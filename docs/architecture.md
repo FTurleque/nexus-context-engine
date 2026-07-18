@@ -1,203 +1,204 @@
-# Architecture baseline
+# Socle architectural
 
-## 1. Architectural goal
+## 1. Objectif architectural
 
-NEXUS is a Context Intelligence Engine. Its core responsibility is to transform a project plus a user request into a minimal, ranked, explainable and budgeted `ContextBundle`.
+NEXUS est un moteur d'intelligence de contexte. Sa responsabilité principale est de transformer un projet et une demande utilisateur en un `ContextBundle` minimal, classé, explicable et contraint par un budget.
 
-The engine must remain independent from LLM vendors, embedding providers, IDEs, agents and transport protocols.
+Le moteur doit rester indépendant des fournisseurs de LLM, des fournisseurs d'embeddings, des IDE, des agents et des protocoles de transport.
 
-## 2. Decisions
+## 2. Décisions
 
-### 2.1 Java baseline: Java 25
+### 2.1 Socle Java : niveau de compilation Java 21
 
-**Decision:** target Java 25 for the new project.
+**Décision :** compiler le MVP avec `--release 21`.
 
-Alternatives considered:
+Alternatives envisagées :
 
-- Java 21: excellent ecosystem compatibility and previous LTS, but no longer the current LTS.
-- Java 25: current LTS and supported by current Quarkus 3 releases.
+- Java 21 : LTS, très largement disponible et suffisamment moderne pour les besoins du MVP ;
+- Java 24 : disponible dans l'environnement local actuel, mais non retenu comme niveau minimal de compilation afin de préserver la portabilité ;
+- Java 25 : LTS plus récente, mais son utilisation comme niveau de compilation imposerait immédiatement un JDK 25 à tous les contributeurs.
 
-Rationale: NEXUS is a greenfield project and can adopt the current LTS without legacy constraints. The code should avoid unnecessary preview features so a later compatibility decision remains possible.
+Justification : NEXUS est un projet open source destiné à être intégré dans différents environnements. Java 21 constitue une base stable et portable. Le développement peut être réalisé avec un JDK plus récent, notamment Java 24, tant que le code reste compatible avec le niveau de compilation Java 21.
 
-### 2.2 Framework: plain Java core, Quarkus later
+### 2.2 Framework : cœur Java simple, Quarkus ultérieurement
 
-**Decision:** do not put Quarkus in the core module during the first iterations.
+**Décision :** ne pas introduire Quarkus dans le cœur pendant les premières itérations.
 
-Alternatives considered:
+Alternatives envisagées :
 
-- Quarkus from day one: convenient REST, DI and CLI integrations, but risks coupling the domain/application core to a runtime framework before boundaries are proven.
-- Plain Java core with a later Quarkus adapter: slightly more explicit wiring, but preserves portability and testability.
+- Quarkus dès le départ : pratique pour REST, l'injection de dépendances et certains adaptateurs, mais cela risquerait de coupler prématurément le cœur métier à un runtime applicatif ;
+- cœur Java simple avec adaptateur Quarkus ultérieur : câblage un peu plus explicite, mais meilleure portabilité et testabilité.
 
-Recommendation: keep domain and application services as plain Java. Introduce Quarkus only when the REST/API application boundary is implemented. Prefer the then-current Quarkus LTS line.
+Recommandation : conserver les domaines et services applicatifs en Java simple. Introduire Quarkus uniquement lors de la création de l'adaptateur API REST. La version de Quarkus sera choisie au moment de cette itération en fonction de la version LTS alors retenue.
 
-### 2.3 Repository shape: one Maven module first
+### 2.3 Structure du repository : un seul module Maven au départ
 
-**Decision:** start with one Maven module organized by capability packages.
+**Décision :** démarrer avec un seul module Maven organisé par responsabilités.
 
-Do not create `nexus-core`, `nexus-indexer`, `nexus-search`, `nexus-api`, `nexus-cli` and `nexus-mcp` immediately.
+Ne pas créer immédiatement `nexus-core`, `nexus-indexer`, `nexus-search`, `nexus-api`, `nexus-cli` et `nexus-mcp`.
 
-Extract Maven modules only when one of these conditions appears:
+Extraire des modules Maven uniquement lorsqu'au moins une des conditions suivantes apparaît :
 
-- distinct runtime packaging;
-- dependency isolation;
-- independent release lifecycle;
-- build-time isolation that materially improves development.
+- packaging ou runtime distinct ;
+- isolation nécessaire des dépendances ;
+- cycle de livraison indépendant ;
+- isolation du build apportant un bénéfice réel.
 
-Likely future extraction order: `nexus-core` -> `nexus-cli` / `nexus-api` -> optional `nexus-mcp`.
+Ordre probable d'extraction ultérieure : `nexus-core`, puis `nexus-cli` et `nexus-api`, puis éventuellement `nexus-mcp`.
 
-### 2.4 Java parsing: AST behind `LanguageAnalyzer`
+### 2.4 Analyse Java : AST derrière `LanguageAnalyzer`
 
-**Decision:** use JavaParser for the first Java analyzer.
+**Décision :** utiliser JavaParser pour le premier analyseur Java.
 
-Alternatives considered:
+Alternatives envisagées :
 
-- regular expressions: rejected for structural analysis;
-- Eclipse JDT: powerful, but heavier for the first local indexing slice;
-- Tree-sitter: attractive for multi-language support, but adds native/runtime considerations before the Java MVP is validated;
-- JavaParser: focused Java AST, simple embedding and sufficient for the MVP.
+- expressions régulières : rejetées pour l'analyse structurelle ;
+- Eclipse JDT : puissant, mais plus lourd pour la première tranche d'indexation locale ;
+- Tree-sitter : intéressant pour le multi-langage, mais introduit des considérations supplémentaires de runtime avant validation du MVP Java ;
+- JavaParser : spécialisé Java, simple à embarquer et suffisant pour le MVP.
 
-The `LanguageAnalyzer` interface prevents JavaParser from becoming an architectural dependency of the whole engine.
+L'interface `LanguageAnalyzer` empêche JavaParser de devenir une dépendance architecturale du moteur complet.
 
-### 2.5 Storage: SQLite when persistence is introduced
+### 2.5 Stockage : SQLite lors de l'introduction de la persistance
 
-**Decision:** use SQLite through a storage abstraction for the MVP persistence layer.
+**Décision :** utiliser SQLite derrière une abstraction de stockage pour la persistance du MVP.
 
-Alternatives considered:
+Alternatives envisagées :
 
-- structured files: simplest initially, but weak for incremental updates, joins and search metadata;
-- H2: good embedded Java database, but less attractive for a portable single-file local index and built-in full-text strategy;
-- SQLite: single-file, mature, local-first, easy to inspect and suitable for metadata plus FTS5 lexical indexing.
+- fichiers structurés : très simples au départ, mais peu adaptés aux mises à jour incrémentales, aux relations et aux métadonnées de recherche ;
+- H2 : bonne base embarquée Java, mais moins attractive pour un index local portable sous forme de fichier unique ;
+- SQLite : base mature, locale, inspectable, portable et adaptée aux métadonnées ainsi qu'à une indexation lexicale via FTS5.
 
-Initial logical data areas:
+Zones logiques initiales :
 
-- project registry;
-- indexed files;
-- symbols;
-- symbol/file relations;
-- lexical search index;
-- indexing metadata.
+- registre des projets ;
+- fichiers indexés ;
+- symboles ;
+- relations entre symboles et fichiers ;
+- index de recherche lexicale ;
+- métadonnées d'indexation.
 
-Embeddings are not part of the MVP storage schema.
+Les embeddings ne font pas partie du schéma de stockage du MVP.
 
-### 2.6 Search: hybrid without mandatory embeddings
+### 2.6 Recherche : approche hybride sans embeddings obligatoires
 
-The MVP search pipeline should combine:
+Le pipeline de recherche du MVP doit combiner :
 
-1. lexical matching on paths, symbol names and indexed text;
-2. exact/fuzzy symbol matching;
-3. file classification and test association;
-4. structural proximity from known relations when available.
+1. correspondance lexicale sur les chemins, noms de symboles et textes indexés ;
+2. correspondance exacte ou approximative des symboles ;
+3. classification des fichiers et association avec les tests ;
+4. proximité structurelle à partir des relations connues lorsqu'elles sont disponibles.
 
-Semantic embeddings remain an optional future `SearchStrategy`.
+Une recherche sémantique basée sur des embeddings pourra être ajoutée ultérieurement comme implémentation optionnelle de `SearchStrategy`.
 
-### 2.7 Ranking: deterministic and explainable
+### 2.7 Classement : déterministe et explicable
 
-Ranking is a separate component. Each candidate receives explicit score components, for example:
+Le classement constitue un composant indépendant. Chaque candidat reçoit des composantes de score explicites, par exemple :
 
-- lexical match;
-- exact symbol match;
-- path/name match;
-- dependency proximity;
-- associated test bonus;
-- recent-change bonus.
+- correspondance lexicale ;
+- correspondance exacte d'un symbole ;
+- correspondance du chemin ou du nom ;
+- proximité dans le graphe de dépendances ;
+- bonus lié à un test associé ;
+- bonus lié à une modification récente.
 
-The final score must be reproducible for identical index, configuration and query inputs. Explanations are derived from the same score components rather than generated by an LLM.
+Le score final doit être reproductible pour une même requête, un même index et une même configuration. Les explications sont dérivées directement des composantes ayant produit le score et ne sont pas générées par un LLM.
 
-### 2.8 Token budget: model-agnostic abstraction
+### 2.8 Budget de tokens : abstraction indépendante des modèles
 
-`TokenEstimator` is an interface. The default implementation may use a deterministic local approximation. Provider-specific tokenizers can be plugged in later.
+`TokenEstimator` est une interface. L'implémentation locale par défaut peut utiliser une estimation déterministe. Des tokenizers spécifiques à certains fournisseurs pourront être ajoutés ultérieurement.
 
-Budget selection should prefer relevant symbol excerpts before full files and record every exclusion or truncation decision when `explain=true`.
+La sélection doit privilégier les extraits de symboles pertinents avant les fichiers complets et enregistrer les décisions d'exclusion ou de troncature lorsque `explain=true`.
 
-## 3. Initial capability boundaries
+## 3. Responsabilités initiales
 
 ```text
 io.github.fturleque.nexus
-├── project      project identity and registry contracts
-├── index        language analysis and structural index contracts
-├── search       retrieval strategies and candidates
-├── ranking      deterministic scoring contracts
-├── token        token estimation abstraction
-└── context      request, bundle and context orchestration contracts
+├── project      identité des projets et contrats du registre
+├── index        analyse des langages et contrats d'indexation structurelle
+├── search       stratégies de recherche et candidats
+├── ranking      contrats de classement déterministe
+├── token        abstraction d'estimation des tokens
+└── context      requête, bundle et orchestration du contexte
 ```
 
-Future adapters may add packages for persistence, CLI, REST, Git, instructions and MCP without moving domain logic into transport handlers.
+Des adaptateurs futurs pourront ajouter des responsabilités pour la persistance, la CLI, REST, Git, les instructions et MCP sans déplacer la logique métier dans les couches de transport.
 
-## 4. Minimal data model
+## 4. Modèle de données minimal
 
-### ProjectDescriptor
+### `ProjectDescriptor`
 
-- id
-- name
-- rootPath
-- sourceType
-- languages
-- technologies
-- lastIndexedAt
-- indexStatus
+- `id` ;
+- `name` ;
+- `rootPath` ;
+- `sourceType` ;
+- `languages` ;
+- `technologies` ;
+- `lastIndexedAt` ;
+- `indexStatus`.
 
-### Indexed file (iteration 1 persistence)
+### Fichier indexé — persistance prévue à l'itération 1
 
-- id
-- projectId
-- relativePath
-- language
-- sizeBytes
-- contentHash
-- modifiedAt
-- estimatedTokens
-- category
+- `id` ;
+- `projectId` ;
+- `relativePath` ;
+- `language` ;
+- `sizeBytes` ;
+- `contentHash` ;
+- `modifiedAt` ;
+- `estimatedTokens` ;
+- `category`.
 
-### CodeSymbol
+### `CodeSymbol`
 
-- kind
-- name
-- qualifiedName
-- signature
-- startLine
-- endLine
+- `kind` ;
+- `name` ;
+- `qualifiedName` ;
+- `signature` ;
+- `startLine` ;
+- `endLine`.
 
-### SymbolRelation
+### `SymbolRelation`
 
-- kind
-- source
-- target
+- `kind` ;
+- `source` ;
+- `target`.
 
-### ContextRequest
+### `ContextRequest`
 
-- projectId
-- query
-- tokenBudget
-- requestedSources
-- constraints
-- explain
+- `projectId` ;
+- `query` ;
+- `tokenBudget` ;
+- `requestedSources` ;
+- `constraints` ;
+- `explain`.
 
-### ContextBundle
+### `ContextBundle`
 
-- selected items
-- estimated tokens
-- token budget
-- excluded items/reasons
-- metadata
+- éléments sélectionnés ;
+- estimation des tokens ;
+- budget de tokens ;
+- éléments exclus et motifs ;
+- métadonnées.
 
-## 5. Security baseline
+## 5. Socle de sécurité
 
-- local-only behavior by default;
-- no outbound model or embedding call in core flows;
-- `.gitignore`-style exclusions plus `.nexusignore`;
-- built-in exclusions for common generated folders and obvious secret material;
-- external integrations must be explicit and observable;
-- indexed content should be stored under the user's NEXUS data directory, not silently copied into cloud services.
+- fonctionnement local par défaut ;
+- aucun appel sortant vers un modèle ou un service d'embeddings dans les flux principaux ;
+- exclusions de type `.gitignore` complétées par `.nexusignore` ;
+- exclusions intégrées pour les dossiers générés courants et les fichiers manifestement sensibles ;
+- intégrations externes explicites et observables ;
+- stockage du contenu indexé dans l'espace de données local de NEXUS, sans copie silencieuse vers un service cloud.
 
-## 6. Observability baseline
+## 6. Socle d'observabilité
 
-Future application adapters should expose structured events for:
+Les futurs adaptateurs applicatifs devront pouvoir exposer des événements structurés concernant :
 
-- indexing duration and file counts;
-- search latency and candidate counts;
-- context build latency;
-- selected versus candidate token estimates;
-- reduction ratio;
-- exclusion reasons.
+- la durée d'indexation et le nombre de fichiers ;
+- la latence de recherche et le nombre de candidats ;
+- la durée de construction du contexte ;
+- les estimations de tokens des candidats et des éléments sélectionnés ;
+- le ratio de réduction ;
+- les motifs d'exclusion.
 
-The core must expose data needed for metrics without depending on a specific telemetry backend.
+Le cœur doit fournir les données nécessaires à ces métriques sans dépendre d'un backend de télémétrie particulier.
