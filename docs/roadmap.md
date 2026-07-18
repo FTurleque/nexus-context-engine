@@ -2,7 +2,7 @@
 
 ## Itération 0 — Socle architectural
 
-État : démarrée.
+État : terminée et validée localement.
 
 Livrables :
 
@@ -14,6 +14,14 @@ Livrables :
 - premier test de l'analyseur.
 
 Critère de sortie : le repository compile et le contrat de l'analyseur Java est testable.
+
+Validation locale :
+
+- `mvn clean install` : succès ;
+- compilation de 20 fichiers source en Java 21 : succès ;
+- tests : 1 exécuté, 0 échec, 0 erreur, 0 ignoré ;
+- génération du JAR `nexus-context-engine-0.1.0-SNAPSHOT.jar` : succès ;
+- installation dans le dépôt Maven local : succès.
 
 ## Itération 1 — Indexation des projets locaux
 
