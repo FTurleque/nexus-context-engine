@@ -1,81 +1,81 @@
 # NEXUS Context Engine
 
-> A local-first, model-agnostic Context Intelligence Engine for software projects.
+> Un moteur local, indépendant des modèles, dédié à l'intelligence de contexte pour les projets logiciels.
 
-NEXUS builds a minimal, relevant, explainable and traceable context for AI assistants and agents. It is not a chatbot and it does not route requests to a specific model.
+NEXUS construit un contexte minimal, pertinent, explicable et traçable pour les assistants et agents IA. NEXUS n'est pas un chatbot et ne réalise aucun routage vers un modèle particulier.
 
 ## Mission
 
-Given a local software repository and a natural-language request, NEXUS should identify and rank the files and symbols most likely to be useful, then build a context bundle that respects a configurable token budget.
+À partir d'un repository logiciel local et d'une demande en langage naturel, NEXUS doit identifier et classer les fichiers et symboles les plus susceptibles d'être utiles, puis construire un `ContextBundle` respectant un budget de tokens configurable.
 
 ```text
-User / Agent / IDE
-        |
-        v
-      Request
-        |
-        v
-      NEXUS
-   index + search
-   rank + explain
-   budget + build
-        |
-        v
-  Context Bundle
-        |
-        v
-   LLM / AI Agent
+Utilisateur / Agent / IDE
+          │
+          ▼
+        Demande
+          │
+          ▼
+        NEXUS
+   indexation + recherche
+   classement + explication
+   budget + construction
+          │
+          ▼
+     ContextBundle
+          │
+          ▼
+      LLM / Agent IA
 ```
 
-## MVP scope
+## Périmètre du MVP
 
-The MVP is deliberately narrow:
+Le périmètre du MVP est volontairement resserré :
 
-- local repositories only;
-- Java first;
-- AST-based structural indexing;
-- lexical and symbol-aware retrieval;
-- explainable deterministic ranking;
-- configurable token budget;
-- file and symbol excerpts rather than indiscriminate full-file injection;
-- local-only operation by default;
-- no mandatory LLM or embedding provider.
+- repositories locaux uniquement ;
+- Java en premier langage pris en charge ;
+- indexation structurelle basée sur un AST ;
+- recherche lexicale et recherche orientée symboles ;
+- classement déterministe et explicable ;
+- budget de tokens configurable ;
+- extraits de fichiers et de symboles plutôt qu'une injection systématique des fichiers complets ;
+- fonctionnement local par défaut ;
+- aucune dépendance obligatoire à un LLM ou à un fournisseur d'embeddings.
 
-Explicitly deferred: GitHub/GitLab sources, IDE integrations, full MCP server, external embeddings, vector databases, JARVIS, Alfred, Brainiac and AI Skills Registry integration.
+Sont explicitement reportés : les sources GitHub et GitLab, les intégrations IDE, le serveur MCP complet, les embeddings externes, les bases vectorielles, ainsi que les intégrations avec JARVIS, Alfred, Brainiac et AI Skills Registry.
 
-## Architecture direction
+## Orientation architecturale
 
-The initial repository is a single Maven module organized by capability. Module boundaries will be extracted only when runtime or dependency isolation justifies them.
+Le repository démarre avec un seul module Maven organisé par responsabilités. Des modules Maven distincts ne seront créés que lorsqu'une séparation de runtime, de packaging ou de dépendances le justifiera réellement.
 
-Core extension points include:
+Les principaux points d'extension du cœur sont :
 
-- `LanguageAnalyzer`
-- `SearchStrategy`
-- `ContextRanker`
-- `TokenEstimator`
-- `ContextBuilder`
+- `LanguageAnalyzer` ;
+- `SearchStrategy` ;
+- `ContextRanker` ;
+- `TokenEstimator` ;
+- `ContextBuilder`.
 
-See [docs/architecture.md](docs/architecture.md), [docs/mvp.md](docs/mvp.md) and [docs/roadmap.md](docs/roadmap.md).
+Consulter [docs/architecture.md](docs/architecture.md), [docs/mvp.md](docs/mvp.md) et [docs/roadmap.md](docs/roadmap.md).
 
-## Technology baseline
+## Socle technique
 
-- Java 25
-- Maven
-- JavaParser for the first Java AST analyzer
-- JUnit for automated tests
+- Java 21 comme niveau de compilation du MVP ;
+- Maven ;
+- JavaParser pour le premier analyseur AST Java ;
+- JUnit pour les tests automatisés.
 
-Quarkus is intentionally deferred to the API/application boundary. The context engine itself must remain usable as a plain Java library.
+Le cœur est volontairement développé en Java sans framework applicatif. Quarkus pourra être introduit ultérieurement au niveau de l'adaptateur API, sans coupler le moteur de contexte à un runtime particulier.
 
-## Status
+## État du projet
 
-**Iteration 0 — architecture baseline and Java indexing contracts.**
+**Itération 0 — socle architectural et contrats d'indexation Java.**
 
-The repository currently contains only the minimum foundation needed to begin the first vertical slice.
+Le repository contient uniquement les éléments nécessaires au démarrage de la première tranche verticale du MVP.
 
-## Security defaults
+## Sécurité par défaut
 
-NEXUS is local-first. No repository content should leave the machine unless an external integration is explicitly enabled. A project-level `.nexusignore` format is planned to complement `.gitignore`-style exclusions for secrets and generated content.
+NEXUS adopte une approche locale par défaut. Aucun contenu du repository ne doit quitter la machine sans activation explicite d'une intégration externe. Un fichier `.nexusignore` complète les mécanismes de type `.gitignore` afin d'exclure notamment les secrets, les fichiers sensibles et les contenus générés.
 
-## License
+## Licence
 
-License selection is intentionally pending before the repository is made public.
+Le choix de la licence reste volontairement ouvert tant que le repository n'est pas rendu public.
