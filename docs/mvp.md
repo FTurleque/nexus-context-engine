@@ -1,81 +1,81 @@
-# MVP definition
+# Définition du MVP
 
-## Objective
+## Objectif
 
-From a local Java repository and a natural-language request, NEXUS identifies and ranks the files and symbols most likely to be useful, then builds a `ContextBundle` that respects a configurable token budget.
+À partir d'un repository Java local et d'une demande en langage naturel, NEXUS identifie et classe les fichiers et symboles les plus susceptibles d'être utiles, puis construit un `ContextBundle` respectant un budget de tokens configurable.
 
-## In scope
+## Inclus dans le périmètre
 
-- register and list local projects;
-- scan a local repository with ignore rules;
-- detect Java source files;
-- parse Java through an AST-based `LanguageAnalyzer`;
-- index files, symbols and basic relations;
-- persist the local index;
-- lexical and symbol-aware context search;
-- deterministic explainable ranking;
-- configurable token budget;
-- context selection using excerpts and relevant symbols;
-- deduplication;
-- human-readable and machine-readable output;
-- CLI commands needed to exercise the complete vertical slice;
-- automated quality corpus and reproducibility tests.
+- enregistrer et lister des projets locaux ;
+- parcourir un repository local en appliquant des règles d'exclusion ;
+- détecter les fichiers source Java ;
+- analyser Java au moyen d'un `LanguageAnalyzer` basé sur un AST ;
+- indexer les fichiers, symboles et relations de base ;
+- persister l'index localement ;
+- rechercher du contexte par approche lexicale et par symboles ;
+- appliquer un classement déterministe et explicable ;
+- gérer un budget de tokens configurable ;
+- sélectionner des extraits et symboles pertinents plutôt que des fichiers complets lorsque cela suffit ;
+- dédupliquer les contenus ;
+- produire une sortie lisible par un humain et exploitable par une machine ;
+- fournir les commandes CLI nécessaires pour exercer la tranche verticale complète ;
+- disposer d'un corpus de qualité et de tests de reproductibilité automatisés.
 
-## Explicitly out of scope
+## Explicitement hors périmètre
 
-- mandatory LLM calls;
-- mandatory external embeddings;
-- vector database;
-- GitHub and GitLab repository sources;
-- IDE plugins;
-- complete MCP server;
-- AI Skills Registry integration;
-- JARVIS, Alfred or Brainiac integration;
-- automatic model routing;
-- multi-language parity.
+- appels obligatoires à un LLM ;
+- embeddings externes obligatoires ;
+- base de données vectorielle ;
+- repositories GitHub et GitLab comme sources ;
+- plugins IDE ;
+- serveur MCP complet ;
+- intégration avec AI Skills Registry ;
+- intégration avec JARVIS, Alfred ou Brainiac ;
+- routage automatique entre modèles ;
+- prise en charge complète de plusieurs langages.
 
-## MVP command surface
+## Surface de commandes cible du MVP
 
-Target commands:
+Commandes visées :
 
 ```bash
-nexus project add ./my-project
+nexus project add ./mon-projet
 nexus project list
-nexus index my-project
-nexus search my-project "document upload"
-nexus context my-project "Fix PDF upload handling" --budget 20000 --explain
-nexus inspect my-project
+nexus index mon-projet
+nexus search mon-projet "ingestion de documents"
+nexus context mon-projet "Corrige le traitement d'upload PDF" --budget 20000 --explain
+nexus inspect mon-projet
 ```
 
-The CLI is an adapter over application services. No context selection logic belongs in CLI handlers.
+La CLI constitue un adaptateur au-dessus des services applicatifs. Aucune logique de sélection du contexte ne doit être implémentée directement dans les handlers de commandes.
 
-## Acceptance criteria
+## Critères de validation
 
-The MVP is valid when all of the following are reproducibly demonstrated on test corpora and at least one representative Java repository:
+Le MVP est considéré comme valide lorsque tous les points suivants sont démontrés de manière reproductible sur des corpus de test et sur au moins un repository Java représentatif :
 
-1. A local project can be registered by path and reloaded in a later process.
-2. Indexing respects `.gitignore`, `.nexusignore` and built-in secret/generated-content exclusions.
-3. Java classes, interfaces, records, enums, methods and imports are structurally extracted without regex-only parsing.
-4. Re-running indexing without source changes produces the same searchable index and results.
-5. A natural-language query returns ranked files and symbols with deterministic scores.
-6. Each selected candidate can expose the score factors that caused its selection.
-7. `ContextBuilder` never exceeds the configured token budget according to the active `TokenEstimator`.
-8. Relevant symbol excerpts are preferred over full files when they provide sufficient context.
-9. Duplicated or overlapping excerpts are removed or merged.
-10. `--explain` reports selected and materially excluded candidates with reasons.
-11. Golden-query tests measure expected relevant and irrelevant results.
-12. The full MVP works offline after dependencies have been resolved.
+1. Un projet local peut être enregistré à partir de son chemin puis rechargé dans un processus ultérieur.
+2. L'indexation respecte `.gitignore`, `.nexusignore` et les exclusions intégrées concernant les secrets et contenus générés.
+3. Les classes, interfaces, records, enums, méthodes et imports Java sont extraits structurellement sans dépendre uniquement d'expressions régulières.
+4. Une nouvelle indexation sans modification des sources produit le même index exploitable et les mêmes résultats.
+5. Une requête en langage naturel retourne des fichiers et symboles classés avec des scores déterministes.
+6. Chaque candidat sélectionné peut exposer les facteurs ayant contribué à son score.
+7. `ContextBuilder` ne dépasse jamais le budget configuré selon le `TokenEstimator` actif.
+8. Les extraits de symboles pertinents sont privilégiés par rapport aux fichiers complets lorsqu'ils fournissent un contexte suffisant.
+9. Les extraits dupliqués ou qui se chevauchent sont supprimés ou fusionnés.
+10. `--explain` présente les éléments sélectionnés ainsi que les candidats significatifs exclus, avec leurs motifs.
+11. Des tests basés sur des requêtes de référence mesurent les résultats pertinents attendus et les résultats non pertinents.
+12. Le MVP complet fonctionne hors ligne une fois les dépendances Maven résolues.
 
-## Initial quality metrics
+## Métriques de qualité initiales
 
-At minimum, capture:
+Mesurer au minimum :
 
-- precision@K on golden queries;
-- recall@K on golden queries;
-- context reduction ratio;
-- estimated token savings;
-- indexing time;
-- search latency;
-- context build latency.
+- précision à K (`precision@K`) ;
+- rappel à K (`recall@K`) ;
+- ratio de réduction du contexte ;
+- économie estimée de tokens ;
+- durée d'indexation ;
+- latence de recherche ;
+- latence de construction du contexte.
 
-These are measurements, not marketing claims. Baselines must be stored with the corpus and compared over time.
+Ces métriques constituent des mesures techniques et non des promesses. Les valeurs de référence doivent être conservées avec les corpus afin de pouvoir suivre leur évolution dans le temps.
