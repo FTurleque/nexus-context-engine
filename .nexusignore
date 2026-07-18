@@ -1,0 +1,18 @@
+# Generated content
+target/
+build/
+dist/
+node_modules/
+
+# Local IDE metadata
+.idea/
+.vscode/
+
+# Secrets and credentials
+.env
+.env.*
+secrets/
+*.key
+*.pem
+*.p12
+*.pfx
