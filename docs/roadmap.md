@@ -1,103 +1,103 @@
-# Incremental roadmap
+# Feuille de route incrémentale
 
-## Iteration 0 — Architecture baseline
+## Itération 0 — Socle architectural
 
-Status: started.
+État : démarrée.
 
-Deliverables:
+Livrables :
 
-- project mission and MVP boundary;
-- architecture decisions;
-- Maven/Java baseline;
-- core contracts;
-- first Java AST analyzer;
-- first analyzer test.
+- mission du projet et périmètre du MVP ;
+- décisions d'architecture ;
+- socle Maven et Java ;
+- contrats principaux du cœur ;
+- premier analyseur AST Java ;
+- premier test de l'analyseur.
 
-Exit criterion: the repository builds and the Java analyzer contract is testable.
+Critère de sortie : le repository compile et le contrat de l'analyseur Java est testable.
 
-## Iteration 1 — Local project indexing
+## Itération 1 — Indexation des projets locaux
 
-Deliverables:
+Livrables :
 
-- local project registry;
-- filesystem scanner;
-- `.gitignore` and `.nexusignore` resolution;
-- secret/generated-content exclusions;
-- incremental file hashing;
-- SQLite persistence abstraction;
-- Java files and symbols persisted;
-- indexing CLI entry point.
+- registre local des projets ;
+- scanner du système de fichiers ;
+- prise en compte de `.gitignore` et `.nexusignore` ;
+- exclusions des secrets et contenus générés ;
+- calcul incrémental des empreintes de fichiers ;
+- abstraction de persistance SQLite ;
+- persistance des fichiers et symboles Java ;
+- point d'entrée CLI pour l'indexation.
 
-Exit criterion: a local Java repository can be registered, indexed and inspected offline.
+Critère de sortie : un repository Java local peut être enregistré, indexé et inspecté hors ligne.
 
-## Iteration 2 — Retrieval and ranking
+## Itération 2 — Recherche et classement
 
-Deliverables:
+Livrables :
 
-- lexical search;
-- exact and fuzzy symbol search;
-- basic file/symbol relations;
-- deterministic score model;
-- score breakdown and explanations;
-- golden-query corpus.
+- recherche lexicale ;
+- recherche exacte et approximative de symboles ;
+- relations de base entre fichiers et symboles ;
+- modèle de score déterministe ;
+- décomposition des scores et explications ;
+- corpus de requêtes de référence.
 
-Exit criterion: queries reproducibly rank expected files and symbols above known irrelevant files.
+Critère de sortie : les requêtes classent de manière reproductible les fichiers et symboles pertinents au-dessus des éléments connus comme non pertinents.
 
-## Iteration 3 — Context Builder and budget
+## Itération 3 — Construction du contexte et budget
 
-Deliverables:
+Livrables :
 
-- `ContextBuilder` implementation;
-- local default `TokenEstimator`;
-- excerpt selection;
-- deduplication/overlap merging;
-- configurable token budget;
-- explainable exclusions and truncation.
+- implémentation de `ContextBuilder` ;
+- implémentation locale par défaut de `TokenEstimator` ;
+- sélection d'extraits ;
+- déduplication et fusion des chevauchements ;
+- budget de tokens configurable ;
+- explication des exclusions et troncatures.
 
-Exit criterion: generated bundles stay within budget and preserve expected relevant context.
+Critère de sortie : les bundles générés restent dans le budget configuré tout en conservant le contexte pertinent attendu.
 
-## Iteration 4 — Usable MVP CLI
+## Itération 4 — CLI utilisable pour le MVP
 
-Deliverables:
+Livrables :
 
-- `project add/list`;
-- `index`;
-- `search`;
-- `context`;
-- `inspect`;
-- JSON and human-readable output;
-- end-to-end corpus tests;
-- baseline performance and context-quality metrics.
+- `project add/list` ;
+- `index` ;
+- `search` ;
+- `context` ;
+- `inspect` ;
+- sorties JSON et lisibles par un humain ;
+- tests de corpus de bout en bout ;
+- métriques initiales de performance et de qualité du contexte.
 
-Exit criterion: the complete MVP objective is demonstrable from the command line.
+Critère de sortie : l'objectif complet du MVP peut être démontré depuis la ligne de commande.
 
-## Iteration 5 — API adapter
+## Itération 5 — Adaptateur API
 
-Candidate stack: Quarkus LTS.
+Stack candidate : Quarkus LTS, version choisie au démarrage de l'itération.
 
-Deliverables:
+Livrables :
 
-- REST application adapter;
-- request/response DTOs isolated from core models;
-- health/observability endpoints;
-- no business logic in REST resources.
+- adaptateur d'application REST ;
+- DTO de requêtes et réponses isolés des modèles du cœur ;
+- endpoints de santé et d'observabilité ;
+- aucune logique métier dans les ressources REST.
 
-## Iteration 6 — Enrichment
+## Itération 6 — Enrichissement
 
-Possible additions, validated independently:
+Ajouts possibles, à valider indépendamment :
 
-- Git context;
-- instruction resolver;
-- richer dependency graph;
-- optional semantic search provider;
-- additional languages through `LanguageAnalyzer` implementations.
+- contexte Git ;
+- résolution des instructions applicables ;
+- graphe de dépendances enrichi ;
+- fournisseur optionnel de recherche sémantique ;
+- langages supplémentaires via de nouvelles implémentations de `LanguageAnalyzer`.
 
-## Iteration 7 — Integrations
+## Itération 7 — Intégrations
 
-Only after the engine quality is proven:
+Uniquement après validation de la qualité du moteur :
 
-- MCP adapter;
-- IDE integrations;
-- GitHub/GitLab project sources;
-- AI Skills Registry connector;
-- JARVIS/Alfred/Brainiac consumers.
+- adaptateur MCP ;
+- intégrations IDE ;
+- sources de projets GitHub et GitLab ;
+- connecteur AI Skills Registry ;
+- intégrations clientes pour JARVIS, Alfred et Brainiac.
