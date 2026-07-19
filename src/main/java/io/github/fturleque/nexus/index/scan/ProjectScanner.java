@@ -77,6 +77,12 @@ public final class ProjectScanner {
         String fileName = relativePath.getFileName().toString();
         String lowerFileName = fileName.toLowerCase(Locale.ROOT);
 
+        if (isAgentProfile(lowerPath, lowerFileName)) {
+            return FileCategory.AGENT_PROFILE;
+        }
+        if (isSkill(lowerPath, lowerFileName)) {
+            return FileCategory.SKILL;
+        }
         if (isInstructionFile(lowerPath, lowerFileName)) {
             return FileCategory.INSTRUCTION;
         }
@@ -93,6 +99,21 @@ public final class ProjectScanner {
             return FileCategory.TEST;
         }
         return FileCategory.SOURCE;
+    }
+
+    private static boolean isAgentProfile(String lowerPath, String lowerFileName) {
+        return lowerFileName.endsWith(".md")
+                && (lowerPath.startsWith(".github/agents/")
+                    || lowerPath.startsWith(".claude/agents/"));
+    }
+
+    private static boolean isSkill(String lowerPath, String lowerFileName) {
+        if (!lowerFileName.equals("skill.md")) {
+            return false;
+        }
+        return lowerPath.startsWith(".github/skills/")
+                || lowerPath.startsWith(".claude/skills/")
+                || lowerPath.startsWith(".agents/skills/");
     }
 
     private static boolean isInstructionFile(String lowerPath, String lowerFileName) {
