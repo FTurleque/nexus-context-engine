@@ -28,12 +28,13 @@ public final class SkillSelector {
 
         for (SkillDescriptor skill : skills) {
             String normalizedName = normalize(skill.name().replace('-', ' '));
+            String normalizedHyphenatedName = normalize(skill.name());
             String normalizedDescription = normalize(skill.description());
             Set<String> nameTerms = terms(normalizedName);
             Set<String> descriptionTerms = terms(normalizedDescription);
 
-            boolean exactName = normalizedQuery.contains(normalizedName)
-                    || normalizedQuery.contains(normalize(skill.name()));
+            boolean exactName = containsDelimited(normalizedQuery, normalizedName)
+                    || containsDelimited(normalizedQuery, normalizedHyphenatedName);
             int matchedNameTerms = matchingTerms(queryTerms, nameTerms);
             int matchedDescriptionTerms = matchingTerms(queryTerms, descriptionTerms);
             int matchedQueryTerms = matchingTerms(queryTerms, union(nameTerms, descriptionTerms));
@@ -117,6 +118,14 @@ public final class SkillSelector {
             return token.substring(0, token.length() - 1);
         }
         return token;
+    }
+
+    private static boolean containsDelimited(String haystack, String needle) {
+        if (needle.isBlank()) {
+            return false;
+        }
+        String normalizedHaystack = " " + haystack.replaceAll("[^\\p{L}\\p{N}-]+", " ") + " ";
+        return normalizedHaystack.contains(" " + needle + " ");
     }
 
     private static Set<String> union(Set<String> left, Set<String> right) {
