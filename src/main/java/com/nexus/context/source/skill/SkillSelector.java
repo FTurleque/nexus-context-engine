@@ -100,13 +100,23 @@ public final class SkillSelector {
     }
 
     private static boolean equivalentToken(String left, String right) {
-        if (left.equals(right)) {
-            return true;
+        return left.equals(right) || stem(left).equals(stem(right));
+    }
+
+    private static String stem(String token) {
+        if (token.length() > 5 && token.endsWith("ing")) {
+            return token.substring(0, token.length() - 3);
         }
-        if (left.length() < 4 || right.length() < 4) {
-            return false;
+        if (token.length() > 4 && token.endsWith("ed")) {
+            return token.substring(0, token.length() - 2);
         }
-        return left.startsWith(right) || right.startsWith(left);
+        if (token.length() > 4 && token.endsWith("es")) {
+            return token.substring(0, token.length() - 2);
+        }
+        if (token.length() > 3 && token.endsWith("s")) {
+            return token.substring(0, token.length() - 1);
+        }
+        return token;
     }
 
     private static Set<String> union(Set<String> left, Set<String> right) {
