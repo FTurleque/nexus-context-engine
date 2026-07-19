@@ -75,6 +75,7 @@ Les ADR constituent l'historique de référence des décisions structurantes, de
 - SQLite comme source de vérité structurelle locale ;
 - Apache Lucene comme index de recherche local reconstructible ;
 - JGit pour la sémantique `.gitignore` / `.nexusignore` ;
+- Jackson à la frontière CLI pour la sérialisation JSON ;
 - JUnit pour les tests automatisés.
 
 Le cœur est volontairement développé en Java sans framework applicatif. Quarkus pourra être introduit ultérieurement au niveau de l'adaptateur API, sans coupler le moteur de contexte à un runtime particulier.
@@ -205,7 +206,23 @@ Validation self-smoke du `ContextBundle` sur NEXUS :
 
 Le self-smoke confirme donc l'invariant principal de l'itération : `ContextBundle.estimatedTokens <= ContextBundle.tokenBudget`. Les troncatures et exclusions observées avec un budget volontairement très contraint de 180 tokens sont explicites et traçables ; elles constituent un point de calibration futur de la diversité du contexte, pas un échec du critère de sortie.
 
-La prochaine étape est l'**Itération 4 — CLI utilisable pour le MVP**.
+**Itération 4 — en cours : CLI utilisable pour le MVP.**
+
+L'implémentation en cours comprend :
+
+- sortie humaine conservée par défaut ;
+- sortie JSON structurée via `--json` sur toutes les commandes ;
+- séparation des succès sur `stdout` et des erreurs sur `stderr` ;
+- codes de sortie `0` succès, `1` erreur d'exécution, `2` erreur d'utilisation ;
+- commandes `--help` et `--version` ;
+- latences `durationMs` pour indexation, recherche et construction du contexte ;
+- JAR CLI autonome `nexus-context-engine-0.1.0-SNAPSHOT-cli.jar` ;
+- scripts Windows `scripts/nexus.ps1` et `scripts/nexus.cmd` ;
+- tests CLI JSON de bout en bout ;
+- self-smoke exécutant directement le JAR autonome ;
+- métriques de qualité du corpus golden publiées dans le log Maven.
+
+Cette itération est encadrée par ADR-0030 et ADR-0031. Elle reste à valider localement avant de déclarer le MVP terminé.
 
 ### Point d'entrée CLI actuel
 
@@ -215,57 +232,67 @@ Classe principale :
 io.github.fturleque.nexus.cli.NexusCli
 ```
 
-Commandes actuellement exposées :
+Commandes exposées :
 
 ```text
-project add <chemin> [nom]
-project list
-index <id-ou-nom> [--rebuild]
-search <id-ou-nom> <requête> [--limit N] [--explain]
-context <id-ou-nom> <requête> [--budget N] [--explain]
-inspect <id-ou-nom>
+project add <chemin> [nom] [--json]
+project list [--json]
+index <id-ou-nom> [--rebuild] [--json]
+search <id-ou-nom> <requête> [--limit N] [--explain] [--json]
+context <id-ou-nom> <requête> [--budget N] [--explain] [--json]
+inspect <id-ou-nom> [--json]
+--help [--json]
+--version [--json]
 ```
 
-Exemples :
+Après un build Maven, le chemin recommandé sous Windows PowerShell est :
 
 ```powershell
-mvn -q exec:java "-Dexec.args=search nexus-context-engine-self-smoke ProjectIndexingService --limit 5 --explain"
-mvn -q exec:java "-Dexec.args=context nexus-context-engine-self-smoke ProjectIndexingService --budget 500 --explain"
+.\scripts\nexus.ps1 --help
+.\scripts\nexus.ps1 project add . nexus-local
+.\scripts\nexus.ps1 index nexus-local
+.\scripts\nexus.ps1 search nexus-local ProjectIndexingService --limit 5 --explain
+.\scripts\nexus.ps1 context nexus-local ProjectIndexingService --budget 500 --explain
 ```
 
-Le packaging final en commande native `nexus` est prévu plus tard dans la phase de consolidation de la CLI.
+Pour une sortie machine :
 
-### Self-smoke test : NEXUS indexe, recherche et construit son contexte
+```powershell
+.\scripts\nexus.ps1 search nexus-local ProjectIndexingService --limit 5 --explain --json
+```
 
-Le script PowerShell `scripts/self-smoke.ps1` valide le flux réel de la CLI sur le repository NEXUS lui-même :
+Le JAR autonome peut aussi être lancé directement :
 
-1. compilation de la CLI ;
-2. enregistrement du repository courant ;
-3. vérification du registre ;
-4. première indexation complète ;
-5. seconde indexation incrémentale attendue avec `0 modifiés` et `0 supprimés` ;
-6. inspection de l'index avec état `READY` ;
-7. recherche explicable de `ProjectIndexingService` ;
-8. construction d'un `ContextBundle` contenant `ProjectIndexingService.java` sans dépasser le budget configuré.
+```powershell
+java -jar .\target\nexus-context-engine-0.1.0-SNAPSHOT-cli.jar --version --json
+```
+
+### Self-smoke test du MVP CLI
+
+Le script PowerShell `scripts/self-smoke.ps1` valide désormais le flux réel via le JAR autonome :
+
+1. construction du JAR `*-cli.jar` ;
+2. validation de `--version --json` ;
+3. enregistrement du repository en JSON ;
+4. vérification du registre en JSON ;
+5. première indexation complète en JSON ;
+6. seconde indexation incrémentale attendue avec `0 modifié` et `0 supprimé` ;
+7. inspection de l'index en JSON avec état `READY` ;
+8. recherche explicable en JSON ;
+9. construction d'un `ContextBundle` JSON sous 180 tokens ;
+10. vérification de la sortie humaine par défaut.
+
+Les documents JSON sont réellement parsés par PowerShell avec `ConvertFrom-Json`.
 
 Le test utilise un `NEXUS_HOME` isolé sous `target/nexus-self-smoke-home` et supprime ces données à la fin par défaut.
 
-Sous Windows PowerShell :
-
 ```powershell
 git pull --ff-only
-.\scripts\self-smoke.ps1
-```
-
-Pour conserver la base SQLite et l'index Lucene générés afin de les inspecter manuellement :
-
-```powershell
+mvn clean install
 .\scripts\self-smoke.ps1 -KeepData
 ```
 
-L'exécution de la CLI par Maven utilise `exec-maven-plugin`, dont la version est fixée dans le `pom.xml` pour conserver un comportement reproductible.
-
-Sous Windows PowerShell 5.1, les accents de certaines sorties Maven/CLI capturées peuvent être mal affichés selon l'encodage de la console. Ce défaut d'affichage est non bloquant et n'affecte ni les données SQLite/Lucene ni le résultat fonctionnel du self-smoke.
+Sous Windows PowerShell 5.1, les accents de certaines sorties JVM ou de bibliothèques peuvent être mal affichés selon l'encodage de la console. Le JSON NEXUS est capturé séparément de `stderr`, ce qui permet de le parser sans être pollué par ces avertissements.
 
 ## Sécurité par défaut
 
