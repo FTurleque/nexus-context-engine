@@ -196,32 +196,33 @@ Validation de référence :
 
 ### Itération 6 — Skills et divulgation progressive
 
-**En cours — validation locale à effectuer.**
+**Terminée et validée localement le 20 juillet 2026.**
 
-Implémentation actuelle :
+Validation de référence :
 
-- ADR-0034 ;
-- `SkillSourceProvider` ;
-- `LocalAgentSkillsProvider` ;
-- support `.agents/skills`, `.github/skills`, `.claude/skills` ;
-- frontmatter YAML 1.2 ;
-- catalogue léger `SkillDescriptor` ;
-- découverte sans chargement du corps complet ;
-- validation `name` / `description` ;
-- inventaire des ressources `scripts`, `references`, `assets` ;
-- déduplication des skills de même nom ;
-- sélection déterministe sur `name` + `description` ;
-- chargement du `SKILL.md` uniquement après sélection ;
-- type `SKILL` dans le `ContextBundle` ;
-- budget dédié ;
-- aucune troncature des skills ;
-- aucun script exécuté ;
-- ressources non chargées automatiquement ;
-- isolation des sous-arbres de skills hors Lucene générique ;
-- dogfooding avec `nexus-context-validation` ;
-- self-smoke étendu à 12 étapes.
+- 100 fichiers source compilés avec Java 21 ;
+- 17 fichiers de test compilés ;
+- 26 tests exécutés, 0 échec, 0 erreur, 0 ignoré ;
+- baseline qualité conservée : `precision@3 = 0,4444`, `recall@3 = 1,0000` ;
+- 170 fichiers indexés ;
+- 480 symboles ;
+- 926 relations ;
+- indexation complète : 1 218 ms ;
+- indexation incrémentale : 282 ms avec 0 fichier modifié et 0 supprimé ;
+- recherche `ProjectIndexingService` : 282 ms, fichier principal classé premier ;
+- contexte strict : 5 items, 180/180 tokens, 454 ms ;
+- contexte multi-source : 9 items, 1 185/1 200 tokens, 449 ms ;
+- contexte avec skill : 1 194/1 200 tokens, 550 ms ;
+- `nexus-context-validation` découvert, matché, activé et sélectionné ;
+- `SKILL.md` complet inclus sans troncature : 233 tokens ;
+- 1 ressource associée inventoriée mais non chargée automatiquement ;
+- `skillsExecuted = false` ;
+- réduction du contexte candidat strict : environ 99,14 % ;
+- résultat final : `SELF-SMOKE SUCCESS`.
 
-L'Itération 6 est encadrée par ADR-0034 et reste à valider localement avant clôture.
+Le critère de sortie de l'Itération 6 est validé : NEXUS sait recommander et inclure un skill pertinent dans un `ContextBundle` sans charger tous les skills, sans tronquer le skill sélectionné et sans exécuter ses scripts.
+
+L'Itération 6 est encadrée par ADR-0034. La prochaine cible de la roadmap est l'**Itération 7 — Contexte Git**.
 
 ## Comment utiliser NEXUS sur une application déjà configurée
 
@@ -293,7 +294,7 @@ inspect <id-ou-nom> [--json]
 --version [--json]
 ```
 
-## Validation locale de l'Itération 6
+## Validation locale de référence
 
 ```powershell
 git pull --ff-only
@@ -301,7 +302,7 @@ mvn clean install
 .\scripts\self-smoke.ps1 -KeepData
 ```
 
-Le self-smoke doit désormais vérifier :
+Le self-smoke valide désormais :
 
 ```text
 JAR autonome
