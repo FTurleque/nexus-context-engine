@@ -8,9 +8,10 @@ L'objectif est qu'un développeur découvrant le repository puisse :
 2. suivre un fichier depuis le scan jusqu'à SQLite et Lucene ;
 3. comprendre comment une requête devient un classement explicable ;
 4. comprendre comment ce classement devient un `ContextBundle` sous budget ;
-5. comprendre comment NEXUS réutilise les instructions et configurations déjà présentes dans un projet ;
-6. reproduire les scénarios depuis la CLI et les tests ;
-7. modifier une brique sans casser les principes architecturaux.
+5. comprendre comment NEXUS réutilise les instructions déjà présentes dans un projet ;
+6. comprendre comment les Agent Skills sont découverts puis chargés progressivement ;
+7. reproduire les scénarios depuis la CLI et les tests ;
+8. modifier une brique sans casser les principes architecturaux.
 
 > **Important** : `docs/architecture.md` décrit l'architecture courante à haut niveau. Les ADR sous `docs/adr/` conservent les décisions et leurs alternatives. Le présent guide décrit **l'implémentation concrète** et ses flux d'exécution.
 
@@ -24,7 +25,8 @@ L'objectif est qu'un développeur découvrant le repository puisse :
 | [4. Construction du contexte](context-building.md) | fragments, fusion, tokens, sélection sous budget, `ContextBundle` |
 | [5. Reproduire et déboguer](reproduce-and-debug.md) | build, CLI, self-smoke, données locales, scénarios de diagnostic |
 | [6. CLI du MVP](cli-mvp.md) | contrat humain/JSON, codes de sortie, JAR autonome, launchers Windows, métriques |
-| [7. Contexte natif des projets](native-context-sources.md) | `AGENTS.md`, Copilot, Claude, Gemini, documentation, profils d'agents, skills et configurations existantes |
+| [7. Contexte natif des projets](native-context-sources.md) | `AGENTS.md`, Copilot, Claude, Gemini, documentation et configurations existantes |
+| [8. Agent Skills](agent-skills.md) | `SKILL.md`, catalogue léger, sélection, activation, ressources, sécurité et budget |
 
 ## Vue d'ensemble actuelle
 
@@ -50,16 +52,14 @@ flowchart LR
     subgraph SEARCH[Recherche et ranking]
         LEX[LuceneFileSearchStrategy]
         SYM[SymbolSearchStrategy]
-        MERGE[CandidateMerger]
         GRAPH[GraphCandidateEnricher]
         RANK[DeterministicContextRanker]
-        LEX --> MERGE
-        SYM --> MERGE
-        MERGE --> GRAPH
+        LEX --> RANK
+        SYM --> RANK
         GRAPH --> RANK
     end
 
-    subgraph NATIF[Contexte natif]
+    subgraph NATIF[Instructions natives]
         AGENTS[AgentsMdInstructionProvider]
         COPILOT[CopilotInstructionProvider]
         CLAUDE[ClaudeInstructionProvider]
@@ -71,24 +71,30 @@ flowchart LR
         GEMINI --> DISC
     end
 
+    subgraph SKILLS[Agent Skills]
+        SP[SkillSourceProvider]
+        SD[SkillDiscoveryService]
+        SS[SkillSelector]
+        SL[SkillLoader]
+        SB[SkillContextSelector]
+        SP --> SD --> SS --> SL --> SB
+    end
+
     subgraph CONTEXT[Construction du contexte]
         FACTORY[ContextFragmentFactory]
-        SF[ContextSourceFragmentFactory]
         BUDGET[BudgetedContextSelector]
         BUNDLE[ContextBundle]
-        FACTORY --> BUDGET
-        DISC --> SF
-        SF --> BUDGET
-        BUDGET --> BUNDLE
+        FACTORY --> BUDGET --> BUNDLE
+        DISC --> BUNDLE
+        SB --> BUNDLE
     end
 
     CORE --> INDEXATION
     SQL --> SYM
-    SQL --> GRAPH
     LUCENE --> LEX
     CORE --> SEARCH
-    RANK --> FACTORY
     CORE --> NATIF
+    CORE --> SKILLS
     CORE --> CONTEXT
     BUNDLE --> CLI
 ```
@@ -98,28 +104,25 @@ flowchart LR
 NEXUS n'est ni un chatbot, ni un LLM, ni un orchestrateur généraliste.
 
 ```text
-Repository + demande utilisateur + contraintes de budget
-                         │
-                         ▼
-                       NEXUS
-                         │
-                         ├── code / symboles / tests
-                         ├── documentation pertinente
-                         ├── instructions natives applicables
-                         └── métadonnées de configurations détectées
-                         │
-                         ▼
-                   ContextBundle
-                         │
-                         ▼
-              LLM / Agent consommateur
+Repository + demande + budget
+          │
+          ▼
+        NEXUS
+          │
+          ├── code / symboles / tests
+          ├── documentation pertinente
+          ├── instructions natives applicables
+          ├── skills pertinents activés progressivement
+          └── métadonnées de configuration détectées
+          │
+          ▼
+     ContextBundle
+          │
+          ▼
+ LLM / Agent consommateur
 ```
 
-NEXUS répond à la question :
-
-> **Quelles informations dois-je fournir au consommateur IA pour cette demande précise, dans quel ordre, sous quel budget, et pourquoi ?**
-
-Le choix du modèle, l'exécution d'un agent, d'un hook, d'un serveur MCP ou d'un skill restent hors du cœur.
+Le choix du modèle et l'exécution des agents, hooks, MCP ou scripts de skills restent hors du cœur.
 
 ## État d'implémentation
 
@@ -139,13 +142,12 @@ Validée : BM25 multi-champs, recherche exacte/fuzzy de symboles, fusion, graphe
 
 Validée localement le 19 juillet 2026 :
 
-- `ContextFragmentFactory` ;
-- `FragmentMerger` ;
-- `BudgetedContextSelector` ;
-- `DefaultContextBuilder` ;
-- budget strict et troncatures explicables ;
-- 13 tests verts lors de la validation ;
-- self-smoke : 3 items, 178/180 tokens estimés, réduction d'environ 96,49 %.
+- fragments symboliques ;
+- fusion ;
+- sélection sous budget ;
+- troncatures explicables ;
+- 13 tests verts ;
+- self-smoke : 3 items, 178/180 tokens, réduction d'environ 96,49 %.
 
 ### Itération 4 — CLI utilisable pour le MVP
 
@@ -153,175 +155,152 @@ Validée localement le 19 juillet 2026 :
 
 - sortie humaine et JSON ;
 - codes de sortie `0`, `1`, `2` ;
-- JAR autonome `*-cli.jar` ;
+- JAR autonome ;
 - launchers Windows ;
-- 16 tests verts lors de la validation ;
-- baseline qualité : `mean precision@3 = 0,4444`, `mean recall@3 = 1,0000` ;
-- self-smoke : 77 fichiers, 322 symboles, 599 relations ;
-- indexation complète 896 ms, incrémentale 232 ms ;
-- recherche 254 ms ;
-- contexte 285 ms ;
+- 16 tests verts ;
+- `mean precision@3 = 0,4444`, `mean recall@3 = 1,0000` ;
 - résultat `SELF-SMOKE SUCCESS`.
 
-Cette validation clôt la **Phase 1 — validation du moteur NEXUS** et valide le MVP du moteur.
+Cette validation clôt la Phase 1 et valide le MVP du moteur.
 
 ### Itération 5 — Instructions et documentation
 
-**Validée localement le 20 juillet 2026.**
+Validée localement le 20 juillet 2026 :
 
-Fonctionnalités validées :
+- Markdown indexé comme documentation ;
+- providers AGENTS, Copilot, Claude et Gemini ;
+- scopes repository/répertoire/glob ;
+- références `@fichier` sécurisées ;
+- déduplication inter-provider et inter-source ;
+- budget d'instructions ;
+- 19 tests verts ;
+- 145 fichiers, 406 symboles, 781 relations ;
+- contexte strict : 172/180 tokens ;
+- contexte multi-source : 1 185/1 200 tokens ;
+- résultat `SELF-SMOKE SUCCESS`.
 
-- scan et indexation des fichiers Markdown ;
-- `MarkdownLanguageAnalyzer` ;
-- catégorie `DOCUMENTATION` pour le Markdown ordinaire ;
-- catégories séparées `INSTRUCTION`, `AGENT_PROFILE` et `SKILL` ;
-- `ContextSourceProvider` et `ContextSourceDescriptor` ;
-- `AgentsMdInstructionProvider` ;
-- `CopilotInstructionProvider` avec résolution `applyTo` ;
-- `ClaudeInstructionProvider` ;
-- `GeminiInstructionProvider` ;
-- scopes repository, répertoire et glob ;
-- priorité croissante avec la spécificité ;
-- résolution sécurisée des références `@fichier` à l'intérieur du repository ;
-- profondeur maximale de référence : 5 ;
-- détection de cycles ;
-- respect des `.gitignore` / `.nexusignore` imbriqués pour les références ;
-- déduplication SHA-256 des instructions identiques ;
-- déduplication entre document référencé et document retrouvé par Lucene ;
-- budget d'instructions plafonné à 25 % du budget total et à 600 tokens ;
-- détection sans injection brute de `.claude/settings*.json`, fichiers MCP, profils d'agents, hooks et skills ;
-- `AGENTS.md` racine ajouté à NEXUS pour dogfooder le mécanisme ;
-- bundle multi-source `INSTRUCTION + DOCUMENTATION + code + tests`.
+### Itération 6 — Skills et divulgation progressive
 
-Validation de référence :
+**En cours — implémentation à valider localement.**
 
-```text
-mvn clean install
-→ 83 fichiers source compilés
-→ 13 fichiers de test compilés
-→ 19 tests exécutés
-→ 0 échec / 0 erreur / 0 ignoré
-→ mean precision@3 = 0,4444
-→ mean recall@3 = 1,0000
+Implémentation actuelle :
 
-self-smoke
-→ 145 fichiers indexés
-→ 406 symboles
-→ 781 relations
-→ langues : java, markdown
-→ indexation complète : 1 115 ms
-→ indexation incrémentale : 236 ms
-→ recherche : 277 ms
-→ contexte strict : 5 items, 172/180 tokens, 379 ms
-→ contexte multi-source : 9 items, 1 185/1 200 tokens, 414 ms
-→ réduction du contexte candidat strict : 99,12 %
-→ SELF-SMOKE SUCCESS
-```
+- ADR-0034 ;
+- port `SkillSourceProvider` ;
+- `LocalAgentSkillsProvider` ;
+- racines `.agents/skills`, `.github/skills`, `.claude/skills` ;
+- parsing YAML 1.2 du frontmatter avec SnakeYAML Engine ;
+- `SkillDescriptor` sans corps Markdown complet ;
+- validation `name` / `description` ;
+- inventaire léger des ressources ;
+- `SkillDiscoveryService` et déduplication par nom ;
+- `SkillSelector` déterministe sur `name` + `description` ;
+- `SkillLoader` appelé uniquement après sélection ;
+- `SkillContextSelector` sans troncature ;
+- type `CandidateType.SKILL` ;
+- isolation de tout le sous-arbre des skills hors de la recherche Lucene générique ;
+- budget skill dédié ;
+- métadonnées de découverte, matching, activation et ressources ;
+- `skillsExecuted=false` par conception ;
+- dogfooding avec `.agents/skills/nexus-context-validation` ;
+- self-smoke étendu à 12 étapes.
 
-Le contexte strict sélectionne réellement `AGENTS.md` et `docs/architecture.md` référencé. Le contexte multi-source sélectionne simultanément des instructions, de la documentation, du code et des tests. Deux fragments documentaires redondants sont éliminés par la déduplication inter-source.
-
-Décisions associées :
-
-- ADR-0011 — normaliser les sources derrière des providers ;
-- ADR-0012 — réutiliser les standards existants ;
-- ADR-0032 — préserver et normaliser le contexte natif ;
-- ADR-0033 — séparer instructions contextuelles et configuration opérationnelle.
-
-Le chapitre [Contexte natif des projets](native-context-sources.md) détaille exactement comment un projet déjà configuré avec `.github`, `.claude`, `AGENTS.md` ou `CLAUDE.md` est utilisé par NEXUS.
-
-La prochaine étape est l'**Itération 6 — Skills et divulgation progressive**.
+Le chapitre [Agent Skills](agent-skills.md) décrit l'implémentation complète.
 
 ## Principes à respecter en contribuant
 
 ### 1. Le cœur ne dépend pas des clients
 
-Les classes métier ne doivent pas dépendre de Copilot, Claude, MCP, Quarkus ou d'un SDK LLM.
+Copilot, Claude, MCP, Quarkus, JARVIS ou un registre externe ne doivent pas contaminer les contrats métier.
 
 ### 2. Les conventions natives restent dans les providers
 
-`DefaultContextBuilder` ne doit pas contenir de logique spécifique à `.github/copilot-instructions.md` ou `CLAUDE.md`.
+Les chemins et formats spécifiques restent dans leurs adaptateurs.
 
-### 3. SQLite est canonique, Lucene est dérivé
+### 3. Découverte d'un skill ne signifie pas chargement complet
 
-Une perte de l'index Lucene doit être récupérable par reconstruction.
+`SkillDescriptor` ne doit pas contenir le corps du `SKILL.md`.
 
-### 4. Toute sélection doit être explicable
+### 4. Sélection avant activation
 
-Un score, une instruction applicable ou une exclusion doit provenir d'une règle mesurable.
+Le `SkillLoader` ne doit recevoir que des `SkillMatch` déjà sélectionnés.
 
-### 5. Le budget appartient au moteur
+### 5. NEXUS ne doit jamais exécuter un skill
 
-Le consommateur fournit un budget ; NEXUS construit un bundle qui ne dépasse pas ce budget selon le `TokenEstimator` actif.
+Les scripts et outils déclarés restent sous le contrôle du consommateur.
 
-### 6. Configuration d'outil ne signifie pas contexte
+### 6. SQLite est canonique, Lucene est dérivé
 
-Les permissions, hooks, MCP et settings détectés ne doivent pas être injectés comme texte brut dans le bundle.
+Une perte de l'index Lucene doit rester reconstructible.
 
-### 7. Une décision structurante implique un ADR
+### 7. Toute sélection doit être explicable
 
-Avant de modifier stockage, scoring, protocole, modèle de données ou stratégie de contexte, vérifier si un nouvel ADR est nécessaire.
+Scores, instructions, skills et exclusions doivent provenir de règles inspectables.
+
+### 8. Le budget appartient au moteur
+
+Le bundle final ne doit jamais dépasser le budget demandé.
+
+### 9. Une décision structurante implique un ADR
+
+Avant de modifier stockage, scoring, protocole ou stratégie de contexte, vérifier si un nouvel ADR est nécessaire.
 
 ## Repères dans le code
 
 ```text
 src/main/java/com/nexus/
-├── cli/                     Adaptateur CLI et rendu humain/JSON
-├── config/                  Résolution NEXUS_HOME et chemins locaux
-├── context/                 Construction du ContextBundle
-│   └── source/              Sources natives normalisées
-│       └── instruction/     Providers AGENTS / Copilot / Claude / Gemini
-├── index/                   Modèles et pipeline d'indexation
-│   ├── java/                Analyse Java via JavaParser
-│   ├── markdown/            Analyse Markdown minimale
-│   └── scan/                Parcours filesystem et classification
-├── persistence/sqlite/      Adaptateurs SQLite et migrations
-├── project/                 Registre et modèle des projets
-├── ranking/                 Score déterministe et graphe
-├── search/                  Stratégies de recherche et fusion
-│   ├── evaluation/          Métriques de qualité
-│   └── lucene/              Adaptateur Lucene
-└── token/                   Estimation de tokens
+├── cli/
+├── config/
+├── context/
+│   └── source/
+│       ├── instruction/     Providers AGENTS / Copilot / Claude / Gemini
+│       └── skill/           Catalogue, sélection et activation Agent Skills
+├── index/
+│   ├── java/
+│   ├── markdown/
+│   └── scan/
+├── persistence/sqlite/
+├── project/
+├── ranking/
+├── search/
+│   ├── evaluation/
+│   └── lucene/
+└── token/
 ```
 
-## UML simplifié des nouveaux ports
+## UML simplifié des ports de sources
 
 ```mermaid
 classDiagram
-    class LanguageAnalyzer {
-        <<interface>>
-        +supports(Path) boolean
-        +analyze(Path, Path) AnalysisResult
-    }
-
     class ContextSourceProvider {
         <<interface>>
-        +id() String
         +discover(ContextSourceQuery) List~ContextSourceDescriptor~
     }
 
-    class ContextBuilder {
+    class SkillSourceProvider {
         <<interface>>
-        +build(ContextRequest) ContextBundle
+        +discover(SkillSourceQuery) SkillProviderResult
     }
 
-    class JavaParserLanguageAnalyzer
-    class MarkdownLanguageAnalyzer
-    class AgentsMdInstructionProvider
-    class CopilotInstructionProvider
-    class ClaudeInstructionProvider
-    class GeminiInstructionProvider
+    class LocalAgentSkillsProvider
+    class SkillDiscoveryService
+    class SkillSelector
+    class SkillLoader
     class DefaultContextBuilder
 
-    LanguageAnalyzer <|.. JavaParserLanguageAnalyzer
-    LanguageAnalyzer <|.. MarkdownLanguageAnalyzer
-    ContextSourceProvider <|.. AgentsMdInstructionProvider
-    ContextSourceProvider <|.. CopilotInstructionProvider
-    ContextSourceProvider <|.. ClaudeInstructionProvider
-    ContextSourceProvider <|.. GeminiInstructionProvider
-    ContextBuilder <|.. DefaultContextBuilder
+    SkillSourceProvider <|.. LocalAgentSkillsProvider
+    SkillDiscoveryService --> SkillSourceProvider
+    SkillSelector --> SkillDiscoveryService
+    SkillLoader --> SkillSelector
+    DefaultContextBuilder --> ContextSourceProvider
+    DefaultContextBuilder --> SkillDiscoveryService
+    DefaultContextBuilder --> SkillSelector
+    DefaultContextBuilder --> SkillLoader
 ```
 
-## Validation locale de référence
+## Validation locale de l'Itération 6
+
+À exécuter :
 
 ```powershell
 git pull --ff-only
@@ -329,27 +308,31 @@ mvn clean install
 .\scripts\self-smoke.ps1 -KeepData
 ```
 
-Le self-smoke comporte 11 étapes et valide notamment :
+Le self-smoke comporte désormais 12 étapes et doit notamment vérifier :
 
 ```text
 Java + Markdown indexés
     ↓
-AGENTS.md natif découvert
+instructions natives sélectionnées
     ↓
-ContextBundle strict <= 180 tokens
+contexte multi-source
     ↓
-ContextBundle multi-source
-    ├── INSTRUCTION
-    ├── DOCUMENTATION
-    ├── code
-    └── tests
+Agent Skill découvert par métadonnées
+    ↓
+Skill pertinent sélectionné
+    ↓
+SKILL.md complet chargé après sélection
+    ↓
+référence du skill non chargée automatiquement
+    ↓
+skillsExecuted = false
     ↓
 SELF-SMOKE SUCCESS
 ```
 
-Après le build, la CLI reste accessible via :
+Après le build :
 
 ```powershell
 .\scripts\nexus.ps1 --help
-.\scripts\nexus.ps1 context nexus-local "modifier OrderService" --budget 2000 --explain --json
+.\scripts\nexus.ps1 context nexus-local "validate NEXUS context quality progressive disclosure" --budget 1200 --explain --json
 ```
