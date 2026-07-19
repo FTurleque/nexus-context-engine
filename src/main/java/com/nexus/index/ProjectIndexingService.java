@@ -68,6 +68,7 @@ public final class ProjectIndexingService {
 
             Set<String> removedPaths = new HashSet<>(existingFiles.keySet());
             removedPaths.removeAll(scannedPaths);
+            Set<String> searchRemovedPaths = new HashSet<>(removedPaths);
 
             List<IndexedFileUpdate> updates = new ArrayList<>();
             List<SearchDocument> searchDocuments = new ArrayList<>();
@@ -81,19 +82,26 @@ public final class ProjectIndexingService {
                 LanguageAnalyzer analyzer = findAnalyzer(scannedFile);
                 AnalysisResult analysis = analyzer.analyze(project.rootPath(), scannedFile.absolutePath());
                 updates.add(new IndexedFileUpdate(scannedFile, analysis));
-                searchDocuments.add(new SearchDocument(
-                        scannedFile.relativePath(),
-                        scannedFile.language(),
-                        scannedFile.category(),
-                        Files.readString(scannedFile.absolutePath(), StandardCharsets.UTF_8),
-                        analysis.symbols()));
+
+                if (isGenericSearchEligible(scannedFile.category())) {
+                    searchDocuments.add(new SearchDocument(
+                            scannedFile.relativePath(),
+                            scannedFile.language(),
+                            scannedFile.category(),
+                            Files.readString(scannedFile.absolutePath(), StandardCharsets.UTF_8),
+                            analysis.symbols()));
+                } else {
+                    // Le fichier reste canonique dans SQLite mais doit disparaître de
+                    // l'index Lucene générique s'il y avait été indexé auparavant.
+                    searchRemovedPaths.add(scannedFile.relativePath());
+                }
             }
 
             indexRepository.applyChanges(projectId, updates, removedPaths);
             if (fullRebuild) {
                 searchIndex.rebuild(projectId, searchDocuments);
             } else {
-                searchIndex.applyChanges(projectId, searchDocuments, removedPaths);
+                searchIndex.applyChanges(projectId, searchDocuments, searchRemovedPaths);
             }
 
             Set<String> languages = scannedFiles.stream()
@@ -121,6 +129,12 @@ public final class ProjectIndexingService {
                 .filter(analyzer -> analyzer.supports(file.absolutePath()))
                 .findFirst()
                 .orElseThrow(() -> new IOException("Aucun analyseur disponible pour " + file.relativePath()));
+    }
+
+    private static boolean isGenericSearchEligible(FileCategory category) {
+        return category != FileCategory.INSTRUCTION
+                && category != FileCategory.AGENT_PROFILE
+                && category != FileCategory.SKILL;
     }
 
     private void markFailed(ProjectDescriptor project, Exception originalFailure) {
