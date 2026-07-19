@@ -79,7 +79,8 @@ public final class DeterministicContextRanker implements ContextRanker {
             case FILE -> 2;
             case DOCUMENTATION -> 3;
             case INSTRUCTION -> 4;
-            case GIT -> 5;
+            case SKILL -> 5;
+            case GIT -> 6;
         };
     }
 
