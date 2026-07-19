@@ -11,7 +11,7 @@ Le ranking lexical identifie les fichiers qui contiennent directement les termes
 
 À ce stade, JavaParser extrait déjà les imports et les types définis. NEXUS ne dispose pas encore de résolution sémantique profonde, d'appels de méthodes complets ni d'un index SCIP. Construire dès maintenant un graphe d'appels exhaustif serait coûteux et fragile.
 
-Aider montre l'intérêt d'un graphe de fichiers pondéré par les relations entre définitions et références, puis d'un ranking de type PageRank personnalisé pour sélectionner les parties les plus importantes du repository. NEXUS souhaite réutiliser ce principe sans dépendre du code d'Aider et sans prétendre disposer dès le MVP du même niveau de relations. Le RepoMap d'Aider construit notamment un graphe où les fichiers sont des nœuds, les dépendances créent des arêtes et la pertinence de la conversation peut influencer la personnalisation du ranking. Les éléments les mieux classés sont ensuite sélectionnés sous budget. citeturn617916search0turn617916search1
+Aider montre l'intérêt d'un graphe de fichiers pondéré par les relations entre définitions et références, puis d'un ranking de type PageRank personnalisé pour sélectionner les parties les plus importantes du repository. NEXUS souhaite réutiliser ce principe sans dépendre du code d'Aider et sans prétendre disposer dès le MVP du même niveau de relations. Le RepoMap d'Aider construit notamment un graphe où les fichiers sont des nœuds, les dépendances créent des arêtes et la pertinence de la conversation peut influencer la personnalisation du ranking. Les éléments les mieux classés sont ensuite sélectionnés sous budget.
 
 ## Facteurs de décision
 
@@ -55,7 +55,7 @@ Les imports externes qui ne correspondent à aucun type du repository sont ignor
 
 Le signal initial `graphScore` sera calculé à partir de la proximité avec les fichiers déjà pertinents et de l'importance structurelle locale. L'implémentation peut commencer par une propagation bornée sur un ou deux sauts. Un PageRank personnalisé pourra être ajouté seulement si les benchmarks montrent qu'il améliore `precision@K` ou `recall@K`.
 
-Cette décision est volontairement plus simple que RepoMap : NEXUS adopte le **principe** d'un ranking structurel par graphe, mais attend des relations plus riches avant de reproduire une propagation globale plus sophistiquée. Aider utilise des définitions/références issues de Tree-sitter et pondère son graphe avant un PageRank ; NEXUS ne dispose pour l'instant que des imports Java fiables. citeturn617916search1turn617916search2
+Cette décision est volontairement plus simple que RepoMap : NEXUS adopte le **principe** d'un ranking structurel par graphe, mais attend des relations plus riches avant de reproduire une propagation globale plus sophistiquée. Aider utilise des définitions/références issues de Tree-sitter et pondère son graphe avant un PageRank ; NEXUS ne dispose pour l'instant que des imports Java fiables.
 
 ### Conséquences positives
 
