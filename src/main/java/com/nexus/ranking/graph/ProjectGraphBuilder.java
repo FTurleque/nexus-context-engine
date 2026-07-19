@@ -1,0 +1,75 @@
+package com.nexus.ranking.graph;
+
+import com.nexus.index.IndexRepository;
+import com.nexus.index.IndexedSymbol;
+import com.nexus.index.RelationKind;
+import com.nexus.index.SymbolKind;
+import com.nexus.index.SymbolRelation;
+
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
+
+public final class ProjectGraphBuilder {
+
+    private final IndexRepository indexRepository;
+
+    public ProjectGraphBuilder(IndexRepository indexRepository) {
+        this.indexRepository = Objects.requireNonNull(indexRepository, "indexRepository");
+    }
+
+    public ProjectGraph build(UUID projectId) {
+        Map<String, String> typeOwners = typeOwners(indexRepository.findSymbols(projectId));
+        Map<String, Set<String>> edges = new LinkedHashMap<>();
+
+        for (SymbolRelation relation : indexRepository.findRelations(projectId)) {
+            if (relation.kind() != RelationKind.IMPORTS) {
+                continue;
+            }
+            String targetPath = resolveImportedType(typeOwners, relation.target());
+            if (targetPath == null || targetPath.equals(relation.source())) {
+                continue;
+            }
+            edges.computeIfAbsent(relation.source(), ignored -> new LinkedHashSet<>()).add(targetPath);
+        }
+
+        return ProjectGraph.undirected(edges);
+    }
+
+    private static Map<String, String> typeOwners(List<IndexedSymbol> symbols) {
+        Map<String, String> owners = new LinkedHashMap<>();
+        for (IndexedSymbol indexedSymbol : symbols) {
+            if (isType(indexedSymbol.symbol().kind())) {
+                owners.putIfAbsent(indexedSymbol.symbol().qualifiedName(), indexedSymbol.relativePath());
+            }
+        }
+        return owners;
+    }
+
+    private static boolean isType(SymbolKind kind) {
+        return switch (kind) {
+            case CLASS, INTERFACE, RECORD, ENUM, ANNOTATION, TYPE -> true;
+            case METHOD, CONSTRUCTOR -> false;
+        };
+    }
+
+    private static String resolveImportedType(Map<String, String> owners, String targetRef) {
+        String candidate = targetRef;
+        while (!candidate.isBlank()) {
+            String owner = owners.get(candidate);
+            if (owner != null) {
+                return owner;
+            }
+            int separator = candidate.lastIndexOf('.');
+            if (separator < 0) {
+                return null;
+            }
+            candidate = candidate.substring(0, separator);
+        }
+        return null;
+    }
+}

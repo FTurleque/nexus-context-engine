@@ -231,7 +231,7 @@ $result.metadata.nativeCustomizationsDetected
 Classe principale :
 
 ```text
-io.github.fturleque.nexus.cli.NexusCli
+cli.com.nexus.NexusCli
 ```
 
 Commandes :

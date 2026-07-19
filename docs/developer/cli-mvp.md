@@ -483,7 +483,7 @@ target/nexus-context-engine-0.1.0-SNAPSHOT-cli.jar
 Il contient les dépendances runtime et possède notamment :
 
 ```text
-Main-Class: io.github.fturleque.nexus.cli.NexusCli
+Main-Class: cli.com.nexus.NexusCli
 Implementation-Version: 0.1.0-SNAPSHOT
 ```
 

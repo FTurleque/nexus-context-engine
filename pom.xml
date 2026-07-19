@@ -86,7 +86,7 @@
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>${exec-maven-plugin.version}</version>
                 <configuration>
-                    <mainClass>io.github.fturleque.nexus.cli.NexusCli</mainClass>
+                    <mainClass>com.nexus.cli.NexusCli</mainClass>
                 </configuration>
             </plugin>
             <plugin>
@@ -117,7 +117,7 @@
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <manifestEntries>
-                                        <Main-Class>io.github.fturleque.nexus.cli.NexusCli</Main-Class>
+                                        <Main-Class>com.nexus.cli.NexusCli</Main-Class>
                                         <Implementation-Title>NEXUS Context Engine CLI</Implementation-Title>
                                         <Implementation-Version>${project.version}</Implementation-Version>
                                     </manifestEntries>

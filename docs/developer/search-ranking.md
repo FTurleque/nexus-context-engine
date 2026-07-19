@@ -201,7 +201,7 @@ qualifiedName → relativePath
 Exemple :
 
 ```text
-io.github.fturleque.nexus.search.SearchService
+search.com.nexus.SearchService
 → src/main/java/io/github/fturleque/nexus/search/SearchService.java
 ```
 
