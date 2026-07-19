@@ -129,6 +129,34 @@ inspect <id-ou-nom>
 
 Le packaging final en commande native `nexus` est prévu plus tard dans la phase de consolidation de la CLI.
 
+### Self-smoke test : NEXUS indexe NEXUS
+
+Le script PowerShell `scripts/self-smoke.ps1` valide le flux réel de la CLI sur le repository NEXUS lui-même :
+
+1. compilation de la CLI ;
+2. enregistrement du repository courant ;
+3. vérification du registre ;
+4. première indexation complète ;
+5. seconde indexation incrémentale attendue avec `0 modifiés` et `0 supprimés` ;
+6. inspection de l'index avec état `READY`.
+
+Le test utilise un `NEXUS_HOME` isolé sous `target/nexus-self-smoke-home` et supprime ces données à la fin par défaut.
+
+Sous Windows PowerShell :
+
+```powershell
+git pull --ff-only
+.\scripts\self-smoke.ps1
+```
+
+Pour conserver la base SQLite et l'index Lucene générés afin de les inspecter manuellement :
+
+```powershell
+.\scripts\self-smoke.ps1 -KeepData
+```
+
+L'exécution de la CLI par Maven utilise `exec-maven-plugin`, dont la version est fixée dans le `pom.xml` pour conserver un comportement reproductible.
+
 ## Sécurité par défaut
 
 NEXUS adopte une approche locale par défaut. Aucun contenu du repository ne doit quitter la machine sans activation explicite d'une intégration externe. Un fichier `.nexusignore` complète les mécanismes de type `.gitignore` afin d'exclure notamment les secrets, les fichiers sensibles et les contenus générés.
