@@ -39,6 +39,8 @@ Validation locale :
 
 ## Itération 1 — Indexation locale et fondations de recherche
 
+État : **terminée et validée localement**.
+
 Objectif : enregistrer un repository Java local, l'indexer de manière incrémentale et disposer d'une base de recherche locale exploitable.
 
 Livrables :
@@ -62,13 +64,31 @@ SQLite
 → source de vérité structurelle
 
 Lucene
-→ index de recherche local
+→ index de recherche local reconstructible
 
 JavaParser
 → analyse structurelle Java embarquée
+
+JGit
+→ sémantique .gitignore / .nexusignore
+
+SHA-256
+→ détection incrémentale des changements
 ```
 
 Critère de sortie : un repository Java local peut être enregistré, indexé, réindexé sans duplication et inspecté hors ligne.
+
+Validation locale du 19 juillet 2026 :
+
+- `mvn clean install` : succès ;
+- compilation de 43 fichiers source avec `--release 21` : succès ;
+- compilation de 4 fichiers de test : succès ;
+- tests : 5 exécutés, 0 échec, 0 erreur, 0 ignoré ;
+- tests couverts : analyse JavaParser, indexation incrémentale SQLite/Lucene, scanner et règles d'ignore, registre de projets ;
+- génération du JAR `nexus-context-engine-0.1.0-SNAPSHOT.jar` : succès ;
+- installation dans le dépôt Maven local : succès.
+
+Les avertissements Maven/Guice, SLF4J sans provider, accès natif SQLite et Vector API Lucene observés lors du build sont non bloquants et ne remettent pas en cause le critère de sortie de l'itération.
 
 ---
 
