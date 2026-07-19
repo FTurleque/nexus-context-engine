@@ -19,6 +19,7 @@ Utilisateur / Agent / IDE
    ├── code / symboles / tests
    ├── documentation pertinente
    ├── instructions natives applicables
+   ├── Agent Skills pertinents
    ├── ranking explicable
    └── budget de contexte
           │
@@ -33,13 +34,28 @@ Utilisateur / Agent / IDE
 
 > **Respecter le contexte natif du projet avant d'ajouter du contexte NEXUS.**
 
-Un projet qui possède déjà `AGENTS.md`, `.github/copilot-instructions.md`, `.github/instructions/*.instructions.md`, `CLAUDE.md`, `.claude/CLAUDE.md` ou `GEMINI.md` n'a pas besoin de migrer vers un format propriétaire.
+Un projet qui possède déjà `AGENTS.md`, `.github/copilot-instructions.md`, `.github/instructions/*.instructions.md`, `CLAUDE.md`, `.claude/CLAUDE.md`, `GEMINI.md` ou des `SKILL.md` n'a pas besoin de migrer vers un format propriétaire.
 
-NEXUS découvre ces conventions via des providers, résout leur scope et les normalise dans un modèle commun.
+NEXUS :
 
-À l'inverse, les configurations opérationnelles telles que `.claude/settings.json`, `.mcp.json`, les hooks ou les profils d'agents sont détectées mais ne sont pas injectées automatiquement comme texte de contexte.
+```text
+instructions
+→ découvre
+→ résout le scope
+→ sélectionne
 
-Documentation détaillée : [Contexte natif des projets](docs/developer/native-context-sources.md).
+skills
+→ découvre les métadonnées
+→ sélectionne name + description
+→ charge seulement le SKILL.md pertinent
+```
+
+Les settings, permissions, hooks, configurations MCP et profils d'agents restent séparés du contexte automatiquement injecté.
+
+Documentation détaillée :
+
+- [Contexte natif des projets](docs/developer/native-context-sources.md)
+- [Agent Skills](docs/developer/agent-skills.md)
 
 ## Périmètre actuel
 
@@ -52,10 +68,11 @@ Documentation détaillée : [Contexte natif des projets](docs/developer/native-c
 - ranking déterministe et explicable ;
 - construction d'extraits sous budget ;
 - instructions natives avec résolution de scope ;
+- Agent Skills avec divulgation progressive ;
 - CLI humaine et JSON ;
 - JAR autonome.
 
-Les intégrations IDE, API REST, MCP, Git distant, multi-langage, skills actifs et embeddings restent des étapes ultérieures de la roadmap.
+Les intégrations IDE, API REST, MCP, Git distant, multi-langage, AI Skills Registry et embeddings restent des étapes ultérieures de la roadmap.
 
 ## Architecture
 
@@ -68,17 +85,16 @@ Principaux ports :
 - `ContextRanker` ;
 - `TokenEstimator` ;
 - `ContextBuilder` ;
-- `ContextSourceProvider`.
+- `ContextSourceProvider` ;
+- `SkillSourceProvider`.
 
 ```text
-Formats et données natives
+Repository
    │
    ├── Java
    ├── Markdown
-   ├── AGENTS.md
-   ├── Copilot instructions
-   ├── CLAUDE.md
-   └── GEMINI.md
+   ├── AGENTS.md / Copilot / Claude / Gemini
+   └── Agent Skills
    │
    ▼
 Providers / analyzers
@@ -90,10 +106,10 @@ Modèle NEXUS normalisé
    └── Lucene dérivé
    │
    ▼
-Recherche + ranking + scope
+Recherche + ranking + scope + skill matching
    │
    ▼
-Budget
+Budgets
    │
    ▼
 ContextBundle
@@ -106,7 +122,8 @@ ContextBundle
 - JGit : `.gitignore` / `.nexusignore` ;
 - SHA-256 : détection incrémentale et déduplication ;
 - JavaParser : analyse Java ;
-- Jackson : uniquement à la frontière CLI JSON.
+- SnakeYAML Engine : frontmatter YAML 1.2 des Agent Skills ;
+- Jackson : frontière CLI JSON.
 
 ## Documentation
 
@@ -117,137 +134,143 @@ ContextBundle
 - [Guide développeur](docs/developer/README.md)
 - [CLI du MVP](docs/developer/cli-mvp.md)
 - [Contexte natif des projets](docs/developer/native-context-sources.md)
-
-Le guide développeur contient les diagrammes Mermaid/UML, les séquences d'exécution et les procédures permettant de reproduire l'implémentation.
+- [Agent Skills](docs/developer/agent-skills.md)
 
 ## État du projet
 
 ### Itération 0 — Socle
 
-**Terminée et validée localement.**
+**Terminée et validée.**
 
-Java 21, Maven, contrats initiaux et premier analyseur JavaParser.
+Java 21, Maven, contrats initiaux et JavaParser.
 
 ### Itération 1 — Indexation locale
 
-**Terminée et validée localement.**
+**Terminée et validée.**
 
 Registre de projets, scanner, ignore rules, SQLite, migrations, Lucene et indexation incrémentale.
 
-Le self-smoke initial a également permis de détecter puis corriger la configuration du niveau Java 21 dans JavaParser.
-
 ### Itération 2 — Recherche et ranking
 
-**Terminée et validée localement.**
+**Terminée et validée.**
 
 BM25 multi-champs, recherche de symboles exacte/fuzzy, graphe d'imports, ranking déterministe et explication des scores.
 
 ### Itération 3 — Construction du contexte
 
-**Terminée et validée localement.**
+**Terminée et validée.**
 
 `ContextBuilder`, fragments symboliques, fusion, estimation de tokens, troncature et sélection sous budget.
 
-Validation historique : 3 items, 178/180 tokens estimés avec environ 96,49 % de réduction du contexte candidat.
-
 ### Itération 4 — CLI utilisable pour le MVP
 
-**Terminée et validée localement le 19 juillet 2026. Le MVP du moteur est validé de bout en bout.**
+**Terminée et validée le 19 juillet 2026. Le MVP du moteur est validé de bout en bout.**
 
-Validation :
+Validation de référence :
 
-- 66 fichiers source compilés ;
-- 11 fichiers de test compilés ;
-- 16 tests, 0 échec ;
-- `mean precision@3 = 0,4444` ;
-- `mean recall@3 = 1,0000` ;
-- JAR bibliothèque et JAR CLI autonome ;
-- self-smoke : 77 fichiers, 322 symboles, 599 relations ;
-- indexation complète : 896 ms ;
-- indexation incrémentale : 232 ms avec 0 changement ;
-- recherche : 254 ms ;
-- contexte : 285 ms ;
-- résultat : `SELF-SMOKE SUCCESS`.
+- 66 sources ;
+- 11 fichiers de test ;
+- 16 tests verts ;
+- `precision@3 = 0,4444` ;
+- `recall@3 = 1,0000` ;
+- JAR autonome ;
+- `SELF-SMOKE SUCCESS`.
 
 ### Itération 5 — Instructions et documentation
 
-**Terminée et validée localement le 20 juillet 2026.**
+**Terminée et validée le 20 juillet 2026.**
 
-L'itération ajoute :
+Validation de référence :
 
-- indexation des `.md` ordinaires comme `DOCUMENTATION` ;
-- `MarkdownLanguageAnalyzer` ;
-- `ContextSourceProvider` et `ContextSourceDescriptor` ;
-- provider `AGENTS.md` et alias de compatibilité `AGENT.md` ;
-- provider GitHub Copilot : repository-wide et `applyTo` ;
-- provider Claude : `CLAUDE.md`, `.claude/CLAUDE.md` et scopes imbriqués ;
-- provider Gemini : `GEMINI.md` ;
-- priorité par spécificité du scope ;
-- références `@fichier` confinées au repository, profondeur maximale 5 et détection de cycles ;
-- respect des `.gitignore` / `.nexusignore`, y compris imbriqués, pour les références ;
-- déduplication SHA-256 entre instructions identiques ;
-- déduplication entre documentation référencée et documentation retrouvée par Lucene ;
-- sous-budget d'instructions : 25 % du budget total, plafonné à 600 tokens ;
-- détection des settings, MCP, hooks, profils d'agents et skills sans injection brute ;
-- catégories distinctes `INSTRUCTION`, `AGENT_PROFILE` et `SKILL` ;
-- `AGENTS.md` racine dans NEXUS afin de dogfooder le mécanisme ;
-- tests brownfield avec `.github`, `.claude`, instructions imbriquées et documentation ;
-- self-smoke à 11 étapes avec validation d'un bundle multi-source.
+- 83 sources ;
+- 13 fichiers de test ;
+- 19 tests verts ;
+- 145 fichiers indexés ;
+- 406 symboles ;
+- 781 relations ;
+- Java + Markdown ;
+- instructions natives sélectionnées ;
+- contexte strict : 172/180 tokens ;
+- contexte multi-source : 1 185/1 200 tokens ;
+- `SELF-SMOKE SUCCESS`.
 
-Validation locale du 20 juillet 2026 :
+### Itération 6 — Skills et divulgation progressive
 
-- `mvn clean install` : succès ;
-- 83 fichiers source compilés ;
-- 13 fichiers de test compilés ;
-- 19 tests exécutés, 0 échec, 0 erreur, 0 ignoré ;
-- baseline qualité inchangée : `mean precision@3 = 0,4444`, `mean recall@3 = 1,0000` ;
-- première indexation : 145 fichiers scannés, 145 modifiés, 0 supprimé ;
-- index produit : 145 fichiers, 406 symboles, 781 relations ;
-- langues détectées : `java`, `markdown` ;
-- indexation complète : 1 115 ms ;
-- seconde indexation incrémentale : 236 ms avec 0 modifié et 0 supprimé ;
-- recherche `ProjectIndexingService` : 277 ms, fichier principal classé premier ;
-- contexte strict avec instructions natives : 5 items, 172/180 tokens, 379 ms ;
-- `AGENTS.md` et `docs/architecture.md` référencé sont effectivement sélectionnés ;
-- contexte multi-source : 9 items, 1 185/1 200 tokens, 414 ms ;
-- le bundle multi-source contient simultanément `INSTRUCTION`, `DOCUMENTATION`, code et tests ;
-- 2 fragments documentaires ont été dédupliqués entre sources natives et recherche lexicale ;
-- résultat final : `SELF-SMOKE SUCCESS`.
+**En cours — validation locale à effectuer.**
 
-Décisions : ADR-0032 et ADR-0033.
+Implémentation actuelle :
 
-La prochaine étape de la roadmap est l'**Itération 6 — Skills et divulgation progressive** : découvrir les skills sans tout charger, sélectionner les `SKILL.md` pertinents et laisser leur exécution à l'agent consommateur.
+- ADR-0034 ;
+- `SkillSourceProvider` ;
+- `LocalAgentSkillsProvider` ;
+- support `.agents/skills`, `.github/skills`, `.claude/skills` ;
+- frontmatter YAML 1.2 ;
+- catalogue léger `SkillDescriptor` ;
+- découverte sans chargement du corps complet ;
+- validation `name` / `description` ;
+- inventaire des ressources `scripts`, `references`, `assets` ;
+- déduplication des skills de même nom ;
+- sélection déterministe sur `name` + `description` ;
+- chargement du `SKILL.md` uniquement après sélection ;
+- type `SKILL` dans le `ContextBundle` ;
+- budget dédié ;
+- aucune troncature des skills ;
+- aucun script exécuté ;
+- ressources non chargées automatiquement ;
+- isolation des sous-arbres de skills hors Lucene générique ;
+- dogfooding avec `nexus-context-validation` ;
+- self-smoke étendu à 12 étapes.
+
+L'Itération 6 est encadrée par ADR-0034 et reste à valider localement avant clôture.
 
 ## Comment utiliser NEXUS sur une application déjà configurée
-
-Aucune migration n'est requise.
 
 ```powershell
 .\scripts\nexus.ps1 project add N:\workspace-dev\mon-app mon-app
 .\scripts\nexus.ps1 index mon-app
-.\scripts\nexus.ps1 context mon-app "modifier OrderService" --budget 2000 --explain
+.\scripts\nexus.ps1 context mon-app "extract PDF form" --budget 2000 --explain
 ```
 
-NEXUS :
+NEXUS peut produire conceptuellement :
 
-1. recherche les fichiers et symboles pertinents ;
-2. utilise leurs chemins pour déterminer les instructions applicables ;
-3. sélectionne les `AGENTS.md`, instructions Copilot, Claude ou Gemini concernées ;
-4. ignore les instructions hors scope ;
-5. détecte les configurations opérationnelles sans les injecter ;
-6. ajoute la documentation Markdown pertinente ;
-7. déduplique ;
-8. respecte le budget global.
+```text
+ContextBundle
+├── INSTRUCTION  AGENTS.md
+├── SKILL        .agents/skills/pdf-processing/SKILL.md
+├── SYMBOL       PdfService.java#extractForm
+├── TEST         PdfServiceTest.java
+└── DOCUMENTATION docs/pdf-processing.md
+```
 
-Pour inspecter précisément la sélection :
+Une référence comme :
+
+```text
+.agents/skills/pdf-processing/references/forms.md
+```
+
+reste hors du bundle tant qu'un consommateur ne la demande pas explicitement.
+
+## Inspecter les skills en JSON
 
 ```powershell
-$result = .\scripts\nexus.ps1 context mon-app "modifier OrderService" --budget 2000 --explain --json | ConvertFrom-Json
-$result.items | Select-Object type, path, estimatedTokens
-$result.metadata.nativeSourcesDiscovered
-$result.metadata.nativeSourcesDeduplicated
-$result.metadata.nativeCustomizationsDetected
+$result = .\scripts\nexus.ps1 context mon-app "extract PDF form" --budget 2000 --explain --json |
+    ConvertFrom-Json
+
+$result.items | Where-Object type -eq "SKILL"
+$result.metadata.skillsDiscovered
+$result.metadata.skillsMatched
+$result.metadata.skillsSelected
+$result.metadata.skillResourcesDiscovered
+$result.metadata.skillsExecuted
 ```
+
+La propriété :
+
+```text
+skillsExecuted = false
+```
+
+est un invariant de sécurité : NEXUS construit du contexte, il n'exécute pas les skills.
 
 ## CLI
 
@@ -270,19 +293,7 @@ inspect <id-ou-nom> [--json]
 --version [--json]
 ```
 
-Sous Windows :
-
-```powershell
-.\scripts\nexus.ps1 --help
-```
-
-JAR autonome :
-
-```powershell
-java -jar .\target\nexus-context-engine-0.1.0-SNAPSHOT-cli.jar --version --json
-```
-
-## Validation locale de référence
+## Validation locale de l'Itération 6
 
 ```powershell
 git pull --ff-only
@@ -290,39 +301,41 @@ mvn clean install
 .\scripts\self-smoke.ps1 -KeepData
 ```
 
-Le self-smoke de l'Itération 5 valide :
+Le self-smoke doit désormais vérifier :
 
 ```text
 JAR autonome
    ↓
-Java + Markdown indexés
+Java + Markdown
    ↓
-indexation incrémentale idempotente
+instructions natives
    ↓
-recherche explicable
+contexte multi-source
    ↓
-AGENTS.md natif sélectionné
+Agent Skill découvert par metadata
    ↓
-ContextBundle strict <= 180 tokens
+Skill sélectionné
    ↓
-ContextBundle multi-source
-   ├── INSTRUCTION
-   ├── DOCUMENTATION
-   ├── code
-   └── tests
+SKILL.md complet chargé après sélection
+   ↓
+ressources seulement inventoriées
+   ↓
+skillsExecuted = false
    ↓
 SELF-SMOKE SUCCESS
 ```
 
 ## Sécurité par défaut
 
-NEXUS est local-first. Aucun contenu ne quitte la machine sans intégration externe explicitement activée.
+NEXUS est local-first.
 
 - `.gitignore` et `.nexusignore` sont respectés ;
 - les secrets et formats sensibles connus sont exclus ;
-- les références `@fichier` ne peuvent pas sortir du repository ;
-- les settings et permissions d'agents ne sont pas injectés comme contexte ;
-- aucun hook ou serveur MCP n'est exécuté pendant la construction du contexte.
+- les références d'instructions ne sortent pas du repository ;
+- settings, permissions et profils d'agents ne sont pas injectés comme instructions ;
+- aucun hook ni serveur MCP n'est exécuté ;
+- aucun script d'un Agent Skill n'est exécuté ;
+- les ressources d'un skill ne sont pas chargées automatiquement.
 
 ## Licence
 
