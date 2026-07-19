@@ -38,22 +38,21 @@ public final class JavaParserLanguageAnalyzer implements LanguageAnalyzer {
                 .orElse("");
 
         List<CodeSymbol> symbols = new ArrayList<>();
-        for (TypeDeclaration<?> type : unit.findAll(TypeDeclaration.class)) {
-            String qualifiedName = qualify(packageName, type.getNameAsString());
-            symbols.add(new CodeSymbol(
-                    symbolKind(type),
-                    type.getNameAsString(),
-                    qualifiedName,
-                    type.getNameAsString(),
-                    startLine(type),
-                    endLine(type)));
+        for (Node node : unit.findAll(Node.class)) {
+            if (node instanceof TypeDeclaration<?> type) {
+                symbols.add(new CodeSymbol(
+                        symbolKind(type),
+                        type.getNameAsString(),
+                        qualifiedOwner(packageName, type),
+                        type.getNameAsString(),
+                        startLine(type),
+                        endLine(type)));
+            }
         }
 
         for (MethodDeclaration method : unit.findAll(MethodDeclaration.class)) {
-            String owner = method.findAncestor(TypeDeclaration.class)
-                    .map(TypeDeclaration::getNameAsString)
-                    .orElse("<unknown>");
-            String qualifiedName = qualify(packageName, owner) + "#" + method.getSignature().asString();
+            String qualifiedName = qualifiedOwner(packageName, method)
+                    + "#" + method.getSignature().asString();
             symbols.add(new CodeSymbol(
                     SymbolKind.METHOD,
                     method.getNameAsString(),
@@ -64,7 +63,7 @@ public final class JavaParserLanguageAnalyzer implements LanguageAnalyzer {
         }
 
         for (ConstructorDeclaration constructor : unit.findAll(ConstructorDeclaration.class)) {
-            String qualifiedName = qualify(packageName, constructor.getNameAsString())
+            String qualifiedName = qualifiedOwner(packageName, constructor)
                     + "#" + constructor.getSignature().asString();
             symbols.add(new CodeSymbol(
                     SymbolKind.CONSTRUCTOR,
@@ -100,6 +99,19 @@ public final class JavaParserLanguageAnalyzer implements LanguageAnalyzer {
             return SymbolKind.ANNOTATION;
         }
         return SymbolKind.TYPE;
+    }
+
+    private static String qualifiedOwner(String packageName, Node node) {
+        List<String> typeNames = new ArrayList<>();
+        Node current = node;
+        while (current != null) {
+            if (current instanceof TypeDeclaration<?> type) {
+                typeNames.add(0, type.getNameAsString());
+            }
+            current = current.getParentNode().orElse(null);
+        }
+        String owner = typeNames.isEmpty() ? "<unknown>" : String.join(".", typeNames);
+        return qualify(packageName, owner);
     }
 
     private static String qualify(String packageName, String name) {
