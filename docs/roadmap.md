@@ -172,6 +172,8 @@ Les accents mal affichés dans certaines sorties capturées sous Windows PowerSh
 
 ## Itération 3 — Construction du contexte et budget
 
+État : **terminée et validée localement**.
+
 Objectif : produire le premier véritable `ContextBundle` NEXUS.
 
 Livrables :
@@ -188,7 +190,52 @@ Livrables :
 - explication des troncatures ;
 - calcul du ratio de réduction du contexte.
 
+Décisions associées :
+
+- ADR-0027 — utiliser un estimateur de tokens local, déterministe et remplaçable ;
+- ADR-0028 — construire prioritairement des fragments à partir des symboles et utiliser des fenêtres lexicales en repli ;
+- ADR-0029 — sélectionner les fragments sous budget de manière gloutonne, déterministe et explicable.
+
+Approche retenue :
+
+- `SearchService` fournit un ensemble de candidats classés ;
+- `ContextFragmentFactory` matérialise les symboles par leurs bornes AST ou crée des fenêtres lexicales pour les fichiers ;
+- `FragmentMerger` fusionne les plages chevauchantes ou adjacentes sans dupliquer les lignes ;
+- `BudgetedContextSelector` trie par score, applique un plafond par item, tronque si nécessaire et explique les exclusions ;
+- `HeuristicTokenEstimator` fournit une estimation locale indépendante d'un fournisseur de modèle ;
+- `DefaultContextBuilder` orchestre le pipeline et produit un `ContextBundle` dont les chemins sont relatifs au projet.
+
 Critère de sortie : les bundles générés restent dans le budget configuré tout en conservant le contexte pertinent attendu sur les corpus de référence.
+
+Validation locale du 19 juillet 2026 :
+
+- `mvn clean install` : succès ;
+- compilation de 65 fichiers source avec `--release 21` : succès ;
+- compilation de 10 fichiers de test : succès ;
+- tests : 13 exécutés, 0 échec, 0 erreur, 0 ignoré ;
+- tests couverts : construction de contexte de bout en bout, respect du budget, troncature, fusion sans duplication, cohérence score/composantes, chemins relatifs, déterminisme et estimation de tokens ;
+- génération du JAR `nexus-context-engine-0.1.0-SNAPSHOT.jar` : succès ;
+- installation dans le dépôt Maven local : succès.
+
+Validation self-smoke sur le repository NEXUS :
+
+- première indexation : 75 fichiers scannés, 75 fichiers modifiés, 0 supprimé ;
+- index produit : 75 fichiers, 288 symboles et 564 relations ;
+- première indexation avec reconstruction complète : 931 ms sur la machine de validation ;
+- seconde indexation incrémentale : 75 fichiers scannés, 0 fichier modifié, 0 supprimé ;
+- seconde indexation : 275 ms sur la machine de validation ;
+- inspection finale : état `READY`, 75 fichiers, 288 symboles et 564 relations ;
+- recherche explicable de `ProjectIndexingService` : succès ;
+- construction du `ContextBundle` avec un budget de 180 tokens : succès ;
+- bundle obtenu : 3 items, 178 tokens estimés sur 180 ;
+- fragments disponibles avant sélection : 5 076 tokens estimés ;
+- ratio de réduction du contexte : environ 96,49 % ;
+- 3 items tronqués explicitement ;
+- 9 fragments exclus faute de budget restant, avec raisons exposées ;
+- `ProjectIndexingService.java` et `ProjectIndexingServiceTest.java` restent présents dans le contexte retenu ;
+- résultat : `SELF-SMOKE SUCCESS`.
+
+Le self-smoke confirme l'invariant principal : `ContextBundle.estimatedTokens <= ContextBundle.tokenBudget`. Le budget volontairement très faible de 180 tokens force ici trois troncatures et plusieurs exclusions ; ces résultats sont conservés comme données de calibration pour de futurs réglages de diversité, sans remettre en cause la validation fonctionnelle de l'itération.
 
 ---
 
