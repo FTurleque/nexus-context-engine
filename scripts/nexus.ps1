@@ -1,9 +1,3 @@
-[CmdletBinding()]
-param(
-    [Parameter(ValueFromRemainingArguments = $true)]
-    [string[]]$NexusArgs
-)
-
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $targetDirectory = Join-Path $repoRoot "target"
@@ -16,5 +10,5 @@ if ($null -eq $cliJar) {
     exit 1
 }
 
-& java -jar $cliJar.FullName @NexusArgs
+& java -jar $cliJar.FullName @args
 exit $LASTEXITCODE
