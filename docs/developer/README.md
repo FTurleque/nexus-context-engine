@@ -22,6 +22,7 @@ L'objectif est qu'un développeur découvrant le repository puisse :
 | [3. Recherche et ranking](search-ranking.md) | BM25, recherche de symboles, graphe, fusion, score explicable |
 | [4. Construction du contexte](context-building.md) | fragments, fusion, tokens, sélection sous budget, `ContextBundle` |
 | [5. Reproduire et déboguer](reproduce-and-debug.md) | build, CLI, self-smoke, données locales, scénarios de diagnostic |
+| [6. CLI du MVP](cli-mvp.md) | contrat humain/JSON, codes de sortie, JAR autonome, launchers Windows, métriques et self-smoke |
 
 ## Vue d'ensemble
 
@@ -152,7 +153,23 @@ Validée localement le 19 juillet 2026 :
 - réduction d'environ 96,49 % par rapport aux 5 076 tokens candidats ;
 - troncatures et exclusions explicitement expliquées.
 
-L'Itération 4 peut désormais consolider la CLI du MVP, notamment les sorties JSON, l'expérience de commande et les métriques de bout en bout.
+### Itération 4 — CLI utilisable pour le MVP
+
+Implémentation en cours, validation locale à effectuer :
+
+- sortie humaine conservée par défaut ;
+- `--json` sur toutes les commandes ;
+- erreurs JSON structurées sur `stderr` ;
+- codes de sortie `0`, `1`, `2` ;
+- `--help` et `--version` ;
+- mesure `durationMs` pour indexation, recherche et construction du contexte ;
+- JAR autonome `*-cli.jar` via Maven Shade Plugin ;
+- scripts `scripts/nexus.ps1` et `scripts/nexus.cmd` ;
+- `NexusCliTest` pour le contrat JSON et le flux MVP ;
+- self-smoke exécutant directement le JAR autonome ;
+- publication des métriques `precision@3` et `recall@3` dans le log du corpus golden.
+
+Les décisions correspondantes sont ADR-0030 et ADR-0031. Le chapitre [CLI du MVP](cli-mvp.md) détaille l'implémentation et la reproduction.
 
 ## Principes à respecter en contribuant
 
@@ -189,7 +206,7 @@ Avant de modifier une décision durable — stockage, scoring, protocole, modèl
 
 ```text
 src/main/java/io/github/fturleque/nexus/
-├── cli/             Adaptateur CLI
+├── cli/             Adaptateur CLI et rendu humain/JSON
 ├── config/          Résolution NEXUS_HOME et chemins locaux
 ├── context/         Construction du ContextBundle
 ├── index/           Modèles et pipeline d'indexation
@@ -270,13 +287,20 @@ mvn clean install
 .\scripts\self-smoke.ps1 -KeepData
 ```
 
-Pour utiliser la CLI via Maven :
+Après le build, le chemin recommandé pour utiliser le MVP est le launcher PowerShell :
 
 ```powershell
-mvn -q exec:java "-Dexec.args=project add . nexus-local"
-mvn -q exec:java "-Dexec.args=index nexus-local"
-mvn -q exec:java "-Dexec.args=search nexus-local ProjectIndexingService --limit 5 --explain"
-mvn -q exec:java "-Dexec.args=context nexus-local ProjectIndexingService --budget 500 --explain"
+.\scripts\nexus.ps1 --help
+.\scripts\nexus.ps1 project add . nexus-local
+.\scripts\nexus.ps1 index nexus-local
+.\scripts\nexus.ps1 search nexus-local ProjectIndexingService --limit 5 --explain
+.\scripts\nexus.ps1 context nexus-local ProjectIndexingService --budget 500 --explain
 ```
 
-Les chapitres suivants détaillent exactement ce qui se passe derrière chacune de ces commandes.
+Pour une consommation machine :
+
+```powershell
+.\scripts\nexus.ps1 search nexus-local ProjectIndexingService --limit 5 --explain --json
+```
+
+L'exécution Maven reste utile pendant le développement, mais le self-smoke de l'Itération 4 valide désormais directement le JAR autonome.
