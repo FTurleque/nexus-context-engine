@@ -30,8 +30,14 @@ final class RepositoryGlobMatcher {
             if (current == '*') {
                 boolean doubleStar = index + 1 < normalized.length() && normalized.charAt(index + 1) == '*';
                 if (doubleStar) {
-                    regex.append(".*");
-                    index++;
+                    boolean followedBySlash = index + 2 < normalized.length() && normalized.charAt(index + 2) == '/';
+                    if (followedBySlash) {
+                        regex.append("(?:.*/)?");
+                        index += 2;
+                    } else {
+                        regex.append(".*");
+                        index++;
+                    }
                 } else {
                     regex.append("[^/]*");
                 }
