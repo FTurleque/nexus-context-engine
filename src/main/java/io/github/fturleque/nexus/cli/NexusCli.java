@@ -13,9 +13,17 @@ import io.github.fturleque.nexus.persistence.sqlite.SqliteProjectRepository;
 import io.github.fturleque.nexus.project.ProjectDescriptor;
 import io.github.fturleque.nexus.project.ProjectRegistry;
 import io.github.fturleque.nexus.project.ProjectRepository;
+import io.github.fturleque.nexus.ranking.DeterministicContextRanker;
+import io.github.fturleque.nexus.ranking.RankedCandidate;
+import io.github.fturleque.nexus.ranking.graph.GraphCandidateEnricher;
+import io.github.fturleque.nexus.search.SearchIndex;
+import io.github.fturleque.nexus.search.SearchService;
+import io.github.fturleque.nexus.search.SymbolSearchStrategy;
+import io.github.fturleque.nexus.search.lucene.LuceneFileSearchStrategy;
 import io.github.fturleque.nexus.search.lucene.LuceneSearchIndex;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -44,16 +52,24 @@ public final class NexusCli {
         ProjectRepository projectRepository = new SqliteProjectRepository(database);
         IndexRepository indexRepository = new SqliteIndexRepository(database);
         ProjectRegistry registry = new ProjectRegistry(projectRepository);
+        SearchIndex searchIndex = new LuceneSearchIndex(paths);
         ProjectIndexingService indexingService = new ProjectIndexingService(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),
                 List.of(new JavaParserLanguageAnalyzer()),
-                new LuceneSearchIndex(paths));
+                searchIndex);
+        SearchService searchService = new SearchService(
+                List.of(
+                        new LuceneFileSearchStrategy(searchIndex),
+                        new SymbolSearchStrategy(indexRepository)),
+                new GraphCandidateEnricher(indexRepository),
+                new DeterministicContextRanker());
 
         switch (args[0]) {
             case "project" -> handleProject(args, registry);
             case "index" -> handleIndex(args, projectRepository, indexingService);
+            case "search" -> handleSearch(args, projectRepository, searchService);
             case "inspect" -> handleInspect(args, projectRepository, indexRepository);
             default -> throw new IllegalArgumentException("Commande inconnue : " + args[0]);
         }
@@ -101,6 +117,60 @@ public final class NexusCli {
                 report.statistics().relations(),
                 report.duration().toMillis(),
                 report.fullSearchRebuild() ? " (reconstruction complète)" : "");
+    }
+
+    private static void handleSearch(
+            String[] args,
+            ProjectRepository projectRepository,
+            SearchService searchService) throws Exception {
+        if (args.length < 3) {
+            throw new IllegalArgumentException(
+                    "Usage : nexus search <id-ou-nom> <requête> [--limit N] [--explain]");
+        }
+
+        ProjectDescriptor project = resolveProject(projectRepository, args[1]);
+        int limit = 10;
+        boolean explain = false;
+        List<String> queryParts = new ArrayList<>();
+
+        for (int index = 2; index < args.length; index++) {
+            if ("--explain".equals(args[index])) {
+                explain = true;
+            } else if ("--limit".equals(args[index])) {
+                if (index + 1 >= args.length) {
+                    throw new IllegalArgumentException("--limit attend une valeur entière");
+                }
+                limit = Integer.parseInt(args[++index]);
+            } else {
+                queryParts.add(args[index]);
+            }
+        }
+
+        String query = String.join(" ", queryParts).trim();
+        if (query.isBlank()) {
+            throw new IllegalArgumentException("La requête de recherche ne peut pas être vide");
+        }
+
+        List<RankedCandidate> results = searchService.search(project, query, limit, explain);
+        System.out.printf("Recherche '%s' : %d résultat(s)%n", query, results.size());
+        for (int index = 0; index < results.size(); index++) {
+            RankedCandidate ranked = results.get(index);
+            String relativePath = project.rootPath().relativize(ranked.candidate().path())
+                    .toString()
+                    .replace('\\', '/');
+            String target = ranked.candidate().symbol() == null
+                    ? relativePath
+                    : relativePath + "#" + ranked.candidate().symbol().signature();
+            System.out.printf(
+                    "%2d. %.4f %-6s %s%n",
+                    index + 1,
+                    ranked.score(),
+                    ranked.candidate().type(),
+                    target);
+            if (explain) {
+                ranked.reasons().forEach(reason -> System.out.println("    - " + reason));
+            }
+        }
     }
 
     private static void handleInspect(
@@ -157,6 +227,7 @@ public final class NexusCli {
                   nexus project add <chemin> [nom]
                   nexus project list
                   nexus index <id-ou-nom> [--rebuild]
+                  nexus search <id-ou-nom> <requête> [--limit N] [--explain]
                   nexus inspect <id-ou-nom>
                 """);
     }
