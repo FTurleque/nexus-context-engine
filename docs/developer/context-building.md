@@ -224,8 +224,7 @@ Le fragment contient donc le symbole et deux lignes de contexte de chaque côté
 
 ```mermaid
 flowchart LR
-    AST[CodeSymbol
-startLine/endLine] --> PAD[Ajouter ±2 lignes]
+    AST["CodeSymbol<br/>startLine / endLine"] --> PAD[Ajouter ±2 lignes]
     PAD --> READ[Lire la plage]
     READ --> F[ContextFragment]
 ```
@@ -299,7 +298,7 @@ Cela couvre :
 
 - chevauchement ;
 - inclusion d'une plage dans une autre ;
-- adjacency directe.
+- adjacence directe.
 
 ### Exemple
 
@@ -312,12 +311,14 @@ Résultat : lignes 10..30
 
 Le contenu chevauchant n'est pas dupliqué.
 
-Les métadonnées sont fusionnées :
+Les métadonnées sont fusionnées ainsi :
 
-- score final = maximum des scores ;
-- composante de score = maximum par signal ;
+- score final = score du fragment le mieux classé ;
+- composantes du score = composantes du même fragment le mieux classé, afin que leur somme reste cohérente avec le score ;
 - raisons = union ordonnée ;
 - symboles = concaténés lorsqu'ils diffèrent.
+
+Le merger ne refait donc pas le ranking. Il évite uniquement la duplication de contenu en préservant l'explicabilité du meilleur candidat.
 
 ## 11. Estimation des tokens
 
@@ -573,6 +574,7 @@ Les nouveaux tests couvrent :
 - déterminisme de l'estimateur ;
 - Unicode ;
 - fusion de plages chevauchantes ;
+- cohérence score/composantes après fusion ;
 - chemins relatifs ;
 - construction de contexte de bout en bout ;
 - respect strict du budget ;
