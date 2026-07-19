@@ -206,9 +206,9 @@ Validation self-smoke du `ContextBundle` sur NEXUS :
 
 Le self-smoke confirme donc l'invariant principal de l'itération : `ContextBundle.estimatedTokens <= ContextBundle.tokenBudget`. Les troncatures et exclusions observées avec un budget volontairement très contraint de 180 tokens sont explicites et traçables ; elles constituent un point de calibration futur de la diversité du contexte, pas un échec du critère de sortie.
 
-**Itération 4 — en cours : CLI utilisable pour le MVP.**
+**Itération 4 — terminée et validée localement : CLI utilisable pour le MVP.**
 
-L'implémentation en cours comprend :
+L'itération comprend :
 
 - sortie humaine conservée par défaut ;
 - sortie JSON structurée via `--json` sur toutes les commandes ;
@@ -222,7 +222,38 @@ L'implémentation en cours comprend :
 - self-smoke exécutant directement le JAR autonome ;
 - métriques de qualité du corpus golden publiées dans le log Maven.
 
-Cette itération est encadrée par ADR-0030 et ADR-0031. Elle reste à valider localement avant de déclarer le MVP terminé.
+Validation locale du 19 juillet 2026 :
+
+- `mvn clean install` : succès ;
+- compilation de 66 fichiers source avec `--release 21` : succès ;
+- compilation de 11 fichiers de test : succès ;
+- tests : 16 exécutés, 0 échec, 0 erreur, 0 ignoré ;
+- baseline qualité : corpus de 3 requêtes, `mean precision@3 = 0,4444`, `mean recall@3 = 1,0000` ;
+- génération du JAR bibliothèque `nexus-context-engine-0.1.0-SNAPSHOT.jar` : succès ;
+- génération du JAR autonome `nexus-context-engine-0.1.0-SNAPSHOT-cli.jar` : succès ;
+- installation des deux artefacts dans le dépôt Maven local : succès.
+
+Validation self-smoke du MVP CLI sur le repository NEXUS :
+
+- exécution directe du JAR autonome : succès ;
+- `--version --json` : succès, version `0.1.0-SNAPSHOT` ;
+- `project add --json` et `project list --json` réellement parsés avec `ConvertFrom-Json` : succès ;
+- première indexation : 77 fichiers scannés, 77 modifiés, 0 supprimé ;
+- index produit : 77 fichiers, 322 symboles et 599 relations ;
+- indexation complète : 896 ms sur la machine de validation ;
+- seconde indexation incrémentale : 0 fichier modifié, 0 supprimé, 232 ms ;
+- état final : `READY` ;
+- recherche explicable de `ProjectIndexingService` : succès, fichier principal classé premier, 254 ms ;
+- construction du contexte : 3 items, 178/180 tokens, 285 ms ;
+- réduction du contexte candidat : environ 96,45 % ;
+- sortie humaine sans `--json` : succès ;
+- résultat final : `SELF-SMOKE SUCCESS`.
+
+Le self-smoke confirme que le **MVP du moteur NEXUS est validé de bout en bout** : un repository Java local peut être enregistré, indexé, réindexé de manière idempotente, recherché, expliqué et transformé en `ContextBundle` sous budget via un JAR autonome, avec un contrat JSON consommable par des scripts et outils externes.
+
+Sous Windows PowerShell 5.1, les warnings écrits sur `stderr` par SLF4J ou la JVM peuvent encore apparaître sous la forme d'un `NativeCommandError` visuel. Ce bruit de console est non bloquant : le script contrôle le véritable `$LASTEXITCODE`, les documents JSON restent séparés sur `stdout` et les dix étapes du self-smoke sont validées.
+
+Cette itération est encadrée par ADR-0030 et ADR-0031. La Phase 1 — validation du moteur NEXUS — est désormais achevée. La prochaine étape de la roadmap est l'**Itération 5 — Instructions et documentation**, première étape de la Phase 2 visant à étendre les sources de contexte.
 
 ### Point d'entrée CLI actuel
 
@@ -269,7 +300,7 @@ java -jar .\target\nexus-context-engine-0.1.0-SNAPSHOT-cli.jar --version --json
 
 ### Self-smoke test du MVP CLI
 
-Le script PowerShell `scripts/self-smoke.ps1` valide désormais le flux réel via le JAR autonome :
+Le script PowerShell `scripts/self-smoke.ps1` valide le flux réel via le JAR autonome :
 
 1. construction du JAR `*-cli.jar` ;
 2. validation de `--version --json` ;
