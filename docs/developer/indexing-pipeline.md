@@ -1,10 +1,10 @@
 # Pipeline d'indexation locale
 
-Ce chapitre décrit l'Itération 1 telle qu'elle est implémentée.
+Ce chapitre décrit l'Itération 1 telle qu'elle est implémentée et validée.
 
 ## 1. Objectif
 
-Transformer un repository local en deux représentations complémentaires :
+Transformer un repository Java local en deux représentations complémentaires :
 
 ```text
 SQLite
@@ -14,14 +14,7 @@ Lucene
 → index de recherche dérivé et reconstructible
 ```
 
-L'indexation doit être :
-
-- locale ;
-- incrémentale ;
-- idempotente ;
-- sensible aux suppressions ;
-- capable de reconstruire Lucene ;
-- indépendante d'un LLM.
+L'indexation doit rester locale, incrémentale, idempotente et capable de propager les suppressions.
 
 ## 2. Séquence complète
 
@@ -42,16 +35,16 @@ sequenceDiagram
     CLI->>SVC: index(projectId)
     SVC->>Repo: findById(projectId)
     SVC->>SQLite: findFiles(projectId)
-    SQLite-->>SVC: fichiers déjà connus + SHA-256
+    SQLite-->>SVC: fichiers connus + SHA-256
 
     SVC->>Scanner: scan(rootPath)
-    Scanner->>Ignore: évaluer .gitignore/.nexusignore
-    Scanner->>Hash: SHA-256 pour les fichiers retenus
+    Scanner->>Ignore: appliquer ignore rules
+    Scanner->>Hash: SHA-256
     Scanner-->>SVC: ScannedFile[]
 
     loop fichier nouveau ou modifié
-        SVC->>AST: analyze(file)
-        AST-->>SVC: AnalysisResult(symbols, relations)
+        SVC->>AST: analyze(projectRoot, file)
+        AST-->>SVC: AnalysisResult
     end
 
     SVC->>SQLite: applyChanges(updates, removedPaths)
@@ -70,9 +63,7 @@ mvn -q exec:java "-Dexec.args=project add N:\workspace-dev\my-project my-project
 
 passe par `ProjectRegistry`.
 
-L'identité métier du projet est un UUID. SQLite conserve le chemin racine réel du projet et impose son unicité.
-
-Conceptuellement :
+Le projet possède un UUID métier durable :
 
 ```text
 ProjectDescriptor
@@ -86,53 +77,67 @@ ProjectDescriptor
 └── indexStatus
 ```
 
-L'utilisation d'un UUID permet de déplacer les implémentations de persistance sans exposer l'identifiant numérique local SQLite.
+La racine réelle du projet est normalisée afin d'éviter d'enregistrer deux fois le même repository via des chemins équivalents.
 
 ## 4. `NEXUS_HOME`
 
 `NexusPaths` centralise les données locales.
 
-Le répertoire peut être défini par la variable :
+La variable :
 
 ```powershell
 $env:NEXUS_HOME = "N:\nexus-data"
 ```
 
-Le self-smoke utilise volontairement :
+permet de déplacer le stockage.
+
+Le self-smoke utilise :
 
 ```text
 target/nexus-self-smoke-home
 ```
 
-pour ne pas polluer le stockage utilisateur réel.
+pour isoler les données de validation.
 
-Le stockage contient actuellement :
+Conceptuellement :
 
 ```text
 NEXUS_HOME/
-├── nexus.db
-└── lucene/
-    └── <project-uuid>/
+├── base SQLite
+└── index Lucene par UUID projet
 ```
 
-Le nom exact des sous-répertoires doit être obtenu via `NexusPaths`; les autres composants ne doivent pas reconstruire les chemins manuellement.
+Toujours utiliser `NexusPaths` pour résoudre ces emplacements.
 
 ## 5. Scan du filesystem
 
-`ProjectScanner` parcourt le projet et construit des `ScannedFile`.
+`ProjectScanner.scan(Path projectRoot)` :
 
-Chaque fichier retenu contient notamment :
+1. normalise la racine en chemin absolu ;
+2. initialise `ProjectIgnoreMatcher` ;
+3. parcourt l'arbre avec `Files.walkFileTree` ;
+4. ignore les sous-arbres exclus ;
+5. ne conserve actuellement que les fichiers `.java` ;
+6. calcule SHA-256 ;
+7. classe le fichier `SOURCE` ou `TEST` ;
+8. trie le résultat par chemin relatif.
 
-- chemin relatif ;
-- langage ;
-- taille ;
-- SHA-256 ;
-- date de modification ;
-- catégorie.
+Chaque `ScannedFile` contient notamment :
+
+```text
+absolutePath
+relativePath
+language
+sizeBytes
+contentHash
+modifiedAt
+estimatedTokens
+category
+```
 
 ### Catégories
 
-`FileCategory` contient actuellement :
+`FileCategory` définit :
 
 ```text
 SOURCE
@@ -142,20 +147,20 @@ DOCUMENTATION
 OTHER
 ```
 
-Pour le MVP Java, les sources `.java` sont les principales cibles d'analyse structurelle.
+Le scanner MVP ne conserve actuellement que les sources Java ; les autres catégories préparent l'extension future.
 
 ## 6. Règles d'exclusion
 
-`ProjectIgnoreMatcher` réutilise JGit pour reproduire la sémantique des patterns Git plutôt que de développer un parseur maison.
+`ProjectIgnoreMatcher` réutilise JGit pour la sémantique des patterns.
 
-Les sources de règles comprennent :
+Sources :
 
 - `.gitignore` ;
 - `.nexusignore` ;
-- fichiers imbriqués lorsque leur scope s'applique ;
+- règles imbriquées avec leur scope ;
 - exclusions intégrées de sécurité et contenus générés.
 
-Exemples typiques exclus :
+Exemples typiques :
 
 ```text
 .git/
@@ -164,66 +169,69 @@ build/
 node_modules/
 .env
 clés privées
-contenus générés
 ```
 
-La négation Git reste supportée :
+La négation est supportée :
 
 ```gitignore
 *.generated.java
 !important.generated.java
 ```
 
-L'objectif est que NEXUS ne réinterprète pas approximativement les règles déjà comprises par les développeurs.
+NEXUS évite ainsi de maintenir un parseur d'ignore partiellement compatible avec Git.
 
-## 7. Détection incrémentale
+## 7. Détection incrémentale par SHA-256
 
-Chaque contenu est identifié par SHA-256.
-
-Pour chaque chemin :
+Pour chaque chemin fonctionnel `(projectId, relativePath)` :
 
 ```text
 nouveau hash == ancien hash
-→ fichier inchangé
-→ pas de nouveau parsing AST
+→ inchangé
+→ pas de parsing AST
 
 nouveau hash != ancien hash
-→ fichier modifié
-→ nouvelle analyse + remplacement symboles/relations
+→ modifié
+→ nouvelle analyse
 
-ancien chemin absent du scan
-→ fichier supprimé
-→ suppression SQLite + propagation Lucene
+chemin ancien absent du scan
+→ supprimé
+→ suppression SQLite + Lucene
 ```
 
-Le second self-smoke valide explicitement :
+Le self-smoke valide qu'une seconde indexation sans modification retourne :
 
 ```text
-0 fichier modifié
-0 fichier supprimé
+0 modifié
+0 supprimé
 ```
-
-sur une deuxième indexation sans changement.
 
 ## 8. Analyse Java
 
-`JavaParserLanguageAnalyzer` implémente `LanguageAnalyzer`.
+`JavaParserLanguageAnalyzer` implémente exactement le contrat :
 
-Le parser est explicitement configuré au niveau **Java 21**.
+```java
+public interface LanguageAnalyzer {
+    boolean supports(Path file);
+    AnalysisResult analyze(Path projectRoot, Path file) throws IOException;
+}
+```
 
-Cette configuration a été ajoutée après qu'un self-smoke réel a révélé qu'un text block Java moderne échouait avec le niveau de langage par défaut de JavaParser.
+Le parser est configuré explicitement au niveau Java 21.
 
-### Modèle de sortie
+Cette configuration a été ajoutée après qu'un self-smoke réel a révélé que le niveau par défaut refusait les text blocks présents dans NEXUS.
+
+### UML du modèle d'analyse
 
 ```mermaid
 classDiagram
     class LanguageAnalyzer {
         <<interface>>
-        +supports(String language) boolean
-        +analyze(Path file) AnalysisResult
+        +supports(Path file) boolean
+        +analyze(Path projectRoot, Path file) AnalysisResult
     }
 
     class JavaParserLanguageAnalyzer
+
     class AnalysisResult {
         +List~CodeSymbol~ symbols
         +List~SymbolRelation~ relations
@@ -250,7 +258,7 @@ classDiagram
     AnalysisResult --> SymbolRelation
 ```
 
-Les positions `startLine` et `endLine` seront réutilisées plus tard par `ContextFragmentFactory` pour extraire du code ciblé.
+Les bornes `startLine` / `endLine` sont ensuite utilisées par l'Itération 3 pour extraire des fragments ciblés.
 
 ## 9. Persistance SQLite
 
@@ -310,17 +318,32 @@ erDiagram
     }
 ```
 
-Le couple suivant est unique :
+La contrainte importante est :
 
 ```text
-(project_id, relative_path)
+UNIQUE(project_id, relative_path)
 ```
 
-Les suppressions utilisent les clés étrangères avec `ON DELETE CASCADE` pour nettoyer les symboles associés.
+Les IDs numériques de fichiers/symboles restent techniques et locaux à SQLite.
 
-## 10. Migrations
+## 10. Transactions de mise à jour
 
-`SchemaMigrator` crée d'abord :
+`SqliteIndexRepository.applyChanges` effectue dans une transaction :
+
+1. suppression des fichiers disparus ;
+2. upsert des fichiers modifiés ;
+3. suppression des anciennes analyses du fichier ;
+4. insertion des nouveaux symboles ;
+5. insertion des nouvelles relations ;
+6. commit.
+
+Une erreur SQL entraîne un rollback.
+
+Les clés étrangères avec `ON DELETE CASCADE` nettoient les symboles liés aux fichiers supprimés.
+
+## 11. Migrations
+
+`SchemaMigrator` maintient la table :
 
 ```text
 schema_migrations
@@ -329,28 +352,31 @@ schema_migrations
 └── applied_at
 ```
 
-Puis applique les scripts embarqués non encore exécutés.
-
 Migration actuelle :
 
 ```text
 src/main/resources/db/migration/V001__initial_schema.sql
 ```
 
-L'application d'une migration se fait dans une transaction. Une erreur provoque un rollback.
+Au démarrage de la base :
 
-Pour ajouter une migration :
+1. créer `schema_migrations` si nécessaire ;
+2. lire les versions appliquées ;
+3. exécuter les scripts manquants dans l'ordre ;
+4. enregistrer la version ;
+5. commit ou rollback global en cas d'erreur.
 
-1. créer `V002__description.sql` ;
-2. ajouter la migration à la liste ordonnée de `SchemaMigrator` ;
-3. écrire un test de migration ;
-4. ne jamais modifier rétroactivement `V001` pour une base déjà distribuée.
+Pour ajouter `V002` :
 
-## 11. Index Lucene
+- créer un nouveau script ;
+- l'enregistrer dans la liste ordonnée du migrateur ;
+- ne pas modifier rétroactivement `V001` pour une base existante.
+
+## 12. Index Lucene
 
 `LuceneSearchIndex` implémente `SearchIndex`.
 
-Un document Lucene représente actuellement un **fichier**.
+Un document Lucene représente actuellement un fichier Java indexé.
 
 Champs principaux :
 
@@ -375,42 +401,21 @@ Clé stable :
 projectId + ":" + relativePath
 ```
 
-Une mise à jour utilise `updateDocument`, ce qui rend l'opération idempotente pour cette clé.
+Les mises à jour utilisent `updateDocument`.
 
-## 12. Pourquoi SQLite ET Lucene ?
+## 13. Synchronisation SQLite → Lucene
 
 ```mermaid
 flowchart LR
-    SRC[Repository] --> PIPE[Indexing Pipeline]
-    PIPE --> SQL[(SQLite)]
-    PIPE --> LUC[(Lucene)]
-
-    SQL -->|canonique| STRUCT[Projets / fichiers / symboles / relations]
-    LUC -->|dérivé| TEXT[Recherche BM25 multi-champs]
-
-    SQL -. reconstruction .-> LUC
+    SRC[Repository] --> PIPE[ProjectIndexingService]
+    PIPE --> SQL[(SQLite canonique)]
+    PIPE --> LUC[(Lucene dérivé)]
+    SQL -. permet la reconstruction .-> LUC
 ```
 
-SQLite répond aux besoins relationnels et transactionnels.
+SQLite contient l'état structurel durable.
 
-Lucene répond aux besoins de recherche textuelle et de ranking lexical.
-
-Fusionner les deux responsabilités dans un seul moteur réduirait soit la qualité de recherche, soit la qualité du modèle structurel.
-
-## 13. Gestion d'échec
-
-Le statut projet suit le cycle :
-
-```text
-NOT_INDEXED
-    │
-    ▼
-INDEXING
-   ├── succès ──> READY
-   └── erreur ──> FAILED
-```
-
-Après un état incohérent ou un besoin explicite, l'index Lucene peut être reconstruit.
+Lucene est optimisé pour la recherche et peut être supprimé/reconstruit.
 
 La commande :
 
@@ -418,9 +423,23 @@ La commande :
 mvn -q exec:java "-Dexec.args=index my-project --rebuild"
 ```
 
-force cette reconstruction.
+force une reconstruction complète de l'index de recherche.
 
-## 14. Reproduire l'indexation
+## 14. Cycle d'état
+
+```mermaid
+stateDiagram-v2
+    [*] --> NOT_INDEXED
+    NOT_INDEXED --> INDEXING : index()
+    READY --> INDEXING : réindexation
+    FAILED --> INDEXING : nouvelle tentative
+    INDEXING --> READY : succès
+    INDEXING --> FAILED : erreur
+```
+
+`DefaultContextBuilder` exige ensuite l'état `READY` avant de construire un contexte.
+
+## 15. Reproduire l'indexation
 
 ```powershell
 $env:NEXUS_HOME = "$PWD\target\manual-nexus-home"
@@ -431,26 +450,27 @@ mvn -q exec:java "-Dexec.args=inspect local-demo"
 mvn -q exec:java "-Dexec.args=index local-demo"
 ```
 
-La seconde commande `index` doit signaler zéro modification si le repository n'a pas changé.
+La dernière commande doit signaler zéro modification si le repository est inchangé.
 
-Pour la validation complète automatisée :
+Validation automatique :
 
 ```powershell
 .\scripts\self-smoke.ps1 -KeepData
 ```
 
-## 15. Tests qui protègent ce pipeline
+## 16. Tests qui protègent le pipeline
 
-Les tests couvrent notamment :
+Les tests couvrent :
 
-- JavaParser et syntaxe Java 21 ;
-- scanner et ignore rules ;
+- syntaxe Java 21 et text blocks ;
+- scanner ;
+- `.gitignore` / `.nexusignore` ;
 - négation de patterns ;
-- registre de projets ;
+- registre idempotent ;
 - indexation initiale ;
-- indexation sans changement ;
+- deuxième indexation sans changement ;
 - modification ;
 - suppression ;
-- cohérence SQLite/Lucene.
+- cohérence du nombre de documents Lucene.
 
-Un changement d'indexation doit conserver ces propriétés avant d'ajouter de nouvelles capacités.
+Toute évolution du scanner ou de la persistance doit conserver ces invariants.
