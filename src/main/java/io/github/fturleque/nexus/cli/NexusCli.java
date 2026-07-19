@@ -46,6 +46,8 @@ public final class NexusCli {
     static final int EXIT_RUNTIME_ERROR = 1;
     static final int EXIT_USAGE_ERROR = 2;
 
+    private static final Set<String> COMMANDS = Set.of("project", "index", "search", "context", "inspect");
+
     private NexusCli() {
     }
 
@@ -81,6 +83,9 @@ public final class NexusCli {
             renderer.renderVersion(version());
             return;
         }
+        if (!COMMANDS.contains(args[0])) {
+            throw new IllegalArgumentException("Commande inconnue : " + args[0]);
+        }
 
         NexusPaths paths = NexusPaths.fromEnvironment();
         SqliteDatabase database = new SqliteDatabase(paths);
@@ -115,7 +120,7 @@ public final class NexusCli {
             case "search" -> handleSearch(args, projectRepository, searchService, renderer);
             case "context" -> handleContext(args, projectRepository, contextBuilder, renderer);
             case "inspect" -> handleInspect(args, projectRepository, indexRepository, renderer);
-            default -> throw new IllegalArgumentException("Commande inconnue : " + args[0]);
+            default -> throw new IllegalStateException("Commande validée mais non routée : " + args[0]);
         }
     }
 
