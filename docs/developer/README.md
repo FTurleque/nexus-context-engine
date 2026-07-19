@@ -167,9 +167,9 @@ Cette validation clôt la **Phase 1 — validation du moteur NEXUS** et valide l
 
 ### Itération 5 — Instructions et documentation
 
-**En cours — validation locale à effectuer.**
+**Validée localement le 20 juillet 2026.**
 
-Implémentation actuelle :
+Fonctionnalités validées :
 
 - scan et indexation des fichiers Markdown ;
 - `MarkdownLanguageAnalyzer` ;
@@ -185,12 +185,40 @@ Implémentation actuelle :
 - résolution sécurisée des références `@fichier` à l'intérieur du repository ;
 - profondeur maximale de référence : 5 ;
 - détection de cycles ;
+- respect des `.gitignore` / `.nexusignore` imbriqués pour les références ;
 - déduplication SHA-256 des instructions identiques ;
 - déduplication entre document référencé et document retrouvé par Lucene ;
 - budget d'instructions plafonné à 25 % du budget total et à 600 tokens ;
 - détection sans injection brute de `.claude/settings*.json`, fichiers MCP, profils d'agents, hooks et skills ;
 - `AGENTS.md` racine ajouté à NEXUS pour dogfooder le mécanisme ;
-- self-smoke étendu à un bundle `INSTRUCTION + DOCUMENTATION + code`.
+- bundle multi-source `INSTRUCTION + DOCUMENTATION + code + tests`.
+
+Validation de référence :
+
+```text
+mvn clean install
+→ 83 fichiers source compilés
+→ 13 fichiers de test compilés
+→ 19 tests exécutés
+→ 0 échec / 0 erreur / 0 ignoré
+→ mean precision@3 = 0,4444
+→ mean recall@3 = 1,0000
+
+self-smoke
+→ 145 fichiers indexés
+→ 406 symboles
+→ 781 relations
+→ langues : java, markdown
+→ indexation complète : 1 115 ms
+→ indexation incrémentale : 236 ms
+→ recherche : 277 ms
+→ contexte strict : 5 items, 172/180 tokens, 379 ms
+→ contexte multi-source : 9 items, 1 185/1 200 tokens, 414 ms
+→ réduction du contexte candidat strict : 99,12 %
+→ SELF-SMOKE SUCCESS
+```
+
+Le contexte strict sélectionne réellement `AGENTS.md` et `docs/architecture.md` référencé. Le contexte multi-source sélectionne simultanément des instructions, de la documentation, du code et des tests. Deux fragments documentaires redondants sont éliminés par la déduplication inter-source.
 
 Décisions associées :
 
@@ -200,6 +228,8 @@ Décisions associées :
 - ADR-0033 — séparer instructions contextuelles et configuration opérationnelle.
 
 Le chapitre [Contexte natif des projets](native-context-sources.md) détaille exactement comment un projet déjà configuré avec `.github`, `.claude`, `AGENTS.md` ou `CLAUDE.md` est utilisé par NEXUS.
+
+La prochaine étape est l'**Itération 6 — Skills et divulgation progressive**.
 
 ## Principes à respecter en contribuant
 
@@ -234,7 +264,7 @@ Avant de modifier stockage, scoring, protocole, modèle de données ou stratégi
 ## Repères dans le code
 
 ```text
-src/main/java/io/github/fturleque/nexus/
+src/main/java/com/nexus/
 ├── cli/                     Adaptateur CLI et rendu humain/JSON
 ├── config/                  Résolution NEXUS_HOME et chemins locaux
 ├── context/                 Construction du ContextBundle
@@ -291,9 +321,7 @@ classDiagram
     ContextBuilder <|.. DefaultContextBuilder
 ```
 
-## Validation locale
-
-L'Itération 5 doit maintenant être validée par :
+## Validation locale de référence
 
 ```powershell
 git pull --ff-only
@@ -301,7 +329,7 @@ mvn clean install
 .\scripts\self-smoke.ps1 -KeepData
 ```
 
-Le self-smoke comporte désormais 11 étapes et doit vérifier notamment :
+Le self-smoke comporte 11 étapes et valide notamment :
 
 ```text
 Java + Markdown indexés
@@ -313,7 +341,8 @@ ContextBundle strict <= 180 tokens
 ContextBundle multi-source
     ├── INSTRUCTION
     ├── DOCUMENTATION
-    └── code
+    ├── code
+    └── tests
     ↓
 SELF-SMOKE SUCCESS
 ```
