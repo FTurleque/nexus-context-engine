@@ -40,8 +40,23 @@ Ce build doit :
 3. compiler le code avec `release 21` ;
 4. compiler les tests ;
 5. exécuter JUnit ;
-6. générer le JAR ;
-7. installer le snapshot dans le dépôt Maven local.
+6. publier les métriques de qualité du corpus golden dans le log ;
+7. générer le JAR bibliothèque ;
+8. générer le JAR CLI autonome avec classifier `cli` ;
+9. installer les artefacts Maven locaux.
+
+Artefacts attendus :
+
+```text
+target/nexus-context-engine-0.1.0-SNAPSHOT.jar
+target/nexus-context-engine-0.1.0-SNAPSHOT-cli.jar
+```
+
+Le second est directement exécutable :
+
+```powershell
+java -jar .\target\nexus-context-engine-0.1.0-SNAPSHOT-cli.jar --version
+```
 
 ## 4. Avertissements connus non bloquants
 
@@ -91,17 +106,25 @@ Le script utilise son propre `NEXUS_HOME` :
 target/nexus-self-smoke-home
 ```
 
-Il exécute maintenant huit étapes :
+Il valide maintenant dix étapes sur le **JAR autonome** :
 
 ```text
-1. compiler la CLI
-2. enregistrer NEXUS comme projet
-3. vérifier le registre
-4. indexer complètement NEXUS
-5. réindexer et vérifier 0 changement
-6. inspecter SQLite
-7. rechercher ProjectIndexingService
-8. construire un ContextBundle sous budget
+1. construire le JAR CLI autonome
+2. valider --version --json
+3. enregistrer NEXUS avec project add --json
+4. vérifier project list --json
+5. première indexation complète --json
+6. seconde indexation attendue avec 0 changement
+7. inspect --json avec état READY
+8. search --explain --json
+9. context --budget 180 --explain --json
+10. vérifier la sortie humaine sans --json
+```
+
+Les sorties JSON sont réellement parsées avec :
+
+```powershell
+ConvertFrom-Json
 ```
 
 Le résultat attendu est :
@@ -109,6 +132,20 @@ Le résultat attendu est :
 ```text
 SELF-SMOKE SUCCESS
 ```
+
+Le script affiche aussi une section :
+
+```text
+=== METRICS ===
+```
+
+avec les latences observées pour :
+
+- indexation complète ;
+- indexation incrémentale ;
+- recherche ;
+- construction du contexte ;
+- réduction du contexte candidat.
 
 Avec `-KeepData`, les données SQLite/Lucene restent disponibles après le script.
 
@@ -124,16 +161,44 @@ Supprimer ce répertoire permet de repartir de zéro :
 Remove-Item -Recurse -Force $env:NEXUS_HOME -ErrorAction SilentlyContinue
 ```
 
-## 7. Enregistrer le projet
+## 7. Choisir le mode d'exécution CLI
+
+Après `mvn clean install`, le mode recommandé est :
 
 ```powershell
-mvn -q exec:java "-Dexec.args=project add . nexus-manual"
+.\scripts\nexus.ps1 --help
+```
+
+Le script localise le dernier JAR `*-cli.jar` puis exécute :
+
+```text
+java -jar <jar-cli> ...
+```
+
+Le launcher CMD est également disponible :
+
+```cmd
+scripts\nexus.cmd --help
+```
+
+L'exécution Maven reste possible pendant le développement :
+
+```powershell
+mvn -q exec:java "-Dexec.args=--help"
+```
+
+mais elle n'est plus le chemin principal de validation du MVP.
+
+## 8. Enregistrer le projet
+
+```powershell
+.\scripts\nexus.ps1 project add . nexus-manual
 ```
 
 Vérifier :
 
 ```powershell
-mvn -q exec:java "-Dexec.args=project list"
+.\scripts\nexus.ps1 project list
 ```
 
 Vous devez voir :
@@ -142,16 +207,22 @@ Vous devez voir :
 <uuid>    nexus-manual    NOT_INDEXED    <chemin>
 ```
 
-## 8. Indexer
+Version JSON :
 
 ```powershell
-mvn -q exec:java "-Dexec.args=index nexus-manual"
+.\scripts\nexus.ps1 project list --json
+```
+
+## 9. Indexer
+
+```powershell
+.\scripts\nexus.ps1 index nexus-manual
 ```
 
 Après succès :
 
 ```powershell
-mvn -q exec:java "-Dexec.args=inspect nexus-manual"
+.\scripts\nexus.ps1 inspect nexus-manual
 ```
 
 Le statut attendu est :
@@ -160,15 +231,26 @@ Le statut attendu est :
 READY
 ```
 
-## 9. Vérifier l'idempotence
+Version JSON :
+
+```powershell
+.\scripts\nexus.ps1 inspect nexus-manual --json
+```
+
+## 10. Vérifier l'idempotence
 
 Relancer :
 
 ```powershell
-mvn -q exec:java "-Dexec.args=index nexus-manual"
+.\scripts\nexus.ps1 index nexus-manual --json
 ```
 
-Sans modification du repository, le nombre de fichiers modifiés et supprimés doit être zéro.
+Sans modification du repository :
+
+```text
+report.changedFiles = 0
+report.removedFiles = 0
+```
 
 Si ce n'est pas le cas :
 
@@ -178,10 +260,10 @@ Si ce n'est pas le cas :
 4. vérifier `.gitignore` / `.nexusignore` ;
 5. ajouter un test de non-régression avant correction.
 
-## 10. Forcer la reconstruction Lucene
+## 11. Forcer la reconstruction Lucene
 
 ```powershell
-mvn -q exec:java "-Dexec.args=index nexus-manual --rebuild"
+.\scripts\nexus.ps1 index nexus-manual --rebuild
 ```
 
 Utiliser cette commande lorsque :
@@ -192,10 +274,10 @@ Utiliser cette commande lorsque :
 
 SQLite reste la source structurelle de référence.
 
-## 11. Rechercher
+## 12. Rechercher
 
 ```powershell
-mvn -q exec:java "-Dexec.args=search nexus-manual ProjectIndexingService --limit 5 --explain"
+.\scripts\nexus.ps1 search nexus-manual ProjectIndexingService --limit 5 --explain
 ```
 
 À vérifier :
@@ -203,12 +285,21 @@ mvn -q exec:java "-Dexec.args=search nexus-manual ProjectIndexingService --limit
 - `ProjectIndexingService.java` remonte ;
 - le score est affiché ;
 - les raisons sont cohérentes ;
-- une deuxième exécution sans changement produit le même ordre.
+- une deuxième exécution sans changement produit le même ordre ;
+- la latence en millisecondes est affichée.
 
-## 12. Construire un contexte
+Version JSON :
 
 ```powershell
-mvn -q exec:java "-Dexec.args=context nexus-manual ProjectIndexingService --budget 500 --explain"
+$result = .\scripts\nexus.ps1 search nexus-manual ProjectIndexingService --limit 5 --explain --json | ConvertFrom-Json
+$result.durationMs
+$result.results[0]
+```
+
+## 13. Construire un contexte
+
+```powershell
+.\scripts\nexus.ps1 context nexus-manual ProjectIndexingService --budget 500 --explain
 ```
 
 À vérifier :
@@ -225,14 +316,24 @@ La sortie doit présenter :
 - le contenu ;
 - le nombre de tokens estimés ;
 - `[TRONQUÉ]` lorsque nécessaire ;
-- les métadonnées et exclusions en mode `--explain`.
+- les métadonnées et exclusions en mode `--explain` ;
+- la latence de construction.
 
-## 13. Tester un petit budget
+Version JSON :
+
+```powershell
+$context = .\scripts\nexus.ps1 context nexus-manual ProjectIndexingService --budget 500 --explain --json | ConvertFrom-Json
+$context.estimatedTokens
+$context.tokenBudget
+$context.metadata.reductionRatio
+```
+
+## 14. Tester un petit budget
 
 Pour provoquer les arbitrages :
 
 ```powershell
-mvn -q exec:java "-Dexec.args=context nexus-manual ProjectIndexingService --budget 80 --explain"
+.\scripts\nexus.ps1 context nexus-manual ProjectIndexingService --budget 80 --explain
 ```
 
 Observer :
@@ -244,7 +345,35 @@ Observer :
 
 Ce test est utile lors d'une modification de `BudgetedContextSelector`.
 
-## 14. Inspecter SQLite
+## 15. Vérifier les codes de sortie
+
+Succès :
+
+```powershell
+.\scripts\nexus.ps1 --version
+$LASTEXITCODE
+# 0
+```
+
+Erreur d'utilisation :
+
+```powershell
+.\scripts\nexus.ps1 unknown-command --json
+$LASTEXITCODE
+# 2
+```
+
+Le JSON d'erreur est écrit sur `stderr` et contient :
+
+```text
+error
+exitCode
+message
+```
+
+Une erreur d'exécution inattendue utilise le code `1`.
+
+## 16. Inspecter SQLite
 
 Le fichier de base est résolu par `NexusPaths` sous `NEXUS_HOME`.
 
@@ -274,7 +403,7 @@ FROM symbol_relations
 ORDER BY source_ref, target_ref;
 ```
 
-## 15. Comprendre un score de recherche
+## 17. Comprendre un score de recherche
 
 Pour un résultat donné :
 
@@ -296,7 +425,7 @@ Si le score affiché ne correspond pas aux contributions :
 3. vérifier `CandidateMerger` ;
 4. ajouter un test.
 
-## 16. Comprendre un ContextBundle trop pauvre
+## 18. Comprendre un ContextBundle trop pauvre
 
 Diagnostic recommandé :
 
@@ -315,7 +444,22 @@ flowchart TD
 
 Cette méthode évite de modifier le ranking lorsqu'en réalité le problème vient du budget, ou inversement.
 
-## 17. Encodage PowerShell 5.1
+## 19. Diagnostiquer un problème JSON
+
+```mermaid
+flowchart TD
+    A[JSON invalide ou pollué] --> B{stdout contient-il uniquement le JSON ?}
+    B -- Non --> C[Inspecter CliRenderer / écriture stdout]
+    B -- Oui --> D{warnings présents sur stderr ?}
+    D -- Oui --> E[Normal : séparer stderr dans le consommateur]
+    D -- Non --> F{ConvertFrom-Json réussit ?}
+    F -- Non --> G[Inspecter le payload et Jackson]
+    F -- Oui --> H[Inspecter le contrat de champs attendu]
+```
+
+Règle : les warnings JVM ou bibliothèques peuvent apparaître sur `stderr`, mais ne doivent jamais être concaténés au document JSON de succès sur `stdout`.
+
+## 20. Encodage PowerShell 5.1
 
 Windows PowerShell 5.1 peut afficher certains accents provenant des processus Java/Maven sous une forme incorrecte :
 
@@ -324,11 +468,11 @@ modifiÚs
 rÚsultat
 ```
 
-Le self-smoke est écrit de manière ASCII-safe pour ses assertions.
+Le self-smoke est écrit de manière ASCII-safe pour ses assertions et capture `stdout` / `stderr` dans des fichiers séparés.
 
 Ce problème d'affichage ne signifie pas que les données SQLite ou Lucene sont corrompues.
 
-## 18. Ajouter un test de non-régression
+## 21. Ajouter un test de non-régression
 
 Ordre recommandé :
 
@@ -340,7 +484,7 @@ Ordre recommandé :
 6. mettre à jour la documentation si le comportement observable change ;
 7. créer un ADR si la correction modifie une décision structurante.
 
-## 19. Nettoyer l'environnement de test
+## 22. Nettoyer l'environnement de test
 
 ```powershell
 Remove-Item -Recurse -Force .\target\nexus-self-smoke-home -ErrorAction SilentlyContinue
@@ -349,7 +493,7 @@ Remove-Item Env:NEXUS_HOME -ErrorAction SilentlyContinue
 
 Le prochain self-smoke recréera un environnement propre.
 
-## 20. Matrice de diagnostic rapide
+## 23. Matrice de diagnostic rapide
 
 | Symptôme | Zone probable |
 |---|---|
@@ -363,3 +507,6 @@ Le prochain self-smoke recréera un environnement propre.
 | contenu dupliqué | `FragmentMerger` |
 | budget dépassé | `BudgetedContextSelector` / `TokenEstimator` |
 | bundle non déterministe | tri ou collection non ordonnée |
+| JSON mélangé à des warnings | séparation stdout/stderr de la CLI ou du wrapper |
+| `*-cli.jar` introuvable | phase Maven package / Shade Plugin |
+| JAR autonome démarre mais SQLite échoue | services `META-INF/services` ou packaging natif |
