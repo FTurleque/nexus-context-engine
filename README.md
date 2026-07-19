@@ -122,7 +122,23 @@ Validation self-smoke réelle sur le repository NEXUS lui-même :
 
 Le self-smoke a également permis de détecter puis corriger un défaut réel : JavaParser utilisait son niveau de langage par défaut et refusait les text blocks présents dans le code NEXUS. L'analyseur est désormais configuré explicitement avec le niveau Java 21 et ce comportement est couvert par un test automatisé.
 
-La prochaine étape est l'**Itération 2 — recherche, graphe et classement explicable**.
+**Itération 2 — en cours : recherche, graphe et classement explicable.**
+
+L'implémentation initiale comprend désormais :
+
+- recherche lexicale Lucene multi-champs avec ranking BM25 ;
+- boosts explicites sur les noms de symboles, noms qualifiés, chemins et contenu ;
+- recherche exacte et approximative de symboles depuis SQLite ;
+- fusion déterministe des candidats et de leurs signaux ;
+- graphe minimal de fichiers construit à partir des imports internes résolus ;
+- propagation de pertinence sur un et deux sauts ;
+- ranking déterministe à composantes pondérées et explicables ;
+- commande CLI `search` avec `--limit` et `--explain` ;
+- corpus de requêtes de référence ;
+- calcul de `precision@K` et `recall@K` ;
+- tests d'intégration dédiés au ranking et au corpus golden.
+
+Cette itération reste **à valider localement** par le prochain `mvn clean install` et par le self-smoke étendu à la recherche réelle dans NEXUS.
 
 ### Point d'entrée CLI actuel
 
@@ -138,12 +154,19 @@ Commandes actuellement exposées :
 project add <chemin> [nom]
 project list
 index <id-ou-nom> [--rebuild]
+search <id-ou-nom> <requête> [--limit N] [--explain]
 inspect <id-ou-nom>
+```
+
+Exemple de recherche :
+
+```powershell
+mvn -q exec:java "-Dexec.args=search nexus-context-engine-self-smoke ProjectIndexingService --limit 5 --explain"
 ```
 
 Le packaging final en commande native `nexus` est prévu plus tard dans la phase de consolidation de la CLI.
 
-### Self-smoke test : NEXUS indexe NEXUS
+### Self-smoke test : NEXUS indexe et recherche dans NEXUS
 
 Le script PowerShell `scripts/self-smoke.ps1` valide le flux réel de la CLI sur le repository NEXUS lui-même :
 
@@ -152,7 +175,8 @@ Le script PowerShell `scripts/self-smoke.ps1` valide le flux réel de la CLI sur
 3. vérification du registre ;
 4. première indexation complète ;
 5. seconde indexation incrémentale attendue avec `0 modifiés` et `0 supprimés` ;
-6. inspection de l'index avec état `READY`.
+6. inspection de l'index avec état `READY` ;
+7. recherche explicable de `ProjectIndexingService` et vérification de la présence de `ProjectIndexingService.java`.
 
 Le test utilise un `NEXUS_HOME` isolé sous `target/nexus-self-smoke-home` et supprime ces données à la fin par défaut.
 
