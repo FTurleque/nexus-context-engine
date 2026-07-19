@@ -83,12 +83,25 @@ Validation locale du 19 juillet 2026 :
 - `mvn clean install` : succès ;
 - compilation de 43 fichiers source avec `--release 21` : succès ;
 - compilation de 4 fichiers de test : succès ;
-- tests : 5 exécutés, 0 échec, 0 erreur, 0 ignoré ;
-- tests couverts : analyse JavaParser, indexation incrémentale SQLite/Lucene, scanner et règles d'ignore, registre de projets ;
+- tests : 6 exécutés, 0 échec, 0 erreur, 0 ignoré ;
+- tests couverts : analyse JavaParser, text blocks Java 21, indexation incrémentale SQLite/Lucene, scanner et règles d'ignore, registre de projets ;
 - génération du JAR `nexus-context-engine-0.1.0-SNAPSHOT.jar` : succès ;
 - installation dans le dépôt Maven local : succès.
 
-Les avertissements Maven/Guice, SLF4J sans provider, accès natif SQLite et Vector API Lucene observés lors du build sont non bloquants et ne remettent pas en cause le critère de sortie de l'itération.
+Validation self-smoke sur le repository NEXUS :
+
+- enregistrement du repository : succès ;
+- première indexation : 47 fichiers scannés, 47 fichiers modifiés, 0 supprimé ;
+- index produit : 47 fichiers, 161 symboles et 287 relations ;
+- première indexation avec reconstruction complète : 741 ms sur la machine de validation ;
+- seconde indexation incrémentale : 47 fichiers scannés, 0 fichier modifié, 0 supprimé ;
+- seconde indexation : 282 ms sur la machine de validation ;
+- inspection finale : état `READY`, 47 fichiers, 161 symboles et 287 relations ;
+- résultat : `SELF-SMOKE SUCCESS`.
+
+Le self-smoke a révélé puis permis de corriger un défaut réel : JavaParser utilisait son niveau de langage par défaut et refusait les text blocks présents dans le code NEXUS. L'analyseur est désormais configuré explicitement avec `ParserConfiguration.LanguageLevel.JAVA_21` et ce comportement est couvert par un test de non-régression.
+
+Les avertissements Maven/Guice, SLF4J sans provider, accès natif SQLite et Vector API Lucene observés lors du build sont non bloquants et ne remettent pas en cause le critère de sortie de l'itération. Sous Windows PowerShell 5.1, certains accents des sorties capturées peuvent également être mal affichés selon l'encodage de la console ; ce problème d'affichage n'affecte pas les données indexées ni le résultat fonctionnel.
 
 ---
 
