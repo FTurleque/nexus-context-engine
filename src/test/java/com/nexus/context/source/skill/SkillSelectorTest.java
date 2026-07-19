@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SkillSelectorTest {
@@ -43,6 +44,22 @@ class SkillSelectorTest {
         assertEquals(1, matches.size());
         assertTrue(matches.getFirst().reasons().stream()
                 .anyMatch(reason -> reason.contains("mentionné explicitement")));
+    }
+
+    @Test
+    void doesNotTreatASubstringAsAnExplicitSkillName() {
+        SkillDescriptor skill = skill(
+                "pdf",
+                "Handle PDF files when a task explicitly concerns PDF documents.");
+
+        List<SkillMatch> matches = new SkillSelector().select(
+                "refactor PdfService implementation",
+                List.of(skill));
+
+        if (!matches.isEmpty()) {
+            assertFalse(matches.getFirst().reasons().stream()
+                    .anyMatch(reason -> reason.contains("mentionné explicitement")));
+        }
     }
 
     private static SkillDescriptor skill(String name, String description) {
