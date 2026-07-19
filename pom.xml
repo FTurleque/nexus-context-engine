@@ -19,6 +19,7 @@
         <lucene.version>10.5.0</lucene.version>
         <jgit.version>7.7.0.202606012155-r</jgit.version>
         <jackson.version>2.22.1</jackson.version>
+        <snakeyaml-engine.version>3.0.1</snakeyaml-engine.version>
         <junit.version>6.0.2</junit.version>
         <exec-maven-plugin.version>3.6.3</exec-maven-plugin.version>
         <maven-shade-plugin.version>3.6.2</maven-shade-plugin.version>
@@ -59,6 +60,12 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
             <version>${jackson.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.snakeyaml</groupId>
+            <artifactId>snakeyaml-engine</artifactId>
+            <version>${snakeyaml-engine.version}</version>
         </dependency>
 
         <dependency>
