@@ -1,8 +1,8 @@
 package io.github.fturleque.nexus.context;
 
 import io.github.fturleque.nexus.index.CodeSymbol;
+import io.github.fturleque.nexus.project.ProjectDescriptor;
 import io.github.fturleque.nexus.ranking.RankedCandidate;
-import io.github.fturleque.nexus.search.CandidateType;
 import io.github.fturleque.nexus.token.TokenEstimator;
 
 import java.io.IOException;
@@ -39,9 +39,11 @@ public final class ContextFragmentFactory {
     }
 
     public List<ContextFragment> create(
+            ProjectDescriptor project,
             String query,
             List<RankedCandidate> rankedCandidates,
             int tokenBudget) throws IOException {
+        Objects.requireNonNull(project, "project");
         Objects.requireNonNull(query, "query");
         Objects.requireNonNull(rankedCandidates, "rankedCandidates");
         if (tokenBudget <= 0) {
@@ -56,27 +58,28 @@ public final class ContextFragmentFactory {
 
         List<ContextFragment> fragments = new ArrayList<>();
         for (Map.Entry<Path, List<RankedCandidate>> entry : byPath.entrySet()) {
-            Path path = entry.getKey();
-            List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
+            Path absolutePath = entry.getKey();
+            Path relativePath = project.rootPath().relativize(absolutePath);
+            List<String> lines = Files.readAllLines(absolutePath, StandardCharsets.UTF_8);
             List<RankedCandidate> symbolCandidates = entry.getValue().stream()
                     .filter(candidate -> candidate.candidate().symbol() != null)
                     .toList();
 
             if (!symbolCandidates.isEmpty()) {
                 for (RankedCandidate candidate : symbolCandidates) {
-                    fragments.add(symbolFragment(path, lines, candidate));
+                    fragments.add(symbolFragment(relativePath, lines, candidate));
                 }
                 continue;
             }
 
             RankedCandidate fileCandidate = entry.getValue().getFirst();
-            fragments.addAll(fileFragments(path, lines, query, fileCandidate, tokenBudget));
+            fragments.addAll(fileFragments(relativePath, lines, query, fileCandidate, tokenBudget));
         }
         return List.copyOf(fragments);
     }
 
     private static ContextFragment symbolFragment(
-            Path path,
+            Path relativePath,
             List<String> lines,
             RankedCandidate candidate) {
         CodeSymbol symbol = candidate.candidate().symbol();
@@ -84,7 +87,7 @@ public final class ContextFragmentFactory {
         int end = Math.min(lines.size(), symbol.endLine() + SYMBOL_CONTEXT_LINES);
         return new ContextFragment(
                 candidate.candidate().type(),
-                path,
+                relativePath,
                 symbol.signature().isBlank() ? symbol.qualifiedName() : symbol.signature(),
                 start,
                 end,
@@ -95,7 +98,7 @@ public final class ContextFragmentFactory {
     }
 
     private List<ContextFragment> fileFragments(
-            Path path,
+            Path relativePath,
             List<String> lines,
             String query,
             RankedCandidate candidate,
@@ -109,7 +112,7 @@ public final class ContextFragmentFactory {
         if (tokenEstimator.estimate(fullContent) <= fullFileThreshold) {
             return List.of(new ContextFragment(
                     candidate.candidate().type(),
-                    path,
+                    relativePath,
                     null,
                     1,
                     lines.size(),
@@ -124,7 +127,7 @@ public final class ContextFragmentFactory {
         for (LineRange range : ranges) {
             fragments.add(new ContextFragment(
                     candidate.candidate().type(),
-                    path,
+                    relativePath,
                     null,
                     range.startLine(),
                     range.endLine(),
