@@ -344,26 +344,73 @@ Sous Windows PowerShell 5.1, certains warnings JVM/SLF4J écrits sur `stderr` pe
 
 ## Itération 5 — Instructions et documentation
 
-État : **à démarrer**.
+État : **terminée et validée localement le 20 juillet 2026**.
 
-Objectif : permettre à NEXUS de sélectionner autre chose que du code.
+Objectif : permettre à NEXUS de sélectionner autre chose que du code tout en réutilisant les conventions déjà présentes dans les projets.
 
-Livrables :
+Livrables validés :
 
 - abstraction `ContextSourceProvider` ;
 - modèle `ContextSourceDescriptor` ;
 - indexation de documentation Markdown ;
-- `InstructionSourceProvider` ;
-- support de `AGENTS.md` ;
+- `MarkdownLanguageAnalyzer` ;
+- support de `AGENTS.md` et alias `AGENT.md` ;
 - support de `.github/copilot-instructions.md` ;
-- support de `.github/instructions/*.instructions.md` ;
-- support de `CLAUDE.md` ;
-- support extensible de formats d'instructions supplémentaires ;
-- résolution du scope des instructions ;
-- ranking des instructions ;
-- explication de leur sélection ou exclusion.
+- support de `.github/instructions/**/*.instructions.md` avec `applyTo` ;
+- support de `CLAUDE.md` et `.claude/CLAUDE.md` ;
+- support de `GEMINI.md` ;
+- résolution du scope repository, répertoire et glob ;
+- ranking des instructions par priorité de source et spécificité ;
+- explication de leur sélection ou exclusion ;
+- résolution sécurisée des références `@fichier` ;
+- confinement des références au repository ;
+- profondeur maximale de 5 et détection de cycles ;
+- respect des `.gitignore` / `.nexusignore`, y compris imbriqués ;
+- déduplication SHA-256 inter-provider ;
+- déduplication entre documents référencés et documents remontés par Lucene ;
+- sous-budget d'instructions plafonné à 25 % du budget global et à 600 tokens ;
+- détection sans injection brute des settings, MCP, hooks, profils d'agents et skills ;
+- catégories `DOCUMENTATION`, `INSTRUCTION`, `AGENT_PROFILE` et `SKILL` ;
+- dogfooding via le `AGENTS.md` racine de NEXUS ;
+- tests brownfield couvrant `.github`, `.claude`, scopes imbriqués et documentation.
+
+Décisions associées :
+
+- ADR-0011 — normaliser les sources de contexte derrière des providers ;
+- ADR-0012 — réutiliser les standards existants ;
+- ADR-0032 — préserver et normaliser le contexte natif des projets ;
+- ADR-0033 — séparer les instructions contextuelles de la configuration opérationnelle.
 
 Critère de sortie : une demande peut produire un `ContextBundle` contenant simultanément du code, de la documentation et uniquement les instructions applicables.
+
+Validation locale du 20 juillet 2026 :
+
+- `mvn clean install` : succès ;
+- compilation de 83 fichiers source avec `--release 21` ;
+- compilation de 13 fichiers de test ;
+- 19 tests exécutés, 0 échec, 0 erreur, 0 ignoré ;
+- baseline qualité conservée : `mean precision@3 = 0,4444`, `mean recall@3 = 1,0000` ;
+- JAR bibliothèque et JAR CLI autonome générés et installés.
+
+Validation self-smoke :
+
+- JAR autonome : succès ;
+- Java et Markdown détectés comme langues du projet ;
+- première indexation : 145 fichiers scannés, 145 modifiés, 0 supprimé ;
+- index produit : 145 fichiers, 406 symboles, 781 relations ;
+- indexation complète : 1 115 ms ;
+- seconde indexation incrémentale : 236 ms, 0 modifié, 0 supprimé ;
+- recherche `ProjectIndexingService` : 277 ms, fichier principal classé premier ;
+- contexte strict : 5 items, 172/180 tokens, 379 ms ;
+- `AGENTS.md` natif sélectionné ;
+- `docs/architecture.md` chargé comme référence explicite ;
+- contexte multi-source : 9 items, 1 185/1 200 tokens, 414 ms ;
+- présence simultanée de `INSTRUCTION`, `DOCUMENTATION`, code et tests ;
+- 2 fragments documentaires supprimés par déduplication inter-source ;
+- réduction du contexte candidat strict : environ 99,12 % ;
+- résultat final : `SELF-SMOKE SUCCESS`.
+
+Le critère de sortie est donc validé : NEXUS sait maintenant construire un contexte multi-source qui respecte les conventions natives du repository avant d'ajouter le contexte issu de sa propre recherche.
 
 ---
 
