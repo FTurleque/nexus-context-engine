@@ -33,12 +33,6 @@ public final class NativeProjectCustomizationDetector {
         agentProfiles.addAll(findBelow(root, ".claude/agents", ".md"));
         putIfNotEmpty(detected, "agentProfiles", agentProfiles);
 
-        List<String> skills = new ArrayList<>();
-        skills.addAll(findNamedBelow(root, ".github/skills", "SKILL.md"));
-        skills.addAll(findNamedBelow(root, ".claude/skills", "SKILL.md"));
-        skills.addAll(findNamedBelow(root, ".agents/skills", "SKILL.md"));
-        putIfNotEmpty(detected, "skillDefinitions", skills);
-
         List<String> hooks = new ArrayList<>();
         hooks.addAll(findBelow(root, ".github/hooks", ".json"));
         hooks.addAll(findBelow(root, ".claude/hooks", ".json"));
@@ -63,22 +57,6 @@ public final class NativeProjectCustomizationDetector {
                     .filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().toLowerCase()
                             .endsWith(suffix.toLowerCase()))
-                    .map(root::relativize)
-                    .map(NativeProjectCustomizationDetector::repositoryPath)
-                    .sorted()
-                    .toList();
-        }
-    }
-
-    private static List<String> findNamedBelow(Path root, String relativeDirectory, String fileName) throws IOException {
-        Path directory = root.resolve(relativeDirectory);
-        if (!Files.isDirectory(directory)) {
-            return List.of();
-        }
-        try (var stream = Files.walk(directory)) {
-            return stream
-                    .filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().equalsIgnoreCase(fileName))
                     .map(root::relativize)
                     .map(NativeProjectCustomizationDetector::repositoryPath)
                     .sorted()
