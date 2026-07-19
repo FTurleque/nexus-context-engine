@@ -201,8 +201,10 @@ public final class NexusCli {
         }
 
         String query = query(queryParts, "La requête de recherche ne peut pas être vide");
+        long startedAt = System.nanoTime();
         List<RankedCandidate> results = searchService.search(project, query, limit, explain);
-        renderer.renderSearch(project, query, limit, explain, results);
+        long durationMs = elapsedMillis(startedAt);
+        renderer.renderSearch(project, query, limit, explain, durationMs, results);
     }
 
     private static void handleContext(
@@ -236,6 +238,7 @@ public final class NexusCli {
         }
 
         String query = query(queryParts, "La requête de contexte ne peut pas être vide");
+        long startedAt = System.nanoTime();
         ContextBundle bundle = contextBuilder.build(new ContextRequest(
                 project.id(),
                 query,
@@ -243,7 +246,8 @@ public final class NexusCli {
                 Set.of(),
                 Map.of(),
                 explain));
-        renderer.renderContext(project, query, explain, bundle);
+        long durationMs = elapsedMillis(startedAt);
+        renderer.renderContext(project, query, explain, durationMs, bundle);
     }
 
     private static void handleInspect(
@@ -303,6 +307,10 @@ public final class NexusCli {
         return Arrays.stream(rawArgs)
                 .filter(argument -> !"--json".equals(argument))
                 .toArray(String[]::new);
+    }
+
+    private static long elapsedMillis(long startedAt) {
+        return Math.max(0L, (System.nanoTime() - startedAt) / 1_000_000L);
     }
 
     private static String safeMessage(Exception exception) {
