@@ -90,7 +90,7 @@ try {
     Write-Host "NEXUS_HOME : $smokeHome"
     Write-Host
 
-    Write-Host "[1/11] Construction du JAR CLI autonome"
+    Write-Host "[1/12] Construction du JAR CLI autonome"
     Invoke-Maven -Arguments @("-q", "-DskipTests", "package")
     $script:cliJar = Get-ChildItem -Path (Join-Path $repoRoot "target") -Filter "nexus-context-engine-*-cli.jar" -File |
         Sort-Object LastWriteTime -Descending |
@@ -100,21 +100,21 @@ try {
     }
     Write-Host "JAR CLI : $($script:cliJar.FullName)"
 
-    Write-Host "[2/11] Validation du point d'entree autonome"
+    Write-Host "[2/12] Validation du point d'entree autonome"
     $versionJson = Invoke-Nexus -Arguments @("--version", "--json")
     $version = $versionJson | ConvertFrom-Json
     if ($version.command -ne "version" -or [string]::IsNullOrWhiteSpace($version.version)) {
         throw "Le JAR autonome devait exposer une version JSON valide."
     }
 
-    Write-Host "[3/11] Enregistrement du repository NEXUS en JSON"
+    Write-Host "[3/12] Enregistrement du repository NEXUS en JSON"
     $registrationJson = Invoke-Nexus -Arguments @("project", "add", ".", $ProjectName, "--json")
     $registration = $registrationJson | ConvertFrom-Json
     if ($registration.project.name -ne $ProjectName) {
         throw "Le projet '$ProjectName' n'apparait pas dans la sortie JSON de project add."
     }
 
-    Write-Host "[4/11] Verification du registre en JSON"
+    Write-Host "[4/12] Verification du registre en JSON"
     $projectListJson = Invoke-Nexus -Arguments @("project", "list", "--json")
     $projectList = $projectListJson | ConvertFrom-Json
     $registeredProject = $projectList.projects | Where-Object { $_.name -eq $ProjectName } | Select-Object -First 1
@@ -122,7 +122,7 @@ try {
         throw "Le projet '$ProjectName' n'apparait pas dans project list --json."
     }
 
-    Write-Host "[5/11] Premiere indexation complete en JSON"
+    Write-Host "[5/12] Premiere indexation complete en JSON"
     $firstIndexJson = Invoke-Nexus -Arguments @("index", $ProjectName, "--json")
     $firstIndex = $firstIndexJson | ConvertFrom-Json
     if ([int]$firstIndex.report.changedFiles -le 0) {
@@ -135,14 +135,14 @@ try {
         throw "L'indexation devait declarer le langage markdown apres l'Iteration 5."
     }
 
-    Write-Host "[6/11] Deuxieme indexation incrementale en JSON"
+    Write-Host "[6/12] Deuxieme indexation incrementale en JSON"
     $secondIndexJson = Invoke-Nexus -Arguments @("index", $ProjectName, "--json")
     $secondIndex = $secondIndexJson | ConvertFrom-Json
     if ([int]$secondIndex.report.changedFiles -ne 0 -or [int]$secondIndex.report.removedFiles -ne 0) {
         throw "La deuxieme indexation devait etre idempotente : 0 fichier modifie et 0 fichier supprime."
     }
 
-    Write-Host "[7/11] Inspection de l'index en JSON"
+    Write-Host "[7/12] Inspection de l'index en JSON"
     $inspectionJson = Invoke-Nexus -Arguments @("inspect", $ProjectName, "--json")
     $inspection = $inspectionJson | ConvertFrom-Json
     if ($inspection.project.indexStatus -ne "READY") {
@@ -152,7 +152,7 @@ try {
         throw "L'inspection devait contenir au moins un fichier et un symbole indexes."
     }
 
-    Write-Host "[8/11] Recherche explicable en JSON"
+    Write-Host "[8/12] Recherche explicable en JSON"
     $searchJson = Invoke-Nexus -Arguments @("search", $ProjectName, "ProjectIndexingService", "--limit", "5", "--explain", "--json")
     $search = $searchJson | ConvertFrom-Json
     $searchHit = $search.results | Where-Object { $_.path -match "ProjectIndexingService\.java$" } | Select-Object -First 1
@@ -160,7 +160,7 @@ try {
         throw "La recherche JSON devait retrouver ProjectIndexingService.java."
     }
 
-    Write-Host "[9/11] Construction d'un ContextBundle strict sous budget avec instructions natives"
+    Write-Host "[9/12] Construction d'un ContextBundle strict sous budget avec instructions natives"
     $contextBudget = 180
     $contextJson = Invoke-Nexus -Arguments @("context", $ProjectName, "ProjectIndexingService", "--budget", "$contextBudget", "--explain", "--json")
     $context = $contextJson | ConvertFrom-Json
@@ -182,7 +182,7 @@ try {
         throw "Les metadonnees devaient indiquer au moins une source native decouverte."
     }
 
-    Write-Host "[10/11] Construction d'un contexte multi-source code documentation instructions"
+    Write-Host "[10/12] Construction d'un contexte multi-source code documentation instructions"
     $multiSourceBudget = 1200
     $multiSourceJson = Invoke-Nexus -Arguments @("context", $ProjectName, "ProjectIndexingService indexation architecture", "--budget", "$multiSourceBudget", "--explain", "--json")
     $multiSource = $multiSourceJson | ConvertFrom-Json
@@ -199,7 +199,34 @@ try {
         throw "Le contexte multi-source devait conserver le code ProjectIndexingService.java."
     }
 
-    Write-Host "[11/11] Validation de la sortie humaine par defaut"
+    Write-Host "[11/12] Activation progressive d'un Agent Skill"
+    $skillContextBudget = 1200
+    $skillContextJson = Invoke-Nexus -Arguments @("context", $ProjectName, "validate NEXUS context quality progressive disclosure", "--budget", "$skillContextBudget", "--explain", "--json")
+    $skillContext = $skillContextJson | ConvertFrom-Json
+    if ([int]$skillContext.estimatedTokens -gt $skillContextBudget) {
+        throw "Le contexte avec skill a depasse son budget."
+    }
+    $skillHit = $skillContext.items | Where-Object { $_.type -eq "SKILL" -and $_.path -match "nexus-context-validation/SKILL\.md$" } | Select-Object -First 1
+    if ($null -eq $skillHit) {
+        throw "Le skill nexus-context-validation devait etre active pour la requete de validation."
+    }
+    if ($skillHit.content -notmatch "NEXUS_SKILL_VALIDATION_WORKFLOW") {
+        throw "Le SKILL.md complet devait etre charge apres selection."
+    }
+    if ($null -ne ($skillContext.items | Where-Object { $_.path -match "quality-checks\.md$" } | Select-Object -First 1)) {
+        throw "La reference quality-checks.md ne devait pas etre chargee automatiquement."
+    }
+    if ([int]$skillContext.metadata.skillsDiscovered -le 0 -or [int]$skillContext.metadata.skillSelectedItems -le 0) {
+        throw "Les metadonnees devaient confirmer la decouverte et la selection d'un skill."
+    }
+    if ([int]$skillContext.metadata.skillResourcesDiscovered -le 0) {
+        throw "Les ressources du skill devaient etre inventoriees."
+    }
+    if ([bool]$skillContext.metadata.skillsExecuted) {
+        throw "NEXUS ne doit jamais executer les skills ou leurs scripts."
+    }
+
+    Write-Host "[12/12] Validation de la sortie humaine par defaut"
     $humanSearch = Invoke-Nexus -Arguments @("search", $ProjectName, "ProjectIndexingService", "--limit", "3")
     if ($humanSearch -notmatch "Recherche\s+'ProjectIndexingService'" -or $humanSearch -notmatch "ProjectIndexingService\.java") {
         throw "La sortie humaine devait rester disponible sans --json."
@@ -214,6 +241,8 @@ try {
     Write-Host "Contexte strict : $($context.items.Count) item(s), $($context.estimatedTokens)/$($context.tokenBudget) tokens"
     Write-Host "Construction contexte multi-source : $($multiSource.durationMs) ms"
     Write-Host "Contexte multi-source : $($multiSource.items.Count) item(s), $($multiSource.estimatedTokens)/$($multiSource.tokenBudget) tokens"
+    Write-Host "Construction contexte avec skill : $($skillContext.durationMs) ms"
+    Write-Host "Skills : $($skillContext.metadata.skillsDiscovered) decouvert(s), $($skillContext.metadata.skillSelectedItems) selectionne(s), $($skillContext.metadata.skillResourcesDiscovered) ressource(s) inventoriee(s)"
     if ($null -ne $context.metadata.reductionRatio) {
         $reductionPercent = [Math]::Round(([double]$context.metadata.reductionRatio * 100.0), 2)
         Write-Host "Reduction du contexte candidat strict : $reductionPercent %"
@@ -221,7 +250,7 @@ try {
 
     Write-Host
     Write-Host "SELF-SMOKE SUCCESS"
-    Write-Host "NEXUS a valide son JAR autonome, ses instructions natives, sa documentation Markdown et son contexte multi-source avec succes."
+    Write-Host "NEXUS a valide son JAR autonome, ses instructions natives, sa documentation Markdown, ses Agent Skills et sa divulgation progressive avec succes."
 }
 finally {
     if ($locationPushed) {
