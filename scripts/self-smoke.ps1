@@ -10,6 +10,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $smokeHome = Join-Path $repoRoot "target\nexus-self-smoke-home"
 $previousNexusHome = $env:NEXUS_HOME
 $locationPushed = $false
+$script:cliJar = $null
 
 function Invoke-Maven {
     param(
@@ -27,34 +28,37 @@ function Invoke-Maven {
 function Invoke-Nexus {
     param(
         [Parameter(Mandatory = $true)]
-        [string]$Arguments
+        [string[]]$Arguments
     )
 
-    # Windows PowerShell 5.1 converts native stderr redirected with 2>&1 into
-    # ErrorRecord objects. With ErrorActionPreference=Stop, harmless Maven/JDK
-    # warnings would therefore abort the script even when Maven exits with 0.
-    # Temporarily use Continue, then rely exclusively on LASTEXITCODE.
-    $previousErrorActionPreference = $ErrorActionPreference
+    if ($null -eq $script:cliJar) {
+        throw "Le JAR CLI NEXUS n'a pas ete initialise."
+    }
+
+    $stdoutFile = [System.IO.Path]::GetTempFileName()
+    $stderrFile = [System.IO.Path]::GetTempFileName()
     try {
-        $ErrorActionPreference = "Continue"
-        $output = & mvn -q exec:java "-Dexec.args=$Arguments" 2>&1
+        & java -jar $script:cliJar.FullName @Arguments 1> $stdoutFile 2> $stderrFile
         $exitCode = $LASTEXITCODE
+        $stdout = (Get-Content -Raw -Path $stdoutFile -ErrorAction SilentlyContinue)
+        $stderr = (Get-Content -Raw -Path $stderrFile -ErrorAction SilentlyContinue)
+
+        if (-not [string]::IsNullOrWhiteSpace($stderr)) {
+            Write-Host $stderr.TrimEnd()
+        }
+        if (-not [string]::IsNullOrWhiteSpace($stdout)) {
+            Write-Host $stdout.TrimEnd()
+        }
+
+        if ($exitCode -ne 0) {
+            throw "La CLI NEXUS a echoue avec le code $exitCode pour : $($Arguments -join ' ')"
+        }
+
+        return $stdout.TrimEnd()
     }
     finally {
-        $ErrorActionPreference = $previousErrorActionPreference
+        Remove-Item -Force $stdoutFile, $stderrFile -ErrorAction SilentlyContinue
     }
-
-    $text = ($output | ForEach-Object { $_.ToString() } | Out-String).TrimEnd()
-
-    if (-not [string]::IsNullOrWhiteSpace($text)) {
-        Write-Host $text
-    }
-
-    if ($exitCode -ne 0) {
-        throw "La CLI NEXUS a echoue avec le code $exitCode pour : $Arguments"
-    }
-
-    return $text
 }
 
 try {
@@ -72,71 +76,97 @@ try {
     Write-Host "NEXUS_HOME : $smokeHome"
     Write-Host
 
-    Write-Host "[1/8] Compilation de la CLI"
-    Invoke-Maven -Arguments @("-q", "-DskipTests", "compile")
+    Write-Host "[1/10] Construction du JAR CLI autonome"
+    Invoke-Maven -Arguments @("-q", "-DskipTests", "package")
+    $script:cliJar = Get-ChildItem -Path (Join-Path $repoRoot "target") -Filter "nexus-context-engine-*-cli.jar" -File |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+    if ($null -eq $script:cliJar) {
+        throw "Le build devait produire un JAR nexus-context-engine-*-cli.jar."
+    }
+    Write-Host "JAR CLI : $($script:cliJar.FullName)"
 
-    Write-Host "[2/8] Enregistrement du repository NEXUS"
-    $registration = Invoke-Nexus -Arguments "project add . $ProjectName"
-    if ($registration -notmatch [regex]::Escape($ProjectName)) {
-        throw "Le projet '$ProjectName' n'apparait pas dans la sortie de project add."
+    Write-Host "[2/10] Validation du point d'entree autonome"
+    $versionJson = Invoke-Nexus -Arguments @("--version", "--json")
+    $version = $versionJson | ConvertFrom-Json
+    if ($version.command -ne "version" -or [string]::IsNullOrWhiteSpace($version.version)) {
+        throw "Le JAR autonome devait exposer une version JSON valide."
     }
 
-    Write-Host "[3/8] Verification du registre"
-    $projectList = Invoke-Nexus -Arguments "project list"
-    if ($projectList -notmatch [regex]::Escape($ProjectName)) {
-        throw "Le projet '$ProjectName' n'apparait pas dans project list."
+    Write-Host "[3/10] Enregistrement du repository NEXUS en JSON"
+    $registrationJson = Invoke-Nexus -Arguments @("project", "add", ".", $ProjectName, "--json")
+    $registration = $registrationJson | ConvertFrom-Json
+    if ($registration.project.name -ne $ProjectName) {
+        throw "Le projet '$ProjectName' n'apparait pas dans la sortie JSON de project add."
     }
 
-    Write-Host "[4/8] Premiere indexation complete"
-    $firstIndex = Invoke-Nexus -Arguments "index $ProjectName"
-    # Format CLI: Projet <nom> : <scannes>, <modifies>, <supprimes>, ...
-    # Match by comma-separated numeric positions so the assertion remains
-    # ASCII-safe under Windows PowerShell 5.1.
-    if ($firstIndex -notmatch "Projet\s+.+?:\s+\d+\s+\S+,\s+([1-9]\d*)\s+\S+,\s+\d+\s+\S+,") {
+    Write-Host "[4/10] Verification du registre en JSON"
+    $projectListJson = Invoke-Nexus -Arguments @("project", "list", "--json")
+    $projectList = $projectListJson | ConvertFrom-Json
+    $registeredProject = $projectList.projects | Where-Object { $_.name -eq $ProjectName } | Select-Object -First 1
+    if ($null -eq $registeredProject) {
+        throw "Le projet '$ProjectName' n'apparait pas dans project list --json."
+    }
+
+    Write-Host "[5/10] Premiere indexation complete en JSON"
+    $firstIndexJson = Invoke-Nexus -Arguments @("index", $ProjectName, "--json")
+    $firstIndex = $firstIndexJson | ConvertFrom-Json
+    if ([int]$firstIndex.report.changedFiles -le 0) {
         throw "La premiere indexation devait indexer au moins un fichier modifie."
     }
+    if ($firstIndex.project.indexStatus -ne "READY") {
+        throw "Le projet devait etre READY apres la premiere indexation."
+    }
 
-    Write-Host "[5/8] Deuxieme indexation incrementale"
-    $secondIndex = Invoke-Nexus -Arguments "index $ProjectName"
-    if ($secondIndex -notmatch "Projet\s+.+?:\s+\d+\s+\S+,\s+0\s+\S+,\s+0\s+\S+,") {
+    Write-Host "[6/10] Deuxieme indexation incrementale en JSON"
+    $secondIndexJson = Invoke-Nexus -Arguments @("index", $ProjectName, "--json")
+    $secondIndex = $secondIndexJson | ConvertFrom-Json
+    if ([int]$secondIndex.report.changedFiles -ne 0 -or [int]$secondIndex.report.removedFiles -ne 0) {
         throw "La deuxieme indexation devait etre idempotente : 0 fichier modifie et 0 fichier supprime."
     }
 
-    Write-Host "[6/8] Inspection de l'index"
-    $inspection = Invoke-Nexus -Arguments "inspect $ProjectName"
-    if ($inspection -notmatch "\bREADY\b") {
+    Write-Host "[7/10] Inspection de l'index en JSON"
+    $inspectionJson = Invoke-Nexus -Arguments @("inspect", $ProjectName, "--json")
+    $inspection = $inspectionJson | ConvertFrom-Json
+    if ($inspection.project.indexStatus -ne "READY") {
         throw "Le projet devait etre dans l'etat READY apres indexation."
     }
-    if ($inspection -notmatch "Index\s*:\s+([1-9]\d*)\s+fichiers,\s+([1-9]\d*)\s+symboles,\s+(\d+)\s+relations") {
+    if ([int]$inspection.index.files -le 0 -or [int]$inspection.index.symbols -le 0) {
         throw "L'inspection devait contenir au moins un fichier et un symbole indexes."
     }
 
-    Write-Host "[7/8] Recherche explicable dans NEXUS"
-    $search = Invoke-Nexus -Arguments "search $ProjectName ProjectIndexingService --limit 5 --explain"
-    if ($search -notmatch "ProjectIndexingService\.java") {
-        throw "La recherche devait retrouver ProjectIndexingService.java."
+    Write-Host "[8/10] Recherche explicable en JSON"
+    $searchJson = Invoke-Nexus -Arguments @("search", $ProjectName, "ProjectIndexingService", "--limit", "5", "--explain", "--json")
+    $search = $searchJson | ConvertFrom-Json
+    $searchHit = $search.results | Where-Object { $_.path -match "ProjectIndexingService\.java$" } | Select-Object -First 1
+    if ($null -eq $searchHit) {
+        throw "La recherche JSON devait retrouver ProjectIndexingService.java."
     }
 
-    Write-Host "[8/8] Construction d'un ContextBundle sous budget"
+    Write-Host "[9/10] Construction d'un ContextBundle JSON sous budget"
     $contextBudget = 180
-    $context = Invoke-Nexus -Arguments "context $ProjectName ProjectIndexingService --budget $contextBudget --explain"
-    if ($context -notmatch "ProjectIndexingService\.java") {
-        throw "Le contexte devait contenir un fragment de ProjectIndexingService.java."
+    $contextJson = Invoke-Nexus -Arguments @("context", $ProjectName, "ProjectIndexingService", "--budget", "$contextBudget", "--explain", "--json")
+    $context = $contextJson | ConvertFrom-Json
+    if ([int]$context.estimatedTokens -gt $contextBudget) {
+        throw "Le ContextBundle a depasse le budget : $($context.estimatedTokens) > $contextBudget."
     }
-    $contextSummaryPattern = "Contexte\s+.+?:\s+([1-9]\d*)\s+item\S*,\s+(\d+)/$contextBudget\s+tokens"
-    if ($context -match $contextSummaryPattern) {
-        $usedTokens = [int]$matches[2]
+    if ($context.items.Count -le 0) {
+        throw "Le ContextBundle devait contenir au moins un item."
     }
-    else {
-        throw "La sortie context devait indiquer au moins un item et le budget consomme."
+    $contextHit = $context.items | Where-Object { $_.path -match "ProjectIndexingService\.java$" } | Select-Object -First 1
+    if ($null -eq $contextHit) {
+        throw "Le contexte JSON devait contenir un fragment de ProjectIndexingService.java."
     }
-    if ($usedTokens -gt $contextBudget) {
-        throw "Le ContextBundle a depasse le budget : $usedTokens > $contextBudget."
+
+    Write-Host "[10/10] Validation de la sortie humaine par defaut"
+    $humanSearch = Invoke-Nexus -Arguments @("search", $ProjectName, "ProjectIndexingService", "--limit", "3")
+    if ($humanSearch -notmatch "Recherche\s+'ProjectIndexingService'" -or $humanSearch -notmatch "ProjectIndexingService\.java") {
+        throw "La sortie humaine devait rester disponible sans --json."
     }
 
     Write-Host
     Write-Host "SELF-SMOKE SUCCESS"
-    Write-Host "NEXUS a enregistre, indexe, reindexe, inspecte, recherche puis construit son propre contexte sous budget avec succes."
+    Write-Host "NEXUS a valide son JAR autonome, son contrat JSON, sa sortie humaine et tout le flux MVP avec succes."
 }
 finally {
     if ($locationPushed) {
