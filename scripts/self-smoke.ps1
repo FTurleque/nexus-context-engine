@@ -9,6 +9,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $smokeHome = Join-Path $repoRoot "target\nexus-self-smoke-home"
 $previousNexusHome = $env:NEXUS_HOME
+$locationPushed = $false
 
 function Invoke-Maven {
     param(
@@ -17,8 +18,9 @@ function Invoke-Maven {
     )
 
     & mvn @Arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "La commande Maven a échoué avec le code $LASTEXITCODE : mvn $($Arguments -join ' ')"
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        throw "La commande Maven a echoue avec le code $exitCode : mvn $($Arguments -join ' ')"
     }
 }
 
@@ -28,16 +30,28 @@ function Invoke-Nexus {
         [string]$Arguments
     )
 
-    $output = & mvn -q exec:java "-Dexec.args=$Arguments" 2>&1
-    $exitCode = $LASTEXITCODE
-    $text = ($output | Out-String).TrimEnd()
+    # Windows PowerShell 5.1 converts native stderr redirected with 2>&1 into
+    # ErrorRecord objects. With ErrorActionPreference=Stop, harmless Maven/JDK
+    # warnings would therefore abort the script even when Maven exits with 0.
+    # Temporarily use Continue, then rely exclusively on LASTEXITCODE.
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $output = & mvn -q exec:java "-Dexec.args=$Arguments" 2>&1
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    $text = ($output | ForEach-Object { $_.ToString() } | Out-String).TrimEnd()
 
     if (-not [string]::IsNullOrWhiteSpace($text)) {
         Write-Host $text
     }
 
     if ($exitCode -ne 0) {
-        throw "La CLI NEXUS a échoué avec le code $exitCode pour : $Arguments"
+        throw "La CLI NEXUS a echoue avec le code $exitCode pour : $Arguments"
     }
 
     return $text
@@ -45,6 +59,7 @@ function Invoke-Nexus {
 
 try {
     Push-Location $repoRoot
+    $locationPushed = $true
 
     if (Test-Path $smokeHome) {
         Remove-Item -Recurse -Force $smokeHome
@@ -63,42 +78,47 @@ try {
     Write-Host "[2/6] Enregistrement du repository NEXUS"
     $registration = Invoke-Nexus -Arguments "project add . $ProjectName"
     if ($registration -notmatch [regex]::Escape($ProjectName)) {
-        throw "Le projet '$ProjectName' n'apparaît pas dans la sortie de project add."
+        throw "Le projet '$ProjectName' n'apparait pas dans la sortie de project add."
     }
 
-    Write-Host "[3/6] Vérification du registre"
+    Write-Host "[3/6] Verification du registre"
     $projectList = Invoke-Nexus -Arguments "project list"
     if ($projectList -notmatch [regex]::Escape($ProjectName)) {
-        throw "Le projet '$ProjectName' n'apparaît pas dans project list."
+        throw "Le projet '$ProjectName' n'apparait pas dans project list."
     }
 
-    Write-Host "[4/6] Première indexation complète"
+    Write-Host "[4/6] Premiere indexation complete"
     $firstIndex = Invoke-Nexus -Arguments "index $ProjectName"
-    if ($firstIndex -notmatch "\b([1-9]\d*)\s+modifiés\b") {
-        throw "La première indexation devait indexer au moins un fichier modifié."
+    # Format CLI: Projet <nom> : <scannes>, <modifies>, <supprimes>, ...
+    # Match by comma-separated numeric positions so the assertion remains
+    # ASCII-safe under Windows PowerShell 5.1.
+    if ($firstIndex -notmatch "Projet\s+.+?:\s+\d+\s+\S+,\s+([1-9]\d*)\s+\S+,\s+\d+\s+\S+,") {
+        throw "La premiere indexation devait indexer au moins un fichier modifie."
     }
 
-    Write-Host "[5/6] Deuxième indexation incrémentale"
+    Write-Host "[5/6] Deuxieme indexation incrementale"
     $secondIndex = Invoke-Nexus -Arguments "index $ProjectName"
-    if ($secondIndex -notmatch "\b0\s+modifiés,\s+0\s+supprimés\b") {
-        throw "La deuxième indexation devait être idempotente : 0 fichier modifié et 0 fichier supprimé."
+    if ($secondIndex -notmatch "Projet\s+.+?:\s+\d+\s+\S+,\s+0\s+\S+,\s+0\s+\S+,") {
+        throw "La deuxieme indexation devait etre idempotente : 0 fichier modifie et 0 fichier supprime."
     }
 
     Write-Host "[6/6] Inspection de l'index"
     $inspection = Invoke-Nexus -Arguments "inspect $ProjectName"
     if ($inspection -notmatch "\bREADY\b") {
-        throw "Le projet devait être dans l'état READY après indexation."
+        throw "Le projet devait etre dans l'etat READY apres indexation."
     }
     if ($inspection -notmatch "Index\s*:\s+([1-9]\d*)\s+fichiers,\s+([1-9]\d*)\s+symboles,\s+(\d+)\s+relations") {
-        throw "L'inspection devait contenir au moins un fichier et un symbole indexés."
+        throw "L'inspection devait contenir au moins un fichier et un symbole indexes."
     }
 
     Write-Host
     Write-Host "SELF-SMOKE SUCCESS"
-    Write-Host "NEXUS a enregistré, indexé deux fois puis inspecté son propre repository avec succès."
+    Write-Host "NEXUS a enregistre, indexe deux fois puis inspecte son propre repository avec succes."
 }
 finally {
-    Pop-Location
+    if ($locationPushed) {
+        Pop-Location
+    }
 
     if ($null -eq $previousNexusHome) {
         Remove-Item Env:NEXUS_HOME -ErrorAction SilentlyContinue
@@ -111,6 +131,6 @@ finally {
         Remove-Item -Recurse -Force $smokeHome
     }
     elseif ($KeepData) {
-        Write-Host "Données de smoke test conservées dans : $smokeHome"
+        Write-Host "Donnees de smoke test conservees dans : $smokeHome"
     }
 }
