@@ -84,6 +84,8 @@ Le numéro est un identifiant stable. Le nom de fichier utilise des minuscules, 
 | [ADR-0027](0027-utiliser-un-estimateur-de-tokens-local-deterministe-et-remplacable.md) | Utiliser un estimateur de tokens local, déterministe et remplaçable | Accepté |
 | [ADR-0028](0028-construire-le-contexte-a-partir-de-fragments-de-code-prioritairement-symboliques.md) | Construire le contexte à partir de fragments de code prioritairement symboliques | Accepté |
 | [ADR-0029](0029-selectionner-le-contextbundle-par-un-algorithme-glouton-deterministe-sous-budget.md) | Sélectionner le ContextBundle par un algorithme glouton déterministe sous budget | Accepté |
+| [ADR-0030](0030-stabiliser-le-contrat-cli-avec-sorties-humaines-json-et-codes-de-sortie.md) | Stabiliser le contrat CLI avec sorties humaines, JSON et codes de sortie | Accepté |
+| [ADR-0031](0031-packager-la-cli-dans-un-jar-autonome.md) | Packager la CLI dans un JAR autonome tout en conservant le JAR bibliothèque | Accepté |
 
 ## Modèle
 
