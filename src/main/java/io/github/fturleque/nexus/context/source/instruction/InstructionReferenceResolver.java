@@ -46,13 +46,32 @@ final class InstructionReferenceResolver {
         String content = InstructionDiscoverySupport.read(sourceFile);
         for (String reference : references(content)) {
             Path target = resolvePath(root, sourceFile.getParent(), reference);
-            if (target == null || !visited.add(target) || ignoreMatcher.isIgnored(target, false)) {
+            if (target == null || !visited.add(target)) {
+                continue;
+            }
+            registerIgnoreScopes(root, target.getParent(), ignoreMatcher);
+            if (ignoreMatcher.isIgnored(target, false)) {
                 continue;
             }
 
             String referencedContent = InstructionDiscoverySupport.read(target);
             resolved.add(new ResolvedReference(root.relativize(target), referencedContent, depth));
             resolveRecursively(root, target, depth + 1, ignoreMatcher, visited, resolved);
+        }
+    }
+
+    private static void registerIgnoreScopes(
+            Path root,
+            Path targetDirectory,
+            ProjectIgnoreMatcher ignoreMatcher) throws IOException {
+        if (targetDirectory == null || !targetDirectory.startsWith(root)) {
+            return;
+        }
+        Path current = root;
+        Path relative = root.relativize(targetDirectory);
+        for (Path segment : relative) {
+            current = current.resolve(segment);
+            ignoreMatcher.registerDirectory(current);
         }
     }
 
