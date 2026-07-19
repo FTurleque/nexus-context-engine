@@ -104,9 +104,23 @@ Validation locale du 19 juillet 2026 :
 - `mvn clean install` : succès ;
 - compilation de 43 fichiers source en Java 21 : succès ;
 - compilation de 4 fichiers de test : succès ;
-- tests : 5 exécutés, 0 échec, 0 erreur, 0 ignoré ;
+- tests : 6 exécutés, 0 échec, 0 erreur, 0 ignoré ;
+- test de non-régression JavaParser sur les text blocks Java 21 : succès ;
 - génération du JAR `nexus-context-engine-0.1.0-SNAPSHOT.jar` : succès ;
 - installation dans le dépôt Maven local : succès.
+
+Validation self-smoke réelle sur le repository NEXUS lui-même :
+
+- enregistrement du repository : succès ;
+- première indexation : 47 fichiers scannés et 47 fichiers modifiés ;
+- index produit : 47 fichiers, 161 symboles et 287 relations ;
+- première indexation avec reconstruction complète : 741 ms sur la machine de validation ;
+- seconde indexation incrémentale : 0 fichier modifié et 0 fichier supprimé ;
+- seconde indexation : 282 ms sur la machine de validation ;
+- état final du projet : `READY` ;
+- résultat du script : `SELF-SMOKE SUCCESS`.
+
+Le self-smoke a également permis de détecter puis corriger un défaut réel : JavaParser utilisait son niveau de langage par défaut et refusait les text blocks présents dans le code NEXUS. L'analyseur est désormais configuré explicitement avec le niveau Java 21 et ce comportement est couvert par un test automatisé.
 
 La prochaine étape est l'**Itération 2 — recherche, graphe et classement explicable**.
 
@@ -156,6 +170,8 @@ Pour conserver la base SQLite et l'index Lucene générés afin de les inspecter
 ```
 
 L'exécution de la CLI par Maven utilise `exec-maven-plugin`, dont la version est fixée dans le `pom.xml` pour conserver un comportement reproductible.
+
+Sous Windows PowerShell 5.1, les accents de certaines sorties Maven/CLI capturées peuvent être mal affichés selon l'encodage de la console. Ce défaut d'affichage est non bloquant et n'affecte ni les données SQLite/Lucene ni le résultat fonctionnel du self-smoke.
 
 ## Sécurité par défaut
 
