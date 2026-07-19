@@ -44,6 +44,7 @@ public final class CandidateMerger {
                 CandidateType.FILE,
                 CandidateType.DOCUMENTATION,
                 CandidateType.INSTRUCTION,
+                CandidateType.SKILL,
                 CandidateType.GIT));
         return order.indexOf(left) <= order.indexOf(right) ? left : right;
     }
