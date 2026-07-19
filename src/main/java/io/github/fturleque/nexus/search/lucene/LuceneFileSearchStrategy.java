@@ -26,26 +26,38 @@ public final class LuceneFileSearchStrategy implements SearchStrategy {
 
     @Override
     public List<SearchCandidate> search(ProjectDescriptor project, String query, int limit) throws IOException {
-        List<LexicalSearchHit> hits = searchIndex.search(project.id(), query, limit);
-        if (hits.isEmpty()) {
+        List<LexicalSearchHit> hits = searchIndex.search(project.id(), query, Math.max(limit, limit * 2));
+        List<LexicalSearchHit> eligibleHits = hits.stream()
+                .filter(hit -> hit.category() != FileCategory.INSTRUCTION)
+                .limit(limit)
+                .toList();
+        if (eligibleHits.isEmpty()) {
             return List.of();
         }
 
-        double maxScore = hits.stream().mapToDouble(LexicalSearchHit::score).max().orElse(1.0d);
-        List<SearchCandidate> candidates = new ArrayList<>(hits.size());
-        for (LexicalSearchHit hit : hits) {
+        double maxScore = eligibleHits.stream().mapToDouble(LexicalSearchHit::score).max().orElse(1.0d);
+        List<SearchCandidate> candidates = new ArrayList<>(eligibleHits.size());
+        for (LexicalSearchHit hit : eligibleHits) {
             Map<String, Double> signals = new LinkedHashMap<>();
             signals.put(SearchSignals.LEXICAL, maxScore == 0.0d ? 0.0d : hit.score() / maxScore);
             signals.put(SearchSignals.PATH, pathScore(hit.relativePath(), query));
             candidates.add(new SearchCandidate(
                     "file:" + hit.relativePath(),
-                    hit.category() == FileCategory.TEST ? CandidateType.TEST : CandidateType.FILE,
+                    candidateType(hit.category()),
                     project.rootPath().resolve(hit.relativePath()),
                     null,
                     hit.relativePath(),
                     signals));
         }
         return List.copyOf(candidates);
+    }
+
+    private static CandidateType candidateType(FileCategory category) {
+        return switch (category) {
+            case TEST -> CandidateType.TEST;
+            case DOCUMENTATION -> CandidateType.DOCUMENTATION;
+            default -> CandidateType.FILE;
+        };
     }
 
     private static double pathScore(String relativePath, String query) {
