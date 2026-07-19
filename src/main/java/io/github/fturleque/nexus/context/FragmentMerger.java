@@ -2,6 +2,7 @@ package io.github.fturleque.nexus.context;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -11,8 +12,9 @@ import java.util.Set;
 
 /**
  * Fusionne les fragments qui se chevauchent ou sont directement adjacents dans
- * un même fichier. Les signaux sont fusionnés par maximum et les raisons sont
- * dédupliquées en conservant leur ordre d'apparition.
+ * un même fichier. Le fragment fusionné conserve le score et les composantes
+ * du fragment le mieux classé afin que le score reste recomposable, tandis que
+ * les raisons et les symboles descriptifs sont dédupliqués et fusionnés.
  */
 public final class FragmentMerger {
 
@@ -65,8 +67,8 @@ public final class FragmentMerger {
                 Math.min(left.startLine(), right.startLine()),
                 Math.max(left.endLine(), right.endLine()),
                 mergeContent(left, right),
-                Math.max(left.score(), right.score()),
-                mergeComponents(left.scoreComponents(), right.scoreComponents()),
+                strongest.score(),
+                strongest.scoreComponents(),
                 mergeReasons(left.reasons(), right.reasons()));
     }
 
@@ -81,19 +83,11 @@ public final class FragmentMerger {
             return left.content();
         }
         String suffix = String.join(System.lineSeparator(),
-                List.of(rightLines).subList(start, rightLines.length));
+                Arrays.asList(rightLines).subList(start, rightLines.length));
         if (suffix.isEmpty()) {
             return left.content();
         }
         return left.content() + System.lineSeparator() + suffix;
-    }
-
-    private static Map<String, Double> mergeComponents(
-            Map<String, Double> left,
-            Map<String, Double> right) {
-        Map<String, Double> merged = new LinkedHashMap<>(left);
-        right.forEach((key, value) -> merged.merge(key, value, Math::max));
-        return Map.copyOf(merged);
     }
 
     private static List<String> mergeReasons(List<String> left, List<String> right) {
