@@ -165,6 +165,18 @@ try {
     }
 
     Write-Host
+    Write-Host "=== METRICS ==="
+    Write-Host "Indexation complete : $($firstIndex.report.durationMs) ms"
+    Write-Host "Indexation incrementale : $($secondIndex.report.durationMs) ms"
+    Write-Host "Recherche : $($search.durationMs) ms"
+    Write-Host "Construction contexte : $($context.durationMs) ms"
+    Write-Host "Contexte : $($context.items.Count) item(s), $($context.estimatedTokens)/$($context.tokenBudget) tokens"
+    if ($null -ne $context.metadata.reductionRatio) {
+        $reductionPercent = [Math]::Round(([double]$context.metadata.reductionRatio * 100.0), 2)
+        Write-Host "Reduction du contexte candidat : $reductionPercent %"
+    }
+
+    Write-Host
     Write-Host "SELF-SMOKE SUCCESS"
     Write-Host "NEXUS a valide son JAR autonome, son contrat JSON, sa sortie humaine et tout le flux MVP avec succes."
 }
