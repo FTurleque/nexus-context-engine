@@ -20,7 +20,7 @@ class InstructionReferenceResolverTest {
     Path temporaryDirectory;
 
     @Test
-    void keepsReferencesInsideRepositoryAndStopsCycles() throws Exception {
+    void keepsReferencesInsideRepositoryStopsCyclesAndRespectsNestedIgnoreRules() throws Exception {
         Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("project"));
         Path outside = temporaryDirectory.resolve("outside.md");
         Files.writeString(outside, "OUTSIDE_SECRET");
@@ -28,9 +28,12 @@ class InstructionReferenceResolverTest {
         Path agents = write(projectRoot, "AGENTS.md", """
                 Read @docs/a.md
                 Ignore @../outside.md
+                Ignore @module/private.md
                 """);
         write(projectRoot, "docs/a.md", "A -> @b.md");
         write(projectRoot, "docs/b.md", "B -> @a.md");
+        write(projectRoot, "module/.nexusignore", "private.md\n");
+        write(projectRoot, "module/private.md", "NESTED_IGNORED_SECRET");
 
         ProjectDescriptor project = new ProjectDescriptor(
                 UUID.randomUUID(),
@@ -50,6 +53,8 @@ class InstructionReferenceResolverTest {
         assertTrue(references.stream().anyMatch(reference ->
                 reference.relativePath().toString().replace('\\', '/').equals("docs/b.md")));
         assertTrue(references.stream().noneMatch(reference -> reference.content().contains("OUTSIDE_SECRET")));
+        assertTrue(references.stream().noneMatch(reference ->
+                reference.content().contains("NESTED_IGNORED_SECRET")));
     }
 
     private static Path write(Path root, String relativePath, String content) throws Exception {
