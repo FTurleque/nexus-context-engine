@@ -68,7 +68,10 @@ Les ADR constituent l'historique de référence des décisions structurantes, de
 
 - Java 21 comme niveau de compilation du MVP ;
 - Maven ;
-- JavaParser pour le premier analyseur AST Java ;
+- JavaParser pour l'analyse structurelle Java embarquée ;
+- SQLite comme source de vérité structurelle locale ;
+- Apache Lucene comme index de recherche local reconstructible ;
+- JGit pour la sémantique `.gitignore` / `.nexusignore` ;
 - JUnit pour les tests automatisés.
 
 Le cœur est volontairement développé en Java sans framework applicatif. Quarkus pourra être introduit ultérieurement au niveau de l'adaptateur API, sans coupler le moteur de contexte à un runtime particulier.
@@ -77,9 +80,45 @@ Le cœur est volontairement développé en Java sans framework applicatif. Quark
 
 **Itération 0 — terminée et validée localement.**
 
-Le socle architectural, les contrats initiaux, le premier analyseur AST Java et son test sont en place. Le build `mvn clean install` a été validé localement.
+Le socle architectural, les contrats initiaux, le premier analyseur AST Java et son test sont en place. Le build `mvn clean install` de cette itération a été validé localement.
 
-La prochaine étape est l'**Itération 1 — indexation locale et fondations de recherche**, avec notamment le registre de projets, le scanner, les exclusions, SQLite et Lucene.
+**Itération 1 — en cours : indexation locale et fondations de recherche.**
+
+L'implémentation initiale comprend désormais :
+
+- le registre local des projets ;
+- le répertoire `NEXUS_HOME` configurable ;
+- SQLite et les migrations SQL versionnées ;
+- le scanner des sources Java ;
+- les règles `.gitignore`, `.nexusignore` et exclusions intégrées ;
+- les empreintes SHA-256 ;
+- l'indexation incrémentale des fichiers, symboles et relations ;
+- Lucene comme index dérivé ;
+- la propagation des suppressions ;
+- une reconstruction complète de l'index de recherche ;
+- une CLI minimale pour `project add`, `project list`, `index` et `inspect` ;
+- des tests d'intégration pour le registre, le scanner et le pipeline SQLite/Lucene.
+
+Le critère de sortie de l'Itération 1 ne sera considéré comme atteint qu'après validation du build et des nouveaux tests sur l'environnement local.
+
+### Point d'entrée CLI actuel
+
+Classe principale :
+
+```text
+io.github.fturleque.nexus.cli.NexusCli
+```
+
+Commandes actuellement exposées :
+
+```text
+project add <chemin> [nom]
+project list
+index <id-ou-nom> [--rebuild]
+inspect <id-ou-nom>
+```
+
+Le packaging final en commande native `nexus` est prévu plus tard dans la phase de consolidation de la CLI.
 
 ## Sécurité par défaut
 
