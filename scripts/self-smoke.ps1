@@ -37,9 +37,23 @@ function Invoke-Nexus {
 
     $stdoutFile = [System.IO.Path]::GetTempFileName()
     $stderrFile = [System.IO.Path]::GetTempFileName()
+    $previousErrorActionPreference = $ErrorActionPreference
     try {
+        # Windows PowerShell 5.1 transforme les lignes stderr des processus natifs
+        # en NativeCommandError lorsque ErrorActionPreference vaut Stop, meme si
+        # stderr est redirige vers un fichier. Les warnings SLF4J/JDK sont alors
+        # susceptibles d'interrompre le script avant la lecture de LASTEXITCODE.
+        # Pendant l'appel Java uniquement, on repasse donc a Continue puis on se
+        # fie au vrai code de sortie du processus pour decider du succes.
+        $ErrorActionPreference = "Continue"
         & java -jar $script:cliJar.FullName @Arguments 1> $stdoutFile 2> $stderrFile
         $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    try {
         $stdout = (Get-Content -Raw -Path $stdoutFile -ErrorAction SilentlyContinue)
         $stderr = (Get-Content -Raw -Path $stderrFile -ErrorAction SilentlyContinue)
 
