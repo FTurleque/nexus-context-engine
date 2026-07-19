@@ -2,11 +2,11 @@
 
 > Un moteur local, indépendant des modèles, dédié à l'intelligence de contexte pour les projets logiciels.
 
-NEXUS construit un contexte minimal, pertinent, explicable et traçable pour les assistants et agents IA. NEXUS n'est pas un chatbot et ne réalise aucun routage vers un modèle particulier.
+NEXUS construit un contexte minimal, pertinent, explicable et traçable pour les assistants et agents IA. NEXUS n'est ni un chatbot, ni un LLM, ni un routeur d'agents.
 
 ## Mission
 
-À partir d'un repository logiciel local et d'une demande en langage naturel, NEXUS doit identifier et classer les fichiers et symboles les plus susceptibles d'être utiles, puis construire un `ContextBundle` respectant un budget de tokens configurable.
+À partir d'un repository logiciel local et d'une demande en langage naturel, NEXUS identifie et classe les informations utiles, puis construit un `ContextBundle` respectant un budget de tokens configurable.
 
 ```text
 Utilisateur / Agent / IDE
@@ -16,9 +16,11 @@ Utilisateur / Agent / IDE
           │
           ▼
         NEXUS
-   indexation + recherche
-   classement + explication
-   budget + construction
+   ├── code / symboles / tests
+   ├── documentation pertinente
+   ├── instructions natives applicables
+   ├── ranking explicable
+   └── budget de contexte
           │
           ▼
      ContextBundle
@@ -27,235 +29,204 @@ Utilisateur / Agent / IDE
       LLM / Agent IA
 ```
 
-## Périmètre du MVP
+## Principe directeur
 
-Le périmètre du MVP est volontairement resserré :
+> **Respecter le contexte natif du projet avant d'ajouter du contexte NEXUS.**
 
-- repositories locaux uniquement ;
-- Java en premier langage pris en charge ;
-- indexation structurelle basée sur un AST ;
-- recherche lexicale et recherche orientée symboles ;
-- classement déterministe et explicable ;
-- budget de tokens configurable ;
-- extraits de fichiers et de symboles plutôt qu'une injection systématique des fichiers complets ;
-- fonctionnement local par défaut ;
-- aucune dépendance obligatoire à un LLM ou à un fournisseur d'embeddings.
+Un projet qui possède déjà `AGENTS.md`, `.github/copilot-instructions.md`, `.github/instructions/*.instructions.md`, `CLAUDE.md`, `.claude/CLAUDE.md` ou `GEMINI.md` n'a pas besoin de migrer vers un format propriétaire.
 
-Sont explicitement reportés : les sources GitHub et GitLab, les intégrations IDE, le serveur MCP complet, les embeddings externes, les bases vectorielles, ainsi que les intégrations avec JARVIS, Alfred, Brainiac et AI Skills Registry.
+NEXUS découvre ces conventions via des providers, résout leur scope et les normalise dans un modèle commun.
 
-## Orientation architecturale
+À l'inverse, les configurations opérationnelles telles que `.claude/settings.json`, `.mcp.json`, les hooks ou les profils d'agents sont détectées mais ne sont pas injectées automatiquement comme texte de contexte.
 
-Le repository démarre avec un seul module Maven organisé par responsabilités. Des modules Maven distincts ne seront créés que lorsqu'une séparation de runtime, de packaging ou de dépendances le justifiera réellement.
+Documentation détaillée : [Contexte natif des projets](docs/developer/native-context-sources.md).
 
-Les principaux points d'extension du cœur sont :
+## Périmètre actuel
+
+- repositories locaux ;
+- Java comme premier langage de code ;
+- Markdown comme première source documentaire ;
+- analyse Java structurelle avec JavaParser ;
+- indexation SQLite + Lucene ;
+- recherche BM25, symbolique et graphe ;
+- ranking déterministe et explicable ;
+- construction d'extraits sous budget ;
+- instructions natives avec résolution de scope ;
+- CLI humaine et JSON ;
+- JAR autonome.
+
+Les intégrations IDE, API REST, MCP, Git distant, multi-langage, skills actifs et embeddings restent des étapes ultérieures de la roadmap.
+
+## Architecture
+
+Le cœur reste en Java 21 sans framework applicatif obligatoire.
+
+Principaux ports :
 
 - `LanguageAnalyzer` ;
 - `SearchStrategy` ;
 - `ContextRanker` ;
 - `TokenEstimator` ;
-- `ContextBuilder`.
+- `ContextBuilder` ;
+- `ContextSourceProvider`.
 
-Documentation principale :
+```text
+Formats et données natives
+   │
+   ├── Java
+   ├── Markdown
+   ├── AGENTS.md
+   ├── Copilot instructions
+   ├── CLAUDE.md
+   └── GEMINI.md
+   │
+   ▼
+Providers / analyzers
+   │
+   ▼
+Modèle NEXUS normalisé
+   │
+   ├── SQLite canonique
+   └── Lucene dérivé
+   │
+   ▼
+Recherche + ranking + scope
+   │
+   ▼
+Budget
+   │
+   ▼
+ContextBundle
+```
 
-- [Architecture](docs/architecture.md) ;
-- [Définition du MVP](docs/mvp.md) ;
-- [Feuille de route](docs/roadmap.md) ;
-- [Registre des décisions d'architecture — ADR](docs/adr/README.md) ;
-- [Guide développeur détaillé](docs/developer/README.md).
+### Stockage et recherche
 
-Le guide développeur documente l'implémentation concrète avec diagrammes Mermaid/UML, séquences d'exécution, modèle SQLite, algorithmes de ranking et procédure de reproduction locale.
+- SQLite : source de vérité structurelle locale ;
+- Lucene : index de recherche reconstructible ;
+- JGit : `.gitignore` / `.nexusignore` ;
+- SHA-256 : détection incrémentale et déduplication ;
+- JavaParser : analyse Java ;
+- Jackson : uniquement à la frontière CLI JSON.
 
-Les ADR constituent l'historique de référence des décisions structurantes, de leurs alternatives et de leurs conséquences. `docs/architecture.md` décrit l'état architectural courant.
+## Documentation
 
-## Socle technique
+- [Architecture](docs/architecture.md)
+- [Définition du MVP](docs/mvp.md)
+- [Feuille de route](docs/roadmap.md)
+- [Registre ADR](docs/adr/README.md)
+- [Guide développeur](docs/developer/README.md)
+- [CLI du MVP](docs/developer/cli-mvp.md)
+- [Contexte natif des projets](docs/developer/native-context-sources.md)
 
-- Java 21 comme niveau de compilation du MVP ;
-- Maven ;
-- JavaParser pour l'analyse structurelle Java embarquée ;
-- SQLite comme source de vérité structurelle locale ;
-- Apache Lucene comme index de recherche local reconstructible ;
-- JGit pour la sémantique `.gitignore` / `.nexusignore` ;
-- Jackson à la frontière CLI pour la sérialisation JSON ;
-- JUnit pour les tests automatisés.
-
-Le cœur est volontairement développé en Java sans framework applicatif. Quarkus pourra être introduit ultérieurement au niveau de l'adaptateur API, sans coupler le moteur de contexte à un runtime particulier.
+Le guide développeur contient les diagrammes Mermaid/UML, les séquences d'exécution et les procédures permettant de reproduire l'implémentation.
 
 ## État du projet
 
-**Itération 0 — terminée et validée localement.**
+### Itération 0 — Socle
 
-Le socle architectural, les contrats initiaux, le premier analyseur AST Java et son test sont en place. Le build `mvn clean install` de cette itération a été validé localement.
+**Terminée et validée localement.**
 
-**Itération 1 — terminée et validée localement : indexation locale et fondations de recherche.**
+Java 21, Maven, contrats initiaux et premier analyseur JavaParser.
 
-L'itération comprend :
+### Itération 1 — Indexation locale
 
-- le registre local des projets ;
-- le répertoire `NEXUS_HOME` configurable ;
-- SQLite et les migrations SQL versionnées ;
-- le scanner des sources Java ;
-- les règles `.gitignore`, `.nexusignore` et exclusions intégrées ;
-- les empreintes SHA-256 ;
-- l'indexation incrémentale des fichiers, symboles et relations ;
-- Lucene comme index dérivé ;
-- la propagation des suppressions ;
-- une reconstruction complète de l'index de recherche ;
-- une CLI minimale pour `project add`, `project list`, `index` et `inspect` ;
-- des tests d'intégration pour le registre, le scanner et le pipeline SQLite/Lucene.
+**Terminée et validée localement.**
 
-Validation locale du 19 juillet 2026 :
+Registre de projets, scanner, ignore rules, SQLite, migrations, Lucene et indexation incrémentale.
 
-- `mvn clean install` : succès ;
-- compilation de 43 fichiers source en Java 21 : succès ;
-- compilation de 4 fichiers de test : succès ;
-- tests : 6 exécutés, 0 échec, 0 erreur, 0 ignoré ;
-- test de non-régression JavaParser sur les text blocks Java 21 : succès ;
-- génération du JAR `nexus-context-engine-0.1.0-SNAPSHOT.jar` : succès ;
-- installation dans le dépôt Maven local : succès.
+Le self-smoke initial a également permis de détecter puis corriger la configuration du niveau Java 21 dans JavaParser.
 
-Validation self-smoke réelle sur le repository NEXUS lui-même :
+### Itération 2 — Recherche et ranking
 
-- enregistrement du repository : succès ;
-- première indexation : 47 fichiers scannés et 47 fichiers modifiés ;
-- index produit : 47 fichiers, 161 symboles et 287 relations ;
-- première indexation avec reconstruction complète : 741 ms sur la machine de validation ;
-- seconde indexation incrémentale : 0 fichier modifié et 0 fichier supprimé ;
-- seconde indexation : 282 ms sur la machine de validation ;
-- état final du projet : `READY` ;
-- résultat du script : `SELF-SMOKE SUCCESS`.
+**Terminée et validée localement.**
 
-Le self-smoke a également permis de détecter puis corriger un défaut réel : JavaParser utilisait son niveau de langage par défaut et refusait les text blocks présents dans le code NEXUS. L'analyseur est désormais configuré explicitement avec le niveau Java 21 et ce comportement est couvert par un test automatisé.
+BM25 multi-champs, recherche de symboles exacte/fuzzy, graphe d'imports, ranking déterministe et explication des scores.
 
-**Itération 2 — terminée et validée localement : recherche, graphe et classement explicable.**
+### Itération 3 — Construction du contexte
 
-L'itération comprend :
+**Terminée et validée localement.**
 
-- recherche lexicale Lucene multi-champs avec ranking BM25 ;
-- boosts explicites sur les noms de symboles, noms qualifiés, chemins et contenu ;
-- recherche exacte et approximative de symboles depuis SQLite ;
-- fusion déterministe des candidats et de leurs signaux ;
-- graphe minimal de fichiers construit à partir des imports internes résolus ;
-- propagation de pertinence sur un et deux sauts ;
-- ranking déterministe à composantes pondérées et explicables ;
-- commande CLI `search` avec `--limit` et `--explain` ;
-- corpus de requêtes de référence ;
-- calcul de `precision@K` et `recall@K` ;
-- tests d'intégration dédiés au ranking et au corpus golden.
+`ContextBuilder`, fragments symboliques, fusion, estimation de tokens, troncature et sélection sous budget.
 
-Validation locale du 19 juillet 2026 :
+Validation historique : 3 items, 178/180 tokens estimés avec environ 96,49 % de réduction du contexte candidat.
 
-- `mvn clean install` : succès ;
-- compilation de 57 fichiers source avec `--release 21` : succès ;
-- compilation de 7 fichiers de test : succès ;
-- tests : 9 exécutés, 0 échec, 0 erreur, 0 ignoré ;
-- tests couverts : analyse JavaParser, indexation, scanner, registre, métriques de qualité, corpus golden et recherche hybride de bout en bout ;
-- génération et installation locale du JAR : succès.
+### Itération 4 — CLI utilisable pour le MVP
 
-Validation self-smoke de la recherche sur NEXUS :
+**Terminée et validée localement le 19 juillet 2026. Le MVP du moteur est validé de bout en bout.**
 
-- première indexation : 64 fichiers scannés, 64 fichiers modifiés, 0 supprimé ;
-- index produit : 64 fichiers, 238 symboles et 460 relations ;
-- première indexation avec reconstruction complète : 943 ms sur la machine de validation ;
-- seconde indexation incrémentale : 64 fichiers scannés, 0 fichier modifié et 0 supprimé ;
-- seconde indexation : 278 ms sur la machine de validation ;
-- recherche explicable de `ProjectIndexingService` : succès ;
-- `ProjectIndexingService.java` classé en première position avec un score de `0,5585` ;
-- explication du premier résultat : BM25 `+0,400`, chemin `+0,100`, graphe `+0,059` ;
-- résultat final : `SELF-SMOKE SUCCESS`.
+Validation :
 
-**Itération 3 — terminée et validée localement : construction du contexte et budget.**
+- 66 fichiers source compilés ;
+- 11 fichiers de test compilés ;
+- 16 tests, 0 échec ;
+- `mean precision@3 = 0,4444` ;
+- `mean recall@3 = 1,0000` ;
+- JAR bibliothèque et JAR CLI autonome ;
+- self-smoke : 77 fichiers, 322 symboles, 599 relations ;
+- indexation complète : 896 ms ;
+- indexation incrémentale : 232 ms avec 0 changement ;
+- recherche : 254 ms ;
+- contexte : 285 ms ;
+- résultat : `SELF-SMOKE SUCCESS`.
 
-L'itération comprend :
+### Itération 5 — Instructions et documentation
 
-- `HeuristicTokenEstimator` local, déterministe et remplaçable ;
-- matérialisation des candidats en fragments symboliques ou fenêtres de fichier ;
-- chemins de bundle relatifs au projet ;
-- fusion des plages chevauchantes et adjacentes ;
-- sélection gloutonne déterministe sous budget ;
-- troncature explicite des fragments trop volumineux ;
-- métadonnées de réduction et d'arbitrage ;
-- implémentation `DefaultContextBuilder` ;
-- commande CLI `context` avec `--budget` et `--explain` ;
-- tests dédiés au budget, à la fusion, à la troncature et au déterminisme ;
-- self-smoke étendu à la construction d'un `ContextBundle` réel.
+**En cours — validation locale à effectuer.**
 
-Validation locale du 19 juillet 2026 :
+Implémentation actuelle :
 
-- `mvn clean install` : succès ;
-- compilation de 65 fichiers source avec `--release 21` : succès ;
-- compilation de 10 fichiers de test : succès ;
-- tests : 13 exécutés, 0 échec, 0 erreur, 0 ignoré ;
-- génération du JAR `nexus-context-engine-0.1.0-SNAPSHOT.jar` : succès ;
-- installation dans le dépôt Maven local : succès.
+- indexation des `.md` ordinaires comme `DOCUMENTATION` ;
+- `MarkdownLanguageAnalyzer` ;
+- `ContextSourceProvider` et `ContextSourceDescriptor` ;
+- provider `AGENTS.md` et alias de compatibilité `AGENT.md` ;
+- provider GitHub Copilot : repository-wide et `applyTo` ;
+- provider Claude : `CLAUDE.md`, `.claude/CLAUDE.md` et scopes imbriqués ;
+- provider Gemini : `GEMINI.md` ;
+- priorité par spécificité du scope ;
+- références `@fichier` confinées au repository, profondeur maximale 5 et détection de cycles ;
+- déduplication SHA-256 entre instructions identiques ;
+- déduplication entre documentation référencée et documentation retrouvée par Lucene ;
+- sous-budget d'instructions : 25 % du budget total, plafonné à 600 tokens ;
+- détection des settings, MCP, hooks, profils d'agents et skills sans injection brute ;
+- catégories distinctes `INSTRUCTION`, `AGENT_PROFILE` et `SKILL` ;
+- `AGENTS.md` racine dans NEXUS afin de dogfooder le mécanisme ;
+- tests brownfield avec `.github`, `.claude`, instructions imbriquées et documentation ;
+- self-smoke étendu à 11 étapes avec validation d'un bundle multi-source.
 
-Validation self-smoke du `ContextBundle` sur NEXUS :
+Décisions : ADR-0032 et ADR-0033.
 
-- première indexation : 75 fichiers scannés, 75 fichiers modifiés, 0 supprimé ;
-- index produit : 75 fichiers, 288 symboles et 564 relations ;
-- première indexation avec reconstruction complète : 931 ms sur la machine de validation ;
-- seconde indexation incrémentale : 75 fichiers scannés, 0 fichier modifié et 0 supprimé ;
-- seconde indexation : 275 ms sur la machine de validation ;
-- recherche explicable de `ProjectIndexingService` : succès, fichier principal toujours classé premier ;
-- construction du contexte avec un budget de 180 tokens : succès ;
-- bundle obtenu : 3 items, 178 tokens estimés sur 180 ;
-- fragments disponibles avant sélection : 5 076 tokens estimés ;
-- ratio de réduction : environ 96,49 % ;
-- 3 items tronqués explicitement et 9 fragments exclus faute de budget restant ;
-- `ProjectIndexingService.java` et `ProjectIndexingServiceTest.java` sont conservés dans le bundle ;
-- résultat final : `SELF-SMOKE SUCCESS`.
+## Comment utiliser NEXUS sur une application déjà configurée
 
-Le self-smoke confirme donc l'invariant principal de l'itération : `ContextBundle.estimatedTokens <= ContextBundle.tokenBudget`. Les troncatures et exclusions observées avec un budget volontairement très contraint de 180 tokens sont explicites et traçables ; elles constituent un point de calibration futur de la diversité du contexte, pas un échec du critère de sortie.
+Aucune migration n'est requise.
 
-**Itération 4 — terminée et validée localement : CLI utilisable pour le MVP.**
+```powershell
+.\scripts\nexus.ps1 project add N:\workspace-dev\mon-app mon-app
+.\scripts\nexus.ps1 index mon-app
+.\scripts\nexus.ps1 context mon-app "modifier OrderService" --budget 2000 --explain
+```
 
-L'itération comprend :
+NEXUS :
 
-- sortie humaine conservée par défaut ;
-- sortie JSON structurée via `--json` sur toutes les commandes ;
-- séparation des succès sur `stdout` et des erreurs sur `stderr` ;
-- codes de sortie `0` succès, `1` erreur d'exécution, `2` erreur d'utilisation ;
-- commandes `--help` et `--version` ;
-- latences `durationMs` pour indexation, recherche et construction du contexte ;
-- JAR CLI autonome `nexus-context-engine-0.1.0-SNAPSHOT-cli.jar` ;
-- scripts Windows `scripts/nexus.ps1` et `scripts/nexus.cmd` ;
-- tests CLI JSON de bout en bout ;
-- self-smoke exécutant directement le JAR autonome ;
-- métriques de qualité du corpus golden publiées dans le log Maven.
+1. recherche les fichiers et symboles pertinents ;
+2. utilise leurs chemins pour déterminer les instructions applicables ;
+3. sélectionne les `AGENTS.md`, instructions Copilot, Claude ou Gemini concernées ;
+4. ignore les instructions hors scope ;
+5. détecte les configurations opérationnelles sans les injecter ;
+6. ajoute la documentation Markdown pertinente ;
+7. déduplique ;
+8. respecte le budget global.
 
-Validation locale du 19 juillet 2026 :
+Pour inspecter précisément la sélection :
 
-- `mvn clean install` : succès ;
-- compilation de 66 fichiers source avec `--release 21` : succès ;
-- compilation de 11 fichiers de test : succès ;
-- tests : 16 exécutés, 0 échec, 0 erreur, 0 ignoré ;
-- baseline qualité : corpus de 3 requêtes, `mean precision@3 = 0,4444`, `mean recall@3 = 1,0000` ;
-- génération du JAR bibliothèque `nexus-context-engine-0.1.0-SNAPSHOT.jar` : succès ;
-- génération du JAR autonome `nexus-context-engine-0.1.0-SNAPSHOT-cli.jar` : succès ;
-- installation des deux artefacts dans le dépôt Maven local : succès.
+```powershell
+$result = .\scripts\nexus.ps1 context mon-app "modifier OrderService" --budget 2000 --explain --json | ConvertFrom-Json
+$result.items | Select-Object type, path, estimatedTokens
+$result.metadata.nativeSourcesDiscovered
+$result.metadata.nativeSourcesDeduplicated
+$result.metadata.nativeCustomizationsDetected
+```
 
-Validation self-smoke du MVP CLI sur le repository NEXUS :
-
-- exécution directe du JAR autonome : succès ;
-- `--version --json` : succès, version `0.1.0-SNAPSHOT` ;
-- `project add --json` et `project list --json` réellement parsés avec `ConvertFrom-Json` : succès ;
-- première indexation : 77 fichiers scannés, 77 modifiés, 0 supprimé ;
-- index produit : 77 fichiers, 322 symboles et 599 relations ;
-- indexation complète : 896 ms sur la machine de validation ;
-- seconde indexation incrémentale : 0 fichier modifié, 0 supprimé, 232 ms ;
-- état final : `READY` ;
-- recherche explicable de `ProjectIndexingService` : succès, fichier principal classé premier, 254 ms ;
-- construction du contexte : 3 items, 178/180 tokens, 285 ms ;
-- réduction du contexte candidat : environ 96,45 % ;
-- sortie humaine sans `--json` : succès ;
-- résultat final : `SELF-SMOKE SUCCESS`.
-
-Le self-smoke confirme que le **MVP du moteur NEXUS est validé de bout en bout** : un repository Java local peut être enregistré, indexé, réindexé de manière idempotente, recherché, expliqué et transformé en `ContextBundle` sous budget via un JAR autonome, avec un contrat JSON consommable par des scripts et outils externes.
-
-Sous Windows PowerShell 5.1, les warnings écrits sur `stderr` par SLF4J ou la JVM peuvent encore apparaître sous la forme d'un `NativeCommandError` visuel. Ce bruit de console est non bloquant : le script contrôle le véritable `$LASTEXITCODE`, les documents JSON restent séparés sur `stdout` et les dix étapes du self-smoke sont validées.
-
-Cette itération est encadrée par ADR-0030 et ADR-0031. La Phase 1 — validation du moteur NEXUS — est désormais achevée. La prochaine étape de la roadmap est l'**Itération 5 — Instructions et documentation**, première étape de la Phase 2 visant à étendre les sources de contexte.
-
-### Point d'entrée CLI actuel
+## CLI
 
 Classe principale :
 
@@ -263,7 +234,7 @@ Classe principale :
 io.github.fturleque.nexus.cli.NexusCli
 ```
 
-Commandes exposées :
+Commandes :
 
 ```text
 project add <chemin> [nom] [--json]
@@ -276,46 +247,19 @@ inspect <id-ou-nom> [--json]
 --version [--json]
 ```
 
-Après un build Maven, le chemin recommandé sous Windows PowerShell est :
+Sous Windows :
 
 ```powershell
 .\scripts\nexus.ps1 --help
-.\scripts\nexus.ps1 project add . nexus-local
-.\scripts\nexus.ps1 index nexus-local
-.\scripts\nexus.ps1 search nexus-local ProjectIndexingService --limit 5 --explain
-.\scripts\nexus.ps1 context nexus-local ProjectIndexingService --budget 500 --explain
 ```
 
-Pour une sortie machine :
-
-```powershell
-.\scripts\nexus.ps1 search nexus-local ProjectIndexingService --limit 5 --explain --json
-```
-
-Le JAR autonome peut aussi être lancé directement :
+JAR autonome :
 
 ```powershell
 java -jar .\target\nexus-context-engine-0.1.0-SNAPSHOT-cli.jar --version --json
 ```
 
-### Self-smoke test du MVP CLI
-
-Le script PowerShell `scripts/self-smoke.ps1` valide le flux réel via le JAR autonome :
-
-1. construction du JAR `*-cli.jar` ;
-2. validation de `--version --json` ;
-3. enregistrement du repository en JSON ;
-4. vérification du registre en JSON ;
-5. première indexation complète en JSON ;
-6. seconde indexation incrémentale attendue avec `0 modifié` et `0 supprimé` ;
-7. inspection de l'index en JSON avec état `READY` ;
-8. recherche explicable en JSON ;
-9. construction d'un `ContextBundle` JSON sous 180 tokens ;
-10. vérification de la sortie humaine par défaut.
-
-Les documents JSON sont réellement parsés par PowerShell avec `ConvertFrom-Json`.
-
-Le test utilise un `NEXUS_HOME` isolé sous `target/nexus-self-smoke-home` et supprime ces données à la fin par défaut.
+## Validation locale de l'Itération 5
 
 ```powershell
 git pull --ff-only
@@ -323,11 +267,38 @@ mvn clean install
 .\scripts\self-smoke.ps1 -KeepData
 ```
 
-Sous Windows PowerShell 5.1, les accents de certaines sorties JVM ou de bibliothèques peuvent être mal affichés selon l'encodage de la console. Le JSON NEXUS est capturé séparément de `stderr`, ce qui permet de le parser sans être pollué par ces avertissements.
+Le self-smoke doit désormais vérifier :
+
+```text
+JAR autonome
+   ↓
+Java + Markdown indexés
+   ↓
+indexation incrémentale idempotente
+   ↓
+recherche explicable
+   ↓
+AGENTS.md natif sélectionné
+   ↓
+ContextBundle strict <= 180 tokens
+   ↓
+ContextBundle multi-source
+   ├── INSTRUCTION
+   ├── DOCUMENTATION
+   └── code
+   ↓
+SELF-SMOKE SUCCESS
+```
 
 ## Sécurité par défaut
 
-NEXUS adopte une approche locale par défaut. Aucun contenu du repository ne doit quitter la machine sans activation explicite d'une intégration externe. Un fichier `.nexusignore` complète les mécanismes de type `.gitignore` afin d'exclure notamment les secrets, les fichiers sensibles et les contenus générés.
+NEXUS est local-first. Aucun contenu ne quitte la machine sans intégration externe explicitement activée.
+
+- `.gitignore` et `.nexusignore` sont respectés ;
+- les secrets et formats sensibles connus sont exclus ;
+- les références `@fichier` ne peuvent pas sortir du repository ;
+- les settings et permissions d'agents ne sont pas injectés comme contexte ;
+- aucun hook ou serveur MCP n'est exécuté pendant la construction du contexte.
 
 ## Licence
 
