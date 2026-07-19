@@ -8,11 +8,16 @@ import io.github.fturleque.nexus.context.ContextFragmentFactory;
 import io.github.fturleque.nexus.context.ContextRequest;
 import io.github.fturleque.nexus.context.DefaultContextBuilder;
 import io.github.fturleque.nexus.context.FragmentMerger;
+import io.github.fturleque.nexus.context.source.instruction.AgentsMdInstructionProvider;
+import io.github.fturleque.nexus.context.source.instruction.ClaudeInstructionProvider;
+import io.github.fturleque.nexus.context.source.instruction.CopilotInstructionProvider;
+import io.github.fturleque.nexus.context.source.instruction.GeminiInstructionProvider;
 import io.github.fturleque.nexus.index.IndexRepository;
 import io.github.fturleque.nexus.index.IndexStatistics;
 import io.github.fturleque.nexus.index.IndexingReport;
 import io.github.fturleque.nexus.index.ProjectIndexingService;
 import io.github.fturleque.nexus.index.java.JavaParserLanguageAnalyzer;
+import io.github.fturleque.nexus.index.markdown.MarkdownLanguageAnalyzer;
 import io.github.fturleque.nexus.index.scan.ProjectScanner;
 import io.github.fturleque.nexus.persistence.sqlite.SqliteDatabase;
 import io.github.fturleque.nexus.persistence.sqlite.SqliteIndexRepository;
@@ -97,7 +102,9 @@ public final class NexusCli {
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),
-                List.of(new JavaParserLanguageAnalyzer()),
+                List.of(
+                        new JavaParserLanguageAnalyzer(),
+                        new MarkdownLanguageAnalyzer()),
                 searchIndex);
         SearchService searchService = new SearchService(
                 List.of(
@@ -112,7 +119,12 @@ public final class NexusCli {
                 new ContextFragmentFactory(tokenEstimator),
                 new FragmentMerger(),
                 new BudgetedContextSelector(tokenEstimator),
-                tokenEstimator);
+                tokenEstimator,
+                List.of(
+                        new AgentsMdInstructionProvider(),
+                        new CopilotInstructionProvider(),
+                        new ClaudeInstructionProvider(),
+                        new GeminiInstructionProvider()));
 
         switch (args[0]) {
             case "project" -> handleProject(args, registry, renderer);
