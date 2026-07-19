@@ -23,8 +23,12 @@ final class SkillFrontmatterParser {
     private static final int MAX_NAME_LENGTH = 64;
     private static final int MAX_DESCRIPTION_LENGTH = 1_024;
     private static final int MAX_COMPATIBILITY_LENGTH = 500;
+    private static final int MAX_FRONTMATTER_CHARS = 65_536;
 
-    private final Load yaml = new Load(LoadSettings.builder().build());
+    private final Load yaml = new Load(LoadSettings.builder()
+            .setAllowDuplicateKeys(false)
+            .setCodePointLimit(MAX_FRONTMATTER_CHARS)
+            .build());
 
     SkillFrontmatter parse(Path skillFile) throws IOException {
         String frontmatter = readFrontmatter(skillFile);
@@ -70,6 +74,11 @@ final class SkillFrontmatterParser {
             while ((line = reader.readLine()) != null) {
                 if ("---".equals(line)) {
                     return yaml.toString();
+                }
+                if (yaml.length() + line.length() + 1 > MAX_FRONTMATTER_CHARS) {
+                    throw new IllegalArgumentException(
+                            "Frontmatter YAML trop volumineux dans " + skillFile
+                                    + " (maximum " + MAX_FRONTMATTER_CHARS + " caractères)");
                 }
                 yaml.append(line).append('\n');
             }
