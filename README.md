@@ -55,7 +55,14 @@ Les principaux points d'extension du cœur sont :
 - `TokenEstimator` ;
 - `ContextBuilder`.
 
-Consulter [docs/architecture.md](docs/architecture.md), [docs/mvp.md](docs/mvp.md) et [docs/roadmap.md](docs/roadmap.md).
+Documentation principale :
+
+- [Architecture](docs/architecture.md) ;
+- [Définition du MVP](docs/mvp.md) ;
+- [Feuille de route](docs/roadmap.md) ;
+- [Registre des décisions d'architecture — ADR](docs/adr/README.md).
+
+Les ADR constituent l'historique de référence des décisions structurantes, de leurs alternatives et de leurs conséquences. `docs/architecture.md` décrit l'état architectural courant.
 
 ## Socle technique
 
@@ -68,9 +75,11 @@ Le cœur est volontairement développé en Java sans framework applicatif. Quark
 
 ## État du projet
 
-**Itération 0 — socle architectural et contrats d'indexation Java.**
+**Itération 0 — terminée et validée localement.**
 
-Le repository contient uniquement les éléments nécessaires au démarrage de la première tranche verticale du MVP.
+Le socle architectural, les contrats initiaux, le premier analyseur AST Java et son test sont en place. Le build `mvn clean install` a été validé localement.
+
+La prochaine étape est l'**Itération 1 — indexation locale et fondations de recherche**, avec notamment le registre de projets, le scanner, les exclusions, SQLite et Lucene.
 
 ## Sécurité par défaut
 
