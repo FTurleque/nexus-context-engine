@@ -226,8 +226,8 @@ classDiagram
 
     class LanguageAnalyzer {
         <<interface>>
-        +supports(String) boolean
-        +analyze(Path) AnalysisResult
+        +supports(Path file) boolean
+        +analyze(Path projectRoot, Path file) AnalysisResult
     }
 
     class TokenEstimator {
