@@ -12,6 +12,7 @@ import com.nexus.context.source.instruction.AgentsMdInstructionProvider;
 import com.nexus.context.source.instruction.ClaudeInstructionProvider;
 import com.nexus.context.source.instruction.CopilotInstructionProvider;
 import com.nexus.context.source.instruction.GeminiInstructionProvider;
+import com.nexus.context.source.skill.LocalAgentSkillsProvider;
 import com.nexus.index.IndexRepository;
 import com.nexus.index.IndexStatistics;
 import com.nexus.index.IndexingReport;
@@ -124,7 +125,8 @@ public final class NexusCli {
                         new AgentsMdInstructionProvider(),
                         new CopilotInstructionProvider(),
                         new ClaudeInstructionProvider(),
-                        new GeminiInstructionProvider()));
+                        new GeminiInstructionProvider()),
+                List.of(new LocalAgentSkillsProvider()));
 
         switch (args[0]) {
             case "project" -> handleProject(args, registry, renderer);
