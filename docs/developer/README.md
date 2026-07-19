@@ -137,7 +137,7 @@ Validée :
 
 ### Itération 3 — Construction du contexte
 
-Implémentation initiale présente, validation locale à effectuer après récupération des derniers commits :
+Validée localement le 19 juillet 2026 :
 
 - `HeuristicTokenEstimator` ;
 - `ContextFragmentFactory` ;
@@ -145,7 +145,14 @@ Implémentation initiale présente, validation locale à effectuer après récup
 - `BudgetedContextSelector` ;
 - `DefaultContextBuilder` ;
 - commande CLI `context` ;
-- self-smoke étendu au `ContextBundle`.
+- self-smoke étendu au `ContextBundle` ;
+- 65 fichiers source et 10 fichiers de test compilés ;
+- 13 tests exécutés, 0 échec, 0 erreur, 0 ignoré ;
+- bundle réel construit avec 3 items et 178/180 tokens estimés ;
+- réduction d'environ 96,49 % par rapport aux 5 076 tokens candidats ;
+- troncatures et exclusions explicitement expliquées.
+
+L'Itération 4 peut désormais consolider la CLI du MVP, notamment les sorties JSON, l'expérience de commande et les métriques de bout en bout.
 
 ## Principes à respecter en contribuant
 
