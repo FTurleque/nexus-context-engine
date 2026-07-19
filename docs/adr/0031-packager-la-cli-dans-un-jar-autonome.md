@@ -43,7 +43,7 @@ target/nexus-context-engine-<version>-cli.jar
 La classe principale reste :
 
 ```text
-cli.com.nexus.NexusCli
+com.nexus.cli.NexusCli
 ```
 
 Le JAR autonome peut être lancé avec :
