@@ -72,6 +72,12 @@ Le numéro est un identifiant stable. Le nom de fichier utilise des minuscules, 
 | [ADR-0015](0015-valider-le-mvp-par-la-cli-avant-les-integrations.md) | Valider le moteur par la CLI avant API, MCP et IDE | Accepté |
 | [ADR-0016](0016-utiliser-le-sdk-java-officiel-pour-mcp.md) | Utiliser le SDK Java MCP officiel pour l'adaptateur MCP | Accepté |
 | [ADR-0017](0017-decoupler-nexus-des-outils-et-orchestrateurs-externes.md) | Découpler NEXUS de Copilot, Claude, AI Skills Registry et des orchestrateurs | Accepté |
+| [ADR-0018](0018-utiliser-des-uuid-pour-les-identites-metier-et-des-ids-locaux-pour-la-persistance.md) | Utiliser des UUID pour les identités métier et des identifiants locaux pour la persistance | Accepté |
+| [ADR-0019](0019-stocker-les-donnees-locales-dans-un-nexus-home-configurable.md) | Stocker les données locales dans un NEXUS_HOME configurable | Accepté |
+| [ADR-0020](0020-versionner-le-schema-sqlite-avec-des-migrations-sql-embarquees.md) | Versionner le schéma SQLite avec des migrations SQL embarquées | Accepté |
+| [ADR-0021](0021-reutiliser-jgit-pour-les-regles-gitignore-et-nexusignore.md) | Réutiliser JGit pour les règles `.gitignore` et `.nexusignore` | Accepté |
+| [ADR-0022](0022-traiter-lucene-comme-un-index-derive-reconstructible-de-sqlite.md) | Traiter Lucene comme un index dérivé et reconstructible de SQLite | Accepté |
+| [ADR-0023](0023-utiliser-sha-256-pour-detecter-les-changements-de-fichiers.md) | Utiliser SHA-256 pour détecter les changements de fichiers | Accepté |
 
 ## Modèle
 
