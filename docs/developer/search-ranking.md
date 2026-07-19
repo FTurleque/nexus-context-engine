@@ -201,8 +201,8 @@ qualifiedName → relativePath
 Exemple :
 
 ```text
-search.com.nexus.SearchService
-→ src/main/java/io/github/fturleque/nexus/search/SearchService.java
+com.nexus.search.SearchService
+→ src/main/java/com/nexus/search/SearchService.java
 ```
 
 ### Étape 2 — résolution des imports
