@@ -6,5 +6,6 @@ public enum CandidateType {
     TEST,
     DOCUMENTATION,
     INSTRUCTION,
+    SKILL,
     GIT
 }
