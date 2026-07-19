@@ -7,6 +7,17 @@ import com.nexus.context.source.ContextSourceFragmentFactory;
 import com.nexus.context.source.ContextSourceProvider;
 import com.nexus.context.source.ContextSourceQuery;
 import com.nexus.context.source.NativeProjectCustomizationDetector;
+import com.nexus.context.source.skill.ActivatedSkill;
+import com.nexus.context.source.skill.SkillActivationResult;
+import com.nexus.context.source.skill.SkillContextSelector;
+import com.nexus.context.source.skill.SkillDescriptor;
+import com.nexus.context.source.skill.SkillDiscoveryResult;
+import com.nexus.context.source.skill.SkillDiscoveryService;
+import com.nexus.context.source.skill.SkillLoader;
+import com.nexus.context.source.skill.SkillMatch;
+import com.nexus.context.source.skill.SkillSelector;
+import com.nexus.context.source.skill.SkillSourceProvider;
+import com.nexus.context.source.skill.SkillSourceQuery;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectRepository;
@@ -33,6 +44,7 @@ public final class DefaultContextBuilder implements ContextBuilder {
     private static final int MIN_RETRIEVAL_LIMIT = 20;
     private static final int MAX_RETRIEVAL_LIMIT = 100;
     private static final int MAX_INSTRUCTION_BUDGET = 600;
+    private static final int MAX_SKILL_BUDGET = 2_000;
 
     private final ProjectRepository projectRepository;
     private final SearchService searchService;
@@ -41,8 +53,13 @@ public final class DefaultContextBuilder implements ContextBuilder {
     private final BudgetedContextSelector contextSelector;
     private final TokenEstimator tokenEstimator;
     private final List<ContextSourceProvider> sourceProviders;
+    private final List<SkillSourceProvider> skillProviders;
     private final ContextSourceDiscoveryService sourceDiscoveryService;
     private final ContextSourceFragmentFactory sourceFragmentFactory;
+    private final SkillDiscoveryService skillDiscoveryService;
+    private final SkillSelector skillSelector;
+    private final SkillLoader skillLoader;
+    private final SkillContextSelector skillContextSelector;
     private final NativeProjectCustomizationDetector customizationDetector;
 
     public DefaultContextBuilder(
@@ -59,6 +76,7 @@ public final class DefaultContextBuilder implements ContextBuilder {
                 fragmentMerger,
                 contextSelector,
                 tokenEstimator,
+                List.of(),
                 List.of());
     }
 
@@ -70,6 +88,26 @@ public final class DefaultContextBuilder implements ContextBuilder {
             BudgetedContextSelector contextSelector,
             TokenEstimator tokenEstimator,
             List<ContextSourceProvider> sourceProviders) {
+        this(
+                projectRepository,
+                searchService,
+                fragmentFactory,
+                fragmentMerger,
+                contextSelector,
+                tokenEstimator,
+                sourceProviders,
+                List.of());
+    }
+
+    public DefaultContextBuilder(
+            ProjectRepository projectRepository,
+            SearchService searchService,
+            ContextFragmentFactory fragmentFactory,
+            FragmentMerger fragmentMerger,
+            BudgetedContextSelector contextSelector,
+            TokenEstimator tokenEstimator,
+            List<ContextSourceProvider> sourceProviders,
+            List<SkillSourceProvider> skillProviders) {
         this.projectRepository = Objects.requireNonNull(projectRepository, "projectRepository");
         this.searchService = Objects.requireNonNull(searchService, "searchService");
         this.fragmentFactory = Objects.requireNonNull(fragmentFactory, "fragmentFactory");
@@ -77,8 +115,13 @@ public final class DefaultContextBuilder implements ContextBuilder {
         this.contextSelector = Objects.requireNonNull(contextSelector, "contextSelector");
         this.tokenEstimator = Objects.requireNonNull(tokenEstimator, "tokenEstimator");
         this.sourceProviders = List.copyOf(Objects.requireNonNull(sourceProviders, "sourceProviders"));
+        this.skillProviders = List.copyOf(Objects.requireNonNull(skillProviders, "skillProviders"));
         this.sourceDiscoveryService = new ContextSourceDiscoveryService();
         this.sourceFragmentFactory = new ContextSourceFragmentFactory();
+        this.skillDiscoveryService = new SkillDiscoveryService();
+        this.skillSelector = new SkillSelector();
+        this.skillLoader = new SkillLoader();
+        this.skillContextSelector = new SkillContextSelector(tokenEstimator);
         this.customizationDetector = new NativeProjectCustomizationDetector();
     }
 
@@ -105,6 +148,10 @@ public final class DefaultContextBuilder implements ContextBuilder {
             ContextSourceDiscoveryResult nativeDiscovery = discoverNativeSources(request, project, ranked);
             List<ContextFragment> instructionFragments = sourceFragmentFactory.create(nativeDiscovery.sources());
 
+            SkillDiscoveryResult skillDiscovery = discoverSkills(request, project);
+            List<SkillMatch> skillMatches = skillSelector.select(request.query(), skillDiscovery.skills());
+            SkillActivationResult skillActivation = skillLoader.load(project, skillMatches);
+
             List<ContextFragment> taskFragments = fragmentFactory.create(
                     project,
                     request.query(),
@@ -127,16 +174,33 @@ public final class DefaultContextBuilder implements ContextBuilder {
                     request.explain(),
                     "instruction");
 
-            int remainingBudget = Math.max(
+            int remainingAfterInstructions = Math.max(
                     0,
                     request.tokenBudget() - instructionSelection.selectedEstimatedTokens());
+            int skillBudget = skillBudget(
+                    request.tokenBudget(),
+                    remainingAfterInstructions,
+                    skillActivation.skills());
+            ContextSelectionResult skillSelection = skillContextSelector.select(
+                    skillActivation.skills(),
+                    skillBudget,
+                    request.explain());
+
+            int remainingBudget = Math.max(
+                    0,
+                    request.tokenBudget()
+                            - instructionSelection.selectedEstimatedTokens()
+                            - skillSelection.selectedEstimatedTokens());
             ContextSelectionResult taskSelection = selectOrEmpty(
                     mergedTaskFragments,
                     remainingBudget,
                     request.explain(),
                     "contexte de tâche");
 
-            ContextSelectionResult combined = combineSelections(instructionSelection, taskSelection);
+            ContextSelectionResult combined = combineSelections(
+                    instructionSelection,
+                    skillSelection,
+                    taskSelection);
             Map<String, List<String>> nativeCustomizations = customizationDetector.detect(project);
             Map<String, Object> metadata = metadata(
                     request,
@@ -149,6 +213,11 @@ public final class DefaultContextBuilder implements ContextBuilder {
                     crossSourceDeduplicatedFragments,
                     instructionBudget,
                     instructionSelection,
+                    skillDiscovery,
+                    skillMatches,
+                    skillActivation,
+                    skillBudget,
+                    skillSelection,
                     combined,
                     nativeCustomizations);
             return new ContextBundle(
@@ -177,6 +246,17 @@ public final class DefaultContextBuilder implements ContextBuilder {
                 new ContextSourceQuery(project, request.query(), targetPaths, request.explain()));
     }
 
+    private SkillDiscoveryResult discoverSkills(
+            ContextRequest request,
+            ProjectDescriptor project) throws IOException {
+        if (!sourceRequested(request, CandidateType.SKILL) || skillProviders.isEmpty()) {
+            return new SkillDiscoveryResult(List.of(), List.of(), List.of());
+        }
+        return skillDiscoveryService.discover(
+                skillProviders,
+                new SkillSourceQuery(project, request.explain()));
+    }
+
     private ContextSelectionResult selectOrEmpty(
             List<ContextFragment> fragments,
             int budget,
@@ -200,19 +280,26 @@ public final class DefaultContextBuilder implements ContextBuilder {
         return new ContextSelectionResult(List.of(), excluded, available, 0, 0);
     }
 
-    private static ContextSelectionResult combineSelections(
-            ContextSelectionResult instructions,
-            ContextSelectionResult task) {
-        List<ContextItem> items = new ArrayList<>(instructions.items());
-        items.addAll(task.items());
-        List<String> excluded = new ArrayList<>(instructions.excluded());
-        excluded.addAll(task.excluded());
+    private static ContextSelectionResult combineSelections(ContextSelectionResult... selections) {
+        List<ContextItem> items = new ArrayList<>();
+        List<String> excluded = new ArrayList<>();
+        int availableTokens = 0;
+        int selectedTokens = 0;
+        int truncatedItems = 0;
+
+        for (ContextSelectionResult selection : selections) {
+            items.addAll(selection.items());
+            excluded.addAll(selection.excluded());
+            availableTokens += selection.availableEstimatedTokens();
+            selectedTokens += selection.selectedEstimatedTokens();
+            truncatedItems += selection.truncatedItems();
+        }
         return new ContextSelectionResult(
                 items,
                 excluded,
-                instructions.availableEstimatedTokens() + task.availableEstimatedTokens(),
-                instructions.selectedEstimatedTokens() + task.selectedEstimatedTokens(),
-                instructions.truncatedItems() + task.truncatedItems());
+                availableTokens,
+                selectedTokens,
+                truncatedItems);
     }
 
     private static List<Path> targetPaths(ProjectDescriptor project, List<RankedCandidate> ranked) {
@@ -258,6 +345,17 @@ public final class DefaultContextBuilder implements ContextBuilder {
         return Math.min(totalBudget, Math.min(MAX_INSTRUCTION_BUDGET, quarter));
     }
 
+    private static int skillBudget(
+            int totalBudget,
+            int remainingBudget,
+            List<ActivatedSkill> activatedSkills) {
+        if (activatedSkills.isEmpty() || remainingBudget <= 0) {
+            return 0;
+        }
+        int fifth = Math.max(64, totalBudget / 5);
+        return Math.min(remainingBudget, Math.min(MAX_SKILL_BUDGET, fifth));
+    }
+
     private Map<String, Object> metadata(
             ContextRequest request,
             List<RankedCandidate> ranked,
@@ -269,6 +367,11 @@ public final class DefaultContextBuilder implements ContextBuilder {
             int crossSourceDeduplicatedFragments,
             int instructionBudget,
             ContextSelectionResult instructionSelection,
+            SkillDiscoveryResult skillDiscovery,
+            List<SkillMatch> skillMatches,
+            SkillActivationResult skillActivation,
+            int skillBudget,
+            ContextSelectionResult skillSelection,
             ContextSelectionResult combined,
             Map<String, List<String>> nativeCustomizations) {
         Map<String, Object> metadata = new LinkedHashMap<>();
@@ -289,6 +392,24 @@ public final class DefaultContextBuilder implements ContextBuilder {
         metadata.put("instructionBudget", instructionBudget);
         metadata.put("instructionSelectedItems", instructionSelection.items().size());
         metadata.put("instructionSelectedTokens", instructionSelection.selectedEstimatedTokens());
+        metadata.put("skillProviders", skillProviders.stream().map(SkillSourceProvider::id).toList());
+        metadata.put("skillsDiscovered", skillDiscovery.skills().size());
+        metadata.put("skillsDeduplicated", skillDiscovery.deduplicatedSkills());
+        metadata.put("skillDiagnostics", combinedSkillDiagnostics(skillDiscovery, skillActivation));
+        metadata.put("skillsMatched", skillMatches.stream().map(match -> match.skill().name()).toList());
+        metadata.put("skillsActivated", skillActivation.skills().stream()
+                .map(skill -> skill.descriptor().name())
+                .toList());
+        metadata.put("skillResourcesDiscovered", skillDiscovery.skills().stream()
+                .mapToInt(skill -> skill.resources().size())
+                .sum());
+        metadata.put("skillBudget", skillBudget);
+        metadata.put("skillSelectedItems", skillSelection.items().size());
+        metadata.put("skillSelectedTokens", skillSelection.selectedEstimatedTokens());
+        metadata.put("skillsSelected", skillSelection.items().stream()
+                .map(item -> repositoryPath(item.path()))
+                .toList());
+        metadata.put("skillsExecuted", false);
         metadata.put("nativeCustomizationsDetected", nativeCustomizations);
         metadata.put("selectedItems", combined.items().size());
         metadata.put("excludedItems", combined.excluded().size());
@@ -299,6 +420,18 @@ public final class DefaultContextBuilder implements ContextBuilder {
                 combined.availableEstimatedTokens(),
                 combined.selectedEstimatedTokens()));
         return Map.copyOf(metadata);
+    }
+
+    private static List<String> combinedSkillDiagnostics(
+            SkillDiscoveryResult discovery,
+            SkillActivationResult activation) {
+        List<String> diagnostics = new ArrayList<>(discovery.diagnostics());
+        diagnostics.addAll(activation.diagnostics());
+        return List.copyOf(diagnostics);
+    }
+
+    private static String repositoryPath(Path path) {
+        return path.toString().replace('\\', '/');
     }
 
     private static double reductionRatio(int availableTokens, int selectedTokens) {
