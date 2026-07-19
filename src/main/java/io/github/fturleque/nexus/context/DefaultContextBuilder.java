@@ -102,15 +102,24 @@ public final class DefaultContextBuilder implements ContextBuilder {
                     request.explain());
             List<RankedCandidate> filtered = filterRequestedSources(request, ranked);
 
+            ContextSourceDiscoveryResult nativeDiscovery = discoverNativeSources(request, project, ranked);
+            List<ContextFragment> instructionFragments = sourceFragmentFactory.create(nativeDiscovery.sources());
+
             List<ContextFragment> taskFragments = fragmentFactory.create(
                     project,
                     request.query(),
                     filtered,
                     request.tokenBudget());
-            List<ContextFragment> mergedTaskFragments = fragmentMerger.merge(taskFragments);
+            Set<Path> nativePaths = nativeDiscovery.sources().stream()
+                    .map(ContextSourceDescriptor::path)
+                    .map(Path::normalize)
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
+            List<ContextFragment> deduplicatedTaskFragments = taskFragments.stream()
+                    .filter(fragment -> !nativePaths.contains(fragment.path().normalize()))
+                    .toList();
+            int crossSourceDeduplicatedFragments = taskFragments.size() - deduplicatedTaskFragments.size();
+            List<ContextFragment> mergedTaskFragments = fragmentMerger.merge(deduplicatedTaskFragments);
 
-            ContextSourceDiscoveryResult nativeDiscovery = discoverNativeSources(request, project, ranked);
-            List<ContextFragment> instructionFragments = sourceFragmentFactory.create(nativeDiscovery.sources());
             int instructionBudget = instructionBudget(request.tokenBudget(), instructionFragments);
             ContextSelectionResult instructionSelection = selectOrEmpty(
                     instructionFragments,
@@ -134,8 +143,10 @@ public final class DefaultContextBuilder implements ContextBuilder {
                     ranked,
                     filtered,
                     taskFragments,
+                    deduplicatedTaskFragments,
                     mergedTaskFragments,
                     nativeDiscovery,
+                    crossSourceDeduplicatedFragments,
                     instructionBudget,
                     instructionSelection,
                     combined,
@@ -206,10 +217,11 @@ public final class DefaultContextBuilder implements ContextBuilder {
 
     private static List<Path> targetPaths(ProjectDescriptor project, List<RankedCandidate> ranked) {
         Set<Path> paths = new LinkedHashSet<>();
+        Path root = project.rootPath().toAbsolutePath().normalize();
         for (RankedCandidate candidate : ranked) {
             Path absolute = candidate.candidate().path().toAbsolutePath().normalize();
-            if (absolute.startsWith(project.rootPath().toAbsolutePath().normalize())) {
-                paths.add(project.rootPath().toAbsolutePath().normalize().relativize(absolute));
+            if (absolute.startsWith(root)) {
+                paths.add(root.relativize(absolute));
             }
             if (paths.size() >= MAX_RETRIEVAL_LIMIT) {
                 break;
@@ -251,8 +263,10 @@ public final class DefaultContextBuilder implements ContextBuilder {
             List<RankedCandidate> ranked,
             List<RankedCandidate> filtered,
             List<ContextFragment> taskFragments,
+            List<ContextFragment> deduplicatedTaskFragments,
             List<ContextFragment> mergedTaskFragments,
             ContextSourceDiscoveryResult nativeDiscovery,
+            int crossSourceDeduplicatedFragments,
             int instructionBudget,
             ContextSelectionResult instructionSelection,
             ContextSelectionResult combined,
@@ -266,6 +280,8 @@ public final class DefaultContextBuilder implements ContextBuilder {
                 .filter(candidate -> candidate.candidate().type() == CandidateType.DOCUMENTATION)
                 .count());
         metadata.put("materializedFragments", taskFragments.size());
+        metadata.put("crossSourceDeduplicatedFragments", crossSourceDeduplicatedFragments);
+        metadata.put("taskFragmentsAfterCrossSourceDeduplication", deduplicatedTaskFragments.size());
         metadata.put("mergedFragments", mergedTaskFragments.size());
         metadata.put("instructionProviders", sourceProviders.stream().map(ContextSourceProvider::id).toList());
         metadata.put("nativeSourcesDiscovered", nativeDiscovery.sources().size());
