@@ -1,5 +1,6 @@
 package io.github.fturleque.nexus.cli;
 
+import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import io.github.fturleque.nexus.context.ContextBundle;
@@ -31,7 +32,9 @@ final class CliRenderer {
         this.out = out;
         this.err = err;
         this.json = json;
-        this.objectMapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+        this.objectMapper = new ObjectMapper()
+                .configure(JsonGenerator.Feature.AUTO_CLOSE_TARGET, false)
+                .enable(SerializationFeature.INDENT_OUTPUT);
     }
 
     boolean json() {
@@ -96,6 +99,7 @@ final class CliRenderer {
             String query,
             int limit,
             boolean explain,
+            long durationMs,
             List<RankedCandidate> results) throws IOException {
         if (json) {
             List<Map<String, Object>> resultMaps = new ArrayList<>();
@@ -117,12 +121,13 @@ final class CliRenderer {
             payload.put("query", query);
             payload.put("limit", limit);
             payload.put("explain", explain);
+            payload.put("durationMs", durationMs);
             payload.put("results", resultMaps);
             writeJson(out, payload);
             return;
         }
 
-        out.printf("Recherche '%s' : %d résultat(s)%n", query, results.size());
+        out.printf("Recherche '%s' : %d résultat(s), %d ms%n", query, results.size(), durationMs);
         for (int index = 0; index < results.size(); index++) {
             RankedCandidate ranked = results.get(index);
             String relativePath = relativePath(project, ranked.candidate().path());
@@ -145,6 +150,7 @@ final class CliRenderer {
             ProjectDescriptor project,
             String query,
             boolean explain,
+            long durationMs,
             ContextBundle bundle) throws IOException {
         if (json) {
             List<Map<String, Object>> items = new ArrayList<>();
@@ -168,6 +174,7 @@ final class CliRenderer {
             payload.put("command", "context");
             payload.put("project", projectMap(project));
             payload.put("query", query);
+            payload.put("durationMs", durationMs);
             payload.put("tokenBudget", bundle.tokenBudget());
             payload.put("estimatedTokens", bundle.estimatedTokens());
             payload.put("items", items);
@@ -178,11 +185,12 @@ final class CliRenderer {
         }
 
         out.printf(
-                "Contexte '%s' : %d item(s), %d/%d tokens estimés%n",
+                "Contexte '%s' : %d item(s), %d/%d tokens estimés, %d ms%n",
                 query,
                 bundle.items().size(),
                 bundle.estimatedTokens(),
-                bundle.tokenBudget());
+                bundle.tokenBudget(),
+                durationMs);
         for (int index = 0; index < bundle.items().size(); index++) {
             ContextItem item = bundle.items().get(index);
             String target = item.symbol() == null
