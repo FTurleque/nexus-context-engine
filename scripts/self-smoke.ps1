@@ -72,22 +72,22 @@ try {
     Write-Host "NEXUS_HOME : $smokeHome"
     Write-Host
 
-    Write-Host "[1/7] Compilation de la CLI"
+    Write-Host "[1/8] Compilation de la CLI"
     Invoke-Maven -Arguments @("-q", "-DskipTests", "compile")
 
-    Write-Host "[2/7] Enregistrement du repository NEXUS"
+    Write-Host "[2/8] Enregistrement du repository NEXUS"
     $registration = Invoke-Nexus -Arguments "project add . $ProjectName"
     if ($registration -notmatch [regex]::Escape($ProjectName)) {
         throw "Le projet '$ProjectName' n'apparait pas dans la sortie de project add."
     }
 
-    Write-Host "[3/7] Verification du registre"
+    Write-Host "[3/8] Verification du registre"
     $projectList = Invoke-Nexus -Arguments "project list"
     if ($projectList -notmatch [regex]::Escape($ProjectName)) {
         throw "Le projet '$ProjectName' n'apparait pas dans project list."
     }
 
-    Write-Host "[4/7] Premiere indexation complete"
+    Write-Host "[4/8] Premiere indexation complete"
     $firstIndex = Invoke-Nexus -Arguments "index $ProjectName"
     # Format CLI: Projet <nom> : <scannes>, <modifies>, <supprimes>, ...
     # Match by comma-separated numeric positions so the assertion remains
@@ -96,13 +96,13 @@ try {
         throw "La premiere indexation devait indexer au moins un fichier modifie."
     }
 
-    Write-Host "[5/7] Deuxieme indexation incrementale"
+    Write-Host "[5/8] Deuxieme indexation incrementale"
     $secondIndex = Invoke-Nexus -Arguments "index $ProjectName"
     if ($secondIndex -notmatch "Projet\s+.+?:\s+\d+\s+\S+,\s+0\s+\S+,\s+0\s+\S+,") {
         throw "La deuxieme indexation devait etre idempotente : 0 fichier modifie et 0 fichier supprime."
     }
 
-    Write-Host "[6/7] Inspection de l'index"
+    Write-Host "[6/8] Inspection de l'index"
     $inspection = Invoke-Nexus -Arguments "inspect $ProjectName"
     if ($inspection -notmatch "\bREADY\b") {
         throw "Le projet devait etre dans l'etat READY apres indexation."
@@ -111,15 +111,29 @@ try {
         throw "L'inspection devait contenir au moins un fichier et un symbole indexes."
     }
 
-    Write-Host "[7/7] Recherche explicable dans NEXUS"
+    Write-Host "[7/8] Recherche explicable dans NEXUS"
     $search = Invoke-Nexus -Arguments "search $ProjectName ProjectIndexingService --limit 5 --explain"
     if ($search -notmatch "ProjectIndexingService\.java") {
         throw "La recherche devait retrouver ProjectIndexingService.java."
     }
 
+    Write-Host "[8/8] Construction d'un ContextBundle sous budget"
+    $contextBudget = 180
+    $context = Invoke-Nexus -Arguments "context $ProjectName ProjectIndexingService --budget $contextBudget --explain"
+    if ($context -notmatch "ProjectIndexingService\.java") {
+        throw "Le contexte devait contenir un fragment de ProjectIndexingService.java."
+    }
+    if ($context -notmatch "Contexte\s+.+?:\s+([1-9]\d*)\s+item\S*,\s+(\d+)/$contextBudget\s+tokens") {
+        throw "La sortie context devait indiquer au moins un item et le budget consomme."
+    }
+    $usedTokens = [int]$matches[2]
+    if ($usedTokens -gt $contextBudget) {
+        throw "Le ContextBundle a depasse le budget : $usedTokens > $contextBudget."
+    }
+
     Write-Host
     Write-Host "SELF-SMOKE SUCCESS"
-    Write-Host "NEXUS a enregistre, indexe, reindexe, inspecte puis recherche dans son propre repository avec succes."
+    Write-Host "NEXUS a enregistre, indexe, reindexe, inspecte, recherche puis construit son propre contexte sous budget avec succes."
 }
 finally {
     if ($locationPushed) {
