@@ -1,6 +1,7 @@
 package io.github.fturleque.nexus.index.java;
 
-import com.github.javaparser.StaticJavaParser;
+import com.github.javaparser.JavaParser;
+import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.AnnotationDeclaration;
@@ -25,6 +26,9 @@ import java.util.Locale;
 
 public final class JavaParserLanguageAnalyzer implements LanguageAnalyzer {
 
+    private static final ParserConfiguration.LanguageLevel LANGUAGE_LEVEL =
+            ParserConfiguration.LanguageLevel.JAVA_21;
+
     @Override
     public boolean supports(Path file) {
         return file.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".java");
@@ -32,7 +36,10 @@ public final class JavaParserLanguageAnalyzer implements LanguageAnalyzer {
 
     @Override
     public AnalysisResult analyze(Path projectRoot, Path file) throws IOException {
-        CompilationUnit unit = StaticJavaParser.parse(file);
+        JavaParser parser = new JavaParser(new ParserConfiguration().setLanguageLevel(LANGUAGE_LEVEL));
+        CompilationUnit unit = parser.parse(file)
+                .getResult()
+                .orElseThrow(() -> new IOException("Impossible d'analyser le fichier Java 21 : " + file));
         String packageName = unit.getPackageDeclaration()
                 .map(declaration -> declaration.getNameAsString())
                 .orElse("");
