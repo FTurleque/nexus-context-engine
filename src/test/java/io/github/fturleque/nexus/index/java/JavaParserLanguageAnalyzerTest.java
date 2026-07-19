@@ -44,4 +44,25 @@ class JavaParserLanguageAnalyzerTest {
         assertTrue(result.relations().stream().anyMatch(relation ->
                 relation.kind() == RelationKind.IMPORTS && relation.target().equals("java.util.List")));
     }
+
+    @Test
+    void parsesJava21TextBlocks() throws IOException {
+        Path source = tempDir.resolve("ModernSyntax.java");
+        String sourceCode = "package demo.modern;\n"
+                + "public class ModernSyntax {\n"
+                + "    private static final String TEMPLATE = \"\"\"\n"
+                + "            hello from a text block\n"
+                + "            \"\"\";\n"
+                + "    public String template() { return TEMPLATE; }\n"
+                + "}\n";
+        Files.writeString(source, sourceCode);
+
+        JavaParserLanguageAnalyzer analyzer = new JavaParserLanguageAnalyzer();
+        AnalysisResult result = analyzer.analyze(tempDir, source);
+
+        assertTrue(result.symbols().stream().anyMatch(symbol ->
+                symbol.kind() == SymbolKind.CLASS && symbol.name().equals("ModernSyntax")));
+        assertTrue(result.symbols().stream().anyMatch(symbol ->
+                symbol.kind() == SymbolKind.METHOD && symbol.name().equals("template")));
+    }
 }
