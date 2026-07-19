@@ -100,6 +100,9 @@ class GoldenSearchCorpusTest {
 
         double meanPrecision = precisionSum / corpus.size();
         double meanRecall = recallSum / corpus.size();
+        System.out.printf(
+                "NEXUS quality baseline: corpus=%d, mean precision@%d=%.4f, mean recall@%d=%.4f%n",
+                corpus.size(), K, meanPrecision, K, meanRecall);
         assertTrue(meanPrecision >= 0.44d, "mean precision@3=" + meanPrecision);
         assertEquals(1.0d, meanRecall, 0.000001d, "mean recall@3");
     }
