@@ -60,7 +60,10 @@ Documentation principale :
 - [Architecture](docs/architecture.md) ;
 - [Définition du MVP](docs/mvp.md) ;
 - [Feuille de route](docs/roadmap.md) ;
-- [Registre des décisions d'architecture — ADR](docs/adr/README.md).
+- [Registre des décisions d'architecture — ADR](docs/adr/README.md) ;
+- [Guide développeur détaillé](docs/developer/README.md).
+
+Le guide développeur documente l'implémentation concrète avec diagrammes Mermaid/UML, séquences d'exécution, modèle SQLite, algorithmes de ranking et procédure de reproduction locale.
 
 Les ADR constituent l'historique de référence des décisions structurantes, de leurs alternatives et de leurs conséquences. `docs/architecture.md` décrit l'état architectural courant.
 
@@ -159,7 +162,23 @@ Validation self-smoke de la recherche sur NEXUS :
 - explication du premier résultat : BM25 `+0,400`, chemin `+0,100`, graphe `+0,059` ;
 - résultat final : `SELF-SMOKE SUCCESS`.
 
-La prochaine étape est l'**Itération 3 — construction du contexte et budget**.
+**Itération 3 — en cours : construction du contexte et budget.**
+
+L'implémentation initiale comprend désormais :
+
+- `HeuristicTokenEstimator` local et déterministe ;
+- matérialisation des candidats en fragments symboliques ou fenêtres de fichier ;
+- chemins de bundle relatifs au projet ;
+- fusion des plages chevauchantes et adjacentes ;
+- sélection gloutonne déterministe sous budget ;
+- troncature explicite des fragments trop volumineux ;
+- métadonnées de réduction et d'arbitrage ;
+- implémentation `DefaultContextBuilder` ;
+- commande CLI `context` avec `--budget` et `--explain` ;
+- tests dédiés au budget, à la fusion, à la troncature et au déterminisme ;
+- self-smoke étendu à la construction d'un `ContextBundle` réel.
+
+Cette itération reste à valider localement par `mvn clean install` puis par le self-smoke à huit étapes.
 
 ### Point d'entrée CLI actuel
 
@@ -176,18 +195,20 @@ project add <chemin> [nom]
 project list
 index <id-ou-nom> [--rebuild]
 search <id-ou-nom> <requête> [--limit N] [--explain]
+context <id-ou-nom> <requête> [--budget N] [--explain]
 inspect <id-ou-nom>
 ```
 
-Exemple de recherche :
+Exemples :
 
 ```powershell
 mvn -q exec:java "-Dexec.args=search nexus-context-engine-self-smoke ProjectIndexingService --limit 5 --explain"
+mvn -q exec:java "-Dexec.args=context nexus-context-engine-self-smoke ProjectIndexingService --budget 500 --explain"
 ```
 
 Le packaging final en commande native `nexus` est prévu plus tard dans la phase de consolidation de la CLI.
 
-### Self-smoke test : NEXUS indexe et recherche dans NEXUS
+### Self-smoke test : NEXUS indexe, recherche et construit son contexte
 
 Le script PowerShell `scripts/self-smoke.ps1` valide le flux réel de la CLI sur le repository NEXUS lui-même :
 
@@ -197,7 +218,8 @@ Le script PowerShell `scripts/self-smoke.ps1` valide le flux réel de la CLI sur
 4. première indexation complète ;
 5. seconde indexation incrémentale attendue avec `0 modifiés` et `0 supprimés` ;
 6. inspection de l'index avec état `READY` ;
-7. recherche explicable de `ProjectIndexingService` et vérification de la présence de `ProjectIndexingService.java`.
+7. recherche explicable de `ProjectIndexingService` ;
+8. construction d'un `ContextBundle` contenant `ProjectIndexingService.java` sans dépasser le budget configuré.
 
 Le test utilise un `NEXUS_HOME` isolé sous `target/nexus-self-smoke-home` et supprime ces données à la fin par défaut.
 
