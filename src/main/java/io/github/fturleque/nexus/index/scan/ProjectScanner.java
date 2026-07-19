@@ -39,7 +39,7 @@ public final class ProjectScanner {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
-                if (ignoreMatcher.isIgnored(file, false) || !isJavaSource(file)) {
+                if (ignoreMatcher.isIgnored(file, false) || !isSupportedTextSource(file)) {
                     return FileVisitResult.CONTINUE;
                 }
 
@@ -47,7 +47,7 @@ public final class ProjectScanner {
                 files.add(new ScannedFile(
                         file,
                         toRepositoryPath(relative),
-                        "java",
+                        language(file),
                         attributes.size(),
                         FileHasher.sha256(file),
                         attributes.lastModifiedTime().toInstant(),
@@ -61,21 +61,48 @@ public final class ProjectScanner {
         return List.copyOf(files);
     }
 
-    private static boolean isJavaSource(Path file) {
-        return file.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".java");
+    private static boolean isSupportedTextSource(Path file) {
+        String fileName = file.getFileName().toString().toLowerCase(Locale.ROOT);
+        return fileName.endsWith(".java") || fileName.endsWith(".md");
+    }
+
+    private static String language(Path file) {
+        String fileName = file.getFileName().toString().toLowerCase(Locale.ROOT);
+        return fileName.endsWith(".java") ? "java" : "markdown";
     }
 
     private static FileCategory classify(Path relativePath) {
-        String repositoryPath = "/" + toRepositoryPath(relativePath).toLowerCase(Locale.ROOT) + "/";
+        String repositoryPath = toRepositoryPath(relativePath);
+        String lowerPath = repositoryPath.toLowerCase(Locale.ROOT);
         String fileName = relativePath.getFileName().toString();
-        if (repositoryPath.contains("/src/test/")
-                || repositoryPath.contains("/src/it/")
+        String lowerFileName = fileName.toLowerCase(Locale.ROOT);
+
+        if (isInstructionFile(lowerPath, lowerFileName)) {
+            return FileCategory.INSTRUCTION;
+        }
+        if (lowerFileName.endsWith(".md")) {
+            return FileCategory.DOCUMENTATION;
+        }
+
+        String paddedPath = "/" + lowerPath + "/";
+        if (paddedPath.contains("/src/test/")
+                || paddedPath.contains("/src/it/")
                 || fileName.endsWith("Test.java")
                 || fileName.endsWith("Tests.java")
                 || fileName.endsWith("IT.java")) {
             return FileCategory.TEST;
         }
         return FileCategory.SOURCE;
+    }
+
+    private static boolean isInstructionFile(String lowerPath, String lowerFileName) {
+        return lowerFileName.equals("agents.md")
+                || lowerFileName.equals("agent.md")
+                || lowerFileName.equals("claude.md")
+                || lowerFileName.equals("gemini.md")
+                || lowerPath.equals(".github/copilot-instructions.md")
+                || (lowerPath.startsWith(".github/instructions/")
+                    && lowerFileName.endsWith(".instructions.md"));
     }
 
     private static int estimateTokens(long sizeBytes) {
