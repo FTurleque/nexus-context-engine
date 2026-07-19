@@ -5,5 +5,6 @@ public enum FileCategory {
     TEST,
     RESOURCE,
     DOCUMENTATION,
+    INSTRUCTION,
     OTHER
 }
