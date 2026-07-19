@@ -74,6 +74,13 @@ public final class ProjectIndexingService {
             List<SearchDocument> searchDocuments = new ArrayList<>();
 
             for (ScannedFile scannedFile : scannedFiles) {
+                boolean genericSearchEligible = isGenericSearchEligible(scannedFile.category());
+                if (!genericSearchEligible) {
+                    // Nettoie aussi les index Lucene créés par une ancienne version de
+                    // NEXUS, même lorsque le fichier canonique n'a pas changé.
+                    searchRemovedPaths.add(scannedFile.relativePath());
+                }
+
                 IndexedFile existing = existingFiles.get(scannedFile.relativePath());
                 if (!fullRebuild && existing != null && existing.contentHash().equals(scannedFile.contentHash())) {
                     continue;
@@ -83,17 +90,13 @@ public final class ProjectIndexingService {
                 AnalysisResult analysis = analyzer.analyze(project.rootPath(), scannedFile.absolutePath());
                 updates.add(new IndexedFileUpdate(scannedFile, analysis));
 
-                if (isGenericSearchEligible(scannedFile.category())) {
+                if (genericSearchEligible) {
                     searchDocuments.add(new SearchDocument(
                             scannedFile.relativePath(),
                             scannedFile.language(),
                             scannedFile.category(),
                             Files.readString(scannedFile.absolutePath(), StandardCharsets.UTF_8),
                             analysis.symbols()));
-                } else {
-                    // Le fichier reste canonique dans SQLite mais doit disparaître de
-                    // l'index Lucene générique s'il y avait été indexé auparavant.
-                    searchRemovedPaths.add(scannedFile.relativePath());
                 }
             }
 
