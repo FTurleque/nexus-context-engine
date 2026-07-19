@@ -82,9 +82,9 @@ Le cœur est volontairement développé en Java sans framework applicatif. Quark
 
 Le socle architectural, les contrats initiaux, le premier analyseur AST Java et son test sont en place. Le build `mvn clean install` de cette itération a été validé localement.
 
-**Itération 1 — en cours : indexation locale et fondations de recherche.**
+**Itération 1 — terminée et validée localement : indexation locale et fondations de recherche.**
 
-L'implémentation initiale comprend désormais :
+L'itération comprend :
 
 - le registre local des projets ;
 - le répertoire `NEXUS_HOME` configurable ;
@@ -99,7 +99,16 @@ L'implémentation initiale comprend désormais :
 - une CLI minimale pour `project add`, `project list`, `index` et `inspect` ;
 - des tests d'intégration pour le registre, le scanner et le pipeline SQLite/Lucene.
 
-Le critère de sortie de l'Itération 1 ne sera considéré comme atteint qu'après validation du build et des nouveaux tests sur l'environnement local.
+Validation locale du 19 juillet 2026 :
+
+- `mvn clean install` : succès ;
+- compilation de 43 fichiers source en Java 21 : succès ;
+- compilation de 4 fichiers de test : succès ;
+- tests : 5 exécutés, 0 échec, 0 erreur, 0 ignoré ;
+- génération du JAR `nexus-context-engine-0.1.0-SNAPSHOT.jar` : succès ;
+- installation dans le dépôt Maven local : succès.
+
+La prochaine étape est l'**Itération 2 — recherche, graphe et classement explicable**.
 
 ### Point d'entrée CLI actuel
 
