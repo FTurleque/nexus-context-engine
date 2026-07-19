@@ -171,9 +171,9 @@ Validation :
 
 ### Itération 5 — Instructions et documentation
 
-**En cours — validation locale à effectuer.**
+**Terminée et validée localement le 20 juillet 2026.**
 
-Implémentation actuelle :
+L'itération ajoute :
 
 - indexation des `.md` ordinaires comme `DOCUMENTATION` ;
 - `MarkdownLanguageAnalyzer` ;
@@ -184,6 +184,7 @@ Implémentation actuelle :
 - provider Gemini : `GEMINI.md` ;
 - priorité par spécificité du scope ;
 - références `@fichier` confinées au repository, profondeur maximale 5 et détection de cycles ;
+- respect des `.gitignore` / `.nexusignore`, y compris imbriqués, pour les références ;
 - déduplication SHA-256 entre instructions identiques ;
 - déduplication entre documentation référencée et documentation retrouvée par Lucene ;
 - sous-budget d'instructions : 25 % du budget total, plafonné à 600 tokens ;
@@ -191,9 +192,31 @@ Implémentation actuelle :
 - catégories distinctes `INSTRUCTION`, `AGENT_PROFILE` et `SKILL` ;
 - `AGENTS.md` racine dans NEXUS afin de dogfooder le mécanisme ;
 - tests brownfield avec `.github`, `.claude`, instructions imbriquées et documentation ;
-- self-smoke étendu à 11 étapes avec validation d'un bundle multi-source.
+- self-smoke à 11 étapes avec validation d'un bundle multi-source.
+
+Validation locale du 20 juillet 2026 :
+
+- `mvn clean install` : succès ;
+- 83 fichiers source compilés ;
+- 13 fichiers de test compilés ;
+- 19 tests exécutés, 0 échec, 0 erreur, 0 ignoré ;
+- baseline qualité inchangée : `mean precision@3 = 0,4444`, `mean recall@3 = 1,0000` ;
+- première indexation : 145 fichiers scannés, 145 modifiés, 0 supprimé ;
+- index produit : 145 fichiers, 406 symboles, 781 relations ;
+- langues détectées : `java`, `markdown` ;
+- indexation complète : 1 115 ms ;
+- seconde indexation incrémentale : 236 ms avec 0 modifié et 0 supprimé ;
+- recherche `ProjectIndexingService` : 277 ms, fichier principal classé premier ;
+- contexte strict avec instructions natives : 5 items, 172/180 tokens, 379 ms ;
+- `AGENTS.md` et `docs/architecture.md` référencé sont effectivement sélectionnés ;
+- contexte multi-source : 9 items, 1 185/1 200 tokens, 414 ms ;
+- le bundle multi-source contient simultanément `INSTRUCTION`, `DOCUMENTATION`, code et tests ;
+- 2 fragments documentaires ont été dédupliqués entre sources natives et recherche lexicale ;
+- résultat final : `SELF-SMOKE SUCCESS`.
 
 Décisions : ADR-0032 et ADR-0033.
+
+La prochaine étape de la roadmap est l'**Itération 6 — Skills et divulgation progressive** : découvrir les skills sans tout charger, sélectionner les `SKILL.md` pertinents et laisser leur exécution à l'agent consommateur.
 
 ## Comment utiliser NEXUS sur une application déjà configurée
 
@@ -259,7 +282,7 @@ JAR autonome :
 java -jar .\target\nexus-context-engine-0.1.0-SNAPSHOT-cli.jar --version --json
 ```
 
-## Validation locale de l'Itération 5
+## Validation locale de référence
 
 ```powershell
 git pull --ff-only
@@ -267,7 +290,7 @@ mvn clean install
 .\scripts\self-smoke.ps1 -KeepData
 ```
 
-Le self-smoke doit désormais vérifier :
+Le self-smoke de l'Itération 5 valide :
 
 ```text
 JAR autonome
@@ -285,7 +308,8 @@ ContextBundle strict <= 180 tokens
 ContextBundle multi-source
    ├── INSTRUCTION
    ├── DOCUMENTATION
-   └── code
+   ├── code
+   └── tests
    ↓
 SELF-SMOKE SUCCESS
 ```
