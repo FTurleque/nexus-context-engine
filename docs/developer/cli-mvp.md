@@ -2,13 +2,42 @@
 
 Ce chapitre décrit l'implémentation de l'Itération 4 au niveau développeur.
 
-> L'Itération 4 est implémentée mais reste à valider localement par `mvn clean install` puis par le self-smoke étendu avant d'être déclarée terminée.
+> **Statut : Itération 4 terminée et validée localement le 19 juillet 2026. Le MVP du moteur NEXUS est validé de bout en bout.**
+
+Validation de référence :
+
+```text
+mvn clean install
+→ 66 fichiers source compilés
+→ 11 fichiers de test compilés
+→ 16 tests exécutés
+→ 0 échec / 0 erreur / 0 ignoré
+
+self-smoke via JAR autonome
+→ 77 fichiers indexés
+→ 322 symboles
+→ 599 relations
+→ indexation complète : 896 ms
+→ indexation incrémentale : 232 ms
+→ recherche : 254 ms
+→ contexte : 285 ms
+→ 3 items, 178/180 tokens
+→ réduction : 96,45 %
+→ SELF-SMOKE SUCCESS
+```
+
+Baseline qualité publiée par le corpus golden :
+
+```text
+mean precision@3 = 0,4444
+mean recall@3    = 1,0000
+```
 
 ## 1. Objectif
 
 La CLI est le premier adaptateur complet de NEXUS.
 
-Elle doit permettre deux usages avec le **même cœur métier** :
+Elle permet deux usages avec le **même cœur métier** :
 
 ```text
 Développeur humain
@@ -156,7 +185,7 @@ System.exit(1);
 
 Cela rend une CLI difficile à tester dans la même JVM.
 
-Le nouveau flux est :
+Le flux actuel est :
 
 ```java
 int exitCode = execute(args, System.out, System.err);
@@ -213,7 +242,7 @@ stdout
 
 ### Erreur
 
-Les diagnostics sont écrits sur :
+Les diagnostics NEXUS sont écrits sur :
 
 ```text
 stderr
@@ -230,6 +259,8 @@ exit code → décider succès/échec
 ```
 
 Les avertissements éventuels de la JVM ou de bibliothèques natives ne font pas partie du document JSON NEXUS.
+
+Sous Windows PowerShell 5.1, les lignes écrites sur `stderr` par un processus natif peuvent être présentées comme un `NativeCommandError` visuel. Le self-smoke contourne ce comportement pendant l'appel Java et se fie au véritable `$LASTEXITCODE`. La validation complète a confirmé que ce bruit n'empêche ni le parsing JSON ni le succès fonctionnel.
 
 ## 8. Sortie humaine et sortie JSON
 
@@ -373,7 +404,7 @@ index
 
 ## 10. Mesures de latence
 
-Trois latences sont aujourd'hui directement disponibles :
+Trois latences sont directement disponibles :
 
 ```text
 index.report.durationMs
@@ -381,7 +412,7 @@ search.durationMs
 context.durationMs
 ```
 
-L'indexation mesure le pipeline d'indexation lui-même via `IndexingReport`.
+L'indexation mesure son propre pipeline via `IndexingReport`.
 
 La CLI mesure `search` et `context` autour des appels :
 
@@ -393,6 +424,15 @@ System.nanoTime()
 
 Ces valeurs servent de **baseline locale**, pas de SLA universel.
 
+Validation de référence sur la machine utilisée le 19 juillet 2026 :
+
+```text
+indexation complète    896 ms
+indexation incrémentale 232 ms
+recherche               254 ms
+construction contexte   285 ms
+```
+
 Elles dépendent notamment :
 
 - de la taille du repository ;
@@ -403,18 +443,21 @@ Elles dépendent notamment :
 
 ## 11. Métriques de qualité
 
-Le corpus golden continue de mesurer :
+Le corpus golden mesure :
 
 ```text
 mean precision@3
 mean recall@3
 ```
 
-Le test `GoldenSearchCorpusTest` publie maintenant les valeurs observées dans le log Maven avant de vérifier les seuils :
+Le test `GoldenSearchCorpusTest` publie les valeurs observées dans le log Maven avant de vérifier les seuils.
+
+Baseline validée :
 
 ```text
-mean precision@3 >= 0.44
-mean recall@3 = 1.0
+corpus = 3 requêtes
+mean precision@3 = 0,4444
+mean recall@3 = 1,0000
 ```
 
 Lors d'une modification du ranking, ces métriques permettent de détecter une régression fonctionnelle avant de se fier à une impression subjective.
@@ -437,10 +480,11 @@ Il reste l'artefact Maven standard.
 target/nexus-context-engine-0.1.0-SNAPSHOT-cli.jar
 ```
 
-Il contient les dépendances runtime et possède :
+Il contient les dépendances runtime et possède notamment :
 
 ```text
 Main-Class: io.github.fturleque.nexus.cli.NexusCli
+Implementation-Version: 0.1.0-SNAPSHOT
 ```
 
 Il peut être exécuté avec :
@@ -448,6 +492,8 @@ Il peut être exécuté avec :
 ```powershell
 java -jar target\nexus-context-engine-0.1.0-SNAPSHOT-cli.jar --help
 ```
+
+La validation réelle a confirmé que le JAR autonome démarre et exécute SQLite, Lucene, Jackson, l'indexation, la recherche et la construction du contexte.
 
 ## 13. Pourquoi fusionner `META-INF/services`
 
@@ -477,6 +523,8 @@ META-INF/*.RSA
 
 sont exclues car elles ne restent plus valides après fusion des JAR.
 
+Les warnings Shade relatifs à `module-info.class`, `LICENSE`, `NOTICE` et `MANIFEST.MF` ont été observés pendant le build de validation. Ils sont non bloquants pour le MVP puisque le JAR autonome a été exécuté avec succès sur tout le flux fonctionnel.
+
 ## 14. Scripts Windows
 
 ### PowerShell
@@ -504,7 +552,7 @@ Le script CMD suit le même principe.
 
 ## 15. Self-smoke de l'Itération 4
 
-Le script `scripts/self-smoke.ps1` valide désormais le **JAR autonome**, et non plus `mvn exec:java`.
+Le script `scripts/self-smoke.ps1` valide le **JAR autonome**, et non `mvn exec:java`.
 
 Flux :
 
@@ -525,14 +573,35 @@ flowchart TD
 
 Chaque document JSON est parsé avec PowerShell `ConvertFrom-Json`.
 
+La validation réelle a produit :
+
+```text
+77 fichiers
+322 symboles
+599 relations
+
+indexation complète : 896 ms
+indexation incrémentale : 232 ms
+recherche : 254 ms
+contexte : 285 ms
+
+3 items
+178/180 tokens
+96,45 % de réduction
+```
+
 Cela vérifie simultanément :
 
 - le packaging ;
 - la classe `Main-Class` ;
 - SQLite dans l'uber-JAR ;
 - Lucene dans l'uber-JAR ;
+- Jackson ;
 - les sorties JSON ;
+- le parsing JSON réel ;
 - la sortie humaine ;
+- l'idempotence de l'indexation ;
+- la recherche explicable ;
 - le budget de contexte ;
 - le flux MVP complet.
 
@@ -548,7 +617,8 @@ Cela vérifie simultanément :
 - `context --budget ... --json` ;
 - `inspect --json` ;
 - chemins de contexte relatifs ;
-- respect du budget.
+- respect du budget ;
+- présence de métriques de latence.
 
 Le test utilise :
 
@@ -557,6 +627,8 @@ Le test utilise :
 ```
 
 via la propriété système `nexus.home`, ce qui évite de toucher au vrai `~/.nexus` du développeur.
+
+La suite complète validée compte 16 tests.
 
 ## 17. Reproduire localement
 
@@ -599,6 +671,12 @@ java -jar .\target\nexus-context-engine-0.1.0-SNAPSHOT-cli.jar --version
 .\scripts\self-smoke.ps1 -KeepData
 ```
 
+Résultat attendu :
+
+```text
+SELF-SMOKE SUCCESS
+```
+
 ## 18. Frontière architecturale à préserver
 
 Une future modification de la CLI ne doit pas conduire à :
@@ -623,3 +701,24 @@ CliRenderer
 ```
 
 Cette frontière permet au futur REST et MCP d'exposer les mêmes capacités avec leurs propres contrats sans réutiliser artificiellement le format JSON de la CLI.
+
+## 19. Ce que valide exactement le MVP
+
+Le MVP validé garantit aujourd'hui qu'un repository Java local peut être traité ainsi :
+
+```mermaid
+flowchart LR
+    REPO[Repository Java local] --> REGISTER[ProjectRegistry]
+    REGISTER --> INDEX[ProjectIndexingService]
+    INDEX --> SQLITE[(SQLite)]
+    INDEX --> LUCENE[(Lucene)]
+    SQLITE --> SEARCH[SearchService]
+    LUCENE --> SEARCH
+    SEARCH --> RANK[Ranking explicable]
+    RANK --> CONTEXT[DefaultContextBuilder]
+    CONTEXT --> BUDGET[BudgetedContextSelector]
+    BUDGET --> BUNDLE[ContextBundle]
+    BUNDLE --> CLI[CLI humaine ou JSON]
+```
+
+Les intégrations externes, sources documentaires, instructions, skills, contexte Git, MCP et API restent volontairement hors de ce MVP. Elles s'appuieront sur ce cœur validé plutôt que de modifier son principe de fonctionnement.
