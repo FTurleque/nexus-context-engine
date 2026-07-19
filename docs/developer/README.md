@@ -181,9 +181,7 @@ Validée localement le 20 juillet 2026 :
 
 ### Itération 6 — Skills et divulgation progressive
 
-**En cours — implémentation à valider localement.**
-
-Implémentation actuelle :
+Validée localement le 20 juillet 2026 :
 
 - ADR-0034 ;
 - port `SkillSourceProvider` ;
@@ -203,9 +201,25 @@ Implémentation actuelle :
 - métadonnées de découverte, matching, activation et ressources ;
 - `skillsExecuted=false` par conception ;
 - dogfooding avec `.agents/skills/nexus-context-validation` ;
-- self-smoke étendu à 12 étapes.
+- 100 fichiers source compilés ;
+- 17 fichiers de test compilés ;
+- 26 tests verts ;
+- baseline conservée : `mean precision@3 = 0,4444`, `mean recall@3 = 1,0000` ;
+- index : 170 fichiers, 480 symboles, 926 relations ;
+- indexation complète : 1 218 ms ;
+- indexation incrémentale : 282 ms avec 0 changement ;
+- recherche : 282 ms ;
+- contexte strict : 5 items, 180/180 tokens, 454 ms ;
+- contexte multi-source : 9 items, 1 185/1 200 tokens, 449 ms ;
+- contexte avec skill : 1 194/1 200 tokens, 550 ms ;
+- skill `nexus-context-validation` sélectionné intégralement : 233 tokens, non tronqué ;
+- 1 ressource inventoriée mais non chargée automatiquement ;
+- `skillsExecuted = false` ;
+- résultat `SELF-SMOKE SUCCESS`.
 
-Le chapitre [Agent Skills](agent-skills.md) décrit l'implémentation complète.
+Le critère de sortie est validé : NEXUS sait recommander et inclure un skill pertinent sans charger tous les skills ni exécuter de script. Le chapitre [Agent Skills](agent-skills.md) décrit l'implémentation complète.
+
+La prochaine cible est l'**Itération 7 — Contexte Git**.
 
 ## Principes à respecter en contribuant
 
@@ -298,9 +312,7 @@ classDiagram
     DefaultContextBuilder --> SkillLoader
 ```
 
-## Validation locale de l'Itération 6
-
-À exécuter :
+## Validation locale de référence
 
 ```powershell
 git pull --ff-only
@@ -308,7 +320,7 @@ mvn clean install
 .\scripts\self-smoke.ps1 -KeepData
 ```
 
-Le self-smoke comporte désormais 12 étapes et doit notamment vérifier :
+Le self-smoke comporte 12 étapes et valide notamment :
 
 ```text
 Java + Markdown indexés
@@ -330,9 +342,8 @@ skillsExecuted = false
 SELF-SMOKE SUCCESS
 ```
 
-Après le build :
+Commande de reproduction ciblée :
 
 ```powershell
-.\scripts\nexus.ps1 --help
 .\scripts\nexus.ps1 context nexus-local "validate NEXUS context quality progressive disclosure" --budget 1200 --explain --json
 ```
