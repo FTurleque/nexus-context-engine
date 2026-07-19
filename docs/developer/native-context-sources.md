@@ -1,171 +1,102 @@
-# Contexte natif des projets : instructions, documentation et configurations d'agents
+# Contexte natif des projets : instructions, documentation, skills et configurations d'agents
 
 Ce chapitre explique comment NEXUS réutilise le contexte déjà présent dans un repository sans imposer de migration vers un format propriétaire.
 
-L'objectif de l'Itération 5 est :
+Il couvre désormais deux familles de sources contextuelles actives :
 
 ```text
-Projet existant
-├── code
-├── documentation
-├── AGENTS.md
-├── .github/copilot-instructions.md
-├── .github/instructions/*.instructions.md
-├── CLAUDE.md
-├── .claude/CLAUDE.md
-├── .github/agents/*.agent.md
-├── .claude/settings.json
-└── skills
-        │
-        ▼
-      NEXUS
-        │
-        ├── utilise ce qui constitue réellement du contexte
-        ├── respecte les scopes natifs
-        ├── détecte les configurations sans les injecter
-        └── explique chaque décision
+Instructions natives
+→ applicabilité par scope
+
+Agent Skills
+→ découverte légère
+→ sélection par métadonnées
+→ activation progressive
 ```
+
+Les configurations opérationnelles restent séparées.
 
 ## 1. Principe fondamental
 
 NEXUS ne remplace pas la configuration existante d'une application.
 
-Il applique la règle suivante :
-
 > **Le contexte natif du repository reste la source de vérité pour ses propres conventions ; NEXUS le normalise afin de pouvoir le sélectionner et le budgéter avec le reste du contexte.**
 
-Il n'est donc pas nécessaire de copier un `CLAUDE.md` vers `AGENTS.md`, ni de recopier `.github/copilot-instructions.md` dans un fichier NEXUS.
+Un projet peut donc conserver simultanément :
 
-## 2. Ce qui est utilisé automatiquement
+```text
+repo/
+├── AGENTS.md
+├── CLAUDE.md
+├── GEMINI.md
+├── .github/
+│   ├── copilot-instructions.md
+│   ├── instructions/
+│   ├── agents/
+│   └── skills/
+├── .claude/
+│   ├── CLAUDE.md
+│   ├── settings.json
+│   ├── agents/
+│   └── skills/
+├── .agents/
+│   └── skills/
+├── docs/
+└── src/
+```
 
-| Convention | Traitement NEXUS | Scope |
+Aucune migration vers un fichier propriétaire NEXUS n'est nécessaire.
+
+## 2. Matrice de traitement
+
+| Convention | Traitement NEXUS | Injection automatique |
 |---|---|---|
-| `AGENTS.md` | instruction | arborescence sous le répertoire parent |
-| `AGENT.md` | instruction, alias de compatibilité | arborescence sous le répertoire parent |
-| `.github/copilot-instructions.md` | instruction | repository entier |
-| `.github/instructions/**/*.instructions.md` | instruction | motifs `applyTo` |
-| `CLAUDE.md` | instruction | repository ou arborescence selon sa position |
-| `.claude/CLAUDE.md` | instruction | repository entier |
-| `GEMINI.md` | instruction | repository ou arborescence selon sa position |
-| Markdown ordinaire | documentation | ranking lexical BM25 |
+| `AGENTS.md` | instruction avec scope répertoire | oui si applicable |
+| `AGENT.md` | alias compatible de `AGENTS.md` | oui si applicable |
+| `.github/copilot-instructions.md` | instruction repository-wide | oui |
+| `.github/instructions/**/*.instructions.md` | instruction avec `applyTo` | oui si applicable |
+| `CLAUDE.md` | instruction repository/répertoire | oui si applicable |
+| `.claude/CLAUDE.md` | instruction repository-wide | oui |
+| `GEMINI.md` | instruction repository/répertoire | oui si applicable |
+| Markdown ordinaire | documentation BM25 | oui si pertinent |
+| `*/skills/**/SKILL.md` | Agent Skill | seulement après sélection |
+| ressources d'un skill | métadonnées légères | non automatiquement |
+| profils d'agents | personnalisation détectée | non |
+| settings / permissions | configuration opérationnelle | non |
+| hooks | configuration exécutable | non |
+| MCP | configuration d'intégration | non |
 
-## 3. Ce qui est détecté mais pas injecté automatiquement
-
-| Convention | Pourquoi |
-|---|---|
-| `.claude/settings.json` | configuration opérationnelle, permissions et réglages |
-| `.claude/settings.local.json` | configuration locale spécifique au poste |
-| `.mcp.json` / `mcp.json` | configuration de serveurs MCP, pas du texte de contexte |
-| `.github/agents/*.md` / `*.agent.md` | profil d'agent spécialisé, pas instruction globale |
-| `.claude/agents/*.md` | profil ou sous-agent spécifique |
-| `.github/hooks/*.json` / `.claude/hooks/*.json` | commandes ou hooks exécutables |
-| `.github/skills/**/SKILL.md` | skill détecté mais sélection progressive prévue en Itération 6 |
-| `.claude/skills/**/SKILL.md` | idem |
-| `.agents/skills/**/SKILL.md` | idem |
-
-Ces éléments apparaissent dans :
-
-```text
-ContextBundle.metadata.nativeCustomizationsDetected
-```
-
-Leur contenu brut n'est pas envoyé au consommateur IA.
-
-## 4. Architecture
+## 3. Architecture générale
 
 ```mermaid
-classDiagram
-    class ContextSourceProvider {
-        <<interface>>
-        +id() String
-        +discover(ContextSourceQuery) List~ContextSourceDescriptor~
-    }
+flowchart TD
+    REQUEST[ContextRequest] --> SEARCH[SearchService]
+    REQUEST --> INSTR[ContextSourceProvider]
+    REQUEST --> SKILLS[SkillSourceProvider]
 
-    class AgentsMdInstructionProvider
-    class CopilotInstructionProvider
-    class ClaudeInstructionProvider
-    class GeminiInstructionProvider
+    SEARCH --> TASK[Code / tests / documentation]
 
-    class ContextSourceQuery {
-        +ProjectDescriptor project
-        +String query
-        +List~Path~ targetPaths
-        +boolean explain
-    }
+    INSTR --> ISCOPE[Résolution du scope]
+    ISCOPE --> ISELECT[Instructions applicables]
 
-    class ContextSourceDescriptor {
-        +String id
-        +CandidateType type
-        +String provider
-        +String origin
-        +Path path
-        +ContextSourceScope scope
-        +List~String~ applyTo
-        +int priority
-        +String content
-        +Map metadata
-        +List reasons
-    }
+    SKILLS --> CATALOG[Catalogue léger name + description]
+    CATALOG --> SMATCH[SkillSelector]
+    SMATCH --> SLOAD[SkillLoader]
+    SLOAD --> SSELECT[SkillContextSelector]
 
-    class ContextSourceDiscoveryService {
-        +discover(List providers, ContextSourceQuery) ContextSourceDiscoveryResult
-    }
-
-    class ContextSourceFragmentFactory {
-        +create(List sources) List~ContextFragment~
-    }
-
-    ContextSourceProvider <|.. AgentsMdInstructionProvider
-    ContextSourceProvider <|.. CopilotInstructionProvider
-    ContextSourceProvider <|.. ClaudeInstructionProvider
-    ContextSourceProvider <|.. GeminiInstructionProvider
-    ContextSourceDiscoveryService --> ContextSourceProvider
-    ContextSourceProvider --> ContextSourceQuery
-    ContextSourceProvider --> ContextSourceDescriptor
-    ContextSourceFragmentFactory --> ContextSourceDescriptor
+    ISELECT --> BUDGET[Budget global]
+    SSELECT --> BUDGET
+    TASK --> BUDGET
+    BUDGET --> BUNDLE[ContextBundle]
 ```
 
-Les particularités des fournisseurs restent dans les providers.
+Les particularités d'un format restent derrière leur provider.
 
-`DefaultContextBuilder` ne contient aucune condition du type :
+`DefaultContextBuilder` orchestre les résultats normalisés ; il ne contient pas de parser spécifique à Copilot, Claude ou au format `SKILL.md`.
 
-```text
-if path == ".github/copilot-instructions.md"   ❌
-if path == "CLAUDE.md"                         ❌
-```
+## 4. Instructions repository-wide
 
-Il manipule uniquement les `ContextSourceDescriptor` normalisés.
-
-## 5. Flux complet de construction
-
-```mermaid
-sequenceDiagram
-    participant User as Utilisateur / Agent
-    participant Builder as DefaultContextBuilder
-    participant Search as SearchService
-    participant Providers as ContextSourceProvider[]
-    participant Discovery as ContextSourceDiscoveryService
-    participant Budget as BudgetedContextSelector
-
-    User->>Builder: ContextRequest(query, budget)
-    Builder->>Search: search(query)
-    Search-->>Builder: RankedCandidate[]
-    Builder->>Builder: extraire les chemins cibles
-    Builder->>Providers: discover(project, query, targetPaths)
-    Providers-->>Discovery: sources applicables
-    Discovery->>Discovery: trier et dédupliquer
-    Discovery-->>Builder: ContextSourceDescriptor[]
-    Builder->>Budget: sélectionner instructions sous sous-budget
-    Builder->>Budget: sélectionner code + docs avec budget restant
-    Budget-->>Builder: ContextItem[]
-    Builder-->>User: ContextBundle
-```
-
-## 6. Comment NEXUS décide qu'une instruction est applicable
-
-### Repository-wide
-
-Exemple :
+Exemples :
 
 ```text
 .github/copilot-instructions.md
@@ -173,9 +104,11 @@ Exemple :
 AGENTS.md à la racine
 ```
 
-Ces instructions sont applicables à toute demande concernant le repository.
+Ces instructions sont candidates pour toute demande concernant le repository.
 
-### Scope répertoire
+Elles passent néanmoins par le budget d'instructions du `ContextBuilder`.
+
+## 5. Instructions avec scope répertoire
 
 Structure :
 
@@ -190,30 +123,30 @@ repo/
 │       └── BatchJob.java
 ```
 
-Pour une requête qui classe `src/api/OrderController.java` :
+Pour une requête qui classe :
+
+```text
+src/api/OrderController.java
+```
+
+NEXUS peut sélectionner :
 
 ```text
 /AGENTS.md
-    applicable
-
 /src/api/AGENTS.md
-    applicable
-    priorité supérieure car plus proche
 ```
 
-Pour `src/batch/BatchJob.java` :
+L'instruction la plus proche reçoit une priorité supérieure.
+
+Pour :
 
 ```text
-/AGENTS.md
-    applicable
-
-/src/api/AGENTS.md
-    non applicable
+src/batch/BatchJob.java
 ```
 
-NEXUS conserve les instructions parentes au lieu de supprimer automatiquement leur contenu. La priorité permet aux règles les plus spécifiques d'être favorisées sous budget.
+`src/api/AGENTS.md` n'est pas applicable.
 
-## 7. Instructions Copilot `applyTo`
+## 6. Instructions Copilot `applyTo`
 
 Exemple :
 
@@ -230,54 +163,44 @@ Le provider :
 1. lit le frontmatter ;
 2. extrait `applyTo` ;
 3. normalise les chemins repository avec `/` ;
-4. compare les motifs aux fichiers candidats de `SearchService` ;
-5. sélectionne l'instruction uniquement si au moins un candidat correspond.
+4. compare les motifs aux fichiers candidats ;
+5. sélectionne l'instruction si au moins une cible correspond.
 
-Exemple :
-
-```text
-requête → OrderService
-candidat → src/main/java/orders/OrderService.java
-applyTo  → src/main/java/**/*.java
-résultat → applicable
-```
-
-Une instruction :
+Une règle :
 
 ```text
 applyTo: "frontend/**"
 ```
 
-ne sera pas injectée pour cette même requête.
+ne s'applique pas à un `OrderService.java` situé sous `src/main/java`.
 
-## 8. Références `@fichier`
+## 7. Références `@fichier`
 
-NEXUS prend en charge les références dans les formats où elles sont pertinentes, notamment `AGENTS.md`, `CLAUDE.md` et les instructions Copilot repository-wide.
-
-Exemple :
+Les instructions peuvent référencer du contexte local :
 
 ```markdown
 Consulter @docs/architecture.md avant une modification structurelle.
 ```
 
-Le fichier référencé devient une source contextuelle de priorité légèrement inférieure à l'instruction qui le référence.
+Le fichier référencé devient une source contextuelle liée à l'instruction.
 
-### Contraintes de sécurité
+Protections :
 
 ```text
 @docs/architecture.md       ✅
-@../outside-secret.txt      ❌ si la résolution sort du repository
+@../outside-secret.txt      ❌ si sortie du repository
 @C:/private/file.txt        ❌
 @~/.claude/private.md       ❌
+fichier .nexusignore        ❌
 ```
 
 La récursion est limitée à cinq niveaux et les cycles sont arrêtés.
 
-Les références placées dans des blocs Markdown délimités par des fences ne sont pas interprétées.
+Les références dans des blocs Markdown fenced ne sont pas interprétées.
 
-## 9. Déduplication
+## 8. Déduplication des instructions
 
-Une équipe peut conserver temporairement la même règle dans :
+Une équipe peut temporairement recopier la même règle dans :
 
 ```text
 AGENTS.md
@@ -285,21 +208,25 @@ CLAUDE.md
 .github/copilot-instructions.md
 ```
 
-Si les contenus normalisés sont identiques, `ContextSourceDiscoveryService` calcule une empreinte SHA-256 et ne conserve qu'une seule source dans le budget.
+`ContextSourceDiscoveryService` calcule une empreinte SHA-256 du contenu normalisé.
 
-Les doublons sont listés dans :
+Les doublons apparaissent dans :
 
 ```text
 metadata.nativeSourcesDeduplicated
 ```
 
-## 10. Budget des instructions
+La déduplication existe également entre une documentation explicitement référencée et la même documentation remontée par Lucene.
 
-Les instructions applicables ont un statut différent d'un simple résultat lexical : elles décrivent **comment travailler** sur le projet.
+La métrique correspondante est :
 
-Mais elles ne doivent pas consommer tout le contexte.
+```text
+metadata.crossSourceDeduplicatedFragments
+```
 
-La politique initiale est :
+## 9. Budget des instructions
+
+Politique actuelle :
 
 ```text
 instructionBudget = min(
@@ -309,41 +236,59 @@ instructionBudget = min(
 )
 ```
 
-Exemples :
+Le budget non consommé revient au reste du contexte.
 
-| Budget total | Budget maximal instructions |
-|---:|---:|
-| 180 | 45 |
-| 500 | 125 |
-| 2 000 | 500 |
-| 8 000 | 600 |
+## 10. Documentation Markdown
 
-Le budget réellement non utilisé par les instructions revient au contexte de tâche.
+Les fichiers `.md` ordinaires sont :
 
-```text
-Budget total
-   │
-   ├── instructions applicables, plafonnées
-   │
-   └── reste disponible
-          ├── code
-          ├── symboles
-          ├── tests
-          └── documentation
-```
-
-## 11. Documentation Markdown
-
-Les fichiers `.md` ordinaires sont maintenant :
-
-1. scannés par `ProjectScanner` ;
+1. scannés ;
 2. catégorisés `DOCUMENTATION` ;
 3. analysés par `MarkdownLanguageAnalyzer` ;
 4. stockés dans SQLite ;
 5. indexés dans Lucene ;
 6. retournés comme `CandidateType.DOCUMENTATION` lorsqu'ils sont pertinents.
 
-Le `MarkdownLanguageAnalyzer` ne produit pas encore de symboles de titres ou de sections. Pour l'Itération 5, Lucene recherche le contenu et `ContextFragmentFactory` extrait le fichier complet lorsqu'il est court ou des fenêtres lexicales lorsqu'il est long.
+Les fichiers situés sous un dossier de skill sont une exception : ils restent de catégorie `SKILL` et sont exclus de la recherche documentaire générique.
+
+Cette exception empêche par exemple :
+
+```text
+.agents/skills/pdf-processing/references/forms.md
+```
+
+d'apparaître comme documentation avant activation du skill.
+
+## 11. Agent Skills
+
+Racines locales reconnues :
+
+```text
+.agents/skills/**/SKILL.md
+.github/skills/**/SKILL.md
+.claude/skills/**/SKILL.md
+```
+
+Le traitement est :
+
+```text
+Découverte
+→ frontmatter seulement
+→ name + description + métadonnées
+
+Sélection
+→ comparaison à la requête
+
+Activation
+→ lecture complète du SKILL.md sélectionné
+
+Ressources
+→ inventoriées
+→ non chargées automatiquement
+→ jamais exécutées par NEXUS
+```
+
+La documentation détaillée est dans [Agent Skills : découverte, sélection et divulgation progressive](agent-skills.md).
 
 ## 12. Instructions, profils d'agents et skills : ne pas confondre
 
@@ -355,7 +300,9 @@ CLAUDE.md
 copilot-instructions.md
 ```
 
-Elle peut s'appliquer automatiquement selon son scope.
+Une instruction décrit des règles applicables à une zone du projet.
+
+Elle peut être sélectionnée automatiquement en fonction du scope.
 
 ### Profil d'agent
 
@@ -363,66 +310,73 @@ Elle peut s'appliquer automatiquement selon son scope.
 .github/agents/security-review.agent.md
 ```
 
-Il décrit un spécialiste avec éventuellement ses outils et MCP.
+Un profil décrit un spécialiste, éventuellement avec des outils et des serveurs MCP.
 
 NEXUS le détecte mais ne l'applique pas automatiquement.
 
-Un futur workflow pourra faire :
-
-```text
-requête
-  ↓
-NEXUS recommande security-review
-  ↓
-JARVIS / client choisit l'agent
-```
+Un futur orchestrateur pourra décider de l'utiliser.
 
 ### Skill
 
 ```text
-.github/skills/testing/SKILL.md
-.claude/skills/testing/SKILL.md
 .agents/skills/testing/SKILL.md
 ```
 
-Il représente une capacité réutilisable et fera l'objet de la divulgation progressive de l'Itération 6.
+Un skill décrit une capacité procédurale réutilisable.
+
+NEXUS peut désormais :
+
+```text
+le découvrir
+→ le sélectionner
+→ inclure son SKILL.md complet
+```
+
+mais :
+
+```text
+NEXUS n'exécute pas le skill
+NEXUS n'exécute pas ses scripts
+NEXUS ne charge pas toutes ses ressources
+```
 
 ## 13. Configuration Claude
 
-Considérons :
+Exemple :
 
 ```text
 .claude/
 ├── CLAUDE.md
 ├── settings.json
 ├── settings.local.json
-└── agents/
-    └── reviewer.md
+├── agents/
+│   └── reviewer.md
+└── skills/
+    └── testing/
+        └── SKILL.md
 ```
 
-NEXUS traite :
+Traitement :
 
 ```text
 CLAUDE.md
 → INSTRUCTION
-→ peut entrer dans le ContextBundle
+
+settings*.json
+→ nativeCustomizationsDetected
+→ pas d'injection brute
+
+agents/*.md
+→ profil d'agent détecté
+
+skills/**/SKILL.md
+→ SkillSourceProvider
+→ divulgation progressive
 ```
 
-mais :
+## 14. Configuration GitHub / Copilot
 
-```text
-settings.json
-settings.local.json
-→ détectés
-→ metadata.nativeCustomizationsDetected
-→ jamais injectés comme texte brut
-```
-
-Les permissions, hooks ou réglages de modèle restent la responsabilité de Claude Code.
-
-## 14. Configuration Copilot
-
-Considérons :
+Exemple :
 
 ```text
 .github/
@@ -437,114 +391,149 @@ Considérons :
         └── SKILL.md
 ```
 
-NEXUS traite :
+Traitement :
 
 ```text
 copilot-instructions.md
-→ instruction repository-wide
+→ INSTRUCTION repository-wide
 
 instructions/*.instructions.md
-→ instruction conditionnelle selon applyTo
+→ INSTRUCTION conditionnelle applyTo
 
 agents/*.md
-→ profil détecté, non injecté
+→ AGENT_PROFILE détecté, non injecté
 
 skills/**/SKILL.md
-→ skill détecté, non chargé avant Itération 6
+→ SKILL découvert légèrement
+→ activable si pertinent
 ```
 
-## 15. Comment utiliser un projet déjà configuré avec NEXUS
+## 15. Comment utiliser un projet déjà configuré
 
-Aucune migration n'est requise.
-
-### Étape 1 — Enregistrer
+### Enregistrer
 
 ```powershell
 .\scripts\nexus.ps1 project add N:\workspace-dev\mon-app mon-app
 ```
 
-### Étape 2 — Indexer
+### Indexer
 
 ```powershell
 .\scripts\nexus.ps1 index mon-app
 ```
 
-NEXUS indexe :
-
-- Java ;
-- documentation Markdown ;
-- métadonnées des fichiers d'instructions/profils/skills.
-
-### Étape 3 — Construire un contexte
+### Construire un contexte
 
 ```powershell
-.\scripts\nexus.ps1 context mon-app "modifier OrderService" --budget 2000 --explain
+.\scripts\nexus.ps1 context mon-app "extract PDF form with OrderService" --budget 2000 --explain
 ```
 
 NEXUS :
 
-1. trouve `OrderService` ;
-2. utilise ce chemin comme cible de scope ;
-3. découvre les instructions applicables ;
-4. exclut les instructions frontend non applicables ;
-5. détecte les configurations d'agents existantes ;
-6. sélectionne la documentation pertinente ;
-7. construit le bundle sous 2 000 tokens.
+1. classe le code et la documentation ;
+2. résout les instructions applicables ;
+3. découvre les skills via leurs métadonnées ;
+4. sélectionne les skills pertinents ;
+5. charge seulement les `SKILL.md` sélectionnés ;
+6. applique les budgets ;
+7. construit le bundle final.
 
-### Étape 4 — Inspecter précisément en JSON
+## 16. Inspecter le résultat JSON
 
 ```powershell
-$result = .\scripts\nexus.ps1 context mon-app "modifier OrderService" --budget 2000 --explain --json | ConvertFrom-Json
+$result = .\scripts\nexus.ps1 context mon-app "extract PDF form" --budget 2000 --explain --json |
+    ConvertFrom-Json
 
 $result.items | Select-Object type, path, estimatedTokens
-$result.metadata.instructionProviders
+
 $result.metadata.nativeSourcesDiscovered
 $result.metadata.nativeSourcesDeduplicated
 $result.metadata.nativeCustomizationsDetected
+
+$result.metadata.skillsDiscovered
+$result.metadata.skillsMatched
+$result.metadata.skillsSelected
+$result.metadata.skillResourcesDiscovered
+$result.metadata.skillsExecuted
 ```
 
-## 16. Exemple de résultat conceptuel
+## 17. Exemple de bundle conceptuel
 
 ```text
 ContextBundle 1 842 / 2 000 tokens
 │
-├── INSTRUCTION  .github/instructions/java.instructions.md
-├── INSTRUCTION  src/main/java/orders/AGENTS.md
 ├── INSTRUCTION  AGENTS.md
+├── INSTRUCTION  .github/instructions/java.instructions.md
+├── SKILL        .agents/skills/pdf-processing/SKILL.md
 ├── SYMBOL       OrderService.java#createOrder
 ├── TEST         OrderServiceTest.java
 └── DOCUMENTATION docs/order-processing.md
 ```
 
-Le consommateur reçoit donc **les règles applicables et le contexte métier**, pas tous les fichiers de configuration du repository.
+Le consommateur reçoit les règles applicables, les skills pertinents et le contexte métier — pas toute la configuration du repository.
 
-## 17. Limites actuelles
+## 18. Configuration opérationnelle détectée mais non injectée
 
-L'Itération 5 ne prétend pas reproduire parfaitement le runtime de chaque outil.
+Exemples :
 
-Notamment :
+```text
+.claude/settings.json
+.claude/settings.local.json
+.mcp.json
+mcp.json
+.github/hooks/*.json
+.claude/hooks/*.json
+.github/agents/*.agent.md
+.claude/agents/*.md
+```
 
-- les instructions utilisateur dans le home (`~/.claude`, `~/.copilot`) ne sont pas chargées ;
-- les instructions d'organisation GitHub ne sont pas disponibles depuis un simple repository local ;
-- les profils d'agents ne sont pas sélectionnés automatiquement ;
-- les skills ne sont pas encore chargés ;
-- les hooks et serveurs MCP ne sont jamais exécutés ;
-- le Markdown n'a pas encore d'index structurel de titres ;
-- les conflits sémantiques entre deux règles différentes sont arbitrés par priorité et budget, pas par raisonnement LLM.
+Ces éléments peuvent apparaître sous :
 
-Ces limites sont intentionnelles afin de conserver NEXUS local, déterministe et explicable.
+```text
+metadata.nativeCustomizationsDetected
+```
 
-## 18. Références externes
+Ils ne sont pas interprétés comme instructions de contexte.
+
+## 19. Sécurité
+
+NEXUS conserve les règles suivantes :
+
+```text
+contenu hors repository              ❌
+fichier ignoré                        ❌
+settings injectés automatiquement     ❌
+hook exécuté                          ❌
+serveur MCP lancé                     ❌
+script d'un skill exécuté             ❌
+```
+
+Les `SKILL.md` sélectionnés sont du contexte déclaratif. Leur exécution reste la responsabilité du consommateur.
+
+## 20. Limites actuelles
+
+- Les instructions utilisateur dans le home ne sont pas chargées.
+- Les instructions d'organisation GitHub ne sont pas disponibles depuis un repository local seul.
+- Les profils d'agents ne sont pas sélectionnés automatiquement.
+- Les ressources de skills ne peuvent pas encore être demandées individuellement via la CLI.
+- Les scripts de skills ne sont jamais exécutés.
+- Le Markdown ordinaire n'a pas encore d'index structurel de titres.
+- Les conflits sémantiques entre règles différentes sont arbitrés par priorité et budget, pas par raisonnement LLM.
+- La sélection des skills est actuellement lexicale et déterministe sur `name` + `description`.
+
+## 21. Références externes
 
 - AGENTS.md : https://agents.md/
+- Agent Skills specification : https://agentskills.io/specification
 - GitHub Copilot repository instructions : https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-repository-instructions
-- GitHub Copilot CLI instructions : https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-custom-instructions
+- GitHub Copilot Agent Skills : https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills
 - GitHub Copilot custom agents : https://docs.github.com/en/copilot/concepts/agents/cloud-agent/about-custom-agents
 - Claude Code memory : https://docs.anthropic.com/en/docs/claude-code/memory
 
-## 19. Décisions d'architecture
+## 22. Décisions d'architecture
 
 - ADR-0011 — normaliser les sources de contexte derrière des providers ;
 - ADR-0012 — réutiliser les standards existants ;
 - ADR-0032 — préserver et normaliser le contexte natif des projets ;
-- ADR-0033 — séparer instructions contextuelles et configuration opérationnelle.
+- ADR-0033 — séparer instructions contextuelles et configuration opérationnelle ;
+- ADR-0034 — adopter la divulgation progressive pour les Agent Skills.
