@@ -25,13 +25,26 @@ class ProjectScannerTest {
         write(".gitignore", "ignored/\n");
         write("module/.nexusignore", "private/\n");
 
-        List<String> paths = new ProjectScanner().scan(temporaryDirectory).stream()
-                .map(ScannedFile::relativePath)
-                .toList();
+        List<String> paths = scanPaths();
 
         assertEquals(List.of(
                 "module/src/main/java/demo/Module.java",
                 "src/main/java/demo/App.java"), paths);
+    }
+
+    @Test
+    void respectsGitignoreNegationRules() throws Exception {
+        write("Drop.java", "class Drop {}\n");
+        write("Keep.java", "class Keep {}\n");
+        write(".gitignore", "*.java\n!Keep.java\n");
+
+        assertEquals(List.of("Keep.java"), scanPaths());
+    }
+
+    private List<String> scanPaths() throws Exception {
+        return new ProjectScanner().scan(temporaryDirectory).stream()
+                .map(ScannedFile::relativePath)
+                .toList();
     }
 
     private void write(String relativePath, String content) throws Exception {
