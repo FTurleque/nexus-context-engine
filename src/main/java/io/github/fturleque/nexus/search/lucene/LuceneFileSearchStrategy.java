@@ -28,7 +28,7 @@ public final class LuceneFileSearchStrategy implements SearchStrategy {
     public List<SearchCandidate> search(ProjectDescriptor project, String query, int limit) throws IOException {
         List<LexicalSearchHit> hits = searchIndex.search(project.id(), query, Math.max(limit, limit * 2));
         List<LexicalSearchHit> eligibleHits = hits.stream()
-                .filter(hit -> hit.category() != FileCategory.INSTRUCTION)
+                .filter(hit -> isGenericSearchEligible(hit.category()))
                 .limit(limit)
                 .toList();
         if (eligibleHits.isEmpty()) {
@@ -50,6 +50,12 @@ public final class LuceneFileSearchStrategy implements SearchStrategy {
                     signals));
         }
         return List.copyOf(candidates);
+    }
+
+    private static boolean isGenericSearchEligible(FileCategory category) {
+        return category != FileCategory.INSTRUCTION
+                && category != FileCategory.AGENT_PROFILE
+                && category != FileCategory.SKILL;
     }
 
     private static CandidateType candidateType(FileCategory category) {
