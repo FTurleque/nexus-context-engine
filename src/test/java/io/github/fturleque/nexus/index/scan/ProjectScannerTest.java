@@ -1,5 +1,6 @@
 package io.github.fturleque.nexus.index.scan;
 
+import io.github.fturleque.nexus.index.FileCategory;
 import io.github.fturleque.nexus.index.ScannedFile;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -7,6 +8,8 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -39,6 +42,24 @@ class ProjectScannerTest {
         write(".gitignore", "*.java\n!Keep.java\n");
 
         assertEquals(List.of("Keep.java"), scanPaths());
+    }
+
+    @Test
+    void classifiesDocumentationInstructionsAgentProfilesAndSkills() throws Exception {
+        write("README.md", "documentation");
+        write("AGENTS.md", "instructions");
+        write(".github/instructions/java.instructions.md", "---\napplyTo: \"**/*.java\"\n---\nrule");
+        write(".github/agents/reviewer.agent.md", "agent");
+        write(".github/skills/testing/SKILL.md", "skill");
+
+        Map<String, FileCategory> categories = new ProjectScanner().scan(temporaryDirectory).stream()
+                .collect(Collectors.toMap(ScannedFile::relativePath, ScannedFile::category));
+
+        assertEquals(FileCategory.DOCUMENTATION, categories.get("README.md"));
+        assertEquals(FileCategory.INSTRUCTION, categories.get("AGENTS.md"));
+        assertEquals(FileCategory.INSTRUCTION, categories.get(".github/instructions/java.instructions.md"));
+        assertEquals(FileCategory.AGENT_PROFILE, categories.get(".github/agents/reviewer.agent.md"));
+        assertEquals(FileCategory.SKILL, categories.get(".github/skills/testing/SKILL.md"));
     }
 
     private List<String> scanPaths() throws Exception {
