@@ -135,7 +135,7 @@ class NativeContextSourcesIntegrationTest {
         String customizationText = customizations.toString();
         assertTrue(customizationText.contains(".claude/settings.json"));
         assertTrue(customizationText.contains(".github/agents/docs.agent.md"));
-        assertTrue(customizationText.contains(".github/skills/demo/SKILL.md"));
+        assertFalse(customizationText.contains(".github/skills/demo/SKILL.md"));
     }
 
     private Fixture fixture(Path projectRoot) throws Exception {
