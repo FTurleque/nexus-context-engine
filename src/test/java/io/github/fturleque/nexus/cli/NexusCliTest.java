@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.fturleque.nexus.config.NexusPaths;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -25,6 +26,11 @@ class NexusCliTest {
     Path temporaryDirectory;
 
     private String previousNexusHome;
+
+    @BeforeEach
+    void rememberNexusHome() {
+        previousNexusHome = System.getProperty(NexusPaths.HOME_PROPERTY);
+    }
 
     @AfterEach
     void restoreNexusHome() {
@@ -90,17 +96,19 @@ class NexusCliTest {
                 "search", "demo-cli", "OrderService", "--limit", "5", "--explain", "--json");
         assertEquals(NexusCli.EXIT_SUCCESS, search.exitCode());
         JsonNode searchPayload = JSON.readTree(search.stdout());
-        assertFalse(searchPayload.path("results").isEmpty());
+        assertTrue(searchPayload.path("results").size() > 0);
         assertTrue(searchPayload.path("results").get(0).path("path").asText().endsWith("OrderService.java"));
         assertTrue(searchPayload.path("results").get(0).path("reasons").isArray());
+        assertTrue(searchPayload.path("durationMs").asLong() >= 0L);
 
         CliExecution context = execute(
                 "context", "demo-cli", "OrderService", "--budget", "120", "--explain", "--json");
         assertEquals(NexusCli.EXIT_SUCCESS, context.exitCode());
         JsonNode contextPayload = JSON.readTree(context.stdout());
         assertTrue(contextPayload.path("estimatedTokens").asInt() <= 120);
-        assertFalse(contextPayload.path("items").isEmpty());
+        assertTrue(contextPayload.path("items").size() > 0);
         assertFalse(Path.of(contextPayload.path("items").get(0).path("path").asText()).isAbsolute());
+        assertTrue(contextPayload.path("durationMs").asLong() >= 0L);
 
         CliExecution inspect = execute("inspect", "demo-cli", "--json");
         assertEquals(NexusCli.EXIT_SUCCESS, inspect.exitCode());
@@ -109,8 +117,7 @@ class NexusCliTest {
         assertTrue(inspectPayload.path("index").path("files").asInt() >= 2);
     }
 
-    private void configureNexusHome(Path nexusHome) {
-        previousNexusHome = System.getProperty(NexusPaths.HOME_PROPERTY);
+    private static void configureNexusHome(Path nexusHome) {
         System.setProperty(NexusPaths.HOME_PROPERTY, nexusHome.toString());
     }
 
