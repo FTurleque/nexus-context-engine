@@ -162,11 +162,11 @@ Validation self-smoke de la recherche sur NEXUS :
 - explication du premier résultat : BM25 `+0,400`, chemin `+0,100`, graphe `+0,059` ;
 - résultat final : `SELF-SMOKE SUCCESS`.
 
-**Itération 3 — en cours : construction du contexte et budget.**
+**Itération 3 — terminée et validée localement : construction du contexte et budget.**
 
-L'implémentation initiale comprend désormais :
+L'itération comprend :
 
-- `HeuristicTokenEstimator` local et déterministe ;
+- `HeuristicTokenEstimator` local, déterministe et remplaçable ;
 - matérialisation des candidats en fragments symboliques ou fenêtres de fichier ;
 - chemins de bundle relatifs au projet ;
 - fusion des plages chevauchantes et adjacentes ;
@@ -178,7 +178,34 @@ L'implémentation initiale comprend désormais :
 - tests dédiés au budget, à la fusion, à la troncature et au déterminisme ;
 - self-smoke étendu à la construction d'un `ContextBundle` réel.
 
-Cette itération reste à valider localement par `mvn clean install` puis par le self-smoke à huit étapes.
+Validation locale du 19 juillet 2026 :
+
+- `mvn clean install` : succès ;
+- compilation de 65 fichiers source avec `--release 21` : succès ;
+- compilation de 10 fichiers de test : succès ;
+- tests : 13 exécutés, 0 échec, 0 erreur, 0 ignoré ;
+- génération du JAR `nexus-context-engine-0.1.0-SNAPSHOT.jar` : succès ;
+- installation dans le dépôt Maven local : succès.
+
+Validation self-smoke du `ContextBundle` sur NEXUS :
+
+- première indexation : 75 fichiers scannés, 75 fichiers modifiés, 0 supprimé ;
+- index produit : 75 fichiers, 288 symboles et 564 relations ;
+- première indexation avec reconstruction complète : 931 ms sur la machine de validation ;
+- seconde indexation incrémentale : 75 fichiers scannés, 0 fichier modifié et 0 supprimé ;
+- seconde indexation : 275 ms sur la machine de validation ;
+- recherche explicable de `ProjectIndexingService` : succès, fichier principal toujours classé premier ;
+- construction du contexte avec un budget de 180 tokens : succès ;
+- bundle obtenu : 3 items, 178 tokens estimés sur 180 ;
+- fragments disponibles avant sélection : 5 076 tokens estimés ;
+- ratio de réduction : environ 96,49 % ;
+- 3 items tronqués explicitement et 9 fragments exclus faute de budget restant ;
+- `ProjectIndexingService.java` et `ProjectIndexingServiceTest.java` sont conservés dans le bundle ;
+- résultat final : `SELF-SMOKE SUCCESS`.
+
+Le self-smoke confirme donc l'invariant principal de l'itération : `ContextBundle.estimatedTokens <= ContextBundle.tokenBudget`. Les troncatures et exclusions observées avec un budget volontairement très contraint de 180 tokens sont explicites et traçables ; elles constituent un point de calibration futur de la diversité du contexte, pas un échec du critère de sortie.
+
+La prochaine étape est l'**Itération 4 — CLI utilisable pour le MVP**.
 
 ### Point d'entrée CLI actuel
 
