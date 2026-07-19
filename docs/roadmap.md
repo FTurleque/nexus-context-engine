@@ -107,6 +107,8 @@ Les avertissements Maven/Guice, SLF4J sans provider, accès natif SQLite et Vect
 
 ## Itération 2 — Recherche, graphe et classement explicable
 
+État : **terminée et validée localement**.
+
 Objectif : transformer une demande textuelle en une liste de fichiers et symboles pertinents avec un score explicable.
 
 Livrables :
@@ -123,15 +125,48 @@ Livrables :
 - corpus de requêtes de référence ;
 - métriques `precision@K` et `recall@K`.
 
-Travail de recherche à effectuer pendant l'itération :
+Décisions associées :
 
-- étudier les principes du RepoMap d'Aider ;
-- évaluer l'utilisation d'un PageRank ou d'une propagation de pertinence dans le graphe ;
-- mesurer le gain réel par rapport à un ranking lexical simple.
+- ADR-0024 — combiner Lucene et SQLite pour la recherche de candidats ;
+- ADR-0025 — normaliser les signaux et calculer un score composé explicable ;
+- ADR-0026 — construire un graphe minimal de fichiers à partir des imports résolus.
 
-Le ranking ne doit pas dépendre du code d'Aider ni reproduire son comportement à l'identique. Seuls les principes pertinents doivent être adaptés au modèle NEXUS.
+Approche retenue :
+
+- Lucene fournit les candidats fichiers et le signal lexical BM25 ;
+- SQLite fournit les symboles exacts et approximatifs ainsi que les relations ;
+- les candidats sont fusionnés de manière déterministe ;
+- le graphe d'imports internes propage un signal structurel sur un et deux sauts ;
+- le score final reste la somme pondérée de composantes bornées et inspectables ;
+- les principes de RepoMap/Aider sont étudiés et adaptés sans dépendre de son implémentation.
 
 Critère de sortie : les requêtes classent de manière reproductible les fichiers et symboles pertinents au-dessus des éléments connus comme non pertinents, et chaque score est explicable.
+
+Validation locale du 19 juillet 2026 :
+
+- `mvn clean install` : succès ;
+- compilation de 57 fichiers source avec `--release 21` : succès ;
+- compilation de 7 fichiers de test : succès ;
+- tests : 9 exécutés, 0 échec, 0 erreur, 0 ignoré ;
+- tests couverts : analyse JavaParser, indexation incrémentale, scanner, registre de projets, `precision@K`, `recall@K`, corpus golden et recherche hybride de bout en bout ;
+- génération du JAR `nexus-context-engine-0.1.0-SNAPSHOT.jar` : succès ;
+- installation dans le dépôt Maven local : succès.
+
+Validation self-smoke sur le repository NEXUS :
+
+- première indexation : 64 fichiers scannés, 64 fichiers modifiés, 0 supprimé ;
+- index produit : 64 fichiers, 238 symboles et 460 relations ;
+- première indexation avec reconstruction complète : 943 ms sur la machine de validation ;
+- seconde indexation incrémentale : 64 fichiers scannés, 0 fichier modifié, 0 supprimé ;
+- seconde indexation : 278 ms sur la machine de validation ;
+- inspection finale : état `READY`, 64 fichiers, 238 symboles et 460 relations ;
+- recherche explicable de `ProjectIndexingService` : succès ;
+- `ProjectIndexingService.java` classé en première position avec un score de `0,5585` ;
+- composantes du premier résultat : correspondance lexicale BM25 `+0,400`, chemin `+0,100`, proximité graphe `+0,059` ;
+- les symboles exacts `ProjectIndexingService` et son constructeur sont également classés parmi les premiers résultats ;
+- résultat : `SELF-SMOKE SUCCESS`.
+
+Les accents mal affichés dans certaines sorties capturées sous Windows PowerShell 5.1 restent un défaut d'encodage de console non bloquant. Ils n'affectent ni les données indexées, ni les scores, ni le résultat du classement.
 
 ---
 
