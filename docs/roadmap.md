@@ -416,33 +416,88 @@ Le critère de sortie est donc validé : NEXUS sait maintenant construire un con
 
 ## Itération 6 — Skills et divulgation progressive
 
+État : **terminée et validée localement le 20 juillet 2026**.
+
 Objectif : intégrer les skills comme source de contexte standardisée sans inventer un format propriétaire.
 
-Livrables :
+Livrables validés :
 
 - abstraction `SkillSourceProvider` ;
 - support du standard Agent Skills ;
-- découverte des `SKILL.md` ;
-- indexation légère du nom, de la description et des métadonnées ;
-- chargement complet uniquement lorsqu'un skill est sélectionné ;
-- prise en compte optionnelle des références et assets ;
-- modèle permettant de référencer un skill sans l'exécuter ;
-- préparation du connecteur futur AI Skills Registry.
+- support des racines `.agents/skills`, `.github/skills` et `.claude/skills` ;
+- parsing YAML 1.2 du frontmatter via SnakeYAML Engine ;
+- découverte légère des `SKILL.md` avec `name`, `description` et métadonnées ;
+- catalogue `SkillDescriptor` sans chargement du corps complet ;
+- validation du frontmatter ;
+- inventaire léger des ressources associées ;
+- déduplication des skills de même nom ;
+- sélection déterministe et explicable sur `name` + `description` ;
+- chargement du `SKILL.md` complet uniquement après sélection ;
+- type `SKILL` dans le `ContextBundle` ;
+- budget dédié et borné ;
+- exclusion explicite d'un skill trop volumineux au lieu de le tronquer ;
+- aucune exécution de script ;
+- ressources inventoriées mais non chargées automatiquement ;
+- isolation des sous-arbres de skills hors de la recherche Lucene générique ;
+- purge incrémentale des anciens documents Lucene devenus non éligibles ;
+- préparation d'un futur provider AI Skills Registry ;
+- dogfooding avec `.agents/skills/nexus-context-validation`.
 
-Principe :
+Décision associée :
+
+- ADR-0034 — adopter la divulgation progressive pour les Agent Skills.
+
+Principe validé :
 
 ```text
 Découverte
 → métadonnées seulement
 
 Sélection
-→ SKILL.md
+→ matching name + description
+
+Activation
+→ SKILL.md complet seulement pour le skill pertinent
 
 Exécution
 → responsabilité de l'agent consommateur
+→ jamais NEXUS
 ```
 
 Critère de sortie : NEXUS sait recommander et inclure les skills pertinents dans un `ContextBundle` sans les charger tous ni les exécuter lui-même.
+
+Validation locale du 20 juillet 2026 :
+
+- `mvn clean install` : succès ;
+- compilation de 100 fichiers source avec `--release 21` ;
+- compilation de 17 fichiers de test ;
+- 26 tests exécutés, 0 échec, 0 erreur, 0 ignoré ;
+- baseline qualité conservée : `mean precision@3 = 0,4444`, `mean recall@3 = 1,0000` ;
+- JAR bibliothèque et JAR CLI autonome générés et installés.
+
+Validation self-smoke à 12 étapes :
+
+- JAR autonome : succès ;
+- Java et Markdown détectés ;
+- première indexation : 170 fichiers scannés, 170 modifiés, 0 supprimé ;
+- index produit : 170 fichiers, 480 symboles, 926 relations ;
+- indexation complète : 1 218 ms ;
+- seconde indexation incrémentale : 282 ms, 0 modifié, 0 supprimé ;
+- recherche `ProjectIndexingService` : 282 ms, fichier principal classé premier ;
+- contexte strict : 5 items, 180/180 tokens, 454 ms ;
+- contexte multi-source : 9 items, 1 185/1 200 tokens, 449 ms ;
+- contexte avec Agent Skill : 1 194/1 200 tokens, 550 ms ;
+- `nexus-context-validation` découvert ;
+- skill matché via ses métadonnées ;
+- `SKILL.md` complet chargé seulement après sélection ;
+- skill sélectionné intégralement : 233 tokens, non tronqué ;
+- 1 ressource associée inventoriée ;
+- `references/quality-checks.md` non chargée automatiquement ;
+- `skillsExecuted = false` ;
+- réduction du contexte candidat strict : environ 99,14 % ;
+- résultat final : `SELF-SMOKE SUCCESS`.
+
+Le critère de sortie est donc validé : NEXUS applique réellement la divulgation progressive aux Agent Skills et peut intégrer un skill pertinent sans bruit global ni exécution implicite.
 
 ---
 
