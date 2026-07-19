@@ -155,7 +155,7 @@ Validée localement le 19 juillet 2026 :
 
 ### Itération 4 — CLI utilisable pour le MVP
 
-Implémentation en cours, validation locale à effectuer :
+Validée localement le 19 juillet 2026 :
 
 - sortie humaine conservée par défaut ;
 - `--json` sur toutes les commandes ;
@@ -167,9 +167,23 @@ Implémentation en cours, validation locale à effectuer :
 - scripts `scripts/nexus.ps1` et `scripts/nexus.cmd` ;
 - `NexusCliTest` pour le contrat JSON et le flux MVP ;
 - self-smoke exécutant directement le JAR autonome ;
-- publication des métriques `precision@3` et `recall@3` dans le log du corpus golden.
+- 66 fichiers source et 11 fichiers de test compilés ;
+- 16 tests exécutés, 0 échec, 0 erreur, 0 ignoré ;
+- baseline qualité : `mean precision@3 = 0,4444`, `mean recall@3 = 1,0000` sur 3 requêtes ;
+- index self-smoke : 77 fichiers, 322 symboles, 599 relations ;
+- indexation complète : 896 ms ;
+- indexation incrémentale : 232 ms avec 0 changement ;
+- recherche : 254 ms ;
+- construction du contexte : 285 ms ;
+- bundle : 3 items, 178/180 tokens ;
+- réduction du contexte candidat : environ 96,45 % ;
+- sortie JSON réellement parsée avec `ConvertFrom-Json` ;
+- sortie humaine vérifiée ;
+- résultat final : `SELF-SMOKE SUCCESS`.
 
-Les décisions correspondantes sont ADR-0030 et ADR-0031. Le chapitre [CLI du MVP](cli-mvp.md) détaille l'implémentation et la reproduction.
+Cette validation clôt la **Phase 1 — validation du moteur NEXUS** et valide le MVP du moteur de bout en bout. Les décisions correspondantes sont ADR-0030 et ADR-0031. Le chapitre [CLI du MVP](cli-mvp.md) détaille l'implémentation et la reproduction.
+
+Sous Windows PowerShell 5.1, certains warnings JVM/SLF4J écrits sur `stderr` peuvent encore être présentés sous la forme d'un `NativeCommandError` visuel. Ce bruit de console est non bloquant : le script contrôle `$LASTEXITCODE`, les sorties JSON restent séparées sur `stdout` et le self-smoke atteint `SELF-SMOKE SUCCESS`.
 
 ## Principes à respecter en contribuant
 
