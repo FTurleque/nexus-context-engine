@@ -22,12 +22,13 @@ public final class ProjectRegistry {
         if (!Files.isDirectory(normalizedRoot)) {
             throw new IOException("Le chemin du projet n'est pas un répertoire : " + normalizedRoot);
         }
+        Path canonicalRoot = normalizedRoot.toRealPath();
 
-        return repository.findByRootPath(normalizedRoot)
+        return repository.findByRootPath(canonicalRoot)
                 .orElseGet(() -> repository.save(new ProjectDescriptor(
                         UUID.randomUUID(),
-                        resolveName(normalizedRoot, requestedName),
-                        normalizedRoot,
+                        resolveName(canonicalRoot, requestedName),
+                        canonicalRoot,
                         ProjectSourceType.LOCAL,
                         Set.of(),
                         Set.of(),
