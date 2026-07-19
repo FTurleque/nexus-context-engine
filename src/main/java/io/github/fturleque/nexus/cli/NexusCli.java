@@ -1,6 +1,14 @@
 package io.github.fturleque.nexus.cli;
 
 import io.github.fturleque.nexus.config.NexusPaths;
+import io.github.fturleque.nexus.context.BudgetedContextSelector;
+import io.github.fturleque.nexus.context.ContextBundle;
+import io.github.fturleque.nexus.context.ContextBuilder;
+import io.github.fturleque.nexus.context.ContextFragmentFactory;
+import io.github.fturleque.nexus.context.ContextItem;
+import io.github.fturleque.nexus.context.ContextRequest;
+import io.github.fturleque.nexus.context.DefaultContextBuilder;
+import io.github.fturleque.nexus.context.FragmentMerger;
 import io.github.fturleque.nexus.index.IndexRepository;
 import io.github.fturleque.nexus.index.IndexStatistics;
 import io.github.fturleque.nexus.index.IndexingReport;
@@ -21,10 +29,14 @@ import io.github.fturleque.nexus.search.SearchService;
 import io.github.fturleque.nexus.search.SymbolSearchStrategy;
 import io.github.fturleque.nexus.search.lucene.LuceneFileSearchStrategy;
 import io.github.fturleque.nexus.search.lucene.LuceneSearchIndex;
+import io.github.fturleque.nexus.token.HeuristicTokenEstimator;
+import io.github.fturleque.nexus.token.TokenEstimator;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public final class NexusCli {
@@ -65,11 +77,20 @@ public final class NexusCli {
                         new SymbolSearchStrategy(indexRepository)),
                 new GraphCandidateEnricher(indexRepository),
                 new DeterministicContextRanker());
+        TokenEstimator tokenEstimator = new HeuristicTokenEstimator();
+        ContextBuilder contextBuilder = new DefaultContextBuilder(
+                projectRepository,
+                searchService,
+                new ContextFragmentFactory(tokenEstimator),
+                new FragmentMerger(),
+                new BudgetedContextSelector(tokenEstimator),
+                tokenEstimator);
 
         switch (args[0]) {
             case "project" -> handleProject(args, registry);
             case "index" -> handleIndex(args, projectRepository, indexingService);
             case "search" -> handleSearch(args, projectRepository, searchService);
+            case "context" -> handleContext(args, projectRepository, contextBuilder);
             case "inspect" -> handleInspect(args, projectRepository, indexRepository);
             default -> throw new IllegalArgumentException("Commande inconnue : " + args[0]);
         }
@@ -173,6 +194,85 @@ public final class NexusCli {
         }
     }
 
+    private static void handleContext(
+            String[] args,
+            ProjectRepository projectRepository,
+            ContextBuilder contextBuilder) {
+        if (args.length < 3) {
+            throw new IllegalArgumentException(
+                    "Usage : nexus context <id-ou-nom> <requête> [--budget N] [--explain]");
+        }
+
+        ProjectDescriptor project = resolveProject(projectRepository, args[1]);
+        int budget = 2_000;
+        boolean explain = false;
+        List<String> queryParts = new ArrayList<>();
+
+        for (int index = 2; index < args.length; index++) {
+            if ("--explain".equals(args[index])) {
+                explain = true;
+            } else if ("--budget".equals(args[index])) {
+                if (index + 1 >= args.length) {
+                    throw new IllegalArgumentException("--budget attend une valeur entière");
+                }
+                budget = Integer.parseInt(args[++index]);
+            } else {
+                queryParts.add(args[index]);
+            }
+        }
+
+        String query = String.join(" ", queryParts).trim();
+        if (query.isBlank()) {
+            throw new IllegalArgumentException("La requête de contexte ne peut pas être vide");
+        }
+
+        ContextBundle bundle = contextBuilder.build(new ContextRequest(
+                project.id(),
+                query,
+                budget,
+                Set.of(),
+                Map.of(),
+                explain));
+
+        System.out.printf(
+                "Contexte '%s' : %d item(s), %d/%d tokens estimés%n",
+                query,
+                bundle.items().size(),
+                bundle.estimatedTokens(),
+                bundle.tokenBudget());
+        for (int index = 0; index < bundle.items().size(); index++) {
+            ContextItem item = bundle.items().get(index);
+            String target = item.symbol() == null
+                    ? item.path().toString()
+                    : item.path() + "#" + item.symbol();
+            System.out.printf(
+                    "%n[%d] %.4f %-6s %s:%d-%d (%d tokens)%s%n",
+                    index + 1,
+                    item.score(),
+                    item.type(),
+                    target,
+                    item.startLine(),
+                    item.endLine(),
+                    item.estimatedTokens(),
+                    item.truncated() ? " [TRONQUÉ]" : "");
+            if (explain) {
+                item.reasons().forEach(reason -> System.out.println("    - " + reason));
+            }
+            System.out.println("-----");
+            System.out.println(item.content());
+            System.out.println("-----");
+        }
+
+        if (explain) {
+            System.out.println();
+            System.out.println("Métadonnées : " + bundle.metadata());
+            if (!bundle.excluded().isEmpty()) {
+                System.out.println("Exclusions :");
+                bundle.excluded().forEach(exclusion -> System.out.println("  - " + exclusion));
+            }
+        }
+    }
+
     private static void handleInspect(
             String[] args,
             ProjectRepository projectRepository,
@@ -228,6 +328,7 @@ public final class NexusCli {
                   nexus project list
                   nexus index <id-ou-nom> [--rebuild]
                   nexus search <id-ou-nom> <requête> [--limit N] [--explain]
+                  nexus context <id-ou-nom> <requête> [--budget N] [--explain]
                   nexus inspect <id-ou-nom>
                 """);
     }
