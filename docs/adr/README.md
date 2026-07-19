@@ -86,6 +86,8 @@ Le numéro est un identifiant stable. Le nom de fichier utilise des minuscules, 
 | [ADR-0029](0029-selectionner-le-contextbundle-par-un-algorithme-glouton-deterministe-sous-budget.md) | Sélectionner le ContextBundle par un algorithme glouton déterministe sous budget | Accepté |
 | [ADR-0030](0030-stabiliser-le-contrat-cli-avec-sorties-humaines-json-et-codes-de-sortie.md) | Stabiliser le contrat CLI avec sorties humaines, JSON et codes de sortie | Accepté |
 | [ADR-0031](0031-packager-la-cli-dans-un-jar-autonome.md) | Packager la CLI dans un JAR autonome tout en conservant le JAR bibliothèque | Accepté |
+| [ADR-0032](0032-preserver-et-normaliser-le-contexte-natif-des-projets.md) | Préserver et normaliser le contexte natif déjà configuré dans les projets | Accepté |
+| [ADR-0033](0033-separer-instructions-contextuelles-et-configuration-operationnelle-des-agents.md) | Séparer les instructions contextuelles de la configuration opérationnelle des agents | Accepté |
 
 ## Modèle
 
@@ -95,4 +97,4 @@ Le fichier [`template.md`](template.md) sert de base aux futurs ADR.
 
 - MADR : https://adr.github.io/madr/
 - Modèles ADR : https://adr.github.io/adr-templates/
-- Répertoire MADR : https://github.com/adr/madr
+- Répertoire MADR : https://github.com/adr/madr/
