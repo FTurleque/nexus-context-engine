@@ -6,5 +6,7 @@ public enum FileCategory {
     RESOURCE,
     DOCUMENTATION,
     INSTRUCTION,
+    AGENT_PROFILE,
+    SKILL,
     OTHER
 }
