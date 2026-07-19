@@ -122,9 +122,9 @@ Validation self-smoke réelle sur le repository NEXUS lui-même :
 
 Le self-smoke a également permis de détecter puis corriger un défaut réel : JavaParser utilisait son niveau de langage par défaut et refusait les text blocks présents dans le code NEXUS. L'analyseur est désormais configuré explicitement avec le niveau Java 21 et ce comportement est couvert par un test automatisé.
 
-**Itération 2 — en cours : recherche, graphe et classement explicable.**
+**Itération 2 — terminée et validée localement : recherche, graphe et classement explicable.**
 
-L'implémentation initiale comprend désormais :
+L'itération comprend :
 
 - recherche lexicale Lucene multi-champs avec ranking BM25 ;
 - boosts explicites sur les noms de symboles, noms qualifiés, chemins et contenu ;
@@ -138,7 +138,28 @@ L'implémentation initiale comprend désormais :
 - calcul de `precision@K` et `recall@K` ;
 - tests d'intégration dédiés au ranking et au corpus golden.
 
-Cette itération reste **à valider localement** par le prochain `mvn clean install` et par le self-smoke étendu à la recherche réelle dans NEXUS.
+Validation locale du 19 juillet 2026 :
+
+- `mvn clean install` : succès ;
+- compilation de 57 fichiers source avec `--release 21` : succès ;
+- compilation de 7 fichiers de test : succès ;
+- tests : 9 exécutés, 0 échec, 0 erreur, 0 ignoré ;
+- tests couverts : analyse JavaParser, indexation, scanner, registre, métriques de qualité, corpus golden et recherche hybride de bout en bout ;
+- génération et installation locale du JAR : succès.
+
+Validation self-smoke de la recherche sur NEXUS :
+
+- première indexation : 64 fichiers scannés, 64 fichiers modifiés, 0 supprimé ;
+- index produit : 64 fichiers, 238 symboles et 460 relations ;
+- première indexation avec reconstruction complète : 943 ms sur la machine de validation ;
+- seconde indexation incrémentale : 64 fichiers scannés, 0 fichier modifié et 0 supprimé ;
+- seconde indexation : 278 ms sur la machine de validation ;
+- recherche explicable de `ProjectIndexingService` : succès ;
+- `ProjectIndexingService.java` classé en première position avec un score de `0,5585` ;
+- explication du premier résultat : BM25 `+0,400`, chemin `+0,100`, graphe `+0,059` ;
+- résultat final : `SELF-SMOKE SUCCESS`.
+
+La prochaine étape est l'**Itération 3 — construction du contexte et budget**.
 
 ### Point d'entrée CLI actuel
 
