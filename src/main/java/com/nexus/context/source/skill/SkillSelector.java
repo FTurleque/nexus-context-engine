@@ -127,7 +127,7 @@ public final class SkillSelector {
 
     private static String normalize(String value) {
         String decomposed = Normalizer.normalize(value.toLowerCase(Locale.ROOT), Normalizer.Form.NFD);
-        return decomposed.replaceAll("\\p{M}+", " ")
+        return decomposed.replaceAll("\\p{M}+", "")
                 .replaceAll("\\s+", " ")
                 .trim();
     }
