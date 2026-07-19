@@ -51,6 +51,7 @@ class ProjectScannerTest {
         write(".github/instructions/java.instructions.md", "---\napplyTo: \"**/*.java\"\n---\nrule");
         write(".github/agents/reviewer.agent.md", "agent");
         write(".github/skills/testing/SKILL.md", "skill");
+        write(".github/skills/testing/references/testing-guide.md", "skill reference");
 
         Map<String, FileCategory> categories = new ProjectScanner().scan(temporaryDirectory).stream()
                 .collect(Collectors.toMap(ScannedFile::relativePath, ScannedFile::category));
@@ -60,6 +61,7 @@ class ProjectScannerTest {
         assertEquals(FileCategory.INSTRUCTION, categories.get(".github/instructions/java.instructions.md"));
         assertEquals(FileCategory.AGENT_PROFILE, categories.get(".github/agents/reviewer.agent.md"));
         assertEquals(FileCategory.SKILL, categories.get(".github/skills/testing/SKILL.md"));
+        assertEquals(FileCategory.SKILL, categories.get(".github/skills/testing/references/testing-guide.md"));
     }
 
     private List<String> scanPaths() throws Exception {
