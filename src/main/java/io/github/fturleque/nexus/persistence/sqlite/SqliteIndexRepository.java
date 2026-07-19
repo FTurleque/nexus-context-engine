@@ -6,7 +6,10 @@ import io.github.fturleque.nexus.index.IndexRepository;
 import io.github.fturleque.nexus.index.IndexStatistics;
 import io.github.fturleque.nexus.index.IndexedFile;
 import io.github.fturleque.nexus.index.IndexedFileUpdate;
+import io.github.fturleque.nexus.index.IndexedSymbol;
+import io.github.fturleque.nexus.index.RelationKind;
 import io.github.fturleque.nexus.index.ScannedFile;
+import io.github.fturleque.nexus.index.SymbolKind;
 import io.github.fturleque.nexus.index.SymbolRelation;
 import io.github.fturleque.nexus.persistence.PersistenceException;
 
@@ -15,6 +18,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,6 +65,63 @@ public final class SqliteIndexRepository implements IndexRepository {
             }
         } catch (SQLException exception) {
             throw new PersistenceException("Impossible de lire les fichiers indexés du projet " + projectId, exception);
+        }
+    }
+
+    @Override
+    public List<IndexedSymbol> findSymbols(UUID projectId) {
+        try (Connection connection = database.openConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT f.relative_path, s.kind, s.name, s.qualified_name,
+                            s.signature, s.start_line, s.end_line
+                     FROM symbols s
+                     JOIN indexed_files f ON f.id = s.file_id
+                     WHERE f.project_id = ?
+                     ORDER BY f.relative_path, s.start_line, s.name
+                     """)) {
+            statement.setString(1, projectId.toString());
+            try (ResultSet resultSet = statement.executeQuery()) {
+                List<IndexedSymbol> symbols = new ArrayList<>();
+                while (resultSet.next()) {
+                    symbols.add(new IndexedSymbol(
+                            resultSet.getString("relative_path"),
+                            new CodeSymbol(
+                                    SymbolKind.valueOf(resultSet.getString("kind")),
+                                    resultSet.getString("name"),
+                                    resultSet.getString("qualified_name"),
+                                    resultSet.getString("signature"),
+                                    resultSet.getInt("start_line"),
+                                    resultSet.getInt("end_line"))));
+                }
+                return List.copyOf(symbols);
+            }
+        } catch (SQLException exception) {
+            throw new PersistenceException("Impossible de lire les symboles du projet " + projectId, exception);
+        }
+    }
+
+    @Override
+    public List<SymbolRelation> findRelations(UUID projectId) {
+        try (Connection connection = database.openConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT kind, source_ref, target_ref
+                     FROM symbol_relations
+                     WHERE project_id = ?
+                     ORDER BY source_ref, kind, target_ref
+                     """)) {
+            statement.setString(1, projectId.toString());
+            try (ResultSet resultSet = statement.executeQuery()) {
+                List<SymbolRelation> relations = new ArrayList<>();
+                while (resultSet.next()) {
+                    relations.add(new SymbolRelation(
+                            RelationKind.valueOf(resultSet.getString("kind")),
+                            resultSet.getString("source_ref"),
+                            resultSet.getString("target_ref")));
+                }
+                return List.copyOf(relations);
+            }
+        } catch (SQLException exception) {
+            throw new PersistenceException("Impossible de lire les relations du projet " + projectId, exception);
         }
     }
 
