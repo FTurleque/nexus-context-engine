@@ -123,10 +123,13 @@ try {
     if ($context -notmatch "ProjectIndexingService\.java") {
         throw "Le contexte devait contenir un fragment de ProjectIndexingService.java."
     }
-    if ($context -notmatch "Contexte\s+.+?:\s+([1-9]\d*)\s+item\S*,\s+(\d+)/$contextBudget\s+tokens") {
+    $contextSummaryPattern = "Contexte\s+.+?:\s+([1-9]\d*)\s+item\S*,\s+(\d+)/$contextBudget\s+tokens"
+    if ($context -match $contextSummaryPattern) {
+        $usedTokens = [int]$matches[2]
+    }
+    else {
         throw "La sortie context devait indiquer au moins un item et le budget consomme."
     }
-    $usedTokens = [int]$matches[2]
     if ($usedTokens -gt $contextBudget) {
         throw "Le ContextBundle a depasse le budget : $usedTokens > $contextBudget."
     }
