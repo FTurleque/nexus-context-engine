@@ -231,7 +231,7 @@ $result.metadata.nativeCustomizationsDetected
 Classe principale :
 
 ```text
-cli.com.nexus.NexusCli
+com.nexus.cli.NexusCli
 ```
 
 Commandes :
