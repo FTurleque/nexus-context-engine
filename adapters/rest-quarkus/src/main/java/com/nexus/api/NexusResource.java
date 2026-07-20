@@ -29,7 +29,6 @@ import java.util.UUID;
 
 @Path("/api/v1/projects")
 @Produces(MediaType.APPLICATION_JSON)
-@Consumes(MediaType.APPLICATION_JSON)
 public class NexusResource {
 
     private static final int DEFAULT_SEARCH_LIMIT = 10;
@@ -46,6 +45,7 @@ public class NexusResource {
     }
 
     @POST
+    @Consumes(MediaType.APPLICATION_JSON)
     public Response createProject(CreateProjectRequest request) throws IOException {
         requireRequest(request, "Le corps de la requête projet est obligatoire");
         String rootPath = requireNonBlank(request.rootPath(), "rootPath est obligatoire");
@@ -76,24 +76,28 @@ public class NexusResource {
 
     @POST
     @Path("/{projectId}/search")
+    @Consumes(MediaType.APPLICATION_JSON)
     public SearchResponse search(@PathParam("projectId") UUID projectId, SearchRequest request) throws IOException {
         return search(projectId, request, null);
     }
 
     @POST
     @Path("/{projectId}/explain/search")
+    @Consumes(MediaType.APPLICATION_JSON)
     public SearchResponse explainSearch(@PathParam("projectId") UUID projectId, SearchRequest request) throws IOException {
         return search(projectId, request, true);
     }
 
     @POST
     @Path("/{projectId}/context")
+    @Consumes(MediaType.APPLICATION_JSON)
     public ContextResponse context(@PathParam("projectId") UUID projectId, ContextRequestDto request) {
         return context(projectId, request, null);
     }
 
     @POST
     @Path("/{projectId}/explain/context")
+    @Consumes(MediaType.APPLICATION_JSON)
     public ContextResponse explainContext(@PathParam("projectId") UUID projectId, ContextRequestDto request) {
         return context(projectId, request, true);
     }
