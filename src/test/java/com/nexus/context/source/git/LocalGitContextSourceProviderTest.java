@@ -65,6 +65,42 @@ class LocalGitContextSourceProviderTest {
     }
 
     @Test
+    void keepsGitContextInsideANestedProjectInAMonorepo() throws Exception {
+        Path projectRoot = temporaryDirectory.resolve("backend/order-app");
+        Path target = write(projectRoot, "src/OrderService.java", "class OrderService {}\n");
+        Path coupled = write(projectRoot, "src/OrderRepository.java", "class OrderRepository {}\n");
+        Path outsideProject = write(temporaryDirectory, "frontend/App.ts", "export const app = true;\n");
+
+        try (Git git = Git.init().setDirectory(temporaryDirectory.toFile()).call()) {
+            commitAll(git, "initial monorepo");
+
+            Files.writeString(target, "class OrderService { void process() {} }\n");
+            Files.writeString(coupled, "class OrderRepository { void save() {} }\n");
+            Files.writeString(outsideProject, "export const app = false;\n");
+            commitAll(git, "change backend and frontend together");
+
+            Files.writeString(target, "class OrderService { void process() {} void localChange() {} }\n");
+        }
+
+        GitContextResult result = new LocalGitContextSourceProvider().discover(new GitContextQuery(
+                project(projectRoot),
+                "order service",
+                List.of(Path.of("src/OrderService.java")),
+                true));
+
+        assertTrue(result.repositoryAvailable());
+        assertTrue(result.relatedCommits() >= 1);
+        String combined = result.fragments().stream()
+                .map(ContextFragment::content)
+                .reduce("", (left, right) -> left + "\n" + right);
+        assertTrue(combined.contains("src/OrderService.java"));
+        assertTrue(combined.contains("src/OrderRepository.java"));
+        assertTrue(combined.contains("modifié : src/OrderService.java"));
+        assertFalse(combined.contains("frontend/App.ts"));
+        assertFalse(combined.contains("backend/order-app/src/OrderService.java"));
+    }
+
+    @Test
     void degradesGracefullyOutsideAGitRepository() throws Exception {
         write("src/Service.java", "class Service {}\n");
 
@@ -81,7 +117,11 @@ class LocalGitContextSourceProviderTest {
     }
 
     private Path write(String relativePath, String content) throws Exception {
-        Path file = temporaryDirectory.resolve(relativePath);
+        return write(temporaryDirectory, relativePath, content);
+    }
+
+    private static Path write(Path root, String relativePath, String content) throws Exception {
+        Path file = root.resolve(relativePath);
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);
         return file;
@@ -97,10 +137,14 @@ class LocalGitContextSourceProviderTest {
     }
 
     private ProjectDescriptor project() {
+        return project(temporaryDirectory);
+    }
+
+    private static ProjectDescriptor project(Path root) {
         return new ProjectDescriptor(
                 UUID.randomUUID(),
                 "git-context-test",
-                temporaryDirectory,
+                root,
                 ProjectSourceType.LOCAL,
                 Set.of("java"),
                 Set.of(),
