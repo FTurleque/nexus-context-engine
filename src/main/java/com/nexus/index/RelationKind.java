@@ -5,5 +5,8 @@ public enum RelationKind {
     EXTENDS,
     IMPLEMENTS,
     USES,
-    CALLS
+    CALLS,
+    REFERENCES,
+    TYPE_DEFINITION,
+    DEFINITION_OF
 }
