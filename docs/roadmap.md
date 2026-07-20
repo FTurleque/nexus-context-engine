@@ -110,69 +110,18 @@ La structure reste enrichissable via SCIP ou des providers optionnels. La valida
 
 État : **terminée, validée localement et fusionnée le 20 juillet 2026**.
 
-Objectif : exposer les capacités NEXUS à d'autres applications sans introduire de framework applicatif obligatoire dans le cœur.
+Résultat : adaptateur REST Quarkus isolé du cœur avec DTO dédiés, endpoints projets/indexation/recherche/contexte/explication, health et métriques.
 
-Stack retenue :
+Validation de référence :
 
-- Java 21 ;
-- Quarkus 3.33 LTS, micro-version figée `3.33.2.1` pour la reproductibilité de l'itération ;
-- Quarkus REST + Jackson ;
-- SmallRye Health ;
-- Micrometer + Prometheus.
+- cœur : 45 tests verts ;
+- baseline : `precision@3 = 0,4444`, `recall@3 = 1,0000` ;
+- self-smoke : succès ;
+- test REST de bout en bout : succès ;
+- health et metrics : succès ;
+- runner Quarkus produit.
 
-Livrables validés :
-
-- adaptateur autonome dans `adapters/rest-quarkus` ;
-- aucune dépendance Quarkus dans le `pom.xml` du cœur ;
-- DTO HTTP isolés des modèles métier ;
-- mapping explicite domaine → DTO ;
-- ressources REST sans logique métier de recherche, ranking ou construction de contexte ;
-- `GET /api/v1/projects` ;
-- `POST /api/v1/projects` ;
-- `GET /api/v1/projects/{projectId}` ;
-- `POST /api/v1/projects/{projectId}/index` ;
-- `GET /api/v1/projects/{projectId}/index` ;
-- `POST /api/v1/projects/{projectId}/search` ;
-- `POST /api/v1/projects/{projectId}/context` ;
-- `POST /api/v1/projects/{projectId}/explain/search` ;
-- `POST /api/v1/projects/{projectId}/explain/context` ;
-- readiness `/q/health/ready` ;
-- métriques `/q/metrics` ;
-- compteurs et timers NEXUS pour `index`, `search` et `context` ;
-- erreurs HTTP JSON normalisées ;
-- ADR-0039 ;
-- documentation `docs/developer/rest-api.md` ;
-- script `scripts/validate-iteration-11.ps1` avec mode `-AdapterOnly`.
-
-Validation réelle du 20 juillet 2026 :
-
-- `mvn clean install` du cœur : succès ;
-- 45 tests cœur, 0 échec, 0 erreur ;
-- baseline qualité conservée : `mean precision@3 = 0,4444`, `mean recall@3 = 1,0000` ;
-- `scripts/self-smoke.ps1` : `SELF-SMOKE SUCCESS` ;
-- `mvn -f adapters/rest-quarkus/pom.xml clean verify` : `BUILD SUCCESS` ;
-- test REST de bout en bout : 1 test, 0 échec, 0 erreur ;
-- création projet via HTTP : succès ;
-- indexation via HTTP : succès ;
-- recherche et explication via HTTP : succès ;
-- contexte et explication via HTTP : succès ;
-- `/q/health/ready` : succès ;
-- `/q/metrics` : succès ;
-- runner `adapters/rest-quarkus/target/quarkus-app/quarkus-run.jar` produit.
-
-Mesures Quarkus :
-
-- démarrage en profil test : 3,572 s ;
-- test REST de bout en bout : 4,233 s ;
-- build adaptateur complet : 19,568 s ;
-- augmentation Quarkus : 2 996 ms.
-
-Défauts révélés et corrigés pendant la validation :
-
-1. l'initialisation de `SqliteDatabase` pouvait lever `SQLException` / `IOException` sans traitement dans le bean CDI ; l'erreur est maintenant encapsulée explicitement avec sa cause ;
-2. `@Consumes(application/json)` appliqué au niveau de toute la ressource imposait à tort un `Content-Type` JSON au `POST /index` sans corps et provoquait HTTP 415 ; `@Consumes` est désormais limité aux endpoints recevant réellement un DTO.
-
-Critère de sortie : **validé**. Les capacités principales de NEXUS sont accessibles par REST, les DTO restent isolés du cœur, l'observabilité est disponible et aucune logique métier n'est dupliquée dans les ressources HTTP.
+Défauts révélés puis corrigés : gestion de l'initialisation SQLite dans CDI et `HTTP 415` causé par un `@Consumes(JSON)` trop large.
 
 PR #4 fusionnée dans `main` au commit `d5565dc3da0be823929afe73ca7345fd2bc1e6ca`.
 
@@ -180,19 +129,21 @@ PR #4 fusionnée dans `main` au commit `d5565dc3da0be823929afe73ca7345fd2bc1e6ca
 
 ## Itération 12 — Adaptateur MCP
 
-État : **en cours**.
+État : **terminée, validée localement et fusionnée le 20 juillet 2026**.
 
-Objectif : rendre NEXUS directement utilisable par les assistants et agents compatibles MCP.
+Objectif : rendre NEXUS directement utilisable par les assistants et agents compatibles MCP sans introduire le protocole dans le cœur.
 
-Décisions :
+Architecture retenue :
 
-- utiliser le SDK Java MCP officiel conformément à ADR-0016 ;
-- isoler le SDK dans `adapters/mcp-java` ;
-- utiliser STDIO comme premier transport local ;
-- centraliser la composition du moteur dans `NexusApplication` afin que REST et MCP appellent la même façade applicative ;
-- ne jamais réimplémenter le framing, le transport, le ranking ou la construction du contexte dans les handlers MCP.
+- SDK Java MCP officiel `2.0.0` ;
+- adaptateur isolé dans `adapters/mcp-java` ;
+- transport local STDIO ;
+- façade applicative commune `NexusApplication` utilisée par REST et MCP ;
+- handlers MCP limités à validation, appel NEXUS et mapping ;
+- aucune logique de ranking ou de construction du contexte dans MCP ;
+- `stdout` réservé au transport JSON-RPC.
 
-Premier périmètre :
+Tools validés :
 
 ```text
 list_projects
@@ -203,40 +154,89 @@ build_context
 explain_context
 ```
 
-Livrables en cours :
+Livrables validés :
 
-- adaptateur MCP Java autonome ;
-- serveur STDIO ;
+- serveur MCP STDIO autonome ;
 - schémas d'entrée explicites ;
-- réponses JSON dans un contenu texte MCP inspectable ;
-- test d'intégration avec un vrai client MCP Java ;
+- réponses JSON inspectables dans le contenu MCP ;
+- vrai client MCP Java pour les tests d'intégration ;
 - parité `search_code` avec `NexusApplication.search` ;
 - parité `build_context` avec `NexusApplication.context` ;
-- régression REST après extraction de la façade commune ;
+- validation `find_symbol` ;
+- contrat exact des six tools ;
+- régression REST après extraction de `NexusApplication` ;
 - ADR-0040 ;
 - documentation `docs/developer/mcp.md` ;
-- script `scripts/validate-iteration-12.ps1`.
+- script `scripts/validate-iteration-12.ps1` avec mode `-AdapterOnly` ;
+- runner `adapters/mcp-java/target/nexus-mcp-java-0.1.0-SNAPSHOT-runner.jar`.
 
-Critère de sortie : un client MCP réel peut initialiser une session, découvrir et appeler les tools NEXUS, et recevoir pour les capacités centrales les mêmes résultats que la façade utilisée par l'API.
+Validation réelle du 20 juillet 2026 :
 
-Aucune validation n'est revendiquée avant exécution locale du script d'itération.
+- `mvn clean install` du cœur : succès ;
+- 45 tests cœur, 0 échec, 0 erreur ;
+- baseline qualité conservée : `precision@3 = 0,4444`, `recall@3 = 1,0000` ;
+- `SELF-SMOKE SUCCESS` ;
+- 216 fichiers indexés ;
+- 1 152 symboles ;
+- 9 562 relations ;
+- indexation complète : 2 068 ms ;
+- indexation incrémentale : 659 ms ;
+- recherche explicable : 726 ms ;
+- contexte strict : 3 items, 100/180 tokens, 882 ms ;
+- contexte multi-source : 12 items, 1 187/1 200 tokens, 1 082 ms ;
+- contexte avec skill : 1 194/1 200 tokens, 1 101 ms ;
+- contexte Git : 1 598/1 600 tokens, 1 080 ms ;
+- réduction du contexte candidat strict : 99,39 % ;
+- régression REST après façade commune : succès ;
+- client MCP STDIO réel : succès ;
+- parité `search_code` : succès ;
+- parité `build_context` : succès ;
+- `find_symbol` : succès ;
+- test MCP final : 1 test, 0 échec, 0 erreur ;
+- contrat exact des six tools : succès ;
+- build MCP final : 10,056 s ;
+- packaging runner MCP : succès.
+
+Défaut révélé et corrigé pendant la validation :
+
+- le premier démarrage du client MCP a échoué avec `NoClassDefFoundError: JsonSerializeAs` à cause d'un graphe Jackson incohérent entre NEXUS et `mcp-json-jackson2` ;
+- le POM MCP aligne désormais explicitement `jackson-core` et `jackson-databind` sur `2.22.1`, ainsi que `jackson-annotations` sur `2.21`, sans modifier les dépendances du cœur.
+
+Critère de sortie : **validé**. Un client MCP réel initialise une session STDIO, découvre exactement les six tools NEXUS et obtient pour la recherche et la construction du contexte les mêmes résultats que la façade applicative commune utilisée par l'API.
+
+PR #5 fusionnée dans `main` au commit `d6e6b190b4082686c1514b0a82f2fef033180858`.
 
 ---
 
 ## Itération 13 — Adaptateurs Copilot et Claude
 
-Objectif : faciliter l'utilisation de NEXUS dans des environnements ayant leurs propres mécanismes de contexte.
+État : **en cours**.
 
-Livrables à étudier :
+Objectif : faciliter l'utilisation de NEXUS dans GitHub Copilot et Claude sans créer deux implémentations propriétaires du moteur de contexte.
 
-- adaptateur Copilot ;
-- adaptateur Claude ;
-- découverte de leurs conventions projet ;
-- traduction entre leurs concepts et le modèle NEXUS ;
-- mécanismes d'invocation adaptés à chaque environnement ;
-- documentation d'intégration.
+Orientation retenue au démarrage :
 
-NEXUS ne remplace pas leurs systèmes natifs. Il fournit une couche commune d'intelligence de contexte.
+- réutiliser l'adaptateur MCP NEXUS validé à l'Itération 12 ;
+- fournir des mécanismes d'installation et de configuration adaptés aux clients ;
+- cibler GitHub Copilot dans les environnements MCP pris en charge, notamment les IDE JetBrains et Copilot CLI ;
+- cibler Claude Code via ses scopes MCP `local`, `project` et `user` ;
+- générer des configurations reproductibles autour du runner MCP NEXUS ;
+- ne jamais modifier silencieusement une configuration utilisateur ;
+- conserver les conventions natives déjà indexées par NEXUS (`.github/copilot-instructions.md`, `.github/instructions/**`, `CLAUDE.md`) ;
+- documenter clairement la frontière entre instructions natives et tools MCP NEXUS.
+
+Premier incrément prévu :
+
+- profil d'intégration `copilot` ;
+- profil d'intégration `claude` ;
+- génération de commandes d'installation MCP locales ;
+- génération de snippets de configuration partageables ;
+- validation des chemins Windows ;
+- tests déterministes de génération ;
+- documentation d'installation ;
+- aucun appel réseau ni authentification gérés par NEXUS.
+
+Critère de sortie : depuis un runner MCP NEXUS local, un développeur peut obtenir une configuration ou une commande d'installation valide pour Copilot et Claude, sans dupliquer la logique du moteur ni exposer de secret.
 
 ---
 
