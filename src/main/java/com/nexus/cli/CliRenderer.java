@@ -244,7 +244,7 @@ final class CliRenderer {
         List<String> commands = List.of(
                 "project add <chemin> [nom] [--json]",
                 "project list [--json]",
-                "index <id-ou-nom> [--rebuild] [--json]",
+                "index <id-ou-nom> [--rebuild] [--deep-java] [--json]",
                 "search <id-ou-nom> <requête> [--limit N] [--explain] [--json]",
                 "context <id-ou-nom> <requête> [--budget N] [--explain] [--json]",
                 "inspect <id-ou-nom> [--json]",
