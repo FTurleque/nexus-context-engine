@@ -3,6 +3,7 @@ package com.nexus.index.scan;
 import com.nexus.index.FileCategory;
 import com.nexus.index.FileHasher;
 import com.nexus.index.ScannedFile;
+import com.nexus.index.SourceLanguage;
 
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
@@ -62,13 +63,13 @@ public final class ProjectScanner {
     }
 
     private static boolean isSupportedTextSource(Path file) {
-        String fileName = file.getFileName().toString().toLowerCase(Locale.ROOT);
-        return fileName.endsWith(".java") || fileName.endsWith(".md");
+        return SourceLanguage.detect(file).isPresent();
     }
 
-    private static String language(Path file) {
-        String fileName = file.getFileName().toString().toLowerCase(Locale.ROOT);
-        return fileName.endsWith(".java") ? "java" : "markdown";
+    private static String language(Path file) throws IOException {
+        return SourceLanguage.detect(file)
+                .map(SourceLanguage::id)
+                .orElseThrow(() -> new IOException("Langage source non pris en charge : " + file));
     }
 
     private static FileCategory classify(Path relativePath) {
@@ -89,16 +90,41 @@ public final class ProjectScanner {
         if (lowerFileName.endsWith(".md")) {
             return FileCategory.DOCUMENTATION;
         }
-
-        String paddedPath = "/" + lowerPath + "/";
-        if (paddedPath.contains("/src/test/")
-                || paddedPath.contains("/src/it/")
-                || fileName.endsWith("Test.java")
-                || fileName.endsWith("Tests.java")
-                || fileName.endsWith("IT.java")) {
+        if (isTestFile(lowerPath, fileName, lowerFileName)) {
             return FileCategory.TEST;
         }
         return FileCategory.SOURCE;
+    }
+
+    private static boolean isTestFile(String lowerPath, String fileName, String lowerFileName) {
+        String paddedPath = "/" + lowerPath + "/";
+        if (paddedPath.contains("/src/test/")
+                || paddedPath.contains("/src/it/")
+                || paddedPath.contains("/test/")
+                || paddedPath.contains("/tests/")
+                || paddedPath.contains("/__tests__/")) {
+            return true;
+        }
+        if (fileName.endsWith("Test.java") || fileName.endsWith("Tests.java") || fileName.endsWith("IT.java")) {
+            return true;
+        }
+        if (fileName.endsWith("Test.kt") || fileName.endsWith("Tests.kt")) {
+            return true;
+        }
+        if (lowerFileName.startsWith("test_") && lowerFileName.endsWith(".py")) {
+            return true;
+        }
+        if (lowerFileName.endsWith("_test.py")) {
+            return true;
+        }
+        return lowerFileName.endsWith(".test.ts")
+                || lowerFileName.endsWith(".test.tsx")
+                || lowerFileName.endsWith(".spec.ts")
+                || lowerFileName.endsWith(".spec.tsx")
+                || lowerFileName.endsWith(".test.js")
+                || lowerFileName.endsWith(".test.jsx")
+                || lowerFileName.endsWith(".spec.js")
+                || lowerFileName.endsWith(".spec.jsx");
     }
 
     private static boolean isAgentProfile(String lowerPath, String lowerFileName) {
