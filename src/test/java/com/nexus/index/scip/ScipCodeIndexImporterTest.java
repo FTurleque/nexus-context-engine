@@ -94,6 +94,34 @@ class ScipCodeIndexImporterTest {
                 indexed.relation().sourceProvider().equals(ScipCodeIndexImporter.SOURCE_PROVIDER)));
     }
 
+    @Test
+    void fallsBackToLegacyPackedRangeWhenTypedRangeIsMissing() throws Exception {
+        Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("legacy-project"));
+        String typeSymbol = "scip-java maven demo app 1.0 demo/Legacy#";
+        byte[] definitionOccurrence = message(
+                packedInt32Field(1, 4, 0, 6, 1),
+                stringField(2, typeSymbol),
+                varintField(3, 1));
+        byte[] symbolInformation = message(
+                stringField(1, typeSymbol),
+                varintField(5, 7),
+                stringField(6, "Legacy"));
+        byte[] document = message(
+                stringField(1, "src/main/java/demo/Legacy.java"),
+                messageField(2, definitionOccurrence),
+                messageField(3, symbolInformation));
+        Files.write(projectRoot.resolve("index.scip"), messageField(2, document));
+
+        CodeIntelligenceSnapshot snapshot = new ScipCodeIndexImporter()
+                .importIndex(projectRoot)
+                .orElseThrow();
+
+        assertEquals(1, snapshot.symbols().size());
+        assertEquals(SymbolKind.CLASS, snapshot.symbols().getFirst().symbol().kind());
+        assertEquals(5, snapshot.symbols().getFirst().symbol().startLine());
+        assertEquals(7, snapshot.symbols().getFirst().symbol().endLine());
+    }
+
     private static byte[] message(byte[]... fields) throws IOException {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         for (byte[] field : fields) {
