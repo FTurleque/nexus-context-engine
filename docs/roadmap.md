@@ -503,19 +503,66 @@ Le critère de sortie est donc validé : NEXUS applique réellement la divulgati
 
 ## Itération 7 — Contexte Git
 
+État : **terminée et validée localement le 20 juillet 2026**.
+
 Objectif : enrichir la pertinence avec l'historique récent du projet sans transformer NEXUS en client Git complet.
 
-Livrables :
+Livrables validés :
 
+- `CandidateEnricher` pour chaîner les enrichissements de recherche ;
+- `GitRecencyCandidateEnricher` et signal `gitRecencyScore` ;
+- bonus de récence configurable, `0,05` par défaut et désactivable avec `0` ;
 - `GitContextSourceProvider` ;
+- `LocalGitContextSourceProvider` ;
 - commits récents liés aux fichiers sélectionnés ;
-- diff pertinent ;
-- historique limité d'un fichier ou symbole ;
+- historique limité des fichiers candidats ;
+- patches locaux indexés et non indexés limités aux chemins candidats ;
+- résumé des changements non suivis ou manquants ;
 - détection de fichiers fréquemment modifiés ensemble ;
-- bonus de récence configurable dans le ranking ;
-- budget spécifique pour le contexte Git.
+- confinement au sous-projet lorsqu'un projet NEXUS est imbriqué dans un monorepo ;
+- contexte Git strictement local et en lecture seule ;
+- contexte Git désactivé sous 500 tokens ;
+- budget spécifique limité à 15 % du budget global et à 500 tokens ;
+- métadonnées et explications Git dans le `ContextBundle` ;
+- self-smoke étendu à 13 étapes.
 
-Critère de sortie : le contexte Git améliore les résultats sur des scénarios mesurés sans provoquer une explosion du volume de contexte.
+Décision associée :
+
+- ADR-0035 — intégrer le contexte Git local comme source bornée et explicable.
+
+Validation locale du 20 juillet 2026 :
+
+- `mvn clean install` : succès ;
+- compilation de 106 fichiers source avec `--release 21` ;
+- compilation de 20 fichiers de test ;
+- 35 tests exécutés, 0 échec, 0 erreur, 0 ignoré ;
+- baseline qualité conservée : `mean precision@3 = 0,4444`, `mean recall@3 = 1,0000` ;
+- JAR bibliothèque et JAR CLI autonome générés et installés.
+
+Validation self-smoke à 13 étapes :
+
+- JAR autonome : succès ;
+- Java et Markdown détectés ;
+- première indexation : 181 fichiers scannés, 181 modifiés, 0 supprimé ;
+- index produit : 181 fichiers, 548 symboles, 1 034 relations ;
+- indexation complète : 1 347 ms ;
+- seconde indexation incrémentale : 270 ms, 0 modifié, 0 supprimé ;
+- recherche `ProjectIndexingService` : fichier principal classé premier avec contribution Git explicable ;
+- latence de la recherche explicable mesurée : 3 603 ms ;
+- contexte strict : 5 items, 174/180 tokens, 782 ms, Git désactivé comme attendu sous 500 tokens ;
+- contexte multi-source : 11 items, 1 192/1 200 tokens, 882 ms ;
+- contexte avec skill : 1 194/1 200 tokens, 939 ms ;
+- contexte Git dédié : 1 597/1 600 tokens, 874 ms ;
+- 50 commits inspectés ;
+- 24 commits liés aux chemins candidats ;
+- 2 fragments Git sélectionnés ;
+- 128 tokens Git sélectionnés pour un budget Git de 240 tokens ;
+- réduction du contexte candidat strict : environ 99,2 % ;
+- résultat final : `SELF-SMOKE SUCCESS`.
+
+Critère de sortie : **validé pour le périmètre actuel**. NEXUS enrichit le ranking avec un signal Git mesurable et injecte du contexte Git ciblé sans explosion du volume de contexte, sans dépasser le budget global et sans rendre Git obligatoire.
+
+Point de surveillance : le self-smoke a mesuré 3 603 ms sur la recherche explicable avec inspection de 50 commits. Cette latence n'est pas bloquante pour valider l'itération, mais elle doit être benchmarkée sur plusieurs tailles de repositories avant de décider d'ajouter un cache Git, une persistance dédiée ou une stratégie de rafraîchissement incrémentale.
 
 ---
 
