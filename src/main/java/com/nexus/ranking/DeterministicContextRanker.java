@@ -18,7 +18,8 @@ public final class DeterministicContextRanker implements ContextRanker {
             SearchSignals.SYMBOL_EXACT, 0.30d,
             SearchSignals.SYMBOL_FUZZY, 0.10d,
             SearchSignals.PATH, 0.10d,
-            SearchSignals.GRAPH, 0.10d);
+            SearchSignals.GRAPH, 0.10d,
+            SearchSignals.GIT_RECENCY, 0.05d);
 
     @Override
     public List<RankedCandidate> rank(RankingRequest request, List<SearchCandidate> candidates) {
@@ -44,7 +45,8 @@ public final class DeterministicContextRanker implements ContextRanker {
                 SearchSignals.SYMBOL_EXACT,
                 SearchSignals.SYMBOL_FUZZY,
                 SearchSignals.PATH,
-                SearchSignals.GRAPH)) {
+                SearchSignals.GRAPH,
+                SearchSignals.GIT_RECENCY)) {
             double normalized = clamp(candidate.signals().getOrDefault(signal, 0.0d));
             double contribution = normalized * WEIGHTS.get(signal);
             if (contribution <= 0.0d) {
@@ -67,6 +69,7 @@ public final class DeterministicContextRanker implements ContextRanker {
             case SearchSignals.SYMBOL_FUZZY -> "similarité de symbole";
             case SearchSignals.PATH -> "correspondance du chemin";
             case SearchSignals.GRAPH -> "proximité dans le graphe";
+            case SearchSignals.GIT_RECENCY -> "récence Git locale";
             default -> signal;
         };
         return String.format(Locale.ROOT, "%s: %.3f -> +%.3f", label, normalized, contribution);
