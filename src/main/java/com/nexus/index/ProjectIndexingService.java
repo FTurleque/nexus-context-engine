@@ -126,8 +126,7 @@ public final class ProjectIndexingService {
                     continue;
                 }
 
-                LanguageAnalyzer analyzer = findAnalyzer(scannedFile);
-                AnalysisResult analysis = analyzer.analyze(project.rootPath(), scannedFile.absolutePath());
+                AnalysisResult analysis = analyzeScannedFile(project.rootPath(), scannedFile);
                 updates.add(new IndexedFileUpdate(scannedFile, analysis));
                 if (genericSearchEligible) {
                     searchDocuments.add(new SearchDocument(
@@ -225,11 +224,13 @@ public final class ProjectIndexingService {
                 .anyMatch(file -> "java".equalsIgnoreCase(file.language()));
     }
 
-    private LanguageAnalyzer findAnalyzer(ScannedFile file) throws IOException {
-        return analyzers.stream()
-                .filter(analyzer -> analyzer.supports(file.absolutePath()))
-                .findFirst()
-                .orElseThrow(() -> new IOException("Aucun analyseur disponible pour " + file.relativePath()));
+    private AnalysisResult analyzeScannedFile(java.nio.file.Path projectRoot, ScannedFile file) throws IOException {
+        for (LanguageAnalyzer analyzer : analyzers) {
+            if (analyzer.supports(file.absolutePath())) {
+                return analyzer.analyze(projectRoot, file.absolutePath());
+            }
+        }
+        return new AnalysisResult(file.absolutePath(), file.language(), List.of(), List.of());
     }
 
     private static boolean isGenericSearchEligible(FileCategory category) {
