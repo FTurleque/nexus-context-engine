@@ -7,10 +7,12 @@ import com.nexus.context.source.ContextSourceFragmentFactory;
 import com.nexus.context.source.ContextSourceProvider;
 import com.nexus.context.source.ContextSourceQuery;
 import com.nexus.context.source.NativeProjectCustomizationDetector;
+import com.nexus.context.source.git.GitContextQuery;
+import com.nexus.context.source.git.GitContextResult;
+import com.nexus.context.source.git.GitContextSourceProvider;
 import com.nexus.context.source.skill.ActivatedSkill;
 import com.nexus.context.source.skill.SkillActivationResult;
 import com.nexus.context.source.skill.SkillContextSelector;
-import com.nexus.context.source.skill.SkillDescriptor;
 import com.nexus.context.source.skill.SkillDiscoveryResult;
 import com.nexus.context.source.skill.SkillDiscoveryService;
 import com.nexus.context.source.skill.SkillLoader;
@@ -45,6 +47,8 @@ public final class DefaultContextBuilder implements ContextBuilder {
     private static final int MAX_RETRIEVAL_LIMIT = 100;
     private static final int MAX_INSTRUCTION_BUDGET = 600;
     private static final int MAX_SKILL_BUDGET = 2_000;
+    private static final int MAX_GIT_BUDGET = 500;
+    private static final int MIN_TOTAL_BUDGET_FOR_GIT = 500;
 
     private final ProjectRepository projectRepository;
     private final SearchService searchService;
@@ -54,6 +58,7 @@ public final class DefaultContextBuilder implements ContextBuilder {
     private final TokenEstimator tokenEstimator;
     private final List<ContextSourceProvider> sourceProviders;
     private final List<SkillSourceProvider> skillProviders;
+    private final GitContextSourceProvider gitContextProvider;
     private final ContextSourceDiscoveryService sourceDiscoveryService;
     private final ContextSourceFragmentFactory sourceFragmentFactory;
     private final SkillDiscoveryService skillDiscoveryService;
@@ -77,7 +82,8 @@ public final class DefaultContextBuilder implements ContextBuilder {
                 contextSelector,
                 tokenEstimator,
                 List.of(),
-                List.of());
+                List.of(),
+                null);
     }
 
     public DefaultContextBuilder(
@@ -96,7 +102,8 @@ public final class DefaultContextBuilder implements ContextBuilder {
                 contextSelector,
                 tokenEstimator,
                 sourceProviders,
-                List.of());
+                List.of(),
+                null);
     }
 
     public DefaultContextBuilder(
@@ -108,6 +115,28 @@ public final class DefaultContextBuilder implements ContextBuilder {
             TokenEstimator tokenEstimator,
             List<ContextSourceProvider> sourceProviders,
             List<SkillSourceProvider> skillProviders) {
+        this(
+                projectRepository,
+                searchService,
+                fragmentFactory,
+                fragmentMerger,
+                contextSelector,
+                tokenEstimator,
+                sourceProviders,
+                skillProviders,
+                null);
+    }
+
+    public DefaultContextBuilder(
+            ProjectRepository projectRepository,
+            SearchService searchService,
+            ContextFragmentFactory fragmentFactory,
+            FragmentMerger fragmentMerger,
+            BudgetedContextSelector contextSelector,
+            TokenEstimator tokenEstimator,
+            List<ContextSourceProvider> sourceProviders,
+            List<SkillSourceProvider> skillProviders,
+            GitContextSourceProvider gitContextProvider) {
         this.projectRepository = Objects.requireNonNull(projectRepository, "projectRepository");
         this.searchService = Objects.requireNonNull(searchService, "searchService");
         this.fragmentFactory = Objects.requireNonNull(fragmentFactory, "fragmentFactory");
@@ -116,6 +145,7 @@ public final class DefaultContextBuilder implements ContextBuilder {
         this.tokenEstimator = Objects.requireNonNull(tokenEstimator, "tokenEstimator");
         this.sourceProviders = List.copyOf(Objects.requireNonNull(sourceProviders, "sourceProviders"));
         this.skillProviders = List.copyOf(Objects.requireNonNull(skillProviders, "skillProviders"));
+        this.gitContextProvider = gitContextProvider;
         this.sourceDiscoveryService = new ContextSourceDiscoveryService();
         this.sourceFragmentFactory = new ContextSourceFragmentFactory();
         this.skillDiscoveryService = new SkillDiscoveryService();
@@ -144,13 +174,19 @@ public final class DefaultContextBuilder implements ContextBuilder {
                     retrievalLimit,
                     request.explain());
             List<RankedCandidate> filtered = filterRequestedSources(request, ranked);
+            List<Path> targetPaths = targetPaths(project, ranked);
 
-            ContextSourceDiscoveryResult nativeDiscovery = discoverNativeSources(request, project, ranked);
+            ContextSourceDiscoveryResult nativeDiscovery = discoverNativeSources(
+                    request,
+                    project,
+                    targetPaths);
             List<ContextFragment> instructionFragments = sourceFragmentFactory.create(nativeDiscovery.sources());
 
             SkillDiscoveryResult skillDiscovery = discoverSkills(request, project);
             List<SkillMatch> skillMatches = skillSelector.select(request.query(), skillDiscovery.skills());
             SkillActivationResult skillActivation = skillLoader.load(project, skillMatches);
+
+            GitContextResult gitContext = discoverGitContext(request, project, targetPaths);
 
             List<ContextFragment> taskFragments = fragmentFactory.create(
                     project,
@@ -186,11 +222,24 @@ public final class DefaultContextBuilder implements ContextBuilder {
                     skillBudget,
                     request.explain());
 
-            int remainingBudget = Math.max(
+            int remainingAfterSkills = Math.max(
                     0,
                     request.tokenBudget()
                             - instructionSelection.selectedEstimatedTokens()
                             - skillSelection.selectedEstimatedTokens());
+            int gitBudget = gitBudget(request.tokenBudget(), remainingAfterSkills, gitContext);
+            ContextSelectionResult gitSelection = selectOrEmpty(
+                    gitContext.fragments(),
+                    gitBudget,
+                    request.explain(),
+                    "contexte Git");
+
+            int remainingBudget = Math.max(
+                    0,
+                    request.tokenBudget()
+                            - instructionSelection.selectedEstimatedTokens()
+                            - skillSelection.selectedEstimatedTokens()
+                            - gitSelection.selectedEstimatedTokens());
             ContextSelectionResult taskSelection = selectOrEmpty(
                     mergedTaskFragments,
                     remainingBudget,
@@ -200,6 +249,7 @@ public final class DefaultContextBuilder implements ContextBuilder {
             ContextSelectionResult combined = combineSelections(
                     instructionSelection,
                     skillSelection,
+                    gitSelection,
                     taskSelection);
             Map<String, List<String>> nativeCustomizations = customizationDetector.detect(project);
             Map<String, Object> metadata = metadata(
@@ -218,6 +268,9 @@ public final class DefaultContextBuilder implements ContextBuilder {
                     skillActivation,
                     skillBudget,
                     skillSelection,
+                    gitContext,
+                    gitBudget,
+                    gitSelection,
                     combined,
                     nativeCustomizations);
             return new ContextBundle(
@@ -236,11 +289,10 @@ public final class DefaultContextBuilder implements ContextBuilder {
     private ContextSourceDiscoveryResult discoverNativeSources(
             ContextRequest request,
             ProjectDescriptor project,
-            List<RankedCandidate> ranked) throws IOException {
+            List<Path> targetPaths) throws IOException {
         if (!sourceRequested(request, CandidateType.INSTRUCTION) || sourceProviders.isEmpty()) {
             return new ContextSourceDiscoveryResult(List.of(), List.of());
         }
-        List<Path> targetPaths = targetPaths(project, ranked);
         return sourceDiscoveryService.discover(
                 sourceProviders,
                 new ContextSourceQuery(project, request.query(), targetPaths, request.explain()));
@@ -255,6 +307,23 @@ public final class DefaultContextBuilder implements ContextBuilder {
         return skillDiscoveryService.discover(
                 skillProviders,
                 new SkillSourceQuery(project, request.explain()));
+    }
+
+    private GitContextResult discoverGitContext(
+            ContextRequest request,
+            ProjectDescriptor project,
+            List<Path> targetPaths) throws IOException {
+        if (!sourceRequested(request, CandidateType.GIT) || gitContextProvider == null) {
+            return GitContextResult.disabled("provider Git absent ou source GIT non demandée");
+        }
+        if (request.tokenBudget() < MIN_TOTAL_BUDGET_FOR_GIT) {
+            return GitContextResult.disabled("contexte Git désactivé pour un budget global inférieur à 500 tokens");
+        }
+        return gitContextProvider.discover(new GitContextQuery(
+                project,
+                request.query(),
+                targetPaths,
+                request.explain()));
     }
 
     private ContextSelectionResult selectOrEmpty(
@@ -356,6 +425,21 @@ public final class DefaultContextBuilder implements ContextBuilder {
         return Math.min(remainingBudget, Math.min(MAX_SKILL_BUDGET, fifth));
     }
 
+    private static int gitBudget(
+            int totalBudget,
+            int remainingBudget,
+            GitContextResult gitContext) {
+        if (!gitContext.enabled()
+                || !gitContext.repositoryAvailable()
+                || gitContext.fragments().isEmpty()
+                || remainingBudget <= 0
+                || totalBudget < MIN_TOTAL_BUDGET_FOR_GIT) {
+            return 0;
+        }
+        int fifteenPercent = Math.max(64, (totalBudget * 15) / 100);
+        return Math.min(remainingBudget, Math.min(MAX_GIT_BUDGET, fifteenPercent));
+    }
+
     private Map<String, Object> metadata(
             ContextRequest request,
             List<RankedCandidate> ranked,
@@ -372,6 +456,9 @@ public final class DefaultContextBuilder implements ContextBuilder {
             SkillActivationResult skillActivation,
             int skillBudget,
             ContextSelectionResult skillSelection,
+            GitContextResult gitContext,
+            int gitBudget,
+            ContextSelectionResult gitSelection,
             ContextSelectionResult combined,
             Map<String, List<String>> nativeCustomizations) {
         Map<String, Object> metadata = new LinkedHashMap<>();
@@ -410,6 +497,16 @@ public final class DefaultContextBuilder implements ContextBuilder {
                 .map(item -> repositoryPath(item.path()))
                 .toList());
         metadata.put("skillsExecuted", false);
+        metadata.put("gitProvider", gitContextProvider == null ? "" : gitContextProvider.id());
+        metadata.put("gitEnabled", gitContext.enabled());
+        metadata.put("gitRepositoryAvailable", gitContext.repositoryAvailable());
+        metadata.put("gitDiagnostics", gitContext.diagnostics());
+        metadata.put("gitCommitsInspected", gitContext.commitsInspected());
+        metadata.put("gitRelatedCommits", gitContext.relatedCommits());
+        metadata.put("gitCoChangeLinks", gitContext.coChangeLinks());
+        metadata.put("gitBudget", gitBudget);
+        metadata.put("gitSelectedItems", gitSelection.items().size());
+        metadata.put("gitSelectedTokens", gitSelection.selectedEstimatedTokens());
         metadata.put("nativeCustomizationsDetected", nativeCustomizations);
         metadata.put("selectedItems", combined.items().size());
         metadata.put("excludedItems", combined.excluded().size());
