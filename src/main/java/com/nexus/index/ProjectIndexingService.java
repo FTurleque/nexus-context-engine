@@ -28,6 +28,7 @@ public final class ProjectIndexingService {
     private final ProjectScanner scanner;
     private final List<LanguageAnalyzer> analyzers;
     private final SearchIndex searchIndex;
+    private final List<CodeIndexImporter> codeIndexImporters;
 
     public ProjectIndexingService(
             ProjectRepository projectRepository,
@@ -35,11 +36,22 @@ public final class ProjectIndexingService {
             ProjectScanner scanner,
             List<LanguageAnalyzer> analyzers,
             SearchIndex searchIndex) {
+        this(projectRepository, indexRepository, scanner, analyzers, searchIndex, List.of());
+    }
+
+    public ProjectIndexingService(
+            ProjectRepository projectRepository,
+            IndexRepository indexRepository,
+            ProjectScanner scanner,
+            List<LanguageAnalyzer> analyzers,
+            SearchIndex searchIndex,
+            List<CodeIndexImporter> codeIndexImporters) {
         this.projectRepository = Objects.requireNonNull(projectRepository, "projectRepository");
         this.indexRepository = Objects.requireNonNull(indexRepository, "indexRepository");
         this.scanner = Objects.requireNonNull(scanner, "scanner");
         this.analyzers = List.copyOf(Objects.requireNonNull(analyzers, "analyzers"));
         this.searchIndex = Objects.requireNonNull(searchIndex, "searchIndex");
+        this.codeIndexImporters = List.copyOf(Objects.requireNonNull(codeIndexImporters, "codeIndexImporters"));
     }
 
     public IndexingReport index(UUID projectId) throws IOException {
@@ -58,7 +70,6 @@ public final class ProjectIndexingService {
         boolean fullRebuild = explicitRebuild || project.indexStatus() != IndexStatus.READY;
         Instant startedAt = Instant.now();
         projectRepository.save(withState(project, IndexStatus.INDEXING, project.lastIndexedAt(), project.languages()));
-
         try {
             List<ScannedFile> scannedFiles = scanner.scan(project.rootPath());
             Map<String, IndexedFile> existingFiles = indexRepository.findFiles(projectId);
@@ -101,6 +112,7 @@ public final class ProjectIndexingService {
             }
 
             indexRepository.applyChanges(projectId, updates, removedPaths);
+            refreshExternalCodeIntelligence(projectId, project.rootPath());
             if (fullRebuild) {
                 searchIndex.rebuild(projectId, searchDocuments);
             } else {
@@ -124,6 +136,18 @@ public final class ProjectIndexingService {
         } catch (IOException | RuntimeException exception) {
             markFailed(project, exception);
             throw exception;
+        }
+    }
+
+    private void refreshExternalCodeIntelligence(UUID projectId, java.nio.file.Path projectRoot) throws IOException {
+        for (CodeIndexImporter importer : codeIndexImporters) {
+            CodeIntelligenceSnapshot snapshot = importer.importIndex(projectRoot)
+                    .orElseGet(() -> CodeIntelligenceSnapshot.empty(importer.sourceProvider()));
+            if (!importer.sourceProvider().equals(snapshot.sourceProvider())) {
+                throw new IOException(
+                        "Le snapshot importé ne correspond pas au provider " + importer.sourceProvider());
+            }
+            indexRepository.replaceExternalCodeIntelligence(projectId, snapshot);
         }
     }
 
