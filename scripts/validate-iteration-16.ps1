@@ -42,24 +42,28 @@ try {
     }
 
     Write-Host
-    Write-Host "[3/3] Tests dedies recherche federee et baseline qualite"
-    Invoke-Maven -Arguments @("-Dtest=FederatedSearchServiceIntegrationTest,GoldenSearchCorpusTest", "test")
+    Write-Host "[3/3] Tests dedies recherche federee et baselines qualite"
+    Invoke-Maven -Arguments @(
+        "-Dtest=FederatedSearchServiceIntegrationTest,FederatedGoldenSearchCorpusTest,GoldenSearchCorpusTest",
+        "test"
+    )
 
     Write-Host
     Write-Host "=== VALIDATION ITERATION 16 - PREMIER INCREMENT ==="
     if ($FocusedOnly) {
-        Write-Host "Coeur Maven             : SKIPPED"
-        Write-Host "Self-smoke              : SKIPPED"
+        Write-Host "Coeur Maven              : SKIPPED"
+        Write-Host "Self-smoke               : SKIPPED"
     }
     else {
-        Write-Host "Coeur Maven             : SUCCESS"
-        Write-Host "Self-smoke              : SUCCESS"
+        Write-Host "Coeur Maven              : SUCCESS"
+        Write-Host "Self-smoke               : SUCCESS"
     }
-    Write-Host "Recherche multi-projet  : SUCCESS"
-    Write-Host "Provenance projectId    : VALIDEE PAR TEST"
-    Write-Host "Corpus golden historique: SUCCESS"
-    Write-Host "Moteur externe          : NON INTRODUIT"
-    Write-Host "==================================================="
+    Write-Host "Recherche multi-projet   : SUCCESS"
+    Write-Host "Provenance projectId     : VALIDEE PAR TEST"
+    Write-Host "Corpus golden historique : SUCCESS"
+    Write-Host "Corpus golden federe     : SUCCESS"
+    Write-Host "Moteur externe           : NON INTRODUIT"
+    Write-Host "===================================================="
     Write-Host
     Write-Host "VALIDATION ITERATION 16 - PREMIER INCREMENT TERMINEE"
 }
