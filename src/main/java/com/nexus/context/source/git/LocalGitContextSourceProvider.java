@@ -84,10 +84,10 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
                     if (fileHistory.size() < MAX_HISTORY_PER_PATH) {
                         fileHistory.add(summary);
                     }
-                    for (String changedPath : changed) {
-                        if (!targets.contains(changedPath)) {
-                            coChanges.merge(changedPath, 1, Integer::sum);
-                        }
+                }
+                for (String changedPath : changed) {
+                    if (!targets.contains(changedPath)) {
+                        coChanges.merge(changedPath, 1, Integer::sum);
                     }
                 }
             }
