@@ -22,7 +22,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -45,7 +44,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
     public GitContextResult discover(GitContextQuery query) throws IOException {
         Set<String> targets = normalizedTargets(query.targetPaths());
         if (targets.isEmpty()) {
-            return new GitContextResult(List.of(), true, 0, 0, 0, List.of());
+            return new GitContextResult(List.of(), true, true, 0, 0, 0, List.of());
         }
 
         List<String> diagnostics = new ArrayList<>();
@@ -102,6 +101,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
             return new GitContextResult(
                     fragments,
                     true,
+                    true,
                     commitsInspected,
                     related.size(),
                     coChangeLinks,
@@ -110,7 +110,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
             return GitContextResult.unavailable("aucun repository Git local détecté");
         } catch (Exception exception) {
             diagnostics.add("contexte Git indisponible : " + safeMessage(exception));
-            return new GitContextResult(List.of(), false, commitsInspected, 0, 0, diagnostics);
+            return new GitContextResult(List.of(), true, false, commitsInspected, 0, 0, diagnostics);
         }
     }
 
