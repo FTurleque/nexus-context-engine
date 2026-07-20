@@ -210,7 +210,7 @@ PR #5 fusionnée dans `main` au commit `d6e6b190b4082686c1514b0a82f2fef033180858
 
 ## Itération 13 — Adaptateurs Copilot et Claude
 
-État : **terminée et validée localement le 20 juillet 2026**.
+État : **terminée, validée localement et fusionnée le 20 juillet 2026**.
 
 Objectif : faciliter l'utilisation de NEXUS dans GitHub Copilot et Claude sans créer deux implémentations propriétaires du moteur de contexte.
 
@@ -274,7 +274,7 @@ Les avertissements SLF4J, native access, Vector API et Maven Shade observés pen
 
 Critère de sortie : **validé**. Depuis un runner MCP NEXUS local, un développeur peut obtenir une configuration ou une commande d'installation déterministe pour les quatre profils clients couverts, sans dupliquer la logique du moteur, modifier silencieusement ses préférences ou exposer de secret.
 
-La PR #6 porte l'ensemble de l'Itération 13 et sera fusionnée dans `main` après validation de cette mise à jour de roadmap.
+PR #6 fusionnée dans `main` au commit `05b311044b8bb0a64dfc598d7e2e00b31f8359a7`.
 
 ---
 
