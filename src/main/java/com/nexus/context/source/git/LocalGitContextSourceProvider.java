@@ -42,8 +42,8 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
 
     @Override
     public GitContextResult discover(GitContextQuery query) throws IOException {
-        Set<String> targets = normalizedTargets(query.targetPaths());
-        if (targets.isEmpty()) {
+        Set<String> projectTargets = normalizedTargets(query.targetPaths());
+        if (projectTargets.isEmpty()) {
             return new GitContextResult(List.of(), true, true, 0, 0, 0, List.of());
         }
 
@@ -60,42 +60,56 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
             diffFormatter.setRepository(repository);
             diffFormatter.setDetectRenames(true);
 
+            String projectPrefix = projectPrefix(repository, query.project().rootPath());
+            Map<String, String> projectPathByGitTarget = new LinkedHashMap<>();
+            for (String projectTarget : projectTargets) {
+                projectPathByGitTarget.put(toGitPath(projectPrefix, projectTarget), projectTarget);
+            }
+            Set<String> gitTargets = projectPathByGitTarget.keySet();
+
             for (RevCommit commit : git.log().setMaxCount(MAX_COMMITS).call()) {
                 commitsInspected++;
                 if (commit.getParentCount() == 0) {
                     continue;
                 }
                 RevCommit parent = revWalk.parseCommit(commit.getParent(0).getId());
-                Set<String> changed = changedPaths(diffFormatter, parent, commit);
-                Set<String> touchedTargets = intersection(changed, targets);
-                if (touchedTargets.isEmpty()) {
+                Set<String> changedGitPaths = changedPaths(diffFormatter, parent, commit);
+                Set<String> touchedGitTargets = intersection(changedGitPaths, gitTargets);
+                if (touchedGitTargets.isEmpty()) {
                     continue;
                 }
 
+                List<String> changedProjectPaths = changedGitPaths.stream()
+                        .map(path -> toProjectPath(projectPrefix, path))
+                        .filter(java.util.Objects::nonNull)
+                        .sorted()
+                        .toList();
                 CommitSummary summary = new CommitSummary(
                         commit.getId().abbreviate(8).name(),
                         Instant.ofEpochSecond(commit.getCommitTime()),
                         commit.getShortMessage(),
-                        List.copyOf(changed.stream().sorted().toList()));
+                        changedProjectPaths);
                 related.add(summary);
 
-                for (String target : touchedTargets) {
-                    List<CommitSummary> fileHistory = history.computeIfAbsent(target, ignored -> new ArrayList<>());
+                for (String gitTarget : touchedGitTargets) {
+                    String projectTarget = projectPathByGitTarget.get(gitTarget);
+                    List<CommitSummary> fileHistory = history.computeIfAbsent(projectTarget, ignored -> new ArrayList<>());
                     if (fileHistory.size() < MAX_HISTORY_PER_PATH) {
                         fileHistory.add(summary);
                     }
                 }
-                for (String changedPath : changed) {
-                    if (!targets.contains(changedPath)) {
-                        coChanges.merge(changedPath, 1, Integer::sum);
+                for (String changedGitPath : changedGitPaths) {
+                    String projectPath = toProjectPath(projectPrefix, changedGitPath);
+                    if (projectPath != null && !projectTargets.contains(projectPath)) {
+                        coChanges.merge(projectPath, 1, Integer::sum);
                     }
                 }
             }
 
             List<ContextFragment> fragments = new ArrayList<>();
-            addRecentCommitsFragment(fragments, related, targets);
+            addRecentCommitsFragment(fragments, related, projectTargets);
             addHistoryFragment(fragments, history);
-            addWorkingTreeFragment(fragments, git.status().call(), targets);
+            addWorkingTreeFragment(fragments, git.status().call(), projectPathByGitTarget);
             int coChangeLinks = addCoChangesFragment(fragments, coChanges);
 
             return new GitContextResult(
@@ -201,14 +215,14 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
     private static void addWorkingTreeFragment(
             List<ContextFragment> fragments,
             Status status,
-            Set<String> targets) {
+            Map<String, String> projectPathByGitTarget) {
         List<String> changes = new ArrayList<>();
-        collectStatus(changes, "ajouté", status.getAdded(), targets);
-        collectStatus(changes, "modifié", status.getModified(), targets);
-        collectStatus(changes, "changé dans l'index", status.getChanged(), targets);
-        collectStatus(changes, "supprimé", status.getRemoved(), targets);
-        collectStatus(changes, "manquant", status.getMissing(), targets);
-        collectStatus(changes, "non suivi", status.getUntracked(), targets);
+        collectStatus(changes, "ajouté", status.getAdded(), projectPathByGitTarget);
+        collectStatus(changes, "modifié", status.getModified(), projectPathByGitTarget);
+        collectStatus(changes, "changé dans l'index", status.getChanged(), projectPathByGitTarget);
+        collectStatus(changes, "supprimé", status.getRemoved(), projectPathByGitTarget);
+        collectStatus(changes, "manquant", status.getMissing(), projectPathByGitTarget);
+        collectStatus(changes, "non suivi", status.getUntracked(), projectPathByGitTarget);
         if (changes.isEmpty()) {
             return;
         }
@@ -260,9 +274,10 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
             List<String> output,
             String label,
             Set<String> statusPaths,
-            Set<String> targets) {
+            Map<String, String> projectPathByGitTarget) {
         statusPaths.stream()
-                .filter(targets::contains)
+                .filter(projectPathByGitTarget::containsKey)
+                .map(projectPathByGitTarget::get)
                 .sorted()
                 .forEach(path -> output.add("- " + label + " : " + path));
     }
@@ -294,6 +309,30 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
             }
         }
         return targets;
+    }
+
+    private static String projectPrefix(Repository repository, Path projectRoot) {
+        Path workTree = repository.getWorkTree().toPath().toAbsolutePath().normalize();
+        Path root = projectRoot.toAbsolutePath().normalize();
+        if (!root.startsWith(workTree)) {
+            return "";
+        }
+        return workTree.relativize(root).toString().replace('\\', '/');
+    }
+
+    private static String toGitPath(String projectPrefix, String projectPath) {
+        return projectPrefix.isBlank() ? projectPath : projectPrefix + "/" + projectPath;
+    }
+
+    private static String toProjectPath(String projectPrefix, String gitPath) {
+        if (gitPath == null || DiffEntry.DEV_NULL.equals(gitPath)) {
+            return null;
+        }
+        if (projectPrefix.isBlank()) {
+            return gitPath;
+        }
+        String prefix = projectPrefix + "/";
+        return gitPath.startsWith(prefix) ? gitPath.substring(prefix.length()) : null;
     }
 
     private static Set<String> intersection(Set<String> left, Set<String> right) {
