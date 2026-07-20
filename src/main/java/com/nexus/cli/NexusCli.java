@@ -8,6 +8,8 @@ import com.nexus.context.ContextFragmentFactory;
 import com.nexus.context.ContextRequest;
 import com.nexus.context.DefaultContextBuilder;
 import com.nexus.context.FragmentMerger;
+import com.nexus.context.source.git.GitRecencyCandidateEnricher;
+import com.nexus.context.source.git.LocalGitContextSourceProvider;
 import com.nexus.context.source.instruction.AgentsMdInstructionProvider;
 import com.nexus.context.source.instruction.ClaudeInstructionProvider;
 import com.nexus.context.source.instruction.CopilotInstructionProvider;
@@ -111,7 +113,9 @@ public final class NexusCli {
                 List.of(
                         new LuceneFileSearchStrategy(searchIndex),
                         new SymbolSearchStrategy(indexRepository)),
-                new GraphCandidateEnricher(indexRepository),
+                List.of(
+                        new GraphCandidateEnricher(indexRepository),
+                        new GitRecencyCandidateEnricher()),
                 new DeterministicContextRanker());
         TokenEstimator tokenEstimator = new HeuristicTokenEstimator();
         ContextBuilder contextBuilder = new DefaultContextBuilder(
@@ -126,7 +130,8 @@ public final class NexusCli {
                         new CopilotInstructionProvider(),
                         new ClaudeInstructionProvider(),
                         new GeminiInstructionProvider()),
-                List.of(new LocalAgentSkillsProvider()));
+                List.of(new LocalAgentSkillsProvider()),
+                new LocalGitContextSourceProvider());
 
         switch (args[0]) {
             case "project" -> handleProject(args, registry, renderer);
