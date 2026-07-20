@@ -282,7 +282,7 @@ PR #6 fusionnée dans `main` au commit `05b311044b8bb0a64dfc598d7e2e00b31f8359a7
 
 ## Itération 14 — AI Skills Registry
 
-État : **terminée et validée localement le 20 juillet 2026**.
+État : **terminée, validée localement et fusionnée le 20 juillet 2026**.
 
 Objectif : connecter la sélection de skills de NEXUS à AI Skills Registry tout en gardant NEXUS utilisable sans registre.
 
@@ -338,6 +338,8 @@ Incident révélé puis corrigé pendant la validation :
 Les avertissements SLF4J, native access, Vector API et Maven Shade observés restent non bloquants pour cette itération.
 
 Critère de sortie : **validé**. NEXUS peut découvrir et sélectionner des skills provenant d'un snapshot local AI Skills Registry sans rendre le registre obligatoire, sans accès réseau pendant une requête et sans perdre la priorité des règles spécifiques au projet.
+
+PR #7 fusionnée dans `main` au commit `118de1333d8c94dd152ebadec2106f8b00e1b291`.
 
 ---
 
