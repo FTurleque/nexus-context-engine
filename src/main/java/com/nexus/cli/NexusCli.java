@@ -15,11 +15,13 @@ import com.nexus.context.source.instruction.ClaudeInstructionProvider;
 import com.nexus.context.source.instruction.CopilotInstructionProvider;
 import com.nexus.context.source.instruction.GeminiInstructionProvider;
 import com.nexus.context.source.skill.LocalAgentSkillsProvider;
+import com.nexus.index.CodeIntelligenceProvider;
 import com.nexus.index.IndexRepository;
 import com.nexus.index.IndexStatistics;
 import com.nexus.index.IndexingReport;
 import com.nexus.index.ProjectIndexingService;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
+import com.nexus.index.jdt.JdtLanguageServerCodeIntelligenceProvider;
 import com.nexus.index.markdown.MarkdownLanguageAnalyzer;
 import com.nexus.index.scan.ProjectScanner;
 import com.nexus.index.scip.ScipCodeIndexImporter;
@@ -102,6 +104,10 @@ public final class NexusCli {
         IndexRepository indexRepository = new SqliteIndexRepository(database);
         ProjectRegistry registry = new ProjectRegistry(projectRepository);
         SearchIndex searchIndex = new LuceneSearchIndex(paths);
+        List<CodeIntelligenceProvider> codeIntelligenceProviders =
+                JdtLanguageServerCodeIntelligenceProvider.fromEnvironment(paths)
+                        .<List<CodeIntelligenceProvider>>map(provider -> List.of(provider))
+                        .orElseGet(List::of);
         ProjectIndexingService indexingService = new ProjectIndexingService(
                 projectRepository,
                 indexRepository,
@@ -110,7 +116,8 @@ public final class NexusCli {
                         new JavaParserLanguageAnalyzer(),
                         new MarkdownLanguageAnalyzer()),
                 searchIndex,
-                List.of(new ScipCodeIndexImporter()));
+                List.of(new ScipCodeIndexImporter()),
+                codeIntelligenceProviders);
         SearchService searchService = new SearchService(
                 List.of(
                         new LuceneFileSearchStrategy(searchIndex),
@@ -176,17 +183,31 @@ public final class NexusCli {
             ProjectRepository projectRepository,
             ProjectIndexingService indexingService,
             CliRenderer renderer) throws Exception {
-        if (args.length < 2 || args.length > 3) {
-            throw new IllegalArgumentException("Usage : nexus index <id-ou-nom> [--rebuild] [--json]");
+        if (args.length < 2 || args.length > 4) {
+            throw new IllegalArgumentException(
+                    "Usage : nexus index <id-ou-nom> [--rebuild] [--deep-java] [--json]");
         }
         ProjectDescriptor project = resolveProject(projectRepository, args[1]);
-        boolean rebuild = args.length == 3 && "--rebuild".equals(args[2]);
-        if (args.length == 3 && !rebuild) {
-            throw new IllegalArgumentException("Option inconnue pour index : " + args[2]);
+        boolean rebuild = false;
+        boolean deepJava = false;
+        for (int index = 2; index < args.length; index++) {
+            switch (args[index]) {
+                case "--rebuild" -> rebuild = true;
+                case "--deep-java" -> deepJava = true;
+                default -> throw new IllegalArgumentException("Option inconnue pour index : " + args[index]);
+            }
         }
-        IndexingReport report = rebuild
-                ? indexingService.rebuild(project.id())
-                : indexingService.index(project.id());
+
+        IndexingReport report;
+        if (deepJava) {
+            report = rebuild
+                    ? indexingService.rebuildWithCodeIntelligence(project.id())
+                    : indexingService.indexWithCodeIntelligence(project.id());
+        } else {
+            report = rebuild
+                    ? indexingService.rebuild(project.id())
+                    : indexingService.index(project.id());
+        }
         ProjectDescriptor updatedProject = projectRepository.findById(project.id()).orElse(project);
         renderer.renderIndex(updatedProject, report);
     }
