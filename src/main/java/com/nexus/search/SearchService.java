@@ -15,15 +15,22 @@ public final class SearchService {
 
     private final List<SearchStrategy> strategies;
     private final CandidateMerger candidateMerger;
-    private final GraphCandidateEnricher graphEnricher;
+    private final List<CandidateEnricher> enrichers;
     private final ContextRanker ranker;
 
     public SearchService(
             List<SearchStrategy> strategies,
             GraphCandidateEnricher graphEnricher,
             ContextRanker ranker) {
+        this(strategies, List.of(graphEnricher), ranker);
+    }
+
+    public SearchService(
+            List<SearchStrategy> strategies,
+            List<CandidateEnricher> enrichers,
+            ContextRanker ranker) {
         this.strategies = List.copyOf(Objects.requireNonNull(strategies, "strategies"));
-        this.graphEnricher = Objects.requireNonNull(graphEnricher, "graphEnricher");
+        this.enrichers = List.copyOf(Objects.requireNonNull(enrichers, "enrichers"));
         this.ranker = Objects.requireNonNull(ranker, "ranker");
         this.candidateMerger = new CandidateMerger();
     }
@@ -48,8 +55,10 @@ public final class SearchService {
             rawCandidates.addAll(strategy.search(project, query, retrievalLimit));
         }
 
-        List<SearchCandidate> merged = candidateMerger.merge(rawCandidates);
-        List<SearchCandidate> enriched = graphEnricher.enrich(project, merged);
+        List<SearchCandidate> enriched = candidateMerger.merge(rawCandidates);
+        for (CandidateEnricher enricher : enrichers) {
+            enriched = enricher.enrich(project, enriched);
+        }
         return ranker.rank(new RankingRequest(query, limit, explain), enriched);
     }
 }
