@@ -210,33 +210,71 @@ PR #5 fusionnée dans `main` au commit `d6e6b190b4082686c1514b0a82f2fef033180858
 
 ## Itération 13 — Adaptateurs Copilot et Claude
 
-État : **en cours**.
+État : **terminée et validée localement le 20 juillet 2026**.
 
 Objectif : faciliter l'utilisation de NEXUS dans GitHub Copilot et Claude sans créer deux implémentations propriétaires du moteur de contexte.
 
-Orientation retenue au démarrage :
+Architecture retenue :
 
-- réutiliser l'adaptateur MCP NEXUS validé à l'Itération 12 ;
-- fournir des mécanismes d'installation et de configuration adaptés aux clients ;
-- cibler GitHub Copilot dans les environnements MCP pris en charge, notamment les IDE JetBrains et Copilot CLI ;
-- cibler Claude Code via ses scopes MCP `local`, `project` et `user` ;
-- générer des configurations reproductibles autour du runner MCP NEXUS ;
-- ne jamais modifier silencieusement une configuration utilisateur ;
-- conserver les conventions natives déjà indexées par NEXUS (`.github/copilot-instructions.md`, `.github/instructions/**`, `CLAUDE.md`) ;
-- documenter clairement la frontière entre instructions natives et tools MCP NEXUS.
+- réutiliser le serveur MCP NEXUS validé à l'Itération 12 ;
+- isoler la génération de configuration dans `adapters/assistant-clients` ;
+- ne jamais dupliquer `SearchService`, le ranking ou le `ContextBuilder` ;
+- ne modifier automatiquement aucune préférence utilisateur ;
+- ne gérer aucun secret ni mécanisme d'authentification ;
+- conserver les instructions natives des clients séparées des tools MCP NEXUS ;
+- formaliser cette frontière dans ADR-0041.
 
-Premier incrément prévu :
+Profils validés :
 
-- profil d'intégration `copilot` ;
-- profil d'intégration `claude` ;
-- génération de commandes d'installation MCP locales ;
-- génération de snippets de configuration partageables ;
-- validation des chemins Windows ;
-- tests déterministes de génération ;
-- documentation d'installation ;
-- aucun appel réseau ni authentification gérés par NEXUS.
+- `copilot-cli` — commande d'installation ou JSON `mcpServers` ;
+- `copilot-jetbrains` — JSON `servers` pour les IDE JetBrains ;
+- `claude-project` — commande avec scope `project` ou JSON projet ;
+- `claude-user` — commande avec scope `user`.
 
-Critère de sortie : depuis un runner MCP NEXUS local, un développeur peut obtenir une configuration ou une commande d'installation valide pour Copilot et Claude, sans dupliquer la logique du moteur ni exposer de secret.
+Livrables validés :
+
+- module autonome `adapters/assistant-clients` ;
+- génération déterministe de commandes et fragments JSON ;
+- normalisation des chemins locaux, y compris les chemins Windows avec espaces ;
+- 4 tests de génération ;
+- documentation `adapters/assistant-clients/README.md` ;
+- script `scripts/validate-iteration-13.ps1` ;
+- ADR-0041 ajouté et indexé ;
+- runner `adapters/assistant-clients/target/nexus-assistant-clients-0.1.0-SNAPSHOT-runner.jar`.
+
+Validation réelle du 20 juillet 2026 :
+
+- build cœur : succès en 14,325 s ;
+- 45 tests cœur, 0 échec, 0 erreur ;
+- baseline qualité conservée : `precision@3 = 0,4444`, `recall@3 = 1,0000` ;
+- `SELF-SMOKE SUCCESS` ;
+- 219 fichiers indexés ;
+- 1 170 symboles ;
+- 9 578 relations ;
+- indexation complète : 2 132 ms ;
+- indexation incrémentale : 681 ms ;
+- recherche explicable : 780 ms ;
+- contexte strict : 4 items, 170/180 tokens, 930 ms ;
+- contexte multi-source : 12 items, 1 181/1 200 tokens, 1 068 ms ;
+- contexte avec skill : 1 180/1 200 tokens, 1 093 ms ;
+- contexte Git : 1 596/1 600 tokens, 1 085 ms ;
+- Git : 50 commits inspectés, 13 liés, 3 fragments sélectionnés ;
+- réduction du contexte candidat strict : 99,01 % ;
+- régression MCP : succès, 1 test, 0 échec, 0 erreur ;
+- test MCP : 2,767 s ;
+- build MCP : 9,024 s ;
+- intégrations assistants : succès, 4 tests, 0 échec, 0 erreur ;
+- tests intégrations : 0,274 s ;
+- build intégrations : 3,102 s ;
+- profils Copilot CLI, Copilot JetBrains, Claude project et Claude user : générés avec succès ;
+- runner MCP : produit ;
+- runner intégrations : produit.
+
+Les avertissements SLF4J, native access, Vector API et Maven Shade observés pendant la validation restent non bloquants pour cette itération.
+
+Critère de sortie : **validé**. Depuis un runner MCP NEXUS local, un développeur peut obtenir une configuration ou une commande d'installation déterministe pour les quatre profils clients couverts, sans dupliquer la logique du moteur, modifier silencieusement ses préférences ou exposer de secret.
+
+La PR #6 porte l'ensemble de l'Itération 13 et sera fusionnée dans `main` après validation de cette mise à jour de roadmap.
 
 ---
 
