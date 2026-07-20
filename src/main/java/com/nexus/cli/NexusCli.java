@@ -22,6 +22,7 @@ import com.nexus.index.ProjectIndexingService;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.markdown.MarkdownLanguageAnalyzer;
 import com.nexus.index.scan.ProjectScanner;
+import com.nexus.index.scip.ScipCodeIndexImporter;
 import com.nexus.persistence.sqlite.SqliteDatabase;
 import com.nexus.persistence.sqlite.SqliteIndexRepository;
 import com.nexus.persistence.sqlite.SqliteProjectRepository;
@@ -108,7 +109,8 @@ public final class NexusCli {
                 List.of(
                         new JavaParserLanguageAnalyzer(),
                         new MarkdownLanguageAnalyzer()),
-                searchIndex);
+                searchIndex,
+                List.of(new ScipCodeIndexImporter()));
         SearchService searchService = new SearchService(
                 List.of(
                         new LuceneFileSearchStrategy(searchIndex),

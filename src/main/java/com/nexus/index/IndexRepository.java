@@ -15,5 +15,7 @@ public interface IndexRepository {
 
     void applyChanges(UUID projectId, List<IndexedFileUpdate> updates, Set<String> removedPaths);
 
+    void replaceExternalCodeIntelligence(UUID projectId, CodeIntelligenceSnapshot snapshot);
+
     IndexStatistics statistics(UUID projectId);
 }

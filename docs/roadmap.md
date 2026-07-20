@@ -570,9 +570,11 @@ Point de surveillance : le self-smoke a mesuré 3 603 ms sur la recherche explic
 
 ## Itération 8 — SCIP et index de code externes
 
+État : **terminée et validée localement le 20 juillet 2026**.
+
 Objectif : réutiliser des index d'intelligence de code existants pour enrichir NEXUS.
 
-Livrables :
+Livrables validés :
 
 - abstraction `CodeIndexImporter` ;
 - abstraction `CodeIntelligenceProvider` ;
@@ -581,9 +583,39 @@ Livrables :
 - support initial de `scip-java` lorsqu'un index est disponible ;
 - stratégie de fusion avec les données JavaParser ;
 - gestion de la provenance des relations ;
-- mesure de la qualité obtenue par rapport à JavaParser seul.
+- mesure de la qualité obtenue par rapport à JavaParser seul ;
+- script reproductible `scripts/compare-scip.ps1` ;
+- exclusion de `/index.scip` du suivi Git comme artefact local généré.
 
-Critère de sortie : NEXUS peut enrichir un projet avec définitions et références externes sans rendre SCIP obligatoire.
+Décision associée :
+
+- ADR-0036 — importer SCIP comme enrichissement opportuniste.
+
+Validation locale du 20 juillet 2026 :
+
+- `mvn clean install` : succès ;
+- compilation de 111 fichiers source avec `--release 21` ;
+- compilation de 21 fichiers de test ;
+- 40 tests exécutés, 0 échec, 0 erreur, 0 ignoré ;
+- JAR bibliothèque et JAR CLI autonome générés et installés ;
+- `scripts/self-smoke.ps1` : `SELF-SMOKE SUCCESS` ;
+- self-smoke : 189 fichiers, 631 symboles, 1 078 relations ;
+- indexation complète self-smoke : 1 359 ms ;
+- indexation incrémentale self-smoke : 283 ms ;
+- réduction du contexte candidat strict : 99,33 %.
+
+Validation SCIP réelle :
+
+- `index.scip` généré avec `scip-java` sous Java 21 : 2 376 589 octets ;
+- comparaison exécutée avec `scripts/compare-scip.ps1` sur le même repository ;
+- JavaParser seul : 189 fichiers, 631 symboles, 1 078 relations, 1 378 ms ;
+- JavaParser + SCIP : 189 fichiers, 874 symboles, 9 264 relations, 1 636 ms ;
+- gain de couverture : +243 symboles et +8 186 relations ;
+- surcoût d'indexation mesuré : +258 ms ;
+- `precision@3` : 0,3333 → 0,3333, aucune dégradation ;
+- `recall@3` : 1,0000 → 1,0000, aucune dégradation.
+
+Critère de sortie : **validé pour le périmètre actuel**. NEXUS enrichit effectivement un projet avec des définitions et références externes tout en conservant JavaParser comme socle autonome. Sur le repository NEXUS, SCIP apporte une hausse nette de la couverture structurelle sans dégradation observée de la précision ou du rappel sur le corpus d'évaluation de l'itération, pour un surcoût d'indexation borné à 258 ms lors de cette mesure.
 
 ---
 

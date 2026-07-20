@@ -22,6 +22,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -152,6 +153,93 @@ class ProjectIndexingServiceTest {
         assertEquals(0, second.removedFiles());
         assertEquals(2, second.statistics().files());
         assertEquals(1, luceneDocumentCount(paths, project));
+    }
+
+    @Test
+    void mergesExternalCodeIntelligenceAndPurgesItWhenTheIndexDisappears() throws Exception {
+        Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("external-index-project"));
+        Path sourceFile = projectRoot.resolve("src/main/java/demo/App.java");
+        Files.createDirectories(sourceFile.getParent());
+        Files.writeString(sourceFile, """
+                package demo;
+                class App {
+                    void run() {}
+                }
+                """);
+
+        NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("external-index-home"));
+        SqliteDatabase database = new SqliteDatabase(paths);
+        ProjectRepository projectRepository = new SqliteProjectRepository(database);
+        IndexRepository indexRepository = new SqliteIndexRepository(database);
+        ProjectDescriptor project = new ProjectRegistry(projectRepository).register(projectRoot, "external-demo");
+        boolean[] available = {true};
+        String provider = "test-external";
+        CodeIndexImporter importer = new CodeIndexImporter() {
+            @Override
+            public String sourceProvider() {
+                return provider;
+            }
+
+            @Override
+            public Optional<CodeIntelligenceSnapshot> importIndex(Path root) {
+                if (!available[0]) {
+                    return Optional.empty();
+                }
+                return Optional.of(new CodeIntelligenceSnapshot(
+                        provider,
+                        List.of(
+                                new IndexedSymbol(
+                                        "src/main/java/demo/App.java",
+                                        new CodeSymbol(
+                                                SymbolKind.METHOD,
+                                                "run",
+                                                "external:demo.App#run()",
+                                                "run()",
+                                                3,
+                                                3,
+                                                provider)),
+                                new IndexedSymbol(
+                                        "src/main/java/demo/App.java",
+                                        new CodeSymbol(
+                                                SymbolKind.TYPE,
+                                                "ExternalOnly",
+                                                "external:demo.ExternalOnly",
+                                                "ExternalOnly",
+                                                4,
+                                                4,
+                                                provider))),
+                        List.of(new IndexedRelation(
+                                "src/main/java/demo/App.java",
+                                new SymbolRelation(
+                                        RelationKind.REFERENCES,
+                                        "src/main/java/demo/App.java",
+                                        "external:demo.Dependency",
+                                        0.95d,
+                                        provider)))));
+            }
+        };
+
+        ProjectIndexingService service = new ProjectIndexingService(
+                projectRepository,
+                indexRepository,
+                new ProjectScanner(),
+                List.of(new JavaParserLanguageAnalyzer()),
+                new LuceneSearchIndex(paths),
+                List.of(importer));
+
+        IndexingReport enriched = service.index(project.id());
+        assertEquals(new IndexStatistics(1, 3, 1), enriched.statistics());
+        assertEquals(1, indexRepository.findSymbols(project.id()).stream()
+                .filter(indexed -> indexed.symbol().sourceProvider().equals(provider))
+                .count());
+        assertEquals(provider, indexRepository.findRelations(project.id()).getFirst().sourceProvider());
+
+        available[0] = false;
+        IndexingReport withoutExternalIndex = service.index(project.id());
+        assertEquals(0, withoutExternalIndex.changedFiles());
+        assertEquals(new IndexStatistics(1, 2, 0), withoutExternalIndex.statistics());
+        assertTrue(indexRepository.findSymbols(project.id()).stream()
+                .noneMatch(indexed -> indexed.symbol().sourceProvider().equals(provider)));
     }
 
     private static int luceneDocumentCount(NexusPaths paths, ProjectDescriptor project) throws Exception {
