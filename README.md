@@ -237,31 +237,36 @@ Le critère de sortie de l'Itération 6 est validé : NEXUS sait recommander et 
 
 ### Itération 7 — Contexte Git
 
-**En cours — validation locale à effectuer.**
+**Terminée et validée localement le 20 juillet 2026.**
 
-Implémentation actuelle :
+Validation de référence :
 
 - ADR-0035 ;
-- `CandidateEnricher` pour chaîner les enrichissements de recherche ;
-- `GraphCandidateEnricher` migré vers ce contrat ;
-- `GitRecencyCandidateEnricher` ;
-- signal explicable `gitRecencyScore` ;
+- 106 fichiers source compilés avec Java 21 ;
+- 20 fichiers de test compilés ;
+- 35 tests exécutés, 0 échec, 0 erreur, 0 ignoré ;
+- baseline qualité conservée : `precision@3 = 0,4444`, `recall@3 = 1,0000` ;
+- `GitRecencyCandidateEnricher` et signal explicable `gitRecencyScore` ;
 - bonus Git configurable, `0,05` par défaut et désactivable avec `0` ;
-- `GitContextSourceProvider` ;
-- `LocalGitContextSourceProvider` ;
+- `GitContextSourceProvider` et `LocalGitContextSourceProvider` ;
 - lecture Git strictement locale et en lecture seule ;
-- maximum 50 commits inspectés ;
-- commits récents liés aux chemins candidats ;
-- historique court des principaux fichiers candidats ;
-- résumé du diff local limité aux chemins candidats ;
-- maximum 8 co-changements ;
+- commits récents liés, historique court, patches locaux ciblés et co-changements ;
 - support des projets imbriqués dans un monorepo sans fuite hors du sous-projet ;
-- contexte Git désactivé pour les budgets globaux inférieurs à 500 tokens ;
-- budget Git plafonné à 15 % du budget global et 500 tokens ;
-- métadonnées Git exposées en JSON explicable ;
-- self-smoke étendu à 13 étapes.
+- contexte Git désactivé sous 500 tokens ;
+- budget Git plafonné à 15 % du budget global et à 500 tokens ;
+- 181 fichiers indexés, 548 symboles et 1 034 relations ;
+- indexation complète : 1 347 ms ;
+- indexation incrémentale : 270 ms avec 0 fichier modifié et 0 supprimé ;
+- recherche `ProjectIndexingService` : fichier principal classé premier avec contribution Git explicable ;
+- contexte strict : 5 items, 174/180 tokens, Git désactivé comme attendu ;
+- contexte multi-source : 11 items, 1 192/1 200 tokens, 2 fragments Git sélectionnés ;
+- contexte Git dédié : 1 597/1 600 tokens, 50 commits inspectés, 24 commits liés, 2 fragments Git sélectionnés, 128 tokens Git pour un budget Git de 240 tokens ;
+- réduction du contexte candidat strict : environ 99,2 % ;
+- résultat final : `SELF-SMOKE SUCCESS`.
 
-Le contexte Git reste optionnel : un projet non Git conserve le comportement historique sans erreur. Cette itération reste à valider par le build et le self-smoke avant clôture.
+Le critère de sortie de l'Itération 7 est validé pour le périmètre actuel : NEXUS enrichit le ranking avec un signal de récence Git et injecte un contexte Git local ciblé sans dépasser le budget global ni rendre Git obligatoire.
+
+Point de surveillance non bloquant : la recherche explicable du self-smoke a mesuré 3 603 ms avec l'enrichissement Git actif et l'inspection de 50 commits. Cette latence devra être benchmarkée sur plusieurs repositories avant de décider d'introduire un cache ou une persistance Git dédiée.
 
 ## Comment utiliser NEXUS sur une application déjà configurée
 
