@@ -61,7 +61,10 @@ class LocalGitContextSourceProviderTest {
         assertTrue(combined.contains("change order workflow"));
         assertTrue(combined.contains("src/OrderRepository.java"));
         assertTrue(combined.contains("modifié : src/OrderService.java"));
+        assertTrue(combined.contains("Patch non indexé"));
+        assertTrue(combined.contains("localChange"));
         assertFalse(combined.contains("change health endpoint"));
+        assertFalse(combined.contains("HealthController { void health"));
     }
 
     @Test
@@ -96,6 +99,7 @@ class LocalGitContextSourceProviderTest {
         assertTrue(combined.contains("src/OrderService.java"));
         assertTrue(combined.contains("src/OrderRepository.java"));
         assertTrue(combined.contains("modifié : src/OrderService.java"));
+        assertTrue(combined.contains("localChange"));
         assertFalse(combined.contains("frontend/App.ts"));
         assertFalse(combined.contains("backend/order-app/src/OrderService.java"));
     }
