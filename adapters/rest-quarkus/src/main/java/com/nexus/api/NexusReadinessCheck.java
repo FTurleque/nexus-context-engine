@@ -15,11 +15,19 @@ public class NexusReadinessCheck implements HealthCheck {
 
     @Override
     public HealthCheckResponse call() {
-        return HealthCheckResponse.named("nexus-context-engine")
-                .up()
-                .withData("nexusHome", service.paths().home().toString())
-                .withData("storage", "sqlite")
-                .withData("search", "lucene")
-                .build();
+        try {
+            int registeredProjects = service.listProjects().size();
+            return HealthCheckResponse.named("nexus-context-engine")
+                    .up()
+                    .withData("storage", "sqlite")
+                    .withData("search", "lucene")
+                    .withData("registeredProjects", registeredProjects)
+                    .build();
+        } catch (RuntimeException exception) {
+            return HealthCheckResponse.named("nexus-context-engine")
+                    .down()
+                    .withData("error", exception.getClass().getSimpleName())
+                    .build();
+        }
     }
 }
