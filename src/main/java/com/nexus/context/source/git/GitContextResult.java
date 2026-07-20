@@ -7,6 +7,7 @@ import java.util.Objects;
 
 public record GitContextResult(
         List<ContextFragment> fragments,
+        boolean enabled,
         boolean repositoryAvailable,
         int commitsInspected,
         int relatedCommits,
@@ -20,7 +21,11 @@ public record GitContextResult(
         diagnostics = List.copyOf(diagnostics);
     }
 
+    public static GitContextResult disabled(String diagnostic) {
+        return new GitContextResult(List.of(), false, false, 0, 0, 0, List.of(diagnostic));
+    }
+
     public static GitContextResult unavailable(String diagnostic) {
-        return new GitContextResult(List.of(), false, 0, 0, 0, List.of(diagnostic));
+        return new GitContextResult(List.of(), true, false, 0, 0, 0, List.of(diagnostic));
     }
 }
