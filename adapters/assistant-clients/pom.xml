@@ -74,7 +74,7 @@
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <manifestEntries>
-                                        <Main-Class>com.nexus.integrations.NexusAssistantIntegrationCli</Main-Class>
+                                        <Main-Class>com.nexus.integrations.AssistantIntegrationGenerator</Main-Class>
                                         <Implementation-Title>NEXUS Assistant Client Integrations</Implementation-Title>
                                         <Implementation-Version>${project.version}</Implementation-Version>
                                     </manifestEntries>
