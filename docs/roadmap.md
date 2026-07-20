@@ -621,21 +621,66 @@ Critère de sortie : **validé pour le périmètre actuel**. NEXUS enrichit effe
 
 ## Itération 9 — Analyse Java profonde optionnelle
 
+État : **terminée et validée localement le 20 juillet 2026**.
+
 Objectif : couvrir les cas Java complexes nécessitant plus qu'un AST embarqué.
 
-Candidat principal : Eclipse JDT Language Server.
+Livrables validés :
 
-Livrables possibles :
-
-- provider JDT optionnel ;
+- provider `JdtLanguageServerCodeIntelligenceProvider` derrière le port `CodeIntelligenceProvider` ;
+- Eclipse JDT Language Server conservé comme processus externe optionnel ;
+- activation explicite avec `nexus index <projet> --deep-java` ;
+- communication JSON-RPC/LSP sur `stdio` ;
+- symboles de document ;
 - références ;
 - implémentations ;
 - hiérarchies de types ;
 - hiérarchies d'appels ;
-- activation uniquement lorsque nécessaire ;
-- isolation du processus et des dépendances.
+- normalisation vers `CodeSymbol`, `SymbolRelation` et `CodeIntelligenceSnapshot` ;
+- provenance `jdtls` et confiance conservées ;
+- conservation du snapshot profond lors d'une indexation normale sans changement Java ;
+- purge du snapshot JDT lorsqu'un fichier Java change sans réanalyse profonde ;
+- refus des éditions proposées par `workspace/applyEdit` afin de conserver un provider en lecture seule ;
+- timeout et nombre maximal de symboles interrogés configurables ;
+- installation reproductible de JDT LS avec vérification SHA-256 ;
+- script `scripts/compare-jdt.ps1` ;
+- script d'orchestration `scripts/validate-iteration-9.ps1`.
 
-Critère de sortie : démontrer un gain mesurable sur des projets Java complexes avant de recommander cet adaptateur.
+Décision associée :
+
+- ADR-0037 — intégrer Eclipse JDT Language Server comme provider Java profond optionnel.
+
+Validation locale du 20 juillet 2026 :
+
+- `mvn clean install` : succès ;
+- compilation de 112 fichiers source avec `--release 21` ;
+- compilation de 22 fichiers de test ;
+- 42 tests exécutés, 0 échec, 0 erreur, 0 ignoré ;
+- JAR bibliothèque et JAR CLI autonome générés et installés ;
+- `scripts/self-smoke.ps1` : `SELF-SMOKE SUCCESS` ;
+- self-smoke : 193 fichiers, 1 000 symboles, 9 327 relations ;
+- indexation complète self-smoke : 1 760 ms ;
+- indexation incrémentale self-smoke : 633 ms ;
+- recherche `ProjectIndexingService` : 636 ms, fichier principal classé premier ;
+- contexte strict : 4 items, 154/180 tokens, 810 ms ;
+- contexte multi-source : 11 items, 1 191/1 200 tokens, 953 ms ;
+- contexte avec skill : 1 189/1 200 tokens, 976 ms ;
+- contexte Git : 1 590/1 600 tokens, 976 ms ;
+- réduction du contexte candidat strict : environ 99,4 %.
+
+Validation JDT LS réelle :
+
+- Eclipse JDT Language Server `1.60.0-202606262232` installé et lancé réellement sous Java 21+ ;
+- exécution réelle de `--deep-java` : succès ;
+- comparaison exécutée avec `scripts/compare-jdt.ps1` sur le repository NEXUS ;
+- baseline JavaParser + importers opportunistes : 193 fichiers, 1 000 symboles, 9 327 relations, 1 824 ms ;
+- baseline + JDT LS : 193 fichiers, 1 705 symboles, 10 420 relations, 60 119 ms ;
+- gain de couverture : +705 symboles et +1 093 relations ;
+- surcoût d'indexation profonde mesuré : +58 295 ms ;
+- `precision@3` : 0,4000 → 0,4000, aucune dégradation ;
+- `recall@3` : 1,0000 → 1,0000, aucune dégradation.
+
+Critère de sortie : **validé pour le périmètre actuel comme enrichissement profond à la demande**. JDT LS augmente nettement la couverture sémantique du repository NEXUS sans dégradation observée de la précision ou du rappel sur le corpus d'évaluation de l'itération. Son coût mesuré est toutefois très supérieur au chemin normal : environ 60,1 s contre 1,8 s. JDT LS reste donc strictement optionnel et ne doit pas devenir le chemin d'indexation par défaut sans nouvelle mesure justifiant ce coût.
 
 ---
 
