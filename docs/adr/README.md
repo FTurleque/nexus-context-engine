@@ -87,13 +87,14 @@ Le numéro est un identifiant stable. Le nom de fichier utilise des minuscules, 
 | [ADR-0030](0030-stabiliser-le-contrat-cli-avec-sorties-humaines-json-et-codes-de-sortie.md) | Stabiliser le contrat CLI avec sorties humaines, JSON et codes de sortie | Accepté |
 | [ADR-0031](0031-packager-la-cli-dans-un-jar-autonome.md) | Packager la CLI dans un JAR autonome tout en conservant le JAR bibliothèque | Accepté |
 | [ADR-0032](0032-preserver-et-normaliser-le-contexte-natif-des-projets.md) | Préserver et normaliser le contexte natif déjà configuré dans les projets | Accepté |
-| [ADR-0033](0033-separer-instructions-contextuelles-et-configuration-operationnelle-des-agents.md) | Séparer les instructions contextuelles de la configuration opérationnelle des agents | Accepté |
+| [ADR-0033](0033-separer-instructions-contextuelles-et-configuration-operationnelle-des-agents.md) | Séparer les instructions contextuelles de la configuration opérationnelle | Accepté |
 | [ADR-0034](0034-adopter-la-divulgation-progressive-pour-les-agent-skills.md) | Adopter la divulgation progressive pour les Agent Skills | Accepté |
 | [ADR-0035](0035-integrer-le-contexte-git-local-comme-source-bornee-et-explicable.md) | Intégrer le contexte Git local comme source bornée et explicable | Accepté |
 | [ADR-0036](0036-importer-scip-comme-enrichissement-opportuniste.md) | Importer SCIP comme enrichissement opportuniste de l'intelligence de code | Accepté |
 | [ADR-0037](0037-integrer-jdt-language-server-comme-provider-java-profond-optionnel.md) | Intégrer JDT Language Server comme provider Java profond optionnel | Accepté |
 | [ADR-0038](0038-indexer-les-langages-additionnels-lexicalement-et-enrichir-la-structure-via-providers.md) | Indexer les langages additionnels lexicalement et enrichir la structure via des providers | Accepté |
 | [ADR-0039](0039-isoler-l-adaptateur-rest-quarkus-du-coeur-nexus.md) | Isoler l'adaptateur REST Quarkus du cœur NEXUS | Accepté |
+| [ADR-0040](0040-exposer-nexus-via-un-adaptateur-mcp-stdio-mince.md) | Exposer NEXUS via un adaptateur MCP STDIO mince | Accepté |
 
 ## Modèle
 
