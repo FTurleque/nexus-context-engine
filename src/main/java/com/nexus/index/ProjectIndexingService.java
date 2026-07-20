@@ -29,6 +29,7 @@ public final class ProjectIndexingService {
     private final List<LanguageAnalyzer> analyzers;
     private final SearchIndex searchIndex;
     private final List<CodeIndexImporter> codeIndexImporters;
+    private final List<CodeIntelligenceProvider> codeIntelligenceProviders;
 
     public ProjectIndexingService(
             ProjectRepository projectRepository,
@@ -36,7 +37,7 @@ public final class ProjectIndexingService {
             ProjectScanner scanner,
             List<LanguageAnalyzer> analyzers,
             SearchIndex searchIndex) {
-        this(projectRepository, indexRepository, scanner, analyzers, searchIndex, List.of());
+        this(projectRepository, indexRepository, scanner, analyzers, searchIndex, List.of(), List.of());
     }
 
     public ProjectIndexingService(
@@ -46,26 +47,54 @@ public final class ProjectIndexingService {
             List<LanguageAnalyzer> analyzers,
             SearchIndex searchIndex,
             List<CodeIndexImporter> codeIndexImporters) {
+        this(projectRepository, indexRepository, scanner, analyzers, searchIndex, codeIndexImporters, List.of());
+    }
+
+    public ProjectIndexingService(
+            ProjectRepository projectRepository,
+            IndexRepository indexRepository,
+            ProjectScanner scanner,
+            List<LanguageAnalyzer> analyzers,
+            SearchIndex searchIndex,
+            List<CodeIndexImporter> codeIndexImporters,
+            List<CodeIntelligenceProvider> codeIntelligenceProviders) {
         this.projectRepository = Objects.requireNonNull(projectRepository, "projectRepository");
         this.indexRepository = Objects.requireNonNull(indexRepository, "indexRepository");
         this.scanner = Objects.requireNonNull(scanner, "scanner");
         this.analyzers = List.copyOf(Objects.requireNonNull(analyzers, "analyzers"));
         this.searchIndex = Objects.requireNonNull(searchIndex, "searchIndex");
         this.codeIndexImporters = List.copyOf(Objects.requireNonNull(codeIndexImporters, "codeIndexImporters"));
+        this.codeIntelligenceProviders = List.copyOf(
+                Objects.requireNonNull(codeIntelligenceProviders, "codeIntelligenceProviders"));
     }
 
     public IndexingReport index(UUID projectId) throws IOException {
-        return index(projectId, false);
+        return index(projectId, false, false);
     }
 
     public IndexingReport rebuild(UUID projectId) throws IOException {
-        return index(projectId, true);
+        return index(projectId, true, false);
     }
 
-    private IndexingReport index(UUID projectId, boolean explicitRebuild) throws IOException {
+    public IndexingReport indexWithCodeIntelligence(UUID projectId) throws IOException {
+        return index(projectId, false, true);
+    }
+
+    public IndexingReport rebuildWithCodeIntelligence(UUID projectId) throws IOException {
+        return index(projectId, true, true);
+    }
+
+    private IndexingReport index(
+            UUID projectId,
+            boolean explicitRebuild,
+            boolean includeCodeIntelligenceProviders) throws IOException {
         Objects.requireNonNull(projectId, "projectId");
         ProjectDescriptor project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Projet NEXUS introuvable : " + projectId));
+        if (includeCodeIntelligenceProviders && codeIntelligenceProviders.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Aucun CodeIntelligenceProvider actif. Pour JDT LS, configurez NEXUS_JDTLS_HOME avant --deep-java.");
+        }
 
         boolean fullRebuild = explicitRebuild || project.indexStatus() != IndexStatus.READY;
         Instant startedAt = Instant.now();
@@ -100,7 +129,6 @@ public final class ProjectIndexingService {
                 LanguageAnalyzer analyzer = findAnalyzer(scannedFile);
                 AnalysisResult analysis = analyzer.analyze(project.rootPath(), scannedFile.absolutePath());
                 updates.add(new IndexedFileUpdate(scannedFile, analysis));
-
                 if (genericSearchEligible) {
                     searchDocuments.add(new SearchDocument(
                             scannedFile.relativePath(),
@@ -111,8 +139,15 @@ public final class ProjectIndexingService {
                 }
             }
 
+            boolean javaSourcesChanged = javaSourcesChanged(fullRebuild, updates, removedPaths, existingFiles);
             indexRepository.applyChanges(projectId, updates, removedPaths);
-            refreshExternalCodeIntelligence(projectId, project.rootPath());
+            refreshImportedCodeIntelligence(projectId, project.rootPath());
+            if (includeCodeIntelligenceProviders) {
+                refreshActiveCodeIntelligence(projectId, project.rootPath());
+            } else if (javaSourcesChanged) {
+                purgeActiveCodeIntelligence(projectId);
+            }
+
             if (fullRebuild) {
                 searchIndex.rebuild(projectId, searchDocuments);
             } else {
@@ -124,7 +159,6 @@ public final class ProjectIndexingService {
                     .collect(Collectors.toUnmodifiableSet());
             Instant completedAt = Instant.now();
             projectRepository.save(withState(project, IndexStatus.READY, completedAt, languages));
-
             return new IndexingReport(
                     projectId,
                     scannedFiles.size(),
@@ -139,16 +173,56 @@ public final class ProjectIndexingService {
         }
     }
 
-    private void refreshExternalCodeIntelligence(UUID projectId, java.nio.file.Path projectRoot) throws IOException {
+    private void refreshImportedCodeIntelligence(UUID projectId, java.nio.file.Path projectRoot) throws IOException {
         for (CodeIndexImporter importer : codeIndexImporters) {
             CodeIntelligenceSnapshot snapshot = importer.importIndex(projectRoot)
                     .orElseGet(() -> CodeIntelligenceSnapshot.empty(importer.sourceProvider()));
-            if (!importer.sourceProvider().equals(snapshot.sourceProvider())) {
-                throw new IOException(
-                        "Le snapshot importé ne correspond pas au provider " + importer.sourceProvider());
-            }
+            validateSnapshotProvider(importer.sourceProvider(), snapshot);
             indexRepository.replaceExternalCodeIntelligence(projectId, snapshot);
         }
+    }
+
+    private void refreshActiveCodeIntelligence(UUID projectId, java.nio.file.Path projectRoot) throws IOException {
+        for (CodeIntelligenceProvider provider : codeIntelligenceProviders) {
+            CodeIntelligenceSnapshot snapshot = provider.analyze(projectRoot);
+            validateSnapshotProvider(provider.sourceProvider(), snapshot);
+            indexRepository.replaceExternalCodeIntelligence(projectId, snapshot);
+        }
+    }
+
+    private void purgeActiveCodeIntelligence(UUID projectId) {
+        for (CodeIntelligenceProvider provider : codeIntelligenceProviders) {
+            indexRepository.replaceExternalCodeIntelligence(
+                    projectId,
+                    CodeIntelligenceSnapshot.empty(provider.sourceProvider()));
+        }
+    }
+
+    private static void validateSnapshotProvider(String expectedProvider, CodeIntelligenceSnapshot snapshot)
+            throws IOException {
+        if (!expectedProvider.equals(snapshot.sourceProvider())) {
+            throw new IOException("Le snapshot ne correspond pas au provider " + expectedProvider);
+        }
+    }
+
+    private static boolean javaSourcesChanged(
+            boolean fullRebuild,
+            List<IndexedFileUpdate> updates,
+            Set<String> removedPaths,
+            Map<String, IndexedFile> existingFiles) {
+        if (fullRebuild) {
+            return true;
+        }
+        boolean javaUpdated = updates.stream()
+                .map(IndexedFileUpdate::file)
+                .anyMatch(file -> "java".equalsIgnoreCase(file.language()));
+        if (javaUpdated) {
+            return true;
+        }
+        return removedPaths.stream()
+                .map(existingFiles::get)
+                .filter(Objects::nonNull)
+                .anyMatch(file -> "java".equalsIgnoreCase(file.language()));
     }
 
     private LanguageAnalyzer findAnalyzer(ScannedFile file) throws IOException {
