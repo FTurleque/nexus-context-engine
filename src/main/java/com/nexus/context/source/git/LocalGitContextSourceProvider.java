@@ -13,7 +13,9 @@ import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 import org.eclipse.jgit.util.io.DisabledOutputStream;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -34,6 +36,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
     static final int MAX_TARGET_HISTORY_PATHS = 5;
     static final int MAX_HISTORY_PER_PATH = 5;
     static final int MAX_CO_CHANGES = 8;
+    static final int MAX_LOCAL_DIFF_CHARS = 6_000;
 
     @Override
     public String id() {
@@ -109,7 +112,13 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
             List<ContextFragment> fragments = new ArrayList<>();
             addRecentCommitsFragment(fragments, related, projectTargets);
             addHistoryFragment(fragments, history);
-            addWorkingTreeFragment(fragments, git.status().call(), projectPathByGitTarget);
+            addWorkingTreeFragment(
+                    fragments,
+                    git,
+                    repository,
+                    git.status().call(),
+                    projectPathByGitTarget,
+                    projectPrefix);
             int coChangeLinks = addCoChangesFragment(fragments, coChanges);
 
             return new GitContextResult(
@@ -214,8 +223,11 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
 
     private static void addWorkingTreeFragment(
             List<ContextFragment> fragments,
+            Git git,
+            Repository repository,
             Status status,
-            Map<String, String> projectPathByGitTarget) {
+            Map<String, String> projectPathByGitTarget,
+            String projectPrefix) throws Exception {
         List<String> changes = new ArrayList<>();
         collectStatus(changes, "ajouté", status.getAdded(), projectPathByGitTarget);
         collectStatus(changes, "modifié", status.getModified(), projectPathByGitTarget);
@@ -223,21 +235,87 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
         collectStatus(changes, "supprimé", status.getRemoved(), projectPathByGitTarget);
         collectStatus(changes, "manquant", status.getMissing(), projectPathByGitTarget);
         collectStatus(changes, "non suivi", status.getUntracked(), projectPathByGitTarget);
-        if (changes.isEmpty()) {
+
+        String unstagedPatch = formatTargetDiff(
+                repository,
+                git.diff().call(),
+                projectPathByGitTarget.keySet(),
+                projectPrefix);
+        String stagedPatch = formatTargetDiff(
+                repository,
+                git.diff().setCached(true).call(),
+                projectPathByGitTarget.keySet(),
+                projectPrefix);
+
+        if (changes.isEmpty() && unstagedPatch.isBlank() && stagedPatch.isBlank()) {
             return;
         }
-        String content = "# Diff local pertinent\n\n"
-                + "Résumé des changements locaux limités aux chemins candidats :\n\n"
-                + String.join("\n", changes)
-                + "\n";
+
+        StringBuilder content = new StringBuilder("# Diff local pertinent\n\n");
+        if (!unstagedPatch.isBlank()) {
+            content.append("## Patch non indexé\n\n```diff\n")
+                    .append(unstagedPatch)
+                    .append("\n```\n\n");
+        }
+        if (!stagedPatch.isBlank()) {
+            content.append("## Patch indexé\n\n```diff\n")
+                    .append(stagedPatch)
+                    .append("\n```\n\n");
+        }
+        if (!changes.isEmpty()) {
+            content.append("## Résumé de statut\n\n")
+                    .append(String.join("\n", changes))
+                    .append('\n');
+        }
+
         fragments.add(fragment(
                 Path.of(".nexus", "git", "working-tree-diff.md"),
-                content,
+                content.toString(),
                 0.85d,
                 List.of(
-                        "changements locaux liés aux chemins candidats",
+                        "patches et changements locaux liés aux chemins candidats",
                         "aucun diff d'un fichier non ciblé n'est injecté",
+                        "diff local borné à " + MAX_LOCAL_DIFF_CHARS + " caractères par zone",
                         "provider : local-git")));
+    }
+
+    private static String formatTargetDiff(
+            Repository repository,
+            List<DiffEntry> entries,
+            Set<String> gitTargets,
+            String projectPrefix) throws IOException {
+        List<DiffEntry> selected = entries.stream()
+                .filter(entry -> gitTargets.contains(entry.getOldPath()) || gitTargets.contains(entry.getNewPath()))
+                .toList();
+        if (selected.isEmpty()) {
+            return "";
+        }
+
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        try (DiffFormatter formatter = new DiffFormatter(output)) {
+            formatter.setRepository(repository);
+            formatter.setDetectRenames(true);
+            for (DiffEntry entry : selected) {
+                formatter.format(entry);
+            }
+            formatter.flush();
+        }
+        String patch = output.toString(StandardCharsets.UTF_8);
+        patch = relativizePatch(projectPrefix, patch);
+        if (patch.length() <= MAX_LOCAL_DIFF_CHARS) {
+            return patch.stripTrailing();
+        }
+        return patch.substring(0, MAX_LOCAL_DIFF_CHARS).stripTrailing()
+                + "\n... [diff Git tronqué par NEXUS]";
+    }
+
+    private static String relativizePatch(String projectPrefix, String patch) {
+        if (projectPrefix.isBlank()) {
+            return patch;
+        }
+        return patch
+                .replace("a/" + projectPrefix + "/", "a/")
+                .replace("b/" + projectPrefix + "/", "b/");
     }
 
     private static int addCoChangesFragment(
