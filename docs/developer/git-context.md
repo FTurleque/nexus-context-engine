@@ -2,7 +2,7 @@
 
 Ce chapitre décrit l'implémentation de l'Itération 7 : utiliser l'historique Git local comme **signal de pertinence** et comme **source de contexte bornée**, sans transformer NEXUS en client Git généraliste.
 
-> L'Itération 7 est implémentée mais reste à valider localement par `mvn clean install` puis par le self-smoke à 13 étapes avant d'être déclarée terminée.
+> L'Itération 7 a été validée localement le 20 juillet 2026 par `mvn clean install` puis par le self-smoke à 13 étapes.
 
 ## 1. Objectif
 
@@ -474,7 +474,45 @@ Le scénario strict à 180 tokens vérifie en parallèle :
 gitEnabled = false
 ```
 
-## 16. Décision d'architecture
+## 16. Validation locale du 20 juillet 2026
+
+Build :
+
+- 106 fichiers source compilés avec Java 21 ;
+- 20 fichiers de test compilés ;
+- 35 tests exécutés ;
+- 0 échec, 0 erreur, 0 ignoré ;
+- `mean precision@3 = 0,4444` ;
+- `mean recall@3 = 1,0000` ;
+- JAR bibliothèque et JAR CLI autonome générés et installés ;
+- `BUILD SUCCESS`.
+
+Self-smoke :
+
+- 181 fichiers indexés ;
+- 548 symboles ;
+- 1 034 relations ;
+- indexation complète : 1 347 ms ;
+- indexation incrémentale : 270 ms avec 0 fichier modifié et 0 supprimé ;
+- recherche `ProjectIndexingService` : fichier principal classé premier avec contribution `gitRecencyScore` ;
+- recherche explicable : 3 603 ms ;
+- contexte strict : 5 items, 174/180 tokens, 782 ms, `gitEnabled = false` ;
+- contexte multi-source : 11 items, 1 192/1 200 tokens, 882 ms ;
+- contexte avec skill : 1 194/1 200 tokens, 939 ms ;
+- contexte Git dédié : 1 597/1 600 tokens, 874 ms ;
+- `gitRepositoryAvailable = true` ;
+- 50 commits inspectés ;
+- 24 commits liés ;
+- 2 fragments Git sélectionnés ;
+- 128 tokens Git sélectionnés pour un budget Git de 240 tokens ;
+- réduction du contexte candidat strict : environ 99,2 % ;
+- résultat : `SELF-SMOKE SUCCESS`.
+
+Le critère de sortie de l'Itération 7 est validé pour le périmètre actuel : le contexte Git enrichit le ranking et le `ContextBundle` sans dépasser le budget global et sans rendre Git obligatoire.
+
+Point de surveillance non bloquant : la recherche explicable a mesuré 3 603 ms avec l'inspection de 50 commits. Une optimisation par cache ou persistance Git ne doit être envisagée qu'après benchmark sur plusieurs tailles de repositories.
+
+## 17. Décision d'architecture
 
 Voir :
 
