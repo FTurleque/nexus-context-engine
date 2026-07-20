@@ -217,28 +217,39 @@ Validée localement le 20 juillet 2026 :
 
 ### Itération 7 — Contexte Git
 
-**En cours — validation locale à effectuer.**
-
-Implémentation actuelle :
+Validée localement le 20 juillet 2026 :
 
 - ADR-0035 ;
 - port `CandidateEnricher` ;
 - chaîne d'enrichissement générique dans `SearchService` ;
 - `GraphCandidateEnricher` migré vers ce contrat ;
-- `GitRecencyCandidateEnricher` ;
-- signal `gitRecencyScore` ;
-- bonus de récence configurable, `0,05` par défaut ;
+- `GitRecencyCandidateEnricher` et signal `gitRecencyScore` ;
+- bonus de récence configurable, `0,05` par défaut et désactivable avec `0` ;
 - port `GitContextSourceProvider` ;
 - `LocalGitContextSourceProvider` ;
-- commits récents liés ;
-- historique court des fichiers cibles ;
-- résumé du diff local limité aux candidats ;
+- commits récents liés et historique court des fichiers cibles ;
+- patches locaux ciblés, indexés et non indexés ;
 - détection de co-changements ;
 - support des projets imbriqués dans un monorepo ;
 - contexte Git désactivé sous 500 tokens ;
 - budget Git limité à 15 % du budget global et 500 tokens ;
 - métadonnées Git explicables ;
-- self-smoke étendu à 13 étapes.
+- 106 fichiers source compilés ;
+- 20 fichiers de test compilés ;
+- 35 tests verts ;
+- baseline qualité conservée : `precision@3 = 0,4444`, `recall@3 = 1,0000` ;
+- index : 181 fichiers, 548 symboles, 1 034 relations ;
+- indexation complète : 1 347 ms ;
+- indexation incrémentale : 270 ms avec 0 fichier modifié et 0 supprimé ;
+- contexte strict : 5 items, 174/180 tokens, Git désactivé comme attendu ;
+- contexte multi-source : 11 items, 1 192/1 200 tokens ;
+- contexte Git dédié : 1 597/1 600 tokens ;
+- 50 commits inspectés, 24 liés, 2 fragments Git sélectionnés ;
+- 128 tokens Git sélectionnés pour un budget Git de 240 tokens ;
+- réduction du contexte candidat strict : environ 99,2 % ;
+- résultat `SELF-SMOKE SUCCESS`.
+
+Point de surveillance non bloquant : la recherche explicable du self-smoke a mesuré 3 603 ms avec l'enrichissement Git actif. Avant d'ajouter un cache Git ou une persistance dédiée, cette latence doit être benchmarkée sur plusieurs tailles de repositories.
 
 Le chapitre [Contexte Git local](git-context.md) décrit l'implémentation complète.
 
