@@ -282,24 +282,62 @@ PR #6 fusionnée dans `main` au commit `05b311044b8bb0a64dfc598d7e2e00b31f8359a7
 
 ## Itération 14 — AI Skills Registry
 
-Objectif : connecter la sélection de skills de NEXUS à un registre externe tout en gardant NEXUS utilisable sans registre.
+État : **terminée et validée localement le 20 juillet 2026**.
 
-Flux cible :
+Objectif : connecter la sélection de skills de NEXUS à AI Skills Registry tout en gardant NEXUS utilisable sans registre.
 
-```text
-Demande
-   │
-   ▼
-NEXUS
-   │
-   ├── contexte code
-   ├── documentation
-   ├── instructions
-   └── skills recherchés
-           │
-           ▼
-    AI Skills Registry
-```
+Architecture retenue :
+
+- `AiSkillsRegistryProvider` s'appuie sur le contrat `SkillSourceProvider` existant ;
+- NEXUS lit un snapshot local sous `.nexus/registry/skills/**/SKILL.md` ;
+- aucune requête réseau ni opération Git n'est effectuée pendant la construction d'un contexte ;
+- l'absence de snapshot ne bloque jamais NEXUS ;
+- la divulgation progressive est conservée : frontmatter avant sélection, corps complet après sélection ;
+- les skills locaux du projet gardent une priorité `80`, supérieure à la priorité `60` des skills du registre ;
+- `.nexus/registry/` reste un cache local non versionné.
+
+Livrables validés :
+
+- `AiSkillsRegistryProvider` ;
+- agrégation dans le pipeline de découverte existant ;
+- priorité déterministe des skills locaux sur les doublons du registre ;
+- tests de découverte, sélection et chargement progressif ;
+- ADR-0042 ajouté et indexé ;
+- documentation `docs/developer/ai-skills-registry.md` ;
+- script `scripts/validate-iteration-14.ps1`.
+
+Validation réelle du 20 juillet 2026 :
+
+- `mvn clean install` : succès en 14,179 s ;
+- 47 tests cœur, 0 échec, 0 erreur ;
+- baseline qualité conservée : `precision@3 = 0,4444`, `recall@3 = 1,0000` ;
+- `SELF-SMOKE SUCCESS` ;
+- 222 fichiers indexés ;
+- 1 185 symboles ;
+- 9 600 relations ;
+- indexation complète : 2 127 ms ;
+- indexation incrémentale : 594 ms ;
+- recherche explicable : 724 ms ;
+- contexte strict : 3 items, 100/180 tokens, 883 ms ;
+- contexte multi-source : 12 items, 1 200/1 200 tokens, 1 077 ms ;
+- contexte avec skill : 1 192/1 200 tokens, 1 143 ms ;
+- contexte Git : 1 592/1 600 tokens, 1 114 ms ;
+- Git : 50 commits inspectés, 13 liés, 3 fragments sélectionnés ;
+- réduction du contexte candidat strict : 99,41 % ;
+- `AiSkillsRegistryProviderTest` : 2 tests, 0 échec, 0 erreur ;
+- tests dédiés : succès en 1,860 s ;
+- priorité locale sur registre : validée ;
+- divulgation progressive du registre : validée.
+
+Incident révélé puis corrigé pendant la validation :
+
+- le premier `testCompile` a échoué car le test utilisait `duplicates()` alors que `SkillDiscoveryResult` expose `deduplicatedSkills()` ;
+- le correctif a uniquement modifié le test, sans toucher au code de production ;
+- la validation complète a ensuite été rejouée avec succès.
+
+Les avertissements SLF4J, native access, Vector API et Maven Shade observés restent non bloquants pour cette itération.
+
+Critère de sortie : **validé**. NEXUS peut découvrir et sélectionner des skills provenant d'un snapshot local AI Skills Registry sans rendre le registre obligatoire, sans accès réseau pendant une requête et sans perdre la priorité des règles spécifiques au projet.
 
 ---
 

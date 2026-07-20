@@ -46,6 +46,10 @@ public final class LocalAgentSkillsProvider implements SkillSourceProvider {
             discoverBelow(projectRoot, skillContainer, relativeRoot, ignoreMatcher, skills, diagnostics);
         }
 
+        SkillProviderResult registryResult = new AiSkillsRegistryProvider().discover(query);
+        skills.addAll(registryResult.skills());
+        diagnostics.addAll(registryResult.diagnostics());
+
         skills.sort(Comparator
                 .comparing(SkillDescriptor::name)
                 .thenComparing(skill -> repositoryPath(skill.definitionPath())));
