@@ -70,7 +70,7 @@ Le numéro est un identifiant stable. Le nom de fichier utilise des minuscules, 
 | [ADR-0013](0013-construire-un-contextbundle-sous-budget-de-tokens.md) | Construire un ContextBundle sous budget de tokens explicable | Accepté |
 | [ADR-0014](0014-rendre-la-recherche-semantique-optionnelle.md) | Rendre la recherche sémantique et les embeddings optionnels | Accepté |
 | [ADR-0015](0015-valider-le-mvp-par-la-cli-avant-les-integrations.md) | Valider le moteur par la CLI avant API, MCP et IDE | Accepté |
-| [ADR-0016](0016-utiliser-le-sdk-java-officiel-pour-mcp.md) | Utiliser le SDK Java MCP officiel pour l'adaptateur MCP | Accepté |
+| [ADR-0016](0016-utiliser-le-sdk-java-officiel-pour-mcp.md) | Utiliser le SDK Java officiel pour l'adaptateur MCP | Accepté |
 | [ADR-0017](0017-decoupler-nexus-des-outils-et-orchestrateurs-externes.md) | Découpler NEXUS de Copilot, Claude, AI Skills Registry et des orchestrateurs | Accepté |
 | [ADR-0018](0018-utiliser-des-uuid-pour-les-identites-metier-et-des-ids-locaux-pour-la-persistance.md) | Utiliser des UUID pour les identités métier et des identifiants locaux pour la persistance | Accepté |
 | [ADR-0019](0019-stocker-les-donnees-locales-dans-un-nexus-home-configurable.md) | Stocker les données locales dans un NEXUS_HOME configurable | Accepté |
@@ -95,6 +95,7 @@ Le numéro est un identifiant stable. Le nom de fichier utilise des minuscules, 
 | [ADR-0038](0038-indexer-les-langages-additionnels-lexicalement-et-enrichir-la-structure-via-providers.md) | Indexer les langages additionnels lexicalement et enrichir la structure via des providers | Accepté |
 | [ADR-0039](0039-isoler-l-adaptateur-rest-quarkus-du-coeur-nexus.md) | Isoler l'adaptateur REST Quarkus du cœur NEXUS | Accepté |
 | [ADR-0040](0040-exposer-nexus-via-un-adaptateur-mcp-stdio-mince.md) | Exposer NEXUS via un adaptateur MCP STDIO mince | Accepté |
+| [ADR-0041](0041-reutiliser-le-serveur-mcp-pour-les-clients-assistants.md) | Réutiliser le serveur MCP pour les clients assistants | Accepté |
 
 ## Modèle
 
