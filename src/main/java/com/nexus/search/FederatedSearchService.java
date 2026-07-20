@@ -53,22 +53,32 @@ public final class FederatedSearchService {
             uniqueProjects.putIfAbsent(nonNullProject.id(), nonNullProject);
         }
 
-        List<FederatedSearchHit> candidates = new ArrayList<>();
+        List<OrderedFederatedHit> candidates = new ArrayList<>();
+        int projectOrder = 0;
         for (ProjectDescriptor project : uniqueProjects.values()) {
             List<RankedCandidate> projectResults = searchService.search(project, query, limit, explain);
-            for (RankedCandidate projectResult : projectResults) {
-                candidates.add(new FederatedSearchHit(project, projectResult));
+            for (int localOrder = 0; localOrder < projectResults.size(); localOrder++) {
+                candidates.add(new OrderedFederatedHit(
+                        new FederatedSearchHit(project, projectResults.get(localOrder)),
+                        projectOrder,
+                        localOrder));
             }
+            projectOrder++;
         }
 
         return candidates.stream()
                 .sorted(Comparator
-                        .comparingDouble((FederatedSearchHit hit) -> hit.rankedCandidate().score()).reversed()
-                        .thenComparing(hit -> hit.project().id().toString())
-                        .thenComparing(hit -> hit.rankedCandidate().candidate().type().name())
-                        .thenComparing(hit -> hit.rankedCandidate().candidate().path().toString())
-                        .thenComparing(hit -> hit.rankedCandidate().candidate().id()))
+                        .comparingDouble((OrderedFederatedHit hit) -> hit.hit().rankedCandidate().score()).reversed()
+                        .thenComparingInt(OrderedFederatedHit::projectOrder)
+                        .thenComparingInt(OrderedFederatedHit::localOrder))
                 .limit(limit)
+                .map(OrderedFederatedHit::hit)
                 .toList();
+    }
+
+    private record OrderedFederatedHit(
+            FederatedSearchHit hit,
+            int projectOrder,
+            int localOrder) {
     }
 }
