@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 public final class LuceneSearchIndex implements SearchIndex {
 
@@ -46,11 +47,19 @@ public final class LuceneSearchIndex implements SearchIndex {
     private static final String FIELD_CONTENT = "content";
     private static final String FIELD_SYMBOL_NAME = "symbol_name";
     private static final String FIELD_QUALIFIED_NAME = "qualified_name";
+    private static final String FIELD_CODE_TERMS = "code_terms";
+
+    private static final Pattern LOWER_OR_DIGIT_TO_UPPER =
+            Pattern.compile("(?<=[\\p{Ll}\\p{Nd}])(?=\\p{Lu})");
+    private static final Pattern ACRONYM_TO_WORD =
+            Pattern.compile("(?<=\\p{Lu})(?=\\p{Lu}\\p{Ll})");
+    private static final Pattern NON_ALPHANUMERIC = Pattern.compile("[^\\p{L}\\p{N}]+");
 
     private static final String[] SEARCH_FIELDS = {
             FIELD_SYMBOL_NAME,
             FIELD_QUALIFIED_NAME,
             FIELD_PATH_TEXT,
+            FIELD_CODE_TERMS,
             FIELD_CONTENT
     };
 
@@ -58,6 +67,7 @@ public final class LuceneSearchIndex implements SearchIndex {
             FIELD_SYMBOL_NAME, 5.0f,
             FIELD_QUALIFIED_NAME, 4.0f,
             FIELD_PATH_TEXT, 3.0f,
+            FIELD_CODE_TERMS, 2.0f,
             FIELD_CONTENT, 1.0f);
 
     private final NexusPaths paths;
@@ -171,15 +181,29 @@ public final class LuceneSearchIndex implements SearchIndex {
         document.add(new StringField(FIELD_LANGUAGE, source.language(), Field.Store.YES));
         document.add(new StringField(FIELD_CATEGORY, source.category().name(), Field.Store.YES));
         document.add(new TextField(FIELD_CONTENT, source.content(), Field.Store.NO));
+        document.add(new TextField(
+                FIELD_CODE_TERMS,
+                identifierSearchText(source.relativePath()) + " " + identifierSearchText(source.content()),
+                Field.Store.NO));
 
         for (CodeSymbol symbol : source.symbols()) {
             document.add(new StringField("symbol_exact", symbol.name(), Field.Store.NO));
             document.add(new TextField(FIELD_SYMBOL_NAME, symbol.name(), Field.Store.NO));
             document.add(new StringField("qualified_name_exact", symbol.qualifiedName(), Field.Store.NO));
             document.add(new TextField(FIELD_QUALIFIED_NAME, symbol.qualifiedName(), Field.Store.NO));
+            document.add(new TextField(
+                    FIELD_CODE_TERMS,
+                    identifierSearchText(symbol.name()) + " " + identifierSearchText(symbol.qualifiedName()),
+                    Field.Store.NO));
             document.add(new StringField("symbol_kind", symbol.kind().name(), Field.Store.NO));
         }
         return document;
+    }
+
+    private static String identifierSearchText(String value) {
+        String normalized = LOWER_OR_DIGIT_TO_UPPER.matcher(value).replaceAll(" ");
+        normalized = ACRONYM_TO_WORD.matcher(normalized).replaceAll(" ");
+        return NON_ALPHANUMERIC.matcher(normalized).replaceAll(" ").trim();
     }
 
     private static String documentKey(UUID projectId, String relativePath) {
