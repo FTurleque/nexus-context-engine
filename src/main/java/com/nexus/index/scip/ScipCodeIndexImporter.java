@@ -99,12 +99,13 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
 
         for (ScipSymbolInformation symbolInformation : document.symbols()) {
             ScipOccurrence definition = findDefinition(document.occurrences(), symbolInformation.symbol());
-            if (definition != null && definition.range() != null) {
+            SymbolKind symbolKind = mapKind(symbolInformation.kind());
+            if (definition != null && definition.range() != null && symbolKind != null) {
                 String name = symbolName(symbolInformation);
                 symbols.add(new IndexedSymbol(
                         relativePath,
                         new CodeSymbol(
-                                mapKind(symbolInformation.kind()),
+                                symbolKind,
                                 name,
                                 symbolInformation.symbol(),
                                 symbolInformation.signature().isBlank() ? name : symbolInformation.signature(),
@@ -247,7 +248,7 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
             case 11 -> SymbolKind.ENUM;
             case 21, 42, 53, 56 -> SymbolKind.INTERFACE;
             case 17, 18, 26, 66, 67, 68, 69, 70, 71, 74, 76, 80 -> SymbolKind.METHOD;
-            default -> SymbolKind.TYPE;
+            default -> null;
         };
     }
 
