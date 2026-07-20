@@ -1,6 +1,7 @@
 package com.nexus.index;
 
 import com.nexus.config.NexusPaths;
+import com.nexus.index.scan.ProjectScanner;
 import com.nexus.persistence.sqlite.SqliteDatabase;
 import com.nexus.persistence.sqlite.SqliteIndexRepository;
 import com.nexus.persistence.sqlite.SqliteProjectRepository;
@@ -12,7 +13,6 @@ import com.nexus.ranking.RankedCandidate;
 import com.nexus.search.SearchService;
 import com.nexus.search.lucene.LuceneFileSearchStrategy;
 import com.nexus.search.lucene.LuceneSearchIndex;
-import com.nexus.index.scan.ProjectScanner;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -79,15 +79,31 @@ class MultiLanguageIndexingIntegrationTest {
                 List.of(new LuceneFileSearchStrategy(searchIndex)),
                 List.of(),
                 new DeterministicContextRanker());
-        List<RankedCandidate> results = searchService.search(
+
+        List<RankedCandidate> pythonResults = searchService.search(
                 indexedProject,
                 "reconcile invoice payments",
                 5,
                 true);
+        assertFalse(pythonResults.isEmpty());
+        assertTrue(pythonResults.getFirst().candidate().path().endsWith("invoice_pipeline.py"));
+        assertTrue(pythonResults.getFirst().reasons().stream().anyMatch(reason -> reason.contains("lexicale")));
 
-        assertFalse(results.isEmpty());
-        assertTrue(results.getFirst().candidate().path().endsWith("invoice_pipeline.py"));
-        assertTrue(results.getFirst().reasons().stream().anyMatch(reason -> reason.contains("lexicale")));
+        List<RankedCandidate> typeScriptResults = searchService.search(
+                indexedProject,
+                "render invoice dashboard",
+                5,
+                true);
+        assertFalse(typeScriptResults.isEmpty());
+        assertTrue(typeScriptResults.getFirst().candidate().path().endsWith("invoice-dashboard.ts"));
+
+        List<RankedCandidate> sqlResults = searchService.search(
+                indexedProject,
+                "invoice payment paid at",
+                5,
+                true);
+        assertFalse(sqlResults.isEmpty());
+        assertTrue(sqlResults.getFirst().candidate().path().endsWith("invoice_report.sql"));
     }
 
     private static void write(Path root, String relativePath, String content) throws Exception {
