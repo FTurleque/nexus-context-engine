@@ -51,6 +51,7 @@ class NexusCliTest {
         assertEquals("help", payload.path("command").asText());
         assertTrue(payload.path("commands").isArray());
         assertTrue(payload.path("commands").toString().contains("context"));
+        assertTrue(payload.path("commands").toString().contains("--deep-java"));
     }
 
     @Test
