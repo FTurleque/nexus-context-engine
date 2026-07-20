@@ -28,8 +28,8 @@ class GitRecencyCandidateEnricherTest {
 
     @Test
     void addsRecencyOnlyToCandidatesTouchedByRecentCommits() throws Exception {
-        Path oldFile = write("src/OldService.java", "class OldService {}\n");
-        Path recentFile = write("src/RecentService.java", "class RecentService {}\n");
+        Path oldFile = write(temporaryDirectory, "src/OldService.java", "class OldService {}\n");
+        Path recentFile = write(temporaryDirectory, "src/RecentService.java", "class RecentService {}\n");
 
         try (Git git = Git.init().setDirectory(temporaryDirectory.toFile()).call()) {
             commitAll(git, "initial");
@@ -37,7 +37,7 @@ class GitRecencyCandidateEnricherTest {
             commitAll(git, "change recent service");
         }
 
-        ProjectDescriptor project = project();
+        ProjectDescriptor project = project(temporaryDirectory);
         List<SearchCandidate> candidates = List.of(
                 candidate("old", oldFile),
                 candidate("recent", recentFile));
@@ -58,19 +58,41 @@ class GitRecencyCandidateEnricherTest {
     }
 
     @Test
+    void resolvesRecencyForANestedProjectInAMonorepo() throws Exception {
+        Path projectRoot = temporaryDirectory.resolve("backend/order-app");
+        Path target = write(projectRoot, "src/OrderService.java", "class OrderService {}\n");
+        write(temporaryDirectory, "frontend/App.ts", "export const app = true;\n");
+
+        try (Git git = Git.init().setDirectory(temporaryDirectory.toFile()).call()) {
+            commitAll(git, "initial monorepo");
+            Files.writeString(target, "class OrderService { void changed() {} }\n");
+            commitAll(git, "change nested order service");
+        }
+
+        SearchCandidate candidate = candidate("order", target);
+        List<SearchCandidate> enriched = new GitRecencyCandidateEnricher().enrich(
+                project(projectRoot),
+                List.of(candidate));
+
+        assertEquals(1.0d, enriched.getFirst().signals().get(SearchSignals.GIT_RECENCY), 0.000001d);
+    }
+
+    @Test
     void leavesCandidatesUntouchedOutsideAGitRepository() throws Exception {
-        Path file = write("src/Service.java", "class Service {}\n");
+        Path file = write(temporaryDirectory, "src/Service.java", "class Service {}\n");
         SearchCandidate candidate = candidate("service", file);
 
-        List<SearchCandidate> enriched = new GitRecencyCandidateEnricher().enrich(project(), List.of(candidate));
+        List<SearchCandidate> enriched = new GitRecencyCandidateEnricher().enrich(
+                project(temporaryDirectory),
+                List.of(candidate));
 
         assertEquals(1, enriched.size());
         assertTrue(enriched.getFirst().signals().containsKey(SearchSignals.LEXICAL));
         assertFalse(enriched.getFirst().signals().containsKey(SearchSignals.GIT_RECENCY));
     }
 
-    private Path write(String relativePath, String content) throws Exception {
-        Path file = temporaryDirectory.resolve(relativePath);
+    private static Path write(Path root, String relativePath, String content) throws Exception {
+        Path file = root.resolve(relativePath);
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);
         return file;
@@ -85,11 +107,11 @@ class GitRecencyCandidateEnricherTest {
                 .call();
     }
 
-    private ProjectDescriptor project() {
+    private static ProjectDescriptor project(Path root) {
         return new ProjectDescriptor(
                 UUID.randomUUID(),
                 "git-test",
-                temporaryDirectory,
+                root,
                 ProjectSourceType.LOCAL,
                 Set.of("java"),
                 Set.of(),
