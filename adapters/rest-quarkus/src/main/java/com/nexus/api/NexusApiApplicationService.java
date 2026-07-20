@@ -47,6 +47,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.sql.SQLException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
@@ -72,7 +73,7 @@ public class NexusApiApplicationService {
         this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry");
         this.paths = NexusPaths.fromEnvironment();
 
-        SqliteDatabase database = new SqliteDatabase(paths);
+        SqliteDatabase database = initializeDatabase(paths);
         this.projectRepository = new SqliteProjectRepository(database);
         this.indexRepository = new SqliteIndexRepository(database);
         this.projectRegistry = new ProjectRegistry(projectRepository);
@@ -197,6 +198,14 @@ public class NexusApiApplicationService {
             return new ContextOperation(project, query, explain, elapsedMillis(startedAt), bundle);
         } finally {
             recordDuration("context", startedAt);
+        }
+    }
+
+    private static SqliteDatabase initializeDatabase(NexusPaths paths) {
+        try {
+            return new SqliteDatabase(paths);
+        } catch (SQLException | IOException exception) {
+            throw new IllegalStateException("Impossible d'initialiser le stockage SQLite de NEXUS", exception);
         }
     }
 
