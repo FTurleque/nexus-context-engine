@@ -36,14 +36,14 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
             return candidates;
         }
 
-        Map<String, List<Integer>> candidateIndexesByPath = new HashMap<>();
-        for (int index = 0; index < candidates.size(); index++) {
-            String relativePath = relativePath(project, candidates.get(index).path());
+        Map<String, SearchCandidate> candidatesByProjectPath = new LinkedHashMap<>();
+        for (SearchCandidate candidate : candidates) {
+            String relativePath = relativePath(project, candidate.path());
             if (relativePath != null) {
-                candidateIndexesByPath.computeIfAbsent(relativePath, ignored -> new ArrayList<>()).add(index);
+                candidatesByProjectPath.putIfAbsent(relativePath, candidate);
             }
         }
-        if (candidateIndexesByPath.isEmpty()) {
+        if (candidatesByProjectPath.isEmpty()) {
             return candidates;
         }
 
@@ -55,6 +55,12 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
             diffFormatter.setRepository(repository);
             diffFormatter.setDetectRenames(true);
 
+            String projectPrefix = projectPrefix(repository, project.rootPath());
+            Map<String, String> projectPathByGitPath = new HashMap<>();
+            for (String projectPath : candidatesByProjectPath.keySet()) {
+                projectPathByGitPath.put(toGitPath(projectPrefix, projectPath), projectPath);
+            }
+
             int position = 0;
             for (RevCommit commit : git.log().setMaxCount(MAX_COMMITS).call()) {
                 if (commit.getParentCount() == 0) {
@@ -64,8 +70,8 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
                 RevCommit parent = revWalk.parseCommit(commit.getParent(0).getId());
                 double score = recencyScore(position++);
                 for (DiffEntry entry : diffFormatter.scan(parent.getTree(), commit.getTree())) {
-                    addScore(recency, candidateIndexesByPath, entry.getOldPath(), score);
-                    addScore(recency, candidateIndexesByPath, entry.getNewPath(), score);
+                    addScore(recency, projectPathByGitPath, entry.getOldPath(), score);
+                    addScore(recency, projectPathByGitPath, entry.getNewPath(), score);
                 }
             }
         } catch (RepositoryNotFoundException exception) {
@@ -108,13 +114,16 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
 
     private static void addScore(
             Map<String, Double> recency,
-            Map<String, List<Integer>> candidateIndexesByPath,
+            Map<String, String> projectPathByGitPath,
             String gitPath,
             double score) {
-        if (gitPath == null || DiffEntry.DEV_NULL.equals(gitPath) || !candidateIndexesByPath.containsKey(gitPath)) {
+        if (gitPath == null || DiffEntry.DEV_NULL.equals(gitPath)) {
             return;
         }
-        recency.merge(gitPath, score, Math::max);
+        String projectPath = projectPathByGitPath.get(gitPath);
+        if (projectPath != null) {
+            recency.merge(projectPath, score, Math::max);
+        }
     }
 
     private static double recencyScore(int position) {
@@ -122,6 +131,19 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
             return 1.0d;
         }
         return Math.max(0.05d, 1.0d - ((double) position / (MAX_COMMITS - 1)));
+    }
+
+    private static String projectPrefix(Repository repository, Path projectRoot) {
+        Path workTree = repository.getWorkTree().toPath().toAbsolutePath().normalize();
+        Path root = projectRoot.toAbsolutePath().normalize();
+        if (!root.startsWith(workTree)) {
+            return "";
+        }
+        return workTree.relativize(root).toString().replace('\\', '/');
+    }
+
+    private static String toGitPath(String projectPrefix, String projectPath) {
+        return projectPrefix.isBlank() ? projectPath : projectPrefix + "/" + projectPath;
     }
 
     private static String relativePath(ProjectDescriptor project, Path candidatePath) {
