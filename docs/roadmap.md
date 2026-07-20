@@ -345,28 +345,72 @@ PR #7 fusionnée dans `main` au commit `118de1333d8c94dd152ebadec2106f8b00e1b291
 
 ## Itération 15 — JARVIS, Alfred et Brainiac
 
-Objectif : utiliser NEXUS comme fournisseur de contexte commun.
+État : **terminée, validée localement et intégrée le 20 juillet 2026**.
 
-Répartition cible :
+Objectif : utiliser NEXUS comme fournisseur de contexte commun tout en conservant JARVIS comme orchestrateur et en gardant NEXUS indépendant de JARVIS, Watchtower et des modèles spécialisés.
+
+Répartition validée :
 
 ```text
 JARVIS
-→ orchestration et routage
+→ orchestration, recherche documentaire et routage
 
 NEXUS
-→ sélection et construction du contexte
+→ sélection et construction du contexte technique
 
 AI Skills Registry
 → découverte des capacités
 
-Alfred / Brainiac / agents
-→ traitement spécialisé
+JARVIS Watchtower
+→ catalogue et résolution des profils de modèles
 
-LLM
-→ raisonnement et génération
+Alfred
+→ traitement général et documentaire
+
+Brainiac
+→ raisonnement approfondi et résolution complexe
+
+Ollama / runtime LLM
+→ exécution de la génération
 ```
 
-NEXUS ne doit introduire aucune dépendance vers ces projets.
+Architecture retenue :
+
+- l'intégration est réalisée du côté consommateur JARVIS ; aucun couplage vers JARVIS ou Watchtower n'est ajouté au cœur NEXUS ;
+- JARVIS consomme le contexte NEXUS via l'API REST locale `/api/v1/projects/{projectId}/context` ;
+- le contrat `ExternalContextProvider` isole l'enrichissement technique dans JARVIS ;
+- `NexusContextProvider` est désactivé par défaut, utilise un timeout court et fonctionne en fail-open ;
+- le contexte NEXUS enrichit le prompt mais ne devient jamais une source documentaire citée par JARVIS ;
+- la recherche documentaire JARVIS reste la source de vérité des citations ;
+- l'absence de résultats documentaires conserve le comportement existant et NEXUS ne se substitue pas aux preuves documentaires ;
+- aucune dépendance Maven JARVIS → NEXUS ni NEXUS → JARVIS n'est introduite ;
+- `LanguageModelClient` découple désormais l'orchestration de génération du runtime Ollama ;
+- `ModelCatalog`, `ModelProfile`, `ModelRouter` et `ModelRoute` portent le contrat de routage ;
+- `WatchtowerModelCatalog` charge optionnellement un `catalog.yaml` local, sans requête réseau pendant la génération ;
+- les questions générales ou documentaires sont routées vers le profil logique `alfred` ;
+- les demandes contenant des marqueurs explicites de raisonnement approfondi sont routées vers `brainiac` ;
+- les fallbacks déclarés par Watchtower sont respectés lorsqu'un runtime exécutable existe ;
+- tant que Watchtower conserve `runtime.model_name: null` pour Alfred et Brainiac, le fallback explicite `legacy-ollama` maintient le comportement historique ;
+- la décision de routage journalise le profil demandé, le profil résolu, la version, le runtime, le fallback et la raison, sans journaliser les prompts privés.
+
+Premier incrément — NEXUS → JARVIS :
+
+- PR JARVIS #89 `M8 — Intégrer NEXUS comme fournisseur de contexte optionnel` ;
+- 524 tests `jarvis-core`, 0 échec, 0 erreur, 16 ignorés ;
+- 16 tests ciblés NEXUS/Answer, 0 échec, 0 erreur ;
+- Spotless validé sur `jarvis`, `jarvis-core`, `jarvis-worker` et `jarvis-web` ;
+- PR fusionnée dans `FTurleque/jarvis:master` au commit `feb25195a6e3543307828204526e93f7d8451d30`.
+
+Deuxième incrément — Watchtower / Alfred / Brainiac :
+
+- PR JARVIS #90 `M8 — Router la génération via Watchtower, Alfred et Brainiac` ;
+- 530 tests `jarvis-core`, 0 échec, 0 erreur, 16 ignorés ;
+- 21 tests ciblés Watchtower/Answer/Ollama, 0 échec, 0 erreur ;
+- Spotless validé sur les quatre modules JARVIS ;
+- routage déterministe et fallback `legacy-ollama` validés ;
+- PR fusionnée dans `FTurleque/jarvis:master` au commit `0156175408cdd6c072d10d174c12e59702102d8f`.
+
+Critère de sortie : **validé**. JARVIS peut enrichir ses réponses avec un contexte technique sélectionné par NEXUS, puis router la génération vers des profils logiques Watchtower sans rendre NEXUS dépendant de l'orchestrateur ou du runtime de modèles. Le découpage cible JARVIS → orchestration, NEXUS → contexte, Watchtower → catalogue de profils et Alfred/Brainiac → spécialisation est désormais matérialisé et testé.
 
 ---
 
