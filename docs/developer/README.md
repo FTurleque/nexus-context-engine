@@ -10,8 +10,9 @@ L'objectif est qu'un développeur découvrant le repository puisse :
 4. comprendre comment ce classement devient un `ContextBundle` sous budget ;
 5. comprendre comment NEXUS réutilise les instructions déjà présentes dans un projet ;
 6. comprendre comment les Agent Skills sont découverts puis chargés progressivement ;
-7. reproduire les scénarios depuis la CLI et les tests ;
-8. modifier une brique sans casser les principes architecturaux.
+7. comprendre comment l'historique Git local enrichit le ranking et le contexte ;
+8. reproduire les scénarios depuis la CLI et les tests ;
+9. modifier une brique sans casser les principes architecturaux.
 
 > **Important** : `docs/architecture.md` décrit l'architecture courante à haut niveau. Les ADR sous `docs/adr/` conservent les décisions et leurs alternatives. Le présent guide décrit **l'implémentation concrète** et ses flux d'exécution.
 
@@ -27,6 +28,7 @@ L'objectif est qu'un développeur découvrant le repository puisse :
 | [6. CLI du MVP](cli-mvp.md) | contrat humain/JSON, codes de sortie, JAR autonome, launchers Windows, métriques |
 | [7. Contexte natif des projets](native-context-sources.md) | `AGENTS.md`, Copilot, Claude, Gemini, documentation et configurations existantes |
 | [8. Agent Skills](agent-skills.md) | `SKILL.md`, catalogue léger, sélection, activation, ressources, sécurité et budget |
+| [9. Contexte Git local](git-context.md) | récence Git, commits liés, diff local ciblé, historique, co-changements et budget Git |
 
 ## Vue d'ensemble actuelle
 
@@ -53,10 +55,12 @@ flowchart LR
         LEX[LuceneFileSearchStrategy]
         SYM[SymbolSearchStrategy]
         GRAPH[GraphCandidateEnricher]
+        GITRECENCY[GitRecencyCandidateEnricher]
         RANK[DeterministicContextRanker]
-        LEX --> RANK
-        SYM --> RANK
-        GRAPH --> RANK
+        LEX --> GRAPH
+        SYM --> GRAPH
+        GRAPH --> GITRECENCY
+        GITRECENCY --> RANK
     end
 
     subgraph NATIF[Instructions natives]
@@ -80,6 +84,12 @@ flowchart LR
         SP --> SD --> SS --> SL --> SB
     end
 
+    subgraph GITCTX[Contexte Git]
+        GP[GitContextSourceProvider]
+        LOCALGIT[LocalGitContextSourceProvider]
+        LOCALGIT --> GP
+    end
+
     subgraph CONTEXT[Construction du contexte]
         FACTORY[ContextFragmentFactory]
         BUDGET[BudgetedContextSelector]
@@ -87,6 +97,7 @@ flowchart LR
         FACTORY --> BUDGET --> BUNDLE
         DISC --> BUNDLE
         SB --> BUNDLE
+        GP --> BUNDLE
     end
 
     CORE --> INDEXATION
@@ -95,6 +106,7 @@ flowchart LR
     CORE --> SEARCH
     CORE --> NATIF
     CORE --> SKILLS
+    CORE --> GITCTX
     CORE --> CONTEXT
     BUNDLE --> CLI
 ```
@@ -113,6 +125,7 @@ Repository + demande + budget
           ├── documentation pertinente
           ├── instructions natives applicables
           ├── skills pertinents activés progressivement
+          ├── contexte Git local borné
           └── métadonnées de configuration détectées
           │
           ▼
@@ -122,7 +135,7 @@ Repository + demande + budget
  LLM / Agent consommateur
 ```
 
-Le choix du modèle et l'exécution des agents, hooks, MCP ou scripts de skills restent hors du cœur.
+Le choix du modèle et l'exécution des agents, hooks, MCP ou scripts de skills restent hors du cœur. Le provider Git reste lui aussi strictement en lecture seule et n'effectue aucune opération réseau.
 
 ## État d'implémentation
 
@@ -189,37 +202,45 @@ Validée localement le 20 juillet 2026 :
 - racines `.agents/skills`, `.github/skills`, `.claude/skills` ;
 - parsing YAML 1.2 du frontmatter avec SnakeYAML Engine ;
 - `SkillDescriptor` sans corps Markdown complet ;
-- validation `name` / `description` ;
-- inventaire léger des ressources ;
-- `SkillDiscoveryService` et déduplication par nom ;
-- `SkillSelector` déterministe sur `name` + `description` ;
-- `SkillLoader` appelé uniquement après sélection ;
+- sélection déterministe sur `name` + `description` ;
+- `SkillLoader` uniquement après sélection ;
 - `SkillContextSelector` sans troncature ;
-- type `CandidateType.SKILL` ;
-- isolation de tout le sous-arbre des skills hors de la recherche Lucene générique ;
-- budget skill dédié ;
-- métadonnées de découverte, matching, activation et ressources ;
-- `skillsExecuted=false` par conception ;
-- dogfooding avec `.agents/skills/nexus-context-validation` ;
+- isolation des skills hors Lucene générique ;
 - 100 fichiers source compilés ;
 - 17 fichiers de test compilés ;
 - 26 tests verts ;
-- baseline conservée : `mean precision@3 = 0,4444`, `mean recall@3 = 1,0000` ;
 - index : 170 fichiers, 480 symboles, 926 relations ;
-- indexation complète : 1 218 ms ;
-- indexation incrémentale : 282 ms avec 0 changement ;
-- recherche : 282 ms ;
-- contexte strict : 5 items, 180/180 tokens, 454 ms ;
-- contexte multi-source : 9 items, 1 185/1 200 tokens, 449 ms ;
 - contexte avec skill : 1 194/1 200 tokens, 550 ms ;
-- skill `nexus-context-validation` sélectionné intégralement : 233 tokens, non tronqué ;
-- 1 ressource inventoriée mais non chargée automatiquement ;
+- skill `nexus-context-validation` sélectionné intégralement : 233 tokens ;
 - `skillsExecuted = false` ;
 - résultat `SELF-SMOKE SUCCESS`.
 
-Le critère de sortie est validé : NEXUS sait recommander et inclure un skill pertinent sans charger tous les skills ni exécuter de script. Le chapitre [Agent Skills](agent-skills.md) décrit l'implémentation complète.
+### Itération 7 — Contexte Git
 
-La prochaine cible est l'**Itération 7 — Contexte Git**.
+**En cours — validation locale à effectuer.**
+
+Implémentation actuelle :
+
+- ADR-0035 ;
+- port `CandidateEnricher` ;
+- chaîne d'enrichissement générique dans `SearchService` ;
+- `GraphCandidateEnricher` migré vers ce contrat ;
+- `GitRecencyCandidateEnricher` ;
+- signal `gitRecencyScore` ;
+- bonus de récence configurable, `0,05` par défaut ;
+- port `GitContextSourceProvider` ;
+- `LocalGitContextSourceProvider` ;
+- commits récents liés ;
+- historique court des fichiers cibles ;
+- résumé du diff local limité aux candidats ;
+- détection de co-changements ;
+- support des projets imbriqués dans un monorepo ;
+- contexte Git désactivé sous 500 tokens ;
+- budget Git limité à 15 % du budget global et 500 tokens ;
+- métadonnées Git explicables ;
+- self-smoke étendu à 13 étapes.
+
+Le chapitre [Contexte Git local](git-context.md) décrit l'implémentation complète.
 
 ## Principes à respecter en contribuant
 
@@ -243,19 +264,23 @@ Le `SkillLoader` ne doit recevoir que des `SkillMatch` déjà sélectionnés.
 
 Les scripts et outils déclarés restent sous le contrôle du consommateur.
 
-### 6. SQLite est canonique, Lucene est dérivé
+### 6. Le contexte Git reste local et en lecture seule
+
+Aucun provider Git du cœur ne doit effectuer `fetch`, `pull`, `push`, `checkout` ou commit.
+
+### 7. SQLite est canonique, Lucene est dérivé
 
 Une perte de l'index Lucene doit rester reconstructible.
 
-### 7. Toute sélection doit être explicable
+### 8. Toute sélection doit être explicable
 
-Scores, instructions, skills et exclusions doivent provenir de règles inspectables.
+Scores, instructions, skills, contexte Git et exclusions doivent provenir de règles inspectables.
 
-### 8. Le budget appartient au moteur
+### 9. Le budget appartient au moteur
 
 Le bundle final ne doit jamais dépasser le budget demandé.
 
-### 9. Une décision structurante implique un ADR
+### 10. Une décision structurante implique un ADR
 
 Avant de modifier stockage, scoring, protocole ou stratégie de contexte, vérifier si un nouvel ADR est nécessaire.
 
@@ -267,6 +292,7 @@ src/main/java/com/nexus/
 ├── config/
 ├── context/
 │   └── source/
+│       ├── git/             Récence, historique et contexte Git local
 │       ├── instruction/     Providers AGENTS / Copilot / Claude / Gemini
 │       └── skill/           Catalogue, sélection et activation Agent Skills
 ├── index/
@@ -286,30 +312,37 @@ src/main/java/com/nexus/
 
 ```mermaid
 classDiagram
+    class CandidateEnricher {
+        <<interface>>
+        +enrich(ProjectDescriptor, List~SearchCandidate~)
+    }
+
     class ContextSourceProvider {
         <<interface>>
-        +discover(ContextSourceQuery) List~ContextSourceDescriptor~
     }
 
     class SkillSourceProvider {
         <<interface>>
-        +discover(SkillSourceQuery) SkillProviderResult
     }
 
+    class GitContextSourceProvider {
+        <<interface>>
+        +discover(GitContextQuery) GitContextResult
+    }
+
+    class GraphCandidateEnricher
+    class GitRecencyCandidateEnricher
     class LocalAgentSkillsProvider
-    class SkillDiscoveryService
-    class SkillSelector
-    class SkillLoader
+    class LocalGitContextSourceProvider
     class DefaultContextBuilder
 
+    CandidateEnricher <|.. GraphCandidateEnricher
+    CandidateEnricher <|.. GitRecencyCandidateEnricher
     SkillSourceProvider <|.. LocalAgentSkillsProvider
-    SkillDiscoveryService --> SkillSourceProvider
-    SkillSelector --> SkillDiscoveryService
-    SkillLoader --> SkillSelector
+    GitContextSourceProvider <|.. LocalGitContextSourceProvider
     DefaultContextBuilder --> ContextSourceProvider
-    DefaultContextBuilder --> SkillDiscoveryService
-    DefaultContextBuilder --> SkillSelector
-    DefaultContextBuilder --> SkillLoader
+    DefaultContextBuilder --> SkillSourceProvider
+    DefaultContextBuilder --> GitContextSourceProvider
 ```
 
 ## Validation locale de référence
@@ -320,7 +353,7 @@ mvn clean install
 .\scripts\self-smoke.ps1 -KeepData
 ```
 
-Le self-smoke comporte 12 étapes et valide notamment :
+Le self-smoke comporte désormais 13 étapes et valide notamment :
 
 ```text
 Java + Markdown indexés
@@ -329,15 +362,17 @@ instructions natives sélectionnées
     ↓
 contexte multi-source
     ↓
-Agent Skill découvert par métadonnées
+Agent Skill découvert puis activé progressivement
     ↓
-Skill pertinent sélectionné
+contexte Git désactivé sous 500 tokens
     ↓
-SKILL.md complet chargé après sélection
+repository Git local détecté sur un budget supérieur
     ↓
-référence du skill non chargée automatiquement
+commits liés découverts
     ↓
-skillsExecuted = false
+au moins un item GIT sélectionné
+    ↓
+budget global respecté
     ↓
 SELF-SMOKE SUCCESS
 ```
@@ -345,5 +380,5 @@ SELF-SMOKE SUCCESS
 Commande de reproduction ciblée :
 
 ```powershell
-.\scripts\nexus.ps1 context nexus-local "validate NEXUS context quality progressive disclosure" --budget 1200 --explain --json
+.\scripts\nexus.ps1 context nexus-local "DefaultContextBuilder git context budget recent changes" --budget 1600 --explain --json
 ```
