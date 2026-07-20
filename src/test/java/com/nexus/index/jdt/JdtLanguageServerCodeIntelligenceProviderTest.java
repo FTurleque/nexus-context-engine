@@ -2,6 +2,7 @@ package com.nexus.index.jdt;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.nexus.index.CodeIntelligenceSnapshot;
 import com.nexus.index.RelationKind;
 import com.nexus.index.SymbolRelation;
@@ -240,19 +241,21 @@ class JdtLanguageServerCodeIntelligenceProviderTest {
                     """.formatted(uri, line, line));
         }
 
-        private JsonNode typeItem(String name, int kind, String uri, int line) {
-            return JSON.createObjectNode()
-                    .put("name", name)
-                    .put("kind", kind)
-                    .put("uri", uri)
-                    .set("range", range(line))
-                    .set("selectionRange", range(line));
+        private ObjectNode typeItem(String name, int kind, String uri, int line) {
+            ObjectNode item = JSON.createObjectNode();
+            item.put("name", name);
+            item.put("kind", kind);
+            item.put("uri", uri);
+            item.set("range", range(line));
+            item.set("selectionRange", range(line));
+            return item;
         }
 
-        private JsonNode range(int line) {
-            return JSON.createObjectNode()
-                    .set("start", JSON.createObjectNode().put("line", line).put("character", 0))
-                    .set("end", JSON.createObjectNode().put("line", line).put("character", 1));
+        private ObjectNode range(int line) {
+            ObjectNode value = JSON.createObjectNode();
+            value.set("start", JSON.createObjectNode().put("line", line).put("character", 0));
+            value.set("end", JSON.createObjectNode().put("line", line).put("character", 1));
+            return value;
         }
     }
 }
