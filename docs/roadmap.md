@@ -686,23 +686,73 @@ Critère de sortie : **validé pour le périmètre actuel comme enrichissement p
 
 ## Itération 10 — Multi-langage
 
-Objectif : étendre progressivement NEXUS au-delà de Java.
+État : **terminée et validée localement le 20 juillet 2026**.
 
-Stratégies possibles :
+Objectif : étendre progressivement NEXUS au-delà de Java sans modifier le fonctionnement fondamental du `ContextBuilder` ni du ranking.
 
-- index SCIP existants ;
-- Tree-sitter ;
-- analyseurs spécifiques ;
-- combinaison des approches.
+Livrables validés :
 
-Langages candidats :
+- détection centralisée des langages via `SourceLanguage` ;
+- support lexical natif de Kotlin (`.kt`, `.kts`) ;
+- support lexical natif de TypeScript (`.ts`, `.tsx`) ;
+- support lexical natif de JavaScript (`.js`, `.jsx`, `.mjs`, `.cjs`) ;
+- support lexical natif de Python (`.py`) ;
+- support lexical natif de SQL (`.sql`) ;
+- analyse structurelle rendue optionnelle lorsqu'aucun `LanguageAnalyzer` spécialisé n'est disponible ;
+- persistance et indexation Lucene des sources polyglottes sans génération de faux symboles ;
+- normalisation Lucene des identifiants `snake_case` et `camelCase` via des termes de code dédiés ;
+- classification étendue des tests Java/Kotlin, Python et JavaScript/TypeScript ;
+- conservation de JavaParser comme analyseur structurel Java embarqué ;
+- enrichissement structurel multi-langage possible via SCIP et les futurs providers ;
+- ADR-0038 ;
+- documentation `docs/developer/multi-language.md` ;
+- script de validation reproductible `scripts/validate-iteration-10.ps1`.
 
-- Kotlin ;
-- TypeScript / JavaScript ;
-- Python ;
-- SQL.
+Décision associée :
 
-Critère de sortie : ajouter un langage sans modifier le fonctionnement fondamental du `ContextBuilder` ni du ranking.
+- ADR-0038 — indexer lexicalement les langages additionnels et enrichir leur structure via des providers optionnels.
+
+Validation locale du 20 juillet 2026 :
+
+- `mvn clean install` : succès ;
+- compilation de 113 fichiers source avec `--release 21` ;
+- compilation de 24 fichiers de test ;
+- 45 tests exécutés, 0 échec, 0 erreur, 0 ignoré ;
+- baseline qualité conservée : `mean precision@3 = 0,4444`, `mean recall@3 = 1,0000` ;
+- JAR bibliothèque et JAR CLI autonome générés et installés ;
+- `scripts/self-smoke.ps1` : `SELF-SMOKE SUCCESS`.
+
+Validation self-smoke :
+
+- 199 fichiers indexés ;
+- 1 027 symboles ;
+- 9 360 relations ;
+- langages détectés sur le repository NEXUS : Java, Markdown et SQL ;
+- indexation complète : 1 907 ms ;
+- indexation incrémentale : 626 ms ;
+- recherche `ProjectIndexingService` : 750 ms, fichier principal classé premier ;
+- contexte strict : 3 items, 100/180 tokens, 867 ms ;
+- contexte multi-source : 12 items, 1 200/1 200 tokens, 1 045 ms ;
+- contexte avec skill : 1 184/1 200 tokens, 1 066 ms ;
+- contexte Git : 1 591/1 600 tokens, 1 057 ms ;
+- 50 commits Git inspectés, 11 liés, 3 fragments sélectionnés ;
+- réduction du contexte candidat strict : 99,55 %.
+
+Validation multi-langage réelle :
+
+- projet synthétique de validation : 5 fichiers indexés ;
+- langages détectés : `javascript`, `kotlin`, `python`, `sql`, `typescript` ;
+- symboles structurels : 0, attendu sans analyseur spécialisé ;
+- relations structurelles : 0, attendu sans analyseur spécialisé ;
+- indexation : 270 ms ;
+- recherche Python `reconcile invoice payments` : succès ;
+- recherche TypeScript `render invoice dashboard` : succès ;
+- recherche SQL `invoice payment paid at` : succès ;
+- `ContextBundle` polyglotte : 138/400 tokens.
+
+La première validation a révélé un défaut réel de recherche : Lucene ne retrouvait pas correctement un identifiant comme `reconcile_invoice_payments` depuis une requête naturelle `reconcile invoice payments`. Le moteur a été corrigé en normalisant les termes de code afin de décomposer les identifiants `snake_case` et `camelCase`. La seconde validation confirme ce correctif avec les 45 tests verts et les recherches Python, TypeScript et SQL réussies.
+
+Critère de sortie : **validé pour le périmètre actuel**. NEXUS sait désormais ajouter et rechercher plusieurs langages sans modifier le fonctionnement fondamental du `ContextBuilder` ni du ranking. Le socle lexical fonctionne immédiatement pour Kotlin, TypeScript, JavaScript, Python et SQL, tandis que l'intelligence structurelle reste optionnelle et peut être enrichie via SCIP ou de futurs analyseurs spécialisés.
 
 ---
 
