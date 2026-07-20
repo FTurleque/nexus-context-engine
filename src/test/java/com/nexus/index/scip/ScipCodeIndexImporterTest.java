@@ -122,6 +122,40 @@ class ScipCodeIndexImporterTest {
         assertEquals(7, snapshot.symbols().getFirst().symbol().endLine());
     }
 
+    @Test
+    void ignoresUnsupportedSymbolKindsWithoutDroppingTheirReferences() throws Exception {
+        Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("unsupported-kind-project"));
+        String fieldSymbol = "scip-java maven demo app 1.0 demo/App#value.";
+        String relativePath = "src/main/java/demo/App.java";
+        byte[] definitionOccurrence = message(
+                packedInt32Field(1, 2, 4, 2, 9),
+                stringField(2, fieldSymbol),
+                varintField(3, 1));
+        byte[] referenceOccurrence = message(
+                packedInt32Field(1, 5, 8, 5, 13),
+                stringField(2, fieldSymbol));
+        byte[] fieldInformation = message(
+                stringField(1, fieldSymbol),
+                varintField(5, 15),
+                stringField(6, "value"));
+        byte[] document = message(
+                stringField(1, relativePath),
+                messageField(2, definitionOccurrence),
+                messageField(2, referenceOccurrence),
+                messageField(3, fieldInformation));
+        Files.write(projectRoot.resolve("index.scip"), messageField(2, document));
+
+        CodeIntelligenceSnapshot snapshot = new ScipCodeIndexImporter()
+                .importIndex(projectRoot)
+                .orElseThrow();
+
+        assertTrue(snapshot.symbols().isEmpty());
+        assertTrue(snapshot.relations().stream().anyMatch(indexed ->
+                indexed.relation().kind() == RelationKind.REFERENCES
+                        && indexed.relation().source().equals(relativePath)
+                        && indexed.relation().target().equals(fieldSymbol)));
+    }
+
     private static byte[] message(byte[]... fields) throws IOException {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         for (byte[] field : fields) {
