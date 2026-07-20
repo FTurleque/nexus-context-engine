@@ -24,6 +24,32 @@ public final class AssistantIntegrationGenerator {
         this.objectMapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
     }
 
+    public static void main(String[] args) {
+        if (args.length < 2) {
+            System.out.println(usage());
+            return;
+        }
+
+        String profile = args[0];
+        Path runner = Path.of(args[1]);
+        String format = args.length >= 3 ? args[2] : "command";
+        AssistantIntegrationGenerator generator = new AssistantIntegrationGenerator();
+
+        String output = switch (profile) {
+            case "copilot-cli" -> "json".equals(format)
+                    ? generator.copilotCliJson(runner)
+                    : generator.copilotCliCommand(runner);
+            case "copilot-jetbrains" -> generator.copilotJetBrainsJson(runner);
+            case "claude-project" -> "json".equals(format)
+                    ? generator.claudeProjectJson(runner)
+                    : generator.claudeProjectCommand(runner);
+            case "claude-user" -> generator.claudeUserCommand(runner);
+            default -> throw new IllegalArgumentException("Profil inconnu : " + profile);
+        };
+
+        System.out.println(output);
+    }
+
     public String copilotCliCommand(Path runner) {
         return "copilot mcp add " + SERVER_NAME + " --tools \"*\" -- java -jar " + quote(normalize(runner));
     }
@@ -78,5 +104,19 @@ public final class AssistantIntegrationGenerator {
 
     private static String quote(String value) {
         return '"' + value.replace("\"", "\\\"") + '"';
+    }
+
+    private static String usage() {
+        return """
+                Usage: java -jar nexus-assistant-clients-...-runner.jar <profil> <runner-mcp> [command|json]
+
+                Profils:
+                  copilot-cli       command ou json
+                  copilot-jetbrains json
+                  claude-project    command ou json
+                  claude-user       command
+
+                Le générateur n'écrit aucun fichier et ne modifie aucune configuration utilisateur.
+                """;
     }
 }
