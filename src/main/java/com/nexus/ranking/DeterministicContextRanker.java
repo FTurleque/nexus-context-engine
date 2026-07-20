@@ -13,13 +13,27 @@ import java.util.Map;
 
 public final class DeterministicContextRanker implements ContextRanker {
 
-    private static final Map<String, Double> WEIGHTS = Map.of(
+    public static final double DEFAULT_GIT_RECENCY_WEIGHT = 0.05d;
+
+    private static final Map<String, Double> BASE_WEIGHTS = Map.of(
             SearchSignals.LEXICAL, 0.40d,
             SearchSignals.SYMBOL_EXACT, 0.30d,
             SearchSignals.SYMBOL_FUZZY, 0.10d,
             SearchSignals.PATH, 0.10d,
-            SearchSignals.GRAPH, 0.10d,
-            SearchSignals.GIT_RECENCY, 0.05d);
+            SearchSignals.GRAPH, 0.10d);
+
+    private final double gitRecencyWeight;
+
+    public DeterministicContextRanker() {
+        this(DEFAULT_GIT_RECENCY_WEIGHT);
+    }
+
+    public DeterministicContextRanker(double gitRecencyWeight) {
+        if (gitRecencyWeight < 0.0d || gitRecencyWeight > 0.20d) {
+            throw new IllegalArgumentException("gitRecencyWeight must be between 0.0 and 0.20");
+        }
+        this.gitRecencyWeight = gitRecencyWeight;
+    }
 
     @Override
     public List<RankedCandidate> rank(RankingRequest request, List<SearchCandidate> candidates) {
@@ -35,7 +49,7 @@ public final class DeterministicContextRanker implements ContextRanker {
                 .toList();
     }
 
-    private static RankedCandidate rankCandidate(RankingRequest request, SearchCandidate candidate) {
+    private RankedCandidate rankCandidate(RankingRequest request, SearchCandidate candidate) {
         Map<String, Double> components = new LinkedHashMap<>();
         List<String> reasons = new ArrayList<>();
         double score = 0.0d;
@@ -48,7 +62,7 @@ public final class DeterministicContextRanker implements ContextRanker {
                 SearchSignals.GRAPH,
                 SearchSignals.GIT_RECENCY)) {
             double normalized = clamp(candidate.signals().getOrDefault(signal, 0.0d));
-            double contribution = normalized * WEIGHTS.get(signal);
+            double contribution = normalized * weight(signal);
             if (contribution <= 0.0d) {
                 continue;
             }
@@ -60,6 +74,13 @@ public final class DeterministicContextRanker implements ContextRanker {
         }
 
         return new RankedCandidate(candidate, score, components, reasons);
+    }
+
+    private double weight(String signal) {
+        if (SearchSignals.GIT_RECENCY.equals(signal)) {
+            return gitRecencyWeight;
+        }
+        return BASE_WEIGHTS.getOrDefault(signal, 0.0d);
     }
 
     private static String reason(String signal, double normalized, double contribution) {
