@@ -11,6 +11,7 @@ import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
+import org.eclipse.jgit.treewalk.filter.PathFilterGroup;
 import org.eclipse.jgit.util.io.DisabledOutputStream;
 
 import java.io.ByteArrayOutputStream;
@@ -59,9 +60,9 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
         try (Repository repository = openRepository(query.project().rootPath());
              Git git = new Git(repository);
              RevWalk revWalk = new RevWalk(repository);
-             DiffFormatter diffFormatter = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
-            diffFormatter.setRepository(repository);
-            diffFormatter.setDetectRenames(true);
+             DiffFormatter historyDiffFormatter = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
+            historyDiffFormatter.setRepository(repository);
+            historyDiffFormatter.setDetectRenames(true);
 
             String projectPrefix = projectPrefix(repository, query.project().rootPath());
             Map<String, String> projectPathByGitTarget = new LinkedHashMap<>();
@@ -75,8 +76,9 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
                 if (commit.getParentCount() == 0) {
                     continue;
                 }
+
                 RevCommit parent = revWalk.parseCommit(commit.getParent(0).getId());
-                Set<String> changedGitPaths = changedPaths(diffFormatter, parent, commit);
+                Set<String> changedGitPaths = changedPaths(historyDiffFormatter, parent, commit);
                 Set<String> touchedGitTargets = intersection(changedGitPaths, gitTargets);
                 if (touchedGitTargets.isEmpty()) {
                     continue;
@@ -96,11 +98,14 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
 
                 for (String gitTarget : touchedGitTargets) {
                     String projectTarget = projectPathByGitTarget.get(gitTarget);
-                    List<CommitSummary> fileHistory = history.computeIfAbsent(projectTarget, ignored -> new ArrayList<>());
+                    List<CommitSummary> fileHistory = history.computeIfAbsent(
+                            projectTarget,
+                            ignored -> new ArrayList<>());
                     if (fileHistory.size() < MAX_HISTORY_PER_PATH) {
                         fileHistory.add(summary);
                     }
                 }
+
                 for (String changedGitPath : changedGitPaths) {
                     String projectPath = toProjectPath(projectPrefix, changedGitPath);
                     if (projectPath != null && !projectTargets.contains(projectPath)) {
@@ -115,7 +120,6 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
             addWorkingTreeFragment(
                     fragments,
                     git,
-                    repository,
                     git.status().call(),
                     projectPathByGitTarget,
                     projectPrefix);
@@ -167,6 +171,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
         if (commits.isEmpty()) {
             return;
         }
+
         StringBuilder content = new StringBuilder("# Commits Git récents liés au contexte\n\n");
         content.append("Chemins cibles : ").append(String.join(", ", targets)).append("\n\n");
         for (CommitSummary commit : commits.stream().limit(8).toList()) {
@@ -180,6 +185,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
                     .append(String.join(", ", commit.paths().stream().limit(6).toList()))
                     .append('\n');
         }
+
         fragments.add(fragment(
                 Path.of(".nexus", "git", "recent-commits.md"),
                 content.toString(),
@@ -196,6 +202,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
         if (history.isEmpty()) {
             return;
         }
+
         StringBuilder content = new StringBuilder("# Historique Git court des fichiers cibles\n\n");
         history.entrySet().stream()
                 .limit(MAX_TARGET_HISTORY_PATHS)
@@ -212,6 +219,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
                     }
                     content.append('\n');
                 });
+
         fragments.add(fragment(
                 Path.of(".nexus", "git", "file-history.md"),
                 content.toString(),
@@ -224,7 +232,6 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
     private static void addWorkingTreeFragment(
             List<ContextFragment> fragments,
             Git git,
-            Repository repository,
             Status status,
             Map<String, String> projectPathByGitTarget,
             String projectPrefix) throws Exception {
@@ -236,16 +243,9 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
         collectStatus(changes, "manquant", status.getMissing(), projectPathByGitTarget);
         collectStatus(changes, "non suivi", status.getUntracked(), projectPathByGitTarget);
 
-        String unstagedPatch = formatTargetDiff(
-                repository,
-                git.diff().call(),
-                projectPathByGitTarget.keySet(),
-                projectPrefix);
-        String stagedPatch = formatTargetDiff(
-                repository,
-                git.diff().setCached(true).call(),
-                projectPathByGitTarget.keySet(),
-                projectPrefix);
+        Set<String> gitTargets = projectPathByGitTarget.keySet();
+        String unstagedPatch = formatTargetDiff(git, gitTargets, projectPrefix, false);
+        String stagedPatch = formatTargetDiff(git, gitTargets, projectPrefix, true);
 
         if (changes.isEmpty() && unstagedPatch.isBlank() && stagedPatch.isBlank()) {
             return;
@@ -279,27 +279,26 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
                         "provider : local-git")));
     }
 
+    /**
+     * Demande à DiffCommand de produire directement le patch. Le formatter interne
+     * conserve ainsi l'accès aux itérateurs du working tree pour les contenus non indexés.
+     */
     private static String formatTargetDiff(
-            Repository repository,
-            List<DiffEntry> entries,
+            Git git,
             Set<String> gitTargets,
-            String projectPrefix) throws IOException {
-        List<DiffEntry> selected = entries.stream()
-                .filter(entry -> gitTargets.contains(entry.getOldPath()) || gitTargets.contains(entry.getNewPath()))
-                .toList();
-        if (selected.isEmpty()) {
+            String projectPrefix,
+            boolean cached) throws Exception {
+        if (gitTargets.isEmpty()) {
             return "";
         }
 
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        try (DiffFormatter formatter = new DiffFormatter(output)) {
-            formatter.setRepository(repository);
-            formatter.setDetectRenames(true);
-            for (DiffEntry entry : selected) {
-                formatter.format(entry);
-            }
-            formatter.flush();
-        }
+        git.diff()
+                .setCached(cached)
+                .setPathFilter(PathFilterGroup.createFromStrings(gitTargets))
+                .setOutputStream(output)
+                .call();
+
         String patch = output.toString(StandardCharsets.UTF_8);
         patch = relativizePatch(projectPrefix, patch);
         if (patch.length() <= MAX_LOCAL_DIFF_CHARS) {
@@ -329,6 +328,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
         if (top.isEmpty()) {
             return 0;
         }
+
         StringBuilder content = new StringBuilder("# Fichiers fréquemment modifiés avec les chemins cibles\n\n");
         for (Map.Entry<String, Integer> entry : top) {
             content.append("- ")
@@ -337,6 +337,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
                     .append(entry.getValue())
                     .append(" commit(s) commun(s)\n");
         }
+
         fragments.add(fragment(
                 Path.of(".nexus", "git", "co-changes.md"),
                 content.toString(),
@@ -425,9 +426,10 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
 
     private static String safeMessage(Exception exception) {
         String message = exception.getMessage();
-        return message == null || message.isBlank()
-                ? exception.getClass().getSimpleName()
-                : message;
+        if (message == null || message.isBlank()) {
+            return exception.getClass().getSimpleName();
+        }
+        return exception.getClass().getSimpleName() + ": " + message;
     }
 
     private record CommitSummary(
