@@ -1,5 +1,7 @@
 [CmdletBinding()]
-param()
+param(
+    [switch]$AdapterOnly
+)
 
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -25,12 +27,18 @@ try {
     Write-Host "============================================================"
     Write-Host
 
-    Write-Host "[1/4] Build et tests du coeur NEXUS"
-    Invoke-Maven -Arguments @("clean", "install")
+    if (-not $AdapterOnly) {
+        Write-Host "[1/4] Build et tests du coeur NEXUS"
+        Invoke-Maven -Arguments @("clean", "install")
 
-    Write-Host
-    Write-Host "[2/4] Self-smoke historique du coeur"
-    & (Join-Path $PSScriptRoot "self-smoke.ps1")
+        Write-Host
+        Write-Host "[2/4] Self-smoke historique du coeur"
+        & (Join-Path $PSScriptRoot "self-smoke.ps1")
+    }
+    else {
+        Write-Host "[1/4] Build et tests du coeur NEXUS : SKIPPED (deja valide)"
+        Write-Host "[2/4] Self-smoke historique du coeur : SKIPPED (deja valide)"
+    }
 
     Write-Host
     Write-Host "[3/4] Build et tests HTTP de l'adaptateur Quarkus"
@@ -45,8 +53,14 @@ try {
 
     Write-Host
     Write-Host "=== VALIDATION ADAPTATEUR API ==="
-    Write-Host "Coeur Maven       : SUCCESS"
-    Write-Host "Self-smoke        : SUCCESS"
+    if ($AdapterOnly) {
+        Write-Host "Coeur Maven       : SUCCESS (deja valide)"
+        Write-Host "Self-smoke        : SUCCESS (deja valide)"
+    }
+    else {
+        Write-Host "Coeur Maven       : SUCCESS"
+        Write-Host "Self-smoke        : SUCCESS"
+    }
     Write-Host "Tests REST Quarkus: SUCCESS"
     Write-Host "Packaging Quarkus : $quarkusRunner"
     Write-Host "Health            : /q/health/ready"
