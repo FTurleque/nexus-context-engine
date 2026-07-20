@@ -20,6 +20,7 @@ Utilisateur / Agent / IDE
    ├── documentation pertinente
    ├── instructions natives applicables
    ├── Agent Skills pertinents
+   ├── contexte Git local pertinent
    ├── ranking explicable
    └── budget de contexte
           │
@@ -48,6 +49,11 @@ skills
 → découvre les métadonnées
 → sélectionne name + description
 → charge seulement le SKILL.md pertinent
+
+Git local
+→ enrichit légèrement le ranking par récence
+→ cible les chemins déjà sélectionnés
+→ ajoute uniquement un historique borné et pertinent
 ```
 
 Les settings, permissions, hooks, configurations MCP et profils d'agents restent séparés du contexte automatiquement injecté.
@@ -56,6 +62,7 @@ Documentation détaillée :
 
 - [Contexte natif des projets](docs/developer/native-context-sources.md)
 - [Agent Skills](docs/developer/agent-skills.md)
+- [Contexte Git local](docs/developer/git-context.md)
 
 ## Périmètre actuel
 
@@ -66,9 +73,11 @@ Documentation détaillée :
 - indexation SQLite + Lucene ;
 - recherche BM25, symbolique et graphe ;
 - ranking déterministe et explicable ;
+- bonus faible de récence Git locale ;
 - construction d'extraits sous budget ;
 - instructions natives avec résolution de scope ;
 - Agent Skills avec divulgation progressive ;
+- contexte Git local borné et en lecture seule ;
 - CLI humaine et JSON ;
 - JAR autonome.
 
@@ -82,11 +91,13 @@ Principaux ports :
 
 - `LanguageAnalyzer` ;
 - `SearchStrategy` ;
+- `CandidateEnricher` ;
 - `ContextRanker` ;
 - `TokenEstimator` ;
 - `ContextBuilder` ;
 - `ContextSourceProvider` ;
-- `SkillSourceProvider`.
+- `SkillSourceProvider` ;
+- `GitContextSourceProvider`.
 
 ```text
 Repository
@@ -94,10 +105,11 @@ Repository
    ├── Java
    ├── Markdown
    ├── AGENTS.md / Copilot / Claude / Gemini
-   └── Agent Skills
+   ├── Agent Skills
+   └── historique Git local
    │
    ▼
-Providers / analyzers
+Providers / analyzers / enrichisseurs
    │
    ▼
 Modèle NEXUS normalisé
@@ -106,10 +118,10 @@ Modèle NEXUS normalisé
    └── Lucene dérivé
    │
    ▼
-Recherche + ranking + scope + skill matching
+Recherche + ranking + scope + skill matching + récence Git
    │
    ▼
-Budgets
+Budgets instructions / skills / Git / tâche
    │
    ▼
 ContextBundle
@@ -119,7 +131,7 @@ ContextBundle
 
 - SQLite : source de vérité structurelle locale ;
 - Lucene : index de recherche reconstructible ;
-- JGit : `.gitignore` / `.nexusignore` ;
+- JGit : `.gitignore` / `.nexusignore`, récence et contexte Git local en lecture seule ;
 - SHA-256 : détection incrémentale et déduplication ;
 - JavaParser : analyse Java ;
 - SnakeYAML Engine : frontmatter YAML 1.2 des Agent Skills ;
@@ -135,6 +147,7 @@ ContextBundle
 - [CLI du MVP](docs/developer/cli-mvp.md)
 - [Contexte natif des projets](docs/developer/native-context-sources.md)
 - [Agent Skills](docs/developer/agent-skills.md)
+- [Contexte Git local](docs/developer/git-context.md)
 
 ## État du projet
 
@@ -222,7 +235,33 @@ Validation de référence :
 
 Le critère de sortie de l'Itération 6 est validé : NEXUS sait recommander et inclure un skill pertinent dans un `ContextBundle` sans charger tous les skills, sans tronquer le skill sélectionné et sans exécuter ses scripts.
 
-L'Itération 6 est encadrée par ADR-0034. La prochaine cible de la roadmap est l'**Itération 7 — Contexte Git**.
+### Itération 7 — Contexte Git
+
+**En cours — validation locale à effectuer.**
+
+Implémentation actuelle :
+
+- ADR-0035 ;
+- `CandidateEnricher` pour chaîner les enrichissements de recherche ;
+- `GraphCandidateEnricher` migré vers ce contrat ;
+- `GitRecencyCandidateEnricher` ;
+- signal explicable `gitRecencyScore` ;
+- bonus Git configurable, `0,05` par défaut et désactivable avec `0` ;
+- `GitContextSourceProvider` ;
+- `LocalGitContextSourceProvider` ;
+- lecture Git strictement locale et en lecture seule ;
+- maximum 50 commits inspectés ;
+- commits récents liés aux chemins candidats ;
+- historique court des principaux fichiers candidats ;
+- résumé du diff local limité aux chemins candidats ;
+- maximum 8 co-changements ;
+- support des projets imbriqués dans un monorepo sans fuite hors du sous-projet ;
+- contexte Git désactivé pour les budgets globaux inférieurs à 500 tokens ;
+- budget Git plafonné à 15 % du budget global et 500 tokens ;
+- métadonnées Git exposées en JSON explicable ;
+- self-smoke étendu à 13 étapes.
+
+Le contexte Git reste optionnel : un projet non Git conserve le comportement historique sans erreur. Cette itération reste à valider par le build et le self-smoke avant clôture.
 
 ## Comment utiliser NEXUS sur une application déjà configurée
 
@@ -238,6 +277,7 @@ NEXUS peut produire conceptuellement :
 ContextBundle
 ├── INSTRUCTION  AGENTS.md
 ├── SKILL        .agents/skills/pdf-processing/SKILL.md
+├── GIT          .nexus/git/recent-commits.md
 ├── SYMBOL       PdfService.java#extractForm
 ├── TEST         PdfServiceTest.java
 └── DOCUMENTATION docs/pdf-processing.md
@@ -251,27 +291,33 @@ Une référence comme :
 
 reste hors du bundle tant qu'un consommateur ne la demande pas explicitement.
 
-## Inspecter les skills en JSON
+## Inspecter les skills et Git en JSON
 
 ```powershell
-$result = .\scripts\nexus.ps1 context mon-app "extract PDF form" --budget 2000 --explain --json |
+$result = .\scripts\nexus.ps1 context mon-app "extract PDF form recent changes" --budget 2000 --explain --json |
     ConvertFrom-Json
 
 $result.items | Where-Object type -eq "SKILL"
+$result.items | Where-Object type -eq "GIT"
 $result.metadata.skillsDiscovered
 $result.metadata.skillsMatched
 $result.metadata.skillsSelected
 $result.metadata.skillResourcesDiscovered
 $result.metadata.skillsExecuted
+$result.metadata.gitEnabled
+$result.metadata.gitRepositoryAvailable
+$result.metadata.gitRelatedCommits
+$result.metadata.gitSelectedItems
 ```
 
-La propriété :
+Les invariants de sécurité principaux sont :
 
 ```text
 skillsExecuted = false
+Git = lecture locale uniquement
 ```
 
-est un invariant de sécurité : NEXUS construit du contexte, il n'exécute pas les skills.
+NEXUS construit du contexte : il n'exécute pas les skills et n'effectue aucune mutation Git ou opération réseau.
 
 ## CLI
 
@@ -302,7 +348,7 @@ mvn clean install
 .\scripts\self-smoke.ps1 -KeepData
 ```
 
-Le self-smoke valide désormais :
+Le self-smoke valide désormais 13 étapes :
 
 ```text
 JAR autonome
@@ -313,15 +359,15 @@ instructions natives
    ↓
 contexte multi-source
    ↓
-Agent Skill découvert par metadata
+Agent Skill découvert et activé progressivement
    ↓
-Skill sélectionné
+contexte Git désactivé pour le budget strict à 180 tokens
    ↓
-SKILL.md complet chargé après sélection
+repository Git local détecté sur un budget supérieur
    ↓
-ressources seulement inventoriées
+commits liés + fragment GIT sous budget
    ↓
-skillsExecuted = false
+sortie humaine
    ↓
 SELF-SMOKE SUCCESS
 ```
@@ -336,7 +382,8 @@ NEXUS est local-first.
 - settings, permissions et profils d'agents ne sont pas injectés comme instructions ;
 - aucun hook ni serveur MCP n'est exécuté ;
 - aucun script d'un Agent Skill n'est exécuté ;
-- les ressources d'un skill ne sont pas chargées automatiquement.
+- les ressources d'un skill ne sont pas chargées automatiquement ;
+- le contexte Git est lu localement et n'effectue aucun `fetch`, `pull`, `push`, `checkout` ou commit.
 
 ## Licence
 
