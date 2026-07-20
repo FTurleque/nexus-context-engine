@@ -4,6 +4,7 @@ import com.nexus.index.FileCategory;
 import com.nexus.index.IndexRepository;
 import com.nexus.index.IndexedFile;
 import com.nexus.project.ProjectDescriptor;
+import com.nexus.search.CandidateEnricher;
 import com.nexus.search.CandidateMerger;
 import com.nexus.search.CandidateType;
 import com.nexus.search.SearchCandidate;
@@ -15,7 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-public final class GraphCandidateEnricher {
+public final class GraphCandidateEnricher implements CandidateEnricher {
 
     private static final double FIRST_HOP_FACTOR = 0.65d;
     private static final double SECOND_HOP_FACTOR = 0.35d;
@@ -30,6 +31,7 @@ public final class GraphCandidateEnricher {
         this.candidateMerger = new CandidateMerger();
     }
 
+    @Override
     public List<SearchCandidate> enrich(ProjectDescriptor project, List<SearchCandidate> directCandidates) {
         ProjectGraph graph = graphBuilder.build(project.id());
         Map<String, IndexedFile> indexedFiles = indexRepository.findFiles(project.id());
