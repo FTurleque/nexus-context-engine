@@ -242,6 +242,96 @@ class ProjectIndexingServiceTest {
                 .noneMatch(indexed -> indexed.symbol().sourceProvider().equals(provider)));
     }
 
+    @Test
+    void runsActiveProviderOnlyOnDeepIndexAndPurgesItAfterJavaChanges() throws Exception {
+        Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("active-provider-project"));
+        Path sourceFile = projectRoot.resolve("src/main/java/demo/App.java");
+        Files.createDirectories(sourceFile.getParent());
+        Files.writeString(sourceFile, """
+                package demo;
+                class App {
+                    void run() {}
+                }
+                """);
+
+        NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("active-provider-home"));
+        SqliteDatabase database = new SqliteDatabase(paths);
+        ProjectRepository projectRepository = new SqliteProjectRepository(database);
+        IndexRepository indexRepository = new SqliteIndexRepository(database);
+        ProjectDescriptor project = new ProjectRegistry(projectRepository).register(projectRoot, "active-provider-demo");
+        String providerName = "deep-test";
+        int[] invocations = {0};
+        CodeIntelligenceProvider provider = new CodeIntelligenceProvider() {
+            @Override
+            public String sourceProvider() {
+                return providerName;
+            }
+
+            @Override
+            public CodeIntelligenceSnapshot analyze(Path root) {
+                invocations[0]++;
+                return new CodeIntelligenceSnapshot(
+                        providerName,
+                        List.of(new IndexedSymbol(
+                                "src/main/java/demo/App.java",
+                                new CodeSymbol(
+                                        SymbolKind.TYPE,
+                                        "ResolvedDependency",
+                                        "demo.ResolvedDependency",
+                                        "ResolvedDependency",
+                                        5,
+                                        5,
+                                        providerName))),
+                        List.of(new IndexedRelation(
+                                "src/main/java/demo/App.java",
+                                new SymbolRelation(
+                                        RelationKind.REFERENCES,
+                                        "demo.App#run()",
+                                        "demo.ResolvedDependency",
+                                        1.0d,
+                                        providerName))));
+            }
+        };
+
+        ProjectIndexingService service = new ProjectIndexingService(
+                projectRepository,
+                indexRepository,
+                new ProjectScanner(),
+                List.of(new JavaParserLanguageAnalyzer()),
+                new LuceneSearchIndex(paths),
+                List.of(),
+                List.of(provider));
+
+        IndexingReport baseline = service.index(project.id());
+        assertEquals(0, invocations[0]);
+        assertEquals(new IndexStatistics(1, 2, 0), baseline.statistics());
+
+        IndexingReport deep = service.indexWithCodeIntelligence(project.id());
+        assertEquals(1, invocations[0]);
+        assertEquals(new IndexStatistics(1, 3, 1), deep.statistics());
+
+        IndexingReport unchanged = service.index(project.id());
+        assertEquals(1, invocations[0]);
+        assertEquals(new IndexStatistics(1, 3, 1), unchanged.statistics());
+
+        Files.writeString(sourceFile, """
+                package demo;
+                class App {
+                    void run() {}
+                    void stop() {}
+                }
+                """);
+        IndexingReport changed = service.index(project.id());
+        assertEquals(1, invocations[0]);
+        assertEquals(new IndexStatistics(1, 3, 0), changed.statistics());
+        assertTrue(indexRepository.findSymbols(project.id()).stream()
+                .noneMatch(indexed -> indexed.symbol().sourceProvider().equals(providerName)));
+
+        IndexingReport deepAgain = service.indexWithCodeIntelligence(project.id());
+        assertEquals(2, invocations[0]);
+        assertEquals(new IndexStatistics(1, 4, 1), deepAgain.statistics());
+    }
+
     private static int luceneDocumentCount(NexusPaths paths, ProjectDescriptor project) throws Exception {
         try (Directory directory = FSDirectory.open(paths.projectLuceneIndex(project.id()));
              DirectoryReader reader = DirectoryReader.open(directory)) {
