@@ -29,13 +29,13 @@ class JdtLanguageServerCodeIntelligenceProviderTest {
         Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("project"));
         Path base = write(projectRoot, "src/main/java/demo/Base.java", """
                 package demo;
-                interface Base {
-                    void run();
+                abstract class Base {
+                    abstract void run();
                 }
                 """);
         Path implementation = write(projectRoot, "src/main/java/demo/Impl.java", """
                 package demo;
-                class Impl implements Base {
+                class Impl extends Base {
                     public void run() {}
                 }
                 """);
@@ -131,16 +131,16 @@ class JdtLanguageServerCodeIntelligenceProviderTest {
                         [
                           {
                             "name":"Base",
-                            "kind":11,
+                            "kind":5,
                             "range":{"start":{"line":1,"character":0},"end":{"line":3,"character":1}},
-                            "selectionRange":{"start":{"line":1,"character":10},"end":{"line":1,"character":14}},
+                            "selectionRange":{"start":{"line":1,"character":15},"end":{"line":1,"character":19}},
                             "children":[
                               {
                                 "name":"run",
                                 "detail":"() : void",
                                 "kind":6,
-                                "range":{"start":{"line":2,"character":4},"end":{"line":2,"character":15}},
-                                "selectionRange":{"start":{"line":2,"character":9},"end":{"line":2,"character":12}}
+                                "range":{"start":{"line":2,"character":4},"end":{"line":2,"character":24}},
+                                "selectionRange":{"start":{"line":2,"character":18},"end":{"line":2,"character":21}}
                               }
                             ]
                           }
@@ -188,14 +188,14 @@ class JdtLanguageServerCodeIntelligenceProviderTest {
             }
             return JSON.createArrayNode().add(typeItem(
                     baseUri.equals(uri) ? "Base" : "Impl",
-                    baseUri.equals(uri) ? 11 : 5,
+                    5,
                     uri,
                     1));
         }
 
         private JsonNode supertypes(String name) throws java.io.IOException {
             if ("Impl".equals(name)) {
-                return JSON.createArrayNode().add(typeItem("Base", 11, baseUri, 1));
+                return JSON.createArrayNode().add(typeItem("Base", 5, baseUri, 1));
             }
             return JSON.createArrayNode();
         }
