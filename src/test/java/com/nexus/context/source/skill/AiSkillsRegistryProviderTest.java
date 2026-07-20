@@ -88,7 +88,8 @@ class AiSkillsRegistryProviderTest {
         assertEquals(1, result.skills().size());
         assertEquals("local-agent-skills", result.skills().getFirst().provider());
         assertEquals(80, result.skills().getFirst().priority());
-        assertTrue(result.duplicates().stream().anyMatch(message -> message.contains(".nexus/registry")));
+        assertTrue(result.deduplicatedSkills().stream()
+                .anyMatch(message -> message.contains(".nexus/registry")));
     }
 
     private ProjectDescriptor project() {
