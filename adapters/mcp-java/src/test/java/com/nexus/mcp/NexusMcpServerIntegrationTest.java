@@ -25,6 +25,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NexusMcpServerIntegrationTest {
 
+    private static final Set<String> EXPECTED_TOOLS = Set.of(
+            "list_projects",
+            "search_code",
+            "find_symbol",
+            "find_usages",
+            "build_context",
+            "explain_context");
+
     @TempDir
     Path temporaryDirectory;
 
@@ -71,11 +79,8 @@ class NexusMcpServerIntegrationTest {
             client.initialize();
 
             var tools = client.listTools().tools().stream().map(McpSchema.Tool::name).toList();
-            assertTrue(tools.contains("search_code"));
-            assertTrue(tools.contains("find_symbol"));
-            assertTrue(tools.contains("find_usages"));
-            assertTrue(tools.contains("build_context"));
-            assertTrue(tools.contains("explain_context"));
+            assertEquals(EXPECTED_TOOLS.size(), tools.size());
+            assertEquals(EXPECTED_TOOLS, Set.copyOf(tools));
 
             McpSchema.CallToolResult searchResult = client.callTool(
                     McpSchema.CallToolRequest.builder("search_code")
