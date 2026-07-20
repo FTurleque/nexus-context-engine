@@ -118,9 +118,9 @@ Si `index.scip` est présent, il est consommé. Sinon, JavaParser reste la seule
 
 ### Symboles
 
-Les `Document.symbols` possédant une occurrence de définition sont convertis en `CodeSymbol`.
+Les `Document.symbols` possédant une occurrence de définition sont convertis en `CodeSymbol` uniquement lorsque leur kind possède un équivalent fiable dans le modèle NEXUS.
 
-Le mapping initial des kinds couvre principalement les catégories nécessaires aux projets JVM :
+Le mapping initial couvre principalement les catégories nécessaires aux projets JVM :
 
 | SCIP | NEXUS |
 |---|---|
@@ -129,7 +129,8 @@ Le mapping initial des kinds couvre principalement les catégories nécessaires 
 | Enum | `ENUM` |
 | Interface / Protocol / Trait / TypeClass | `INTERFACE` |
 | Method / Function et variantes de méthodes | `METHOD` |
-| autres kinds | `TYPE` |
+
+Les kinds qui représentent des champs, variables, paramètres ou catégories sans équivalent fiable ne sont pas transformés artificiellement en `TYPE`. Leurs occurrences et relations restent toutefois importées, ce qui préserve l'intelligence de référence sans polluer la recherche de symboles.
 
 L'identifiant SCIP est conservé comme `qualifiedName` lorsqu'il constitue l'identité la plus sûre. `display_name` alimente `name` lorsqu'il est disponible.
 
@@ -274,6 +275,7 @@ Les tests ajoutés couvrent notamment :
 - plage SCIP typée ;
 - fallback de plage historique ;
 - priorité de la plage typée ;
+- kinds de symboles non représentables ignorés sans perdre leurs références ;
 - provenance `scip` ;
 - fusion avec JavaParser ;
 - déduplication d'une définition déjà connue ;
