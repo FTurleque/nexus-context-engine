@@ -1,6 +1,9 @@
 package com.nexus.context;
 
 import com.nexus.config.NexusPaths;
+import com.nexus.context.source.git.GitContextQuery;
+import com.nexus.context.source.git.GitContextResult;
+import com.nexus.context.source.git.GitContextSourceProvider;
 import com.nexus.index.IndexRepository;
 import com.nexus.index.ProjectIndexingService;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
@@ -29,6 +32,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -110,7 +114,76 @@ class DefaultContextBuilderIntegrationTest {
         assertTrue(((Number) bundle.metadata().get("truncatedItems")).intValue() >= 1);
     }
 
+    @Test
+    void disablesGitBelowThresholdAndSelectsItWhenBudgetAllows() throws Exception {
+        Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("git-budget-project"));
+        writeJava(projectRoot, "demo/OrderService.java", """
+                package demo;
+                class OrderService {
+                    void create() {}
+                }
+                """);
+
+        AtomicInteger providerCalls = new AtomicInteger();
+        GitContextSourceProvider provider = new GitContextSourceProvider() {
+            @Override
+            public String id() {
+                return "test-git";
+            }
+
+            @Override
+            public GitContextResult discover(GitContextQuery query) {
+                providerCalls.incrementAndGet();
+                ContextFragment fragment = new ContextFragment(
+                        CandidateType.GIT,
+                        Path.of(".nexus/git/recent-commits.md"),
+                        null,
+                        1,
+                        2,
+                        "# Git recent context\n- recent order change\n",
+                        0.8d,
+                        Map.of("gitContextScore", 0.8d),
+                        List.of("test Git context"));
+                return new GitContextResult(List.of(fragment), true, true, 3, 1, 0, List.of());
+            }
+        };
+
+        Fixture fixture = fixture(projectRoot, "git-budget", provider);
+        fixture.indexingService().index(fixture.project().id());
+
+        ContextBundle strict = fixture.contextBuilder().build(new ContextRequest(
+                fixture.project().id(),
+                "OrderService",
+                180,
+                Set.of(),
+                Map.of(),
+                true));
+        assertEquals(0, providerCalls.get());
+        assertFalse((Boolean) strict.metadata().get("gitEnabled"));
+        assertTrue(strict.items().stream().noneMatch(item -> item.type() == CandidateType.GIT));
+
+        ContextBundle comfortable = fixture.contextBuilder().build(new ContextRequest(
+                fixture.project().id(),
+                "OrderService",
+                600,
+                Set.of(),
+                Map.of(),
+                true));
+        assertEquals(1, providerCalls.get());
+        assertTrue((Boolean) comfortable.metadata().get("gitEnabled"));
+        assertTrue(comfortable.estimatedTokens() <= 600);
+        assertTrue(comfortable.items().stream().anyMatch(item -> item.type() == CandidateType.GIT));
+        assertTrue(((Number) comfortable.metadata().get("gitSelectedItems")).intValue() >= 1);
+    }
+
     private Fixture fixture(Path projectRoot, String name) throws Exception {
+        return fixture(projectRoot, name, null);
+    }
+
+    private Fixture fixture(
+            Path projectRoot,
+            String name,
+            GitContextSourceProvider gitContextProvider) throws Exception {
         NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("nexus-home-" + name));
         SqliteDatabase database = new SqliteDatabase(paths);
         ProjectRepository projectRepository = new SqliteProjectRepository(database);
@@ -130,13 +203,24 @@ class DefaultContextBuilderIntegrationTest {
                 new GraphCandidateEnricher(indexRepository),
                 new DeterministicContextRanker());
         TokenEstimator tokenEstimator = new HeuristicTokenEstimator();
-        ContextBuilder contextBuilder = new DefaultContextBuilder(
-                projectRepository,
-                searchService,
-                new ContextFragmentFactory(tokenEstimator),
-                new FragmentMerger(),
-                new BudgetedContextSelector(tokenEstimator),
-                tokenEstimator);
+        ContextBuilder contextBuilder = gitContextProvider == null
+                ? new DefaultContextBuilder(
+                        projectRepository,
+                        searchService,
+                        new ContextFragmentFactory(tokenEstimator),
+                        new FragmentMerger(),
+                        new BudgetedContextSelector(tokenEstimator),
+                        tokenEstimator)
+                : new DefaultContextBuilder(
+                        projectRepository,
+                        searchService,
+                        new ContextFragmentFactory(tokenEstimator),
+                        new FragmentMerger(),
+                        new BudgetedContextSelector(tokenEstimator),
+                        tokenEstimator,
+                        List.of(),
+                        List.of(),
+                        gitContextProvider);
         return new Fixture(project, indexingService, contextBuilder);
     }
 
