@@ -12,6 +12,7 @@ param(
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $locationPushed = $false
+$inputPath = $null
 
 function Invoke-Maven {
     param([Parameter(Mandatory = $true)][string[]]$Arguments)
@@ -62,15 +63,15 @@ try {
         throw "Au moins une requete doit etre fournie via -Queries."
     }
 
-    foreach ($query in $resolvedQueries) {
-        if ($query.Contains("|")) {
-            throw "Une requete de baseline ne peut pas contenir le caractere '|': $query"
-        }
-    }
-
-    $encodedProjects = $resolvedRoots -join "|"
-    $encodedQueries = $resolvedQueries -join "|"
     $resolvedOutput = Resolve-OutputPath -Path $Output
+    $inputDirectory = Join-Path $repoRoot "target"
+    New-Item -ItemType Directory -Force -Path $inputDirectory | Out-Null
+    $inputPath = Join-Path $inputDirectory ("iteration-16-baseline-input-{0}.json" -f [Guid]::NewGuid().ToString("N"))
+
+    [ordered]@{
+        projects = $resolvedRoots
+        queries = $resolvedQueries
+    } | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 -Path $inputPath
 
     Write-Host "============================================================"
     Write-Host " NEXUS - Baseline Iteration 16 / Large Scale Search"
@@ -83,13 +84,13 @@ try {
     foreach ($query in $resolvedQueries) {
         Write-Host " - $query"
     }
+    Write-Host "Entree       : $inputPath"
     Write-Host "Rapport      : $resolvedOutput"
     Write-Host
 
     Invoke-Maven -Arguments @(
         "-Dtest=LargeScaleSearchBaselineTest",
-        "-Dnexus.baseline.projects=$encodedProjects",
-        "-Dnexus.baseline.queries=$encodedQueries",
+        "-Dnexus.baseline.input=$inputPath",
         "-Dnexus.baseline.output=$resolvedOutput",
         "test"
     )
@@ -117,6 +118,9 @@ catch {
     Write-Host "Le terminal reste ouvert. Copiez la sortie depuis l'etape en echec."
 }
 finally {
+    if ($null -ne $inputPath -and (Test-Path -Path $inputPath -PathType Leaf)) {
+        Remove-Item -Force -Path $inputPath
+    }
     if ($locationPushed) {
         Pop-Location
     }
