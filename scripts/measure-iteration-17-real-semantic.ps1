@@ -88,9 +88,11 @@ try {
         "docs/developer/iteration-17-semantic-results.md",
         "scripts/measure-iteration-17-semantic.ps1",
         "scripts/measure-iteration-17-real-semantic.ps1",
+        "scripts/measure-iteration-17-real-semantic-diagnostic.ps1",
         "scripts/validate-iteration-17.ps1",
         "src/test/java/com/nexus/search/semantic/SemanticSearchBenchmarkTest.java",
         "src/test/java/com/nexus/search/semantic/RealSemanticSearchBenchmarkTest.java",
+        "src/test/java/com/nexus/search/semantic/RealSemanticRetrievalDiagnosticTest.java",
         "src/test/java/com/nexus/application/NexusApplicationSemanticConfigurationTest.java",
         "src/test/java/com/nexus/ranking/SemanticRankingTest.java"
     )
