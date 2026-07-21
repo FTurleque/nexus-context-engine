@@ -2,13 +2,13 @@
 
 Date de validation locale : **21 juillet 2026**.
 
-Ce document complète `iteration-16-baseline-results.md` avec le palier étendu de sept repositories réels. Il conserve séparément les résultats du portefeuille afin de distinguer le passage à l'échelle, la qualité lexicale et la diversification des résultats.
+Ce document complète `iteration-16-baseline-results.md` avec le palier étendu de sept repositories réels. Il conserve séparément les résultats du portefeuille afin de distinguer le passage à l'échelle, la qualité lexicale, la diversification des résultats et le protocole final reproductible.
 
 ## Portefeuille
 
-Le palier utilise :
+Le palier final utilise :
 
-1. le checkout NEXUS courant ;
+1. un snapshot Git contrôlé du `HEAD` NEXUS courant ;
 2. `MediaUtilityTools` au commit `91e2f003a46a842e2d194fdc4bcf26e882c99c02` ;
 3. `collection-manager` au commit `37ca800b2476db6f4bdc3e976afb78764ed05dda` ;
 4. `db-toolkit-core` au commit `8cacc4e181e4bd9a36551b363b4d414c51f30eed` ;
@@ -20,7 +20,9 @@ JARVIS et ses satellites restent explicitement exclus.
 
 Le manifest reproductible est `scripts/config/iteration-16-extended-portfolio.json`.
 
-## Validation fonctionnelle avant le dernier run
+## Validation fonctionnelle
+
+Derniers builds locaux validés après diversification par chemin :
 
 ```text
 mvn install
@@ -29,7 +31,7 @@ BUILD SUCCESS
 0 échec
 0 erreur
 2 harness opt-in ignorés
-11,063 s
+11,515 s puis 11,002 s
 ```
 
 Validation ciblée :
@@ -43,31 +45,11 @@ scripts/validate-iteration-16.ps1 -FocusedOnly
 BUILD SUCCESS
 ```
 
-La coordination lexicale multi-termes, la recherche multi-projet, la provenance `projectId` et les corpus golden mono/fédéré sont validés.
+La coordination lexicale multi-termes, la recherche multi-projet, la diversification par chemin, la provenance `projectId` et les corpus golden mono/fédéré sont validés.
 
-## Volumes du dernier run avant diversification par chemin
+## Historique du palier étendu avant diversification
 
-| Métrique | Valeur |
-|---|---:|
-| repositories | 7 |
-| requêtes | 8 |
-| fichiers | 2 108 |
-| symboles | 11 190 |
-| relations | 18 314 |
-| index Lucene cumulé | 5 155 041 octets |
-| indexation complète cumulée | 10 978 ms |
-| incrémental sans changement cumulé | 919 ms |
-| recherche fédérée p50 | 226 ms |
-| recherche fédérée p95 | 303 ms |
-| contexte p50 | 51 ms |
-| contexte p95 | 244 ms |
-| delta heap observé | 127 783 408 octets |
-
-Le delta heap reste une observation ponctuelle dépendante du GC et ne doit pas être interprété isolément comme une consommation stable.
-
-## Stabilité de performance du palier 4
-
-Trois exécutions successives du portefeuille étendu ont donné :
+Trois exécutions successives avant diversification ont donné :
 
 | Métrique | Run initial | Run coordination v1 | Run coordination finale |
 |---|---:|---:|---:|
@@ -78,18 +60,91 @@ Trois exécutions successives du portefeuille étendu ont donné :
 | indexation complète | 13 230 ms | 11 357 ms | 10 978 ms |
 | incrémental sans changement | 1 104 ms | 949 ms | 919 ms |
 
-Le p95 de recherche reste donc dans une plage de `303–331 ms` sur sept repositories réels. Cette croissance par rapport au portefeuille de quatre repositories ne démontre pas une rupture nécessitant Zoekt, OpenGrok ou un index distant.
+Le dernier de ces runs indexait 2 108 fichiers, 11 190 symboles et 18 314 relations pour 5 155 041 octets d'index Lucene.
 
-## Qualité du corpus réel
-
-Le premier run du palier 4 avait révélé une faiblesse de coordination des requêtes multi-termes :
+La qualité après correction de la coordination lexicale multi-termes était :
 
 ```text
-precision@3 = 0,3333
-recall@3    = 0,7500
+precision@3 moyenne = 0,4583
+recall@3 moyenne    = 0,8958
+hit@3 moyen         = 1,0000
+MRR@3 moyen         = 1,0000
 ```
 
-Après correction de la coordination Lucene par termes analysés uniques et qualification des chemins réellement pertinents, le dernier run produit :
+## Diversification par chemin
+
+Les baselines ont montré qu'un même fichier pouvait apparaître plusieurs fois dans le classement fédéré via des candidats `FILE` et `SYMBOL`. La correction retenue est locale à la fédération :
+
+- trier d'abord tous les candidats fédérés avec les règles déterministes existantes ;
+- conserver uniquement le meilleur candidat pour un couple `projectId + chemin normalisé` ;
+- ne jamais dédupliquer deux résultats provenant de projets différents ;
+- appliquer la limite finale après diversification.
+
+Cette évolution ne modifie ni les poids du ranking, ni SQLite, ni Lucene, ni les stratégies de recherche par projet.
+
+Deux runs consécutifs après diversification, mais avant isolation du corpus NEXUS, ont donné :
+
+| Métrique | Run 1 | Run 2 |
+|---|---:|---:|
+| fichiers | 2 109 | 2 109 |
+| symboles | 11 191 | 11 191 |
+| relations | 18 315 | 18 315 |
+| index Lucene | 5 160 406 octets | 5 160 406 octets |
+| indexation complète | 10 668 ms | 10 744 ms |
+| incrémental sans changement | 897 ms | 889 ms |
+| recherche p50 | 202 ms | 203 ms |
+| recherche p95 | 253 ms | 251 ms |
+| contexte p50 | 42 ms | 42 ms |
+| contexte p95 | 212 ms | 209 ms |
+
+La qualité observée restait `precision@3 = 0,4583`, `recall@3 = 0,8958` et `hit@3 = 1,0000`, mais `MRR@3` tombait à `0,9375` parce que ce document de résultats était lui-même indexé dans le checkout NEXUS et passait au rang 1 pour `architecture hexagonale`.
+
+Cette baisse était donc un biais du protocole, pas une régression de la diversification.
+
+## Isolation finale du corpus NEXUS
+
+Le runner construit désormais un snapshot Git contrôlé du `HEAD` NEXUS via `git archive` lorsque le manifest le demande. Onze artefacts propres au benchmark sont retirés du snapshot : rapports, manifests, runners et harness de mesure.
+
+Le checkout utilisateur n'est jamais modifié.
+
+Le snapshot Git ne transporte que le contenu versionné. Il n'embarque donc pas les artefacts locaux dérivés éventuellement présents dans le checkout, notamment un `index.scip` non versionné. NEXUS importe opportunistement ce fichier lorsqu'il existe à la racine du projet ; son absence explique que les volumes de symboles et surtout de relations du run hermétique ne soient pas directement comparables aux runs effectués sur le checkout local enrichi.
+
+Le run hermétique est retenu comme **baseline finale canonique** parce qu'il est reconstructible à partir du commit et du manifest, indépendamment de l'état local non versionné de la machine.
+
+## Baseline finale canonique — corpus hermétique et diversifié
+
+Snapshot NEXUS mesuré : `eea8d2585b60533dfc1f4586bf752e6c89bc2fb4`.
+
+| Métrique | Valeur |
+|---|---:|
+| repositories | 7 |
+| requêtes | 8 |
+| fichiers | 2 104 |
+| symboles | 10 878 |
+| relations | 10 087 |
+| index Lucene cumulé | 5 121 497 octets |
+| indexation complète cumulée | 8 818 ms |
+| incrémental sans changement cumulé | 762 ms |
+| recherche fédérée p50 | 133 ms |
+| recherche fédérée p95 | 304 ms |
+| contexte p50 | 48 ms |
+| contexte p95 | 206 ms |
+| delta heap observé | -2 235 520 octets |
+
+Le delta heap négatif est une observation ponctuelle liée au GC et ne représente pas une consommation mémoire négative.
+
+Pour NEXUS seul dans ce snapshot hermétique :
+
+| Métrique | Valeur |
+|---|---:|
+| fichiers | 231 |
+| symboles | 921 |
+| relations | 1 497 |
+| index Lucene | 790 077 octets |
+| indexation complète | 1 895 ms |
+| incrémental sans changement | 138 ms |
+
+## Qualité finale du corpus réel
 
 ```text
 precision@3 moyenne = 0,4583
@@ -111,31 +166,42 @@ Détail :
 | `architecture hexagonale` | 0,6667 | 0,6667 | 1,0000 | 1,0000 |
 | `SceneFxmlApp` | 0,3333 | 1,0000 | 1,0000 | 1,0000 |
 
-`hit@3 = 1` et `MRR@3 = 1` signifient que les huit requêtes placent au moins un chemin pertinent dans le top 3 et, plus précisément, que le premier résultat pertinent est classé au rang 1 pour chacune d'elles.
+`hit@3 = 1` et `MRR@3 = 1` signifient que les huit requêtes placent au moins un chemin pertinent dans le top 3 et que le premier résultat pertinent est classé au rang 1 pour chacune d'elles.
 
-Le `recall@3` inférieur à `1` sur les deux requêtes larges n'indique donc pas l'absence d'un bon résultat. Il reflète le fait que plusieurs chemins pertinents sont déclarés alors que le top 3 est encore occupé en partie par plusieurs candidats `FILE` / `SYMBOL` pointant vers le même chemin.
+Le `recall@3` inférieur à `1` sur les deux requêtes larges ne traduit donc pas l'absence d'un bon résultat. Il reflète simplement le fait que le corpus déclare plusieurs chemins pertinents alors que l'évaluation est limitée aux trois premières positions.
 
-## Signal restant : diversification par chemin
+Exemples confirmés au rang 1 :
 
-Les baselines ont montré de manière répétée qu'un même fichier peut apparaître plusieurs fois dans le classement fédéré via des candidats `FILE` et `SYMBOL`. Cette répétition réduit mécaniquement la diversité du top 3 et peut limiter `precision@3` / `recall@3` sans améliorer l'expérience utilisateur.
+- `candidate-multiplier` → `ariane-chatbot/src/main/java/fr/ariane/chatbot/knowledge/KSearchSettings.java` ;
+- `architecture hexagonale` → `collection-manager/docs/architecture/architecture.md` ;
+- `SceneFxmlApp` → `streamApp/src/main/java/com/streamapp/SceneFxmlApp.java`.
 
-La correction retenue pour la dernière validation de l'Itération 16 est donc locale à la fédération :
-
-- trier d'abord tous les candidats fédérés avec les règles déterministes existantes ;
-- conserver uniquement le meilleur candidat pour un couple `projectId + chemin normalisé` ;
-- ne jamais dédupliquer deux résultats provenant de projets différents ;
-- appliquer la limite finale après diversification.
-
-Cette évolution ne modifie ni les poids du ranking, ni SQLite, ni Lucene, ni les stratégies de recherche par projet.
+Un faux positif de stratégie symbole reste visible en deuxième position sur `candidate-multiplier` (`GitRecencyCandidateEnricherTest.java`), mais le résultat attendu est rang 1. Ce signal peut être réévalué ultérieurement avec un corpus dédié aux requêtes symboliques multi-termes ; il ne bloque pas l'Itération 16.
 
 ## Décision moteur externe
 
-Les mesures actuelles ne justifient toujours :
+Les quatre paliers mesurés ne justifient :
 
 - ni Zoekt ;
 - ni OpenGrok ;
 - ni index distant ;
 - ni distribution de l'index ;
-- ni parallélisation prématurée de la fédération.
+- ni parallélisation prématurée de la fédération ;
+- ni modification supplémentaire des poids de ranking.
 
-La dernière mesure à effectuer est la validation du portefeuille étendu après diversification par chemin, afin de quantifier son effet sur `precision@3`, `recall@3`, `hit@3` et `MRR@3` sans dégrader la latence observée.
+Sur sept repositories réels, la fédération locale séquentielle reste compatible avec l'objectif local-first. Le p95 final de `304 ms` reste du même ordre de grandeur que les runs précédents du palier étendu, tandis que toutes les requêtes du corpus ont un résultat pertinent au rang 1.
+
+## Conclusion de l'Itération 16
+
+Les objectifs techniques de l'Itération 16 sont considérés comme **atteints** :
+
+- recherche fédérée multi-repository opérationnelle et déterministe ;
+- provenance projet conservée ;
+- coordination lexicale multi-termes corrigée ;
+- résultats diversifiés par chemin ;
+- indexation incrémentale validée sur petit delta avec accélération mesurée de `34,45×` ;
+- portefeuille réel étendu jusqu'à sept repositories ;
+- protocole final reproductible et isolé de ses propres artefacts de mesure ;
+- aucune limite mesurée ne justifie un moteur externe.
+
+Une future réouverture du sujet Zoekt/OpenGrok devra être déclenchée par une limite reproductible sur un portefeuille réellement plus grand ou par un besoin fonctionnel non couvert, pas par anticipation.
