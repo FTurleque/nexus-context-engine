@@ -28,27 +28,17 @@ class SemanticSearchStrategyTest {
     @Test
     void mapsSemanticHitsToStandardSearchCandidates() throws Exception {
         EmbeddingProvider provider = provider(3, new float[]{1.0f, 0.0f, 0.0f});
-        SemanticSearchIndex index = new SemanticSearchIndex() {
-            @Override
-            public int dimensions() {
-                return 3;
-            }
-
-            @Override
-            public List<SemanticSearchHit> search(UUID projectId, float[] queryVector, int limit) {
-                return List.of(
-                        new SemanticSearchHit(
-                                "docs/architecture.md",
-                                FileCategory.DOCUMENTATION,
-                                "Découplage du domaine et des adaptateurs",
-                                0.92d),
-                        new SemanticSearchHit(
-                                ".github/copilot-instructions.md",
-                                FileCategory.INSTRUCTION,
-                                "instructions",
-                                0.99d));
-            }
-        };
+        SemanticSearchIndex index = index(3, List.of(
+                new SemanticSearchHit(
+                        "docs/architecture.md",
+                        FileCategory.DOCUMENTATION,
+                        "Découplage du domaine et des adaptateurs",
+                        0.92d),
+                new SemanticSearchHit(
+                        ".github/copilot-instructions.md",
+                        FileCategory.INSTRUCTION,
+                        "instructions",
+                        0.99d)));
 
         SemanticSearchStrategy strategy = new SemanticSearchStrategy(provider, index);
         List<SearchCandidate> candidates = strategy.search(project(), "séparer le domaine de l'infrastructure", 5);
@@ -64,17 +54,7 @@ class SemanticSearchStrategyTest {
     @Test
     void rejectsDimensionMismatchAtCompositionTime() {
         EmbeddingProvider provider = provider(3, new float[]{1.0f, 0.0f, 0.0f});
-        SemanticSearchIndex index = new SemanticSearchIndex() {
-            @Override
-            public int dimensions() {
-                return 4;
-            }
-
-            @Override
-            public List<SemanticSearchHit> search(UUID projectId, float[] queryVector, int limit) {
-                return List.of();
-            }
-        };
+        SemanticSearchIndex index = index(4, List.of());
 
         assertThrows(IllegalArgumentException.class, () -> new SemanticSearchStrategy(provider, index));
     }
@@ -82,7 +62,7 @@ class SemanticSearchStrategyTest {
     @Test
     void rejectsUnexpectedVectorDimensionReturnedByProvider() {
         EmbeddingProvider provider = provider(3, new float[]{1.0f, 0.0f});
-        SemanticSearchIndex index = emptyIndex(3);
+        SemanticSearchIndex index = index(3, List.of());
         SemanticSearchStrategy strategy = new SemanticSearchStrategy(provider, index);
 
         assertThrows(IOException.class, () -> strategy.search(project(), "query", 5));
@@ -119,7 +99,7 @@ class SemanticSearchStrategyTest {
         };
     }
 
-    private static SemanticSearchIndex emptyIndex(int dimensions) {
+    private static SemanticSearchIndex index(int dimensions, List<SemanticSearchHit> hits) {
         return new SemanticSearchIndex() {
             @Override
             public int dimensions() {
@@ -127,8 +107,21 @@ class SemanticSearchStrategyTest {
             }
 
             @Override
+            public void rebuild(UUID projectId, List<SemanticVectorDocument> documents) {
+                // no-op for strategy tests
+            }
+
+            @Override
+            public void applyChanges(
+                    UUID projectId,
+                    List<SemanticVectorDocument> documents,
+                    Set<String> removedRelativePaths) {
+                // no-op for strategy tests
+            }
+
+            @Override
             public List<SemanticSearchHit> search(UUID projectId, float[] queryVector, int limit) {
-                return List.of();
+                return hits;
             }
         };
     }
