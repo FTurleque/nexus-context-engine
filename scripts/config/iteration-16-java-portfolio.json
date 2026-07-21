@@ -9,6 +9,10 @@
         {
           "repository": "nexus-context-engine",
           "path": "src/main/java/com/nexus/search/SearchService.java"
+        },
+        {
+          "repository": "collection-manager",
+          "path": "domain/src/main/java/com/collectionmanager/domain/search/service/SearchService.java"
         }
       ]
     },
@@ -27,6 +31,10 @@
         {
           "repository": "collection-manager",
           "path": "infra/src/main/java/com/collectionmanager/infra/migration/FlywayMigrator.java"
+        },
+        {
+          "repository": "collection-manager",
+          "path": "infra/src/main/java/com/collectionmanager/infra/config/FlywayMigrator.java"
         }
       ]
     },
