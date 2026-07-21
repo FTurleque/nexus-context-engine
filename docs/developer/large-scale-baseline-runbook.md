@@ -78,7 +78,7 @@ Le runner :
 
 1. refuse de démarrer si le checkout NEXUS contient des modifications suivies non validées ;
 2. conserve le checkout NEXUS courant comme première racine ;
-3. clone les autres repositories dans `target\iteration-16-portfolio\repositories` ;
+3. clone les autres repositories dans le workspace demandé ;
 4. positionne chaque clone sur le commit exact défini dans le manifest ;
 5. enregistre les commits réellement résolus dans `resolved-portfolio.json` ;
 6. exécute le harness avec toutes les requêtes ;
@@ -87,7 +87,7 @@ Le runner :
 
 Les clones contrôlés peuvent être recréés ou réutilisés. `git checkout --detach --force` et `git clean -ffd` ne s'appliquent qu'aux copies situées dans le workspace de benchmark. Les repositories de travail de l'utilisateur ne sont jamais modifiés.
 
-Rapports produits :
+Rapports produits par le portefeuille de référence :
 
 ```text
 target\iteration-16-portfolio-baseline.json
@@ -208,18 +208,60 @@ Il contient les durées et compteurs pour :
 
 Le checkout NEXUS, le repository source et le clone Git contrôlé ne reçoivent aucune modification du benchmark. Seule la copie temporaire gérée par JUnit est mutée puis supprimée automatiquement.
 
-## Interprétation
+## Palier étendu — sept repositories réels
 
-Comparer plusieurs paliers, par exemple :
+Le palier supérieur est défini dans :
 
 ```text
-1 repository
-4 repositories du portefeuille Java
-5 repositories
-10 repositories
+scripts/config/iteration-16-extended-portfolio.json
 ```
 
-Les paliers doivent utiliser les repositories réellement pertinents pour NEXUS plutôt qu'un nombre artificiel de copies identiques.
+Il reprend le portefeuille de quatre repositories et ajoute trois projets personnels distincts :
+
+- `ariane-chatbot` au commit `827107ce20ed1bd9a4d6242caafbec6f4e266b3e` : Java 17 / Quarkus, recherche documentaire locale ;
+- `market-sync-app` au commit `f2861d2a5aa0a0baf368a812a3d6980cd3acae2b` : Java 21 multi-module, architecture hexagonale, Quarkus et JavaFX ;
+- `streamApp` au commit `af5c49a38ee2670c5bd3064872b14e3b1ec15328` : application JavaFX.
+
+Le corpus comporte donc sept repositories et huit requêtes. Les trois nouvelles requêtes couvrent volontairement plusieurs formes de recherche : configuration documentée, documentation architecturale et symbole Java exact.
+
+JARVIS, `jarvis-watchtower`, les forks massifs de projets tiers et les anciens dépôts de formation ne sont pas utilisés pour gonfler artificiellement ce palier.
+
+Commande :
+
+```powershell
+.\scripts\measure-iteration-16-portfolio.ps1 `
+    -Manifest "scripts\config\iteration-16-extended-portfolio.json" `
+    -Workspace "target\iteration-16-extended-portfolio" `
+    -Output "target\iteration-16-extended-portfolio-baseline.json"
+```
+
+Rapports attendus :
+
+```text
+target\iteration-16-extended-portfolio-baseline.json
+target\iteration-16-extended-portfolio\resolved-portfolio.json
+```
+
+Ce palier doit être comparé aux mesures du portefeuille à quatre repositories en priorité sur :
+
+- l'évolution de la recherche fédérée `p50` / `p95` ;
+- la croissance du heap ;
+- la taille cumulée des index Lucene ;
+- le temps d'indexation complète et incrémentale sans changement ;
+- `precision@3` / `recall@3` du corpus réel ;
+- la représentation des projets dans les résultats des requêtes ambiguës.
+
+## Interprétation
+
+Les paliers de référence sont désormais :
+
+```text
+1 repository : NEXUS seul
+4 repositories : portefeuille Java initial
+7 repositories : portefeuille étendu réel
+```
+
+Les paliers utilisent des repositories réellement distincts plutôt qu'un nombre artificiel de copies identiques.
 
 Une dégradation observée sur une seule exécution ne justifie pas un nouveau backend. Il faut rechercher une tendance reproductible sur les volumes, la latence, la mémoire, la taille d'index et la qualité.
 
