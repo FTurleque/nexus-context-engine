@@ -14,13 +14,15 @@ import java.util.Map;
 public final class DeterministicContextRanker implements ContextRanker {
 
     public static final double DEFAULT_GIT_RECENCY_WEIGHT = 0.05d;
+    public static final double DEFAULT_SEMANTIC_WEIGHT = 0.15d;
 
     private static final Map<String, Double> BASE_WEIGHTS = Map.of(
             SearchSignals.LEXICAL, 0.40d,
             SearchSignals.SYMBOL_EXACT, 0.30d,
             SearchSignals.SYMBOL_FUZZY, 0.10d,
             SearchSignals.PATH, 0.10d,
-            SearchSignals.GRAPH, 0.10d);
+            SearchSignals.GRAPH, 0.10d,
+            SearchSignals.SEMANTIC, DEFAULT_SEMANTIC_WEIGHT);
 
     private final double gitRecencyWeight;
 
@@ -60,6 +62,7 @@ public final class DeterministicContextRanker implements ContextRanker {
                 SearchSignals.SYMBOL_FUZZY,
                 SearchSignals.PATH,
                 SearchSignals.GRAPH,
+                SearchSignals.SEMANTIC,
                 SearchSignals.GIT_RECENCY)) {
             double normalized = clamp(candidate.signals().getOrDefault(signal, 0.0d));
             double contribution = normalized * weight(signal);
@@ -90,6 +93,7 @@ public final class DeterministicContextRanker implements ContextRanker {
             case SearchSignals.SYMBOL_FUZZY -> "similarité de symbole";
             case SearchSignals.PATH -> "correspondance du chemin";
             case SearchSignals.GRAPH -> "proximité dans le graphe";
+            case SearchSignals.SEMANTIC -> "similarité sémantique";
             case SearchSignals.GIT_RECENCY -> "récence Git locale";
             default -> signal;
         };
