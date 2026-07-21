@@ -7,7 +7,9 @@ import com.nexus.search.LexicalSearchHit;
 import com.nexus.search.SearchDocument;
 import com.nexus.search.SearchIndex;
 import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
+import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.StringField;
@@ -32,6 +34,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -148,31 +151,35 @@ public final class LuceneSearchIndex implements SearchIndex {
         MultiFieldQueryParser parser = new MultiFieldQueryParser(SEARCH_FIELDS, analyzer, FIELD_BOOSTS);
         parser.setDefaultOperator(QueryParser.Operator.OR);
         try {
-            Query parsed = parser.parse(QueryParser.escape(query.trim()));
-            return requireMultiTermCoordination(parsed);
+            List<String> analyzedTerms = analyzeUniqueTerms(query, analyzer);
+            if (analyzedTerms.size() < 2) {
+                return parser.parse(QueryParser.escape(query.trim()));
+            }
+
+            BooleanQuery.Builder coordinated = new BooleanQuery.Builder();
+            for (String term : analyzedTerms) {
+                coordinated.add(
+                        parser.parse(QueryParser.escape(term)),
+                        BooleanClause.Occur.SHOULD);
+            }
+            coordinated.setMinimumNumberShouldMatch(2);
+            return coordinated.build();
         } catch (ParseException exception) {
             throw new IOException("Requête Lucene invalide : " + query, exception);
         }
     }
 
-    private static Query requireMultiTermCoordination(Query query) {
-        if (!(query instanceof BooleanQuery booleanQuery)) {
-            return query;
+    private static List<String> analyzeUniqueTerms(String query, Analyzer analyzer) throws IOException {
+        LinkedHashSet<String> terms = new LinkedHashSet<>();
+        try (TokenStream tokenStream = analyzer.tokenStream(FIELD_CONTENT, query)) {
+            CharTermAttribute termAttribute = tokenStream.addAttribute(CharTermAttribute.class);
+            tokenStream.reset();
+            while (tokenStream.incrementToken()) {
+                terms.add(termAttribute.toString());
+            }
+            tokenStream.end();
         }
-
-        long optionalClauses = booleanQuery.clauses().stream()
-                .filter(clause -> clause.occur() == BooleanClause.Occur.SHOULD)
-                .count();
-        if (optionalClauses < 2) {
-            return query;
-        }
-
-        BooleanQuery.Builder coordinated = new BooleanQuery.Builder();
-        for (BooleanClause clause : booleanQuery.clauses()) {
-            coordinated.add(clause);
-        }
-        coordinated.setMinimumNumberShouldMatch(2);
-        return coordinated.build();
+        return List.copyOf(terms);
     }
 
     private IndexResources open(UUID projectId) throws IOException {
