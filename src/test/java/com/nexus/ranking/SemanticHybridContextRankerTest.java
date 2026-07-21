@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SemanticHybridContextRankerTest {
@@ -78,6 +79,32 @@ class SemanticHybridContextRankerTest {
         assertEquals("file:docs/first.md", ranked.get(0).candidate().id());
         assertEquals("file:docs/second.md", ranked.get(1).candidate().id());
         assertTrue(ranked.get(0).score() > ranked.get(1).score());
+    }
+
+    @Test
+    void semanticWeightCanFavorTheSemanticChannelWithoutChangingItsOrder() {
+        SearchCandidate baselineOnly = candidate(
+                "file:src/baseline.java",
+                "src/baseline.java",
+                Map.of(SearchSignals.LEXICAL, 1.0d));
+        SearchCandidate semanticOnly = candidate(
+                "file:docs/semantic.md",
+                "docs/semantic.md",
+                Map.of(SearchSignals.SEMANTIC, 1.0d));
+
+        List<RankedCandidate> ranked = new SemanticHybridContextRanker(2.0d).rank(
+                new RankingRequest("semantic rescue", 2, true),
+                List.of(baselineOnly, semanticOnly));
+
+        assertEquals("file:docs/semantic.md", ranked.getFirst().candidate().id());
+        assertTrue(ranked.getFirst().reasons().stream().anyMatch(reason -> reason.contains("x2.00")));
+    }
+
+    @Test
+    void rejectsInvalidSemanticWeights() {
+        assertThrows(IllegalArgumentException.class, () -> new SemanticHybridContextRanker(0.0d));
+        assertThrows(IllegalArgumentException.class, () -> new SemanticHybridContextRanker(Double.NaN));
+        assertThrows(IllegalArgumentException.class, () -> new SemanticHybridContextRanker(11.0d));
     }
 
     private static SearchCandidate candidate(String id, String path, Map<String, Double> signals) {
