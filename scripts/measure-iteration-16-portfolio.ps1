@@ -58,6 +58,48 @@ function Normalize-RelativePath {
     return ($Path -replace '\\', '/').TrimStart('/')
 }
 
+function New-ControlledCurrentRepositorySnapshot {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$WorkspacePath,
+        [string[]]$ExcludedPaths = @()
+    )
+
+    $snapshotParent = Join-Path $WorkspacePath "current-repository"
+    $snapshotPath = Join-Path $snapshotParent "nexus-context-engine"
+    $archivePath = Join-Path $WorkspacePath "current-repository.zip"
+
+    if (Test-Path $snapshotParent) {
+        Remove-Item -Recurse -Force $snapshotParent
+    }
+    if (Test-Path $archivePath) {
+        Remove-Item -Force $archivePath
+    }
+
+    New-Item -ItemType Directory -Force -Path $snapshotPath | Out-Null
+    Invoke-Git -Arguments @("-C", $RepositoryRoot, "archive", "--format=zip", "--output=$archivePath", "HEAD")
+    Expand-Archive -Path $archivePath -DestinationPath $snapshotPath -Force
+    Remove-Item -Force $archivePath
+
+    $snapshotPrefix = [System.IO.Path]::GetFullPath($snapshotPath).TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+    foreach ($configuredPath in @($ExcludedPaths)) {
+        $relativePath = ([string]$configuredPath).Trim()
+        if ([string]::IsNullOrWhiteSpace($relativePath)) {
+            continue
+        }
+
+        $excludedPath = [System.IO.Path]::GetFullPath((Join-Path $snapshotPath $relativePath))
+        if (-not $excludedPath.StartsWith($snapshotPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "Chemin exclu hors du snapshot NEXUS : $relativePath"
+        }
+        if (Test-Path $excludedPath) {
+            Remove-Item -Recurse -Force $excludedPath
+        }
+    }
+
+    return $snapshotPath
+}
+
 try {
     $manifestPath = Resolve-AbsolutePath -Path $Manifest
     $workspacePath = Resolve-AbsolutePath -Path $Workspace
@@ -104,14 +146,29 @@ try {
         $currentCommit = Invoke-Git -Arguments @("-C", $repoRoot, "rev-parse", "HEAD") -Capture
         $currentBranch = Invoke-Git -Arguments @("-C", $repoRoot, "branch", "--show-current") -Capture
         $currentRemote = Invoke-Git -Arguments @("-C", $repoRoot, "remote", "get-url", "origin") -Capture
-        $projectRoots += $repoRoot
+        $currentExcludedPaths = @($configuration.currentRepositoryExcludedPaths)
+        $currentRoot = $repoRoot
+        $currentSource = "current-checkout"
+
+        if ($currentExcludedPaths.Count -gt 0) {
+            Write-Host "Snapshot controle : nexus-context-engine @ $currentCommit"
+            $currentRoot = New-ControlledCurrentRepositorySnapshot `
+                -RepositoryRoot $repoRoot `
+                -WorkspacePath $workspacePath `
+                -ExcludedPaths $currentExcludedPaths
+            $currentSource = "controlled-current-snapshot"
+            Write-Host "Artefacts de benchmark exclus du corpus NEXUS : $($currentExcludedPaths.Count)"
+        }
+
+        $projectRoots += $currentRoot
         $sources += [ordered]@{
             name = "nexus-context-engine"
-            root = $repoRoot
+            root = $currentRoot
             url = $currentRemote
             requestedRef = $currentBranch
             resolvedCommit = $currentCommit
-            source = "current-checkout"
+            source = $currentSource
+            excludedPaths = $currentExcludedPaths
         }
     }
 
