@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string[]]$ProjectRoots,
 
-    [string]$Query = "SearchService",
+    [Alias("Query")]
+    [string[]]$Queries = @("SearchService"),
 
     [string]$Output = "target\iteration-16-baseline.json"
 )
@@ -31,14 +32,35 @@ try {
         if (-not (Test-Path -Path $resolved -PathType Container)) {
             throw "Le repository baseline n'est pas un repertoire : $resolved"
         }
-        $resolvedRoots += $resolved
+        if ($resolvedRoots -notcontains $resolved) {
+            $resolvedRoots += $resolved
+        }
     }
 
     if ($resolvedRoots.Count -eq 0) {
         throw "Au moins un repository doit etre fourni via -ProjectRoots."
     }
 
+    $resolvedQueries = @()
+    foreach ($query in $Queries) {
+        $trimmed = $query.Trim()
+        if (-not [string]::IsNullOrWhiteSpace($trimmed) -and $resolvedQueries -notcontains $trimmed) {
+            $resolvedQueries += $trimmed
+        }
+    }
+
+    if ($resolvedQueries.Count -eq 0) {
+        throw "Au moins une requete doit etre fournie via -Queries."
+    }
+
+    foreach ($query in $resolvedQueries) {
+        if ($query.Contains("|")) {
+            throw "Une requete de baseline ne peut pas contenir le caractere '|': $query"
+        }
+    }
+
     $encodedProjects = $resolvedRoots -join "|"
+    $encodedQueries = $resolvedQueries -join "|"
     $resolvedOutput = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $Output))
 
     Write-Host "============================================================"
@@ -48,14 +70,17 @@ try {
     foreach ($root in $resolvedRoots) {
         Write-Host " - $root"
     }
-    Write-Host "Query        : $Query"
+    Write-Host "Requetes     : $($resolvedQueries.Count)"
+    foreach ($query in $resolvedQueries) {
+        Write-Host " - $query"
+    }
     Write-Host "Rapport      : $resolvedOutput"
     Write-Host
 
     Invoke-Maven -Arguments @(
         "-Dtest=LargeScaleSearchBaselineTest",
         "-Dnexus.baseline.projects=$encodedProjects",
-        "-Dnexus.baseline.query=$Query",
+        "-Dnexus.baseline.queries=$encodedQueries",
         "-Dnexus.baseline.output=$resolvedOutput",
         "test"
     )
@@ -71,7 +96,7 @@ try {
     Write-Host
     Write-Host "La baseline de performance est produite sans modifier les repositories sources."
     Write-Host "L'indexation incrementale avec petit delta doit etre mesuree separement sur une copie de travail controlee."
-    Write-Host "Les metriques precision@3 et recall@3 restent couvertes par GoldenSearchCorpusTest et devront etre etendues a un corpus multi-repository reel."
+    Write-Host "Les metriques precision@3 et recall@3 restent couvertes par les corpus golden et devront etre etendues a un corpus multi-repository reel."
 }
 catch {
     Write-Host
