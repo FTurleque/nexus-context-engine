@@ -41,15 +41,23 @@ import com.nexus.search.FederatedSearchHit;
 import com.nexus.search.FederatedSearchService;
 import com.nexus.search.SearchIndex;
 import com.nexus.search.SearchService;
+import com.nexus.search.SearchStrategy;
 import com.nexus.search.SymbolSearchStrategy;
 import com.nexus.search.lucene.LuceneFileSearchStrategy;
 import com.nexus.search.lucene.LuceneSearchIndex;
+import com.nexus.search.semantic.EmbeddingProvider;
+import com.nexus.search.semantic.SemanticIndexingService;
+import com.nexus.search.semantic.SemanticSearchConfiguration;
+import com.nexus.search.semantic.SemanticSearchIndex;
+import com.nexus.search.semantic.SemanticSearchStrategy;
+import com.nexus.search.semantic.lucene.LuceneSemanticSearchIndex;
 import com.nexus.token.HeuristicTokenEstimator;
 import com.nexus.token.TokenEstimator;
 
 import java.io.IOException;
 import java.nio.file.Path;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -92,7 +100,18 @@ public final class NexusApplication {
     }
 
     public static NexusApplication create(NexusPaths paths) throws SQLException, IOException {
+        return create(paths, SemanticSearchConfiguration.disabled());
+    }
+
+    /**
+     * Compose NEXUS avec une capacité sémantique uniquement lorsque l'appelant
+     * fournit explicitement une configuration activée.
+     */
+    public static NexusApplication create(
+            NexusPaths paths,
+            SemanticSearchConfiguration semanticSearchConfiguration) throws SQLException, IOException {
         Objects.requireNonNull(paths, "paths");
+        Objects.requireNonNull(semanticSearchConfiguration, "semanticSearchConfiguration");
 
         SqliteDatabase database = new SqliteDatabase(paths);
         ProjectRepository projectRepository = new SqliteProjectRepository(database);
@@ -105,6 +124,20 @@ public final class NexusApplication {
                         .<List<CodeIntelligenceProvider>>map(List::of)
                         .orElseGet(List::of);
 
+        List<SearchStrategy> searchStrategies = new ArrayList<>();
+        searchStrategies.add(new LuceneFileSearchStrategy(searchIndex));
+        searchStrategies.add(new SymbolSearchStrategy(indexRepository));
+
+        SemanticIndexingService semanticIndexingService = null;
+        if (semanticSearchConfiguration.enabled()) {
+            EmbeddingProvider embeddingProvider = semanticSearchConfiguration.embeddingProvider()
+                    .orElseThrow(() -> new IllegalStateException("Configuration sémantique activée sans provider"));
+            SemanticSearchIndex semanticSearchIndex =
+                    new LuceneSemanticSearchIndex(paths, embeddingProvider.dimensions());
+            semanticIndexingService = new SemanticIndexingService(embeddingProvider, semanticSearchIndex);
+            searchStrategies.add(new SemanticSearchStrategy(embeddingProvider, semanticSearchIndex));
+        }
+
         ProjectIndexingService indexingService = new ProjectIndexingService(
                 projectRepository,
                 indexRepository,
@@ -114,12 +147,11 @@ public final class NexusApplication {
                         new MarkdownLanguageAnalyzer()),
                 searchIndex,
                 List.of(new ScipCodeIndexImporter()),
-                codeIntelligenceProviders);
+                codeIntelligenceProviders,
+                semanticIndexingService);
 
         SearchService searchService = new SearchService(
-                List.of(
-                        new LuceneFileSearchStrategy(searchIndex),
-                        new SymbolSearchStrategy(indexRepository)),
+                searchStrategies,
                 List.of(
                         new GraphCandidateEnricher(indexRepository),
                         new GitRecencyCandidateEnricher()),
