@@ -42,33 +42,11 @@ Les cinq documents pertinents sont absents du top 3 lexical. Avec la stratégie 
 
 La hausse de coût est nette mais reste mesurée sur un corpus minuscule ; ces rapports ne doivent pas être extrapolés directement à un repository réel.
 
-### Résultats par requête
+## Palier 2 — snapshot réel NEXUS, fusion additive initiale
 
-| Besoin exprimé | Document attendu | Baseline | Sémantique |
-|---|---|---:|---:|
-| éviter que plusieurs appelants martèlent le stockage pour la même absence | `docs/cache-stampede.md` | hors top 3 | rang 1 |
-| isoler les règles métier des frameworks et bases de données | `docs/hexagonal-boundaries.md` | hors top 3 | rang 2 |
-| faire tenir les preuves les plus utiles dans la limite d'entrée du modèle | `docs/token-budget.md` | hors top 3 | rang 1 |
-| éviter de rescanner tout le projet après deux fichiers modifiés | `docs/incremental-index.md` | hors top 3 | rang 1 |
-| empêcher l'envoi de code propriétaire vers des services hébergés | `docs/local-privacy.md` | hors top 3 | rang 1 |
-
-## Interprétation du palier 1
-
-Ce résultat démontre une **valeur fonctionnelle réelle** de la recherche sémantique sur les requêtes où le vocabulaire diverge fortement : la baseline ne retrouve aucun document pertinent dans le top 3 alors que les embeddings couvrent les cinq cas.
-
-Ce palier ne suffit toutefois pas à recommander l'activation par défaut :
-
-- le corpus est contrôlé et très petit ;
-- le coût d'indexation est significativement supérieur ;
-- la recherche moyenne est plus lente ;
-- le comportement sur un ensemble mêlant code, ADR, documentation et tests doit être observé.
-
-## Palier 2 — snapshot réel NEXUS
-
-Validation exécutée localement le 21 juillet 2026 sur le snapshot hermétique :
+Validation exécutée localement le 21 juillet 2026 sur un snapshot hermétique issu du commit `20c091b49a402ad787b95055a09af74e945ba6b8` :
 
 ```text
-commit     = 20c091b49a402ad787b95055a09af74e945ba6b8
 provider   = Ollama local
 model      = qwen3-embedding:0.6b
 dimensions = 1024
@@ -79,18 +57,16 @@ relations  = 1 658
 requêtes   = 6
 ```
 
-Le snapshot a été construit par `git archive HEAD` puis débarrassé des artefacts de benchmark de l'Itération 17. Il ne contient donc ni `.git`, ni `index.scip` local, ni contenu non versionné opportuniste.
+Le snapshot a été construit par `git archive` puis débarrassé des artefacts de benchmark de l'Itération 17. Il ne contient donc ni `.git`, ni `index.scip` local, ni contenu non versionné opportuniste.
 
 ### Qualité du pipeline hybride observé
 
-| Métrique | Baseline | Hybride avec sémantique | Delta |
+| Métrique | Baseline | Hybride sémantique | Delta |
 |---|---:|---:|---:|
 | `precision@3` | 0,0000 | 0,0000 | 0,0000 |
 | `recall@3` | 0,0000 | 0,0000 | 0,0000 |
 | `hit@3` | 0,0000 | 0,0000 | 0,0000 |
 | `MRR@3` | 0,0000 | 0,0000 | 0,0000 |
-
-Sur les six requêtes paraphrasées, aucun document déclaré pertinent n'entre dans le top 3, ni dans la baseline ni dans le classement hybride actuel.
 
 ### Coût observé
 
@@ -100,52 +76,76 @@ Sur les six requêtes paraphrasées, aucun document déclaré pertinent n'entre 
 | recherche moyenne | 205,0 ms | 308,5 ms | +103,5 ms / ~1,50× |
 | index sémantique | 0 octet | 1 052 033 octets | +1 052 033 octets |
 
-Le coût d'indexation devient donc substantiel sur un repository réel, même avec seulement 248 fichiers. La surcharge de recherche est plus modérée que sur le petit corpus contrôlé, mais reste mesurable.
+Ce résultat prouve que la fusion additive initiale n'exploite pas correctement le canal sémantique sur le corpus réel. Il ne permet toutefois pas, à lui seul, de conclure que le retrieval vectoriel est mauvais.
 
-### Top 3 observé
+## Diagnostic kNN brut versus fusion hybride
 
-Les résultats hybrides restent majoritairement dominés par des fichiers de code et de test déjà favorisés par les signaux lexicaux, symboliques, chemin et graphe. Par exemple :
+Un diagnostic dédié a ensuite été exécuté le 21 juillet 2026 sur le snapshot `b7746cc705caaaceed2de891a8cd78dd4080450d` afin de séparer retrieval brut et fusion.
 
-- la requête sur SQLite/Lucene retourne des tests Agent Skills et `ProjectIndexingServiceTest` ;
-- la requête sur la divulgation progressive retourne les tests des providers de skills ;
-- la requête MCP retourne `NexusMcpTools` et le test d'intégration MCP ;
-- la requête multi-repository retourne notamment `FederatedSearchServiceIntegrationTest` et `NexusApplication` ;
-- la requête de budget de contexte retourne notamment `AgentSkillsIntegrationTest` et l'ADR sur les fragments symboliques.
+### Résultat agrégé
 
-## Diagnostic nécessaire avant décision
+| Métrique | kNN brut | Hybride additif |
+|---|---:|---:|
+| `precision@3` | 0,1667 | 0,0000 |
+| `recall@3` | 0,4167 | 0,0000 |
+| `hit@3` | 0,5000 | 0,0000 |
+| `MRR@3` | 0,3056 | 0,0000 |
+| recherche moyenne | 157,0 ms | 346,5 ms |
 
-Le résultat `semanticRank = 0` du premier harness réel signifie **hors top 3 hybride**. Il ne permet pas de distinguer :
+L'indexation sémantique a pris `67 057 ms` sur 248 fichiers.
 
-1. un échec du modèle / de la représentation documentaire : le document pertinent n'est pas bien classé dans le kNN brut ;
-2. un échec de fusion : le kNN récupère le bon document, mais le poids `semanticScore` est insuffisant face aux signaux historiques.
+### Rangs des documents déclarés pertinents
 
-Il serait donc incorrect de modifier immédiatement les poids du ranking ou de rejeter les embeddings sur la seule base du top 3 hybride.
+Les six besoins attendus sont tous retrouvés par le kNN brut dans les 17 premiers résultats :
 
-Un diagnostic dédié est ajouté :
+| Besoin | Rang kNN brut | Rang hybride observé |
+|---|---:|---:|
+| SQLite/Lucene dérivé reconstructible | 6 | hors top 50 |
+| divulgation progressive des Agent Skills | 2 | hors top 50 |
+| contexte Git local, offline et read-only | 1 | hors top 50 |
+| adaptateur MCP STDIO | 17 | 9 |
+| fédération multi-repository avec provenance | 10 | hors top 50 |
+| sélection du contexte sous budget | 3 | 22 |
+
+Le diagnostic tranche donc le problème principal : **le retrieval sémantique contient un signal utile, mais la fusion additive le détruit**.
+
+Les scores kNN des premiers voisins sont généralement compris entre environ `0,73` et `0,85`. Leur contribution historique était multipliée par un poids `0,15`, tandis que les canaux lexicaux, symboliques, chemin et graphe utilisent d'autres échelles et peuvent cumuler plusieurs contributions. Une addition directe de ces scores n'est donc pas une fusion robuste.
+
+## Correction retenue — Reciprocal Rank Fusion
+
+La composition sémantique opt-in utilise désormais `SemanticHybridContextRanker` avec une **Reciprocal Rank Fusion (RRF)** déterministe.
+
+Principes :
+
+- le classement historique est calculé sans contribution sémantique ;
+- le classement sémantique est ordonné séparément par similarité kNN ;
+- les deux listes sont fusionnées à partir de leurs rangs, avec `k = 60` ;
+- les composantes `baselineRrfScore` et `semanticRrfScore` rendent la fusion explicable ;
+- en l'absence de signal sémantique, le ranker historique est délégué tel quel ;
+- `NexusApplication.create(paths)` continue d'utiliser uniquement `DeterministicContextRanker` ;
+- la RRF n'est utilisée que par `NexusApplication.create(paths, SemanticSearchConfiguration.enabled(...))`.
+
+Cette correction ne modifie donc pas le comportement par défaut de NEXUS.
+
+## Corpus réel figé pour les comparaisons suivantes
+
+Pour éviter qu'un nouveau commit de l'Itération 17 change le corpus à chaque mesure, les runners réels utilisent désormais par défaut le merge de l'Itération 16 :
 
 ```text
-RealSemanticRetrievalDiagnosticTest
-scripts/measure-iteration-17-real-semantic-diagnostic.ps1
+CorpusRef = a5d23386fede9b4a4eccf4d5c52308fcd5cae4b1
 ```
 
-Il mesure séparément :
-
-- le rang kNN brut à 3 et à 50 ;
-- le rang hybride à 3 et à 50 ;
-- les dix premiers voisins kNN avec leur score ;
-- les dix premiers résultats hybrides ;
-- `precision@3`, `recall@3`, `hit@3` et `MRR@3` pour chaque étage.
-
-Le test lui-même et son runner sont exclus du snapshot afin de préserver l'herméticité du corpus.
+Le code exécuté reste celui de la branche courante, mais le **corpus indexé est figé**. Cela permet de comparer l'ancienne fusion et la RRF sur la même base documentaire sans auto-contamination progressive.
 
 ## État de décision
 
 À ce stade :
 
-- le palier contrôlé démontre que les embeddings peuvent résoudre une forte divergence de vocabulaire ;
-- le pipeline hybride actuel ne produit **aucun gain top 3** sur le snapshot réel NEXUS ;
-- le coût d'indexation réel est élevé (~33× sur ce run) ;
-- aucune activation par défaut n'est justifiée ;
-- aucune modification des poids du ranking n'est encore justifiée sans connaître le comportement du kNN brut.
+- les embeddings démontrent une valeur nette sur le corpus contrôlé ;
+- le kNN brut retrouve les six cibles réelles dans le top 17 et trois requêtes sur six ont déjà une cible pertinente dans le top 3 brut ;
+- l'échec du premier pipeline réel provient principalement de la stratégie de fusion additive ;
+- la RRF est maintenant implémentée uniquement en mode opt-in ;
+- le coût d'indexation Ollama reste élevé et doit rester un critère majeur de décision ;
+- aucune activation par défaut n'est encore justifiée.
 
-La prochaine décision dépend donc du diagnostic kNN brut versus fusion hybride. Si le kNN brut échoue également, il faudra travailler la représentation des documents, le chunking ou le modèle. S'il réussit mais que l'hybride échoue, le problème se situe dans la stratégie de fusion/ranking.
+La prochaine validation doit exécuter le diagnostic et le benchmark réel sur le corpus figé afin de mesurer objectivement la RRF avant la décision finale de l'Itération 17.
