@@ -11,7 +11,14 @@ import java.util.Optional;
  */
 public final class SemanticSearchConfiguration {
 
-    public static final double DEFAULT_SEMANTIC_RRF_WEIGHT = 1.0d;
+    /**
+     * Poids retenu après le sweep réel de l'Itération 17 sur le corpus NEXUS figé.
+     *
+     * <p>Le poids 8.0 est le meilleur point observé selon l'ordre de décision
+     * recall -> hit -> MRR -> precision. Il rejoint le kNN brut sur les quatre
+     * métriques top-3 du corpus mesuré, tout en restant strictement opt-in.</p>
+     */
+    public static final double DEFAULT_SEMANTIC_RRF_WEIGHT = 8.0d;
     public static final double MAX_SEMANTIC_RRF_WEIGHT = 10.0d;
 
     private static final SemanticSearchConfiguration DISABLED =
