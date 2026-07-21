@@ -416,18 +416,60 @@ Critère de sortie : **validé**. JARVIS peut enrichir ses réponses avec un con
 
 ## Itération 16 — Recherche à grande échelle
 
-Objectif : permettre à NEXUS d'adresser des volumes dépassant le cas du repository local.
+État : **terminée et validée localement le 21 juillet 2026**.
 
-Pistes à évaluer uniquement si les métriques le justifient :
+Objectif : permettre à NEXUS d'adresser plusieurs repositories réels avec une recherche fédérée locale, déterministe et explicable, puis mesurer objectivement si un moteur externe devient nécessaire.
 
-- Zoekt comme moteur de recherche de code externe ;
-- OpenGrok ;
-- index distants ;
-- plusieurs repositories ;
-- cache partagé ;
-- recherche fédérée.
+Architecture retenue :
 
-Lucene reste le moteur local par défaut tant qu'il répond aux besoins.
+- `FederatedSearchService` orchestre les recherches projet par projet ;
+- `FederatedSearchHit` conserve explicitement la provenance via `ProjectDescriptor` ;
+- SQLite reste canonique par `projectId` et Lucene reste un index dérivé reconstructible par projet ;
+- la fédération conserve le ranking existant et fusionne les résultats de manière déterministe ;
+- les requêtes lexicales multi-termes coordonnent au moins deux termes analysés uniques afin d'éviter les faux positifs à un seul terme ;
+- les résultats fédérés sont diversifiés par couple `projectId + chemin normalisé` après ranking afin qu'un même fichier ne monopolise pas le top-K via plusieurs candidats `FILE` / `SYMBOL` ;
+- deux repositories différents ne sont jamais dédupliqués ;
+- aucun backend réseau, index distant ou moteur externe n'est requis pendant la recherche.
+
+Validation fonctionnelle :
+
+- `mvn install` : 55 tests, 0 échec, 0 erreur, 2 harness opt-in ignorés ;
+- validation ciblée : 7 tests, 0 échec, 0 erreur ;
+- recherche multi-projet : validée ;
+- provenance `projectId` : validée ;
+- coordination lexicale multi-termes : validée ;
+- corpus golden historique et fédéré : validés.
+
+Palier incrémental contrôlé sur `collection-manager` :
+
+- reconstruction complète : 11 128 ms ;
+- incrémental petit delta : 323 ms ;
+- rollback incrémental : 303 ms ;
+- accélération reconstruction / petit delta : `34,45×` ;
+- visibilité de la probe après delta et purge après rollback : validées.
+
+Baseline finale canonique sur un corpus hermétique de sept repositories réels et huit requêtes :
+
+- 2 104 fichiers ;
+- 10 878 symboles ;
+- 10 087 relations ;
+- index Lucene cumulé : 5 121 497 octets ;
+- indexation complète : 8 818 ms ;
+- incrémental sans changement : 762 ms ;
+- recherche fédérée : `p50 = 133 ms`, `p95 = 304 ms` ;
+- construction de contexte : `p50 = 48 ms`, `p95 = 206 ms` ;
+- `precision@3 = 0,4583` ;
+- `recall@3 = 0,8958` ;
+- `hit@3 = 1,0000` ;
+- `MRR@3 = 1,0000`.
+
+Le corpus hermétique est reconstruit à partir d'un snapshot Git contrôlé et exclut les artefacts propres au benchmark afin d'éviter l'auto-contamination des mesures. Les données locales non versionnées, notamment un éventuel `index.scip`, ne sont pas incluses dans cette baseline canonique ; les volumes sémantiques des anciens runs sur checkout enrichi ne sont donc pas strictement comparables.
+
+Décision : les quatre paliers mesurés ne justifient ni Zoekt, ni OpenGrok, ni index distant, ni distribution de l'index, ni parallélisation prématurée de la fédération, ni nouveau changement des poids du ranking. Lucene reste le moteur local par défaut.
+
+Critère de sortie : **validé**. NEXUS recherche désormais sur plusieurs repositories réels avec provenance, ranking déterministe, coordination multi-termes et diversification par chemin, tout en conservant des latences bornées et un résultat pertinent classé premier sur les huit requêtes du corpus final.
+
+Documentation de référence : ADR-0043, `docs/developer/large-scale-search.md`, `docs/developer/large-scale-baseline-runbook.md`, `docs/developer/iteration-16-baseline-results.md` et `docs/developer/iteration-16-extended-portfolio-results.md`.
 
 ---
 

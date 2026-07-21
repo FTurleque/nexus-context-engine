@@ -37,6 +37,8 @@ import com.nexus.ranking.DeterministicContextRanker;
 import com.nexus.ranking.RankedCandidate;
 import com.nexus.ranking.graph.GraphCandidateEnricher;
 import com.nexus.search.CandidateType;
+import com.nexus.search.FederatedSearchHit;
+import com.nexus.search.FederatedSearchService;
 import com.nexus.search.SearchIndex;
 import com.nexus.search.SearchService;
 import com.nexus.search.SymbolSearchStrategy;
@@ -69,6 +71,7 @@ public final class NexusApplication {
     private final ProjectRegistry projectRegistry;
     private final ProjectIndexingService indexingService;
     private final SearchService searchService;
+    private final FederatedSearchService federatedSearchService;
     private final ContextBuilder contextBuilder;
 
     private NexusApplication(
@@ -77,12 +80,14 @@ public final class NexusApplication {
             ProjectRegistry projectRegistry,
             ProjectIndexingService indexingService,
             SearchService searchService,
+            FederatedSearchService federatedSearchService,
             ContextBuilder contextBuilder) {
         this.projectRepository = Objects.requireNonNull(projectRepository, "projectRepository");
         this.indexRepository = Objects.requireNonNull(indexRepository, "indexRepository");
         this.projectRegistry = Objects.requireNonNull(projectRegistry, "projectRegistry");
         this.indexingService = Objects.requireNonNull(indexingService, "indexingService");
         this.searchService = Objects.requireNonNull(searchService, "searchService");
+        this.federatedSearchService = Objects.requireNonNull(federatedSearchService, "federatedSearchService");
         this.contextBuilder = Objects.requireNonNull(contextBuilder, "contextBuilder");
     }
 
@@ -119,6 +124,7 @@ public final class NexusApplication {
                         new GraphCandidateEnricher(indexRepository),
                         new GitRecencyCandidateEnricher()),
                 new DeterministicContextRanker());
+        FederatedSearchService federatedSearchService = new FederatedSearchService(searchService);
 
         TokenEstimator tokenEstimator = new HeuristicTokenEstimator();
         ContextBuilder contextBuilder = new DefaultContextBuilder(
@@ -142,6 +148,7 @@ public final class NexusApplication {
                 projectRegistry,
                 indexingService,
                 searchService,
+                federatedSearchService,
                 contextBuilder);
     }
 
@@ -208,6 +215,20 @@ public final class NexusApplication {
         long startedAt = System.nanoTime();
         List<RankedCandidate> results = searchService.search(project, query, limit, explain);
         return new SearchOperation(project, query, limit, explain, elapsedMillis(startedAt), results);
+    }
+
+    public FederatedSearchOperation searchAcrossProjects(
+            List<UUID> projectIds,
+            String query,
+            int limit,
+            boolean explain) throws IOException {
+        Objects.requireNonNull(projectIds, "projectIds");
+        List<ProjectDescriptor> projects = projectIds.stream()
+                .map(this::getProject)
+                .toList();
+        long startedAt = System.nanoTime();
+        List<FederatedSearchHit> results = federatedSearchService.search(projects, query, limit, explain);
+        return new FederatedSearchOperation(projects, query, limit, explain, elapsedMillis(startedAt), results);
     }
 
     public ContextOperation context(
@@ -302,6 +323,19 @@ public final class NexusApplication {
             long durationMs,
             List<RankedCandidate> results) {
         public SearchOperation {
+            results = List.copyOf(results);
+        }
+    }
+
+    public record FederatedSearchOperation(
+            List<ProjectDescriptor> projects,
+            String query,
+            int limit,
+            boolean explain,
+            long durationMs,
+            List<FederatedSearchHit> results) {
+        public FederatedSearchOperation {
+            projects = List.copyOf(projects);
             results = List.copyOf(results);
         }
     }
