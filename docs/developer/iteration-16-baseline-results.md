@@ -8,21 +8,21 @@ Les mesures sont des observations reproductibles sur la machine de validation ut
 
 Date de validation locale : **21 juillet 2026**.
 
-### Build complet
+### Build complet après ajout du palier petit delta
 
 ```text
 mvn clean install
 BUILD SUCCESS
 117 fichiers source compilés
-28 fichiers de test compilés
-51 tests exécutés
+29 fichiers de test compilés
+52 tests exécutés
 0 échec
 0 erreur
-1 test ignoré
-14,286 s
+2 tests ignorés
+21,810 s
 ```
 
-Le test ignoré est `LargeScaleSearchBaselineTest`, volontairement opt-in pendant le build standard.
+Les deux tests ignorés sont les harness opt-in `LargeScaleSearchBaselineTest` et `SmallDeltaIndexingBaselineTest`. Ils ne s'exécutent que lorsque leurs paramètres de benchmark sont explicitement fournis.
 
 La validation précédente avait également produit :
 
@@ -176,7 +176,7 @@ Le p50 de recherche varie sensiblement entre les deux runs. En revanche, le p95,
 
 `SearchService` reste la requête la plus coûteuse, car elle produit des correspondances exactes dans plusieurs projets. Même dans ce cas, le p95 reste à `219 ms`.
 
-## 4. Comparaison des deux paliers
+## 4. Comparaison des deux premiers paliers
 
 Entre le palier NEXUS seul et le portefeuille de quatre repositories :
 
@@ -237,9 +237,63 @@ Signal inter-projets notable : pour la requête non qualifiée `SearchService`, 
 
 Les résultats montrent aussi que plusieurs candidats `FILE` et `SYMBOL` peuvent pointer vers le même chemin dans le top 3. Cette répétition n'empêche pas le rappel parfait du corpus actuel, mais elle constitue un axe possible d'amélioration de la diversité des résultats, distinct d'un changement de backend.
 
-## 6. Décision à ce palier
+## 6. Palier 3 — indexation incrémentale avec petit delta contrôlé
 
-Le palier de quatre repositories ne justifie :
+Commande :
+
+```powershell
+.\scripts\measure-iteration-16-small-delta.ps1
+```
+
+Repository de référence : `collection-manager` au commit `37ca800b2476db6f4bdc3e976afb78764ed05dda`.
+
+Le runner clone la référence figée dans `target`, puis le harness JUnit crée une seconde copie temporaire. Le delta n'est appliqué qu'à cette copie temporaire ; ni le checkout utilisateur, ni le clone Git contrôlé ne sont modifiés.
+
+Delta appliqué :
+
+- modification de `infra/src/main/java/com/collectionmanager/infra/migration/FlywayMigrator.java` ;
+- ajout de `infra/src/main/java/com/collectionmanager/infra/migration/NexusIteration16DeltaProbe.java`.
+
+Résultat local :
+
+```text
+SmallDeltaIndexingBaselineTest
+1 test exécuté
+0 échec
+0 erreur
+0 ignoré
+BUILD SUCCESS
+```
+
+| Métrique | Valeur |
+|---|---:|
+| fichiers scannés avant delta | 722 |
+| indexation complète | 11 128 ms |
+| incrémental sans changement | 289 ms |
+| incrémental petit delta | 323 ms |
+| fichiers modifiés détectés | 2 |
+| fichiers supprimés pendant le delta | 0 |
+| rollback incrémental | 303 ms |
+| accélération reconstruction / petit delta | 34,45× |
+| nouvelle probe trouvée par la recherche | oui |
+| purge de la probe après rollback | oui |
+
+Le petit delta représente environ `2,90 %` du temps de la reconstruction complète. Le rollback représente environ `2,72 %` du temps de reconstruction complète.
+
+La mesure valide simultanément les propriétés fonctionnelles suivantes :
+
+- l'indexation reste incrémentale (`fullSearchRebuild = false`) ;
+- exactement deux fichiers sont détectés comme modifiés lors du delta ;
+- le nouveau symbole est visible dans les données canoniques SQLite ;
+- le nouveau fichier est visible dans l'index de recherche Lucene dérivé ;
+- après restauration/suppression, le rollback incrémental détecte un fichier modifié et un fichier supprimé ;
+- le symbole et le chemin supprimés disparaissent des index après rollback.
+
+Cette mesure montre une différence nette et reproductible entre reconstruction complète et petit changement local. À ce volume, l'architecture incrémentale existante répond donc correctement au cas d'édition courant sans nécessiter un moteur externe.
+
+## 7. Décision à ce palier
+
+Les trois paliers mesurés ne justifient :
 
 - ni Zoekt ;
 - ni OpenGrok ;
@@ -247,15 +301,16 @@ Le palier de quatre repositories ne justifie :
 - ni parallélisation prématurée de la fédération ;
 - ni changement des poids de ranking sur une seule mesure.
 
-La recherche fédérée reste sous `p95 = 220 ms` sur les cinq requêtes mesurées, avec une taille cumulée d'index inférieure à 3,5 Mo et un rappel réel parfait à `recall@3`.
+La recherche fédérée reste sous `p95 = 220 ms` sur les cinq requêtes du portefeuille, avec une taille cumulée d'index inférieure à 3,5 Mo et un rappel réel parfait à `recall@3`.
 
-## 7. Mesures encore nécessaires
+L'indexation avec deux fichiers changés termine en `323 ms`, contre `11 128 ms` pour une reconstruction complète sur le même corpus contrôlé, soit une accélération mesurée de `34,45×`.
+
+## 8. Mesures encore utiles
 
 Avant de considérer l'Itération 16 totalement close, il reste utile de mesurer :
 
-1. une indexation incrémentale avec petit delta sur une copie contrôlée ;
-2. un palier supérieur si des repositories réellement pertinents permettent d'atteindre cinq à dix projets sans duplication artificielle ;
-3. la stabilité du ranking sur des requêtes métier ambiguës et qualifiées ;
-4. l'intérêt d'une diversification par chemin lorsque plusieurs candidats `FILE` et `SYMBOL` identiques occupent le top 3.
+1. un palier supérieur si des repositories réellement pertinents permettent d'atteindre cinq à dix projets sans duplication artificielle ;
+2. la stabilité du ranking sur des requêtes métier ambiguës et qualifiées ;
+3. l'intérêt d'une diversification par chemin lorsque plusieurs candidats `FILE` et `SYMBOL` identiques occupent le top 3.
 
 La décision d'évaluer Zoekt ou OpenGrok ne sera réouverte que si ces mesures montrent une limite reproductible que l'architecture locale ne peut pas corriger simplement.
