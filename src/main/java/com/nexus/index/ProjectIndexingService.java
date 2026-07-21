@@ -6,6 +6,7 @@ import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectRepository;
 import com.nexus.search.SearchDocument;
 import com.nexus.search.SearchIndex;
+import com.nexus.search.semantic.SemanticIndexingService;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -30,6 +31,7 @@ public final class ProjectIndexingService {
     private final SearchIndex searchIndex;
     private final List<CodeIndexImporter> codeIndexImporters;
     private final List<CodeIntelligenceProvider> codeIntelligenceProviders;
+    private final SemanticIndexingService semanticIndexingService;
 
     public ProjectIndexingService(
             ProjectRepository projectRepository,
@@ -37,7 +39,7 @@ public final class ProjectIndexingService {
             ProjectScanner scanner,
             List<LanguageAnalyzer> analyzers,
             SearchIndex searchIndex) {
-        this(projectRepository, indexRepository, scanner, analyzers, searchIndex, List.of(), List.of());
+        this(projectRepository, indexRepository, scanner, analyzers, searchIndex, List.of(), List.of(), null);
     }
 
     public ProjectIndexingService(
@@ -47,7 +49,7 @@ public final class ProjectIndexingService {
             List<LanguageAnalyzer> analyzers,
             SearchIndex searchIndex,
             List<CodeIndexImporter> codeIndexImporters) {
-        this(projectRepository, indexRepository, scanner, analyzers, searchIndex, codeIndexImporters, List.of());
+        this(projectRepository, indexRepository, scanner, analyzers, searchIndex, codeIndexImporters, List.of(), null);
     }
 
     public ProjectIndexingService(
@@ -58,6 +60,26 @@ public final class ProjectIndexingService {
             SearchIndex searchIndex,
             List<CodeIndexImporter> codeIndexImporters,
             List<CodeIntelligenceProvider> codeIntelligenceProviders) {
+        this(
+                projectRepository,
+                indexRepository,
+                scanner,
+                analyzers,
+                searchIndex,
+                codeIndexImporters,
+                codeIntelligenceProviders,
+                null);
+    }
+
+    public ProjectIndexingService(
+            ProjectRepository projectRepository,
+            IndexRepository indexRepository,
+            ProjectScanner scanner,
+            List<LanguageAnalyzer> analyzers,
+            SearchIndex searchIndex,
+            List<CodeIndexImporter> codeIndexImporters,
+            List<CodeIntelligenceProvider> codeIntelligenceProviders,
+            SemanticIndexingService semanticIndexingService) {
         this.projectRepository = Objects.requireNonNull(projectRepository, "projectRepository");
         this.indexRepository = Objects.requireNonNull(indexRepository, "indexRepository");
         this.scanner = Objects.requireNonNull(scanner, "scanner");
@@ -66,6 +88,7 @@ public final class ProjectIndexingService {
         this.codeIndexImporters = List.copyOf(Objects.requireNonNull(codeIndexImporters, "codeIndexImporters"));
         this.codeIntelligenceProviders = List.copyOf(
                 Objects.requireNonNull(codeIntelligenceProviders, "codeIntelligenceProviders"));
+        this.semanticIndexingService = semanticIndexingService;
     }
 
     public IndexingReport index(UUID projectId) throws IOException {
@@ -116,7 +139,7 @@ public final class ProjectIndexingService {
             for (ScannedFile scannedFile : scannedFiles) {
                 boolean genericSearchEligible = isGenericSearchEligible(scannedFile.category());
                 if (!genericSearchEligible) {
-                    // Nettoie aussi les index Lucene créés par une ancienne version de
+                    // Nettoie aussi les index dérivés créés par une ancienne version de
                     // NEXUS, même lorsque le fichier canonique n'a pas changé.
                     searchRemovedPaths.add(scannedFile.relativePath());
                 }
@@ -149,8 +172,14 @@ public final class ProjectIndexingService {
 
             if (fullRebuild) {
                 searchIndex.rebuild(projectId, searchDocuments);
+                if (semanticIndexingService != null) {
+                    semanticIndexingService.rebuild(projectId, searchDocuments);
+                }
             } else {
                 searchIndex.applyChanges(projectId, searchDocuments, searchRemovedPaths);
+                if (semanticIndexingService != null) {
+                    semanticIndexingService.applyChanges(projectId, searchDocuments, searchRemovedPaths);
+                }
             }
 
             Set<String> languages = scannedFiles.stream()

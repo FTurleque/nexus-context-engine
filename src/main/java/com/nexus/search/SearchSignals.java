@@ -8,6 +8,7 @@ public final class SearchSignals {
     public static final String PATH = "pathScore";
     public static final String GRAPH = "graphScore";
     public static final String GIT_RECENCY = "gitRecencyScore";
+    public static final String SEMANTIC = "semanticScore";
 
     private SearchSignals() {
     }

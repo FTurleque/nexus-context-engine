@@ -14,6 +14,7 @@ import java.util.Map;
 public final class DeterministicContextRanker implements ContextRanker {
 
     public static final double DEFAULT_GIT_RECENCY_WEIGHT = 0.05d;
+    public static final double DEFAULT_SEMANTIC_WEIGHT = 0.15d;
 
     private static final Map<String, Double> BASE_WEIGHTS = Map.of(
             SearchSignals.LEXICAL, 0.40d,
@@ -23,16 +24,25 @@ public final class DeterministicContextRanker implements ContextRanker {
             SearchSignals.GRAPH, 0.10d);
 
     private final double gitRecencyWeight;
+    private final double semanticWeight;
 
     public DeterministicContextRanker() {
-        this(DEFAULT_GIT_RECENCY_WEIGHT);
+        this(DEFAULT_GIT_RECENCY_WEIGHT, DEFAULT_SEMANTIC_WEIGHT);
     }
 
     public DeterministicContextRanker(double gitRecencyWeight) {
+        this(gitRecencyWeight, DEFAULT_SEMANTIC_WEIGHT);
+    }
+
+    public DeterministicContextRanker(double gitRecencyWeight, double semanticWeight) {
         if (gitRecencyWeight < 0.0d || gitRecencyWeight > 0.20d) {
             throw new IllegalArgumentException("gitRecencyWeight must be between 0.0 and 0.20");
         }
+        if (semanticWeight < 0.0d || semanticWeight > 1.0d) {
+            throw new IllegalArgumentException("semanticWeight must be between 0.0 and 1.0");
+        }
         this.gitRecencyWeight = gitRecencyWeight;
+        this.semanticWeight = semanticWeight;
     }
 
     @Override
@@ -60,6 +70,7 @@ public final class DeterministicContextRanker implements ContextRanker {
                 SearchSignals.SYMBOL_FUZZY,
                 SearchSignals.PATH,
                 SearchSignals.GRAPH,
+                SearchSignals.SEMANTIC,
                 SearchSignals.GIT_RECENCY)) {
             double normalized = clamp(candidate.signals().getOrDefault(signal, 0.0d));
             double contribution = normalized * weight(signal);
@@ -80,6 +91,9 @@ public final class DeterministicContextRanker implements ContextRanker {
         if (SearchSignals.GIT_RECENCY.equals(signal)) {
             return gitRecencyWeight;
         }
+        if (SearchSignals.SEMANTIC.equals(signal)) {
+            return semanticWeight;
+        }
         return BASE_WEIGHTS.getOrDefault(signal, 0.0d);
     }
 
@@ -90,6 +104,7 @@ public final class DeterministicContextRanker implements ContextRanker {
             case SearchSignals.SYMBOL_FUZZY -> "similarité de symbole";
             case SearchSignals.PATH -> "correspondance du chemin";
             case SearchSignals.GRAPH -> "proximité dans le graphe";
+            case SearchSignals.SEMANTIC -> "similarité sémantique";
             case SearchSignals.GIT_RECENCY -> "récence Git locale";
             default -> signal;
         };
