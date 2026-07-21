@@ -244,11 +244,17 @@ class LargeScaleSearchBaselineTest {
     }
 
     private static Map<String, Object> reportedHit(FederatedSearchHit hit) {
+        Path candidatePath = hit.rankedCandidate().candidate().path().toAbsolutePath().normalize();
+        Path projectRoot = hit.project().rootPath().toAbsolutePath().normalize();
+        Path reportedPath = candidatePath.startsWith(projectRoot)
+                ? projectRoot.relativize(candidatePath)
+                : candidatePath;
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("projectId", hit.project().id().toString());
         result.put("projectName", hit.project().name());
         result.put("type", hit.rankedCandidate().candidate().type().name());
-        result.put("path", hit.rankedCandidate().candidate().path().toString());
+        result.put("path", reportedPath.toString());
         result.put("score", hit.rankedCandidate().score());
         return result;
     }
