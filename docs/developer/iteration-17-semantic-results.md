@@ -156,16 +156,42 @@ Décision retenue :
 
 La capacité n'est donc ni supprimée, ni promue au chemin universel : elle devient un **mode opt-in mesuré et explicable**.
 
-## Validation restante avant fusion
+## Validation finale avant fusion
 
-Le benchmark final et la validation ciblée sont verts :
+Validation complète exécutée localement le 21 juillet 2026 sur la tête finale de la branche :
 
 ```text
-17 tests ciblés
+mvn clean install : SUCCESS
+73 tests
 0 échec
 0 erreur
-BUILD SUCCESS
-benchmark A/B réel : BUILD SUCCESS
+5 harness opt-in ignorés
+BUILD SUCCESS en 16,571 s
+
+SELF-SMOKE SUCCESS
+257 fichiers indexés
+1 431 symboles
+9 957 relations
+indexation complète : 2 271 ms
+indexation incrémentale sans changement : 657 ms
+recherche explicable : 727 ms
+contexte strict : 107/180 tokens en 885 ms
+contexte multi-source : 1 199/1 200 tokens en 1 051 ms
+contexte avec skill : 1 199/1 200 tokens en 1 123 ms
+contexte Git : 1 588/1 600 tokens en 1 084 ms
+réduction du contexte candidat strict : 99,47 %
+
+validation ciblée Itération 17 : SUCCESS
+17 tests
+0 échec
+0 erreur
+Fusion semantic RRF : SUCCESS
+Composition application : OPT-IN VALIDEE
+Corpus golden historique : SUCCESS
+Corpus golden fédéré : SUCCESS
+Activation create(paths) : DESACTIVEE
 ```
 
-Avant fusion de la PR, il reste à exécuter la validation complète de non-régression (`mvn clean install` + self-smoke historique) sur la tête finale de la branche.
+Les avertissements SLF4J, native access, Vector API et Maven Shade observés restent non bloquants et n'ont provoqué aucun échec.
+
+**Critère de sortie : validé.** L'Itération 17 peut être fusionnée : la recherche sémantique apporte un gain mesurable sur les requêtes conceptuelles, reste strictement opt-in, conserve le chemin historique sans embeddings et n'introduit ni fournisseur obligatoire ni base vectorielle externe.
