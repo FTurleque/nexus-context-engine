@@ -4,7 +4,7 @@
 
 Mesurer si une stratégie de recherche sémantique améliore réellement la qualité de recherche et du contexte NEXUS par rapport au socle lexical + symbolique + graphe, sans rendre les embeddings obligatoires.
 
-Cette itération applique l'ADR-0014 : la recherche sémantique reste **désactivée par défaut**, local-first lorsque possible, et ne sera conservée durablement que si les métriques montrent un gain utile.
+Cette itération applique l'ADR-0014 : la recherche sémantique reste **désactivée par défaut**, local-first lorsque possible, et n'est conservée que si les métriques montrent un gain utile.
 
 ## Invariants
 
@@ -30,13 +30,20 @@ SearchService
         │
         └── SemanticSearchIndex        port
               └── LuceneSemanticSearchIndex
+
+Ranking
+├── DeterministicContextRanker         chemin historique
+└── SemanticHybridContextRanker        opt-in uniquement
+      └── Weighted Reciprocal Rank Fusion
 ```
 
-Le résultat de la stratégie sémantique rejoint les `SearchCandidate` existants au moyen d'un signal `semanticScore`. Le ranking décide de sa contribution avec un poids explicite et explicable. Sans stratégie sémantique configurée, ce signal est absent et le comportement historique est inchangé.
+Le résultat de la stratégie sémantique rejoint les `SearchCandidate` existants au moyen d'un signal `semanticScore`.
+
+En mode sémantique, les scores bruts BM25/symboliques/graphe et cosine ne sont pas additionnés directement. Le ranking historique et le ranking kNN sont ordonnés séparément puis fusionnés par RRF pondérée.
 
 L'index vectoriel est stocké séparément sous `indexes/{projectId}/semantic-lucene`. Il reste entièrement dérivé et reconstructible ; SQLite conserve son rôle canonique.
 
-## Incrément 1 — contrats, ranking et stockage vectoriel
+## Incrément 1 — contrats et stockage vectoriel
 
 Implémenté :
 
@@ -44,7 +51,6 @@ Implémenté :
 - `SemanticSearchIndex` ;
 - `SemanticSearchStrategy` ;
 - signal `semanticScore` ;
-- contribution sémantique explicable dans `DeterministicContextRanker` ;
 - `SemanticIndexingService` ;
 - `LuceneSemanticSearchIndex` basé sur le kNN natif Lucene et la similarité cosinus ;
 - reconstruction complète, delta incrémental et suppression par chemin ;
@@ -53,8 +59,6 @@ Implémenté :
 
 ### Validation locale du 21 juillet 2026
 
-Validation complète fournie depuis Windows / PowerShell :
-
 ```text
 mvn clean install
 63 tests exécutés
@@ -62,36 +66,9 @@ mvn clean install
 0 erreur
 2 harness opt-in ignorés
 BUILD SUCCESS
-16,687 s
 ```
 
 Self-smoke historique : **SUCCESS**.
-
-Mesures du self-smoke sans embeddings actifs :
-
-```text
-250 fichiers
-1 324 symboles
-9 845 relations
-indexation complète : 3 017 ms
-indexation incrémentale : 817 ms
-recherche : 807 ms
-contexte strict : 898 ms
-contexte multi-source : 1 120 ms
-contexte avec skill : 1 107 ms
-contexte Git : 1 134 ms
-```
-
-Validation ciblée sémantique :
-
-```text
-10 tests exécutés
-0 échec
-0 erreur
-0 ignoré
-BUILD SUCCESS
-3,461 s
-```
 
 La baseline historique reste inchangée :
 
@@ -100,13 +77,11 @@ precision@3 = 0,4444
 recall@3    = 1,0000
 ```
 
-Conclusion de l'incrément 1 : contrats embeddings, stratégie sémantique, index vectoriel Lucene, cycle rebuild/delta et ranking `semanticScore` sont validés, tandis que l'activation par défaut reste désactivée.
-
 ## Incrément 2 — composition applicative explicitement opt-in
 
-`NexusApplication.create(paths)` délègue explicitement vers `SemanticSearchConfiguration.disabled()` et conserve donc le comportement historique.
+`NexusApplication.create(paths)` délègue vers `SemanticSearchConfiguration.disabled()` et conserve le comportement historique.
 
-Une seconde composition est disponible :
+Activation explicite :
 
 ```java
 NexusApplication.create(
@@ -118,17 +93,55 @@ Lorsque cette configuration est activée :
 
 - le même `EmbeddingProvider` alimente l'indexation et les requêtes ;
 - un `LuceneSemanticSearchIndex` est créé avec la dimension du provider ;
-- `SemanticIndexingService` rejoint le cycle d'indexation existant ;
+- `SemanticIndexingService` rejoint le cycle d'indexation ;
 - `SemanticSearchStrategy` rejoint les stratégies du `SearchService` ;
-- aucun autre adaptateur n'est obligé d'activer la capacité.
+- `SemanticHybridContextRanker` remplace le ranker historique uniquement pour cette composition.
 
-`NexusApplicationSemanticConfigurationTest` vérifie à la fois l'absence totale de `semanticScore` dans la composition historique et la présence effective d'un résultat sémantique dans la composition explicitement activée.
+## Incrément 3 — fusion RRF pondérée
+
+Le diagnostic réel a montré que le kNN retrouvait les six cibles dans le top 17 mais que l'ancienne fusion additive détruisait ce signal.
+
+Une RRF déterministe est donc utilisée avec :
+
+```text
+RRF k                = 60
+poids baseline       = 1,0
+poids sémantique     = 8,0
+```
+
+Le poids `8,0` n'est pas arbitraire. Il est retenu après un sweep sur le corpus NEXUS figé :
+
+```text
+1,00  1,25  1,50  2,00  3,00  4,00  6,00  8,00
+```
+
+Résultat :
+
+```text
+smallestWeightMatchingRawRecallAndHit = 4.0
+bestObservedWeightByRecallHitMrr      = 8.0
+```
+
+Avec x8, la fusion rejoint le kNN brut sur les quatre métriques top-3 du corpus mesuré :
+
+```text
+precision@3 = 0,1667
+recall@3    = 0,4167
+hit@3       = 0,5000
+MRR@3       = 0,3056
+```
+
+La valeur est exposée par `SemanticSearchConfiguration.DEFAULT_SEMANTIC_RRF_WEIGHT` et peut être explicitement remplacée :
+
+```java
+SemanticSearchConfiguration.enabled(embeddingProvider, customWeight)
+```
+
+La capacité reste néanmoins **désactivée par défaut** : le poids x8 ne s'applique jamais à `NexusApplication.create(paths)`.
 
 ## Provider local de baseline
 
-Le premier provider réel est `OllamaEmbeddingProvider`.
-
-Configuration de référence du harness :
+Le provider réel de référence est `OllamaEmbeddingProvider` :
 
 ```text
 endpoint   = http://localhost:11434
@@ -138,46 +151,50 @@ dimensions = 1024
 
 Aucune requête Ollama n'est exécutée à la construction d'un provider. Le trafic n'existe que lorsque la composition sémantique est explicitement utilisée pour indexer ou rechercher.
 
-## Benchmark A/B opt-in
+## Corpus réel figé
 
-`SemanticSearchBenchmarkTest` crée un corpus contrôlé de huit documents et cinq requêtes où le vocabulaire de la requête diverge volontairement du document pertinent.
+Les benchmarks réels utilisent par défaut le merge final de l'Itération 16 :
 
-Le même corpus est indexé deux fois :
+```text
+CorpusRef = a5d23386fede9b4a4eccf4d5c52308fcd5cae4b1
+```
 
-1. baseline lexical + symbolique + graphe ;
-2. même pipeline avec la stratégie sémantique activée.
+Le code benchmarké reste celui de la branche courante, mais le corpus indexé ne change pas entre les variantes de ranking.
 
-Le rapport JSON contient :
+## Benchmarks opt-in
 
-- `precision@3` ;
-- `recall@3` ;
-- `hit@3` ;
-- `MRR@3` ;
-- rang du document pertinent pour chaque requête ;
-- latence moyenne de recherche ;
-- durée d'indexation ;
-- taille de l'index sémantique ;
-- identité du modèle, dimension et endpoint ;
-- indication explicite permettant de distinguer un endpoint local d'un endpoint distant.
-
-Exécution :
+Corpus contrôlé :
 
 ```powershell
 .\scripts\measure-iteration-17-semantic.ps1
 ```
 
-Le modèle peut être préparé explicitement au moment de la mesure avec :
+Benchmark réel hermétique :
 
 ```powershell
-.\scripts\measure-iteration-17-semantic.ps1 -PullModel
+.\scripts\measure-iteration-17-real-semantic.ps1
 ```
 
-Le benchmark est volontairement opt-in et n'est jamais exécuté par `mvn test` sans la propriété `nexus.semantic.benchmark.enabled=true`.
+Diagnostic kNN / fusion et sweep :
+
+```powershell
+.\scripts\measure-iteration-17-real-semantic-diagnostic.ps1
+```
+
+Ces harness sont opt-in et ne sont pas exécutés par `mvn test` sans leurs propriétés d'activation.
 
 ## Critère d'adoption
 
-La recherche sémantique n'est pas adoptée par défaut simplement parce qu'elle fonctionne techniquement.
+La recherche sémantique n'est pas activée globalement simplement parce qu'elle fonctionne techniquement.
 
-Elle ne sera conservée comme capacité recommandée que si le benchmark montre un gain mesurable sur des requêtes réellement sémantiques sans dégradation disproportionnée de la précision, de la latence, du stockage ou de la confidentialité.
+La décision finale doit considérer ensemble :
 
-Dans le cas contraire, l'itération pourra conclure rationnellement que le socle lexical + symbolique + graphe reste préférable et la capacité sémantique restera expérimentale ou sera retirée.
+- gain de qualité sur les requêtes réellement sémantiques ;
+- latence de recherche ;
+- durée d'indexation ;
+- taille de l'index vectoriel ;
+- coût financier éventuel ;
+- volume de données envoyées à l'extérieur ;
+- qualité du `ContextBundle` sous budget.
+
+Le poids RRF x8 est désormais le **défaut de la capacité opt-in**, pas le défaut global de NEXUS. Le dernier benchmark A/B réel doit confirmer le compromis qualité/coût avant clôture de l'Itération 17.
