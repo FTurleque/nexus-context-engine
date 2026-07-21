@@ -44,7 +44,7 @@ class NexusApplicationSemanticConfigurationTest {
     }
 
     @Test
-    void enabledCompositionIndexesAndSearchesWithSemanticRrfFusion() throws Exception {
+    void enabledCompositionIndexesAndSearchesWithMeasuredSemanticRrfWeight() throws Exception {
         Path repository = repository("semantic-repository");
         Files.writeString(
                 repository.resolve("docs/cache-control.md"),
@@ -54,9 +54,12 @@ class NexusApplicationSemanticConfigurationTest {
                 "Render interface widgets with a responsive layout and accessible labels.");
 
         CountingSemanticProvider provider = new CountingSemanticProvider();
+        SemanticSearchConfiguration configuration = SemanticSearchConfiguration.enabled(provider);
+        assertEquals(8.0d, configuration.semanticRrfWeight(), 0.000001d);
+
         NexusApplication application = NexusApplication.create(
                 new NexusPaths(temporaryDirectory.resolve("semantic-home")),
-                SemanticSearchConfiguration.enabled(provider));
+                configuration);
         ProjectDescriptor project = application.registerProject(repository, "semantic-enabled");
         application.index(project.id(), true, false);
 
@@ -68,6 +71,7 @@ class NexusApplicationSemanticConfigurationTest {
         assertTrue(first.components().containsKey(SemanticHybridContextRanker.SEMANTIC_RRF_COMPONENT));
         assertTrue(first.components().get(SemanticHybridContextRanker.SEMANTIC_RRF_COMPONENT) > 0.0d);
         assertTrue(first.reasons().stream().anyMatch(reason -> reason.contains("fusion RRF sémantique")));
+        assertTrue(first.reasons().stream().anyMatch(reason -> reason.contains("x8.00")));
         assertTrue(provider.calls() >= 3, "Deux documents et la requête doivent être vectorisés");
     }
 
