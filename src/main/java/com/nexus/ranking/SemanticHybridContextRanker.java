@@ -22,26 +22,46 @@ import java.util.Objects;
 public final class SemanticHybridContextRanker implements ContextRanker {
 
     public static final int DEFAULT_RRF_K = 60;
+    public static final double DEFAULT_SEMANTIC_RRF_WEIGHT = 1.0d;
+    public static final double MAX_SEMANTIC_RRF_WEIGHT = 10.0d;
     public static final String BASELINE_RRF_COMPONENT = "baselineRrfScore";
     public static final String SEMANTIC_RRF_COMPONENT = "semanticRrfScore";
 
+    private static final double BASELINE_RRF_WEIGHT = 1.0d;
+
     private final ContextRanker baselineRanker;
     private final int rrfK;
+    private final double semanticRrfWeight;
 
     public SemanticHybridContextRanker() {
+        this(DEFAULT_SEMANTIC_RRF_WEIGHT);
+    }
+
+    public SemanticHybridContextRanker(double semanticRrfWeight) {
         this(
                 new DeterministicContextRanker(
                         DeterministicContextRanker.DEFAULT_GIT_RECENCY_WEIGHT,
                         0.0d),
-                DEFAULT_RRF_K);
+                DEFAULT_RRF_K,
+                semanticRrfWeight);
     }
 
-    SemanticHybridContextRanker(ContextRanker baselineRanker, int rrfK) {
+    SemanticHybridContextRanker(
+            ContextRanker baselineRanker,
+            int rrfK,
+            double semanticRrfWeight) {
         this.baselineRanker = Objects.requireNonNull(baselineRanker, "baselineRanker");
         if (rrfK <= 0) {
             throw new IllegalArgumentException("rrfK must be greater than zero");
         }
+        if (!Double.isFinite(semanticRrfWeight)
+                || semanticRrfWeight <= 0.0d
+                || semanticRrfWeight > MAX_SEMANTIC_RRF_WEIGHT) {
+            throw new IllegalArgumentException(
+                    "semanticRrfWeight must be greater than 0.0 and at most " + MAX_SEMANTIC_RRF_WEIGHT);
+        }
         this.rrfK = rrfK;
+        this.semanticRrfWeight = semanticRrfWeight;
     }
 
     @Override
@@ -79,7 +99,7 @@ public final class SemanticHybridContextRanker implements ContextRanker {
         Map<String, Integer> semanticRanks = ranksOfSearchCandidates(semanticRanking);
 
         double channelMaximum = reciprocalRank(1);
-        double normalizer = channelMaximum * 2.0d;
+        double normalizer = channelMaximum * (BASELINE_RRF_WEIGHT + semanticRrfWeight);
         List<FusedCandidate> fused = new ArrayList<>(candidates.size());
 
         for (SearchCandidate candidate : candidates) {
@@ -91,10 +111,10 @@ public final class SemanticHybridContextRanker implements ContextRanker {
 
             double baselineContribution = baselineRank == null
                     ? 0.0d
-                    : reciprocalRank(baselineRank) / normalizer;
+                    : BASELINE_RRF_WEIGHT * reciprocalRank(baselineRank) / normalizer;
             double semanticContribution = semanticRank == null
                     ? 0.0d
-                    : reciprocalRank(semanticRank) / normalizer;
+                    : semanticRrfWeight * reciprocalRank(semanticRank) / normalizer;
             double score = baselineContribution + semanticContribution;
 
             Map<String, Double> components = new LinkedHashMap<>();
@@ -109,6 +129,7 @@ public final class SemanticHybridContextRanker implements ContextRanker {
             if (request.explain()) {
                 if (baselineRank != null) {
                     reasons.add("fusion RRF baseline: rang " + baselineRank
+                            + " x" + formatWeight(BASELINE_RRF_WEIGHT)
                             + " -> +" + format(baselineContribution));
                     RankedCandidate baseline = baselineById.get(candidate.id());
                     if (baseline != null) {
@@ -117,6 +138,7 @@ public final class SemanticHybridContextRanker implements ContextRanker {
                 }
                 if (semanticRank != null) {
                     reasons.add("fusion RRF sémantique: rang " + semanticRank
+                            + " x" + formatWeight(semanticRrfWeight)
                             + " -> +" + format(semanticContribution));
                 }
             }
@@ -161,6 +183,10 @@ public final class SemanticHybridContextRanker implements ContextRanker {
 
     private static String format(double value) {
         return String.format(java.util.Locale.ROOT, "%.3f", value);
+    }
+
+    private static String formatWeight(double value) {
+        return String.format(java.util.Locale.ROOT, "%.2f", value);
     }
 
     private record FusedCandidate(RankedCandidate ranked, int baselineRank, int semanticRank) {
