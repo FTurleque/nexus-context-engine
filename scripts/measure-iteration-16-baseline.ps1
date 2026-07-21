@@ -22,6 +22,15 @@ function Invoke-Maven {
     }
 }
 
+function Resolve-OutputPath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if ([System.IO.Path]::IsPathRooted($Path)) {
+        return [System.IO.Path]::GetFullPath($Path)
+    }
+    return [System.IO.Path]::GetFullPath((Join-Path $repoRoot $Path))
+}
+
 try {
     Push-Location $repoRoot
     $locationPushed = $true
@@ -61,7 +70,7 @@ try {
 
     $encodedProjects = $resolvedRoots -join "|"
     $encodedQueries = $resolvedQueries -join "|"
-    $resolvedOutput = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $Output))
+    $resolvedOutput = Resolve-OutputPath -Path $Output
 
     Write-Host "============================================================"
     Write-Host " NEXUS - Baseline Iteration 16 / Large Scale Search"
