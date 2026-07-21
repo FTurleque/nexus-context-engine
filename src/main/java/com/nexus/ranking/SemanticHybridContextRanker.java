@@ -22,7 +22,7 @@ import java.util.Objects;
 public final class SemanticHybridContextRanker implements ContextRanker {
 
     public static final int DEFAULT_RRF_K = 60;
-    public static final double DEFAULT_SEMANTIC_RRF_WEIGHT = 1.0d;
+    public static final double DEFAULT_SEMANTIC_RRF_WEIGHT = 8.0d;
     public static final double MAX_SEMANTIC_RRF_WEIGHT = 10.0d;
     public static final String BASELINE_RRF_COMPONENT = "baselineRrfScore";
     public static final String SEMANTIC_RRF_COMPONENT = "semanticRrfScore";
@@ -152,8 +152,8 @@ public final class SemanticHybridContextRanker implements ContextRanker {
         return fused.stream()
                 .sorted(Comparator
                         .comparingDouble((FusedCandidate candidate) -> candidate.ranked().score()).reversed()
-                        .thenComparingInt(FusedCandidate::baselineRank)
                         .thenComparingInt(FusedCandidate::semanticRank)
+                        .thenComparingInt(FusedCandidate::baselineRank)
                         .thenComparing(candidate -> candidate.ranked().candidate().path().toString())
                         .thenComparing(candidate -> candidate.ranked().candidate().id()))
                 .limit(request.limit())
