@@ -153,7 +153,7 @@ public final class NexusApplication {
                 semanticIndexingService);
 
         ContextRanker contextRanker = semanticSearchConfiguration.enabled()
-                ? new SemanticHybridContextRanker()
+                ? new SemanticHybridContextRanker(semanticSearchConfiguration.semanticRrfWeight())
                 : new DeterministicContextRanker();
         SearchService searchService = new SearchService(
                 searchStrategies,
