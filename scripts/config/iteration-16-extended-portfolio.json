@@ -1,0 +1,119 @@
+{
+  "name": "iteration-16-extended-portfolio",
+  "description": "Palier etendu de sept repositories reels et personnels, sans JARVIS, satellites JARVIS, forks tiers massifs ni duplication artificielle.",
+  "includeCurrentRepository": true,
+  "queries": [
+    {
+      "text": "SearchService",
+      "relevant": [
+        {
+          "repository": "nexus-context-engine",
+          "path": "src/main/java/com/nexus/search/SearchService.java"
+        },
+        {
+          "repository": "collection-manager",
+          "path": "domain/src/main/java/com/collectionmanager/domain/search/service/SearchService.java"
+        }
+      ]
+    },
+    {
+      "text": "MediaFileNameController",
+      "relevant": [
+        {
+          "repository": "MediaUtilityTools",
+          "path": "src/main/java/com/mediautilitytools/renaming/controllers/ui/MediaFileNameController.java"
+        }
+      ]
+    },
+    {
+      "text": "FlywayMigrator",
+      "relevant": [
+        {
+          "repository": "collection-manager",
+          "path": "infra/src/main/java/com/collectionmanager/infra/migration/FlywayMigrator.java"
+        },
+        {
+          "repository": "collection-manager",
+          "path": "infra/src/main/java/com/collectionmanager/infra/config/FlywayMigrator.java"
+        }
+      ]
+    },
+    {
+      "text": "DatabaseMigrationManager",
+      "relevant": [
+        {
+          "repository": "db-toolkit-core",
+          "path": "src/main/java/com/ft/dbtoolkit/migrations/DatabaseMigrationManager.java"
+        }
+      ]
+    },
+    {
+      "text": "SqlScriptExecutor",
+      "relevant": [
+        {
+          "repository": "db-toolkit-core",
+          "path": "src/main/java/com/ft/dbtoolkit/core/SqlScriptExecutor.java"
+        }
+      ]
+    },
+    {
+      "text": "candidate-multiplier",
+      "relevant": [
+        {
+          "repository": "ariane-chatbot",
+          "path": "docs/developer/local-search.md"
+        }
+      ]
+    },
+    {
+      "text": "architecture hexagonale",
+      "relevant": [
+        {
+          "repository": "market-sync-app",
+          "path": "README.md"
+        }
+      ]
+    },
+    {
+      "text": "SceneFxmlApp",
+      "relevant": [
+        {
+          "repository": "streamApp",
+          "path": "src/main/java/com/streamapp/SceneFxmlApp.java"
+        }
+      ]
+    }
+  ],
+  "repositories": [
+    {
+      "name": "MediaUtilityTools",
+      "url": "https://github.com/FTurleque/MediaUtilityTools.git",
+      "ref": "91e2f003a46a842e2d194fdc4bcf26e882c99c02"
+    },
+    {
+      "name": "collection-manager",
+      "url": "https://github.com/FTurleque/collection-manager.git",
+      "ref": "37ca800b2476db6f4bdc3e976afb78764ed05dda"
+    },
+    {
+      "name": "db-toolkit-core",
+      "url": "https://github.com/FTurleque/db-toolkit-core.git",
+      "ref": "8cacc4e181e4bd9a36551b363b4d414c51f30eed"
+    },
+    {
+      "name": "ariane-chatbot",
+      "url": "https://github.com/FTurleque/ariane-chatbot.git",
+      "ref": "827107ce20ed1bd9a4d6242caafbec6f4e266b3e"
+    },
+    {
+      "name": "market-sync-app",
+      "url": "https://github.com/FTurleque/market-sync-app.git",
+      "ref": "f2861d2a5aa0a0baf368a812a3d6980cd3acae2b"
+    },
+    {
+      "name": "streamApp",
+      "url": "https://github.com/FTurleque/streamApp.git",
+      "ref": "af5c49a38ee2670c5bd3064872b14e3b1ec15328"
+    }
+  ]
+}
