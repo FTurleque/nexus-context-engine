@@ -91,12 +91,14 @@ class SmallDeltaIndexingBaselineTest {
                 modifiedFile,
                 System.lineSeparator() + "// NEXUS_ITERATION_16_SMALL_DELTA" + System.lineSeparator(),
                 StandardCharsets.UTF_8,
+                StandardOpenOption.WRITE,
                 StandardOpenOption.APPEND);
         Files.createDirectories(addedFile.getParent());
         Files.writeString(
                 addedFile,
                 probeSource(addedRelativePath),
                 StandardCharsets.UTF_8,
+                StandardOpenOption.WRITE,
                 StandardOpenOption.CREATE_NEW);
 
         NexusApplication.IndexOperation deltaIndex = application.index(project.id(), false, false);
@@ -120,6 +122,7 @@ class SmallDeltaIndexingBaselineTest {
                 modifiedFile,
                 originalModifiedContent,
                 StandardCharsets.UTF_8,
+                StandardOpenOption.WRITE,
                 StandardOpenOption.TRUNCATE_EXISTING);
         Files.delete(addedFile);
 
