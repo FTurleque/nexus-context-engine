@@ -22,9 +22,8 @@ import java.util.Objects;
 public final class SemanticHybridContextRanker implements ContextRanker {
 
     public static final int DEFAULT_RRF_K = 60;
-
-    private static final String BASELINE_RRF_COMPONENT = "baselineRrfScore";
-    private static final String SEMANTIC_RRF_COMPONENT = "semanticRrfScore";
+    public static final String BASELINE_RRF_COMPONENT = "baselineRrfScore";
+    public static final String SEMANTIC_RRF_COMPONENT = "semanticRrfScore";
 
     private final ContextRanker baselineRanker;
     private final int rrfK;
