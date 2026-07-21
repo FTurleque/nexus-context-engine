@@ -42,14 +42,14 @@ try {
     }
 
     Write-Host
-    Write-Host "[3/3] Contrats semantiques, index vectoriel Lucene et non-regression qualite"
+    Write-Host "[3/3] Composition opt-in, contrats semantiques, index vectoriel Lucene et non-regression qualite"
     Invoke-Maven -Arguments @(
-        "-Dtest=SemanticSearchStrategyTest,SemanticRankingTest,SemanticIndexingServiceTest,LuceneSemanticSearchIndexTest,GoldenSearchCorpusTest,FederatedGoldenSearchCorpusTest",
+        "-Dtest=NexusApplicationSemanticConfigurationTest,SemanticSearchStrategyTest,SemanticRankingTest,SemanticIndexingServiceTest,LuceneSemanticSearchIndexTest,GoldenSearchCorpusTest,FederatedGoldenSearchCorpusTest",
         "test"
     )
 
     Write-Host
-    Write-Host "=== VALIDATION ITERATION 17 / INCREMENT 1 ==="
+    Write-Host "=== VALIDATION ITERATION 17 / INCREMENT 2 ==="
     if ($FocusedOnly) {
         Write-Host "Coeur Maven                : SKIPPED"
         Write-Host "Self-smoke                 : SKIPPED"
@@ -63,12 +63,13 @@ try {
     Write-Host "Index vectoriel Lucene     : SUCCESS"
     Write-Host "Cycle rebuild / delta      : SUCCESS"
     Write-Host "Ranking semanticScore      : SUCCESS"
+    Write-Host "Composition application    : OPT-IN VALIDEE"
     Write-Host "Corpus golden historique   : SUCCESS"
     Write-Host "Corpus golden federe       : SUCCESS"
-    Write-Host "Activation par defaut      : DESACTIVEE"
+    Write-Host "Activation create(paths)   : DESACTIVEE"
     Write-Host "================================================"
     Write-Host
-    Write-Host "VALIDATION INCREMENT 1 ITERATION 17 TERMINEE"
+    Write-Host "VALIDATION INCREMENT 2 ITERATION 17 TERMINEE"
 }
 catch {
     Write-Host
