@@ -6,11 +6,11 @@ Ce runbook complète [`large-scale-search.md`](large-scale-search.md) avec la pr
 
 - Java 21 ;
 - Maven disponible dans le `PATH` ;
-- Git disponible dans le `PATH` pour le runner de portefeuille ;
+- Git disponible dans le `PATH` pour les runners contrôlés ;
 - repositories sources accessibles localement, ou authentification Git opérationnelle pour les clones contrôlés ;
-- aucune modification des repositories sources n'est nécessaire pour la baseline standard.
+- aucune modification des repositories sources n'est nécessaire pour les baselines.
 
-Le harness utilise un `NEXUS_HOME` temporaire créé par JUnit. Les données NEXUS de l'utilisateur ne sont donc pas réutilisées.
+Les harness utilisent un `NEXUS_HOME` temporaire créé par JUnit. Les données NEXUS de l'utilisateur ne sont donc pas réutilisées.
 
 ## Baseline sur des racines locales
 
@@ -164,18 +164,49 @@ Le corpus du portefeuille complète ces tests synthétiques avec des symboles et
 
 ## Mesure d'indexation incrémentale avec petit delta
 
-Le harness standard ne modifie jamais les repositories sources. Il mesure donc l'indexation incrémentale **sans changement**.
+La mesure est automatisée par :
 
-Pour mesurer un petit delta de manière reproductible :
+```powershell
+.\scripts\measure-iteration-16-small-delta.ps1
+```
 
-1. travailler sur une copie dédiée d'un repository de référence ;
-2. exécuter une première baseline en conservant le même `NEXUS_HOME` de benchmark ;
-3. appliquer un changement contrôlé et documenté, par exemple la modification d'un fichier et l'ajout d'un fichier ;
-4. relancer l'indexation incrémentale ;
-5. enregistrer le nombre de fichiers modifiés et la durée ;
-6. réinitialiser ou supprimer la copie contrôlée après la mesure.
+Le scénario de référence utilise `collection-manager`, fixé au commit déjà déclaré dans `scripts/config/iteration-16-java-portfolio.json`. Le runner crée ou réutilise un clone Git contrôlé sous :
 
-Cette mesure n'est pas automatisée dans le premier incrément afin de ne jamais altérer silencieusement les sources de l'utilisateur.
+```text
+target\iteration-16-small-delta\repository
+```
+
+Ce clone reste lui-même inchangé pendant la mesure. `SmallDeltaIndexingBaselineTest` en crée une copie temporaire JUnit et applique le delta uniquement dans cette copie.
+
+Le protocole est volontairement déterministe :
+
+1. indexation complète de la copie contrôlée ;
+2. indexation incrémentale sans changement ;
+3. ajout d'un commentaire déterministe dans `FlywayMigrator.java` ;
+4. ajout de `NexusIteration16DeltaProbe.java` dans le même package ;
+5. indexation incrémentale attendue avec exactement 2 fichiers modifiés, 0 supprimé et aucun rebuild Lucene complet ;
+6. vérification que le nouveau symbole est visible dans SQLite et dans la recherche dérivée ;
+7. restauration du fichier modifié et suppression de la probe ;
+8. rollback incrémental attendu avec 1 fichier modifié, 1 supprimé et aucun rebuild Lucene complet ;
+9. vérification que le symbole et son chemin ont disparu des index.
+
+Le rapport est écrit dans :
+
+```text
+target\iteration-16-small-delta-baseline.json
+```
+
+Il contient les durées et compteurs pour :
+
+- l'indexation complète ;
+- l'incrémental sans changement ;
+- l'incrémental avec petit delta ;
+- le rollback incrémental ;
+- la recherche de la probe avant et après rollback ;
+- le ratio `fullToDeltaSpeedup` calculé par le runner ;
+- le repository source, la référence demandée et le commit effectivement résolu.
+
+Le checkout NEXUS, le repository source et le clone Git contrôlé ne reçoivent aucune modification du benchmark. Seule la copie temporaire gérée par JUnit est mutée puis supprimée automatiquement.
 
 ## Interprétation
 
