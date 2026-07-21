@@ -475,20 +475,66 @@ Documentation de référence : ADR-0043, `docs/developer/large-scale-search.md`,
 
 ## Itération 17 — Recherche sémantique optionnelle
 
-Objectif : mesurer si les embeddings améliorent réellement la qualité du contexte.
+État : **terminée et validée localement le 21 juillet 2026**.
 
-Livrables potentiels :
+Objectif : mesurer si les embeddings améliorent réellement la qualité du contexte sans rendre un fournisseur d'embeddings, un runtime de modèle ou un index vectoriel externe obligatoire.
 
-- `SemanticSearchStrategy` ;
-- provider d'embeddings local ou externe ;
-- activation explicite ;
-- stockage vectoriel via Lucene lorsque pertinent ;
-- comparaison avec le ranking lexical + symbolique + graphe ;
-- mesure du coût, de la latence et du gain de précision.
+Architecture retenue :
 
-Aucun fournisseur d'embeddings ne devient obligatoire.
+- `EmbeddingProvider` et `SemanticSearchIndex` isolent les providers et le stockage vectoriel ;
+- `LuceneSemanticSearchIndex` utilise le kNN/cosine natif Lucene et reste dérivé/reconstructible ;
+- `SemanticIndexingService` suit le cycle rebuild/delta/suppression ;
+- `OllamaEmbeddingProvider` fournit la baseline locale mesurée ;
+- `SemanticSearchConfiguration` rend l'activation explicite ;
+- `NexusApplication.create(paths)` reste sans embeddings ;
+- `SemanticHybridContextRanker` remplace la fusion additive initiale par une Reciprocal Rank Fusion déterministe ;
+- RRF `k = 60`, poids historique `1,0`, poids sémantique retenu `8,0` ;
+- aucun moteur vectoriel externe n'est introduit.
 
-Critère d'adoption : conserver la recherche sémantique uniquement si elle apporte un gain mesurable sur le corpus de référence.
+Diagnostic et tuning :
+
+- le kNN brut retrouve les six cibles réelles dans le top 17 ;
+- la fusion additive initiale est rejetée car elle détruit ce signal ;
+- le sweep RRF teste `1,00`, `1,25`, `1,50`, `2,00`, `3,00`, `4,00`, `6,00`, `8,00` ;
+- `4,0` est le premier poids qui rejoint le rappel/hit du kNN brut ;
+- `8,0` est le meilleur poids mesuré selon `recall -> hit -> MRR -> precision` et rejoint les quatre métriques top-3 du kNN brut.
+
+Benchmark A/B réel final sur le corpus hermétique figé de l'Itération 16 :
+
+- 236 fichiers ;
+- 946 symboles ;
+- 1 539 relations ;
+- 6 requêtes ;
+- baseline : `precision@3 = 0,0000`, `recall@3 = 0,0000`, `hit@3 = 0,0000`, `MRR@3 = 0,0000` ;
+- sémantique RRF x8 : `precision@3 = 0,1667`, `recall@3 = 0,4167`, `hit@3 = 0,5000`, `MRR@3 = 0,3056` ;
+- indexation complète : `1 943 ms` baseline contre `64 332 ms` sémantique, soit environ `33,11×` ;
+- recherche moyenne : `208,8 ms` baseline contre `298,7 ms` sémantique, soit environ `1,43×` ;
+- index sémantique : `1 001 537` octets.
+
+Validation finale locale :
+
+- `mvn clean install` : 73 tests, 0 échec, 0 erreur, 5 harness opt-in ignorés, `BUILD SUCCESS` en 16,571 s ;
+- `SELF-SMOKE SUCCESS` ;
+- 257 fichiers indexés ;
+- 1 431 symboles ;
+- 9 957 relations ;
+- indexation complète : 2 271 ms ;
+- indexation incrémentale sans changement : 657 ms ;
+- recherche explicable : 727 ms ;
+- contexte strict : 107/180 tokens en 885 ms ;
+- contexte multi-source : 1 199/1 200 tokens en 1 051 ms ;
+- contexte avec skill : 1 199/1 200 tokens en 1 123 ms ;
+- contexte Git : 1 588/1 600 tokens en 1 084 ms ;
+- réduction du contexte candidat strict : 99,47 % ;
+- validation ciblée : 17 tests, 0 échec, 0 erreur ;
+- corpus golden historique et fédéré : succès ;
+- `NexusApplication.create(paths)` : sémantique désactivée.
+
+Décision : **conserver la recherche sémantique comme capacité locale opt-in validée**, recommandée pour les recherches conceptuelles ou à forte divergence lexicale lorsque le coût d'indexation est acceptable. Ne pas l'activer automatiquement dans l'indexation standard : le coût d'environ `33×` ne le justifie pas. Lucene reste suffisant pour le stockage vectoriel mesuré et aucun provider n'est obligatoire.
+
+Critère de sortie : **validé**. L'Itération 17 démontre un gain de qualité réel et mesurable sans modifier le chemin historique par défaut, tout en documentant explicitement le coût d'indexation et le compromis de latence.
+
+Documentation de référence : ADR-0014, `docs/developer/semantic-search.md` et `docs/developer/iteration-17-semantic-results.md`.
 
 ---
 
