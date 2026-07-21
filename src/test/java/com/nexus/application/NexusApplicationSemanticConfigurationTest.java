@@ -3,6 +3,7 @@ package com.nexus.application;
 import com.nexus.config.NexusPaths;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.ranking.RankedCandidate;
+import com.nexus.ranking.SemanticHybridContextRanker;
 import com.nexus.search.SearchSignals;
 import com.nexus.search.semantic.EmbeddingProvider;
 import com.nexus.search.semantic.SemanticSearchConfiguration;
@@ -38,10 +39,12 @@ class NexusApplicationSemanticConfigurationTest {
 
         assertFalse(results.isEmpty());
         assertTrue(results.stream().noneMatch(result -> result.components().containsKey(SearchSignals.SEMANTIC)));
+        assertTrue(results.stream().noneMatch(result ->
+                result.components().containsKey(SemanticHybridContextRanker.SEMANTIC_RRF_COMPONENT)));
     }
 
     @Test
-    void enabledCompositionIndexesAndSearchesWithSemanticSignal() throws Exception {
+    void enabledCompositionIndexesAndSearchesWithSemanticRrfFusion() throws Exception {
         Path repository = repository("semantic-repository");
         Files.writeString(
                 repository.resolve("docs/cache-control.md"),
@@ -62,8 +65,9 @@ class NexusApplicationSemanticConfigurationTest {
         assertFalse(results.isEmpty());
         RankedCandidate first = results.getFirst();
         assertEquals(repository.resolve("docs/cache-control.md"), first.candidate().path());
-        assertTrue(first.components().containsKey(SearchSignals.SEMANTIC));
-        assertTrue(first.components().get(SearchSignals.SEMANTIC) > 0.0d);
+        assertTrue(first.components().containsKey(SemanticHybridContextRanker.SEMANTIC_RRF_COMPONENT));
+        assertTrue(first.components().get(SemanticHybridContextRanker.SEMANTIC_RRF_COMPONENT) > 0.0d);
+        assertTrue(first.reasons().stream().anyMatch(reason -> reason.contains("fusion RRF sémantique")));
         assertTrue(provider.calls() >= 3, "Deux documents et la requête doivent être vectorisés");
     }
 
