@@ -34,7 +34,7 @@ class FederatedSearchServiceIntegrationTest {
     Path temporaryDirectory;
 
     @Test
-    void searchesExplicitProjectsAndPreservesProjectProvenance() throws Exception {
+    void searchesExplicitProjectsPreservesProvenanceAndDiversifiesPaths() throws Exception {
         Path projectARoot = Files.createDirectories(temporaryDirectory.resolve("project-a"));
         Path projectBRoot = Files.createDirectories(temporaryDirectory.resolve("project-b"));
         write(projectARoot, "src/main/java/demo/a/BillingService.java", """
@@ -88,6 +88,11 @@ class FederatedSearchServiceIntegrationTest {
         assertEquals(Set.of(projectA.id(), projectB.id()), projectIds);
         assertTrue(results.stream().allMatch(hit -> hit.rankedCandidate().candidate().path()
                 .startsWith(hit.project().rootPath())));
+
+        Set<String> projectPaths = results.stream()
+                .map(hit -> hit.project().id() + ":" + hit.rankedCandidate().candidate().path().toAbsolutePath().normalize())
+                .collect(Collectors.toSet());
+        assertEquals(results.size(), projectPaths.size());
 
         List<FederatedSearchHit> projectAOnly = federatedSearchService.search(
                 List.of(projectA),
