@@ -16,7 +16,7 @@ Cette itération applique l'ADR-0014 : la recherche sémantique reste **désacti
 - L'activation sémantique doit pouvoir être comparée A/B à la baseline non sémantique sur le même corpus.
 - Aucune base vectorielle dédiée n'est introduite tant que Lucene ou une abstraction locale simple suffit.
 
-## Architecture cible
+## Architecture
 
 ```text
 SearchService
@@ -29,47 +29,150 @@ SearchService
         │     └── provider externe     opt-in uniquement
         │
         └── SemanticSearchIndex        port
-              └── index vectoriel local dérivé
+              └── LuceneSemanticSearchIndex
 ```
 
 Le résultat de la stratégie sémantique rejoint les `SearchCandidate` existants au moyen d'un signal `semanticScore`. Le ranking décide de sa contribution avec un poids explicite et explicable. Sans stratégie sémantique configurée, ce signal est absent et le comportement historique est inchangé.
 
-## Incréments
+L'index vectoriel est stocké séparément sous `indexes/{projectId}/semantic-lucene`. Il reste entièrement dérivé et reconstructible ; SQLite conserve son rôle canonique.
 
-### 1. Contrats et signal de ranking
+## Incrément 1 — contrats, ranking et stockage vectoriel
 
-- introduire `EmbeddingProvider` ;
-- introduire `SemanticSearchIndex` ;
-- introduire `SemanticSearchStrategy` ;
-- ajouter le signal `semanticScore` au ranking ;
-- garantir par test que le chemin par défaut reste inchangé lorsque la sémantique n'est pas configurée.
+Implémenté :
 
-### 2. Index vectoriel local dérivé
+- `EmbeddingProvider` ;
+- `SemanticSearchIndex` ;
+- `SemanticSearchStrategy` ;
+- signal `semanticScore` ;
+- contribution sémantique explicable dans `DeterministicContextRanker` ;
+- `SemanticIndexingService` ;
+- `LuceneSemanticSearchIndex` basé sur le kNN natif Lucene et la similarité cosinus ;
+- reconstruction complète, delta incrémental et suppression par chemin ;
+- `OllamaEmbeddingProvider` explicitement opt-in ;
+- `SemanticSearchConfiguration` désactivée par défaut.
 
-- stocker les vecteurs dans un index local reconstructible par projet ;
-- supporter reconstruction complète et mise à jour incrémentale ;
-- ne jamais faire de l'index vectoriel une source canonique ;
-- conserver SQLite comme source de vérité structurelle.
+### Validation locale du 21 juillet 2026
 
-### 3. Provider d'embeddings explicitement activé
+Validation complète fournie depuis Windows / PowerShell :
 
-Le premier provider réel doit être choisi pour permettre une mesure reproductible et sans dépendance obligatoire. Un runtime local est préféré pour la baseline ; un provider externe éventuel doit rester strictement opt-in.
+```text
+mvn clean install
+63 tests exécutés
+0 échec
+0 erreur
+2 harness opt-in ignorés
+BUILD SUCCESS
+16,687 s
+```
 
-### 4. Corpus sémantique et benchmark A/B
+Self-smoke historique : **SUCCESS**.
 
-Le benchmark doit contenir des requêtes où le vocabulaire attendu diffère volontairement du vocabulaire des documents pertinents. Mesures minimales :
+Mesures du self-smoke sans embeddings actifs :
+
+```text
+250 fichiers
+1 324 symboles
+9 845 relations
+indexation complète : 3 017 ms
+indexation incrémentale : 817 ms
+recherche : 807 ms
+contexte strict : 898 ms
+contexte multi-source : 1 120 ms
+contexte avec skill : 1 107 ms
+contexte Git : 1 134 ms
+```
+
+Validation ciblée sémantique :
+
+```text
+10 tests exécutés
+0 échec
+0 erreur
+0 ignoré
+BUILD SUCCESS
+3,461 s
+```
+
+La baseline historique reste inchangée :
+
+```text
+precision@3 = 0,4444
+recall@3    = 1,0000
+```
+
+Conclusion de l'incrément 1 : contrats embeddings, stratégie sémantique, index vectoriel Lucene, cycle rebuild/delta et ranking `semanticScore` sont validés, tandis que l'activation par défaut reste désactivée.
+
+## Incrément 2 — composition applicative explicitement opt-in
+
+`NexusApplication.create(paths)` délègue explicitement vers `SemanticSearchConfiguration.disabled()` et conserve donc le comportement historique.
+
+Une seconde composition est disponible :
+
+```java
+NexusApplication.create(
+        paths,
+        SemanticSearchConfiguration.enabled(embeddingProvider));
+```
+
+Lorsque cette configuration est activée :
+
+- le même `EmbeddingProvider` alimente l'indexation et les requêtes ;
+- un `LuceneSemanticSearchIndex` est créé avec la dimension du provider ;
+- `SemanticIndexingService` rejoint le cycle d'indexation existant ;
+- `SemanticSearchStrategy` rejoint les stratégies du `SearchService` ;
+- aucun autre adaptateur n'est obligé d'activer la capacité.
+
+`NexusApplicationSemanticConfigurationTest` vérifie à la fois l'absence totale de `semanticScore` dans la composition historique et la présence effective d'un résultat sémantique dans la composition explicitement activée.
+
+## Provider local de baseline
+
+Le premier provider réel est `OllamaEmbeddingProvider`.
+
+Configuration de référence du harness :
+
+```text
+endpoint   = http://localhost:11434
+model      = qwen3-embedding:0.6b
+dimensions = 1024
+```
+
+Aucune requête Ollama n'est exécutée à la construction d'un provider. Le trafic n'existe que lorsque la composition sémantique est explicitement utilisée pour indexer ou rechercher.
+
+## Benchmark A/B opt-in
+
+`SemanticSearchBenchmarkTest` crée un corpus contrôlé de huit documents et cinq requêtes où le vocabulaire de la requête diverge volontairement du document pertinent.
+
+Le même corpus est indexé deux fois :
+
+1. baseline lexical + symbolique + graphe ;
+2. même pipeline avec la stratégie sémantique activée.
+
+Le rapport JSON contient :
 
 - `precision@3` ;
 - `recall@3` ;
 - `hit@3` ;
 - `MRR@3` ;
-- qualité du contexte final sous budget ;
-- latence d'indexation ;
-- latence de recherche ;
-- taille de l'index vectoriel ;
-- mémoire observée ;
-- coût financier éventuel ;
-- volume de données envoyé hors machine, qui doit rester nul pour une baseline locale.
+- rang du document pertinent pour chaque requête ;
+- latence moyenne de recherche ;
+- durée d'indexation ;
+- taille de l'index sémantique ;
+- identité du modèle, dimension et endpoint ;
+- indication explicite permettant de distinguer un endpoint local d'un endpoint distant.
+
+Exécution :
+
+```powershell
+.\scripts\measure-iteration-17-semantic.ps1
+```
+
+Le modèle peut être préparé explicitement au moment de la mesure avec :
+
+```powershell
+.\scripts\measure-iteration-17-semantic.ps1 -PullModel
+```
+
+Le benchmark est volontairement opt-in et n'est jamais exécuté par `mvn test` sans la propriété `nexus.semantic.benchmark.enabled=true`.
 
 ## Critère d'adoption
 
