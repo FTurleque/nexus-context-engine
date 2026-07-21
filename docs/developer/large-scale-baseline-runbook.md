@@ -38,6 +38,18 @@ target\iteration-16-baseline.json
 
 Un autre chemin peut être fourni avec `-Output`, qu'il soit relatif à NEXUS ou absolu.
 
+### Transport portable des paramètres
+
+Le script ne concatène pas les racines et les requêtes dans la ligne de commande Maven. Il écrit une configuration JSON UTF-8 temporaire sous `target`, puis transmet uniquement son chemin via :
+
+```text
+-Dnexus.baseline.input=<fichier-json>
+```
+
+Cette approche évite que `cmd.exe`, utilisé indirectement par `mvn.cmd` sous Windows, interprète les caractères `|` comme des pipes de commande. Le fichier temporaire est supprimé dans le bloc `finally`, y compris après un échec du benchmark.
+
+Les propriétés historiques `nexus.baseline.projects`, `nexus.baseline.queries` et `nexus.baseline.query` restent lues par le harness pour compatibilité avec les appels directs existants. Les scripts PowerShell constituent toutefois le chemin de référence.
+
 ## Portefeuille Java contrôlé
 
 Le palier multi-repository de référence est défini dans :
