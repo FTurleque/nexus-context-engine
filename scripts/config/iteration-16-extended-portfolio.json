@@ -2,6 +2,19 @@
   "name": "iteration-16-extended-portfolio",
   "description": "Palier etendu de sept repositories reels et personnels, sans JARVIS, satellites JARVIS, forks tiers massifs ni duplication artificielle.",
   "includeCurrentRepository": true,
+  "currentRepositoryExcludedPaths": [
+    "docs/developer/iteration-16-baseline-results.md",
+    "docs/developer/iteration-16-extended-portfolio-results.md",
+    "docs/developer/large-scale-baseline-runbook.md",
+    "scripts/config/iteration-16-extended-portfolio.json",
+    "scripts/config/iteration-16-java-portfolio.json",
+    "scripts/measure-iteration-16-baseline.ps1",
+    "scripts/measure-iteration-16-portfolio.ps1",
+    "scripts/measure-iteration-16-small-delta.ps1",
+    "scripts/validate-iteration-16.ps1",
+    "src/test/java/com/nexus/search/LargeScaleSearchBaselineTest.java",
+    "src/test/java/com/nexus/index/SmallDeltaIndexingBaselineTest.java"
+  ],
   "queries": [
     {
       "text": "SearchService",
