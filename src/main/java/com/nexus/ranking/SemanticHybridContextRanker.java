@@ -152,8 +152,8 @@ public final class SemanticHybridContextRanker implements ContextRanker {
         return fused.stream()
                 .sorted(Comparator
                         .comparingDouble((FusedCandidate candidate) -> candidate.ranked().score()).reversed()
-                        .thenComparingInt(FusedCandidate::semanticRank)
                         .thenComparingInt(FusedCandidate::baselineRank)
+                        .thenComparingInt(FusedCandidate::semanticRank)
                         .thenComparing(candidate -> candidate.ranked().candidate().path().toString())
                         .thenComparing(candidate -> candidate.ranked().candidate().id()))
                 .limit(request.limit())
