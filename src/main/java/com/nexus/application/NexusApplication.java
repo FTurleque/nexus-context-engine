@@ -33,8 +33,10 @@ import com.nexus.persistence.sqlite.SqliteProjectRepository;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectRegistry;
 import com.nexus.project.ProjectRepository;
+import com.nexus.ranking.ContextRanker;
 import com.nexus.ranking.DeterministicContextRanker;
 import com.nexus.ranking.RankedCandidate;
+import com.nexus.ranking.SemanticHybridContextRanker;
 import com.nexus.ranking.graph.GraphCandidateEnricher;
 import com.nexus.search.CandidateType;
 import com.nexus.search.FederatedSearchHit;
@@ -150,12 +152,15 @@ public final class NexusApplication {
                 codeIntelligenceProviders,
                 semanticIndexingService);
 
+        ContextRanker contextRanker = semanticSearchConfiguration.enabled()
+                ? new SemanticHybridContextRanker()
+                : new DeterministicContextRanker();
         SearchService searchService = new SearchService(
                 searchStrategies,
                 List.of(
                         new GraphCandidateEnricher(indexRepository),
                         new GitRecencyCandidateEnricher()),
-                new DeterministicContextRanker());
+                contextRanker);
         FederatedSearchService federatedSearchService = new FederatedSearchService(searchService);
 
         TokenEstimator tokenEstimator = new HeuristicTokenEstimator();
