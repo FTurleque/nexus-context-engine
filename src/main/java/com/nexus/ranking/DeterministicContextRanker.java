@@ -21,20 +21,28 @@ public final class DeterministicContextRanker implements ContextRanker {
             SearchSignals.SYMBOL_EXACT, 0.30d,
             SearchSignals.SYMBOL_FUZZY, 0.10d,
             SearchSignals.PATH, 0.10d,
-            SearchSignals.GRAPH, 0.10d,
-            SearchSignals.SEMANTIC, DEFAULT_SEMANTIC_WEIGHT);
+            SearchSignals.GRAPH, 0.10d);
 
     private final double gitRecencyWeight;
+    private final double semanticWeight;
 
     public DeterministicContextRanker() {
-        this(DEFAULT_GIT_RECENCY_WEIGHT);
+        this(DEFAULT_GIT_RECENCY_WEIGHT, DEFAULT_SEMANTIC_WEIGHT);
     }
 
     public DeterministicContextRanker(double gitRecencyWeight) {
+        this(gitRecencyWeight, DEFAULT_SEMANTIC_WEIGHT);
+    }
+
+    public DeterministicContextRanker(double gitRecencyWeight, double semanticWeight) {
         if (gitRecencyWeight < 0.0d || gitRecencyWeight > 0.20d) {
             throw new IllegalArgumentException("gitRecencyWeight must be between 0.0 and 0.20");
         }
+        if (semanticWeight < 0.0d || semanticWeight > 1.0d) {
+            throw new IllegalArgumentException("semanticWeight must be between 0.0 and 1.0");
+        }
         this.gitRecencyWeight = gitRecencyWeight;
+        this.semanticWeight = semanticWeight;
     }
 
     @Override
@@ -82,6 +90,9 @@ public final class DeterministicContextRanker implements ContextRanker {
     private double weight(String signal) {
         if (SearchSignals.GIT_RECENCY.equals(signal)) {
             return gitRecencyWeight;
+        }
+        if (SearchSignals.SEMANTIC.equals(signal)) {
+            return semanticWeight;
         }
         return BASE_WEIGHTS.getOrDefault(signal, 0.0d);
     }
