@@ -4,6 +4,7 @@ param(
     [string]$Model = "qwen3-embedding:0.6b",
     [int]$Dimensions = 1024,
     [int]$TimeoutSeconds = 60,
+    [string]$CorpusRef = "a5d23386fede9b4a4eccf4d5c52308fcd5cae4b1",
     [string]$Workspace = "target\iteration-17-real-semantic",
     [string]$Output = "target\iteration-17-real-semantic-benchmark.json",
     [switch]$PullModel
@@ -39,6 +40,7 @@ try {
     Write-Host "Endpoint   : $BaseUri"
     Write-Host "Modele     : $Model"
     Write-Host "Dimensions : $Dimensions"
+    Write-Host "Corpus ref : $CorpusRef"
     Write-Host
 
     if ($PullModel) {
@@ -69,15 +71,15 @@ try {
         Remove-Item -Force $outputPath
     }
 
-    $commit = (& git rev-parse HEAD).Trim()
+    $commit = (& git rev-parse "$CorpusRef^{commit}").Trim()
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($commit)) {
-        throw "Impossible de resoudre HEAD."
+        throw "Impossible de resoudre le corpus Git : $CorpusRef"
     }
 
-    $archivePath = Join-Path $workspacePath "nexus-head.zip"
+    $archivePath = Join-Path $workspacePath "nexus-corpus.zip"
     $snapshotRoot = Join-Path $workspacePath "nexus-snapshot"
     Write-Host "Snapshot controle : nexus-context-engine @ $commit"
-    & git archive --format=zip --output=$archivePath HEAD
+    & git archive --format=zip --output=$archivePath $commit
     if ($LASTEXITCODE -ne 0) {
         throw "git archive a echoue avec le code $LASTEXITCODE"
     }
@@ -94,11 +96,13 @@ try {
         "src/test/java/com/nexus/search/semantic/RealSemanticSearchBenchmarkTest.java",
         "src/test/java/com/nexus/search/semantic/RealSemanticRetrievalDiagnosticTest.java",
         "src/test/java/com/nexus/application/NexusApplicationSemanticConfigurationTest.java",
-        "src/test/java/com/nexus/ranking/SemanticRankingTest.java"
+        "src/test/java/com/nexus/ranking/SemanticRankingTest.java",
+        "src/test/java/com/nexus/ranking/SemanticHybridContextRankerTest.java"
     )
 
     $snapshotFull = [System.IO.Path]::GetFullPath($snapshotRoot)
     $snapshotPrefix = $snapshotFull.TrimEnd([char[]]@('\', '/')) + [System.IO.Path]::DirectorySeparatorChar
+    $excludedCount = 0
     foreach ($relativePath in $excludedPaths) {
         $target = [System.IO.Path]::GetFullPath((Join-Path $snapshotFull $relativePath))
         if (-not $target.StartsWith($snapshotPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -106,11 +110,12 @@ try {
         }
         if (Test-Path $target) {
             Remove-Item -Recurse -Force $target
+            $excludedCount++
         }
     }
     Remove-Item -Force $archivePath
 
-    Write-Host "Artefacts Iteration 17 exclus du corpus : $($excludedPaths.Count)"
+    Write-Host "Artefacts Iteration 17 exclus du corpus : $excludedCount"
     Write-Host "Corpus                              : $snapshotRoot"
     Write-Host
 
