@@ -1,78 +1,48 @@
 # Résultats de l'Itération 17 — Recherche sémantique optionnelle
 
-Ce document conserve les mesures obtenues pendant l'évaluation de la recherche sémantique. La capacité reste opt-in tant que les paliers de validation ne sont pas terminés.
+Ce document conserve les mesures et la décision finale de l'Itération 17. La recherche sémantique reste une capacité explicitement opt-in : `NexusApplication.create(paths)` conserve le moteur historique sans embeddings.
+
+## Configuration de référence
+
+```text
+provider   = Ollama local
+model      = qwen3-embedding:0.6b
+dimensions = 1024
+endpoint   = http://localhost:11434
+RRF k      = 60
+poids RRF sémantique retenu = 8,0
+```
+
+L'index vectoriel Lucene est dérivé et reconstructible. SQLite reste canonique.
 
 ## Palier 1 — corpus contrôlé à divergence de vocabulaire
 
-Validation exécutée localement le 21 juillet 2026 avec :
+Validation du 21 juillet 2026 sur 8 documents et 5 requêtes formulées avec un vocabulaire différent du document pertinent.
 
-```text
-provider   = Ollama local
-model      = qwen3-embedding:0.6b
-dimensions = 1024
-endpoint   = http://localhost:11434
-corpus     = 8 documents
-requêtes   = 5
-```
-
-Le corpus est volontairement construit pour que la requête exprime le besoin avec un vocabulaire différent de celui du document pertinent.
-
-### Qualité
-
-| Métrique | Baseline lexical/symbolique/graphe | Avec sémantique | Delta |
-|---|---:|---:|---:|
-| `precision@3` | 0,0000 | 0,3333 | +0,3333 |
-| `recall@3` | 0,0000 | 1,0000 | +1,0000 |
-| `hit@3` | 0,0000 | 1,0000 | +1,0000 |
-| `MRR@3` | 0,0000 | 0,9000 | +0,9000 |
-
-Les cinq documents pertinents sont absents du top 3 lexical. Avec la stratégie sémantique, quatre sont classés au rang 1 et un au rang 2.
-
-### Coût observé
-
-| Métrique | Baseline | Avec sémantique | Rapport / delta |
-|---|---:|---:|---:|
-| indexation | 372 ms | 3 188 ms | ~8,57× |
-| recherche moyenne | 25,0 ms | 176,6 ms | +151,6 ms / ~7,06× |
-| index sémantique | 0 octet | 37 249 octets | +37 249 octets |
-
-## Palier 2 — snapshot réel NEXUS, fusion additive initiale
-
-Validation exécutée localement le 21 juillet 2026 sur un snapshot hermétique issu du commit `20c091b49a402ad787b95055a09af74e945ba6b8` :
-
-```text
-provider   = Ollama local
-model      = qwen3-embedding:0.6b
-dimensions = 1024
-endpoint   = http://localhost:11434
-fichiers   = 248
-symboles   = 1 028
-relations  = 1 658
-requêtes   = 6
-```
-
-### Qualité du pipeline hybride observé
-
-| Métrique | Baseline | Hybride sémantique |
+| Métrique | Baseline | Sémantique |
 |---|---:|---:|
-| `precision@3` | 0,0000 | 0,0000 |
-| `recall@3` | 0,0000 | 0,0000 |
-| `hit@3` | 0,0000 | 0,0000 |
-| `MRR@3` | 0,0000 | 0,0000 |
+| `precision@3` | 0,0000 | 0,3333 |
+| `recall@3` | 0,0000 | 1,0000 |
+| `hit@3` | 0,0000 | 1,0000 |
+| `MRR@3` | 0,0000 | 0,9000 |
 
-### Coût observé
+Quatre documents pertinents sont classés au rang 1 et un au rang 2.
 
-| Métrique | Baseline | Hybride sémantique | Rapport / delta |
-|---|---:|---:|---:|
-| indexation complète | 2 073 ms | 68 972 ms | ~33,27× |
-| recherche moyenne | 205,0 ms | 308,5 ms | +103,5 ms / ~1,50× |
-| index sémantique | 0 octet | 1 052 033 octets | +1 052 033 octets |
+Coût observé :
 
-La fusion additive initiale n'exploite donc pas correctement le canal sémantique.
+| Métrique | Baseline | Sémantique |
+|---|---:|---:|
+| indexation | 372 ms | 3 188 ms |
+| recherche moyenne | 25,0 ms | 176,6 ms |
+| index sémantique | 0 octet | 37 249 octets |
 
-## Diagnostic kNN brut versus fusion additive
+Ce palier démontre que les embeddings peuvent résoudre une divergence lexicale que le moteur historique ne couvre pas.
 
-Le diagnostic dédié sépare retrieval brut et fusion :
+## Palier 2 — diagnostic sur repository réel
+
+La première fusion additive a été rejetée : elle additionnait directement des signaux BM25/symboliques/graphe et cosine dont les échelles ne sont pas comparables.
+
+Diagnostic kNN brut versus fusion additive :
 
 | Métrique | kNN brut | Hybride additif |
 |---|---:|---:|
@@ -80,74 +50,42 @@ Le diagnostic dédié sépare retrieval brut et fusion :
 | `recall@3` | 0,4167 | 0,0000 |
 | `hit@3` | 0,5000 | 0,0000 |
 | `MRR@3` | 0,3056 | 0,0000 |
-| recherche moyenne | 157,0 ms | 346,5 ms |
 
-Les six besoins attendus sont tous retrouvés par le kNN brut dans les 17 premiers résultats, aux rangs `6, 2, 1, 17, 10, 3`.
+Les six besoins du corpus réel sont retrouvés par le kNN brut dans le top 17, aux rangs `6, 2, 1, 17, 10, 3`.
 
-Le diagnostic tranche donc le problème principal : **le retrieval sémantique contient un signal utile, mais la fusion additive le détruit**.
+Conclusion : le signal vectoriel est utile ; le défaut provenait principalement de la fusion.
 
 ## Correction — Reciprocal Rank Fusion
 
-La composition sémantique opt-in utilise `SemanticHybridContextRanker` avec une **Reciprocal Rank Fusion (RRF)** déterministe.
+`SemanticHybridContextRanker` fusionne désormais deux classements séparés :
 
-Principes :
+- canal historique calculé sans contribution sémantique ;
+- canal vectoriel classé par similarité kNN ;
+- fusion RRF déterministe avec `k = 60` ;
+- composantes explicables `baselineRrfScore` et `semanticRrfScore` ;
+- délégation exacte au ranker historique en l'absence de signal sémantique.
 
-- le classement historique est calculé sans contribution sémantique ;
-- le classement sémantique est ordonné séparément par similarité kNN ;
-- les deux listes sont fusionnées à partir de leurs rangs avec `k = 60` ;
-- les composantes `baselineRrfScore` et `semanticRrfScore` rendent la fusion explicable ;
-- en l'absence de signal sémantique, le ranker historique est délégué tel quel ;
-- `NexusApplication.create(paths)` continue d'utiliser uniquement `DeterministicContextRanker` ;
-- la RRF n'est utilisée que par la composition sémantique explicitement activée.
+La RRF n'est utilisée que lorsque `SemanticSearchConfiguration` est explicitement activée.
 
-## Validation RRF 1:1 sur corpus réel figé
+## Corpus réel figé
 
-L'incrément RRF a été validé localement :
-
-```text
-15 tests
-0 échec
-0 erreur
-BUILD SUCCESS
-Fusion semantic RRF      : SUCCESS
-Activation create(paths) : DESACTIVEE
-```
-
-Le corpus réel est ensuite figé sur le merge final de l'Itération 16 :
+Pour rendre les mesures comparables entre corrections de l'Itération 17, le corpus réel est figé sur le merge final de l'Itération 16 :
 
 ```text
 CorpusRef = a5d23386fede9b4a4eccf4d5c52308fcd5cae4b1
 fichiers  = 236
+symboles  = 946
+relations = 1 539
+requêtes  = 6
 ```
 
-| Métrique | kNN brut | RRF 1:1 |
-|---|---:|---:|
-| `precision@3` | 0,1667 | 0,0556 |
-| `recall@3` | 0,4167 | 0,0833 |
-| `hit@3` | 0,5000 | 0,1667 |
-| `MRR@3` | 0,3056 | 0,0556 |
-
-La RRF 1:1 améliore la fusion additive mais reste trop dominée par le canal historique.
+Le code benchmarké reste celui de la branche courante, mais le contenu indexé ne varie plus.
 
 ## Sweep pondéré de la RRF
 
-Validation locale du 21 juillet 2026 :
+Le sweep a mesuré les poids sémantiques `1,00`, `1,25`, `1,50`, `2,00`, `3,00`, `4,00`, `6,00`, `8,00` sur un index sémantique construit une seule fois.
 
-```text
-17 tests
-0 échec
-0 erreur
-BUILD SUCCESS
-CorpusRef = a5d23386fede9b4a4eccf4d5c52308fcd5cae4b1
-fichiers  = 236
-indexation sémantique = 66 413 ms
-```
-
-Le sweep réutilise un seul index et mesure les poids `1,00`, `1,25`, `1,50`, `2,00`, `3,00`, `4,00`, `6,00`, `8,00`.
-
-### Résultats agrégés
-
-| Poids sémantique | precision@3 | recall@3 | hit@3 | MRR@3 | recherche moyenne |
+| Poids | precision@3 | recall@3 | hit@3 | MRR@3 | recherche moyenne |
 |---:|---:|---:|---:|---:|---:|
 | 1,00 | 0,0556 | 0,0833 | 0,1667 | 0,0556 | 311,0 ms |
 | 1,25 | 0,0556 | 0,0833 | 0,1667 | 0,0556 | 314,3 ms |
@@ -158,57 +96,76 @@ Le sweep réutilise un seul index et mesure les poids `1,00`, `1,25`, `1,50`, `2
 | 6,00 | 0,1667 | 0,4167 | 0,5000 | 0,2222 | 310,7 ms |
 | 8,00 | 0,1667 | 0,4167 | 0,5000 | 0,3056 | 309,7 ms |
 
-Références :
-
-```text
-baseline historique : recall@3=0,0000, hit@3=0,0000, MRR@3=0,0000
-kNN brut             : recall@3=0,4167, hit@3=0,5000, MRR@3=0,3056
-```
-
-### Décision de pondération
-
-Le sweep produit :
+Le harness produit :
 
 ```text
 smallestWeightMatchingRawRecallAndHit = 4.0
 bestObservedWeightByRecallHitMrr      = 8.0
 ```
 
-Le poids `4,0` est le premier qui restaure le rappel et le hit du kNN brut, mais son `MRR@3 = 0,1944` reste inférieur.
+Conformément au critère défini avant la mesure (`recall -> hit -> MRR -> precision`, poids minimal en cas d'égalité), **8,0 est retenu comme poids RRF sémantique par défaut de la capacité opt-in**.
 
-Le poids `8,0` est le seul poids testé qui rejoint simultanément le kNN brut sur les quatre métriques top-3 :
+Cette valeur reste surchargeable explicitement. Elle n'active pas la recherche sémantique à elle seule.
+
+## Palier final — benchmark A/B réel avec RRF x8
+
+Validation exécutée localement le 21 juillet 2026 sur le corpus figé.
+
+### Qualité
+
+| Métrique | Baseline historique | Sémantique RRF x8 | Delta |
+|---|---:|---:|---:|
+| `precision@3` | 0,0000 | 0,1667 | +0,1667 |
+| `recall@3` | 0,0000 | 0,4167 | +0,4167 |
+| `hit@3` | 0,0000 | 0,5000 | +0,5000 |
+| `MRR@3` | 0,0000 | 0,3056 | +0,3056 |
+
+Sur les six requêtes :
+
+- `agent-skills.md` est classé rang 3 ;
+- `git-context.md` est classé rang 1 ;
+- `context-building.md` est classé rang 2 ;
+- les trois autres cibles restent hors top 3, tout en étant présentes dans le retrieval vectoriel plus profond observé pendant le diagnostic.
+
+La RRF x8 préserve ainsi exactement les quatre métriques top-3 du kNN brut sur ce corpus, tout en conservant le canal historique dans la fusion.
+
+### Coût réel
+
+| Métrique | Baseline | Sémantique RRF x8 | Rapport / delta |
+|---|---:|---:|---:|
+| indexation complète | 1 943 ms | 64 332 ms | ~33,11× |
+| recherche moyenne | 208,8 ms | 298,7 ms | +89,8 ms / ~1,43× |
+| index sémantique | 0 octet | 1 001 537 octets | +1 001 537 octets |
+
+Le coût principal est donc l'indexation des embeddings avec le provider Ollama de référence. La surcharge de recherche reste nettement plus modérée que la surcharge d'indexation.
+
+## Décision de l'Itération 17
+
+La recherche sémantique satisfait le critère d'adoption de l'itération : elle apporte un gain mesurable sur les requêtes où le vocabulaire diverge de celui des documents pertinents.
+
+Décision retenue :
+
+- **conserver la recherche sémantique comme capacité locale optionnelle validée** ;
+- conserver `NexusApplication.create(paths)` comme chemin global par défaut, sans embeddings ;
+- utiliser RRF `k = 60` avec poids sémantique `8,0` comme configuration par défaut uniquement lorsqu'un caller active explicitement la capacité ;
+- conserver `qwen3-embedding:0.6b` via Ollama comme baseline locale mesurée, sans rendre ce provider obligatoire ;
+- ne pas introduire de base vectorielle externe : Lucene suffit pour le périmètre mesuré ;
+- ne pas activer automatiquement les embeddings lors de l'indexation standard, le coût observé d'environ `33×` ne le justifie pas ;
+- recommander cette capacité lorsque la divergence lexicale ou la recherche conceptuelle justifie explicitement ce coût ;
+- conserver la possibilité de remplacer le provider ou la stratégie de représentation derrière les abstractions existantes.
+
+La capacité n'est donc ni supprimée, ni promue au chemin universel : elle devient un **mode opt-in mesuré et explicable**.
+
+## Validation restante avant fusion
+
+Le benchmark final et la validation ciblée sont verts :
 
 ```text
-precision@3 = 0,1667
-recall@3    = 0,4167
-hit@3       = 0,5000
-MRR@3       = 0,3056
+17 tests ciblés
+0 échec
+0 erreur
+BUILD SUCCESS
+benchmark A/B réel : BUILD SUCCESS
 ```
 
-Conformément au critère défini avant la mesure (`recall -> hit -> MRR -> precision`, poids minimal en cas d'égalité), **8,0 devient le poids sémantique RRF par défaut de la capacité opt-in**.
-
-Cette décision ne change pas le comportement par défaut de NEXUS : sans `SemanticSearchConfiguration.enabled(...)`, aucun embedding ni index vectoriel n'est utilisé.
-
-## Corpus réel figé
-
-Les runners réels utilisent par défaut :
-
-```text
-CorpusRef = a5d23386fede9b4a4eccf4d5c52308fcd5cae4b1
-```
-
-Le code exécuté reste celui de la branche courante, mais le corpus indexé est immuable entre les variantes de ranking.
-
-## État de décision
-
-À ce stade :
-
-- les embeddings démontrent une valeur nette sur le corpus contrôlé ;
-- le kNN brut démontre un signal utile sur le repository réel ;
-- la fusion additive est rejetée ;
-- la RRF pondérée x8 préserve le signal top-3 du kNN brut sur le corpus figé ;
-- la capacité reste strictement opt-in et désactivée dans `create(paths)` ;
-- le coût d'indexation Ollama reste élevé et doit rester un critère majeur de décision ;
-- aucune activation globale par défaut n'est justifiée.
-
-Le dernier palier de l'Itération 17 consiste à relancer le **benchmark A/B réel complet** avec x8 comme valeur opt-in par défaut afin de figer le compromis qualité / indexation / latence / stockage avant la décision finale de conservation et la clôture de l'itération.
+Avant fusion de la PR, il reste à exécuter la validation complète de non-régression (`mvn clean install` + self-smoke historique) sur la tête finale de la branche.
