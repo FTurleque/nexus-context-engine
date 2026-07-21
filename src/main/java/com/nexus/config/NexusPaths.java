@@ -40,4 +40,9 @@ public record NexusPaths(Path home) {
         Objects.requireNonNull(projectId, "projectId");
         return indexesDirectory().resolve(projectId.toString()).resolve("lucene");
     }
+
+    public Path projectSemanticLuceneIndex(UUID projectId) {
+        Objects.requireNonNull(projectId, "projectId");
+        return indexesDirectory().resolve(projectId.toString()).resolve("semantic-lucene");
+    }
 }
