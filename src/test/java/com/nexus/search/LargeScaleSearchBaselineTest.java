@@ -25,8 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * Harness opt-in pour établir une baseline de passage à l'échelle sur des
- * repositories locaux réels. Il est ignoré lorsque la propriété
- * {@code nexus.baseline.projects} n'est pas fournie.
+ * repositories locaux réels. Il est ignoré lorsque ni
+ * {@code nexus.baseline.input} ni {@code nexus.baseline.projects} ne sont fournis.
  */
 class LargeScaleSearchBaselineTest {
 
@@ -43,25 +43,19 @@ class LargeScaleSearchBaselineTest {
 
     @Test
     void measuresConfiguredRepositories() throws Exception {
-        String configuredProjects = System.getProperty("nexus.baseline.projects", "").trim();
+        ObjectMapper objectMapper = new ObjectMapper();
+        BaselineConfiguration configuration = configuredBaseline(objectMapper);
+        List<Path> projectRoots = configuration.projectRoots();
         Assumptions.assumeFalse(
-                configuredProjects.isBlank(),
-                "Baseline opt-in : fournir -Dnexus.baseline.projects=repo1|repo2");
-
-        List<Path> projectRoots = Arrays.stream(configuredProjects.split("\\|"))
-                .map(String::trim)
-                .filter(value -> !value.isBlank())
-                .map(Path::of)
-                .map(path -> path.toAbsolutePath().normalize())
-                .toList();
-        assertFalse(projectRoots.isEmpty());
+                projectRoots.isEmpty(),
+                "Baseline opt-in : fournir -Dnexus.baseline.input=<fichier-json> ou -Dnexus.baseline.projects=repo1|repo2");
         for (Path projectRoot : projectRoots) {
             if (!Files.isDirectory(projectRoot)) {
                 throw new IllegalArgumentException("Repository baseline introuvable : " + projectRoot);
             }
         }
 
-        List<String> queries = configuredQueries();
+        List<String> queries = configuration.queries();
         Path output = Path.of(System.getProperty(
                         "nexus.baseline.output",
                         "target/iteration-16-baseline.json"))
@@ -209,7 +203,7 @@ class LargeScaleSearchBaselineTest {
         report.put("incrementalSmallDelta", "Not measured automatically because source repositories are never modified");
 
         Files.createDirectories(output.getParent());
-        new ObjectMapper().writerWithDefaultPrettyPrinter().writeValue(output.toFile(), report);
+        objectMapper.writerWithDefaultPrettyPrinter().writeValue(output.toFile(), report);
 
         System.out.printf(
                 "NEXUS scale baseline: repositories=%d, queries=%d, files=%d, symbols=%d, relations=%d, indexBytes=%d, searchP50=%dms, searchP95=%dms, contextP50=%dms, contextP95=%dms%n",
@@ -226,19 +220,58 @@ class LargeScaleSearchBaselineTest {
         System.out.println("NEXUS scale baseline report: " + output);
     }
 
+    private static BaselineConfiguration configuredBaseline(ObjectMapper objectMapper) throws Exception {
+        String configuredInput = System.getProperty("nexus.baseline.input", "").trim();
+        if (!configuredInput.isBlank()) {
+            Path input = Path.of(configuredInput).toAbsolutePath().normalize();
+            if (!Files.isRegularFile(input)) {
+                throw new IllegalArgumentException("Fichier de configuration baseline introuvable : " + input);
+            }
+            BaselineInput baselineInput = objectMapper.readValue(input.toFile(), BaselineInput.class);
+            return new BaselineConfiguration(
+                    normalizedProjectRoots(baselineInput.projects()),
+                    normalizedQueries(baselineInput.queries()));
+        }
+
+        String configuredProjects = System.getProperty("nexus.baseline.projects", "").trim();
+        List<Path> projectRoots = configuredProjects.isBlank()
+                ? List.of()
+                : normalizedProjectRoots(Arrays.asList(configuredProjects.split("\\|")));
+        return new BaselineConfiguration(projectRoots, configuredQueries());
+    }
+
     private static List<String> configuredQueries() {
         String configuredQueries = System.getProperty("nexus.baseline.queries", "").trim();
         if (configuredQueries.isBlank()) {
             configuredQueries = System.getProperty("nexus.baseline.query", "SearchService").trim();
         }
+        return normalizedQueries(Arrays.asList(configuredQueries.split("\\|")));
+    }
 
-        LinkedHashSet<String> queries = new LinkedHashSet<>();
-        Arrays.stream(configuredQueries.split("\\|"))
+    private static List<Path> normalizedProjectRoots(List<String> configuredRoots) {
+        if (configuredRoots == null) {
+            return List.of();
+        }
+        LinkedHashSet<Path> projectRoots = new LinkedHashSet<>();
+        configuredRoots.stream()
                 .map(String::trim)
                 .filter(value -> !value.isBlank())
-                .forEach(queries::add);
+                .map(Path::of)
+                .map(path -> path.toAbsolutePath().normalize())
+                .forEach(projectRoots::add);
+        return List.copyOf(projectRoots);
+    }
+
+    private static List<String> normalizedQueries(List<String> configuredValues) {
+        LinkedHashSet<String> queries = new LinkedHashSet<>();
+        if (configuredValues != null) {
+            configuredValues.stream()
+                    .map(String::trim)
+                    .filter(value -> !value.isBlank())
+                    .forEach(queries::add);
+        }
         if (queries.isEmpty()) {
-            throw new IllegalArgumentException("nexus.baseline.queries must contain at least one non-blank query");
+            throw new IllegalArgumentException("La baseline doit contenir au moins une requête non vide");
         }
         return List.copyOf(queries);
     }
@@ -295,5 +328,15 @@ class LargeScaleSearchBaselineTest {
     private static long usedHeapBytes() {
         Runtime runtime = Runtime.getRuntime();
         return runtime.totalMemory() - runtime.freeMemory();
+    }
+
+    private record BaselineInput(List<String> projects, List<String> queries) {
+    }
+
+    private record BaselineConfiguration(List<Path> projectRoots, List<String> queries) {
+        private BaselineConfiguration {
+            projectRoots = List.copyOf(projectRoots);
+            queries = List.copyOf(queries);
+        }
     }
 }
