@@ -62,6 +62,10 @@
         {
           "repository": "ariane-chatbot",
           "path": "docs/developer/local-search.md"
+        },
+        {
+          "repository": "ariane-chatbot",
+          "path": "src/main/java/fr/ariane/chatbot/knowledge/KSearchSettings.java"
         }
       ]
     },
@@ -69,8 +73,16 @@
       "text": "architecture hexagonale",
       "relevant": [
         {
+          "repository": "collection-manager",
+          "path": "docs/architecture/architecture.md"
+        },
+        {
           "repository": "market-sync-app",
           "path": "README.md"
+        },
+        {
+          "repository": "market-sync-app",
+          "path": "docs/dev/architecture.md"
         }
       ]
     },
