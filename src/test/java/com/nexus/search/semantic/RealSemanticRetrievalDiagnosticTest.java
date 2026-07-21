@@ -30,12 +30,14 @@ class RealSemanticRetrievalDiagnosticTest {
 
     private static final int K = 3;
     private static final int RETRIEVAL_LIMIT = 50;
+    private static final List<Double> SEMANTIC_RRF_WEIGHTS =
+            List.of(1.0d, 1.25d, 1.5d, 2.0d, 3.0d, 4.0d, 6.0d, 8.0d);
 
     @TempDir
     Path temporaryDirectory;
 
     @Test
-    void diagnoseRawKnnVersusHybridRankingOnHermeticNexusSnapshot() throws Exception {
+    void diagnoseRawKnnVersusWeightedHybridRankingOnHermeticNexusSnapshot() throws Exception {
         Path corpusRoot = corpusRoot();
         assertTrue(Files.isDirectory(corpusRoot), "Le snapshot NEXUS doit exister : " + corpusRoot);
 
@@ -47,20 +49,48 @@ class RealSemanticRetrievalDiagnosticTest {
                 Duration.ofSeconds(ollama.timeoutSeconds()));
 
         NexusPaths semanticPaths = new NexusPaths(temporaryDirectory.resolve("semantic-home"));
-        NexusApplication semantic = NexusApplication.create(
+        NexusApplication indexingApplication = NexusApplication.create(
                 semanticPaths,
                 SemanticSearchConfiguration.enabled(provider));
-        ProjectDescriptor project = semantic.registerProject(corpusRoot, "nexus-real-semantic-diagnostic");
-        NexusApplication.IndexOperation indexing = semantic.index(project.id(), true, false);
+        ProjectDescriptor project = indexingApplication.registerProject(corpusRoot, "nexus-real-semantic-diagnostic");
+        NexusApplication.IndexOperation indexing = indexingApplication.index(project.id(), true, false);
 
         SemanticSearchIndex rawIndex = new LuceneSemanticSearchIndex(semanticPaths, provider.dimensions());
+        NexusApplication baselineApplication = NexusApplication.create(semanticPaths);
+        Map<Double, NexusApplication> weightedApplications = new LinkedHashMap<>();
+        for (double semanticWeight : SEMANTIC_RRF_WEIGHTS) {
+            weightedApplications.put(
+                    semanticWeight,
+                    NexusApplication.create(
+                            semanticPaths,
+                            SemanticSearchConfiguration.enabled(provider, semanticWeight)));
+        }
+
         List<QueryDiagnostic> diagnostics = new ArrayList<>();
         for (QueryCase queryCase : queries()) {
-            diagnostics.add(runDiagnostic(semantic, project, corpusRoot, provider, rawIndex, queryCase));
+            diagnostics.add(runDiagnostic(
+                    baselineApplication,
+                    weightedApplications,
+                    project,
+                    corpusRoot,
+                    provider,
+                    rawIndex,
+                    queryCase));
         }
 
         Aggregate rawAggregate = aggregate(diagnostics.stream().map(QueryDiagnostic::raw).toList());
-        Aggregate hybridAggregate = aggregate(diagnostics.stream().map(QueryDiagnostic::hybrid).toList());
+        Aggregate baselineAggregate = aggregate(diagnostics.stream().map(QueryDiagnostic::baseline).toList());
+        Map<Double, Aggregate> sweepAggregates = new LinkedHashMap<>();
+        for (double semanticWeight : SEMANTIC_RRF_WEIGHTS) {
+            sweepAggregates.put(
+                    semanticWeight,
+                    aggregate(diagnostics.stream()
+                            .map(diagnostic -> diagnostic.weightedHybrid().get(semanticWeight))
+                            .toList()));
+        }
+
+        Double smallestWeightMatchingRaw = smallestWeightMatchingRaw(rawAggregate, sweepAggregates);
+        double bestObservedWeight = bestObservedWeight(sweepAggregates);
 
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("snapshotCommit", System.getProperty("nexus.semantic.realBenchmark.commit", "unknown"));
@@ -70,7 +100,10 @@ class RealSemanticRetrievalDiagnosticTest {
         report.put("corpusFiles", indexing.report().scannedFiles());
         report.put("semanticIndexingMs", indexing.report().duration().toMillis());
         report.put("rawSemantic", summary(rawAggregate));
-        report.put("hybrid", summary(hybridAggregate));
+        report.put("baseline", summary(baselineAggregate));
+        report.put("fusionSweep", sweepSummary(sweepAggregates));
+        report.put("smallestWeightMatchingRawRecallAndHit", smallestWeightMatchingRaw);
+        report.put("bestObservedWeightByRecallHitMrr", bestObservedWeight);
         report.put("queryResults", diagnostics.stream().map(RealSemanticRetrievalDiagnosticTest::toReport).toList());
 
         Path output = outputPath();
@@ -79,18 +112,24 @@ class RealSemanticRetrievalDiagnosticTest {
                 .enable(SerializationFeature.INDENT_OUTPUT)
                 .writeValue(output.toFile(), report);
 
+        Aggregate defaultHybrid = sweepAggregates.get(1.0d);
+        Aggregate bestHybrid = sweepAggregates.get(bestObservedWeight);
         System.out.printf(
                 java.util.Locale.ROOT,
-                "NEXUS semantic diagnostic: raw mrr@3=%.4f recall@3=%.4f, hybrid mrr@3=%.4f recall@3=%.4f, output=%s%n",
-                rawAggregate.mrrAt3(),
+                "NEXUS semantic diagnostic: raw recall@3=%.4f mrr@3=%.4f, RRF x1 recall@3=%.4f mrr@3=%.4f, best x%.2f recall@3=%.4f mrr@3=%.4f, output=%s%n",
                 rawAggregate.recallAt3(),
-                hybridAggregate.mrrAt3(),
-                hybridAggregate.recallAt3(),
+                rawAggregate.mrrAt3(),
+                defaultHybrid.recallAt3(),
+                defaultHybrid.mrrAt3(),
+                bestObservedWeight,
+                bestHybrid.recallAt3(),
+                bestHybrid.mrrAt3(),
                 output);
     }
 
     private QueryDiagnostic runDiagnostic(
-            NexusApplication application,
+            NexusApplication baselineApplication,
+            Map<Double, NexusApplication> weightedApplications,
             ProjectDescriptor project,
             Path corpusRoot,
             EmbeddingProvider provider,
@@ -107,17 +146,18 @@ class RealSemanticRetrievalDiagnosticTest {
                 .toList();
         RetrievalResult raw = result(rawPaths, queryCase.relevantPaths(), rawDurationMs);
 
-        NexusApplication.SearchOperation hybridOperation = application.search(
-                project.id(),
-                queryCase.query(),
-                RETRIEVAL_LIMIT,
-                true);
-        List<String> hybridPaths = hybridOperation.results().stream()
-                .map(RankedCandidate::candidate)
-                .map(candidate -> normalize(corpusRoot.relativize(candidate.path())))
-                .distinct()
-                .toList();
-        RetrievalResult hybrid = result(hybridPaths, queryCase.relevantPaths(), hybridOperation.durationMs());
+        RetrievalResult baseline = runApplicationSearch(
+                baselineApplication,
+                project,
+                corpusRoot,
+                queryCase);
+
+        Map<Double, RetrievalResult> weightedHybrid = new LinkedHashMap<>();
+        for (Map.Entry<Double, NexusApplication> entry : weightedApplications.entrySet()) {
+            weightedHybrid.put(
+                    entry.getKey(),
+                    runApplicationSearch(entry.getValue(), project, corpusRoot, queryCase));
+        }
 
         List<Map<String, Object>> rawTop = new ArrayList<>();
         for (SemanticSearchHit hit : rawHits.stream().limit(10).toList()) {
@@ -127,7 +167,25 @@ class RealSemanticRetrievalDiagnosticTest {
             rawTop.add(item);
         }
 
-        return new QueryDiagnostic(queryCase, raw, hybrid, List.copyOf(rawTop));
+        return new QueryDiagnostic(queryCase, raw, baseline, Map.copyOf(weightedHybrid), List.copyOf(rawTop));
+    }
+
+    private RetrievalResult runApplicationSearch(
+            NexusApplication application,
+            ProjectDescriptor project,
+            Path corpusRoot,
+            QueryCase queryCase) throws IOException {
+        NexusApplication.SearchOperation operation = application.search(
+                project.id(),
+                queryCase.query(),
+                RETRIEVAL_LIMIT,
+                true);
+        List<String> rankedPaths = operation.results().stream()
+                .map(RankedCandidate::candidate)
+                .map(candidate -> normalize(corpusRoot.relativize(candidate.path())))
+                .distinct()
+                .toList();
+        return result(rankedPaths, queryCase.relevantPaths(), operation.durationMs());
     }
 
     private static RetrievalResult result(List<String> rankedPaths, Set<String> relevantPaths, long durationMs) {
@@ -174,18 +232,76 @@ class RealSemanticRetrievalDiagnosticTest {
         return result;
     }
 
+    private static Map<String, Object> sweepSummary(Map<Double, Aggregate> sweepAggregates) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        sweepAggregates.forEach((weight, aggregate) -> result.put(formatWeight(weight), summary(aggregate)));
+        return result;
+    }
+
+    private static Double smallestWeightMatchingRaw(
+            Aggregate raw,
+            Map<Double, Aggregate> sweepAggregates) {
+        for (Map.Entry<Double, Aggregate> entry : sweepAggregates.entrySet()) {
+            Aggregate candidate = entry.getValue();
+            if (candidate.recallAt3() + 0.0000001d >= raw.recallAt3()
+                    && candidate.hitAt3() + 0.0000001d >= raw.hitAt3()) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+
+    private static double bestObservedWeight(Map<Double, Aggregate> sweepAggregates) {
+        return sweepAggregates.entrySet().stream()
+                .sorted((left, right) -> {
+                    int byRecall = Double.compare(right.getValue().recallAt3(), left.getValue().recallAt3());
+                    if (byRecall != 0) {
+                        return byRecall;
+                    }
+                    int byHit = Double.compare(right.getValue().hitAt3(), left.getValue().hitAt3());
+                    if (byHit != 0) {
+                        return byHit;
+                    }
+                    int byMrr = Double.compare(right.getValue().mrrAt3(), left.getValue().mrrAt3());
+                    if (byMrr != 0) {
+                        return byMrr;
+                    }
+                    int byPrecision = Double.compare(
+                            right.getValue().precisionAt3(),
+                            left.getValue().precisionAt3());
+                    return byPrecision != 0 ? byPrecision : Double.compare(left.getKey(), right.getKey());
+                })
+                .map(Map.Entry::getKey)
+                .findFirst()
+                .orElseThrow();
+    }
+
     private static Map<String, Object> toReport(QueryDiagnostic diagnostic) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("query", diagnostic.queryCase().query());
         result.put("relevantPaths", diagnostic.queryCase().relevantPaths().stream().sorted().toList());
         result.put("rawRankAt3", diagnostic.raw().rankAt3());
         result.put("rawRankAt50", diagnostic.raw().rankAt50());
-        result.put("hybridRankAt3", diagnostic.hybrid().rankAt3());
-        result.put("hybridRankAt50", diagnostic.hybrid().rankAt50());
+        result.put("baselineRankAt3", diagnostic.baseline().rankAt3());
+        result.put("baselineRankAt50", diagnostic.baseline().rankAt50());
         result.put("rawTop", diagnostic.rawTop());
-        result.put("hybridTop", diagnostic.hybrid().rankedPaths().stream().limit(10).toList());
+        result.put("baselineTop", diagnostic.baseline().rankedPaths().stream().limit(10).toList());
+
+        Map<String, Object> sweep = new LinkedHashMap<>();
+        diagnostic.weightedHybrid().entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> {
+                    RetrievalResult measurement = entry.getValue();
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("rankAt3", measurement.rankAt3());
+                    item.put("rankAt50", measurement.rankAt50());
+                    item.put("top", measurement.rankedPaths().stream().limit(10).toList());
+                    item.put("searchMs", measurement.durationMs());
+                    sweep.put(formatWeight(entry.getKey()), item);
+                });
+        result.put("weightedRrf", sweep);
         result.put("rawSearchMs", diagnostic.raw().durationMs());
-        result.put("hybridSearchMs", diagnostic.hybrid().durationMs());
+        result.put("baselineSearchMs", diagnostic.baseline().durationMs());
         return result;
     }
 
@@ -234,6 +350,10 @@ class RealSemanticRetrievalDiagnosticTest {
         return path.toString().replace('\\', '/');
     }
 
+    private static String formatWeight(double value) {
+        return String.format(java.util.Locale.ROOT, "%.2f", value);
+    }
+
     private static double mean(List<Double> values) {
         return values.stream().mapToDouble(Double::doubleValue).average().orElse(0.0d);
     }
@@ -266,7 +386,8 @@ class RealSemanticRetrievalDiagnosticTest {
     private record QueryDiagnostic(
             QueryCase queryCase,
             RetrievalResult raw,
-            RetrievalResult hybrid,
+            RetrievalResult baseline,
+            Map<Double, RetrievalResult> weightedHybrid,
             List<Map<String, Object>> rawTop) {
     }
 
