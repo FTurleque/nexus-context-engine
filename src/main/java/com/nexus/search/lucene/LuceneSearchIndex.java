@@ -19,6 +19,8 @@ import org.apache.lucene.index.Term;
 import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
@@ -146,10 +148,31 @@ public final class LuceneSearchIndex implements SearchIndex {
         MultiFieldQueryParser parser = new MultiFieldQueryParser(SEARCH_FIELDS, analyzer, FIELD_BOOSTS);
         parser.setDefaultOperator(QueryParser.Operator.OR);
         try {
-            return parser.parse(QueryParser.escape(query.trim()));
+            Query parsed = parser.parse(QueryParser.escape(query.trim()));
+            return requireMultiTermCoordination(parsed);
         } catch (ParseException exception) {
             throw new IOException("Requête Lucene invalide : " + query, exception);
         }
+    }
+
+    private static Query requireMultiTermCoordination(Query query) {
+        if (!(query instanceof BooleanQuery booleanQuery)) {
+            return query;
+        }
+
+        long optionalClauses = booleanQuery.clauses().stream()
+                .filter(clause -> clause.occur() == BooleanClause.Occur.SHOULD)
+                .count();
+        if (optionalClauses < 2) {
+            return query;
+        }
+
+        BooleanQuery.Builder coordinated = new BooleanQuery.Builder();
+        for (BooleanClause clause : booleanQuery.clauses()) {
+            coordinated.add(clause);
+        }
+        coordinated.setMinimumNumberShouldMatch(2);
+        return coordinated.build();
     }
 
     private IndexResources open(UUID projectId) throws IOException {
