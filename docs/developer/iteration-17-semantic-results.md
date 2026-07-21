@@ -78,9 +78,9 @@ Le snapshot a été construit par `git archive` puis débarrassé des artefacts 
 
 Ce résultat prouve que la fusion additive initiale n'exploite pas correctement le canal sémantique sur le corpus réel. Il ne permet toutefois pas, à lui seul, de conclure que le retrieval vectoriel est mauvais.
 
-## Diagnostic kNN brut versus fusion hybride
+## Diagnostic kNN brut versus fusion additive
 
-Un diagnostic dédié a ensuite été exécuté le 21 juillet 2026 sur le snapshot `b7746cc705caaaceed2de891a8cd78dd4080450d` afin de séparer retrieval brut et fusion.
+Un diagnostic dédié a ensuite été exécuté le 21 juillet 2026 afin de séparer retrieval brut et fusion.
 
 ### Résultat agrégé
 
@@ -94,24 +94,13 @@ Un diagnostic dédié a ensuite été exécuté le 21 juillet 2026 sur le snapsh
 
 L'indexation sémantique a pris `67 057 ms` sur 248 fichiers.
 
-### Rangs des documents déclarés pertinents
-
-Les six besoins attendus sont tous retrouvés par le kNN brut dans les 17 premiers résultats :
-
-| Besoin | Rang kNN brut | Rang hybride observé |
-|---|---:|---:|
-| SQLite/Lucene dérivé reconstructible | 6 | hors top 50 |
-| divulgation progressive des Agent Skills | 2 | hors top 50 |
-| contexte Git local, offline et read-only | 1 | hors top 50 |
-| adaptateur MCP STDIO | 17 | 9 |
-| fédération multi-repository avec provenance | 10 | hors top 50 |
-| sélection du contexte sous budget | 3 | 22 |
+Les six besoins attendus sont tous retrouvés par le kNN brut dans les 17 premiers résultats, aux rangs `6, 2, 1, 17, 10, 3`.
 
 Le diagnostic tranche donc le problème principal : **le retrieval sémantique contient un signal utile, mais la fusion additive le détruit**.
 
 Les scores kNN des premiers voisins sont généralement compris entre environ `0,73` et `0,85`. Leur contribution historique était multipliée par un poids `0,15`, tandis que les canaux lexicaux, symboliques, chemin et graphe utilisent d'autres échelles et peuvent cumuler plusieurs contributions. Une addition directe de ces scores n'est donc pas une fusion robuste.
 
-## Correction retenue — Reciprocal Rank Fusion
+## Correction — Reciprocal Rank Fusion
 
 La composition sémantique opt-in utilise désormais `SemanticHybridContextRanker` avec une **Reciprocal Rank Fusion (RRF)** déterministe.
 
@@ -127,7 +116,74 @@ Principes :
 
 Cette correction ne modifie donc pas le comportement par défaut de NEXUS.
 
-## Corpus réel figé pour les comparaisons suivantes
+## Validation RRF 1:1 sur corpus réel figé
+
+Le 21 juillet 2026, l'incrément RRF a été validé localement :
+
+```text
+15 tests
+0 échec
+0 erreur
+BUILD SUCCESS
+Fusion semantic RRF      : SUCCESS
+Activation create(paths) : DESACTIVEE
+```
+
+Le diagnostic a ensuite été relancé sur le corpus immuable de l'Itération 16 :
+
+```text
+CorpusRef = a5d23386fede9b4a4eccf4d5c52308fcd5cae4b1
+fichiers  = 236
+```
+
+### Qualité RRF avec poids sémantique 1,0
+
+| Métrique | kNN brut | RRF 1:1 |
+|---|---:|---:|
+| `precision@3` | 0,1667 | 0,0556 |
+| `recall@3` | 0,4167 | 0,0833 |
+| `hit@3` | 0,5000 | 0,1667 |
+| `MRR@3` | 0,3056 | 0,0556 |
+| recherche moyenne | 159,0 ms | 376,3 ms |
+
+La RRF 1:1 est donc meilleure que la fusion additive, qui obtenait zéro sur toutes les métriques top 3, mais elle reste très inférieure au retrieval kNN brut.
+
+Les écarts sont particulièrement révélateurs :
+
+- `docs/developer/git-context.md` : kNN rang 1, RRF 1:1 rang 29 ;
+- `docs/developer/agent-skills.md` : kNN rang 2, RRF 1:1 rang 20 ;
+- ADR SQLite/Lucene : kNN rang 6, RRF 1:1 rang 42 ;
+- MCP : kNN rang 16, RRF 1:1 rang 8 ;
+- fédération multi-repository : kNN rang 10, RRF 1:1 rang 22 ;
+- contexte sous budget : rang 3 dans les deux canaux.
+
+La conclusion est donc plus précise : **le passage à une fusion par rang est correct, mais une pondération 1:1 reste trop favorable au canal historique pour les requêtes à forte divergence lexicale**.
+
+## Sweep pondéré de la RRF
+
+Le poids sémantique est désormais explicite dans `SemanticSearchConfiguration` et `SemanticHybridContextRanker`. La valeur par défaut reste `1,0` tant que la mesure n'a pas retenu un autre ratio.
+
+Le diagnostic teste, sur le même index construit une seule fois :
+
+```text
+1,00
+1,25
+1,50
+2,00
+3,00
+4,00
+6,00
+8,00
+```
+
+Pour chaque ratio, le rapport conserve `precision@3`, `recall@3`, `hit@3`, `MRR@3`, latence et rangs par requête. Il indique également :
+
+- le plus petit poids qui rejoint au minimum le rappel et le hit du kNN brut ;
+- le meilleur poids observé selon l'ordre `recall -> hit -> MRR -> precision`, avec préférence pour le poids le plus faible en cas d'égalité.
+
+Ce sweep doit éviter un nouveau réglage intuitif ou arbitraire du ranking.
+
+## Corpus réel figé
 
 Pour éviter qu'un nouveau commit de l'Itération 17 change le corpus à chaque mesure, les runners réels utilisent désormais par défaut le merge de l'Itération 16 :
 
@@ -135,17 +191,18 @@ Pour éviter qu'un nouveau commit de l'Itération 17 change le corpus à chaque 
 CorpusRef = a5d23386fede9b4a4eccf4d5c52308fcd5cae4b1
 ```
 
-Le code exécuté reste celui de la branche courante, mais le **corpus indexé est figé**. Cela permet de comparer l'ancienne fusion et la RRF sur la même base documentaire sans auto-contamination progressive.
+Le code exécuté reste celui de la branche courante, mais le **corpus indexé est figé**. Cela permet de comparer les variantes de fusion sur la même base documentaire sans auto-contamination progressive.
 
 ## État de décision
 
 À ce stade :
 
 - les embeddings démontrent une valeur nette sur le corpus contrôlé ;
-- le kNN brut retrouve les six cibles réelles dans le top 17 et trois requêtes sur six ont déjà une cible pertinente dans le top 3 brut ;
-- l'échec du premier pipeline réel provient principalement de la stratégie de fusion additive ;
-- la RRF est maintenant implémentée uniquement en mode opt-in ;
+- le kNN brut démontre également un signal utile sur le repository réel ;
+- la fusion additive est rejetée ;
+- la RRF 1:1 améliore la situation mais ne préserve pas suffisamment le signal sémantique ;
+- un sweep pondéré est maintenant prêt pour choisir le ratio à partir des métriques ;
 - le coût d'indexation Ollama reste élevé et doit rester un critère majeur de décision ;
 - aucune activation par défaut n'est encore justifiée.
 
-La prochaine validation doit exécuter le diagnostic et le benchmark réel sur le corpus figé afin de mesurer objectivement la RRF avant la décision finale de l'Itération 17.
+La prochaine validation doit exécuter le sweep pondéré sur le corpus figé. La pondération retenue ne sera intégrée comme valeur par défaut de la capacité sémantique opt-in qu'après cette mesure.
