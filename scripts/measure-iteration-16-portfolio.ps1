@@ -209,6 +209,8 @@ try {
     $qualityMetrics = @()
     $precisionValues = @()
     $recallValues = @()
+    $hitValues = @()
+    $reciprocalRankValues = @()
     foreach ($definition in $queryDefinitions) {
         $query = ([string]$definition.text).Trim()
         $queryMetric = @($baseline.queryMetrics | Where-Object { $_.query -eq $query }) | Select-Object -First 1
@@ -241,10 +243,24 @@ try {
             }
         }
 
+        $firstRelevantRank = 0
+        for ($index = 0; $index -lt $topThree.Count; $index++) {
+            $key = $topThree[$index].ToLowerInvariant()
+            if (@($relevantIds | Where-Object { $_.ToLowerInvariant() -eq $key }).Count -gt 0) {
+                $firstRelevantRank = $index + 1
+                break
+            }
+        }
+
         $precision = $matches / 3.0
         $recall = if ($relevantIds.Count -eq 0) { 1.0 } else { $matches / [double]$relevantIds.Count }
+        $hitAt3 = if ($firstRelevantRank -gt 0) { 1.0 } else { 0.0 }
+        $reciprocalRankAt3 = if ($firstRelevantRank -gt 0) { 1.0 / [double]$firstRelevantRank } else { 0.0 }
+
         $precisionValues += $precision
         $recallValues += $recall
+        $hitValues += $hitAt3
+        $reciprocalRankValues += $reciprocalRankAt3
         $qualityMetrics += [ordered]@{
             query = $query
             relevant = $relevantIds
@@ -252,11 +268,16 @@ try {
             matches = $matches
             precisionAt3 = $precision
             recallAt3 = $recall
+            hitAt3 = $hitAt3
+            reciprocalRankAt3 = $reciprocalRankAt3
+            firstRelevantRank = $firstRelevantRank
         }
     }
 
     $meanPrecision = ($precisionValues | Measure-Object -Average).Average
     $meanRecall = ($recallValues | Measure-Object -Average).Average
+    $meanHitAt3 = ($hitValues | Measure-Object -Average).Average
+    $meanReciprocalRankAt3 = ($reciprocalRankValues | Measure-Object -Average).Average
 
     $baseline | Add-Member -NotePropertyName portfolio -NotePropertyValue $configuration.name
     $baseline | Add-Member -NotePropertyName resolvedPortfolioManifest -NotePropertyValue $executionManifestPath
@@ -266,6 +287,8 @@ try {
         corpusSize = $qualityMetrics.Count
         meanPrecisionAt3 = $meanPrecision
         meanRecallAt3 = $meanRecall
+        meanHitAt3 = $meanHitAt3
+        meanReciprocalRankAt3 = $meanReciprocalRankAt3
         queries = $qualityMetrics
     })
     $baseline | ConvertTo-Json -Depth 20 | Set-Content -Encoding UTF8 -Path $outputPath
@@ -274,8 +297,10 @@ try {
     Write-Host "=== QUALITE CORPUS REEL ==="
     Write-Host ("precision@3 moyenne : {0:N4}" -f $meanPrecision)
     Write-Host ("recall@3 moyenne    : {0:N4}" -f $meanRecall)
+    Write-Host ("hit@3 moyen         : {0:N4}" -f $meanHitAt3)
+    Write-Host ("MRR@3 moyen         : {0:N4}" -f $meanReciprocalRankAt3)
     foreach ($metric in $qualityMetrics) {
-        Write-Host (" - {0} : p@3={1:N4}, r@3={2:N4}" -f $metric.query, $metric.precisionAt3, $metric.recallAt3)
+        Write-Host (" - {0} : p@3={1:N4}, r@3={2:N4}, hit@3={3:N4}, rr@3={4:N4}" -f $metric.query, $metric.precisionAt3, $metric.recallAt3, $metric.hitAt3, $metric.reciprocalRankAt3)
     }
     Write-Host "==========================="
     Write-Host
