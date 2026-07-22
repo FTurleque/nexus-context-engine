@@ -7,6 +7,9 @@ import com.nexus.context.ContextBundle;
 import com.nexus.context.ContextFragmentFactory;
 import com.nexus.context.ContextRequest;
 import com.nexus.context.DefaultContextBuilder;
+import com.nexus.context.FederatedContextBuilder;
+import com.nexus.context.FederatedContextBundle;
+import com.nexus.context.FederatedContextRequest;
 import com.nexus.context.FragmentMerger;
 import com.nexus.context.source.git.GitRecencyCandidateEnricher;
 import com.nexus.context.source.git.LocalGitContextSourceProvider;
@@ -83,6 +86,7 @@ public final class NexusApplication {
     private final SearchService searchService;
     private final FederatedSearchService federatedSearchService;
     private final ContextBuilder contextBuilder;
+    private final FederatedContextBuilder federatedContextBuilder;
 
     private NexusApplication(
             ProjectRepository projectRepository,
@@ -91,7 +95,8 @@ public final class NexusApplication {
             ProjectIndexingService indexingService,
             SearchService searchService,
             FederatedSearchService federatedSearchService,
-            ContextBuilder contextBuilder) {
+            ContextBuilder contextBuilder,
+            FederatedContextBuilder federatedContextBuilder) {
         this.projectRepository = Objects.requireNonNull(projectRepository, "projectRepository");
         this.indexRepository = Objects.requireNonNull(indexRepository, "indexRepository");
         this.projectRegistry = Objects.requireNonNull(projectRegistry, "projectRegistry");
@@ -99,6 +104,7 @@ public final class NexusApplication {
         this.searchService = Objects.requireNonNull(searchService, "searchService");
         this.federatedSearchService = Objects.requireNonNull(federatedSearchService, "federatedSearchService");
         this.contextBuilder = Objects.requireNonNull(contextBuilder, "contextBuilder");
+        this.federatedContextBuilder = Objects.requireNonNull(federatedContextBuilder, "federatedContextBuilder");
     }
 
     public static NexusApplication create(NexusPaths paths) throws SQLException, IOException {
@@ -164,12 +170,15 @@ public final class NexusApplication {
         FederatedSearchService federatedSearchService = new FederatedSearchService(searchService);
 
         TokenEstimator tokenEstimator = new HeuristicTokenEstimator();
+        ContextFragmentFactory fragmentFactory = new ContextFragmentFactory(tokenEstimator);
+        FragmentMerger fragmentMerger = new FragmentMerger();
+        BudgetedContextSelector contextSelector = new BudgetedContextSelector(tokenEstimator);
         ContextBuilder contextBuilder = new DefaultContextBuilder(
                 projectRepository,
                 searchService,
-                new ContextFragmentFactory(tokenEstimator),
-                new FragmentMerger(),
-                new BudgetedContextSelector(tokenEstimator),
+                fragmentFactory,
+                fragmentMerger,
+                contextSelector,
                 tokenEstimator,
                 List.of(
                         new AgentsMdInstructionProvider(),
@@ -178,6 +187,11 @@ public final class NexusApplication {
                         new GeminiInstructionProvider()),
                 List.of(new LocalAgentSkillsProvider()),
                 new LocalGitContextSourceProvider());
+        FederatedContextBuilder federatedContextBuilder = new FederatedContextBuilder(
+                federatedSearchService,
+                fragmentFactory,
+                fragmentMerger,
+                contextSelector);
 
         return new NexusApplication(
                 projectRepository,
@@ -186,7 +200,8 @@ public final class NexusApplication {
                 indexingService,
                 searchService,
                 federatedSearchService,
-                contextBuilder);
+                contextBuilder,
+                federatedContextBuilder);
     }
 
     public List<ProjectDescriptor> listProjects() {
@@ -287,6 +302,28 @@ public final class NexusApplication {
         return new ContextOperation(project, query, explain, elapsedMillis(startedAt), bundle);
     }
 
+    public FederatedContextOperation contextAcrossProjects(
+            List<UUID> projectIds,
+            String query,
+            int tokenBudget,
+            Set<CandidateType> requestedSources,
+            Map<String, String> constraints,
+            boolean explain) {
+        Objects.requireNonNull(projectIds, "projectIds");
+        List<ProjectDescriptor> projects = projectIds.stream()
+                .map(this::getProject)
+                .toList();
+        long startedAt = System.nanoTime();
+        FederatedContextBundle bundle = federatedContextBuilder.build(new FederatedContextRequest(
+                projects,
+                query,
+                tokenBudget,
+                requestedSources == null ? Set.of() : requestedSources,
+                constraints == null ? Map.of() : constraints,
+                explain));
+        return new FederatedContextOperation(projects, query, explain, elapsedMillis(startedAt), bundle);
+    }
+
     public List<IndexedSymbol> findSymbols(UUID projectId, String query, int limit) {
         getProject(projectId);
         String normalized = requireQuery(query).toLowerCase(Locale.ROOT);
@@ -383,5 +420,16 @@ public final class NexusApplication {
             boolean explain,
             long durationMs,
             ContextBundle bundle) {
+    }
+
+    public record FederatedContextOperation(
+            List<ProjectDescriptor> projects,
+            String query,
+            boolean explain,
+            long durationMs,
+            FederatedContextBundle bundle) {
+        public FederatedContextOperation {
+            projects = List.copyOf(projects);
+        }
     }
 }
