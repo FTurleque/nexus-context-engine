@@ -98,6 +98,7 @@ Le numéro est un identifiant stable. Le nom de fichier utilise des minuscules, 
 | [ADR-0041](0041-reutiliser-le-serveur-mcp-pour-les-clients-assistants.md) | Réutiliser le serveur MCP pour les clients assistants | Accepté |
 | [ADR-0042](0042-consommer-ai-skills-registry-comme-snapshot-local-optionnel.md) | Consommer AI Skills Registry comme snapshot local optionnel | Accepté |
 | [ADR-0043](0043-federer-la-recherche-locale-par-projet-avant-un-moteur-externe.md) | Fédérer la recherche locale par projet avant d'introduire un moteur externe | Accepté |
+| [ADR-0044](0044-construire-un-contexte-federe-sous-budget-global.md) | Construire un contexte fédéré sous budget global avant d'arbitrer les sources projet-locales | Proposé |
 
 ## Modèle
 
@@ -106,5 +107,5 @@ Le fichier [`template.md`](template.md) sert de base aux futurs ADR.
 ## Références
 
 - MADR : https://adr.github.io/madr/
-- Modèles ADR : https://adr.github.io/adr-templates/
+- Modèles ADR : https://github.com/adr/adr-templates/
 - Répertoire MADR : https://github.com/adr/madr/
