@@ -2,6 +2,7 @@ package com.nexus.index.minos;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nexus.config.NexusPaths;
 import com.nexus.index.CodeIndexImporter;
 import com.nexus.index.CodeIntelligenceSnapshot;
 import com.nexus.index.CodeSymbol;
@@ -11,13 +12,13 @@ import com.nexus.index.RelationKind;
 import com.nexus.index.SymbolKind;
 import com.nexus.index.SymbolRelation;
 
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -29,22 +30,25 @@ import java.util.concurrent.TimeUnit;
 /**
  * Optional Java-21-side importer for the versioned JSON export produced by MINOS.
  *
- * <p>No MINOS class is linked into NEXUS. A configured Java 24 runtime launches the
- * MINOS shaded JAR in a local process and NEXUS maps the returned facts into its own
- * code-intelligence model. Ranking and context selection remain entirely in NEXUS.</p>
+ * <p>No MINOS class is linked into NEXUS. When the conventional integration JAR is
+ * installed under NEXUS_HOME, NEXUS launches the fixed {@code java} command and the
+ * fixed MINOS bridge class. The project root is transported over stdin, never placed
+ * on the operating-system command line. Ranking and context selection remain entirely
+ * in NEXUS.</p>
  */
 public final class MinosCodeIndexImporter implements CodeIndexImporter {
 
     public static final String SOURCE_PROVIDER = "minos";
-    public static final String JAR_ENVIRONMENT_VARIABLE = "NEXUS_MINOS_JAR";
-    public static final String JAVA_ENVIRONMENT_VARIABLE = "NEXUS_MINOS_JAVA";
-    public static final String HOME_ENVIRONMENT_VARIABLE = "NEXUS_MINOS_HOME";
-    public static final String TIMEOUT_ENVIRONMENT_VARIABLE = "NEXUS_MINOS_TIMEOUT_SECONDS";
 
     private static final String CONTRACT_VERSION = "1";
     private static final String PRODUCER = "MINOS";
-    private static final long DEFAULT_TIMEOUT_SECONDS = 20L;
-    private static final long MAX_TIMEOUT_SECONDS = 300L;
+    private static final String JAVA_COMMAND = "java";
+    private static final String BRIDGE_MAIN_CLASS = "com.minos.integration.nexus.NexusExportBridgeMain";
+    private static final String MINOS_CLASSPATH = "integrations/minos/minos-code-intelligence-all.jar";
+    private static final String MINOS_HOME = "integrations/minos/home";
+    private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(20);
+    private static final Duration MAX_TIMEOUT = Duration.ofSeconds(300);
+    private static final long MAX_EXPORT_BYTES = 128L * 1024L * 1024L;
 
     private final Configuration configuration;
     private final ExportRunner exportRunner;
@@ -55,11 +59,8 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
         this(null, null, new ObjectMapper());
     }
 
-    public MinosCodeIndexImporter(Configuration configuration) {
-        this(
-                Objects.requireNonNull(configuration, "configuration"),
-                new ProcessExportRunner(configuration),
-                new ObjectMapper());
+    private MinosCodeIndexImporter(Configuration configuration) {
+        this(configuration, new ProcessExportRunner(configuration), new ObjectMapper());
     }
 
     MinosCodeIndexImporter(Configuration configuration, ExportRunner exportRunner, ObjectMapper objectMapper) {
@@ -71,32 +72,16 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
         }
     }
 
-    public static MinosCodeIndexImporter fromEnvironment() {
-        return fromEnvironment(System.getenv());
-    }
-
-    static MinosCodeIndexImporter fromEnvironment(Map<String, String> environment) {
-        Objects.requireNonNull(environment, "environment");
-        String jar = trimmed(environment.get(JAR_ENVIRONMENT_VARIABLE));
-        if (jar == null) {
+    /**
+     * Enables MINOS only when its shaded JAR is installed at the conventional path
+     * {@code <NEXUS_HOME>/integrations/minos/minos-code-intelligence-all.jar}.
+     */
+    public static MinosCodeIndexImporter fromPaths(NexusPaths paths) throws IOException {
+        Objects.requireNonNull(paths, "paths");
+        if (!Files.isRegularFile(paths.minosIntegrationJar())) {
             return new MinosCodeIndexImporter();
         }
-        String javaCommand = trimmed(environment.get(JAVA_ENVIRONMENT_VARIABLE));
-        if (javaCommand == null) {
-            throw new IllegalArgumentException(
-                    JAVA_ENVIRONMENT_VARIABLE + " is required when " + JAR_ENVIRONMENT_VARIABLE
-                            + " is configured because MINOS requires Java 24");
-        }
-        String home = trimmed(environment.get(HOME_ENVIRONMENT_VARIABLE));
-        long timeoutSeconds = positiveLong(
-                environment.get(TIMEOUT_ENVIRONMENT_VARIABLE),
-                DEFAULT_TIMEOUT_SECONDS,
-                TIMEOUT_ENVIRONMENT_VARIABLE);
-        return new MinosCodeIndexImporter(new Configuration(
-                Path.of(jar),
-                home == null ? null : Path.of(home),
-                javaCommand,
-                Duration.ofSeconds(timeoutSeconds)));
+        return new MinosCodeIndexImporter(new Configuration(paths.home(), DEFAULT_TIMEOUT));
     }
 
     public boolean enabled() {
@@ -295,10 +280,10 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
     private static Path normalizedAbsolutePath(String value, String field) throws IOException {
         try {
             Path path = Path.of(value);
-            if (!path.isAbsolute()) {
-                throw new IOException("MINOS export " + field + " must be absolute");
+            if (!path.isAbsolute() || !path.equals(path.normalize())) {
+                throw new IOException("MINOS export " + field + " must be canonical and absolute");
             }
-            return path.normalize();
+            return path;
         } catch (InvalidPathException exception) {
             throw new IOException("MINOS export contains an invalid " + field, exception);
         }
@@ -357,51 +342,27 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
         return value;
     }
 
-    private static long positiveLong(String raw, long defaultValue, String name) {
-        String value = trimmed(raw);
-        if (value == null) {
-            return defaultValue;
-        }
-        try {
-            long parsed = Long.parseLong(value);
-            if (parsed < 1 || parsed > MAX_TIMEOUT_SECONDS) {
-                throw new IllegalArgumentException(name + " must be between 1 and " + MAX_TIMEOUT_SECONDS);
-            }
-            return parsed;
-        } catch (NumberFormatException exception) {
-            throw new IllegalArgumentException("invalid " + name + ": " + value, exception);
-        }
-    }
-
-    private static String trimmed(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isBlank() ? null : trimmed;
-    }
-
-    public record Configuration(
-            Path minosJar,
-            Path minosHome,
-            String javaCommand,
-            Duration timeout
-    ) {
-        public Configuration {
-            Objects.requireNonNull(minosJar, "minosJar");
-            Objects.requireNonNull(javaCommand, "javaCommand");
+    record Configuration(Path nexusHome, Duration timeout) {
+        Configuration {
+            Objects.requireNonNull(nexusHome, "nexusHome");
             Objects.requireNonNull(timeout, "timeout");
-            minosJar = minosJar.toAbsolutePath().normalize();
-            minosHome = minosHome == null ? null : minosHome.toAbsolutePath().normalize();
-            if (!Files.isRegularFile(minosJar)) {
-                throw new IllegalArgumentException("MINOS JAR does not exist: " + minosJar);
+            if (timeout.isZero() || timeout.isNegative() || timeout.compareTo(MAX_TIMEOUT) > 0) {
+                throw new IllegalArgumentException("timeout must be between 1 and 300 seconds");
             }
-            if (javaCommand.isBlank()) {
-                throw new IllegalArgumentException("javaCommand must not be blank");
+            Path configuredHome = nexusHome.toAbsolutePath().normalize();
+            Path configuredJar = configuredHome.resolve(MINOS_CLASSPATH).normalize();
+            if (!Files.isRegularFile(configuredJar)) {
+                throw new IllegalArgumentException("MINOS integration JAR does not exist: " + configuredJar);
             }
-            if (timeout.isZero() || timeout.isNegative()
-                    || timeout.compareTo(Duration.ofSeconds(MAX_TIMEOUT_SECONDS)) > 0) {
-                throw new IllegalArgumentException("timeout must be between 1 and " + MAX_TIMEOUT_SECONDS + " seconds");
+            try {
+                Path canonicalHome = configuredHome.toRealPath();
+                Path canonicalJar = configuredJar.toRealPath();
+                if (!canonicalJar.startsWith(canonicalHome)) {
+                    throw new IllegalArgumentException("MINOS integration JAR must remain under NEXUS_HOME");
+                }
+                nexusHome = canonicalHome;
+            } catch (IOException exception) {
+                throw new IllegalArgumentException("MINOS integration paths cannot be canonicalized", exception);
             }
         }
     }
@@ -416,7 +377,7 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
         private final Configuration configuration;
 
         private ProcessExportRunner(Configuration configuration) {
-            this.configuration = configuration;
+            this.configuration = Objects.requireNonNull(configuration, "configuration");
         }
 
         @Override
@@ -424,21 +385,23 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
             Path stdout = Files.createTempFile("nexus-minos-", ".json");
             Path stderr = Files.createTempFile("nexus-minos-", ".err");
             try {
-                List<String> command = new ArrayList<>();
-                command.add(configuration.javaCommand());
-                if (configuration.minosHome() != null) {
-                    command.add("-Dminos.home=" + configuration.minosHome());
-                }
-                command.add("-jar");
-                command.add(configuration.minosJar().toString());
-                command.add("nexus-export");
-                command.add("--root");
-                command.add(projectRoot.toString());
-
-                Process process = new ProcessBuilder(command)
+                ProcessBuilder builder = new ProcessBuilder(
+                        JAVA_COMMAND,
+                        "-cp",
+                        MINOS_CLASSPATH,
+                        BRIDGE_MAIN_CLASS);
+                builder.directory(configuration.nexusHome().toFile());
+                builder.environment().put("MINOS_HOME", MINOS_HOME);
+                Process process = builder
                         .redirectOutput(stdout.toFile())
                         .redirectError(stderr.toFile())
                         .start();
+
+                try (BufferedWriter writer = process.outputWriter(StandardCharsets.UTF_8)) {
+                    writer.write(projectRoot.toString());
+                    writer.newLine();
+                }
+
                 boolean completed;
                 try {
                     completed = process.waitFor(configuration.timeout().toMillis(), TimeUnit.MILLISECONDS);
@@ -455,6 +418,9 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
                 if (process.exitValue() != 0) {
                     throw new IOException(
                             "MINOS export failed with exit code " + process.exitValue() + ": " + diagnostic(errors));
+                }
+                if (Files.size(stdout) > MAX_EXPORT_BYTES) {
+                    throw new IOException("MINOS export exceeds the 128 MiB transport limit");
                 }
                 return Files.readString(stdout, StandardCharsets.UTF_8);
             } finally {
