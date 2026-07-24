@@ -11,6 +11,7 @@ import com.nexus.index.SymbolKind;
 import com.nexus.index.SymbolRelation;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -51,12 +52,15 @@ public final class MinosCodeIndexImporter {
     public CodeIntelligenceSnapshot importPayload(Path projectRoot, String payload) throws IOException {
         Path root = Objects.requireNonNull(projectRoot, "projectRoot").toRealPath();
         String documentPayload = Objects.requireNonNull(payload, "payload");
-        if (documentPayload.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_EXPORT_BYTES) {
+        if (documentPayload.getBytes(StandardCharsets.UTF_8).length > MAX_EXPORT_BYTES) {
             throw new IOException("MINOS export exceeds the 128 MiB transport limit");
         }
 
         Set<String> safeProjectFiles = safeProjectFiles(root);
         JsonNode document = objectMapper.readTree(documentPayload);
+        if (document == null || !document.isObject()) {
+            throw new IOException("MINOS export root must be a JSON object");
+        }
         requireText(document, "contractVersion", CONTRACT_VERSION);
         requireText(document, "producer", PRODUCER);
 
