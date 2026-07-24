@@ -125,13 +125,7 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
         requireText(document, "producer", PRODUCER);
 
         JsonNode project = requiredObject(document, "project");
-        String exportedRootText = requiredText(project, "rootPath");
-        Path exportedRoot;
-        try {
-            exportedRoot = Path.of(exportedRootText).toRealPath();
-        } catch (InvalidPathException exception) {
-            throw new IOException("MINOS export contains an invalid project root", exception);
-        }
+        Path exportedRoot = normalizedAbsolutePath(requiredText(project, "rootPath"), "project root");
         if (!root.equals(exportedRoot)) {
             throw new IOException("MINOS export belongs to another project root: " + exportedRoot);
         }
@@ -277,7 +271,14 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
     private static String safeRelativePath(Path root, String exportedPath) {
         try {
             Path raw = Path.of(exportedPath);
-            Path resolved = raw.isAbsolute() ? raw.normalize() : root.resolve(raw).normalize();
+            if (raw.isAbsolute()) {
+                return null;
+            }
+            Path normalized = raw.normalize();
+            if (normalized.getNameCount() == 0 || normalized.startsWith("..")) {
+                return null;
+            }
+            Path resolved = root.resolve(normalized).normalize();
             if (!resolved.startsWith(root) || resolved.equals(root) || !Files.isRegularFile(resolved)) {
                 return null;
             }
@@ -285,9 +286,21 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
             if (!canonical.startsWith(root)) {
                 return null;
             }
-            return root.relativize(resolved).toString().replace('\\', '/');
+            return normalized.toString().replace('\\', '/');
         } catch (InvalidPathException | IOException exception) {
             return null;
+        }
+    }
+
+    private static Path normalizedAbsolutePath(String value, String field) throws IOException {
+        try {
+            Path path = Path.of(value);
+            if (!path.isAbsolute()) {
+                throw new IOException("MINOS export " + field + " must be absolute");
+            }
+            return path.normalize();
+        } catch (InvalidPathException exception) {
+            throw new IOException("MINOS export contains an invalid " + field, exception);
         }
     }
 
