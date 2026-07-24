@@ -22,67 +22,44 @@ import com.nexus.search.SymbolSearchStrategy;
 import com.nexus.search.lucene.LuceneSearchIndex;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.List;
-import java.util.Locale;
-import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Opt-in cross-repository replay using the real MINOS Java-24 shaded JAR.
+ * Opt-in cross-repository replay using a real, pre-installed MINOS Java-24 shaded JAR.
  */
 class MinosRealIntegrationTest {
 
-    private static final String JAR_PROPERTY = "nexus.minos.integration.jar";
-    private static final String JAVA_PROPERTY = "nexus.minos.integration.java";
+    private static final String HOME_PROPERTY = "nexus.minos.integration.home";
     private static final String FIXTURE_PROPERTY = "nexus.minos.integration.fixture";
 
     @Test
-    void realMinosExportFeedsNexusSearch(@TempDir Path temp) throws Exception {
-        String configuredJar = System.getProperty(JAR_PROPERTY);
-        String configuredJava = System.getProperty(JAVA_PROPERTY);
+    void realMinosExportFeedsNexusSearch() throws Exception {
+        String configuredHome = System.getProperty(HOME_PROPERTY);
         String configuredFixture = System.getProperty(FIXTURE_PROPERTY);
-        Assumptions.assumeTrue(configuredJar != null && !configuredJar.isBlank(),
-                () -> "opt-in: provide -D" + JAR_PROPERTY);
-        Assumptions.assumeTrue(configuredJava != null && !configuredJava.isBlank(),
-                () -> "opt-in: provide -D" + JAVA_PROPERTY);
+        Assumptions.assumeTrue(configuredHome != null && !configuredHome.isBlank(),
+                () -> "opt-in: provide -D" + HOME_PROPERTY);
         Assumptions.assumeTrue(configuredFixture != null && !configuredFixture.isBlank(),
                 () -> "opt-in: provide -D" + FIXTURE_PROPERTY);
 
-        Path minosJar = Path.of(configuredJar).toRealPath();
-        Path java24 = Path.of(configuredJava).toRealPath();
+        NexusPaths paths = new NexusPaths(Path.of(configuredHome).toRealPath());
         Path fixture = Path.of(configuredFixture).toRealPath();
-        Path scip = fixture.resolve(Path.of(".minos-m0", "scip-typescript", "index.scip"));
-        Assumptions.assumeTrue(Files.isRegularFile(scip), () -> "missing SCIP fixture: " + scip);
+        Assumptions.assumeTrue(Files.isRegularFile(paths.minosIntegrationJar()),
+                () -> "missing conventional MINOS JAR: " + paths.minosIntegrationJar());
+        Assumptions.assumeTrue(Files.isDirectory(paths.minosIntegrationHome()),
+                () -> "missing prepared MINOS integration home: " + paths.minosIntegrationHome());
 
-        Path minosHome = Files.createDirectories(temp.resolve("minos-home"));
-        runMinos(java24, minosJar, minosHome,
-                "project", "add", fixture.toString(), "--name", "m13-fixture");
-        runMinos(java24, minosJar, minosHome,
-                "index", "m13-fixture",
-                "--scip", scip.toString(),
-                "--provider", "scip-typescript",
-                "--provider-version", "0.4.0");
-
-        MinosCodeIndexImporter importer = new MinosCodeIndexImporter(
-                new MinosCodeIndexImporter.Configuration(
-                        minosJar,
-                        minosHome,
-                        java24.toString(),
-                        Duration.ofSeconds(30)));
+        MinosCodeIndexImporter importer = MinosCodeIndexImporter.fromPaths(paths);
         CodeIntelligenceSnapshot exported = importer.importIndex(fixture).orElseThrow();
         assertFalse(exported.symbols().isEmpty());
         assertTrue(exported.symbols().stream().anyMatch(symbol ->
                 "GreetingPort".equals(symbol.symbol().name())));
 
-        NexusPaths paths = new NexusPaths(temp.resolve("nexus-home"));
         SqliteDatabase database = new SqliteDatabase(paths);
         ProjectRepository projectRepository = new SqliteProjectRepository(database);
         IndexRepository indexRepository = new SqliteIndexRepository(database);
@@ -115,42 +92,5 @@ class MinosRealIntegrationTest {
         System.out.printf(
                 "M13 MINOS->NEXUS: symbols=%d, relations=%d, nexus-symbols=%d, search=%d%n",
                 exported.symbols().size(), exported.relations().size(), indexedSymbols.size(), results.size());
-    }
-
-    private static void runMinos(
-            Path java24,
-            Path jar,
-            Path home,
-            String... arguments
-    ) throws Exception {
-        Path stdout = Files.createTempFile("m13-minos-", ".out");
-        Path stderr = Files.createTempFile("m13-minos-", ".err");
-        try {
-            List<String> command = new java.util.ArrayList<>();
-            command.add(java24.toString());
-            command.add("-Dminos.home=" + home);
-            command.add("-jar");
-            command.add(jar.toString());
-            command.addAll(List.of(arguments));
-            Process process = new ProcessBuilder(command)
-                    .redirectOutput(stdout.toFile())
-                    .redirectError(stderr.toFile())
-                    .start();
-            boolean completed = process.waitFor(30, TimeUnit.SECONDS);
-            if (!completed) {
-                process.destroyForcibly();
-                throw new AssertionError("MINOS fixture setup timed out");
-            }
-            if (process.exitValue() != 0) {
-                String error = Files.readString(stderr, StandardCharsets.UTF_8)
-                        .replace('\r', ' ')
-                        .replace('\n', ' ')
-                        .trim();
-                throw new AssertionError("MINOS fixture setup failed: " + error);
-            }
-        } finally {
-            Files.deleteIfExists(stdout);
-            Files.deleteIfExists(stderr);
-        }
     }
 }
