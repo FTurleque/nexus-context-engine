@@ -14,11 +14,6 @@ $ErrorActionPreference = 'Stop'
 $jar = (Resolve-Path $MinosJar).Path
 $java24 = (Resolve-Path $Java24).Path
 $fixturePath = (Resolve-Path $Fixture).Path
-$scip = Join-Path $fixturePath '.minos-m0\scip-typescript\index.scip'
-
-if (-not (Test-Path $scip -PathType Leaf)) {
-    throw "Missing SCIP fixture: $scip"
-}
 
 if ([string]::IsNullOrWhiteSpace($env:JAVA_HOME)) {
     throw 'JAVA_HOME must point to the Java 21 JDK used to validate NEXUS.'
@@ -39,20 +34,31 @@ if ($java24Version -notmatch 'version "24(?:\.|\")') {
     throw "The -Java24 executable must be Java 24. Detected: $java24Version"
 }
 
-$nexusHome = Join-Path ([System.IO.Path]::GetTempPath()) ("nexus-minos-m13-" + [guid]::NewGuid())
+$replayRoot = Join-Path (Get-Location) 'target\m13-replay'
+$nexusHome = Join-Path $replayRoot 'nexus-home'
+$replayFixture = Join-Path $replayRoot 'fixture'
 $integrationDir = Join-Path $nexusHome 'integrations\minos'
 $minosHome = Join-Path $integrationDir 'home'
 $installedJar = Join-Path $integrationDir 'minos-code-intelligence-all.jar'
 
+if (Test-Path $replayRoot) {
+    Remove-Item -Recurse -Force $replayRoot
+}
 New-Item -ItemType Directory -Force -Path $minosHome | Out-Null
+Copy-Item -Recurse -Force $fixturePath $replayFixture
 Copy-Item -Force $jar $installedJar
+
+$scip = Join-Path $replayFixture '.minos-m0\scip-typescript\index.scip'
+if (-not (Test-Path $scip -PathType Leaf)) {
+    throw "Missing SCIP fixture in replay sandbox: $scip"
+}
 
 Write-Host 'NEXUS MINOS integration replay'
 Write-Host "  NEXUS Java : $java21"
 Write-Host "  MINOS Java : $java24"
 Write-Host "  MINOS JAR  : $installedJar"
 Write-Host "  NEXUS_HOME : $nexusHome"
-Write-Host "  Fixture    : $fixturePath"
+Write-Host "  Fixture    : $replayFixture"
 
 function Invoke-Minos {
     param([string[]]$Arguments)
@@ -65,7 +71,7 @@ function Invoke-Minos {
 
 $previousPath = $env:PATH
 try {
-    Invoke-Minos @('project', 'add', $fixturePath, '--name', 'm13-fixture')
+    Invoke-Minos @('project', 'add', $replayFixture, '--name', 'm13-fixture')
     Invoke-Minos @(
         'index', 'm13-fixture',
         '--scip', $scip,
@@ -79,8 +85,7 @@ try {
 
     mvn `
         '-Dtest=MinosRealIntegrationTest' `
-        "-Dnexus.minos.integration.home=$nexusHome" `
-        "-Dnexus.minos.integration.fixture=$fixturePath" `
+        '-Dnexus.minos.integration.replay=true' `
         test
 
     if ($LASTEXITCODE -ne 0) {
@@ -91,7 +96,7 @@ try {
 }
 finally {
     $env:PATH = $previousPath
-    if (Test-Path $nexusHome) {
-        Remove-Item -Recurse -Force $nexusHome
+    if (Test-Path $replayRoot) {
+        Remove-Item -Recurse -Force $replayRoot
     }
 }
