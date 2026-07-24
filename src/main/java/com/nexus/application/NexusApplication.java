@@ -15,6 +15,7 @@ import com.nexus.context.source.instruction.ClaudeInstructionProvider;
 import com.nexus.context.source.instruction.CopilotInstructionProvider;
 import com.nexus.context.source.instruction.GeminiInstructionProvider;
 import com.nexus.context.source.skill.LocalAgentSkillsProvider;
+import com.nexus.index.CodeIndexImporter;
 import com.nexus.index.CodeIntelligenceProvider;
 import com.nexus.index.IndexRepository;
 import com.nexus.index.IndexStatistics;
@@ -25,6 +26,7 @@ import com.nexus.index.SymbolRelation;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.jdt.JdtLanguageServerCodeIntelligenceProvider;
 import com.nexus.index.markdown.MarkdownLanguageAnalyzer;
+import com.nexus.index.minos.MinosCodeIndexImporter;
 import com.nexus.index.scan.ProjectScanner;
 import com.nexus.index.scip.ScipCodeIndexImporter;
 import com.nexus.persistence.sqlite.SqliteDatabase;
@@ -126,6 +128,11 @@ public final class NexusApplication {
                         .<List<CodeIntelligenceProvider>>map(List::of)
                         .orElseGet(List::of);
 
+        MinosCodeIndexImporter minosImporter = MinosCodeIndexImporter.fromEnvironment();
+        List<CodeIndexImporter> codeIndexImporters = new ArrayList<>();
+        codeIndexImporters.add(minosImporter);
+        codeIndexImporters.add(new ScipCodeIndexImporter());
+
         List<SearchStrategy> searchStrategies = new ArrayList<>();
         searchStrategies.add(new LuceneFileSearchStrategy(searchIndex));
         searchStrategies.add(new SymbolSearchStrategy(indexRepository));
@@ -148,7 +155,7 @@ public final class NexusApplication {
                         new JavaParserLanguageAnalyzer(),
                         new MarkdownLanguageAnalyzer()),
                 searchIndex,
-                List.of(new ScipCodeIndexImporter()),
+                codeIndexImporters,
                 codeIntelligenceProviders,
                 semanticIndexingService);
 
