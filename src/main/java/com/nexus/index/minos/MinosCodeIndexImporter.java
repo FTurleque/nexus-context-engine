@@ -20,11 +20,13 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -105,6 +107,7 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
 
     CodeIntelligenceSnapshot parseExport(Path projectRoot, String payload) throws IOException {
         Path root = Objects.requireNonNull(projectRoot, "projectRoot").toRealPath();
+        Set<String> safeProjectFiles = safeProjectFiles(root);
         JsonNode document = objectMapper.readTree(Objects.requireNonNull(payload, "payload"));
         requireText(document, "contractVersion", CONTRACT_VERSION);
         requireText(document, "producer", PRODUCER);
@@ -117,7 +120,7 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
 
         Map<String, IndexedSymbol> symbols = new LinkedHashMap<>();
         for (JsonNode symbolNode : requiredArray(document, "symbols")) {
-            IndexedSymbol symbol = mapSymbol(root, symbolNode);
+            IndexedSymbol symbol = mapSymbol(safeProjectFiles, symbolNode);
             if (symbol == null) {
                 continue;
             }
@@ -130,7 +133,7 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
 
         Map<String, IndexedRelation> relations = new LinkedHashMap<>();
         for (JsonNode relationNode : requiredArray(document, "relations")) {
-            IndexedRelation relation = mapRelation(root, relationNode);
+            IndexedRelation relation = mapRelation(safeProjectFiles, relationNode);
             if (relation == null) {
                 continue;
             }
@@ -147,7 +150,7 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
                 List.copyOf(relations.values()));
     }
 
-    private static IndexedSymbol mapSymbol(Path root, JsonNode node) throws IOException {
+    private static IndexedSymbol mapSymbol(Set<String> safeProjectFiles, JsonNode node) throws IOException {
         if (!"RESOLVED".equals(optionalText(node, "resolutionStatus"))) {
             return null;
         }
@@ -155,7 +158,7 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
         if (kind == null) {
             return null;
         }
-        String relativePath = safeRelativePath(root, requiredText(node, "filePath"));
+        String relativePath = safeRelativePath(safeProjectFiles, requiredText(node, "filePath"));
         if (relativePath == null) {
             return null;
         }
@@ -185,7 +188,7 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
                         SOURCE_PROVIDER));
     }
 
-    private static IndexedRelation mapRelation(Path root, JsonNode node) throws IOException {
+    private static IndexedRelation mapRelation(Set<String> safeProjectFiles, JsonNode node) throws IOException {
         if (!"RESOLVED".equals(optionalText(node, "resolutionStatus"))) {
             return null;
         }
@@ -193,7 +196,7 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
         if (kind == null) {
             return null;
         }
-        String relativePath = safeRelativePath(root, requiredText(node, "filePath"));
+        String relativePath = safeRelativePath(safeProjectFiles, requiredText(node, "filePath"));
         if (relativePath == null) {
             return null;
         }
@@ -253,7 +256,34 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
         throw new IOException("MINOS derived relation is missing confidence");
     }
 
-    private static String safeRelativePath(Path root, String exportedPath) {
+    private static Set<String> safeProjectFiles(Path root) throws IOException {
+        Set<String> safeFiles = new LinkedHashSet<>();
+        try (var paths = Files.walk(root)) {
+            var iterator = paths.iterator();
+            while (iterator.hasNext()) {
+                Path candidate = iterator.next();
+                if (!Files.isRegularFile(candidate)) {
+                    continue;
+                }
+                Path canonical;
+                try {
+                    canonical = candidate.toRealPath();
+                } catch (IOException exception) {
+                    continue;
+                }
+                if (!canonical.startsWith(root)) {
+                    continue;
+                }
+                Path relative = root.relativize(candidate.normalize());
+                if (relative.getNameCount() > 0) {
+                    safeFiles.add(relative.toString().replace('\\', '/'));
+                }
+            }
+        }
+        return Set.copyOf(safeFiles);
+    }
+
+    private static String safeRelativePath(Set<String> safeProjectFiles, String exportedPath) {
         try {
             Path raw = Path.of(exportedPath);
             if (raw.isAbsolute()) {
@@ -263,16 +293,9 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
             if (normalized.getNameCount() == 0 || normalized.startsWith("..")) {
                 return null;
             }
-            Path resolved = root.resolve(normalized).normalize();
-            if (!resolved.startsWith(root) || resolved.equals(root) || !Files.isRegularFile(resolved)) {
-                return null;
-            }
-            Path canonical = resolved.toRealPath();
-            if (!canonical.startsWith(root)) {
-                return null;
-            }
-            return normalized.toString().replace('\\', '/');
-        } catch (InvalidPathException | IOException exception) {
+            String relativePath = normalized.toString().replace('\\', '/');
+            return safeProjectFiles.contains(relativePath) ? relativePath : null;
+        } catch (InvalidPathException exception) {
             return null;
         }
     }
