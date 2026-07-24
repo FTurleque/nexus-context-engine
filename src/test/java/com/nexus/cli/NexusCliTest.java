@@ -171,7 +171,7 @@ class NexusCliTest {
     }
 
     private static CliExecution execute(String... args) {
-        return executeWithStream(InputStream.nullInputStream(), args);
+        return executeWithStream(new ByteArrayInputStream(new byte[0]), args);
     }
 
     private static CliExecution executeWithInput(String input, String... args) {
