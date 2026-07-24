@@ -27,15 +27,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class MinosCodeIndexImporterTest {
 
     @Test
-    void integrationIsOptInThroughConventionalJarLocation(@TempDir Path temp) throws Exception {
+    void integrationIsOptInThroughExplicitActivation(@TempDir Path temp) throws Exception {
         NexusPaths paths = new NexusPaths(Files.createDirectories(temp.resolve("nexus-home")));
-        MinosCodeIndexImporter disabled = MinosCodeIndexImporter.fromPaths(paths);
+        MinosCodeIndexImporter disabled = MinosCodeIndexImporter.fromPaths(paths, false);
         assertFalse(disabled.enabled());
         assertTrue(disabled.importIndex(Files.createDirectories(temp.resolve("project"))).isEmpty());
 
-        Files.createDirectories(paths.minosIntegrationDirectory());
-        Files.write(paths.minosIntegrationJar(), new byte[]{0});
-        assertTrue(MinosCodeIndexImporter.fromPaths(paths).enabled());
+        MinosCodeIndexImporter enabled = MinosCodeIndexImporter.fromPaths(paths, true);
+        assertTrue(enabled.enabled());
     }
 
     @Test
@@ -44,7 +43,7 @@ class MinosCodeIndexImporterTest {
         Path source = Files.createDirectories(project.resolve("src"));
         Files.writeString(source.resolve("GreetingPort.ts"), "export interface GreetingPort {}\n");
         Files.writeString(source.resolve("Greeter.ts"), "export class Greeter {}\n");
-        NexusPaths paths = installPlaceholderJar(temp.resolve("nexus-home"));
+        NexusPaths paths = new NexusPaths(Files.createDirectories(temp.resolve("nexus-home")));
         ObjectMapper mapper = new ObjectMapper();
         String payload = payload(mapper, project);
         MinosCodeIndexImporter.Configuration configuration = new MinosCodeIndexImporter.Configuration(
@@ -72,7 +71,7 @@ class MinosCodeIndexImporterTest {
     void rejectsForeignContractVersionAndProjectRoot(@TempDir Path temp) throws Exception {
         Path project = Files.createDirectories(temp.resolve("project"));
         Path other = Files.createDirectories(temp.resolve("other"));
-        NexusPaths paths = installPlaceholderJar(temp.resolve("nexus-home"));
+        NexusPaths paths = new NexusPaths(Files.createDirectories(temp.resolve("nexus-home")));
         ObjectMapper mapper = new ObjectMapper();
         MinosCodeIndexImporter.Configuration configuration = new MinosCodeIndexImporter.Configuration(
                 paths.home(),
@@ -101,19 +100,12 @@ class MinosCodeIndexImporterTest {
         Files.createDirectories(paths.minosIntegrationDirectory());
         createFakeBridgeJar(paths.minosIntegrationJar(), temp.resolve("fake-bridge"));
 
-        MinosCodeIndexImporter importer = MinosCodeIndexImporter.fromPaths(paths);
+        MinosCodeIndexImporter importer = MinosCodeIndexImporter.fromPaths(paths, true);
         CodeIntelligenceSnapshot snapshot = importer.importIndex(project).orElseThrow();
 
         assertEquals("minos", snapshot.sourceProvider());
         assertTrue(snapshot.symbols().isEmpty());
         assertTrue(snapshot.relations().isEmpty());
-    }
-
-    private static NexusPaths installPlaceholderJar(Path home) throws Exception {
-        NexusPaths paths = new NexusPaths(Files.createDirectories(home));
-        Files.createDirectories(paths.minosIntegrationDirectory());
-        Files.write(paths.minosIntegrationJar(), new byte[]{0});
-        return paths;
     }
 
     private static String payload(ObjectMapper mapper, Path project) throws Exception {
