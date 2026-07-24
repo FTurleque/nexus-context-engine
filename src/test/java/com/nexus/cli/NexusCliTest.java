@@ -19,6 +19,7 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NexusCliTest {
@@ -102,6 +103,7 @@ class NexusCliTest {
                 "minos-import", "demo-cli", "--json");
         assertEquals(NexusCli.EXIT_SUCCESS, minosImport.exitCode());
         JsonNode minosPayload = JSON.readTree(minosImport.stdout());
+        assertNotNull(minosPayload);
         assertEquals("minos-import", minosPayload.path("command").asText());
         assertEquals("minos", minosPayload.path("sourceProvider").asText());
         assertEquals(1, minosPayload.path("symbols").asInt());
