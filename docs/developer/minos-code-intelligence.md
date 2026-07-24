@@ -22,49 +22,77 @@ L’intégration ne change pas les poids du ranking et ne remplace aucune source
 
 NEXUS cible Java 21. MINOS impose Java 24. Une dépendance Maven vers le JAR MINOS introduirait donc un couplage de bytecode incompatible avec la baseline NEXUS.
 
-NEXUS consomme à la place le contrat JSON `NexusExportContract` v1 via :
+NEXUS consomme à la place le contrat JSON `NexusExportContract` v1 au travers d’un bridge local MINOS. La commande système lancée par NEXUS est fixe :
 
 ```text
-java 24 -jar <minos-all.jar> nexus-export --root <project>
+java -cp integrations/minos/minos-code-intelligence-all.jar \
+  com.minos.integration.nexus.NexusExportBridgeMain
 ```
+
+La racine du projet n’est jamais placée sur la ligne de commande système : NEXUS l’écrit sur stdin et le bridge renvoie le JSON sur stdout.
 
 Le processus reste local ; aucune requête réseau n’est utilisée.
 
-## Configuration
+## Activation conventionnelle
 
-### Désactivé par défaut
+L’intégration est **désactivée par défaut**. Elle devient active uniquement si le shaded JAR MINOS existe à cet emplacement :
 
-Sans configuration, NEXUS continue à utiliser ses analyseurs et importers habituels.
-
-### Activation
-
-```powershell
-$env:NEXUS_MINOS_JAR = 'N:\workspace-dev\minos-code-intelligence\target\minos-code-intelligence-0.1.0-SNAPSHOT-all.jar'
-$env:NEXUS_MINOS_JAVA = 'C:\path\to\jdk-24\bin\java.exe'
+```text
+<NEXUS_HOME>/integrations/minos/minos-code-intelligence-all.jar
 ```
 
-Optionnel :
+MINOS utilise un home dédié à l’intégration :
 
-```powershell
-$env:NEXUS_MINOS_HOME = 'C:\Users\me\.minos'
-$env:NEXUS_MINOS_TIMEOUT_SECONDS = '20'
+```text
+<NEXUS_HOME>/integrations/minos/home
 ```
 
-`NEXUS_MINOS_JAVA` est volontairement obligatoire dès qu’un JAR est configuré. NEXUS ne tente pas d’exécuter MINOS avec son propre runtime Java 21.
+Arborescence :
 
-Timeout accepté : `1..300` secondes.
+```text
+<NEXUS_HOME>/
+└─ integrations/
+   └─ minos/
+      ├─ minos-code-intelligence-all.jar
+      └─ home/
+```
+
+Aucune variable `NEXUS_MINOS_*` n’est utilisée. Le timeout de transport production est fixé à **20 secondes**.
+
+### Runtime enfant Java 24
+
+NEXUS lance volontairement la commande constante `java`. Lorsque MINOS est installé, le `java` résolu dans l’environnement du processus NEXUS doit donc être un runtime **Java 24** capable d’exécuter le JAR MINOS.
+
+Cela ne change pas la baseline de compilation de NEXUS : la validation du cœur reste effectuée avec Java 21. Dans un IDE ou un service, NEXUS peut être lancé avec son JDK 21 explicite tout en donnant au processus enfant un `PATH` où `java` résout vers Java 24.
+
+## Installation du JAR MINOS
+
+Exemple PowerShell :
+
+```powershell
+$minosDir = Join-Path $env:NEXUS_HOME 'integrations\minos'
+New-Item -ItemType Directory -Force -Path (Join-Path $minosDir 'home') | Out-Null
+
+Copy-Item `
+  N:\workspace-dev\minos-code-intelligence\target\minos-code-intelligence-0.1.0-SNAPSHOT-all.jar `
+  (Join-Path $minosDir 'minos-code-intelligence-all.jar')
+```
 
 ## Préparation MINOS
 
-Le projet doit exister dans le registre MINOS et disposer d’un snapshot actif.
+Le projet doit exister dans le registre MINOS dédié et disposer d’un snapshot actif.
 
 Exemple avec un SCIP existant :
 
 ```powershell
-java -Dminos.home=$env:NEXUS_MINOS_HOME -jar $env:NEXUS_MINOS_JAR `
+$java24 = 'C:\path\to\jdk-24\bin\java.exe'
+$minosJar = Join-Path $env:NEXUS_HOME 'integrations\minos\minos-code-intelligence-all.jar'
+$minosHome = Join-Path $env:NEXUS_HOME 'integrations\minos\home'
+
+& $java24 "-Dminos.home=$minosHome" -jar $minosJar `
   project add N:\workspace-dev\my-project --name my-project
 
-java -Dminos.home=$env:NEXUS_MINOS_HOME -jar $env:NEXUS_MINOS_JAR `
+& $java24 "-Dminos.home=$minosHome" -jar $minosJar `
   index my-project --scip N:\workspace-dev\my-project\index.scip `
   --provider scip-typescript --provider-version 0.4.0
 ```
@@ -86,7 +114,7 @@ ProjectScanner
 
 MINOS est positionné avant SCIP. SQLite NEXUS déduplique déjà les symboles externes et relations identiques ; un fait fourni par MINOS garde donc `source_provider=minos`, puis SCIP peut compléter les faits absents.
 
-Quand l’intégration est désactivée, l’importer MINOS renvoie un snapshot vide. Le remplacement transactionnel existant supprime alors les anciennes lignes `source_provider=minos`, ce qui évite de conserver silencieusement une connaissance périmée.
+Quand le JAR conventionnel est absent, l’importer MINOS renvoie un snapshot vide. Le remplacement transactionnel existant supprime alors les anciennes lignes `source_provider=minos`, ce qui évite de conserver silencieusement une connaissance périmée.
 
 ## Validation du contrat
 
@@ -97,9 +125,16 @@ contractVersion = 1
 producer        = MINOS
 ```
 
-La racine canonique indiquée par MINOS doit être exactement celle du projet NEXUS en cours d’indexation.
+La racine indiquée par MINOS doit être un chemin absolu déjà canonique et être exactement celle du projet NEXUS en cours d’indexation.
 
-Un contrat incompatible ou un export appartenant à un autre projet provoque un échec d’indexation explicite.
+Chaque `filePath` exporté doit :
+
+- être relatif ;
+- ne contenir aucune remontée `..` après normalisation ;
+- désigner un fichier réel sous la racine ;
+- rester sous la racine après résolution canonique des liens symboliques.
+
+Un contrat incompatible, une mauvaise racine ou un chemin non sûr n’est jamais transformé en accès fichier arbitraire.
 
 ## Mapping symboles
 
@@ -144,12 +179,17 @@ Les relations comme `DEPENDS_ON`, `RELATED_TEST`, `IMPACT_PATH`, `CENTRALITY`, e
 
 Pour un fait `FACTUAL` sans confiance explicite, NEXUS applique `1.0`. Les dérivations/heuristiques doivent porter une confiance explicite.
 
-## Erreurs processus
+## Sécurité et bornes du processus
 
 NEXUS :
 
-- borne le temps d’exécution ;
+- utilise une commande enfant fixe, sans token issu d’une requête, d’un chemin projet ou d’une variable d’intégration ;
+- transmet la racine projet par stdin ;
+- utilise un classpath relatif fixe sous le répertoire de travail `NEXUS_HOME` ;
+- fixe `MINOS_HOME` à `integrations/minos/home` dans l’environnement enfant ;
+- borne le temps d’exécution à 20 secondes en production ;
 - redirige stdout/stderr vers des fichiers temporaires pour éviter les blocages de pipes ;
+- limite le document JSON transporté à 128 MiB ;
 - rejette les codes de sortie MINOS non nuls ;
 - ne réinjecte qu’un diagnostic stderr normalisé et borné dans l’exception ;
 - nettoie les fichiers temporaires.
@@ -158,42 +198,49 @@ NEXUS :
 
 `MinosCodeIndexImporterTest` couvre :
 
-- mode désactivé ;
-- obligation de fournir Java 24 ;
+- mode désactivé sans JAR conventionnel ;
+- activation par présence du JAR conventionnel ;
 - mapping conservateur ;
 - refus d’une version inconnue ;
 - refus d’une mauvaise racine ;
-- exécution réelle d’un JAR synthétique comme processus.
+- exécution réelle de la commande bridge fixe ;
+- transport de la racine projet par stdin.
 
-`MinosRealIntegrationTest` est un harness opt-in utilisant le vrai JAR MINOS.
+`MinosRealIntegrationTest` est un harness opt-in utilisant un `NEXUS_HOME` déjà préparé avec le vrai JAR MINOS et son snapshot.
 
-Propriétés :
+Propriétés du harness :
 
 ```text
-nexus.minos.integration.jar
-nexus.minos.integration.java
+nexus.minos.integration.home
 nexus.minos.integration.fixture
 ```
 
-Exemple :
+Le chemin recommandé est le script :
 
 ```powershell
-mvn -Dtest=MinosRealIntegrationTest `
-  -Dnexus.minos.integration.jar=N:\workspace-dev\minos-code-intelligence\target\minos-code-intelligence-0.1.0-SNAPSHOT-all.jar `
-  -Dnexus.minos.integration.java=C:\path\to\jdk-24\bin\java.exe `
-  -Dnexus.minos.integration.fixture=N:\workspace-dev\minos-code-intelligence\fixtures\typescript\typescript-modules `
-  test
+.\scripts\validate-minos-integration.ps1 `
+  -MinosJar N:\workspace-dev\minos-code-intelligence\target\minos-code-intelligence-0.1.0-SNAPSHOT-all.jar `
+  -Java24 C:\path\to\jdk-24\bin\java.exe `
+  -Fixture N:\workspace-dev\minos-code-intelligence\fixtures\typescript\typescript-modules
 ```
 
-Le harness :
+Le script :
 
-1. crée un `MINOS_HOME` temporaire ;
-2. enregistre la fixture dans MINOS ;
-3. importe son SCIP réel ;
-4. lance le vrai `nexus-export` ;
-5. ingère le snapshot dans SQLite NEXUS ;
-6. vérifie `GreetingPort` avec `sourceProvider=minos` ;
-7. exécute une recherche NEXUS et vérifie que ce symbole est retourné.
+1. exige `JAVA_HOME` sur Java 21 pour Maven/NEXUS ;
+2. vérifie le runtime Java 24 fourni ;
+3. crée un `NEXUS_HOME` temporaire ;
+4. installe le JAR MINOS au chemin conventionnel ;
+5. prépare le `MINOS_HOME` dédié avec la fixture et son SCIP réel ;
+6. place Java 24 en tête du `PATH` uniquement pour que le processus enfant fixe `java` l’utilise ;
+7. lance `MinosRealIntegrationTest` ;
+8. nettoie le sandbox.
+
+Le harness vérifie ensuite :
+
+1. le vrai `NexusExportBridgeMain` MINOS ;
+2. l’ingestion dans SQLite NEXUS ;
+3. `GreetingPort` avec `sourceProvider=minos` ;
+4. une recherche NEXUS qui retourne ce symbole.
 
 Replay attendu :
 
