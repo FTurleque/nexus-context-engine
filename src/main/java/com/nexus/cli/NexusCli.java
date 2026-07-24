@@ -111,7 +111,7 @@ public final class NexusCli {
                         .<List<CodeIntelligenceProvider>>map(provider -> List.of(provider))
                         .orElseGet(List::of);
         List<CodeIndexImporter> codeIndexImporters = new ArrayList<>();
-        codeIndexImporters.add(MinosCodeIndexImporter.fromEnvironment());
+        codeIndexImporters.add(MinosCodeIndexImporter.fromPaths(paths));
         codeIndexImporters.add(new ScipCodeIndexImporter());
         ProjectIndexingService indexingService = new ProjectIndexingService(
                 projectRepository,
