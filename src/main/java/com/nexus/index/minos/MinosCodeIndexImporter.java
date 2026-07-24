@@ -2,8 +2,6 @@ package com.nexus.index.minos;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nexus.config.NexusPaths;
-import com.nexus.index.CodeIndexImporter;
 import com.nexus.index.CodeIntelligenceSnapshot;
 import com.nexus.index.CodeSymbol;
 import com.nexus.index.IndexedRelation;
@@ -12,108 +10,53 @@ import com.nexus.index.RelationKind;
 import com.nexus.index.SymbolKind;
 import com.nexus.index.SymbolRelation;
 
-import java.io.BufferedWriter;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 
 /**
- * Optional Java-21-side importer for the versioned JSON export produced by MINOS.
+ * Pure Java-21-side adapter for the versioned JSON export produced by MINOS.
  *
- * <p>No MINOS class is linked into NEXUS. When explicitly enabled, NEXUS launches
- * the fixed {@code java} command and fixed MINOS bridge class from the conventional
- * integration classpath under NEXUS_HOME. The project root is transported over stdin,
- * never placed on the operating-system command line. Ranking and context selection
- * remain entirely in NEXUS.</p>
+ * <p>The importer never launches MINOS and never opens a path coming from the
+ * export. Callers provide the JSON payload explicitly (for example through stdin),
+ * NEXUS validates it against the already-known local project root, and only the
+ * subset representable in the NEXUS code-intelligence model is promoted.</p>
  */
-public final class MinosCodeIndexImporter implements CodeIndexImporter {
+public final class MinosCodeIndexImporter {
 
     public static final String SOURCE_PROVIDER = "minos";
-    public static final String ENABLED_PROPERTY = "nexus.minos.enabled";
+    public static final long MAX_EXPORT_BYTES = 128L * 1024L * 1024L;
 
     private static final String CONTRACT_VERSION = "1";
     private static final String PRODUCER = "MINOS";
-    private static final String JAVA_COMMAND = "java";
-    private static final String BRIDGE_MAIN_CLASS = "com.minos.integration.nexus.NexusExportBridgeMain";
-    private static final String MINOS_CLASSPATH = "integrations/minos/minos-code-intelligence-all.jar";
-    private static final String MINOS_HOME = "integrations/minos/home";
-    private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(20);
-    private static final Duration MAX_TIMEOUT = Duration.ofSeconds(300);
-    private static final long MAX_EXPORT_BYTES = 128L * 1024L * 1024L;
 
-    private final Configuration configuration;
-    private final ExportRunner exportRunner;
     private final ObjectMapper objectMapper;
 
-    /** Creates a disabled importer used to purge stale MINOS data when integration is off. */
     public MinosCodeIndexImporter() {
-        this(null, null, new ObjectMapper());
+        this(new ObjectMapper());
     }
 
-    private MinosCodeIndexImporter(Configuration configuration) {
-        this(configuration, new ProcessExportRunner(configuration), new ObjectMapper());
-    }
-
-    MinosCodeIndexImporter(Configuration configuration, ExportRunner exportRunner, ObjectMapper objectMapper) {
-        this.configuration = configuration;
-        this.exportRunner = exportRunner;
+    MinosCodeIndexImporter(ObjectMapper objectMapper) {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
-        if (configuration != null) {
-            Objects.requireNonNull(exportRunner, "exportRunner");
-        }
     }
 
-    /**
-     * Enables MINOS only when {@code -Dnexus.minos.enabled=true} is set explicitly.
-     * The process classpath remains a fixed relative path under NEXUS_HOME.
-     */
-    public static MinosCodeIndexImporter fromPaths(NexusPaths paths) {
-        Objects.requireNonNull(paths, "paths");
-        return fromPaths(paths, Boolean.parseBoolean(System.getProperty(ENABLED_PROPERTY, "false")));
-    }
-
-    static MinosCodeIndexImporter fromPaths(NexusPaths paths, boolean enabled) {
-        Objects.requireNonNull(paths, "paths");
-        return enabled
-                ? new MinosCodeIndexImporter(new Configuration(paths.home(), DEFAULT_TIMEOUT))
-                : new MinosCodeIndexImporter();
-    }
-
-    public boolean enabled() {
-        return configuration != null;
-    }
-
-    @Override
-    public String sourceProvider() {
-        return SOURCE_PROVIDER;
-    }
-
-    @Override
-    public Optional<CodeIntelligenceSnapshot> importIndex(Path projectRoot) throws IOException {
-        if (!enabled()) {
-            return Optional.empty();
-        }
+    public CodeIntelligenceSnapshot importPayload(Path projectRoot, String payload) throws IOException {
         Path root = Objects.requireNonNull(projectRoot, "projectRoot").toRealPath();
-        String payload = exportRunner.export(root);
-        return Optional.of(parseExport(root, payload));
-    }
+        String documentPayload = Objects.requireNonNull(payload, "payload");
+        if (documentPayload.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_EXPORT_BYTES) {
+            throw new IOException("MINOS export exceeds the 128 MiB transport limit");
+        }
 
-    CodeIntelligenceSnapshot parseExport(Path projectRoot, String payload) throws IOException {
-        Path root = Objects.requireNonNull(projectRoot, "projectRoot").toRealPath();
         Set<String> safeProjectFiles = safeProjectFiles(root);
-        JsonNode document = objectMapper.readTree(Objects.requireNonNull(payload, "payload"));
+        JsonNode document = objectMapper.readTree(documentPayload);
         requireText(document, "contractVersion", CONTRACT_VERSION);
         requireText(document, "producer", PRODUCER);
 
@@ -368,87 +311,5 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
             throw new IOException("MINOS export field '" + field + "' must be positive");
         }
         return value;
-    }
-
-    record Configuration(Path nexusHome, Duration timeout) {
-        Configuration {
-            Objects.requireNonNull(nexusHome, "nexusHome");
-            Objects.requireNonNull(timeout, "timeout");
-            if (timeout.isZero() || timeout.isNegative() || timeout.compareTo(MAX_TIMEOUT) > 0) {
-                throw new IllegalArgumentException("timeout must be between 1 and 300 seconds");
-            }
-            nexusHome = nexusHome.toAbsolutePath().normalize();
-        }
-    }
-
-    @FunctionalInterface
-    interface ExportRunner {
-        String export(Path projectRoot) throws IOException;
-    }
-
-    private static final class ProcessExportRunner implements ExportRunner {
-
-        private final Configuration configuration;
-
-        private ProcessExportRunner(Configuration configuration) {
-            this.configuration = Objects.requireNonNull(configuration, "configuration");
-        }
-
-        @Override
-        public String export(Path projectRoot) throws IOException {
-            Path stdout = Files.createTempFile("nexus-minos-", ".json");
-            Path stderr = Files.createTempFile("nexus-minos-", ".err");
-            try {
-                ProcessBuilder builder = new ProcessBuilder(
-                        JAVA_COMMAND,
-                        "-cp",
-                        MINOS_CLASSPATH,
-                        BRIDGE_MAIN_CLASS);
-                builder.directory(configuration.nexusHome().toFile());
-                builder.environment().put("MINOS_HOME", MINOS_HOME);
-                Process process = builder
-                        .redirectOutput(stdout.toFile())
-                        .redirectError(stderr.toFile())
-                        .start();
-
-                try (BufferedWriter writer = process.outputWriter(StandardCharsets.UTF_8)) {
-                    writer.write(projectRoot.toString());
-                    writer.newLine();
-                }
-
-                boolean completed;
-                try {
-                    completed = process.waitFor(configuration.timeout().toMillis(), TimeUnit.MILLISECONDS);
-                } catch (InterruptedException exception) {
-                    Thread.currentThread().interrupt();
-                    process.destroyForcibly();
-                    throw new IOException("MINOS export interrupted", exception);
-                }
-                if (!completed) {
-                    process.destroyForcibly();
-                    throw new IOException("MINOS export timed out after " + configuration.timeout().toSeconds() + "s");
-                }
-                String errors = Files.readString(stderr, StandardCharsets.UTF_8);
-                if (process.exitValue() != 0) {
-                    throw new IOException(
-                            "MINOS export failed with exit code " + process.exitValue() + ": " + diagnostic(errors));
-                }
-                if (Files.size(stdout) > MAX_EXPORT_BYTES) {
-                    throw new IOException("MINOS export exceeds the 128 MiB transport limit");
-                }
-                return Files.readString(stdout, StandardCharsets.UTF_8);
-            } finally {
-                Files.deleteIfExists(stdout);
-                Files.deleteIfExists(stderr);
-            }
-        }
-
-        private static String diagnostic(String value) {
-            String normalized = value == null ? "" : value.replace('\r', ' ').replace('\n', ' ').trim();
-            if (normalized.isBlank()) {
-                return "no diagnostic";
-            }
-            return normalized.length() <= 500 ? normalized : normalized.substring(0, 500) + "...";
-        }
     }
 }
