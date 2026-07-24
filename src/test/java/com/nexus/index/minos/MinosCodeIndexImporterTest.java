@@ -24,7 +24,7 @@ class MinosCodeIndexImporterTest {
         ObjectMapper mapper = new ObjectMapper();
         ObjectNode document = baseDocument(mapper, project);
 
-        CodeIntelligenceSnapshot snapshot = new MinosCodeIndexImporter(mapper)
+        CodeIntelligenceSnapshot snapshot = new MinosCodeIndexImporter()
                 .importPayload(project, mapper.writeValueAsString(document));
 
         assertEquals("minos", snapshot.sourceProvider());
@@ -42,7 +42,7 @@ class MinosCodeIndexImporterTest {
         ObjectMapper mapper = new ObjectMapper();
         String payload = payload(mapper, project, false);
 
-        CodeIntelligenceSnapshot snapshot = new MinosCodeIndexImporter(mapper).importPayload(project, payload);
+        CodeIntelligenceSnapshot snapshot = new MinosCodeIndexImporter().importPayload(project, payload);
 
         assertEquals("minos", snapshot.sourceProvider());
         assertEquals(3, snapshot.symbols().size());
@@ -62,7 +62,7 @@ class MinosCodeIndexImporterTest {
         Path project = Files.createDirectories(temp.resolve("project"));
         Path other = Files.createDirectories(temp.resolve("other"));
         ObjectMapper mapper = new ObjectMapper();
-        MinosCodeIndexImporter importer = new MinosCodeIndexImporter(mapper);
+        MinosCodeIndexImporter importer = new MinosCodeIndexImporter();
 
         ObjectNode wrongVersion = baseDocument(mapper, project);
         wrongVersion.put("contractVersion", "2");
@@ -82,7 +82,7 @@ class MinosCodeIndexImporterTest {
     @Test
     void rejectsNullAndNonObjectJsonDocuments(@TempDir Path temp) throws Exception {
         Path project = Files.createDirectories(temp.resolve("project"));
-        MinosCodeIndexImporter importer = new MinosCodeIndexImporter(new ObjectMapper());
+        MinosCodeIndexImporter importer = new MinosCodeIndexImporter();
 
         assertThrows(java.io.IOException.class, () -> importer.importPayload(project, "null"));
         assertThrows(java.io.IOException.class, () -> importer.importPayload(project, "[]"));
@@ -96,7 +96,7 @@ class MinosCodeIndexImporterTest {
         Files.writeString(source.resolve("Greeter.ts"), "export class Greeter {}\n");
         ObjectMapper mapper = new ObjectMapper();
 
-        CodeIntelligenceSnapshot snapshot = new MinosCodeIndexImporter(mapper)
+        CodeIntelligenceSnapshot snapshot = new MinosCodeIndexImporter()
                 .importPayload(project, payload(mapper, project, true));
 
         assertEquals(2, snapshot.symbols().size());
@@ -114,7 +114,7 @@ class MinosCodeIndexImporterTest {
         Files.writeString(source.resolve("GreetingPort.ts"), "export interface GreetingPort {}\n");
         Files.writeString(source.resolve("Greeter.ts"), "export class Greeter {}\n");
         ObjectMapper mapper = new ObjectMapper();
-        MinosCodeIndexImporter importer = new MinosCodeIndexImporter(mapper);
+        MinosCodeIndexImporter importer = new MinosCodeIndexImporter();
 
         ObjectNode malformed = baseDocument(mapper, project);
         ObjectNode malformedRelation = malformed.withArray("relations").addObject();

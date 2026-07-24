@@ -39,15 +39,7 @@ public final class MinosCodeIndexImporter {
     private static final String CONTRACT_VERSION = "1";
     private static final String PRODUCER = "MINOS";
 
-    private final ObjectMapper objectMapper;
-
-    public MinosCodeIndexImporter() {
-        this(new ObjectMapper());
-    }
-
-    MinosCodeIndexImporter(ObjectMapper objectMapper) {
-        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
-    }
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public CodeIntelligenceSnapshot importPayload(Path projectRoot, String payload) throws IOException {
         Path root = Objects.requireNonNull(projectRoot, "projectRoot").toRealPath();
