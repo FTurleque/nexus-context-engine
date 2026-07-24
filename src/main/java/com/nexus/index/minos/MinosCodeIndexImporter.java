@@ -278,11 +278,15 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
         try {
             Path raw = Path.of(exportedPath);
             Path resolved = raw.isAbsolute() ? raw.normalize() : root.resolve(raw).normalize();
-            if (!resolved.startsWith(root) || resolved.equals(root)) {
+            if (!resolved.startsWith(root) || resolved.equals(root) || !Files.isRegularFile(resolved)) {
+                return null;
+            }
+            Path canonical = resolved.toRealPath();
+            if (!canonical.startsWith(root)) {
                 return null;
             }
             return root.relativize(resolved).toString().replace('\\', '/');
-        } catch (InvalidPathException exception) {
+        } catch (InvalidPathException | IOException exception) {
             return null;
         }
     }
@@ -382,7 +386,8 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
             if (javaCommand.isBlank()) {
                 throw new IllegalArgumentException("javaCommand must not be blank");
             }
-            if (timeout.isZero() || timeout.isNegative() || timeout.compareTo(Duration.ofSeconds(MAX_TIMEOUT_SECONDS)) > 0) {
+            if (timeout.isZero() || timeout.isNegative()
+                    || timeout.compareTo(Duration.ofSeconds(MAX_TIMEOUT_SECONDS)) > 0) {
                 throw new IllegalArgumentException("timeout must be between 1 and " + MAX_TIMEOUT_SECONDS + " seconds");
             }
         }
