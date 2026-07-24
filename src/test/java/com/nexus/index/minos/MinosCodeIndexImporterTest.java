@@ -59,15 +59,16 @@ class MinosCodeIndexImporterTest {
         Path project = Files.createDirectories(temp.resolve("project"));
         Path other = Files.createDirectories(temp.resolve("other"));
         ObjectMapper mapper = new ObjectMapper();
+        MinosCodeIndexImporter importer = new MinosCodeIndexImporter(mapper);
 
         ObjectNode wrongVersion = baseDocument(mapper, project);
         wrongVersion.put("contractVersion", "2");
-        assertThrows(java.io.IOException.class, () -> new MinosCodeIndexImporter(mapper)
-                .importPayload(project, mapper.writeValueAsString(wrongVersion)));
+        String wrongVersionPayload = mapper.writeValueAsString(wrongVersion);
+        assertThrows(java.io.IOException.class, () -> importer.importPayload(project, wrongVersionPayload));
 
         ObjectNode wrongRoot = baseDocument(mapper, other);
-        assertThrows(java.io.IOException.class, () -> new MinosCodeIndexImporter(mapper)
-                .importPayload(project, mapper.writeValueAsString(wrongRoot)));
+        String wrongRootPayload = mapper.writeValueAsString(wrongRoot);
+        assertThrows(java.io.IOException.class, () -> importer.importPayload(project, wrongRootPayload));
     }
 
     @Test
