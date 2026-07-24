@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.nexus.context.ContextBundle;
 import com.nexus.context.ContextItem;
+import com.nexus.index.CodeIntelligenceSnapshot;
 import com.nexus.index.CodeSymbol;
 import com.nexus.index.IndexStatistics;
 import com.nexus.index.IndexingReport;
@@ -92,6 +93,24 @@ final class CliRenderer {
                 report.statistics().relations(),
                 report.duration().toMillis(),
                 report.fullSearchRebuild() ? " (reconstruction complète)" : "");
+    }
+
+    void renderMinosImport(ProjectDescriptor project, CodeIntelligenceSnapshot snapshot) throws IOException {
+        if (json) {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("command", "minos-import");
+            payload.put("project", projectMap(project));
+            payload.put("sourceProvider", snapshot.sourceProvider());
+            payload.put("symbols", snapshot.symbols().size());
+            payload.put("relations", snapshot.relations().size());
+            writeJson(out, payload);
+            return;
+        }
+        out.printf(
+                "MINOS importé pour %s : %d symbole(s), %d relation(s)%n",
+                project.name(),
+                snapshot.symbols().size(),
+                snapshot.relations().size());
     }
 
     void renderSearch(
@@ -245,6 +264,7 @@ final class CliRenderer {
                 "project add <chemin> [nom] [--json]",
                 "project list [--json]",
                 "index <id-ou-nom> [--rebuild] [--deep-java] [--json]",
+                "minos-import <id-ou-nom> < export-minos.json [--json]",
                 "search <id-ou-nom> <requête> [--limit N] [--explain] [--json]",
                 "context <id-ou-nom> <requête> [--budget N] [--explain] [--json]",
                 "inspect <id-ou-nom> [--json]",
