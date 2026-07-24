@@ -66,6 +66,11 @@ class MinosCodeIndexImporterTest {
         String wrongVersionPayload = mapper.writeValueAsString(wrongVersion);
         assertThrows(java.io.IOException.class, () -> importer.importPayload(project, wrongVersionPayload));
 
+        ObjectNode wrongProducer = baseDocument(mapper, project);
+        wrongProducer.put("producer", "OTHER");
+        String wrongProducerPayload = mapper.writeValueAsString(wrongProducer);
+        assertThrows(java.io.IOException.class, () -> importer.importPayload(project, wrongProducerPayload));
+
         ObjectNode wrongRoot = baseDocument(mapper, other);
         String wrongRootPayload = mapper.writeValueAsString(wrongRoot);
         assertThrows(java.io.IOException.class, () -> importer.importPayload(project, wrongRootPayload));
@@ -84,8 +89,34 @@ class MinosCodeIndexImporterTest {
 
         assertEquals(2, snapshot.symbols().size());
         assertTrue(snapshot.symbols().stream().noneMatch(symbol ->
-                "Outside".equals(symbol.symbol().name()) || "Absolute".equals(symbol.symbol().name())));
+                "Outside".equals(symbol.symbol().name())
+                        || "NormalizedTraversal".equals(symbol.symbol().name())
+                        || "Absolute".equals(symbol.symbol().name())));
         assertEquals(1, snapshot.relations().size());
+    }
+
+    @Test
+    void rejectsMalformedOrMissingDerivedConfidence(@TempDir Path temp) throws Exception {
+        Path project = Files.createDirectories(temp.resolve("project"));
+        Path source = Files.createDirectories(project.resolve("src"));
+        Files.writeString(source.resolve("GreetingPort.ts"), "export interface GreetingPort {}\n");
+        Files.writeString(source.resolve("Greeter.ts"), "export class Greeter {}\n");
+        ObjectMapper mapper = new ObjectMapper();
+        MinosCodeIndexImporter importer = new MinosCodeIndexImporter(mapper);
+
+        ObjectNode malformed = baseDocument(mapper, project);
+        ObjectNode malformedRelation = malformed.withArray("relations").addObject();
+        relation(malformedRelation, "malformed", "src/Greeter.ts", "IMPLEMENTS", "Greeter", "GreetingPort");
+        malformedRelation.put("confidence", "certain");
+        String malformedPayload = mapper.writeValueAsString(malformed);
+        assertThrows(java.io.IOException.class, () -> importer.importPayload(project, malformedPayload));
+
+        ObjectNode derived = baseDocument(mapper, project);
+        ObjectNode derivedRelation = derived.withArray("relations").addObject();
+        relation(derivedRelation, "derived", "src/Greeter.ts", "IMPLEMENTS", "Greeter", "GreetingPort");
+        derivedRelation.put("nature", "DERIVED");
+        String derivedPayload = mapper.writeValueAsString(derived);
+        assertThrows(java.io.IOException.class, () -> importer.importPayload(project, derivedPayload));
     }
 
     private static String payload(ObjectMapper mapper, Path project, boolean includeUnsafe) throws Exception {
@@ -96,6 +127,8 @@ class MinosCodeIndexImporterTest {
         symbol(symbols.addObject(), "field", "src/Greeter.ts", "FIELD", "value", "Greeter.value", 2, 2);
         if (includeUnsafe) {
             symbol(symbols.addObject(), "traversal", "../outside.ts", "CLASS", "Outside", "Outside", 1, 1);
+            symbol(symbols.addObject(), "normalized-traversal", "src/../src/GreetingPort.ts", "CLASS",
+                    "NormalizedTraversal", "NormalizedTraversal", 1, 1);
             symbol(symbols.addObject(), "absolute", project.resolve("src/GreetingPort.ts").toAbsolutePath().toString(),
                     "CLASS", "Absolute", "Absolute", 1, 1);
         }

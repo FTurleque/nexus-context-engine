@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -57,8 +58,9 @@ public final class MinosCodeIndexImporter {
         }
 
         Set<String> safeProjectFiles = safeProjectFiles(root);
-        JsonNode document = objectMapper.readTree(documentPayload);
-        if (document == null || !document.isObject()) {
+        JsonNode document = Optional.ofNullable(objectMapper.readTree(documentPayload))
+                .orElseThrow(() -> new IOException("MINOS export root must be a JSON object"));
+        if (!document.isObject()) {
             throw new IOException("MINOS export root must be a JSON object");
         }
         requireText(document, "contractVersion", CONTRACT_VERSION);
@@ -195,7 +197,10 @@ public final class MinosCodeIndexImporter {
 
     private static double confidence(JsonNode node) throws IOException {
         JsonNode confidence = node.get("confidence");
-        if (confidence != null && confidence.isNumber()) {
+        if (confidence != null && !confidence.isNull()) {
+            if (!confidence.isNumber()) {
+                throw new IOException("MINOS export contains a non-numeric relation confidence");
+            }
             double value = confidence.asDouble();
             if (Double.isFinite(value) && value >= 0.0d && value <= 1.0d) {
                 return value;
@@ -240,6 +245,11 @@ public final class MinosCodeIndexImporter {
             Path raw = Path.of(exportedPath);
             if (raw.isAbsolute()) {
                 return null;
+            }
+            for (Path segment : raw) {
+                if ("..".equals(segment.toString())) {
+                    return null;
+                }
             }
             Path normalized = raw.normalize();
             if (normalized.getNameCount() == 0 || normalized.startsWith("..")) {
