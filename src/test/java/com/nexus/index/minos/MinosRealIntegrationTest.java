@@ -1,7 +1,6 @@
 package com.nexus.index.minos;
 
 import com.nexus.config.NexusPaths;
-import com.nexus.index.CodeIndexImporter;
 import com.nexus.index.CodeIntelligenceSnapshot;
 import com.nexus.index.IndexRepository;
 import com.nexus.index.IndexedSymbol;
@@ -23,6 +22,7 @@ import com.nexus.search.lucene.LuceneSearchIndex;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -38,6 +38,7 @@ class MinosRealIntegrationTest {
 
     private static final String REPLAY_PROPERTY = "nexus.minos.integration.replay";
     private static final Path REPLAY_ROOT = Path.of("target", "m13-replay").toAbsolutePath().normalize();
+    private static final Path EXPORT_FILE = REPLAY_ROOT.resolve("minos-export.json");
 
     @Test
     void realMinosExportFeedsNexusSearch() throws Exception {
@@ -46,13 +47,11 @@ class MinosRealIntegrationTest {
 
         NexusPaths paths = new NexusPaths(REPLAY_ROOT.resolve("nexus-home"));
         Path fixture = REPLAY_ROOT.resolve("fixture").toRealPath();
-        Assumptions.assumeTrue(Files.isRegularFile(paths.minosIntegrationJar()),
-                () -> "missing conventional MINOS JAR in replay sandbox");
-        Assumptions.assumeTrue(Files.isDirectory(paths.minosIntegrationHome()),
-                () -> "missing prepared MINOS integration home in replay sandbox");
+        Assumptions.assumeTrue(Files.isRegularFile(EXPORT_FILE),
+                () -> "missing MINOS export in deterministic replay sandbox");
 
-        MinosCodeIndexImporter importer = MinosCodeIndexImporter.fromPaths(paths, true);
-        CodeIntelligenceSnapshot exported = importer.importIndex(fixture).orElseThrow();
+        String payload = Files.readString(EXPORT_FILE, StandardCharsets.UTF_8);
+        CodeIntelligenceSnapshot exported = new MinosCodeIndexImporter().importPayload(fixture, payload);
         assertFalse(exported.symbols().isEmpty());
         assertTrue(exported.symbols().stream().anyMatch(symbol ->
                 "GreetingPort".equals(symbol.symbol().name())));
@@ -67,9 +66,9 @@ class MinosRealIntegrationTest {
                 indexRepository,
                 new ProjectScanner(),
                 List.of(new JavaParserLanguageAnalyzer(), new MarkdownLanguageAnalyzer()),
-                searchIndex,
-                List.<CodeIndexImporter>of(importer));
+                searchIndex);
         indexingService.rebuild(project.id());
+        indexRepository.replaceExternalCodeIntelligence(project.id(), exported);
 
         List<IndexedSymbol> indexedSymbols = indexRepository.findSymbols(project.id());
         assertTrue(indexedSymbols.stream().anyMatch(symbol ->
