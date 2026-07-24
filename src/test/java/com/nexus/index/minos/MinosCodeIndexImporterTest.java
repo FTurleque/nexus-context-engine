@@ -44,6 +44,9 @@ class MinosCodeIndexImporterTest {
     @Test
     void mapsVersionedMinosFactsConservatively(@TempDir Path temp) throws Exception {
         Path project = Files.createDirectories(temp.resolve("project"));
+        Path source = Files.createDirectories(project.resolve("src"));
+        Files.writeString(source.resolve("GreetingPort.ts"), "export interface GreetingPort {}\n");
+        Files.writeString(source.resolve("Greeter.ts"), "export class Greeter {}\n");
         Path jar = Files.createFile(temp.resolve("minos.jar"));
         ObjectMapper mapper = new ObjectMapper();
         String payload = payload(mapper, project);
