@@ -37,16 +37,15 @@ if ($java24Version -notmatch 'version "24(?:\.|\")') {
 $replayRoot = Join-Path (Get-Location) 'target\m13-replay'
 $nexusHome = Join-Path $replayRoot 'nexus-home'
 $replayFixture = Join-Path $replayRoot 'fixture'
-$integrationDir = Join-Path $nexusHome 'integrations\minos'
-$minosHome = Join-Path $integrationDir 'home'
-$installedJar = Join-Path $integrationDir 'minos-code-intelligence-all.jar'
+$minosHome = Join-Path $replayRoot 'minos-home'
+$exportJson = Join-Path $replayRoot 'minos-export.json'
 
 if (Test-Path $replayRoot) {
     Remove-Item -Recurse -Force $replayRoot
 }
 New-Item -ItemType Directory -Force -Path $minosHome | Out-Null
+New-Item -ItemType Directory -Force -Path $nexusHome | Out-Null
 Copy-Item -Recurse -Force $fixturePath $replayFixture
-Copy-Item -Force $jar $installedJar
 
 $scip = Join-Path $replayFixture '.minos-m0\scip-typescript\index.scip'
 if (-not (Test-Path $scip -PathType Leaf)) {
@@ -56,33 +55,37 @@ if (-not (Test-Path $scip -PathType Leaf)) {
 Write-Host 'NEXUS MINOS integration replay'
 Write-Host "  NEXUS Java : $java21"
 Write-Host "  MINOS Java : $java24"
-Write-Host "  MINOS JAR  : $installedJar"
+Write-Host "  MINOS JAR  : $jar"
 Write-Host "  NEXUS_HOME : $nexusHome"
 Write-Host "  Fixture    : $replayFixture"
 
 function Invoke-Minos {
     param([string[]]$Arguments)
 
-    & $java24 "-Dminos.home=$minosHome" -jar $installedJar @Arguments
+    $output = & $java24 "-Dminos.home=$minosHome" -jar $jar @Arguments
     if ($LASTEXITCODE -ne 0) {
-        throw "MINOS fixture setup failed with exit code $LASTEXITCODE"
+        throw "MINOS command failed with exit code $LASTEXITCODE"
     }
+    return $output
 }
 
-$previousPath = $env:PATH
 try {
-    Invoke-Minos @('project', 'add', $replayFixture, '--name', 'm13-fixture')
+    Invoke-Minos @('project', 'add', $replayFixture, '--name', 'm13-fixture') | Out-Null
     Invoke-Minos @(
         'index', 'm13-fixture',
         '--scip', $scip,
         '--provider', 'scip-typescript',
         '--provider-version', '0.4.0'
-    )
+    ) | Out-Null
 
-    # Maven remains on Java 21 through JAVA_HOME. The MINOS child process launched
-    # by NEXUS resolves the fixed command `java` from PATH, so prepend Java 24 here.
-    $env:PATH = "$(Split-Path -Parent $java24);$previousPath"
+    $export = Invoke-Minos @('nexus-export', '--root', $replayFixture)
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText(
+        $exportJson,
+        ($export -join [Environment]::NewLine),
+        $utf8NoBom)
 
+    $env:NEXUS_HOME = $nexusHome
     mvn `
         '-Dtest=MinosRealIntegrationTest' `
         '-Dnexus.minos.integration.replay=true' `
@@ -95,7 +98,7 @@ try {
     Write-Host 'M13 MINOS -> NEXUS replay SUCCESS'
 }
 finally {
-    $env:PATH = $previousPath
+    Remove-Item Env:NEXUS_HOME -ErrorAction SilentlyContinue
     if (Test-Path $replayRoot) {
         Remove-Item -Recurse -Force $replayRoot
     }
