@@ -45,6 +45,7 @@ import com.nexus.search.lucene.LuceneSearchIndex;
 import com.nexus.token.HeuristicTokenEstimator;
 import com.nexus.token.TokenEstimator;
 
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
@@ -76,7 +77,7 @@ public final class NexusCli {
     }
 
     static int execute(String[] rawArgs, PrintStream out, PrintStream err) {
-        return execute(rawArgs, InputStream.nullInputStream(), out, err);
+        return execute(rawArgs, new ByteArrayInputStream(new byte[0]), out, err);
     }
 
     static int execute(String[] rawArgs, InputStream input, PrintStream out, PrintStream err) {
