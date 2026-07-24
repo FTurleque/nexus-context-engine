@@ -122,6 +122,9 @@ class MinosCodeIndexImporterTest {
         symbol(symbols.addObject(), "port", "src/GreetingPort.ts", "INTERFACE", "GreetingPort", "GreetingPort", 1, 3);
         symbol(symbols.addObject(), "greeter", "src/Greeter.ts", "CLASS", "Greeter", "Greeter", 1, 5);
         symbol(symbols.addObject(), "field", "src/Greeter.ts", "FIELD", "value", "Greeter.value", 2, 2);
+        symbol(symbols.addObject(), "traversal", "../outside.ts", "CLASS", "Outside", "Outside", 1, 1);
+        symbol(symbols.addObject(), "absolute", project.resolve("src/GreetingPort.ts").toAbsolutePath().toString(),
+                "CLASS", "Absolute", "Absolute", 1, 1);
 
         ArrayNode relations = document.withArray("relations");
         relation(relations.addObject(), "implements", "src/Greeter.ts", "IMPLEMENTS", "Greeter", "GreetingPort");
