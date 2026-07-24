@@ -31,30 +31,27 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Opt-in cross-repository replay using a real, pre-installed MINOS Java-24 shaded JAR.
+ * Opt-in cross-repository replay using the deterministic sandbox prepared by
+ * {@code scripts/validate-minos-integration.ps1}.
  */
 class MinosRealIntegrationTest {
 
-    private static final String HOME_PROPERTY = "nexus.minos.integration.home";
-    private static final String FIXTURE_PROPERTY = "nexus.minos.integration.fixture";
+    private static final String REPLAY_PROPERTY = "nexus.minos.integration.replay";
+    private static final Path REPLAY_ROOT = Path.of("target", "m13-replay").toAbsolutePath().normalize();
 
     @Test
     void realMinosExportFeedsNexusSearch() throws Exception {
-        String configuredHome = System.getProperty(HOME_PROPERTY);
-        String configuredFixture = System.getProperty(FIXTURE_PROPERTY);
-        Assumptions.assumeTrue(configuredHome != null && !configuredHome.isBlank(),
-                () -> "opt-in: provide -D" + HOME_PROPERTY);
-        Assumptions.assumeTrue(configuredFixture != null && !configuredFixture.isBlank(),
-                () -> "opt-in: provide -D" + FIXTURE_PROPERTY);
+        Assumptions.assumeTrue(Boolean.getBoolean(REPLAY_PROPERTY),
+                () -> "opt-in: provide -D" + REPLAY_PROPERTY + "=true via the validation script");
 
-        NexusPaths paths = new NexusPaths(Path.of(configuredHome).toRealPath());
-        Path fixture = Path.of(configuredFixture).toRealPath();
+        NexusPaths paths = new NexusPaths(REPLAY_ROOT.resolve("nexus-home"));
+        Path fixture = REPLAY_ROOT.resolve("fixture").toRealPath();
         Assumptions.assumeTrue(Files.isRegularFile(paths.minosIntegrationJar()),
-                () -> "missing conventional MINOS JAR: " + paths.minosIntegrationJar());
+                () -> "missing conventional MINOS JAR in replay sandbox");
         Assumptions.assumeTrue(Files.isDirectory(paths.minosIntegrationHome()),
-                () -> "missing prepared MINOS integration home: " + paths.minosIntegrationHome());
+                () -> "missing prepared MINOS integration home in replay sandbox");
 
-        MinosCodeIndexImporter importer = MinosCodeIndexImporter.fromPaths(paths);
+        MinosCodeIndexImporter importer = MinosCodeIndexImporter.fromPaths(paths, true);
         CodeIntelligenceSnapshot exported = importer.importIndex(fixture).orElseThrow();
         assertFalse(exported.symbols().isEmpty());
         assertTrue(exported.symbols().stream().anyMatch(symbol ->
