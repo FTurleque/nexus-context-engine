@@ -36,6 +36,21 @@ public record NexusPaths(Path home) {
         return home.resolve("indexes");
     }
 
+    public Path integrationsDirectory() {
+        return home.resolve("integrations");
+    }
+
+    public Path minosIntegrationDirectory() {
+        return integrationsDirectory().resolve("minos");
+    }
+
+    /**
+     * Conventional opt-in location for the MINOS shaded JAR.
+     */
+    public Path minosIntegrationJar() {
+        return minosIntegrationDirectory().resolve("minos-code-intelligence-all.jar");
+    }
+
     public Path projectLuceneIndex(UUID projectId) {
         Objects.requireNonNull(projectId, "projectId");
         return indexesDirectory().resolve(projectId.toString()).resolve("lucene");
