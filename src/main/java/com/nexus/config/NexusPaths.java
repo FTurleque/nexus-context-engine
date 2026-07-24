@@ -51,6 +51,13 @@ public record NexusPaths(Path home) {
         return minosIntegrationDirectory().resolve("minos-code-intelligence-all.jar");
     }
 
+    /**
+     * Dedicated MINOS_HOME used only by the optional NEXUS integration.
+     */
+    public Path minosIntegrationHome() {
+        return minosIntegrationDirectory().resolve("home");
+    }
+
     public Path projectLuceneIndex(UUID projectId) {
         Objects.requireNonNull(projectId, "projectId");
         return indexesDirectory().resolve(projectId.toString()).resolve("lucene");
