@@ -15,7 +15,9 @@ import com.nexus.context.source.instruction.ClaudeInstructionProvider;
 import com.nexus.context.source.instruction.CopilotInstructionProvider;
 import com.nexus.context.source.instruction.GeminiInstructionProvider;
 import com.nexus.context.source.skill.LocalAgentSkillsProvider;
+import com.nexus.index.CodeIndexImporter;
 import com.nexus.index.CodeIntelligenceProvider;
+import com.nexus.index.CodeIntelligenceSnapshot;
 import com.nexus.index.IndexRepository;
 import com.nexus.index.IndexStatistics;
 import com.nexus.index.IndexingReport;
@@ -23,6 +25,7 @@ import com.nexus.index.ProjectIndexingService;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.jdt.JdtLanguageServerCodeIntelligenceProvider;
 import com.nexus.index.markdown.MarkdownLanguageAnalyzer;
+import com.nexus.index.minos.MinosCodeIndexImporter;
 import com.nexus.index.scan.ProjectScanner;
 import com.nexus.index.scip.ScipCodeIndexImporter;
 import com.nexus.persistence.sqlite.SqliteDatabase;
@@ -42,7 +45,10 @@ import com.nexus.search.lucene.LuceneSearchIndex;
 import com.nexus.token.HeuristicTokenEstimator;
 import com.nexus.token.TokenEstimator;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -57,24 +63,29 @@ public final class NexusCli {
     static final int EXIT_RUNTIME_ERROR = 1;
     static final int EXIT_USAGE_ERROR = 2;
 
-    private static final Set<String> COMMANDS = Set.of("project", "index", "search", "context", "inspect");
+    private static final Set<String> COMMANDS = Set.of(
+            "project", "index", "minos-import", "search", "context", "inspect");
 
     private NexusCli() {
     }
 
     public static void main(String[] args) {
-        int exitCode = execute(args, System.out, System.err);
+        int exitCode = execute(args, System.in, System.out, System.err);
         if (exitCode != EXIT_SUCCESS) {
             System.exit(exitCode);
         }
     }
 
     static int execute(String[] rawArgs, PrintStream out, PrintStream err) {
+        return execute(rawArgs, new ByteArrayInputStream(new byte[0]), out, err);
+    }
+
+    static int execute(String[] rawArgs, InputStream input, PrintStream out, PrintStream err) {
         boolean json = Arrays.asList(rawArgs).contains("--json");
         CliRenderer renderer = new CliRenderer(out, err, json);
         try {
             String[] args = withoutJsonFlag(rawArgs);
-            run(args, renderer);
+            run(args, input, renderer);
             return EXIT_SUCCESS;
         } catch (IllegalArgumentException exception) {
             renderer.renderError(exception.getMessage(), EXIT_USAGE_ERROR);
@@ -85,7 +96,7 @@ public final class NexusCli {
         }
     }
 
-    private static void run(String[] args, CliRenderer renderer) throws Exception {
+    private static void run(String[] args, InputStream input, CliRenderer renderer) throws Exception {
         if (args.length == 0 || "--help".equals(args[0]) || "help".equals(args[0])) {
             renderer.renderUsage();
             return;
@@ -108,6 +119,7 @@ public final class NexusCli {
                 JdtLanguageServerCodeIntelligenceProvider.fromEnvironment(paths)
                         .<List<CodeIntelligenceProvider>>map(provider -> List.of(provider))
                         .orElseGet(List::of);
+        List<CodeIndexImporter> codeIndexImporters = List.of(new ScipCodeIndexImporter());
         ProjectIndexingService indexingService = new ProjectIndexingService(
                 projectRepository,
                 indexRepository,
@@ -116,7 +128,7 @@ public final class NexusCli {
                         new JavaParserLanguageAnalyzer(),
                         new MarkdownLanguageAnalyzer()),
                 searchIndex,
-                List.of(new ScipCodeIndexImporter()),
+                codeIndexImporters,
                 codeIntelligenceProviders);
         SearchService searchService = new SearchService(
                 List.of(
@@ -145,6 +157,7 @@ public final class NexusCli {
         switch (args[0]) {
             case "project" -> handleProject(args, registry, renderer);
             case "index" -> handleIndex(args, projectRepository, indexingService, renderer);
+            case "minos-import" -> handleMinosImport(args, input, projectRepository, indexRepository, renderer);
             case "search" -> handleSearch(args, projectRepository, searchService, renderer);
             case "context" -> handleContext(args, projectRepository, contextBuilder, renderer);
             case "inspect" -> handleInspect(args, projectRepository, indexRepository, renderer);
@@ -210,6 +223,30 @@ public final class NexusCli {
         }
         ProjectDescriptor updatedProject = projectRepository.findById(project.id()).orElse(project);
         renderer.renderIndex(updatedProject, report);
+    }
+
+    private static void handleMinosImport(
+            String[] args,
+            InputStream input,
+            ProjectRepository projectRepository,
+            IndexRepository indexRepository,
+            CliRenderer renderer) throws Exception {
+        if (args.length != 2) {
+            throw new IllegalArgumentException("Usage : nexus minos-import <id-ou-nom> < export-minos.json [--json]");
+        }
+        ProjectDescriptor project = resolveProject(projectRepository, args[1]);
+        int limit = Math.toIntExact(MinosCodeIndexImporter.MAX_EXPORT_BYTES) + 1;
+        byte[] bytes = input.readNBytes(limit);
+        if (bytes.length > MinosCodeIndexImporter.MAX_EXPORT_BYTES) {
+            throw new IllegalArgumentException("Le payload MINOS dépasse la limite de 128 MiB");
+        }
+        String payload = new String(bytes, StandardCharsets.UTF_8);
+        if (payload.isBlank()) {
+            throw new IllegalArgumentException("Le payload MINOS doit être fourni sur stdin");
+        }
+        CodeIntelligenceSnapshot snapshot = new MinosCodeIndexImporter().importPayload(project.rootPath(), payload);
+        indexRepository.replaceExternalCodeIntelligence(project.id(), snapshot);
+        renderer.renderMinosImport(project, snapshot);
     }
 
     private static void handleSearch(

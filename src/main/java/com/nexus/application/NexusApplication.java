@@ -15,7 +15,9 @@ import com.nexus.context.source.instruction.ClaudeInstructionProvider;
 import com.nexus.context.source.instruction.CopilotInstructionProvider;
 import com.nexus.context.source.instruction.GeminiInstructionProvider;
 import com.nexus.context.source.skill.LocalAgentSkillsProvider;
+import com.nexus.index.CodeIndexImporter;
 import com.nexus.index.CodeIntelligenceProvider;
+import com.nexus.index.CodeIntelligenceSnapshot;
 import com.nexus.index.IndexRepository;
 import com.nexus.index.IndexStatistics;
 import com.nexus.index.IndexedSymbol;
@@ -25,6 +27,7 @@ import com.nexus.index.SymbolRelation;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.jdt.JdtLanguageServerCodeIntelligenceProvider;
 import com.nexus.index.markdown.MarkdownLanguageAnalyzer;
+import com.nexus.index.minos.MinosCodeIndexImporter;
 import com.nexus.index.scan.ProjectScanner;
 import com.nexus.index.scip.ScipCodeIndexImporter;
 import com.nexus.persistence.sqlite.SqliteDatabase;
@@ -126,6 +129,8 @@ public final class NexusApplication {
                         .<List<CodeIntelligenceProvider>>map(List::of)
                         .orElseGet(List::of);
 
+        List<CodeIndexImporter> codeIndexImporters = List.of(new ScipCodeIndexImporter());
+
         List<SearchStrategy> searchStrategies = new ArrayList<>();
         searchStrategies.add(new LuceneFileSearchStrategy(searchIndex));
         searchStrategies.add(new SymbolSearchStrategy(indexRepository));
@@ -148,7 +153,7 @@ public final class NexusApplication {
                         new JavaParserLanguageAnalyzer(),
                         new MarkdownLanguageAnalyzer()),
                 searchIndex,
-                List.of(new ScipCodeIndexImporter()),
+                codeIndexImporters,
                 codeIntelligenceProviders,
                 semanticIndexingService);
 
@@ -240,6 +245,17 @@ public final class NexusApplication {
         }
         ProjectDescriptor updatedProject = projectRepository.findById(projectId).orElse(project);
         return new IndexOperation(updatedProject, report);
+    }
+
+    /**
+     * Replaces the explicit MINOS external snapshot for a registered project.
+     * The payload is supplied by the caller; NEXUS never launches MINOS itself.
+     */
+    public CodeIntelligenceSnapshot importMinos(UUID projectId, String payload) throws IOException {
+        ProjectDescriptor project = getProject(projectId);
+        CodeIntelligenceSnapshot snapshot = new MinosCodeIndexImporter().importPayload(project.rootPath(), payload);
+        indexRepository.replaceExternalCodeIntelligence(projectId, snapshot);
+        return snapshot;
     }
 
     public IndexStatistics inspect(UUID projectId) {
