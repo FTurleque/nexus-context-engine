@@ -3,42 +3,39 @@ package com.nexus.index.minos;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.nexus.config.NexusPaths;
 import com.nexus.index.CodeIntelligenceSnapshot;
 import com.nexus.index.RelationKind;
 import com.nexus.index.SymbolKind;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.InputStream;
+import javax.tools.JavaCompiler;
+import javax.tools.ToolProvider;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.Locale;
-import java.util.Map;
-import java.util.jar.Attributes;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
-import java.util.jar.Manifest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MinosCodeIndexImporterTest {
 
     @Test
-    void integrationIsDisabledByDefaultAndRequiresExplicitJava24Command(@TempDir Path temp) throws Exception {
-        MinosCodeIndexImporter disabled = MinosCodeIndexImporter.fromEnvironment(Map.of());
+    void integrationIsOptInThroughConventionalJarLocation(@TempDir Path temp) throws Exception {
+        NexusPaths paths = new NexusPaths(Files.createDirectories(temp.resolve("nexus-home")));
+        MinosCodeIndexImporter disabled = MinosCodeIndexImporter.fromPaths(paths);
         assertFalse(disabled.enabled());
         assertTrue(disabled.importIndex(Files.createDirectories(temp.resolve("project"))).isEmpty());
 
-        Path jar = Files.createFile(temp.resolve("minos.jar"));
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> MinosCodeIndexImporter.fromEnvironment(Map.of(
-                        MinosCodeIndexImporter.JAR_ENVIRONMENT_VARIABLE, jar.toString())));
-        assertTrue(exception.getMessage().contains(MinosCodeIndexImporter.JAVA_ENVIRONMENT_VARIABLE));
+        Files.createDirectories(paths.minosIntegrationDirectory());
+        Files.write(paths.minosIntegrationJar(), new byte[]{0});
+        assertTrue(MinosCodeIndexImporter.fromPaths(paths).enabled());
     }
 
     @Test
@@ -47,13 +44,11 @@ class MinosCodeIndexImporterTest {
         Path source = Files.createDirectories(project.resolve("src"));
         Files.writeString(source.resolve("GreetingPort.ts"), "export interface GreetingPort {}\n");
         Files.writeString(source.resolve("Greeter.ts"), "export class Greeter {}\n");
-        Path jar = Files.createFile(temp.resolve("minos.jar"));
+        NexusPaths paths = installPlaceholderJar(temp.resolve("nexus-home"));
         ObjectMapper mapper = new ObjectMapper();
         String payload = payload(mapper, project);
         MinosCodeIndexImporter.Configuration configuration = new MinosCodeIndexImporter.Configuration(
-                jar,
-                null,
-                "java24",
+                paths.home(),
                 Duration.ofSeconds(10));
         MinosCodeIndexImporter importer = new MinosCodeIndexImporter(
                 configuration,
@@ -77,12 +72,10 @@ class MinosCodeIndexImporterTest {
     void rejectsForeignContractVersionAndProjectRoot(@TempDir Path temp) throws Exception {
         Path project = Files.createDirectories(temp.resolve("project"));
         Path other = Files.createDirectories(temp.resolve("other"));
-        Path jar = Files.createFile(temp.resolve("minos.jar"));
+        NexusPaths paths = installPlaceholderJar(temp.resolve("nexus-home"));
         ObjectMapper mapper = new ObjectMapper();
         MinosCodeIndexImporter.Configuration configuration = new MinosCodeIndexImporter.Configuration(
-                jar,
-                null,
-                "java24",
+                paths.home(),
                 Duration.ofSeconds(10));
 
         ObjectNode wrongVersion = baseDocument(mapper, project);
@@ -102,24 +95,25 @@ class MinosCodeIndexImporterTest {
     }
 
     @Test
-    void executesConfiguredExporterAsLocalProcess(@TempDir Path temp) throws Exception {
+    void executesFixedBridgeCommandAndSendsProjectRootOnStdin(@TempDir Path temp) throws Exception {
         Path project = Files.createDirectories(temp.resolve("project"));
-        Path fakeJar = createFakeExporterJar(temp.resolve("fake-minos.jar"));
-        String javaCommand = Path.of(
-                System.getProperty("java.home"),
-                "bin",
-                isWindows() ? "java.exe" : "java").toString();
-        MinosCodeIndexImporter importer = new MinosCodeIndexImporter(
-                new MinosCodeIndexImporter.Configuration(
-                        fakeJar,
-                        temp.resolve("minos-home"),
-                        javaCommand,
-                        Duration.ofSeconds(10)));
+        NexusPaths paths = new NexusPaths(Files.createDirectories(temp.resolve("nexus-home")));
+        Files.createDirectories(paths.minosIntegrationDirectory());
+        createFakeBridgeJar(paths.minosIntegrationJar(), temp.resolve("fake-bridge"));
 
+        MinosCodeIndexImporter importer = MinosCodeIndexImporter.fromPaths(paths);
         CodeIntelligenceSnapshot snapshot = importer.importIndex(project).orElseThrow();
+
         assertEquals("minos", snapshot.sourceProvider());
         assertTrue(snapshot.symbols().isEmpty());
         assertTrue(snapshot.relations().isEmpty());
+    }
+
+    private static NexusPaths installPlaceholderJar(Path home) throws Exception {
+        NexusPaths paths = new NexusPaths(Files.createDirectories(home));
+        Files.createDirectories(paths.minosIntegrationDirectory());
+        Files.write(paths.minosIntegrationJar(), new byte[]{0});
+        return paths;
     }
 
     private static String payload(ObjectMapper mapper, Path project) throws Exception {
@@ -196,24 +190,44 @@ class MinosCodeIndexImporterTest {
         node.putArray("evidence");
     }
 
-    private static Path createFakeExporterJar(Path jar) throws Exception {
-        Manifest manifest = new Manifest();
-        manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
-        manifest.getMainAttributes().put(Attributes.Name.MAIN_CLASS, FakeMinosExportMain.class.getName());
-        String resource = FakeMinosExportMain.class.getName().replace('.', '/') + ".class";
-        try (InputStream input = FakeMinosExportMain.class.getClassLoader().getResourceAsStream(resource);
-             JarOutputStream output = new JarOutputStream(Files.newOutputStream(jar), manifest)) {
-            if (input == null) {
-                throw new IllegalStateException("missing test class resource: " + resource);
-            }
-            output.putNextEntry(new JarEntry(resource));
-            input.transferTo(output);
+    private static void createFakeBridgeJar(Path jar, Path work) throws Exception {
+        Path sourceRoot = Files.createDirectories(work.resolve("src/com/minos/integration/nexus"));
+        Path classes = Files.createDirectories(work.resolve("classes"));
+        Path source = sourceRoot.resolve("NexusExportBridgeMain.java");
+        Files.writeString(source, """
+                package com.minos.integration.nexus;
+
+                import java.io.BufferedReader;
+                import java.io.InputStreamReader;
+                import java.nio.charset.StandardCharsets;
+                import java.nio.file.Path;
+
+                public final class NexusExportBridgeMain {
+                    private NexusExportBridgeMain() {
+                    }
+
+                    public static void main(String[] args) throws Exception {
+                        String root = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8))
+                                .readLine();
+                        String canonical = Path.of(root).toRealPath().toString();
+                        String escaped = canonical.replace("\\\\", "\\\\\\\\").replace("\"", "\\\\\"");
+                        System.out.print("{\\\"contractVersion\\\":\\\"1\\\",\\\"producer\\\":\\\"MINOS\\\","
+                                + "\\\"project\\\":{\\\"id\\\":\\\"fake\\\",\\\"name\\\":\\\"fake\\\","
+                                + "\\\"rootPath\\\":\\\"" + escaped + "\\\",\\\"snapshotId\\\":\\\"fake-snapshot\\\"},"
+                                + "\\\"symbols\\\":[],\\\"relations\\\":[],\\\"limitations\\\":[]}");
+                    }
+                }
+                """);
+
+        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+        assertNotNull(compiler, "tests require a JDK compiler");
+        assertEquals(0, compiler.run(null, null, null, "-encoding", "UTF-8", "-d", classes.toString(), source.toString()));
+
+        Path classFile = classes.resolve("com/minos/integration/nexus/NexusExportBridgeMain.class");
+        try (JarOutputStream output = new JarOutputStream(Files.newOutputStream(jar))) {
+            output.putNextEntry(new JarEntry("com/minos/integration/nexus/NexusExportBridgeMain.class"));
+            Files.copy(classFile, output);
             output.closeEntry();
         }
-        return jar;
-    }
-
-    private static boolean isWindows() {
-        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
     }
 }
