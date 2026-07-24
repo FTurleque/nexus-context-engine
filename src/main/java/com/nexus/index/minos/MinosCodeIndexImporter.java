@@ -21,7 +21,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -58,8 +57,7 @@ public final class MinosCodeIndexImporter {
         }
 
         Set<String> safeProjectFiles = safeProjectFiles(root);
-        JsonNode document = Optional.ofNullable(objectMapper.readTree(documentPayload))
-                .orElseThrow(() -> new IOException("MINOS export root must be a JSON object"));
+        JsonNode document = readDocument(documentPayload);
         if (!document.isObject()) {
             throw new IOException("MINOS export root must be a JSON object");
         }
@@ -102,6 +100,14 @@ public final class MinosCodeIndexImporter {
                 SOURCE_PROVIDER,
                 List.copyOf(symbols.values()),
                 List.copyOf(relations.values()));
+    }
+
+    private JsonNode readDocument(String payload) throws IOException {
+        JsonNode document = objectMapper.readTree(payload);
+        if (document == null) {
+            throw new IOException("MINOS export root must be a JSON object");
+        }
+        return document;
     }
 
     private static IndexedSymbol mapSymbol(Set<String> safeProjectFiles, JsonNode node) throws IOException {

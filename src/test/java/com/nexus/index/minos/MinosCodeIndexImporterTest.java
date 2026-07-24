@@ -80,6 +80,15 @@ class MinosCodeIndexImporterTest {
     }
 
     @Test
+    void rejectsNullAndNonObjectJsonDocuments(@TempDir Path temp) throws Exception {
+        Path project = Files.createDirectories(temp.resolve("project"));
+        MinosCodeIndexImporter importer = new MinosCodeIndexImporter(new ObjectMapper());
+
+        assertThrows(java.io.IOException.class, () -> importer.importPayload(project, "null"));
+        assertThrows(java.io.IOException.class, () -> importer.importPayload(project, "[]"));
+    }
+
+    @Test
     void ignoresUnsafeUnknownAndUnsupportedPaths(@TempDir Path temp) throws Exception {
         Path project = Files.createDirectories(temp.resolve("project"));
         Path source = Files.createDirectories(project.resolve("src"));
