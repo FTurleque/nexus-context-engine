@@ -38,14 +38,17 @@ class MinosCodeIndexImporterTest {
         Path source = Files.createDirectories(project.resolve("src"));
         Files.writeString(source.resolve("GreetingPort.ts"), "export interface GreetingPort {}\n");
         Files.writeString(source.resolve("Greeter.ts"), "export class Greeter {}\n");
+        Files.writeString(source.resolve("Generic.ts"), "export type Generic = string;\n");
         ObjectMapper mapper = new ObjectMapper();
         String payload = payload(mapper, project, false);
 
         CodeIntelligenceSnapshot snapshot = new MinosCodeIndexImporter(mapper).importPayload(project, payload);
 
         assertEquals("minos", snapshot.sourceProvider());
-        assertEquals(2, snapshot.symbols().size());
+        assertEquals(3, snapshot.symbols().size());
         assertEquals(SymbolKind.INTERFACE, snapshot.symbols().getFirst().symbol().kind());
+        assertTrue(snapshot.symbols().stream().anyMatch(symbol ->
+                symbol.symbol().kind() == SymbolKind.TYPE));
         assertTrue(snapshot.symbols().stream().allMatch(symbol ->
                 "minos".equals(symbol.symbol().sourceProvider())));
         assertEquals(1, snapshot.relations().size());
@@ -124,6 +127,7 @@ class MinosCodeIndexImporterTest {
         ArrayNode symbols = document.withArray("symbols");
         symbol(symbols.addObject(), "port", "src/GreetingPort.ts", "INTERFACE", "GreetingPort", "GreetingPort", 1, 3);
         symbol(symbols.addObject(), "greeter", "src/Greeter.ts", "CLASS", "Greeter", "Greeter", 1, 5);
+        symbol(symbols.addObject(), "generic", "src/Generic.ts", "TYPE", "Generic", "Generic", 1, 1);
         symbol(symbols.addObject(), "field", "src/Greeter.ts", "FIELD", "value", "Greeter.value", 2, 2);
         if (includeUnsafe) {
             symbol(symbols.addObject(), "traversal", "../outside.ts", "CLASS", "Outside", "Outside", 1, 1);

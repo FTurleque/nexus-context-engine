@@ -174,7 +174,7 @@ public final class MinosCodeIndexImporter {
             case "ANNOTATION" -> SymbolKind.ANNOTATION;
             case "METHOD", "FUNCTION" -> SymbolKind.METHOD;
             case "CONSTRUCTOR" -> SymbolKind.CONSTRUCTOR;
-            case "STRUCT", "TYPE_ALIAS" -> SymbolKind.TYPE;
+            case "TYPE", "STRUCT", "TYPE_ALIAS" -> SymbolKind.TYPE;
             default -> null;
         };
     }
