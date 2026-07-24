@@ -32,15 +32,16 @@ import java.util.concurrent.TimeUnit;
 /**
  * Optional Java-21-side importer for the versioned JSON export produced by MINOS.
  *
- * <p>No MINOS class is linked into NEXUS. When the conventional integration JAR is
- * installed under NEXUS_HOME, NEXUS launches the fixed {@code java} command and the
- * fixed MINOS bridge class. The project root is transported over stdin, never placed
- * on the operating-system command line. Ranking and context selection remain entirely
- * in NEXUS.</p>
+ * <p>No MINOS class is linked into NEXUS. When explicitly enabled, NEXUS launches
+ * the fixed {@code java} command and fixed MINOS bridge class from the conventional
+ * integration classpath under NEXUS_HOME. The project root is transported over stdin,
+ * never placed on the operating-system command line. Ranking and context selection
+ * remain entirely in NEXUS.</p>
  */
 public final class MinosCodeIndexImporter implements CodeIndexImporter {
 
     public static final String SOURCE_PROVIDER = "minos";
+    public static final String ENABLED_PROPERTY = "nexus.minos.enabled";
 
     private static final String CONTRACT_VERSION = "1";
     private static final String PRODUCER = "MINOS";
@@ -75,15 +76,19 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
     }
 
     /**
-     * Enables MINOS only when its shaded JAR is installed at the conventional path
-     * {@code <NEXUS_HOME>/integrations/minos/minos-code-intelligence-all.jar}.
+     * Enables MINOS only when {@code -Dnexus.minos.enabled=true} is set explicitly.
+     * The process classpath remains a fixed relative path under NEXUS_HOME.
      */
-    public static MinosCodeIndexImporter fromPaths(NexusPaths paths) throws IOException {
+    public static MinosCodeIndexImporter fromPaths(NexusPaths paths) {
         Objects.requireNonNull(paths, "paths");
-        if (!Files.isRegularFile(paths.minosIntegrationJar())) {
-            return new MinosCodeIndexImporter();
-        }
-        return new MinosCodeIndexImporter(new Configuration(paths.home(), DEFAULT_TIMEOUT));
+        return fromPaths(paths, Boolean.parseBoolean(System.getProperty(ENABLED_PROPERTY, "false")));
+    }
+
+    static MinosCodeIndexImporter fromPaths(NexusPaths paths, boolean enabled) {
+        Objects.requireNonNull(paths, "paths");
+        return enabled
+                ? new MinosCodeIndexImporter(new Configuration(paths.home(), DEFAULT_TIMEOUT))
+                : new MinosCodeIndexImporter();
     }
 
     public boolean enabled() {
@@ -372,21 +377,7 @@ public final class MinosCodeIndexImporter implements CodeIndexImporter {
             if (timeout.isZero() || timeout.isNegative() || timeout.compareTo(MAX_TIMEOUT) > 0) {
                 throw new IllegalArgumentException("timeout must be between 1 and 300 seconds");
             }
-            Path configuredHome = nexusHome.toAbsolutePath().normalize();
-            Path configuredJar = configuredHome.resolve(MINOS_CLASSPATH).normalize();
-            if (!Files.isRegularFile(configuredJar)) {
-                throw new IllegalArgumentException("MINOS integration JAR does not exist: " + configuredJar);
-            }
-            try {
-                Path canonicalHome = configuredHome.toRealPath();
-                Path canonicalJar = configuredJar.toRealPath();
-                if (!canonicalJar.startsWith(canonicalHome)) {
-                    throw new IllegalArgumentException("MINOS integration JAR must remain under NEXUS_HOME");
-                }
-                nexusHome = canonicalHome;
-            } catch (IOException exception) {
-                throw new IllegalArgumentException("MINOS integration paths cannot be canonicalized", exception);
-            }
+            nexusHome = nexusHome.toAbsolutePath().normalize();
         }
     }
 
