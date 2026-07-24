@@ -210,18 +210,32 @@ class MinosCodeIndexImporterTest {
                         String root = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8))
                                 .readLine();
                         String canonical = Path.of(root).toRealPath().toString();
-                        String escaped = canonical.replace("\\\\", "\\\\\\\\").replace("\"", "\\\\\"");
-                        System.out.print("{\\\"contractVersion\\\":\\\"1\\\",\\\"producer\\\":\\\"MINOS\\\","
-                                + "\\\"project\\\":{\\\"id\\\":\\\"fake\\\",\\\"name\\\":\\\"fake\\\","
-                                + "\\\"rootPath\\\":\\\"" + escaped + "\\\",\\\"snapshotId\\\":\\\"fake-snapshot\\\"},"
-                                + "\\\"symbols\\\":[],\\\"relations\\\":[],\\\"limitations\\\":[]}");
+                        char backslash = 92;
+                        char quote = 34;
+                        String escaped = canonical
+                                .replace(Character.toString(backslash),
+                                        Character.toString(backslash) + Character.toString(backslash))
+                                .replace(Character.toString(quote),
+                                        Character.toString(backslash) + Character.toString(quote));
+                        String q = Character.toString(quote);
+                        System.out.print("{" + q + "contractVersion" + q + ":" + q + "1" + q + ","
+                                + q + "producer" + q + ":" + q + "MINOS" + q + ","
+                                + q + "project" + q + ":{"
+                                + q + "id" + q + ":" + q + "fake" + q + ","
+                                + q + "name" + q + ":" + q + "fake" + q + ","
+                                + q + "rootPath" + q + ":" + q + escaped + q + ","
+                                + q + "snapshotId" + q + ":" + q + "fake-snapshot" + q + "},"
+                                + q + "symbols" + q + ":[],"
+                                + q + "relations" + q + ":[],"
+                                + q + "limitations" + q + ":[]}");
                     }
                 }
                 """);
 
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         assertNotNull(compiler, "tests require a JDK compiler");
-        assertEquals(0, compiler.run(null, null, null, "-encoding", "UTF-8", "-d", classes.toString(), source.toString()));
+        assertEquals(0, compiler.run(null, null, null,
+                "-encoding", "UTF-8", "-d", classes.toString(), source.toString()));
 
         Path classFile = classes.resolve("com/minos/integration/nexus/NexusExportBridgeMain.class");
         try (JarOutputStream output = new JarOutputStream(Files.newOutputStream(jar))) {
