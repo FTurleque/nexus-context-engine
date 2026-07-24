@@ -24,12 +24,43 @@ if (-not (Test-Path $java21 -PathType Leaf)) {
     throw "JAVA_HOME does not contain java.exe: $java21"
 }
 
-$java21Version = (& $java21 -version 2>&1 | Out-String)
+function Get-JavaVersionText {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Executable
+    )
+
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $Executable
+    $startInfo.Arguments = '-version'
+    $startInfo.UseShellExecute = $false
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.CreateNoWindow = $true
+
+    $process = [System.Diagnostics.Process]::Start($startInfo)
+    try {
+        $stdout = $process.StandardOutput.ReadToEnd()
+        $stderr = $process.StandardError.ReadToEnd()
+        $process.WaitForExit()
+
+        if ($process.ExitCode -ne 0) {
+            throw "Java version probe failed with exit code $($process.ExitCode): $Executable"
+        }
+
+        return (($stderr + [Environment]::NewLine + $stdout).Trim())
+    }
+    finally {
+        $process.Dispose()
+    }
+}
+
+$java21Version = Get-JavaVersionText -Executable $java21
 if ($java21Version -notmatch 'version "21(?:\.|\")') {
     throw "NEXUS replay requires JAVA_HOME on Java 21. Detected: $java21Version"
 }
 
-$java24Version = (& $java24 -version 2>&1 | Out-String)
+$java24Version = Get-JavaVersionText -Executable $java24
 if ($java24Version -notmatch 'version "24(?:\.|\")') {
     throw "The -Java24 executable must be Java 24. Detected: $java24Version"
 }
