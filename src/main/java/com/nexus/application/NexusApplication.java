@@ -128,7 +128,7 @@ public final class NexusApplication {
                         .<List<CodeIntelligenceProvider>>map(List::of)
                         .orElseGet(List::of);
 
-        MinosCodeIndexImporter minosImporter = MinosCodeIndexImporter.fromEnvironment();
+        MinosCodeIndexImporter minosImporter = MinosCodeIndexImporter.fromPaths(paths);
         List<CodeIndexImporter> codeIndexImporters = new ArrayList<>();
         codeIndexImporters.add(minosImporter);
         codeIndexImporters.add(new ScipCodeIndexImporter());
