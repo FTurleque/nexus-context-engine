@@ -1,395 +1,258 @@
 # Guide développeur NEXUS
 
-Ce répertoire explique **comment NEXUS est réellement implémenté**, pourquoi les composants existent, comment ils collaborent et comment reproduire le comportement localement.
+Ce répertoire décrit l'implémentation **actuelle** de NEXUS et sépare clairement trois types de documents :
 
-L'objectif est qu'un développeur découvrant le repository puisse :
+1. documentation courante — doit suivre le code de `main` ;
+2. documents d'itération/benchmark — conservent une mesure historique ;
+3. ADR — conservent les décisions et ne sont pas réécrits rétroactivement.
 
-1. comprendre la mission et les frontières de NEXUS ;
-2. suivre un fichier depuis le scan jusqu'à SQLite et Lucene ;
-3. comprendre comment une requête devient un classement explicable ;
-4. comprendre comment ce classement devient un `ContextBundle` sous budget ;
-5. comprendre comment NEXUS réutilise les instructions déjà présentes dans un projet ;
-6. comprendre comment les Agent Skills sont découverts puis chargés progressivement ;
-7. comprendre comment l'historique Git local enrichit le ranking et le contexte ;
-8. reproduire les scénarios depuis la CLI et les tests ;
-9. modifier une brique sans casser les principes architecturaux.
+État de référence : 29 juillet 2026, `main` `13fd6970f7350602c7a86aae729ddd4adad771bd`.
 
-> **Important** : `docs/architecture.md` décrit l'architecture courante à haut niveau. Les ADR sous `docs/adr/` conservent les décisions et leurs alternatives. Le présent guide décrit **l'implémentation concrète** et ses flux d'exécution.
+## Parcours recommandé
 
-## Parcours de lecture recommandé
-
-| Chapitre | Ce que vous apprendrez |
+| Sujet | Document |
 |---|---|
-| [1. Architecture d'implémentation](architecture-implementation.md) | packages, couches, dépendances, principaux contrats et classes |
-| [2. Indexation locale](indexing-pipeline.md) | scan, ignore rules, SHA-256, JavaParser, SQLite, Lucene, incrémental |
-| [3. Recherche et ranking](search-ranking.md) | BM25, recherche de symboles, graphe, fusion, score explicable |
-| [4. Construction du contexte](context-building.md) | fragments, fusion, tokens, sélection sous budget, `ContextBundle` |
-| [5. Reproduire et déboguer](reproduce-and-debug.md) | build, CLI, self-smoke, données locales, scénarios de diagnostic |
-| [6. CLI du MVP](cli-mvp.md) | contrat humain/JSON, codes de sortie, JAR autonome, launchers Windows, métriques |
-| [7. Contexte natif des projets](native-context-sources.md) | `AGENTS.md`, Copilot, Claude, Gemini, documentation et configurations existantes |
-| [8. Agent Skills](agent-skills.md) | `SKILL.md`, catalogue léger, sélection, activation, ressources, sécurité et budget |
-| [9. Contexte Git local](git-context.md) | récence Git, commits liés, diff local ciblé, historique, co-changements et budget Git |
+| architecture globale | [Architecture](../architecture.md) |
+| architecture concrète / packages / composition | [Architecture d'implémentation](architecture-implementation.md) |
+| limites et dette active | [Limites actuelles](current-limitations.md) |
+| roadmap | [Roadmap](../roadmap.md) |
+| indexation | [Pipeline d'indexation](indexing-pipeline.md) |
+| recherche et ranking | [Recherche et ranking](search-ranking.md) |
+| construction du contexte | [Construction du contexte](context-building.md) |
+| CLI courante | [CLI](cli.md) |
+| contrat historique du MVP | [CLI du MVP — historique](cli-mvp.md) |
+| contexte natif | [Contexte natif des projets](native-context-sources.md) |
+| Agent Skills | [Agent Skills](agent-skills.md) |
+| AI Skills Registry | [AI Skills Registry](ai-skills-registry.md) |
+| Git | [Contexte Git local](git-context.md) |
+| Code Intelligence | [Code Intelligence](code-intelligence.md) |
+| JDT LS | [JDT Language Server](jdt-language-server.md) |
+| multi-langage | [Support multi-langage](multi-language.md) |
+| MINOS | [MINOS Code Intelligence](minos-code-intelligence.md) |
+| REST | [API REST](rest-api.md) |
+| MCP | [MCP](mcp.md) |
+| recherche multi-repository | [Recherche à grande échelle](large-scale-search.md) |
+| runbook baseline multi-repository | [Runbook Itération 16](large-scale-baseline-runbook.md) |
+| résultats Itération 16 | [Baseline](iteration-16-baseline-results.md) / [portfolio étendu](iteration-16-extended-portfolio-results.md) |
+| recherche sémantique | [Recherche sémantique](semantic-search.md) |
+| résultats sémantiques | [Résultats Itération 17](iteration-17-semantic-results.md) |
+| reproduction / diagnostic | [Reproduire et déboguer](reproduce-and-debug.md) |
 
 ## Vue d'ensemble actuelle
 
-```mermaid
-flowchart LR
-    U[Utilisateur / IDE / Agent] -->|requête| CLI[CLI / futur API / MCP]
-    CLI --> CORE[NEXUS Core]
-
-    subgraph INDEXATION[Indexation]
-        SCAN[ProjectScanner]
-        JAVA[JavaParserLanguageAnalyzer]
-        MD[MarkdownLanguageAnalyzer]
-        SQL[(SQLite)]
-        LUCENE[(Lucene)]
-        SCAN --> JAVA
-        SCAN --> MD
-        JAVA --> SQL
-        MD --> SQL
-        JAVA --> LUCENE
-        MD --> LUCENE
-    end
-
-    subgraph SEARCH[Recherche et ranking]
-        LEX[LuceneFileSearchStrategy]
-        SYM[SymbolSearchStrategy]
-        GRAPH[GraphCandidateEnricher]
-        GITRECENCY[GitRecencyCandidateEnricher]
-        RANK[DeterministicContextRanker]
-        LEX --> GRAPH
-        SYM --> GRAPH
-        GRAPH --> GITRECENCY
-        GITRECENCY --> RANK
-    end
-
-    subgraph NATIF[Instructions natives]
-        AGENTS[AgentsMdInstructionProvider]
-        COPILOT[CopilotInstructionProvider]
-        CLAUDE[ClaudeInstructionProvider]
-        GEMINI[GeminiInstructionProvider]
-        DISC[ContextSourceDiscoveryService]
-        AGENTS --> DISC
-        COPILOT --> DISC
-        CLAUDE --> DISC
-        GEMINI --> DISC
-    end
-
-    subgraph SKILLS[Agent Skills]
-        SP[SkillSourceProvider]
-        SD[SkillDiscoveryService]
-        SS[SkillSelector]
-        SL[SkillLoader]
-        SB[SkillContextSelector]
-        SP --> SD --> SS --> SL --> SB
-    end
-
-    subgraph GITCTX[Contexte Git]
-        GP[GitContextSourceProvider]
-        LOCALGIT[LocalGitContextSourceProvider]
-        LOCALGIT --> GP
-    end
-
-    subgraph CONTEXT[Construction du contexte]
-        FACTORY[ContextFragmentFactory]
-        BUDGET[BudgetedContextSelector]
-        BUNDLE[ContextBundle]
-        FACTORY --> BUDGET --> BUNDLE
-        DISC --> BUNDLE
-        SB --> BUNDLE
-        GP --> BUNDLE
-    end
-
-    CORE --> INDEXATION
-    SQL --> SYM
-    LUCENE --> LEX
-    CORE --> SEARCH
-    CORE --> NATIF
-    CORE --> SKILLS
-    CORE --> GITCTX
-    CORE --> CONTEXT
-    BUNDLE --> CLI
-```
-
-## Position de NEXUS
-
-NEXUS n'est ni un chatbot, ni un LLM, ni un orchestrateur généraliste.
-
 ```text
-Repository + demande + budget
-          │
-          ▼
-        NEXUS
-          │
-          ├── code / symboles / tests
-          ├── documentation pertinente
-          ├── instructions natives applicables
-          ├── skills pertinents activés progressivement
-          ├── contexte Git local borné
-          └── métadonnées de configuration détectées
-          │
-          ▼
-     ContextBundle
-          │
-          ▼
- LLM / Agent consommateur
+                             consommateurs
+                  CLI / REST / MCP / Java / JARVIS
+                               │
+                               ▼
+                        NexusApplication
+                               │
+            ┌──────────────────┼──────────────────┐
+            │                  │                  │
+            ▼                  ▼                  ▼
+      ProjectRegistry   ProjectIndexingService Search/Context
+            │                  │                  │
+            │          ┌───────┴────────┐         │
+            │          ▼                ▼         │
+            │       SQLite           Lucene       │
+            │       canonique        dérivé       │
+            │          ▲                ▲         │
+            │          │                │         │
+            │   analyzers/importers/providers     │
+            │   JavaParser / SCIP / JDT / MINOS  │
+            │                                     │
+            └─────────────────────────────────────┘
+                               │
+                    ranking + sources natives
+                               │
+                               ▼
+                        ContextBundle
 ```
 
-Le choix du modèle et l'exécution des agents, hooks, MCP ou scripts de skills restent hors du cœur. Le provider Git reste lui aussi strictement en lecture seule et n'effectue aucune opération réseau.
+## Capacités livrées
 
-## État d'implémentation
+### Cœur
 
-### Itération 0 — Socle
+- Java 21 sans framework applicatif obligatoire ;
+- SQLite canonique ;
+- Lucene lexical dérivé ;
+- indexation incrémentale ;
+- ranking déterministe et explicable ;
+- construction sous budget ;
+- instructions natives ;
+- Agent Skills ;
+- contexte Git ;
+- recherche fédérée ;
+- sémantique opt-in.
 
-Validée : Java 21, Maven, contrats principaux, JavaParser et architecture sans framework applicatif obligatoire dans le cœur.
+### Code Intelligence
 
-### Itération 1 — Indexation locale
+- JavaParser embarqué ;
+- SCIP opportuniste ;
+- JDT Language Server opt-in ;
+- MINOS via contrat JSON local explicite ;
+- support lexical Kotlin, TypeScript, JavaScript, Python et SQL.
 
-Validée : registre de projets, `NEXUS_HOME`, scanner, `.gitignore` / `.nexusignore`, SHA-256, SQLite, migrations, Lucene et indexation incrémentale.
+### Adaptateurs
 
-### Itération 2 — Recherche et ranking
+- CLI autonome ;
+- REST Quarkus ;
+- MCP Java STDIO ;
+- générateur de configuration Copilot/Claude.
 
-Validée : BM25 multi-champs, recherche exacte/fuzzy de symboles, fusion, graphe d'imports, ranking déterministe, explications, `precision@K` et `recall@K`.
-
-### Itération 3 — Construction du contexte
-
-Validée localement le 19 juillet 2026 :
-
-- fragments symboliques ;
-- fusion ;
-- sélection sous budget ;
-- troncatures explicables ;
-- 13 tests verts ;
-- self-smoke : 3 items, 178/180 tokens, réduction d'environ 96,49 %.
-
-### Itération 4 — CLI utilisable pour le MVP
-
-Validée localement le 19 juillet 2026 :
-
-- sortie humaine et JSON ;
-- codes de sortie `0`, `1`, `2` ;
-- JAR autonome ;
-- launchers Windows ;
-- 16 tests verts ;
-- `mean precision@3 = 0,4444`, `mean recall@3 = 1,0000` ;
-- résultat `SELF-SMOKE SUCCESS`.
-
-Cette validation clôt la Phase 1 et valide le MVP du moteur.
-
-### Itération 5 — Instructions et documentation
-
-Validée localement le 20 juillet 2026 :
-
-- Markdown indexé comme documentation ;
-- providers AGENTS, Copilot, Claude et Gemini ;
-- scopes repository/répertoire/glob ;
-- références `@fichier` sécurisées ;
-- déduplication inter-provider et inter-source ;
-- budget d'instructions ;
-- 19 tests verts ;
-- 145 fichiers, 406 symboles, 781 relations ;
-- contexte strict : 172/180 tokens ;
-- contexte multi-source : 1 185/1 200 tokens ;
-- résultat `SELF-SMOKE SUCCESS`.
-
-### Itération 6 — Skills et divulgation progressive
-
-Validée localement le 20 juillet 2026 :
-
-- ADR-0034 ;
-- port `SkillSourceProvider` ;
-- `LocalAgentSkillsProvider` ;
-- racines `.agents/skills`, `.github/skills`, `.claude/skills` ;
-- parsing YAML 1.2 du frontmatter avec SnakeYAML Engine ;
-- `SkillDescriptor` sans corps Markdown complet ;
-- sélection déterministe sur `name` + `description` ;
-- `SkillLoader` uniquement après sélection ;
-- `SkillContextSelector` sans troncature ;
-- isolation des skills hors Lucene générique ;
-- 100 fichiers source compilés ;
-- 17 fichiers de test compilés ;
-- 26 tests verts ;
-- index : 170 fichiers, 480 symboles, 926 relations ;
-- contexte avec skill : 1 194/1 200 tokens, 550 ms ;
-- skill `nexus-context-validation` sélectionné intégralement : 233 tokens ;
-- `skillsExecuted = false` ;
-- résultat `SELF-SMOKE SUCCESS`.
-
-### Itération 7 — Contexte Git
-
-Validée localement le 20 juillet 2026 :
-
-- ADR-0035 ;
-- port `CandidateEnricher` ;
-- chaîne d'enrichissement générique dans `SearchService` ;
-- `GraphCandidateEnricher` migré vers ce contrat ;
-- `GitRecencyCandidateEnricher` et signal `gitRecencyScore` ;
-- bonus de récence configurable, `0,05` par défaut et désactivable avec `0` ;
-- port `GitContextSourceProvider` ;
-- `LocalGitContextSourceProvider` ;
-- commits récents liés et historique court des fichiers cibles ;
-- patches locaux ciblés, indexés et non indexés ;
-- détection de co-changements ;
-- support des projets imbriqués dans un monorepo ;
-- contexte Git désactivé sous 500 tokens ;
-- budget Git limité à 15 % du budget global et 500 tokens ;
-- métadonnées Git explicables ;
-- 106 fichiers source compilés ;
-- 20 fichiers de test compilés ;
-- 35 tests verts ;
-- baseline qualité conservée : `precision@3 = 0,4444`, `recall@3 = 1,0000` ;
-- index : 181 fichiers, 548 symboles, 1 034 relations ;
-- indexation complète : 1 347 ms ;
-- indexation incrémentale : 270 ms avec 0 fichier modifié et 0 supprimé ;
-- contexte strict : 5 items, 174/180 tokens, Git désactivé comme attendu ;
-- contexte multi-source : 11 items, 1 192/1 200 tokens ;
-- contexte Git dédié : 1 597/1 600 tokens ;
-- 50 commits inspectés, 24 liés, 2 fragments Git sélectionnés ;
-- 128 tokens Git sélectionnés pour un budget Git de 240 tokens ;
-- réduction du contexte candidat strict : environ 99,2 % ;
-- résultat `SELF-SMOKE SUCCESS`.
-
-Point de surveillance non bloquant : la recherche explicable du self-smoke a mesuré 3 603 ms avec l'enrichissement Git actif. Avant d'ajouter un cache Git ou une persistance dédiée, cette latence doit être benchmarkée sur plusieurs tailles de repositories.
-
-Le chapitre [Contexte Git local](git-context.md) décrit l'implémentation complète.
-
-## Principes à respecter en contribuant
-
-### 1. Le cœur ne dépend pas des clients
-
-Copilot, Claude, MCP, Quarkus, JARVIS ou un registre externe ne doivent pas contaminer les contrats métier.
-
-### 2. Les conventions natives restent dans les providers
-
-Les chemins et formats spécifiques restent dans leurs adaptateurs.
-
-### 3. Découverte d'un skill ne signifie pas chargement complet
-
-`SkillDescriptor` ne doit pas contenir le corps du `SKILL.md`.
-
-### 4. Sélection avant activation
-
-Le `SkillLoader` ne doit recevoir que des `SkillMatch` déjà sélectionnés.
-
-### 5. NEXUS ne doit jamais exécuter un skill
-
-Les scripts et outils déclarés restent sous le contrôle du consommateur.
-
-### 6. Le contexte Git reste local et en lecture seule
-
-Aucun provider Git du cœur ne doit effectuer `fetch`, `pull`, `push`, `checkout` ou commit.
-
-### 7. SQLite est canonique, Lucene est dérivé
-
-Une perte de l'index Lucene doit rester reconstructible.
-
-### 8. Toute sélection doit être explicable
-
-Scores, instructions, skills, contexte Git et exclusions doivent provenir de règles inspectables.
-
-### 9. Le budget appartient au moteur
-
-Le bundle final ne doit jamais dépasser le budget demandé.
-
-### 10. Une décision structurante implique un ADR
-
-Avant de modifier stockage, scoring, protocole ou stratégie de contexte, vérifier si un nouvel ADR est nécessaire.
-
-## Repères dans le code
+## Organisation du code
 
 ```text
 src/main/java/com/nexus/
-├── cli/
-├── config/
-├── context/
+├── application/       façade NexusApplication
+├── cli/               adaptateur CLI historique
+├── config/            NEXUS_HOME et chemins locaux
+├── context/           fragments, budgets, bundle
 │   └── source/
-│       ├── git/             Récence, historique et contexte Git local
-│       ├── instruction/     Providers AGENTS / Copilot / Claude / Gemini
-│       └── skill/           Catalogue, sélection et activation Agent Skills
-├── index/
+│       ├── git/
+│       ├── instruction/
+│       └── skill/
+├── index/             scan, analyse, importers/providers
 │   ├── java/
+│   ├── jdt/
 │   ├── markdown/
-│   └── scan/
-├── persistence/sqlite/
-├── project/
-├── ranking/
-├── search/
-│   ├── evaluation/
-│   └── lucene/
-└── token/
+│   ├── minos/
+│   ├── scan/
+│   └── scip/
+├── persistence/       ports/adaptateur SQLite
+├── project/           registre et état projet
+├── ranking/           ranking et graphe
+├── search/            stratégies, fédération, sémantique
+└── token/             estimation du budget
+
+adapters/
+├── rest-quarkus/
+├── mcp-java/
+└── assistant-clients/
 ```
 
-## UML simplifié des ports de sources
+## Composition actuelle
 
-```mermaid
-classDiagram
-    class CandidateEnricher {
-        <<interface>>
-        +enrich(ProjectDescriptor, List~SearchCandidate~)
-    }
-
-    class ContextSourceProvider {
-        <<interface>>
-    }
-
-    class SkillSourceProvider {
-        <<interface>>
-    }
-
-    class GitContextSourceProvider {
-        <<interface>>
-        +discover(GitContextQuery) GitContextResult
-    }
-
-    class GraphCandidateEnricher
-    class GitRecencyCandidateEnricher
-    class LocalAgentSkillsProvider
-    class LocalGitContextSourceProvider
-    class DefaultContextBuilder
-
-    CandidateEnricher <|.. GraphCandidateEnricher
-    CandidateEnricher <|.. GitRecencyCandidateEnricher
-    SkillSourceProvider <|.. LocalAgentSkillsProvider
-    GitContextSourceProvider <|.. LocalGitContextSourceProvider
-    DefaultContextBuilder --> ContextSourceProvider
-    DefaultContextBuilder --> SkillSourceProvider
-    DefaultContextBuilder --> GitContextSourceProvider
-```
-
-## Validation locale de référence
-
-```powershell
-git pull --ff-only
-mvn clean install
-.\scripts\self-smoke.ps1 -KeepData
-```
-
-Le self-smoke comporte désormais 13 étapes et valide notamment :
+`NexusApplication` centralise la composition partagée par REST et MCP :
 
 ```text
-Java + Markdown indexés
-    ↓
-instructions natives sélectionnées
-    ↓
-contexte multi-source
-    ↓
-Agent Skill découvert puis activé progressivement
-    ↓
-contexte Git désactivé sous 500 tokens
-    ↓
-repository Git local détecté sur un budget supérieur
-    ↓
-commits liés découverts
-    ↓
-au moins un item GIT sélectionné
-    ↓
-budget global respecté
-    ↓
-SELF-SMOKE SUCCESS
+SqliteDatabase
+SqliteProjectRepository
+SqliteIndexRepository
+LuceneSearchIndex
+JavaParserLanguageAnalyzer
+MarkdownLanguageAnalyzer
+ScipCodeIndexImporter
+JdtLanguageServerCodeIntelligenceProvider optionnel
+SemanticIndexingService optionnel
+SearchService
+FederatedSearchService
+DefaultContextBuilder
 ```
 
-Commande de reproduction ciblée :
+La CLI possède encore une composition manuelle similaire. C'est une dette explicite, suivie en Itération 20.
+
+Le pipeline de skills possède également une divergence : `SkillDiscoveryService` sait agréger plusieurs providers, mais `LocalAgentSkillsProvider` instancie aujourd'hui `AiSkillsRegistryProvider` directement. La Phase 6 doit revenir à une composition indépendante des providers.
+
+## Persistance et disponibilité
+
+SQLite est canonique ; Lucene et l'index sémantique sont reconstructibles.
+
+Un projet possède un `IndexStatus` :
+
+```text
+NOT_INDEXED
+INDEXING
+READY
+FAILED
+```
+
+`DefaultContextBuilder` exige déjà `READY`. La recherche et les outils symboliques doivent encore recevoir le même gate de manière uniforme ; voir [Limites actuelles](current-limitations.md).
+
+## Recherche
+
+Le pipeline principal :
+
+```text
+LuceneFileSearchStrategy
+SymbolSearchStrategy
+SemanticSearchStrategy opt-in
+        │
+        ▼
+CandidateMerger
+        │
+GraphCandidateEnricher
+GitRecencyCandidateEnricher
+        │
+        ▼
+DeterministicContextRanker
+ou SemanticHybridContextRanker
+```
+
+La recherche multi-projet utilise `FederatedSearchService` et conserve la provenance projet.
+
+La baseline de l'Itération 16 ne justifie pas aujourd'hui Zoekt/OpenGrok ou un index distant. Le prochain chantier de scale porte d'abord sur les scans complets symboles/relations et le graphe reconstruit par requête.
+
+## Construction du contexte
+
+`DefaultContextBuilder` orchestre :
+
+1. recherche et ranking ;
+2. filtrage des types demandés ;
+3. instructions natives applicables ;
+4. discovery/matching/loading de skills ;
+5. contexte Git ciblé ;
+6. matérialisation et fusion de fragments ;
+7. budgets par famille ;
+8. sélection finale ;
+9. métadonnées d'explication.
+
+Invariant :
+
+```text
+ContextBundle.estimatedTokens <= ContextBundle.tokenBudget
+```
+
+## Documentation historique vs courante
+
+Les documents portant explicitement le nom d'une itération conservent souvent le raisonnement ou les mesures de cette étape. Une phrase au futur dans un ADR accepté ne doit pas être corrigée rétroactivement : elle reflète le contexte de la décision à sa date.
+
+En revanche :
+
+- `README.md` ;
+- `docs/architecture.md` ;
+- ce guide ;
+- `architecture-implementation.md` ;
+- `current-limitations.md` ;
+- `docs/roadmap.md`
+
+doivent décrire l'état courant.
+
+`docs/mvp.md` et `cli-mvp.md` sont explicitement des documents historiques du MVP.
+
+## Gates de développement
+
+Gate de base :
 
 ```powershell
-.\scripts\nexus.ps1 context nexus-local "DefaultContextBuilder git context budget recent changes" --budget 1600 --explain --json
+mvn clean install
+.\scripts\self-smoke.ps1
 ```
+
+Une itération spécialisée doit ajouter son runner ciblé sans remplacer ces deux gates.
+
+Pour une modification du ranking ou du retrieval, rejouer les corpus golden concernés.
+
+Pour une revendication de performance, mesurer avant/après sur le même corpus et la même machine ; une seule durée observée n'est pas une preuve.
+
+## Principes de contribution
+
+1. SQLite reste canonique ; Lucene reste reconstructible.
+2. Le cœur ne dépend pas de Quarkus, MCP, Copilot, Claude, JARVIS ou MINOS.
+3. Un provider externe reste optionnel.
+4. Les scores et sélections restent déterministes et explicables.
+5. NEXUS ne lance pas MINOS et n'exécute pas les skills.
+6. Le Git context reste local et en lecture seule.
+7. Une décision structurante durable implique un ADR.
+8. Une optimisation de scale doit être justifiée par une mesure.
+9. Une itération n'est pas terminée tant que la documentation courante n'a pas été réconciliée avec l'exact head.
