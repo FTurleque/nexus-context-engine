@@ -1,74 +1,124 @@
 # AI Skills Registry dans NEXUS
 
-## Objectif
+## Statut
 
-L'Itération 14 permet à NEXUS de découvrir des skills provenant d'un snapshot local de AI Skills Registry, sans introduire de dépendance réseau pendant la construction du contexte.
+Capacité **livrée et validée** depuis l'Itération 14.
 
-Le comportement reste local-first et optionnel : en l'absence de snapshot, NEXUS continue à fonctionner uniquement avec les skills présents dans le projet.
+NEXUS peut découvrir des skills provenant d'un snapshot local AI Skills Registry sans accès réseau pendant la construction du contexte.
 
 ## Emplacement du snapshot
-
-NEXUS recherche les définitions du registre sous :
 
 ```text
 .nexus/registry/skills/**/SKILL.md
 ```
 
-Le contenu de `.nexus/registry` est considéré comme un cache local et n'est pas versionné avec le repository NEXUS.
+`.nexus/registry` est un cache local non versionné. Son absence n'empêche jamais NEXUS de fonctionner avec les skills du projet.
 
-## Pipeline
+## Comportement fonctionnel
+
+Deux origines sont prises en compte :
 
 ```text
-skills locaux du projet
-        +
-snapshot AI Skills Registry
-        |
-        v
+skills locaux du projet       priorité 80
+snapshot AI Skills Registry   priorité 60
+```
+
+La déduplication est effectuée par nom dans `SkillDiscoveryService`. Un skill local de même nom garde donc la priorité sur le snapshot partagé.
+
+La divulgation progressive reste la même pour les deux origines :
+
+```text
+découverte
+→ frontmatter seulement
+
+sélection
+→ name + description + metadata
+
+activation
+→ chargement du SKILL.md complet
+
+ressources
+→ inventoriées mais non chargées/exécutées automatiquement
+```
+
+## Architecture contractuelle
+
+Le contrat prévu est :
+
+```text
+SkillSourceProvider[]
+        │
+        ▼
 SkillDiscoveryService
-        |
-        v
-déduplication par nom et priorité
-        |
-        v
+        │
+        ├── tri par priorité
+        └── déduplication par nom
+        │
+        ▼
 SkillSelector
-        |
-        v
+        ▼
 SkillLoader
-        |
-        v
+        ▼
 SkillContextSelector
 ```
 
-`AiSkillsRegistryProvider` lit uniquement le frontmatter YAML pendant la découverte. Le corps complet d'un `SKILL.md` n'est chargé qu'après sélection par `SkillLoader`.
+`AiSkillsRegistryProvider` implémente bien `SkillSourceProvider` et lit uniquement les métadonnées nécessaires pendant la découverte.
 
-## Priorités
+## Composition actuelle — dette connue
 
-Les priorités initiales sont :
+Le comportement fonctionnel ci-dessus est correct et testé, mais la composition courante n'utilise pas encore les deux providers comme deux entrées indépendantes.
 
-- skill local du projet : `80` ;
-- skill issu du registre : `60`.
+Aujourd'hui :
 
-Lorsque deux skills portent le même nom, `SkillDiscoveryService` conserve donc la définition locale du projet.
+```text
+NexusApplication
+    │
+    └── LocalAgentSkillsProvider
+             │
+             └── crée AiSkillsRegistryProvider pendant discover()
+```
 
-Cette règle permet à un projet de spécialiser ou remplacer localement un skill partagé sans modifier le registre central.
+Autrement dit, `LocalAgentSkillsProvider` délègue lui-même au registre avant de retourner son résultat, alors que `SkillDiscoveryService` possède déjà le contrat nécessaire pour agréger plusieurs `SkillSourceProvider`.
 
-## Absence du registre
+Cette divergence ne change pas la priorité locale > registre, mais elle couple deux providers qui devraient rester indépendants.
 
-Si `.nexus/registry/skills` n'existe pas, le provider retourne un catalogue vide sans erreur.
+La correction est planifiée en **Phase 6 — Itération 20** :
 
-Aucun accès réseau et aucune opération Git ne sont déclenchés automatiquement par NEXUS pendant une requête de contexte.
+```text
+NexusApplication
+    │
+    ├── LocalAgentSkillsProvider
+    └── AiSkillsRegistryProvider
+             │
+             ▼
+      SkillDiscoveryService
+```
 
-## Validation
+La priorité et la déduplication continueront d'être portées par les descriptors/service de discovery, pas par une dépendance provider → provider.
 
-L'Itération 14 vérifie explicitement que :
+## Absence de réseau
 
-- les métadonnées du registre sont découvertes sans charger le corps complet du skill ;
-- le corps complet est chargé uniquement après sélection ;
-- un skill local de même nom conserve la priorité ;
-- le build complet du cœur reste vert ;
-- le self-smoke historique reste vert sans snapshot de registre.
+NEXUS ne synchronise pas lui-même un registre distant pendant une demande de contexte :
 
-Commande de validation dédiée :
+- aucune requête HTTP ;
+- aucun clone/fetch Git ;
+- aucun secret nécessaire ;
+- aucune indisponibilité distante susceptible de bloquer `ContextBuilder`.
+
+La synchronisation éventuelle du snapshot appartient à un outil ou workflow externe.
+
+## Validation livrée
+
+L'Itération 14 a validé :
+
+- découverte des métadonnées sans charger tous les corps ;
+- chargement du corps uniquement après sélection ;
+- priorité du skill local sur un doublon registry ;
+- absence de snapshot sans erreur ;
+- build du cœur ;
+- self-smoke historique sans dépendance au registre.
+
+Runner :
 
 ```powershell
 .\scripts\validate-iteration-14.ps1
@@ -76,6 +126,12 @@ Commande de validation dédiée :
 
 ## Limites actuelles
 
-Le premier incrément ne synchronise pas lui-même le dépôt externe et n'exploite pas encore tous les champs propres au registre comme `version`, `status`, `category` ou `tags` pour le ranking.
+Le snapshot n'exploite pas encore nécessairement tous les champs possibles d'un registre partagé (`version`, `status`, `category`, `tags`) pour le ranking.
 
-Ces enrichissements pourront être ajoutés derrière le même contrat sans modifier le pipeline de sélection des skills.
+Ces enrichissements ne doivent être ajoutés que s'ils améliorent réellement la sélection. Ils peuvent rester derrière `SkillSourceProvider` sans modifier `DefaultContextBuilder`.
+
+Voir également :
+
+- [`agent-skills.md`](agent-skills.md) ;
+- [`current-limitations.md`](current-limitations.md), F09 ;
+- [`../roadmap.md`](../roadmap.md), Itération 20.
