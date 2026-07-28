@@ -1,38 +1,12 @@
 # Construction du contexte et gestion du budget
 
-Ce chapitre décrit l'implémentation initiale de l'Itération 3.
+Ce chapitre décrit l'implémentation **actuelle** de `DefaultContextBuilder`.
 
-> Cette itération est implémentée dans le repository mais doit encore être validée par le prochain build local et le self-smoke étendu.
+La construction de contexte est l'une des responsabilités centrales de NEXUS : transformer une requête et des sources hétérogènes en un `ContextBundle` déterministe, explicable et borné.
 
-## 1. Objectif
-
-Transformer :
-
-```text
-ContextRequest
-+ résultats de recherche classés
-+ sources locales
-```
-
-en :
-
-```text
-ContextBundle
-```
-
-avec la garantie :
-
-```text
-estimatedTokens <= tokenBudget
-```
-
-selon le `TokenEstimator` actif.
-
-## 2. Contrats d'entrée et sortie
+## 1. Contrats
 
 ### `ContextRequest`
-
-Contient :
 
 ```text
 projectId
@@ -43,32 +17,32 @@ constraints
 explain
 ```
 
-Pour l'implémentation actuelle :
-
-- `requestedSources` vide signifie : accepter tous les types produits par la recherche ;
-- `constraints` est réservé aux politiques futures ;
+- `requestedSources` vide signifie : toutes les sources éligibles ;
+- `constraints` transporte des contraintes clé/valeur sans faire fuiter un client dans le cœur ;
 - `explain` active les raisons et exclusions détaillées.
 
 ### `ContextBundle`
 
-Contient :
-
 ```text
 items
-budget
+tokenBudget
 estimatedTokens
 excluded
 metadata
 ```
 
-### `ContextItem`
+Invariant :
 
-Un item retenu contient désormais :
+```text
+estimatedTokens <= tokenBudget
+```
+
+### `ContextItem`
 
 ```text
 type
-path relatif au projet
-symbol éventuel
+path
+symbol
 startLine
 endLine
 content
@@ -79,385 +53,296 @@ estimatedTokens
 truncated
 ```
 
-## 3. Vue générale du pipeline
+## 2. Gate de disponibilité
 
-```mermaid
-flowchart LR
-    REQ[ContextRequest] --> SEARCH[SearchService]
-    SEARCH --> RANKED[RankedCandidate]
-    RANKED --> FILTER[Filtre requestedSources]
-    FILTER --> FACTORY[ContextFragmentFactory]
-    FACTORY --> FRAG[ContextFragment]
-    FRAG --> MERGE[FragmentMerger]
-    MERGE --> SELECT[BudgetedContextSelector]
-    SELECT --> ITEMS[ContextItem]
-    ITEMS --> BUNDLE[ContextBundle]
-
-    TOKEN[TokenEstimator] --> FACTORY
-    TOKEN --> SELECT
-```
-
-## 4. Diagramme UML
-
-```mermaid
-classDiagram
-    class ContextBuilder {
-        <<interface>>
-        +build(ContextRequest) ContextBundle
-    }
-
-    class DefaultContextBuilder {
-        -ProjectRepository projectRepository
-        -SearchService searchService
-        -ContextFragmentFactory fragmentFactory
-        -FragmentMerger fragmentMerger
-        -BudgetedContextSelector contextSelector
-        -TokenEstimator tokenEstimator
-        +build(ContextRequest) ContextBundle
-    }
-
-    class ContextFragmentFactory {
-        +create(ProjectDescriptor, String, List~RankedCandidate~, int) List~ContextFragment~
-    }
-
-    class FragmentMerger {
-        +merge(List~ContextFragment~) List~ContextFragment~
-    }
-
-    class BudgetedContextSelector {
-        +select(List~ContextFragment~, int, boolean) ContextSelectionResult
-    }
-
-    class TokenEstimator {
-        <<interface>>
-        +estimate(CharSequence) int
-    }
-
-    class HeuristicTokenEstimator
-    class ContextBundle
-    class ContextItem
-    class ContextFragment
-
-    ContextBuilder <|.. DefaultContextBuilder
-    DefaultContextBuilder --> ContextFragmentFactory
-    DefaultContextBuilder --> FragmentMerger
-    DefaultContextBuilder --> BudgetedContextSelector
-    DefaultContextBuilder --> TokenEstimator
-    TokenEstimator <|.. HeuristicTokenEstimator
-    ContextFragmentFactory --> ContextFragment
-    FragmentMerger --> ContextFragment
-    BudgetedContextSelector --> ContextItem
-    DefaultContextBuilder --> ContextBundle
-```
-
-## 5. Étape 1 — Résoudre le projet
-
-`DefaultContextBuilder` charge le projet par `projectId`.
-
-Le projet doit être en état :
+`DefaultContextBuilder` résout le projet puis exige :
 
 ```text
-READY
+IndexStatus.READY
 ```
 
-Sinon la construction échoue avec `ContextBuildingException`.
+Un projet `NOT_INDEXED`, `INDEXING` ou `FAILED` est refusé avec `ContextBuildingException`.
 
-Cela évite de construire un contexte sur un index non initialisé ou en échec.
+Cette protection est déjà correcte dans le builder. La Phase 6 doit appliquer le même principe aux autres lectures indexées (`search`, symboles, usages).
 
-## 6. Étape 2 — Récupérer davantage de candidats que nécessaire
-
-Le builder calcule une limite de récupération :
+## 3. Pipeline complet
 
 ```text
-retrievalLimit = clamp(tokenBudget / 40, 20, 100)
+ContextRequest
+    │
+    ▼
+SearchService
+    │
+    ▼
+RankedCandidate[]
+    │
+    ├── filtre requestedSources
+    │
+    ├── targetPaths
+    │      ├── instructions natives
+    │      └── contexte Git ciblé
+    │
+    ├── discovery/matching/loading des skills
+    │
+    ▼
+ContextFragmentFactory
+    │
+    ├── fragments tâche
+    ├── fragments instructions
+    ├── fragments skills
+    └── fragments Git
+    │
+    ▼
+déduplication cross-source
+    │
+    ▼
+FragmentMerger
+    │
+    ▼
+sélections par budgets successifs
+    │
+    ▼
+ContextBundle + metadata
 ```
 
-Exemples :
+## 4. Retrieval de candidats
 
-| Budget | Candidats demandés au SearchService |
-|---:|---:|
-| 200 | 20 |
-| 800 | 20 |
-| 2 000 | 50 |
-| 10 000 | 100 |
-
-L'objectif est d'avoir suffisamment de choix avant le budget sans récupérer arbitrairement des milliers de candidats.
-
-## 7. Étape 3 — Filtrer les sources demandées
-
-Si :
-
-```java
-requestedSources = Set.of()
-```
-
-aucun filtre n'est appliqué.
-
-Sinon seuls les types demandés sont conservés.
-
-Exemple :
-
-```java
-Set.of(CandidateType.SYMBOL, CandidateType.TEST)
-```
-
-permettrait de construire un bundle uniquement à partir de symboles et tests.
-
-## 8. Étape 4 — Matérialiser les fragments
-
-`ContextFragmentFactory` lit le contenu réel depuis le filesystem.
-
-Les chemins du `ContextItem` sont ensuite rendus **relatifs à la racine projet**.
-
-### Cas A — un symbole est disponible
-
-Pour un `CodeSymbol` :
+La limite demandée à `SearchService` dépend du budget :
 
 ```text
-start = symbol.startLine - 2
-end   = symbol.endLine + 2
+retrievalLimit = min(100, max(20, tokenBudget / 40))
 ```
 
-avec bornage dans le fichier.
+Le builder récupère ainsi un ensemble plus large que les quelques fragments qui rentreront finalement dans le budget.
 
-Le fragment contient donc le symbole et deux lignes de contexte de chaque côté.
+## 5. Filtrage des sources
 
-```mermaid
-flowchart LR
-    AST["CodeSymbol<br/>startLine / endLine"] --> PAD[Ajouter ±2 lignes]
-    PAD --> READ[Lire la plage]
-    READ --> F[ContextFragment]
-```
+Si `requestedSources` est non vide, seuls les candidats de ces types sont conservés pour les fragments de tâche.
 
-### Pourquoi privilégier le symbole ?
-
-Supposons un fichier de 800 lignes contenant une méthode pertinente de 20 lignes.
-
-Inclure le fichier entier peut coûter plusieurs milliers de tokens.
-
-Inclure :
+Types actuellement utilisés dans la construction :
 
 ```text
-méthode + 2 lignes avant + 2 lignes après
+FILE
+SYMBOL
+TEST
+DOCUMENTATION
+INSTRUCTION
+SKILL
+GIT
 ```
 
-conserve davantage de budget pour d'autres dépendances pertinentes.
+Les instructions, skills et Git possèdent leurs propres pipelines de discovery ; ils ne sont pas ramenés artificiellement par la recherche Lucene générique.
 
-### Cas B — candidat fichier sans symbole précis
+## 6. `targetPaths`
 
-Le builder estime d'abord le fichier complet.
+Le builder conserve jusqu'à 100 chemins relatifs dérivés des candidats classés.
 
-Le seuil d'inclusion complète est :
+Ces chemins servent à :
+
+- résoudre les instructions avec scope ;
+- cibler l'historique/diff Git ;
+- contextualiser les sources natives autour des fichiers réellement pertinents.
+
+## 7. Instructions natives
+
+Providers composés :
 
 ```text
-fullFileThreshold = max(120, min(800, tokenBudget / 4))
+AgentsMdInstructionProvider
+CopilotInstructionProvider
+ClaudeInstructionProvider
+GeminiInstructionProvider
 ```
 
-Si le fichier est inférieur à ce seuil, il est inclus intégralement.
+`ContextSourceDiscoveryService` agrège les sources applicables et déduplique les contenus.
 
-Sinon NEXUS construit des fenêtres lexicales.
+Les références locales `@fichier` sont confinées au repository et limitées en profondeur.
 
-## 9. Fenêtres lexicales de fichier
+Les sources découvertes sont transformées en fragments via `ContextSourceFragmentFactory`.
 
-Pour un fichier long :
+## 8. Agent Skills
 
-1. extraire les termes de la requête ;
-2. trouver les lignes qui contiennent au moins un terme ;
-3. prendre `±5` lignes autour ;
-4. limiter à 4 fenêtres ;
-5. fusionner les fenêtres qui se chevauchent ou sont adjacentes.
-
-Exemple :
+Pipeline :
 
 ```text
-ligne 100 contient "ContextBuilder"
-→ plage 95..105
-
-ligne 108 contient "ContextBuilder"
-→ plage 103..113
-
-fusion
-→ plage 95..113
+SkillDiscoveryService
+→ SkillSelector
+→ SkillLoader
+→ SkillContextSelector
 ```
 
-Si aucun terme n'est trouvé, le fallback initial prend les 40 premières lignes.
+La découverte utilise seulement les métadonnées légères. Le corps complet du `SKILL.md` est chargé après sélection.
 
-Ce fallback est volontairement simple et devra être mesuré avant sophistication.
+Les ressources associées sont inventoriées mais ne sont ni chargées ni exécutées automatiquement.
 
-## 10. Étape 5 — Fusionner les fragments
+La priorité locale sur AI Skills Registry est conservée par les descriptors/algorithmes de déduplication. La composition provider actuelle doit encore être simplifiée ; voir F09.
 
-`FragmentMerger` groupe les fragments par chemin.
+## 9. Contexte Git
 
-Deux plages sont fusionnées si :
+`LocalGitContextSourceProvider` est interrogé seulement si :
+
+- la source `GIT` est demandée ou les sources sont laissées ouvertes ;
+- le provider existe ;
+- le budget global est d'au moins 500 tokens.
+
+Le provider peut produire :
+
+- commits récents liés ;
+- historique court ;
+- diff local ciblé ;
+- co-changements.
+
+Il reste strictement local et en lecture seule.
+
+## 10. Fragments de tâche
+
+`ContextFragmentFactory` matérialise les candidats code/tests/documentation/symboles.
+
+### Symbole précis
+
+Lorsqu'un `CodeSymbol` est disponible, NEXUS privilégie un extrait autour de sa plage plutôt que le fichier entier.
+
+### Fichier sans symbole précis
+
+Le builder peut :
+
+- inclure le fichier entier s'il reste assez petit relativement au budget ;
+- sinon produire des fenêtres autour des termes de la requête ;
+- utiliser un fallback borné si aucune correspondance lexicale locale n'est trouvée.
+
+L'objectif est de préserver la diversité du contexte plutôt que de laisser un seul fichier consommer tout le budget.
+
+## 11. Déduplication cross-source
+
+Un fichier déjà sélectionné comme instruction/référence native ne doit pas être réinjecté comme fragment de tâche uniquement parce que Lucene l'a également remonté.
+
+Le builder compare les chemins normalisés puis expose notamment :
 
 ```text
-next.startLine <= current.endLine + 1
+metadata.crossSourceDeduplicatedFragments
 ```
 
-Cela couvre :
+`FragmentMerger` fusionne ensuite les plages chevauchantes/adjacentes d'un même fichier.
 
-- chevauchement ;
-- inclusion d'une plage dans une autre ;
-- adjacence directe.
+## 12. Estimateur de tokens
 
-### Exemple
+L'implémentation par défaut est `HeuristicTokenEstimator` :
 
 ```text
-Fragment A : lignes 10..20
-Fragment B : lignes 18..30
-
-Résultat : lignes 10..30
+estimatedTokens = ceil(pointsDeCodeUnicode / 3.5)
 ```
 
-Le contenu chevauchant n'est pas dupliqué.
+Cette estimation est :
 
-Les métadonnées sont fusionnées ainsi :
+- locale ;
+- déterministe ;
+- remplaçable via `TokenEstimator` ;
+- indépendante d'un fournisseur LLM.
 
-- score final = score du fragment le mieux classé ;
-- composantes du score = composantes du même fragment le mieux classé, afin que leur somme reste cohérente avec le score ;
-- raisons = union ordonnée ;
-- symboles = concaténés lorsqu'ils diffèrent.
+Elle ne prétend pas reproduire exactement un tokenizer OpenAI, Anthropic ou autre.
 
-Le merger ne refait donc pas le ranking. Il évite uniquement la duplication de contenu en préservant l'explicabilité du meilleur candidat.
+## 13. Sélection gloutonne
 
-## 11. Estimation des tokens
+`BudgetedContextSelector` :
 
-L'implémentation par défaut est `HeuristicTokenEstimator`.
+1. trie les fragments par score, chemin et lignes ;
+2. borne la part d'un fragment à environ la moitié du budget de la sélection ;
+3. inclut le fragment complet s'il tient ;
+4. sinon tente une troncature utile ;
+5. conserve les exclusions lorsque `explain=true`.
 
-Formule :
-
-```text
-estimatedTokens = ceil(nombreDePointsDeCodeUnicode / 3.5)
-```
-
-Exemple approximatif :
-
-```text
-350 caractères Unicode
-→ environ 100 tokens estimés
-```
-
-Cette valeur est volontairement une **estimation générique**, pas le résultat exact du tokenizer OpenAI, Anthropic ou autre.
-
-Le port :
-
-```java
-public interface TokenEstimator {
-    int estimate(CharSequence text);
-}
-```
-
-permettra d'injecter un tokenizer exact dans un adaptateur futur.
-
-## 12. Étape 6 — Sélection sous budget
-
-`BudgetedContextSelector` reçoit les fragments déjà fusionnés.
-
-### Tri
-
-Ordre :
-
-1. score décroissant ;
-2. chemin ;
-3. ligne de début ;
-4. ligne de fin.
-
-### Plafond par item
-
-Pour éviter qu'un seul fragment monopolise tout le contexte :
-
-```text
-maxPerItemTokens = max(24, tokenBudget / 2)
-```
-
-Ainsi, avec un budget de 1 000 :
-
-```text
-un fragment individuel est plafonné à environ 500 tokens
-```
-
-Cela laisse de la place à au moins une autre information pertinente.
-
-## 13. Algorithme de sélection
-
-Pseudo-code correspondant à l'implémentation :
-
-```text
-remaining = tokenBudget
-selected = []
-
-for fragment in fragments sorted by score:
-    fullTokens = estimate(fragment.content)
-    allowed = min(remaining, maxPerItemTokens)
-
-    if fullTokens <= allowed:
-        select(fragment)
-        remaining -= fullTokens
-
-    else if allowed >= 24:
-        truncated = truncate(fragment, allowed)
-
-        if truncated fits:
-            select(truncated)
-            remaining -= truncated.tokens
-
-    else:
-        exclude(fragment)
-```
-
-Le résultat satisfait toujours :
-
-```text
-sum(item.estimatedTokens) <= tokenBudget
-```
-
-## 14. Troncature
-
-La troncature essaie d'abord de conserver des lignes complètes.
-
-Marqueur :
+Un fragment tronqué porte le marqueur :
 
 ```text
 ... [fragment tronqué par NEXUS]
 ```
 
-Si aucune ligne complète ne tient avec le marqueur, une recherche binaire détermine le plus grand préfixe de caractères compatible avec le budget.
+La sélection reste déterministe.
 
-L'item reçoit :
+## 14. Politique de budgets par famille
 
-```text
-truncated = true
-```
-
-Avec `explain=true`, une raison supplémentaire indique que la troncature sert à respecter le budget et préserver la diversité.
-
-## 15. Exclusions
-
-Un fragment qui ne peut pas être inclus produit une explication de la forme :
+### Instructions
 
 ```text
-src/.../Demo.java:10-50 exclu : 180 tokens estimés requis, 12 disponibles
+instructionBudget = min(
+    totalBudget,
+    600,
+    max(24, totalBudget / 4)
+)
 ```
 
-Ces messages sont exposés dans :
+Soit environ 25 % du budget, plafonné à 600 tokens.
+
+### Skills
 
 ```text
-ContextBundle.excluded
+skillBudget = min(
+    remaining,
+    2000,
+    max(64, totalBudget / 5)
+)
 ```
 
-uniquement lorsque `explain=true` dans l'implémentation actuelle.
+Soit environ 20 %, plafonné à 2 000 tokens.
 
-## 16. Métadonnées du bundle
+### Git
 
-`DefaultContextBuilder` ajoute actuellement :
+Le Git est désactivé sous 500 tokens de budget global.
+
+Lorsqu'il est actif :
+
+```text
+gitBudget = min(
+    remaining,
+    500,
+    max(64, totalBudget * 15 / 100)
+)
+```
+
+### Tâche
+
+Le contexte de tâche reçoit tout le budget restant après instructions, skills et Git.
+
+Le budget non consommé par une famille n'est pas perdu : il reste disponible pour les familles suivantes.
+
+## 15. Metadata d'explication
+
+Le bundle expose notamment :
 
 ```text
 query
 tokenEstimator
 rankedCandidates
 sourceEligibleCandidates
+documentationCandidates
 materializedFragments
+crossSourceDeduplicatedFragments
 mergedFragments
+instructionProviders
+nativeSourcesDiscovered
+instructionBudget
+instructionSelectedItems
+instructionSelectedTokens
+skillProviders
+skillsDiscovered
+skillsMatched
+skillsActivated
+skillResourcesDiscovered
+skillBudget
+skillSelectedItems
+skillSelectedTokens
+skillsExecuted=false
+gitProvider
+gitEnabled
+gitRepositoryAvailable
+gitDiagnostics
+gitCommitsInspected
+gitRelatedCommits
+gitCoChangeLinks
+gitBudget
+gitSelectedItems
+gitSelectedTokens
+nativeCustomizationsDetected
 selectedItems
 excludedItems
 truncatedItems
@@ -466,132 +351,54 @@ selectedEstimatedTokens
 reductionRatio
 ```
 
-### Ratio de réduction
+Les métadonnées décrivent le calcul et la sélection ; elles ne dépendent pas d'une explication générée par un modèle.
 
-```text
-reductionRatio = 1 - selectedEstimatedTokens / availableEstimatedTokens
-```
+## 16. Sécurité
 
-Exemple :
+- les chemins de fragments doivent rester sous la racine projet ;
+- les instructions ne peuvent pas référencer arbitrairement un fichier extérieur ;
+- les skills ne sont jamais exécutés ;
+- le Git context ne mute pas le repository ;
+- un provider externe n'est pas requis pour construire un contexte standard ;
+- un bundle ne doit jamais dépasser son budget estimé.
 
-```text
-fragments disponibles : 4 000 tokens
-bundle sélectionné     : 1 000 tokens
+## 17. Contexte multi-projet
 
-reductionRatio = 0.75
-```
+Le builder actuel reste **mono-projet**.
 
-NEXUS a donc réduit de 75 % le volume candidat estimé.
+La recherche fédérée existe déjà, mais aucun `ContextBundle` fédéré n'est livré sur `main`.
 
-## 17. Séquence complète
+Une ancienne PR draft #10 a exploré ce besoin sans validation/merge final. La capacité est replanifiée en Itération 23 après les travaux de correctness, scale et composition.
 
-```mermaid
-sequenceDiagram
-    actor User as Utilisateur
-    participant CLI as NexusCli
-    participant B as DefaultContextBuilder
-    participant S as SearchService
-    participant F as ContextFragmentFactory
-    participant M as FragmentMerger
-    participant T as TokenEstimator
-    participant SEL as BudgetedContextSelector
+Le futur builder fédéré doit notamment garantir :
 
-    User->>CLI: context project query --budget 500 --explain
-    CLI->>B: build(ContextRequest)
-    B->>S: search(project, query, retrievalLimit, explain)
-    S-->>B: RankedCandidate[]
-    B->>B: filtrer requestedSources
-    B->>F: create(project, query, ranked, budget)
-    F->>T: estimate(fichiers)
-    F-->>B: ContextFragment[]
-    B->>M: merge(fragments)
-    M-->>B: fragments fusionnés
-    B->>SEL: select(fragments, budget, explain)
-    SEL->>T: estimate(fragment)
-    SEL-->>B: ContextSelectionResult
-    B-->>CLI: ContextBundle
-```
+- budget global unique ;
+- provenance par projet ;
+- absence de collision de chemins ;
+- déterminisme ;
+- mesure de starvation ;
+- politique explicite pour instructions/skills/Git.
 
-## 18. Exemple CLI
+## 18. Validation
+
+Les tests de contexte couvrent entre autres :
+
+- projet READY obligatoire ;
+- budget strict ;
+- fragments symboliques ;
+- déduplication/fusion ;
+- instructions natives ;
+- Agent Skills ;
+- Git ;
+- metadata ;
+- troncature ;
+- sources demandées.
+
+Le gate de base reste :
 
 ```powershell
-mvn -q exec:java "-Dexec.args=context nexus-local ProjectIndexingService --budget 500 --explain"
+mvn clean install
+.\scripts\self-smoke.ps1
 ```
 
-La sortie contient :
-
-```text
-Contexte 'ProjectIndexingService' : N item(s), X/500 tokens estimés
-
-[1] score TYPE chemin:ligneDébut-ligneFin (tokens)
------
-<contenu réellement inclus>
------
-```
-
-Puis, si `--explain` :
-
-- raisons ;
-- métadonnées ;
-- exclusions.
-
-## 19. Pourquoi le chemin du bundle est relatif ?
-
-La recherche interne utilise un chemin absolu pour lire le fichier.
-
-Mais un `ContextBundle` doit rester portable :
-
-```text
-N:\workspace-dev\nexus-context-engine\src\...
-```
-
-ne doit pas devenir une identité persistante du contexte.
-
-La sortie utilise donc :
-
-```text
-src/main/java/io/github/fturleque/nexus/...
-```
-
-## 20. Limites actuelles
-
-L'implémentation initiale ne gère pas encore :
-
-- sous-budgets par type de source ;
-- diversité optimisée globalement ;
-- tokenizer exact par modèle ;
-- documentation/instructions/skills ;
-- fragments structurels non Java ;
-- résolution automatique des dépendances nécessaires à la compilation d'un extrait ;
-- optimisation globale de type knapsack.
-
-Ces limites sont volontaires. Le glouton déterministe constitue la baseline mesurable.
-
-## 21. Tests
-
-Les nouveaux tests couvrent :
-
-- déterminisme de l'estimateur ;
-- Unicode ;
-- fusion de plages chevauchantes ;
-- cohérence score/composantes après fusion ;
-- chemins relatifs ;
-- construction de contexte de bout en bout ;
-- respect strict du budget ;
-- troncature d'un gros fragment ;
-- déterminisme du bundle.
-
-Le self-smoke est également étendu pour construire un contexte réel sur le repository NEXUS.
-
-## 22. Modifier la politique de contexte
-
-Avant toute modification :
-
-1. identifier si la décision relève des ADR 0013, 0027, 0028 ou 0029 ;
-2. ajouter un test qui montre le problème actuel ;
-3. modifier une responsabilité isolée ;
-4. vérifier `mvn clean install` ;
-5. vérifier le self-smoke ;
-6. mesurer le ratio de réduction et la qualité du corpus lorsque pertinent.
-
-Ne pas déplacer la logique de budget dans la CLI ou un futur adaptateur LLM.
+Voir aussi [`current-limitations.md`](current-limitations.md) et les Itérations 18/23 de la [`roadmap`](../roadmap.md).
