@@ -1,14 +1,39 @@
-# Feuille de route incrémentale
+# Feuille de route NEXUS
 
-Cette feuille de route active suit la progression actuelle de NEXUS et conserve les critères de sortie des prochaines itérations.
+Cette feuille de route est la source de vérité active pour l'évolution de NEXUS.
 
-L'historique détaillé des validations des Itérations 0 à 10, avec toutes les métriques intermédiaires, est archivé sans modification dans [`roadmap-history-through-iteration-10.md`](roadmap-history-through-iteration-10.md).
+État de référence au 29 juillet 2026 :
+
+```text
+repository  FTurleque/nexus-context-engine
+main        13fd6970f7350602c7a86aae729ddd4adad771bd
+Java        21
+version     0.1.0-SNAPSHOT
+```
 
 Le principe directeur reste :
 
-> **qualité du contexte > nombre de fonctionnalités > nombre d'intégrations.**
+> **qualité du contexte > correctness > passage à l'échelle > opérabilité > nombre de fonctionnalités > nombre d'intégrations.**
 
-Une nouvelle brique doit rester optionnelle lorsqu'elle n'est pas indispensable au moteur et ne doit pas faire fuiter un framework, un protocole client ou un fournisseur externe dans le cœur.
+Une nouvelle brique doit rester optionnelle lorsqu'elle n'est pas indispensable au moteur. Un framework, un protocole client, un provider externe ou un runtime de modèle ne doit pas fuiter dans le cœur NEXUS.
+
+Les ADR acceptés conservent l'historique des décisions et ne sont pas réécrits rétroactivement. Les documents d'itération conservent les mesures historiques. Cette roadmap décrit l'état courant et l'ordre des prochains travaux.
+
+---
+
+# État consolidé
+
+| Phase | Itérations | État |
+|---|---|---|
+| Phase 1 — Valider le moteur | 0 → 4 | ✅ terminée |
+| Phase 2 — Étendre les sources de contexte | 5 → 7 | ✅ terminée |
+| Phase 3 — Enrichir l'intelligence de code | 8 → 10 | ✅ terminée |
+| Phase 4 — Exposer NEXUS aux autres outils | 11 → 13 | ✅ terminée |
+| Phase 5 — Écosystème et passage à l'échelle | 14 → 17 | ✅ terminée |
+| Intégration compagnon MINOS | issue #11 / PR #12 | ✅ livrée |
+| Phase 6 — Consolidation, hardening et industrialisation | 18 → 24 | ⏭ prochaine phase |
+
+La validation NEXUS associée à l'intégration MINOS a établi sur Java 21 : 128 sources principales, 41 sources de tests, 80 tests exécutés, 0 failure, 0 error, 6 skipped et `BUILD SUCCESS`. Le replay réel MINOS → NEXUS a également été validé. Les preuves détaillées restent dans l'issue #11 et la PR #12.
 
 ---
 
@@ -18,33 +43,25 @@ Une nouvelle brique doit rester optionnelle lorsqu'elle n'est pas indispensable 
 
 ## Itération 0 — Socle architectural
 
-État : **terminée et validée localement**.
-
-Résultat : socle Java 21, contrats du cœur, ADR et premier analyseur Java établis.
+✅ Java 21, contrats du cœur, ADR et premier analyseur Java.
 
 ## Itération 1 — Indexation locale et fondations de recherche
 
-État : **terminée et validée localement**.
-
-Résultat : registre de projets, scan local, SQLite canonique, Lucene reconstructible et indexation incrémentale validés hors ligne.
+✅ Registre de projets, scanner local, SQLite canonique, Lucene reconstructible et indexation incrémentale.
 
 ## Itération 2 — Recherche, graphe et classement explicable
 
-État : **terminée et validée localement**.
-
-Résultat : recherche hybride, fusion déterministe, graphe minimal, ranking et explications de score validés.
+✅ Recherche hybride, fusion déterministe, graphe minimal, ranking et explications de score.
 
 ## Itération 3 — Construction du contexte et budget
 
-État : **terminée et validée localement**.
-
-Résultat : `ContextBuilder`, estimation locale des tokens, sélection de fragments et invariant `estimatedTokens <= tokenBudget` validés.
+✅ `ContextBuilder`, estimation locale des tokens, fragments et invariant `estimatedTokens <= tokenBudget`.
 
 ## Itération 4 — CLI utilisable pour le MVP
 
-État : **terminée et validée localement**.
+✅ CLI humaine/JSON, codes de sortie stables, JAR autonome et flux projet → indexation → recherche → contexte.
 
-Résultat : CLI autonome humaine/JSON, codes de sortie stables et flux complet projet → indexation → recherche → `ContextBundle` validés.
+L'historique détaillé des Itérations 0 à 10 est conservé dans [`roadmap-history-through-iteration-10.md`](roadmap-history-through-iteration-10.md).
 
 ---
 
@@ -54,23 +71,17 @@ Résultat : CLI autonome humaine/JSON, codes de sortie stables et flux complet p
 
 ## Itération 5 — Instructions et documentation
 
-État : **terminée et validée localement**.
-
-Résultat : documentation Markdown et instructions natives (`AGENTS.md`, Copilot, Claude, Gemini) intégrées avec scopes, priorités, références sécurisées et déduplication.
+✅ Markdown et instructions natives `AGENTS.md`, Copilot, Claude et Gemini avec scopes, références sécurisées et déduplication.
 
 ## Itération 6 — Skills et divulgation progressive
 
-État : **terminée et validée localement**.
-
-Résultat : Agent Skills découverts par métadonnées, sélectionnés avant chargement complet, intégrés sous budget et jamais exécutés par NEXUS.
+✅ Agent Skills découverts par métadonnées, sélectionnés avant chargement complet, intégrés sous budget et jamais exécutés par NEXUS.
 
 ## Itération 7 — Contexte Git
 
-État : **terminée et validée localement**.
+✅ Signal de récence et contexte Git local borné, explicable et en lecture seule.
 
-Résultat : signal de récence Git et contexte Git local borné, explicable et optionnel ajoutés sans transformer NEXUS en client Git complet.
-
-Point de surveillance conservé : le coût de l'inspection Git doit continuer à être mesuré avant toute stratégie de cache ou de persistance supplémentaire.
+Point de surveillance conservé : le coût de l'inspection Git doit être remesuré avant toute décision de cache ou de persistance supplémentaire.
 
 ---
 
@@ -80,70 +91,33 @@ Point de surveillance conservé : le coût de l'inspection Git doit continuer à
 
 ## Itération 8 — SCIP et index de code externes
 
-État : **terminée et validée localement**.
-
-Résultat : import SCIP opportuniste derrière `CodeIndexImporter`, avec provenance conservée et enrichissement mesuré sans rendre SCIP obligatoire.
-
-Mesure de référence sur NEXUS : +243 symboles et +8 186 relations, sans dégradation observée du corpus de recherche de l'itération.
+✅ Import SCIP opportuniste derrière `CodeIndexImporter`, avec provenance conservée et sans rendre SCIP obligatoire.
 
 ## Itération 9 — Analyse Java profonde optionnelle
 
-État : **terminée et validée localement**.
+✅ Eclipse JDT Language Server derrière `CodeIntelligenceProvider`, activé explicitement via `--deep-java`.
 
-Résultat : Eclipse JDT Language Server intégré comme provider Java profond explicitement activé par `--deep-java`.
-
-Mesure de référence : +705 symboles et +1 093 relations, mais environ 60,1 s contre 1,8 s pour le chemin normal. JDT LS reste donc strictement à la demande.
+La mesure de référence a confirmé que JDT LS est beaucoup plus coûteux que le chemin normal ; il reste strictement à la demande.
 
 ## Itération 10 — Multi-langage
 
-État : **terminée et validée localement**.
-
-Résultat : support lexical natif de Kotlin, TypeScript, JavaScript, Python et SQL, sans modification fondamentale du `ContextBuilder` ni du ranking.
-
-La structure reste enrichissable via SCIP ou des providers optionnels. La validation a également conduit à normaliser les identifiants `snake_case` et `camelCase` dans Lucene.
+✅ Support lexical natif de Kotlin, TypeScript, JavaScript, Python et SQL. Java conserve JavaParser comme structure embarquée ; les autres langages peuvent recevoir une structure via SCIP, MINOS ou un autre provider.
 
 ---
 
 # Phase 4 — Exposer NEXUS aux autres outils
 
-## Itération 11 — Adaptateur API
+État global : **terminée et intégrée le 20 juillet 2026**.
 
-État : **terminée, validée localement et fusionnée le 20 juillet 2026**.
+## Itération 11 — Adaptateur REST
 
-Résultat : adaptateur REST Quarkus isolé du cœur avec DTO dédiés, endpoints projets/indexation/recherche/contexte/explication, health et métriques.
+✅ Quarkus REST isolé du cœur, DTO dédiés, projets/indexation/recherche/contexte/explication, health et métriques.
 
-Validation de référence :
-
-- cœur : 45 tests verts ;
-- baseline : `precision@3 = 0,4444`, `recall@3 = 1,0000` ;
-- self-smoke : succès ;
-- test REST de bout en bout : succès ;
-- health et metrics : succès ;
-- runner Quarkus produit.
-
-Défauts révélés puis corrigés : gestion de l'initialisation SQLite dans CDI et `HTTP 415` causé par un `@Consumes(JSON)` trop large.
-
-PR #4 fusionnée dans `main` au commit `d5565dc3da0be823929afe73ca7345fd2bc1e6ca`.
-
----
+PR #4 fusionnée dans `main`.
 
 ## Itération 12 — Adaptateur MCP
 
-État : **terminée, validée localement et fusionnée le 20 juillet 2026**.
-
-Objectif : rendre NEXUS directement utilisable par les assistants et agents compatibles MCP sans introduire le protocole dans le cœur.
-
-Architecture retenue :
-
-- SDK Java MCP officiel `2.0.0` ;
-- adaptateur isolé dans `adapters/mcp-java` ;
-- transport local STDIO ;
-- façade applicative commune `NexusApplication` utilisée par REST et MCP ;
-- handlers MCP limités à validation, appel NEXUS et mapping ;
-- aucune logique de ranking ou de construction du contexte dans MCP ;
-- `stdout` réservé au transport JSON-RPC.
-
-Tools validés :
+✅ Serveur MCP Java STDIO autonome avec six tools :
 
 ```text
 list_projects
@@ -154,403 +128,356 @@ build_context
 explain_context
 ```
 
-Livrables validés :
+REST et MCP s'appuient sur la façade applicative `NexusApplication`. L'incident Jackson rencontré pendant cette itération constitue désormais un cas de référence pour la gouvernance future des dépendances.
 
-- serveur MCP STDIO autonome ;
-- schémas d'entrée explicites ;
-- réponses JSON inspectables dans le contenu MCP ;
-- vrai client MCP Java pour les tests d'intégration ;
-- parité `search_code` avec `NexusApplication.search` ;
-- parité `build_context` avec `NexusApplication.context` ;
-- validation `find_symbol` ;
-- contrat exact des six tools ;
-- régression REST après extraction de `NexusApplication` ;
-- ADR-0040 ;
-- documentation `docs/developer/mcp.md` ;
-- script `scripts/validate-iteration-12.ps1` avec mode `-AdapterOnly` ;
-- runner `adapters/mcp-java/target/nexus-mcp-java-0.1.0-SNAPSHOT-runner.jar`.
-
-Validation réelle du 20 juillet 2026 :
-
-- `mvn clean install` du cœur : succès ;
-- 45 tests cœur, 0 échec, 0 erreur ;
-- baseline qualité conservée : `precision@3 = 0,4444`, `recall@3 = 1,0000` ;
-- `SELF-SMOKE SUCCESS` ;
-- 216 fichiers indexés ;
-- 1 152 symboles ;
-- 9 562 relations ;
-- indexation complète : 2 068 ms ;
-- indexation incrémentale : 659 ms ;
-- recherche explicable : 726 ms ;
-- contexte strict : 3 items, 100/180 tokens, 882 ms ;
-- contexte multi-source : 12 items, 1 187/1 200 tokens, 1 082 ms ;
-- contexte avec skill : 1 194/1 200 tokens, 1 101 ms ;
-- contexte Git : 1 598/1 600 tokens, 1 080 ms ;
-- réduction du contexte candidat strict : 99,39 % ;
-- régression REST après façade commune : succès ;
-- client MCP STDIO réel : succès ;
-- parité `search_code` : succès ;
-- parité `build_context` : succès ;
-- `find_symbol` : succès ;
-- test MCP final : 1 test, 0 échec, 0 erreur ;
-- contrat exact des six tools : succès ;
-- build MCP final : 10,056 s ;
-- packaging runner MCP : succès.
-
-Défaut révélé et corrigé pendant la validation :
-
-- le premier démarrage du client MCP a échoué avec `NoClassDefFoundError: JsonSerializeAs` à cause d'un graphe Jackson incohérent entre NEXUS et `mcp-json-jackson2` ;
-- le POM MCP aligne désormais explicitement `jackson-core` et `jackson-databind` sur `2.22.1`, ainsi que `jackson-annotations` sur `2.21`, sans modifier les dépendances du cœur.
-
-Critère de sortie : **validé**. Un client MCP réel initialise une session STDIO, découvre exactement les six tools NEXUS et obtient pour la recherche et la construction du contexte les mêmes résultats que la façade applicative commune utilisée par l'API.
-
-PR #5 fusionnée dans `main` au commit `d6e6b190b4082686c1514b0a82f2fef033180858`.
-
----
+PR #5 fusionnée dans `main`.
 
 ## Itération 13 — Adaptateurs Copilot et Claude
 
-État : **terminée, validée localement et fusionnée le 20 juillet 2026**.
+✅ Génération déterministe de configurations pour Copilot CLI, Copilot JetBrains, Claude project et Claude user, sans modifier silencieusement les préférences utilisateur.
 
-Objectif : faciliter l'utilisation de NEXUS dans GitHub Copilot et Claude sans créer deux implémentations propriétaires du moteur de contexte.
-
-Architecture retenue :
-
-- réutiliser le serveur MCP NEXUS validé à l'Itération 12 ;
-- isoler la génération de configuration dans `adapters/assistant-clients` ;
-- ne jamais dupliquer `SearchService`, le ranking ou le `ContextBuilder` ;
-- ne modifier automatiquement aucune préférence utilisateur ;
-- ne gérer aucun secret ni mécanisme d'authentification ;
-- conserver les instructions natives des clients séparées des tools MCP NEXUS ;
-- formaliser cette frontière dans ADR-0041.
-
-Profils validés :
-
-- `copilot-cli` — commande d'installation ou JSON `mcpServers` ;
-- `copilot-jetbrains` — JSON `servers` pour les IDE JetBrains ;
-- `claude-project` — commande avec scope `project` ou JSON projet ;
-- `claude-user` — commande avec scope `user`.
-
-Livrables validés :
-
-- module autonome `adapters/assistant-clients` ;
-- génération déterministe de commandes et fragments JSON ;
-- normalisation des chemins locaux, y compris les chemins Windows avec espaces ;
-- 4 tests de génération ;
-- documentation `adapters/assistant-clients/README.md` ;
-- script `scripts/validate-iteration-13.ps1` ;
-- ADR-0041 ajouté et indexé ;
-- runner `adapters/assistant-clients/target/nexus-assistant-clients-0.1.0-SNAPSHOT-runner.jar`.
-
-Validation réelle du 20 juillet 2026 :
-
-- build cœur : succès en 14,325 s ;
-- 45 tests cœur, 0 échec, 0 erreur ;
-- baseline qualité conservée : `precision@3 = 0,4444`, `recall@3 = 1,0000` ;
-- `SELF-SMOKE SUCCESS` ;
-- 219 fichiers indexés ;
-- 1 170 symboles ;
-- 9 578 relations ;
-- indexation complète : 2 132 ms ;
-- indexation incrémentale : 681 ms ;
-- recherche explicable : 780 ms ;
-- contexte strict : 4 items, 170/180 tokens, 930 ms ;
-- contexte multi-source : 12 items, 1 181/1 200 tokens, 1 068 ms ;
-- contexte avec skill : 1 180/1 200 tokens, 1 093 ms ;
-- contexte Git : 1 596/1 600 tokens, 1 085 ms ;
-- Git : 50 commits inspectés, 13 liés, 3 fragments sélectionnés ;
-- réduction du contexte candidat strict : 99,01 % ;
-- régression MCP : succès, 1 test, 0 échec, 0 erreur ;
-- test MCP : 2,767 s ;
-- build MCP : 9,024 s ;
-- intégrations assistants : succès, 4 tests, 0 échec, 0 erreur ;
-- tests intégrations : 0,274 s ;
-- build intégrations : 3,102 s ;
-- profils Copilot CLI, Copilot JetBrains, Claude project et Claude user : générés avec succès ;
-- runner MCP : produit ;
-- runner intégrations : produit.
-
-Les avertissements SLF4J, native access, Vector API et Maven Shade observés pendant la validation restent non bloquants pour cette itération.
-
-Critère de sortie : **validé**. Depuis un runner MCP NEXUS local, un développeur peut obtenir une configuration ou une commande d'installation déterministe pour les quatre profils clients couverts, sans dupliquer la logique du moteur, modifier silencieusement ses préférences ou exposer de secret.
-
-PR #6 fusionnée dans `main` au commit `05b311044b8bb0a64dfc598d7e2e00b31f8359a7`.
+PR #6 fusionnée dans `main`.
 
 ---
 
 # Phase 5 — Écosystème et passage à l'échelle
 
+État global : **terminée et validée**.
+
 ## Itération 14 — AI Skills Registry
 
-État : **terminée, validée localement et fusionnée le 20 juillet 2026**.
+✅ Snapshot local optionnel, priorité des skills projet, divulgation progressive et absence d'accès réseau pendant la construction du contexte.
 
-Objectif : connecter la sélection de skills de NEXUS à AI Skills Registry tout en gardant NEXUS utilisable sans registre.
-
-Architecture retenue :
-
-- `AiSkillsRegistryProvider` s'appuie sur le contrat `SkillSourceProvider` existant ;
-- NEXUS lit un snapshot local sous `.nexus/registry/skills/**/SKILL.md` ;
-- aucune requête réseau ni opération Git n'est effectuée pendant la construction d'un contexte ;
-- l'absence de snapshot ne bloque jamais NEXUS ;
-- la divulgation progressive est conservée : frontmatter avant sélection, corps complet après sélection ;
-- les skills locaux du projet gardent une priorité `80`, supérieure à la priorité `60` des skills du registre ;
-- `.nexus/registry/` reste un cache local non versionné.
-
-Livrables validés :
-
-- `AiSkillsRegistryProvider` ;
-- agrégation dans le pipeline de découverte existant ;
-- priorité déterministe des skills locaux sur les doublons du registre ;
-- tests de découverte, sélection et chargement progressif ;
-- ADR-0042 ajouté et indexé ;
-- documentation `docs/developer/ai-skills-registry.md` ;
-- script `scripts/validate-iteration-14.ps1`.
-
-Validation réelle du 20 juillet 2026 :
-
-- `mvn clean install` : succès en 14,179 s ;
-- 47 tests cœur, 0 échec, 0 erreur ;
-- baseline qualité conservée : `precision@3 = 0,4444`, `recall@3 = 1,0000` ;
-- `SELF-SMOKE SUCCESS` ;
-- 222 fichiers indexés ;
-- 1 185 symboles ;
-- 9 600 relations ;
-- indexation complète : 2 127 ms ;
-- indexation incrémentale : 594 ms ;
-- recherche explicable : 724 ms ;
-- contexte strict : 3 items, 100/180 tokens, 883 ms ;
-- contexte multi-source : 12 items, 1 200/1 200 tokens, 1 077 ms ;
-- contexte avec skill : 1 192/1 200 tokens, 1 143 ms ;
-- contexte Git : 1 592/1 600 tokens, 1 114 ms ;
-- Git : 50 commits inspectés, 13 liés, 3 fragments sélectionnés ;
-- réduction du contexte candidat strict : 99,41 % ;
-- `AiSkillsRegistryProviderTest` : 2 tests, 0 échec, 0 erreur ;
-- tests dédiés : succès en 1,860 s ;
-- priorité locale sur registre : validée ;
-- divulgation progressive du registre : validée.
-
-Incident révélé puis corrigé pendant la validation :
-
-- le premier `testCompile` a échoué car le test utilisait `duplicates()` alors que `SkillDiscoveryResult` expose `deduplicatedSkills()` ;
-- le correctif a uniquement modifié le test, sans toucher au code de production ;
-- la validation complète a ensuite été rejouée avec succès.
-
-Les avertissements SLF4J, native access, Vector API et Maven Shade observés restent non bloquants pour cette itération.
-
-Critère de sortie : **validé**. NEXUS peut découvrir et sélectionner des skills provenant d'un snapshot local AI Skills Registry sans rendre le registre obligatoire, sans accès réseau pendant une requête et sans perdre la priorité des règles spécifiques au projet.
-
-PR #7 fusionnée dans `main` au commit `118de1333d8c94dd152ebadec2106f8b00e1b291`.
-
----
+PR #7 fusionnée dans `main`.
 
 ## Itération 15 — JARVIS, Alfred et Brainiac
 
-État : **terminée, validée localement et intégrée le 20 juillet 2026**.
-
-Objectif : utiliser NEXUS comme fournisseur de contexte commun tout en conservant JARVIS comme orchestrateur et en gardant NEXUS indépendant de JARVIS, Watchtower et des modèles spécialisés.
-
-Répartition validée :
-
-```text
-JARVIS
-→ orchestration, recherche documentaire et routage
-
-NEXUS
-→ sélection et construction du contexte technique
-
-AI Skills Registry
-→ découverte des capacités
-
-JARVIS Watchtower
-→ catalogue et résolution des profils de modèles
-
-Alfred
-→ traitement général et documentaire
-
-Brainiac
-→ raisonnement approfondi et résolution complexe
-
-Ollama / runtime LLM
-→ exécution de la génération
-```
-
-Architecture retenue :
-
-- l'intégration est réalisée du côté consommateur JARVIS ; aucun couplage vers JARVIS ou Watchtower n'est ajouté au cœur NEXUS ;
-- JARVIS consomme le contexte NEXUS via l'API REST locale `/api/v1/projects/{projectId}/context` ;
-- le contrat `ExternalContextProvider` isole l'enrichissement technique dans JARVIS ;
-- `NexusContextProvider` est désactivé par défaut, utilise un timeout court et fonctionne en fail-open ;
-- le contexte NEXUS enrichit le prompt mais ne devient jamais une source documentaire citée par JARVIS ;
-- la recherche documentaire JARVIS reste la source de vérité des citations ;
-- l'absence de résultats documentaires conserve le comportement existant et NEXUS ne se substitue pas aux preuves documentaires ;
-- aucune dépendance Maven JARVIS → NEXUS ni NEXUS → JARVIS n'est introduite ;
-- `LanguageModelClient` découple désormais l'orchestration de génération du runtime Ollama ;
-- `ModelCatalog`, `ModelProfile`, `ModelRouter` et `ModelRoute` portent le contrat de routage ;
-- `WatchtowerModelCatalog` charge optionnellement un `catalog.yaml` local, sans requête réseau pendant la génération ;
-- les questions générales ou documentaires sont routées vers le profil logique `alfred` ;
-- les demandes contenant des marqueurs explicites de raisonnement approfondi sont routées vers `brainiac` ;
-- les fallbacks déclarés par Watchtower sont respectés lorsqu'un runtime exécutable existe ;
-- tant que Watchtower conserve `runtime.model_name: null` pour Alfred et Brainiac, le fallback explicite `legacy-ollama` maintient le comportement historique ;
-- la décision de routage journalise le profil demandé, le profil résolu, la version, le runtime, le fallback et la raison, sans journaliser les prompts privés.
-
-Premier incrément — NEXUS → JARVIS :
-
-- PR JARVIS #89 `M8 — Intégrer NEXUS comme fournisseur de contexte optionnel` ;
-- 524 tests `jarvis-core`, 0 échec, 0 erreur, 16 ignorés ;
-- 16 tests ciblés NEXUS/Answer, 0 échec, 0 erreur ;
-- Spotless validé sur `jarvis`, `jarvis-core`, `jarvis-worker` et `jarvis-web` ;
-- PR fusionnée dans `FTurleque/jarvis:master` au commit `feb25195a6e3543307828204526e93f7d8451d30`.
-
-Deuxième incrément — Watchtower / Alfred / Brainiac :
-
-- PR JARVIS #90 `M8 — Router la génération via Watchtower, Alfred et Brainiac` ;
-- 530 tests `jarvis-core`, 0 échec, 0 erreur, 16 ignorés ;
-- 21 tests ciblés Watchtower/Answer/Ollama, 0 échec, 0 erreur ;
-- Spotless validé sur les quatre modules JARVIS ;
-- routage déterministe et fallback `legacy-ollama` validés ;
-- PR fusionnée dans `FTurleque/jarvis:master` au commit `0156175408cdd6c072d10d174c12e59702102d8f`.
-
-Critère de sortie : **validé**. JARVIS peut enrichir ses réponses avec un contexte technique sélectionné par NEXUS, puis router la génération vers des profils logiques Watchtower sans rendre NEXUS dépendant de l'orchestrateur ou du runtime de modèles. Le découpage cible JARVIS → orchestration, NEXUS → contexte, Watchtower → catalogue de profils et Alfred/Brainiac → spécialisation est désormais matérialisé et testé.
-
----
+✅ NEXUS utilisé comme fournisseur de contexte technique par JARVIS tout en conservant les responsabilités séparées : JARVIS orchestre, NEXUS construit le contexte, Watchtower résout les profils, Alfred/Brainiac spécialisent le traitement.
 
 ## Itération 16 — Recherche à grande échelle
 
-État : **terminée et validée localement le 21 juillet 2026**.
+✅ Recherche fédérée locale multi-repository avec provenance et diversification par chemin.
 
-Objectif : permettre à NEXUS d'adresser plusieurs repositories réels avec une recherche fédérée locale, déterministe et explicable, puis mesurer objectivement si un moteur externe devient nécessaire.
+Baseline finale canonique :
 
-Architecture retenue :
+```text
+repositories               7
+fichiers                    2 104
+symboles                    10 878
+relations                   10 087
+index Lucene cumulé         5 121 497 octets
+indexation complète         8 818 ms
+incrémental sans changement 762 ms
+recherche fédérée p50       133 ms
+recherche fédérée p95       304 ms
+contexte p50                48 ms
+contexte p95                206 ms
+precision@3                 0,4583
+recall@3                    0,8958
+hit@3                       1,0000
+MRR@3                       1,0000
+```
 
-- `FederatedSearchService` orchestre les recherches projet par projet ;
-- `FederatedSearchHit` conserve explicitement la provenance via `ProjectDescriptor` ;
-- SQLite reste canonique par `projectId` et Lucene reste un index dérivé reconstructible par projet ;
-- la fédération conserve le ranking existant et fusionne les résultats de manière déterministe ;
-- les requêtes lexicales multi-termes coordonnent au moins deux termes analysés uniques afin d'éviter les faux positifs à un seul terme ;
-- les résultats fédérés sont diversifiés par couple `projectId + chemin normalisé` après ranking afin qu'un même fichier ne monopolise pas le top-K via plusieurs candidats `FILE` / `SYMBOL` ;
-- deux repositories différents ne sont jamais dédupliqués ;
-- aucun backend réseau, index distant ou moteur externe n'est requis pendant la recherche.
-
-Validation fonctionnelle :
-
-- `mvn install` : 55 tests, 0 échec, 0 erreur, 2 harness opt-in ignorés ;
-- validation ciblée : 7 tests, 0 échec, 0 erreur ;
-- recherche multi-projet : validée ;
-- provenance `projectId` : validée ;
-- coordination lexicale multi-termes : validée ;
-- corpus golden historique et fédéré : validés.
-
-Palier incrémental contrôlé sur `collection-manager` :
-
-- reconstruction complète : 11 128 ms ;
-- incrémental petit delta : 323 ms ;
-- rollback incrémental : 303 ms ;
-- accélération reconstruction / petit delta : `34,45×` ;
-- visibilité de la probe après delta et purge après rollback : validées.
-
-Baseline finale canonique sur un corpus hermétique de sept repositories réels et huit requêtes :
-
-- 2 104 fichiers ;
-- 10 878 symboles ;
-- 10 087 relations ;
-- index Lucene cumulé : 5 121 497 octets ;
-- indexation complète : 8 818 ms ;
-- incrémental sans changement : 762 ms ;
-- recherche fédérée : `p50 = 133 ms`, `p95 = 304 ms` ;
-- construction de contexte : `p50 = 48 ms`, `p95 = 206 ms` ;
-- `precision@3 = 0,4583` ;
-- `recall@3 = 0,8958` ;
-- `hit@3 = 1,0000` ;
-- `MRR@3 = 1,0000`.
-
-Le corpus hermétique est reconstruit à partir d'un snapshot Git contrôlé et exclut les artefacts propres au benchmark afin d'éviter l'auto-contamination des mesures. Les données locales non versionnées, notamment un éventuel `index.scip`, ne sont pas incluses dans cette baseline canonique ; les volumes sémantiques des anciens runs sur checkout enrichi ne sont donc pas strictement comparables.
-
-Décision : les quatre paliers mesurés ne justifient ni Zoekt, ni OpenGrok, ni index distant, ni distribution de l'index, ni parallélisation prématurée de la fédération, ni nouveau changement des poids du ranking. Lucene reste le moteur local par défaut.
-
-Critère de sortie : **validé**. NEXUS recherche désormais sur plusieurs repositories réels avec provenance, ranking déterministe, coordination multi-termes et diversification par chemin, tout en conservant des latences bornées et un résultat pertinent classé premier sur les huit requêtes du corpus final.
-
-Documentation de référence : ADR-0043, `docs/developer/large-scale-search.md`, `docs/developer/large-scale-baseline-runbook.md`, `docs/developer/iteration-16-baseline-results.md` et `docs/developer/iteration-16-extended-portfolio-results.md`.
-
----
+Décision conservée : aucun besoin mesuré de Zoekt, OpenGrok, index distant ou distribution de l'index. Lucene reste le moteur local par défaut.
 
 ## Itération 17 — Recherche sémantique optionnelle
 
-État : **terminée et validée localement le 21 juillet 2026**.
+✅ Embeddings et index vectoriel Lucene opt-in derrière `EmbeddingProvider` et `SemanticSearchIndex`, fusion RRF déterministe.
 
-Objectif : mesurer si les embeddings améliorent réellement la qualité du contexte sans rendre un fournisseur d'embeddings, un runtime de modèle ou un index vectoriel externe obligatoire.
+Baseline réelle finale :
 
-Architecture retenue :
+```text
+baseline precision@3       0,0000
+sémantique precision@3     0,1667
+baseline recall@3          0,0000
+sémantique recall@3        0,4167
+baseline hit@3             0,0000
+sémantique hit@3           0,5000
+baseline MRR@3             0,0000
+sémantique MRR@3           0,3056
+indexation sémantique      ~33,11× la baseline
+recherche sémantique       ~1,43× la baseline
+```
 
-- `EmbeddingProvider` et `SemanticSearchIndex` isolent les providers et le stockage vectoriel ;
-- `LuceneSemanticSearchIndex` utilise le kNN/cosine natif Lucene et reste dérivé/reconstructible ;
-- `SemanticIndexingService` suit le cycle rebuild/delta/suppression ;
-- `OllamaEmbeddingProvider` fournit la baseline locale mesurée ;
-- `SemanticSearchConfiguration` rend l'activation explicite ;
-- `NexusApplication.create(paths)` reste sans embeddings ;
-- `SemanticHybridContextRanker` remplace la fusion additive initiale par une Reciprocal Rank Fusion déterministe ;
-- RRF `k = 60`, poids historique `1,0`, poids sémantique retenu `8,0` ;
-- aucun moteur vectoriel externe n'est introduit.
+Décision conservée : capacité utile mais désactivée par défaut. Aucun moteur vectoriel externe n'est justifié par les mesures actuelles.
 
-Diagnostic et tuning :
+---
 
-- le kNN brut retrouve les six cibles réelles dans le top 17 ;
-- la fusion additive initiale est rejetée car elle détruit ce signal ;
-- le sweep RRF teste `1,00`, `1,25`, `1,50`, `2,00`, `3,00`, `4,00`, `6,00`, `8,00` ;
-- `4,0` est le premier poids qui rejoint le rappel/hit du kNN brut ;
-- `8,0` est le meilleur poids mesuré selon `recall -> hit -> MRR -> precision` et rejoint les quatre métriques top-3 du kNN brut.
+# Intégration compagnon — MINOS Code Intelligence
 
-Benchmark A/B réel final sur le corpus hermétique figé de l'Itération 16 :
+État : **terminée, validée et livrée le 24 juillet 2026** — issue #11 / PR #12.
 
-- 236 fichiers ;
-- 946 symboles ;
-- 1 539 relations ;
-- 6 requêtes ;
-- baseline : `precision@3 = 0,0000`, `recall@3 = 0,0000`, `hit@3 = 0,0000`, `MRR@3 = 0,0000` ;
-- sémantique RRF x8 : `precision@3 = 0,1667`, `recall@3 = 0,4167`, `hit@3 = 0,5000`, `MRR@3 = 0,3056` ;
-- indexation complète : `1 943 ms` baseline contre `64 332 ms` sémantique, soit environ `33,11×` ;
-- recherche moyenne : `208,8 ms` baseline contre `298,7 ms` sémantique, soit environ `1,43×` ;
-- index sémantique : `1 001 537` octets.
+```text
+MINOS Java 24
+  nexus-export --root <project>
+        |
+        | JSON stdout
+        v
+NEXUS Java 21
+  minos-import <project> < stdin
+        |
+        v
+SQLite -> SearchService -> ranking -> ContextBuilder
+```
 
-Validation finale locale :
+Invariants :
 
-- `mvn clean install` : 73 tests, 0 échec, 0 erreur, 5 harness opt-in ignorés, `BUILD SUCCESS` en 16,571 s ;
-- `SELF-SMOKE SUCCESS` ;
-- 257 fichiers indexés ;
-- 1 431 symboles ;
-- 9 957 relations ;
-- indexation complète : 2 271 ms ;
-- indexation incrémentale sans changement : 657 ms ;
-- recherche explicable : 727 ms ;
-- contexte strict : 107/180 tokens en 885 ms ;
-- contexte multi-source : 1 199/1 200 tokens en 1 051 ms ;
-- contexte avec skill : 1 199/1 200 tokens en 1 123 ms ;
-- contexte Git : 1 588/1 600 tokens en 1 084 ms ;
-- réduction du contexte candidat strict : 99,47 % ;
-- validation ciblée : 17 tests, 0 échec, 0 erreur ;
-- corpus golden historique et fédéré : succès ;
-- `NexusApplication.create(paths)` : sémantique désactivée.
+- aucune dépendance Maven NEXUS → MINOS ;
+- aucun lancement de processus MINOS par NEXUS ;
+- transport local explicite ;
+- contrat JSON versionné ;
+- validation stricte de la racine et des chemins ;
+- `sourceProvider=minos` conservé ;
+- ranking et construction du contexte restent sous responsabilité NEXUS.
 
-Décision : **conserver la recherche sémantique comme capacité locale opt-in validée**, recommandée pour les recherches conceptuelles ou à forte divergence lexicale lorsque le coût d'indexation est acceptable. Ne pas l'activer automatiquement dans l'indexation standard : le coût d'environ `33×` ne le justifie pas. Lucene reste suffisant pour le stockage vectoriel mesuré et aucun provider n'est obligatoire.
+Le replay réel final a confirmé l'import et la recherche d'un symbole MINOS dans NEXUS.
 
-Critère de sortie : **validé**. L'Itération 17 démontre un gain de qualité réel et mesurable sans modifier le chemin historique par défaut, tout en documentant explicitement le coût d'indexation et le compromis de latence.
+---
 
-Documentation de référence : ADR-0014, `docs/developer/semantic-search.md` et `docs/developer/iteration-17-semantic-results.md`.
+# Audit de consolidation — dette active
+
+L'audit du 29 juillet 2026 est suivi par l'issue #13. Les éléments ci-dessous sont des travaux planifiés, pas des correctifs déjà livrés.
+
+| ID | Priorité | Limite vérifiée | Traitement |
+|---|---|---|---|
+| F01 | P1 | fédération : diversification après top-K local pouvant sous-remplir le résultat | I18 |
+| F02 | P1 | `IndexStatus.READY` non imposé uniformément aux recherches/symboles/usages | I18 |
+| F03 | P1 | fenêtre de désynchronisation possible SQLite / index dérivés lors d'un échec | I18 |
+| F04 | P1 | recherche symbolique par scan complet + fuzzy Java | I19 |
+| F05 | P1 | `findSymbols` / `findUsages` par scans complets | I19 |
+| F06 | P1 | graphe reconstruit depuis tous les symboles/relations à chaque recherche | I19 |
+| F07 | P1 | CLI possède encore son propre composition root malgré `NexusApplication` | I20 |
+| F08 | P1 | versions/plugins Maven dupliqués entre cœur et adaptateurs | I20 |
+| F09 | P1 | `LocalAgentSkillsProvider` couple directement `AiSkillsRegistryProvider` | I20 |
+| F10 | P2 | absence de single-flight explicite d'indexation par projet | I21 |
+| F11 | P2 | absence de plafond configurable de taille de fichier avant lecture complète | I21 |
+| F12 | P2 | import MINOS rescannant l'arbre physique pour son allow-list | I21 |
+| F13 | P2 | lifecycle Lucene reader/searcher/writer créé par opération | I22 |
+| F14 | P2 | sémantique validée mais non configurée uniformément dans CLI/REST/MCP | I22 |
+| F15 | P2 | recherche fédérée applicative non encore exposée par les adaptateurs publics | I22 |
+| F16 | P2 | coûts Git et embeddings à remesurer avant cache/batch/persistance | I22 |
+| F17 | P1 fonctionnel | aucun `ContextBundle` fédéré multi-projet livré | I23 |
+| F18 | P2 produit | distribution encore `0.1.0-SNAPSHOT`, sans installation versionnée autonome | I24 |
+
+La documentation courante est réconciliée séparément de cette dette : les ADR restent historiques ; les documents décrivant l'architecture actuelle doivent, eux, rester synchronisés avec le code.
+
+---
+
+# Phase 6 — Consolidation, hardening et industrialisation
+
+La Phase 6 corrige d'abord les limites structurelles avant de relancer l'expansion fonctionnelle.
+
+## Itération 18 — Correctness de recherche et cohérence des index
+
+État : **prochaine itération**.
+
+### Objectifs
+
+1. Corriger la fédération top-K : récupérer suffisamment de candidats locaux avant diversification afin qu'un fichier représenté par plusieurs candidats `FILE`/`SYMBOL` ne réduise artificiellement le nombre de résultats globaux.
+2. Imposer une politique unique de disponibilité : une recherche, `findSymbols`, `findUsages` ou un contexte ne doit pas servir un projet `NOT_INDEXED`, `INDEXING` ou `FAILED` comme s'il était cohérent.
+3. Formaliser l'état de génération des données canoniques et dérivées afin qu'un échec après commit SQLite soit détectable et récupérable sans résultat ambigu.
+4. Ajouter des scénarios de panne contrôlée entre SQLite, providers et Lucene.
+5. Conserver l'auto-récupération par rebuild lorsque l'état est `FAILED`.
+
+### Gates de sortie
+
+- test reproduisant le top-K sous-rempli avant correctif puis top-K rempli après diversification ;
+- tests de refus de recherche sur tous les états non `READY` ;
+- test de panne d'index dérivé et rebuild de récupération ;
+- corpus golden mono-projet et fédéré sans régression ;
+- `mvn clean install` + self-smoke exact-head.
+
+### Décisions structurantes possibles
+
+Créer un ADR si la notion de génération d'index ou la politique de lecture pendant indexation modifie le contrat de persistance.
+
+---
+
+## Itération 19 — Recherche symbolique et graphe à grande échelle
+
+État : **planifiée après I18**.
+
+### Objectifs
+
+1. Remplacer les scans complets par des requêtes `IndexRepository` ciblées : recherche de symboles, relations par source/cible/kind et limites côté stockage.
+2. Utiliser les indexes SQLite existants et ajouter uniquement les indexes démontrés nécessaires par les plans de requête.
+3. Réserver Levenshtein/fuzzy Java à un ensemble préfiltré borné.
+4. Éviter de reconstruire le graphe complet à chaque recherche : cache ou représentation matérialisée invalidée par génération d'index, uniquement après mesure.
+5. Conserver provenance et déterminisme avec JavaParser, SCIP, JDT et MINOS.
+6. Ajouter un benchmark qui sépare volume de fichiers, symboles et relations.
+
+### Gates de sortie
+
+- aucune stratégie de recherche interactive ne charge tous les symboles/relations du projet sans justification explicite ;
+- résultats fonctionnels identiques ou meilleurs sur les corpus golden ;
+- benchmark multi-palier avec p50/p95, heap et volumes ;
+- pas d'adoption de moteur externe sans preuve qu'un backend local ciblé ne suffit pas.
+
+---
+
+## Itération 20 — Composition applicative et gouvernance des dépendances
+
+État : **planifiée après I18 ; peut avancer en parallèle de I19 si les branches restent indépendantes**.
+
+### Objectifs
+
+1. Faire de `NexusApplication` la composition applicative commune pour CLI, REST et MCP ; les adaptateurs ne doivent conserver que parsing/validation/mapping/transport.
+2. Introduire un parent/reactor Maven léger ou une stratégie équivalente de `dependencyManagement` afin de centraliser Java, plugins et versions communes sans coupler les runtimes.
+3. Ajouter des vérifications de convergence/version capables de détecter le type de drift Jackson observé pendant I12.
+4. Composer `LocalAgentSkillsProvider` et `AiSkillsRegistryProvider` comme deux `SkillSourceProvider` indépendants via `SkillDiscoveryService`.
+5. Centraliser la configuration des capacités optionnelles sans imposer Ollama, JDT, SCIP, MINOS ou un adaptateur client au cœur.
+6. Conserver les artefacts autonomes CLI/MCP/assistant-clients.
+
+### Gates de sortie
+
+- parité fonctionnelle CLI / `NexusApplication` ;
+- REST et MCP toujours minces ;
+- aucune duplication du composition root métier ;
+- test de priorité local > registry avec providers réellement indépendants ;
+- dépendances convergentes sur tous les artefacts.
+
+---
+
+## Itération 21 — Robustesse d'indexation et gouvernance des ressources
+
+État : **planifiée après I18/I20**.
+
+### Objectifs
+
+1. Garantir une seule indexation active par `projectId` et définir le comportement d'un second appel concurrent.
+2. Ajouter une limite configurable de taille de fichier et un diagnostic d'exclusion avant `Files.readString`/indexation Lucene.
+3. Définir le comportement pour fichiers illisibles, encodages invalides et changements pendant le scan.
+4. Faire valider l'import MINOS contre la vue canonique des fichiers NEXUS lorsque cela préserve les invariants de sécurité, plutôt que rescanner tout l'arbre physique.
+5. Ajouter timeout/annulation/diagnostics pour les providers externes lourds lorsque le contrat le permet.
+6. Vérifier les migrations SQLite et la stratégie de récupération/backup avant distribution stable.
+
+### Gates de sortie
+
+- test de concurrence d'indexation ;
+- test de fichier géant exclu sans pic mémoire disproportionné ;
+- test MINOS sans traversal physique inutile ;
+- échec provider borné et projet laissé dans un état explicite ;
+- self-smoke et corpus golden sans régression.
+
+---
+
+## Itération 22 — Runtime persistant, opérabilité et capacités opt-in
+
+État : **planifiée après I19/I20/I21**.
+
+### Objectifs
+
+1. Mesurer le coût réel de création des readers/searchers/writers Lucene dans un serveur persistant puis réutiliser un lifecycle géré uniquement si le gain est démontré.
+2. Faire refléter aux health/readiness l'état réel de NEXUS et des projets.
+3. Uniformiser les métriques de durée, volume, erreurs providers et fédération sans journaliser le contenu privé des requêtes ou du contexte.
+4. Exposer la recherche fédérée par les surfaces publiques qui en ont besoin sans dupliquer `FederatedSearchService`.
+5. Rendre le mode sémantique explicitement configurable depuis les surfaces retenues, toujours désactivé par défaut.
+6. Étudier batch/cache d'embeddings et cache Git seulement si les mesures montrent un bénéfice reproductible.
+7. Conserver `SearcherManager`, cache Git, batching ou parallélisme comme décisions mesurées, jamais comme objectifs en soi.
+
+### Gates de sortie
+
+- tests concurrents REST/MCP ;
+- readiness cohérente avec `IndexStatus` ;
+- métriques sans fuite de contenu ;
+- parité de recherche fédérée entre façade et adaptateurs retenus ;
+- sémantique toujours opt-in ;
+- comparaison avant/après de toute optimisation runtime adoptée.
+
+---
+
+## Itération 23 — ContextBundle fédéré multi-projet
+
+État : **planifiée après I18 à I22**.
+
+Une ancienne PR draft #10 avait préparé un prototype nommé « Itération 18 — contexte fédéré multi-projet ». Elle a été fermée sans merge et sans qualification locale ; elle reste une source historique d'idées, pas une base autoritative. Le numéro 18 est donc réaffecté au hardening et le besoin fonctionnel est replanifié ici.
+
+### Objectifs
+
+1. Construire un contexte technique sur une liste explicite de projets avec un **budget global unique**.
+2. Conserver la provenance `projectId` de chaque item.
+3. Éviter toute collision entre chemins relatifs identiques appartenant à des repositories différents.
+4. Réutiliser la recherche fédérée, `ContextFragmentFactory`, la fusion et la sélection sous budget corrigées par les itérations précédentes.
+5. Mesurer la starvation entre projets avant d'introduire des quotas.
+6. Commencer par `FILE`, `SYMBOL`, `TEST`, `DOCUMENTATION`.
+7. Définir séparément la politique multi-projet pour `INSTRUCTION`, `SKILL` et `GIT` ; refuser explicitement ces sources tant que leur sémantique n'est pas décidée.
+8. Exposer la capacité dans `NexusApplication`, puis REST/MCP seulement après validation du contrat.
+
+### Gates de sortie
+
+- budget global jamais dépassé ;
+- deux repositories avec le même chemin restent deux provenances distinctes ;
+- déterminisme sur exécutions répétées ;
+- métriques `selectedItemsByProject` et `selectedTokensByProject` ;
+- benchmark de pertinence et starvation ;
+- corpus mono-projet non régressé.
+
+---
+
+## Itération 24 — Distribution, installation et release readiness
+
+État : **planifiée après stabilisation de la Phase 6**.
+
+### Objectifs
+
+1. Sortir du seul usage `0.1.0-SNAPSHOT` pour définir versioning et compatibilité des contrats publics.
+2. Fournir un Maven Wrapper afin de rendre le build reproductible sans Maven préinstallé.
+3. Produire des distributions versionnées pour les surfaces réellement supportées : CLI, MCP et, si retenu, REST.
+4. Permettre une installation sans cloner le repository.
+5. Produire checksums et métadonnées de version ; ajouter SBOM/signature si le modèle de distribution le justifie.
+6. Définir l'upgrade de `NEXUS_HOME`, migrations SQLite et reconstruction des index dérivés.
+7. Qualifier au minimum Windows et Linux sur les artefacts distribués.
+8. Documenter installation, upgrade, rollback et désinstallation.
+
+### Gates de sortie
+
+- installation depuis un artefact versionné sur machine propre ;
+- `--version` cohérent avec l'artefact ;
+- self-smoke Windows + Linux ;
+- migration d'un `NEXUS_HOME` antérieur testée ;
+- checksums vérifiés ;
+- aucune dépendance à un checkout source pour l'usage normal.
+
+---
+
+# Décisions explicitement différées
+
+Les sujets suivants ne doivent pas devenir des chantiers automatiques :
+
+- Zoekt / OpenGrok / moteur distant ;
+- vector database externe ;
+- parallélisation de la fédération ;
+- cache Git persistant ;
+- cache graphe complexe ;
+- Tree-sitter embarqué ;
+- tokenizer fournisseur exact ;
+- index distribué.
+
+Ils sont réévalués seulement si une mesure d'une itération de Phase 6 démontre un problème que l'architecture locale actuelle ne corrige pas simplement.
 
 ---
 
 # Critères globaux de progression
 
-Une nouvelle brique ne doit être adoptée durablement que si elle satisfait au moins un des critères suivants :
+Une évolution est adoptée durablement si elle apporte au moins un bénéfice mesurable parmi :
 
-- amélioration mesurable de la précision ou du rappel ;
+- correction d'un défaut de correctness ou de cohérence ;
+- amélioration de précision, rappel, hit-rate ou MRR ;
 - réduction du contexte ou du budget de tokens ;
+- réduction significative de latence, mémoire ou I/O ;
 - amélioration de la couverture fonctionnelle ;
-- réduction significative de code maison ;
-- amélioration de l'interopérabilité ;
-- besoin réel d'une intégration cliente.
+- réduction de duplication ou de drift de dépendances ;
+- amélioration de l'interopérabilité ou de l'opérabilité ;
+- besoin réel d'une surface cliente.
 
-Les composants externes doivent rester derrière des abstractions NEXUS et ne doivent jamais devenir obligatoires sans justification.
+Chaque itération doit :
 
-La priorité générale reste :
+1. partir d'un `main` identifié ;
+2. préserver les ADR acceptés ou en créer un nouveau si la décision change ;
+3. posséder des tests ciblés ;
+4. rejouer le corpus golden concerné ;
+5. produire des mesures avant/après lorsqu'elle prétend améliorer la performance ;
+6. terminer par `mvn clean install` et `scripts/self-smoke.ps1` sur l'exact head ;
+7. réconcilier README, architecture, guide développeur et roadmap avant merge.
 
-> **qualité du contexte > nombre de fonctionnalités > nombre d'intégrations.**
+> **La Phase 6 ne cherche pas à rendre NEXUS plus gros. Elle cherche à rendre les capacités déjà livrées plus correctes, plus cohérentes, plus scalables et réellement distribuables.**
