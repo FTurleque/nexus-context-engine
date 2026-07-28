@@ -1,42 +1,40 @@
 # Support multi-langage
 
-Ce chapitre décrit le support multi-langage introduit par l'Itération 10.
+Ce chapitre décrit le support multi-langage courant de NEXUS.
 
 ## Principe
 
-NEXUS sépare volontairement deux niveaux de capacité :
+NEXUS sépare deux niveaux :
 
 ```text
-Fichier reconnu
-    │
-    ├── niveau 1 : scan + SQLite + Lucene + ContextBundle
-    │             disponible nativement
-    │
-    └── niveau 2 : symboles + relations
-                  analyseur spécialisé ou provider externe
+fichier reconnu
+   │
+   ├── niveau 1 : scan + SQLite + Lucene + ContextBundle
+   │             support lexical natif
+   │
+   └── niveau 2 : symboles + relations
+                 analyseur embarqué ou Code Intelligence externe
 ```
 
-Un langage peut donc être utile à NEXUS avant même de disposer d'un parser structurel embarqué.
+Un langage peut donc être utile au moteur sans parser structurel embarqué.
 
 ## Langages reconnus
 
 | Langage | Extensions | Support lexical natif | Structure embarquée |
-|---|---|---:|---:|
+|---|---|---:|---|
 | Java | `.java` | oui | JavaParser |
-| Markdown | `.md` | oui | non |
+| Markdown | `.md` | oui | analyse documentaire |
 | Kotlin | `.kt`, `.kts` | oui | non |
 | TypeScript | `.ts`, `.tsx` | oui | non |
 | JavaScript | `.js`, `.jsx`, `.mjs`, `.cjs` | oui | non |
 | Python | `.py` | oui | non |
 | SQL | `.sql` | oui | non |
 
-La colonne « structure embarquée » décrit uniquement le comportement par défaut du cœur NEXUS. Un index SCIP ou un autre provider peut ajouter des symboles et relations sans modifier le scanner ni les consommateurs.
+La colonne « structure embarquée » décrit uniquement ce que le cœur sait extraire sans source externe.
 
 ## `SourceLanguage`
 
-`SourceLanguage` centralise la correspondance entre extensions et identifiants de langage.
-
-Le scanner ne contient plus une condition codée en dur limitée à Java et Markdown :
+`SourceLanguage` centralise la détection par extension :
 
 ```text
 Path
@@ -46,128 +44,136 @@ SourceLanguage.detect(path)
 ScannedFile.language
 ```
 
-L'objectif est d'éviter que chaque nouveau langage impose des modifications dispersées dans plusieurs composants.
+Cette centralisation évite de dupliquer la liste des langages dans le scanner, le ranking ou le `ContextBuilder`.
 
-## Analyseur structurel optionnel
+## Analyse structurelle
 
-Avant l'Itération 10, chaque fichier scanné devait obligatoirement trouver un `LanguageAnalyzer`. Cette contrainte empêchait d'indexer lexicalement un langage sans parser dédié.
-
-Le comportement est désormais :
+Lorsqu'un `LanguageAnalyzer` supporte le fichier :
 
 ```text
-LanguageAnalyzer compatible ?
-    │
-    ├── oui → analyse structurelle normale
-    │
-    └── non → AnalysisResult vide
-              + fichier persisté
-              + contenu indexé dans Lucene
-              + contexte disponible
+fichier
+→ analyseur
+→ CodeSymbol / SymbolRelation
 ```
 
-NEXUS ne génère donc pas de symboles approximatifs par expression régulière uniquement pour satisfaire le contrat.
+Sinon :
 
-## Recherche
+```text
+fichier
+→ AnalysisResult vide
+→ fichier toujours persisté/indexé lexicalement
+```
 
-Les fichiers des nouveaux langages alimentent `LuceneSearchIndex` exactement comme les autres sources génériques.
+NEXUS ne fabrique pas des symboles approximatifs par regex uniquement pour remplir le modèle.
 
-Ils bénéficient notamment :
+## Sources structurelles externes
 
-- de la recherche BM25 ;
-- du signal de chemin ;
-- du ranking déterministe ;
-- du signal Git lorsqu'il est disponible ;
-- de la construction de fragments de fichier par `ContextFragmentFactory`.
+Les langages non couverts par un parser embarqué peuvent recevoir des faits par :
 
-Sans enrichissement structurel, ils ne contribuent pas à `SymbolSearchStrategy` et ne créent pas de relations de graphe symboliques.
+### SCIP
+
+Un `index.scip` présent à la racine est importé opportunément pendant l'indexation.
+
+### MINOS
+
+Un export MINOS peut être importé explicitement :
+
+```text
+MINOS nexus-export
+→ JSON
+→ NEXUS minos-import
+```
+
+L'import reste indépendant de l'indexation normale et conserve `sourceProvider=minos`.
+
+### Providers
+
+`CodeIntelligenceProvider` permet d'ajouter une analyse profonde explicitement activée. Le provider livré aujourd'hui est JDT Language Server pour Java.
+
+La structure externe est normalisée vers le même modèle NEXUS ; le `ContextBuilder` ne connaît pas son fournisseur.
+
+## Recherche lexicale
+
+Tous les langages reconnus alimentent `LuceneSearchIndex` avec :
+
+- chemin ;
+- langage ;
+- catégorie ;
+- contenu ;
+- termes de code normalisés ;
+- symboles éventuels lorsqu'une source structurelle les fournit.
+
+Ils bénéficient du ranking lexical, du signal de chemin, de la récence Git et du pipeline de contexte.
+
+Sans symbole/relations, un fichier ne contribue simplement pas à la recherche symbolique ou au graphe.
 
 ## Contexte
 
-Aucune branche conditionnelle par langage n'a été ajoutée dans `DefaultContextBuilder`.
-
-Un fichier Python ou TypeScript sélectionné par le ranking suit le même pipeline qu'un candidat fichier Java :
+Le pipeline ne branche pas sur le langage :
 
 ```text
 SearchCandidate
-  ↓
+   ↓
 ContextFragmentFactory
-  ↓
+   ↓
 FragmentMerger
-  ↓
+   ↓
 BudgetedContextSelector
-  ↓
+   ↓
 ContextBundle
 ```
 
-Le critère architectural de l'Itération 10 est ainsi conservé : ajouter un langage ne modifie pas le fonctionnement fondamental du `ContextBuilder` ni du ranking.
+Un fichier Python/TypeScript/Kotlin sélectionné est donc injecté sous les mêmes invariants de budget qu'un fichier Java.
 
-## Classification des tests
+## Détection des tests
 
-`ProjectScanner` reconnaît plusieurs conventions courantes :
+Le scanner reconnaît notamment :
 
-- répertoires `src/test`, `src/it`, `test`, `tests`, `__tests__` ;
+- `src/test`, `src/it`, `test`, `tests`, `__tests__` ;
 - Java : `*Test.java`, `*Tests.java`, `*IT.java` ;
 - Kotlin : `*Test.kt`, `*Tests.kt` ;
 - Python : `test_*.py`, `*_test.py` ;
-- JavaScript / TypeScript : `*.test.*`, `*.spec.*` pour les extensions supportées.
+- JS/TS : `*.test.*`, `*.spec.*` pour les extensions supportées.
 
-Cette détection sert uniquement à la catégorie `FileCategory.TEST`.
+Cette détection affecte `FileCategory.TEST` ; elle ne prétend pas analyser le framework de test utilisé.
 
-## Enrichissement avec SCIP
+## Ajouter un langage
 
-Le support lexical et SCIP sont complémentaires.
+### Support lexical
 
-```text
-Source Kotlin / TypeScript / Python / ...
-        │
-        ├── scanner NEXUS → fichier + contenu lexical
-        │
-        └── index SCIP disponible → symboles + relations externes
-```
+1. ajouter le langage/extensions dans `SourceLanguage` ;
+2. ajouter les conventions de test uniquement si elles sont déterministes ;
+3. ajouter des tests de détection/indexation/recherche ;
+4. vérifier qu'aucune branche n'est nécessaire dans `DefaultContextBuilder`.
 
-`ScipCodeIndexImporter` reste opportuniste : NEXUS ne lance pas automatiquement un indexeur externe et continue de fonctionner lorsque `index.scip` est absent.
+### Support structurel
 
-## Ajouter un nouveau langage
-
-Pour un support lexical simple :
-
-1. ajouter le langage et ses extensions à `SourceLanguage` ;
-2. ajouter les conventions de test uniquement lorsqu'elles sont déterministes et utiles ;
-3. ajouter un test de détection ;
-4. ajouter un scénario d'indexation/recherche.
-
-Aucune modification du `ContextBuilder` ou du ranking ne doit être nécessaire.
-
-Pour un support structurel :
-
-1. évaluer un `LanguageAnalyzer`, un index SCIP ou un `CodeIntelligenceProvider` ;
-2. mesurer le gain réel ;
-3. normaliser les résultats vers `CodeSymbol` et `SymbolRelation` ;
+1. préférer un standard/index/provider existant lorsqu'il fournit de meilleurs faits qu'un parser maison ;
+2. mesurer le besoin ;
+3. normaliser vers `CodeSymbol` / `SymbolRelation` ;
 4. conserver la provenance ;
-5. documenter toute nouvelle dépendance structurante dans un ADR.
+5. rendre la dépendance optionnelle ;
+6. documenter par ADR si la décision est structurante.
 
-## Validation reproductible
+## Limites actuelles
 
-Depuis la racine du repository :
+Le support natif structurel reste principalement Java. Ce choix n'est pas considéré comme un défaut tant qu'un besoin mesuré ne justifie pas un nouveau parser embarqué.
+
+Le principal chantier de scale multi-langage est plutôt transversal : rendre les recherches de symboles/relations ciblées afin que les données ajoutées par SCIP, JDT ou MINOS restent efficaces à grand volume.
+
+Voir :
+
+- [`code-intelligence.md`](code-intelligence.md) ;
+- [`minos-code-intelligence.md`](minos-code-intelligence.md) ;
+- [`current-limitations.md`](current-limitations.md) ;
+- [`../roadmap.md`](../roadmap.md), Itération 19.
+
+## Validation historique
+
+Le runner de l'Itération 10 reste disponible :
 
 ```powershell
 .\scripts\validate-iteration-10.ps1
 ```
 
-Le script exécute :
-
-```text
-mvn clean install
-→ self-smoke NEXUS
-→ création d'un projet polyglotte synthétique
-→ indexation sans analyseur structurel dédié
-→ vérification des langages détectés
-→ recherches Python / TypeScript / SQL
-→ construction d'un ContextBundle Python sous budget
-```
-
-Le script n'utilise pas `exit` et laisse le terminal PowerShell ouvert en cas d'échec.
-
-## Décision associée
-
-Voir ADR-0038 — Indexer les langages additionnels lexicalement et enrichir la structure via des providers.
+Il vérifie notamment un projet polyglotte synthétique, la détection des langages, des recherches Python/TypeScript/SQL et la construction d'un contexte sous budget.
