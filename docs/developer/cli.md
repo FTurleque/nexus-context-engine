@@ -1,6 +1,6 @@
-# CLI NEXUS — surface courante
+# CLI NEXUS — surface 0.2.0
 
-Ce document décrit la CLI **actuelle**. Le contrat historique de l'Itération 4 reste archivé dans [`cli-mvp.md`](cli-mvp.md).
+Ce document décrit la CLI Phase 6. Le contrat historique MVP reste dans [`cli-mvp.md`](cli-mvp.md).
 
 ## Commandes
 
@@ -10,189 +10,140 @@ nexus project list [--json]
 nexus index <id-ou-nom> [--rebuild] [--deep-java] [--json]
 nexus minos-import <id-ou-nom> < export-minos.json [--json]
 nexus search <id-ou-nom> <requête> [--limit N] [--explain] [--json]
+nexus search-federated <projet1,projet2,...> <requête> [--limit N] [--explain] [--json]
 nexus context <id-ou-nom> <requête> [--budget N] [--explain] [--json]
+nexus context-federated <projet1,projet2,...> <requête> [--budget N] [--explain] [--json]
 nexus inspect <id-ou-nom> [--json]
 nexus --help [--json]
 nexus --version [--json]
 ```
 
-`--json` est une option globale. Les succès sont rendus sur `stdout`, les erreurs sur `stderr`, avec des codes de sortie stables :
+`--json` est global. `stdout` porte les résultats, `stderr` les erreurs.
 
 | Code | Sens |
 |---:|---|
 | 0 | succès |
 | 1 | erreur runtime |
-| 2 | erreur d'usage/arguments |
+| 2 | erreur d'usage |
 
-## Build et exécution
+## Composition
 
-```powershell
-mvn clean install
-```
-
-Le build principal produit notamment :
-
-```text
-target/nexus-context-engine-0.1.0-SNAPSHOT.jar
-target/nexus-context-engine-0.1.0-SNAPSHOT-cli.jar
-```
-
-Exécution directe :
-
-```powershell
-java -jar .\target\nexus-context-engine-0.1.0-SNAPSHOT-cli.jar --help
-```
-
-Launchers de développement :
-
-```powershell
-.\scripts\nexus.ps1 --help
-```
-
-```cmd
-scripts\nexus.cmd --help
-```
-
-La Phase 6 prévoit une distribution versionnée indépendante d'un checkout ; elle n'est pas encore livrée.
-
-## Projet
-
-Enregistrer :
-
-```powershell
-.\scripts\nexus.ps1 project add N:\workspace-dev\mon-app mon-app
-```
-
-Lister :
-
-```powershell
-.\scripts\nexus.ps1 project list --json
-```
-
-## Indexation
-
-Chemin normal :
-
-```powershell
-.\scripts\nexus.ps1 index mon-app
-```
-
-Rebuild :
-
-```powershell
-.\scripts\nexus.ps1 index mon-app --rebuild
-```
-
-Analyse Java profonde :
-
-```powershell
-$env:NEXUS_JDTLS_HOME = 'C:\tools\jdtls'
-.\scripts\nexus.ps1 index mon-app --deep-java
-```
-
-`--deep-java` exige un `CodeIntelligenceProvider` JDT actif. Il reste opt-in à cause de son coût opérationnel supérieur au chemin JavaParser normal.
-
-Un éventuel `index.scip` à la racine du projet est importé opportunément lors de l'indexation normale.
-
-## MINOS
-
-MINOS est importé explicitement ; `nexus index` ne lance pas MINOS.
-
-```powershell
-Get-Content -Raw .\minos-export.json |
-    .\scripts\nexus.ps1 minos-import mon-app --json
-```
-
-Le payload est lu sur stdin et borné à 128 MiB.
-
-Voir [`minos-code-intelligence.md`](minos-code-intelligence.md).
-
-## Recherche
-
-```powershell
-.\scripts\nexus.ps1 search mon-app "service de facturation" --limit 10 --explain
-```
-
-JSON :
-
-```powershell
-$result = .\scripts\nexus.ps1 search mon-app "service de facturation" --limit 10 --explain --json |
-    ConvertFrom-Json
-```
-
-Le chemin CLI courant reste mono-projet. La façade Java possède déjà `searchAcrossProjects(...)`; son exposition dans les adaptateurs est planifiée en Phase 6 après correction du top-K fédéré.
-
-## Construction de contexte
-
-```powershell
-.\scripts\nexus.ps1 context mon-app "Corriger la facturation" --budget 2000 --explain
-```
-
-Le bundle peut contenir code, symboles, tests, documentation, instructions, skills et Git selon la requête et le budget.
-
-Le contexte CLI reste mono-projet. Le `ContextBundle` fédéré est planifié après le hardening de la recherche et de l'indexation.
-
-## Inspection
-
-```powershell
-.\scripts\nexus.ps1 inspect mon-app --json
-```
-
-La sortie expose les volumes canoniques : fichiers, symboles et relations.
-
-## Architecture actuelle de la CLI
-
-La CLI respecte les frontières métier, mais `NexusCli` instancie encore directement le composition root du moteur.
-
-```text
-NexusCli
-├── repositories SQLite
-├── Lucene
-├── analyzers/importers/providers
-├── ProjectIndexingService
-├── SearchService
-└── DefaultContextBuilder
-```
-
-REST et MCP utilisent déjà `NexusApplication`. La Phase 6 — Itération 20 prévoit de faire déléguer la CLI à cette même façade afin d'éviter le drift de composition.
-
-## Recherche sémantique
-
-La capacité sémantique est validée dans le cœur via :
-
-```java
-NexusApplication.create(paths, SemanticSearchConfiguration.enabled(provider));
-```
-
-La CLI ne possède pas encore de contrat stable pour l'activer. Ce n'est pas un oubli documentaire : c'est une limite opérationnelle suivie par I22. Le mode reste désactivé par défaut.
-
-## Validation
-
-Gate principal :
-
-```powershell
-mvn clean install
-.\scripts\self-smoke.ps1
-```
-
-Le self-smoke valide le JAR CLI autonome et le flux projet → index → recherche → contexte.
-
-Les validations spécialisées sont disponibles sous `scripts/validate-iteration-*.ps1`.
-
-## Contrat à préserver
-
-La CLI ne doit pas devenir une seconde implémentation du moteur :
+Phase 6 supprime le second composition root historique de la CLI :
 
 ```text
 arguments
   ↓
-validation / parsing
+NexusCli — parsing / validation
   ↓
 NexusApplication
   ↓
-objets métier
+repositories / indexing / search / context / federation
   ↓
-CliRenderer humain/JSON
+CliRenderer
 ```
 
-La migration vers cette composition unique est planifiée ; les formats humain/JSON et codes de sortie doivent rester compatibles ou être versionnés explicitement.
+REST et MCP utilisent la même façade. Les règles READY, providers, ranking et opt-ins sont donc communes.
+
+## Build
+
+```powershell
+.\mvnw.cmd clean install
+```
+
+Fat JAR :
+
+```powershell
+java -jar .\target\nexus-context-engine-0.2.0-cli.jar --help
+```
+
+Archive installable :
+
+```text
+target/distribution/nexus-context-engine-0.2.0.zip
+```
+
+Voir [`release-and-recovery.md`](release-and-recovery.md).
+
+## Projet et indexation
+
+```powershell
+java -jar .\target\nexus-context-engine-0.2.0-cli.jar project add N:\workspace-dev\mon-app mon-app
+java -jar .\target\nexus-context-engine-0.2.0-cli.jar index mon-app
+java -jar .\target\nexus-context-engine-0.2.0-cli.jar index mon-app --rebuild
+```
+
+JDT LS reste explicite :
+
+```powershell
+$env:NEXUS_JDTLS_HOME = 'C:\tools\jdtls'
+java -jar .\target\nexus-context-engine-0.2.0-cli.jar index mon-app --deep-java
+```
+
+Hardening Phase 6 :
+
+- une seule indexation active par projet/processus ;
+- `NEXUS_MAX_FILE_SIZE_BYTES` limite les fichiers avant hash/lecture ;
+- `NEXUS_CODE_INTELLIGENCE_TIMEOUT_SECONDS` limite les providers externes ;
+- exclusions/providers sont visibles dans les diagnostics d'indexation.
+
+## MINOS
+
+NEXUS ne lance jamais MINOS.
+
+```powershell
+Get-Content -Raw .\minos-export.json |
+    java -jar .\target\nexus-context-engine-0.2.0-cli.jar minos-import mon-app --json
+```
+
+Le payload reste borné à 128 MiB. Les chemins sont validés contre les fichiers canoniques déjà indexés.
+
+## Recherche mono-projet
+
+```powershell
+java -jar .\target\nexus-context-engine-0.2.0-cli.jar search mon-app "service de facturation" --limit 10 --explain
+```
+
+Le projet doit être `READY`.
+
+## Recherche fédérée
+
+```powershell
+java -jar .\target\nexus-context-engine-0.2.0-cli.jar search-federated app-api,app-domain "facturation" --limit 20 --explain
+```
+
+La portée accepte noms uniques ou UUID séparés par des virgules. Chaque projet doit être `READY`. NEXUS sur-récupère localement avant diversification globale par `(projectId,path)` pour éviter un top-K artificiellement sous-rempli.
+
+## ContextBundle mono-projet
+
+```powershell
+java -jar .\target\nexus-context-engine-0.2.0-cli.jar context mon-app "Corriger la facturation" --budget 2000 --explain
+```
+
+## Contexte fédéré
+
+```powershell
+java -jar .\target\nexus-context-engine-0.2.0-cli.jar context-federated app-api,app-domain "Corriger la facturation" --budget 4000 --explain
+```
+
+Le budget est global. Les quotas projet sont déterministes, les items portent leur provenance, le merge est round-robin et les contenus identiques sont dédupliqués. Instructions, skills et Git restent évalués dans leur projet d'origine.
+
+## Sémantique
+
+Désactivé par défaut. Activation explicite :
+
+```powershell
+$env:NEXUS_SEMANTIC_PROVIDER = "ollama"
+$env:NEXUS_OLLAMA_EMBEDDING_MODEL = "qwen3-embedding:0.6b"
+java -jar .\target\nexus-context-engine-0.2.0-cli.jar index mon-app --rebuild
+java -jar .\target\nexus-context-engine-0.2.0-cli.jar search mon-app "adapter une requête au modèle métier"
+```
+
+La CLI n'a pas de flag sémantique dédié : l'opt-in commun par environnement évite un comportement différent entre CLI, REST et MCP.
+
+## Qualification
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
+```
+
+Ce script inclut le reactor complet et `scripts/self-smoke.ps1` et vérifie également release, checksums, SBOM et archive installable.
