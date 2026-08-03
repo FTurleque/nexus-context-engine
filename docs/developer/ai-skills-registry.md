@@ -2,136 +2,77 @@
 
 ## Statut
 
-Capacité **livrée et validée** depuis l'Itération 14.
+Capacité livrée depuis l'Itération 14. Phase 6 corrige la dérive de composition identifiée lors de l'audit de consolidation.
 
 NEXUS peut découvrir des skills provenant d'un snapshot local AI Skills Registry sans accès réseau pendant la construction du contexte.
 
-## Emplacement du snapshot
+## Snapshot local
 
 ```text
 .nexus/registry/skills/**/SKILL.md
 ```
 
-`.nexus/registry` est un cache local non versionné. Son absence n'empêche jamais NEXUS de fonctionner avec les skills du projet.
+`.nexus/registry` est un cache local non versionné. Son absence n'empêche jamais les skills propres au projet de fonctionner.
 
-## Comportement fonctionnel
-
-Deux origines sont prises en compte :
+## Sources et priorités
 
 ```text
-skills locaux du projet       priorité 80
-snapshot AI Skills Registry   priorité 60
-```
-
-La déduplication est effectuée par nom dans `SkillDiscoveryService`. Un skill local de même nom garde donc la priorité sur le snapshot partagé.
-
-La divulgation progressive reste la même pour les deux origines :
-
-```text
-découverte
-→ frontmatter seulement
-
-sélection
-→ name + description + metadata
-
-activation
-→ chargement du SKILL.md complet
-
-ressources
-→ inventoriées mais non chargées/exécutées automatiquement
-```
-
-## Architecture contractuelle
-
-Le contrat prévu est :
-
-```text
-SkillSourceProvider[]
-        │
-        ▼
+LocalAgentSkillsProvider       priorité 80
+AiSkillsRegistryProvider      priorité 60
+            ↓
 SkillDiscoveryService
-        │
-        ├── tri par priorité
-        └── déduplication par nom
-        │
-        ▼
-SkillSelector
-        ▼
-SkillLoader
-        ▼
-SkillContextSelector
+            ↓
+tri / déduplication par nom
 ```
 
-`AiSkillsRegistryProvider` implémente bien `SkillSourceProvider` et lit uniquement les métadonnées nécessaires pendant la découverte.
+Un skill local de même nom conserve la priorité sur le snapshot partagé.
 
-## Composition actuelle — dette connue
+## Composition Phase 6
 
-Le comportement fonctionnel ci-dessus est correct et testé, mais la composition courante n'utilise pas encore les deux providers comme deux entrées indépendantes.
-
-Aujourd'hui :
+Les deux providers sont maintenant composés indépendamment dans `NexusApplication` :
 
 ```text
 NexusApplication
-    │
-    └── LocalAgentSkillsProvider
-             │
-             └── crée AiSkillsRegistryProvider pendant discover()
+   ├─ LocalAgentSkillsProvider
+   └─ AiSkillsRegistryProvider
+            ↓
+     SkillDiscoveryService
 ```
 
-Autrement dit, `LocalAgentSkillsProvider` délègue lui-même au registre avant de retourner son résultat, alors que `SkillDiscoveryService` possède déjà le contrat nécessaire pour agréger plusieurs `SkillSourceProvider`.
+`LocalAgentSkillsProvider` ne crée plus et n'appelle plus `AiSkillsRegistryProvider`. La composition est donc conforme au port `SkillSourceProvider` et la politique d'agrégation reste centralisée.
 
-Cette divergence ne change pas la priorité locale > registre, mais elle couple deux providers qui devraient rester indépendants.
-
-La correction est planifiée en **Phase 6 — Itération 20** :
+## Divulgation progressive
 
 ```text
-NexusApplication
-    │
-    ├── LocalAgentSkillsProvider
-    └── AiSkillsRegistryProvider
-             │
-             ▼
-      SkillDiscoveryService
+découverte  → frontmatter seulement
+sélection   → name + description + metadata
+activation  → SKILL.md complet
+ressources  → inventoriées, jamais exécutées automatiquement
 ```
 
-La priorité et la déduplication continueront d'être portées par les descriptors/service de discovery, pas par une dépendance provider → provider.
+Cette politique reste identique pour origine locale et registry.
 
 ## Absence de réseau
 
-NEXUS ne synchronise pas lui-même un registre distant pendant une demande de contexte :
+Pendant `ContextBuilder` :
 
 - aucune requête HTTP ;
 - aucun clone/fetch Git ;
-- aucun secret nécessaire ;
-- aucune indisponibilité distante susceptible de bloquer `ContextBuilder`.
+- aucun secret ;
+- aucune dépendance à la disponibilité d'un registre distant.
 
-La synchronisation éventuelle du snapshot appartient à un outil ou workflow externe.
+La synchronisation éventuelle du snapshot appartient à un outil externe.
 
-## Validation livrée
+## Contexte fédéré
 
-L'Itération 14 a validé :
+Phase 6 conserve les skills dans leur portée projet : chaque `DefaultContextBuilder` découvre ses providers pour son propre projet avant que `FederatedContextService` ne fusionne les résultats. Aucun skill d'un projet n'est propagé implicitement à un autre.
 
-- découverte des métadonnées sans charger tous les corps ;
-- chargement du corps uniquement après sélection ;
-- priorité du skill local sur un doublon registry ;
-- absence de snapshot sans erreur ;
-- build du cœur ;
-- self-smoke historique sans dépendance au registre.
+## Validation
 
-Runner :
+Les tests historiques I14 continuent de couvrir découverte progressive, priorité locale, absence de snapshot et non-exécution des ressources. Le gate Phase 6 ajoute la qualification du reactor/composition complet :
 
 ```powershell
-.\scripts\validate-iteration-14.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
 ```
 
-## Limites actuelles
-
-Le snapshot n'exploite pas encore nécessairement tous les champs possibles d'un registre partagé (`version`, `status`, `category`, `tags`) pour le ranking.
-
-Ces enrichissements ne doivent être ajoutés que s'ils améliorent réellement la sélection. Ils peuvent rester derrière `SkillSourceProvider` sans modifier `DefaultContextBuilder`.
-
-Voir également :
-
-- [`agent-skills.md`](agent-skills.md) ;
-- [`current-limitations.md`](current-limitations.md), F09 ;
-- [`../roadmap.md`](../roadmap.md), Itération 20.
+Voir [`agent-skills.md`](agent-skills.md), [`current-limitations.md`](current-limitations.md) et la [`roadmap`](../roadmap.md).
