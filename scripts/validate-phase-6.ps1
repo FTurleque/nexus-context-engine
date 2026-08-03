@@ -1,12 +1,9 @@
 [CmdletBinding()]
-param(
-    [string]$Java21Home
-)
+param()
 
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $locationPushed = $false
-$previousJavaHome = $env:JAVA_HOME
 $previousPath = $env:PATH
 
 function Invoke-Native {
@@ -29,8 +26,8 @@ function Get-JavaVersionText {
     $stderrFile = [System.IO.Path]::GetTempFileName()
     $previousErrorActionPreference = $ErrorActionPreference
     try {
-        # Windows PowerShell 5.1 converts native stderr to NativeCommandError
-        # when ErrorActionPreference is Stop. java -version writes to stderr.
+        # java -version writes to stderr. Windows PowerShell 5.1 can turn that
+        # normal stderr output into NativeCommandError when Stop is active.
         $ErrorActionPreference = "Continue"
         & $JavaExecutable -version 1> $stdoutFile 2> $stderrFile
         $exitCode = $LASTEXITCODE
@@ -52,78 +49,13 @@ function Get-JavaVersionText {
     }
 }
 
-function Test-Java21Executable {
-    param([Parameter(Mandatory = $true)][string]$JavaExecutable)
+function Get-JavaMajorVersion {
+    param([Parameter(Mandatory = $true)][string]$VersionText)
 
-    if (-not (Test-Path -LiteralPath $JavaExecutable -PathType Leaf)) {
-        return $false
+    if ($VersionText -notmatch 'version\s+"(?<version>[0-9]+)(?:\.[^"]*)?"') {
+        return $null
     }
-    $versionText = Get-JavaVersionText -JavaExecutable $JavaExecutable
-    return ($null -ne $versionText -and $versionText -match 'version\s+"21(?:\.|\")')
-}
-
-function Resolve-Java21Home {
-    param([string]$ExplicitHome)
-
-    $candidateHomes = New-Object System.Collections.Generic.List[string]
-
-    foreach ($candidate in @($ExplicitHome, $env:NEXUS_JAVA21_HOME, $env:JAVA_HOME)) {
-        if (-not [string]::IsNullOrWhiteSpace($candidate)) {
-            $candidateHomes.Add($candidate)
-        }
-    }
-
-    # IntelliJ / JetBrains downloaded JDKs.
-    $jetBrainsJdks = Join-Path $env:USERPROFILE ".jdks"
-    if (Test-Path -LiteralPath $jetBrainsJdks -PathType Container) {
-        Get-ChildItem -LiteralPath $jetBrainsJdks -Directory -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -match '21' } |
-            Sort-Object FullName -Descending |
-            ForEach-Object { $candidateHomes.Add($_.FullName) }
-    }
-
-    $programFilesRoots = @($env:ProgramFiles, ${env:ProgramFiles(x86)}) |
-        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
-        Select-Object -Unique
-
-    foreach ($root in $programFilesRoots) {
-        $patterns = @(
-            (Join-Path $root "Microsoft\jdk-21*"),
-            (Join-Path $root "Eclipse Adoptium\jdk-21*"),
-            (Join-Path $root "Java\jdk-21*"),
-            (Join-Path $root "Amazon Corretto\jdk21*"),
-            (Join-Path $root "Zulu\zulu-21*"),
-            (Join-Path $root "BellSoft\LibericaJDK-21*")
-        )
-        foreach ($pattern in $patterns) {
-            Get-ChildItem -Path $pattern -Directory -ErrorAction SilentlyContinue |
-                Sort-Object FullName -Descending |
-                ForEach-Object { $candidateHomes.Add($_.FullName) }
-        }
-    }
-
-    $javaCommand = Get-Command java -ErrorAction SilentlyContinue
-    if ($null -ne $javaCommand -and -not [string]::IsNullOrWhiteSpace($javaCommand.Source)) {
-        if (Test-Java21Executable -JavaExecutable $javaCommand.Source) {
-            return (Split-Path -Parent (Split-Path -Parent $javaCommand.Source))
-        }
-    }
-
-    foreach ($candidateHome in ($candidateHomes | Select-Object -Unique)) {
-        try {
-            $resolvedCandidateHome = (Resolve-Path -LiteralPath $candidateHome -ErrorAction Stop).Path
-        }
-        catch {
-            continue
-        }
-
-        $javaExecutable = Join-Path $resolvedCandidateHome "bin\java.exe"
-        if (Test-Java21Executable -JavaExecutable $javaExecutable) {
-            return $resolvedCandidateHome
-        }
-    }
-
-    return $null
+    return [int]$Matches['version']
 }
 
 function Assert-Sha256File {
@@ -148,29 +80,30 @@ try {
     Write-Host "Repository : $repoRoot"
     Write-Host
 
-    Write-Host "[1/8] Java 21"
-    $resolvedJava21Home = Resolve-Java21Home -ExplicitHome $Java21Home
-    if ([string]::IsNullOrWhiteSpace($resolvedJava21Home)) {
-        $currentJava = Get-Command java -ErrorAction SilentlyContinue
-        $currentVersion = "java absent du PATH"
-        if ($null -ne $currentJava -and -not [string]::IsNullOrWhiteSpace($currentJava.Source)) {
-            $detected = Get-JavaVersionText -JavaExecutable $currentJava.Source
-            if (-not [string]::IsNullOrWhiteSpace($detected)) {
-                $currentVersion = $detected
-            }
-        }
-        throw "Java 21 Windows est requis et introuvable. Java courant : $currentVersion. Installez un JDK 21 Windows ou passez -Java21Home <chemin>."
+    Write-Host "[1/8] JDK 21+ / compilation release 21"
+    $javaCommand = Get-Command java -ErrorAction SilentlyContinue
+    if ($null -eq $javaCommand -or [string]::IsNullOrWhiteSpace($javaCommand.Source)) {
+        throw "Java est absent du PATH."
     }
 
-    $env:JAVA_HOME = $resolvedJava21Home
-    $env:PATH = "$(Join-Path $resolvedJava21Home 'bin');$previousPath"
-    $javaExecutable = Join-Path $resolvedJava21Home "bin\java.exe"
-    $javaVersion = Get-JavaVersionText -JavaExecutable $javaExecutable
-    if ([string]::IsNullOrWhiteSpace($javaVersion) -or $javaVersion -notmatch 'version\s+"21(?:\.|\")') {
-        throw "Le JDK selectionne n'est pas Java 21 : $resolvedJava21Home"
+    $javaVersion = Get-JavaVersionText -JavaExecutable $javaCommand.Source
+    if ([string]::IsNullOrWhiteSpace($javaVersion)) {
+        throw "Impossible de lire la version Java depuis $($javaCommand.Source)."
     }
-    Write-Host "JAVA_HOME : $resolvedJava21Home"
+    $javaMajor = Get-JavaMajorVersion -VersionText $javaVersion
+    if ($null -eq $javaMajor -or $javaMajor -lt 21) {
+        throw "NEXUS requiert un JDK 21 ou superieur. Version detectee : $javaVersion"
+    }
+
+    [xml]$rootPom = Get-Content -Raw -LiteralPath (Join-Path $repoRoot "pom.xml")
+    $compilerRelease = [string]$rootPom.project.properties.'maven.compiler.release'
+    if ($compilerRelease -ne "21") {
+        throw "Le build doit rester cible sur maven.compiler.release=21 (valeur detectee : $compilerRelease)."
+    }
+
+    Write-Host "Java executable : $($javaCommand.Source)"
     Write-Host $javaVersion
+    Write-Host "Maven compiler release : $compilerRelease"
 
     Write-Host "[2/8] Maven Wrapper reproductible"
     Invoke-Native -Command (Join-Path $repoRoot "mvnw.cmd") -Arguments @("--version")
@@ -244,7 +177,6 @@ try {
     Write-Host "SBOM : $sbom"
 }
 finally {
-    $env:JAVA_HOME = $previousJavaHome
     $env:PATH = $previousPath
     if ($locationPushed) {
         Pop-Location
