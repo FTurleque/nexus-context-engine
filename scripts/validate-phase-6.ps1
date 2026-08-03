@@ -22,31 +22,26 @@ function Invoke-Native {
 function Get-JavaVersionText {
     param([Parameter(Mandatory = $true)][string]$JavaExecutable)
 
-    $stdoutFile = [System.IO.Path]::GetTempFileName()
-    $stderrFile = [System.IO.Path]::GetTempFileName()
-    $previousErrorActionPreference = $ErrorActionPreference
-    try {
-        # java -version writes to stderr. Windows PowerShell 5.1 can turn that
-        # normal stderr output into NativeCommandError when Stop is active.
-        $ErrorActionPreference = "Continue"
-        & $JavaExecutable -version 1> $stdoutFile 2> $stderrFile
-        $exitCode = $LASTEXITCODE
-    }
-    finally {
-        $ErrorActionPreference = $previousErrorActionPreference
+    $processStartInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $processStartInfo.FileName = $JavaExecutable
+    $processStartInfo.Arguments = "-version"
+    $processStartInfo.UseShellExecute = $false
+    $processStartInfo.RedirectStandardOutput = $true
+    $processStartInfo.RedirectStandardError = $true
+    $processStartInfo.CreateNoWindow = $true
+
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $processStartInfo
+    [void]$process.Start()
+    $stdout = $process.StandardOutput.ReadToEnd()
+    $stderr = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+
+    if ($process.ExitCode -ne 0) {
+        return $null
     }
 
-    try {
-        if ($exitCode -ne 0) {
-            return $null
-        }
-        $stdout = Get-Content -Raw -Path $stdoutFile -ErrorAction SilentlyContinue
-        $stderr = Get-Content -Raw -Path $stderrFile -ErrorAction SilentlyContinue
-        return (($stderr + [Environment]::NewLine + $stdout).Trim())
-    }
-    finally {
-        Remove-Item -Force $stdoutFile, $stderrFile -ErrorAction SilentlyContinue
-    }
+    return (($stderr + [Environment]::NewLine + $stdout).Trim())
 }
 
 function Get-JavaMajorVersion {
