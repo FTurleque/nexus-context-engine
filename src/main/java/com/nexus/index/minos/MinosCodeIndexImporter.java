@@ -24,12 +24,12 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Pure Java-21-side adapter for the versioned JSON export produced by MINOS.
+ * Adaptateur Java 21 pour l'export JSON versionné produit par MINOS.
  *
- * <p>The importer never launches MINOS and never opens a path coming from the
- * export. Callers provide the JSON payload explicitly (for example through stdin),
- * NEXUS validates it against the already-known local project root, and only the
- * subset representable in the NEXUS code-intelligence model is promoted.</p>
+ * <p>Le chemin applicatif doit fournir la liste canonique des fichiers déjà
+ * indexés par NEXUS. L'ancienne surcharge à deux arguments est conservée pour
+ * les outils/tests autonomes mais réalise alors explicitement la découverte
+ * physique historique.</p>
  */
 public final class MinosCodeIndexImporter {
 
@@ -41,14 +41,26 @@ public final class MinosCodeIndexImporter {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    /**
+     * Compatibilité autonome. La façade NexusApplication utilise la surcharge
+     * avec fichiers canoniques et n'effectue donc pas ce walk physique.
+     */
     public CodeIntelligenceSnapshot importPayload(Path projectRoot, String payload) throws IOException {
         Path root = Objects.requireNonNull(projectRoot, "projectRoot").toRealPath();
+        return importPayload(root, safeProjectFiles(root), payload);
+    }
+
+    public CodeIntelligenceSnapshot importPayload(
+            Path projectRoot,
+            Set<String> indexedProjectFiles,
+            String payload) throws IOException {
+        Path root = Objects.requireNonNull(projectRoot, "projectRoot").toRealPath();
+        Set<String> safeProjectFiles = canonicalIndexedFiles(indexedProjectFiles);
         String documentPayload = Objects.requireNonNull(payload, "payload");
         if (documentPayload.getBytes(StandardCharsets.UTF_8).length > MAX_EXPORT_BYTES) {
             throw new IOException("MINOS export exceeds the 128 MiB transport limit");
         }
 
-        Set<String> safeProjectFiles = safeProjectFiles(root);
         JsonNode document = readDocument(documentPayload);
         if (!document.isObject()) {
             throw new IOException("MINOS export root must be a JSON object");
@@ -211,6 +223,22 @@ public final class MinosCodeIndexImporter {
         throw new IOException("MINOS derived relation is missing confidence");
     }
 
+    private static Set<String> canonicalIndexedFiles(Set<String> indexedProjectFiles) throws IOException {
+        Objects.requireNonNull(indexedProjectFiles, "indexedProjectFiles");
+        Set<String> safe = new LinkedHashSet<>();
+        for (String value : indexedProjectFiles) {
+            if (value == null || value.isBlank()) {
+                throw new IOException("NEXUS canonical indexed file path must not be blank");
+            }
+            String normalized = safeRelativePathSyntax(value);
+            if (normalized == null) {
+                throw new IOException("NEXUS canonical indexed file path is invalid: " + value);
+            }
+            safe.add(normalized);
+        }
+        return Set.copyOf(safe);
+    }
+
     private static Set<String> safeProjectFiles(Path root) throws IOException {
         Set<String> safeFiles = new LinkedHashSet<>();
         try (var paths = Files.walk(root)) {
@@ -239,6 +267,11 @@ public final class MinosCodeIndexImporter {
     }
 
     private static String safeRelativePath(Set<String> safeProjectFiles, String exportedPath) {
+        String normalized = safeRelativePathSyntax(exportedPath);
+        return normalized != null && safeProjectFiles.contains(normalized) ? normalized : null;
+    }
+
+    private static String safeRelativePathSyntax(String exportedPath) {
         try {
             Path raw = Path.of(exportedPath);
             if (raw.isAbsolute()) {
@@ -253,8 +286,7 @@ public final class MinosCodeIndexImporter {
             if (normalized.getNameCount() == 0 || normalized.startsWith("..")) {
                 return null;
             }
-            String relativePath = normalized.toString().replace('\\', '/');
-            return safeProjectFiles.contains(relativePath) ? relativePath : null;
+            return normalized.toString().replace('\\', '/');
         } catch (InvalidPathException exception) {
             return null;
         }
