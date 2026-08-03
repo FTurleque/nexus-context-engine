@@ -17,7 +17,8 @@ import java.util.Set;
 final class SchemaMigrator {
 
     private static final List<Migration> MIGRATIONS = List.of(
-            new Migration(1, "db/migration/V001__initial_schema.sql"));
+            new Migration(1, "db/migration/V001__initial_schema.sql"),
+            new Migration(2, "db/migration/V002__index_generation.sql"));
 
     private SchemaMigrator() {
     }
