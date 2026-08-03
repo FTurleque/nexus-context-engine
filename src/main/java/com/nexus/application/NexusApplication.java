@@ -7,6 +7,8 @@ import com.nexus.context.ContextBundle;
 import com.nexus.context.ContextFragmentFactory;
 import com.nexus.context.ContextRequest;
 import com.nexus.context.DefaultContextBuilder;
+import com.nexus.context.FederatedContextBundle;
+import com.nexus.context.FederatedContextService;
 import com.nexus.context.FragmentMerger;
 import com.nexus.context.source.git.GitRecencyCandidateEnricher;
 import com.nexus.context.source.git.LocalGitContextSourceProvider;
@@ -14,6 +16,7 @@ import com.nexus.context.source.instruction.AgentsMdInstructionProvider;
 import com.nexus.context.source.instruction.ClaudeInstructionProvider;
 import com.nexus.context.source.instruction.CopilotInstructionProvider;
 import com.nexus.context.source.instruction.GeminiInstructionProvider;
+import com.nexus.context.source.skill.AiSkillsRegistryProvider;
 import com.nexus.context.source.skill.LocalAgentSkillsProvider;
 import com.nexus.index.CodeIndexImporter;
 import com.nexus.index.CodeIntelligenceProvider;
@@ -33,6 +36,7 @@ import com.nexus.index.scip.ScipCodeIndexImporter;
 import com.nexus.persistence.sqlite.SqliteDatabase;
 import com.nexus.persistence.sqlite.SqliteIndexRepository;
 import com.nexus.persistence.sqlite.SqliteProjectRepository;
+import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectRegistry;
 import com.nexus.project.ProjectRepository;
@@ -63,8 +67,8 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -73,9 +77,9 @@ import java.util.UUID;
 /**
  * Façade applicative indépendante des adaptateurs clients.
  *
- * <p>Elle centralise la composition du moteur NEXUS afin que la CLI, REST, MCP
- * et les futurs adaptateurs puissent partager exactement les mêmes services
- * métier sans dépendre d'un framework applicatif ou d'un protocole client.</p>
+ * <p>La CLI, REST et MCP doivent déléguer à cette façade afin de partager les
+ * mêmes gates de cohérence, la même composition des providers et les mêmes
+ * politiques de ranking/context.</p>
  */
 public final class NexusApplication {
 
@@ -86,6 +90,8 @@ public final class NexusApplication {
     private final SearchService searchService;
     private final FederatedSearchService federatedSearchService;
     private final ContextBuilder contextBuilder;
+    private final FederatedContextService federatedContextService;
+    private final boolean semanticSearchEnabled;
 
     private NexusApplication(
             ProjectRepository projectRepository,
@@ -94,7 +100,9 @@ public final class NexusApplication {
             ProjectIndexingService indexingService,
             SearchService searchService,
             FederatedSearchService federatedSearchService,
-            ContextBuilder contextBuilder) {
+            ContextBuilder contextBuilder,
+            FederatedContextService federatedContextService,
+            boolean semanticSearchEnabled) {
         this.projectRepository = Objects.requireNonNull(projectRepository, "projectRepository");
         this.indexRepository = Objects.requireNonNull(indexRepository, "indexRepository");
         this.projectRegistry = Objects.requireNonNull(projectRegistry, "projectRegistry");
@@ -102,16 +110,16 @@ public final class NexusApplication {
         this.searchService = Objects.requireNonNull(searchService, "searchService");
         this.federatedSearchService = Objects.requireNonNull(federatedSearchService, "federatedSearchService");
         this.contextBuilder = Objects.requireNonNull(contextBuilder, "contextBuilder");
+        this.federatedContextService = Objects.requireNonNull(federatedContextService, "federatedContextService");
+        this.semanticSearchEnabled = semanticSearchEnabled;
     }
 
+    /** Compose NEXUS avec les opt-ins opérationnels explicitement présents dans l'environnement. */
     public static NexusApplication create(NexusPaths paths) throws SQLException, IOException {
-        return create(paths, SemanticSearchConfiguration.disabled());
+        return create(paths, SemanticSearchConfiguration.fromEnvironment());
     }
 
-    /**
-     * Compose NEXUS avec une capacité sémantique uniquement lorsque l'appelant
-     * fournit explicitement une configuration activée.
-     */
+    /** Compose NEXUS avec une configuration sémantique fournie explicitement par l'appelant. */
     public static NexusApplication create(
             NexusPaths paths,
             SemanticSearchConfiguration semanticSearchConfiguration) throws SQLException, IOException {
@@ -128,7 +136,6 @@ public final class NexusApplication {
                 JdtLanguageServerCodeIntelligenceProvider.fromEnvironment(paths)
                         .<List<CodeIntelligenceProvider>>map(List::of)
                         .orElseGet(List::of);
-
         List<CodeIndexImporter> codeIndexImporters = List.of(new ScipCodeIndexImporter());
 
         List<SearchStrategy> searchStrategies = new ArrayList<>();
@@ -149,9 +156,7 @@ public final class NexusApplication {
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),
-                List.of(
-                        new JavaParserLanguageAnalyzer(),
-                        new MarkdownLanguageAnalyzer()),
+                List.of(new JavaParserLanguageAnalyzer(), new MarkdownLanguageAnalyzer()),
                 searchIndex,
                 codeIndexImporters,
                 codeIntelligenceProviders,
@@ -181,8 +186,11 @@ public final class NexusApplication {
                         new CopilotInstructionProvider(),
                         new ClaudeInstructionProvider(),
                         new GeminiInstructionProvider()),
-                List.of(new LocalAgentSkillsProvider()),
+                List.of(
+                        new LocalAgentSkillsProvider(),
+                        new AiSkillsRegistryProvider()),
                 new LocalGitContextSourceProvider());
+        FederatedContextService federatedContextService = new FederatedContextService(contextBuilder);
 
         return new NexusApplication(
                 projectRepository,
@@ -191,7 +199,9 @@ public final class NexusApplication {
                 indexingService,
                 searchService,
                 federatedSearchService,
-                contextBuilder);
+                contextBuilder,
+                federatedContextService,
+                semanticSearchConfiguration.enabled());
     }
 
     public List<ProjectDescriptor> listProjects() {
@@ -247,13 +257,12 @@ public final class NexusApplication {
         return new IndexOperation(updatedProject, report);
     }
 
-    /**
-     * Replaces the explicit MINOS external snapshot for a registered project.
-     * The payload is supplied by the caller; NEXUS never launches MINOS itself.
-     */
+    /** Le payload est fourni explicitement ; NEXUS ne lance jamais MINOS. */
     public CodeIntelligenceSnapshot importMinos(UUID projectId, String payload) throws IOException {
-        ProjectDescriptor project = getProject(projectId);
-        CodeIntelligenceSnapshot snapshot = new MinosCodeIndexImporter().importPayload(project.rootPath(), payload);
+        ProjectDescriptor project = requireReadyProject(projectId);
+        Set<String> indexedFiles = indexRepository.findFiles(projectId).keySet();
+        CodeIntelligenceSnapshot snapshot = new MinosCodeIndexImporter()
+                .importPayload(project.rootPath(), indexedFiles, payload);
         indexRepository.replaceExternalCodeIntelligence(projectId, snapshot);
         return snapshot;
     }
@@ -264,10 +273,13 @@ public final class NexusApplication {
     }
 
     public SearchOperation search(UUID projectId, String query, int limit, boolean explain) throws IOException {
-        ProjectDescriptor project = getProject(projectId);
+        ProjectDescriptor project = requireReadyProject(projectId);
+        String resolvedQuery = requireQuery(query);
+        int resolvedLimit = positiveLimit(limit);
         long startedAt = System.nanoTime();
-        List<RankedCandidate> results = searchService.search(project, query, limit, explain);
-        return new SearchOperation(project, query, limit, explain, elapsedMillis(startedAt), results);
+        List<RankedCandidate> results = searchService.search(project, resolvedQuery, resolvedLimit, explain);
+        return new SearchOperation(
+                project, resolvedQuery, resolvedLimit, explain, elapsedMillis(startedAt), results);
     }
 
     public FederatedSearchOperation searchAcrossProjects(
@@ -276,12 +288,19 @@ public final class NexusApplication {
             int limit,
             boolean explain) throws IOException {
         Objects.requireNonNull(projectIds, "projectIds");
+        if (projectIds.isEmpty()) {
+            throw new IllegalArgumentException("projectIds must not be empty");
+        }
+        String resolvedQuery = requireQuery(query);
+        int resolvedLimit = positiveLimit(limit);
         List<ProjectDescriptor> projects = projectIds.stream()
-                .map(this::getProject)
+                .map(this::requireReadyProject)
                 .toList();
         long startedAt = System.nanoTime();
-        List<FederatedSearchHit> results = federatedSearchService.search(projects, query, limit, explain);
-        return new FederatedSearchOperation(projects, query, limit, explain, elapsedMillis(startedAt), results);
+        List<FederatedSearchHit> results =
+                federatedSearchService.search(projects, resolvedQuery, resolvedLimit, explain);
+        return new FederatedSearchOperation(
+                projects, resolvedQuery, resolvedLimit, explain, elapsedMillis(startedAt), results);
     }
 
     public ContextOperation context(
@@ -291,58 +310,78 @@ public final class NexusApplication {
             Set<CandidateType> requestedSources,
             Map<String, String> constraints,
             boolean explain) {
-        ProjectDescriptor project = getProject(projectId);
+        ProjectDescriptor project = requireReadyProject(projectId);
+        String resolvedQuery = requireQuery(query);
         long startedAt = System.nanoTime();
         ContextBundle bundle = contextBuilder.build(new ContextRequest(
                 projectId,
-                query,
+                resolvedQuery,
                 tokenBudget,
                 requestedSources == null ? Set.of() : requestedSources,
                 constraints == null ? Map.of() : constraints,
                 explain));
-        return new ContextOperation(project, query, explain, elapsedMillis(startedAt), bundle);
+        return new ContextOperation(project, resolvedQuery, explain, elapsedMillis(startedAt), bundle);
+    }
+
+    public FederatedContextOperation contextAcrossProjects(
+            List<UUID> projectIds,
+            String query,
+            int tokenBudget,
+            Set<CandidateType> requestedSources,
+            Map<String, String> constraints,
+            boolean explain) {
+        Objects.requireNonNull(projectIds, "projectIds");
+        if (projectIds.isEmpty()) {
+            throw new IllegalArgumentException("projectIds must not be empty");
+        }
+        String resolvedQuery = requireQuery(query);
+        List<ProjectDescriptor> projects = projectIds.stream()
+                .map(this::requireReadyProject)
+                .toList();
+        long startedAt = System.nanoTime();
+        FederatedContextBundle bundle = federatedContextService.build(
+                projects,
+                resolvedQuery,
+                tokenBudget,
+                requestedSources == null ? Set.of() : requestedSources,
+                constraints == null ? Map.of() : constraints,
+                explain);
+        return new FederatedContextOperation(
+                projects, resolvedQuery, explain, elapsedMillis(startedAt), bundle);
     }
 
     public List<IndexedSymbol> findSymbols(UUID projectId, String query, int limit) {
-        getProject(projectId);
-        String normalized = requireQuery(query).toLowerCase(Locale.ROOT);
-        int boundedLimit = positiveLimit(limit);
-        return indexRepository.findSymbols(projectId).stream()
-                .filter(indexed -> {
-                    String name = indexed.symbol().name().toLowerCase(Locale.ROOT);
-                    String qualifiedName = indexed.symbol().qualifiedName().toLowerCase(Locale.ROOT);
-                    return name.contains(normalized) || qualifiedName.contains(normalized);
-                })
-                .sorted((left, right) -> {
-                    boolean leftExact = left.symbol().name().equalsIgnoreCase(query);
-                    boolean rightExact = right.symbol().name().equalsIgnoreCase(query);
-                    if (leftExact != rightExact) {
-                        return leftExact ? -1 : 1;
-                    }
-                    int byName = left.symbol().qualifiedName().compareTo(right.symbol().qualifiedName());
-                    return byName != 0 ? byName : left.relativePath().compareTo(right.relativePath());
-                })
-                .limit(boundedLimit)
-                .toList();
+        requireReadyProject(projectId);
+        return indexRepository.searchSymbols(projectId, requireQuery(query), positiveLimit(limit));
     }
 
     public List<SymbolRelation> findUsages(UUID projectId, String symbol, int limit) {
-        getProject(projectId);
-        String normalized = requireQuery(symbol).toLowerCase(Locale.ROOT);
-        int boundedLimit = positiveLimit(limit);
-        return indexRepository.findRelations(projectId).stream()
-                .filter(relation -> relation.source().toLowerCase(Locale.ROOT).contains(normalized)
-                        || relation.target().toLowerCase(Locale.ROOT).contains(normalized))
-                .sorted((left, right) -> {
-                    int byKind = left.kind().compareTo(right.kind());
-                    if (byKind != 0) {
-                        return byKind;
-                    }
-                    int bySource = left.source().compareTo(right.source());
-                    return bySource != 0 ? bySource : left.target().compareTo(right.target());
-                })
-                .limit(boundedLimit)
-                .toList();
+        requireReadyProject(projectId);
+        return indexRepository.searchRelations(projectId, requireQuery(symbol), positiveLimit(limit));
+    }
+
+    public ReadinessSnapshot readiness() {
+        List<ProjectDescriptor> projects = projectRepository.findAll();
+        EnumMap<IndexStatus, Integer> counts = new EnumMap<>(IndexStatus.class);
+        for (IndexStatus status : IndexStatus.values()) {
+            counts.put(status, 0);
+        }
+        projects.forEach(project -> counts.merge(project.indexStatus(), 1, Integer::sum));
+        boolean operational = counts.get(IndexStatus.FAILED) == 0;
+        return new ReadinessSnapshot(
+                operational,
+                projects.size(),
+                counts,
+                semanticSearchEnabled);
+    }
+
+    private ProjectDescriptor requireReadyProject(UUID projectId) {
+        ProjectDescriptor project = getProject(projectId);
+        if (project.indexStatus() != IndexStatus.READY) {
+            throw new IllegalStateException(
+                    "Le projet " + project.name() + " n'est pas READY (état " + project.indexStatus() + ")");
+        }
+        return project;
     }
 
     private static String requireQuery(String value) {
@@ -399,5 +438,26 @@ public final class NexusApplication {
             boolean explain,
             long durationMs,
             ContextBundle bundle) {
+    }
+
+    public record FederatedContextOperation(
+            List<ProjectDescriptor> projects,
+            String query,
+            boolean explain,
+            long durationMs,
+            FederatedContextBundle bundle) {
+        public FederatedContextOperation {
+            projects = List.copyOf(projects);
+        }
+    }
+
+    public record ReadinessSnapshot(
+            boolean operational,
+            int registeredProjects,
+            Map<IndexStatus, Integer> projectsByStatus,
+            boolean semanticSearchEnabled) {
+        public ReadinessSnapshot {
+            projectsByStatus = Map.copyOf(projectsByStatus);
+        }
     }
 }
