@@ -12,9 +12,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
-/**
- * Provider local des Agent Skills versionnés dans le repository.
- */
+/** Provider local des Agent Skills versionnés dans le repository. */
 public final class LocalAgentSkillsProvider implements SkillSourceProvider {
 
     private static final List<String> SKILL_ROOTS = List.of(
@@ -45,10 +43,6 @@ public final class LocalAgentSkillsProvider implements SkillSourceProvider {
             registerParentChain(projectRoot, skillContainer, ignoreMatcher);
             discoverBelow(projectRoot, skillContainer, relativeRoot, ignoreMatcher, skills, diagnostics);
         }
-
-        SkillProviderResult registryResult = new AiSkillsRegistryProvider().discover(query);
-        skills.addAll(registryResult.skills());
-        diagnostics.addAll(registryResult.diagnostics());
 
         skills.sort(Comparator
                 .comparing(SkillDescriptor::name)
