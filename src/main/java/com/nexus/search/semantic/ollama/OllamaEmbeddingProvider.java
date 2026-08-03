@@ -11,15 +11,12 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-/**
- * Provider d'embeddings Ollama explicitement opt-in.
- *
- * <p>Aucune requête n'est exécutée à la construction. Le trafic n'existe que
- * lorsqu'une composition applicative active explicitement ce provider.</p>
- */
+/** Provider d'embeddings Ollama explicitement opt-in. */
 public final class OllamaEmbeddingProvider implements EmbeddingProvider {
 
     public static final URI DEFAULT_BASE_URI = URI.create("http://localhost:11434");
@@ -92,14 +89,24 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
 
     @Override
     public float[] embed(String text) throws IOException {
-        Objects.requireNonNull(text, "text");
-        if (text.isBlank()) {
-            throw new IllegalArgumentException("text must not be blank");
+        return embedAll(List.of(text)).getFirst();
+    }
+
+    @Override
+    public List<float[]> embedAll(List<String> texts) throws IOException {
+        Objects.requireNonNull(texts, "texts");
+        if (texts.isEmpty()) {
+            return List.of();
+        }
+        for (String text : texts) {
+            if (text == null || text.isBlank()) {
+                throw new IllegalArgumentException("embedding text must not be blank");
+            }
         }
 
         String requestBody = objectMapper.writeValueAsString(Map.of(
                 "model", model,
-                "input", text));
+                "input", texts));
         HttpRequest request = HttpRequest.newBuilder(embedEndpoint)
                 .timeout(timeout)
                 .header("Content-Type", "application/json")
@@ -122,25 +129,36 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
 
         JsonNode root = objectMapper.readTree(response.body());
         JsonNode embeddings = root.path("embeddings");
-        if (!embeddings.isArray() || embeddings.isEmpty() || !embeddings.get(0).isArray()) {
-            throw new IOException("Réponse Ollama invalide : champ embeddings absent ou vide");
-        }
-        JsonNode firstEmbedding = embeddings.get(0);
-        if (firstEmbedding.size() != dimensions) {
+        if (!embeddings.isArray() || embeddings.size() != texts.size()) {
             throw new IOException(
-                    "Le modèle " + model + " a produit " + firstEmbedding.size()
-                            + " dimensions au lieu de " + dimensions);
+                    "Réponse Ollama invalide : " + embeddings.size()
+                            + " embedding(s) pour " + texts.size() + " entrée(s)");
         }
+        List<float[]> vectors = new ArrayList<>(texts.size());
+        for (int vectorIndex = 0; vectorIndex < embeddings.size(); vectorIndex++) {
+            vectors.add(parseVector(embeddings.get(vectorIndex), vectorIndex));
+        }
+        return List.copyOf(vectors);
+    }
 
+    private float[] parseVector(JsonNode embedding, int vectorIndex) throws IOException {
+        if (!embedding.isArray() || embedding.size() != dimensions) {
+            throw new IOException(
+                    "Le modèle " + model + " a produit une dimension invalide pour le vecteur " + vectorIndex);
+        }
         float[] vector = new float[dimensions];
         for (int index = 0; index < dimensions; index++) {
-            JsonNode value = firstEmbedding.get(index);
+            JsonNode value = embedding.get(index);
             if (value == null || !value.isNumber()) {
-                throw new IOException("Réponse Ollama invalide : valeur d'embedding non numérique à l'index " + index);
+                throw new IOException(
+                        "Réponse Ollama invalide : valeur non numérique dans le vecteur " + vectorIndex
+                                + " à l'index " + index);
             }
             vector[index] = value.floatValue();
             if (!Float.isFinite(vector[index])) {
-                throw new IOException("Réponse Ollama invalide : valeur d'embedding non finie à l'index " + index);
+                throw new IOException(
+                        "Réponse Ollama invalide : valeur non finie dans le vecteur " + vectorIndex
+                                + " à l'index " + index);
             }
         }
         return vector;
