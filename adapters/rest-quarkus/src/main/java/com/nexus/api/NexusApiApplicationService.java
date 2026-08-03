@@ -52,6 +52,7 @@ public class NexusApiApplicationService {
         operationCounter("index");
         try {
             NexusApplication.IndexOperation operation = application.index(projectId, rebuild, deepJava);
+            recordProviderDurations(operation.report());
             return new IndexOperation(operation.project(), operation.report());
         } finally {
             recordDuration("index", startedAt);
@@ -169,6 +170,12 @@ public class NexusApiApplicationService {
     private void recordDuration(String operation, long startedAt) {
         meterRegistry.timer("nexus.api.operation.duration", "operation", operation)
                 .record(Duration.ofNanos(System.nanoTime() - startedAt));
+    }
+
+    private void recordProviderDurations(IndexingReport report) {
+        report.providerDurationsMs().forEach((provider, durationMs) ->
+                meterRegistry.timer("nexus.code_intelligence.duration", "provider", provider)
+                        .record(Duration.ofMillis(durationMs)));
     }
 
     public record IndexOperation(ProjectDescriptor project, IndexingReport report) {
