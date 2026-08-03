@@ -1,385 +1,86 @@
 # Limites actuelles et dette de consolidation
 
-Ce document décrit les limites **réellement présentes dans le code courant** de NEXUS au 29 juillet 2026 (`main` : `13fd6970f7350602c7a86aae729ddd4adad771bd`).
+> État de travail : `phase-6-consolidation-hardening`.
+> Les correctifs Phase 6 sont implémentés mais ne sont **pas encore déclarés qualifiés** tant que `scripts/validate-phase-6.ps1` n'a pas produit `=== PHASE 6 PASS ===` sur l'exact head.
 
-Il ne remplace ni les ADR ni la roadmap :
+Ce registre suit les constats F01–F18 issus de l'audit de juillet 2026. Les ADR acceptés restent historiques et ne sont pas réécrits.
 
-- les ADR expliquent les décisions historiques ;
-- ce document décrit les écarts/limites actuels ;
-- `docs/roadmap.md` ordonne leur traitement ;
-- l'issue #13 suit la Phase 6 de consolidation.
+## Registre Phase 6
 
-Une limite indiquée ici n'est pas nécessairement un bug utilisateur déjà observé. Certaines sont des plafonds de scale ou des divergences entre l'architecture cible et l'implémentation actuelle.
+| ID | Sujet | Traitement Phase 6 | État avant qualification |
+|---|---|---|---|
+| F01 | top-K fédéré sous-rempli | sur-récupération bornée avant diversification + test de régression | corrigé, à qualifier |
+| F02 | gate `READY` non uniforme | gate applicatif commun pour search/context/symbols/usages/fédération/MINOS | corrigé, à qualifier |
+| F03 | fenêtre SQLite/index dérivés | lecture interdite hors `READY`, recovery non-READY par rebuild complet, génération canonique | corrigé, à qualifier |
+| F04 | scan complet recherche symbolique | préfiltrage SQLite borné avant fuzzy Java | corrigé, à qualifier |
+| F05 | `findSymbols`/`findUsages` projet-wide | requêtes repository SQL avec `LIMIT` | corrigé, à qualifier |
+| F06 | graphe reconstruit par requête | cache dérivé par génération d'index | corrigé, à qualifier |
+| F07 | composition CLI dupliquée | CLI déléguée entièrement à `NexusApplication` | corrigé, à qualifier |
+| F08 | drift Maven | reactor parent, dependency/plugin management et Enforcer communs | corrigé, à qualifier |
+| F09 | coupling Skills Registry | providers local/registry composés indépendamment | corrigé, à qualifier |
+| F10 | absence single-flight | verrou in-process par `projectId`, second run actif refusé | corrigé, à qualifier |
+| F11 | fichiers non bornés | plafond configurable avant hash/lecture, 8 MiB par défaut, diagnostics | corrigé, à qualifier |
+| F12 | MINOS full walk | chemin applicatif validé contre `indexed_files` canonique | corrigé, à qualifier |
+| F13 | lifecycle Lucene par opération | **pas de changement sans preuve de benchmark** ; reste un watch item | différé sur preuve |
+| F14 | opt-in sémantique non uniforme | configuration environnement commune CLI/REST/MCP, désactivée par défaut | corrigé, à qualifier |
+| F15 | fédération non exposée | CLI + REST + MCP exposent recherche fédérée | corrigé, à qualifier |
+| F16 | coûts Git/embeddings | embeddings batchables + batch Ollama ; aucun cache Git sans mesure | partiellement optimisé, watch item Git |
+| F17 | absence ContextBundle fédéré | budget global, provenance, fairness, déduplication et sources natives projet-locales | corrigé, à qualifier |
+| F18 | distribution orientée checkout | version 0.2.0, wrapper, ZIP autonome, SHA-256, SBOM, runbook recovery | corrigé, à qualifier |
 
-## Synthèse
+## Invariants renforcés
 
-| ID | Priorité | Domaine | Limite | Roadmap |
-|---|---|---|---|---|
-| F01 | P1 | fédération | top-K potentiellement sous-rempli après diversification | I18 |
-| F02 | P1 | disponibilité | gate `READY` non uniforme | I18 |
-| F03 | P1 | cohérence | fenêtre SQLite / index dérivés sur panne | I18 |
-| F04 | P1 | recherche | scan complet des symboles | I19 |
-| F05 | P1 | API | `findSymbols` / `findUsages` projet-wide | I19 |
-| F06 | P1 | graphe | reconstruction complète à chaque recherche | I19 |
-| F07 | P1 | composition | composition root CLI dupliqué | I20 |
-| F08 | P1 | build | drift de versions entre POM | I20 |
-| F09 | P1 | skills | provider registry couplé au provider local | I20 |
-| F10 | P2 | indexation | pas de single-flight explicite par projet | I21 |
-| F11 | P2 | ressources | pas de taille maximale de fichier configurable | I21 |
-| F12 | P2 | MINOS | allow-list reconstruite par scan physique complet | I21 |
-| F13 | P2 | Lucene | lifecycle reader/writer par opération | I22 |
-| F14 | P2 | sémantique | capacité opt-in non opérationnalisée uniformément | I22 |
-| F15 | P2 | fédération | recherche fédérée non exposée dans les adaptateurs publics | I22 |
-| F16 | P2 | performance | Git/embeddings à optimiser seulement après mesure | I22 |
-| F17 | P1 fonctionnel | contexte | pas de `ContextBundle` fédéré livré | I23 |
-| F18 | P2 produit | distribution | `0.1.0-SNAPSHOT`, usage encore orienté checkout | I24 |
+### Cohérence d'index
 
----
+SQLite reste la source canonique. Lucene lexical et sémantique restent dérivés et reconstructibles. Une lecture dépendant d'un index exige désormais `IndexStatus.READY` au niveau de la façade applicative.
 
-## F01 — Top-K fédéré après diversification
+Une panne pendant l'indexation conduit normalement à `FAILED`. Un crash brutal peut laisser `INDEXING`; cet état ne constitue pas un verrou persistant : la prochaine indexation force un rebuild complet. Le single-flight ne concerne que les traitements réellement concurrents dans le processus actif.
 
-### État actuel
+### Scale
 
-`FederatedSearchService` demande à chaque projet :
+La recherche symbole et les tools `find_symbol` / `find_usages` ne matérialisent plus systématiquement l'ensemble du projet. Le graphe est reconstruit uniquement lorsque la génération SQLite change.
 
-```java
-searchService.search(project, query, limit, explain)
-```
+Aucun moteur externe n'a été ajouté : les baselines existantes ne justifient toujours pas Zoekt, OpenGrok, OpenSearch ou un index distribué.
 
-puis fusionne les candidats et ne conserve qu'un résultat par couple `projectId + path`.
+### Ressources et providers
 
-Si les `limit` premiers candidats locaux correspondent majoritairement à plusieurs `FILE`/`SYMBOL` du même fichier, la diversification peut supprimer plusieurs éléments sans avoir récupéré les candidats classés juste après le top-K local.
-
-### Risque
-
-Un appel demandant 10 résultats peut retourner moins de 10 chemins uniques alors que des candidats pertinents existaient au-delà du dixième rang local.
-
-### Direction
-
-Sur-récupérer avant diversification, ou intégrer la diversification plus tôt dans le retrieval. Le facteur doit être mesuré et borné.
-
----
-
-## F02 — Disponibilité d'un projet non uniformisée
-
-### État actuel
-
-`DefaultContextBuilder` refuse explicitement un projet dont `IndexStatus != READY`.
-
-En revanche, les chemins applicatifs de recherche, `findSymbols` et `findUsages` ne réalisent pas tous le même contrôle avant d'interroger les indexes.
-
-### Risque
-
-Un projet `INDEXING` ou `FAILED` peut être interrogé alors que ses données canoniques et dérivées ne représentent pas une génération cohérente.
-
-### Direction
-
-Créer une politique applicative commune de readiness et l'appliquer à toutes les lectures dépendant d'un index.
-
----
-
-## F03 — Cohérence SQLite / Lucene / providers sur panne partielle
-
-### État actuel
-
-`ProjectIndexingService` applique les changements SQLite avant de rafraîchir certains providers et avant l'écriture de Lucene.
-
-Si une étape ultérieure échoue :
-
-- le projet passe à `FAILED` ;
-- la prochaine indexation force un rebuild ;
-- mais SQLite peut déjà contenir une version plus récente que Lucene pendant cette fenêtre.
-
-### Risque
-
-Sans gate F02, une recherche peut observer un état partiel.
-
-### Direction
-
-Formaliser une génération d'index ou une politique équivalente, empêcher toute lecture incohérente et tester une panne injectée à chaque frontière importante.
-
----
-
-## F04 — Recherche symbolique par scan complet
-
-### État actuel
-
-`SymbolSearchStrategy` appelle `IndexRepository.findSymbols(projectId)` puis exécute en Java :
-
-- comparaison exacte ;
-- `contains` ;
-- distance de Levenshtein ;
-- tri ;
-- `limit`.
-
-Le calcul est donc proportionnel au nombre total de symboles du projet avant application du top-K.
-
-### Risque
-
-Le comportement validé sur environ 10 000 symboles n'est pas un modèle adapté à des centaines de milliers de symboles.
-
-### Direction
-
-Ajouter des requêtes repository ciblées et préfiltrer avec SQLite/Lucene avant toute fuzzy coûteuse en Java.
-
----
-
-## F05 — `findSymbols` et `findUsages` projet-wide
-
-### État actuel
-
-La façade `NexusApplication` implémente ces opérations en chargeant respectivement tous les symboles ou toutes les relations puis en filtrant en mémoire.
-
-Ces méthodes alimentent notamment les tools MCP `find_symbol` et `find_usages`.
-
-### Direction
-
-Déplacer la sélection et la limite dans `IndexRepository` avec des requêtes indexées par nom/nom qualifié/source/cible/kind.
-
----
-
-## F06 — Graphe reconstruit par requête
-
-### État actuel
-
-`ProjectGraphBuilder.build(projectId)` recharge les symboles et les relations du projet puis reconstruit le graphe d'imports. `GraphCandidateEnricher` l'appelle pendant la recherche.
-
-### Risque
-
-Le coût augmente avec le corpus même lorsqu'aucune indexation n'a changé entre deux recherches.
-
-### Direction
-
-Après mesure, conserver une représentation d'adjacence associée à la génération d'index ou un cache invalidé explicitement. Aucun cache complexe avant benchmark.
-
----
-
-## F07 — Composition root CLI dupliqué
-
-### État actuel
-
-`NexusApplication` centralise la composition utilisée par REST et MCP.
-
-`NexusCli` instancie encore directement :
-
-- SQLite repositories ;
-- Lucene ;
-- JavaParser/Markdown ;
-- SCIP/JDT ;
-- `ProjectIndexingService` ;
-- `SearchService` ;
-- enrichisseurs ;
-- `DefaultContextBuilder`.
-
-### Risque
-
-Une nouvelle option ou un changement de composition peut être appliqué à REST/MCP mais oublié dans la CLI, ou l'inverse.
-
-### Direction
-
-Faire déléguer la CLI à `NexusApplication` et conserver dans la CLI uniquement parsing, validation et rendu.
-
----
-
-## F08 — Gouvernance Maven dispersée
-
-### État actuel
-
-Le cœur, REST, MCP et assistant-clients possèdent des POM indépendants qui répètent Java, plugins et plusieurs versions de dépendances.
-
-L'Itération 12 a déjà rencontré une incompatibilité Jackson entre le SDK MCP et NEXUS et a dû aligner explicitement `jackson-core`, `jackson-databind` et `jackson-annotations`.
-
-### Direction
-
-Introduire un parent/reactor léger ou une stratégie équivalente de `dependencyManagement`, puis vérifier convergence et toolchain sans rendre Quarkus/MCP transitifs vers le cœur.
-
----
-
-## F09 — Composition AI Skills Registry non conforme au port prévu
-
-### État actuel
-
-`SkillDiscoveryService` sait agréger plusieurs `SkillSourceProvider`.
-
-Cependant `NexusApplication` compose uniquement `LocalAgentSkillsProvider`, et ce provider instancie lui-même `AiSkillsRegistryProvider` dans `discover()`.
-
-### Conséquence
-
-Le comportement fonctionnel local > registry est validé, mais la frontière provider est moins modulaire que l'architecture documentée.
-
-### Direction
-
-Composer explicitement :
-
-```text
-LocalAgentSkillsProvider
-AiSkillsRegistryProvider
-        │
-        ▼
-SkillDiscoveryService
-```
-
-et conserver la priorité dans `SkillDescriptor`/déduplication, pas dans un couplage provider → provider.
-
----
-
-## F10 — Indexation concurrente non sérialisée explicitement
-
-### État actuel
-
-Aucun mécanisme de single-flight/lock par `projectId` n'est visible dans `ProjectIndexingService`.
-
-SQLite possède un `busy_timeout`, mais cela ne définit pas la sémantique métier de deux indexations simultanées.
-
-### Direction
-
-Garantir une opération active par projet et décider explicitement si un second appel est refusé, rejoint l'opération existante ou est mis en file.
-
----
-
-## F11 — Taille de fichier non bornée
-
-### État actuel
-
-`ProjectScanner` enregistre les fichiers supportés sans plafond configurable de taille. Pour un fichier à indexer lexicalement, `ProjectIndexingService` utilise ensuite `Files.readString(...)`.
-
-### Risque
-
-Un dump SQL, Markdown ou source très volumineux peut provoquer une pression mémoire et une latence disproportionnées.
-
-### Direction
-
-Ajouter une limite configurable, un diagnostic explicable et des tests de gros fichier. La valeur par défaut doit être choisie à partir de corpus réels.
-
----
-
-## F12 — Allow-list MINOS construite par `Files.walk`
-
-### État actuel
-
-`MinosCodeIndexImporter.safeProjectFiles(root)` parcourt tout l'arbre et appelle `toRealPath()` pour construire une allow-list de fichiers sûrs.
-
-Cette protection évite les traversals pilotés par le JSON, mais elle parcourt aussi des zones que le scanner NEXUS peut ignorer (`.git`, `target`, `node_modules`, etc.).
-
-### Direction
-
-Réutiliser la vue canonique NEXUS (`indexed_files`) ou une allow-list produite par le scanner, sans affaiblir les protections de chemin de l'ADR-0044.
-
----
-
-## F13 — Lifecycle Lucene par opération
-
-### État actuel
-
-La recherche ouvre un `FSDirectory`, un `DirectoryReader`, un `StandardAnalyzer` et un `IndexSearcher` par appel. Les écritures ouvrent également leur writer par opération.
-
-### Position actuelle
-
-Ce choix reste acceptable sur les baselines mesurées et simplifie le lifecycle local.
-
-### Direction
-
-Mesurer sous charge REST/MCP persistante. Adopter `SearcherManager` ou un lifecycle partagé uniquement si la mesure prouve un bénéfice significatif et si l'invalidation reste sûre.
-
----
-
-## F14 — Recherche sémantique essentiellement programmable
-
-### État actuel
-
-`SemanticSearchConfiguration` est utilisée par `NexusApplication` et les tests/benchmarks. La CLI, REST et MCP ne possèdent pas encore une politique/configuration homogène pour l'activer.
-
-### Direction
-
-Après unification de composition : configuration explicite, désactivée par défaut, avec provider/modèle/dimensions vérifiés. Ne jamais déclencher d'embeddings implicitement.
-
----
-
-## F15 — Recherche fédérée non exposée par les adaptateurs
-
-### État actuel
-
-`NexusApplication.searchAcrossProjects(...)` et `FederatedSearchService` existent, mais les contrats REST/MCP/CLI courants restent principalement mono-projet.
-
-### Direction
-
-Exposer la fédération seulement après F01/F02, avec une portée de projets explicite et une provenance obligatoire dans la réponse.
-
----
-
-## F16 — Coûts Git et sémantique
-
-### Git
-
-Les itérations précédentes ont observé un coût sensible lié à l'inspection de commits. Aucun cache n'est adopté tant qu'un benchmark multi-repository ne démontre pas un besoin.
+- `NEXUS_MAX_FILE_SIZE_BYTES` : 8 MiB par défaut ; exclusion avant SHA-256 et `readString` ;
+- `NEXUS_CODE_INTELLIGENCE_TIMEOUT_SECONDS` : 180 s par défaut ;
+- JDT conserve ses timeouts internes et reçoit en plus une enveloppe globale ;
+- les durées importer/provider sont structurées dans `IndexingReport` et exportées par REST sans contenu privé dans les labels.
 
 ### Sémantique
 
-La baseline réelle a mesuré environ :
+Le mode sémantique reste opt-in. `NEXUS_SEMANTIC_PROVIDER=ollama` active explicitement la capacité. Les embeddings sont envoyés par lots bornés ; aucune vector DB n'est introduite.
 
-```text
-indexation  ~33,11×
-recherche   ~1,43×
-```
+### Fédération
 
-par rapport au chemin lexical de référence.
+La recherche fédérée et le contexte fédéré exigent une liste explicite de projets READY. Le contexte :
 
-`SemanticIndexingService` produit actuellement les embeddings document par document.
+- partage un budget global déterministe ;
+- conserve la provenance projet ;
+- entrelace les résultats pour limiter la starvation ;
+- déduplique les contenus identiques entre projets ;
+- évalue instructions, skills et Git dans leur projet d'origine, sans propagation implicite.
 
-### Direction
+## Watch items conservés après Phase 6
 
-Mesurer batch, cache de vecteurs par hash et incrémental avant d'élargir l'usage. Le mode sémantique reste opt-in.
+Ces points ne sont pas considérés comme des corrections manquantes de la Phase 6 :
 
----
+1. **Lifecycle Lucene persistant** : `SearcherManager`/writer partagé uniquement si un benchmark REST/MCP démontre un gain matériel.
+2. **Cache Git** : aucun cache persistant sans mesure multi-repository.
+3. **Moteur externe** : Zoekt/OpenGrok/OpenSearch uniquement si les nouvelles requêtes bornées et le cache graphe ne suffisent plus.
+4. **Vector DB** : non justifiée par le corpus actuel.
+5. **Transport MCP distant** : hors périmètre ; stdio local reste la surface prévue.
 
-## F17 — `ContextBundle` fédéré non livré
+## Règle de fermeture
 
-### État actuel
+F01–F12, F14–F15, F17–F18 ne passent de « corrigé, à qualifier » à « fermé » qu'après :
 
-La recherche fédérée existe, mais `DefaultContextBuilder` reste projet-local.
+1. `mvnw.cmd clean install` PASS ;
+2. `scripts/self-smoke.ps1` PASS ;
+3. contrôles packaging/SBOM/checksums PASS ;
+4. exact-head confirmé par `scripts/validate-phase-6.ps1` ;
+5. réconciliation finale de la roadmap et de l'issue #13.
 
-Une ancienne PR draft #10 a préparé un prototype de contexte fédéré, puis a été fermée sans merge et sans validation locale acquise.
-
-### Direction
-
-Reprendre le besoin après les corrections de Phase 6 : budget global, provenance, collision de chemins, fairness/starvation. Commencer par les sources techniques `FILE`, `SYMBOL`, `TEST`, `DOCUMENTATION` et refuser `INSTRUCTION`, `SKILL`, `GIT` tant que leur sémantique multi-projet n'est pas décidée.
-
----
-
-## F18 — Distribution encore orientée développement
-
-### État actuel
-
-Le projet publie des artefacts `0.1.0-SNAPSHOT` et des runners Maven locaux. L'usage normal suppose encore un build/checkout dans la plupart des scénarios documentés.
-
-### Direction
-
-Versioning, Maven Wrapper, distributions versionnées, checksums, installation sans clone, upgrade/migration/rebuild de `NEXUS_HOME`, qualification Windows/Linux.
-
----
-
-# Sujets qui ne sont pas des défauts actuels
-
-Les éléments suivants restent volontairement différés et ne doivent pas être introduits juste parce qu'ils existent :
-
-- Zoekt ;
-- OpenGrok ;
-- Elasticsearch/OpenSearch ;
-- vector DB externe ;
-- Tree-sitter embarqué ;
-- index distribué ;
-- cache Git persistant ;
-- parallélisme multi-projet ;
-- tokenizer exact d'un fournisseur.
-
-Une itération peut les réexaminer si un benchmark démontre un besoin que l'architecture locale ne corrige pas simplement.
-
-# Règle de fermeture d'une limite
-
-Une ligne Fxx ne doit être considérée close que lorsque :
-
-1. le comportement problématique possède un test ou benchmark reproductible ;
-2. le correctif est validé sur exact head ;
-3. les corpus golden concernés ne régressent pas ;
-4. la documentation courante est mise à jour ;
-5. la roadmap indique le résultat réel plutôt que l'intention initiale.
+Voir aussi : `docs/developer/release-and-recovery.md` et `docs/roadmap.md`.
