@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -156,15 +157,15 @@ public final class ProjectIndexingService {
             boolean includeCodeIntelligenceProviders) throws IOException {
         ProjectDescriptor project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Projet NEXUS introuvable : " + projectId));
-        if (project.indexStatus() == IndexStatus.INDEXING) {
-            throw new IllegalStateException(
-                    "Le projet est déjà marqué INDEXING. Une indexation précédente peut encore être active : " + projectId);
-        }
         if (includeCodeIntelligenceProviders && codeIntelligenceProviders.isEmpty()) {
             throw new IllegalArgumentException(
                     "Aucun CodeIntelligenceProvider actif. Pour JDT LS, configurez NEXUS_JDTLS_HOME avant --deep-java.");
         }
 
+        // Tout état persistant non READY, y compris INDEXING après crash, impose
+        // une reconstruction complète. La concurrence active est gérée par le
+        // verrou in-process ci-dessus, pas par un état persistant qui pourrait
+        // rester bloqué après l'arrêt brutal du processus.
         boolean fullRebuild = explicitRebuild || project.indexStatus() != IndexStatus.READY;
         Instant startedAt = Instant.now();
         projectRepository.save(withState(project, IndexStatus.INDEXING, project.lastIndexedAt(), project.languages()));
@@ -172,6 +173,7 @@ public final class ProjectIndexingService {
             ProjectScanResult scanResult = scanner.scanWithDiagnostics(project.rootPath());
             List<ScannedFile> scannedFiles = scanResult.files();
             List<String> diagnostics = new ArrayList<>(scanResult.diagnostics());
+            Map<String, Long> providerDurationsMs = new LinkedHashMap<>();
             Map<String, IndexedFile> existingFiles = indexRepository.findFiles(projectId);
             Set<String> scannedPaths = scannedFiles.stream()
                     .map(ScannedFile::relativePath)
@@ -209,9 +211,11 @@ public final class ProjectIndexingService {
 
             boolean javaSourcesChanged = javaSourcesChanged(fullRebuild, updates, removedPaths, existingFiles);
             indexRepository.applyChanges(projectId, updates, removedPaths);
-            refreshImportedCodeIntelligence(projectId, project.rootPath(), diagnostics);
+            refreshImportedCodeIntelligence(
+                    projectId, project.rootPath(), diagnostics, providerDurationsMs);
             if (includeCodeIntelligenceProviders) {
-                refreshActiveCodeIntelligence(projectId, project.rootPath(), diagnostics);
+                refreshActiveCodeIntelligence(
+                        projectId, project.rootPath(), diagnostics, providerDurationsMs);
             } else if (javaSourcesChanged) {
                 purgeActiveCodeIntelligence(projectId);
             }
@@ -242,7 +246,8 @@ public final class ProjectIndexingService {
                     indexRepository.statistics(projectId),
                     Duration.between(startedAt, completedAt),
                     scanResult.skippedFiles(),
-                    diagnostics);
+                    diagnostics,
+                    providerDurationsMs);
         } catch (IOException | RuntimeException exception) {
             markFailed(project, exception);
             throw exception;
@@ -252,15 +257,18 @@ public final class ProjectIndexingService {
     private void refreshImportedCodeIntelligence(
             UUID projectId,
             java.nio.file.Path projectRoot,
-            List<String> diagnostics) throws IOException {
+            List<String> diagnostics,
+            Map<String, Long> providerDurationsMs) throws IOException {
         for (CodeIndexImporter importer : codeIndexImporters) {
             long startedAt = System.nanoTime();
             CodeIntelligenceSnapshot snapshot = importer.importIndex(projectRoot)
                     .orElseGet(() -> CodeIntelligenceSnapshot.empty(importer.sourceProvider()));
             validateSnapshotProvider(importer.sourceProvider(), snapshot);
             indexRepository.replaceExternalCodeIntelligence(projectId, snapshot);
+            long durationMs = elapsedMillis(startedAt);
+            providerDurationsMs.put("importer:" + importer.sourceProvider(), durationMs);
             diagnostics.add("importer " + importer.sourceProvider() + " : "
-                    + elapsedMillis(startedAt) + " ms, " + snapshot.symbols().size()
+                    + durationMs + " ms, " + snapshot.symbols().size()
                     + " symbole(s), " + snapshot.relations().size() + " relation(s)");
         }
     }
@@ -268,14 +276,17 @@ public final class ProjectIndexingService {
     private void refreshActiveCodeIntelligence(
             UUID projectId,
             java.nio.file.Path projectRoot,
-            List<String> diagnostics) throws IOException {
+            List<String> diagnostics,
+            Map<String, Long> providerDurationsMs) throws IOException {
         for (CodeIntelligenceProvider provider : codeIntelligenceProviders) {
             long startedAt = System.nanoTime();
             CodeIntelligenceSnapshot snapshot = analyzeWithTimeout(provider, projectRoot);
             validateSnapshotProvider(provider.sourceProvider(), snapshot);
             indexRepository.replaceExternalCodeIntelligence(projectId, snapshot);
+            long durationMs = elapsedMillis(startedAt);
+            providerDurationsMs.put("provider:" + provider.sourceProvider(), durationMs);
             diagnostics.add("provider " + provider.sourceProvider() + " : "
-                    + elapsedMillis(startedAt) + " ms, " + snapshot.symbols().size()
+                    + durationMs + " ms, " + snapshot.symbols().size()
                     + " symbole(s), " + snapshot.relations().size() + " relation(s)");
         }
     }
