@@ -1,30 +1,31 @@
 # Guide développeur NEXUS
 
-Ce répertoire décrit l'implémentation **actuelle** de NEXUS et sépare clairement trois types de documents :
+Ce répertoire distingue :
 
-1. documentation courante — doit suivre le code de `main` ;
-2. documents d'itération/benchmark — conservent une mesure historique ;
-3. ADR — conservent les décisions et ne sont pas réécrits rétroactivement.
+1. **documentation courante** — doit suivre l'exact head ;
+2. **documents d'itération/benchmark** — conservent les résultats historiques ;
+3. **ADR** — conservent les décisions et ne sont pas réécrits rétroactivement.
 
-État de référence : 29 juillet 2026, `main` `13fd6970f7350602c7a86aae729ddd4adad771bd`.
+État de travail : Phase 6 sur `phase-6-consolidation-hardening`, version `0.2.0`, qualification locale exact-head en attente.
 
 ## Parcours recommandé
 
 | Sujet | Document |
 |---|---|
 | architecture globale | [Architecture](../architecture.md) |
-| architecture concrète / packages / composition | [Architecture d'implémentation](architecture-implementation.md) |
-| limites et dette active | [Limites actuelles](current-limitations.md) |
+| architecture concrète / reactor / composition | [Architecture d'implémentation](architecture-implementation.md) |
+| limites et watch items | [Limites actuelles](current-limitations.md) |
 | roadmap | [Roadmap](../roadmap.md) |
+| release / migration / recovery | [Release et recovery](release-and-recovery.md) |
 | indexation | [Pipeline d'indexation](indexing-pipeline.md) |
 | recherche et ranking | [Recherche et ranking](search-ranking.md) |
 | construction du contexte | [Construction du contexte](context-building.md) |
-| CLI courante | [CLI](cli.md) |
-| contrat historique du MVP | [CLI du MVP — historique](cli-mvp.md) |
-| contexte natif | [Contexte natif des projets](native-context-sources.md) |
+| CLI | [CLI](cli.md) |
+| CLI MVP historique | [CLI du MVP](cli-mvp.md) |
+| contexte natif | [Contexte natif](native-context-sources.md) |
 | Agent Skills | [Agent Skills](agent-skills.md) |
 | AI Skills Registry | [AI Skills Registry](ai-skills-registry.md) |
-| Git | [Contexte Git local](git-context.md) |
+| Git | [Contexte Git](git-context.md) |
 | Code Intelligence | [Code Intelligence](code-intelligence.md) |
 | JDT LS | [JDT Language Server](jdt-language-server.md) |
 | multi-langage | [Support multi-langage](multi-language.md) |
@@ -32,65 +33,79 @@ Ce répertoire décrit l'implémentation **actuelle** de NEXUS et sépare claire
 | REST | [API REST](rest-api.md) |
 | MCP | [MCP](mcp.md) |
 | recherche multi-repository | [Recherche à grande échelle](large-scale-search.md) |
-| runbook baseline multi-repository | [Runbook Itération 16](large-scale-baseline-runbook.md) |
-| résultats Itération 16 | [Baseline](iteration-16-baseline-results.md) / [portfolio étendu](iteration-16-extended-portfolio-results.md) |
-| recherche sémantique | [Recherche sémantique](semantic-search.md) |
-| résultats sémantiques | [Résultats Itération 17](iteration-17-semantic-results.md) |
+| baseline I16 | [Runbook](large-scale-baseline-runbook.md) / [résultats](iteration-16-baseline-results.md) |
+| sémantique | [Recherche sémantique](semantic-search.md) |
+| résultats sémantiques historiques | [Itération 17](iteration-17-semantic-results.md) |
 | reproduction / diagnostic | [Reproduire et déboguer](reproduce-and-debug.md) |
 
-## Vue d'ensemble actuelle
+## Vue d'ensemble Phase 6
 
 ```text
-                             consommateurs
-                  CLI / REST / MCP / Java / JARVIS
-                               │
-                               ▼
-                        NexusApplication
-                               │
-            ┌──────────────────┼──────────────────┐
-            │                  │                  │
-            ▼                  ▼                  ▼
-      ProjectRegistry   ProjectIndexingService Search/Context
-            │                  │                  │
-            │          ┌───────┴────────┐         │
-            │          ▼                ▼         │
-            │       SQLite           Lucene       │
-            │       canonique        dérivé       │
-            │          ▲                ▲         │
-            │          │                │         │
-            │   analyzers/importers/providers     │
-            │   JavaParser / SCIP / JDT / MINOS  │
-            │                                     │
-            └─────────────────────────────────────┘
-                               │
-                    ranking + sources natives
-                               │
-                               ▼
-                        ContextBundle
+                      CLI / REST / MCP
+                            │
+                            ▼
+                     NexusApplication
+                            │
+         ┌──────────────────┼───────────────────┐
+         ▼                  ▼                   ▼
+ ProjectRegistry   ProjectIndexingService   Search / Context
+         │                  │                   │
+         │          SQLite canonique            │
+         │             + generation             │
+         │                  │                   │
+         │          Lucene dérivé               │
+         │                  │                   │
+         └──────────── providers ────────────────┘
+                            │
+              ranking / sources natives
+                            │
+          ┌─────────────────┴────────────────┐
+          ▼                                  ▼
+    ContextBundle                  FederatedContextBundle
 ```
 
-## Capacités livrées
+## Reactor Maven
+
+```text
+pom.xml                         nexus-context-engine-parent:0.2.0
+├── core/                       nexus-context-engine:0.2.0
+├── adapters/rest-quarkus/
+├── adapters/mcp-java/
+└── adapters/assistant-clients/
+```
+
+Le core reste physiquement dans `src/`; `core/pom.xml` référence ces sources. Les outputs Maven sont isolés par module et les livrables du core nécessaires aux scripts historiques sont recopiés dans `target/`.
+
+Build complet :
+
+```powershell
+.\mvnw.cmd clean install
+```
+
+## Capacités courantes
 
 ### Cœur
 
-- Java 21 sans framework applicatif obligatoire ;
+- Java 21 ;
 - SQLite canonique ;
-- Lucene lexical dérivé ;
+- Lucene lexical/sémantique dérivé ;
 - indexation incrémentale ;
-- ranking déterministe et explicable ;
-- construction sous budget ;
-- instructions natives ;
-- Agent Skills ;
-- contexte Git ;
+- single-flight par projet ;
+- taille de fichier bornée ;
+- ranking déterministe/explicable ;
+- recherche symbole/usages bornée ;
+- graphe cache par génération ;
 - recherche fédérée ;
+- `ContextBundle` projet-local et fédéré ;
+- instructions natives, Agent Skills, registry local et Git ;
 - sémantique opt-in.
 
 ### Code Intelligence
 
-- JavaParser embarqué ;
+- JavaParser ;
 - SCIP opportuniste ;
-- JDT Language Server opt-in ;
-- MINOS via contrat JSON local explicite ;
+- JDT LS opt-in ;
+- MINOS via JSON local explicite ;
 - support lexical Kotlin, TypeScript, JavaScript, Python et SQL.
 
 ### Adaptateurs
@@ -100,65 +115,27 @@ Ce répertoire décrit l'implémentation **actuelle** de NEXUS et sépare claire
 - MCP Java STDIO ;
 - générateur de configuration Copilot/Claude.
 
-## Organisation du code
+## Composition unique
 
-```text
-src/main/java/com/nexus/
-├── application/       façade NexusApplication
-├── cli/               adaptateur CLI historique
-├── config/            NEXUS_HOME et chemins locaux
-├── context/           fragments, budgets, bundle
-│   └── source/
-│       ├── git/
-│       ├── instruction/
-│       └── skill/
-├── index/             scan, analyse, importers/providers
-│   ├── java/
-│   ├── jdt/
-│   ├── markdown/
-│   ├── minos/
-│   ├── scan/
-│   └── scip/
-├── persistence/       ports/adaptateur SQLite
-├── project/           registre et état projet
-├── ranking/           ranking et graphe
-├── search/            stratégies, fédération, sémantique
-└── token/             estimation du budget
-
-adapters/
-├── rest-quarkus/
-├── mcp-java/
-└── assistant-clients/
-```
-
-## Composition actuelle
-
-`NexusApplication` centralise la composition partagée par REST et MCP :
+`NexusApplication` est maintenant le composition root commun :
 
 ```text
 SqliteDatabase
 SqliteProjectRepository
 SqliteIndexRepository
 LuceneSearchIndex
-JavaParserLanguageAnalyzer
-MarkdownLanguageAnalyzer
-ScipCodeIndexImporter
-JdtLanguageServerCodeIntelligenceProvider optionnel
-SemanticIndexingService optionnel
+ProjectIndexingService
 SearchService
 FederatedSearchService
 DefaultContextBuilder
+FederatedContextService
 ```
 
-La CLI possède encore une composition manuelle similaire. C'est une dette explicite, suivie en Itération 20.
+La CLI ne possède plus de second câblage manuel. Les providers de skills local et registry sont composés indépendamment.
 
-Le pipeline de skills possède également une divergence : `SkillDiscoveryService` sait agréger plusieurs providers, mais `LocalAgentSkillsProvider` instancie aujourd'hui `AiSkillsRegistryProvider` directement. La Phase 6 doit revenir à une composition indépendante des providers.
+## Cohérence et recovery
 
-## Persistance et disponibilité
-
-SQLite est canonique ; Lucene et l'index sémantique sont reconstructibles.
-
-Un projet possède un `IndexStatus` :
+États projet :
 
 ```text
 NOT_INDEXED
@@ -167,92 +144,58 @@ READY
 FAILED
 ```
 
-`DefaultContextBuilder` exige déjà `READY`. La recherche et les outils symboliques doivent encore recevoir le même gate de manière uniforme ; voir [Limites actuelles](current-limitations.md).
+Les lectures interactives dépendant de l'index exigent `READY`. Toute reprise depuis un état persistant non-READY force un rebuild complet. Un `INDEXING` abandonné par crash n'est donc pas un verrou permanent ; la vraie concurrence active est protégée par le single-flight in-process.
 
-## Recherche
+## Scale
 
-Le pipeline principal :
+Phase 6 applique d'abord des optimisations locales :
 
-```text
-LuceneFileSearchStrategy
-SymbolSearchStrategy
-SemanticSearchStrategy opt-in
-        │
-        ▼
-CandidateMerger
-        │
-GraphCandidateEnricher
-GitRecencyCandidateEnricher
-        │
-        ▼
-DeterministicContextRanker
-ou SemanticHybridContextRanker
-```
+- requêtes SQL bornées pour symboles/usages ;
+- fuzzy sur pool préfiltré ;
+- graphe réutilisé par génération ;
+- chargement ciblé des fichiers voisins ;
+- sur-récupération avant diversification fédérée.
 
-La recherche multi-projet utilise `FederatedSearchService` et conserve la provenance projet.
+Les baselines actuelles ne justifient toujours pas Zoekt/OpenGrok/OpenSearch, vector DB ou index distribué.
 
-La baseline de l'Itération 16 ne justifie pas aujourd'hui Zoekt/OpenGrok ou un index distant. Le prochain chantier de scale porte d'abord sur les scans complets symboles/relations et le graphe reconstruit par requête.
+## Contexte fédéré
 
-## Construction du contexte
+`FederatedContextService` construit les bundles locaux sous une allocation globale, conserve la provenance projet, entrelace les items et déduplique les contenus identiques. Instructions, Skills et Git restent projet-locaux.
 
-`DefaultContextBuilder` orchestre :
+## Distribution 0.2.0
 
-1. recherche et ranking ;
-2. filtrage des types demandés ;
-3. instructions natives applicables ;
-4. discovery/matching/loading de skills ;
-5. contexte Git ciblé ;
-6. matérialisation et fusion de fragments ;
-7. budgets par famille ;
-8. sélection finale ;
-9. métadonnées d'explication.
-
-Invariant :
+Le reactor produit :
 
 ```text
-ContextBundle.estimatedTokens <= ContextBundle.tokenBudget
+target/nexus-context-engine-0.2.0-cli.jar
+target/nexus-context-engine-0.2.0-cli.jar.sha256
+target/distribution/nexus-context-engine-0.2.0.zip
+target/distribution/nexus-context-engine-0.2.0.zip.sha256
+target/sbom/bom.json
 ```
 
-## Documentation historique vs courante
+Voir [Release et recovery](release-and-recovery.md).
 
-Les documents portant explicitement le nom d'une itération conservent souvent le raisonnement ou les mesures de cette étape. Une phrase au futur dans un ADR accepté ne doit pas être corrigée rétroactivement : elle reflète le contexte de la décision à sa date.
+## Gates
 
-En revanche :
-
-- `README.md` ;
-- `docs/architecture.md` ;
-- ce guide ;
-- `architecture-implementation.md` ;
-- `current-limitations.md` ;
-- `docs/roadmap.md`
-
-doivent décrire l'état courant.
-
-`docs/mvp.md` et `cli-mvp.md` sont explicitement des documents historiques du MVP.
-
-## Gates de développement
-
-Gate de base :
+Gate Phase 6 Windows :
 
 ```powershell
-mvn clean install
-.\scripts\self-smoke.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
 ```
 
-Une itération spécialisée doit ajouter son runner ciblé sans remplacer ces deux gates.
+Il inclut le `clean install` du reactor, `scripts/self-smoke.ps1`, checksums, SBOM, exécution réelle de l'archive et exact-head.
 
-Pour une modification du ranking ou du retrieval, rejouer les corpus golden concernés.
-
-Pour une revendication de performance, mesurer avant/après sur le même corpus et la même machine ; une seule durée observée n'est pas une preuve.
+Une itération ne doit pas être déclarée validée/livrée sans ce log sur le commit concerné.
 
 ## Principes de contribution
 
 1. SQLite reste canonique ; Lucene reste reconstructible.
 2. Le cœur ne dépend pas de Quarkus, MCP, Copilot, Claude, JARVIS ou MINOS.
-3. Un provider externe reste optionnel.
-4. Les scores et sélections restent déterministes et explicables.
+3. Tout provider externe reste optionnel et borné.
+4. Scores, budgets et sélections restent déterministes et explicables.
 5. NEXUS ne lance pas MINOS et n'exécute pas les skills.
-6. Le Git context reste local et en lecture seule.
-7. Une décision structurante durable implique un ADR.
+6. Git reste local/read-only.
+7. Une décision durable structurante implique un ADR.
 8. Une optimisation de scale doit être justifiée par une mesure.
-9. Une itération n'est pas terminée tant que la documentation courante n'a pas été réconciliée avec l'exact head.
+9. La documentation courante doit être réconciliée avec l'exact head avant clôture.
