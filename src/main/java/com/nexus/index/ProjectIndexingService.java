@@ -1,5 +1,6 @@
 package com.nexus.index;
 
+import com.nexus.index.scan.ProjectScanResult;
 import com.nexus.index.scan.ProjectScanner;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
@@ -20,9 +21,21 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 public final class ProjectIndexingService {
+
+    public static final String PROVIDER_TIMEOUT_ENVIRONMENT_VARIABLE = "NEXUS_CODE_INTELLIGENCE_TIMEOUT_SECONDS";
+    public static final Duration DEFAULT_PROVIDER_TIMEOUT = Duration.ofSeconds(180);
 
     private final ProjectRepository projectRepository;
     private final IndexRepository indexRepository;
@@ -32,6 +45,8 @@ public final class ProjectIndexingService {
     private final List<CodeIndexImporter> codeIndexImporters;
     private final List<CodeIntelligenceProvider> codeIntelligenceProviders;
     private final SemanticIndexingService semanticIndexingService;
+    private final Duration providerTimeout;
+    private final ConcurrentMap<UUID, ReentrantLock> projectLocks = new ConcurrentHashMap<>();
 
     public ProjectIndexingService(
             ProjectRepository projectRepository,
@@ -60,15 +75,8 @@ public final class ProjectIndexingService {
             SearchIndex searchIndex,
             List<CodeIndexImporter> codeIndexImporters,
             List<CodeIntelligenceProvider> codeIntelligenceProviders) {
-        this(
-                projectRepository,
-                indexRepository,
-                scanner,
-                analyzers,
-                searchIndex,
-                codeIndexImporters,
-                codeIntelligenceProviders,
-                null);
+        this(projectRepository, indexRepository, scanner, analyzers, searchIndex,
+                codeIndexImporters, codeIntelligenceProviders, null);
     }
 
     public ProjectIndexingService(
@@ -80,6 +88,21 @@ public final class ProjectIndexingService {
             List<CodeIndexImporter> codeIndexImporters,
             List<CodeIntelligenceProvider> codeIntelligenceProviders,
             SemanticIndexingService semanticIndexingService) {
+        this(projectRepository, indexRepository, scanner, analyzers, searchIndex,
+                codeIndexImporters, codeIntelligenceProviders, semanticIndexingService,
+                providerTimeoutFromEnvironment());
+    }
+
+    public ProjectIndexingService(
+            ProjectRepository projectRepository,
+            IndexRepository indexRepository,
+            ProjectScanner scanner,
+            List<LanguageAnalyzer> analyzers,
+            SearchIndex searchIndex,
+            List<CodeIndexImporter> codeIndexImporters,
+            List<CodeIntelligenceProvider> codeIntelligenceProviders,
+            SemanticIndexingService semanticIndexingService,
+            Duration providerTimeout) {
         this.projectRepository = Objects.requireNonNull(projectRepository, "projectRepository");
         this.indexRepository = Objects.requireNonNull(indexRepository, "indexRepository");
         this.scanner = Objects.requireNonNull(scanner, "scanner");
@@ -89,6 +112,10 @@ public final class ProjectIndexingService {
         this.codeIntelligenceProviders = List.copyOf(
                 Objects.requireNonNull(codeIntelligenceProviders, "codeIntelligenceProviders"));
         this.semanticIndexingService = semanticIndexingService;
+        this.providerTimeout = Objects.requireNonNull(providerTimeout, "providerTimeout");
+        if (providerTimeout.isZero() || providerTimeout.isNegative()) {
+            throw new IllegalArgumentException("providerTimeout must be greater than zero");
+        }
     }
 
     public IndexingReport index(UUID projectId) throws IOException {
@@ -112,8 +139,27 @@ public final class ProjectIndexingService {
             boolean explicitRebuild,
             boolean includeCodeIntelligenceProviders) throws IOException {
         Objects.requireNonNull(projectId, "projectId");
+        ReentrantLock lock = projectLocks.computeIfAbsent(projectId, ignored -> new ReentrantLock());
+        if (!lock.tryLock()) {
+            throw new IllegalStateException("Une indexation est déjà en cours pour le projet " + projectId);
+        }
+        try {
+            return indexLocked(projectId, explicitRebuild, includeCodeIntelligenceProviders);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private IndexingReport indexLocked(
+            UUID projectId,
+            boolean explicitRebuild,
+            boolean includeCodeIntelligenceProviders) throws IOException {
         ProjectDescriptor project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Projet NEXUS introuvable : " + projectId));
+        if (project.indexStatus() == IndexStatus.INDEXING) {
+            throw new IllegalStateException(
+                    "Le projet est déjà marqué INDEXING. Une indexation précédente peut encore être active : " + projectId);
+        }
         if (includeCodeIntelligenceProviders && codeIntelligenceProviders.isEmpty()) {
             throw new IllegalArgumentException(
                     "Aucun CodeIntelligenceProvider actif. Pour JDT LS, configurez NEXUS_JDTLS_HOME avant --deep-java.");
@@ -123,7 +169,9 @@ public final class ProjectIndexingService {
         Instant startedAt = Instant.now();
         projectRepository.save(withState(project, IndexStatus.INDEXING, project.lastIndexedAt(), project.languages()));
         try {
-            List<ScannedFile> scannedFiles = scanner.scan(project.rootPath());
+            ProjectScanResult scanResult = scanner.scanWithDiagnostics(project.rootPath());
+            List<ScannedFile> scannedFiles = scanResult.files();
+            List<String> diagnostics = new ArrayList<>(scanResult.diagnostics());
             Map<String, IndexedFile> existingFiles = indexRepository.findFiles(projectId);
             Set<String> scannedPaths = scannedFiles.stream()
                     .map(ScannedFile::relativePath)
@@ -139,8 +187,6 @@ public final class ProjectIndexingService {
             for (ScannedFile scannedFile : scannedFiles) {
                 boolean genericSearchEligible = isGenericSearchEligible(scannedFile.category());
                 if (!genericSearchEligible) {
-                    // Nettoie aussi les index dérivés créés par une ancienne version de
-                    // NEXUS, même lorsque le fichier canonique n'a pas changé.
                     searchRemovedPaths.add(scannedFile.relativePath());
                 }
 
@@ -163,9 +209,9 @@ public final class ProjectIndexingService {
 
             boolean javaSourcesChanged = javaSourcesChanged(fullRebuild, updates, removedPaths, existingFiles);
             indexRepository.applyChanges(projectId, updates, removedPaths);
-            refreshImportedCodeIntelligence(projectId, project.rootPath());
+            refreshImportedCodeIntelligence(projectId, project.rootPath(), diagnostics);
             if (includeCodeIntelligenceProviders) {
-                refreshActiveCodeIntelligence(projectId, project.rootPath());
+                refreshActiveCodeIntelligence(projectId, project.rootPath(), diagnostics);
             } else if (javaSourcesChanged) {
                 purgeActiveCodeIntelligence(projectId);
             }
@@ -194,27 +240,72 @@ public final class ProjectIndexingService {
                     removedPaths.size(),
                     fullRebuild,
                     indexRepository.statistics(projectId),
-                    Duration.between(startedAt, completedAt));
+                    Duration.between(startedAt, completedAt),
+                    scanResult.skippedFiles(),
+                    diagnostics);
         } catch (IOException | RuntimeException exception) {
             markFailed(project, exception);
             throw exception;
         }
     }
 
-    private void refreshImportedCodeIntelligence(UUID projectId, java.nio.file.Path projectRoot) throws IOException {
+    private void refreshImportedCodeIntelligence(
+            UUID projectId,
+            java.nio.file.Path projectRoot,
+            List<String> diagnostics) throws IOException {
         for (CodeIndexImporter importer : codeIndexImporters) {
+            long startedAt = System.nanoTime();
             CodeIntelligenceSnapshot snapshot = importer.importIndex(projectRoot)
                     .orElseGet(() -> CodeIntelligenceSnapshot.empty(importer.sourceProvider()));
             validateSnapshotProvider(importer.sourceProvider(), snapshot);
             indexRepository.replaceExternalCodeIntelligence(projectId, snapshot);
+            diagnostics.add("importer " + importer.sourceProvider() + " : "
+                    + elapsedMillis(startedAt) + " ms, " + snapshot.symbols().size()
+                    + " symbole(s), " + snapshot.relations().size() + " relation(s)");
         }
     }
 
-    private void refreshActiveCodeIntelligence(UUID projectId, java.nio.file.Path projectRoot) throws IOException {
+    private void refreshActiveCodeIntelligence(
+            UUID projectId,
+            java.nio.file.Path projectRoot,
+            List<String> diagnostics) throws IOException {
         for (CodeIntelligenceProvider provider : codeIntelligenceProviders) {
-            CodeIntelligenceSnapshot snapshot = provider.analyze(projectRoot);
+            long startedAt = System.nanoTime();
+            CodeIntelligenceSnapshot snapshot = analyzeWithTimeout(provider, projectRoot);
             validateSnapshotProvider(provider.sourceProvider(), snapshot);
             indexRepository.replaceExternalCodeIntelligence(projectId, snapshot);
+            diagnostics.add("provider " + provider.sourceProvider() + " : "
+                    + elapsedMillis(startedAt) + " ms, " + snapshot.symbols().size()
+                    + " symbole(s), " + snapshot.relations().size() + " relation(s)");
+        }
+    }
+
+    private CodeIntelligenceSnapshot analyzeWithTimeout(
+            CodeIntelligenceProvider provider,
+            java.nio.file.Path projectRoot) throws IOException {
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            Future<CodeIntelligenceSnapshot> future = executor.submit(() -> provider.analyze(projectRoot));
+            try {
+                return future.get(providerTimeout.toMillis(), TimeUnit.MILLISECONDS);
+            } catch (TimeoutException exception) {
+                future.cancel(true);
+                throw new IOException(
+                        "Le provider " + provider.sourceProvider() + " a dépassé le timeout global de "
+                                + providerTimeout.toSeconds() + " s", exception);
+            } catch (InterruptedException exception) {
+                future.cancel(true);
+                Thread.currentThread().interrupt();
+                throw new IOException("L'exécution du provider " + provider.sourceProvider() + " a été interrompue", exception);
+            } catch (ExecutionException exception) {
+                Throwable cause = exception.getCause();
+                if (cause instanceof IOException ioException) {
+                    throw ioException;
+                }
+                if (cause instanceof RuntimeException runtimeException) {
+                    throw runtimeException;
+                }
+                throw new IOException("Le provider " + provider.sourceProvider() + " a échoué", cause);
+            }
         }
     }
 
@@ -294,5 +385,27 @@ public final class ProjectIndexingService {
                 project.technologies(),
                 lastIndexedAt,
                 status);
+    }
+
+    private static Duration providerTimeoutFromEnvironment() {
+        String configured = System.getenv(PROVIDER_TIMEOUT_ENVIRONMENT_VARIABLE);
+        if (configured == null || configured.isBlank()) {
+            return DEFAULT_PROVIDER_TIMEOUT;
+        }
+        try {
+            long seconds = Long.parseLong(configured.trim());
+            if (seconds <= 0) {
+                throw new IllegalArgumentException(
+                        PROVIDER_TIMEOUT_ENVIRONMENT_VARIABLE + " doit être strictement positif");
+            }
+            return Duration.ofSeconds(seconds);
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException(
+                    PROVIDER_TIMEOUT_ENVIRONMENT_VARIABLE + " doit être un entier en secondes", exception);
+        }
+    }
+
+    private static long elapsedMillis(long startedAt) {
+        return Math.max(0L, (System.nanoTime() - startedAt) / 1_000_000L);
     }
 }
