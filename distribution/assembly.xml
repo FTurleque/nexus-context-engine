@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<assembly xmlns="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.3"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.3 https://maven.apache.org/xsd/assembly-1.1.3.xsd">
+    <id>distribution</id>
+    <formats>
+        <format>zip</format>
+    </formats>
+    <includeBaseDirectory>true</includeBaseDirectory>
+    <baseDirectory>nexus-context-engine-${project.version}</baseDirectory>
+    <files>
+        <file>
+            <source>${project.build.directory}/nexus-context-engine-${project.version}-cli.jar</source>
+            <outputDirectory>lib</outputDirectory>
+            <destName>nexus-cli.jar</destName>
+            <fileMode>0644</fileMode>
+        </file>
+        <file>
+            <source>${project.parent.basedir}/distribution/bin/nexus.cmd</source>
+            <outputDirectory>bin</outputDirectory>
+            <destName>nexus.cmd</destName>
+            <fileMode>0644</fileMode>
+        </file>
+        <file>
+            <source>${project.parent.basedir}/distribution/bin/nexus</source>
+            <outputDirectory>bin</outputDirectory>
+            <destName>nexus</destName>
+            <fileMode>0755</fileMode>
+        </file>
+        <file>
+            <source>${project.parent.basedir}/distribution/README.md</source>
+            <outputDirectory>/</outputDirectory>
+            <destName>README.md</destName>
+            <fileMode>0644</fileMode>
+        </file>
+    </files>
+</assembly>
