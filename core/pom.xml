@@ -117,6 +117,44 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>standalone-distribution</id>
+                        <phase>verify</phase>
+                        <goals><goal>single</goal></goals>
+                        <configuration>
+                            <descriptors>
+                                <descriptor>${project.parent.basedir}/distribution/assembly.xml</descriptor>
+                            </descriptors>
+                            <finalName>nexus-context-engine-${project.version}</finalName>
+                            <appendAssemblyId>false</appendAssemblyId>
+                            <outputDirectory>${project.build.directory}/distribution</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>distribution-checksums</id>
+                        <phase>verify</phase>
+                        <goals><goal>run</goal></goals>
+                        <configuration>
+                            <target>
+                                <checksum file="${project.build.directory}/nexus-context-engine-${project.version}-cli.jar"
+                                          algorithm="SHA-256" fileext=".sha256"/>
+                                <checksum file="${project.build.directory}/distribution/nexus-context-engine-${project.version}.zip"
+                                          algorithm="SHA-256" fileext=".sha256"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 </project>
