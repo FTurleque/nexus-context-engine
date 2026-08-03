@@ -1,64 +1,40 @@
 # Intégration MINOS Code Intelligence
 
-Statut : **terminée, validée et livrée le 24 juillet 2026**.
+Statut historique : **terminée, validée et livrée le 24 juillet 2026** via NEXUS issue #11 / PR #12.
 
-Suivi historique : NEXUS issue #11 / PR #12 ; jalon fournisseur MINOS M13.
+Phase 6 conserve la frontière MINOS/NEXUS et optimise la validation des chemins dans le chemin applicatif.
 
 ## Responsabilités
 
 ```text
-MINOS
-→ faits de code, symboles, relations, provenance et preuves
-
-NEXUS
-→ persistance, recherche, ranking, sélection, budget et ContextBundle
+MINOS → faits de code, symboles, relations, provenance
+NEXUS → persistance, recherche, ranking, sélection, budget, ContextBundle
 ```
 
-L'intégration ne transfère ni le ranking ni la construction de contexte vers MINOS.
+NEXUS ne lance jamais MINOS, n'a aucune dépendance `com.minos`, ne configure aucun JAR MINOS et n'exige aucun réseau.
 
-## Frontière Java 24 / Java 21
-
-MINOS est validé avec Java 24 alors que NEXUS cible Java 21. La frontière retenue évite donc toute dépendance binaire croisée :
+## Frontière Java
 
 ```text
 MINOS Java 24
   nexus-export --root <project>
-        │
-        │ JSON stdout
-        ▼
+       │ JSON stdout
+       ▼
 NEXUS Java 21
   minos-import <project> < stdin
-        │
-        ▼
-IndexRepository -> SearchService -> ranking -> ContextBuilder
+       ▼
+SQLite → search/ranking/context
 ```
 
-NEXUS :
-
-- ne lance jamais MINOS ;
-- ne contient aucun `ProcessBuilder` pour cette intégration ;
-- ne configure aucun chemin de JAR MINOS ;
-- ne dépend d'aucun type `com.minos` ;
-- ne requiert aucun réseau.
-
-## Commande NEXUS
+## Commande
 
 ```text
 nexus minos-import <id-ou-nom> < export-minos.json [--json]
 ```
 
-La commande :
+Le payload est borné à 128 MiB. Le projet doit désormais être `READY` avant remplacement du snapshot MINOS, comme les autres opérations dépendant d'un index cohérent.
 
-1. résout un projet NEXUS déjà enregistré ;
-2. lit le JSON uniquement sur stdin ;
-3. refuse un payload supérieur à 128 MiB ;
-4. valide le contrat MINOS ;
-5. mappe uniquement les faits représentables ;
-6. remplace transactionnellement le snapshot externe `sourceProvider=minos`.
-
-L'indexation normale `nexus index` ne déclenche pas d'import MINOS.
-
-## Contrat
+## Contrat et chemins
 
 NEXUS exige :
 
@@ -67,146 +43,71 @@ contractVersion = 1
 producer        = MINOS
 ```
 
-La racine exportée doit correspondre à la racine canonique du projet NEXUS ciblé.
+La racine exportée doit correspondre à la racine canonique du projet ciblé.
 
-### Sécurité des chemins
-
-Les `filePath` du JSON sont non fiables.
-
-Protections actuelles :
+Pour chaque `filePath` :
 
 - chemin relatif obligatoire ;
-- remontée `..` refusée ;
-- chemin normalisé présent dans une allow-list locale ;
-- aucune ouverture d'un chemin arbitraire fourni par le JSON ;
-- racine projet locale considérée comme frontière de confiance.
+- `..` refusé ;
+- normalisation obligatoire ;
+- présence dans une allow-list canonique ;
+- aucune ouverture arbitraire d'un chemin fourni par le JSON.
 
-L'implémentation actuelle construit cette allow-list en parcourant les fichiers physiques sous la racine. Cette stratégie est sûre mais potentiellement coûteuse sur un gros repository contenant `.git`, `node_modules`, `target`, etc. L'Itération 21 doit étudier sa construction depuis la vue canonique NEXUS sans réduire les protections de l'ADR-0044.
+### Optimisation Phase 6
 
-## Mapping des symboles
-
-Seuls les symboles `RESOLVED` et représentables sont importés.
-
-```text
-MINOS                    NEXUS
-CLASS                    CLASS
-INTERFACE / TRAIT        INTERFACE
-RECORD                   RECORD
-ENUM                     ENUM
-ANNOTATION               ANNOTATION
-METHOD / FUNCTION        METHOD
-CONSTRUCTOR              CONSTRUCTOR
-TYPE / STRUCT / TYPE_ALIAS TYPE
-```
-
-Tous les symboles promus portent :
-
-```text
-sourceProvider = minos
-```
-
-Les kinds sans équivalent sûr sont ignorés plutôt que remappés arbitrairement.
-
-## Mapping des relations
-
-```text
-MINOS             NEXUS
-IMPORTS           IMPORTS
-EXTENDS           EXTENDS
-IMPLEMENTS        IMPLEMENTS
-CALLS             CALLS
-REFERENCES        REFERENCES
-TYPE_DEFINITION   TYPE_DEFINITION
-DEFINITION        DEFINITION_OF
-```
-
-Pour un fait `FACTUAL` sans confiance explicite, NEXUS utilise `1.0`. Une relation dérivée sans confiance explicite est rejetée.
-
-## API applicative
-
-La façade expose :
+Le chemin applicatif :
 
 ```java
-CodeIntelligenceSnapshot importMinos(UUID projectId, String payload)
+NexusApplication.importMinos(...)
 ```
 
-Cette méthode applique le même adaptateur de contrat et le même remplacement de snapshot que la CLI.
-
-La méthode rend l'intégration réutilisable par un adaptateur, mais **REST et MCP ne publient pas actuellement de tool/endpoint MINOS dédié**. Une exposition éventuelle devra rester explicite et ne pas transformer MINOS en dépendance implicite.
-
-## Qualification finale
-
-Qualification NEXUS finale documentée :
+construit désormais l'allow-list depuis :
 
 ```text
-Java                21.0.10 LTS Microsoft
-Maven               3.9.11
-compile             release 21
-sources main        128
-sources test        41
-tests               80
-failures            0
-errors              0
-skipped             6
+IndexRepository.findFiles(projectId).keySet()
+```
+
+puis appelle :
+
+```java
+MinosCodeIndexImporter.importPayload(root, indexedFiles, payload)
+```
+
+Il n'effectue donc plus un `Files.walk`/`toRealPath` sur tout le repository pour valider le payload. La surcharge historique à deux arguments reste disponible pour tests/outils autonomes et conserve son comportement filesystem explicite.
+
+## Mapping
+
+Symboles représentables : CLASS, INTERFACE/TRAIT, RECORD, ENUM, ANNOTATION, METHOD/FUNCTION, CONSTRUCTOR et TYPE/STRUCT/TYPE_ALIAS.
+
+Relations représentables : IMPORTS, EXTENDS, IMPLEMENTS, CALLS, REFERENCES, TYPE_DEFINITION et DEFINITION→DEFINITION_OF.
+
+Seuls les faits `RESOLVED` représentables sont promus. La provenance reste :
+
+```text
+sourceProvider=minos
+```
+
+Une relation `FACTUAL` sans confiance explicite reçoit 1.0 ; une relation dérivée sans confiance explicite est rejetée.
+
+## Qualification historique
+
+La livraison initiale avait produit :
+
+```text
+Java 21.0.10 LTS Microsoft
+Maven 3.9.11
+80 tests
+0 failure / 0 error / 6 skipped
 BUILD SUCCESS
-```
-
-MINOS compagnon a également été qualifié sur son `main` avec Java 24.
-
-Replay réel MINOS → NEXUS :
-
-```text
-M13 MINOS->NEXUS: symbols=11, relations=6, nexus-symbols=11, search=5
-Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
-BUILD SUCCESS
-M13 MINOS -> NEXUS replay SUCCESS
-```
-
-Le scénario vérifie notamment qu'un symbole importé avec `sourceProvider=minos` est ensuite retrouvé par `SearchService`.
-
-La qualification publiée dans l'issue #11 indique également :
-
-```text
 Sonar Quality Gate Passed
-0 Security Hotspots
-0.0% Duplication on New Code
 ```
 
-## Tests et replay
+Replay réel : 11 symboles, 6 relations, symbole `GreetingPort` retrouvé avec provenance `minos`.
 
-`MinosCodeIndexImporterTest` couvre notamment :
-
-- version/producteur ;
-- racine projet ;
-- chemins absolus/remontants ;
-- kinds non représentables ;
-- mapping conservateur ;
-- provenance.
-
-`NexusCliTest` couvre l'import stdin.
-
-`MinosRealIntegrationTest` couvre le vrai export MINOS puis la persistance/recherche NEXUS.
-
-Runner inter-dépôt :
+La Phase 6 ne modifie pas le contrat JSON MINOS ; elle modifie uniquement l'utilisation de l'état canonique NEXUS et le gate READY. Ces changements seront qualifiés via :
 
 ```powershell
-.\scripts\validate-minos-integration.ps1 `
-  -MinosJar <minos-all.jar> `
-  -Java24 <java-24.exe> `
-  -Fixture <fixture>
+powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
 ```
 
-## Non-objectifs
-
-Cette intégration :
-
-- ne rend pas MINOS obligatoire ;
-- ne lance pas MINOS ;
-- ne modifie pas les poids du ranking ;
-- ne modifie pas le budget du `ContextBuilder` ;
-- n'ajoute pas de dépendance Maven croisée ;
-- n'ajoute pas de réseau.
-
-Décision : [ADR-0044](../adr/0044-consommer-minos-via-un-contrat-json-local-versionne.md).
-
-Limite de performance actuelle : [`current-limitations.md`](current-limitations.md), F12.
+Décision historique : [ADR-0044](../adr/0044-consommer-minos-via-un-contrat-json-local-versionne.md).
