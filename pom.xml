@@ -43,6 +43,7 @@
         <maven.enforcer-plugin.version>3.6.2</maven.enforcer-plugin.version>
         <maven.assembly-plugin.version>3.7.1</maven.assembly-plugin.version>
         <maven.antrun-plugin.version>3.2.0</maven.antrun-plugin.version>
+        <cyclonedx-maven-plugin.version>2.9.2</cyclonedx-maven-plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -187,6 +188,26 @@
                                 </requireMavenVersion>
                                 <banDuplicatePomDependencyVersions/>
                             </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.cyclonedx</groupId>
+                <artifactId>cyclonedx-maven-plugin</artifactId>
+                <version>${cyclonedx-maven-plugin.version}</version>
+                <inherited>false</inherited>
+                <executions>
+                    <execution>
+                        <id>aggregate-sbom</id>
+                        <phase>verify</phase>
+                        <goals><goal>makeAggregateBom</goal></goals>
+                        <configuration>
+                            <projectType>application</projectType>
+                            <includeBomSerialNumber>true</includeBomSerialNumber>
+                            <outputFormat>json</outputFormat>
+                            <outputName>bom</outputName>
+                            <outputDirectory>${project.build.directory}/sbom</outputDirectory>
                         </configuration>
                     </execution>
                 </executions>
