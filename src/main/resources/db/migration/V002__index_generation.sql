@@ -9,3 +9,6 @@ SELECT id, 0 FROM projects;
 
 CREATE INDEX idx_symbol_relations_source
     ON symbol_relations(project_id, source_ref);
+
+CREATE INDEX idx_symbol_relations_target
+    ON symbol_relations(project_id, target_ref);
