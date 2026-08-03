@@ -16,19 +16,19 @@
             <fileMode>0644</fileMode>
         </file>
         <file>
-            <source>${project.parent.basedir}/distribution/bin/nexus.cmd</source>
+            <source>${project.basedir}/../distribution/bin/nexus.cmd</source>
             <outputDirectory>bin</outputDirectory>
             <destName>nexus.cmd</destName>
             <fileMode>0644</fileMode>
         </file>
         <file>
-            <source>${project.parent.basedir}/distribution/bin/nexus</source>
+            <source>${project.basedir}/../distribution/bin/nexus</source>
             <outputDirectory>bin</outputDirectory>
             <destName>nexus</destName>
             <fileMode>0755</fileMode>
         </file>
         <file>
-            <source>${project.parent.basedir}/distribution/README.md</source>
+            <source>${project.basedir}/../distribution/README.md</source>
             <outputDirectory>/</outputDirectory>
             <destName>README.md</destName>
             <fileMode>0644</fileMode>
