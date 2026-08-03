@@ -156,13 +156,25 @@ try {
     }
 
     Write-Host "[8/8] Controle exact-head et etat Git"
-    $branch = (& git branch --show-current).Trim()
-    if ($LASTEXITCODE -ne 0 -or $branch -ne "phase-6-consolidation-hardening") {
-        throw "La qualification doit etre executee sur phase-6-consolidation-hardening (branche courante : $branch)."
-    }
     $head = (& git rev-parse HEAD).Trim()
     if ($LASTEXITCODE -ne 0) {
         throw "Impossible de lire le HEAD Git."
+    }
+
+    $expectedHead = $env:NEXUS_EXPECTED_HEAD_SHA
+    if (-not [string]::IsNullOrWhiteSpace($expectedHead)) {
+        $expectedHead = $expectedHead.Trim()
+        if ($head -ne $expectedHead) {
+            throw "La qualification doit etre executee au HEAD attendu $expectedHead (HEAD courant : $head)."
+        }
+        Write-Host "Expected HEAD : $expectedHead"
+    }
+    else {
+        $branch = (& git branch --show-current).Trim()
+        if ($LASTEXITCODE -ne 0 -or $branch -ne "phase-6-consolidation-hardening") {
+            throw "La qualification doit etre executee sur phase-6-consolidation-hardening (branche courante : $branch)."
+        }
+        Write-Host "Branch : $branch"
     }
 
     Write-Host
