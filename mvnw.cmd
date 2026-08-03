@@ -7,11 +7,16 @@ SET "MAVEN_DIST_SHA512_URL=%MAVEN_DIST_URL%.sha512"
 SET "WRAPPER_HOME=%USERPROFILE%\.m2\wrapper\dists\nexus\apache-maven-%MAVEN_VERSION%"
 SET "MAVEN_HOME=%WRAPPER_HOME%\apache-maven-%MAVEN_VERSION%"
 SET "ARCHIVE=%WRAPPER_HOME%\apache-maven-%MAVEN_VERSION%-bin.zip"
+SET "POWERSHELL_EXE=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
 
 IF EXIST "%MAVEN_HOME%\bin\mvn.cmd" GOTO RUN_MAVEN
+IF NOT EXIST "%POWERSHELL_EXE%" (
+  ECHO [NEXUS] Windows PowerShell 5.1 introuvable : %POWERSHELL_EXE%
+  EXIT /B 1
+)
 
 ECHO [NEXUS] Installation locale de Maven %MAVEN_VERSION% via Maven Central...
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+"%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ErrorActionPreference='Stop';" ^
   "$homeDir=[Environment]::ExpandEnvironmentVariables('%WRAPPER_HOME%');" ^
   "$archive=[Environment]::ExpandEnvironmentVariables('%ARCHIVE%');" ^
