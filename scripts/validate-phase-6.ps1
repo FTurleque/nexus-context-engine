@@ -1,9 +1,13 @@
 [CmdletBinding()]
-param()
+param(
+    [string]$Java21Home
+)
 
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $locationPushed = $false
+$previousJavaHome = $env:JAVA_HOME
+$previousPath = $env:PATH
 
 function Invoke-Native {
     param(
@@ -14,6 +18,103 @@ function Invoke-Native {
     if ($LASTEXITCODE -ne 0) {
         throw "Commande en echec ($LASTEXITCODE) : $Command $($Arguments -join ' ')"
     }
+}
+
+function Get-JavaVersionText {
+    param([Parameter(Mandatory = $true)][string]$JavaExecutable)
+
+    $stdoutFile = [System.IO.Path]::GetTempFileName()
+    $stderrFile = [System.IO.Path]::GetTempFileName()
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        # Windows PowerShell 5.1 converts native stderr to NativeCommandError
+        # when ErrorActionPreference is Stop. java -version writes to stderr by
+        # design, so capture both streams and trust the native exit code.
+        $ErrorActionPreference = "Continue"
+        & $JavaExecutable -version 1> $stdoutFile 2> $stderrFile
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    try {
+        $stdout = Get-Content -Raw -Path $stdoutFile -ErrorAction SilentlyContinue
+        $stderr = Get-Content -Raw -Path $stderrFile -ErrorAction SilentlyContinue
+        if ($exitCode -ne 0) {
+            return $null
+        }
+        return (($stderr + [Environment]::NewLine + $stdout).Trim())
+    }
+    finally {
+        Remove-Item -Force $stdoutFile, $stderrFile -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-Java21Executable {
+    param([Parameter(Mandatory = $true)][string]$JavaExecutable)
+
+    if (-not (Test-Path $JavaExecutable)) {
+        return $false
+    }
+    $versionText = Get-JavaVersionText -JavaExecutable $JavaExecutable
+    return ($null -ne $versionText -and $versionText -match 'version\s+"21(?:\.|\")')
+}
+
+function Resolve-Java21Home {
+    param([string]$ExplicitHome)
+
+    $candidateHomes = New-Object System.Collections.Generic.List[string]
+    if (-not [string]::IsNullOrWhiteSpace($ExplicitHome)) {
+        $candidateHomes.Add($ExplicitHome)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:NEXUS_JAVA21_HOME)) {
+        $candidateHomes.Add($env:NEXUS_JAVA21_HOME)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:JAVA_HOME)) {
+        $candidateHomes.Add($env:JAVA_HOME)
+    }
+
+    $programFilesRoots = @($env:ProgramFiles, ${env:ProgramFiles(x86)}) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        Select-Object -Unique
+    foreach ($root in $programFilesRoots) {
+        $patterns = @(
+            (Join-Path $root "Microsoft\jdk-21*"),
+            (Join-Path $root "Eclipse Adoptium\jdk-21*"),
+            (Join-Path $root "Java\jdk-21*"),
+            (Join-Path $root "Amazon Corretto\jdk21*"),
+            (Join-Path $root "Zulu\zulu-21*"),
+            (Join-Path $root "BellSoft\LibericaJDK-21*")
+        )
+        foreach ($pattern in $patterns) {
+            Get-ChildItem -Path $pattern -Directory -ErrorAction SilentlyContinue |
+                Sort-Object FullName -Descending |
+                ForEach-Object { $candidateHomes.Add($_.FullName) }
+        }
+    }
+
+    $javaCommand = Get-Command java -ErrorAction SilentlyContinue
+    if ($null -ne $javaCommand -and -not [string]::IsNullOrWhiteSpace($javaCommand.Source)) {
+        $pathJava = $javaCommand.Source
+        if (Test-Java21Executable -JavaExecutable $pathJava) {
+            return (Split-Path -Parent (Split-Path -Parent $pathJava))
+        }
+    }
+
+    foreach ($home in ($candidateHomes | Select-Object -Unique)) {
+        try {
+            $resolvedHome = (Resolve-Path $home -ErrorAction Stop).Path
+        }
+        catch {
+            continue
+        }
+        $javaExecutable = Join-Path $resolvedHome "bin\java.exe"
+        if (Test-Java21Executable -JavaExecutable $javaExecutable) {
+            return $resolvedHome
+        }
+    }
+    return $null
 }
 
 function Assert-Sha256File {
@@ -38,11 +139,28 @@ try {
     Write-Host
 
     Write-Host "[1/8] Java 21"
-    $javaVersion = (& java -version 2>&1 | Out-String)
-    if ($LASTEXITCODE -ne 0 -or $javaVersion -notmatch 'version\s+"21(?:\.|\")') {
-        throw "Java 21 est requis. Version detectee : $javaVersion"
+    $resolvedJava21Home = Resolve-Java21Home -ExplicitHome $Java21Home
+    if ([string]::IsNullOrWhiteSpace($resolvedJava21Home)) {
+        $currentJava = Get-Command java -ErrorAction SilentlyContinue
+        $currentVersion = "java absent du PATH"
+        if ($null -ne $currentJava -and -not [string]::IsNullOrWhiteSpace($currentJava.Source)) {
+            $detected = Get-JavaVersionText -JavaExecutable $currentJava.Source
+            if (-not [string]::IsNullOrWhiteSpace($detected)) {
+                $currentVersion = $detected
+            }
+        }
+        throw "Java 21 est requis et n'a pas ete trouve automatiquement. Java courant : $currentVersion. Configurez NEXUS_JAVA21_HOME ou relancez avec -Java21Home <chemin-du-JDK-21>."
     }
-    Write-Host $javaVersion.Trim()
+
+    $env:JAVA_HOME = $resolvedJava21Home
+    $env:PATH = "$(Join-Path $resolvedJava21Home 'bin');$previousPath"
+    $javaExecutable = Join-Path $resolvedJava21Home "bin\java.exe"
+    $javaVersion = Get-JavaVersionText -JavaExecutable $javaExecutable
+    if ([string]::IsNullOrWhiteSpace($javaVersion) -or $javaVersion -notmatch 'version\s+"21(?:\.|\")') {
+        throw "Le JDK selectionne n'est pas Java 21 : $resolvedJava21Home"
+    }
+    Write-Host "JAVA_HOME : $resolvedJava21Home"
+    Write-Host $javaVersion
 
     Write-Host "[2/8] Maven Wrapper reproductible"
     Invoke-Native -Command (Join-Path $repoRoot "mvnw.cmd") -Arguments @("--version")
@@ -116,6 +234,8 @@ try {
     Write-Host "SBOM : $sbom"
 }
 finally {
+    $env:JAVA_HOME = $previousJavaHome
+    $env:PATH = $previousPath
     if ($locationPushed) {
         Pop-Location
     }
