@@ -12,7 +12,7 @@ function Invoke-Native {
     )
     & $Command @Arguments
     if ($LASTEXITCODE -ne 0) {
-        throw "Commande en échec ($LASTEXITCODE) : $Command $($Arguments -join ' ')"
+        throw "Commande en echec ($LASTEXITCODE) : $Command $($Arguments -join ' ')"
     }
 }
 
@@ -33,14 +33,14 @@ try {
     Push-Location $repoRoot
     $locationPushed = $true
 
-    Write-Host "=== NEXUS Phase 6 — qualification locale ==="
+    Write-Host "=== NEXUS Phase 6 - qualification locale ==="
     Write-Host "Repository : $repoRoot"
     Write-Host
 
     Write-Host "[1/8] Java 21"
     $javaVersion = (& java -version 2>&1 | Out-String)
     if ($LASTEXITCODE -ne 0 -or $javaVersion -notmatch 'version\s+"21(?:\.|\")') {
-        throw "Java 21 est requis. Version détectée : $javaVersion"
+        throw "Java 21 est requis. Version detectee : $javaVersion"
     }
     Write-Host $javaVersion.Trim()
 
@@ -57,7 +57,7 @@ try {
     Write-Host "[4/8] Self-smoke historique obligatoire"
     & (Join-Path $repoRoot "scripts\self-smoke.ps1")
     if ($LASTEXITCODE -ne 0) {
-        throw "scripts/self-smoke.ps1 a échoué avec le code $LASTEXITCODE"
+        throw "scripts/self-smoke.ps1 a echoue avec le code $LASTEXITCODE"
     }
 
     Write-Host "[5/8] Livrables 0.2.0 et checksums"
@@ -70,14 +70,14 @@ try {
         Assert-Sha256File -Artifact $artifact
     }
 
-    Write-Host "[6/8] SBOM CycloneDX agrégé"
+    Write-Host "[6/8] SBOM CycloneDX agrege"
     $sbom = Join-Path $repoRoot "target\sbom\bom.json"
     if (-not (Test-Path $sbom)) {
         throw "SBOM absent : $sbom"
     }
     $sbomJson = Get-Content -Raw $sbom | ConvertFrom-Json
     if ($sbomJson.bomFormat -ne "CycloneDX") {
-        throw "Le SBOM généré n'est pas au format CycloneDX."
+        throw "Le SBOM genere n'est pas au format CycloneDX."
     }
 
     Write-Host "[7/8] Archive installable sans clone"
@@ -92,17 +92,17 @@ try {
     }
     $versionOutput = & $launcher.FullName --version --json | Out-String
     if ($LASTEXITCODE -ne 0) {
-        throw "Le launcher de distribution a échoué."
+        throw "Le launcher de distribution a echoue."
     }
     $version = $versionOutput | ConvertFrom-Json
     if ($version.version -ne "0.2.0") {
         throw "Version de distribution inattendue : $($version.version)"
     }
 
-    Write-Host "[8/8] Contrôle exact-head et état Git"
+    Write-Host "[8/8] Controle exact-head et etat Git"
     $branch = (& git branch --show-current).Trim()
     if ($LASTEXITCODE -ne 0 -or $branch -ne "phase-6-consolidation-hardening") {
-        throw "La qualification doit être exécutée sur phase-6-consolidation-hardening (branche courante : $branch)."
+        throw "La qualification doit etre executee sur phase-6-consolidation-hardening (branche courante : $branch)."
     }
     $head = (& git rev-parse HEAD).Trim()
     if ($LASTEXITCODE -ne 0) {
