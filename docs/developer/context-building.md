@@ -1,12 +1,10 @@
 # Construction du contexte et gestion du budget
 
-Ce chapitre décrit l'implémentation **actuelle** de `DefaultContextBuilder`.
+Ce chapitre décrit `DefaultContextBuilder` et l'orchestration fédérée ajoutée en Phase 6.
 
-La construction de contexte est l'une des responsabilités centrales de NEXUS : transformer une requête et des sources hétérogènes en un `ContextBundle` déterministe, explicable et borné.
+## ContextBundle projet-local
 
-## 1. Contrats
-
-### `ContextRequest`
+`ContextRequest` contient :
 
 ```text
 projectId
@@ -17,11 +15,7 @@ constraints
 explain
 ```
 
-- `requestedSources` vide signifie : toutes les sources éligibles ;
-- `constraints` transporte des contraintes clé/valeur sans faire fuiter un client dans le cœur ;
-- `explain` active les raisons et exclusions détaillées.
-
-### `ContextBundle`
+`ContextBundle` contient :
 
 ```text
 items
@@ -31,374 +25,168 @@ excluded
 metadata
 ```
 
-Invariant :
+Invariant : `estimatedTokens <= tokenBudget`.
 
-```text
-estimatedTokens <= tokenBudget
-```
+## Gate READY
 
-### `ContextItem`
+`DefaultContextBuilder` exigeait déjà `READY`. Phase 6 applique désormais le même gate dans `NexusApplication` à toutes les lectures indexées : recherche, symboles, usages, contexte, recherche fédérée, contexte fédéré et import MINOS.
 
-```text
-type
-path
-symbol
-startLine
-endLine
-content
-score
-scoreComponents
-reasons
-estimatedTokens
-truncated
-```
-
-## 2. Gate de disponibilité
-
-`DefaultContextBuilder` résout le projet puis exige :
-
-```text
-IndexStatus.READY
-```
-
-Un projet `NOT_INDEXED`, `INDEXING` ou `FAILED` est refusé avec `ContextBuildingException`.
-
-Cette protection est déjà correcte dans le builder. La Phase 6 doit appliquer le même principe aux autres lectures indexées (`search`, symboles, usages).
-
-## 3. Pipeline complet
+## Pipeline mono-projet
 
 ```text
 ContextRequest
-    │
-    ▼
+   ↓
 SearchService
-    │
-    ▼
+   ↓
 RankedCandidate[]
-    │
-    ├── filtre requestedSources
-    │
-    ├── targetPaths
-    │      ├── instructions natives
-    │      └── contexte Git ciblé
-    │
-    ├── discovery/matching/loading des skills
-    │
-    ▼
+   ├─ filtre requestedSources
+   ├─ instructions natives
+   ├─ Agent Skills
+   └─ Git ciblé
+   ↓
 ContextFragmentFactory
-    │
-    ├── fragments tâche
-    ├── fragments instructions
-    ├── fragments skills
-    └── fragments Git
-    │
-    ▼
+   ↓
 déduplication cross-source
-    │
-    ▼
+   ↓
 FragmentMerger
-    │
-    ▼
-sélections par budgets successifs
-    │
-    ▼
-ContextBundle + metadata
+   ↓
+BudgetedContextSelector
+   ↓
+ContextBundle
 ```
 
-## 4. Retrieval de candidats
-
-La limite demandée à `SearchService` dépend du budget :
+La limite de retrieval dépend du budget :
 
 ```text
 retrievalLimit = min(100, max(20, tokenBudget / 40))
 ```
 
-Le builder récupère ainsi un ensemble plus large que les quelques fragments qui rentreront finalement dans le budget.
+## Instructions natives
 
-## 5. Filtrage des sources
+Providers : AGENTS.md, Copilot, Claude et Gemini. Les références locales restent confinées au repository et bornées en profondeur.
 
-Si `requestedSources` est non vide, seuls les candidats de ces types sont conservés pour les fragments de tâche.
-
-Types actuellement utilisés dans la construction :
+## Agent Skills
 
 ```text
-FILE
-SYMBOL
-TEST
-DOCUMENTATION
-INSTRUCTION
-SKILL
-GIT
-```
-
-Les instructions, skills et Git possèdent leurs propres pipelines de discovery ; ils ne sont pas ramenés artificiellement par la recherche Lucene générique.
-
-## 6. `targetPaths`
-
-Le builder conserve jusqu'à 100 chemins relatifs dérivés des candidats classés.
-
-Ces chemins servent à :
-
-- résoudre les instructions avec scope ;
-- cibler l'historique/diff Git ;
-- contextualiser les sources natives autour des fichiers réellement pertinents.
-
-## 7. Instructions natives
-
-Providers composés :
-
-```text
-AgentsMdInstructionProvider
-CopilotInstructionProvider
-ClaudeInstructionProvider
-GeminiInstructionProvider
-```
-
-`ContextSourceDiscoveryService` agrège les sources applicables et déduplique les contenus.
-
-Les références locales `@fichier` sont confinées au repository et limitées en profondeur.
-
-Les sources découvertes sont transformées en fragments via `ContextSourceFragmentFactory`.
-
-## 8. Agent Skills
-
-Pipeline :
-
-```text
+SkillSourceProvider[]
+        ↓
 SkillDiscoveryService
-→ SkillSelector
-→ SkillLoader
-→ SkillContextSelector
+        ↓
+SkillSelector
+        ↓
+SkillLoader
+        ↓
+SkillContextSelector
 ```
 
-La découverte utilise seulement les métadonnées légères. Le corps complet du `SKILL.md` est chargé après sélection.
+Phase 6 compose `LocalAgentSkillsProvider` et `AiSkillsRegistryProvider` indépendamment. Le provider local n'instancie plus le registre. La priorité local > registry reste portée par les descriptors et la déduplication du service.
 
-Les ressources associées sont inventoriées mais ne sont ni chargées ni exécutées automatiquement.
+Les ressources sont inventoriées mais jamais exécutées automatiquement.
 
-La priorité locale sur AI Skills Registry est conservée par les descriptors/algorithmes de déduplication. La composition provider actuelle doit encore être simplifiée ; voir F09.
+## Git
 
-## 9. Contexte Git
+`LocalGitContextSourceProvider` reste local/read-only. Il est désactivé sous 500 tokens de budget global et reçoit un sous-budget borné lorsqu'il est actif.
 
-`LocalGitContextSourceProvider` est interrogé seulement si :
+Aucun cache Git persistant n'est introduit sans benchmark.
 
-- la source `GIT` est demandée ou les sources sont laissées ouvertes ;
-- le provider existe ;
-- le budget global est d'au moins 500 tokens.
+## Budgets par famille
 
-Le provider peut produire :
+Instructions : environ 25 %, plafonné à 600 tokens.
 
-- commits récents liés ;
-- historique court ;
-- diff local ciblé ;
-- co-changements.
+Skills : environ 20 %, plafonné à 2 000 tokens.
 
-Il reste strictement local et en lecture seule.
+Git : environ 15 %, plafonné à 500 tokens, seulement si budget global >= 500.
 
-## 10. Fragments de tâche
+La tâche utilise le budget restant. Les portions inutilisées restent disponibles aux familles suivantes.
 
-`ContextFragmentFactory` matérialise les candidats code/tests/documentation/symboles.
+## Fragments et déduplication
 
-### Symbole précis
+Pour un symbole précis, NEXUS privilégie un extrait autour de ses lignes. Pour un fichier, le builder choisit fichier entier, fenêtres autour des termes ou fallback borné selon le budget.
 
-Lorsqu'un `CodeSymbol` est disponible, NEXUS privilégie un extrait autour de sa plage plutôt que le fichier entier.
+Les doublons entre recherche générique et sources natives sont supprimés avant fusion. `FragmentMerger` fusionne les plages adjacentes/chevauchantes d'un même fichier.
 
-### Fichier sans symbole précis
+## Estimation des tokens
 
-Le builder peut :
+`HeuristicTokenEstimator` reste local, déterministe et remplaçable. La valeur estimée n'est pas présentée comme équivalente à un tokenizer de fournisseur LLM.
 
-- inclure le fichier entier s'il reste assez petit relativement au budget ;
-- sinon produire des fenêtres autour des termes de la requête ;
-- utiliser un fallback borné si aucune correspondance lexicale locale n'est trouvée.
+## ContextBundle fédéré — Phase 6
 
-L'objectif est de préserver la diversité du contexte plutôt que de laisser un seul fichier consommer tout le budget.
-
-## 11. Déduplication cross-source
-
-Un fichier déjà sélectionné comme instruction/référence native ne doit pas être réinjecté comme fragment de tâche uniquement parce que Lucene l'a également remonté.
-
-Le builder compare les chemins normalisés puis expose notamment :
+`FederatedContextService` reçoit une portée explicite de projets READY et un **budget global unique**.
 
 ```text
-metadata.crossSourceDeduplicatedFragments
+projects[] + query + globalBudget
+            ↓
+allocation déterministe du budget
+            ↓
+DefaultContextBuilder(Project A)
+DefaultContextBuilder(Project B)
+...
+            ↓
+round-robin inter-projet
+            ↓
+déduplication inter-projet du contenu
+            ↓
+FederatedContextBundle
 ```
 
-`FragmentMerger` fusionne ensuite les plages chevauchantes/adjacentes d'un même fichier.
-
-## 12. Estimateur de tokens
-
-L'implémentation par défaut est `HeuristicTokenEstimator` :
+Chaque item devient un `FederatedContextItem` contenant :
 
 ```text
-estimatedTokens = ceil(pointsDeCodeUnicode / 3.5)
+ProjectDescriptor project
+ContextItem item
 ```
 
-Cette estimation est :
+Cela empêche toute ambiguïté de provenance même lorsque deux repositories contiennent le même chemin relatif.
 
-- locale ;
-- déterministe ;
-- remplaçable via `TokenEstimator` ;
-- indépendante d'un fournisseur LLM.
+### Fairness
 
-Elle ne prétend pas reproduire exactement un tokenizer OpenAI, Anthropic ou autre.
-
-## 13. Sélection gloutonne
-
-`BudgetedContextSelector` :
-
-1. trie les fragments par score, chemin et lignes ;
-2. borne la part d'un fragment à environ la moitié du budget de la sélection ;
-3. inclut le fragment complet s'il tient ;
-4. sinon tente une troncature utile ;
-5. conserve les exclusions lorsque `explain=true`.
-
-Un fragment tronqué porte le marqueur :
+Le budget est réparti entre les projets de la portée, reste strictement <= budget global, puis les items sont entrelacés round-robin. Les metadata exposent :
 
 ```text
-... [fragment tronqué par NEXUS]
+allocationByProject
+localTokensByProject
+localItemsByProject
+selectedTokensByProject
+selectedItemsByProject
+starvedProjects
+starvedProjectCount
+crossProjectDeduplicatedItems
+mergePolicy=fair-budget-round-robin
+nativeSourceScope=project-local
 ```
 
-La sélection reste déterministe.
+### Sources natives
 
-## 14. Politique de budgets par famille
+Instructions, Skills et Git sont calculés **dans le projet d'origine**. Phase 6 n'autorise aucune propagation implicite d'une instruction ou d'un skill d'un projet vers un autre.
 
-### Instructions
+### Déduplication inter-projet
+
+Deux items de même type dont le contenu normalisé est identique ne sont conservés qu'une fois dans le bundle fédéré. Leur chemin seul n'est jamais utilisé pour dédupliquer entre projets.
+
+## Surfaces fédérées
 
 ```text
-instructionBudget = min(
-    totalBudget,
-    600,
-    max(24, totalBudget / 4)
-)
+CLI  context-federated
+REST POST /api/v1/federated/context
+MCP  build_context_across_projects
+MCP  explain_context_across_projects
 ```
 
-Soit environ 25 % du budget, plafonné à 600 tokens.
+## Sécurité
 
-### Skills
+- chemins confinés aux racines projets ;
+- aucune exécution de skill ;
+- Git read-only ;
+- providers externes non requis pour le contexte standard ;
+- projet non-READY refusé ;
+- budget local ou fédéré strictement respecté.
 
-```text
-skillBudget = min(
-    remaining,
-    2000,
-    max(64, totalBudget / 5)
-)
-```
+## Validation
 
-Soit environ 20 %, plafonné à 2 000 tokens.
-
-### Git
-
-Le Git est désactivé sous 500 tokens de budget global.
-
-Lorsqu'il est actif :
-
-```text
-gitBudget = min(
-    remaining,
-    500,
-    max(64, totalBudget * 15 / 100)
-)
-```
-
-### Tâche
-
-Le contexte de tâche reçoit tout le budget restant après instructions, skills et Git.
-
-Le budget non consommé par une famille n'est pas perdu : il reste disponible pour les familles suivantes.
-
-## 15. Metadata d'explication
-
-Le bundle expose notamment :
-
-```text
-query
-tokenEstimator
-rankedCandidates
-sourceEligibleCandidates
-documentationCandidates
-materializedFragments
-crossSourceDeduplicatedFragments
-mergedFragments
-instructionProviders
-nativeSourcesDiscovered
-instructionBudget
-instructionSelectedItems
-instructionSelectedTokens
-skillProviders
-skillsDiscovered
-skillsMatched
-skillsActivated
-skillResourcesDiscovered
-skillBudget
-skillSelectedItems
-skillSelectedTokens
-skillsExecuted=false
-gitProvider
-gitEnabled
-gitRepositoryAvailable
-gitDiagnostics
-gitCommitsInspected
-gitRelatedCommits
-gitCoChangeLinks
-gitBudget
-gitSelectedItems
-gitSelectedTokens
-nativeCustomizationsDetected
-selectedItems
-excludedItems
-truncatedItems
-availableEstimatedTokens
-selectedEstimatedTokens
-reductionRatio
-```
-
-Les métadonnées décrivent le calcul et la sélection ; elles ne dépendent pas d'une explication générée par un modèle.
-
-## 16. Sécurité
-
-- les chemins de fragments doivent rester sous la racine projet ;
-- les instructions ne peuvent pas référencer arbitrairement un fichier extérieur ;
-- les skills ne sont jamais exécutés ;
-- le Git context ne mute pas le repository ;
-- un provider externe n'est pas requis pour construire un contexte standard ;
-- un bundle ne doit jamais dépasser son budget estimé.
-
-## 17. Contexte multi-projet
-
-Le builder actuel reste **mono-projet**.
-
-La recherche fédérée existe déjà, mais aucun `ContextBundle` fédéré n'est livré sur `main`.
-
-Une ancienne PR draft #10 a exploré ce besoin sans validation/merge final. La capacité est replanifiée en Itération 23 après les travaux de correctness, scale et composition.
-
-Le futur builder fédéré doit notamment garantir :
-
-- budget global unique ;
-- provenance par projet ;
-- absence de collision de chemins ;
-- déterminisme ;
-- mesure de starvation ;
-- politique explicite pour instructions/skills/Git.
-
-## 18. Validation
-
-Les tests de contexte couvrent entre autres :
-
-- projet READY obligatoire ;
-- budget strict ;
-- fragments symboliques ;
-- déduplication/fusion ;
-- instructions natives ;
-- Agent Skills ;
-- Git ;
-- metadata ;
-- troncature ;
-- sources demandées.
-
-Le gate de base reste :
+La Phase 6 ajoute un test dédié au budget global, à la provenance et à la déduplication fédérée. Le gate final Windows est :
 
 ```powershell
-mvn clean install
-.\scripts\self-smoke.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
 ```
 
-Voir aussi [`current-limitations.md`](current-limitations.md) et les Itérations 18/23 de la [`roadmap`](../roadmap.md).
+Voir [`current-limitations.md`](current-limitations.md) et la [`roadmap`](../roadmap.md).
