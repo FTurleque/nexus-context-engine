@@ -1,153 +1,87 @@
 # Recherche, graphe et ranking explicable
 
-Ce chapitre décrit le pipeline **actuel** de recherche NEXUS. Les mesures et décisions historiques des Itérations 2, 7, 16 et 17 restent conservées dans la roadmap, les ADR et les documents de benchmark.
+Ce chapitre décrit le pipeline Phase 6. Les baselines historiques restent dans les documents d'itération et de benchmark.
 
-## 1. Pipeline mono-projet
+## Pipeline mono-projet
 
 ```text
 query
- │
- ├── LuceneFileSearchStrategy
- ├── SymbolSearchStrategy
- └── SemanticSearchStrategy          opt-in
- │
- ▼
+ ├─ LuceneFileSearchStrategy
+ ├─ SymbolSearchStrategy          pool SQLite borné
+ └─ SemanticSearchStrategy        opt-in
+          ↓
 CandidateMerger
- │
- ├── GraphCandidateEnricher
- └── GitRecencyCandidateEnricher
- │
- ▼
+          ↓
+GraphCandidateEnricher            graphe cache/génération
+GitRecencyCandidateEnricher
+          ↓
 ContextRanker
- ├── DeterministicContextRanker      défaut
- └── SemanticHybridContextRanker     mode sémantique
- │
- ▼
+ ├─ DeterministicContextRanker    défaut
+ └─ SemanticHybridContextRanker   opt-in
+          ↓
 RankedCandidate[]
 ```
 
-`SearchService` orchestre les stratégies, fusionne les candidats, applique les enrichisseurs puis délègue le classement final au `ContextRanker`.
-
-## 2. Retrieval interne
-
-Pour une demande de `limit`, `SearchService` calcule :
+`SearchService` sur-récupère avant le ranking final :
 
 ```text
 retrievalLimit = min(500, max(20, limit * 3))
 ```
 
-Chaque `SearchStrategy` reçoit cette limite afin de laisser de la marge à la fusion et aux enrichissements avant le ranking final.
+## Gate de cohérence
 
-Cette sur-récupération existe au niveau mono-projet. La recherche fédérée possède encore une limite distincte : elle demande actuellement seulement le `limit` global à chaque projet avant diversification par chemin. Voir F01 dans [`current-limitations.md`](current-limitations.md).
+Les surfaces applicatives passent par `NexusApplication` et exigent désormais `IndexStatus.READY` avant recherche, symboles/usages, contexte ou fédération. Un index dérivé partiellement mis à jour n'est donc pas servi pendant `INDEXING`/`FAILED`.
 
-## 3. Recherche Lucene
+## Recherche Lucene
 
-`LuceneFileSearchStrategy` délègue à `LuceneSearchIndex`.
+`LuceneFileSearchStrategy` cherche les champs `symbol_name`, `qualified_name`, `path_text`, `code_terms` et `content` avec les boosts historiques. Les catégories `INSTRUCTION`, `AGENT_PROFILE` et `SKILL` restent hors recherche générique.
 
-Champs recherchés et boosts :
+Le lifecycle Lucene par opération est conservé tant qu'un benchmark de runtime persistant ne démontre pas qu'un `SearcherManager`/writer partagé améliore matériellement p95/heap.
 
-| Champ | Boost |
-|---|---:|
-| `symbol_name` | 5.0 |
-| `qualified_name` | 4.0 |
-| `path_text` | 3.0 |
-| `code_terms` | 2.0 |
-| `content` | 1.0 |
+## Recherche symbole bornée
 
-`code_terms` normalise notamment les identifiants `camelCase`, acronymes et séparateurs afin d'améliorer la recherche de code.
+`SymbolSearchStrategy` ne charge plus tous les symboles avant filtrage. Elle demande à `IndexRepository.searchSymbols(projectId, query, limit)` un pool borné et préfiltré côté SQLite, puis conserve le fuzzy Java :
 
-Pour une requête multi-termes contenant au moins deux termes analysés uniques, Lucene construit une requête coordonnée avec un minimum de deux termes correspondants. Ce comportement a été introduit pendant l'Itération 16 pour réduire les faux positifs à un seul terme.
+- exact : 1.0 ;
+- contains : 0.9 ;
+- Levenshtein normalisé ;
+- seuil fuzzy : 0.62 ;
+- pool candidat : min 100, max 2 000.
 
-Le score brut Lucene est normalisé relativement au meilleur hit éligible :
+`NexusApplication.findSymbols` utilise directement cette API bornée.
 
-```text
-lexicalScore = hit.score / maxHitScore
-```
+## Usages bornés
 
-`pathScore` mesure la proportion de termes présents dans le chemin.
+`findUsages` délègue à `IndexRepository.searchRelations(projectId, symbol, limit)`. SQLite filtre source ou cible avant matérialisation et V002 indexe les deux endpoints relationnels.
 
-Les catégories `INSTRUCTION`, `AGENT_PROFILE` et `SKILL` sont exclues de la recherche générique ; elles ont leurs propres pipelines de découverte.
+## Graphe dérivé par génération
 
-## 4. Recherche de symboles
-
-`SymbolSearchStrategy` produit :
+`ProjectGraphBuilder` construit le graphe à partir des symboles de type et des relations `IMPORTS`. V002 ajoute une génération monotone par projet.
 
 ```text
-symbolExactScore
-symbolFuzzyScore
-pathScore
+SQLite canonical generation N
+        ↓
+ProjectGraph cache generation N
 ```
 
-Un match exact vaut `1.0` lorsque le nom ou nom qualifié correspond à la requête/à un terme pertinent.
+Tant que la génération ne change pas, le graphe est réutilisé. Lorsqu'elle change, il est reconstruit. `GraphCandidateEnricher` charge ensuite uniquement les `IndexedFile` correspondant aux chemins voisins calculés.
 
-Le fuzzy combine :
-
-- `0.9` pour un contains direct ;
-- une similarité Levenshtein normalisée ;
-- un seuil minimal `0.62`.
-
-### Limite actuelle
-
-La stratégie récupère encore tous les symboles du projet via `IndexRepository.findSymbols(projectId)` puis calcule le fuzzy en Java avant le `limit` final.
-
-C'est le principal plafond de scale identifié. L'Itération 19 doit déplacer le préfiltrage vers des requêtes repository indexées et réserver Levenshtein à un ensemble borné.
-
-## 5. Fusion des candidats
-
-`CandidateMerger` agrège les signaux de candidats représentant la même identité logique au lieu de sommer prématurément les scores.
-
-Principe :
-
-```text
-une stratégie trouve
-+
-une autre stratégie confirme
-=
-un candidat avec plusieurs signaux explicables
-```
-
-Le ranking final reste responsable de la pondération.
-
-## 6. Graphe
-
-`ProjectGraphBuilder` utilise :
-
-- les symboles de type (`CLASS`, `INTERFACE`, `RECORD`, `ENUM`, `ANNOTATION`, `TYPE`) ;
-- les relations `IMPORTS` ;
-- la provenance normalisée persistée dans SQLite.
-
-Il résout les imports vers des fichiers internes puis construit un graphe de voisinage non orienté.
-
-`GraphCandidateEnricher` propage un score à deux sauts :
+La propagation reste :
 
 ```text
 premier saut = seedScore × 0.65
 second saut  = seedScore × 0.35
 ```
 
-Le seed utilise le maximum des signaux directs lexical/symbole/path.
+## Récence Git
 
-### Limite actuelle
+`GitRecencyCandidateEnricher` reste local, read-only et faiblement pondéré. Aucun cache persistant Git n'est introduit sans mesure justifiant sa complexité.
 
-Le graphe est reconstruit depuis les symboles/relations du projet à chaque recherche. I19 doit mesurer puis réutiliser une représentation associée à la génération d'index, sans introduire un cache complexe sans preuve.
+## Ranking déterministe
 
-## 7. Récence Git
+Poids historiques principaux :
 
-`GitRecencyCandidateEnricher` ajoute un signal faible et explicable de récence locale.
-
-La valeur de référence historique du bonus est `0.05` par défaut et peut être désactivée par configuration.
-
-Le Git context reste local et en lecture seule ; l'enrichisseur ne transforme pas NEXUS en client Git réseau.
-
-Le coût de l'inspection Git reste un point de mesure avant toute stratégie de cache.
-
-## 8. Ranking historique par défaut
-
-`DeterministicContextRanker` conserve les composantes explicables issues des stratégies/enrichisseurs.
-
-Les poids historiques principaux établis par l'Itération 2 sont :
-
-| Signal | Poids de base |
+| Signal | Poids |
 |---|---:|
 | lexical | 0.40 |
 | symbol exact | 0.30 |
@@ -155,88 +89,59 @@ Les poids historiques principaux établis par l'Itération 2 sont :
 | path | 0.10 |
 | graph | 0.10 |
 
-Les enrichissements ajoutés ensuite, notamment Git, restent explicitement bornés et documentés dans leurs composants/ADR.
+À score égal, des tie-breakers stables conservent le déterminisme.
 
-À score égal, le tri applique des critères stables afin de préserver le déterminisme.
+## Sémantique opt-in
 
-## 9. Recherche sémantique opt-in
-
-Quand `SemanticSearchConfiguration` est activée :
+Lorsque `NEXUS_SEMANTIC_PROVIDER=ollama` ou une configuration explicite active la capacité :
 
 ```text
 EmbeddingProvider
-        │
-        ▼
+  ↓
 LuceneSemanticSearchIndex
-        │
-        ▼
+  ↓
 SemanticSearchStrategy
+  ↓
+SemanticHybridContextRanker
 ```
 
-La fusion additive initiale a été rejetée. `SemanticHybridContextRanker` construit deux rankings séparés puis applique une Reciprocal Rank Fusion :
+RRF historique : `k=60`, poids sémantique par défaut `8.0`, limité à `10`. Voir [`semantic-search.md`](semantic-search.md).
+
+## Recherche fédérée
+
+`FederatedSearchService` :
+
+1. déduplique la portée par UUID ;
+2. demande à chaque projet un pool local **supérieur au top-K final** ;
+3. fusionne globalement par score ;
+4. stabilise les égalités ;
+5. diversifie par `(projectId,path)` ;
+6. tronque au top-K global.
+
+La sur-récupération fédérée est bornée entre 20 et 500 candidats par projet, avec facteur 4 sur le `limit`. Cela corrige le cas où FILE et SYMBOL d'un même chemin consommaient le cut-off local et sous-remplissaient ensuite le top-K diversifié.
+
+La capacité est exposée via :
 
 ```text
-k = 60
-poids historique = 1.0
-poids sémantique = 8.0
+CLI  search-federated
+REST POST /api/v1/federated/search
+MCP  search_across_projects
 ```
 
-Le chemin sans signal sémantique reste le ranking historique.
+## Explicabilité et qualité
 
-Voir [`semantic-search.md`](semantic-search.md).
+`explain=true` conserve composantes et raisons calculées, jamais générées par LLM.
 
-## 10. Recherche fédérée
-
-`FederatedSearchService` reçoit une liste explicite de `ProjectDescriptor` :
-
-1. déduplication des projets par UUID ;
-2. recherche projet par projet via `SearchService` ;
-3. fusion globale par score ;
-4. stabilisation des égalités par ordre de projet/rang local ;
-5. diversification par `projectId + path` ;
-6. top-K final.
-
-Deux repositories différents ne sont jamais dédupliqués sur leur seul chemin.
-
-Limites et baseline : [`large-scale-search.md`](large-scale-search.md).
-
-## 11. Explicabilité
-
-Lorsque `explain=true`, NEXUS conserve :
-
-- composantes de score ;
-- raisons de ranking ;
-- raisons de troncature/exclusion dans le contexte ;
-- provenance des données de Code Intelligence.
-
-Ces explications sont dérivées du calcul. Elles ne sont pas générées par un LLM.
-
-## 12. Qualité
-
-Le projet utilise des corpus golden mono-projet et fédéré.
-
-Métriques suivies selon les itérations :
+Métriques de comparaison :
 
 ```text
 precision@K
 recall@K
 hit@K
 MRR@K
-p50 / p95 de recherche
+p50 / p95
 ```
 
-Une modification du retrieval ou du ranking doit comparer les mêmes corpus avant/après.
+La Phase 6 ne remplace pas Lucene par Zoekt/OpenGrok/OpenSearch : les optimisations locales sont appliquées d'abord et doivent être re-mesurées avant toute décision d'infrastructure.
 
-## 13. Dette de scale à traiter avant un moteur externe
-
-Ordre recommandé :
-
-1. corriger le top-K fédéré ;
-2. imposer le gate `READY` ;
-3. préfiltrer les symboles côté repository ;
-4. requêter les relations de manière ciblée ;
-5. réutiliser le graphe ;
-6. mesurer à nouveau p50/p95/heap ;
-7. seulement ensuite réévaluer Zoekt/OpenGrok/index distant si les mesures le justifient.
-
-Voir [`current-limitations.md`](current-limitations.md) et les Itérations 18-19 de la [`roadmap`](../roadmap.md).
+Voir [`large-scale-search.md`](large-scale-search.md), [`current-limitations.md`](current-limitations.md) et la [`roadmap`](../roadmap.md).
