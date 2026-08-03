@@ -14,9 +14,11 @@ function Invoke-Native {
         [Parameter(Mandatory = $true)][string]$Command,
         [Parameter(Mandatory = $false)][string[]]$Arguments = @()
     )
+
     & $Command @Arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "Commande en echec ($LASTEXITCODE) : $Command $($Arguments -join ' ')"
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        throw "Commande en echec ($exitCode) : $Command $($Arguments -join ' ')"
     }
 }
 
@@ -28,8 +30,7 @@ function Get-JavaVersionText {
     $previousErrorActionPreference = $ErrorActionPreference
     try {
         # Windows PowerShell 5.1 converts native stderr to NativeCommandError
-        # when ErrorActionPreference is Stop. java -version writes to stderr by
-        # design, so capture both streams and trust the native exit code.
+        # when ErrorActionPreference is Stop. java -version writes to stderr.
         $ErrorActionPreference = "Continue"
         & $JavaExecutable -version 1> $stdoutFile 2> $stderrFile
         $exitCode = $LASTEXITCODE
@@ -39,11 +40,11 @@ function Get-JavaVersionText {
     }
 
     try {
-        $stdout = Get-Content -Raw -Path $stdoutFile -ErrorAction SilentlyContinue
-        $stderr = Get-Content -Raw -Path $stderrFile -ErrorAction SilentlyContinue
         if ($exitCode -ne 0) {
             return $null
         }
+        $stdout = Get-Content -Raw -Path $stdoutFile -ErrorAction SilentlyContinue
+        $stderr = Get-Content -Raw -Path $stderrFile -ErrorAction SilentlyContinue
         return (($stderr + [Environment]::NewLine + $stdout).Trim())
     }
     finally {
@@ -54,7 +55,7 @@ function Get-JavaVersionText {
 function Test-Java21Executable {
     param([Parameter(Mandatory = $true)][string]$JavaExecutable)
 
-    if (-not (Test-Path $JavaExecutable)) {
+    if (-not (Test-Path -LiteralPath $JavaExecutable -PathType Leaf)) {
         return $false
     }
     $versionText = Get-JavaVersionText -JavaExecutable $JavaExecutable
@@ -65,19 +66,26 @@ function Resolve-Java21Home {
     param([string]$ExplicitHome)
 
     $candidateHomes = New-Object System.Collections.Generic.List[string]
-    if (-not [string]::IsNullOrWhiteSpace($ExplicitHome)) {
-        $candidateHomes.Add($ExplicitHome)
+
+    foreach ($candidate in @($ExplicitHome, $env:NEXUS_JAVA21_HOME, $env:JAVA_HOME)) {
+        if (-not [string]::IsNullOrWhiteSpace($candidate)) {
+            $candidateHomes.Add($candidate)
+        }
     }
-    if (-not [string]::IsNullOrWhiteSpace($env:NEXUS_JAVA21_HOME)) {
-        $candidateHomes.Add($env:NEXUS_JAVA21_HOME)
-    }
-    if (-not [string]::IsNullOrWhiteSpace($env:JAVA_HOME)) {
-        $candidateHomes.Add($env:JAVA_HOME)
+
+    # IntelliJ / JetBrains downloaded JDKs.
+    $jetBrainsJdks = Join-Path $env:USERPROFILE ".jdks"
+    if (Test-Path -LiteralPath $jetBrainsJdks -PathType Container) {
+        Get-ChildItem -LiteralPath $jetBrainsJdks -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match '21' } |
+            Sort-Object FullName -Descending |
+            ForEach-Object { $candidateHomes.Add($_.FullName) }
     }
 
     $programFilesRoots = @($env:ProgramFiles, ${env:ProgramFiles(x86)}) |
         Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
         Select-Object -Unique
+
     foreach ($root in $programFilesRoots) {
         $patterns = @(
             (Join-Path $root "Microsoft\jdk-21*"),
@@ -96,35 +104,37 @@ function Resolve-Java21Home {
 
     $javaCommand = Get-Command java -ErrorAction SilentlyContinue
     if ($null -ne $javaCommand -and -not [string]::IsNullOrWhiteSpace($javaCommand.Source)) {
-        $pathJava = $javaCommand.Source
-        if (Test-Java21Executable -JavaExecutable $pathJava) {
-            return (Split-Path -Parent (Split-Path -Parent $pathJava))
+        if (Test-Java21Executable -JavaExecutable $javaCommand.Source) {
+            return (Split-Path -Parent (Split-Path -Parent $javaCommand.Source))
         }
     }
 
-    foreach ($home in ($candidateHomes | Select-Object -Unique)) {
+    foreach ($candidateHome in ($candidateHomes | Select-Object -Unique)) {
         try {
-            $resolvedHome = (Resolve-Path $home -ErrorAction Stop).Path
+            $resolvedCandidateHome = (Resolve-Path -LiteralPath $candidateHome -ErrorAction Stop).Path
         }
         catch {
             continue
         }
-        $javaExecutable = Join-Path $resolvedHome "bin\java.exe"
+
+        $javaExecutable = Join-Path $resolvedCandidateHome "bin\java.exe"
         if (Test-Java21Executable -JavaExecutable $javaExecutable) {
-            return $resolvedHome
+            return $resolvedCandidateHome
         }
     }
+
     return $null
 }
 
 function Assert-Sha256File {
     param([Parameter(Mandatory = $true)][string]$Artifact)
+
     $checksumFile = "$Artifact.sha256"
-    if (-not (Test-Path $checksumFile)) {
+    if (-not (Test-Path -LiteralPath $checksumFile -PathType Leaf)) {
         throw "Checksum absent : $checksumFile"
     }
-    $expected = ((Get-Content -Raw $checksumFile).Trim() -split '\s+')[0].ToUpperInvariant()
-    $actual = (Get-FileHash -Algorithm SHA256 -Path $Artifact).Hash.ToUpperInvariant()
+    $expected = ((Get-Content -Raw -LiteralPath $checksumFile).Trim() -split '\s+')[0].ToUpperInvariant()
+    $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $Artifact).Hash.ToUpperInvariant()
     if ($expected -ne $actual) {
         throw "Checksum SHA-256 invalide pour $Artifact"
     }
@@ -149,7 +159,7 @@ try {
                 $currentVersion = $detected
             }
         }
-        throw "Java 21 est requis et n'a pas ete trouve automatiquement. Java courant : $currentVersion. Configurez NEXUS_JAVA21_HOME ou relancez avec -Java21Home <chemin-du-JDK-21>."
+        throw "Java 21 Windows est requis et introuvable. Java courant : $currentVersion. Installez un JDK 21 Windows ou passez -Java21Home <chemin>."
     }
 
     $env:JAVA_HOME = $resolvedJava21Home
@@ -165,7 +175,7 @@ try {
     Write-Host "[2/8] Maven Wrapper reproductible"
     Invoke-Native -Command (Join-Path $repoRoot "mvnw.cmd") -Arguments @("--version")
     $wrapperMavenBin = Join-Path $env:USERPROFILE ".m2\wrapper\dists\nexus\apache-maven-3.9.11\apache-maven-3.9.11\bin"
-    if (Test-Path $wrapperMavenBin) {
+    if (Test-Path -LiteralPath $wrapperMavenBin -PathType Container) {
         $env:PATH = "$wrapperMavenBin;$env:PATH"
     }
 
@@ -182,7 +192,7 @@ try {
     $cliJar = Join-Path $repoRoot "target\nexus-context-engine-0.2.0-cli.jar"
     $distributionZip = Join-Path $repoRoot "target\distribution\nexus-context-engine-0.2.0.zip"
     foreach ($artifact in @($cliJar, $distributionZip)) {
-        if (-not (Test-Path $artifact)) {
+        if (-not (Test-Path -LiteralPath $artifact -PathType Leaf)) {
             throw "Livrable absent : $artifact"
         }
         Assert-Sha256File -Artifact $artifact
@@ -190,18 +200,18 @@ try {
 
     Write-Host "[6/8] SBOM CycloneDX agrege"
     $sbom = Join-Path $repoRoot "target\sbom\bom.json"
-    if (-not (Test-Path $sbom)) {
+    if (-not (Test-Path -LiteralPath $sbom -PathType Leaf)) {
         throw "SBOM absent : $sbom"
     }
-    $sbomJson = Get-Content -Raw $sbom | ConvertFrom-Json
+    $sbomJson = Get-Content -Raw -LiteralPath $sbom | ConvertFrom-Json
     if ($sbomJson.bomFormat -ne "CycloneDX") {
         throw "Le SBOM genere n'est pas au format CycloneDX."
     }
 
     Write-Host "[7/8] Archive installable sans clone"
     $extractRoot = Join-Path $repoRoot "target\phase-6-distribution-smoke"
-    if (Test-Path $extractRoot) {
-        Remove-Item -Recurse -Force $extractRoot
+    if (Test-Path -LiteralPath $extractRoot) {
+        Remove-Item -Recurse -Force -LiteralPath $extractRoot
     }
     Expand-Archive -Path $distributionZip -DestinationPath $extractRoot -Force
     $launcher = Get-ChildItem -Path $extractRoot -Filter "nexus.cmd" -Recurse -File | Select-Object -First 1
