@@ -16,6 +16,9 @@ import java.util.Objects;
 public final class SymbolSearchStrategy implements SearchStrategy {
 
     private static final double MIN_FUZZY_SCORE = 0.62d;
+    private static final int MIN_CANDIDATE_POOL = 100;
+    private static final int MAX_CANDIDATE_POOL = 2_000;
+    private static final int MAX_QUERY_TERMS = 8;
 
     private final IndexRepository indexRepository;
 
@@ -27,9 +30,21 @@ public final class SymbolSearchStrategy implements SearchStrategy {
     public List<SearchCandidate> search(ProjectDescriptor project, String query, int limit) {
         List<String> terms = SearchText.terms(query);
         String normalizedQuery = query.toLowerCase(Locale.ROOT).trim();
-        List<SearchCandidate> candidates = new ArrayList<>();
+        int candidatePoolLimit = Math.min(
+                MAX_CANDIDATE_POOL,
+                Math.max(MIN_CANDIDATE_POOL, limit * 20));
 
-        for (IndexedSymbol indexedSymbol : indexRepository.findSymbols(project.id())) {
+        Map<String, IndexedSymbol> symbolPool = new LinkedHashMap<>();
+        collect(symbolPool, indexRepository.searchSymbols(project.id(), normalizedQuery, candidatePoolLimit));
+        terms.stream()
+                .limit(MAX_QUERY_TERMS)
+                .filter(term -> !term.equals(normalizedQuery))
+                .forEach(term -> collect(
+                        symbolPool,
+                        indexRepository.searchSymbols(project.id(), term, candidatePoolLimit)));
+
+        List<SearchCandidate> candidates = new ArrayList<>();
+        for (IndexedSymbol indexedSymbol : symbolPool.values()) {
             CodeSymbol symbol = indexedSymbol.symbol();
             String name = symbol.name().toLowerCase(Locale.ROOT);
             String qualifiedName = symbol.qualifiedName().toLowerCase(Locale.ROOT);
@@ -61,6 +76,15 @@ public final class SymbolSearchStrategy implements SearchStrategy {
                         .thenComparing(SearchCandidate::id))
                 .limit(limit)
                 .toList();
+    }
+
+    private static void collect(Map<String, IndexedSymbol> target, List<IndexedSymbol> symbols) {
+        for (IndexedSymbol indexed : symbols) {
+            CodeSymbol symbol = indexed.symbol();
+            String key = indexed.relativePath() + "\u0000" + symbol.kind() + "\u0000"
+                    + symbol.qualifiedName() + "\u0000" + symbol.startLine() + "\u0000" + symbol.sourceProvider();
+            target.putIfAbsent(key, indexed);
+        }
     }
 
     private static double exactScore(
