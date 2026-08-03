@@ -1,296 +1,182 @@
 # NEXUS Context Engine
 
-> Moteur local d'intelligence de contexte pour projets logiciels : recherche, ranking explicable et construction de `ContextBundle` sous budget.
+> Moteur local d'intelligence de contexte pour projets logiciels : recherche hybride, ranking explicable et construction de contexte sous budget.
 
-NEXUS n'est ni un chatbot, ni un LLM, ni un orchestrateur d'agents. Il se place entre un repository et le consommateur IA afin de sélectionner le contexte technique réellement utile.
+NEXUS n'est ni un chatbot, ni un LLM, ni un orchestrateur d'agents. Il se place entre les repositories et les consommateurs IA afin de sélectionner un contexte technique pertinent, borné et traçable.
 
-## État actuel
-
-État de référence au 29 juillet 2026 :
+## État Phase 6
 
 ```text
-repository  FTurleque/nexus-context-engine
-main        13fd6970f7350602c7a86aae729ddd4adad771bd
-Java        21
-version     0.1.0-SNAPSHOT
-roadmap     Itérations 0 → 17 terminées
-MINOS       intégration issue #11 / PR #12 livrée
+repository   FTurleque/nexus-context-engine
+branch       phase-6-consolidation-hardening
+Java         21
+version      0.2.0
+Phase 1→5    livrées
+Phase 6      implémentée, qualification locale exact-head en attente
+MINOS        issue #11 / PR #12 livrée
 ```
 
-Dernière qualification NEXUS documentée avec l'intégration MINOS :
+La Phase 6 ne doit pas être annoncée comme validée avant `=== PHASE 6 PASS ===` de `scripts/validate-phase-6.ps1` sur le head concerné.
 
-```text
-sources main   128
-sources test   41
-tests          80
-failures       0
-errors         0
-skipped        6
-BUILD SUCCESS
-```
+## Capacités
 
-La prochaine phase est une phase de **consolidation et hardening**, pas une course aux intégrations. Voir [`docs/roadmap.md`](docs/roadmap.md) et [`docs/developer/current-limitations.md`](docs/developer/current-limitations.md).
-
-## Ce que NEXUS sait faire
-
-### Indexation et recherche
-
-- registre de plusieurs projets locaux ;
-- scan respectant `.gitignore`, `.nexusignore` et des exclusions sensibles intégrées ;
-- SQLite comme source de vérité structurelle ;
-- Lucene comme index lexical dérivé et reconstructible ;
-- indexation incrémentale par SHA-256 ;
-- recherche BM25 multi-champs ;
-- recherche exacte/fuzzy de symboles ;
-- graphe d'imports et enrichissement structurel ;
-- ranking déterministe et explicable ;
-- recherche fédérée sur une liste explicite de projets.
-
-### Langages et Code Intelligence
-
-| Capacité | État |
-|---|---|
-| Java lexical | natif |
-| Java structurel | JavaParser embarqué |
-| Kotlin | lexical natif |
-| TypeScript / JavaScript | lexical natif |
-| Python | lexical natif |
-| SQL | lexical natif |
-| SCIP | import opportuniste `index.scip` |
-| JDT Language Server | provider Java profond opt-in via `--deep-java` |
-| MINOS | import JSON local explicite via `minos-import` |
-
-Les langages sans analyseur structurel embarqué restent pleinement recherchables lexicalement. Leur structure peut être enrichie par SCIP, MINOS ou un autre provider compatible.
-
-### Sources de contexte
-
-NEXUS peut construire un bundle à partir de :
-
-```text
-FILE
-SYMBOL
-TEST
-DOCUMENTATION
-INSTRUCTION
-SKILL
-GIT
-```
-
-Il comprend notamment :
-
-- `AGENTS.md` / `AGENT.md` ;
-- instructions GitHub Copilot ;
-- `CLAUDE.md` / `.claude/CLAUDE.md` ;
-- `GEMINI.md` ;
-- Agent Skills `SKILL.md` avec divulgation progressive ;
-- snapshot local AI Skills Registry ;
+- indexation locale incrémentale ;
+- SQLite canonique et index Lucene reconstructibles ;
+- JavaParser, Markdown et recherche lexicale polyglotte ;
+- SCIP opportuniste, JDT LS opt-in et import MINOS explicite ;
+- recherche hybride fichier/symbole/graphe/Git ;
+- recherche sémantique locale opt-in ;
+- recherche fédérée multi-projet ;
+- `ContextBundle` projet-local et contexte fédéré avec budget global/provenance ;
+- instructions AGENTS/Copilot/Claude/Gemini ;
+- Agent Skills locaux + AI Skills Registry local ;
 - contexte Git local borné ;
-- documentation Markdown.
+- CLI, REST Quarkus et MCP Java STDIO ;
+- générateurs de configuration Copilot/Claude ;
+- métriques/readiness REST ;
+- distribution CLI autonome versionnée.
 
-NEXUS sélectionne les skills mais **n'exécute jamais leurs scripts**.
+## Build reproductible
 
-### Recherche sémantique
+Sous Windows :
 
-La recherche sémantique est une capacité locale **opt-in** validée :
+```powershell
+.\mvnw.cmd clean install
+```
 
-- `EmbeddingProvider` abstrait le fournisseur ;
-- `LuceneSemanticSearchIndex` utilise le kNN/cosine Lucene ;
-- `SemanticHybridContextRanker` utilise une RRF déterministe ;
-- Ollama/qwen3-embedding constitue la baseline locale mesurée ;
-- aucun provider d'embeddings ni vector DB n'est obligatoire.
+Sous Linux/macOS :
 
-Elle reste désactivée par défaut car la baseline réelle a mesuré un coût d'indexation d'environ `33×` le chemin lexical.
+```bash
+sh ./mvnw clean install
+```
 
-## Architecture
+Le wrapper est épinglé sur Maven 3.9.11 et vérifie le SHA-512 du téléchargement.
+
+## CLI
+
+Après build :
+
+```powershell
+java -jar .\target\nexus-context-engine-0.2.0-cli.jar --help
+```
+
+Commandes principales :
 
 ```text
-                         NEXUS
-                           │
-          ┌────────────────┼────────────────┐
-          │                │                │
-   Project Registry   Context Sources   Code Intelligence
-          │                │                │
-        SQLite       instructions       JavaParser
-                     skills             SCIP
-                     Git                JDT LS opt-in
-                     docs               MINOS explicite
-                          \             /
-                           \           /
-                            ▼         ▼
-                         Indexation
-                     SQLite + Lucene
-                            │
-                            ▼
-                  SearchService / fédération
-                            │
-                   enrichissements graphe/Git
-                            │
-                            ▼
-                    ranking explicable
-                            │
-                            ▼
-                  DefaultContextBuilder
-                            │
-                       budget tokens
-                            │
-                            ▼
-                      ContextBundle
-                            │
-            ┌───────────────┼───────────────┐
-            ▼               ▼               ▼
-           CLI             REST             MCP
+project add
+project list
+index [--rebuild] [--deep-java]
+minos-import
+search
+search-federated
+context
+context-federated
+inspect
+--help
+--version
 ```
 
-Le cœur reste Java 21 sans framework applicatif obligatoire. Quarkus et le SDK MCP vivent dans des adaptateurs séparés.
+Les sélecteurs fédérés CLI sont des noms/UUID séparés par des virgules.
 
-Documentation d'architecture : [`docs/architecture.md`](docs/architecture.md).
+## Distribution sans clone
 
-## Surfaces disponibles
-
-### CLI
-
-Le build principal produit un JAR bibliothèque et un JAR CLI autonome.
-
-Commandes actuelles :
+`clean install` produit :
 
 ```text
-project add <chemin> [nom] [--json]
-project list [--json]
-index <id-ou-nom> [--rebuild] [--deep-java] [--json]
-minos-import <id-ou-nom> < export-minos.json [--json]
-search <id-ou-nom> <requête> [--limit N] [--explain] [--json]
-context <id-ou-nom> <requête> [--budget N] [--explain] [--json]
-inspect <id-ou-nom> [--json]
---help [--json]
---version [--json]
+target/nexus-context-engine-0.2.0-cli.jar
+target/nexus-context-engine-0.2.0-cli.jar.sha256
+target/distribution/nexus-context-engine-0.2.0.zip
+target/distribution/nexus-context-engine-0.2.0.zip.sha256
+target/sbom/bom.json
 ```
 
-Guide courant : [`docs/developer/cli.md`](docs/developer/cli.md).
+Le ZIP contient `bin/nexus.cmd`, `bin/nexus` et `lib/nexus-cli.jar`. Maven n'est pas requis sur la machine cible ; Java 21 reste obligatoire.
 
-Le document [`docs/developer/cli-mvp.md`](docs/developer/cli-mvp.md) conserve uniquement le contrat historique du MVP.
+## Correctness et scale Phase 6
 
-### REST
+- toute lecture dépendant d'un index exige un projet `READY` ;
+- un état `FAILED`, `NOT_INDEXED` ou `INDEXING` persistant entraîne un rebuild complet au prochain index ;
+- une seule indexation active est acceptée par projet et par processus ;
+- top-K fédéré sur-récupéré avant diversification ;
+- symboles/usages filtrés côté SQLite avec limites ;
+- graphe réutilisé tant que la génération canonique n'a pas changé ;
+- taille de fichier bornée avant hash/lecture ;
+- providers externes bornés par timeout ;
+- MINOS valide contre les fichiers canoniques déjà indexés.
 
-L'adaptateur Quarkus se trouve sous `adapters/rest-quarkus` et expose les opérations projet, indexation, recherche, contexte et explication, avec health et métriques.
+## Configuration
 
-Documentation : [`docs/developer/rest-api.md`](docs/developer/rest-api.md).
-
-Par défaut, le serveur écoute sur `127.0.0.1:8080`.
-
-### MCP
-
-L'adaptateur Java MCP STDIO se trouve sous `adapters/mcp-java` et expose :
+Variables importantes :
 
 ```text
-list_projects
-search_code
-find_symbol
-find_usages
-build_context
-explain_context
+NEXUS_HOME
+NEXUS_MAX_FILE_SIZE_BYTES
+NEXUS_CODE_INTELLIGENCE_TIMEOUT_SECONDS
+NEXUS_JDTLS_HOME
+NEXUS_SEMANTIC_PROVIDER
+NEXUS_SEMANTIC_RRF_WEIGHT
+NEXUS_OLLAMA_BASE_URL
+NEXUS_OLLAMA_EMBEDDING_MODEL
+NEXUS_OLLAMA_EMBEDDING_DIMENSIONS
+NEXUS_OLLAMA_TIMEOUT_SECONDS
 ```
 
-Documentation : [`docs/developer/mcp.md`](docs/developer/mcp.md).
+`NEXUS_MAX_FILE_SIZE_BYTES` vaut 8 MiB par défaut. Le timeout global de code intelligence vaut 180 s. Les providers lourds et la sémantique sont **désactivés par défaut**.
 
-### Copilot / Claude
-
-`adapters/assistant-clients` génère les configurations nécessaires pour connecter le serveur MCP NEXUS à Copilot CLI, Copilot JetBrains et Claude.
-
-## Utilisation locale de la CLI
-
-Construire :
+Pour activer explicitement Ollama :
 
 ```powershell
-mvn clean install
+$env:NEXUS_SEMANTIC_PROVIDER = "ollama"
 ```
 
-Enregistrer et indexer un projet :
+## Surfaces fédérées
+
+CLI :
+
+```text
+search-federated <projet1,projet2,...> <requête>
+context-federated <projet1,projet2,...> <requête>
+```
+
+REST :
+
+```text
+POST /api/v1/federated/search
+POST /api/v1/federated/context
+```
+
+MCP :
+
+```text
+search_across_projects
+build_context_across_projects
+explain_context_across_projects
+```
+
+Le contexte fédéré applique un budget global, conserve la provenance projet, réduit la starvation et ne propage pas implicitement instructions/skills/Git d'un projet vers un autre.
+
+## Qualification Phase 6
+
+Source de vérité Windows :
 
 ```powershell
-.\scripts\nexus.ps1 project add N:\workspace-dev\mon-app mon-app
-.\scripts\nexus.ps1 index mon-app
+powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
 ```
 
-Recherche :
-
-```powershell
-.\scripts\nexus.ps1 search mon-app "service de facturation" --limit 10 --explain
-```
-
-Contexte sous budget :
-
-```powershell
-.\scripts\nexus.ps1 context mon-app "Corriger la réconciliation des factures" --budget 2000 --explain
-```
-
-Analyse Java profonde lorsque JDT LS est configuré :
-
-```powershell
-.\scripts\nexus.ps1 index mon-app --deep-java
-```
-
-Import MINOS explicite :
-
-```powershell
-Get-Content -Raw .\minos-export.json | .\scripts\nexus.ps1 minos-import mon-app
-```
-
-## Principes de sécurité
-
-- fonctionnement local-first ;
-- secrets et formats sensibles connus exclus du scanner ;
-- références d'instructions confinées au repository ;
-- contexte Git en lecture seule ;
-- aucun script de skill exécuté ;
-- aucun lancement MINOS depuis NEXUS ;
-- aucun provider sémantique activé implicitement ;
-- REST lié à loopback par défaut.
-
-## Limites connues
-
-Les principales limites actives sont désormais suivies explicitement :
-
-- top-K fédéré à durcir après diversification ;
-- scans complets de symboles/relations à éliminer pour la montée en charge ;
-- gate `IndexStatus.READY` à uniformiser ;
-- cohérence SQLite/Lucene à formaliser sur panne partielle ;
-- composition CLI/builds à unifier ;
-- concurrence et ressources d'indexation à borner ;
-- recherche fédérée et sémantique à exposer de façon cohérente dans les adaptateurs ;
-- `ContextBundle` fédéré multi-projet non encore livré ;
-- distribution encore en `0.1.0-SNAPSHOT`.
-
-Détail et preuves : [`docs/developer/current-limitations.md`](docs/developer/current-limitations.md).
+Ce gate exécute le reactor complet, le self-smoke historique, vérifie les checksums, le SBOM, l'archive installable et l'exact-head.
 
 ## Documentation
 
-- [Architecture courante](docs/architecture.md)
-- [Roadmap active](docs/roadmap.md)
-- [Guide développeur](docs/developer/README.md)
-- [Limites et dette active](docs/developer/current-limitations.md)
-- [Indexation](docs/developer/indexing-pipeline.md)
-- [Recherche et ranking](docs/developer/search-ranking.md)
-- [Construction du contexte](docs/developer/context-building.md)
-- [Code Intelligence](docs/developer/code-intelligence.md)
-- [Multi-langage](docs/developer/multi-language.md)
-- [Recherche à grande échelle](docs/developer/large-scale-search.md)
-- [Recherche sémantique](docs/developer/semantic-search.md)
-- [MINOS](docs/developer/minos-code-intelligence.md)
-- [REST](docs/developer/rest-api.md)
-- [MCP](docs/developer/mcp.md)
-- [ADR](docs/adr/README.md)
+- architecture : [`docs/architecture.md`](docs/architecture.md) ;
+- implémentation : [`docs/developer/architecture-implementation.md`](docs/developer/architecture-implementation.md) ;
+- CLI : [`docs/developer/cli.md`](docs/developer/cli.md) ;
+- recherche : [`docs/developer/search-ranking.md`](docs/developer/search-ranking.md) ;
+- contexte : [`docs/developer/context-building.md`](docs/developer/context-building.md) ;
+- sémantique : [`docs/developer/semantic-search.md`](docs/developer/semantic-search.md) ;
+- limites/watch items : [`docs/developer/current-limitations.md`](docs/developer/current-limitations.md) ;
+- release/recovery : [`docs/developer/release-and-recovery.md`](docs/developer/release-and-recovery.md) ;
+- roadmap : [`docs/roadmap.md`](docs/roadmap.md).
 
-## Validation locale
+## Décisions conservées
 
-Le gate de base du repository reste :
-
-```powershell
-mvn clean install
-.\scripts\self-smoke.ps1
-```
-
-Les scripts `validate-iteration-*.ps1` et `measure-iteration-*.ps1` conservent les validations et benchmarks spécialisés.
-
-## Licence
-
-Le choix de la licence reste volontairement ouvert tant que le repository n'est pas rendu public.
+SQLite reste canonique. Lucene reste dérivé. Aucun Zoekt/OpenGrok/OpenSearch, index distribué, vector DB, cache Git persistant ou lifecycle Lucene plus complexe n'est adopté sans mesure démontrant qu'il répond à un problème réel.
