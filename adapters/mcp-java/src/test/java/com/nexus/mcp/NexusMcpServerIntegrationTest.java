@@ -28,10 +28,13 @@ class NexusMcpServerIntegrationTest {
     private static final Set<String> EXPECTED_TOOLS = Set.of(
             "list_projects",
             "search_code",
+            "search_across_projects",
             "find_symbol",
             "find_usages",
             "build_context",
-            "explain_context");
+            "explain_context",
+            "build_context_across_projects",
+            "explain_context_across_projects");
 
     @TempDir
     Path temporaryDirectory;
