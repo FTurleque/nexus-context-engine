@@ -1,0 +1,56 @@
+name: Phase 6 CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+      - phase-6-consolidation-hardening
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-phase-6-gate:
+    name: Windows Phase 6 gate
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 24
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '24'
+
+      - name: Run Phase 6 local qualification script
+        shell: powershell
+        run: |
+          Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+          .\scripts\validate-phase-6.ps1
+
+  linux-reactor:
+    name: Linux reactor Maven build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Run Maven reactor
+        run: |
+          chmod +x ./mvnw
+          ./mvnw -B clean install
