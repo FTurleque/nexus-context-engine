@@ -32,6 +32,8 @@ public final class ApiModels {
             int scannedFiles,
             int changedFiles,
             int removedFiles,
+            int skippedFiles,
+            List<String> diagnostics,
             boolean fullSearchRebuild,
             long durationMs,
             IndexStatisticsResponse statistics) {
@@ -41,6 +43,13 @@ public final class ApiModels {
     }
 
     public record SearchRequest(String query, Integer limit, Boolean explain) {
+    }
+
+    public record FederatedSearchRequest(
+            List<UUID> projectIds,
+            String query,
+            Integer limit,
+            Boolean explain) {
     }
 
     public record SymbolResponse(
@@ -72,7 +81,30 @@ public final class ApiModels {
             List<SearchResultResponse> results) {
     }
 
+    public record FederatedSearchResultResponse(
+            ProjectResponse project,
+            SearchResultResponse result) {
+    }
+
+    public record FederatedSearchResponse(
+            List<ProjectResponse> projects,
+            String query,
+            int limit,
+            boolean explain,
+            long durationMs,
+            List<FederatedSearchResultResponse> results) {
+    }
+
     public record ContextRequestDto(
+            String query,
+            Integer tokenBudget,
+            Set<String> requestedSources,
+            Map<String, String> constraints,
+            Boolean explain) {
+    }
+
+    public record FederatedContextRequest(
+            List<UUID> projectIds,
             String query,
             Integer tokenBudget,
             Set<String> requestedSources,
@@ -102,6 +134,23 @@ public final class ApiModels {
             int tokenBudget,
             int estimatedTokens,
             List<ContextItemResponse> items,
+            List<String> excluded,
+            Map<String, Object> metadata) {
+    }
+
+    public record FederatedContextItemResponse(
+            ProjectResponse project,
+            ContextItemResponse item) {
+    }
+
+    public record FederatedContextResponse(
+            List<ProjectResponse> projects,
+            String query,
+            boolean explain,
+            long durationMs,
+            int tokenBudget,
+            int estimatedTokens,
+            List<FederatedContextItemResponse> items,
             List<String> excluded,
             Map<String, Object> metadata) {
     }
