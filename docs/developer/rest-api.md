@@ -1,124 +1,60 @@
 # Adaptateur REST NEXUS
 
-Ce chapitre décrit l'adaptateur HTTP introduit par l'Itération 11.
+L'adaptateur Quarkus expose NEXUS sans introduire Quarkus dans le cœur. Il fait partie du reactor Phase 6 et délègue à `NexusApplication`, comme CLI et MCP.
 
-## 1. Objectif
-
-L'adaptateur expose les capacités du moteur NEXUS à des applications externes sans introduire Quarkus dans le cœur.
-
-Le code se trouve dans :
+## Module et build
 
 ```text
 adapters/rest-quarkus/
+Java 21
+Quarkus 3.33.2.1
+version NEXUS 0.2.0
 ```
 
-Le cœur reste construit par le `pom.xml` racine. L'adaptateur possède son propre build Maven et dépend du JAR `nexus-context-engine`.
-
-## 2. Version Quarkus
-
-L'Itération 11 démarre avec :
-
-```text
-Quarkus 3.33 LTS
-micro-version : 3.33.2.1
-Java : 21
-```
-
-La version est figée dans `adapters/rest-quarkus/pom.xml` afin de rendre les validations reproductibles.
-
-## 3. Architecture
-
-```text
-Client HTTP
-    ↓
-NexusResource
-    ↓
-DTO REST / ApiMapper
-    ↓
-NexusApiApplicationService
-    ↓
-NEXUS core
-    ├── ProjectRegistry
-    ├── ProjectIndexingService
-    ├── SearchService
-    ├── ContextBuilder
-    ├── SQLite
-    ├── Lucene
-    ├── SCIP optionnel
-    └── JDT LS optionnel
-```
-
-Les ressources REST ne contiennent aucune logique métier d'indexation, recherche ou construction de contexte.
-
-Les modèles du cœur ne constituent pas le contrat HTTP public. Les réponses sont transformées vers les DTO définis dans `ApiModels`.
-
-## 4. Configuration
-
-L'adaptateur réutilise les variables et propriétés du moteur NEXUS.
-
-La donnée locale reste configurée avec :
-
-```text
-NEXUS_HOME
-```
-
-ou la propriété JVM :
-
-```text
--Dnexus.home=<chemin>
-```
-
-Par défaut, Quarkus écoute uniquement en local :
-
-```text
-127.0.0.1:8080
-```
-
-Ce choix préserve le comportement local-first de NEXUS. Une exposition réseau doit être configurée explicitement par l'opérateur.
-
-## 5. Construire l'adaptateur
-
-Le cœur doit d'abord être installé dans le dépôt Maven local :
+Build reactor recommandé :
 
 ```powershell
-mvn clean install
-mvn -f adapters/rest-quarkus/pom.xml clean verify
+.\mvnw.cmd clean install
 ```
 
-La validation complète recommandée reste :
-
-```powershell
-.\scripts\validate-iteration-11.ps1
-```
-
-## 6. Lancer l'API
-
-Après packaging :
+Lancement après packaging :
 
 ```powershell
 java -jar .\adapters\rest-quarkus\target\quarkus-app\quarkus-run.jar
 ```
 
-Le contrat initial est versionné sous :
+Par défaut, l'API reste local-first sur `127.0.0.1:8080`.
+
+## Architecture
 
 ```text
-/api/v1
+Client HTTP
+    ↓
+Resources REST
+    ↓
+DTO / ApiMapper
+    ↓
+NexusApiApplicationService
+    ↓
+NexusApplication
+    ├─ ProjectIndexingService
+    ├─ SearchService
+    ├─ FederatedSearchService
+    ├─ DefaultContextBuilder
+    └─ FederatedContextService
 ```
 
-## 7. Projets
+Les DTO REST restent distincts des modèles du cœur.
 
-### Lister les projets
-
-```http
-GET /api/v1/projects
-```
-
-### Enregistrer un projet local
+## Projets
 
 ```http
+GET  /api/v1/projects
 POST /api/v1/projects
-Content-Type: application/json
+GET  /api/v1/projects/{projectId}
 ```
+
+Création :
 
 ```json
 {
@@ -127,51 +63,26 @@ Content-Type: application/json
 }
 ```
 
-### Lire un projet
-
-```http
-GET /api/v1/projects/{projectId}
-```
-
-Les identités HTTP utilisent les UUID NEXUS.
-
-## 8. Indexation
-
-### Indexation normale
+## Indexation
 
 ```http
 POST /api/v1/projects/{projectId}/index
-```
-
-### Reconstruction complète
-
-```http
 POST /api/v1/projects/{projectId}/index?rebuild=true
-```
-
-### Analyse Java profonde optionnelle
-
-```http
 POST /api/v1/projects/{projectId}/index?deepJava=true
+GET  /api/v1/projects/{projectId}/index
 ```
 
-La présence de `deepJava=true` ne rend pas JDT LS obligatoire. Si aucun provider JDT LS n'est configuré dans l'environnement, le comportement suit les règles du moteur NEXUS.
-
-### Inspecter l'index
-
-```http
-GET /api/v1/projects/{projectId}/index
-```
-
-La réponse contient les compteurs :
+La réponse d'indexation Phase 6 expose aussi :
 
 ```text
-files
-symbols
-relations
+skippedFiles
+diagnostics
+providerDurationsMs via le rapport applicatif/métriques
 ```
 
-## 9. Recherche
+`deepJava=true` nécessite un provider JDT LS réellement configuré ; sinon l'appel échoue explicitement au lieu de prétendre avoir exécuté une analyse profonde.
+
+## Recherche mono-projet
 
 ```http
 POST /api/v1/projects/{projectId}/search
@@ -186,28 +97,40 @@ Content-Type: application/json
 }
 ```
 
-Valeurs par défaut :
+Le projet doit être `READY`.
 
-```text
-limit = 10
-explain = false
+Endpoints d'explication historiques :
+
+```http
+POST /api/v1/projects/{projectId}/explain/search
+POST /api/v1/projects/{projectId}/explain/context
 ```
 
-Les résultats exposent notamment :
+## Recherche fédérée — Phase 6
 
-- rang ;
-- score global ;
-- type de candidat ;
-- chemin relatif ;
-- symbole éventuel ;
-- composantes du score ;
-- raisons d'explication lorsque demandées.
+```http
+POST /api/v1/federated/search
+Content-Type: application/json
+```
 
-## 10. Contexte
+```json
+{
+  "projectIds": [
+    "11111111-1111-1111-1111-111111111111",
+    "22222222-2222-2222-2222-222222222222"
+  ],
+  "query": "billing adapter",
+  "limit": 20,
+  "explain": true
+}
+```
+
+Chaque projet doit être `READY`. Le top-K est global et diversifié par `(projectId,path)` après sur-récupération locale bornée.
+
+## Contexte mono-projet
 
 ```http
 POST /api/v1/projects/{projectId}/context
-Content-Type: application/json
 ```
 
 ```json
@@ -220,94 +143,94 @@ Content-Type: application/json
 }
 ```
 
-Valeurs par défaut :
+Invariant : `estimatedTokens <= tokenBudget`.
 
-```text
-tokenBudget = 2000
-explain = false
-requestedSources = toutes les sources éligibles
-constraints = vide
-```
-
-L'invariant du moteur reste inchangé :
-
-```text
-estimatedTokens <= tokenBudget
-```
-
-## 11. Endpoints d'explication
-
-Deux routes rendent l'intention explicite pour les clients qui veulent systématiquement les justifications :
+## Contexte fédéré — Phase 6
 
 ```http
-POST /api/v1/projects/{projectId}/explain/search
-POST /api/v1/projects/{projectId}/explain/context
+POST /api/v1/federated/context
+Content-Type: application/json
 ```
 
-Elles réutilisent les mêmes pipelines que les routes standard en forçant `explain=true`.
+```json
+{
+  "projectIds": [
+    "11111111-1111-1111-1111-111111111111",
+    "22222222-2222-2222-2222-222222222222"
+  ],
+  "query": "change the billing contract",
+  "tokenBudget": 4000,
+  "requestedSources": [],
+  "constraints": {},
+  "explain": true
+}
+```
 
-## 12. Santé
+Le bundle conserve la provenance projet, applique un budget global, un merge round-robin et une déduplication inter-projet. Instructions, skills et Git restent projet-locaux.
 
-SmallRye Health expose notamment :
+## Sémantique
+
+L'adaptateur n'a aucune configuration sémantique spécifique. Il utilise le même composition root que la CLI/MCP :
+
+```text
+NEXUS_SEMANTIC_PROVIDER=ollama
+NEXUS_SEMANTIC_RRF_WEIGHT
+NEXUS_OLLAMA_BASE_URL
+NEXUS_OLLAMA_EMBEDDING_MODEL
+NEXUS_OLLAMA_EMBEDDING_DIMENSIONS
+NEXUS_OLLAMA_TIMEOUT_SECONDS
+```
+
+Sans `NEXUS_SEMANTIC_PROVIDER`, aucun provider d'embeddings n'est créé.
+
+## Readiness
 
 ```http
 GET /q/health
 GET /q/health/ready
 ```
 
-Le check `nexus-context-engine` publie l'état de readiness ainsi que des informations non sensibles sur les adapters de stockage et de recherche utilisés.
+Le check NEXUS expose :
 
-## 13. Observabilité
+```text
+registeredProjects
+semanticSearchEnabled
+projects.ready
+projects.indexing
+projects.failed
+projects.not_indexed
+```
 
-Micrometer avec export Prometheus expose :
+Un projet `FAILED` rend le check NEXUS non opérationnel ; un projet `INDEXING` est visible sans rendre automatiquement tout le service indisponible.
+
+## Métriques
 
 ```http
 GET /q/metrics
 ```
 
-L'adaptateur enregistre également :
+Métriques applicatives :
 
 ```text
 nexus.api.operations
 nexus.api.operation.duration
+nexus.code_intelligence.duration
 ```
 
-avec le tag :
+Opérations : `index`, `search`, `context`, `search_federated`, `context_federated`.
 
-```text
-operation=index|search|context
+Les labels n'incluent ni requête, ni contenu source, ni chemin de projet. Le label provider utilise seulement l'identifiant contrôlé du provider/importer.
+
+## Erreurs
+
+Les erreurs de validation restent normalisées par les mappers REST. Les gates READY et les erreurs de providers remontent de la façade applicative ; elles ne sont pas contournées dans les resources.
+
+## Qualification
+
+Les runners historiques REST restent utiles pour leur périmètre. Le gate final Phase 6 est :
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
 ```
 
-Les métriques HTTP Quarkus restent activées pour observer les requêtes entrantes.
-
-## 14. Gestion des erreurs
-
-Les erreurs de validation sont normalisées en HTTP `400` avec une réponse JSON :
-
-```json
-{
-  "error": "bad_request",
-  "message": "query est obligatoire"
-}
-```
-
-Les erreurs d'entrée/sortie non récupérables sont normalisées en HTTP `500` avec `error=io_error`.
-
-Cette première version privilégie un contrat stable et explicite. Des erreurs métier plus fines (`404`, `409`, `422`) pourront être introduites lorsque les cas d'usage API seront stabilisés.
-
-## 15. Validation de l'Itération 11
-
-Le test Quarkus de bout en bout couvre :
-
-1. création d'un projet ;
-2. indexation ;
-3. inspection ;
-4. recherche explicable ;
-5. endpoint d'explication de recherche ;
-6. construction de contexte sous budget ;
-7. endpoint d'explication de contexte ;
-8. erreur de validation HTTP `400` ;
-9. readiness ;
-10. métriques.
-
-Le script `scripts/validate-iteration-11.ps1` vérifie en plus que le self-smoke historique du cœur reste vert et que le runner Quarkus est réellement produit.
+Il construit le reactor complet, donc l'adaptateur REST est qualifié dans le même exact-head que le core et MCP.
