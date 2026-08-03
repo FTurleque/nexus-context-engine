@@ -52,19 +52,18 @@
     </dependencies>
 
     <build>
-        <!-- Les sources restent à leur emplacement historique afin que Phase 6
-             ne transforme pas un hardening en déplacement massif de fichiers. -->
-        <sourceDirectory>${project.parent.basedir}/src/main/java</sourceDirectory>
-        <testSourceDirectory>${project.parent.basedir}/src/test/java</testSourceDirectory>
-        <directory>${project.parent.basedir}/target</directory>
+        <!-- Les sources restent à leur emplacement historique ; seul le module
+             Maven est introduit. Les outputs Maven restent isolés dans core/target. -->
+        <sourceDirectory>${project.basedir}/../src/main/java</sourceDirectory>
+        <testSourceDirectory>${project.basedir}/../src/test/java</testSourceDirectory>
         <resources>
             <resource>
-                <directory>${project.parent.basedir}/src/main/resources</directory>
+                <directory>${project.basedir}/../src/main/resources</directory>
             </resource>
         </resources>
         <testResources>
             <testResource>
-                <directory>${project.parent.basedir}/src/test/resources</directory>
+                <directory>${project.basedir}/../src/test/resources</directory>
             </testResource>
         </testResources>
         <plugins>
@@ -72,7 +71,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
-                    <workingDirectory>${project.parent.basedir}</workingDirectory>
+                    <workingDirectory>${project.basedir}/..</workingDirectory>
                 </configuration>
             </plugin>
             <plugin>
@@ -127,11 +126,11 @@
                         <goals><goal>single</goal></goals>
                         <configuration>
                             <descriptors>
-                                <descriptor>${project.parent.basedir}/distribution/assembly.xml</descriptor>
+                                <descriptor>${project.basedir}/../distribution/assembly.xml</descriptor>
                             </descriptors>
                             <finalName>nexus-context-engine-${project.version}</finalName>
                             <appendAssemblyId>false</appendAssemblyId>
-                            <outputDirectory>${project.build.directory}/distribution</outputDirectory>
+                            <outputDirectory>${project.basedir}/../target/distribution</outputDirectory>
                         </configuration>
                     </execution>
                 </executions>
@@ -141,14 +140,30 @@
                 <artifactId>maven-antrun-plugin</artifactId>
                 <executions>
                     <execution>
+                        <id>publish-legacy-root-artifacts</id>
+                        <phase>package</phase>
+                        <goals><goal>run</goal></goals>
+                        <configuration>
+                            <target>
+                                <mkdir dir="${project.basedir}/../target"/>
+                                <copy file="${project.build.directory}/nexus-context-engine-${project.version}.jar"
+                                      tofile="${project.basedir}/../target/nexus-context-engine-${project.version}.jar"
+                                      overwrite="true"/>
+                                <copy file="${project.build.directory}/nexus-context-engine-${project.version}-cli.jar"
+                                      tofile="${project.basedir}/../target/nexus-context-engine-${project.version}-cli.jar"
+                                      overwrite="true"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>distribution-checksums</id>
                         <phase>verify</phase>
                         <goals><goal>run</goal></goals>
                         <configuration>
                             <target>
-                                <checksum file="${project.build.directory}/nexus-context-engine-${project.version}-cli.jar"
+                                <checksum file="${project.basedir}/../target/nexus-context-engine-${project.version}-cli.jar"
                                           algorithm="SHA-256" fileext=".sha256"/>
-                                <checksum file="${project.build.directory}/distribution/nexus-context-engine-${project.version}.zip"
+                                <checksum file="${project.basedir}/../target/distribution/nexus-context-engine-${project.version}.zip"
                                           algorithm="SHA-256" fileext=".sha256"/>
                             </target>
                         </configuration>
