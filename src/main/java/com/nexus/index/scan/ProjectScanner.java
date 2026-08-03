@@ -18,7 +18,31 @@ import java.util.Locale;
 
 public final class ProjectScanner {
 
+    public static final String MAX_FILE_SIZE_ENVIRONMENT_VARIABLE = "NEXUS_MAX_FILE_SIZE_BYTES";
+    public static final long DEFAULT_MAX_FILE_SIZE_BYTES = 8L * 1024L * 1024L;
+
+    private final long maxFileSizeBytes;
+
+    public ProjectScanner() {
+        this(maxFileSizeFromEnvironment());
+    }
+
+    public ProjectScanner(long maxFileSizeBytes) {
+        if (maxFileSizeBytes <= 0) {
+            throw new IllegalArgumentException("maxFileSizeBytes must be greater than zero");
+        }
+        this.maxFileSizeBytes = maxFileSizeBytes;
+    }
+
+    public long maxFileSizeBytes() {
+        return maxFileSizeBytes;
+    }
+
     public List<ScannedFile> scan(Path projectRoot) throws IOException {
+        return scanWithDiagnostics(projectRoot).files();
+    }
+
+    public ProjectScanResult scanWithDiagnostics(Path projectRoot) throws IOException {
         Path root = projectRoot.toAbsolutePath().normalize();
         if (!Files.isDirectory(root)) {
             throw new IOException("Le chemin du projet n'est pas un répertoire : " + root);
@@ -26,6 +50,8 @@ public final class ProjectScanner {
 
         ProjectIgnoreMatcher ignoreMatcher = new ProjectIgnoreMatcher(root);
         List<ScannedFile> files = new ArrayList<>();
+        List<String> diagnostics = new ArrayList<>();
+        int[] skippedFiles = {0};
 
         Files.walkFileTree(root, new SimpleFileVisitor<>() {
             @Override
@@ -45,9 +71,17 @@ public final class ProjectScanner {
                 }
 
                 Path relative = root.relativize(file);
+                String repositoryPath = toRepositoryPath(relative);
+                if (attributes.size() > maxFileSizeBytes) {
+                    skippedFiles[0]++;
+                    diagnostics.add(repositoryPath + " ignoré : " + attributes.size()
+                            + " octets > limite " + maxFileSizeBytes + " octets");
+                    return FileVisitResult.CONTINUE;
+                }
+
                 files.add(new ScannedFile(
                         file,
-                        toRepositoryPath(relative),
+                        repositoryPath,
                         language(file),
                         attributes.size(),
                         FileHasher.sha256(file),
@@ -59,7 +93,8 @@ public final class ProjectScanner {
         });
 
         files.sort(Comparator.comparing(ScannedFile::relativePath));
-        return List.copyOf(files);
+        diagnostics.sort(String::compareTo);
+        return new ProjectScanResult(files, skippedFiles[0], diagnostics);
     }
 
     private static boolean isSupportedTextSource(Path file) {
@@ -152,6 +187,24 @@ public final class ProjectScanner {
     private static int estimateTokens(long sizeBytes) {
         long estimate = Math.max(1L, (sizeBytes + 3L) / 4L);
         return estimate > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) estimate;
+    }
+
+    private static long maxFileSizeFromEnvironment() {
+        String configured = System.getenv(MAX_FILE_SIZE_ENVIRONMENT_VARIABLE);
+        if (configured == null || configured.isBlank()) {
+            return DEFAULT_MAX_FILE_SIZE_BYTES;
+        }
+        try {
+            long value = Long.parseLong(configured.trim());
+            if (value <= 0) {
+                throw new IllegalArgumentException(
+                        MAX_FILE_SIZE_ENVIRONMENT_VARIABLE + " doit être strictement positif");
+            }
+            return value;
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException(
+                    MAX_FILE_SIZE_ENVIRONMENT_VARIABLE + " doit être un entier en octets", exception);
+        }
     }
 
     private static String toRepositoryPath(Path path) {
