@@ -4,6 +4,7 @@ import com.nexus.index.FileCategory;
 import com.nexus.index.FileHasher;
 import com.nexus.index.ScannedFile;
 import com.nexus.index.SourceLanguage;
+import com.nexus.security.ProjectFileLimits;
 import com.nexus.security.ProjectPathGuard;
 
 import java.io.IOException;
@@ -20,13 +21,16 @@ import java.util.Locale;
 
 public final class ProjectScanner {
 
-    public static final String MAX_FILE_SIZE_ENVIRONMENT_VARIABLE = "NEXUS_MAX_FILE_SIZE_BYTES";
-    public static final long DEFAULT_MAX_FILE_SIZE_BYTES = 8L * 1024L * 1024L;
+    /** Compatibilité API : la politique est désormais centralisée dans ProjectFileLimits. */
+    public static final String MAX_FILE_SIZE_ENVIRONMENT_VARIABLE =
+            ProjectFileLimits.MAX_FILE_SIZE_ENVIRONMENT_VARIABLE;
+    public static final long DEFAULT_MAX_FILE_SIZE_BYTES =
+            ProjectFileLimits.DEFAULT_MAX_FILE_SIZE_BYTES;
 
     private final long maxFileSizeBytes;
 
     public ProjectScanner() {
-        this(maxFileSizeFromEnvironment());
+        this(ProjectFileLimits.maxFileSizeFromEnvironment());
     }
 
     public ProjectScanner(long maxFileSizeBytes) {
@@ -107,7 +111,7 @@ public final class ProjectScanner {
                         repositoryPath,
                         language(safeFile),
                         size,
-                        FileHasher.sha256(safeFile),
+                        FileHasher.sha256(safeFile, maxFileSizeBytes),
                         safeAttributes.lastModifiedTime().toInstant(),
                         estimateTokens(size),
                         classify(root.relativize(safeFile))));
@@ -210,24 +214,6 @@ public final class ProjectScanner {
     private static int estimateTokens(long sizeBytes) {
         long estimate = Math.max(1L, (sizeBytes + 3L) / 4L);
         return estimate > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) estimate;
-    }
-
-    private static long maxFileSizeFromEnvironment() {
-        String configured = System.getenv(MAX_FILE_SIZE_ENVIRONMENT_VARIABLE);
-        if (configured == null || configured.isBlank()) {
-            return DEFAULT_MAX_FILE_SIZE_BYTES;
-        }
-        try {
-            long value = Long.parseLong(configured.trim());
-            if (value <= 0) {
-                throw new IllegalArgumentException(
-                        MAX_FILE_SIZE_ENVIRONMENT_VARIABLE + " doit être strictement positif");
-            }
-            return value;
-        } catch (NumberFormatException exception) {
-            throw new IllegalArgumentException(
-                    MAX_FILE_SIZE_ENVIRONMENT_VARIABLE + " doit être un entier en octets", exception);
-        }
     }
 
     private static String toRepositoryPath(Path path) {
