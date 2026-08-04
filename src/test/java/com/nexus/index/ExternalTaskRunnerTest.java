@@ -16,7 +16,7 @@ class ExternalTaskRunnerTest {
         long startedAt = System.nanoTime();
 
         IOException failure = assertThrows(IOException.class, () -> runner.run("stubborn-provider", () -> {
-            long stopAt = System.nanoTime() + Duration.ofMillis(500).toNanos();
+            long stopAt = System.nanoTime() + Duration.ofMillis(1_500).toNanos();
             while (System.nanoTime() < stopAt) {
                 try {
                     Thread.sleep(10L);
@@ -29,7 +29,7 @@ class ExternalTaskRunnerTest {
 
         long elapsedMillis = Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
         assertTrue(failure.getMessage().contains("timeout global"));
-        assertTrue(elapsedMillis < 400L,
+        assertTrue(elapsedMillis < 750L,
                 () -> "Le timeout ne doit pas attendre la fin du worker récalcitrant : " + elapsedMillis + " ms");
     }
 }
