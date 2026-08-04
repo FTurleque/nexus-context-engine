@@ -1,5 +1,7 @@
 package com.nexus.persistence.sqlite;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexus.index.CodeIntelligenceSnapshot;
 import com.nexus.index.CodeSymbol;
 import com.nexus.index.FileCategory;
@@ -28,11 +30,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 public final class SqliteIndexRepository implements IndexRepository {
 
     private static final String EMBEDDED_SOURCE_PROVIDER = CodeSymbol.DEFAULT_SOURCE_PROVIDER;
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
 
     private final SqliteDatabase database;
 
@@ -63,21 +65,19 @@ public final class SqliteIndexRepository implements IndexRepository {
         if (relativePaths.isEmpty()) {
             return Map.of();
         }
+        relativePaths.forEach(path -> Objects.requireNonNull(path, "relativePaths must not contain null"));
         List<String> paths = relativePaths.stream().sorted().toList();
-        String placeholders = paths.stream().map(ignored -> "?").collect(Collectors.joining(","));
-        String sql = """
-                SELECT id, project_id, relative_path, language, size_bytes,
-                       content_hash, modified_at, estimated_tokens, category
-                FROM indexed_files
-                WHERE project_id = ? AND relative_path IN (%s)
-                ORDER BY relative_path
-                """.formatted(placeholders);
         try (Connection connection = database.openConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, projectId.toString());
-            for (int index = 0; index < paths.size(); index++) {
-                statement.setString(index + 2, paths.get(index));
-            }
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT f.id, f.project_id, f.relative_path, f.language, f.size_bytes,
+                            f.content_hash, f.modified_at, f.estimated_tokens, f.category
+                     FROM json_each(?) AS requested
+                     CROSS JOIN indexed_files f
+                     WHERE f.project_id = ? AND f.relative_path = requested.value
+                     ORDER BY f.relative_path
+                     """)) {
+            statement.setString(1, serializePaths(paths));
+            statement.setString(2, projectId.toString());
             return readFiles(statement);
         } catch (SQLException exception) {
             throw persistence("Impossible de lire les fichiers ciblés du projet " + projectId, exception);
@@ -590,6 +590,14 @@ public final class SqliteIndexRepository implements IndexRepository {
 
     private static String escapeLike(String value) {
         return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    }
+
+    private static String serializePaths(List<String> paths) {
+        try {
+            return JSON_MAPPER.writeValueAsString(paths);
+        } catch (JsonProcessingException exception) {
+            throw new PersistenceException("Impossible de sérialiser les chemins de fichiers ciblés", exception);
+        }
     }
 
     private static PersistenceException persistence(String message, SQLException exception) {
