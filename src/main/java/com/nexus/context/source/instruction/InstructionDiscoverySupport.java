@@ -3,9 +3,9 @@ package com.nexus.context.source.instruction;
 import com.nexus.index.scan.ProjectIgnoreMatcher;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.security.ProjectPathGuard;
+import com.nexus.security.SafeFileIO;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -123,7 +123,7 @@ final class InstructionDiscoverySupport {
     static String read(ProjectDescriptor project, Path file) throws IOException {
         ProjectPathGuard pathGuard = new ProjectPathGuard(project.rootPath());
         Path safeFile = pathGuard.requireRegularFile(file);
-        return Files.readString(safeFile, StandardCharsets.UTF_8);
+        return SafeFileIO.readStringNoFollow(safeFile);
     }
 
     static Path relative(ProjectDescriptor project, Path absolutePath) throws IOException {
