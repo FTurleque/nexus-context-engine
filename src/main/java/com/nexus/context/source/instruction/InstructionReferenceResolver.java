@@ -2,9 +2,9 @@ package com.nexus.context.source.instruction;
 
 import com.nexus.index.scan.ProjectIgnoreMatcher;
 import com.nexus.project.ProjectDescriptor;
+import com.nexus.security.ProjectPathGuard;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -15,7 +15,8 @@ import java.util.regex.Pattern;
 
 /**
  * Résout les références @chemin présentes dans les instructions supportées.
- * Les références sont confinées au repository et limitées à cinq niveaux.
+ * Les références sont confinées au repository, refusent les liens symboliques
+ * et sont limitées à cinq niveaux.
  */
 final class InstructionReferenceResolver {
 
@@ -23,17 +24,27 @@ final class InstructionReferenceResolver {
     private static final Pattern REFERENCE = Pattern.compile("(?:^|\\s)@([A-Za-z0-9._/\\\\-]+)");
 
     List<ResolvedReference> resolve(ProjectDescriptor project, Path instructionFile) throws IOException {
-        Path root = project.rootPath().toAbsolutePath().normalize();
+        ProjectPathGuard pathGuard = new ProjectPathGuard(project.rootPath());
+        Path root = pathGuard.root();
+        Path safeInstructionFile = pathGuard.requireRegularFile(instructionFile);
         ProjectIgnoreMatcher ignoreMatcher = new ProjectIgnoreMatcher(root);
         List<ResolvedReference> resolved = new ArrayList<>();
         Set<Path> visited = new LinkedHashSet<>();
-        visited.add(instructionFile.toAbsolutePath().normalize());
-        resolveRecursively(root, instructionFile.toAbsolutePath().normalize(), 1, ignoreMatcher, visited, resolved);
+        visited.add(safeInstructionFile);
+        resolveRecursively(
+                project,
+                pathGuard,
+                safeInstructionFile,
+                1,
+                ignoreMatcher,
+                visited,
+                resolved);
         return List.copyOf(resolved);
     }
 
     private void resolveRecursively(
-            Path root,
+            ProjectDescriptor project,
+            ProjectPathGuard pathGuard,
             Path sourceFile,
             int depth,
             ProjectIgnoreMatcher ignoreMatcher,
@@ -43,20 +54,27 @@ final class InstructionReferenceResolver {
             return;
         }
 
-        String content = InstructionDiscoverySupport.read(sourceFile);
+        String content = InstructionDiscoverySupport.read(project, sourceFile);
         for (String reference : references(content)) {
-            Path target = resolvePath(root, sourceFile.getParent(), reference);
+            Path target = resolvePath(pathGuard, sourceFile.getParent(), reference);
             if (target == null || !visited.add(target)) {
                 continue;
             }
-            registerIgnoreScopes(root, target.getParent(), ignoreMatcher);
+            registerIgnoreScopes(pathGuard.root(), target.getParent(), ignoreMatcher);
             if (ignoreMatcher.isIgnored(target, false)) {
                 continue;
             }
 
-            String referencedContent = InstructionDiscoverySupport.read(target);
-            resolved.add(new ResolvedReference(root.relativize(target), referencedContent, depth));
-            resolveRecursively(root, target, depth + 1, ignoreMatcher, visited, resolved);
+            String referencedContent = InstructionDiscoverySupport.read(project, target);
+            resolved.add(new ResolvedReference(pathGuard.root().relativize(target), referencedContent, depth));
+            resolveRecursively(
+                    project,
+                    pathGuard,
+                    target,
+                    depth + 1,
+                    ignoreMatcher,
+                    visited,
+                    resolved);
         }
     }
 
@@ -75,7 +93,7 @@ final class InstructionReferenceResolver {
         }
     }
 
-    private static Path resolvePath(Path root, Path sourceDirectory, String reference) {
+    private static Path resolvePath(ProjectPathGuard pathGuard, Path sourceDirectory, String reference) {
         if (reference.isBlank() || reference.startsWith("~")) {
             return null;
         }
@@ -91,15 +109,21 @@ final class InstructionReferenceResolver {
         }
 
         Path relativeToSource = sourceDirectory.resolve(raw).normalize();
-        if (relativeToSource.startsWith(root) && Files.isRegularFile(relativeToSource)) {
-            return relativeToSource;
+        Path safe = safeRegularFile(pathGuard, relativeToSource);
+        if (safe != null) {
+            return safe;
         }
 
-        Path relativeToRoot = root.resolve(raw).normalize();
-        if (relativeToRoot.startsWith(root) && Files.isRegularFile(relativeToRoot)) {
-            return relativeToRoot;
+        Path relativeToRoot = pathGuard.root().resolve(raw).normalize();
+        return safeRegularFile(pathGuard, relativeToRoot);
+    }
+
+    private static Path safeRegularFile(ProjectPathGuard pathGuard, Path candidate) {
+        try {
+            return pathGuard.requireRegularFile(candidate);
+        } catch (IOException unsafeOrMissing) {
+            return null;
         }
-        return null;
     }
 
     private static List<String> references(String content) {
