@@ -10,6 +10,7 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SafeFileIOTest {
 
@@ -22,6 +23,18 @@ class SafeFileIOTest {
         Files.writeString(file, "safe-content");
 
         assertEquals("safe-content", SafeFileIO.readStringNoFollow(file));
+    }
+
+    @Test
+    void refusesContentThatExceedsTheReadLimit() throws Exception {
+        Path file = temporaryDirectory.resolve("large.txt");
+        Files.writeString(file, "0123456789");
+
+        IOException failure = assertThrows(
+                IOException.class,
+                () -> SafeFileIO.readStringNoFollow(file, 5L));
+
+        assertTrue(failure.getMessage().contains("maximum 5 octets"));
     }
 
     @Test
