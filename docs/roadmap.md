@@ -136,6 +136,8 @@ Base : `develop` créée depuis le `main` post-Phase 6.
 
 Branche : `hardening/post-phase6-audit`.
 
+PR de revue : **#17**, ouverte en draft vers `develop`.
+
 **Règle de gate : aucune CI et aucun merge dans `develop` avant validation explicite.** Les statuts ci-dessous signifient uniquement « code présent sur la branche », jamais « PASS qualifié ».
 
 ## H1 — Frontière filesystem sûre
@@ -146,8 +148,13 @@ Branche : `hardening/post-phase6-audit`.
 - root canonicalisé ;
 - liens symboliques sous la racine refusés ;
 - confinement appliqué au scanner, `.gitignore`/`.nexusignore`, instructions, références et Agent Skills ;
+- ouverture du composant final avec `NOFOLLOW_LINKS` via `SafeFileIO` ;
+- politique `NEXUS_MAX_FILE_SIZE_BYTES` centralisée dans `ProjectFileLimits` ;
+- hash et flux de lecture réellement bornés au moment de la consommation ;
 - fichier réel et taille réelle revalidés avant hash/lecture ;
 - tests adversariaux symlink préparés avec skip explicite si la plateforme n'autorise pas leur création.
+
+Limite assumée : le modèle Java portable ne constitue pas un sandbox absolu contre un acteur local qui remplace agressivement un répertoire ancêtre ou crée des hard-links pendant le traitement. Le provider JDT LS opt-in reste également à qualifier contre un workspace muté activement après son scan sécurisé.
 
 ## H2 — Single-flight inter-processus
 
@@ -156,9 +163,13 @@ Branche : `hardening/post-phase6-audit`.
 - mutex JVM par `projectId` conservé ;
 - slots locaux libérés quand ils ne sont plus utilisés ;
 - `FileLock` OS par projet sous `NEXUS_HOME/locks` ;
-- diagnostic best-effort PID/date dans le fichier de lock ;
+- le répertoire de locks et le fichier final ne peuvent pas être redirigés par symlink ;
+- NEXUS ne tronque ni n'écrit de contenu métier dans le fichier de lock ;
 - la présence du fichier n'est pas assimilée à un verrou actif ;
-- test d'exclusion/réacquisition préparé.
+- index/rebuild/deep-Java et import MINOS sont coordonnés par le même verrou de mutation ;
+- tests d'exclusion/réacquisition et de redirection symlink préparés.
+
+La sémantique d'un filesystem réseau doit être qualifiée séparément ; le support cible reste un `NEXUS_HOME` local.
 
 ## H3 — Timeouts externes cohérents
 
@@ -169,7 +180,8 @@ Branche : `hardening/post-phase6-audit`.
 - worker daemon ;
 - timeout wall-clock côté appelant ;
 - annulation/interruption sans attente bloquante de fermeture d'executor ;
-- test d'une tâche volontairement non coopérative préparé.
+- test d'une tâche volontairement non coopérative préparé ;
+- test d'intégration d'un importer récalcitrant préparé, avec passage du projet en `FAILED`.
 
 Risque résiduel accepté pour ce niveau : une intégration Java qui ignore définitivement l'interruption peut survivre sur un worker daemon. Une isolation en processus/circuit-breaker n'est justifiée que si ce cas apparaît réellement avec de futurs providers.
 
@@ -189,9 +201,10 @@ Risque résiduel accepté pour ce niveau : une intégration Java qui ignore déf
 
 - fair floor déterministe par projet ;
 - pool local borné par le budget global ;
-- premier passage équitable ;
+- premier passage équitable par préfixe de ranking local ;
 - déduplication ;
 - refill global des candidats différés avec le budget rendu disponible ;
+- ordre relatif du ranking local préservé : un petit candidat moins pertinent ne peut pas dépasser un candidat mieux classé simplement parce que ce dernier dépasse le fair floor ;
 - métriques `refillTokens`, `refillItems`, `unusedTokens`.
 
 ## H6 — Sécurité de l'exposition REST
@@ -200,7 +213,7 @@ Risque résiduel accepté pour ce niveau : une intégration Java qui ignore déf
 
 - `127.0.0.1` reste le défaut ;
 - `NEXUS_REST_API_TOKEN` ou `-Dnexus.rest.api-token` active Bearer auth ;
-- host non-loopback sans token : fail-fast au bootstrap ;
+- host non-loopback sans token : fail-fast au bootstrap via bean eager ;
 - test unitaire des primitives loopback/token préparé.
 
 ## H7 — Corrections de cohérence mineures
@@ -236,10 +249,12 @@ Après validation, la qualification devra couvrir au minimum :
 - tests core + REST ;
 - scénarios symlink Windows/Linux quand supportés ;
 - deux propriétaires concurrents du même lock ;
+- redirection symlink du répertoire/fichier de lock ;
+- import MINOS concurrent d'une mutation d'index ;
 - importer/provider en timeout ;
 - readiness/liveness ;
 - REST loopback et non-loopback avec/sans token ;
-- budget fédéré ;
+- budget fédéré et ordre de ranking pendant le refill ;
 - packaging/distribution ;
 - exact-head du commit destiné à `develop`.
 
