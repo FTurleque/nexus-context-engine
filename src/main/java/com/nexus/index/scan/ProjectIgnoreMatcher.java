@@ -1,6 +1,7 @@
 package com.nexus.index.scan;
 
 import com.nexus.security.ProjectPathGuard;
+import com.nexus.security.SafeFileIO;
 import org.eclipse.jgit.ignore.IgnoreNode;
 
 import java.io.IOException;
@@ -98,7 +99,7 @@ public final class ProjectIgnoreMatcher {
 
         Path safeIgnoreFile = pathGuard.requireRegularFile(ignoreFile);
         IgnoreNode node = new IgnoreNode();
-        try (InputStream input = Files.newInputStream(safeIgnoreFile)) {
+        try (InputStream input = SafeFileIO.newInputStreamNoFollow(safeIgnoreFile)) {
             node.parse(input);
         }
         scopes.add(new ScopedIgnoreNode(directory, node));
