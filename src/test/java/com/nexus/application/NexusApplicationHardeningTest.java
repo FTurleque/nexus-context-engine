@@ -1,6 +1,7 @@
 package com.nexus.application;
 
 import com.nexus.config.NexusPaths;
+import com.nexus.index.ProjectIndexLockManager;
 import com.nexus.search.semantic.SemanticSearchConfiguration;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -51,5 +52,23 @@ class NexusApplicationHardeningTest {
 
         assertTrue(failure.getMessage().contains(unknown.toString()));
         assertTrue(failure.getMessage().contains("Projet NEXUS introuvable"));
+    }
+
+    @Test
+    void minosImportCannotRaceAnotherProjectIndexMutation() throws Exception {
+        NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("minos-home"));
+        NexusApplication application = NexusApplication.create(paths, SemanticSearchConfiguration.disabled());
+        Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("minos-project"));
+        Files.writeString(projectRoot.resolve("App.java"), "class App {}\n");
+        var project = application.registerProject(projectRoot, "minos-demo");
+        application.index(project.id(), false, false);
+
+        ProjectIndexLockManager secondOwner = ProjectIndexLockManager.fileBacked(paths);
+        try (ProjectIndexLockManager.LockHandle ignored = secondOwner.acquire(project.id())) {
+            IllegalStateException failure = assertThrows(
+                    IllegalStateException.class,
+                    () -> application.importMinos(project.id(), "{}"));
+            assertTrue(failure.getMessage().contains("mutation d'index"));
+        }
     }
 }
