@@ -1,5 +1,6 @@
 package com.nexus.index;
 
+import com.nexus.security.ProjectFileLimits;
 import com.nexus.security.SafeFileIO;
 
 import java.io.IOException;
@@ -17,14 +18,29 @@ public final class FileHasher {
     }
 
     public static String sha256(Path file) throws IOException {
+        return sha256(file, ProjectFileLimits.maxFileSizeFromEnvironment());
+    }
+
+    public static String sha256(Path file, long maxBytes) throws IOException {
+        if (maxBytes <= 0) {
+            throw new IllegalArgumentException("maxBytes must be greater than zero");
+        }
         MessageDigest digest = sha256Digest();
         byte[] buffer = new byte[BUFFER_SIZE];
+        long total = 0L;
         try (InputStream input = SafeFileIO.newInputStreamNoFollow(file)) {
             int read;
             while ((read = input.read(buffer)) >= 0) {
-                if (read > 0) {
-                    digest.update(buffer, 0, read);
+                if (read == 0) {
+                    continue;
                 }
+                total += read;
+                if (total > maxBytes) {
+                    throw new IOException(
+                            "Fichier trop volumineux au moment du hash : " + file
+                                    + " (maximum " + maxBytes + " octets)");
+                }
+                digest.update(buffer, 0, read);
             }
         }
         return HexFormat.of().formatHex(digest.digest());
