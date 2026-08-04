@@ -75,10 +75,11 @@ class NexusMcpServerIntegrationTest {
                         NexusMcpServer.class.getName())
                 .build();
 
-        try (McpSyncClient client = McpClient.sync(
+        McpSyncClient client = McpClient.sync(
                         new StdioClientTransport(parameters, McpJsonDefaults.getMapper()))
                 .requestTimeout(Duration.ofSeconds(30))
-                .build()) {
+                .build();
+        try {
             client.initialize();
 
             var tools = client.listTools().tools().stream().map(McpSchema.Tool::name).toList();
@@ -126,6 +127,9 @@ class NexusMcpServerIntegrationTest {
                             .build());
             assertFalse(Boolean.TRUE.equals(symbolResult.isError()));
             assertTrue(json(symbolResult).path("symbols").size() > 0);
+        }
+        finally {
+            assertTrue(client.closeGracefully(), "The MCP server process must stop before the test completes");
         }
     }
 
