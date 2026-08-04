@@ -16,7 +16,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Verrou inter-processus d'indexation par projet.
+ * Verrou inter-processus des mutations d'index par projet.
  *
  * <p>Le fichier de lock reste présent après libération ; c'est le verrou OS porté
  * par {@link FileLock} qui représente la propriété exclusive. Le contenu du
@@ -76,7 +76,7 @@ public final class ProjectIndexLockManager {
 
     private static IllegalStateException busy(UUID projectId) {
         return new IllegalStateException(
-                "Une indexation est déjà en cours dans un autre processus pour le projet " + projectId);
+                "Une mutation d'index est déjà en cours pour le projet " + projectId);
     }
 
     private static void writeOwnerDiagnostic(FileChannel channel) {
@@ -122,23 +122,22 @@ public final class ProjectIndexLockManager {
                 return;
             }
             closed = true;
-            IOException failure = null;
+            IOException releaseFailure = null;
             try {
                 fileLock.release();
-            } catch (IOException releaseFailure) {
-                failure = releaseFailure;
+            } catch (IOException failure) {
+                releaseFailure = failure;
             }
             try {
+                // Fermer le channel libère également les locks associés. Si la
+                // fermeture réussit, une erreur préalable de release ne doit pas
+                // transformer une mutation déjà validée en faux échec métier.
                 channel.close();
             } catch (IOException closeFailure) {
-                if (failure == null) {
-                    failure = closeFailure;
-                } else {
-                    failure.addSuppressed(closeFailure);
+                if (releaseFailure != null) {
+                    closeFailure.addSuppressed(releaseFailure);
                 }
-            }
-            if (failure != null) {
-                throw failure;
+                throw closeFailure;
             }
         }
     }
