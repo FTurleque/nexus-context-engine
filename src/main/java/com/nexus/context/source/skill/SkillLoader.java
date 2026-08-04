@@ -2,10 +2,9 @@ package com.nexus.context.source.skill;
 
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.security.ProjectPathGuard;
+import com.nexus.security.SafeFileIO;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,7 +31,7 @@ public final class SkillLoader {
                 continue;
             }
 
-            String content = Files.readString(definition, StandardCharsets.UTF_8);
+            String content = SafeFileIO.readStringNoFollow(definition);
             List<String> reasons = new ArrayList<>(match.reasons());
             reasons.add("SKILL.md complet chargé après sélection des métadonnées");
             if (!match.skill().resources().isEmpty()) {
