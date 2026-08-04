@@ -36,6 +36,15 @@ public record NexusPaths(Path home) {
         return home.resolve("indexes");
     }
 
+    public Path locksDirectory() {
+        return home.resolve("locks");
+    }
+
+    public Path projectIndexLock(UUID projectId) {
+        Objects.requireNonNull(projectId, "projectId");
+        return locksDirectory().resolve(projectId + ".index.lock");
+    }
+
     public Path projectLuceneIndex(UUID projectId) {
         Objects.requireNonNull(projectId, "projectId");
         return indexesDirectory().resolve(projectId.toString()).resolve("lucene");
