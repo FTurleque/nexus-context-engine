@@ -14,7 +14,7 @@ en recherche classée ou en contexte minimal, pertinent, explicable et borné.
 
 ## Invariants
 
-1. Java 21.
+1. JVM d'exécution 21 ou supérieure, bytecode/API ciblés sur Java 21.
 2. `NexusApplication` est le composition root applicatif partagé par CLI, REST et MCP.
 3. SQLite est canonique.
 4. Lucene lexical et sémantique sont dérivés/reconstructibles.

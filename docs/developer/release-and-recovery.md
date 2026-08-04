@@ -13,7 +13,7 @@ Le reactor Maven est piloté par le `pom.xml` racine et contient :
 - `adapters/mcp-java` ;
 - `adapters/assistant-clients`.
 
-Java 21 est obligatoire. Maven est reproductible via `mvnw.cmd` / `mvnw`, épinglé sur Maven 3.9.11.
+Maven doit être exécuté avec un JDK 21 ou supérieur ; le bytecode et les API restent ciblés sur Java 21 via `maven.compiler.release=21`. Maven est reproductible via `mvnw.cmd` / `mvnw`, épinglé sur Maven 3.9.11.
 
 ## Livrables
 
@@ -43,7 +43,7 @@ nexus-context-engine-0.2.0/
 └── README.md
 ```
 
-Elle fonctionne sans clone du dépôt et sans Maven installé sur la machine cible. Java 21 reste requis.
+Elle fonctionne sans clone du dépôt et sans Maven installé sur la machine cible. Une JVM Java 21 ou supérieure reste requise.
 
 ## Intégrité et inventaire logiciel
 
@@ -87,7 +87,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
 
 Le script impose :
 
-- Java 21 ;
+- une JVM d'exécution Java 21 ou supérieure et `maven.compiler.release=21` ;
 - Maven Wrapper fonctionnel ;
 - `clean install` du reactor complet ;
 - `scripts/self-smoke.ps1` ;

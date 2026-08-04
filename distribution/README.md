@@ -4,7 +4,7 @@ Cette archive contient la CLI NEXUS autonome. Elle ne nécessite pas de cloner l
 
 ## Prérequis
 
-- Java 21 ;
+- Java 21 ou supérieur ;
 - accès en lecture/écriture au répertoire configuré par `NEXUS_HOME` (ou au répertoire NEXUS par défaut).
 
 ## Windows

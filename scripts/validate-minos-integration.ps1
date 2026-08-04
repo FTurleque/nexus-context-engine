@@ -14,14 +14,15 @@ $ErrorActionPreference = 'Stop'
 $jar = (Resolve-Path $MinosJar).Path
 $java24 = (Resolve-Path $Java24).Path
 $fixturePath = (Resolve-Path $Fixture).Path
+$mavenWrapper = (Resolve-Path (Join-Path $PSScriptRoot '..\mvnw.cmd')).Path
 
 if ([string]::IsNullOrWhiteSpace($env:JAVA_HOME)) {
-    throw 'JAVA_HOME must point to the Java 21 JDK used to validate NEXUS.'
+    throw 'JAVA_HOME must point to a JDK 21 or newer used to validate NEXUS.'
 }
 
-$java21 = Join-Path $env:JAVA_HOME 'bin\java.exe'
-if (-not (Test-Path $java21 -PathType Leaf)) {
-    throw "JAVA_HOME does not contain java.exe: $java21"
+$nexusJava = Join-Path $env:JAVA_HOME 'bin\java.exe'
+if (-not (Test-Path $nexusJava -PathType Leaf)) {
+    throw "JAVA_HOME does not contain java.exe: $nexusJava"
 }
 
 function Get-JavaVersionText {
@@ -55,9 +56,22 @@ function Get-JavaVersionText {
     }
 }
 
-$java21Version = Get-JavaVersionText -Executable $java21
-if ($java21Version -notmatch 'version "21(?:\.|\")') {
-    throw "NEXUS replay requires JAVA_HOME on Java 21. Detected: $java21Version"
+function Get-JavaMajorVersion {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$VersionText
+    )
+
+    if ($VersionText -notmatch 'version\s+"(?<version>[0-9]+)(?:\.[^"]*)?"') {
+        return $null
+    }
+    return [int]$Matches['version']
+}
+
+$nexusJavaVersion = Get-JavaVersionText -Executable $nexusJava
+$nexusJavaMajor = Get-JavaMajorVersion -VersionText $nexusJavaVersion
+if ($null -eq $nexusJavaMajor -or $nexusJavaMajor -lt 21) {
+    throw "NEXUS replay requires JAVA_HOME on Java 21 or newer. Detected: $nexusJavaVersion"
 }
 
 $java24Version = Get-JavaVersionText -Executable $java24
@@ -84,7 +98,7 @@ if (-not (Test-Path $scip -PathType Leaf)) {
 }
 
 Write-Host 'NEXUS MINOS integration replay'
-Write-Host "  NEXUS Java : $java21"
+Write-Host "  NEXUS Java : $nexusJava"
 Write-Host "  MINOS Java : $java24"
 Write-Host "  MINOS JAR  : $jar"
 Write-Host "  NEXUS_HOME : $nexusHome"
@@ -117,7 +131,7 @@ try {
         $utf8NoBom)
 
     $env:NEXUS_HOME = $nexusHome
-    mvn `
+    & $mavenWrapper `
         '-Dtest=MinosRealIntegrationTest' `
         '-Dnexus.minos.integration.replay=true' `
         test

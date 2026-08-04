@@ -90,7 +90,7 @@ target/distribution/nexus-context-engine-0.2.0.zip.sha256
 target/sbom/bom.json
 ```
 
-Le ZIP contient `bin/nexus.cmd`, `bin/nexus` et `lib/nexus-cli.jar`. Maven n'est pas requis sur la machine cible ; Java 21 reste obligatoire.
+Le ZIP contient `bin/nexus.cmd`, `bin/nexus` et `lib/nexus-cli.jar`. Maven n'est pas requis sur la machine cible ; une JVM Java 21 ou supérieure est nécessaire.
 
 ## Correctness et scale Phase 6
 

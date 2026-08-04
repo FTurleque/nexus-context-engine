@@ -91,7 +91,7 @@ Le lifecycle Lucene par opération reste un watch item : aucune complexification
 - providers Local Skills / AI Skills Registry indépendants ;
 - reactor Maven racine + module core ;
 - Java/dépendances/BOM/plugins centralisés ;
-- Enforcer Java 21, Maven ≥3.9 et doublons de versions ;
+- Enforcer Java `[21,)`, compilation `release=21`, Maven ≥3.9 et doublons de versions ;
 - alignement Jackson MCP centralisé.
 
 ## I21 — Hardening indexation et ressources
@@ -168,6 +168,6 @@ Avant qualification : F01–F12, F14–F15, F17–F18 sont corrigés à qualifie
 powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
 ```
 
-Ce gate vérifie Java 21, Maven Wrapper, `clean install` du reactor, `scripts/self-smoke.ps1`, livrables 0.2.0, SHA-256, SBOM CycloneDX, exécution réelle de l'archive autonome et exact-head Git.
+Ce gate vérifie une JVM Java 21 ou supérieure avec compilation `release=21`, Maven Wrapper, `clean install` du reactor, `scripts/self-smoke.ps1`, livrables 0.2.0, SHA-256, SBOM CycloneDX, exécution réelle de l'archive autonome et exact-head Git.
 
 Après PASS seulement : réconciliation finale des statuts, PR, merge et fermeture de #13.
