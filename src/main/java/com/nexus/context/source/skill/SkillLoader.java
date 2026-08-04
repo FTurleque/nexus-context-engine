@@ -1,6 +1,7 @@
 package com.nexus.context.source.skill;
 
 import com.nexus.project.ProjectDescriptor;
+import com.nexus.security.ProjectPathGuard;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -17,18 +18,17 @@ public final class SkillLoader {
     public SkillActivationResult load(
             ProjectDescriptor project,
             List<SkillMatch> selectedSkills) throws IOException {
-        Path root = project.rootPath().toAbsolutePath().normalize();
+        ProjectPathGuard pathGuard = new ProjectPathGuard(project.rootPath());
         List<ActivatedSkill> activated = new ArrayList<>();
         List<String> diagnostics = new ArrayList<>();
 
         for (SkillMatch match : selectedSkills) {
-            Path definition = root.resolve(match.skill().definitionPath()).normalize();
-            if (!definition.startsWith(root)) {
-                diagnostics.add(match.skill().name() + " non chargé : chemin hors repository");
-                continue;
-            }
-            if (!Files.isRegularFile(definition)) {
-                diagnostics.add(match.skill().name() + " non chargé : SKILL.md introuvable");
+            Path definition;
+            try {
+                definition = pathGuard.requireRegularFile(
+                        pathGuard.resolve(match.skill().definitionPath()));
+            } catch (IOException unsafeOrMissing) {
+                diagnostics.add(match.skill().name() + " non chargé : " + unsafeOrMissing.getMessage());
                 continue;
             }
 
