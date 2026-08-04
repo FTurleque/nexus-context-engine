@@ -88,6 +88,7 @@ public final class NexusApplication {
     private final IndexRepository indexRepository;
     private final ProjectRegistry projectRegistry;
     private final ProjectIndexingService indexingService;
+    private final ProjectIndexLockManager projectIndexLockManager;
     private final SearchService searchService;
     private final FederatedSearchService federatedSearchService;
     private final ContextBuilder contextBuilder;
@@ -99,6 +100,7 @@ public final class NexusApplication {
             IndexRepository indexRepository,
             ProjectRegistry projectRegistry,
             ProjectIndexingService indexingService,
+            ProjectIndexLockManager projectIndexLockManager,
             SearchService searchService,
             FederatedSearchService federatedSearchService,
             ContextBuilder contextBuilder,
@@ -108,6 +110,7 @@ public final class NexusApplication {
         this.indexRepository = Objects.requireNonNull(indexRepository, "indexRepository");
         this.projectRegistry = Objects.requireNonNull(projectRegistry, "projectRegistry");
         this.indexingService = Objects.requireNonNull(indexingService, "indexingService");
+        this.projectIndexLockManager = Objects.requireNonNull(projectIndexLockManager, "projectIndexLockManager");
         this.searchService = Objects.requireNonNull(searchService, "searchService");
         this.federatedSearchService = Objects.requireNonNull(federatedSearchService, "federatedSearchService");
         this.contextBuilder = Objects.requireNonNull(contextBuilder, "contextBuilder");
@@ -132,6 +135,7 @@ public final class NexusApplication {
         IndexRepository indexRepository = new SqliteIndexRepository(database);
         ProjectRegistry projectRegistry = new ProjectRegistry(projectRepository);
         SearchIndex searchIndex = new LuceneSearchIndex(paths);
+        ProjectIndexLockManager projectIndexLockManager = ProjectIndexLockManager.fileBacked(paths);
 
         List<CodeIntelligenceProvider> codeIntelligenceProviders =
                 JdtLanguageServerCodeIntelligenceProvider.fromEnvironment(paths)
@@ -162,7 +166,7 @@ public final class NexusApplication {
                 codeIndexImporters,
                 codeIntelligenceProviders,
                 semanticIndexingService,
-                ProjectIndexLockManager.fileBacked(paths));
+                projectIndexLockManager);
 
         ContextRanker contextRanker = semanticSearchConfiguration.enabled()
                 ? new SemanticHybridContextRanker(semanticSearchConfiguration.semanticRrfWeight())
@@ -199,6 +203,7 @@ public final class NexusApplication {
                 indexRepository,
                 projectRegistry,
                 indexingService,
+                projectIndexLockManager,
                 searchService,
                 federatedSearchService,
                 contextBuilder,
@@ -267,12 +272,15 @@ public final class NexusApplication {
 
     /** Le payload est fourni explicitement ; NEXUS ne lance jamais MINOS. */
     public CodeIntelligenceSnapshot importMinos(UUID projectId, String payload) throws IOException {
-        ProjectDescriptor project = requireReadyProject(projectId);
-        Set<String> indexedFiles = indexRepository.findFiles(projectId).keySet();
-        CodeIntelligenceSnapshot snapshot = new MinosCodeIndexImporter()
-                .importPayload(project.rootPath(), indexedFiles, payload);
-        indexRepository.replaceExternalCodeIntelligence(projectId, snapshot);
-        return snapshot;
+        Objects.requireNonNull(projectId, "projectId");
+        try (ProjectIndexLockManager.LockHandle ignored = projectIndexLockManager.acquire(projectId)) {
+            ProjectDescriptor project = requireReadyProject(projectId);
+            Set<String> indexedFiles = indexRepository.findFiles(projectId).keySet();
+            CodeIntelligenceSnapshot snapshot = new MinosCodeIndexImporter()
+                    .importPayload(project.rootPath(), indexedFiles, payload);
+            indexRepository.replaceExternalCodeIntelligence(projectId, snapshot);
+            return snapshot;
+        }
     }
 
     public IndexStatistics inspect(UUID projectId) {
