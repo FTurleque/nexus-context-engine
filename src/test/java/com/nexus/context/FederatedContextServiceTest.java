@@ -92,6 +92,40 @@ class FederatedContextServiceTest {
         assertEquals("fair-floor-global-refill", bundle.metadata().get("mergePolicy"));
     }
 
+    @Test
+    void doesNotLetASmallerLowerRankedItemLeapfrogADeferredCandidate() {
+        ProjectDescriptor sparse = project("sparse-order", root.resolve("sparse-order"));
+        ProjectDescriptor rich = project("rich-order", root.resolve("rich-order"));
+
+        ContextBuilder builder = request -> {
+            if (request.projectId().equals(sparse.id())) {
+                return withinBudget(
+                        request.tokenBudget(),
+                        List.of(item(sparse.rootPath().resolve("README.md"), "sparse", 20)));
+            }
+            return withinBudget(
+                    request.tokenBudget(),
+                    List.of(
+                            item(rich.rootPath().resolve("High.java"), "high-ranked", 120),
+                            item(rich.rootPath().resolve("Low.java"), "lower-ranked", 30)));
+        };
+
+        FederatedContextBundle bundle = new FederatedContextService(builder).build(
+                List.of(sparse, rich),
+                "task",
+                200,
+                Set.of(),
+                Map.of(),
+                true);
+
+        assertEquals(3, bundle.items().size());
+        assertEquals("sparse", bundle.items().get(0).item().content());
+        assertEquals("high-ranked", bundle.items().get(1).item().content());
+        assertEquals("lower-ranked", bundle.items().get(2).item().content());
+        assertEquals(150, bundle.metadata().get("refillTokens"));
+        assertEquals(2, bundle.metadata().get("refillItems"));
+    }
+
     private static ContextBundle withinBudget(int tokenBudget, List<ContextItem> candidates) {
         List<ContextItem> selected = new ArrayList<>();
         int tokens = 0;
