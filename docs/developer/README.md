@@ -6,7 +6,7 @@ Ce répertoire distingue :
 2. **documents d'itération/benchmark** — conservent les résultats historiques ;
 3. **ADR** — conservent les décisions et ne sont pas réécrits rétroactivement.
 
-État de travail : Phase 6 sur `phase-6-consolidation-hardening`, version `0.2.0`, qualification locale exact-head en attente.
+État de travail : Phase 6 qualifiée techniquement sur `phase-6-consolidation-hardening`, version `0.2.0`, intégration de la PR #15 en attente.
 
 ## Parcours recommandé
 

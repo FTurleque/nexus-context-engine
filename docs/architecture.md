@@ -1,6 +1,6 @@
 # Architecture de NEXUS
 
-Ce document décrit l'architecture **Phase 6** de NEXUS sur `phase-6-consolidation-hardening`. Les ADR de `docs/adr/` restent historiques et ne sont pas réécrits. La Phase 6 est implémentée mais sa qualification exact-head est encore requise.
+Ce document décrit l'architecture **Phase 6** de NEXUS sur `phase-6-consolidation-hardening`. Les ADR de `docs/adr/` restent historiques et ne sont pas réécrits. La Phase 6 est implémentée et qualifiée techniquement ; son intégration reste portée par la PR #15.
 
 ## Mission
 

@@ -1,6 +1,6 @@
 # Release, installation et recovery
 
-> État Phase 6 : implémenté sur `phase-6-consolidation-hardening`, qualification locale exact-head requise avant promotion ou merge.
+> État Phase 6 : implémenté et qualifié techniquement sur `phase-6-consolidation-hardening` ; la preuve exact-head est publiée dans la PR #15, non fusionnée.
 
 ## Version produit
 
@@ -93,7 +93,7 @@ Le script impose :
 - `scripts/self-smoke.ps1` ;
 - existence et vérification des SHA-256 ;
 - SBOM CycloneDX ;
-- extraction et exécution de l'archive autonome ;
+- extraction et exécution Windows de l'archive autonome, contrôle POSIX local et smoke réel dans la CI Linux ;
 - branche exact-head `phase-6-consolidation-hardening`.
 
 Une release, un tag ou un merge ne doit pas être déclaré qualifié sans le log `=== PHASE 6 PASS ===` du head concerné.

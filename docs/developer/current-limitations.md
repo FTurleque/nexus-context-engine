@@ -1,32 +1,32 @@
 # Limites actuelles et dette de consolidation
 
-> État de travail : `phase-6-consolidation-hardening`.
-> Les correctifs Phase 6 sont implémentés mais ne sont **pas encore déclarés qualifiés** tant que `scripts/validate-phase-6.ps1` n'a pas produit `=== PHASE 6 PASS ===` sur l'exact head.
+> État qualifié : `phase-6-consolidation-hardening`.
+> Les correctifs Phase 6 sont couverts par `=== PHASE 6 PASS ===` sur l'exact head ; la preuve est publiée dans la PR #15.
 
 Ce registre suit les constats F01–F18 issus de l'audit de juillet 2026. Les ADR acceptés restent historiques et ne sont pas réécrits.
 
 ## Registre Phase 6
 
-| ID | Sujet | Traitement Phase 6 | État avant qualification |
+| ID | Sujet | Traitement Phase 6 | État Phase 6 |
 |---|---|---|---|
-| F01 | top-K fédéré sous-rempli | sur-récupération bornée avant diversification + test de régression | corrigé, à qualifier |
-| F02 | gate `READY` non uniforme | gate applicatif commun pour search/context/symbols/usages/fédération/MINOS | corrigé, à qualifier |
-| F03 | fenêtre SQLite/index dérivés | lecture interdite hors `READY`, recovery non-READY par rebuild complet, génération canonique | corrigé, à qualifier |
-| F04 | scan complet recherche symbolique | préfiltrage SQLite borné avant fuzzy Java | corrigé, à qualifier |
-| F05 | `findSymbols`/`findUsages` projet-wide | requêtes repository SQL avec `LIMIT` | corrigé, à qualifier |
-| F06 | graphe reconstruit par requête | cache dérivé par génération d'index | corrigé, à qualifier |
-| F07 | composition CLI dupliquée | CLI déléguée entièrement à `NexusApplication` | corrigé, à qualifier |
-| F08 | drift Maven | reactor parent, dependency/plugin management et Enforcer communs | corrigé, à qualifier |
-| F09 | coupling Skills Registry | providers local/registry composés indépendamment | corrigé, à qualifier |
-| F10 | absence single-flight | verrou in-process par `projectId`, second run actif refusé | corrigé, à qualifier |
-| F11 | fichiers non bornés | plafond configurable avant hash/lecture, 8 MiB par défaut, diagnostics | corrigé, à qualifier |
-| F12 | MINOS full walk | chemin applicatif validé contre `indexed_files` canonique | corrigé, à qualifier |
+| F01 | top-K fédéré sous-rempli | sur-récupération bornée avant diversification + test de régression | fermé |
+| F02 | gate `READY` non uniforme | gate applicatif commun pour search/context/symbols/usages/fédération/MINOS | fermé |
+| F03 | fenêtre SQLite/index dérivés | lecture interdite hors `READY`, recovery non-READY par rebuild complet, génération canonique | fermé |
+| F04 | scan complet recherche symbolique | préfiltrage SQLite borné avant fuzzy Java | fermé |
+| F05 | `findSymbols`/`findUsages` projet-wide | requêtes repository SQL avec `LIMIT` | fermé |
+| F06 | graphe reconstruit par requête | cache dérivé par génération d'index | fermé |
+| F07 | composition CLI dupliquée | CLI déléguée entièrement à `NexusApplication` | fermé |
+| F08 | drift Maven | reactor parent, dependency/plugin management et Enforcer communs | fermé |
+| F09 | coupling Skills Registry | providers local/registry composés indépendamment | fermé |
+| F10 | absence single-flight | verrou in-process par `projectId`, second run actif refusé | fermé |
+| F11 | fichiers non bornés | plafond configurable avant hash/lecture, 8 MiB par défaut, diagnostics | fermé |
+| F12 | MINOS full walk | chemin applicatif validé contre `indexed_files` canonique | fermé |
 | F13 | lifecycle Lucene par opération | **pas de changement sans preuve de benchmark** ; reste un watch item | différé sur preuve |
-| F14 | opt-in sémantique non uniforme | configuration environnement commune CLI/REST/MCP, désactivée par défaut | corrigé, à qualifier |
-| F15 | fédération non exposée | CLI + REST + MCP exposent recherche fédérée | corrigé, à qualifier |
+| F14 | opt-in sémantique non uniforme | configuration environnement commune CLI/REST/MCP, désactivée par défaut | fermé |
+| F15 | fédération non exposée | CLI + REST + MCP exposent recherche fédérée | fermé |
 | F16 | coûts Git/embeddings | embeddings batchables + batch Ollama ; aucun cache Git sans mesure | partiellement optimisé, watch item Git |
-| F17 | absence ContextBundle fédéré | budget global, provenance, fairness, déduplication et sources natives projet-locales | corrigé, à qualifier |
-| F18 | distribution orientée checkout | version 0.2.0, wrapper, ZIP autonome, SHA-256, SBOM, runbook recovery | corrigé, à qualifier |
+| F17 | absence ContextBundle fédéré | budget global, provenance, fairness, déduplication et sources natives projet-locales | fermé |
+| F18 | distribution orientée checkout | version 0.2.0, wrapper, ZIP autonome, SHA-256, SBOM, runbook recovery | fermé |
 
 ## Invariants renforcés
 
@@ -73,14 +73,16 @@ Ces points ne sont pas considérés comme des corrections manquantes de la Phase
 4. **Vector DB** : non justifiée par le corpus actuel.
 5. **Transport MCP distant** : hors périmètre ; stdio local reste la surface prévue.
 
-## Règle de fermeture
+## Critères de fermeture appliqués
 
-F01–F12, F14–F15, F17–F18 ne passent de « corrigé, à qualifier » à « fermé » qu'après :
+F01–F12, F14–F15 et F17–F18 sont fermés après :
 
 1. `mvnw.cmd clean install` PASS ;
 2. `scripts/self-smoke.ps1` PASS ;
 3. contrôles packaging/SBOM/checksums PASS ;
 4. exact-head confirmé par `scripts/validate-phase-6.ps1` ;
-5. réconciliation finale de la roadmap et de l'issue #13.
+5. réconciliation finale de la documentation courante.
+
+L'issue #13 reste ouverte jusqu'à l'intégration autorisée de la PR #15 ; cet état administratif ne rouvre pas les défauts techniques fermés ci-dessus.
 
 Voir aussi : `docs/developer/release-and-recovery.md` et `docs/roadmap.md`.

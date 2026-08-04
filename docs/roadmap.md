@@ -8,15 +8,15 @@ Cette feuille de route est la source de vérité active pour l'évolution de NEX
 repository  FTurleque/nexus-context-engine
 branch      phase-6-consolidation-hardening
 version     0.2.0
-Java        21
-qualification locale exact-head : EN ATTENTE
+Java        runtime >=21 / release 21
+qualification locale exact-head : PASS
 ```
 
 Principe directeur :
 
 > **qualité du contexte > correctness > passage à l'échelle > opérabilité > nombre de fonctionnalités > nombre d'intégrations.**
 
-Les ADR acceptés conservent l'historique des décisions. Les résultats historiques restent dans leurs documents dédiés. Cette roadmap décrit l'état courant du produit et les gates restant à franchir.
+Les ADR acceptés conservent l'historique des décisions. Les résultats historiques restent dans leurs documents dédiés. Cette roadmap décrit l'état courant du produit et les preuves de qualification requises avant intégration.
 
 ## État consolidé
 
@@ -28,7 +28,7 @@ Les ADR acceptés conservent l'historique des décisions. Les résultats histori
 | Phase 4 — Exposer NEXUS aux autres outils | 11 → 13 | ✅ terminée |
 | Phase 5 — Écosystème et passage à l'échelle | 14 → 17 | ✅ terminée |
 | Intégration compagnon MINOS | issue #11 / PR #12 | ✅ livrée |
-| Phase 6 — Consolidation, hardening et industrialisation | 18 → 24 | 🚧 implémentée sur branche, qualification locale requise |
+| Phase 6 — Consolidation, hardening et industrialisation | 18 → 24 | ✅ qualifiée techniquement sur branche, intégration en attente |
 
 Dernière qualification intégrée connue avant Phase 6 : Java 21, 128 sources principales, 41 sources de tests, 80 tests exécutés, 0 failure, 0 error, 6 skipped, `BUILD SUCCESS`, Sonar Quality Gate Passed. Le replay réel MINOS → NEXUS avait importé 11 symboles / 6 relations et retrouvé `GreetingPort` avec provenance `minos`.
 
@@ -56,11 +56,11 @@ Issue : **#13 — Phase 6 — Consolidation, hardening, scale et réconciliation
 
 Branche : `phase-6-consolidation-hardening`.
 
-Aucune itération ci-dessous n'est déclarée validée/livrée avant le log exact-head `=== PHASE 6 PASS ===` produit par `scripts/validate-phase-6.ps1`.
+Les itérations ci-dessous sont couvertes par le log exact-head `=== PHASE 6 PASS ===` produit par `scripts/validate-phase-6.ps1`. La preuve du head qualifié est conservée dans la PR #15.
 
 ## I18 — Correctness de recherche et cohérence des index
 
-**✅ implémentée / ⏳ qualification locale**
+**✅ implémentée / ✅ qualifiée Phase 6**
 
 - sur-récupération bornée avant diversification fédérée ;
 - test du cas FILE + SYMBOL sur le même chemin ;
@@ -71,7 +71,7 @@ Aucune itération ci-dessous n'est déclarée validée/livrée avant le log exac
 
 ## I19 — Recherche symbolique et graphe à grande échelle
 
-**✅ implémentée / ⏳ qualification locale**
+**✅ implémentée / ✅ qualifiée Phase 6**
 
 - `searchSymbols` / `searchRelations` bornés côté repository/SQLite ;
 - fuzzy Java appliqué seulement sur un pool préfiltré ;
@@ -84,7 +84,7 @@ Le lifecycle Lucene par opération reste un watch item : aucune complexification
 
 ## I20 — Composition applicative et gouvernance Maven
 
-**✅ implémentée / ⏳ qualification locale**
+**✅ implémentée / ✅ qualifiée Phase 6**
 
 - CLI entièrement déléguée à `NexusApplication` ;
 - même composition root pour CLI/REST/MCP ;
@@ -96,7 +96,7 @@ Le lifecycle Lucene par opération reste un watch item : aucune complexification
 
 ## I21 — Hardening indexation et ressources
 
-**✅ implémentée / ⏳ qualification locale**
+**✅ implémentée / ✅ qualifiée Phase 6**
 
 - single-flight in-process par projet ;
 - taille maximale configurable avant hash/lecture : `NEXUS_MAX_FILE_SIZE_BYTES`, 8 MiB par défaut ;
@@ -108,7 +108,7 @@ Le lifecycle Lucene par opération reste un watch item : aucune complexification
 
 ## I22 — Runtime, opérabilité et opt-ins
 
-**✅ implémentée / ⏳ qualification locale**
+**✅ implémentée / ✅ qualifiée Phase 6**
 
 - readiness REST avec comptes READY/INDEXING/FAILED/NOT_INDEXED ;
 - métriques index/search/context/fédération sans contenu privé dans les labels ;
@@ -121,7 +121,7 @@ Watch items conservés sur preuve : lifecycle Lucene persistant et cache Git.
 
 ## I23 — ContextBundle fédéré multi-projet
 
-**✅ implémentée / ⏳ qualification locale**
+**✅ implémentée / ✅ qualifiée Phase 6**
 
 - portée explicite de projets READY ;
 - budget global déterministe ;
@@ -139,7 +139,7 @@ L'ancienne PR draft #10 reste historique et n'est pas une source autoritative.
 
 ## I24 — Distribution, installation et release readiness
 
-**✅ implémentée / ⏳ qualification Windows ; Linux requise avant release multi-OS**
+**✅ implémentée / ✅ qualifiée Windows et Linux**
 
 - version reactor 0.2.0 ;
 - Maven Wrapper `only-script` épinglé sur Maven 3.9.11 avec SHA-512 ;
@@ -160,7 +160,7 @@ Runbook : [`developer/release-and-recovery.md`](developer/release-and-recovery.m
 
 Le détail est maintenu dans [`developer/current-limitations.md`](developer/current-limitations.md).
 
-Avant qualification : F01–F12, F14–F15, F17–F18 sont corrigés à qualifier ; F13 reste volontairement un watch item Lucene ; F16 a reçu le batching embeddings, tandis que le cache Git reste différé sur benchmark.
+Après qualification : F01–F12, F14–F15 et F17–F18 sont fermés ; F13 reste volontairement un watch item Lucene ; F16 a reçu le batching embeddings, tandis que le cache Git reste différé sur benchmark.
 
 # Gate final Phase 6
 
@@ -170,4 +170,4 @@ powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
 
 Ce gate vérifie une JVM Java 21 ou supérieure avec compilation `release=21`, Maven Wrapper, `clean install` du reactor, `scripts/self-smoke.ps1`, livrables 0.2.0, SHA-256, SBOM CycloneDX, exécution réelle de l'archive autonome et exact-head Git.
 
-Après PASS seulement : réconciliation finale des statuts, PR, merge et fermeture de #13.
+La preuve exact-head est publiée dans la PR #15. Le merge de la PR et la fermeture de #13 restent soumis à autorisation explicite.

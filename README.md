@@ -9,14 +9,14 @@ NEXUS n'est ni un chatbot, ni un LLM, ni un orchestrateur d'agents. Il se place 
 ```text
 repository   FTurleque/nexus-context-engine
 branch       phase-6-consolidation-hardening
-Java         21
+Java         runtime >=21 / release 21
 version      0.2.0
 Phase 1→5    livrées
-Phase 6      implémentée, qualification locale exact-head en attente
+Phase 6      qualifiée techniquement sur la branche, intégration en attente
 MINOS        issue #11 / PR #12 livrée
 ```
 
-La Phase 6 ne doit pas être annoncée comme validée avant `=== PHASE 6 PASS ===` de `scripts/validate-phase-6.ps1` sur le head concerné.
+La preuve exact-head `=== PHASE 6 PASS ===` du head qualifié est publiée dans la PR #15. Le merge et la fermeture de l'issue #13 restent des décisions d'intégration distinctes.
 
 ## Capacités
 
