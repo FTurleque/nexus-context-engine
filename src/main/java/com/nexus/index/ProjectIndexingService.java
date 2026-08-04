@@ -8,10 +8,9 @@ import com.nexus.project.ProjectRepository;
 import com.nexus.search.SearchDocument;
 import com.nexus.search.SearchIndex;
 import com.nexus.search.semantic.SemanticIndexingService;
+import com.nexus.security.SafeFileIO;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -234,7 +233,7 @@ public final class ProjectIndexingService {
                             scannedFile.relativePath(),
                             scannedFile.language(),
                             scannedFile.category(),
-                            Files.readString(scannedFile.absolutePath(), StandardCharsets.UTF_8),
+                            SafeFileIO.readStringNoFollow(scannedFile.absolutePath()),
                             analysis.symbols()));
                 }
             }
