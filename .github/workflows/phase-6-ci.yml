@@ -58,3 +58,9 @@ jobs:
         run: |
           chmod +x ./mvnw
           ./mvnw -B clean install
+
+      - name: Run packaged Linux distribution
+        run: |
+          unzip -q target/distribution/nexus-context-engine-0.2.0.zip -d target/linux-distribution-smoke
+          test -x target/linux-distribution-smoke/nexus-context-engine-0.2.0/bin/nexus
+          target/linux-distribution-smoke/nexus-context-engine-0.2.0/bin/nexus --version --json | grep -F '"version":"0.2.0"'

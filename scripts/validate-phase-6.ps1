@@ -135,6 +135,28 @@ try {
     if ($sbomJson.bomFormat -ne "CycloneDX") {
         throw "Le SBOM genere n'est pas au format CycloneDX."
     }
+    if ($sbomJson.specVersion -ne "1.6") {
+        throw "Version CycloneDX inattendue : $($sbomJson.specVersion)"
+    }
+    if ($null -eq $sbomJson.metadata.component -or
+            $sbomJson.metadata.component.name -ne "nexus-context-engine-parent" -or
+            $sbomJson.metadata.component.version -ne "0.2.0") {
+        throw "Le composant racine du SBOM ne decrit pas NEXUS 0.2.0."
+    }
+    $requiredModules = @(
+        "nexus-context-engine",
+        "nexus-rest-quarkus",
+        "nexus-mcp-java",
+        "nexus-assistant-clients"
+    )
+    $sbomModules = @($sbomJson.components |
+            Where-Object { $_.group -eq "io.github.fturleque" -and $_.version -eq "0.2.0" } |
+            ForEach-Object { $_.name })
+    foreach ($requiredModule in $requiredModules) {
+        if ($sbomModules -notcontains $requiredModule) {
+            throw "Module NEXUS absent du SBOM : $requiredModule"
+        }
+    }
 
     Write-Host "[7/8] Archive installable sans clone"
     $extractRoot = Join-Path $repoRoot "target\phase-6-distribution-smoke"
@@ -145,6 +167,18 @@ try {
     $launcher = Get-ChildItem -Path $extractRoot -Filter "nexus.cmd" -Recurse -File | Select-Object -First 1
     if ($null -eq $launcher) {
         throw "Launcher Windows nexus.cmd absent de l'archive."
+    }
+    $posixLauncher = Get-ChildItem -Path $extractRoot -Filter "nexus" -Recurse -File | Select-Object -First 1
+    if ($null -eq $posixLauncher) {
+        throw "Launcher POSIX nexus absent de l'archive."
+    }
+    $posixBytes = [System.IO.File]::ReadAllBytes($posixLauncher.FullName)
+    if ($posixBytes -contains [byte]13) {
+        throw "Le launcher POSIX contient des retours chariot CR et ne peut pas etre distribue."
+    }
+    $posixText = [System.Text.Encoding]::UTF8.GetString($posixBytes)
+    if (-not $posixText.StartsWith("#!/bin/sh`n")) {
+        throw "Le launcher POSIX ne possede pas le shebang attendu."
     }
     $versionOutput = & $launcher.FullName --version --json | Out-String
     if ($LASTEXITCODE -ne 0) {

@@ -2,7 +2,7 @@
 set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 if ! command -v java >/dev/null 2>&1; then
-  echo "Java 21 est requis pour exécuter NEXUS." >&2
+  echo "Java 21 ou supérieur est requis pour exécuter NEXUS." >&2
   exit 1
 fi
 exec java -jar "${SCRIPT_DIR}/../lib/nexus-cli.jar" "$@"
