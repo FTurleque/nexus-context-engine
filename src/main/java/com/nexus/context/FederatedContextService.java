@@ -5,7 +5,6 @@ import com.nexus.search.CandidateType;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -100,11 +99,15 @@ public final class FederatedContextService {
         Map<ContentKey, UUID> seen = new LinkedHashMap<>();
         Map<String, Integer> selectedTokensByProject = new LinkedHashMap<>();
         Map<String, Integer> selectedItemsByProject = new LinkedHashMap<>();
+        boolean[] fairFloorClosed = new boolean[scope.size()];
         int[] crossProjectDuplicates = {0};
         int selectedTokens = 0;
         int maxItems = perProjectItems.stream().mapToInt(List::size).max().orElse(0);
 
-        // Passe 1 : chaque projet peut consommer son fair floor, en round-robin.
+        // Passe 1 : chaque projet peut consommer un préfixe de son ranking local
+        // dans son fair floor. Dès que le prochain candidat ne tient plus, tous
+        // les candidats suivants de ce projet sont différés afin de ne jamais
+        // faire passer un résultat local moins bien classé devant lui.
         for (int itemIndex = 0; itemIndex < maxItems; itemIndex++) {
             for (int projectIndex = 0; projectIndex < scope.size(); projectIndex++) {
                 List<FederatedContextItem> projectItems = perProjectItems.get(projectIndex);
@@ -114,14 +117,17 @@ public final class FederatedContextService {
                 FederatedContextItem federated = projectItems.get(itemIndex);
                 ContextItem item = federated.item();
                 String projectId = federated.project().id().toString();
-                int fairAllocation = allocatedByProject.get(projectId);
-                int projectTokens = selectedTokensByProject.getOrDefault(projectId, 0);
 
-                if (projectTokens + item.estimatedTokens() > fairAllocation) {
+                if (fairFloorClosed[projectIndex]) {
                     deferred.add(federated);
                     continue;
                 }
-                if (selectedTokens + item.estimatedTokens() > tokenBudget) {
+
+                int fairAllocation = allocatedByProject.get(projectId);
+                int projectTokens = selectedTokensByProject.getOrDefault(projectId, 0);
+                if (projectTokens + item.estimatedTokens() > fairAllocation
+                        || selectedTokens + item.estimatedTokens() > tokenBudget) {
+                    fairFloorClosed[projectIndex] = true;
                     deferred.add(federated);
                     continue;
                 }
@@ -136,8 +142,9 @@ public final class FederatedContextService {
             }
         }
 
-        // Passe 2 : tous les candidats qui dépassaient leur fair floor peuvent
-        // réutiliser le budget laissé libre par les projets clairsemés ou par le dedup.
+        // Passe 2 : les préfixes différés réutilisent le budget laissé libre par
+        // les projets clairsemés ou par le dedup. L'ordre de deferred est issu du
+        // round-robin de la passe 1 et conserve l'ordre relatif de chaque projet.
         int refillTokens = 0;
         int refillItems = 0;
         for (FederatedContextItem federated : deferred) {
