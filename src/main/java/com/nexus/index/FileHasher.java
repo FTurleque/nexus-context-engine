@@ -1,8 +1,9 @@
 package com.nexus.index;
 
+import com.nexus.security.SafeFileIO;
+
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -18,7 +19,7 @@ public final class FileHasher {
     public static String sha256(Path file) throws IOException {
         MessageDigest digest = sha256Digest();
         byte[] buffer = new byte[BUFFER_SIZE];
-        try (InputStream input = Files.newInputStream(file)) {
+        try (InputStream input = SafeFileIO.newInputStreamNoFollow(file)) {
             int read;
             while ((read = input.read(buffer)) >= 0) {
                 if (read > 0) {
