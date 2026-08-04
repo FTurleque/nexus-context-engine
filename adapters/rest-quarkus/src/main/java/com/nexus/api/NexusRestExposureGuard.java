@@ -1,5 +1,6 @@
 package com.nexus.api;
 
+import io.quarkus.runtime.Startup;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -7,6 +8,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 /**
  * Empêche une exposition réseau accidentelle de l'API de contexte sans secret.
  */
+@Startup
 @ApplicationScoped
 public class NexusRestExposureGuard {
 
