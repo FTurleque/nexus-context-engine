@@ -2,6 +2,7 @@ package com.nexus.security;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -22,7 +23,8 @@ import java.util.Set;
  *
  * <p>Ces primitives complètent {@link ProjectPathGuard}. Le guard vérifie la
  * frontière et les composants du chemin ; {@code SafeFileIO} réduit la fenêtre
- * TOCTOU entre cette validation et l'ouverture effective du fichier.</p>
+ * TOCTOU entre cette validation et l'ouverture effective du fichier. Tous les
+ * flux publics sont également bornés par la politique de taille projet.</p>
  */
 public final class SafeFileIO {
 
@@ -35,12 +37,24 @@ public final class SafeFileIO {
     }
 
     public static InputStream newInputStreamNoFollow(Path file) throws IOException {
+        return newInputStreamNoFollow(file, ProjectFileLimits.maxFileSizeFromEnvironment());
+    }
+
+    public static InputStream newInputStreamNoFollow(Path file, long maxBytes) throws IOException {
+        if (maxBytes <= 0) {
+            throw new IllegalArgumentException("maxBytes must be greater than zero");
+        }
         SeekableByteChannel channel = Files.newByteChannel(file, READ_NOFOLLOW);
-        return Channels.newInputStream(channel);
+        return new BoundedInputStream(Channels.newInputStream(channel), file, maxBytes);
     }
 
     public static BufferedReader newBufferedReaderNoFollow(Path file, Charset charset) throws IOException {
         return new BufferedReader(new InputStreamReader(newInputStreamNoFollow(file), charset));
+    }
+
+    public static BufferedReader newBufferedReaderNoFollow(Path file, Charset charset, long maxBytes)
+            throws IOException {
+        return new BufferedReader(new InputStreamReader(newInputStreamNoFollow(file, maxBytes), charset));
     }
 
     public static String readStringNoFollow(Path file) throws IOException {
@@ -48,27 +62,56 @@ public final class SafeFileIO {
     }
 
     public static String readStringNoFollow(Path file, long maxBytes) throws IOException {
-        if (maxBytes <= 0) {
-            throw new IllegalArgumentException("maxBytes must be greater than zero");
-        }
-        try (InputStream input = newInputStreamNoFollow(file);
+        try (InputStream input = newInputStreamNoFollow(file, maxBytes);
              ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             byte[] buffer = new byte[BUFFER_SIZE];
-            long total = 0L;
             int read;
             while ((read = input.read(buffer)) >= 0) {
-                if (read == 0) {
-                    continue;
+                if (read > 0) {
+                    output.write(buffer, 0, read);
                 }
-                total += read;
-                if (total > maxBytes) {
-                    throw new IOException(
-                            "Fichier trop volumineux au moment de la lecture : " + file
-                                    + " (maximum " + maxBytes + " octets)");
-                }
-                output.write(buffer, 0, read);
             }
             return output.toString(StandardCharsets.UTF_8);
+        }
+    }
+
+    private static final class BoundedInputStream extends FilterInputStream {
+
+        private final Path file;
+        private final long maxBytes;
+        private long consumed;
+
+        private BoundedInputStream(InputStream delegate, Path file, long maxBytes) {
+            super(delegate);
+            this.file = file;
+            this.maxBytes = maxBytes;
+        }
+
+        @Override
+        public int read() throws IOException {
+            int value = super.read();
+            if (value >= 0) {
+                record(1L);
+            }
+            return value;
+        }
+
+        @Override
+        public int read(byte[] buffer, int offset, int length) throws IOException {
+            int read = super.read(buffer, offset, length);
+            if (read > 0) {
+                record(read);
+            }
+            return read;
+        }
+
+        private void record(long bytes) throws IOException {
+            consumed += bytes;
+            if (consumed > maxBytes) {
+                throw new IOException(
+                        "Fichier trop volumineux pendant la lecture : " + file
+                                + " (maximum " + maxBytes + " octets)");
+            }
         }
     }
 }
