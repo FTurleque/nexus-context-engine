@@ -17,6 +17,7 @@ import com.nexus.index.LanguageAnalyzer;
 import com.nexus.index.RelationKind;
 import com.nexus.index.SymbolKind;
 import com.nexus.index.SymbolRelation;
+import com.nexus.security.SafeFileIO;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -37,7 +38,8 @@ public final class JavaParserLanguageAnalyzer implements LanguageAnalyzer {
     @Override
     public AnalysisResult analyze(Path projectRoot, Path file) throws IOException {
         JavaParser parser = new JavaParser(new ParserConfiguration().setLanguageLevel(LANGUAGE_LEVEL));
-        CompilationUnit unit = parser.parse(file)
+        String source = SafeFileIO.readStringNoFollow(file);
+        CompilationUnit unit = parser.parse(source)
                 .getResult()
                 .orElseThrow(() -> new IOException("Impossible d'analyser le fichier Java 21 : " + file));
         String packageName = unit.getPackageDeclaration()
