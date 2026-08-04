@@ -24,12 +24,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
@@ -46,8 +40,9 @@ public final class ProjectIndexingService {
     private final List<CodeIndexImporter> codeIndexImporters;
     private final List<CodeIntelligenceProvider> codeIntelligenceProviders;
     private final SemanticIndexingService semanticIndexingService;
-    private final Duration providerTimeout;
-    private final ConcurrentMap<UUID, ReentrantLock> projectLocks = new ConcurrentHashMap<>();
+    private final ExternalTaskRunner externalTaskRunner;
+    private final ProjectIndexLockManager projectIndexLockManager;
+    private final ConcurrentMap<UUID, LockSlot> projectLocks = new ConcurrentHashMap<>();
 
     public ProjectIndexingService(
             ProjectRepository projectRepository,
@@ -91,7 +86,22 @@ public final class ProjectIndexingService {
             SemanticIndexingService semanticIndexingService) {
         this(projectRepository, indexRepository, scanner, analyzers, searchIndex,
                 codeIndexImporters, codeIntelligenceProviders, semanticIndexingService,
-                providerTimeoutFromEnvironment());
+                providerTimeoutFromEnvironment(), ProjectIndexLockManager.processLocalOnly());
+    }
+
+    public ProjectIndexingService(
+            ProjectRepository projectRepository,
+            IndexRepository indexRepository,
+            ProjectScanner scanner,
+            List<LanguageAnalyzer> analyzers,
+            SearchIndex searchIndex,
+            List<CodeIndexImporter> codeIndexImporters,
+            List<CodeIntelligenceProvider> codeIntelligenceProviders,
+            SemanticIndexingService semanticIndexingService,
+            ProjectIndexLockManager projectIndexLockManager) {
+        this(projectRepository, indexRepository, scanner, analyzers, searchIndex,
+                codeIndexImporters, codeIntelligenceProviders, semanticIndexingService,
+                providerTimeoutFromEnvironment(), projectIndexLockManager);
     }
 
     public ProjectIndexingService(
@@ -104,6 +114,22 @@ public final class ProjectIndexingService {
             List<CodeIntelligenceProvider> codeIntelligenceProviders,
             SemanticIndexingService semanticIndexingService,
             Duration providerTimeout) {
+        this(projectRepository, indexRepository, scanner, analyzers, searchIndex,
+                codeIndexImporters, codeIntelligenceProviders, semanticIndexingService,
+                providerTimeout, ProjectIndexLockManager.processLocalOnly());
+    }
+
+    public ProjectIndexingService(
+            ProjectRepository projectRepository,
+            IndexRepository indexRepository,
+            ProjectScanner scanner,
+            List<LanguageAnalyzer> analyzers,
+            SearchIndex searchIndex,
+            List<CodeIndexImporter> codeIndexImporters,
+            List<CodeIntelligenceProvider> codeIntelligenceProviders,
+            SemanticIndexingService semanticIndexingService,
+            Duration providerTimeout,
+            ProjectIndexLockManager projectIndexLockManager) {
         this.projectRepository = Objects.requireNonNull(projectRepository, "projectRepository");
         this.indexRepository = Objects.requireNonNull(indexRepository, "indexRepository");
         this.scanner = Objects.requireNonNull(scanner, "scanner");
@@ -113,10 +139,8 @@ public final class ProjectIndexingService {
         this.codeIntelligenceProviders = List.copyOf(
                 Objects.requireNonNull(codeIntelligenceProviders, "codeIntelligenceProviders"));
         this.semanticIndexingService = semanticIndexingService;
-        this.providerTimeout = Objects.requireNonNull(providerTimeout, "providerTimeout");
-        if (providerTimeout.isZero() || providerTimeout.isNegative()) {
-            throw new IllegalArgumentException("providerTimeout must be greater than zero");
-        }
+        this.externalTaskRunner = new ExternalTaskRunner(Objects.requireNonNull(providerTimeout, "providerTimeout"));
+        this.projectIndexLockManager = Objects.requireNonNull(projectIndexLockManager, "projectIndexLockManager");
     }
 
     public IndexingReport index(UUID projectId) throws IOException {
@@ -140,14 +164,16 @@ public final class ProjectIndexingService {
             boolean explicitRebuild,
             boolean includeCodeIntelligenceProviders) throws IOException {
         Objects.requireNonNull(projectId, "projectId");
-        ReentrantLock lock = projectLocks.computeIfAbsent(projectId, ignored -> new ReentrantLock());
-        if (!lock.tryLock()) {
+        LockSlot lockSlot = retainProjectLock(projectId);
+        if (!lockSlot.lock.tryLock()) {
+            releaseProjectLock(projectId, lockSlot);
             throw new IllegalStateException("Une indexation est déjà en cours pour le projet " + projectId);
         }
-        try {
+        try (ProjectIndexLockManager.LockHandle ignored = projectIndexLockManager.acquire(projectId)) {
             return indexLocked(projectId, explicitRebuild, includeCodeIntelligenceProviders);
         } finally {
-            lock.unlock();
+            lockSlot.lock.unlock();
+            releaseProjectLock(projectId, lockSlot);
         }
     }
 
@@ -163,9 +189,9 @@ public final class ProjectIndexingService {
         }
 
         // Tout état persistant non READY, y compris INDEXING après crash, impose
-        // une reconstruction complète. La concurrence active est gérée par le
-        // verrou in-process ci-dessus, pas par un état persistant qui pourrait
-        // rester bloqué après l'arrêt brutal du processus.
+        // une reconstruction complète. La concurrence active est gérée par les
+        // verrous single-flight JVM + OS, pas par un état persistant susceptible
+        // de rester bloqué après l'arrêt brutal d'un processus.
         boolean fullRebuild = explicitRebuild || project.indexStatus() != IndexStatus.READY;
         Instant startedAt = Instant.now();
         projectRepository.save(withState(project, IndexStatus.INDEXING, project.lastIndexedAt(), project.languages()));
@@ -261,8 +287,10 @@ public final class ProjectIndexingService {
             Map<String, Long> providerDurationsMs) throws IOException {
         for (CodeIndexImporter importer : codeIndexImporters) {
             long startedAt = System.nanoTime();
-            CodeIntelligenceSnapshot snapshot = importer.importIndex(projectRoot)
-                    .orElseGet(() -> CodeIntelligenceSnapshot.empty(importer.sourceProvider()));
+            CodeIntelligenceSnapshot snapshot = externalTaskRunner.run(
+                    "importer " + importer.sourceProvider(),
+                    () -> importer.importIndex(projectRoot)
+                            .orElseGet(() -> CodeIntelligenceSnapshot.empty(importer.sourceProvider())));
             validateSnapshotProvider(importer.sourceProvider(), snapshot);
             indexRepository.replaceExternalCodeIntelligence(projectId, snapshot);
             long durationMs = elapsedMillis(startedAt);
@@ -280,7 +308,9 @@ public final class ProjectIndexingService {
             Map<String, Long> providerDurationsMs) throws IOException {
         for (CodeIntelligenceProvider provider : codeIntelligenceProviders) {
             long startedAt = System.nanoTime();
-            CodeIntelligenceSnapshot snapshot = analyzeWithTimeout(provider, projectRoot);
+            CodeIntelligenceSnapshot snapshot = externalTaskRunner.run(
+                    "provider " + provider.sourceProvider(),
+                    () -> provider.analyze(projectRoot));
             validateSnapshotProvider(provider.sourceProvider(), snapshot);
             indexRepository.replaceExternalCodeIntelligence(projectId, snapshot);
             long durationMs = elapsedMillis(startedAt);
@@ -288,35 +318,6 @@ public final class ProjectIndexingService {
             diagnostics.add("provider " + provider.sourceProvider() + " : "
                     + durationMs + " ms, " + snapshot.symbols().size()
                     + " symbole(s), " + snapshot.relations().size() + " relation(s)");
-        }
-    }
-
-    private CodeIntelligenceSnapshot analyzeWithTimeout(
-            CodeIntelligenceProvider provider,
-            java.nio.file.Path projectRoot) throws IOException {
-        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            Future<CodeIntelligenceSnapshot> future = executor.submit(() -> provider.analyze(projectRoot));
-            try {
-                return future.get(providerTimeout.toMillis(), TimeUnit.MILLISECONDS);
-            } catch (TimeoutException exception) {
-                future.cancel(true);
-                throw new IOException(
-                        "Le provider " + provider.sourceProvider() + " a dépassé le timeout global de "
-                                + providerTimeout.toSeconds() + " s", exception);
-            } catch (InterruptedException exception) {
-                future.cancel(true);
-                Thread.currentThread().interrupt();
-                throw new IOException("L'exécution du provider " + provider.sourceProvider() + " a été interrompue", exception);
-            } catch (ExecutionException exception) {
-                Throwable cause = exception.getCause();
-                if (cause instanceof IOException ioException) {
-                    throw ioException;
-                }
-                if (cause instanceof RuntimeException runtimeException) {
-                    throw runtimeException;
-                }
-                throw new IOException("Le provider " + provider.sourceProvider() + " a échoué", cause);
-            }
         }
     }
 
@@ -382,6 +383,24 @@ public final class ProjectIndexingService {
         }
     }
 
+    private LockSlot retainProjectLock(UUID projectId) {
+        return projectLocks.compute(projectId, (ignored, existing) -> {
+            LockSlot slot = existing == null ? new LockSlot() : existing;
+            slot.users++;
+            return slot;
+        });
+    }
+
+    private void releaseProjectLock(UUID projectId, LockSlot expected) {
+        projectLocks.computeIfPresent(projectId, (ignored, existing) -> {
+            if (existing != expected) {
+                return existing;
+            }
+            existing.users--;
+            return existing.users == 0 ? null : existing;
+        });
+    }
+
     private static ProjectDescriptor withState(
             ProjectDescriptor project,
             IndexStatus status,
@@ -418,5 +437,10 @@ public final class ProjectIndexingService {
 
     private static long elapsedMillis(long startedAt) {
         return Math.max(0L, (System.nanoTime() - startedAt) / 1_000_000L);
+    }
+
+    private static final class LockSlot {
+        private final ReentrantLock lock = new ReentrantLock();
+        private int users;
     }
 }
