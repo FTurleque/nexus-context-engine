@@ -2,6 +2,7 @@ package com.nexus.context.source.instruction;
 
 import com.nexus.index.scan.ProjectIgnoreMatcher;
 import com.nexus.project.ProjectDescriptor;
+import com.nexus.security.ProjectPathGuard;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -22,7 +23,8 @@ final class InstructionDiscoverySupport {
     }
 
     static List<Path> findNamedFiles(ProjectDescriptor project, Set<String> names) throws IOException {
-        Path root = project.rootPath().toAbsolutePath().normalize();
+        ProjectPathGuard pathGuard = new ProjectPathGuard(project.rootPath());
+        Path root = pathGuard.root();
         ProjectIgnoreMatcher ignoreMatcher = new ProjectIgnoreMatcher(root);
         Set<String> normalizedNames = names.stream()
                 .map(name -> name.toLowerCase(Locale.ROOT))
@@ -41,13 +43,20 @@ final class InstructionDiscoverySupport {
             }
 
             @Override
-            public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
-                if (ignoreMatcher.isIgnored(file, false)) {
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+                if (ignoreMatcher.isIgnored(file, false)
+                        || attributes.isSymbolicLink()
+                        || Files.isSymbolicLink(file)
+                        || !attributes.isRegularFile()) {
                     return FileVisitResult.CONTINUE;
                 }
                 String name = file.getFileName().toString().toLowerCase(Locale.ROOT);
                 if (normalizedNames.contains(name)) {
-                    matches.add(file);
+                    try {
+                        matches.add(pathGuard.requireRegularFile(file));
+                    } catch (IOException unsafePath) {
+                        // Une entrée devenue non sûre pendant le scan n'est jamais exposée au provider.
+                    }
                 }
                 return FileVisitResult.CONTINUE;
             }
@@ -59,9 +68,12 @@ final class InstructionDiscoverySupport {
 
     static List<Path> findFilesBelow(ProjectDescriptor project, Path relativeDirectory, String suffix)
             throws IOException {
-        Path root = project.rootPath().toAbsolutePath().normalize();
-        Path directory = root.resolve(relativeDirectory).normalize();
-        if (!directory.startsWith(root) || !Files.isDirectory(directory)) {
+        ProjectPathGuard pathGuard = new ProjectPathGuard(project.rootPath());
+        Path root = pathGuard.root();
+        Path directory;
+        try {
+            directory = pathGuard.requireDirectory(pathGuard.resolve(relativeDirectory));
+        } catch (IOException missingOrUnsafeDirectory) {
             return List.of();
         }
 
@@ -71,7 +83,7 @@ final class InstructionDiscoverySupport {
             @Override
             public FileVisitResult preVisitDirectory(Path current, BasicFileAttributes attributes)
                     throws IOException {
-                if (!current.equals(root) && ignoreMatcher.isIgnored(current, true)) {
+                if (!current.equals(directory) && ignoreMatcher.isIgnored(current, true)) {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
                 ignoreMatcher.registerDirectory(current);
@@ -79,11 +91,20 @@ final class InstructionDiscoverySupport {
             }
 
             @Override
-            public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
-                if (!ignoreMatcher.isIgnored(file, false)
-                        && file.getFileName().toString().toLowerCase(Locale.ROOT)
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+                if (ignoreMatcher.isIgnored(file, false)
+                        || attributes.isSymbolicLink()
+                        || Files.isSymbolicLink(file)
+                        || !attributes.isRegularFile()) {
+                    return FileVisitResult.CONTINUE;
+                }
+                if (file.getFileName().toString().toLowerCase(Locale.ROOT)
                         .endsWith(suffix.toLowerCase(Locale.ROOT))) {
-                    matches.add(file);
+                    try {
+                        matches.add(pathGuard.requireRegularFile(file));
+                    } catch (IOException unsafePath) {
+                        // Ignore une entrée remplacée par un lien ou sortie de la frontière entre-temps.
+                    }
                 }
                 return FileVisitResult.CONTINUE;
             }
@@ -93,12 +114,16 @@ final class InstructionDiscoverySupport {
         return List.copyOf(matches);
     }
 
-    static String read(Path file) throws IOException {
-        return Files.readString(file, StandardCharsets.UTF_8);
+    static String read(ProjectDescriptor project, Path file) throws IOException {
+        ProjectPathGuard pathGuard = new ProjectPathGuard(project.rootPath());
+        Path safeFile = pathGuard.requireRegularFile(file);
+        return Files.readString(safeFile, StandardCharsets.UTF_8);
     }
 
-    static Path relative(ProjectDescriptor project, Path absolutePath) {
-        return project.rootPath().toAbsolutePath().normalize().relativize(absolutePath.toAbsolutePath().normalize());
+    static Path relative(ProjectDescriptor project, Path absolutePath) throws IOException {
+        ProjectPathGuard pathGuard = new ProjectPathGuard(project.rootPath());
+        Path safePath = pathGuard.requireRegularFile(absolutePath);
+        return pathGuard.root().relativize(safePath);
     }
 
     static boolean directoryScopeApplies(Path instructionRelativePath, List<Path> targetPaths) {
