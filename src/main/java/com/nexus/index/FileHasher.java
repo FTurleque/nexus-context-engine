@@ -28,7 +28,7 @@ public final class FileHasher {
         MessageDigest digest = sha256Digest();
         byte[] buffer = new byte[BUFFER_SIZE];
         long total = 0L;
-        try (InputStream input = SafeFileIO.newInputStreamNoFollow(file)) {
+        try (InputStream input = SafeFileIO.newInputStreamNoFollow(file, maxBytes)) {
             int read;
             while ((read = input.read(buffer)) >= 0) {
                 if (read == 0) {
