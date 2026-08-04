@@ -1,133 +1,111 @@
 # Adaptateur MCP Java
 
-## 1. Objectif
+L'adaptateur MCP expose NEXUS aux assistants compatibles Model Context Protocol sans introduire le protocole dans le cœur.
 
-L'adaptateur MCP expose les capacités NEXUS à des assistants et agents compatibles avec le Model Context Protocol sans introduire le protocole dans le cœur.
-
-Le module est isolé dans :
+## Stack
 
 ```text
-adapters/mcp-java
+module      adapters/mcp-java
+Java        21
+MCP SDK     2.0.0
+transport   STDIO
+version     NEXUS 0.2.0
 ```
 
-Il dépend du JAR `nexus-context-engine`, tandis que le cœur ne dépend jamais du SDK MCP.
+Le MCP SDK et Jackson sont gouvernés par le parent Maven Phase 6. Le conflit de versions Jackson précédemment traité manuellement est désormais couvert par la gestion centrale des dépendances.
 
-## 2. Stack
-
-- Java 21 ;
-- SDK Java MCP officiel `2.0.0` ;
-- transport STDIO ;
-- mapper Jackson 2 fourni par `mcp-json-jackson2` ;
-- packaging autonome via Maven Shade.
-
-La version du SDK est figée dans `adapters/mcp-java/pom.xml` pour rendre les validations reproductibles.
-
-## 3. Architecture
+## Architecture
 
 ```text
 Client MCP
-   │
-   │ JSON-RPC / STDIO
-   ▼
-SDK Java MCP officiel
-   │
-   ▼
+   ↓ JSON-RPC / STDIO
 NexusMcpServer
-   │
-   ▼
+   ↓
 NexusMcpTools
-   │
-   ▼
+   ↓
 NexusApplication
-   │
-   ├── ProjectRegistry
-   ├── ProjectIndexingService
-   ├── SearchService
-   └── ContextBuilder
+   ├─ SearchService
+   ├─ FederatedSearchService
+   ├─ DefaultContextBuilder
+   └─ FederatedContextService
 ```
 
-`NexusApplication` est indépendante de MCP et de Quarkus. L'adaptateur REST délègue également à cette façade, ce qui réduit le risque de divergence entre clients.
+CLI, REST et MCP partagent donc les mêmes gates READY, providers, ranking et opt-ins.
 
-## 4. Transport STDIO
+## Transport STDIO
 
-Le premier transport MCP est STDIO.
+`stdout` reste réservé au transport JSON-RPC. Aucun log applicatif ne doit y être écrit. Les diagnostics utilisent `stderr` ou le mécanisme compatible du SDK.
 
-Le serveur est lancé par :
-
-```text
-com.nexus.mcp.NexusMcpServer
-```
-
-Règle impérative : `stdout` est réservé au transport JSON-RPC. Aucun log applicatif ne doit y être écrit.
-
-Les diagnostics éventuels doivent utiliser `stderr` ou un mécanisme explicitement compatible avec le transport.
-
-## 5. Tools disponibles
+## Tools mono-projet
 
 ### `list_projects`
 
-Liste les projets enregistrés dans le `NEXUS_HOME` courant.
-
-Aucun argument requis.
+Liste les projets enregistrés et leur état.
 
 ### `search_code`
 
-Arguments :
+Arguments : `project`, `query`, `limit` optionnel, `explain` optionnel.
 
-- `project` : UUID ou nom unique du projet ;
-- `query` : requête ;
-- `limit` : optionnel, 10 par défaut ;
-- `explain` : optionnel.
-
-Le tool appelle directement `NexusApplication.search` et conserve le score, ses composantes et les raisons produites par NEXUS.
+Le projet doit être READY.
 
 ### `find_symbol`
 
-Arguments :
+Arguments : `project`, `query`, `limit` optionnel.
 
-- `project` ;
-- `query` ;
-- `limit` optionnel.
-
-Le tool recherche dans les symboles persistés par nom ou nom qualifié.
+Phase 6 utilise une recherche repository/SQLite bornée au lieu d'un scan applicatif de tous les symboles.
 
 ### `find_usages`
 
-Arguments :
+Arguments : `project`, `symbol`, `limit` optionnel.
 
-- `project` ;
-- `symbol` ;
-- `limit` optionnel.
-
-Le tool retourne les relations structurelles connues dont la source ou la cible correspond au symbole. Il peut donc refléter les données JavaParser, SCIP ou celles d'un provider profond optionnel. Il ne prétend pas reconstruire des usages absents de l'index.
+Les relations source/cible sont filtrées côté repository avec une limite stricte.
 
 ### `build_context`
 
-Arguments :
-
-- `project` ;
-- `query` ;
-- `tokenBudget` optionnel, 2 000 par défaut ;
-- `requestedSources` optionnel ;
-- `constraints` optionnel.
-
-Le tool appelle `NexusApplication.context` et respecte les mêmes budgets, stratégies de ranking, instructions, skills et contexte Git que les autres adaptateurs.
+Arguments : `project`, `query`, `tokenBudget`, `requestedSources`, `constraints`.
 
 ### `explain_context`
 
-Même contrat que `build_context`, avec le mode explicable forcé.
+Même contrat que `build_context`, avec explicabilité forcée.
 
-## 6. Format des réponses
+## Tools fédérés — Phase 6
 
-Le premier contrat retourne un contenu texte MCP contenant un document JSON sérialisé.
+### `search_across_projects`
 
-Ce choix rend la réponse :
+Arguments :
 
-- inspectable ;
-- stable pour les tests ;
-- facile à comparer avec les sorties JSON de NEXUS.
+```text
+projects  tableau non vide d'UUID ou noms uniques
+query     requête
+limit     optionnel, 10 par défaut
+explain   optionnel
+```
 
-Les erreurs de tool sont retournées avec `isError = true` et un objet JSON contenant :
+Retourne le top-K global après sur-récupération locale et diversification `(projectId,path)`. Chaque hit conserve son projet d'origine.
+
+### `build_context_across_projects`
+
+Arguments :
+
+```text
+projects
+query
+tokenBudget      2000 par défaut
+requestedSources optionnel
+constraints      optionnel
+```
+
+Construit un `FederatedContextBundle` avec budget global, provenance, fairness round-robin et déduplication inter-projet.
+
+### `explain_context_across_projects`
+
+Même contrat avec explicabilité forcée.
+
+Les instructions, Skills et données Git restent calculés dans leur projet d'origine avant fusion.
+
+## Format des réponses
+
+Chaque tool retourne un contenu texte MCP contenant un JSON sérialisé. Les erreurs sont retournées avec `isError=true` et :
 
 ```json
 {
@@ -136,79 +114,60 @@ Les erreurs de tool sont retournées avec `isError = true` et un objet JSON cont
 }
 ```
 
-## 7. Parité avec REST et le cœur
+## Sémantique
 
-L'Itération 12 vérifie la parité de deux capacités centrales :
+MCP utilise `SemanticSearchConfiguration.fromEnvironment()` via `NexusApplication`. Aucune capacité sémantique spécifique au protocole n'existe.
 
-1. `search_code` doit retourner le même premier chemin et le même score que `NexusApplication.search` ;
-2. `build_context` doit retourner le même budget, le même nombre estimé de tokens et le même premier item que `NexusApplication.context`.
-
-L'adaptateur REST délègue lui aussi à `NexusApplication`.
-
-La parité est donc garantie par :
+Activation explicite :
 
 ```text
-REST ─┐
-      ├──> NexusApplication ──> services NEXUS
-MCP ──┘
+NEXUS_SEMANTIC_PROVIDER=ollama
 ```
 
-## 8. Build
+Sans cette variable, aucun provider d'embeddings n'est créé.
 
-Le cœur doit d'abord être installé dans Maven Local :
+## Build
+
+Le module est dans le reactor :
+
+```powershell
+.\mvnw.cmd clean install
+```
+
+Runner :
 
 ```text
-mvn clean install
+adapters/mcp-java/target/nexus-mcp-java-0.2.0-runner.jar
 ```
 
-Puis l'adaptateur MCP :
+Lancement manuel :
+
+```powershell
+java -jar .\adapters\mcp-java\target\nexus-mcp-java-0.2.0-runner.jar
+```
+
+## Parité
+
+La parité repose maintenant sur une seule façade :
 
 ```text
-mvn -f adapters/mcp-java/pom.xml clean verify
+CLI  ─┐
+REST ─┼──> NexusApplication ──> services NEXUS
+MCP  ─┘
 ```
 
-Le runner attendu est :
+Il n'existe plus de second composition root CLI à réconcilier.
 
-```text
-adapters/mcp-java/target/nexus-mcp-java-0.1.0-SNAPSHOT-runner.jar
+## Qualification
+
+Le runner historique I12 reste utile pour le transport STDIO. Le gate intégral Phase 6 est :
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
 ```
 
-## 9. Validation
+Le reactor construit/teste MCP avec le même exact-head que le core et REST.
 
-Le script d'itération est :
+## Hors périmètre
 
-```text
-scripts/validate-iteration-12.ps1
-```
-
-Il exécute :
-
-1. `mvn clean install` sur le cœur ;
-2. `scripts/self-smoke.ps1` ;
-3. le build et les tests de l'adaptateur REST après extraction de la façade commune ;
-4. le build et le test d'intégration MCP avec un vrai client STDIO ;
-5. la vérification du runner autonome MCP.
-
-Le mode `-AdapterOnly` permet de rejouer uniquement REST + MCP lorsque le cœur et le self-smoke ont déjà été validés dans la même itération.
-
-## 10. Lancement manuel
-
-Après packaging :
-
-```text
-java -jar adapters/mcp-java/target/nexus-mcp-java-0.1.0-SNAPSHOT-runner.jar
-```
-
-Le processus attend alors les messages MCP sur STDIN et écrit uniquement les réponses du transport sur STDOUT.
-
-Le `NEXUS_HOME` suit les mêmes règles que la CLI et REST :
-
-1. propriété JVM `nexus.home` ;
-2. variable `NEXUS_HOME` ;
-3. défaut `~/.nexus`.
-
-## 11. Extension future
-
-Les tools candidats de la roadmap (`get_related_tests`, `get_architecture_context`, `get_recent_changes`, etc.) ne sont pas ajoutés automatiquement. Ils doivent correspondre à un besoin client réel et réutiliser les services NEXUS existants.
-
-Un transport distant pourra être étudié ultérieurement si un usage concret justifie Streamable HTTP. STDIO reste le chemin local minimal de l'Itération 12.
+Un transport MCP distant n'est pas ajouté automatiquement. STDIO reste le chemin local minimal ; Streamable HTTP ne sera étudié qu'en présence d'un besoin concret et d'un modèle d'exposition/sécurité explicite.

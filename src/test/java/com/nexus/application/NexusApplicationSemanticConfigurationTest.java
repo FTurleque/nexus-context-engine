@@ -67,7 +67,7 @@ class NexusApplicationSemanticConfigurationTest {
 
         assertFalse(results.isEmpty());
         RankedCandidate first = results.getFirst();
-        assertEquals(repository.resolve("docs/cache-control.md"), first.candidate().path());
+        assertEquals(project.rootPath().resolve("docs/cache-control.md"), first.candidate().path());
         assertTrue(first.components().containsKey(SemanticHybridContextRanker.SEMANTIC_RRF_COMPONENT));
         assertTrue(first.components().get(SemanticHybridContextRanker.SEMANTIC_RRF_COMPONENT) > 0.0d);
         assertTrue(first.reasons().stream().anyMatch(reason -> reason.contains("fusion RRF sémantique")));

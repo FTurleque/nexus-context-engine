@@ -1,5 +1,7 @@
 package com.nexus.persistence.sqlite;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexus.index.CodeIntelligenceSnapshot;
 import com.nexus.index.CodeSymbol;
 import com.nexus.index.FileCategory;
@@ -23,18 +25,21 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
 public final class SqliteIndexRepository implements IndexRepository {
 
     private static final String EMBEDDED_SOURCE_PROVIDER = CodeSymbol.DEFAULT_SOURCE_PROVIDER;
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
 
     private final SqliteDatabase database;
 
     public SqliteIndexRepository(SqliteDatabase database) {
-        this.database = database;
+        this.database = Objects.requireNonNull(database, "database");
     }
 
     @Override
@@ -48,25 +53,34 @@ public final class SqliteIndexRepository implements IndexRepository {
                      ORDER BY relative_path
                      """)) {
             statement.setString(1, projectId.toString());
-            try (ResultSet resultSet = statement.executeQuery()) {
-                Map<String, IndexedFile> files = new LinkedHashMap<>();
-                while (resultSet.next()) {
-                    IndexedFile file = new IndexedFile(
-                            resultSet.getLong("id"),
-                            UUID.fromString(resultSet.getString("project_id")),
-                            resultSet.getString("relative_path"),
-                            resultSet.getString("language"),
-                            resultSet.getLong("size_bytes"),
-                            resultSet.getString("content_hash"),
-                            Instant.parse(resultSet.getString("modified_at")),
-                            resultSet.getInt("estimated_tokens"),
-                            FileCategory.valueOf(resultSet.getString("category")));
-                    files.put(file.relativePath(), file);
-                }
-                return Map.copyOf(files);
-            }
+            return readFiles(statement);
         } catch (SQLException exception) {
-            throw new PersistenceException("Impossible de lire les fichiers indexés du projet " + projectId, exception);
+            throw persistence("Impossible de lire les fichiers indexés du projet " + projectId, exception);
+        }
+    }
+
+    @Override
+    public Map<String, IndexedFile> findFiles(UUID projectId, Set<String> relativePaths) {
+        Objects.requireNonNull(relativePaths, "relativePaths");
+        if (relativePaths.isEmpty()) {
+            return Map.of();
+        }
+        relativePaths.forEach(path -> Objects.requireNonNull(path, "relativePaths must not contain null"));
+        List<String> paths = relativePaths.stream().sorted().toList();
+        try (Connection connection = database.openConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT f.id, f.project_id, f.relative_path, f.language, f.size_bytes,
+                            f.content_hash, f.modified_at, f.estimated_tokens, f.category
+                     FROM json_each(?) AS requested
+                     CROSS JOIN indexed_files f
+                     WHERE f.project_id = ? AND f.relative_path = requested.value
+                     ORDER BY f.relative_path
+                     """)) {
+            statement.setString(1, serializePaths(paths));
+            statement.setString(2, projectId.toString());
+            return readFiles(statement);
+        } catch (SQLException exception) {
+            throw persistence("Impossible de lire les fichiers ciblés du projet " + projectId, exception);
         }
     }
 
@@ -82,24 +96,60 @@ public final class SqliteIndexRepository implements IndexRepository {
                      ORDER BY f.relative_path, s.start_line, s.name, s.source_provider
                      """)) {
             statement.setString(1, projectId.toString());
-            try (ResultSet resultSet = statement.executeQuery()) {
-                List<IndexedSymbol> symbols = new ArrayList<>();
-                while (resultSet.next()) {
-                    symbols.add(new IndexedSymbol(
-                            resultSet.getString("relative_path"),
-                            new CodeSymbol(
-                                    SymbolKind.valueOf(resultSet.getString("kind")),
-                                    resultSet.getString("name"),
-                                    resultSet.getString("qualified_name"),
-                                    resultSet.getString("signature"),
-                                    resultSet.getInt("start_line"),
-                                    resultSet.getInt("end_line"),
-                                    resultSet.getString("source_provider"))));
-                }
-                return List.copyOf(symbols);
-            }
+            return readSymbols(statement);
         } catch (SQLException exception) {
-            throw new PersistenceException("Impossible de lire les symboles du projet " + projectId, exception);
+            throw persistence("Impossible de lire les symboles du projet " + projectId, exception);
+        }
+    }
+
+    @Override
+    public List<IndexedSymbol> searchSymbols(UUID projectId, String query, int limit) {
+        Objects.requireNonNull(query, "query");
+        if (query.isBlank()) {
+            throw new IllegalArgumentException("query must not be blank");
+        }
+        if (limit <= 0) {
+            throw new IllegalArgumentException("limit must be greater than zero");
+        }
+        String normalized = query.trim().toLowerCase(Locale.ROOT);
+        String contains = "%" + escapeLike(normalized) + "%";
+        String prefix = escapeLike(normalized) + "%";
+        String firstCharacter = normalized.substring(0, 1);
+        try (Connection connection = database.openConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT f.relative_path, s.kind, s.name, s.qualified_name,
+                            s.signature, s.start_line, s.end_line, s.source_provider
+                     FROM symbols s
+                     JOIN indexed_files f ON f.id = s.file_id
+                     WHERE f.project_id = ?
+                       AND (
+                           LOWER(s.name) LIKE ? ESCAPE '\\'
+                           OR LOWER(s.qualified_name) LIKE ? ESCAPE '\\'
+                           OR (SUBSTR(LOWER(s.name), 1, 1) = ?
+                               AND ABS(LENGTH(s.name) - ?) <= 3)
+                       )
+                     ORDER BY
+                         CASE
+                             WHEN LOWER(s.name) = ? THEN 0
+                             WHEN LOWER(s.qualified_name) = ? THEN 1
+                             WHEN LOWER(s.name) LIKE ? ESCAPE '\\' THEN 2
+                             ELSE 3
+                         END,
+                         s.qualified_name, f.relative_path, s.start_line, s.source_provider
+                     LIMIT ?
+                     """)) {
+            statement.setString(1, projectId.toString());
+            statement.setString(2, contains);
+            statement.setString(3, contains);
+            statement.setString(4, firstCharacter);
+            statement.setInt(5, normalized.length());
+            statement.setString(6, normalized);
+            statement.setString(7, normalized);
+            statement.setString(8, prefix);
+            statement.setInt(9, limit);
+            return readSymbols(statement);
+        } catch (SQLException exception) {
+            throw persistence("Impossible de rechercher les symboles du projet " + projectId, exception);
         }
     }
 
@@ -113,20 +163,40 @@ public final class SqliteIndexRepository implements IndexRepository {
                      ORDER BY source_ref, kind, target_ref, source_provider
                      """)) {
             statement.setString(1, projectId.toString());
-            try (ResultSet resultSet = statement.executeQuery()) {
-                List<SymbolRelation> relations = new ArrayList<>();
-                while (resultSet.next()) {
-                    relations.add(new SymbolRelation(
-                            RelationKind.valueOf(resultSet.getString("kind")),
-                            resultSet.getString("source_ref"),
-                            resultSet.getString("target_ref"),
-                            resultSet.getDouble("confidence"),
-                            resultSet.getString("source_provider")));
-                }
-                return List.copyOf(relations);
-            }
+            return readRelations(statement);
         } catch (SQLException exception) {
-            throw new PersistenceException("Impossible de lire les relations du projet " + projectId, exception);
+            throw persistence("Impossible de lire les relations du projet " + projectId, exception);
+        }
+    }
+
+    @Override
+    public List<SymbolRelation> searchRelations(UUID projectId, String symbol, int limit) {
+        Objects.requireNonNull(symbol, "symbol");
+        if (symbol.isBlank()) {
+            throw new IllegalArgumentException("symbol must not be blank");
+        }
+        if (limit <= 0) {
+            throw new IllegalArgumentException("limit must be greater than zero");
+        }
+        String normalized = symbol.trim().toLowerCase(Locale.ROOT);
+        String contains = "%" + escapeLike(normalized) + "%";
+        try (Connection connection = database.openConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT kind, source_ref, target_ref, confidence, source_provider
+                     FROM symbol_relations
+                     WHERE project_id = ?
+                       AND (LOWER(source_ref) LIKE ? ESCAPE '\\'
+                            OR LOWER(target_ref) LIKE ? ESCAPE '\\')
+                     ORDER BY kind, source_ref, target_ref, source_provider
+                     LIMIT ?
+                     """)) {
+            statement.setString(1, projectId.toString());
+            statement.setString(2, contains);
+            statement.setString(3, contains);
+            statement.setInt(4, limit);
+            return readRelations(statement);
+        } catch (SQLException exception) {
+            throw persistence("Impossible de rechercher les relations du projet " + projectId, exception);
         }
     }
 
@@ -141,6 +211,9 @@ public final class SqliteIndexRepository implements IndexRepository {
                     long fileId = upsertFile(connection, projectId, update.file());
                     replaceAnalysis(connection, projectId, fileId, update);
                 }
+                if (!updates.isEmpty() || !removedPaths.isEmpty()) {
+                    bumpGeneration(connection, projectId);
+                }
                 connection.commit();
             } catch (SQLException exception) {
                 connection.rollback();
@@ -149,7 +222,7 @@ public final class SqliteIndexRepository implements IndexRepository {
                 connection.setAutoCommit(initialAutoCommit);
             }
         } catch (SQLException exception) {
-            throw new PersistenceException("Impossible de mettre à jour l'index SQLite du projet " + projectId, exception);
+            throw persistence("Impossible de mettre à jour l'index SQLite du projet " + projectId, exception);
         }
     }
 
@@ -166,6 +239,7 @@ public final class SqliteIndexRepository implements IndexRepository {
                 Map<String, Long> fileIds = findFileIds(connection, projectId);
                 insertExternalSymbols(connection, fileIds, snapshot.symbols());
                 insertExternalRelations(connection, projectId, fileIds, snapshot.relations());
+                bumpGeneration(connection, projectId);
                 connection.commit();
             } catch (SQLException exception) {
                 connection.rollback();
@@ -174,7 +248,7 @@ public final class SqliteIndexRepository implements IndexRepository {
                 connection.setAutoCommit(initialAutoCommit);
             }
         } catch (SQLException exception) {
-            throw new PersistenceException(
+            throw persistence(
                     "Impossible de remplacer l'intelligence de code du provider " + snapshot.sourceProvider(),
                     exception);
         }
@@ -195,7 +269,78 @@ public final class SqliteIndexRepository implements IndexRepository {
                     "SELECT COUNT(*) FROM symbol_relations WHERE project_id = ?", projectId);
             return new IndexStatistics(files, symbols, relations);
         } catch (SQLException exception) {
-            throw new PersistenceException("Impossible de calculer les statistiques du projet " + projectId, exception);
+            throw persistence("Impossible de calculer les statistiques du projet " + projectId, exception);
+        }
+    }
+
+    @Override
+    public long generation(UUID projectId) {
+        try (Connection connection = database.openConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT generation
+                     FROM project_index_generations
+                     WHERE project_id = ?
+                     """)) {
+            statement.setString(1, projectId.toString());
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() ? resultSet.getLong(1) : 0L;
+            }
+        } catch (SQLException exception) {
+            throw persistence("Impossible de lire la génération d'index du projet " + projectId, exception);
+        }
+    }
+
+    private static Map<String, IndexedFile> readFiles(PreparedStatement statement) throws SQLException {
+        try (ResultSet resultSet = statement.executeQuery()) {
+            Map<String, IndexedFile> files = new LinkedHashMap<>();
+            while (resultSet.next()) {
+                IndexedFile file = new IndexedFile(
+                        resultSet.getLong("id"),
+                        UUID.fromString(resultSet.getString("project_id")),
+                        resultSet.getString("relative_path"),
+                        resultSet.getString("language"),
+                        resultSet.getLong("size_bytes"),
+                        resultSet.getString("content_hash"),
+                        Instant.parse(resultSet.getString("modified_at")),
+                        resultSet.getInt("estimated_tokens"),
+                        FileCategory.valueOf(resultSet.getString("category")));
+                files.put(file.relativePath(), file);
+            }
+            return Map.copyOf(files);
+        }
+    }
+
+    private static List<IndexedSymbol> readSymbols(PreparedStatement statement) throws SQLException {
+        try (ResultSet resultSet = statement.executeQuery()) {
+            List<IndexedSymbol> symbols = new ArrayList<>();
+            while (resultSet.next()) {
+                symbols.add(new IndexedSymbol(
+                        resultSet.getString("relative_path"),
+                        new CodeSymbol(
+                                SymbolKind.valueOf(resultSet.getString("kind")),
+                                resultSet.getString("name"),
+                                resultSet.getString("qualified_name"),
+                                resultSet.getString("signature"),
+                                resultSet.getInt("start_line"),
+                                resultSet.getInt("end_line"),
+                                resultSet.getString("source_provider"))));
+            }
+            return List.copyOf(symbols);
+        }
+    }
+
+    private static List<SymbolRelation> readRelations(PreparedStatement statement) throws SQLException {
+        try (ResultSet resultSet = statement.executeQuery()) {
+            List<SymbolRelation> relations = new ArrayList<>();
+            while (resultSet.next()) {
+                relations.add(new SymbolRelation(
+                        RelationKind.valueOf(resultSet.getString("kind")),
+                        resultSet.getString("source_ref"),
+                        resultSet.getString("target_ref"),
+                        resultSet.getDouble("confidence"),
+                        resultSet.getString("source_provider")));
+            }
+            return List.copyOf(relations);
         }
     }
 
@@ -269,7 +414,6 @@ public final class SqliteIndexRepository implements IndexRepository {
             deleteSymbols.setString(2, EMBEDDED_SOURCE_PROVIDER);
             deleteSymbols.executeUpdate();
         }
-
         insertSymbols(connection, fileId, update.analysis().symbols());
         insertRelations(connection, projectId, fileId, update.analysis().relations());
     }
@@ -424,6 +568,17 @@ public final class SqliteIndexRepository implements IndexRepository {
         }
     }
 
+    private static void bumpGeneration(Connection connection, UUID projectId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO project_index_generations(project_id, generation)
+                VALUES (?, 1)
+                ON CONFLICT(project_id) DO UPDATE SET generation = generation + 1
+                """)) {
+            statement.setString(1, projectId.toString());
+            statement.executeUpdate();
+        }
+    }
+
     private static long count(Connection connection, String sql, UUID projectId) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, projectId.toString());
@@ -431,5 +586,21 @@ public final class SqliteIndexRepository implements IndexRepository {
                 return resultSet.next() ? resultSet.getLong(1) : 0L;
             }
         }
+    }
+
+    private static String escapeLike(String value) {
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    }
+
+    private static String serializePaths(List<String> paths) {
+        try {
+            return JSON_MAPPER.writeValueAsString(paths);
+        } catch (JsonProcessingException exception) {
+            throw new PersistenceException("Impossible de sérialiser les chemins de fichiers ciblés", exception);
+        }
+    }
+
+    private static PersistenceException persistence(String message, SQLException exception) {
+        return new PersistenceException(message, exception);
     }
 }

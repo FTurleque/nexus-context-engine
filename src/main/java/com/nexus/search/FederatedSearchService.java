@@ -21,11 +21,17 @@ import java.util.UUID;
  * résultats sont ensuite fusionnés de manière déterministe en conservant le
  * {@link ProjectDescriptor} d'origine. Deux candidats du même projet qui pointent
  * vers le même chemin sont diversifiés après le tri global : seul le meilleur
- * candidat est conservé. Aucune déduplication inter-projets n'est appliquée :
- * deux chemins identiques appartenant à deux projets distincts restent deux
- * résultats différents.</p>
+ * candidat est conservé. Aucune déduplication inter-projets n'est appliquée.</p>
+ *
+ * <p>La récupération locale est volontairement supérieure au top-K final afin
+ * que la diversification par chemin ne sous-remplisse pas le résultat alors que
+ * des candidats distincts existent juste après le cut-off local.</p>
  */
 public final class FederatedSearchService {
+
+    private static final int MIN_LOCAL_RETRIEVAL = 20;
+    private static final int MAX_LOCAL_RETRIEVAL = 500;
+    private static final int LOCAL_OVERFETCH_FACTOR = 4;
 
     private final SearchService searchService;
 
@@ -56,10 +62,11 @@ public final class FederatedSearchService {
             uniqueProjects.putIfAbsent(nonNullProject.id(), nonNullProject);
         }
 
+        int localLimit = localRetrievalLimit(limit);
         List<OrderedFederatedHit> candidates = new ArrayList<>();
         int projectOrder = 0;
         for (ProjectDescriptor project : uniqueProjects.values()) {
-            List<RankedCandidate> projectResults = searchService.search(project, query, limit, explain);
+            List<RankedCandidate> projectResults = searchService.search(project, query, localLimit, explain);
             for (int localOrder = 0; localOrder < projectResults.size(); localOrder++) {
                 candidates.add(new OrderedFederatedHit(
                         new FederatedSearchHit(project, projectResults.get(localOrder)),
@@ -88,6 +95,15 @@ public final class FederatedSearchService {
             }
         }
         return List.copyOf(diversified.values());
+    }
+
+    private static int localRetrievalLimit(int limit) {
+        if (limit >= MAX_LOCAL_RETRIEVAL / LOCAL_OVERFETCH_FACTOR) {
+            return MAX_LOCAL_RETRIEVAL;
+        }
+        return Math.min(
+                MAX_LOCAL_RETRIEVAL,
+                Math.max(MIN_LOCAL_RETRIEVAL, limit * LOCAL_OVERFETCH_FACTOR));
     }
 
     private record OrderedFederatedHit(

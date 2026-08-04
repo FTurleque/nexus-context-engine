@@ -1,81 +1,78 @@
 # AI Skills Registry dans NEXUS
 
-## Objectif
+## Statut
 
-L'Itération 14 permet à NEXUS de découvrir des skills provenant d'un snapshot local de AI Skills Registry, sans introduire de dépendance réseau pendant la construction du contexte.
+Capacité livrée depuis l'Itération 14. Phase 6 corrige la dérive de composition identifiée lors de l'audit de consolidation.
 
-Le comportement reste local-first et optionnel : en l'absence de snapshot, NEXUS continue à fonctionner uniquement avec les skills présents dans le projet.
+NEXUS peut découvrir des skills provenant d'un snapshot local AI Skills Registry sans accès réseau pendant la construction du contexte.
 
-## Emplacement du snapshot
-
-NEXUS recherche les définitions du registre sous :
+## Snapshot local
 
 ```text
 .nexus/registry/skills/**/SKILL.md
 ```
 
-Le contenu de `.nexus/registry` est considéré comme un cache local et n'est pas versionné avec le repository NEXUS.
+`.nexus/registry` est un cache local non versionné. Son absence n'empêche jamais les skills propres au projet de fonctionner.
 
-## Pipeline
+## Sources et priorités
 
 ```text
-skills locaux du projet
-        +
-snapshot AI Skills Registry
-        |
-        v
+LocalAgentSkillsProvider       priorité 80
+AiSkillsRegistryProvider      priorité 60
+            ↓
 SkillDiscoveryService
-        |
-        v
-déduplication par nom et priorité
-        |
-        v
-SkillSelector
-        |
-        v
-SkillLoader
-        |
-        v
-SkillContextSelector
+            ↓
+tri / déduplication par nom
 ```
 
-`AiSkillsRegistryProvider` lit uniquement le frontmatter YAML pendant la découverte. Le corps complet d'un `SKILL.md` n'est chargé qu'après sélection par `SkillLoader`.
+Un skill local de même nom conserve la priorité sur le snapshot partagé.
 
-## Priorités
+## Composition Phase 6
 
-Les priorités initiales sont :
+Les deux providers sont maintenant composés indépendamment dans `NexusApplication` :
 
-- skill local du projet : `80` ;
-- skill issu du registre : `60`.
+```text
+NexusApplication
+   ├─ LocalAgentSkillsProvider
+   └─ AiSkillsRegistryProvider
+            ↓
+     SkillDiscoveryService
+```
 
-Lorsque deux skills portent le même nom, `SkillDiscoveryService` conserve donc la définition locale du projet.
+`LocalAgentSkillsProvider` ne crée plus et n'appelle plus `AiSkillsRegistryProvider`. La composition est donc conforme au port `SkillSourceProvider` et la politique d'agrégation reste centralisée.
 
-Cette règle permet à un projet de spécialiser ou remplacer localement un skill partagé sans modifier le registre central.
+## Divulgation progressive
 
-## Absence du registre
+```text
+découverte  → frontmatter seulement
+sélection   → name + description + metadata
+activation  → SKILL.md complet
+ressources  → inventoriées, jamais exécutées automatiquement
+```
 
-Si `.nexus/registry/skills` n'existe pas, le provider retourne un catalogue vide sans erreur.
+Cette politique reste identique pour origine locale et registry.
 
-Aucun accès réseau et aucune opération Git ne sont déclenchés automatiquement par NEXUS pendant une requête de contexte.
+## Absence de réseau
+
+Pendant `ContextBuilder` :
+
+- aucune requête HTTP ;
+- aucun clone/fetch Git ;
+- aucun secret ;
+- aucune dépendance à la disponibilité d'un registre distant.
+
+La synchronisation éventuelle du snapshot appartient à un outil externe.
+
+## Contexte fédéré
+
+Phase 6 conserve les skills dans leur portée projet : chaque `DefaultContextBuilder` découvre ses providers pour son propre projet avant que `FederatedContextService` ne fusionne les résultats. Aucun skill d'un projet n'est propagé implicitement à un autre.
 
 ## Validation
 
-L'Itération 14 vérifie explicitement que :
-
-- les métadonnées du registre sont découvertes sans charger le corps complet du skill ;
-- le corps complet est chargé uniquement après sélection ;
-- un skill local de même nom conserve la priorité ;
-- le build complet du cœur reste vert ;
-- le self-smoke historique reste vert sans snapshot de registre.
-
-Commande de validation dédiée :
+Les tests historiques I14 continuent de couvrir découverte progressive, priorité locale, absence de snapshot et non-exécution des ressources. Le gate Phase 6 ajoute la qualification du reactor/composition complet :
 
 ```powershell
-.\scripts\validate-iteration-14.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
 ```
 
-## Limites actuelles
-
-Le premier incrément ne synchronise pas lui-même le dépôt externe et n'exploite pas encore tous les champs propres au registre comme `version`, `status`, `category` ou `tags` pour le ranking.
-
-Ces enrichissements pourront être ajoutés derrière le même contrat sans modifier le pipeline de sélection des skills.
+Voir [`agent-skills.md`](agent-skills.md), [`current-limitations.md`](current-limitations.md) et la [`roadmap`](../roadmap.md).

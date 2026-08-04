@@ -1,194 +1,120 @@
-# Recherche à grande échelle — Itération 16
+# Recherche multi-repository et passage à l'échelle
 
-Ce document décrit le premier incrément de l'Itération 16 et le protocole de mesure à utiliser avant toute évaluation d'un moteur de recherche externe.
+Ce document conserve la baseline validée de l'Itération 16 et décrit les améliorations Phase 6 implémentées au-dessus de cette base.
 
-## 1. État de l'architecture au démarrage
-
-NEXUS savait déjà gérer plusieurs projets dans son stockage :
-
-- `ProjectRegistry` enregistre plusieurs `ProjectDescriptor` ;
-- SQLite conserve les fichiers, symboles et relations avec une portée `projectId` ;
-- `ProjectIndexingService` indexe un projet identifié ;
-- `LuceneSearchIndex` utilise un répertoire d'index distinct par `projectId` ;
-- la clé Lucene d'un document contient `(projectId, relativePath)`.
-
-La limite se situait au niveau orchestration :
-
-- `SearchService.search(...)` reçoit un seul `ProjectDescriptor` ;
-- `NexusApplication.search(...)` reçoit un seul `projectId` ;
-- `DefaultContextBuilder` construit un contexte pour un seul projet.
-
-Il n'était donc pas nécessaire de remplacer Lucene pour commencer le multi-repository.
-
-## 2. Premier incrément retenu
-
-Le premier incrément ajoute une fédération locale au-dessus du moteur existant :
+## Baseline historique validée
 
 ```text
-liste explicite de projectId
-          │
-          ▼
-NexusApplication.searchAcrossProjects(...)
-          │
-          ▼
+repositories               7
+fichiers                    2 104
+symboles                    10 878
+relations                   10 087
+index Lucene cumulé         5 121 497 octets
+indexation complète         8 818 ms
+incrémental sans changement 762 ms
+recherche fédérée p50       133 ms
+recherche fédérée p95       304 ms
+contexte p50                48 ms
+contexte p95                206 ms
+precision@3                 0,4583
+recall@3                    0,8958
+hit@3                       1,0000
+MRR@3                       1,0000
+```
+
+Résultats détaillés :
+
+- [`iteration-16-baseline-results.md`](iteration-16-baseline-results.md) ;
+- [`iteration-16-extended-portfolio-results.md`](iteration-16-extended-portfolio-results.md) ;
+- [`large-scale-baseline-runbook.md`](large-scale-baseline-runbook.md).
+
+Cette baseline ne doit pas être réécrite avec des chiffres Phase 6 tant qu'une nouvelle campagne mesurée n'a pas été exécutée.
+
+## Architecture fédérée Phase 6
+
+```text
+projectIds explicites et READY
+       ↓
+NexusApplication.searchAcrossProjects
+       ↓
 FederatedSearchService
-          │
-          ├── SearchService(Project A)
-          ├── SearchService(Project B)
-          └── SearchService(Project C)
-                    │
-                    ▼
-           fusion déterministe
-                    │
-                    ▼
-           FederatedSearchHit[]
-           - projet d'origine
-           - RankedCandidate
+       ├─ SearchService(A, localOverfetch)
+       ├─ SearchService(B, localOverfetch)
+       └─ SearchService(C, localOverfetch)
+       ↓
+tri global déterministe
+       ↓
+diversification (projectId,path)
+       ↓
+top-K global
 ```
 
-Invariants :
+Le pool local est désormais supérieur au top-K final, borné de 20 à 500 avec facteur 4. Le défaut F01 où FILE/SYMBOL d'un même chemin pouvaient vider le résultat après diversification est couvert par un test de régression.
 
-- aucun projet n'est ajouté implicitement à la portée ;
-- les doublons de `projectId` dans la portée sont ignorés ;
-- deux résultats de projets différents restent distincts, même avec le même chemin relatif ;
-- le résultat conserve le `ProjectDescriptor` d'origine ;
-- chaque projet conserve son index Lucene isolé ;
-- `SearchService`, `DeterministicContextRanker` et `DefaultContextBuilder` ne sont pas modifiés ;
-- aucune dépendance réseau ou moteur externe n'est ajoutée.
+## Scale symboles/usages
 
-## 3. Limites connues à mesurer
-
-### 3.1 Coût linéaire par nombre de projets
-
-La première implémentation exécute une recherche par projet sélectionné. Aucun parallélisme n'est introduit avant mesure.
-
-La baseline doit déterminer si ce coût devient significatif et à partir de combien de projets ou de documents.
-
-### 3.2 Comparabilité du ranking inter-projets
-
-Les signaux Lucene sont normalisés dans `LuceneFileSearchStrategy` par rapport au meilleur score du projet courant. Les scores finaux sont donc déterministes, mais leur comparabilité entre projets doit être validée sur un corpus multi-repository.
-
-Il ne faut pas modifier les poids du ranking avant d'avoir mesuré `precision@3` et `recall@3` sur ce corpus.
-
-### 3.3 Recherche structurelle SQLite
-
-`SymbolSearchStrategy` interroge les symboles canoniques du projet. L'ADR-0024 identifie déjà la recherche fuzzy à très fort volume de symboles comme un point de réexamen.
-
-La baseline doit séparer le volume de fichiers du volume de symboles et de relations.
-
-### 3.4 Contexte multi-projet
-
-`DefaultContextBuilder` reste projet-local. Cette limitation est volontaire pour le premier incrément.
-
-Les sources suivantes dépendent du projet :
-
-- instructions natives ;
-- Agent Skills locaux ;
-- contexte Git ;
-- chemins absolus des fragments.
-
-Une future construction de contexte fédérée devra définir explicitement :
-
-- un budget de tokens global ;
-- la provenance de chaque item ;
-- la répartition du budget entre projets ;
-- la déduplication inter-projets ;
-- le traitement des instructions, skills et signaux Git de plusieurs racines.
-
-## 4. Baseline reproductible
-
-La baseline de l'Itération 16 doit être exécutée sur plusieurs paliers de volume. Les seuils exacts ne doivent pas être inventés à l'avance : ils doivent correspondre aux repositories réellement visés par NEXUS.
-
-Pour chaque palier, relever :
-
-| Métrique | Portée |
-|---|---|
-| nombre de repositories | total sélectionné |
-| nombre de fichiers | par projet + total |
-| nombre de symboles | par projet + total |
-| nombre de relations | par projet + total |
-| taille de l'index Lucene | par projet + total |
-| indexation complète | par projet + total |
-| indexation incrémentale sans changement | par projet + total |
-| indexation incrémentale avec petit delta | par projet + total |
-| recherche locale | p50 / p95 après échauffement |
-| recherche fédérée | p50 / p95 selon nombre de projets |
-| construction du contexte | p50 / p95 |
-| `precision@3` | corpus projet-local + corpus fédéré |
-| `recall@3` | corpus projet-local + corpus fédéré |
-| mémoire | heap JVM avant/après et pic si reproductible |
-
-### 4.1 Protocole de latence
-
-Pour chaque requête de référence :
-
-1. exécuter quelques appels d'échauffement non comptabilisés ;
-2. exécuter plusieurs répétitions ;
-3. conserver au minimum p50 et p95 ;
-4. distinguer recherche mono-projet et fédérée ;
-5. conserver la même machine et la même JVM pour comparer deux runs.
-
-Une seule durée observée ne constitue pas une preuve de passage à l'échelle.
-
-### 4.2 Corpus qualité multi-repository
-
-Le corpus doit identifier les résultats attendus avec une clé de provenance :
+Phase 6 remplace les scans applicatifs par des opérations repository bornées :
 
 ```text
-projectId + relativePath
+searchSymbols(projectId, query, limit)
+searchRelations(projectId, symbol, limit)
 ```
 
-Deux repositories contenant le même chemin relatif doivent donc produire deux identités différentes.
+SQLite préfiltre avant matérialisation. Le fuzzy Levenshtein reste en Java, mais uniquement sur un pool borné.
 
-Les métriques `precision@3` et `recall@3` doivent être calculées sur les résultats fédérés sans supprimer cette provenance.
+## Graphe
 
-## 5. Quand réexaminer Lucene
+V002 introduit une génération monotone de l'index canonique par projet. `ProjectGraphBuilder` conserve une vue dérivée en mémoire tant que cette génération ne change pas.
 
-Lucene reste le moteur local par défaut.
+Conséquence : le graphe n'est plus reconstruit à chaque recherche et l'enrichisseur charge seulement les fichiers voisins nécessaires.
 
-Une évaluation Zoekt/OpenGrok devient pertinente uniquement si la baseline montre un problème reproductible que l'architecture locale ne corrige pas simplement, par exemple :
+## Surfaces publiques
 
-- latence fédérée trop élevée au nombre de repositories réellement visé ;
-- reconstruction Lucene trop lente ou trop coûteuse ;
-- empreinte disque ou mémoire non acceptable ;
-- recherche de symboles SQLite dominante à très fort volume ;
-- besoin réel d'index distants ;
-- dégradation de qualité du ranking fédéré nécessitant une capacité qu'un backend spécialisé apporte mieux.
-
-L'apparition d'un de ces symptômes déclenche une comparaison, pas une adoption automatique.
-
-## 6. Zoekt et OpenGrok
-
-Aucune comparaison détaillée n'est réalisée dans ce premier incrément, car aucune métrique actuelle ne démontre encore le besoin d'un moteur externe.
-
-Si la baseline déclenche cette évaluation, elle devra utiliser des sources récentes et comparer au minimum :
-
-- maintenance et activité du projet ;
-- performances d'indexation et de recherche ;
-- indexation incrémentale ;
-- langages pris en charge ;
-- API ;
-- déploiement local ;
-- support Windows natif ou via Linux/Docker ;
-- consommation mémoire ;
-- complexité opérationnelle ;
-- licence ;
-- capacité à rester optionnel derrière un port/adaptateur NEXUS.
-
-## 7. Compatibilité REST et MCP
-
-La fédération est placée dans le cœur applicatif, sous les adaptateurs. REST et MCP pourront donc l'exposer ultérieurement sans dupliquer la logique.
-
-Le premier incrément ne modifie pas encore leurs contrats publics. Cette évolution doit être faite après validation locale de la sémantique multi-projet et de la provenance.
-
-## 8. Validation du premier incrément
-
-La validation attendue est :
+La fédération n'est plus limitée à la façade interne :
 
 ```text
-mvn clean install
-scripts/self-smoke.ps1
-scripts/validate-iteration-16.ps1
+CLI  search-federated
+REST POST /api/v1/federated/search
+MCP  search_across_projects
 ```
 
-Le script dédié couvre la régression du corpus golden et la fédération explicite multi-projet. Les mesures de volume réel doivent ensuite être ajoutées au compte rendu de l'Itération 16 à partir des repositories retenus pour la baseline.
+Les trois surfaces délèguent à `NexusApplication` et appliquent le même gate READY.
+
+## Contexte multi-projet
+
+Phase 6 livre également `FederatedContextService` :
+
+- portée explicite ;
+- budget global ;
+- provenance ;
+- fairness round-robin ;
+- déduplication de contenu ;
+- métriques de starvation ;
+- instructions/skills/Git projet-locaux.
+
+Surfaces : CLI `context-federated`, REST `/api/v1/federated/context`, MCP `build_context_across_projects` et `explain_context_across_projects`.
+
+## Décision moteurs externes
+
+Les optimisations Phase 6 suivent le principe « améliorer le moteur local avant d'ajouter une infrastructure ». Aucun Zoekt, OpenGrok, OpenSearch, index distant, index distribué ou parallélisme fédéré n'est ajouté automatiquement.
+
+Réexaminer un moteur externe seulement si une campagne reproductible démontre malgré les requêtes bornées et le cache graphe :
+
+- p95 non acceptable ;
+- mémoire/disque non acceptable ;
+- reconstruction trop coûteuse ;
+- volume de symboles au-delà des capacités locales ;
+- besoin réel d'un index partagé/distant ;
+- gain de pertinence mesuré impossible avec Lucene/SQLite.
+
+Le lifecycle Lucene partagé reste lui aussi un watch item jusqu'à preuve de gain.
+
+## Qualification Phase 6
+
+Le runner historique I16 reste utile pour comparer la baseline. Le gate d'intégration Phase 6 est :
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
+```
+
+Une campagne de performance post-Phase 6 peut ensuite rejouer les corpus I16 pour mesurer le gain réel des requêtes ciblées et du cache de graphe sans falsifier la baseline historique.

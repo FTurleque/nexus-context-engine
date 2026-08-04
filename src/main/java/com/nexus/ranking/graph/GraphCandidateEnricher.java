@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 public final class GraphCandidateEnricher implements CandidateEnricher {
 
@@ -34,12 +35,22 @@ public final class GraphCandidateEnricher implements CandidateEnricher {
     @Override
     public List<SearchCandidate> enrich(ProjectDescriptor project, List<SearchCandidate> directCandidates) {
         ProjectGraph graph = graphBuilder.build(project.id());
-        Map<String, IndexedFile> indexedFiles = indexRepository.findFiles(project.id());
+        Map<String, Double> graphScores = graphScores(project, graph, directCandidates);
+        Map<String, IndexedFile> indexedFiles = indexRepository.findFiles(project.id(), graphScores.keySet());
         Map<String, SearchCandidate> candidates = new LinkedHashMap<>();
         for (SearchCandidate candidate : directCandidates) {
             candidates.put(candidate.id(), candidate);
         }
+        graphScores.forEach((relativePath, graphScore) ->
+                addGraphSignal(project, indexedFiles, candidates, relativePath, graphScore));
+        return List.copyOf(candidates.values());
+    }
 
+    private static Map<String, Double> graphScores(
+            ProjectDescriptor project,
+            ProjectGraph graph,
+            List<SearchCandidate> directCandidates) {
+        Map<String, Double> scores = new LinkedHashMap<>();
         for (SearchCandidate seed : directCandidates) {
             double seedScore = directScore(seed);
             if (seedScore <= 0.0d) {
@@ -47,16 +58,15 @@ public final class GraphCandidateEnricher implements CandidateEnricher {
             }
             String seedPath = relativePath(project, seed);
             for (String firstHop : graph.neighbors(seedPath)) {
-                addGraphSignal(project, indexedFiles, candidates, firstHop, seedScore * FIRST_HOP_FACTOR);
+                scores.merge(firstHop, seedScore * FIRST_HOP_FACTOR, Math::max);
                 for (String secondHop : graph.neighbors(firstHop)) {
                     if (!secondHop.equals(seedPath)) {
-                        addGraphSignal(project, indexedFiles, candidates, secondHop, seedScore * SECOND_HOP_FACTOR);
+                        scores.merge(secondHop, seedScore * SECOND_HOP_FACTOR, Math::max);
                     }
                 }
             }
         }
-
-        return List.copyOf(candidates.values());
+        return Map.copyOf(scores);
     }
 
     private void addGraphSignal(

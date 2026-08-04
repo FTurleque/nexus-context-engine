@@ -4,11 +4,13 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexus.application.NexusApplication;
 import com.nexus.context.ContextItem;
+import com.nexus.context.FederatedContextItem;
 import com.nexus.index.IndexedSymbol;
 import com.nexus.index.SymbolRelation;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.ranking.RankedCandidate;
 import com.nexus.search.CandidateType;
+import com.nexus.search.FederatedSearchHit;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.spec.McpSchema;
 
@@ -39,16 +41,19 @@ final class NexusMcpTools {
         return List.of(
                 listProjects(),
                 searchCode(),
+                searchAcrossProjects(),
                 findSymbol(),
                 findUsages(),
                 buildContext(false),
-                buildContext(true));
+                buildContext(true),
+                buildContextAcrossProjects(false),
+                buildContextAcrossProjects(true));
     }
 
     private McpServerFeatures.SyncToolSpecification listProjects() {
         return tool(
                 "list_projects",
-                "Liste les projets déjà enregistrés dans NEXUS afin de récupérer leur UUID ou leur nom avant d'appeler les autres outils.",
+                "Liste les projets enregistrés dans NEXUS avec leur état d'indexation.",
                 objectSchema(Map.of(), List.of()),
                 arguments -> application.listProjects().stream().map(this::project).toList());
     }
@@ -56,40 +61,51 @@ final class NexusMcpTools {
     private McpServerFeatures.SyncToolSpecification searchCode() {
         return tool(
                 "search_code",
-                "Recherche dans un projet NEXUS avec exactement le moteur hybride et le ranking utilisés par les autres adaptateurs. Retourne fichiers et symboles classés, avec explications optionnelles.",
+                "Recherche dans un projet READY avec le moteur hybride NEXUS.",
                 objectSchema(
                         Map.of(
                                 "project", stringProperty("UUID ou nom unique du projet NEXUS"),
-                                "query", stringProperty("Requête de recherche en langage naturel ou identifiant de code"),
+                                "query", stringProperty("Requête de recherche"),
                                 "limit", integerProperty("Nombre maximal de résultats, 10 par défaut"),
-                                "explain", booleanProperty("Inclure les composantes de score et raisons de classement")),
+                                "explain", booleanProperty("Inclure les explications de ranking")),
                         List.of("project", "query")),
                 arguments -> {
                     ProjectDescriptor project = resolveProject(arguments);
-                    String query = requiredString(arguments, "query");
-                    int limit = positiveInteger(arguments, "limit", DEFAULT_LIMIT);
-                    boolean explain = booleanValue(arguments, "explain", false);
-                    try {
-                        NexusApplication.SearchOperation operation =
-                                application.search(project.id(), query, limit, explain);
-                        Map<String, Object> result = new LinkedHashMap<>();
-                        result.put("project", project(operation.project()));
-                        result.put("query", operation.query());
-                        result.put("limit", operation.limit());
-                        result.put("explain", operation.explain());
-                        result.put("durationMs", operation.durationMs());
-                        result.put("results", operation.results().stream().map(this::rankedCandidate).toList());
-                        return result;
-                    } catch (Exception exception) {
-                        throw new IllegalStateException("La recherche NEXUS a échoué", exception);
-                    }
+                    NexusApplication.SearchOperation operation = application.search(
+                            project.id(),
+                            requiredString(arguments, "query"),
+                            positiveInteger(arguments, "limit", DEFAULT_LIMIT),
+                            booleanValue(arguments, "explain", false));
+                    return search(operation);
+                });
+    }
+
+    private McpServerFeatures.SyncToolSpecification searchAcrossProjects() {
+        return tool(
+                "search_across_projects",
+                "Recherche fédérée NEXUS sur une portée explicite de projets READY, avec diversification globale par chemin.",
+                objectSchema(
+                        Map.of(
+                                "projects", arrayOfStringsProperty("UUID ou noms uniques des projets NEXUS"),
+                                "query", stringProperty("Requête de recherche"),
+                                "limit", integerProperty("Top-K global, 10 par défaut"),
+                                "explain", booleanProperty("Inclure les explications de ranking")),
+                        List.of("projects", "query")),
+                arguments -> {
+                    List<ProjectDescriptor> projects = resolveProjects(arguments);
+                    NexusApplication.FederatedSearchOperation operation = application.searchAcrossProjects(
+                            projects.stream().map(ProjectDescriptor::id).toList(),
+                            requiredString(arguments, "query"),
+                            positiveInteger(arguments, "limit", DEFAULT_LIMIT),
+                            booleanValue(arguments, "explain", false));
+                    return federatedSearch(operation);
                 });
     }
 
     private McpServerFeatures.SyncToolSpecification findSymbol() {
         return tool(
                 "find_symbol",
-                "Recherche des symboles indexés par nom ou nom qualifié dans un projet NEXUS, sans recalculer le ranking métier.",
+                "Recherche bornée de symboles indexés par nom ou nom qualifié dans un projet READY.",
                 objectSchema(
                         Map.of(
                                 "project", stringProperty("UUID ou nom unique du projet NEXUS"),
@@ -99,8 +115,8 @@ final class NexusMcpTools {
                 arguments -> {
                     ProjectDescriptor project = resolveProject(arguments);
                     String query = requiredString(arguments, "query");
-                    int limit = positiveInteger(arguments, "limit", DEFAULT_LIMIT);
-                    List<IndexedSymbol> symbols = application.findSymbols(project.id(), query, limit);
+                    List<IndexedSymbol> symbols = application.findSymbols(
+                            project.id(), query, positiveInteger(arguments, "limit", DEFAULT_LIMIT));
                     return Map.of(
                             "project", project(project),
                             "query", query,
@@ -111,7 +127,7 @@ final class NexusMcpTools {
     private McpServerFeatures.SyncToolSpecification findUsages() {
         return tool(
                 "find_usages",
-                "Retourne les relations structurelles connues par NEXUS dont la source ou la cible correspond au symbole demandé. Les données peuvent provenir de JavaParser, SCIP ou d'un provider profond optionnel.",
+                "Retourne les relations structurelles bornées portant sur le symbole demandé dans un projet READY.",
                 objectSchema(
                         Map.of(
                                 "project", stringProperty("UUID ou nom unique du projet NEXUS"),
@@ -121,8 +137,8 @@ final class NexusMcpTools {
                 arguments -> {
                     ProjectDescriptor project = resolveProject(arguments);
                     String symbol = requiredString(arguments, "symbol");
-                    int limit = positiveInteger(arguments, "limit", 20);
-                    List<SymbolRelation> relations = application.findUsages(project.id(), symbol, limit);
+                    List<SymbolRelation> relations = application.findUsages(
+                            project.id(), symbol, positiveInteger(arguments, "limit", 20));
                     return Map.of(
                             "project", project(project),
                             "symbol", symbol,
@@ -132,34 +148,57 @@ final class NexusMcpTools {
 
     private McpServerFeatures.SyncToolSpecification buildContext(boolean forceExplain) {
         String name = forceExplain ? "explain_context" : "build_context";
-        String description = forceExplain
-                ? "Construit un ContextBundle NEXUS sous budget et retourne toutes les explications de sélection, troncature et exclusion disponibles."
-                : "Construit le ContextBundle NEXUS pertinent pour une tâche en respectant strictement le budget de tokens configuré.";
         return tool(
                 name,
-                description,
+                forceExplain
+                        ? "Construit un ContextBundle projet-local et retourne les explications de sélection/exclusion."
+                        : "Construit un ContextBundle NEXUS projet-local sous budget strict.",
                 objectSchema(
                         Map.of(
                                 "project", stringProperty("UUID ou nom unique du projet NEXUS"),
-                                "query", stringProperty("Tâche ou demande pour laquelle construire le contexte"),
-                                "tokenBudget", integerProperty("Budget maximal de tokens estimés, 2000 par défaut"),
-                                "requestedSources", arrayOfStringsProperty("Sources optionnelles: FILE, SYMBOL, TEST, DOCUMENTATION, INSTRUCTION, SKILL, GIT"),
-                                "constraints", objectProperty("Contraintes clé/valeur optionnelles transmises au ContextBuilder")),
+                                "query", stringProperty("Tâche ou demande de contexte"),
+                                "tokenBudget", integerProperty("Budget maximal, 2000 par défaut"),
+                                "requestedSources", arrayOfStringsProperty("Sources optionnelles NEXUS"),
+                                "constraints", objectProperty("Contraintes clé/valeur optionnelles")),
                         List.of("project", "query")),
                 arguments -> {
                     ProjectDescriptor project = resolveProject(arguments);
-                    String query = requiredString(arguments, "query");
-                    int tokenBudget = positiveInteger(arguments, "tokenBudget", DEFAULT_TOKEN_BUDGET);
-                    Set<CandidateType> requestedSources = requestedSources(arguments.get("requestedSources"));
-                    Map<String, String> constraints = stringMap(arguments.get("constraints"));
                     NexusApplication.ContextOperation operation = application.context(
                             project.id(),
-                            query,
-                            tokenBudget,
-                            requestedSources,
-                            constraints,
+                            requiredString(arguments, "query"),
+                            positiveInteger(arguments, "tokenBudget", DEFAULT_TOKEN_BUDGET),
+                            requestedSources(arguments.get("requestedSources")),
+                            stringMap(arguments.get("constraints")),
                             forceExplain);
                     return context(operation);
+                });
+    }
+
+    private McpServerFeatures.SyncToolSpecification buildContextAcrossProjects(boolean forceExplain) {
+        String name = forceExplain ? "explain_context_across_projects" : "build_context_across_projects";
+        return tool(
+                name,
+                forceExplain
+                        ? "Construit un contexte fédéré avec budget global, provenance projet, équité et explications."
+                        : "Construit un contexte fédéré avec budget global, provenance projet et sources natives isolées par projet.",
+                objectSchema(
+                        Map.of(
+                                "projects", arrayOfStringsProperty("UUID ou noms uniques des projets NEXUS"),
+                                "query", stringProperty("Tâche ou demande de contexte"),
+                                "tokenBudget", integerProperty("Budget global maximal, 2000 par défaut"),
+                                "requestedSources", arrayOfStringsProperty("Sources optionnelles NEXUS"),
+                                "constraints", objectProperty("Contraintes clé/valeur optionnelles")),
+                        List.of("projects", "query")),
+                arguments -> {
+                    List<ProjectDescriptor> projects = resolveProjects(arguments);
+                    NexusApplication.FederatedContextOperation operation = application.contextAcrossProjects(
+                            projects.stream().map(ProjectDescriptor::id).toList(),
+                            requiredString(arguments, "query"),
+                            positiveInteger(arguments, "tokenBudget", DEFAULT_TOKEN_BUDGET),
+                            requestedSources(arguments.get("requestedSources")),
+                            stringMap(arguments.get("constraints")),
+                            forceExplain);
+                    return federatedContext(operation);
                 });
     }
 
@@ -168,15 +207,12 @@ final class NexusMcpTools {
             String description,
             Map<String, Object> schema,
             ToolHandler handler) {
-        McpSchema.Tool tool = McpSchema.Tool.builder(name, schema)
-                .description(description)
-                .build();
+        McpSchema.Tool tool = McpSchema.Tool.builder(name, schema).description(description).build();
         return McpServerFeatures.SyncToolSpecification.builder()
                 .tool(tool)
                 .callHandler((exchange, request) -> {
                     try {
-                        Object result = handler.handle(request.arguments());
-                        return textResult(result, false);
+                        return textResult(handler.handle(request.arguments()), false);
                     } catch (Exception exception) {
                         return textResult(Map.of(
                                 "error", "nexus_tool_error",
@@ -204,6 +240,50 @@ final class NexusMcpTools {
 
     private ProjectDescriptor resolveProject(Map<String, Object> arguments) {
         return application.resolveProject(requiredString(arguments, "project"));
+    }
+
+    private List<ProjectDescriptor> resolveProjects(Map<String, Object> arguments) {
+        Object value = arguments.get("projects");
+        if (!(value instanceof List<?> values) || values.isEmpty()) {
+            throw new IllegalArgumentException("projects doit être un tableau non vide");
+        }
+        List<ProjectDescriptor> projects = new ArrayList<>();
+        Set<UUID> seen = new java.util.LinkedHashSet<>();
+        for (Object selector : values) {
+            ProjectDescriptor project = application.resolveProject(String.valueOf(selector));
+            if (seen.add(project.id())) {
+                projects.add(project);
+            }
+        }
+        return List.copyOf(projects);
+    }
+
+    private Map<String, Object> search(NexusApplication.SearchOperation operation) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("project", project(operation.project()));
+        result.put("query", operation.query());
+        result.put("limit", operation.limit());
+        result.put("explain", operation.explain());
+        result.put("durationMs", operation.durationMs());
+        result.put("results", operation.results().stream().map(this::rankedCandidate).toList());
+        return result;
+    }
+
+    private Map<String, Object> federatedSearch(NexusApplication.FederatedSearchOperation operation) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("projects", operation.projects().stream().map(this::project).toList());
+        result.put("query", operation.query());
+        result.put("limit", operation.limit());
+        result.put("explain", operation.explain());
+        result.put("durationMs", operation.durationMs());
+        result.put("results", operation.results().stream().map(this::federatedSearchHit).toList());
+        return result;
+    }
+
+    private Map<String, Object> federatedSearchHit(FederatedSearchHit hit) {
+        return Map.of(
+                "project", project(hit.project()),
+                "result", rankedCandidate(hit.rankedCandidate()));
     }
 
     private Map<String, Object> project(ProjectDescriptor project) {
@@ -235,9 +315,7 @@ final class NexusMcpTools {
     }
 
     private Map<String, Object> indexedSymbol(IndexedSymbol indexed) {
-        return Map.of(
-                "path", indexed.relativePath(),
-                "symbol", symbol(indexed.symbol()));
+        return Map.of("path", indexed.relativePath(), "symbol", symbol(indexed.symbol()));
     }
 
     private Map<String, Object> symbol(com.nexus.index.CodeSymbol symbol) {
@@ -275,6 +353,26 @@ final class NexusMcpTools {
         return result;
     }
 
+    private Map<String, Object> federatedContext(NexusApplication.FederatedContextOperation operation) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("projects", operation.projects().stream().map(this::project).toList());
+        result.put("query", operation.query());
+        result.put("explain", operation.explain());
+        result.put("durationMs", operation.durationMs());
+        result.put("tokenBudget", operation.bundle().tokenBudget());
+        result.put("estimatedTokens", operation.bundle().estimatedTokens());
+        result.put("items", operation.bundle().items().stream().map(this::federatedContextItem).toList());
+        result.put("excluded", operation.bundle().excluded());
+        result.put("metadata", operation.bundle().metadata());
+        return result;
+    }
+
+    private Map<String, Object> federatedContextItem(FederatedContextItem federated) {
+        return Map.of(
+                "project", project(federated.project()),
+                "item", contextItem(federated.item()));
+    }
+
     private Map<String, Object> contextItem(ContextItem item) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("type", item.type().name());
@@ -291,9 +389,7 @@ final class NexusMcpTools {
         return result;
     }
 
-    private static Map<String, Object> objectSchema(
-            Map<String, Object> properties,
-            List<String> required) {
+    private static Map<String, Object> objectSchema(Map<String, Object> properties, List<String> required) {
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("type", "object");
         schema.put("properties", properties);
@@ -317,10 +413,7 @@ final class NexusMcpTools {
     }
 
     private static Map<String, Object> arrayOfStringsProperty(String description) {
-        return Map.of(
-                "type", "array",
-                "items", Map.of("type", "string"),
-                "description", description);
+        return Map.of("type", "array", "items", Map.of("type", "string"), "description", description);
     }
 
     private static Map<String, Object> objectProperty(String description) {

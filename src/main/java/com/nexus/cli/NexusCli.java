@@ -1,49 +1,10 @@
 package com.nexus.cli;
 
+import com.nexus.application.NexusApplication;
 import com.nexus.config.NexusPaths;
-import com.nexus.context.BudgetedContextSelector;
-import com.nexus.context.ContextBundle;
-import com.nexus.context.ContextBuilder;
-import com.nexus.context.ContextFragmentFactory;
-import com.nexus.context.ContextRequest;
-import com.nexus.context.DefaultContextBuilder;
-import com.nexus.context.FragmentMerger;
-import com.nexus.context.source.git.GitRecencyCandidateEnricher;
-import com.nexus.context.source.git.LocalGitContextSourceProvider;
-import com.nexus.context.source.instruction.AgentsMdInstructionProvider;
-import com.nexus.context.source.instruction.ClaudeInstructionProvider;
-import com.nexus.context.source.instruction.CopilotInstructionProvider;
-import com.nexus.context.source.instruction.GeminiInstructionProvider;
-import com.nexus.context.source.skill.LocalAgentSkillsProvider;
-import com.nexus.index.CodeIndexImporter;
-import com.nexus.index.CodeIntelligenceProvider;
 import com.nexus.index.CodeIntelligenceSnapshot;
-import com.nexus.index.IndexRepository;
-import com.nexus.index.IndexStatistics;
-import com.nexus.index.IndexingReport;
-import com.nexus.index.ProjectIndexingService;
-import com.nexus.index.java.JavaParserLanguageAnalyzer;
-import com.nexus.index.jdt.JdtLanguageServerCodeIntelligenceProvider;
-import com.nexus.index.markdown.MarkdownLanguageAnalyzer;
 import com.nexus.index.minos.MinosCodeIndexImporter;
-import com.nexus.index.scan.ProjectScanner;
-import com.nexus.index.scip.ScipCodeIndexImporter;
-import com.nexus.persistence.sqlite.SqliteDatabase;
-import com.nexus.persistence.sqlite.SqliteIndexRepository;
-import com.nexus.persistence.sqlite.SqliteProjectRepository;
 import com.nexus.project.ProjectDescriptor;
-import com.nexus.project.ProjectRegistry;
-import com.nexus.project.ProjectRepository;
-import com.nexus.ranking.DeterministicContextRanker;
-import com.nexus.ranking.RankedCandidate;
-import com.nexus.ranking.graph.GraphCandidateEnricher;
-import com.nexus.search.SearchIndex;
-import com.nexus.search.SearchService;
-import com.nexus.search.SymbolSearchStrategy;
-import com.nexus.search.lucene.LuceneFileSearchStrategy;
-import com.nexus.search.lucene.LuceneSearchIndex;
-import com.nexus.token.HeuristicTokenEstimator;
-import com.nexus.token.TokenEstimator;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -64,7 +25,8 @@ public final class NexusCli {
     static final int EXIT_USAGE_ERROR = 2;
 
     private static final Set<String> COMMANDS = Set.of(
-            "project", "index", "minos-import", "search", "context", "inspect");
+            "project", "index", "minos-import", "search", "search-federated",
+            "context", "context-federated", "inspect");
 
     private NexusCli() {
     }
@@ -84,8 +46,7 @@ public final class NexusCli {
         boolean json = Arrays.asList(rawArgs).contains("--json");
         CliRenderer renderer = new CliRenderer(out, err, json);
         try {
-            String[] args = withoutJsonFlag(rawArgs);
-            run(args, input, renderer);
+            run(withoutJsonFlag(rawArgs), input, renderer);
             return EXIT_SUCCESS;
         } catch (IllegalArgumentException exception) {
             renderer.renderError(exception.getMessage(), EXIT_USAGE_ERROR);
@@ -109,66 +70,22 @@ public final class NexusCli {
             throw new IllegalArgumentException("Commande inconnue : " + args[0]);
         }
 
-        NexusPaths paths = NexusPaths.fromEnvironment();
-        SqliteDatabase database = new SqliteDatabase(paths);
-        ProjectRepository projectRepository = new SqliteProjectRepository(database);
-        IndexRepository indexRepository = new SqliteIndexRepository(database);
-        ProjectRegistry registry = new ProjectRegistry(projectRepository);
-        SearchIndex searchIndex = new LuceneSearchIndex(paths);
-        List<CodeIntelligenceProvider> codeIntelligenceProviders =
-                JdtLanguageServerCodeIntelligenceProvider.fromEnvironment(paths)
-                        .<List<CodeIntelligenceProvider>>map(provider -> List.of(provider))
-                        .orElseGet(List::of);
-        List<CodeIndexImporter> codeIndexImporters = List.of(new ScipCodeIndexImporter());
-        ProjectIndexingService indexingService = new ProjectIndexingService(
-                projectRepository,
-                indexRepository,
-                new ProjectScanner(),
-                List.of(
-                        new JavaParserLanguageAnalyzer(),
-                        new MarkdownLanguageAnalyzer()),
-                searchIndex,
-                codeIndexImporters,
-                codeIntelligenceProviders);
-        SearchService searchService = new SearchService(
-                List.of(
-                        new LuceneFileSearchStrategy(searchIndex),
-                        new SymbolSearchStrategy(indexRepository)),
-                List.of(
-                        new GraphCandidateEnricher(indexRepository),
-                        new GitRecencyCandidateEnricher()),
-                new DeterministicContextRanker());
-        TokenEstimator tokenEstimator = new HeuristicTokenEstimator();
-        ContextBuilder contextBuilder = new DefaultContextBuilder(
-                projectRepository,
-                searchService,
-                new ContextFragmentFactory(tokenEstimator),
-                new FragmentMerger(),
-                new BudgetedContextSelector(tokenEstimator),
-                tokenEstimator,
-                List.of(
-                        new AgentsMdInstructionProvider(),
-                        new CopilotInstructionProvider(),
-                        new ClaudeInstructionProvider(),
-                        new GeminiInstructionProvider()),
-                List.of(new LocalAgentSkillsProvider()),
-                new LocalGitContextSourceProvider());
-
+        NexusApplication application = NexusApplication.create(NexusPaths.fromEnvironment());
         switch (args[0]) {
-            case "project" -> handleProject(args, registry, renderer);
-            case "index" -> handleIndex(args, projectRepository, indexingService, renderer);
-            case "minos-import" -> handleMinosImport(args, input, projectRepository, indexRepository, renderer);
-            case "search" -> handleSearch(args, projectRepository, searchService, renderer);
-            case "context" -> handleContext(args, projectRepository, contextBuilder, renderer);
-            case "inspect" -> handleInspect(args, projectRepository, indexRepository, renderer);
+            case "project" -> handleProject(args, application, renderer);
+            case "index" -> handleIndex(args, application, renderer);
+            case "minos-import" -> handleMinosImport(args, input, application, renderer);
+            case "search" -> handleSearch(args, application, renderer);
+            case "search-federated" -> handleFederatedSearch(args, application, renderer);
+            case "context" -> handleContext(args, application, renderer);
+            case "context-federated" -> handleFederatedContext(args, application, renderer);
+            case "inspect" -> handleInspect(args, application, renderer);
             default -> throw new IllegalStateException("Commande validée mais non routée : " + args[0]);
         }
     }
 
-    private static void handleProject(
-            String[] args,
-            ProjectRegistry registry,
-            CliRenderer renderer) throws Exception {
+    private static void handleProject(String[] args, NexusApplication application, CliRenderer renderer)
+            throws Exception {
         if (args.length < 2) {
             throw new IllegalArgumentException("Commande attendue : project add|list");
         }
@@ -178,29 +95,25 @@ public final class NexusCli {
                     throw new IllegalArgumentException("Usage : nexus project add <chemin> [nom] [--json]");
                 }
                 String name = args.length == 4 ? args[3] : null;
-                ProjectDescriptor project = registry.register(Path.of(args[2]), name);
-                renderer.renderProject(project);
+                renderer.renderProject(application.registerProject(Path.of(args[2]), name));
             }
             case "list" -> {
                 if (args.length != 2) {
                     throw new IllegalArgumentException("Usage : nexus project list [--json]");
                 }
-                renderer.renderProjects(registry.list());
+                renderer.renderProjects(application.listProjects());
             }
             default -> throw new IllegalArgumentException("Commande project inconnue : " + args[1]);
         }
     }
 
-    private static void handleIndex(
-            String[] args,
-            ProjectRepository projectRepository,
-            ProjectIndexingService indexingService,
-            CliRenderer renderer) throws Exception {
+    private static void handleIndex(String[] args, NexusApplication application, CliRenderer renderer)
+            throws Exception {
         if (args.length < 2 || args.length > 4) {
             throw new IllegalArgumentException(
                     "Usage : nexus index <id-ou-nom> [--rebuild] [--deep-java] [--json]");
         }
-        ProjectDescriptor project = resolveProject(projectRepository, args[1]);
+        ProjectDescriptor project = application.resolveProject(args[1]);
         boolean rebuild = false;
         boolean deepJava = false;
         for (int index = 2; index < args.length; index++) {
@@ -210,33 +123,21 @@ public final class NexusCli {
                 default -> throw new IllegalArgumentException("Option inconnue pour index : " + args[index]);
             }
         }
-
-        IndexingReport report;
-        if (deepJava) {
-            report = rebuild
-                    ? indexingService.rebuildWithCodeIntelligence(project.id())
-                    : indexingService.indexWithCodeIntelligence(project.id());
-        } else {
-            report = rebuild
-                    ? indexingService.rebuild(project.id())
-                    : indexingService.index(project.id());
-        }
-        ProjectDescriptor updatedProject = projectRepository.findById(project.id()).orElse(project);
-        renderer.renderIndex(updatedProject, report);
+        NexusApplication.IndexOperation operation = application.index(project.id(), rebuild, deepJava);
+        renderer.renderIndex(operation.project(), operation.report());
     }
 
     private static void handleMinosImport(
             String[] args,
             InputStream input,
-            ProjectRepository projectRepository,
-            IndexRepository indexRepository,
+            NexusApplication application,
             CliRenderer renderer) throws Exception {
         if (args.length != 2) {
             throw new IllegalArgumentException("Usage : nexus minos-import <id-ou-nom> < export-minos.json [--json]");
         }
-        ProjectDescriptor project = resolveProject(projectRepository, args[1]);
-        int limit = Math.toIntExact(MinosCodeIndexImporter.MAX_EXPORT_BYTES) + 1;
-        byte[] bytes = input.readNBytes(limit);
+        ProjectDescriptor project = application.resolveProject(args[1]);
+        int readLimit = Math.toIntExact(MinosCodeIndexImporter.MAX_EXPORT_BYTES) + 1;
+        byte[] bytes = input.readNBytes(readLimit);
         if (bytes.length > MinosCodeIndexImporter.MAX_EXPORT_BYTES) {
             throw new IllegalArgumentException("Le payload MINOS dépasse la limite de 128 MiB");
         }
@@ -244,27 +145,86 @@ public final class NexusCli {
         if (payload.isBlank()) {
             throw new IllegalArgumentException("Le payload MINOS doit être fourni sur stdin");
         }
-        CodeIntelligenceSnapshot snapshot = new MinosCodeIndexImporter().importPayload(project.rootPath(), payload);
-        indexRepository.replaceExternalCodeIntelligence(project.id(), snapshot);
-        renderer.renderMinosImport(project, snapshot);
+        CodeIntelligenceSnapshot snapshot = application.importMinos(project.id(), payload);
+        renderer.renderMinosImport(application.getProject(project.id()), snapshot);
     }
 
-    private static void handleSearch(
-            String[] args,
-            ProjectRepository projectRepository,
-            SearchService searchService,
-            CliRenderer renderer) throws Exception {
+    private static void handleSearch(String[] args, NexusApplication application, CliRenderer renderer)
+            throws Exception {
         if (args.length < 3) {
             throw new IllegalArgumentException(
                     "Usage : nexus search <id-ou-nom> <requête> [--limit N] [--explain] [--json]");
         }
+        ProjectDescriptor project = application.resolveProject(args[1]);
+        ParsedSearch parsed = parseSearch(args, 2, "search");
+        NexusApplication.SearchOperation operation = application.search(
+                project.id(), parsed.query(), parsed.limit(), parsed.explain());
+        renderer.renderSearch(
+                operation.project(), operation.query(), operation.limit(), operation.explain(),
+                operation.durationMs(), operation.results());
+    }
 
-        ProjectDescriptor project = resolveProject(projectRepository, args[1]);
+    private static void handleFederatedSearch(
+            String[] args,
+            NexusApplication application,
+            CliRenderer renderer) throws Exception {
+        if (args.length < 3) {
+            throw new IllegalArgumentException(
+                    "Usage : nexus search-federated <projet1,projet2,...> <requête> [--limit N] [--explain] [--json]");
+        }
+        List<UUID> projectIds = resolveProjectScope(application, args[1]);
+        ParsedSearch parsed = parseSearch(args, 2, "search-federated");
+        NexusApplication.FederatedSearchOperation operation = application.searchAcrossProjects(
+                projectIds, parsed.query(), parsed.limit(), parsed.explain());
+        renderer.renderFederatedSearch(
+                operation.projects(), operation.query(), operation.limit(), operation.explain(),
+                operation.durationMs(), operation.results());
+    }
+
+    private static void handleContext(String[] args, NexusApplication application, CliRenderer renderer)
+            throws Exception {
+        if (args.length < 3) {
+            throw new IllegalArgumentException(
+                    "Usage : nexus context <id-ou-nom> <requête> [--budget N] [--explain] [--json]");
+        }
+        ProjectDescriptor project = application.resolveProject(args[1]);
+        ParsedContext parsed = parseContext(args, 2, "context");
+        NexusApplication.ContextOperation operation = application.context(
+                project.id(), parsed.query(), parsed.budget(), Set.of(), Map.of(), parsed.explain());
+        renderer.renderContext(
+                operation.project(), operation.query(), operation.explain(), operation.durationMs(), operation.bundle());
+    }
+
+    private static void handleFederatedContext(
+            String[] args,
+            NexusApplication application,
+            CliRenderer renderer) throws Exception {
+        if (args.length < 3) {
+            throw new IllegalArgumentException(
+                    "Usage : nexus context-federated <projet1,projet2,...> <requête> [--budget N] [--explain] [--json]");
+        }
+        List<UUID> projectIds = resolveProjectScope(application, args[1]);
+        ParsedContext parsed = parseContext(args, 2, "context-federated");
+        NexusApplication.FederatedContextOperation operation = application.contextAcrossProjects(
+                projectIds, parsed.query(), parsed.budget(), Set.of(), Map.of(), parsed.explain());
+        renderer.renderFederatedContext(
+                operation.projects(), operation.query(), operation.explain(), operation.durationMs(), operation.bundle());
+    }
+
+    private static void handleInspect(String[] args, NexusApplication application, CliRenderer renderer)
+            throws Exception {
+        if (args.length != 2) {
+            throw new IllegalArgumentException("Usage : nexus inspect <id-ou-nom> [--json]");
+        }
+        ProjectDescriptor project = application.resolveProject(args[1]);
+        renderer.renderInspect(project, application.inspect(project.id()));
+    }
+
+    private static ParsedSearch parseSearch(String[] args, int start, String command) {
         int limit = 10;
         boolean explain = false;
         List<String> queryParts = new ArrayList<>();
-
-        for (int index = 2; index < args.length; index++) {
+        for (int index = start; index < args.length; index++) {
             if ("--explain".equals(args[index])) {
                 explain = true;
             } else if ("--limit".equals(args[index])) {
@@ -273,35 +233,19 @@ public final class NexusCli {
                 }
                 limit = positiveInteger("--limit", args[++index]);
             } else if (args[index].startsWith("--")) {
-                throw new IllegalArgumentException("Option inconnue pour search : " + args[index]);
+                throw new IllegalArgumentException("Option inconnue pour " + command + " : " + args[index]);
             } else {
                 queryParts.add(args[index]);
             }
         }
-
-        String query = query(queryParts, "La requête de recherche ne peut pas être vide");
-        long startedAt = System.nanoTime();
-        List<RankedCandidate> results = searchService.search(project, query, limit, explain);
-        long durationMs = elapsedMillis(startedAt);
-        renderer.renderSearch(project, query, limit, explain, durationMs, results);
+        return new ParsedSearch(query(queryParts, "La requête de recherche ne peut pas être vide"), limit, explain);
     }
 
-    private static void handleContext(
-            String[] args,
-            ProjectRepository projectRepository,
-            ContextBuilder contextBuilder,
-            CliRenderer renderer) throws Exception {
-        if (args.length < 3) {
-            throw new IllegalArgumentException(
-                    "Usage : nexus context <id-ou-nom> <requête> [--budget N] [--explain] [--json]");
-        }
-
-        ProjectDescriptor project = resolveProject(projectRepository, args[1]);
+    private static ParsedContext parseContext(String[] args, int start, String command) {
         int budget = 2_000;
         boolean explain = false;
         List<String> queryParts = new ArrayList<>();
-
-        for (int index = 2; index < args.length; index++) {
+        for (int index = start; index < args.length; index++) {
             if ("--explain".equals(args[index])) {
                 explain = true;
             } else if ("--budget".equals(args[index])) {
@@ -310,56 +254,26 @@ public final class NexusCli {
                 }
                 budget = positiveInteger("--budget", args[++index]);
             } else if (args[index].startsWith("--")) {
-                throw new IllegalArgumentException("Option inconnue pour context : " + args[index]);
+                throw new IllegalArgumentException("Option inconnue pour " + command + " : " + args[index]);
             } else {
                 queryParts.add(args[index]);
             }
         }
-
-        String query = query(queryParts, "La requête de contexte ne peut pas être vide");
-        long startedAt = System.nanoTime();
-        ContextBundle bundle = contextBuilder.build(new ContextRequest(
-                project.id(),
-                query,
-                budget,
-                Set.of(),
-                Map.of(),
-                explain));
-        long durationMs = elapsedMillis(startedAt);
-        renderer.renderContext(project, query, explain, durationMs, bundle);
+        return new ParsedContext(query(queryParts, "La requête de contexte ne peut pas être vide"), budget, explain);
     }
 
-    private static void handleInspect(
-            String[] args,
-            ProjectRepository projectRepository,
-            IndexRepository indexRepository,
-            CliRenderer renderer) throws Exception {
-        if (args.length != 2) {
-            throw new IllegalArgumentException("Usage : nexus inspect <id-ou-nom> [--json]");
+    private static List<UUID> resolveProjectScope(NexusApplication application, String selectors) {
+        List<UUID> ids = Arrays.stream(selectors.split(","))
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .map(application::resolveProject)
+                .map(ProjectDescriptor::id)
+                .distinct()
+                .toList();
+        if (ids.isEmpty()) {
+            throw new IllegalArgumentException("La portée fédérée doit contenir au moins un projet");
         }
-        ProjectDescriptor project = resolveProject(projectRepository, args[1]);
-        IndexStatistics statistics = indexRepository.statistics(project.id());
-        renderer.renderInspect(project, statistics);
-    }
-
-    private static ProjectDescriptor resolveProject(ProjectRepository repository, String selector) {
-        try {
-            UUID projectId = UUID.fromString(selector);
-            return repository.findById(projectId)
-                    .orElseThrow(() -> new IllegalArgumentException("Projet introuvable : " + selector));
-        } catch (IllegalArgumentException notUuidOrMissing) {
-            List<ProjectDescriptor> matches = repository.findAll().stream()
-                    .filter(project -> project.name().equalsIgnoreCase(selector))
-                    .toList();
-            if (matches.size() == 1) {
-                return matches.getFirst();
-            }
-            if (matches.size() > 1) {
-                throw new IllegalArgumentException(
-                        "Plusieurs projets portent le nom '" + selector + "'. Utilisez leur UUID.");
-            }
-            throw new IllegalArgumentException("Projet introuvable : " + selector);
-        }
+        return ids;
     }
 
     private static int positiveInteger(String option, String value) {
@@ -388,15 +302,9 @@ public final class NexusCli {
                 .toArray(String[]::new);
     }
 
-    private static long elapsedMillis(long startedAt) {
-        return Math.max(0L, (System.nanoTime() - startedAt) / 1_000_000L);
-    }
-
     private static String safeMessage(Exception exception) {
         String message = exception.getMessage();
-        return message == null || message.isBlank()
-                ? exception.getClass().getSimpleName()
-                : message;
+        return message == null || message.isBlank() ? exception.getClass().getSimpleName() : message;
     }
 
     private static String version() {
@@ -404,5 +312,11 @@ public final class NexusCli {
         return implementationVersion == null || implementationVersion.isBlank()
                 ? "0.1.0-SNAPSHOT"
                 : implementationVersion;
+    }
+
+    private record ParsedSearch(String query, int limit, boolean explain) {
+    }
+
+    private record ParsedContext(String query, int budget, boolean explain) {
     }
 }

@@ -1,303 +1,120 @@
-# Architecture d'implémentation
+# Architecture d'implémentation — Phase 6
 
-Ce chapitre décrit l'organisation concrète du code NEXUS au niveau développeur.
+Ce chapitre décrit l'organisation concrète du code sur `phase-6-consolidation-hardening`. La qualification locale exact-head reste nécessaire avant promotion.
 
-## 1. Style architectural actuel
+## Repository
 
-Le repository utilise actuellement **un seul module Maven**, mais les responsabilités sont séparées par packages et interfaces.
-
-L'objectif est de conserver la vitesse de développement d'un mono-module tout en préparant une extraction future lorsque les runtimes divergeront réellement.
-
-```mermaid
-flowchart TB
-    subgraph ADAPTERS[Adaptateurs entrants]
-        CLI[NexusCli]
-        API[API REST future]
-        MCP[MCP futur]
-    end
-
-    subgraph APP[Services applicatifs]
-        REG[ProjectRegistry]
-        IDX[ProjectIndexingService]
-        SEARCH[SearchService]
-        CTX[DefaultContextBuilder]
-    end
-
-    subgraph DOMAIN[Contrats / modèles NEXUS]
-        PROJECT[ProjectDescriptor]
-        SYMBOL[CodeSymbol / SymbolRelation]
-        CAND[SearchCandidate / RankedCandidate]
-        BUNDLE[ContextRequest / ContextBundle]
-    end
-
-    subgraph PORTS[Ports sortants]
-        PR[ProjectRepository]
-        IR[IndexRepository]
-        SI[SearchIndex]
-        LA[LanguageAnalyzer]
-        TE[TokenEstimator]
-    end
-
-    subgraph TECH[Adaptateurs techniques]
-        SPR[SqliteProjectRepository]
-        SIR[SqliteIndexRepository]
-        LSI[LuceneSearchIndex]
-        JPA[JavaParserLanguageAnalyzer]
-        HTE[HeuristicTokenEstimator]
-    end
-
-    ADAPTERS --> APP
-    APP --> DOMAIN
-    APP --> PORTS
-    PR --> SPR
-    IR --> SIR
-    SI --> LSI
-    LA --> JPA
-    TE --> HTE
+```text
+nexus-context-engine/
+├── pom.xml                         parent/reactor 0.2.0
+├── core/pom.xml                    module core, sources historiques dans ../src
+├── src/main/java/com/nexus/        domaine + application + adapters locaux
+├── src/main/resources/             migrations SQLite
+├── src/test/java/com/nexus/
+├── adapters/
+│   ├── rest-quarkus/
+│   ├── mcp-java/
+│   └── assistant-clients/
+├── distribution/                   launchers + assembly
+├── scripts/
+│   ├── self-smoke.ps1
+│   └── validate-phase-6.ps1
+├── mvnw.cmd / mvnw
+└── docs/
 ```
 
-La dépendance conceptuelle doit toujours aller vers les contrats NEXUS.
+Le parent centralise Java 21, versions de dépendances/BOM, plugins, Enforcer et SBOM. Les adaptateurs restent des modules optionnels mais ne dérivent plus chacun leur propre gouvernance Maven.
 
-Un adaptateur technique peut connaître le domaine ; le domaine ne doit pas connaître Lucene, SQLite ou JavaParser.
+## Composition root
 
-## 2. Composition de l'application CLI
+`NexusApplication` compose les ports et adapters partagés par toutes les surfaces :
 
-Pour l'instant, `NexusCli` joue aussi le rôle de **composition root** : c'est l'endroit où les implémentations concrètes sont instanciées et injectées dans les services.
+```text
+NexusPaths
+  ↓
+SqliteDatabase
+  ├─ SqliteProjectRepository
+  └─ SqliteIndexRepository
+  ↓
+ProjectRegistry
+ProjectIndexingService
+SearchService
+FederatedSearchService
+DefaultContextBuilder
+FederatedContextService
+```
 
-Le câblage actuel est conceptuellement :
+La CLI fait uniquement parsing/rendu et délègue les opérations à cette façade. REST et MCP font de même.
+
+## Indexation et cohérence
+
+`ProjectIndexingService` :
+
+1. acquiert un verrou single-flight par projet ;
+2. marque le projet `INDEXING` ;
+3. scanne les fichiers supportés sous plafond de taille ;
+4. analyse les fichiers modifiés ;
+5. met à jour SQLite ;
+6. rafraîchit SCIP/JDT selon configuration ;
+7. met à jour les index dérivés ;
+8. marque `READY` ;
+9. en cas d'échec, marque `FAILED`.
+
+Un état persistant non-`READY` force le prochain rebuild complet. Un `INDEXING` laissé par un crash est donc récupérable.
+
+V002 ajoute `project_index_generations`. Les mises à jour canoniques font avancer cette génération, utilisée pour invalider le cache de graphe.
+
+## Repositories à grande échelle
+
+`IndexRepository` garde les APIs exhaustives nécessaires aux rebuilds, mais ajoute des chemins bornés :
 
 ```java
-NexusPaths paths = NexusPaths.fromEnvironment();
-SqliteDatabase database = new SqliteDatabase(paths);
-
-ProjectRepository projectRepository = new SqliteProjectRepository(database);
-IndexRepository indexRepository = new SqliteIndexRepository(database);
-SearchIndex searchIndex = new LuceneSearchIndex(paths);
-
-ProjectIndexingService indexingService = ...;
-SearchService searchService = ...;
-TokenEstimator tokenEstimator = new HeuristicTokenEstimator();
-ContextBuilder contextBuilder = new DefaultContextBuilder(...);
+findFiles(projectId, relativePaths)
+searchSymbols(projectId, query, limit)
+searchRelations(projectId, symbol, limit)
+generation(projectId)
 ```
 
-Aucun conteneur d'injection n'est nécessaire pour le MVP.
+SQLite surcharge ces méthodes pour filtrer avant matérialisation. Les doubles de tests restent compatibles via les implémentations par défaut.
 
-### Diagramme UML de composition
+## Ranking
 
-```mermaid
-classDiagram
-    class NexusCli
-    class ProjectRegistry
-    class ProjectIndexingService
-    class SearchService
-    class DefaultContextBuilder
-    class SqliteProjectRepository
-    class SqliteIndexRepository
-    class LuceneSearchIndex
-    class JavaParserLanguageAnalyzer
-    class DeterministicContextRanker
-    class GraphCandidateEnricher
-    class HeuristicTokenEstimator
+- Lucene : candidats fichiers ;
+- SQLite borné : candidats symboles ;
+- graphe : cache dérivé par génération ;
+- Git : signal local ;
+- sémantique : stratégie optionnelle ;
+- ranker déterministe, ou hybrid RRF lorsque le sémantique est activé.
 
-    NexusCli --> ProjectRegistry : crée / appelle
-    NexusCli --> ProjectIndexingService : crée / appelle
-    NexusCli --> SearchService : crée / appelle
-    NexusCli --> DefaultContextBuilder : crée / appelle
+La fédération sur-récupère localement puis trie/diversifie globalement.
 
-    ProjectRegistry --> SqliteProjectRepository
-    ProjectIndexingService --> SqliteProjectRepository
-    ProjectIndexingService --> SqliteIndexRepository
-    ProjectIndexingService --> LuceneSearchIndex
-    ProjectIndexingService --> JavaParserLanguageAnalyzer
+## ContextBuilder
 
-    SearchService --> LuceneSearchIndex : via stratégie
-    SearchService --> SqliteIndexRepository : symboles
-    SearchService --> GraphCandidateEnricher
-    SearchService --> DeterministicContextRanker
+`DefaultContextBuilder` reste projet-local. `FederatedContextService` orchestre plusieurs ContextBundle locaux sous un budget global et ajoute provenance/fairness/déduplication sans changer les règles natives de chaque projet.
 
-    DefaultContextBuilder --> SearchService
-    DefaultContextBuilder --> HeuristicTokenEstimator
-```
+## Providers
 
-Lorsque l'API REST ou MCP sera ajoutée, ces adaptateurs devront construire ou recevoir les **mêmes services**, pas réimplémenter leur logique.
+Code intelligence :
 
-## 3. Responsabilités par package
+- JavaParser embarqué ;
+- SCIP import opportuniste ;
+- JDT LS explicite ;
+- MINOS import explicite et hors orchestration NEXUS.
 
-### `project`
+Skills :
 
-Responsable de l'identité et de l'enregistrement d'un projet.
+- `LocalAgentSkillsProvider` ;
+- `AiSkillsRegistryProvider` ;
+- composition indépendante via `SkillDiscoveryService`.
 
-Principales classes :
+## Sémantique
 
-- `ProjectDescriptor` : modèle du projet ;
-- `ProjectRepository` : port de persistance ;
-- `ProjectRegistry` : logique d'enregistrement et consultation ;
-- `IndexStatus` : état `NOT_INDEXED`, `INDEXING`, `READY`, `FAILED`.
+`SemanticSearchConfiguration.fromEnvironment()` est la seule résolution opérationnelle commune. Sans `NEXUS_SEMANTIC_PROVIDER`, aucun provider d'embeddings n'est créé.
 
-### `config`
+`SemanticIndexingService` batch les documents. `OllamaEmbeddingProvider` surcharge `embedAll` et utilise l'entrée tableau de `/api/embed`.
 
-Responsable des emplacements locaux NEXUS.
+## Packaging
 
-`NexusPaths` résout le répertoire `NEXUS_HOME` puis les chemins de :
+Le module core produit dans `core/target`, puis copie les deux JAR attendus dans `target/` pour conserver la compatibilité avec les scripts historiques. Le parent conserve son propre `target/sbom`, évitant toute collision de `clean` entre modules.
 
-- base SQLite ;
-- index Lucene par projet ;
-- autres données locales futures.
-
-### `index`
-
-Responsable du pipeline de transformation :
-
-```text
-filesystem
-→ ScannedFile
-→ AnalysisResult
-→ IndexedFileUpdate
-→ SQLite + Lucene
-```
-
-Les types `CodeSymbol` et `SymbolRelation` sont des modèles internes NEXUS et non des types JavaParser.
-
-### `persistence.sqlite`
-
-Implémente les ports de persistance avec JDBC/SQLite.
-
-Les classes métier ne reçoivent jamais de `Connection`, `ResultSet` ou `PreparedStatement`.
-
-### `search`
-
-Responsable de la récupération des candidats :
-
-- `SearchStrategy` ;
-- `LuceneFileSearchStrategy` ;
-- `SymbolSearchStrategy` ;
-- `CandidateMerger` ;
-- `SearchService`.
-
-### `ranking`
-
-Responsable de l'enrichissement structurel et du score final :
-
-- `GraphCandidateEnricher` ;
-- `ProjectGraphBuilder` ;
-- `DeterministicContextRanker` ;
-- `RankedCandidate`.
-
-### `context`
-
-Responsable du passage du ranking au contenu réellement injectable :
-
-- `ContextFragmentFactory` ;
-- `FragmentMerger` ;
-- `BudgetedContextSelector` ;
-- `DefaultContextBuilder` ;
-- `ContextBundle`.
-
-### `token`
-
-Contient le port `TokenEstimator` et l'implémentation locale `HeuristicTokenEstimator`.
-
-## 4. Flux de bout en bout
-
-```mermaid
-sequenceDiagram
-    actor User as Utilisateur
-    participant CLI as NexusCli
-    participant Index as ProjectIndexingService
-    participant Search as SearchService
-    participant Context as DefaultContextBuilder
-    participant SQLite as SQLite
-    participant Lucene as Lucene
-
-    User->>CLI: project add
-    CLI->>SQLite: enregistrer ProjectDescriptor
-
-    User->>CLI: index
-    CLI->>Index: index(projectId)
-    Index->>SQLite: lire fichiers connus
-    Index->>Index: scanner + SHA-256 + JavaParser
-    Index->>SQLite: persister fichiers/symboles/relations
-    Index->>Lucene: appliquer/reconstruire index
-
-    User->>CLI: search query
-    CLI->>Search: search(project, query)
-    Search->>Lucene: recherche BM25 fichiers
-    Search->>SQLite: recherche symboles + relations
-    Search-->>CLI: RankedCandidate[]
-
-    User->>CLI: context query --budget N
-    CLI->>Context: build(ContextRequest)
-    Context->>Search: récupérer candidats classés
-    Context->>Context: fragments + fusion + budget
-    Context-->>CLI: ContextBundle
-```
-
-## 5. Invariants architecturaux
-
-### Invariant A — Lucene n'est jamais canonique
-
-Si l'index Lucene est supprimé, il doit pouvoir être reconstruit.
-
-### Invariant B — les chemins persistés sont relatifs au projet
-
-L'identité d'un fichier dans l'index est le couple :
-
-```text
-(projectId, relativePath)
-```
-
-Les chemins absolus sont utilisés pour accéder au filesystem, mais les sorties de contexte utilisent des chemins relatifs pour rester portables.
-
-### Invariant C — le ranking est déterministe
-
-À index, requête et configuration identiques, l'ordre doit être identique.
-
-### Invariant D — le contexte ne dépasse pas le budget estimé
-
-Pour chaque bundle :
-
-```text
-ContextBundle.estimatedTokens <= ContextBundle.tokenBudget
-```
-
-### Invariant E — les détails fournisseurs restent aux frontières
-
-Un futur tokenizer Claude/OpenAI, un serveur MCP ou un endpoint REST doit être un adaptateur.
-
-## 6. Où ajouter une nouvelle fonctionnalité ?
-
-### Ajouter un autre moteur de recherche
-
-Implémenter `SearchIndex` ou une nouvelle `SearchStrategy`.
-
-Ne pas modifier `ContextBuilder` pour parler directement au moteur.
-
-### Ajouter un langage
-
-Implémenter `LanguageAnalyzer` ou un futur `CodeIntelligenceProvider`.
-
-Convertir toujours les données vers `CodeSymbol` / `SymbolRelation`.
-
-### Ajouter un tokenizer exact
-
-Implémenter `TokenEstimator`, puis l'injecter dans :
-
-- `ContextFragmentFactory` ;
-- `BudgetedContextSelector` ;
-- `DefaultContextBuilder`.
-
-### Ajouter une nouvelle source de contexte
-
-La direction cible est `ContextSourceProvider` ; ne pas coder directement les conventions Copilot/Claude dans `DefaultContextBuilder`.
-
-## 7. Règles de dépendance à vérifier en revue de code
-
-Un changement mérite une alerte si :
-
-- une classe `context` importe directement une classe Lucene ;
-- une classe `ranking` ouvre une connexion JDBC ;
-- une classe de domaine dépend de Quarkus ou MCP ;
-- une ressource REST future contient le calcul du score ;
-- un nouveau provider externe devient obligatoire pour lancer le moteur local.
-
-Ces règles matérialisent les ADR 0001, 0003, 0005, 0006, 0007 et 0017.
+Le ZIP standalone est assemblé dans `target/distribution` et accompagné d'un SHA-256.

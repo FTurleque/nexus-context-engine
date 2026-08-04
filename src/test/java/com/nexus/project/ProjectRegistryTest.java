@@ -36,7 +36,7 @@ class ProjectRegistryTest {
         ProjectDescriptor reloaded = reopenedRegistry.get(first.id());
 
         assertEquals(first.id(), reloaded.id());
-        assertEquals(projectRoot.toAbsolutePath().normalize(), reloaded.rootPath());
+        assertEquals(first.rootPath(), reloaded.rootPath());
         assertEquals(IndexStatus.NOT_INDEXED, reloaded.indexStatus());
     }
 }

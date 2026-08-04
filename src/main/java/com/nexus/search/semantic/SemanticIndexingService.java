@@ -18,21 +18,31 @@ public final class SemanticIndexingService {
 
     public static final int DEFAULT_MAX_EMBEDDING_CHARS = 12_000;
     public static final int DEFAULT_EXCERPT_CHARS = 320;
+    public static final int DEFAULT_BATCH_SIZE = 32;
 
     private final EmbeddingProvider embeddingProvider;
     private final SemanticSearchIndex semanticSearchIndex;
     private final int maxEmbeddingChars;
+    private final int batchSize;
 
     public SemanticIndexingService(
             EmbeddingProvider embeddingProvider,
             SemanticSearchIndex semanticSearchIndex) {
-        this(embeddingProvider, semanticSearchIndex, DEFAULT_MAX_EMBEDDING_CHARS);
+        this(embeddingProvider, semanticSearchIndex, DEFAULT_MAX_EMBEDDING_CHARS, DEFAULT_BATCH_SIZE);
     }
 
     public SemanticIndexingService(
             EmbeddingProvider embeddingProvider,
             SemanticSearchIndex semanticSearchIndex,
             int maxEmbeddingChars) {
+        this(embeddingProvider, semanticSearchIndex, maxEmbeddingChars, DEFAULT_BATCH_SIZE);
+    }
+
+    public SemanticIndexingService(
+            EmbeddingProvider embeddingProvider,
+            SemanticSearchIndex semanticSearchIndex,
+            int maxEmbeddingChars,
+            int batchSize) {
         this.embeddingProvider = Objects.requireNonNull(embeddingProvider, "embeddingProvider");
         this.semanticSearchIndex = Objects.requireNonNull(semanticSearchIndex, "semanticSearchIndex");
         if (embeddingProvider.dimensions() <= 0) {
@@ -45,7 +55,11 @@ public final class SemanticIndexingService {
         if (maxEmbeddingChars <= 0) {
             throw new IllegalArgumentException("maxEmbeddingChars must be greater than zero");
         }
+        if (batchSize <= 0 || batchSize > 256) {
+            throw new IllegalArgumentException("batchSize must be between 1 and 256");
+        }
         this.maxEmbeddingChars = maxEmbeddingChars;
+        this.batchSize = batchSize;
     }
 
     public String modelId() {
@@ -65,25 +79,43 @@ public final class SemanticIndexingService {
 
     private List<SemanticVectorDocument> vectorize(List<SearchDocument> documents) throws IOException {
         Objects.requireNonNull(documents, "documents");
+        if (documents.isEmpty()) {
+            return List.of();
+        }
         List<SemanticVectorDocument> vectors = new ArrayList<>(documents.size());
-        for (SearchDocument document : documents) {
-            String embeddingText = embeddingText(document);
-            float[] vector = Objects.requireNonNull(
-                    embeddingProvider.embed(embeddingText),
-                    "embedding vector");
-            if (vector.length != embeddingProvider.dimensions()) {
+        for (int start = 0; start < documents.size(); start += batchSize) {
+            int end = Math.min(documents.size(), start + batchSize);
+            List<SearchDocument> batch = documents.subList(start, end);
+            List<String> texts = batch.stream().map(this::embeddingText).toList();
+            List<float[]> embedded = Objects.requireNonNull(
+                    embeddingProvider.embedAll(texts),
+                    "embedding vectors");
+            if (embedded.size() != batch.size()) {
                 throw new IOException(
                         "Le provider d'embeddings " + embeddingProvider.modelId()
-                                + " a produit un vecteur de dimension " + vector.length
-                                + " au lieu de " + embeddingProvider.dimensions());
+                                + " a produit " + embedded.size() + " vecteur(s) pour " + batch.size() + " document(s)");
             }
-            vectors.add(new SemanticVectorDocument(
-                    document.relativePath(),
-                    document.category(),
-                    excerpt(document),
-                    vector));
+            for (int index = 0; index < batch.size(); index++) {
+                SearchDocument document = batch.get(index);
+                float[] vector = Objects.requireNonNull(embedded.get(index), "embedding vector");
+                validateDimensions(vector);
+                vectors.add(new SemanticVectorDocument(
+                        document.relativePath(),
+                        document.category(),
+                        excerpt(document),
+                        vector));
+            }
         }
         return List.copyOf(vectors);
+    }
+
+    private void validateDimensions(float[] vector) throws IOException {
+        if (vector.length != embeddingProvider.dimensions()) {
+            throw new IOException(
+                    "Le provider d'embeddings " + embeddingProvider.modelId()
+                            + " a produit un vecteur de dimension " + vector.length
+                            + " au lieu de " + embeddingProvider.dimensions());
+        }
     }
 
     private String embeddingText(SearchDocument document) {

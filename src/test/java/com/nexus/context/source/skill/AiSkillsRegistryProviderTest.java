@@ -41,7 +41,7 @@ class AiSkillsRegistryProviderTest {
                 """);
 
         ProjectDescriptor project = project();
-        SkillProviderResult providerResult = new LocalAgentSkillsProvider().discover(
+        SkillProviderResult providerResult = new AiSkillsRegistryProvider().discover(
                 new SkillSourceQuery(project, true));
 
         SkillDescriptor registrySkill = providerResult.skills().stream()
@@ -82,7 +82,7 @@ class AiSkillsRegistryProviderTest {
                 """);
 
         SkillDiscoveryResult result = new SkillDiscoveryService().discover(
-                List.of(new LocalAgentSkillsProvider()),
+                List.of(new LocalAgentSkillsProvider(), new AiSkillsRegistryProvider()),
                 new SkillSourceQuery(project(), true));
 
         assertEquals(1, result.skills().size());

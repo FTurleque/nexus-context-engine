@@ -1,406 +1,147 @@
 # Recherche, graphe et ranking explicable
 
-Ce chapitre décrit l'Itération 2 telle qu'elle est implémentée et validée.
+Ce chapitre décrit le pipeline Phase 6. Les baselines historiques restent dans les documents d'itération et de benchmark.
 
-## 1. Objectif
-
-À partir de :
+## Pipeline mono-projet
 
 ```text
-ProjectDescriptor + requête texte
+query
+ ├─ LuceneFileSearchStrategy
+ ├─ SymbolSearchStrategy          pool SQLite borné
+ └─ SemanticSearchStrategy        opt-in
+          ↓
+CandidateMerger
+          ↓
+GraphCandidateEnricher            graphe cache/génération
+GitRecencyCandidateEnricher
+          ↓
+ContextRanker
+ ├─ DeterministicContextRanker    défaut
+ └─ SemanticHybridContextRanker   opt-in
+          ↓
+RankedCandidate[]
 ```
 
-produire :
+`SearchService` sur-récupère avant le ranking final :
 
 ```text
-List<RankedCandidate>
+retrievalLimit = min(500, max(20, limit * 3))
 ```
 
-avec :
+## Gate de cohérence
 
-- les fichiers et symboles pertinents ;
-- un ordre stable ;
-- un score composé ;
-- les composantes exactes du score ;
-- des raisons lisibles lorsque `explain=true`.
+Les surfaces applicatives passent par `NexusApplication` et exigent désormais `IndexStatus.READY` avant recherche, symboles/usages, contexte ou fédération. Un index dérivé partiellement mis à jour n'est donc pas servi pendant `INDEXING`/`FAILED`.
 
-## 2. Pipeline général
+## Recherche Lucene
 
-```mermaid
-flowchart LR
-    Q[Query] --> LEX[LuceneFileSearchStrategy]
-    Q --> SYM[SymbolSearchStrategy]
+`LuceneFileSearchStrategy` cherche les champs `symbol_name`, `qualified_name`, `path_text`, `code_terms` et `content` avec les boosts historiques. Les catégories `INSTRUCTION`, `AGENT_PROFILE` et `SKILL` restent hors recherche générique.
 
-    LEX --> RAW[SearchCandidate]
-    SYM --> RAW
+Le lifecycle Lucene par opération est conservé tant qu'un benchmark de runtime persistant ne démontre pas qu'un `SearcherManager`/writer partagé améliore matériellement p95/heap.
 
-    RAW --> MERGE[CandidateMerger]
-    MERGE --> GRAPH[GraphCandidateEnricher]
-    GRAPH --> RANK[DeterministicContextRanker]
-    RANK --> OUT[RankedCandidate]
+## Recherche symbole bornée
+
+`SymbolSearchStrategy` ne charge plus tous les symboles avant filtrage. Elle demande à `IndexRepository.searchSymbols(projectId, query, limit)` un pool borné et préfiltré côté SQLite, puis conserve le fuzzy Java :
+
+- exact : 1.0 ;
+- contains : 0.9 ;
+- Levenshtein normalisé ;
+- seuil fuzzy : 0.62 ;
+- pool candidat : min 100, max 2 000.
+
+`NexusApplication.findSymbols` utilise directement cette API bornée.
+
+## Usages bornés
+
+`findUsages` délègue à `IndexRepository.searchRelations(projectId, symbol, limit)`. SQLite filtre source ou cible avant matérialisation et V002 indexe les deux endpoints relationnels.
+
+## Graphe dérivé par génération
+
+`ProjectGraphBuilder` construit le graphe à partir des symboles de type et des relations `IMPORTS`. V002 ajoute une génération monotone par projet.
+
+```text
+SQLite canonical generation N
+        ↓
+ProjectGraph cache generation N
 ```
 
-Le service orchestrateur est `SearchService`.
+Tant que la génération ne change pas, le graphe est réutilisé. Lorsqu'elle change, il est reconstruit. `GraphCandidateEnricher` charge ensuite uniquement les `IndexedFile` correspondant aux chemins voisins calculés.
 
-## 3. Diagramme UML des principales classes
+La propagation reste :
 
-```mermaid
-classDiagram
-    class SearchService {
-        -List~SearchStrategy~ strategies
-        -CandidateMerger candidateMerger
-        -GraphCandidateEnricher graphEnricher
-        -ContextRanker ranker
-        +search(ProjectDescriptor, String, int, boolean) List~RankedCandidate~
-    }
-
-    class SearchStrategy {
-        <<interface>>
-        +search(ProjectDescriptor, String, int) List~SearchCandidate~
-    }
-
-    class LuceneFileSearchStrategy
-    class SymbolSearchStrategy
-    class CandidateMerger
-    class GraphCandidateEnricher
-    class ContextRanker {
-        <<interface>>
-        +rank(RankingRequest, List~SearchCandidate~) List~RankedCandidate~
-    }
-    class DeterministicContextRanker
-
-    SearchStrategy <|.. LuceneFileSearchStrategy
-    SearchStrategy <|.. SymbolSearchStrategy
-    ContextRanker <|.. DeterministicContextRanker
-    SearchService --> SearchStrategy
-    SearchService --> CandidateMerger
-    SearchService --> GraphCandidateEnricher
-    SearchService --> ContextRanker
+```text
+premier saut = seedScore × 0.65
+second saut  = seedScore × 0.35
 ```
 
-## 4. Recherche lexicale Lucene
+## Récence Git
 
-`LuceneFileSearchStrategy` appelle `SearchIndex.search`.
+`GitRecencyCandidateEnricher` reste local, read-only et faiblement pondéré. Aucun cache persistant Git n'est introduit sans mesure justifiant sa complexité.
 
-L'implémentation `LuceneSearchIndex` utilise un `MultiFieldQueryParser` avec les boosts suivants :
+## Ranking déterministe
 
-| Champ | Boost Lucene |
+Poids historiques principaux :
+
+| Signal | Poids |
 |---|---:|
-| `symbol_name` | 5.0 |
-| `qualified_name` | 4.0 |
-| `path_text` | 3.0 |
-| `content` | 1.0 |
+| lexical | 0.40 |
+| symbol exact | 0.30 |
+| symbol fuzzy | 0.10 |
+| path | 0.10 |
+| graph | 0.10 |
 
-Lucene utilise son ranking BM25 par défaut pour produire le score brut.
+À score égal, des tie-breakers stables conservent le déterminisme.
 
-Le score lexical brut est ensuite normalisé relativement au meilleur hit de la requête :
+## Sémantique opt-in
 
-```text
-lexicalScore = hit.score / maxHitScore
-```
-
-Ainsi le signal transmis au ranker est borné entre 0 et 1.
-
-### Exemple
-
-Pour :
+Lorsque `NEXUS_SEMANTIC_PROVIDER=ollama` ou une configuration explicite active la capacité :
 
 ```text
-ProjectIndexingService
+EmbeddingProvider
+  ↓
+LuceneSemanticSearchIndex
+  ↓
+SemanticSearchStrategy
+  ↓
+SemanticHybridContextRanker
 ```
 
-un fichier contenant exactement ce nom dans son chemin et ses symboles bénéficie :
+RRF historique : `k=60`, poids sémantique par défaut `8.0`, limité à `10`. Voir [`semantic-search.md`](semantic-search.md).
 
-- du score BM25 ;
-- d'un `pathScore` ;
-- potentiellement d'un `graphScore` ensuite.
+## Recherche fédérée
 
-## 5. Recherche de symboles SQLite
+`FederatedSearchService` :
 
-`SymbolSearchStrategy` lit les symboles via `IndexRepository.findSymbols(projectId)`.
+1. déduplique la portée par UUID ;
+2. demande à chaque projet un pool local **supérieur au top-K final** ;
+3. fusionne globalement par score ;
+4. stabilise les égalités ;
+5. diversifie par `(projectId,path)` ;
+6. tronque au top-K global.
 
-Elle calcule deux signaux.
+La sur-récupération fédérée est bornée entre 20 et 500 candidats par projet, avec facteur 4 sur le `limit`. Cela corrige le cas où FILE et SYMBOL d'un même chemin consommaient le cut-off local et sous-remplissaient ensuite le top-K diversifié.
 
-### `symbolExactScore`
-
-Vaut `1.0` lorsque :
-
-- le nom du symbole égale la requête ;
-- le nom qualifié égale la requête ;
-- un terme de la requête égale le nom ;
-- un terme correspond à la fin du nom qualifié.
-
-Sinon :
+La capacité est exposée via :
 
 ```text
-symbolExactScore = 0.0
+CLI  search-federated
+REST POST /api/v1/federated/search
+MCP  search_across_projects
 ```
 
-### `symbolFuzzyScore`
+## Explicabilité et qualité
 
-La stratégie conserve :
+`explain=true` conserve composantes et raisons calculées, jamais générées par LLM.
 
-- `0.9` lorsqu'un nom contient directement un terme ;
-- une similarité textuelle calculée par `SearchText.similarity` ;
-- le meilleur score parmi les termes.
-
-Seuls les candidats avec :
+Métriques de comparaison :
 
 ```text
-symbolExactScore > 0
-OU
-symbolFuzzyScore >= 0.62
+precision@K
+recall@K
+hit@K
+MRR@K
+p50 / p95
 ```
 
-sont retenus.
+La Phase 6 ne remplace pas Lucene par Zoekt/OpenGrok/OpenSearch : les optimisations locales sont appliquées d'abord et doivent être re-mesurées avant toute décision d'infrastructure.
 
-## 6. Correspondance de chemin
-
-Le signal `pathScore` mesure la proportion de termes de la requête présents dans le chemin normalisé.
-
-Exemple :
-
-```text
-query = "project indexing service"
-path  = "src/main/java/.../ProjectIndexingService.java"
-```
-
-Plus les termes sont présents dans le chemin, plus le score approche `1.0`.
-
-## 7. Fusion des candidats
-
-Lucene et SQLite peuvent retourner des éléments concernant le même fichier.
-
-`CandidateMerger` combine leurs signaux au lieu de laisser les stratégies se concurrencer avec des représentations incohérentes.
-
-La philosophie est :
-
-```text
-une source trouve un candidat
-+ une autre source confirme sa pertinence
-= candidat enrichi
-```
-
-Les signaux restent séparés ; ils ne sont pas additionnés à ce stade.
-
-## 8. Construction du graphe
-
-`ProjectGraphBuilder` utilise :
-
-- les types définis dans `symbols` ;
-- les relations `IMPORTS` dans `symbol_relations`.
-
-### Étape 1 — propriétaire de type
-
-Construction d'une table :
-
-```text
-qualifiedName → relativePath
-```
-
-Exemple :
-
-```text
-com.nexus.search.SearchService
-→ src/main/java/com/nexus/search/SearchService.java
-```
-
-### Étape 2 — résolution des imports
-
-Pour une relation :
-
-```text
-source_ref = chemin du fichier source
-target_ref = type importé
-```
-
-NEXUS cherche le fichier qui définit `target_ref`.
-
-Les imports externes qui ne correspondent à aucun type interne sont ignorés.
-
-### Étape 3 — graphe non orienté
-
-Le graphe final relie les fichiers internes dépendants.
-
-```mermaid
-graph LR
-    A[ProjectIndexingService.java] --- B[IndexRepository.java]
-    A --- C[ProjectScanner.java]
-    A --- D[SearchIndex.java]
-    B --- E[SqliteIndexRepository.java]
-    D --- F[LuceneSearchIndex.java]
-```
-
-Le graphe est actuellement rendu non orienté pour mesurer une proximité structurelle locale.
-
-## 9. Propagation du signal de graphe
-
-`GraphCandidateEnricher` part des candidats directs.
-
-Le score direct utilisé comme graine est le maximum parmi :
-
-```text
-lexicalScore
-symbolExactScore
-symbolFuzzyScore
-pathScore
-```
-
-Propagation :
-
-```text
-premier saut  = seedScore × 0.65
-second saut   = seedScore × 0.35
-```
-
-Le résultat est borné à `1.0`.
-
-Cette propagation est volontairement limitée. NEXUS n'implémente pas encore PageRank.
-
-Le but est de disposer d'une baseline structurelle simple avant de mesurer si une propagation globale apporte un réel gain.
-
-## 10. Ranking final
-
-`DeterministicContextRanker` applique les poids suivants :
-
-| Signal normalisé | Poids final |
-|---|---:|
-| `lexicalScore` | 0.40 |
-| `symbolExactScore` | 0.30 |
-| `symbolFuzzyScore` | 0.10 |
-| `pathScore` | 0.10 |
-| `graphScore` | 0.10 |
-
-Formule :
-
-```text
-score =
-    lexicalScore     × 0.40
-  + symbolExactScore × 0.30
-  + symbolFuzzyScore × 0.10
-  + pathScore        × 0.10
-  + graphScore       × 0.10
-```
-
-Chaque signal est borné entre 0 et 1 avant multiplication.
-
-## 11. Déterminisme
-
-Le tri final utilise :
-
-1. score décroissant ;
-2. ordre de type (`SYMBOL`, `TEST`, `FILE`, ...) ;
-3. chemin ;
-4. identifiant du candidat.
-
-Cela garantit un résultat stable lorsque deux candidats ont le même score.
-
-## 12. Explication du score
-
-Lorsque `--explain` est demandé, chaque contribution positive produit une raison.
-
-Exemple réel du self-smoke :
-
-```text
-ProjectIndexingService.java
-score = 0.5585
-
-correspondance lexicale BM25 : 1.000 → +0.400
-correspondance du chemin      : 1.000 → +0.100
-proximité dans le graphe      : 0.585 → +0.059
-```
-
-L'explication n'est pas générée par un LLM : elle est une projection directe du calcul.
-
-## 13. Séquence d'une recherche
-
-```mermaid
-sequenceDiagram
-    participant CLI as NexusCli
-    participant SS as SearchService
-    participant L as LuceneFileSearchStrategy
-    participant S as SymbolSearchStrategy
-    participant M as CandidateMerger
-    participant G as GraphCandidateEnricher
-    participant R as DeterministicContextRanker
-
-    CLI->>SS: search(project, query, limit, explain)
-    SS->>L: search(...)
-    L-->>SS: candidats fichiers
-    SS->>S: search(...)
-    S-->>SS: candidats symboles
-    SS->>M: merge(rawCandidates)
-    M-->>SS: candidats fusionnés
-    SS->>G: enrich(project, candidates)
-    G-->>SS: candidats + graphScore
-    SS->>R: rank(RankingRequest, candidates)
-    R-->>SS: RankedCandidate[]
-    SS-->>CLI: résultats ordonnés
-```
-
-## 14. Corpus golden
-
-NEXUS possède un corpus de requêtes de référence sous les ressources de test.
-
-L'objectif n'est pas seulement de vérifier qu'une recherche retourne quelque chose, mais de vérifier que les chemins attendus remontent assez haut.
-
-Les métriques disponibles sont :
-
-### Precision@K
-
-```text
-nombre de résultats pertinents dans les K premiers
--------------------------------------------------
-K
-```
-
-### Recall@K
-
-```text
-nombre de résultats pertinents retrouvés dans les K premiers
------------------------------------------------------------
-nombre total de résultats pertinents attendus
-```
-
-Ces métriques doivent guider les futurs changements de poids.
-
-Changer un poids uniquement parce qu'un exemple « semble meilleur » n'est pas suffisant : il faut vérifier le corpus.
-
-## 15. Reproduire une recherche
-
-Après indexation :
-
-```powershell
-mvn -q exec:java "-Dexec.args=search nexus-local ProjectIndexingService --limit 5 --explain"
-```
-
-Le résultat doit montrer :
-
-- le score total ;
-- le type (`FILE`, `SYMBOL`, etc.) ;
-- le chemin ou symbole ;
-- les raisons si `--explain` est actif.
-
-## 16. Ajouter un nouveau signal
-
-Procédure recommandée :
-
-1. créer le signal dans `SearchSignals` ;
-2. produire une valeur normalisée `[0,1]` ;
-3. préserver le signal dans `CandidateMerger` ;
-4. définir son poids dans `DeterministicContextRanker` ;
-5. ajouter son explication ;
-6. mesurer le corpus golden avant/après ;
-7. créer un ADR si le signal change significativement la stratégie de ranking.
-
-## 17. Limites actuelles
-
-Le graphe ne connaît pas encore :
-
-- toutes les références de symboles ;
-- les appels de méthodes fiables ;
-- les implémentations résolues ;
-- les dépendances dynamiques ;
-- les relations multi-langages.
-
-Ces enrichissements sont prévus via SCIP ou JDT sans changer le contrat du ranker.
+Voir [`large-scale-search.md`](large-scale-search.md), [`current-limitations.md`](current-limitations.md) et la [`roadmap`](../roadmap.md).

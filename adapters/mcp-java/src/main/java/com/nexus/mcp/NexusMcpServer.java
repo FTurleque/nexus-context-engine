@@ -47,7 +47,7 @@ public final class NexusMcpServer {
     private static String version() {
         String implementationVersion = NexusMcpServer.class.getPackage().getImplementationVersion();
         return implementationVersion == null || implementationVersion.isBlank()
-                ? "0.1.0-SNAPSHOT"
+                ? "0.2.0"
                 : implementationVersion;
     }
 }
