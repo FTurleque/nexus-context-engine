@@ -89,7 +89,11 @@ public final class ProjectIndexingService {
                 providerTimeoutFromEnvironment(), ProjectIndexLockManager.processLocalOnly());
     }
 
-    public ProjectIndexingService(
+    /**
+     * Composition de production : conserve le timeout environnemental et ajoute
+     * le verrou inter-processus fourni explicitement par la façade applicative.
+     */
+    public static ProjectIndexingService withInterProcessLocking(
             ProjectRepository projectRepository,
             IndexRepository indexRepository,
             ProjectScanner scanner,
@@ -99,9 +103,17 @@ public final class ProjectIndexingService {
             List<CodeIntelligenceProvider> codeIntelligenceProviders,
             SemanticIndexingService semanticIndexingService,
             ProjectIndexLockManager projectIndexLockManager) {
-        this(projectRepository, indexRepository, scanner, analyzers, searchIndex,
-                codeIndexImporters, codeIntelligenceProviders, semanticIndexingService,
-                providerTimeoutFromEnvironment(), projectIndexLockManager);
+        return new ProjectIndexingService(
+                projectRepository,
+                indexRepository,
+                scanner,
+                analyzers,
+                searchIndex,
+                codeIndexImporters,
+                codeIntelligenceProviders,
+                semanticIndexingService,
+                providerTimeoutFromEnvironment(),
+                projectIndexLockManager);
     }
 
     public ProjectIndexingService(
@@ -119,7 +131,7 @@ public final class ProjectIndexingService {
                 providerTimeout, ProjectIndexLockManager.processLocalOnly());
     }
 
-    public ProjectIndexingService(
+    ProjectIndexingService(
             ProjectRepository projectRepository,
             IndexRepository indexRepository,
             ProjectScanner scanner,
