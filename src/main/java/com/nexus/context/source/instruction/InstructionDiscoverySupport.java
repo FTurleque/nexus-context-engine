@@ -78,6 +78,12 @@ final class InstructionDiscoverySupport {
         }
 
         ProjectIgnoreMatcher ignoreMatcher = new ProjectIgnoreMatcher(root);
+        registerParentScopes(root, directory.getParent(), ignoreMatcher);
+        if (!directory.equals(root) && ignoreMatcher.isIgnored(directory, true)) {
+            return List.of();
+        }
+        ignoreMatcher.registerDirectory(directory);
+
         List<Path> matches = new ArrayList<>();
         Files.walkFileTree(directory, new SimpleFileVisitor<>() {
             @Override
@@ -141,5 +147,19 @@ final class InstructionDiscoverySupport {
 
     static String repositoryPath(Path path) {
         return path.toString().replace('\\', '/');
+    }
+
+    private static void registerParentScopes(
+            Path root,
+            Path targetParent,
+            ProjectIgnoreMatcher ignoreMatcher) throws IOException {
+        if (targetParent == null || !targetParent.startsWith(root)) {
+            return;
+        }
+        Path current = root;
+        for (Path segment : root.relativize(targetParent)) {
+            current = current.resolve(segment);
+            ignoreMatcher.registerDirectory(current);
+        }
     }
 }
