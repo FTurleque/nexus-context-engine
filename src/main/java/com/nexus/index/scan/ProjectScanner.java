@@ -4,10 +4,12 @@ import com.nexus.index.FileCategory;
 import com.nexus.index.FileHasher;
 import com.nexus.index.ScannedFile;
 import com.nexus.index.SourceLanguage;
+import com.nexus.security.ProjectPathGuard;
 
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -43,11 +45,8 @@ public final class ProjectScanner {
     }
 
     public ProjectScanResult scanWithDiagnostics(Path projectRoot) throws IOException {
-        Path root = projectRoot.toAbsolutePath().normalize();
-        if (!Files.isDirectory(root)) {
-            throw new IOException("Le chemin du projet n'est pas un répertoire : " + root);
-        }
-
+        ProjectPathGuard pathGuard = new ProjectPathGuard(projectRoot);
+        Path root = pathGuard.root();
         ProjectIgnoreMatcher ignoreMatcher = new ProjectIgnoreMatcher(root);
         List<ScannedFile> files = new ArrayList<>();
         List<String> diagnostics = new ArrayList<>();
@@ -70,24 +69,48 @@ public final class ProjectScanner {
                     return FileVisitResult.CONTINUE;
                 }
 
-                Path relative = root.relativize(file);
-                String repositoryPath = toRepositoryPath(relative);
-                if (attributes.size() > maxFileSizeBytes) {
+                String repositoryPath = toRepositoryPath(root.relativize(file));
+                if (attributes.isSymbolicLink() || Files.isSymbolicLink(file)) {
                     skippedFiles[0]++;
-                    diagnostics.add(repositoryPath + " ignoré : " + attributes.size()
+                    diagnostics.add(repositoryPath + " ignoré : lien symbolique interdit");
+                    return FileVisitResult.CONTINUE;
+                }
+                if (!attributes.isRegularFile()) {
+                    skippedFiles[0]++;
+                    diagnostics.add(repositoryPath + " ignoré : entrée non régulière");
+                    return FileVisitResult.CONTINUE;
+                }
+
+                Path safeFile;
+                try {
+                    safeFile = pathGuard.requireRegularFile(file);
+                } catch (IOException unsafePath) {
+                    skippedFiles[0]++;
+                    diagnostics.add(repositoryPath + " ignoré : " + unsafePath.getMessage());
+                    return FileVisitResult.CONTINUE;
+                }
+
+                BasicFileAttributes safeAttributes = Files.readAttributes(
+                        safeFile,
+                        BasicFileAttributes.class,
+                        LinkOption.NOFOLLOW_LINKS);
+                long size = safeAttributes.size();
+                if (size > maxFileSizeBytes) {
+                    skippedFiles[0]++;
+                    diagnostics.add(repositoryPath + " ignoré : " + size
                             + " octets > limite " + maxFileSizeBytes + " octets");
                     return FileVisitResult.CONTINUE;
                 }
 
                 files.add(new ScannedFile(
-                        file,
+                        safeFile,
                         repositoryPath,
-                        language(file),
-                        attributes.size(),
-                        FileHasher.sha256(file),
-                        attributes.lastModifiedTime().toInstant(),
-                        estimateTokens(attributes.size()),
-                        classify(relative)));
+                        language(safeFile),
+                        size,
+                        FileHasher.sha256(safeFile),
+                        safeAttributes.lastModifiedTime().toInstant(),
+                        estimateTokens(size),
+                        classify(root.relativize(safeFile))));
                 return FileVisitResult.CONTINUE;
             }
         });
