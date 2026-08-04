@@ -33,11 +33,11 @@ Ce registre conserve les constats F01–F18 issus de l'audit de juillet 2026 et 
 
 | ID | Constat | Traitement implémenté | État actuel |
 |---|---|---|---|
-| H01 | lecture possible d'une cible extérieure via symlink | `ProjectPathGuard`, racine canonique, refus des symlinks sous le repository, revalidation avant lecture/hash | implémenté, validation en attente |
-| H02 | single-flight limité à une JVM | mutex local + `FileLock` OS par `projectId` sous `NEXUS_HOME/locks` dans la composition de production | implémenté, validation en attente |
+| H01 | lecture possible d'une cible extérieure via symlink | `ProjectPathGuard`, racine canonique, refus des symlinks sous le repository, ouverture finale `NOFOLLOW_LINKS`, flux et lectures bornés | implémenté, validation en attente |
+| H02 | single-flight limité à une JVM | mutex local + `FileLock` OS par `projectId` sous `NEXUS_HOME/locks` ; indexations et import MINOS sérialisés | implémenté, validation en attente |
 | H03 | timeout provider potentiellement bloquant et importers non bornés | `ExternalTaskRunner` daemon non bloquant ; même enveloppe pour importers et providers | implémenté, validation en attente |
 | H04 | readiness mélangeait santé du service et disponibilité des projets | liveness explicite, readiness service, `allProjectsReady`, `degraded`, gate projet `READY` séparé | implémenté, validation en attente |
-| H05 | budget fédéré perdu après projet clairsemé ou déduplication | fair floor, overfetch local borné et refill global du budget restant | implémenté, validation en attente |
+| H05 | budget fédéré perdu après projet clairsemé ou déduplication | fair floor, overfetch local borné, refill global et préservation de l'ordre de ranking local | implémenté, validation en attente |
 | H06 | exposition REST non-loopback possible sans authentification | fail-fast hors loopback sans token + Bearer auth si token configuré | implémenté, validation en attente |
 | H07 | UUID inconnu réinterprété comme nom | séparation parse UUID / résolution par nom | implémenté, validation en attente |
 | H08 | map des mutex JVM conservée indéfiniment | slots référencés et suppression quand plus aucun utilisateur | implémenté, validation en attente |
@@ -51,7 +51,18 @@ La racine projet est canonicalisée une fois. Les chemins lus par le scanner, le
 
 La politique post-Phase 6 est volontairement conservatrice : **un lien symbolique présent sous la racine du repository n'est pas suivi**. Une racine fournie elle-même via symlink peut être résolue vers sa cible canonique ; cette cible devient ensuite la frontière de confiance.
 
-Les attributs du fichier sûr sont relus sans suivre de lien avant le contrôle de `NEXUS_MAX_FILE_SIZE_BYTES`, le SHA-256 et les lectures de contenu.
+La protection est en deux couches :
+
+1. `ProjectPathGuard` valide le confinement réel, le type de l'entrée et l'absence de composants symlinkés sous la racine ;
+2. `SafeFileIO` ouvre le composant final avec `NOFOLLOW_LINKS` et borne effectivement le nombre d'octets consommés.
+
+`NEXUS_MAX_FILE_SIZE_BYTES` est une politique commune : scanner, hash et lectures de contenu utilisent le même plafond de production. Les `.gitignore`, `.nexusignore`, instructions, références et `SKILL.md` héritent aussi des flux bornés, même lorsqu'ils sont découverts hors du scanner générique.
+
+Cela ferme notamment le remplacement concurrent du **fichier final** par un symlink ou un fichier devenu beaucoup plus gros entre validation et consommation.
+
+**Limites résiduelles du modèle Java portable :** NEXUS ne prétend pas fournir un sandbox filesystem contre un acteur local qui modifie agressivement l'arborescence pendant l'indexation. Un remplacement concurrent d'un **répertoire ancêtre** après validation, ou un hard-link créé localement vers un inode extérieur au modèle logique du repository, ne peut pas être éliminé complètement avec les seules primitives `Path` portables utilisées ici. Une défense absolue nécessiterait une marche par handles/`SecureDirectoryStream` disponible selon le filesystem, ou une isolation de processus/OS. Git ne versionne pas les hard-links en tant que tels, ce risque concerne donc surtout un repository local activement hostile pendant son traitement.
+
+Le provider JDT LS opt-in réutilise le scanner sécurisé pour déterminer les fichiers, mais sa lecture interne de document reste une surface TOCTOU plus étroite si le filesystem est modifié activement après le scan. Les repositories non fiables ne doivent pas être mutés concurremment pendant `--deep-java` tant qu'une isolation plus forte n'est pas justifiée.
 
 ### Cohérence et concurrence d'index
 
@@ -64,7 +75,9 @@ La façade de production utilise désormais deux niveaux de single-flight :
 1. mutex JVM par projet ;
 2. verrou fichier OS par projet sous `NEXUS_HOME/locks`.
 
-Le fichier de lock peut rester présent après libération ; c'est le `FileLock` OS, et non la présence du fichier, qui représente la propriété exclusive.
+Le verrou OS couvre les indexations/rebuilds, les providers de code intelligence et l'import MINOS piloté par la façade. Le fichier de lock peut rester présent après libération ; c'est le `FileLock` OS, et non la présence du fichier, qui représente la propriété exclusive.
+
+La garantie inter-processus suppose un filesystem local respectant correctement les locks de fichiers. Un `NEXUS_HOME` placé sur un filesystem réseau exotique doit être qualifié séparément avant d'être considéré supporté.
 
 ### Ressources et providers
 
@@ -90,9 +103,11 @@ Un service peut donc rester opérationnel pendant l'indexation d'un projet sans 
 
 ### Fédération
 
-Le contexte fédéré conserve un fair floor déterministe par projet, mais les builders locaux peuvent produire un pool de candidats borné par le budget global. Après le premier passage équitable et la déduplication, les candidats différés peuvent consommer les tokens rendus disponibles.
+Le contexte fédéré conserve un fair floor déterministe par projet, mais les builders locaux peuvent produire un pool de candidats borné par le budget global. La première passe ne consomme qu'un **préfixe** du ranking local de chaque projet ; dès que le prochain candidat ne tient plus dans son fair floor, le suffixe est différé. Après déduplication, ces suffixes peuvent réutiliser les tokens rendus disponibles sans faire passer un candidat local moins bien classé devant un candidat différé plus pertinent.
 
 Les métadonnées exposent notamment `refillTokens`, `refillItems`, `unusedTokens`, allocation/sélection par projet, starvation et déduplication.
+
+Le coût de construction local peut augmenter avec le nombre de projets car chaque builder peut produire un pool jusqu'au budget fédéré global. Ce coût reste borné, mais doit être mesuré si les portfolios deviennent très larges.
 
 ### Sécurité REST
 
@@ -116,6 +131,9 @@ Les endpoints techniques fournis directement par Quarkus (health/métriques) ne 
 5. **Vector DB** : non justifiée par le corpus actuel.
 6. **Transport MCP distant** : hors périmètre ; stdio local reste la surface prévue.
 7. **Worker externe récalcitrant** : envisager isolation processus/circuit-breaker si de futurs providers Java non coopératifs deviennent une réalité opérationnelle.
+8. **Filesystem activement hostile / TOCTOU ancêtre / hard-links** : isolation par handles ou processus seulement si NEXUS doit accepter ce threat model.
+9. **JDT LS et mutation concurrente du repository** : qualifier/renforcer si `--deep-java` doit devenir sûr contre un workspace local hostile en mouvement.
+10. **Portfolios très larges** : mesurer le coût d'overfetch du contexte fédéré avant toute stratégie adaptative plus complexe.
 
 ## Gate de validation post-Phase 6
 
