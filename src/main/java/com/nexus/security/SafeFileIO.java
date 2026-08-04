@@ -1,6 +1,7 @@
 package com.nexus.security;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -25,6 +26,7 @@ import java.util.Set;
  */
 public final class SafeFileIO {
 
+    private static final int BUFFER_SIZE = 16 * 1024;
     private static final Set<OpenOption> READ_NOFOLLOW = Set.of(
             StandardOpenOption.READ,
             LinkOption.NOFOLLOW_LINKS);
@@ -42,8 +44,31 @@ public final class SafeFileIO {
     }
 
     public static String readStringNoFollow(Path file) throws IOException {
-        try (InputStream input = newInputStreamNoFollow(file)) {
-            return new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        return readStringNoFollow(file, ProjectFileLimits.maxFileSizeFromEnvironment());
+    }
+
+    public static String readStringNoFollow(Path file, long maxBytes) throws IOException {
+        if (maxBytes <= 0) {
+            throw new IllegalArgumentException("maxBytes must be greater than zero");
+        }
+        try (InputStream input = newInputStreamNoFollow(file);
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[BUFFER_SIZE];
+            long total = 0L;
+            int read;
+            while ((read = input.read(buffer)) >= 0) {
+                if (read == 0) {
+                    continue;
+                }
+                total += read;
+                if (total > maxBytes) {
+                    throw new IOException(
+                            "Fichier trop volumineux au moment de la lecture : " + file
+                                    + " (maximum " + maxBytes + " octets)");
+                }
+                output.write(buffer, 0, read);
+            }
+            return output.toString(StandardCharsets.UTF_8);
         }
     }
 }
