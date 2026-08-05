@@ -26,6 +26,7 @@ import com.nexus.index.IndexStatistics;
 import com.nexus.index.IndexedSymbol;
 import com.nexus.index.IndexingReport;
 import com.nexus.index.ProjectIndexingService;
+import com.nexus.index.ProjectIndexLockManager;
 import com.nexus.index.SymbolRelation;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.jdt.JdtLanguageServerCodeIntelligenceProvider;
@@ -87,6 +88,7 @@ public final class NexusApplication {
     private final IndexRepository indexRepository;
     private final ProjectRegistry projectRegistry;
     private final ProjectIndexingService indexingService;
+    private final ProjectIndexLockManager projectIndexLockManager;
     private final SearchService searchService;
     private final FederatedSearchService federatedSearchService;
     private final ContextBuilder contextBuilder;
@@ -98,6 +100,7 @@ public final class NexusApplication {
             IndexRepository indexRepository,
             ProjectRegistry projectRegistry,
             ProjectIndexingService indexingService,
+            ProjectIndexLockManager projectIndexLockManager,
             SearchService searchService,
             FederatedSearchService federatedSearchService,
             ContextBuilder contextBuilder,
@@ -107,6 +110,7 @@ public final class NexusApplication {
         this.indexRepository = Objects.requireNonNull(indexRepository, "indexRepository");
         this.projectRegistry = Objects.requireNonNull(projectRegistry, "projectRegistry");
         this.indexingService = Objects.requireNonNull(indexingService, "indexingService");
+        this.projectIndexLockManager = Objects.requireNonNull(projectIndexLockManager, "projectIndexLockManager");
         this.searchService = Objects.requireNonNull(searchService, "searchService");
         this.federatedSearchService = Objects.requireNonNull(federatedSearchService, "federatedSearchService");
         this.contextBuilder = Objects.requireNonNull(contextBuilder, "contextBuilder");
@@ -131,6 +135,7 @@ public final class NexusApplication {
         IndexRepository indexRepository = new SqliteIndexRepository(database);
         ProjectRegistry projectRegistry = new ProjectRegistry(projectRepository);
         SearchIndex searchIndex = new LuceneSearchIndex(paths);
+        ProjectIndexLockManager projectIndexLockManager = ProjectIndexLockManager.fileBacked(paths);
 
         List<CodeIntelligenceProvider> codeIntelligenceProviders =
                 JdtLanguageServerCodeIntelligenceProvider.fromEnvironment(paths)
@@ -160,7 +165,8 @@ public final class NexusApplication {
                 searchIndex,
                 codeIndexImporters,
                 codeIntelligenceProviders,
-                semanticIndexingService);
+                semanticIndexingService,
+                projectIndexLockManager);
 
         ContextRanker contextRanker = semanticSearchConfiguration.enabled()
                 ? new SemanticHybridContextRanker(semanticSearchConfiguration.semanticRrfWeight())
@@ -197,6 +203,7 @@ public final class NexusApplication {
                 indexRepository,
                 projectRegistry,
                 indexingService,
+                projectIndexLockManager,
                 searchService,
                 federatedSearchService,
                 contextBuilder,
@@ -223,22 +230,28 @@ public final class NexusApplication {
         if (normalized.isBlank()) {
             throw new IllegalArgumentException("Le sélecteur de projet ne peut pas être vide");
         }
+
+        UUID projectId = null;
         try {
-            UUID projectId = UUID.fromString(normalized);
-            return getProject(projectId);
-        } catch (IllegalArgumentException notUuidOrMissing) {
-            List<ProjectDescriptor> matches = projectRepository.findAll().stream()
-                    .filter(project -> project.name().equalsIgnoreCase(normalized))
-                    .toList();
-            if (matches.size() == 1) {
-                return matches.getFirst();
-            }
-            if (matches.size() > 1) {
-                throw new IllegalArgumentException(
-                        "Plusieurs projets portent le nom '" + normalized + "'. Utilisez leur UUID.");
-            }
-            throw new IllegalArgumentException("Projet introuvable : " + normalized);
+            projectId = UUID.fromString(normalized);
+        } catch (IllegalArgumentException invalidUuid) {
+            // Le sélecteur n'est pas un UUID : on tente alors seulement la résolution par nom.
         }
+        if (projectId != null) {
+            return getProject(projectId);
+        }
+
+        List<ProjectDescriptor> matches = projectRepository.findAll().stream()
+                .filter(project -> project.name().equalsIgnoreCase(normalized))
+                .toList();
+        if (matches.size() == 1) {
+            return matches.getFirst();
+        }
+        if (matches.size() > 1) {
+            throw new IllegalArgumentException(
+                    "Plusieurs projets portent le nom '" + normalized + "'. Utilisez leur UUID.");
+        }
+        throw new IllegalArgumentException("Projet introuvable : " + normalized);
     }
 
     public IndexOperation index(UUID projectId, boolean rebuild, boolean deepJava) throws IOException {
@@ -259,12 +272,15 @@ public final class NexusApplication {
 
     /** Le payload est fourni explicitement ; NEXUS ne lance jamais MINOS. */
     public CodeIntelligenceSnapshot importMinos(UUID projectId, String payload) throws IOException {
-        ProjectDescriptor project = requireReadyProject(projectId);
-        Set<String> indexedFiles = indexRepository.findFiles(projectId).keySet();
-        CodeIntelligenceSnapshot snapshot = new MinosCodeIndexImporter()
-                .importPayload(project.rootPath(), indexedFiles, payload);
-        indexRepository.replaceExternalCodeIntelligence(projectId, snapshot);
-        return snapshot;
+        Objects.requireNonNull(projectId, "projectId");
+        try (ProjectIndexLockManager.LockHandle ignored = projectIndexLockManager.acquire(projectId)) {
+            ProjectDescriptor project = requireReadyProject(projectId);
+            Set<String> indexedFiles = indexRepository.findFiles(projectId).keySet();
+            CodeIntelligenceSnapshot snapshot = new MinosCodeIndexImporter()
+                    .importPayload(project.rootPath(), indexedFiles, payload);
+            indexRepository.replaceExternalCodeIntelligence(projectId, snapshot);
+            return snapshot;
+        }
     }
 
     public IndexStatistics inspect(UUID projectId) {
@@ -367,9 +383,18 @@ public final class NexusApplication {
             counts.put(status, 0);
         }
         projects.forEach(project -> counts.merge(project.indexStatus(), 1, Integer::sum));
-        boolean operational = counts.get(IndexStatus.FAILED) == 0;
+
+        boolean degraded = counts.get(IndexStatus.FAILED) > 0;
+        boolean allProjectsReady = projects.stream()
+                .allMatch(project -> project.indexStatus() == IndexStatus.READY);
+
+        // Si la lecture du repository a réussi, le service applicatif est prêt à
+        // accepter du trafic de gestion. La disponibilité d'un projet reste un
+        // gate distinct, contrôlé par requireReadyProject().
         return new ReadinessSnapshot(
-                operational,
+                true,
+                allProjectsReady,
+                degraded,
                 projects.size(),
                 counts,
                 semanticSearchEnabled);
@@ -453,6 +478,8 @@ public final class NexusApplication {
 
     public record ReadinessSnapshot(
             boolean operational,
+            boolean allProjectsReady,
+            boolean degraded,
             int registeredProjects,
             Map<IndexStatus, Integer> projectsByStatus,
             boolean semanticSearchEnabled) {

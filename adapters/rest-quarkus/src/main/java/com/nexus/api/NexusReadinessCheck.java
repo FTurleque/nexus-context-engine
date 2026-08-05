@@ -25,6 +25,8 @@ public class NexusReadinessCheck implements HealthCheck {
                     .withData("storage", "sqlite")
                     .withData("search", "lucene")
                     .withData("registeredProjects", snapshot.registeredProjects())
+                    .withData("allProjectsReady", snapshot.allProjectsReady())
+                    .withData("degraded", snapshot.degraded())
                     .withData("semanticSearchEnabled", snapshot.semanticSearchEnabled());
             for (IndexStatus status : IndexStatus.values()) {
                 response.withData(

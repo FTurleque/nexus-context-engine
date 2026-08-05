@@ -3,9 +3,11 @@ package com.nexus.context.source.skill;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
@@ -22,7 +24,7 @@ class LocalAgentSkillsProviderTest {
 
     @Test
     void discoversOnlyValidSkillsAndInventoriesResourcesWithoutLoadingTheirContent() throws Exception {
-        write(".agents/skills/pdf-processing/SKILL.md", """
+        write(temporaryDirectory, ".agents/skills/pdf-processing/SKILL.md", """
                 ---
                 name: pdf-processing
                 description: >
@@ -36,11 +38,11 @@ class LocalAgentSkillsProviderTest {
                 ---
                 SECRET_BODY_MARKER_SHOULD_NOT_BE_IN_DESCRIPTOR
                 """);
-        write(".agents/skills/pdf-processing/references/REFERENCE.md", "REFERENCE_BODY");
-        write(".agents/skills/pdf-processing/scripts/extract.py", "print('SCRIPT_BODY')");
-        write(".agents/skills/pdf-processing/assets/template.txt", "ASSET_BODY");
+        write(temporaryDirectory, ".agents/skills/pdf-processing/references/REFERENCE.md", "REFERENCE_BODY");
+        write(temporaryDirectory, ".agents/skills/pdf-processing/scripts/extract.py", "print('SCRIPT_BODY')");
+        write(temporaryDirectory, ".agents/skills/pdf-processing/assets/template.txt", "ASSET_BODY");
 
-        write(".github/skills/wrong-folder/SKILL.md", """
+        write(temporaryDirectory, ".github/skills/wrong-folder/SKILL.md", """
                 ---
                 name: different-name
                 description: Invalid because the name does not match the directory.
@@ -48,8 +50,8 @@ class LocalAgentSkillsProviderTest {
                 body
                 """);
 
-        write(".claude/skills/.nexusignore", "private/\n");
-        write(".claude/skills/private/SKILL.md", """
+        write(temporaryDirectory, ".claude/skills/.nexusignore", "private/\n");
+        write(temporaryDirectory, ".claude/skills/private/SKILL.md", """
                 ---
                 name: private
                 description: This skill must be ignored by nested nexusignore rules.
@@ -57,15 +59,7 @@ class LocalAgentSkillsProviderTest {
                 body
                 """);
 
-        ProjectDescriptor project = new ProjectDescriptor(
-                UUID.randomUUID(),
-                "skills-test",
-                temporaryDirectory,
-                ProjectSourceType.LOCAL,
-                Set.of(),
-                Set.of(),
-                null,
-                IndexStatus.NOT_INDEXED);
+        ProjectDescriptor project = project(temporaryDirectory, "skills-test");
 
         SkillProviderResult result = new LocalAgentSkillsProvider().discover(
                 new SkillSourceQuery(project, true));
@@ -86,9 +80,55 @@ class LocalAgentSkillsProviderTest {
         assertFalse(result.diagnostics().stream().anyMatch(message -> message.contains("private")));
     }
 
-    private void write(String relativePath, String content) throws Exception {
-        Path file = temporaryDirectory.resolve(relativePath);
+    @Test
+    void refusesASkillRootThatIsASymbolicLinkOutsideTheRepository() throws Exception {
+        Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("symlink-project"));
+        Path outsideSkills = Files.createDirectories(temporaryDirectory.resolve("outside-skills"));
+        write(outsideSkills, "secret/SKILL.md", """
+                ---
+                name: secret
+                description: Must never be discovered through an external symlink.
+                ---
+                SECRET_SKILL_BODY
+                """);
+        Path agents = Files.createDirectories(projectRoot.resolve(".agents"));
+        Path skillLink = agents.resolve("skills");
+
+        Assumptions.assumeTrue(createSymbolicLink(skillLink, outsideSkills),
+                "Les liens symboliques ne sont pas disponibles dans cet environnement");
+
+        SkillProviderResult result = new LocalAgentSkillsProvider().discover(
+                new SkillSourceQuery(project(projectRoot, "symlink-skills"), true));
+
+        assertTrue(result.skills().isEmpty());
+        assertTrue(result.diagnostics().stream().anyMatch(message ->
+                message.contains(".agents/skills") && message.contains("Lien symbolique")));
+    }
+
+    private static ProjectDescriptor project(Path root, String name) {
+        return new ProjectDescriptor(
+                UUID.randomUUID(),
+                name,
+                root,
+                ProjectSourceType.LOCAL,
+                Set.of(),
+                Set.of(),
+                null,
+                IndexStatus.NOT_INDEXED);
+    }
+
+    private static void write(Path root, String relativePath, String content) throws Exception {
+        Path file = root.resolve(relativePath);
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);
+    }
+
+    private static boolean createSymbolicLink(Path link, Path target) {
+        try {
+            Files.createSymbolicLink(link, target.toAbsolutePath());
+            return true;
+        } catch (UnsupportedOperationException | IOException | SecurityException unavailable) {
+            return false;
+        }
     }
 }

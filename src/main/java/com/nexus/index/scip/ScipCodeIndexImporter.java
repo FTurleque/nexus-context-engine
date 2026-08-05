@@ -8,6 +8,7 @@ import com.nexus.index.IndexedSymbol;
 import com.nexus.index.RelationKind;
 import com.nexus.index.SymbolKind;
 import com.nexus.index.SymbolRelation;
+import com.nexus.security.SafeFileIO;
 
 import java.io.BufferedInputStream;
 import java.io.EOFException;
@@ -15,6 +16,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -57,7 +59,7 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
     public Optional<CodeIntelligenceSnapshot> importIndex(Path projectRoot) throws IOException {
         Path root = projectRoot.toAbsolutePath().normalize();
         Path indexFile = root.resolve(indexFileName).normalize();
-        if (!indexFile.startsWith(root) || !Files.isRegularFile(indexFile)) {
+        if (!indexFile.startsWith(root) || !Files.isRegularFile(indexFile, LinkOption.NOFOLLOW_LINKS)) {
             return Optional.empty();
         }
 
@@ -65,7 +67,7 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
         List<IndexedRelation> relations = new ArrayList<>();
         Set<String> relationKeys = new LinkedHashSet<>();
 
-        try (InputStream input = new BufferedInputStream(Files.newInputStream(indexFile))) {
+        try (InputStream input = new BufferedInputStream(SafeFileIO.newInputStreamNoFollow(indexFile))) {
             while (true) {
                 long rawTag = readVarintOrEof(input);
                 if (rawTag < 0) {

@@ -18,10 +18,14 @@ function Invoke-Maven {
         [string[]]$Arguments
     )
 
-    & mvn @Arguments
+    $mvnw = Join-Path $repoRoot "mvnw.cmd"
+    if (-not (Test-Path $mvnw)) {
+        $mvnw = Join-Path $repoRoot "mvnw"
+    }
+    & $mvnw @Arguments
     $exitCode = $LASTEXITCODE
     if ($exitCode -ne 0) {
-        throw "La commande Maven a echoue avec le code $exitCode : mvn $($Arguments -join ' ')"
+        throw "La commande Maven a echoue avec le code $exitCode : mvnw $($Arguments -join ' ')"
     }
 }
 

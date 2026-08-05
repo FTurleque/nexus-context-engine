@@ -4,19 +4,20 @@
 
 NEXUS n'est ni un chatbot, ni un LLM, ni un orchestrateur d'agents. Il se place entre les repositories et les consommateurs IA afin de sélectionner un contexte technique pertinent, borné et traçable.
 
-## État Phase 6
+## État courant
 
 ```text
 repository   FTurleque/nexus-context-engine
-branch       phase-6-consolidation-hardening
+main         Phase 6 + Hardening post-Phase 6 intégrés
+develop      à jour avec main
+issue        #16 — Post-Phase 6 hardening — clôturée
 Java         runtime >=21 / release 21
 version      0.2.0
-Phase 1→5    livrées
-Phase 6      qualifiée techniquement sur la branche, intégration en attente
-MINOS        issue #11 / PR #12 livrée
+Phase 1→6    livrées / intégrées
+hardening    qualifié et intégré dans main (2026-08-05)
 ```
 
-La preuve exact-head `=== PHASE 6 PASS ===` du head qualifié est publiée dans la PR #15. Le merge et la fermeture de l'issue #13 restent des décisions d'intégration distinctes.
+La Phase 6 a été fusionnée via PR #15 (issue #13). Le hardening post-Phase 6 a été qualifié localement (gates A–D PASS, self-smoke 13/13) et intégré dans `main` via PR #18 (issue #16).
 
 ## Capacités
 
@@ -33,8 +34,22 @@ La preuve exact-head `=== PHASE 6 PASS ===` du head qualifié est publiée dans 
 - contexte Git local borné ;
 - CLI, REST Quarkus et MCP Java STDIO ;
 - générateurs de configuration Copilot/Claude ;
-- métriques/readiness REST ;
+- liveness/readiness REST et métriques ;
 - distribution CLI autonome versionnée.
+
+## Hardening post-Phase 6 — intégré
+
+Le hardening issue de l'audit post-Phase 6 renforce plusieurs frontières de production :
+
+- **filesystem** : racine canonique, refus des liens symboliques sous le repository, ouverture avec `NOFOLLOW_LINKS` via `SafeFileIO` — couvre scanner, ignore files, instructions/références, Agent Skills, provider JDT LS, ContextFragmentFactory et importeur SCIP ;
+- **taille des fichiers** : revalidation du fichier réel et de sa taille avant hash ou lecture ; flux bornés à `NEXUS_MAX_FILE_SIZE_BYTES` ;
+- **concurrence** : single-flight par projet dans la JVM et verrou OS sous `NEXUS_HOME/locks` ;
+- **providers/importers** : enveloppe wall-clock commune via `ExternalTaskRunner`, interruption sans fermeture bloquante ;
+- **readiness** : liveness, readiness service et état READY des projets distincts ;
+- **contexte fédéré** : fair floor déterministe, déduplication, réutilisation globale du budget libéré ;
+- **REST** : écoute loopback par défaut, Bearer token requis hors-loopback ;
+- **cohérence API** : UUID inconnu → erreur UUID directe ;
+- **ressources JVM** : slots de locks locaux retirés à libération.
 
 ## Build reproductible
 
@@ -92,17 +107,20 @@ target/sbom/bom.json
 
 Le ZIP contient `bin/nexus.cmd`, `bin/nexus` et `lib/nexus-cli.jar`. Maven n'est pas requis sur la machine cible ; une JVM Java 21 ou supérieure est nécessaire.
 
-## Correctness et scale Phase 6
+## Correctness et scale
 
 - toute lecture dépendant d'un index exige un projet `READY` ;
 - un état `FAILED`, `NOT_INDEXED` ou `INDEXING` persistant entraîne un rebuild complet au prochain index ;
-- une seule indexation active est acceptée par projet et par processus ;
+- la façade de production n'accepte qu'une indexation active par projet, y compris entre plusieurs processus partageant le même `NEXUS_HOME` ;
 - top-K fédéré sur-récupéré avant diversification ;
 - symboles/usages filtrés côté SQLite avec limites ;
 - graphe réutilisé tant que la génération canonique n'a pas changé ;
-- taille de fichier bornée avant hash/lecture ;
-- providers externes bornés par timeout ;
-- MINOS valide contre les fichiers canoniques déjà indexés.
+- taille de fichier bornée avant hash/lecture et fichiers symlinkés refusés ;
+- providers **et importers** externes bornés par timeout ;
+- MINOS valide contre les fichiers canoniques déjà indexés ;
+- le contexte fédéré peut redistribuer son budget restant après fair floor et déduplication.
+
+Les recherches SQLite utilisant des recherches de sous-chaîne restent un **watch item mesuré** : aucun FTS5, trigram ou moteur supplémentaire ne sera introduit sans benchmark montrant un bénéfice matériel sur les corpus cibles.
 
 ## Configuration
 
@@ -119,6 +137,7 @@ NEXUS_OLLAMA_BASE_URL
 NEXUS_OLLAMA_EMBEDDING_MODEL
 NEXUS_OLLAMA_EMBEDDING_DIMENSIONS
 NEXUS_OLLAMA_TIMEOUT_SECONDS
+NEXUS_REST_API_TOKEN
 ```
 
 `NEXUS_MAX_FILE_SIZE_BYTES` vaut 8 MiB par défaut. Le timeout global de code intelligence vaut 180 s. Les providers lourds et la sémantique sont **désactivés par défaut**.
@@ -128,6 +147,22 @@ Pour activer explicitement Ollama :
 ```powershell
 $env:NEXUS_SEMANTIC_PROVIDER = "ollama"
 ```
+
+### Sécurité REST
+
+La configuration par défaut reste :
+
+```text
+quarkus.http.host=127.0.0.1
+```
+
+Sur loopback, aucun token n'est imposé par défaut. Si `NEXUS_REST_API_TOKEN` est défini, les ressources REST JAX-RS exigent :
+
+```text
+Authorization: Bearer <token>
+```
+
+Une écoute non-loopback (`0.0.0.0`, adresse LAN, etc.) sans `NEXUS_REST_API_TOKEN` est refusée au démarrage. Le token peut également être fourni par la propriété JVM `-Dnexus.rest.api-token=...`.
 
 ## Surfaces fédérées
 
@@ -153,17 +188,17 @@ build_context_across_projects
 explain_context_across_projects
 ```
 
-Le contexte fédéré applique un budget global, conserve la provenance projet, réduit la starvation et ne propage pas implicitement instructions/skills/Git d'un projet vers un autre.
+Le contexte fédéré applique un budget global, conserve la provenance projet, réduit la starvation, réutilise le budget rendu disponible et ne propage pas implicitement instructions/skills/Git d'un projet vers un autre.
 
-## Qualification Phase 6
+## Qualification
 
-Source de vérité Windows :
+La qualification Phase 6 historique reste décrite par :
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
 ```
 
-Ce gate exécute le reactor complet, le self-smoke historique, vérifie les checksums, le SBOM, l'archive installable et l'exact-head.
+Pour le hardening post-Phase 6, les tests et contrôles ont été **préparés mais pas exécutés via CI**. La qualification exacte de la branche sera lancée uniquement après validation explicite, conformément au gate de l'issue #16.
 
 ## Documentation
 
@@ -179,4 +214,4 @@ Ce gate exécute le reactor complet, le self-smoke historique, vérifie les chec
 
 ## Décisions conservées
 
-SQLite reste canonique. Lucene reste dérivé. Aucun Zoekt/OpenGrok/OpenSearch, index distribué, vector DB, cache Git persistant ou lifecycle Lucene plus complexe n'est adopté sans mesure démontrant qu'il répond à un problème réel.
+SQLite reste canonique. Lucene reste dérivé. Aucun Zoekt/OpenGrok/OpenSearch, index distribué, vector DB, cache Git persistant, FTS supplémentaire ou lifecycle Lucene plus complexe n'est adopté sans mesure démontrant qu'il répond à un problème réel.

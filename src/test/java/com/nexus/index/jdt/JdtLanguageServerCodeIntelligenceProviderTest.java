@@ -41,7 +41,7 @@ class JdtLanguageServerCodeIntelligenceProviderTest {
                 }
                 """);
 
-        FakeSession session = new FakeSession(base.toUri().toString(), implementation.toUri().toString());
+        FakeSession session = new FakeSession(base.toRealPath().toUri().toString(), implementation.toRealPath().toUri().toString());
         JdtLanguageServerCodeIntelligenceProvider.Configuration configuration =
                 new JdtLanguageServerCodeIntelligenceProvider.Configuration(
                         temporaryDirectory.resolve("jdtls"),

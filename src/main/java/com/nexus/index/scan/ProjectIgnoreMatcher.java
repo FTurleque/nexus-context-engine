@@ -1,10 +1,13 @@
 package com.nexus.index.scan;
 
+import com.nexus.security.ProjectPathGuard;
+import com.nexus.security.SafeFileIO;
 import org.eclipse.jgit.ignore.IgnoreNode;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -43,13 +46,15 @@ public final class ProjectIgnoreMatcher {
             ".p12",
             ".pfx");
 
+    private final ProjectPathGuard pathGuard;
     private final Path projectRoot;
     private final List<ScopedIgnoreNode> gitScopes = new ArrayList<>();
     private final List<ScopedIgnoreNode> nexusScopes = new ArrayList<>();
     private final Set<Path> loadedDirectories = new HashSet<>();
 
     public ProjectIgnoreMatcher(Path projectRoot) throws IOException {
-        this.projectRoot = projectRoot.toAbsolutePath().normalize();
+        this.pathGuard = new ProjectPathGuard(projectRoot);
+        this.projectRoot = pathGuard.root();
         registerDirectory(this.projectRoot);
     }
 
@@ -58,8 +63,9 @@ public final class ProjectIgnoreMatcher {
         if (!normalizedDirectory.startsWith(projectRoot) || !loadedDirectories.add(normalizedDirectory)) {
             return;
         }
-        loadIgnoreFile(normalizedDirectory, ".gitignore", gitScopes);
-        loadIgnoreFile(normalizedDirectory, ".nexusignore", nexusScopes);
+        Path safeDirectory = pathGuard.requireDirectory(normalizedDirectory);
+        loadIgnoreFile(safeDirectory, ".gitignore", gitScopes);
+        loadIgnoreFile(safeDirectory, ".nexusignore", nexusScopes);
     }
 
     public boolean isIgnored(Path path, boolean directory) {
@@ -86,12 +92,14 @@ public final class ProjectIgnoreMatcher {
             String fileName,
             List<ScopedIgnoreNode> scopes) throws IOException {
         Path ignoreFile = directory.resolve(fileName);
-        if (!Files.isRegularFile(ignoreFile)) {
+        if (Files.isSymbolicLink(ignoreFile)
+                || !Files.isRegularFile(ignoreFile, LinkOption.NOFOLLOW_LINKS)) {
             return;
         }
 
+        Path safeIgnoreFile = pathGuard.requireRegularFile(ignoreFile);
         IgnoreNode node = new IgnoreNode();
-        try (InputStream input = Files.newInputStream(ignoreFile)) {
+        try (InputStream input = SafeFileIO.newInputStreamNoFollow(safeIgnoreFile)) {
             node.parse(input);
         }
         scopes.add(new ScopedIgnoreNode(directory, node));
