@@ -48,7 +48,7 @@ public final class CopilotInstructionProvider implements ContextSourceProvider {
 
         for (Path file : InstructionDiscoverySupport.findFilesBelow(
                 query.project(), Path.of(".github", "instructions"), ".instructions.md")) {
-            String content = InstructionDiscoverySupport.read(file);
+            String content = InstructionDiscoverySupport.read(query.project(), file);
             List<String> applyTo = parseApplyTo(content);
             if (applyTo.isEmpty() || !RepositoryGlobMatcher.matchesAny(applyTo, query.targetPaths())) {
                 continue;
