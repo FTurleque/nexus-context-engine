@@ -6,12 +6,12 @@ Cette feuille de route est la source de vérité active pour l'évolution de NEX
 
 ```text
 repository  FTurleque/nexus-context-engine
-main        Phase 6 intégrée
-develop     Hardening post-Phase 6 intégré (2026-08-05)
+main        Phase 6 + Hardening post-Phase 6 intégrés (PR #18 — 2026-08-05)
+develop     identique à main (3cd3d07)
 issue       #16 — Post-Phase 6 hardening — CLÔTURÉE
 version     0.2.0
 Java        runtime >=21 / release 21
-qualification post-Phase 6 : EXÉCUTÉE — gates A-D PASS, self-smoke 13/13
+qualification post-Phase 6 : COMPLÈTE — gates A-D PASS, self-smoke 13/13, CI NEXUS CI success
 ```
 
 Principe directeur :
