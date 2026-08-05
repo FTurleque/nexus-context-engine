@@ -1,8 +1,8 @@
 # Limites actuelles et dette de consolidation
 
-> Phase 6 : intégrée dans `main` via la PR #15 ; issue #13 clôturée.
-> Cycle courant : issue #16, branche `hardening/post-phase6-audit` issue de `develop`.
-> Les changements post-Phase 6 sont implémentés mais **non qualifiés par CI avant validation explicite**.
+> Phase 6 : intégrée dans `main` via PR #15 ; issue #13 clôturée.
+> Hardening post-Phase 6 : intégré dans `main` via PR #18 ; issue #16 clôturée.
+> Qualification exécutée localement sous Windows (gates A–D PASS, self-smoke 13/13) et validée par CI (2026-08-05).
 
 Ce registre conserve les constats F01–F18 issus de l'audit de juillet 2026 et ajoute les constats de l'audit post-Phase 6. Les ADR acceptés restent historiques et ne sont pas réécrits.
 
@@ -33,14 +33,14 @@ Ce registre conserve les constats F01–F18 issus de l'audit de juillet 2026 et 
 
 | ID | Constat | Traitement implémenté | État actuel |
 |---|---|---|---|
-| H01 | lecture possible d'une cible extérieure via symlink | `ProjectPathGuard`, racine canonique, refus des symlinks sous le repository, ouverture finale `NOFOLLOW_LINKS`, flux et lectures bornés | implémenté, validation en attente |
-| H02 | single-flight limité à une JVM | mutex local + `FileLock` OS par `projectId` sous `NEXUS_HOME/locks` ; indexations et import MINOS sérialisés | implémenté, validation en attente |
-| H03 | timeout provider potentiellement bloquant et importers non bornés | `ExternalTaskRunner` daemon non bloquant ; même enveloppe pour importers et providers | implémenté, validation en attente |
-| H04 | readiness mélangeait santé du service et disponibilité des projets | liveness explicite, readiness service, `allProjectsReady`, `degraded`, gate projet `READY` séparé | implémenté, validation en attente |
-| H05 | budget fédéré perdu après projet clairsemé ou déduplication | fair floor, overfetch local borné, refill global et préservation de l'ordre de ranking local | implémenté, validation en attente |
-| H06 | exposition REST non-loopback possible sans authentification | fail-fast hors loopback sans token + Bearer auth si token configuré | implémenté, validation en attente |
-| H07 | UUID inconnu réinterprété comme nom | séparation parse UUID / résolution par nom | implémenté, validation en attente |
-| H08 | map des mutex JVM conservée indéfiniment | slots référencés et suppression quand plus aucun utilisateur | implémenté, validation en attente |
+| H01 | lecture possible d'une cible extérieure via symlink | `ProjectPathGuard`, racine canonique, refus des symlinks sous le repository, ouverture finale `NOFOLLOW_LINKS`, flux et lectures bornés ; `SafeFileIO` couvre scanner, instructions, références, Agent Skills, provider JDT LS, `ContextFragmentFactory` et importeur SCIP | qualifié |
+| H02 | single-flight limité à une JVM | mutex local + `FileLock` OS par `projectId` sous `NEXUS_HOME/locks` ; indexations et import MINOS sérialisés | qualifié |
+| H03 | timeout provider potentiellement bloquant et importers non bornés | `ExternalTaskRunner` daemon non bloquant ; même enveloppe pour importers et providers | qualifié |
+| H04 | readiness mélangeait santé du service et disponibilité des projets | liveness explicite, readiness service, `allProjectsReady`, `degraded`, gate projet `READY` séparé | qualifié |
+| H05 | budget fédéré perdu après projet clairsemé ou déduplication | fair floor, overfetch local borné, refill global et préservation de l'ordre de ranking local | qualifié |
+| H06 | exposition REST non-loopback possible sans authentification | fail-fast hors loopback sans token + Bearer auth si token configuré | qualifié |
+| H07 | UUID inconnu réinterprété comme nom | séparation parse UUID / résolution par nom | qualifié |
+| H08 | map des mutex JVM conservée indéfiniment | slots référencés et suppression quand plus aucun utilisateur | qualifié |
 | H09 | coût SQLite des recherches `%substring%` à grande échelle | aucun changement prématuré ; benchmark requis avant FTS5/trigram/autre moteur | watch item mesuré |
 
 ## Invariants renforcés
@@ -137,12 +137,12 @@ Les endpoints techniques fournis directement par Quarkus (health/métriques) ne 
 
 ## Gate de validation post-Phase 6
 
-Aucun PASS n'est déclaré à ce stade pour l'issue #16. Conformément au gate demandé :
+Issue #16 **clôturée**. Qualification complète exécutée :
 
-1. revue statique complète de la branche ;
-2. validation explicite du propriétaire ;
-3. seulement ensuite intégration/qualification autorisée selon la stratégie convenue ;
-4. qualification exacte du commit livré, incluant build reactor, tests, packaging et scénarios de concurrence/sécurité ;
-5. mise à jour de ce registre avec les preuves réelles.
+1. revue statique complète de la branche ✓
+2. validation explicite du propriétaire ✓
+3. intégration dans `develop` via PR #17, puis dans `main` via PR #18 ✓
+4. qualification locale Windows : gates A–D PASS, self-smoke 13/13, CI Windows + Linux success ✓
+5. ce registre mis à jour avec les preuves réelles ✓
 
-Voir aussi : `docs/developer/release-and-recovery.md`, `docs/roadmap.md` et l'issue #16.
+Voir aussi : `docs/developer/release-and-recovery.md` et `docs/roadmap.md`.

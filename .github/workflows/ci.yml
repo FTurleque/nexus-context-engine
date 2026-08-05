@@ -1,4 +1,4 @@
-name: Phase 6 CI
+name: NEXUS CI
 
 on:
   pull_request:
@@ -6,16 +6,16 @@ on:
       - main
   push:
     branches:
+      - develop
       - main
-      - phase-6-consolidation-hardening
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  windows-phase-6-gate:
-    name: Windows Phase 6 gate
+  windows-gate:
+    name: Windows gate
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -30,7 +30,7 @@ jobs:
           distribution: temurin
           java-version: '24'
 
-      - name: Run Phase 6 local qualification script
+      - name: Run local qualification script
         shell: powershell
         env:
           NEXUS_EXPECTED_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}

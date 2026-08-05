@@ -3,11 +3,10 @@ package com.nexus.context;
 import com.nexus.index.CodeSymbol;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.ranking.RankedCandidate;
+import com.nexus.security.SafeFileIO;
 import com.nexus.token.TokenEstimator;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -60,7 +59,7 @@ public final class ContextFragmentFactory {
         for (Map.Entry<Path, List<RankedCandidate>> entry : byPath.entrySet()) {
             Path absolutePath = entry.getKey();
             Path relativePath = project.rootPath().relativize(absolutePath);
-            List<String> lines = Files.readAllLines(absolutePath, StandardCharsets.UTF_8);
+            List<String> lines = List.of(SafeFileIO.readStringNoFollow(absolutePath).split("\\r?\\n", -1));
             List<RankedCandidate> symbolCandidates = entry.getValue().stream()
                     .filter(candidate -> candidate.candidate().symbol() != null)
                     .toList();

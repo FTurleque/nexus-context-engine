@@ -8,18 +8,16 @@ NEXUS n'est ni un chatbot, ni un LLM, ni un orchestrateur d'agents. Il se place 
 
 ```text
 repository   FTurleque/nexus-context-engine
-main         Phase 6 intégrée
-base         develop
-work         hardening/post-phase6-audit
-issue        #16 — Post-Phase 6 hardening
+main         Phase 6 + Hardening post-Phase 6 intégrés
+develop      à jour avec main
+issue        #16 — Post-Phase 6 hardening — clôturée
 Java         runtime >=21 / release 21
 version      0.2.0
 Phase 1→6    livrées / intégrées
-hardening    implémenté sur branche, validation en attente
-CI hardening NON EXÉCUTÉE avant validation explicite
+hardening    qualifié et intégré dans main (2026-08-05)
 ```
 
-La Phase 6 a été fusionnée via la PR #15 et l'issue #13 est historique. Le cycle post-Phase 6 est volontairement développé à partir de `develop`. La branche `hardening/post-phase6-audit` ne doit pas être fusionnée ni qualifiée par GitHub Actions avant validation explicite.
+La Phase 6 a été fusionnée via PR #15 (issue #13). Le hardening post-Phase 6 a été qualifié localement (gates A–D PASS, self-smoke 13/13) et intégré dans `main` via PR #18 (issue #16).
 
 ## Capacités
 
@@ -39,21 +37,19 @@ La Phase 6 a été fusionnée via la PR #15 et l'issue #13 est historique. Le cy
 - liveness/readiness REST et métriques ;
 - distribution CLI autonome versionnée.
 
-## Hardening post-Phase 6
+## Hardening post-Phase 6 — intégré
 
-La branche de travail issue de l'audit renforce plusieurs frontières de production :
+Le hardening issue de l'audit post-Phase 6 renforce plusieurs frontières de production :
 
-- **filesystem** : racine canonique et refus des liens symboliques sous le repository pour le scanner, les ignore files, les instructions/références et les Agent Skills ;
-- **taille des fichiers** : revalidation du fichier réel et de sa taille avant hash ou lecture ;
-- **concurrence** : single-flight par projet dans la JVM et verrou OS sous `NEXUS_HOME/locks` pour les processus partageant le même home ;
-- **providers/importers** : enveloppe wall-clock commune via `NEXUS_CODE_INTELLIGENCE_TIMEOUT_SECONDS`, interruption du worker et retour sans fermeture bloquante de l'executor ;
-- **readiness** : liveness du processus, readiness du service et état READY des projets sont exposés comme notions distinctes ;
-- **contexte fédéré** : fair floor initial, déduplication puis réutilisation globale du budget libéré ;
-- **REST** : écoute loopback par défaut ; toute écoute non-loopback exige un Bearer token ;
-- **cohérence API** : un UUID valide mais inconnu n'est plus réinterprété comme un nom de projet ;
-- **ressources JVM** : les slots de locks locaux sont retirés lorsqu'ils ne sont plus utilisés.
-
-Ces changements disposent de tests de régression dans la branche, mais **aucun résultat PASS de build/CI n'est revendiqué tant que la qualification n'a pas été autorisée et exécutée**.
+- **filesystem** : racine canonique, refus des liens symboliques sous le repository, ouverture avec `NOFOLLOW_LINKS` via `SafeFileIO` — couvre scanner, ignore files, instructions/références, Agent Skills, provider JDT LS, ContextFragmentFactory et importeur SCIP ;
+- **taille des fichiers** : revalidation du fichier réel et de sa taille avant hash ou lecture ; flux bornés à `NEXUS_MAX_FILE_SIZE_BYTES` ;
+- **concurrence** : single-flight par projet dans la JVM et verrou OS sous `NEXUS_HOME/locks` ;
+- **providers/importers** : enveloppe wall-clock commune via `ExternalTaskRunner`, interruption sans fermeture bloquante ;
+- **readiness** : liveness, readiness service et état READY des projets distincts ;
+- **contexte fédéré** : fair floor déterministe, déduplication, réutilisation globale du budget libéré ;
+- **REST** : écoute loopback par défaut, Bearer token requis hors-loopback ;
+- **cohérence API** : UUID inconnu → erreur UUID directe ;
+- **ressources JVM** : slots de locks locaux retirés à libération.
 
 ## Build reproductible
 

@@ -1,6 +1,6 @@
 # Release, installation et recovery
 
-> État Phase 6 + Hardening : intégré dans `develop` (PR #15 + issue #16). Qualification post-Phase 6 exécutée localement sous Windows le 2026-08-05 — gates A–D PASS, self-smoke 13/13. HEAD develop : `5a7a6f4`.
+> État Phase 6 + Hardening : intégré dans `main` (PR #15 + PR #18). Qualification post-Phase 6 exécutée localement sous Windows le 2026-08-05 — gates A–D PASS, self-smoke 13/13. CI Windows + Linux : success.
 
 ## Version produit
 
@@ -79,7 +79,7 @@ En cas de corruption d'un index Lucene, supprimer uniquement l'index dérivé pu
 
 ## Qualification release
 
-Sous Windows, la source de vérité Phase 6 est :
+Sous Windows, la qualification est pilotée par :
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
@@ -88,12 +88,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
 Le script impose :
 
 - une JVM d'exécution Java 21 ou supérieure et `maven.compiler.release=21` ;
-- Maven Wrapper fonctionnel ;
+- Maven Wrapper fonctionnel (`mvnw.cmd` / `mvnw`) ;
 - `clean install` du reactor complet ;
-- `scripts/self-smoke.ps1` ;
+- `scripts/self-smoke.ps1` (auto-hermétique via `mvnw.cmd`) ;
 - existence et vérification des SHA-256 ;
 - SBOM CycloneDX ;
-- extraction et exécution Windows de l'archive autonome, contrôle POSIX local et smoke réel dans la CI Linux ;
-- branche exact-head `phase-6-consolidation-hardening`.
+- extraction et exécution Windows de l'archive autonome, contrôle POSIX et smoke réel dans la CI Linux ;
+- exact-head SHA vérifié via `NEXUS_EXPECTED_HEAD_SHA`.
 
 Une release, un tag ou un merge ne doit pas être déclaré qualifié sans le log `=== PHASE 6 PASS ===` du head concerné.

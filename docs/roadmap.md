@@ -141,7 +141,7 @@ PR de revue : **#17**, ouverte en draft vers `develop`.
 
 ## H1 — Frontière filesystem sûre
 
-**✅ implémenté / ⏳ validation en attente**
+**✅ implémenté / ✅ qualifié**
 
 - nouvelle politique `ProjectPathGuard` ;
 - root canonicalisé ;
@@ -153,11 +153,13 @@ PR de revue : **#17**, ouverte en draft vers `develop`.
 - fichier réel et taille réelle revalidés avant hash/lecture ;
 - tests adversariaux symlink préparés avec skip explicite si la plateforme n'autorise pas leur création.
 
-Limite assumée : le modèle Java portable ne constitue pas un sandbox absolu contre un acteur local qui remplace agressivement un répertoire ancêtre ou crée des hard-links pendant le traitement. Le provider JDT LS opt-in reste également à qualifier contre un workspace muté activement après son scan sécurisé.
+Frontière étendue post-qualification : la lecture interne du provider JDT LS (via `SafeFileIO.readStringNoFollow`), `ContextFragmentFactory` et l'importeur SCIP couverts par `SafeFileIO` + `NOFOLLOW_LINKS`.
+
+Limite assumée : le modèle Java portable ne constitue pas un sandbox absolu contre un acteur local qui remplace agressivement un répertoire ancêtre ou crée des hard-links pendant le traitement.
 
 ## H2 — Single-flight inter-processus
 
-**✅ implémenté / ⏳ validation en attente**
+**✅ implémenté / ✅ qualifié**
 
 - mutex JVM par `projectId` conservé ;
 - slots locaux libérés quand ils ne sont plus utilisés ;
@@ -172,7 +174,7 @@ La sémantique d'un filesystem réseau doit être qualifiée séparément ; le s
 
 ## H3 — Timeouts externes cohérents
 
-**✅ implémenté / ⏳ validation en attente**
+**✅ implémenté / ✅ qualifié**
 
 - `ExternalTaskRunner` commun ;
 - même enveloppe pour `CodeIndexImporter` et `CodeIntelligenceProvider` ;
@@ -186,7 +188,7 @@ Risque résiduel accepté pour ce niveau : une intégration Java qui ignore déf
 
 ## H4 — Health model explicite
 
-**✅ implémenté / ⏳ validation en attente**
+**✅ implémenté / ✅ qualifié**
 
 - liveness Quarkus séparée ;
 - readiness service distincte ;
@@ -196,7 +198,7 @@ Risque résiduel accepté pour ce niveau : une intégration Java qui ignore déf
 
 ## H5 — Fédération avec réutilisation du budget
 
-**✅ implémenté / ⏳ validation en attente**
+**✅ implémenté / ✅ qualifié**
 
 - fair floor déterministe par projet ;
 - pool local borné par le budget global ;
@@ -208,7 +210,7 @@ Risque résiduel accepté pour ce niveau : une intégration Java qui ignore déf
 
 ## H6 — Sécurité de l'exposition REST
 
-**✅ implémenté / ⏳ validation en attente**
+**✅ implémenté / ✅ qualifié**
 
 - `127.0.0.1` reste le défaut ;
 - `NEXUS_REST_API_TOKEN` ou `-Dnexus.rest.api-token` active Bearer auth ;
@@ -217,7 +219,7 @@ Risque résiduel accepté pour ce niveau : une intégration Java qui ignore déf
 
 ## H7 — Corrections de cohérence mineures
 
-**✅ implémenté / ⏳ validation en attente**
+**✅ implémenté / ✅ qualifié**
 
 - UUID valide mais inconnu : erreur UUID directe, pas de fallback par nom ;
 - cycle de vie des locks JVM nettoyé ;
