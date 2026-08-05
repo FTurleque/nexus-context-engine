@@ -5,7 +5,6 @@ import com.nexus.search.CandidateType;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -14,8 +13,13 @@ import java.util.UUID;
 
 /**
  * Construit un contexte fédéré sans faire fuiter les customisations natives
- * d'un projet vers un autre. Chaque projet reçoit une part déterministe du
- * budget global, puis les résultats sont entrelacés pour éviter la starvation.
+ * d'un projet vers un autre.
+ *
+ * <p>Chaque projet dispose d'un fair floor déterministe. Les builders locaux
+ * peuvent néanmoins overfetcher jusqu'au budget global ; après le premier tour
+ * équitable et la déduplication, le budget libéré est redistribué globalement
+ * en round-robin. Un projet peu fourni ne laisse donc plus des tokens inutilisés
+ * si un autre projet possède encore du contexte pertinent.</p>
  */
 public final class FederatedContextService {
 
@@ -65,13 +69,16 @@ public final class FederatedContextService {
         Map<String, Integer> localTokensByProject = new LinkedHashMap<>();
         Map<String, Integer> localItemsByProject = new LinkedHashMap<>();
 
+        // Overfetch borné par le budget global. Cela reste déterministe et évite
+        // une seconde construction locale après déduplication.
+        int candidateBudget = tokenBudget;
         for (int index = 0; index < scope.size(); index++) {
             ProjectDescriptor project = scope.get(index);
-            int projectBudget = baseBudget + (index < remainder ? 1 : 0);
+            int fairAllocation = baseBudget + (index < remainder ? 1 : 0);
             ContextBundle local = contextBuilder.build(new ContextRequest(
                     project.id(),
                     query,
-                    projectBudget,
+                    candidateBudget,
                     requestedSources,
                     constraints,
                     explain));
@@ -79,7 +86,7 @@ public final class FederatedContextService {
                     .map(item -> new FederatedContextItem(project, item))
                     .toList();
             perProjectItems.add(items);
-            allocatedByProject.put(project.id().toString(), projectBudget);
+            allocatedByProject.put(project.id().toString(), fairAllocation);
             localTokensByProject.put(project.id().toString(), local.estimatedTokens());
             localItemsByProject.put(project.id().toString(), local.items().size());
             if (explain) {
@@ -88,12 +95,19 @@ public final class FederatedContextService {
         }
 
         List<FederatedContextItem> selected = new ArrayList<>();
-        Set<ContentKey> seen = new LinkedHashSet<>();
+        List<FederatedContextItem> deferred = new ArrayList<>();
+        Map<ContentKey, UUID> seen = new LinkedHashMap<>();
         Map<String, Integer> selectedTokensByProject = new LinkedHashMap<>();
         Map<String, Integer> selectedItemsByProject = new LinkedHashMap<>();
-        int crossProjectDuplicates = 0;
+        boolean[] fairFloorClosed = new boolean[scope.size()];
+        int[] crossProjectDuplicates = {0};
+        int selectedTokens = 0;
         int maxItems = perProjectItems.stream().mapToInt(List::size).max().orElse(0);
 
+        // Passe 1 : chaque projet peut consommer un préfixe de son ranking local
+        // dans son fair floor. Dès que le prochain candidat ne tient plus, tous
+        // les candidats suivants de ce projet sont différés afin de ne jamais
+        // faire passer un résultat local moins bien classé devant lui.
         for (int itemIndex = 0; itemIndex < maxItems; itemIndex++) {
             for (int projectIndex = 0; projectIndex < scope.size(); projectIndex++) {
                 List<FederatedContextItem> projectItems = perProjectItems.get(projectIndex);
@@ -102,27 +116,60 @@ public final class FederatedContextService {
                 }
                 FederatedContextItem federated = projectItems.get(itemIndex);
                 ContextItem item = federated.item();
-                ContentKey key = new ContentKey(item.type(), normalize(item.content()));
-                if (!seen.add(key)) {
-                    crossProjectDuplicates++;
-                    if (explain) {
-                        excluded.add(federated.project().name() + ": " + item.path()
-                                + " exclu : contenu identique déjà retenu depuis un autre projet");
-                    }
+                String projectId = federated.project().id().toString();
+
+                if (fairFloorClosed[projectIndex]) {
+                    deferred.add(federated);
                     continue;
                 }
+
+                int fairAllocation = allocatedByProject.get(projectId);
+                int projectTokens = selectedTokensByProject.getOrDefault(projectId, 0);
+                if (projectTokens + item.estimatedTokens() > fairAllocation
+                        || selectedTokens + item.estimatedTokens() > tokenBudget) {
+                    fairFloorClosed[projectIndex] = true;
+                    deferred.add(federated);
+                    continue;
+                }
+                if (!retainUnique(federated, seen, excluded, explain, crossProjectDuplicates)) {
+                    continue;
+                }
+
                 selected.add(federated);
-                String projectId = federated.project().id().toString();
+                selectedTokens += item.estimatedTokens();
                 selectedTokensByProject.merge(projectId, item.estimatedTokens(), Integer::sum);
                 selectedItemsByProject.merge(projectId, 1, Integer::sum);
             }
         }
 
-        int estimatedTokens = selected.stream()
-                .map(FederatedContextItem::item)
-                .mapToInt(ContextItem::estimatedTokens)
-                .sum();
-        if (estimatedTokens > tokenBudget) {
+        // Passe 2 : les préfixes différés réutilisent le budget laissé libre par
+        // les projets clairsemés ou par le dedup. L'ordre de deferred est issu du
+        // round-robin de la passe 1 et conserve l'ordre relatif de chaque projet.
+        int refillTokens = 0;
+        int refillItems = 0;
+        for (FederatedContextItem federated : deferred) {
+            ContextItem item = federated.item();
+            if (selectedTokens + item.estimatedTokens() > tokenBudget) {
+                if (explain) {
+                    excluded.add(federated.project().name() + ": " + item.path()
+                            + " différé puis exclu : budget global restant insuffisant");
+                }
+                continue;
+            }
+            if (!retainUnique(federated, seen, excluded, explain, crossProjectDuplicates)) {
+                continue;
+            }
+
+            selected.add(federated);
+            selectedTokens += item.estimatedTokens();
+            refillTokens += item.estimatedTokens();
+            refillItems++;
+            String projectId = federated.project().id().toString();
+            selectedTokensByProject.merge(projectId, item.estimatedTokens(), Integer::sum);
+            selectedItemsByProject.merge(projectId, 1, Integer::sum);
+        }
+
+        if (selectedTokens > tokenBudget) {
             throw new IllegalStateException("Le contexte fédéré a dépassé son budget global");
         }
 
@@ -135,22 +182,48 @@ public final class FederatedContextService {
         metadata.put("projectCount", scope.size());
         metadata.put("projectIds", scope.stream().map(project -> project.id().toString()).toList());
         metadata.put("allocationByProject", Map.copyOf(allocatedByProject));
+        metadata.put("candidateBudgetPerProject", candidateBudget);
         metadata.put("localTokensByProject", Map.copyOf(localTokensByProject));
         metadata.put("localItemsByProject", Map.copyOf(localItemsByProject));
         metadata.put("selectedTokensByProject", Map.copyOf(selectedTokensByProject));
         metadata.put("selectedItemsByProject", Map.copyOf(selectedItemsByProject));
+        metadata.put("refillTokens", refillTokens);
+        metadata.put("refillItems", refillItems);
+        metadata.put("unusedTokens", tokenBudget - selectedTokens);
         metadata.put("starvedProjects", starvedProjects);
         metadata.put("starvedProjectCount", starvedProjects.size());
-        metadata.put("crossProjectDeduplicatedItems", crossProjectDuplicates);
-        metadata.put("mergePolicy", "fair-budget-round-robin");
+        metadata.put("crossProjectDeduplicatedItems", crossProjectDuplicates[0]);
+        metadata.put("mergePolicy", "fair-floor-global-refill");
         metadata.put("nativeSourceScope", "project-local");
 
         return new FederatedContextBundle(
                 selected,
                 tokenBudget,
-                estimatedTokens,
+                selectedTokens,
                 explain ? excluded : List.of(),
                 metadata);
+    }
+
+    private static boolean retainUnique(
+            FederatedContextItem federated,
+            Map<ContentKey, UUID> seen,
+            List<String> excluded,
+            boolean explain,
+            int[] crossProjectDuplicates) {
+        ContextItem item = federated.item();
+        ContentKey key = new ContentKey(item.type(), normalize(item.content()));
+        UUID firstProject = seen.putIfAbsent(key, federated.project().id());
+        if (firstProject == null) {
+            return true;
+        }
+        if (!firstProject.equals(federated.project().id())) {
+            crossProjectDuplicates[0]++;
+        }
+        if (explain) {
+            excluded.add(federated.project().name() + ": " + item.path()
+                    + " exclu : contenu identique déjà retenu");
+        }
+        return false;
     }
 
     private static String normalize(String content) {

@@ -37,7 +37,7 @@ final class InstructionDescriptorFactory {
                 scope,
                 applyTo,
                 priority,
-                InstructionDiscoverySupport.read(absolutePath),
+                InstructionDiscoverySupport.read(project, absolutePath),
                 Map.of(),
                 reasons));
 

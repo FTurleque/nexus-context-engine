@@ -2,9 +2,11 @@ package com.nexus.index.scan;
 
 import com.nexus.index.FileCategory;
 import com.nexus.index.ScannedFile;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -12,6 +14,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProjectScannerTest {
 
@@ -91,6 +94,24 @@ class ProjectScannerTest {
         assertEquals(8, files.size());
     }
 
+    @Test
+    void rejectsSymbolicLinksInsteadOfReadingTargetsOutsideTheRepository() throws Exception {
+        Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("symlink-project"));
+        Path outside = temporaryDirectory.resolve("outside-secret.java");
+        Files.writeString(outside, "class OutsideSecret {}\n");
+        Path link = projectRoot.resolve("LinkedSecret.java");
+
+        Assumptions.assumeTrue(createSymbolicLink(link, outside),
+                "Les liens symboliques ne sont pas disponibles dans cet environnement");
+
+        ProjectScanResult result = new ProjectScanner().scanWithDiagnostics(projectRoot);
+
+        assertTrue(result.files().isEmpty());
+        assertEquals(1, result.skippedFiles());
+        assertTrue(result.diagnostics().stream().anyMatch(message ->
+                message.contains("LinkedSecret.java") && message.contains("lien symbolique")));
+    }
+
     private List<String> scanPaths() throws Exception {
         return new ProjectScanner().scan(temporaryDirectory).stream()
                 .map(ScannedFile::relativePath)
@@ -101,5 +122,14 @@ class ProjectScannerTest {
         Path file = temporaryDirectory.resolve(relativePath);
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);
+    }
+
+    private static boolean createSymbolicLink(Path link, Path target) {
+        try {
+            Files.createSymbolicLink(link, target.toAbsolutePath());
+            return true;
+        } catch (UnsupportedOperationException | IOException | SecurityException unavailable) {
+            return false;
+        }
     }
 }

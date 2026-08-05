@@ -1,12 +1,12 @@
 package com.nexus.context.source.skill;
 
+import com.nexus.security.SafeFileIO;
 import org.snakeyaml.engine.v2.api.Load;
 import org.snakeyaml.engine.v2.api.LoadSettings;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -63,7 +63,7 @@ final class SkillFrontmatterParser {
     }
 
     private static String readFrontmatter(Path skillFile) throws IOException {
-        try (BufferedReader reader = Files.newBufferedReader(skillFile, StandardCharsets.UTF_8)) {
+        try (BufferedReader reader = SafeFileIO.newBufferedReaderNoFollow(skillFile, StandardCharsets.UTF_8)) {
             String firstLine = reader.readLine();
             if (!"---".equals(firstLine)) {
                 throw new IllegalArgumentException("SKILL.md doit commencer par un frontmatter YAML : " + skillFile);

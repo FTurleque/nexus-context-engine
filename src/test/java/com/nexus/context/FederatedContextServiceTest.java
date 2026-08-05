@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -54,6 +55,87 @@ class FederatedContextServiceTest {
         assertEquals(
                 Set.of(first.id(), second.id()),
                 bundle.items().stream().map(item -> item.project().id()).collect(java.util.stream.Collectors.toSet()));
+    }
+
+    @Test
+    void refillsBudgetReleasedByASparseProject() {
+        ProjectDescriptor sparse = project("sparse", root.resolve("sparse"));
+        ProjectDescriptor rich = project("rich", root.resolve("rich"));
+
+        ContextBuilder builder = request -> {
+            if (request.projectId().equals(sparse.id())) {
+                return withinBudget(
+                        request.tokenBudget(),
+                        List.of(item(sparse.rootPath().resolve("README.md"), "small", 20)));
+            }
+            return withinBudget(
+                    request.tokenBudget(),
+                    List.of(
+                            item(rich.rootPath().resolve("A.java"), "A", 60),
+                            item(rich.rootPath().resolve("B.java"), "B", 40),
+                            item(rich.rootPath().resolve("C.java"), "C", 50)));
+        };
+
+        FederatedContextBundle bundle = new FederatedContextService(builder).build(
+                List.of(sparse, rich),
+                "task",
+                200,
+                Set.of(),
+                Map.of(),
+                true);
+
+        assertEquals(170, bundle.estimatedTokens());
+        assertEquals(4, bundle.items().size());
+        assertEquals(50, bundle.metadata().get("refillTokens"));
+        assertEquals(1, bundle.metadata().get("refillItems"));
+        assertEquals(30, bundle.metadata().get("unusedTokens"));
+        assertEquals("fair-floor-global-refill", bundle.metadata().get("mergePolicy"));
+    }
+
+    @Test
+    void doesNotLetASmallerLowerRankedItemLeapfrogADeferredCandidate() {
+        ProjectDescriptor sparse = project("sparse-order", root.resolve("sparse-order"));
+        ProjectDescriptor rich = project("rich-order", root.resolve("rich-order"));
+
+        ContextBuilder builder = request -> {
+            if (request.projectId().equals(sparse.id())) {
+                return withinBudget(
+                        request.tokenBudget(),
+                        List.of(item(sparse.rootPath().resolve("README.md"), "sparse", 20)));
+            }
+            return withinBudget(
+                    request.tokenBudget(),
+                    List.of(
+                            item(rich.rootPath().resolve("High.java"), "high-ranked", 120),
+                            item(rich.rootPath().resolve("Low.java"), "lower-ranked", 30)));
+        };
+
+        FederatedContextBundle bundle = new FederatedContextService(builder).build(
+                List.of(sparse, rich),
+                "task",
+                200,
+                Set.of(),
+                Map.of(),
+                true);
+
+        assertEquals(3, bundle.items().size());
+        assertEquals("sparse", bundle.items().get(0).item().content());
+        assertEquals("high-ranked", bundle.items().get(1).item().content());
+        assertEquals("lower-ranked", bundle.items().get(2).item().content());
+        assertEquals(150, bundle.metadata().get("refillTokens"));
+        assertEquals(2, bundle.metadata().get("refillItems"));
+    }
+
+    private static ContextBundle withinBudget(int tokenBudget, List<ContextItem> candidates) {
+        List<ContextItem> selected = new ArrayList<>();
+        int tokens = 0;
+        for (ContextItem candidate : candidates) {
+            if (tokens + candidate.estimatedTokens() <= tokenBudget) {
+                selected.add(candidate);
+                tokens += candidate.estimatedTokens();
+            }
+        }
+        return new ContextBundle(selected, tokenBudget, tokens, List.of(), Map.of());
     }
 
     private static ProjectDescriptor project(String name, Path path) {
