@@ -101,8 +101,16 @@ public final class ProjectPathGuard {
     private Path requireContained(Path candidate) throws IOException {
         Objects.requireNonNull(candidate, "candidate");
         Path absolute = candidate.toAbsolutePath().normalize();
+        // On Windows, toAbsolutePath() may preserve 8.3 short names (e.g. RUNNER~1)
+        // that don't match the canonical root resolved via toRealPath() at construction.
+        // Resolve without following symlinks so the prefix comparison is consistent.
+        try {
+            absolute = absolute.toRealPath(LinkOption.NOFOLLOW_LINKS);
+        } catch (IOException ignored) {
+            // Path does not exist yet; the caller's existence check will surface a clear error.
+        }
         if (!absolute.startsWith(root)) {
-            throw new IOException("Chemin hors repository : " + absolute);
+            throw new IOException("Chemin hors repository : " + candidate.toAbsolutePath().normalize());
         }
         return absolute;
     }
