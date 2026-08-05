@@ -119,6 +119,15 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
     @Override
     public CodeIntelligenceSnapshot analyze(Path projectRoot) throws IOException {
         Path root = Objects.requireNonNull(projectRoot, "projectRoot").toAbsolutePath().normalize();
+        // Resolve to the real path so file URIs built by the scanner (via requireRegularFile)
+        // and URIs returned by the JDT session share the same canonical base for containment
+        // checks. On Windows, java.io.tmpdir may carry 8.3 short names that cause startsWith()
+        // to fail even for valid intra-project paths.
+        try {
+            root = root.toRealPath();
+        } catch (IOException ignored) {
+            // Project root does not exist yet; ProjectScanner will report a clear error.
+        }
         List<ScannedFile> javaFiles = new ProjectScanner().scan(root).stream()
                 .filter(file -> "java".equalsIgnoreCase(file.language()))
                 .filter(file -> file.relativePath().toLowerCase(Locale.ROOT).endsWith(".java"))
