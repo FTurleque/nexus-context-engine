@@ -1,6 +1,6 @@
 # Release, installation et recovery
 
-> État Phase 6 : implémenté et qualifié techniquement sur `phase-6-consolidation-hardening` ; la preuve exact-head est publiée dans la PR #15, non fusionnée.
+> État Phase 6 + Hardening : intégré dans `develop` (PR #15 + issue #16). Qualification post-Phase 6 exécutée localement sous Windows le 2026-08-05 — gates A–D PASS, self-smoke 13/13. HEAD develop : `5a7a6f4`.
 
 ## Version produit
 

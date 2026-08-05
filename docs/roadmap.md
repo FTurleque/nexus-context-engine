@@ -7,12 +7,11 @@ Cette feuille de route est la source de vérité active pour l'évolution de NEX
 ```text
 repository  FTurleque/nexus-context-engine
 main        Phase 6 intégrée
-base        develop
-work        hardening/post-phase6-audit
-issue       #16 — Post-Phase 6 hardening
+develop     Hardening post-Phase 6 intégré (2026-08-05)
+issue       #16 — Post-Phase 6 hardening — CLÔTURÉE
 version     0.2.0
 Java        runtime >=21 / release 21
-qualification post-Phase 6 : NON EXÉCUTÉE — validation explicite requise
+qualification post-Phase 6 : EXÉCUTÉE — gates A-D PASS, self-smoke 13/13
 ```
 
 Principe directeur :
@@ -32,7 +31,7 @@ Les ADR acceptés conservent l'historique des décisions. Les résultats histori
 | Phase 5 — Écosystème et passage à l'échelle | 14 → 17 | ✅ terminée |
 | Intégration compagnon MINOS | issue #11 / PR #12 | ✅ livrée |
 | Phase 6 — Consolidation, hardening et industrialisation | 18 → 24 | ✅ intégrée via PR #15 |
-| Hardening post-Phase 6 | issue #16 | 🚧 implémenté sur branche, validation en attente |
+| Hardening post-Phase 6 | issue #16 / PR #17 | ✅ intégré dans `develop` le 2026-08-05 |
 
 La qualification Phase 6 historique reste conservée dans la PR #15. Elle ne constitue pas une preuve pour les changements de l'issue #16.
 
