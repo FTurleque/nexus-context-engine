@@ -5,14 +5,20 @@ Voir [`arc42/11-risques-dette.md`](../arc42/11-risques-dette.md) pour le tableau
 
 ## État courant des risques prioritaires
 
-### R12 — Qualification post-Phase 6 non exécutée (BLOQUANT)
+### R12 — Qualification post-Phase 6 non exécutée (**CLÔTURÉ 2026-08-05**)
 
-- **Probabilité** : Élevée (état actuel de la branche `hardening/post-phase6-audit`)
+- **Probabilité** : ~~Élevée~~ → **Mitigée** (gates A–D passées localement sous Windows)
 - **Impact** : Moyen
-- **Action requise** : Exécuter la gate de validation complète décrite dans
-  `docs/roadmap.md` § Gate de validation #16 avant tout merge dans `develop`.
+- **Mitigation effective** :
+  - Gate A (`.\mvnw.cmd -pl core test`) : 103 tests, 0 failures
+  - Gate B (`.\mvnw.cmd -pl adapters/rest-quarkus -am test`) : 3 tests, 0 failures
+  - Gate C (`.\mvnw.cmd clean test`) : 111 tests (5 modules), 0 failures
+  - Gate D (`.\mvnw.cmd clean install`) : BUILD SUCCESS, 111 tests, 0 failures
+  - Self-smoke (`scripts/self-smoke.ps1`) : 13/13 étapes, SELF-SMOKE SUCCESS
+  - Fix committé : `e490f1d` — `fix(instructions): propagate project context to hardened file reads`
+  - SHA HEAD après push : `f85bf25`
 - **Propriétaire** : Propriétaire du projet
-- **Date cible** : Avant le prochain merge
+- **Date clôture** : 2026-08-05
 
 ### R1 — Scale SQLite lexical (WATCH ITEM)
 
