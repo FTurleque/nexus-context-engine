@@ -13,9 +13,10 @@
 
     <licenses>
         <license>
-            <name>NEXUS Proprietary Software License - All Rights Reserved</name>
+            <name>NEXUS Proprietary Source-Available License - All Rights Reserved</name>
+            <url>https://github.com/FTurleque/nexus-context-engine/blob/main/LICENSE</url>
             <distribution>repo</distribution>
-            <comments>Copyright (c) 2026 Fabrice Turleque. Use, copying, modification and distribution require prior written authorization.</comments>
+            <comments>Copyright (c) 2026 Fabrice Turleque. No general use, modification, distribution or commercial license is granted.</comments>
         </license>
     </licenses>
 
@@ -46,7 +47,7 @@
 
         <maven.compiler-plugin.version>3.15.0</maven.compiler-plugin.version>
         <maven.surefire-plugin.version>3.5.4</maven.surefire-plugin.version>
-        <maven-shade-plugin.version>3.6.2</maven.shade-plugin.version>
+        <maven.shade-plugin.version>3.6.2</maven.shade-plugin.version>
         <exec-maven-plugin.version>3.6.3</exec-maven-plugin.version>
         <maven.enforcer-plugin.version>3.6.2</maven.enforcer-plugin.version>
         <maven.assembly-plugin.version>3.7.1</maven.assembly-plugin.version>
