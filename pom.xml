@@ -11,6 +11,14 @@
     <name>NEXUS Context Engine Reactor</name>
     <description>Reactor et gouvernance de build communs au cœur NEXUS et à ses adaptateurs optionnels.</description>
 
+    <licenses>
+        <license>
+            <name>NEXUS Proprietary Software License - All Rights Reserved</name>
+            <distribution>repo</distribution>
+            <comments>Copyright (c) 2026 Fabrice Turleque. Use, copying, modification and distribution require prior written authorization.</comments>
+        </license>
+    </licenses>
+
     <modules>
         <module>core</module>
         <module>adapters/rest-quarkus</module>
@@ -38,7 +46,7 @@
 
         <maven.compiler-plugin.version>3.15.0</maven.compiler-plugin.version>
         <maven.surefire-plugin.version>3.5.4</maven.surefire-plugin.version>
-        <maven.shade-plugin.version>3.6.2</maven.shade-plugin.version>
+        <maven-shade-plugin.version>3.6.2</maven.shade-plugin.version>
         <exec-maven-plugin.version>3.6.3</exec-maven-plugin.version>
         <maven.enforcer-plugin.version>3.6.2</maven.enforcer-plugin.version>
         <maven.assembly-plugin.version>3.7.1</maven.assembly-plugin.version>
