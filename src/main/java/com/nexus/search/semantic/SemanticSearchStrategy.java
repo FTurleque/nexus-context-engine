@@ -16,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -28,21 +29,39 @@ public final class SemanticSearchStrategy implements SearchStrategy {
     private final EmbeddingProvider embeddingProvider;
     private final SemanticSearchIndex semanticSearchIndex;
     private final IndexRepository indexRepository;
-    private final ConcurrentMap<java.util.UUID, CachedFingerprint> fingerprints = new ConcurrentHashMap<>();
+    private final String contentProfile;
+    private final ConcurrentMap<UUID, CachedFingerprint> fingerprints = new ConcurrentHashMap<>();
 
     public SemanticSearchStrategy(
             EmbeddingProvider embeddingProvider,
             SemanticSearchIndex semanticSearchIndex) {
-        this(embeddingProvider, semanticSearchIndex, null);
+        this(
+                embeddingProvider,
+                semanticSearchIndex,
+                null,
+                SemanticIndexingService.defaultProfileId());
     }
 
     public SemanticSearchStrategy(
             EmbeddingProvider embeddingProvider,
             SemanticSearchIndex semanticSearchIndex,
             IndexRepository indexRepository) {
+        this(
+                embeddingProvider,
+                semanticSearchIndex,
+                indexRepository,
+                SemanticIndexingService.defaultProfileId());
+    }
+
+    public SemanticSearchStrategy(
+            EmbeddingProvider embeddingProvider,
+            SemanticSearchIndex semanticSearchIndex,
+            IndexRepository indexRepository,
+            String contentProfile) {
         this.embeddingProvider = Objects.requireNonNull(embeddingProvider, "embeddingProvider");
         this.semanticSearchIndex = Objects.requireNonNull(semanticSearchIndex, "semanticSearchIndex");
         this.indexRepository = indexRepository;
+        this.contentProfile = requireText(contentProfile, "contentProfile");
         if (embeddingProvider.dimensions() <= 0) {
             throw new IllegalArgumentException("embeddingProvider dimensions must be greater than zero");
         }
@@ -65,8 +84,10 @@ public final class SemanticSearchStrategy implements SearchStrategy {
 
         if (indexRepository != null) {
             String canonicalFingerprint = canonicalFingerprint(project);
-            SemanticIndexProvenance expected =
-                    SemanticIndexProvenance.current(canonicalFingerprint, embeddingProvider);
+            SemanticIndexProvenance expected = SemanticIndexProvenance.current(
+                    canonicalFingerprint,
+                    embeddingProvider,
+                    contentProfile);
             if (!semanticSearchIndex.isCompatible(project.id(), expected)) {
                 return List.of();
             }
@@ -111,6 +132,15 @@ public final class SemanticSearchStrategy implements SearchStrategy {
         String fingerprint = CanonicalIndexFingerprint.fromIndexedFiles(indexRepository.findFiles(project.id()));
         fingerprints.put(project.id(), new CachedFingerprint(lastIndexedAt, fingerprint));
         return fingerprint;
+    }
+
+    private static String requireText(String value, String name) {
+        Objects.requireNonNull(value, name);
+        String normalized = value.trim();
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException(name + " must not be blank");
+        }
+        return normalized;
     }
 
     private static boolean isGenericSearchEligible(FileCategory category) {
