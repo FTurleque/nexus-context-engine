@@ -1,6 +1,6 @@
 # Release, installation et recovery
 
-> État courant : Phase 6, hardening post-Phase 6, licence propriétaire et hardening de provenance des index sont intégrés dans `main`. La qualification exacte-head de PR #24 a exécuté avec succès le gate Windows Java 24 et le reactor/smoke de distribution Linux Java 21.
+> État courant : Phase 6, hardening post-Phase 6, licence propriétaire, provenance des index et hardening CI/supply-chain sont intégrés dans `main`.
 
 ## Version produit
 
@@ -27,6 +27,8 @@ target/
 ├── distribution/
 │   ├── nexus-context-engine-0.2.0.zip
 │   └── nexus-context-engine-0.2.0.zip.sha256
+├── licenses/
+│   └── THIRD_PARTY_NOTICES.txt
 └── sbom/
     └── bom.json
 ```
@@ -41,18 +43,44 @@ nexus-context-engine-0.2.0/
 ├── lib/
 │   └── nexus-cli.jar
 ├── LICENSE
+├── THIRD_PARTY_NOTICES.txt
+├── SBOM.cdx.json
 └── README.md
 ```
 
 Elle fonctionne sans clone du dépôt et sans Maven installé sur la machine cible. Une JVM Java 21 ou supérieure reste requise.
 
-NEXUS est un logiciel **propriétaire source-available**. Le fichier `LICENSE` livré avec le dépôt et la distribution est la source de vérité pour les droits accordés sur NEXUS. Les composants tiers restent soumis à leurs propres licences ; les notices tierces complètes sont suivies dans l'issue #22.
+NEXUS est un logiciel **propriétaire source-available**. `LICENSE` est la source de vérité pour les droits accordés sur NEXUS. Les composants tiers restent soumis à leurs propres licences ; `THIRD_PARTY_NOTICES.txt` matérialise l'inventaire de licences compile/runtime utilisé pour la distribution.
 
 ## Intégrité et inventaire logiciel
 
-Les deux livrables distribuables sont accompagnés de SHA-256. Le build génère aussi un SBOM CycloneDX agrégé de l'ensemble du reactor.
+Les deux livrables distribuables sont accompagnés de SHA-256.
+
+Le build génère un SBOM CycloneDX agrégé et les notices tierces. Depuis PR #28 :
+
+- `license-maven-plugin` s'exécute avec `failOnMissing=true` ;
+- le ZIP embarque `LICENSE`, les notices et le SBOM ;
+- la qualification Windows vérifie que les fichiers embarqués sont identiques aux fichiers générés ;
+- la CI Linux vérifie leur présence et conserve SBOM/notices/JaCoCo pendant 90 jours dans un artefact nommé avec le head exact qualifié.
 
 Aucun secret, requête utilisateur, contenu source ou chemin de projet n'est injecté dans le SBOM.
+
+## Gates release et supply-chain
+
+Le reactor applique un gate JaCoCo bloquant au module `core` :
+
+- lignes : minimum 70 % ;
+- branches : minimum 50 % ;
+- baseline mesurée lors de PR #28 : 77,07 % lignes / 58,46 % branches.
+
+GitHub Actions complète le reactor par :
+
+- OSV-Scanner : nouvelles vulnérabilités bloquantes sur PR, scan courant/hebdomadaire ;
+- CodeQL Java/Kotlin `security-extended` ;
+- Dependabot Maven + GitHub Actions hebdomadaire ;
+- pins immuables des Actions contrôlées dans le dépôt.
+
+Voir [`ci-and-supply-chain.md`](ci-and-supply-chain.md).
 
 ## Migration SQLite
 
@@ -113,17 +141,20 @@ Sous Windows, la qualification est pilotée par :
 powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
 ```
 
-Le script impose :
+Le script impose notamment :
 
-- une JVM d'exécution Java 21 ou supérieure et `maven.compiler.release=21` ;
-- Maven Wrapper fonctionnel (`mvnw.cmd` / `mvnw`) ;
+- JVM Java 21+ et `maven.compiler.release=21` ;
+- Maven Wrapper ;
 - `clean install` du reactor complet ;
-- `scripts/self-smoke.ps1` ;
-- existence et vérification des SHA-256 ;
+- self-smoke ;
+- checksums ;
 - SBOM CycloneDX ;
-- extraction et exécution Windows de l'archive autonome, contrôle POSIX et smoke réel dans la CI Linux ;
-- exact-head SHA vérifié via `NEXUS_EXPECTED_HEAD_SHA`.
+- notices tierces et rapport JaCoCo ;
+- archive autonome avec artefacts de conformité identiques aux outputs de build ;
+- exact-head via `NEXUS_EXPECTED_HEAD_SHA` en CI.
 
-Preuve récente : PR #24, head `25c12b100b774a4ec3d69d221675bf31d8ebaa0c`, NEXUS CI run #15 : Windows Java 24 PASS, Linux Java 21 Maven reactor PASS et distribution smoke PASS.
+Preuve récente : PR #28, head `a363e93dc97597d288389b4f4b9e8404abe4296c` : NEXUS CI run #31 Windows Java 24 PASS / Linux Java 21 PASS / JaCoCo 70/50 PASS / distribution-compliance PASS ; OSV run #4 PASS ; CodeQL run #6 PASS.
 
-Une release, un tag ou un merge ne doit pas être déclaré qualifié sans preuve exécutable sur le head concerné. Les anciens runs à zéro étape (`steps=[]`) ne constituent pas une preuve de succès ou d'échec applicatif.
+PR #28 est intégrée dans `main` via `4c9b7cd4e26913af42f687b48718c8e733fa06f7`.
+
+Une release, un tag ou un merge ne doit pas être déclaré qualifié sans preuve exécutable sur le head concerné.
