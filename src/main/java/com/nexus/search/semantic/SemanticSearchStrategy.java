@@ -125,11 +125,13 @@ public final class SemanticSearchStrategy implements SearchStrategy {
     private String canonicalFingerprint(ProjectDescriptor project) {
         long generation = indexRepository.generation(project.id());
         CachedFingerprint cached = fingerprints.get(project.id());
-        if (cached != null && cached.generation() == generation) {
+        if (generation > 0L && cached != null && cached.generation() == generation) {
             return cached.fingerprint();
         }
         String fingerprint = CanonicalIndexFingerprint.fromIndexedFiles(indexRepository.findFiles(project.id()));
-        fingerprints.put(project.id(), new CachedFingerprint(generation, fingerprint));
+        if (generation > 0L) {
+            fingerprints.put(project.id(), new CachedFingerprint(generation, fingerprint));
+        }
         return fingerprint;
     }
 
