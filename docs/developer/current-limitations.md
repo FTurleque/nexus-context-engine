@@ -1,6 +1,6 @@
 # Limites actuelles et dette de consolidation
 
-> Phase 6 intégrée via PR #15 ; hardening post-Phase 6 intégré via PR #18 ; hardening de provenance des index intégré via PR #24 ; licence propriétaire publique intégrée via PR #25.
+> Phase 6 intégrée via PR #15 ; hardening post-Phase 6 via PR #18 ; provenance des index via PR #24 ; licence propriétaire publique via PR #25 ; CI/supply-chain via PR #28.
 
 Ce registre distingue les constats **fermés** des limites **réellement ouvertes**. Les ADR et PR conservent l'historique détaillé ; les anciennes branches/gates ne sont pas des états courants.
 
@@ -50,6 +50,19 @@ Ce registre distingue les constats **fermés** des limites **réellement ouverte
 
 La provenance sémantique comprend le fingerprint canonique, l'identité provider/modèle, les dimensions, le profil de préparation du contenu et la version de schéma. Voir [`../index-provenance.md`](../index-provenance.md).
 
+## CI / couverture / supply-chain — issue #22 / PR #28
+
+| ID | Constat | Traitement intégré | État |
+|---|---|---|---|
+| S22-1 | JaCoCo report-only | gate `check` core à 70 % lignes / 50 % branches | fermé / qualifié |
+| S22-2 | absence de gate vulnérabilités | OSV-Scanner PR + scan courant/hebdomadaire | fermé / qualifié |
+| S22-3 | absence d'analyse statique sécurité | CodeQL Java/Kotlin `security-extended` | fermé / qualifié |
+| S22-4 | Actions par tags mutables | Actions contrôlées épinglées à des SHA immuables | fermé / qualifié |
+| S22-5 | SBOM non conservé avec la distribution | SBOM embarqué dans le ZIP + artefact CI 90 jours | fermé / qualifié |
+| S22-6 | notices tierces non matérialisées | `THIRD_PARTY_NOTICES.txt`, `failOnMissing=true`, embarqué dans le ZIP | fermé / qualifié |
+
+Baseline qualifiée de couverture : **77,07 % lignes / 58,46 % branches**. Voir [`ci-and-supply-chain.md`](ci-and-supply-chain.md).
+
 ## Invariants actuels
 
 ### Frontière filesystem
@@ -58,7 +71,7 @@ La racine projet est canonicalisée. Les chemins applicatifs sont vérifiés par
 
 `NEXUS_MAX_FILE_SIZE_BYTES` est appliqué au moment de la consommation, pas uniquement au scan.
 
-**Limite résiduelle :** le modèle Java portable n'est pas un sandbox contre un acteur local qui modifie agressivement les répertoires ancêtres ou manipule des hard-links pendant le traitement. Ce threat model nécessiterait des handles de répertoire sécurisés lorsqu'ils sont disponibles ou une isolation OS/processus.
+**Limite résiduelle :** le modèle Java portable n'est pas un sandbox contre un acteur local qui modifie agressivement les répertoires ancêtres ou manipule des hard-links pendant le traitement.
 
 ### Cohérence et concurrence d'index
 
@@ -98,8 +111,6 @@ Le fair floor et le refill évitent la starvation et réutilisent le budget lib�
 - non-loopback + aucun token : démarrage refusé ;
 - non-loopback + token : exposition autorisée.
 
-Les endpoints techniques Quarkus (health/métriques) restent une décision d'exploitation distincte des endpoints applicatifs.
-
 ## Watch items ouverts
 
 1. **Scale SQLite substring** — benchmark #23 avant FTS5/trigram/autre moteur.
@@ -109,18 +120,17 @@ Les endpoints techniques Quarkus (health/métriques) restent une décision d'exp
 5. **Provider Java non coopératif** — envisager isolation processus seulement avec preuve opérationnelle.
 6. **Filesystem activement hostile** — sécurité absolue hors périmètre portable actuel.
 7. **Filesystem réseau pour `NEXUS_HOME`** — non supporté sans qualification dédiée.
-8. **Supply-chain publique** — vulnérabilités, code scanning, couverture, actions immuables et notices tierces suivis par #22.
+8. **Compatibilité juridique d'une nouvelle dépendance inhabituelle** — revue explicite malgré l'inventaire automatisé des licences.
 9. **Ollama indisponible / corruption physique Lucene** — renforcer les scénarios de récupération explicites.
 
 ## Qualification récente
 
-PR #24, head exact `25c12b100b774a4ec3d69d221675bf31d8ebaa0c`, NEXUS CI run #15 :
+PR #28, head exact `a363e93dc97597d288389b4f4b9e8404abe4296c` :
 
-- Windows Java 24 : PASS ;
-- `scripts/validate-phase-6.ps1` : PASS ;
-- Linux Java 21 Maven reactor : PASS ;
-- distribution smoke : PASS.
+- NEXUS CI run #31 : Windows Java 24 PASS ; Linux Java 21 PASS ; JaCoCo 70/50 PASS ; distribution/compliance PASS ;
+- OSV-Scanner run #4 : PASS ;
+- CodeQL run #6 : PASS.
 
-PR #24 est intégrée dans `main` via `c7a03479a78713b78ec2ddc477e1d07d400d8aba`.
+PR #28 est intégrée dans `main` via `4c9b7cd4e26913af42f687b48718c8e733fa06f7`.
 
-Voir aussi : [`release-and-recovery.md`](release-and-recovery.md), [`../roadmap.md`](../roadmap.md) et [`../index-provenance.md`](../index-provenance.md).
+Voir aussi : [`release-and-recovery.md`](release-and-recovery.md), [`ci-and-supply-chain.md`](ci-and-supply-chain.md), [`../roadmap.md`](../roadmap.md) et [`../index-provenance.md`](../index-provenance.md).
