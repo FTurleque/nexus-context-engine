@@ -66,8 +66,22 @@ public final class SemanticIndexingService {
         return embeddingProvider.modelId();
     }
 
+    public boolean isCompatible(UUID projectId, String canonicalFingerprint) throws IOException {
+        return semanticSearchIndex.isCompatible(projectId, provenance(canonicalFingerprint));
+    }
+
     public void rebuild(UUID projectId, List<SearchDocument> documents) throws IOException {
         semanticSearchIndex.rebuild(projectId, vectorize(documents));
+    }
+
+    public void rebuild(
+            UUID projectId,
+            String canonicalFingerprint,
+            List<SearchDocument> documents) throws IOException {
+        semanticSearchIndex.rebuild(
+                projectId,
+                provenance(canonicalFingerprint),
+                vectorize(documents));
     }
 
     public void applyChanges(
@@ -75,6 +89,22 @@ public final class SemanticIndexingService {
             List<SearchDocument> documents,
             Set<String> removedRelativePaths) throws IOException {
         semanticSearchIndex.applyChanges(projectId, vectorize(documents), removedRelativePaths);
+    }
+
+    public void applyChanges(
+            UUID projectId,
+            String canonicalFingerprint,
+            List<SearchDocument> documents,
+            Set<String> removedRelativePaths) throws IOException {
+        semanticSearchIndex.applyChanges(
+                projectId,
+                provenance(canonicalFingerprint),
+                vectorize(documents),
+                removedRelativePaths);
+    }
+
+    private SemanticIndexProvenance provenance(String canonicalFingerprint) {
+        return SemanticIndexProvenance.current(canonicalFingerprint, embeddingProvider);
     }
 
     private List<SemanticVectorDocument> vectorize(List<SearchDocument> documents) throws IOException {
