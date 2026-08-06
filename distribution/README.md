@@ -2,6 +2,14 @@
 
 Cette archive contient la CLI NEXUS autonome. Elle ne nécessite pas de cloner le dépôt ni d'installer Maven.
 
+## Licence
+
+NEXUS Context Engine est un logiciel **propriétaire**. Copyright © 2026 Fabrice Turleque. Tous droits réservés.
+
+L'accès à cette archive ne confère aucun droit de copie, modification, redistribution, sous-licence, commercialisation ou mise à disposition à un tiers en dehors d'une autorisation écrite explicite du titulaire des droits.
+
+Les conditions complètes applicables à NEXUS sont fournies dans le fichier `LICENSE` inclus dans cette distribution. Les composants tiers éventuellement embarqués ou utilisés par NEXUS restent soumis à leurs licences respectives.
+
 ## Prérequis
 
 - Java 21 ou supérieur ;
