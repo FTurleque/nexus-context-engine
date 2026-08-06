@@ -4,11 +4,21 @@ Cette archive contient la CLI NEXUS autonome. Elle ne nécessite pas de cloner l
 
 ## Licence
 
-NEXUS Context Engine est un logiciel **propriétaire**. Copyright © 2026 Fabrice Turleque. Tous droits réservés.
+NEXUS Context Engine est un logiciel **propriétaire source-available**. Copyright © 2026 Fabrice Turleque. Tous droits réservés.
 
-L'accès à cette archive ne confère aucun droit de copie, modification, redistribution, sous-licence, commercialisation ou mise à disposition à un tiers en dehors d'une autorisation écrite explicite du titulaire des droits.
+L'accès à cette archive ne confère aucun droit général d'utilisation, copie, modification, redistribution, sous-licence, commercialisation ou mise à disposition à un tiers en dehors d'une autorisation écrite explicite du titulaire des droits, sous réserve des droits impératifs applicables.
 
-Les conditions complètes applicables à NEXUS sont fournies dans le fichier `LICENSE` inclus dans cette distribution. Les composants tiers éventuellement embarqués ou utilisés par NEXUS restent soumis à leurs licences respectives.
+Les conditions complètes applicables à NEXUS sont fournies dans `LICENSE`.
+
+Les composants tiers restent soumis à leurs propres licences. `THIRD_PARTY_NOTICES.txt` est généré à partir des métadonnées Maven des dépendances compile/runtime du reactor ; le build échoue si l'une de ces dépendances ne fournit pas d'information de licence exploitable. `SBOM.cdx.json` contient l'inventaire logiciel CycloneDX agrégé de la distribution.
+
+Fichiers de conformité inclus :
+
+```text
+LICENSE
+THIRD_PARTY_NOTICES.txt
+SBOM.cdx.json
+```
 
 ## Prérequis
 
@@ -45,6 +55,6 @@ Aucun provider externe ni moteur sémantique n'est activé par défaut.
 
 ## Intégrité
 
-Les livrables générés par le build de release sont accompagnés d'un fichier `.sha256`. Vérifiez ce checksum avant distribution ou installation.
+Les livrables générés par le build sont accompagnés de fichiers `.sha256`. Vérifiez ces checksums avant distribution ou installation.
 
-Le build produit également un SBOM CycloneDX agrégé dans `target/sbom/`.
+Le SBOM CycloneDX et les notices tierces sont à la fois générés dans `target/` et embarqués dans l'archive autonome afin qu'un ZIP distribué conserve son propre inventaire de conformité.
