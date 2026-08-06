@@ -11,6 +11,7 @@ on:
       - 'src/test/java/com/nexus/benchmark/**'
       - 'scripts/measure-scale-regression.ps1'
       - 'docs/developer/scale-regression-benchmark.md'
+      - 'docs/developer/scale-regression-results.md'
       - '.github/workflows/scale-benchmark.yml'
   workflow_dispatch:
     inputs:
@@ -65,22 +66,76 @@ jobs:
             -Dnexus.scale.benchmark.output=target/scale-benchmark.json \
             test
 
-      - name: Verify report
+      - name: Verify report and regression budgets
         shell: bash
         run: |
           test -s target/scale-benchmark.json
           python3 - <<'PY'
           import json
           from pathlib import Path
+
           report = json.loads(Path('target/scale-benchmark.json').read_text())
-          assert report['profile'] in ('ci', 'full')
+          profile = report['profile']
+          assert profile in ('ci', 'full')
           assert report['sqliteTiers']
           assert report['portfolio']['tiers']
           assert report['semanticRecovery']['documents'] > 0
-          print('profile=', report['profile'])
+
+          sqlite = {tier['symbols']: tier for tier in report['sqliteTiers']}
+          portfolio = {tier['projects']: tier for tier in report['portfolio']['tiers']}
+
+          # Budgets calibrated from two full GitHub-hosted runner executions on #23.
+          # They are intentionally above the observed maxima to absorb runner noise
+          # while remaining low enough to detect material algorithmic regressions.
+          sqlite_budgets = {
+              10_000:  {'exact': 50,   'contains': 30,   'miss': 30,   'relation': 25,  'population': 700},
+              100_000: {'exact': 250,  'contains': 150,  'miss': 150,  'relation': 100, 'population': 2500},
+              500_000: {'exact': 1000, 'contains': 600,  'miss': 600,  'relation': 400, 'population': 10000},
+              1_000_000: {'exact': 2000, 'contains': 1200, 'miss': 1200, 'relation': 800, 'population': 20000},
+          }
+
+          for symbols, tier in sqlite.items():
+              budget = sqlite_budgets[symbols]
+              assert tier['symbolExact']['p95Ms'] <= budget['exact'], (symbols, 'exact', tier['symbolExact']['p95Ms'])
+              assert tier['symbolContains']['p95Ms'] <= budget['contains'], (symbols, 'contains', tier['symbolContains']['p95Ms'])
+              assert tier['symbolMissingWorstCase']['p95Ms'] <= budget['miss'], (symbols, 'miss', tier['symbolMissingWorstCase']['p95Ms'])
+              assert tier['relationContains']['p95Ms'] <= budget['relation'], (symbols, 'relation', tier['relationContains']['p95Ms'])
+              assert tier['targeted100Files']['p95Ms'] <= 30, (symbols, 'targeted-files', tier['targeted100Files']['p95Ms'])
+              assert tier['populationMs'] <= budget['population'], (symbols, 'population', tier['populationMs'])
+
+          if 1_000_000 in sqlite:
+              assert sqlite[1_000_000]['databaseBytes'] <= 650 * 1024 * 1024, sqlite[1_000_000]['databaseBytes']
+
+          portfolio_budgets = {
+              10: {'search': 120, 'context': 160},
+              25: {'search': 160, 'context': 260},
+              50: {'search': 250, 'context': 450},
+              100: {'search': 400, 'context': 800},
+          }
+          for projects, tier in portfolio.items():
+              budget = portfolio_budgets[projects]
+              assert tier['search']['p95Ms'] <= budget['search'], (projects, 'search', tier['search']['p95Ms'])
+              assert tier['context']['p95Ms'] <= budget['context'], (projects, 'context', tier['context']['p95Ms'])
+              assert tier['representativeResults'] > 0
+              assert tier['projectsRepresented'] > 0
+
+          if profile == 'full':
+              assert report['portfolio']['totalFullIndexMs'] <= 6000, report['portfolio']['totalFullIndexMs']
+              assert report['semanticRecovery']['initialRebuildMs'] <= 12000, report['semanticRecovery']['initialRebuildMs']
+              assert report['semanticRecovery']['incompatibleRecoveryRebuildMs'] <= 12000, report['semanticRecovery']['incompatibleRecoveryRebuildMs']
+              assert report['semanticRecovery']['semanticIndexBytes'] <= 8 * 1024 * 1024, report['semanticRecovery']['semanticIndexBytes']
+              assert report['totalDurationMs'] <= 180000, report['totalDurationMs']
+
+          assert report['concurrentReadWrite']['delete']['reader']['failures'] == 0
+          assert report['concurrentReadWrite']['wal']['reader']['failures'] == 0
+          assert report['usedHeapDeltaBytes'] <= 256 * 1024 * 1024, report['usedHeapDeltaBytes']
+
+          print('profile=', profile)
           print('sqlite-max=', report['sqliteTiers'][-1]['symbols'])
           print('portfolio-max=', report['portfolio']['maximumProjects'])
           print('semantic-documents=', report['semanticRecovery']['documents'])
+          print('total-duration-ms=', report['totalDurationMs'])
+          print('all-regression-budgets=PASS')
           PY
 
       - name: Retain benchmark report
