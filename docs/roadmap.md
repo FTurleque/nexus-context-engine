@@ -7,12 +7,13 @@ Cette feuille de route est la source de vérité active pour l'évolution de NEX
 ```text
 repository  FTurleque/nexus-context-engine
 visibility  public
-main        Phase 6 + hardening + provenance des index + licence intégrés
+main        Phase 6 + hardening + provenance des index + licence + documentation réconciliée
 version     0.2.0
 Java        runtime >=21 / release 21
 Phase 1→6  livrées / intégrées
 hardening  post-Phase 6 intégré
 P1 audit   #19 + #20 intégrés via PR #24
+docs        #21 intégré via PR #26
 licence    propriétaire source-available via PR #25
 ```
 
@@ -34,7 +35,7 @@ Principe directeur :
 | Hardening post-Phase 6 | issue #16 / PR #18 | ✅ intégré |
 | Provenance/fraîcheur des index | issues #19/#20 / PR #24 | ✅ intégré |
 | Licence propriétaire publique | PR #25 | ✅ intégrée |
-| Réconciliation documentaire | issue #21 | 🚧 en cours |
+| Réconciliation documentaire | issue #21 / PR #26 | ✅ intégrée |
 | CI / couverture / supply-chain | issue #22 | ⏳ à traiter |
 | Benchmark scale SQLite/fédération | issue #23 | ⏳ à traiter |
 
@@ -93,24 +94,33 @@ Une provenance absente ou incompatible force un rebuild. La recherche refuse un 
 
 Référence : [`index-provenance.md`](index-provenance.md).
 
-## Qualification actuelle
+## Réconciliation documentaire — PR #26
 
-La qualification exacte-head de PR #24 (`25c12b100b774a4ec3d69d221675bf31d8ebaa0c`) a été exécutée avec succès dans NEXUS CI run #15 après le passage du dépôt en public :
+L'issue #21 est clôturée. Les documents courants ont été alignés sur l'architecture réellement intégrée :
+
+- plus aucune branche historique de Phase 6/hardening n'est présentée comme branche active ;
+- le verrouillage courant est documenté comme mutex JVM + `FileLock` OS ;
+- la frontière de support du filesystem local est explicite ;
+- les risques/scénarios déjà qualifiés ne sont plus présentés comme gates en attente ;
+- README, architecture, Arc42, limites, release/recovery et roadmap décrivent les mêmes invariants ;
+- la provenance des index de PR #24 et le statut propriétaire/public sont documentés.
+
+PR #26 a été qualifiée sur le head exact `54a41f690c461f36ae061d213d516f6c94f20370` dans NEXUS CI run #22 (`31094087018`) : Windows Java 24 PASS, Linux Java 21 reactor PASS et smoke de distribution Linux PASS.
+
+## Qualification de référence récente
+
+PR #24, head exact `25c12b100b774a4ec3d69d221675bf31d8ebaa0c` :
 
 - Windows / Java 24 : **PASS** ;
 - `scripts/validate-phase-6.ps1` : **PASS** ;
 - Linux / Java 21 Maven reactor : **PASS** ;
 - smoke de la distribution Linux : **PASS**.
 
-PR #24 a ensuite été fusionnée dans `main` comme `c7a03479a78713b78ec2ddc477e1d07d400d8aba`. Ce SHA est une **preuve historique de merge**, pas un pointeur dynamique sur le HEAD courant.
+PR #24 a été fusionnée comme `c7a03479a78713b78ec2ddc477e1d07d400d8aba`. Ce SHA est une **preuve historique de merge**, pas un pointeur dynamique sur le HEAD courant.
 
-Les anciens échecs GitHub Actions avec `steps=[]` / `BlobNotFound` sont considérés comme un incident historique/transitoire : la relance a exécuté les deux runners normalement.
+Les anciens échecs GitHub Actions avec `steps=[]` / `BlobNotFound` sont considérés comme un incident historique/transitoire : les runs récents exécutent normalement les deux runners.
 
 ## Travail restant priorisé
-
-### P2 — #21 Réconciliation documentaire
-
-Objectif : garantir que README, architecture, arc42, roadmap et runbook recovery décrivent tous la même architecture effectivement livrée.
 
 ### P2 — #22 CI, couverture et supply-chain
 
