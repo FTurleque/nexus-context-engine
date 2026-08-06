@@ -19,10 +19,11 @@ Exposition = Probabilité × Impact
 | R9 | **Dérive qualité de recherche** lors de nouveaux langages/rankers | M | M | MM | Watch item | baseline qualité + qualification avant intégration |
 | R10 | **Compatibilité MCP SDK** lors d'une mise à jour | M | M | MM | Watch item | ADR-0016 + tests d'intégration MCP |
 | R11 | **AI Skills Registry indisponible** | M | F | MF | Accepté | provider local/fallback ; registry opt-in |
-| R12 | **Qualification post-Phase 6 non exécutée** | E | M | EM | **Clôturé** | hardening qualifié et intégré ; PR #24 également qualifiée Windows/Linux |
-| R13 | **Snapshots externes obsolètes** après changement canonique | M | E | ME | **Clôturé** | invalidation des providers externes persistés sur changement SOURCE/TEST ; PR #24 / test de régression |
+| R12 | **Qualification post-Phase 6 non exécutée** | E | M | EM | **Clôturé** | hardening qualifié et intégré ; gates Windows/Linux exécutés régulièrement |
+| R13 | **Snapshots externes obsolètes** après changement canonique | M | E | ME | **Clôturé** | invalidation des providers externes persistés sur changement SOURCE/TEST ; PR #24 |
 | R14 | **Index sémantique incompatible** avec état/modèle/dimensions/profil courant | M | E | ME | **Clôturé** | manifeste de provenance Lucene + rebuild sur mismatch + garde de recherche ; PR #24 |
-| R15 | **Supply-chain publique / obligations tierces** | M | E | ME | Ouvert | issue #22 : notices tierces, vulnérabilités, scanning, actions immuables, couverture, SBOM release |
+| R15 | **Supply-chain publique / obligations tierces** | M | E | ME | **Clôturé** | PR #28 : JaCoCo 70/50, OSV, CodeQL, Dependabot, pins SHA, notices tierces, SBOM distribué/retained |
+| R16 | **Nouvelle dépendance à licence contextuellement incompatible** | F | E | FM | Surveillance | inventaire automatisé + revue explicite des nouvelles licences inhabituelles/copy-left fort |
 
 Le registre opérationnel détaillé est maintenu dans [`../risks/register.md`](../risks/register.md).
 
@@ -35,7 +36,7 @@ Le registre opérationnel détaillé est maintenu dans [`../risks/register.md`](
 | D3 | **Sélection de skills principalement lexicale** | Moyen | Élevé | Faible |
 | D4 | **Instructions utilisateur home non chargées** | Faible | Moyen | Faible |
 | D5 | **Scale SQLite lexical non benchmarké** | Moyen potentiel | Élevé | Moyen — #23 |
-| D6 | **Gates supply-chain incomplets** | Élevé pour distribution publique | Moyen | Haute — #22 |
+| D6 | **Gates supply-chain incomplets** | Élevé pour distribution publique | Moyen | **Clôturé par PR #28** |
 
 ## 11.3 Frontières de support
 
@@ -50,6 +51,10 @@ La garantie de single-flight combine mutex JVM et `FileLock` OS et vise un `NEXU
 ### Index dérivés
 
 SQLite reste canonique. Un index sémantique sans provenance compatible n'est pas réutilisé ; un snapshot externe obsolète n'est pas conservé comme autorité courante.
+
+### Supply-chain
+
+Le build échoue si une dépendance compile/runtime distribuée n'a pas de licence exploitable. OSV et CodeQL automatisent les contrôles sécurité ; la compatibilité juridique d'une licence nouvelle ou atypique reste une décision de revue explicite, pas un simple filtre textuel.
 
 ## 11.4 Choix volontairement non adoptés
 
