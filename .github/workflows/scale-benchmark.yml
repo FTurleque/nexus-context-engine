@@ -61,6 +61,7 @@ jobs:
           chmod +x ./mvnw
           ./mvnw -B -pl core \
             -Dtest=ScaleRegressionBenchmarkTest \
+            -Djunit.jupiter.execution.timeout.test.method.default=20m \
             -Dnexus.scale.benchmark.enabled=true \
             -Dnexus.scale.benchmark.profile=${{ steps.profile.outputs.value }} \
             -Dnexus.scale.benchmark.output=target/scale-benchmark.json \
