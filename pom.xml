@@ -11,6 +11,15 @@
     <name>NEXUS Context Engine Reactor</name>
     <description>Reactor et gouvernance de build communs au cœur NEXUS et à ses adaptateurs optionnels.</description>
 
+    <licenses>
+        <license>
+            <name>NEXUS Proprietary Source-Available License - All Rights Reserved</name>
+            <url>https://github.com/FTurleque/nexus-context-engine/blob/main/LICENSE</url>
+            <distribution>repo</distribution>
+            <comments>Copyright (c) 2026 Fabrice Turleque. No general use, modification, distribution or commercial license is granted.</comments>
+        </license>
+    </licenses>
+
     <modules>
         <module>core</module>
         <module>adapters/rest-quarkus</module>
