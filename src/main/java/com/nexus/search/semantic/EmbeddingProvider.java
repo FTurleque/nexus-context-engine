@@ -14,6 +14,14 @@ import java.util.Objects;
  */
 public interface EmbeddingProvider {
 
+    /**
+     * Identité stable du provider/transport. Les implémentations peuvent la
+     * surcharger lorsqu'elles disposent d'un identifiant métier plus explicite.
+     */
+    default String providerId() {
+        return getClass().getName();
+    }
+
     /** Identité stable et observable du modèle utilisé. */
     String modelId();
 
