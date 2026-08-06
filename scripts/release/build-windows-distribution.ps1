@@ -40,8 +40,16 @@ foreach ($tool in @($java, $jpackage, $jdeps)) {
     }
 }
 
-$versionOutput = (& $java -version 2>&1 | Out-String)
-if ($LASTEXITCODE -ne 0 -or $versionOutput -notmatch 'version "(\d+)') {
+$previousPreference = $ErrorActionPreference
+try {
+    $ErrorActionPreference = 'Continue'
+    $versionOutput = ((& $java -version 2>&1) | Out-String)
+    $versionExit = $LASTEXITCODE
+}
+finally {
+    $ErrorActionPreference = $previousPreference
+}
+if ($versionExit -ne 0 -or $versionOutput -notmatch 'version "(\d+)') {
     throw "Unable to determine JAVA_HOME runtime version: $versionOutput"
 }
 $javaMajor = [int]$Matches[1]
