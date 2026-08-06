@@ -4,6 +4,8 @@ Ce benchmark complète les portfolios réels de l'Itération 16 avec un corpus *
 
 Il ne remplace pas les baselines réelles I16 : il mesure spécifiquement les courbes qui ne peuvent pas être extrapolées de manière fiable depuis ~10k symboles et sept repositories.
 
+Les résultats de calibration et décisions sont conservés dans [`scale-regression-results.md`](scale-regression-results.md).
+
 ## Objectifs
 
 Le protocole mesure :
@@ -42,6 +44,8 @@ Rapport :
 target/scale-benchmark.json
 ```
 
+Le test JUnit est opt-in. Le workflow possède un timeout de job de 45 minutes et impose aussi un timeout JUnit de 20 minutes au test afin qu'une anomalie du scénario concurrent ne puisse pas bloquer indéfiniment la qualification.
+
 ## Profils
 
 ### `ci`
@@ -55,7 +59,7 @@ Profil court pour diagnostic rapide :
 
 ### `full`
 
-Profil de décision #23 :
+Profil de décision/régression #23 :
 
 - SQLite : 10k, 100k, 500k et 1M symboles/relations ;
 - portfolio : 10, 25, 50 et 100 projets ;
@@ -112,11 +116,13 @@ Dans chacune :
 - toute erreur de lecture fait échouer le benchmark ;
 - p95 lecture, durée totale writer et taille des fichiers SQLite sont enregistrés.
 
-Règle de décision initiale :
+Règle de décision :
 
 > ne proposer WAL que si plusieurs exécutions comparables montrent au moins **25 % d'amélioration du p95 lecteur**, sans régression significative writer/recovery.
 
-Une seule exécution favorable ne suffit pas à modifier `SqliteDatabase`.
+Calibration #23 : amélioration reader p95 de **30,4 %** au premier run, mais seulement **0,3 %** au second. Le gain writer est important dans les deux runs, mais le critère lecteur n'est pas répétable.
+
+**Décision : le mode de production reste inchangé ; WAL n'est pas adopté.**
 
 ## Portfolio fédéré
 
@@ -170,18 +176,66 @@ Les latences GitHub-hosted runners sont des mesures de régression, pas un bench
 
 ## Budgets de régression
 
-Les budgets définitifs de #23 **ne sont pas inventés avant mesure**.
+Deux runs full de calibration sur le même head ont servi à fixer les budgets. Le workflow les applique désormais comme **gate**.
 
-Processus :
+### SQLite p95
 
-1. exécuter le profil `full` sur le head de la PR #23 ;
-2. récupérer `scale-benchmark.json` ;
-3. observer la pente et la variance ;
-4. fixer des budgets explicites avec marge pour le bruit des runners ;
-5. réexécuter le même head avec les budgets ;
-6. seulement ensuite décider si WAL, FTS5, trigram ou une autre complexité est justifiée.
+| Palier | Exact | Contains | Miss worst-case | Relation |
+|---:|---:|---:|---:|---:|
+| 10k | 50 ms | 30 ms | 30 ms | 25 ms |
+| 100k | 250 ms | 150 ms | 150 ms | 100 ms |
+| 500k | 1 000 ms | 600 ms | 600 ms | 400 ms |
+| 1M | 2 000 ms | 1 200 ms | 1 200 ms | 800 ms |
 
-Aucun nouveau backend n'est introduit uniquement parce que la requête SQL est théoriquement O(n) : il faut une limite mesurée sur les corpus cibles.
+Autres budgets SQLite :
+
+- 100 fichiers ciblés : <= 30 ms p95 ;
+- population : <= 0,7 s / 2,5 s / 10 s / 20 s selon le palier ;
+- base 1M : <= 650 MiB.
+
+### Fédération
+
+| Projets | Search p95 | Context p95 |
+|---:|---:|---:|
+| 10 | 120 ms | 160 ms |
+| 25 | 160 ms | 260 ms |
+| 50 | 250 ms | 450 ms |
+| 100 | 400 ms | 800 ms |
+
+Indexation des 100 projets synthétiques : <= 6 s.
+
+### Sémantique / ressources
+
+- rebuild initial 20k : <= 12 s ;
+- recovery incompatible 20k : <= 12 s ;
+- index sémantique : <= 8 MiB ;
+- delta heap observé fin de run : <= 256 MiB ;
+- durée full : <= 180 s ;
+- aucune erreur de lecture concurrente sous DELETE ou WAL.
+
+Les budgets sont volontairement au-dessus des maxima de calibration pour absorber le bruit des runners, tout en détectant une régression algorithmique matérielle.
+
+## Décision FTS5 / trigram
+
+**Aucun FTS5, trigram ni nouveau moteur n'est ajouté par #23.**
+
+Mesures :
+
+- corpus réel I16 proche de 10k symboles : p95 SQLite synthétique de l'ordre de 5–22 ms ;
+- 100k : p95 <= ~135 ms sur les deux calibrations ;
+- 500k : exact ~675 ms, substring ~374 ms ;
+- 1M : exact ~1,34–1,37 s, substring ~0,75–0,81 s ;
+- portfolio 100 : search p95 <= 222 ms, contexte p95 <= 538 ms.
+
+Ces chiffres matérialisent la limite de l'approche substring mais ne montrent pas de SLO violé sur les corpus cibles actuels. Ajouter maintenant FTS/trigram créerait migrations, index secondaires et recovery supplémentaires sans bénéfice nécessaire démontré.
+
+Déclencheurs de réexamen :
+
+1. corpus utilisateur courant >= 500k symboles et latence interactive insuffisante ;
+2. 1M exact > 2 s p95 ou substring > 1,2 s p95 ;
+3. portfolio 100 > 400 ms p95 search ou > 800 ms contexte ;
+4. SLO utilisateur réel plus strict que cette baseline ;
+5. optimisation SQL plus simple insuffisante.
 
 ## Baseline réelle historique à conserver
 
@@ -196,4 +250,4 @@ Le corpus hermétique I16 de sept repositories reste la référence fonctionnell
 - hit@3 : 1,0 ;
 - MRR@3 : 1,0.
 
-Voir [`iteration-16-extended-portfolio-results.md`](iteration-16-extended-portfolio-results.md).
+Voir [`iteration-16-extended-portfolio-results.md`](iteration-16-extended-portfolio-results.md) et [`scale-regression-results.md`](scale-regression-results.md).
