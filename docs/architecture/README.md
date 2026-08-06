@@ -44,16 +44,21 @@ docs/architecture/
 
 | Source | Rôle |
 |--------|------|
-| `docs/architecture.md` | Synthèse architecture Phase 6 |
+| `docs/architecture.md` | Synthèse d'architecture courante |
 | `docs/adr/` | Historique décisionnel (ADR-0000 à ADR-0044) |
-| `docs/roadmap.md` | État courant et gates de validation |
+| `docs/roadmap.md` | État courant, backlog de stabilisation et preuves de qualification |
 | `docs/developer/` | Documentation technique détaillée |
+| `docs/index-provenance.md` | Autorité et fraîcheur des index canoniques, externes et sémantiques |
 | `src/main/java/` | Sources du cœur Java |
 | `adapters/` | Sources des adaptateurs REST / MCP / Clients |
 
 ## Statut
 
-- **Version** : 0.2.0 — Phase 6 intégrée dans `main`
-- **Branche active** : `hardening/post-phase6-audit` (issue #16)
-- **Qualification post-Phase 6** : implémentée, validation en attente
-- **Dernière mise à jour** : 2026-08-05
+- **Version** : 0.2.0
+- **Phase 6** : intégrée dans `main` via PR #15
+- **Hardening post-Phase 6** : intégré dans `main` via PR #18
+- **Provenance des index externes et sémantiques** : intégrée dans `main` via PR #24
+- **Licence** : propriétaire source-available, intégrée via PR #25
+- **Qualification #24** : Windows Java 24 PASS ; Linux Java 21 + distribution PASS
+- **Branche historique `hardening/post-phase6-audit`** : clôturée/supprimée ; ne constitue plus une branche active
+- **Dernière mise à jour** : 2026-08-06
