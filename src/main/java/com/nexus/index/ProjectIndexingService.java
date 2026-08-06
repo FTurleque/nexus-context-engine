@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -201,6 +202,7 @@ public final class ProjectIndexingService {
         try {
             ProjectScanResult scanResult = scanner.scanWithDiagnostics(project.rootPath());
             List<ScannedFile> scannedFiles = scanResult.files();
+            String canonicalFingerprint = CanonicalIndexFingerprint.fromScannedFiles(scannedFiles);
             List<String> diagnostics = new ArrayList<>(scanResult.diagnostics());
             Map<String, Long> providerDurationsMs = new LinkedHashMap<>();
             Map<String, IndexedFile> existingFiles = indexRepository.findFiles(projectId);
@@ -212,8 +214,12 @@ public final class ProjectIndexingService {
             removedPaths.removeAll(scannedPaths);
             Set<String> searchRemovedPaths = new HashSet<>(removedPaths);
 
+            boolean semanticFullRebuild = semanticIndexingService != null
+                    && (fullRebuild || !semanticIndexingService.isCompatible(projectId, canonicalFingerprint));
+
             List<IndexedFileUpdate> updates = new ArrayList<>();
             List<SearchDocument> searchDocuments = new ArrayList<>();
+            List<SearchDocument> semanticDocuments = new ArrayList<>();
 
             for (ScannedFile scannedFile : scannedFiles) {
                 boolean genericSearchEligible = isGenericSearchEligible(scannedFile.category());
@@ -222,42 +228,68 @@ public final class ProjectIndexingService {
                 }
 
                 IndexedFile existing = existingFiles.get(scannedFile.relativePath());
-                if (!fullRebuild && existing != null && existing.contentHash().equals(scannedFile.contentHash())) {
+                boolean changed = fullRebuild
+                        || existing == null
+                        || !existing.contentHash().equals(scannedFile.contentHash());
+                boolean requiredForSemanticRebuild = semanticFullRebuild && genericSearchEligible;
+                if (!changed && !requiredForSemanticRebuild) {
                     continue;
                 }
 
                 AnalysisResult analysis = analyzeScannedFile(project.rootPath(), scannedFile);
-                updates.add(new IndexedFileUpdate(scannedFile, analysis));
+                SearchDocument document = null;
                 if (genericSearchEligible) {
-                    searchDocuments.add(new SearchDocument(
+                    document = new SearchDocument(
                             scannedFile.relativePath(),
                             scannedFile.language(),
                             scannedFile.category(),
                             SafeFileIO.readStringNoFollow(scannedFile.absolutePath()),
-                            analysis.symbols()));
+                            analysis.symbols());
+                }
+
+                if (changed) {
+                    updates.add(new IndexedFileUpdate(scannedFile, analysis));
+                    if (document != null) {
+                        searchDocuments.add(document);
+                    }
+                }
+                if (document != null && (semanticFullRebuild || changed)) {
+                    semanticDocuments.add(document);
                 }
             }
 
-            boolean javaSourcesChanged = javaSourcesChanged(fullRebuild, updates, removedPaths, existingFiles);
+            boolean codeSourcesChanged = codeIntelligenceSourcesChanged(
+                    fullRebuild, updates, removedPaths, existingFiles);
+            Set<String> staleExternalProviders = codeSourcesChanged
+                    ? externalProviders(projectId)
+                    : Set.of();
+
             indexRepository.applyChanges(projectId, updates, removedPaths);
+            if (!staleExternalProviders.isEmpty()) {
+                purgeExternalCodeIntelligence(projectId, staleExternalProviders);
+                diagnostics.add("external code intelligence invalidated: "
+                        + String.join(", ", staleExternalProviders));
+            }
+
             refreshImportedCodeIntelligence(
                     projectId, project.rootPath(), diagnostics, providerDurationsMs);
             if (includeCodeIntelligenceProviders) {
                 refreshActiveCodeIntelligence(
                         projectId, project.rootPath(), diagnostics, providerDurationsMs);
-            } else if (javaSourcesChanged) {
-                purgeActiveCodeIntelligence(projectId);
             }
 
             if (fullRebuild) {
                 searchIndex.rebuild(projectId, searchDocuments);
-                if (semanticIndexingService != null) {
-                    semanticIndexingService.rebuild(projectId, searchDocuments);
-                }
             } else {
                 searchIndex.applyChanges(projectId, searchDocuments, searchRemovedPaths);
-                if (semanticIndexingService != null) {
-                    semanticIndexingService.applyChanges(projectId, searchDocuments, searchRemovedPaths);
+            }
+
+            if (semanticIndexingService != null) {
+                if (semanticFullRebuild) {
+                    semanticIndexingService.rebuild(projectId, canonicalFingerprint, semanticDocuments);
+                } else {
+                    semanticIndexingService.applyChanges(
+                            projectId, canonicalFingerprint, semanticDocuments, searchRemovedPaths);
                 }
             }
 
@@ -324,11 +356,24 @@ public final class ProjectIndexingService {
         }
     }
 
-    private void purgeActiveCodeIntelligence(UUID projectId) {
-        for (CodeIntelligenceProvider provider : codeIntelligenceProviders) {
+    private Set<String> externalProviders(UUID projectId) {
+        Set<String> providers = new TreeSet<>();
+        indexRepository.findSymbols(projectId).stream()
+                .map(indexed -> indexed.symbol().sourceProvider())
+                .filter(provider -> !CodeSymbol.DEFAULT_SOURCE_PROVIDER.equals(provider))
+                .forEach(providers::add);
+        indexRepository.findRelations(projectId).stream()
+                .map(SymbolRelation::sourceProvider)
+                .filter(provider -> !CodeSymbol.DEFAULT_SOURCE_PROVIDER.equals(provider))
+                .forEach(providers::add);
+        return Set.copyOf(providers);
+    }
+
+    private void purgeExternalCodeIntelligence(UUID projectId, Set<String> providers) {
+        for (String provider : providers.stream().sorted().toList()) {
             indexRepository.replaceExternalCodeIntelligence(
                     projectId,
-                    CodeIntelligenceSnapshot.empty(provider.sourceProvider()));
+                    CodeIntelligenceSnapshot.empty(provider));
         }
     }
 
@@ -339,7 +384,7 @@ public final class ProjectIndexingService {
         }
     }
 
-    private static boolean javaSourcesChanged(
+    private static boolean codeIntelligenceSourcesChanged(
             boolean fullRebuild,
             List<IndexedFileUpdate> updates,
             Set<String> removedPaths,
@@ -347,16 +392,22 @@ public final class ProjectIndexingService {
         if (fullRebuild) {
             return true;
         }
-        boolean javaUpdated = updates.stream()
+        boolean sourceUpdated = updates.stream()
                 .map(IndexedFileUpdate::file)
-                .anyMatch(file -> "java".equalsIgnoreCase(file.language()));
-        if (javaUpdated) {
+                .map(ScannedFile::category)
+                .anyMatch(ProjectIndexingService::isCodeIntelligenceSource);
+        if (sourceUpdated) {
             return true;
         }
         return removedPaths.stream()
                 .map(existingFiles::get)
                 .filter(Objects::nonNull)
-                .anyMatch(file -> "java".equalsIgnoreCase(file.language()));
+                .map(IndexedFile::category)
+                .anyMatch(ProjectIndexingService::isCodeIntelligenceSource);
+    }
+
+    private static boolean isCodeIntelligenceSource(FileCategory category) {
+        return category == FileCategory.SOURCE || category == FileCategory.TEST;
     }
 
     private AnalysisResult analyzeScannedFile(java.nio.file.Path projectRoot, ScannedFile file) throws IOException {
