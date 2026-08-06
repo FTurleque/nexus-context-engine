@@ -19,6 +19,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -31,7 +32,7 @@ class SemanticIndexProvenanceIntegrationTest {
     Path temporaryDirectory;
 
     @Test
-    void rebuildsAfterSemanticWasDisabledDuringCanonicalChangesAndAfterModelChange() throws Exception {
+    void rebuildsWheneverPersistedSemanticProvenanceIsIncompatible() throws Exception {
         Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("project"));
         Path source = projectRoot.resolve("src/main/java/demo/App.java");
         Files.createDirectories(source.getParent());
@@ -43,7 +44,7 @@ class SemanticIndexProvenanceIntegrationTest {
         IndexRepository indexRepository = new SqliteIndexRepository(database);
         ProjectDescriptor project = new ProjectRegistry(projectRepository).register(projectRoot, "demo");
 
-        TestEmbeddingProvider modelA = new TestEmbeddingProvider("model-a");
+        TestEmbeddingProvider modelA = new TestEmbeddingProvider("model-a", 3);
         LuceneSemanticSearchIndex semanticIndex = new LuceneSemanticSearchIndex(paths, modelA.dimensions());
         ProjectIndexingService semanticServiceA = service(
                 paths,
@@ -82,7 +83,7 @@ class SemanticIndexProvenanceIntegrationTest {
 
         // Même provider et même dimension, mais autre modèle : les espaces
         // vectoriels ne sont pas supposés compatibles et doivent être reconstruits.
-        TestEmbeddingProvider modelB = new TestEmbeddingProvider("model-b");
+        TestEmbeddingProvider modelB = new TestEmbeddingProvider("model-b", 3);
         assertFalse(semanticIndex.isCompatible(
                 project.id(),
                 SemanticIndexProvenance.current(changedFingerprint, modelB)));
@@ -108,6 +109,45 @@ class SemanticIndexProvenanceIntegrationTest {
         assertFalse(semanticIndex.isCompatible(
                 project.id(),
                 SemanticIndexProvenance.current(changedFingerprint, modelA)));
+
+        // Même provider/modèle/dimension mais autre profil de préparation du
+        // texte : le manifeste doit également forcer un rebuild complet.
+        SemanticIndexingService compactProfile = new SemanticIndexingService(
+                modelB,
+                semanticIndex,
+                4_000);
+        assertFalse(semanticIndex.isCompatible(
+                project.id(),
+                SemanticIndexProvenance.current(
+                        changedFingerprint,
+                        modelB,
+                        compactProfile.profileId())));
+        int embeddingsBeforeProfileChange = modelB.embeddings;
+        service(paths, projectRepository, indexRepository, compactProfile).index(project.id());
+        assertTrue(modelB.embeddings > embeddingsBeforeProfileChange);
+        assertTrue(semanticIndex.isCompatible(
+                project.id(),
+                SemanticIndexProvenance.current(
+                        changedFingerprint,
+                        modelB,
+                        compactProfile.profileId())));
+
+        // Une nouvelle dimension utilise un nouvel index writer sur le même
+        // chemin et doit remplacer proprement l'ancien espace vectoriel.
+        TestEmbeddingProvider modelC = new TestEmbeddingProvider("model-c", 4);
+        LuceneSemanticSearchIndex resizedIndex = new LuceneSemanticSearchIndex(paths, modelC.dimensions());
+        assertFalse(resizedIndex.isCompatible(
+                project.id(),
+                SemanticIndexProvenance.current(changedFingerprint, modelC)));
+        service(
+                paths,
+                projectRepository,
+                indexRepository,
+                new SemanticIndexingService(modelC, resizedIndex)).index(project.id());
+        assertTrue(modelC.embeddings > 0);
+        assertTrue(resizedIndex.isCompatible(
+                project.id(),
+                SemanticIndexProvenance.current(changedFingerprint, modelC)));
     }
 
     private static ProjectIndexingService service(
@@ -132,10 +172,12 @@ class SemanticIndexProvenanceIntegrationTest {
 
     private static final class TestEmbeddingProvider implements EmbeddingProvider {
         private final String modelId;
+        private final int dimensions;
         private int embeddings;
 
-        private TestEmbeddingProvider(String modelId) {
+        private TestEmbeddingProvider(String modelId, int dimensions) {
             this.modelId = modelId;
+            this.dimensions = dimensions;
         }
 
         @Override
@@ -150,13 +192,16 @@ class SemanticIndexProvenanceIntegrationTest {
 
         @Override
         public int dimensions() {
-            return 3;
+            return dimensions;
         }
 
         @Override
         public float[] embed(String text) {
             embeddings++;
-            return new float[]{1.0f, 0.25f, 0.1f};
+            float[] vector = new float[dimensions];
+            Arrays.fill(vector, 0.1f);
+            vector[0] = 1.0f;
+            return vector;
         }
     }
 }
