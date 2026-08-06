@@ -10,7 +10,6 @@ import com.nexus.search.SearchSignals;
 import com.nexus.search.SearchStrategy;
 
 import java.io.IOException;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -124,13 +123,13 @@ public final class SemanticSearchStrategy implements SearchStrategy {
     }
 
     private String canonicalFingerprint(ProjectDescriptor project) {
-        Instant lastIndexedAt = project.lastIndexedAt();
+        long generation = indexRepository.generation(project.id());
         CachedFingerprint cached = fingerprints.get(project.id());
-        if (cached != null && Objects.equals(cached.lastIndexedAt(), lastIndexedAt)) {
+        if (cached != null && cached.generation() == generation) {
             return cached.fingerprint();
         }
         String fingerprint = CanonicalIndexFingerprint.fromIndexedFiles(indexRepository.findFiles(project.id()));
-        fingerprints.put(project.id(), new CachedFingerprint(lastIndexedAt, fingerprint));
+        fingerprints.put(project.id(), new CachedFingerprint(generation, fingerprint));
         return fingerprint;
     }
 
@@ -157,6 +156,6 @@ public final class SemanticSearchStrategy implements SearchStrategy {
         };
     }
 
-    private record CachedFingerprint(Instant lastIndexedAt, String fingerprint) {
+    private record CachedFingerprint(long generation, String fingerprint) {
     }
 }
