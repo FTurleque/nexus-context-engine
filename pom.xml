@@ -54,6 +54,7 @@
         <maven.antrun-plugin.version>3.2.0</maven.antrun-plugin.version>
         <cyclonedx-maven-plugin.version>2.9.2</cyclonedx-maven-plugin.version>
         <jacoco.version>0.8.12</jacoco.version>
+        <license-maven-plugin.version>2.7.1</license-maven-plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -173,6 +174,11 @@
                     <artifactId>jacoco-maven-plugin</artifactId>
                     <version>${jacoco.version}</version>
                 </plugin>
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>license-maven-plugin</artifactId>
+                    <version>${license-maven-plugin.version}</version>
+                </plugin>
             </plugins>
         </pluginManagement>
 
@@ -218,6 +224,32 @@
                                 </requireMavenVersion>
                                 <banDuplicatePomDependencyVersions/>
                             </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>license-maven-plugin</artifactId>
+                <version>${license-maven-plugin.version}</version>
+                <inherited>false</inherited>
+                <executions>
+                    <execution>
+                        <id>aggregate-third-party-notices</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>aggregate-add-third-party</goal>
+                        </goals>
+                        <configuration>
+                            <acceptPomPackaging>true</acceptPomPackaging>
+                            <includedScopes>compile,runtime</includedScopes>
+                            <excludedGroups>io.github.fturleque</excludedGroups>
+                            <failOnMissing>true</failOnMissing>
+                            <deployMissingFile>false</deployMissingFile>
+                            <useRepositoryMissingFiles>false</useRepositoryMissingFiles>
+                            <sortArtifactByName>true</sortArtifactByName>
+                            <outputDirectory>${project.build.directory}/licenses</outputDirectory>
+                            <thirdPartyFilename>THIRD_PARTY_NOTICES.txt</thirdPartyFilename>
                         </configuration>
                     </execution>
                 </executions>
