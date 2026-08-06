@@ -6,22 +6,23 @@ Ce répertoire distingue :
 2. **documents d'itération/benchmark** — conservent les résultats historiques ;
 3. **ADR** — conservent les décisions et ne sont pas réécrits rétroactivement.
 
-État de travail : Phase 6 qualifiée techniquement sur `phase-6-consolidation-hardening`, version `0.2.0`, intégration de la PR #15 en attente.
+État courant : NEXUS 0.2.0, Phase 6 intégrée via PR #15, hardening post-Phase 6 via PR #18, provenance des index via PR #24 et licence propriétaire publique via PR #25.
 
 ## Parcours recommandé
 
 | Sujet | Document |
 |---|---|
 | architecture globale | [Architecture](../architecture.md) |
+| Arc42 | [Documentation d'architecture](../architecture/README.md) |
 | architecture concrète / reactor / composition | [Architecture d'implémentation](architecture-implementation.md) |
 | limites et watch items | [Limites actuelles](current-limitations.md) |
 | roadmap | [Roadmap](../roadmap.md) |
 | release / migration / recovery | [Release et recovery](release-and-recovery.md) |
+| provenance/fraîcheur des index | [Index provenance](../index-provenance.md) |
 | indexation | [Pipeline d'indexation](indexing-pipeline.md) |
 | recherche et ranking | [Recherche et ranking](search-ranking.md) |
 | construction du contexte | [Construction du contexte](context-building.md) |
 | CLI | [CLI](cli.md) |
-| CLI MVP historique | [CLI du MVP](cli-mvp.md) |
 | contexte natif | [Contexte natif](native-context-sources.md) |
 | Agent Skills | [Agent Skills](agent-skills.md) |
 | AI Skills Registry | [AI Skills Registry](ai-skills-registry.md) |
@@ -35,10 +36,9 @@ Ce répertoire distingue :
 | recherche multi-repository | [Recherche à grande échelle](large-scale-search.md) |
 | baseline I16 | [Runbook](large-scale-baseline-runbook.md) / [résultats](iteration-16-baseline-results.md) |
 | sémantique | [Recherche sémantique](semantic-search.md) |
-| résultats sémantiques historiques | [Itération 17](iteration-17-semantic-results.md) |
 | reproduction / diagnostic | [Reproduire et déboguer](reproduce-and-debug.md) |
 
-## Vue d'ensemble Phase 6
+## Vue d'ensemble
 
 ```text
                       CLI / REST / MCP
@@ -51,11 +51,11 @@ Ce répertoire distingue :
  ProjectRegistry   ProjectIndexingService   Search / Context
          │                  │                   │
          │          SQLite canonique            │
-         │             + generation             │
+         │       + génération/fingerprint       │
          │                  │                   │
          │          Lucene dérivé               │
          │                  │                   │
-         └──────────── providers ────────────────┘
+         └──── providers/importers bornés ──────┘
                             │
               ranking / sources natives
                             │
@@ -74,9 +74,7 @@ pom.xml                         nexus-context-engine-parent:0.2.0
 └── adapters/assistant-clients/
 ```
 
-Le core reste physiquement dans `src/`; `core/pom.xml` référence ces sources. Les outputs Maven sont isolés par module et les livrables du core nécessaires aux scripts historiques sont recopiés dans `target/`.
-
-Build complet :
+Le core reste physiquement dans `src/`; `core/pom.xml` référence ces sources. Build complet :
 
 ```powershell
 .\mvnw.cmd clean install
@@ -90,7 +88,8 @@ Build complet :
 - SQLite canonique ;
 - Lucene lexical/sémantique dérivé ;
 - indexation incrémentale ;
-- single-flight par projet ;
+- single-flight par projet dans la JVM **et entre processus** via `FileLock` OS ;
+- frontière filesystem durcie (`ProjectPathGuard`, `SafeFileIO`, `NOFOLLOW_LINKS`) ;
 - taille de fichier bornée ;
 - ranking déterministe/explicable ;
 - recherche symbole/usages bornée ;
@@ -98,7 +97,7 @@ Build complet :
 - recherche fédérée ;
 - `ContextBundle` projet-local et fédéré ;
 - instructions natives, Agent Skills, registry local et Git ;
-- sémantique opt-in.
+- sémantique opt-in avec contrôle de provenance.
 
 ### Code Intelligence
 
@@ -106,6 +105,7 @@ Build complet :
 - SCIP opportuniste ;
 - JDT LS opt-in ;
 - MINOS via JSON local explicite ;
+- snapshots externes invalidés lorsque l'état canonique SOURCE/TEST change ;
 - support lexical Kotlin, TypeScript, JavaScript, Python et SQL.
 
 ### Adaptateurs
@@ -114,24 +114,6 @@ Build complet :
 - REST Quarkus ;
 - MCP Java STDIO ;
 - générateur de configuration Copilot/Claude.
-
-## Composition unique
-
-`NexusApplication` est maintenant le composition root commun :
-
-```text
-SqliteDatabase
-SqliteProjectRepository
-SqliteIndexRepository
-LuceneSearchIndex
-ProjectIndexingService
-SearchService
-FederatedSearchService
-DefaultContextBuilder
-FederatedContextService
-```
-
-La CLI ne possède plus de second câblage manuel. Les providers de skills local et registry sont composés indépendamment.
 
 ## Cohérence et recovery
 
@@ -144,23 +126,29 @@ READY
 FAILED
 ```
 
-Les lectures interactives dépendant de l'index exigent `READY`. Toute reprise depuis un état persistant non-READY force un rebuild complet. Un `INDEXING` abandonné par crash n'est donc pas un verrou permanent ; la vraie concurrence active est protégée par le single-flight in-process.
+Les lectures interactives dépendant de l'index exigent `READY`. Toute reprise depuis un état persistant non-READY force un rebuild complet.
+
+La concurrence active est protégée à deux niveaux :
+
+1. mutex JVM par projet ;
+2. `FileLock` OS par projet sous `NEXUS_HOME/locks`.
+
+La garantie inter-processus vise un filesystem local. Un `NEXUS_HOME` réseau n'est pas déclaré supporté sans qualification spécifique.
+
+Les index dérivés sont réutilisés seulement lorsqu'ils sont cohérents avec l'état canonique. L'index sémantique porte un manifeste de provenance ; les snapshots externes obsolètes sont invalidés.
 
 ## Scale
 
-Phase 6 applique d'abord des optimisations locales :
+NEXUS applique d'abord des optimisations locales :
 
 - requêtes SQL bornées pour symboles/usages ;
 - fuzzy sur pool préfiltré ;
 - graphe réutilisé par génération ;
 - chargement ciblé des fichiers voisins ;
-- sur-récupération avant diversification fédérée.
+- sur-récupération avant diversification fédérée ;
+- fair floor + refill pour le contexte fédéré.
 
-Les baselines actuelles ne justifient toujours pas Zoekt/OpenGrok/OpenSearch, vector DB ou index distribué.
-
-## Contexte fédéré
-
-`FederatedContextService` construit les bundles locaux sous une allocation globale, conserve la provenance projet, entrelace les items et déduplique les contenus identiques. Instructions, Skills et Git restent projet-locaux.
+Les baselines actuelles ne justifient pas Zoekt/OpenGrok/OpenSearch, vector DB, FTS supplémentaire ou index distribué. Les benchmarks complémentaires sont suivis par #23.
 
 ## Distribution 0.2.0
 
@@ -174,23 +162,23 @@ target/distribution/nexus-context-engine-0.2.0.zip.sha256
 target/sbom/bom.json
 ```
 
-Voir [Release et recovery](release-and-recovery.md).
+Le ZIP autonome inclut `LICENSE`. Voir [Release et recovery](release-and-recovery.md).
 
-## Gates
+## Qualification
 
-Gate Phase 6 Windows :
+Gate Windows :
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
 ```
 
-Il inclut le `clean install` du reactor, `scripts/self-smoke.ps1`, checksums, SBOM, exécution réelle de l'archive et exact-head.
+Preuve récente : PR #24, head exact `25c12b100b774a4ec3d69d221675bf31d8ebaa0c`, NEXUS CI run #15 : Windows Java 24 PASS, Linux Java 21 reactor PASS et distribution smoke PASS.
 
-Une itération ne doit pas être déclarée validée/livrée sans ce log sur le commit concerné.
+Une itération ne doit pas être déclarée validée/livrée sans preuve exécutable sur le commit concerné.
 
 ## Principes de contribution
 
-1. SQLite reste canonique ; Lucene reste reconstructible.
+1. SQLite reste canonique ; les index dérivés restent reconstructibles.
 2. Le cœur ne dépend pas de Quarkus, MCP, Copilot, Claude, JARVIS ou MINOS.
 3. Tout provider externe reste optionnel et borné.
 4. Scores, budgets et sélections restent déterministes et explicables.
@@ -199,3 +187,4 @@ Une itération ne doit pas être déclarée validée/livrée sans ce log sur le 
 7. Une décision durable structurante implique un ADR.
 8. Une optimisation de scale doit être justifiée par une mesure.
 9. La documentation courante doit être réconciliée avec l'exact head avant clôture.
+10. Le dépôt étant propriétaire source-available, les contributions externes suivent [`../../CONTRIBUTING.md`](../../CONTRIBUTING.md).

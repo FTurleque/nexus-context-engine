@@ -8,16 +8,17 @@ NEXUS n'est ni un chatbot, ni un LLM, ni un orchestrateur d'agents. Il se place 
 
 ```text
 repository   FTurleque/nexus-context-engine
-main         Phase 6 + Hardening post-Phase 6 intégrés
-develop      à jour avec main
-issue        #16 — Post-Phase 6 hardening — clôturée
+visibility   public
+main         Phase 6 + hardening + provenance des index intégrés
 Java         runtime >=21 / release 21
 version      0.2.0
 Phase 1→6    livrées / intégrées
-hardening    qualifié et intégré dans main (2026-08-05)
+hardening    post-Phase 6 intégré via PR #18
+provenance   externe + sémantique intégrée via PR #24
+licence      propriétaire source-available via PR #25
 ```
 
-La Phase 6 a été fusionnée via PR #15 (issue #13). Le hardening post-Phase 6 a été qualifié localement (gates A–D PASS, self-smoke 13/13) et intégré dans `main` via PR #18 (issue #16).
+La Phase 6 a été fusionnée via PR #15. Le hardening post-Phase 6 a été intégré via PR #18. Les deux P1 issus de l'audit de stabilisation (#19/#20) ont été qualifiés puis intégrés via PR #24.
 
 ## Capacités
 
@@ -37,19 +38,32 @@ La Phase 6 a été fusionnée via PR #15 (issue #13). Le hardening post-Phase 6 
 - liveness/readiness REST et métriques ;
 - distribution CLI autonome versionnée.
 
-## Hardening post-Phase 6 — intégré
+## Hardening intégré
 
-Le hardening issue de l'audit post-Phase 6 renforce plusieurs frontières de production :
+Le hardening post-Phase 6 renforce plusieurs frontières de production :
 
-- **filesystem** : racine canonique, refus des liens symboliques sous le repository, ouverture avec `NOFOLLOW_LINKS` via `SafeFileIO` — couvre scanner, ignore files, instructions/références, Agent Skills, provider JDT LS, ContextFragmentFactory et importeur SCIP ;
+- **filesystem** : racine canonique, refus des liens symboliques sous le repository, ouverture avec `NOFOLLOW_LINKS` via `SafeFileIO` — scanner, ignore files, instructions/références, Agent Skills, provider JDT LS, `ContextFragmentFactory` et importeur SCIP ;
 - **taille des fichiers** : revalidation du fichier réel et de sa taille avant hash ou lecture ; flux bornés à `NEXUS_MAX_FILE_SIZE_BYTES` ;
-- **concurrence** : single-flight par projet dans la JVM et verrou OS sous `NEXUS_HOME/locks` ;
+- **concurrence** : single-flight par projet dans la JVM et verrou OS par projet sous `NEXUS_HOME/locks` ;
 - **providers/importers** : enveloppe wall-clock commune via `ExternalTaskRunner`, interruption sans fermeture bloquante ;
-- **readiness** : liveness, readiness service et état READY des projets distincts ;
+- **readiness** : liveness et readiness distinctes ;
 - **contexte fédéré** : fair floor déterministe, déduplication, réutilisation globale du budget libéré ;
 - **REST** : écoute loopback par défaut, Bearer token requis hors-loopback ;
 - **cohérence API** : UUID inconnu → erreur UUID directe ;
 - **ressources JVM** : slots de locks locaux retirés à libération.
+
+Le support cible de `NEXUS_HOME` reste un filesystem local. Les garanties de `FileLock` sur un filesystem réseau ne sont pas revendiquées.
+
+## Provenance et fraîcheur des index
+
+Depuis PR #24, NEXUS ne réutilise plus silencieusement de données dérivées dont la compatibilité avec l'état canonique n'est pas démontrée.
+
+- lorsqu'un fichier `SOURCE`/`TEST` canonique change, les snapshots persistés des providers externes non embarqués sont invalidés, y compris si le provider n'est plus actif dans le runtime courant ;
+- l'index sémantique Lucene persiste un manifeste contenant fingerprint canonique, provider, modèle, dimensions, profil de préparation du contenu et version de schéma ;
+- une provenance sémantique absente ou incompatible force un rebuild ;
+- une recherche sémantique obsolète est refusée avant même le calcul de l'embedding de requête.
+
+Voir [`docs/index-provenance.md`](docs/index-provenance.md).
 
 ## Build reproductible
 
@@ -105,13 +119,13 @@ target/distribution/nexus-context-engine-0.2.0.zip.sha256
 target/sbom/bom.json
 ```
 
-Le ZIP contient `bin/nexus.cmd`, `bin/nexus`, `lib/nexus-cli.jar`, `README.md` et la licence propriétaire `LICENSE`. Maven n'est pas requis sur la machine cible ; une JVM Java 21 ou supérieure est nécessaire.
+Le ZIP contient `bin/nexus.cmd`, `bin/nexus`, `lib/nexus-cli.jar`, `README.md` et `LICENSE`. Maven n'est pas requis sur la machine cible ; une JVM Java 21 ou supérieure est nécessaire.
 
 ## Correctness et scale
 
 - toute lecture dépendant d'un index exige un projet `READY` ;
 - un état `FAILED`, `NOT_INDEXED` ou `INDEXING` persistant entraîne un rebuild complet au prochain index ;
-- la façade de production n'accepte qu'une indexation active par projet, y compris entre plusieurs processus partageant le même `NEXUS_HOME` ;
+- une seule mutation d'index par projet est active à la fois, y compris entre processus partageant un `NEXUS_HOME` local ;
 - top-K fédéré sur-récupéré avant diversification ;
 - symboles/usages filtrés côté SQLite avec limites ;
 - graphe réutilisé tant que la génération canonique n'a pas changé ;
@@ -120,7 +134,7 @@ Le ZIP contient `bin/nexus.cmd`, `bin/nexus`, `lib/nexus-cli.jar`, `README.md` e
 - MINOS valide contre les fichiers canoniques déjà indexés ;
 - le contexte fédéré peut redistribuer son budget restant après fair floor et déduplication.
 
-Les recherches SQLite utilisant des recherches de sous-chaîne restent un **watch item mesuré** : aucun FTS5, trigram ou moteur supplémentaire ne sera introduit sans benchmark montrant un bénéfice matériel sur les corpus cibles.
+Les recherches SQLite utilisant des recherches de sous-chaîne restent un **watch item** suivi par #23 : aucun FTS5, trigram ou moteur supplémentaire ne sera introduit sans benchmark montrant un bénéfice matériel sur les corpus cibles.
 
 ## Configuration
 
@@ -162,7 +176,7 @@ Sur loopback, aucun token n'est imposé par défaut. Si `NEXUS_REST_API_TOKEN` e
 Authorization: Bearer <token>
 ```
 
-Une écoute non-loopback (`0.0.0.0`, adresse LAN, etc.) sans `NEXUS_REST_API_TOKEN` est refusée au démarrage. Le token peut également être fourni par la propriété JVM `-Dnexus.rest.api-token=...`.
+Une écoute non-loopback (`0.0.0.0`, adresse LAN, etc.) sans `NEXUS_REST_API_TOKEN` est refusée au démarrage. Le token peut également être fourni par `-Dnexus.rest.api-token=...`.
 
 ## Surfaces fédérées
 
@@ -192,17 +206,26 @@ Le contexte fédéré applique un budget global, conserve la provenance projet, 
 
 ## Qualification
 
-La qualification Phase 6 historique reste décrite par :
+La qualification Windows reste pilotée par :
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
 ```
 
-Pour le hardening post-Phase 6, les tests et contrôles ont été **préparés mais pas exécutés via CI**. La qualification exacte de la branche sera lancée uniquement après validation explicite, conformément au gate de l'issue #16.
+Preuve récente : PR #24, head exact `25c12b100b774a4ec3d69d221675bf31d8ebaa0c`, NEXUS CI run #15 :
+
+- Windows / Java 24 : **PASS** ;
+- script de qualification local : **PASS** ;
+- Linux / Java 21 Maven reactor : **PASS** ;
+- distribution Linux : **PASS**.
+
+PR #24 est intégrée dans `main` via `c7a03479a78713b78ec2ddc477e1d07d400d8aba`.
 
 ## Documentation
 
 - architecture : [`docs/architecture.md`](docs/architecture.md) ;
+- Arc42 : [`docs/architecture/README.md`](docs/architecture/README.md) ;
+- provenance des index : [`docs/index-provenance.md`](docs/index-provenance.md) ;
 - implémentation : [`docs/developer/architecture-implementation.md`](docs/developer/architecture-implementation.md) ;
 - CLI : [`docs/developer/cli.md`](docs/developer/cli.md) ;
 - recherche : [`docs/developer/search-ranking.md`](docs/developer/search-ranking.md) ;
@@ -214,9 +237,11 @@ Pour le hardening post-Phase 6, les tests et contrôles ont été **préparés m
 
 ## Licence
 
-NEXUS Context Engine est un logiciel **propriétaire**. Copyright © 2026 Fabrice Turleque. Tous droits réservés.
+NEXUS Context Engine est un logiciel **propriétaire source-available**. Copyright © 2026 Fabrice Turleque. Tous droits réservés.
 
-Aucun droit d'utilisation, de copie, de modification, de redistribution, de sous-licence ou de commercialisation n'est accordé sans autorisation écrite explicite du titulaire des droits. Les conditions complètes figurent dans [`LICENSE`](LICENSE). Les composants tiers restent soumis à leurs licences respectives.
+La visibilité publique du code ne transforme pas NEXUS en logiciel open source. Aucun droit général d'utilisation, d'exécution, de modification, de redistribution, de sous-licence ou de commercialisation n'est accordé sans autorisation écrite, sous réserve des droits impératifs et des droits indépendamment accordés par les conditions applicables de GitHub.
+
+Les conditions complètes figurent dans [`LICENSE`](LICENSE). Voir également [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Décisions conservées
 

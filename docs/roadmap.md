@@ -1,264 +1,145 @@
 # Feuille de route NEXUS
 
-Cette feuille de route est la source de vérité active pour l'évolution de NEXUS.
+Cette feuille de route est la source de vérité active pour l'évolution de NEXUS. Les détails historiques d'implémentation restent conservés dans les issues, PR et ADR correspondants ; ce document décrit l'état courant et le prochain travail attendu.
 
-État courant :
+## État courant
 
 ```text
 repository  FTurleque/nexus-context-engine
-main        Phase 6 + Hardening post-Phase 6 intégrés (PR #18 — 2026-08-05)
-develop     identique à main (3cd3d07)
-issue       #16 — Post-Phase 6 hardening — CLÔTURÉE
+visibility  public
+main        Phase 6 + hardening + provenance des index + licence intégrés
 version     0.2.0
 Java        runtime >=21 / release 21
-qualification post-Phase 6 : COMPLÈTE — gates A-D PASS, self-smoke 13/13, CI NEXUS CI success
+Phase 1→6  livrées / intégrées
+hardening  post-Phase 6 intégré
+P1 audit   #19 + #20 intégrés via PR #24
+licence    propriétaire source-available via PR #25
 ```
 
 Principe directeur :
 
 > **qualité du contexte > correctness > passage à l'échelle > opérabilité > nombre de fonctionnalités > nombre d'intégrations.**
 
-Les ADR acceptés conservent l'historique des décisions. Les résultats historiques restent dans leurs documents dédiés. Cette roadmap décrit l'état courant du produit et les preuves de qualification requises avant intégration.
-
 ## État consolidé
 
-| Phase | Itérations | État |
+| Lot | Référence | État |
 |---|---|---|
-| Phase 1 — Valider le moteur | 0 → 4 | ✅ terminée |
-| Phase 2 — Étendre les sources de contexte | 5 → 7 | ✅ terminée |
-| Phase 3 — Enrichir l'intelligence de code | 8 → 10 | ✅ terminée |
-| Phase 4 — Exposer NEXUS aux autres outils | 11 → 13 | ✅ terminée |
-| Phase 5 — Écosystème et passage à l'échelle | 14 → 17 | ✅ terminée |
+| Phase 1 — Valider le moteur | I0 → I4 | ✅ terminée |
+| Phase 2 — Étendre les sources de contexte | I5 → I7 | ✅ terminée |
+| Phase 3 — Enrichir l'intelligence de code | I8 → I10 | ✅ terminée |
+| Phase 4 — Exposer NEXUS aux autres outils | I11 → I13 | ✅ terminée |
+| Phase 5 — Écosystème et passage à l'échelle | I14 → I17 | ✅ terminée |
 | Intégration compagnon MINOS | issue #11 / PR #12 | ✅ livrée |
-| Phase 6 — Consolidation, hardening et industrialisation | 18 → 24 | ✅ intégrée via PR #15 |
-| Hardening post-Phase 6 | issue #16 / PR #17 | ✅ intégré dans `develop` le 2026-08-05 |
+| Phase 6 — Consolidation, hardening et industrialisation | I18 → I24 / PR #15 | ✅ intégrée |
+| Hardening post-Phase 6 | issue #16 / PR #18 | ✅ intégré |
+| Provenance/fraîcheur des index | issues #19/#20 / PR #24 | ✅ intégré |
+| Licence propriétaire publique | PR #25 | ✅ intégrée |
+| Réconciliation documentaire | issue #21 | 🚧 en cours |
+| CI / couverture / supply-chain | issue #22 | ⏳ à traiter |
+| Benchmark scale SQLite/fédération | issue #23 | ⏳ à traiter |
 
-La qualification Phase 6 historique reste conservée dans la PR #15. Elle ne constitue pas une preuve pour les changements de l'issue #16.
+## Baseline fonctionnelle livrée
 
-## Phases 1 à 5 — livré
+NEXUS 0.2.0 fournit notamment :
 
-- **0→4** : architecture Java 21, SQLite canonique, Lucene dérivé, indexation incrémentale, recherche hybride, ranking explicable, ContextBuilder, budget strict, CLI autonome.
-- **5→7** : Markdown, instructions natives, Agent Skills à divulgation progressive et contexte Git local borné.
-- **8→10** : SCIP opportuniste, JDT LS opt-in et support lexical Kotlin/TypeScript/JavaScript/Python/SQL.
-- **11→13** : REST Quarkus, MCP Java STDIO et intégrations Copilot/Claude.
-- **14→17** : AI Skills Registry, JARVIS/Alfred/Brainiac, recherche fédérée locale et recherche sémantique optionnelle.
+- indexation locale incrémentale avec SQLite canonique et Lucene dérivé ;
+- JavaParser, Markdown et recherche lexicale polyglotte ;
+- SCIP opportuniste, JDT LS opt-in et import MINOS explicite ;
+- recherche fichier/symbole/graphe/Git et fédération multi-projet ;
+- recherche sémantique locale opt-in ;
+- ContextBundle avec budget strict, provenance et contexte fédéré ;
+- instructions AGENTS/Copilot/Claude/Gemini ;
+- Agent Skills locaux et AI Skills Registry ;
+- CLI, REST Quarkus et MCP Java STDIO ;
+- distribution CLI autonome avec checksums et SBOM.
 
-Baseline grande échelle canonique : 2 104 fichiers, 10 878 symboles, 10 087 relations, indexation complète 8 818 ms, fédération p50/p95 133/304 ms, contexte p50/p95 48/206 ms, hit@3 et MRR@3 à 1,0.
+Baseline grande échelle historique : 2 104 fichiers, 10 878 symboles, 10 087 relations, indexation complète 8 818 ms, fédération p50/p95 133/304 ms, contexte p50/p95 48/206 ms, hit@3 et MRR@3 à 1,0.
 
-Décisions conservées : Lucene reste le moteur local par défaut ; aucun Zoekt/OpenGrok/OpenSearch, index distribué, FTS supplémentaire ou vector DB sans benchmark démontrant le besoin ; sémantique désactivée par défaut.
+## Hardening intégré
 
-## Intégration MINOS
+Le hardening post-Phase 6 n'est plus un travail en attente ni une branche active. Il est intégré dans `main` et couvre notamment :
 
-✅ Issue #11 / PR #12 livrées le 24 juillet 2026. NEXUS ne dépend pas de MINOS et ne le lance jamais ; l'import reste un JSON local explicite, versionné et validé. Phase 6 réutilise la vue canonique `indexed_files` pour l'allow-list du chemin applicatif.
+- confinement filesystem sous racine canonique, refus des symlinks et lectures `NOFOLLOW_LINKS` via `SafeFileIO` ;
+- revalidation de la taille réelle avant hash/lecture ;
+- exclusion mutuelle par projet dans la JVM **et entre processus** via `FileLock` sous `NEXUS_HOME/locks` ;
+- timeout wall-clock commun aux providers et importers externes ;
+- liveness/readiness séparées ;
+- fédération avec fair floor, déduplication et réutilisation du budget ;
+- REST loopback par défaut et token requis hors loopback ;
+- cohérence des erreurs UUID et nettoyage du cycle de vie des locks.
 
----
+Le support cible de `NEXUS_HOME` reste un filesystem local. Les garanties de `FileLock` sur un filesystem réseau ne sont pas revendiquées.
 
-# Phase 6 — Consolidation, hardening et industrialisation
+## Provenance des index — PR #24
 
-Issue : **#13** — clôturée.
+Les issues P1 #19 et #20 sont clôturées.
 
-PR : **#15** — fusionnée dans `main`.
+### Intelligence de code externe
 
-Les itérations I18→I24 ont été qualifiées avant intégration. Elles constituent la baseline fonctionnelle sur laquelle part l'issue #16.
+Quand l'état canonique SOURCE/TEST change, les snapshots persistés de providers externes non embarqués sont invalidés, y compris lorsqu'un provider n'est plus actif dans le runtime courant. Les providers/importers configurés peuvent ensuite republier un snapshot courant.
 
-## I18 — Correctness de recherche et cohérence des index
+### Index sémantique
 
-**✅ intégrée**
+Le commit Lucene sémantique porte un manifeste de provenance comprenant :
 
-- sur-récupération bornée avant diversification fédérée ;
-- gate READY commun pour recherche, contexte, symboles, usages, fédération et MINOS ;
-- aucune lecture interactive hors READY ;
-- tout état persistant non-READY force un rebuild complet ;
-- un INDEXING abandonné après crash est récupérable.
+- fingerprint canonique ;
+- identité du provider ;
+- modèle ;
+- dimensions vectorielles ;
+- profil de préparation du contenu ;
+- version de schéma sémantique.
 
-## I19 — Recherche symbolique et graphe à grande échelle
+Une provenance absente ou incompatible force un rebuild. La recherche refuse un index sémantique obsolète avant même de calculer l'embedding de requête.
 
-**✅ intégrée**
+Référence : [`index-provenance.md`](index-provenance.md).
 
-- `searchSymbols` / `searchRelations` bornés côté repository/SQLite ;
-- fuzzy Java appliqué seulement sur un pool préfiltré ;
-- `findSymbols` / `findUsages` sans scan complet applicatif ;
-- génération monotone par projet ;
-- graphe dérivé mis en cache par génération ;
-- enrichissement graphe limité aux fichiers voisins nécessaires.
+## Qualification actuelle
 
-## I20 — Composition applicative et gouvernance Maven
+La qualification exacte-head de PR #24 (`25c12b100b774a4ec3d69d221675bf31d8ebaa0c`) a été exécutée avec succès dans NEXUS CI run #15 après le passage du dépôt en public :
 
-**✅ intégrée**
+- Windows / Java 24 : **PASS** ;
+- `scripts/validate-phase-6.ps1` : **PASS** ;
+- Linux / Java 21 Maven reactor : **PASS** ;
+- smoke de la distribution Linux : **PASS**.
 
-- CLI déléguée à `NexusApplication` ;
-- même composition root pour CLI/REST/MCP ;
-- providers Local Skills / AI Skills Registry indépendants ;
-- reactor Maven racine + module core ;
-- Java/dépendances/BOM/plugins centralisés ;
-- Enforcer Java `[21,)`, compilation `release=21`, Maven ≥3.9.
+PR #24 a ensuite été fusionnée dans `main` comme `c7a03479a78713b78ec2ddc477e1d07d400d8aba`. Ce SHA est une **preuve historique de merge**, pas un pointeur dynamique sur le HEAD courant.
 
-## I21 — Hardening indexation et ressources
+Les anciens échecs GitHub Actions avec `steps=[]` / `BlobNotFound` sont considérés comme un incident historique/transitoire : la relance a exécuté les deux runners normalement.
 
-**✅ intégrée, puis renforcée par #16**
+## Travail restant priorisé
 
-Baseline Phase 6 : single-flight in-process, taille maximale configurable, import MINOS canonique, timeout global provider et diagnostics structurés.
+### P2 — #21 Réconciliation documentaire
 
-## I22 — Runtime, opérabilité et opt-ins
+Objectif : garantir que README, architecture, arc42, roadmap et runbook recovery décrivent tous la même architecture effectivement livrée.
 
-**✅ intégrée, puis renforcée par #16**
+### P2 — #22 CI, couverture et supply-chain
 
-Baseline Phase 6 : readiness REST, métriques, sémantique opt-in commune, batching embeddings et fédération exposée en CLI/REST/MCP.
+À évaluer/mettre en œuvre :
 
-## I23 — ContextBundle fédéré multi-projet
+- gate JaCoCo explicite ;
+- politique de vulnérabilités/dépendances ;
+- code scanning ;
+- pinning immuable des actions tierces ;
+- conservation SBOM de release ;
+- `THIRD_PARTY_NOTICES.md` et obligations de redistribution des dépendances.
 
-**✅ intégrée, puis renforcée par #16**
+La licence NEXUS elle-même est déjà propriétaire/source-available et intégrée via PR #25.
 
-Baseline Phase 6 : portée explicite de projets READY, budget global, provenance, round-robin, déduplication et sources natives projet-locales.
+### P3 — #23 Benchmark scale
 
-## I24 — Distribution, installation et release readiness
+Mesurer avant toute nouvelle complexité d'indexation :
 
-**✅ intégrée**
-
-- version reactor 0.2.0 ;
-- Maven Wrapper 3.9.11 avec SHA-512 ;
-- fat JAR CLI ;
-- ZIP autonome ;
-- launchers Windows/POSIX ;
-- SHA-256 ;
-- SBOM CycloneDX ;
-- migration SQLite forward-only ;
-- runbook backup/recovery.
-
-Runbook : [`developer/release-and-recovery.md`](developer/release-and-recovery.md).
-
----
-
-# Hardening post-Phase 6 — issue #16
-
-Base : `develop` créée depuis le `main` post-Phase 6.
-
-Branche : `hardening/post-phase6-audit`.
-
-PR de revue : **#17**, ouverte en draft vers `develop`.
-
-**Règle de gate : aucune CI et aucun merge dans `develop` avant validation explicite.** Les statuts ci-dessous signifient uniquement « code présent sur la branche », jamais « PASS qualifié ».
-
-## H1 — Frontière filesystem sûre
-
-**✅ implémenté / ✅ qualifié**
-
-- nouvelle politique `ProjectPathGuard` ;
-- root canonicalisé ;
-- liens symboliques sous la racine refusés ;
-- confinement appliqué au scanner, `.gitignore`/`.nexusignore`, instructions, références et Agent Skills ;
-- ouverture du composant final avec `NOFOLLOW_LINKS` via `SafeFileIO` ;
-- politique `NEXUS_MAX_FILE_SIZE_BYTES` centralisée dans `ProjectFileLimits` ;
-- hash et flux de lecture réellement bornés au moment de la consommation ;
-- fichier réel et taille réelle revalidés avant hash/lecture ;
-- tests adversariaux symlink préparés avec skip explicite si la plateforme n'autorise pas leur création.
-
-Frontière étendue post-qualification : la lecture interne du provider JDT LS (via `SafeFileIO.readStringNoFollow`), `ContextFragmentFactory` et l'importeur SCIP couverts par `SafeFileIO` + `NOFOLLOW_LINKS`.
-
-Limite assumée : le modèle Java portable ne constitue pas un sandbox absolu contre un acteur local qui remplace agressivement un répertoire ancêtre ou crée des hard-links pendant le traitement.
-
-## H2 — Single-flight inter-processus
-
-**✅ implémenté / ✅ qualifié**
-
-- mutex JVM par `projectId` conservé ;
-- slots locaux libérés quand ils ne sont plus utilisés ;
-- `FileLock` OS par projet sous `NEXUS_HOME/locks` ;
-- le répertoire de locks et le fichier final ne peuvent pas être redirigés par symlink ;
-- NEXUS ne tronque ni n'écrit de contenu métier dans le fichier de lock ;
-- la présence du fichier n'est pas assimilée à un verrou actif ;
-- index/rebuild/deep-Java et import MINOS sont coordonnés par le même verrou de mutation ;
-- tests d'exclusion/réacquisition et de redirection symlink préparés.
-
-La sémantique d'un filesystem réseau doit être qualifiée séparément ; le support cible reste un `NEXUS_HOME` local.
-
-## H3 — Timeouts externes cohérents
-
-**✅ implémenté / ✅ qualifié**
-
-- `ExternalTaskRunner` commun ;
-- même enveloppe pour `CodeIndexImporter` et `CodeIntelligenceProvider` ;
-- worker daemon ;
-- timeout wall-clock côté appelant ;
-- annulation/interruption sans attente bloquante de fermeture d'executor ;
-- test d'une tâche volontairement non coopérative préparé ;
-- test d'intégration d'un importer récalcitrant préparé, avec passage du projet en `FAILED`.
-
-Risque résiduel accepté pour ce niveau : une intégration Java qui ignore définitivement l'interruption peut survivre sur un worker daemon. Une isolation en processus/circuit-breaker n'est justifiée que si ce cas apparaît réellement avec de futurs providers.
-
-## H4 — Health model explicite
-
-**✅ implémenté / ✅ qualifié**
-
-- liveness Quarkus séparée ;
-- readiness service distincte ;
-- `allProjectsReady` ;
-- `degraded` si un projet est `FAILED` ;
-- les opérations de lecture gardent le gate strict `project == READY`.
-
-## H5 — Fédération avec réutilisation du budget
-
-**✅ implémenté / ✅ qualifié**
-
-- fair floor déterministe par projet ;
-- pool local borné par le budget global ;
-- premier passage équitable par préfixe de ranking local ;
-- déduplication ;
-- refill global des candidats différés avec le budget rendu disponible ;
-- ordre relatif du ranking local préservé : un petit candidat moins pertinent ne peut pas dépasser un candidat mieux classé simplement parce que ce dernier dépasse le fair floor ;
-- métriques `refillTokens`, `refillItems`, `unusedTokens`.
-
-## H6 — Sécurité de l'exposition REST
-
-**✅ implémenté / ✅ qualifié**
-
-- `127.0.0.1` reste le défaut ;
-- `NEXUS_REST_API_TOKEN` ou `-Dnexus.rest.api-token` active Bearer auth ;
-- host non-loopback sans token : fail-fast au bootstrap via bean eager ;
-- test unitaire des primitives loopback/token préparé.
-
-## H7 — Corrections de cohérence mineures
-
-**✅ implémenté / ✅ qualifié**
-
-- UUID valide mais inconnu : erreur UUID directe, pas de fallback par nom ;
-- cycle de vie des locks JVM nettoyé ;
-- README/roadmap/limitations réconciliés avec l'intégration réelle de Phase 6.
-
-## H8 — Scale lexical SQLite
-
-**⏳ benchmark requis avant modification**
-
-Le coût potentiel de `LOWER(...) LIKE '%...%'` reste un watch item réel. La décision est volontairement différée jusqu'à une mesure sur des jeux de 10k, 100k, 500k et 1M symboles. Les options à comparer sont notamment FTS5, n-gram/trigram et maintien de la stratégie actuelle.
-
-Introduire maintenant FTS5 ou un moteur supplémentaire sans preuve irait contre le principe directeur de NEXUS et augmenterait la complexité de migration/recovery sans bénéfice démontré.
-
----
-
-# Gate de validation #16
-
-Avant toute intégration dans `develop` :
-
-1. revue statique du diff `develop...hardening/post-phase6-audit` ;
-2. vérification qu'aucun workflow CI n'a été déclenché par la branche ;
-3. présentation du périmètre et des risques résiduels ;
-4. **validation explicite du propriétaire**.
-
-Après validation, la qualification devra couvrir au minimum :
-
-- reactor Maven complet ;
-- tests core + REST ;
-- scénarios symlink Windows/Linux quand supportés ;
-- deux propriétaires concurrents du même lock ;
-- redirection symlink du répertoire/fichier de lock ;
-- import MINOS concurrent d'une mutation d'index ;
-- importer/provider en timeout ;
-- readiness/liveness ;
-- REST loopback et non-loopback avec/sans token ;
-- budget fédéré et ordre de ranking pendant le refill ;
-- packaging/distribution ;
-- exact-head du commit destiné à `develop`.
-
-Aucun résultat de ces gates n'est préjugé avant exécution réelle.
-
-Voir aussi : [`developer/current-limitations.md`](developer/current-limitations.md) et [`developer/release-and-recovery.md`](developer/release-and-recovery.md).
+- recherches SQLite lexicales sur corpus croissants ;
+- coût fédéré multi-projet ;
+- seuils justifiant ou non FTS5/trigram/autre stratégie.
+
+Aucun FTS supplémentaire, vector DB, index distribué ou nouveau moteur n'est adopté sans benchmark montrant un bénéfice matériel.
+
+## Références
+
+- Architecture : [`architecture.md`](architecture.md)
+- Arc42 : [`architecture/README.md`](architecture/README.md)
+- Provenance des index : [`index-provenance.md`](index-provenance.md)
+- Limites courantes : [`developer/current-limitations.md`](developer/current-limitations.md)
+- Release/recovery : [`developer/release-and-recovery.md`](developer/release-and-recovery.md)
+- ADR : [`adr/`](adr/)

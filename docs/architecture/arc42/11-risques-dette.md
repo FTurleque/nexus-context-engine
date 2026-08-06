@@ -6,37 +6,55 @@ Exposition = Probabilité × Impact
 
 ## 11.1 Registre des risques
 
-| ID | Risque | Prob. | Impact | Exp. | Statut | Mitigation | Propriétaire | Date cible |
-|----|--------|-------|--------|------|--------|-----------|--------------|------------|
-| R1 | **Scale SQLite lexical** — `LOWER(...) LIKE '%...%'` peut se dégrader sur 100k+ symboles | M | M | MM | Surveillance | Benchmark différé sur jeux de 10k/100k/500k/1M symboles avant toute modification (H8, `docs/roadmap.md`) | Équipe cœur | Sur benchmark |
-| R2 | **Corruption SQLite** lors d'une coupure de courant en cours d'écriture | F | E | FM | Accepté | Transactions ACID, rollback automatique, Lucene reconstructible, runbook de recovery | Équipe hardening | Continu |
-| R3 | **Symlink race** — acteur local remplaçant un répertoire ancêtre pendant le traitement | F | E | FM | Accepté (limite documentée) | `ProjectPathGuard` + `SafeFileIO` NOFOLLOW_LINKS — protection contre les cas statiques uniquement | Équipe hardening | Phase 7 si besoin |
-| R4 | **FileLock FS réseau** — sémantique non qualifiée sur filesystem réseau | M | E | ME | Non-support documenté | NEXUS_HOME doit être local ; documentation explicite dans roadmap H2 | Équipe hardening | Sur demande |
-| R5 | **Provider JDT LS non-coopératif** — ignore l'interruption indéfiniment | M | M | MM | Accepté | Worker daemon, timeout wall-clock, risque accepté si ce cas apparaît avec de futurs providers (H3) | Équipe hardening | Sur incident |
-| R6 | **Migration SQLite sans rollback** — une V002 défectueuse ne peut pas être annulée | F | E | FM | Watch item | Tester les migrations sur copie avant production ; runbook de restore depuis backup | Équipe cœur | Avant V002 |
-| R7 | **Glissement fonctionnel** — NEXUS devient orchestrateur ou chatbot | F | E | FM | Maîtrisé | ADR-0001 + revues de frontière régulières | Architecte | Continu |
-| R8 | **Dépendance Quarkus dans le cœur** — importation accidentelle | F | M | FM | Maîtrisé | Build séparé (reactor Maven), pas de dépendance Quarkus dans `core/pom.xml` | Équipe cœur | Continu |
-| R9 | **Dérive de qualité de recherche** lors de l'ajout de nouveaux langages | M | M | MM | Watch item | Baseline `hit@3` / `MRR@3` maintenue, qualification avant intégration | Équipe qualité | Par itération |
-| R10 | **Compatibilité MCP SDK** — rupture de contrat lors d'une mise à jour du SDK MCP Java | M | M | MM | Watch item | ADR-0016, test d'intégration `NexusMcpServerIntegrationTest` | Équipe adaptateur | Sur upgrade |
-| R11 | **Registre AI Skills** indisponible | M | F | MF | Accepté | Provider local en fallback (snapshot) ; `AiSkillsRegistryProvider` opt-in (ADR-0042) | Équipe cœur | N/A |
-| R12 | **Qualification post-Phase 6 non exécutée** (issue #16) — état actuel de la branche | E | M | EM | Bloquant | Gate explicite dans `docs/roadmap.md` — aucun merge avant validation du propriétaire | Propriétaire | Branche actuelle |
+| ID | Risque | Prob. | Impact | Exp. | Statut | Mitigation / suivi |
+|----|--------|-------|--------|------|--------|--------------------|
+| R1 | **Scale SQLite lexical** — `LOWER(...) LIKE '%...%'` peut se dégrader sur très grands corpus | M | M | MM | Surveillance | Benchmark #23 avant FTS5/trigram/autre moteur |
+| R2 | **Corruption SQLite** lors d'une coupure en écriture | F | E | FM | Accepté | transactions ACID, sauvegarde canonique, runbook recovery, Lucene reconstructible |
+| R3 | **Race filesystem locale hostile** — remplacement d'un ancêtre/hard-link pendant le traitement | F | E | FM | Limite documentée | `ProjectPathGuard` + `SafeFileIO` + `NOFOLLOW_LINKS`; isolation OS uniquement si ce threat model devient requis |
+| R4 | **`FileLock` sur filesystem réseau** | M | E | ME | Non supporté | `NEXUS_HOME` local requis pour la garantie inter-processus |
+| R5 | **Provider Java non-coopératif** — ignore définitivement l'interruption | M | M | MM | Accepté / surveillé | worker daemon + timeout wall-clock ; isolation processus/circuit-breaker uniquement avec preuve opérationnelle |
+| R6 | **Migration SQLite forward-only** | F | E | FM | Watch item | tester sur copie, backup avant upgrade, restore canonique en cas d'échec |
+| R7 | **Glissement fonctionnel** — NEXUS devient orchestrateur/chatbot | F | E | FM | Maîtrisé | ADR-0001 + revues de frontière |
+| R8 | **Dépendance Quarkus dans le cœur** | F | M | FM | Maîtrisé | reactor séparé, aucune dépendance Quarkus dans le core |
+| R9 | **Dérive qualité de recherche** lors de nouveaux langages/rankers | M | M | MM | Watch item | baseline qualité + qualification avant intégration |
+| R10 | **Compatibilité MCP SDK** lors d'une mise à jour | M | M | MM | Watch item | ADR-0016 + tests d'intégration MCP |
+| R11 | **AI Skills Registry indisponible** | M | F | MF | Accepté | provider local/fallback ; registry opt-in |
+| R12 | **Qualification post-Phase 6 non exécutée** | E | M | EM | **Clôturé** | hardening qualifié et intégré ; PR #24 également qualifiée Windows/Linux |
+| R13 | **Snapshots externes obsolètes** après changement canonique | M | E | ME | **Clôturé** | invalidation des providers externes persistés sur changement SOURCE/TEST ; PR #24 / test de régression |
+| R14 | **Index sémantique incompatible** avec état/modèle/dimensions/profil courant | M | E | ME | **Clôturé** | manifeste de provenance Lucene + rebuild sur mismatch + garde de recherche ; PR #24 |
+| R15 | **Supply-chain publique / obligations tierces** | M | E | ME | Ouvert | issue #22 : notices tierces, vulnérabilités, scanning, actions immuables, couverture, SBOM release |
+
+Le registre opérationnel détaillé est maintenu dans [`../risks/register.md`](../risks/register.md).
 
 ## 11.2 Dette technique identifiée
 
 | ID | Dette | Impact | Effort | Priorité |
 |----|-------|--------|--------|---------|
-| D1 | **Sources historiques dans `src/`** — `core/pom.xml` les référence via `sourceDirectory` au lieu d'un déplacement physique | Faible (fonctionne, inconvenant en IDEs) | Moyen | Faible |
-| D2 | **Pas de rollback de schéma SQLite** — toute migration est forward-only sans procédure de downgrade documentée | Moyen | Faible | Moyen |
-| D3 | **Sélection de skills lexicale uniquement** — pas de sélection sémantique | Moyen (qualité skill matching) | Élevé | Faible (attendu phase future) |
-| D4 | **Instructions utilisateur home non chargées** — limitation documentée | Faible | Moyen | Faible |
-| D5 | **H8 — scale SQLite lexical non benchmarké** sur grands corpus | Moyen potentiel | Élevé (benchmark + décision) | Moyen — différé intentionnellement |
+| D1 | **Sources historiques dans `src/`** — `core/pom.xml` utilise `sourceDirectory` | Faible | Moyen | Faible |
+| D2 | **Pas de rollback de schéma SQLite** — migrations forward-only | Moyen | Faible | Moyen |
+| D3 | **Sélection de skills principalement lexicale** | Moyen | Élevé | Faible |
+| D4 | **Instructions utilisateur home non chargées** | Faible | Moyen | Faible |
+| D5 | **Scale SQLite lexical non benchmarké** | Moyen potentiel | Élevé | Moyen — #23 |
+| D6 | **Gates supply-chain incomplets** | Élevé pour distribution publique | Moyen | Haute — #22 |
 
-## 11.3 Choix volontairement non adoptés
+## 11.3 Frontières de support
 
-> Ces choix ne sont pas de la dette mais des décisions conscientes documentées dans
-> `docs/architecture.md` § Choix volontairement non adoptés.
+### Filesystem
 
-- Pas de Zoekt/OpenGrok/OpenSearch, index distribué, vector DB ou FTS5 supplémentaire
-  sans benchmark démontrant le besoin.
-- Pas de cache Git persistant ni de lifecycle Lucene partagé plus complexe.
-- Pas d'isolation en processus/circuit-breaker pour les providers — différé si un cas réel l'exige.
+NEXUS protège les chemins applicatifs contre les symlinks et borne les lectures, mais ne constitue pas un sandbox absolu contre un utilisateur local hostile modifiant activement l'arborescence pendant l'indexation.
+
+### Verrouillage
+
+La garantie de single-flight combine mutex JVM et `FileLock` OS et vise un `NEXUS_HOME` local. Un filesystem réseau doit faire l'objet d'une qualification séparée avant d'être déclaré supporté.
+
+### Index dérivés
+
+SQLite reste canonique. Un index sémantique sans provenance compatible n'est pas réutilisé ; un snapshot externe obsolète n'est pas conservé comme autorité courante.
+
+## 11.4 Choix volontairement non adoptés
+
+> Ces choix ne sont pas de la dette ; ils restent conditionnés à une mesure démontrant leur nécessité.
+
+- Pas de Zoekt/OpenGrok/OpenSearch, index distribué, vector DB ou FTS supplémentaire sans benchmark.
+- Pas de cache Git persistant ni de lifecycle Lucene partagé plus complexe sans mesure.
+- Pas d'isolation processus/circuit-breaker systématique pour les providers sans incident réel démontrant le besoin.
