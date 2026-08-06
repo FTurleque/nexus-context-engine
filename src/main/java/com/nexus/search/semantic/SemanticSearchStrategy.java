@@ -1,6 +1,8 @@
 package com.nexus.search.semantic;
 
+import com.nexus.index.CanonicalIndexFingerprint;
 import com.nexus.index.FileCategory;
+import com.nexus.index.IndexRepository;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.search.CandidateType;
 import com.nexus.search.SearchCandidate;
@@ -8,11 +10,14 @@ import com.nexus.search.SearchSignals;
 import com.nexus.search.SearchStrategy;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 /**
  * Stratégie sémantique optionnelle branchée sur les mêmes candidats que les
@@ -22,12 +27,22 @@ public final class SemanticSearchStrategy implements SearchStrategy {
 
     private final EmbeddingProvider embeddingProvider;
     private final SemanticSearchIndex semanticSearchIndex;
+    private final IndexRepository indexRepository;
+    private final ConcurrentMap<java.util.UUID, CachedFingerprint> fingerprints = new ConcurrentHashMap<>();
 
     public SemanticSearchStrategy(
             EmbeddingProvider embeddingProvider,
             SemanticSearchIndex semanticSearchIndex) {
+        this(embeddingProvider, semanticSearchIndex, null);
+    }
+
+    public SemanticSearchStrategy(
+            EmbeddingProvider embeddingProvider,
+            SemanticSearchIndex semanticSearchIndex,
+            IndexRepository indexRepository) {
         this.embeddingProvider = Objects.requireNonNull(embeddingProvider, "embeddingProvider");
         this.semanticSearchIndex = Objects.requireNonNull(semanticSearchIndex, "semanticSearchIndex");
+        this.indexRepository = indexRepository;
         if (embeddingProvider.dimensions() <= 0) {
             throw new IllegalArgumentException("embeddingProvider dimensions must be greater than zero");
         }
@@ -46,6 +61,15 @@ public final class SemanticSearchStrategy implements SearchStrategy {
         }
         if (limit <= 0) {
             throw new IllegalArgumentException("limit must be greater than zero");
+        }
+
+        if (indexRepository != null) {
+            String canonicalFingerprint = canonicalFingerprint(project);
+            SemanticIndexProvenance expected =
+                    SemanticIndexProvenance.current(canonicalFingerprint, embeddingProvider);
+            if (!semanticSearchIndex.isCompatible(project.id(), expected)) {
+                return List.of();
+            }
         }
 
         float[] queryVector = Objects.requireNonNull(embeddingProvider.embed(query), "embedding vector");
@@ -78,6 +102,17 @@ public final class SemanticSearchStrategy implements SearchStrategy {
         return List.copyOf(candidates);
     }
 
+    private String canonicalFingerprint(ProjectDescriptor project) {
+        Instant lastIndexedAt = project.lastIndexedAt();
+        CachedFingerprint cached = fingerprints.get(project.id());
+        if (cached != null && Objects.equals(cached.lastIndexedAt(), lastIndexedAt)) {
+            return cached.fingerprint();
+        }
+        String fingerprint = CanonicalIndexFingerprint.fromIndexedFiles(indexRepository.findFiles(project.id()));
+        fingerprints.put(project.id(), new CachedFingerprint(lastIndexedAt, fingerprint));
+        return fingerprint;
+    }
+
     private static boolean isGenericSearchEligible(FileCategory category) {
         return category != FileCategory.INSTRUCTION
                 && category != FileCategory.AGENT_PROFILE
@@ -90,5 +125,8 @@ public final class SemanticSearchStrategy implements SearchStrategy {
             case DOCUMENTATION -> CandidateType.DOCUMENTATION;
             default -> CandidateType.FILE;
         };
+    }
+
+    private record CachedFingerprint(Instant lastIndexedAt, String fingerprint) {
     }
 }
