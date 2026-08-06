@@ -21,6 +21,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -85,6 +86,14 @@ class SemanticIndexProvenanceIntegrationTest {
         assertFalse(semanticIndex.isCompatible(
                 project.id(),
                 SemanticIndexProvenance.current(changedFingerprint, modelB)));
+
+        ProjectDescriptor readyProject = projectRepository.findById(project.id()).orElseThrow();
+        SemanticSearchStrategy staleStrategy = new SemanticSearchStrategy(
+                modelB,
+                semanticIndex,
+                indexRepository);
+        assertTrue(staleStrategy.search(readyProject, "run application", 5).isEmpty());
+        assertEquals(0, modelB.embeddings);
 
         service(
                 paths,
