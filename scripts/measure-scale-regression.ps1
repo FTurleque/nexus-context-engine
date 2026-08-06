@@ -22,6 +22,7 @@ try {
 
     & .\mvnw.cmd -B -pl core `
         "-Dtest=ScaleRegressionBenchmarkTest" `
+        "-Djunit.jupiter.execution.timeout.test.method.default=20m" `
         "-Dnexus.scale.benchmark.enabled=true" `
         "-Dnexus.scale.benchmark.profile=$Profile" `
         "-Dnexus.scale.benchmark.output=$resolvedOutput" `
