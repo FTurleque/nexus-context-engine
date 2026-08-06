@@ -21,10 +21,11 @@ Prérequis de build :
 - `JAVA_HOME` pointant vers un JDK 21 ou supérieur ;
 - accès réseau la première fois si Inno Setup n'est pas déjà disponible.
 
-Commande de référence depuis la racine du repository :
+Depuis une console Windows PowerShell déjà ouverte à la racine du repository, activez le bypass uniquement pour le processus courant puis exécutez directement les scripts. Cette forme ne dépend pas de la présence de `powershell.exe` dans le `PATH` et ne modifie pas la stratégie d'exécution de façon permanente :
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\release\build-windows-release.ps1
+Set-ExecutionPolicy -Scope Process Bypass -Force
+& .\scripts\release\build-windows-release.ps1
 ```
 
 Le script :
@@ -40,30 +41,32 @@ Le script :
 Pour une itération de packaging plus rapide après avoir déjà qualifié le code :
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\release\build-windows-release.ps1 -SkipVerify
+& .\scripts\release\build-windows-release.ps1 -SkipVerify
 ```
 
 `-SkipVerify` ne doit pas être utilisé comme preuve de release finale.
 
 ## Tests locaux complets
 
+Dans la même console PowerShell, après le `Set-ExecutionPolicy -Scope Process Bypass -Force` ci-dessus :
+
 Qualification standard NEXUS :
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
+& .\scripts\validate-phase-6.ps1
 ```
 
 Benchmark scale complet :
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\measure-scale-regression.ps1 -Profile full
+& .\scripts\measure-scale-regression.ps1 -Profile full
 ```
 
 Qualification spécifique du setup après génération :
 
 ```powershell
 $setup = Resolve-Path .\target\dist\.smoke\NEXUS-0.2.0-windows-x64-smoke-setup.exe
-powershell -ExecutionPolicy Bypass -File .\scripts\release\test-windows-installer.ps1 -Setup $setup
+& .\scripts\release\test-windows-installer.ps1 -Setup $setup
 ```
 
 La CI `Windows Installer` construit automatiquement cette variante smoke, l'installe dans un répertoire isolé, exécute la CLI puis lance le désinstallateur.
