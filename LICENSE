@@ -1,0 +1,46 @@
+NEXUS CONTEXT ENGINE — PROPRIETARY SOFTWARE LICENSE
+
+Copyright (c) 2026 Fabrice Turleque. All rights reserved.
+
+NEXUS Context Engine (the "Software"), including its source code,
+object code, documentation, build scripts, configuration files and other
+associated materials, is proprietary software owned by Fabrice Turleque.
+
+No rights or licenses are granted by possession of, access to, or receipt of
+the Software except those expressly granted in writing by the copyright holder.
+
+Unless prior written authorization has been obtained from the copyright holder,
+you may not, in whole or in part:
+
+1. copy, reproduce, modify, adapt, translate or create derivative works of the
+   Software;
+2. publish, distribute, sublicense, sell, rent, lease, lend, transfer or
+   otherwise make the Software available to any third party;
+3. use the Software to provide a hosted, managed, commercial or other service
+   to a third party;
+4. remove, alter or obscure copyright, ownership or proprietary notices; or
+5. reverse engineer, decompile or disassemble the Software, except to the extent
+   that such a restriction is prohibited by applicable law.
+
+Any authorized use is limited to the scope, purpose, users, systems and duration
+expressly approved in writing by the copyright holder. All rights not expressly
+granted are reserved.
+
+THIRD-PARTY COMPONENTS
+
+The Software may include or depend on third-party software. Such third-party
+components remain subject to their respective licenses and notices. Nothing in
+this license is intended to restrict rights granted by, or replace obligations
+imposed by, those third-party licenses.
+
+DISCLAIMER
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE SOFTWARE IS PROVIDED
+"AS IS" AND WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
+WITHOUT LIMITATION WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM OR RELATED TO THE
+SOFTWARE OR ITS USE, EXCEPT WHERE SUCH EXCLUSION OR LIMITATION IS PROHIBITED BY
+APPLICABLE LAW.
+
+For licensing permissions or other authorized use, contact the copyright holder.
