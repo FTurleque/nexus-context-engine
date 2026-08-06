@@ -7,7 +7,7 @@ Cette feuille de route est la source de vérité active pour l'évolution de NEX
 ```text
 repository  FTurleque/nexus-context-engine
 visibility  public
-main        c7a03479a78713b78ec2ddc477e1d07d400d8aba
+main        Phase 6 + hardening + provenance des index + licence intégrés
 version     0.2.0
 Java        runtime >=21 / release 21
 Phase 1→6  livrées / intégrées
@@ -102,7 +102,7 @@ La qualification exacte-head de PR #24 (`25c12b100b774a4ec3d69d221675bf31d8ebaa0
 - Linux / Java 21 Maven reactor : **PASS** ;
 - smoke de la distribution Linux : **PASS**.
 
-PR #24 a ensuite été fusionnée dans `main` comme `c7a03479a78713b78ec2ddc477e1d07d400d8aba`.
+PR #24 a ensuite été fusionnée dans `main` comme `c7a03479a78713b78ec2ddc477e1d07d400d8aba`. Ce SHA est une **preuve historique de merge**, pas un pointeur dynamique sur le HEAD courant.
 
 Les anciens échecs GitHub Actions avec `steps=[]` / `BlobNotFound` sont considérés comme un incident historique/transitoire : la relance a exécuté les deux runners normalement.
 
