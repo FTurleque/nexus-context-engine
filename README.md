@@ -105,7 +105,7 @@ target/distribution/nexus-context-engine-0.2.0.zip.sha256
 target/sbom/bom.json
 ```
 
-Le ZIP contient `bin/nexus.cmd`, `bin/nexus` et `lib/nexus-cli.jar`. Maven n'est pas requis sur la machine cible ; une JVM Java 21 ou supérieure est nécessaire.
+Le ZIP contient `bin/nexus.cmd`, `bin/nexus`, `lib/nexus-cli.jar`, `README.md` et la licence propriétaire `LICENSE`. Maven n'est pas requis sur la machine cible ; une JVM Java 21 ou supérieure est nécessaire.
 
 ## Correctness et scale
 
@@ -211,6 +211,12 @@ Pour le hardening post-Phase 6, les tests et contrôles ont été **préparés m
 - limites/watch items : [`docs/developer/current-limitations.md`](docs/developer/current-limitations.md) ;
 - release/recovery : [`docs/developer/release-and-recovery.md`](docs/developer/release-and-recovery.md) ;
 - roadmap : [`docs/roadmap.md`](docs/roadmap.md).
+
+## Licence
+
+NEXUS Context Engine est un logiciel **propriétaire**. Copyright © 2026 Fabrice Turleque. Tous droits réservés.
+
+Aucun droit d'utilisation, de copie, de modification, de redistribution, de sous-licence ou de commercialisation n'est accordé sans autorisation écrite explicite du titulaire des droits. Les conditions complètes figurent dans [`LICENSE`](LICENSE). Les composants tiers restent soumis à leurs licences respectives.
 
 ## Décisions conservées
 
