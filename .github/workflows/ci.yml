@@ -19,13 +19,13 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Java 24
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4.9.0
         with:
           distribution: temurin
           java-version: '24'
@@ -43,13 +43,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Java 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4.9.0
         with:
           distribution: temurin
           java-version: '21'
@@ -63,4 +63,26 @@ jobs:
         run: |
           unzip -q target/distribution/nexus-context-engine-0.2.0.zip -d target/linux-distribution-smoke
           test -x target/linux-distribution-smoke/nexus-context-engine-0.2.0/bin/nexus
+          test -s target/linux-distribution-smoke/nexus-context-engine-0.2.0/LICENSE
+          test -s target/linux-distribution-smoke/nexus-context-engine-0.2.0/THIRD_PARTY_NOTICES.txt
+          test -s target/linux-distribution-smoke/nexus-context-engine-0.2.0/SBOM.cdx.json
           target/linux-distribution-smoke/nexus-context-engine-0.2.0/bin/nexus --version --json | grep -Eq '"version"[[:space:]]*:[[:space:]]*"0\.2\.0"'
+
+      - name: Verify compliance artifacts
+        run: |
+          test -s target/sbom/bom.json
+          test -s target/licenses/THIRD_PARTY_NOTICES.txt
+          test -s core/target/site/jacoco/jacoco.xml
+
+      - name: Retain SBOM, notices and coverage evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nexus-ci-evidence-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            target/sbom/bom.json
+            target/licenses/THIRD_PARTY_NOTICES.txt
+            core/target/site/jacoco/jacoco.xml
+            core/target/site/jacoco/index.html
