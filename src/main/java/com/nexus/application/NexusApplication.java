@@ -154,7 +154,10 @@ public final class NexusApplication {
             SemanticSearchIndex semanticSearchIndex =
                     new LuceneSemanticSearchIndex(paths, embeddingProvider.dimensions());
             semanticIndexingService = new SemanticIndexingService(embeddingProvider, semanticSearchIndex);
-            searchStrategies.add(new SemanticSearchStrategy(embeddingProvider, semanticSearchIndex));
+            searchStrategies.add(new SemanticSearchStrategy(
+                    embeddingProvider,
+                    semanticSearchIndex,
+                    indexRepository));
         }
 
         ProjectIndexingService indexingService = new ProjectIndexingService(
