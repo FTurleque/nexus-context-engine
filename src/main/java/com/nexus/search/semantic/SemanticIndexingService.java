@@ -19,6 +19,7 @@ public final class SemanticIndexingService {
     public static final int DEFAULT_MAX_EMBEDDING_CHARS = 12_000;
     public static final int DEFAULT_EXCERPT_CHARS = 320;
     public static final int DEFAULT_BATCH_SIZE = 32;
+    private static final int CONTENT_PROFILE_VERSION = 1;
 
     private final EmbeddingProvider embeddingProvider;
     private final SemanticSearchIndex semanticSearchIndex;
@@ -66,6 +67,14 @@ public final class SemanticIndexingService {
         return embeddingProvider.modelId();
     }
 
+    public String profileId() {
+        return profileId(maxEmbeddingChars);
+    }
+
+    public static String defaultProfileId() {
+        return profileId(DEFAULT_MAX_EMBEDDING_CHARS);
+    }
+
     public boolean isCompatible(UUID projectId, String canonicalFingerprint) throws IOException {
         return semanticSearchIndex.isCompatible(projectId, provenance(canonicalFingerprint));
     }
@@ -104,7 +113,16 @@ public final class SemanticIndexingService {
     }
 
     private SemanticIndexProvenance provenance(String canonicalFingerprint) {
-        return SemanticIndexProvenance.current(canonicalFingerprint, embeddingProvider);
+        return SemanticIndexProvenance.current(
+                canonicalFingerprint,
+                embeddingProvider,
+                profileId());
+    }
+
+    private static String profileId(int maxEmbeddingChars) {
+        return "content-v" + CONTENT_PROFILE_VERSION
+                + ";maxEmbeddingChars=" + maxEmbeddingChars
+                + ";excerptChars=" + DEFAULT_EXCERPT_CHARS;
     }
 
     private List<SemanticVectorDocument> vectorize(List<SearchDocument> documents) throws IOException {
