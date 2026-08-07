@@ -45,6 +45,14 @@ if ($installerSource.IndexOf('--accept-license', [StringComparison]::Ordinal) -g
     throw 'Windows installer must not accept the Docker Desktop license on behalf of the user.'
 }
 
+Write-Host '[contract] client-only docker.exe must not suppress Docker Desktop bootstrap'
+$installerBuilder = Join-Path $repo 'scripts\release\build-windows-installer.ps1'
+$builderSource = Get-Content -Raw -LiteralPath $installerBuilder
+Assert-TextContains -Text $builderSource -Needle 'function DockerEngineReady(): Boolean;' -Description 'strict Docker engine readiness detector'
+Assert-TextContains -Text $builderSource -Needle 'docker info >nul 2>nul' -Description 'real Docker engine reachability probe'
+Assert-TextContains -Text $builderSource -Needle 'Result := DockerEngineReady() or (DockerDesktopExecutable() <> '''');' -Description 'Docker Desktop or working engine prerequisite semantics'
+Assert-TextContains -Text $builderSource -Needle 'refusing to build an EXE that could skip Docker Desktop bootstrap' -Description 'fail-closed build guard for Docker detector drift'
+
 $root = Join-Path $repo 'target\installer-smoke'
 $install = Join-Path $root 'install'
 $data = Join-Path $root 'nexus-home'
@@ -137,5 +145,5 @@ if (-not (Test-Path -LiteralPath $sentinel -PathType Leaf)) {
     throw 'NEXUS_HOME user data was deleted by uninstall.'
 }
 
-Write-Host 'NEXUS Windows installer Docker-bootstrap contract + install/CLI/MCP/Claude/Codex payload/uninstall smoke PASS' -ForegroundColor Green
+Write-Host 'NEXUS Windows installer strict-Docker-bootstrap contract + install/CLI/MCP/Claude/Codex payload/uninstall smoke PASS' -ForegroundColor Green
 Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
