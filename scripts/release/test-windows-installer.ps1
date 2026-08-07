@@ -21,7 +21,7 @@ function Assert-TextContains {
         [Parameter(Mandatory = $true)][string]$Needle,
         [Parameter(Mandatory = $true)][string]$Description
     )
-    if (-not $Text.Contains($Needle, [StringComparison]::Ordinal)) {
+    if ($Text.IndexOf($Needle, [StringComparison]::Ordinal) -lt 0) {
         throw "Windows installer contract missing: $Description"
     }
 }
@@ -41,7 +41,7 @@ Assert-TextContains -Text $installerSource -Needle 'install --user --backend=wsl
 Assert-TextContains -Text $installerSource -Needle 'function PrepareToInstall' -Description 'post-Ready prerequisite bootstrap hook'
 Assert-TextContains -Text $installerSource -Needle 'DockerDesktopInstalledDuringSetup' -Description 'Docker Desktop installation state tracking'
 Assert-TextContains -Text $installerSource -Needle 'nexus-docker-up.cmd' -Description 'Docker runtime startup launcher'
-if ($installerSource.Contains('--accept-license', [StringComparison]::Ordinal)) {
+if ($installerSource.IndexOf('--accept-license', [StringComparison]::Ordinal) -ge 0) {
     throw 'Windows installer must not accept the Docker Desktop license on behalf of the user.'
 }
 
