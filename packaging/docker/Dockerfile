@@ -2,6 +2,10 @@ ARG MAVEN_IMAGE=maven:3.9.11-eclipse-temurin-21
 ARG RUNTIME_IMAGE=eclipse-temurin:21-jre-jammy
 
 FROM ${MAVEN_IMAGE} AS build
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends unzip \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /workspace
 COPY . .
 RUN chmod +x ./mvnw && ./mvnw -B -DskipTests package
