@@ -18,6 +18,7 @@ if ($null -eq $docker) { throw 'Docker CLI is required for the Docker smoke test
 $prefix = "nexus-smoke-$PID"
 $restName = "$prefix-rest"
 $mcpName = "$prefix-mcp"
+$restToken = "nexus-docker-smoke-$PID"
 
 function Remove-Container([string]$Name) {
     & $docker.Source rm -f $Name *> $null
@@ -42,13 +43,14 @@ try {
     Remove-Container $mcpName
 
     Write-Host "Docker REST smoke on host port $HostPort..." -ForegroundColor Cyan
-    & $docker.Source run -d --name $restName -p "127.0.0.1:${HostPort}:8080" $Image rest | Out-Null
+    & $docker.Source run -d --name $restName -e "NEXUS_REST_API_TOKEN=$restToken" -p "127.0.0.1:${HostPort}:8080" $Image rest | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Unable to start the REST container.' }
 
     $healthy = $false
+    $headers = @{ Authorization = "Bearer $restToken" }
     for ($attempt = 0; $attempt -lt 30; $attempt++) {
         try {
-            $response = Invoke-RestMethod -Uri "http://127.0.0.1:$HostPort/q/health/live" -TimeoutSec 2
+            $response = Invoke-RestMethod -Uri "http://127.0.0.1:$HostPort/q/health/live" -Headers $headers -TimeoutSec 2
             if ($response.status -eq 'UP') { $healthy = $true; break }
         }
         catch {
