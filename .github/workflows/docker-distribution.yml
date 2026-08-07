@@ -95,6 +95,34 @@ jobs:
           docker logs "$CID"
           exit 1
 
+      - name: Smoke installed-payload fallback image
+        shell: bash
+        run: |
+          set -euo pipefail
+          STAGE="$RUNNER_TEMP/nexus-runtime-fallback"
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE/lib" "$STAGE/rest" "$STAGE/docker"
+
+          CID="$(docker create nexus-context-engine:${NEXUS_HEAD_SHA})"
+          trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
+          docker cp "$CID:/opt/nexus/lib/." "$STAGE/lib/"
+          docker cp "$CID:/opt/nexus/rest/." "$STAGE/rest/"
+          docker rm "$CID" >/dev/null
+          trap - EXIT
+
+          cp packaging/docker/Dockerfile.runtime "$STAGE/docker/Dockerfile.runtime"
+          cp packaging/docker/nexus-container-entrypoint.sh "$STAGE/docker/nexus-container-entrypoint.sh"
+
+          FALLBACK_IMAGE="nexus-context-engine:fallback-${NEXUS_HEAD_SHA}"
+          docker build --pull --file "$STAGE/docker/Dockerfile.runtime" --tag "$FALLBACK_IMAGE" "$STAGE"
+          docker run --rm "$FALLBACK_IMAGE" cli --version --json | tee /tmp/nexus-fallback-version.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/nexus-fallback-version.json', encoding='utf-8') as handle:
+              data = json.load(handle)
+          assert data['version'] == '${{ steps.version.outputs.version }}', data
+          PY
+
       - name: Publish versioned GHCR image
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         shell: bash
