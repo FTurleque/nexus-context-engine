@@ -35,7 +35,7 @@ public final class AssistantIntegrationGenerator {
         String profile = args[0];
 
         // Backward-compatible Phase 6 syntax:
-        // <profile> <runner-mcp> [command|json]
+        // <profile> <runner-mcp> [command|json|toml]
         if (!"native".equals(args[1]) && !"docker".equals(args[1])) {
             Path runner = Path.of(args[1]);
             String format = args.length >= 3 ? args[2] : "command";
@@ -71,7 +71,10 @@ public final class AssistantIntegrationGenerator {
             case "claude-project" -> "json".equals(format)
                     ? claudeProjectJson(commandSpec)
                     : claudeProjectCommand(commandSpec);
-            case "claude-user" -> claudeUserCommand(commandSpec);
+            case "claude-cli", "claude-user" -> claudeUserCommand(commandSpec);
+            case "codex-desktop" -> "command".equals(format)
+                    ? codexCommand(commandSpec)
+                    : codexDesktopToml(commandSpec);
             case "generic" -> genericMcpJson(commandSpec);
             default -> throw new IllegalArgumentException("Profil inconnu : " + profile);
         };
@@ -144,6 +147,25 @@ public final class AssistantIntegrationGenerator {
         return json(Map.of("mcpServers", Map.of(SERVER_NAME, server)));
     }
 
+    public String codexCommand(CommandSpec commandSpec) {
+        return "codex mcp add " + SERVER_NAME + " -- " + renderCommand(commandSpec);
+    }
+
+    public String codexDesktopToml(CommandSpec commandSpec) {
+        StringBuilder result = new StringBuilder();
+        result.append("[mcp_servers.").append(SERVER_NAME).append("]\n");
+        result.append("command = \"").append(tomlEscape(commandSpec.command())).append("\"\n");
+        result.append("args = [");
+        for (int i = 0; i < commandSpec.args().size(); i++) {
+            if (i > 0) {
+                result.append(", ");
+            }
+            result.append('"').append(tomlEscape(commandSpec.args().get(i))).append('"');
+        }
+        result.append("]\n");
+        return result.toString();
+    }
+
     public String genericMcpJson(CommandSpec commandSpec) {
         return json(Map.of("mcpServers", Map.of(SERVER_NAME, stdioServer(commandSpec))));
     }
@@ -191,18 +213,28 @@ public final class AssistantIntegrationGenerator {
         return '"' + normalized.replace("\"", "\\\"") + '"';
     }
 
+    private static String tomlEscape(String value) {
+        return Objects.requireNonNull(value, "value")
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r");
+    }
+
     private static String usage() {
         return """
                 Usage:
-                  java -jar nexus-assistant-clients-...-runner.jar <profil> <runner-mcp> [command|json]
-                  java -jar nexus-assistant-clients-...-runner.jar <profil> native <java-exe> <runner-mcp> [command|json]
-                  java -jar nexus-assistant-clients-...-runner.jar <profil> docker <container-name> [command|json]
+                  java -jar nexus-assistant-clients-...-runner.jar <profil> <runner-mcp> [command|json|toml]
+                  java -jar nexus-assistant-clients-...-runner.jar <profil> native <java-exe> <runner-mcp> [command|json|toml]
+                  java -jar nexus-assistant-clients-...-runner.jar <profil> docker <container-name> [command|json|toml]
 
                 Profils:
                   copilot-cli       command ou json
                   copilot-jetbrains json
                   claude-project    command ou json
-                  claude-user       command
+                  claude-cli        command (scope user)
+                  claude-user       alias rétrocompatible de claude-cli
+                  codex-desktop     command ou toml (~/.codex/config.toml)
                   generic           json mcpServers
 
                 Le mode native permet de viser explicitement le Java embarqué NEXUS.
