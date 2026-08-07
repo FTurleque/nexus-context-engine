@@ -55,7 +55,8 @@ docker\docker-compose.yml.template
 
 ### Docker
 
-- Docker CLI + Docker Desktop/Engine requis ;
+- si Docker Desktop/CLI est déjà présent, il est réutilisé ;
+- si Docker est absent, le wizard peut télécharger et installer automatiquement Docker Desktop en mode utilisateur/WSL 2 ;
 - image NEXUS configurable ;
 - `NEXUS_HOME` persistant ;
 - repository monté sous `/workspace:ro` ;
@@ -64,7 +65,7 @@ docker\docker-compose.yml.template
 
 ### Natif + Docker
 
-Les deux runtimes sont installés. L'utilisateur choisit ensuite lequel sera utilisé par les intégrations MCP.
+Les deux runtimes NEXUS sont installés. L'utilisateur choisit ensuite lequel sera utilisé par les intégrations MCP.
 
 Si REST natif et REST Docker sont tous les deux configurés, leurs ports externes ne peuvent pas être identiques : le wizard réserve le port natif et déplace automatiquement le port hôte Docker si nécessaire.
 
@@ -196,7 +197,51 @@ En profil recommandé, cocher Ollama conserve cette URL sans afficher l'écran a
 
 En Docker, `127.0.0.1` pointe vers le conteneur lui-même. Si Ollama tourne sur l'hôte Windows, l'URL doit être adaptée à la topologie Docker utilisée.
 
-## Écran 7 — Configuration Docker
+## Écran 7 — Docker Desktop
+
+Visible uniquement lorsqu'un mode Docker est sélectionné **et qu'aucun runtime Docker n'est détecté**.
+
+Option :
+
+```text
+[x] Installer automatiquement Docker Desktop s'il est absent
+```
+
+Cette option est cochée par défaut.
+
+Si elle reste cochée, après validation de la page **Ready to Install** et clic sur Installer, NEXUS :
+
+1. télécharge l'installateur x64 officiel depuis :
+
+   ```text
+   https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe
+   ```
+
+2. vérifie la signature Authenticode ; le statut doit être valide et le certificat doit être signé pour `Docker Inc` ;
+3. exécute :
+
+   ```text
+   Docker Desktop Installer.exe install --user --backend=wsl-2 --quiet
+   ```
+
+4. vérifie qu'un runtime Docker est ensuite détectable ;
+5. lance Docker Desktop après l'installation NEXUS.
+
+Le setup ne passe volontairement **pas** `--accept-license`. NEXUS ne doit pas accepter la Docker Subscription Service Agreement à la place de l'utilisateur. Au premier lancement Docker Desktop, l'utilisateur doit accepter les conditions Docker pour démarrer le moteur.
+
+Le mode Docker Desktop per-user cible normalement :
+
+```text
+%LOCALAPPDATA%\Programs\DockerDesktop
+```
+
+L'installation Docker Desktop elle-même ne nécessite normalement pas de droits administrateur dans ce mode. En revanche, l'activation ou la mise à jour initiale de WSL 2 peut nécessiter une élévation et éventuellement un redémarrage.
+
+Si l'installation automatique est décochée alors qu'aucun runtime Docker n'existe, le wizard bloque la poursuite du mode Docker.
+
+Docker Desktop est considéré comme un **prérequis partagé** : le désinstalleur NEXUS ne le supprime jamais.
+
+## Écran 8 — Configuration Docker
 
 Visible dès que Docker est sélectionné.
 
@@ -243,7 +288,20 @@ Le repository choisi est monté :
 
 `NEXUS_HOME` est monté en lecture/écriture sous `/data/nexus`.
 
-## Écran 8 — Intégrations assistants IA
+### Démarrage Docker généré
+
+`nexus-docker-up.cmd` ne dépend pas uniquement du `PATH` courant. Il recherche aussi la CLI Docker Desktop dans les emplacements per-user et all-users.
+
+Avant `docker compose up -d`, le script :
+
+1. teste `docker info` ;
+2. démarre Docker Desktop si nécessaire ;
+3. attend le moteur jusqu'à environ 180 secondes ;
+4. lance le Compose NEXUS lorsque le moteur est prêt.
+
+Si l'onboarding Docker Desktop/WSL 2 n'est pas terminé dans ce délai, le script se termine avec un code non nul et peut être relancé ensuite.
+
+## Écran 9 — Intégrations assistants IA
 
 La même matrice est utilisée partout dans NEXUS : wizard, générateur standalone et documentation.
 
@@ -323,7 +381,7 @@ avec le schéma `mcpServers`.
 
 NEXUS ne gère aucune authentification Copilot, Claude ou Codex et ne stocke aucun token externe.
 
-## Écran 9 — Runtime MCP en mode Both
+## Écran 10 — Runtime MCP en mode Both
 
 Visible uniquement en mode `Natif + Docker`.
 
@@ -354,6 +412,8 @@ Le récapitulatif contient :
 - recherche sémantique désactivée ou Ollama activé ;
 - URL Ollama si activé ;
 - rappel que le binaire Ollama n'est pas installé par NEXUS ;
+- état Docker Desktop/CLI : déjà détecté ou installation automatique prévue ;
+- rappel que la licence Docker reste à accepter par l'utilisateur lorsqu'une installation Docker Desktop est prévue ;
 - image Docker ;
 - conteneur ;
 - bind et **port hôte Docker final vérifié** ;
@@ -377,6 +437,12 @@ Mode : Natif + Docker
 Profil : Personnalisé
 NEXUS_HOME : C:\Users\<user>\.nexus
 
+Docker :
+  - Docker Desktop : sera téléchargé depuis desktop.docker.com et installé en mode utilisateur (WSL 2)
+  - La licence Docker devra être acceptée par l'utilisateur au premier démarrage.
+  - Image : ghcr.io/fturleque/nexus-context-engine:0.2.0
+  - REST : 127.0.0.1:8081 -> conteneur:8080
+
 Recherche sémantique : Ollama ACTIVÉ
   - URL : http://127.0.0.1:11434
   - Le setup configure NEXUS mais n'installe pas le binaire Ollama.
@@ -390,7 +456,7 @@ Assistants MCP :
   - Runtime MCP : Natif / Java embarqué
 ```
 
-Aucune configuration externe n'est ajoutée avant la confirmation et l'exécution réelle de l'installation.
+Aucun téléchargement Docker Desktop, aucune configuration externe et aucun fichier applicatif n'est installé avant la confirmation de cette page.
 
 ## Fichiers générés
 
@@ -495,6 +561,8 @@ Sont notamment conservés :
 - `NEXUS_HOME` ;
 - paramètres REST et ports résolus ;
 - état Ollama + URL ;
+- préférence d'installation automatique Docker Desktop ;
+- information qu'une installation Docker Desktop a été déclenchée par NEXUS ;
 - image et conteneur Docker ;
 - ports ;
 - repository ;
@@ -510,7 +578,8 @@ La désinstallation :
 - supprime les fichiers applicatifs ;
 - conserve `NEXUS_HOME` ;
 - conserve les repositories utilisateur ;
-- ne désinstalle pas Docker ;
+- **ne désinstalle jamais Docker Desktop**, même si NEXUS l'a installé ;
+- ne désinstalle pas WSL ;
 - ne désinstalle pas Ollama ;
 - ne supprime pas les configurations MCP qui n'ont pas été créées par NEXUS.
 
@@ -546,6 +615,8 @@ Smoke install/uninstall :
 $setup = (Resolve-Path '.\target\dist\NEXUS-0.2.0-windows-x64-setup.exe').Path
 .\scripts\release\test-windows-installer.ps1 -Setup $setup
 ```
+
+Le smoke standard reste en mode natif et ne télécharge jamais Docker Desktop.
 
 ## Docker local
 
