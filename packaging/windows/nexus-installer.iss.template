@@ -618,11 +618,11 @@ begin
   AssistantPage.Add('Claude CLI / Claude Code — scope utilisateur, connecter si la CLI est détectée');
   AssistantPage.Add('Codex Desktop — connecter via la CLI codex si détectée + générer un snippet TOML');
   AssistantPage.Add('Client MCP générique — générer un JSON STDIO');
-  AssistantPage.Values[0] := True;
+  AssistantPage.Values[0] := False;
   AssistantPage.Values[1] := False;
-  AssistantPage.Values[2] := True;
-  AssistantPage.Values[3] := True;
-  AssistantPage.Values[4] := True;
+  AssistantPage.Values[2] := False;
+  AssistantPage.Values[3] := False;
+  AssistantPage.Values[4] := False;
 
   IntegrationRuntimePage := CreateInputOptionPage(AssistantPage.ID,
     'Runtime MCP des assistants',
@@ -988,21 +988,26 @@ begin
 
   if AssistantPage.Values[1] then
   begin
-    { Static JSON fallback — kept for users who prefer manual import. }
-    SaveStringToFile(Dir + '\copilot-jetbrains.mcp.json', NativeMcpCommandJson('servers'), False);
+    { Static JSON fallback — restored Docker handling, kept for manual import. }
+    if UseDockerForIntegrations() then
+      SaveStringToFile(Dir + '\copilot-jetbrains.mcp.json', DockerMcpCommandJson('servers'), False)
+    else
+      SaveStringToFile(Dir + '\copilot-jetbrains.mcp.json', NativeMcpCommandJson('servers'), False);
 
-    { PS1: check/merge nexus entry into the real IntelliJ Copilot mcp.json.
-      - exit 10 : mcp.json absent (plugin not installed)
-      - exit 20 : nexus already present (idempotent)
+    { PS1: merge nexus entry into the live IntelliJ Copilot mcp.json using the
+      same cmd.exe + nexus-mcp.cmd pattern as mcp-search-net.
+      - exit 10 : mcp.json absent OR nexus-mcp.cmd not installed
+      - exit 20 : nexus key already present (idempotent)
       - exit 0  : nexus added successfully }
     JetBrainsPsScript :=
       '$mcp = Join-Path $env:LOCALAPPDATA ''github-copilot\intellij\mcp.json''' + #13#10 +
       'if (-not (Test-Path $mcp)) { exit 10 }' + #13#10 +
+      '$launcher = ''' + ExpandConstant('{app}\nexus-mcp.cmd') + '''' + #13#10 +
+      'if (-not (Test-Path $launcher)) { exit 10 }' + #13#10 +
       '$c = Get-Content $mcp -Raw | ConvertFrom-Json' + #13#10 +
       'if ($null -ne $c.servers.nexus) { exit 20 }' + #13#10 +
-      '$e = [PSCustomObject]@{ type = ''stdio''; command = ''' +
-          ExpandConstant('{app}\app\runtime\bin\java.exe') + '''; ' +
-          'args = @(''-jar'', ''' + ExpandConstant('{app}\lib\nexus-mcp.jar') + ''') }' + #13#10 +
+      '$e = [PSCustomObject]@{ type = ''stdio''; command = ''cmd.exe''; ' +
+          'args = @(''/d'', ''/s'', ''/c'', $launcher) }' + #13#10 +
       '$c.servers | Add-Member -MemberType NoteProperty -Name nexus -Value $e' + #13#10 +
       '[System.IO.File]::WriteAllText($mcp, ($c | ConvertTo-Json -Depth 5), ' +
           '[System.Text.UTF8Encoding]::new($false))' + #13#10 +
