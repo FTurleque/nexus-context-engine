@@ -1,3 +1,4 @@
+name: "nexus-context-engine"
 services:
   nexus:
     image: "${NEXUS_DOCKER_IMAGE:-nexus-context-engine:0.2.0}"
@@ -5,7 +6,7 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.runtime
-    container_name: "${NEXUS_DOCKER_CONTAINER:-nexus}"
+    container_name: "${NEXUS_DOCKER_CONTAINER:-nexus-context-engine}"
     restart: "${NEXUS_DOCKER_RESTART_POLICY:-unless-stopped}"
     environment:
       NEXUS_HOME: /data/nexus

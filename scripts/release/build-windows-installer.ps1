@@ -62,6 +62,7 @@ foreach ($required in @(
 $dockerPayloadRoot = Join-Path $DistributionRoot 'docker'
 New-Item -ItemType Directory -Force -Path $dockerPayloadRoot | Out-Null
 $dockerRuntimePayload = @(
+    @{ Source = (Join-Path $repo 'packaging\docker\docker-compose.yml.template'); Destination = (Join-Path $dockerPayloadRoot 'docker-compose.yml.template') },
     @{ Source = (Join-Path $repo 'packaging\docker\Dockerfile.runtime'); Destination = (Join-Path $dockerPayloadRoot 'Dockerfile.runtime') },
     @{ Source = (Join-Path $repo 'packaging\docker\nexus-container-entrypoint.sh'); Destination = (Join-Path $dockerPayloadRoot 'nexus-container-entrypoint.sh') }
 )
