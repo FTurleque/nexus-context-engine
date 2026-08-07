@@ -235,7 +235,7 @@ try {
 
     Write-Host "[12/13] Construction d'un contexte Git local borne et explicable"
     $gitContextBudget = 1600
-    $gitContextJson = Invoke-Nexus -Arguments @("context", $ProjectName, "DefaultContextBuilder git context budget recent changes", "--budget", "$gitContextBudget", "--explain", "--json")
+    $gitContextJson = Invoke-Nexus -Arguments @("context", $ProjectName, "scale regression benchmark hermetic calibration", "--budget", "$gitContextBudget", "--explain", "--json")
     $gitContext = $gitContextJson | ConvertFrom-Json
     if ([int]$gitContext.estimatedTokens -gt $gitContextBudget) {
         throw "Le contexte Git a depasse son budget global."
