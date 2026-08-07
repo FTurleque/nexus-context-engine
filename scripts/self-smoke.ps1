@@ -246,15 +246,20 @@ try {
     if (-not [bool]$gitContext.metadata.gitRepositoryAvailable) {
         throw "Le repository NEXUS devait etre detecte comme repository Git local."
     }
-    if ([int]$gitContext.metadata.gitRelatedCommits -le 0) {
-        throw "Le contexte Git devait retrouver au moins un commit lie aux chemins candidats."
+    if ([int]$gitContext.metadata.gitCommitsInspected -le 0) {
+        throw "Le provider Git devait inspecter au moins un commit du repository local."
     }
-    if ([int]$gitContext.metadata.gitSelectedItems -le 0) {
-        throw "Le contexte Git devait selectionner au moins un fragment Git."
-    }
+
+    $gitRelatedCommits = [int]$gitContext.metadata.gitRelatedCommits
+    $gitSelectedItems = [int]$gitContext.metadata.gitSelectedItems
     $gitHit = $gitContext.items | Where-Object { $_.type -eq "GIT" } | Select-Object -First 1
-    if ($null -eq $gitHit) {
-        throw "Le ContextBundle devait contenir au moins un item GIT."
+    if ($gitRelatedCommits -gt 0) {
+        if ($gitSelectedItems -le 0 -or $null -eq $gitHit) {
+            throw "Des commits Git lies ont ete trouves mais aucun fragment Git coherent n'a ete selectionne."
+        }
+    }
+    elseif ($gitSelectedItems -ne 0 -or $null -ne $gitHit) {
+        throw "Aucun commit Git lie n'a ete trouve : aucun fragment Git ne devait etre selectionne."
     }
 
     Write-Host "[13/13] Validation de la sortie humaine par defaut"
