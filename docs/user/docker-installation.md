@@ -35,8 +35,6 @@ docker run --rm nexus-context-engine:0.2.0 assistant generic docker nexus json
 
 ## Construire localement
 
-Depuis Windows PowerShell :
-
 ```powershell
 $image = & .\scripts\release\build-docker-image.ps1
 ```
@@ -47,13 +45,7 @@ Image par défaut :
 nexus-context-engine:0.2.0
 ```
 
-Pour choisir le tag :
-
-```powershell
-& .\scripts\release\build-docker-image.ps1 -Image "nexus-context-engine:test"
-```
-
-## Smoke local
+Smoke :
 
 ```powershell
 & .\scripts\release\test-docker-runtime.ps1 `
@@ -61,11 +53,7 @@ Pour choisir le tag :
   -HostPort 18080
 ```
 
-Le test vérifie :
-
-1. CLI/version JSON ;
-2. processus MCP STDIO gardé vivant avec stdin ouvert ;
-3. REST `/q/health/live` sur un port hôte personnalisé.
+Le test vérifie CLI, MCP STDIO et REST sur un port hôte personnalisé.
 
 ## Persistance
 
@@ -75,19 +63,17 @@ Dans le conteneur :
 NEXUS_HOME=/data/nexus
 ```
 
-Le volume `/data/nexus` doit être persistant. Le supprimer revient à supprimer explicitement les données NEXUS.
+Le volume `/data/nexus` doit être persistant.
 
 ## Repositories
 
-Le Compose de référence monte la racine choisie en lecture seule :
+Le Compose monte la racine choisie en lecture seule :
 
 ```text
 <Windows path>:/workspace:ro
 ```
 
-NEXUS ne peut indexer que les chemins visibles dans le conteneur.
-
-Exemple Windows :
+Exemple :
 
 ```text
 N:/workspace-dev:/workspace:ro
@@ -119,33 +105,51 @@ Mapping :
 <bind-address>:<host-port>:<container-port>
 ```
 
-Exemple :
-
-```text
-127.0.0.1:9080:8080
-```
-
-Le port hôte est le paramètre à changer en priorité.
+Le port hôte est celui à changer en priorité.
 
 ## REST et token
 
-À l'intérieur de Docker, Quarkus doit écouter sur `0.0.0.0` pour être publié par Docker. La politique de sécurité NEXUS exige donc un `NEXUS_REST_API_TOKEN`.
+À l'intérieur de Docker, Quarkus écoute sur `0.0.0.0` pour pouvoir être publié. La politique de sécurité NEXUS exige donc un `NEXUS_REST_API_TOKEN`.
 
 L'assistant Windows génère un token local si Docker est choisi et que l'utilisateur n'en fournit pas.
-
-Ne publiez pas REST sur `0.0.0.0` côté hôte ou sur une adresse LAN sans comprendre l'exposition réseau et sans protéger le token.
 
 ## MCP Docker
 
 MCP reste STDIO. Il n'existe pas de port MCP Docker.
 
-Commande de connexion :
-
 ```text
 docker exec -i nexus java -jar /opt/nexus/lib/nexus-mcp.jar
 ```
 
-Cette commande peut être utilisée comme `command`/`args` par les clients MCP.
+Cette commande est réutilisée par toutes les intégrations assistants quand le runtime MCP Docker est sélectionné.
+
+## Intégrations assistants avec Docker
+
+La matrice est identique au mode natif :
+
+- GitHub Copilot CLI ;
+- GitHub Copilot JetBrains ;
+- Claude CLI / Claude Code ;
+- Codex Desktop ;
+- client MCP générique.
+
+Exemples générés :
+
+```text
+copilot mcp add nexus --tools "*" -- docker exec -i nexus java -jar /opt/nexus/lib/nexus-mcp.jar
+claude mcp add nexus --scope user -- docker exec -i nexus java -jar /opt/nexus/lib/nexus-mcp.jar
+codex mcp add nexus -- docker exec -i nexus java -jar /opt/nexus/lib/nexus-mcp.jar
+```
+
+Assets :
+
+```text
+integrations\copilot-jetbrains.mcp.json
+integrations\codex-desktop.mcp.toml
+integrations\generic-mcp.json
+```
+
+Une entrée `nexus` existante est préservée. NEXUS ne gère pas l'authentification Copilot/Claude/Codex.
 
 ## Compose
 
@@ -155,52 +159,54 @@ Template :
 packaging/docker/docker-compose.yml.template
 ```
 
-L'assistant Windows en copie une instance dans :
-
-```text
-<install>\docker\docker-compose.yml
-```
-
-et génère :
+L'assistant Windows génère :
 
 ```text
 <install>\docker\.env
-```
-
-Contrôle :
-
-```powershell
-.\nexus-docker-up.cmd
-.\nexus-docker-down.cmd
-```
-
-CLI dans le conteneur déjà démarré :
-
-```powershell
-.\nexus-docker.cmd --version --json
-```
-
-MCP STDIO :
-
-```powershell
-.\nexus-docker-mcp.cmd
+<install>\docker\docker-compose.yml
+<install>\nexus-docker-up.cmd
+<install>\nexus-docker-down.cmd
 ```
 
 ## Sémantique / Ollama
 
 La recherche sémantique reste désactivée par défaut.
 
-Variables :
+Dans le wizard Windows, le provider n'est pas un champ texte :
 
 ```text
-NEXUS_SEMANTIC_PROVIDER
-NEXUS_OLLAMA_BASE_URL
-NEXUS_OLLAMA_EMBEDDING_MODEL
-NEXUS_OLLAMA_EMBEDDING_DIMENSIONS
-NEXUS_OLLAMA_TIMEOUT_SECONDS
+[ ] Activer Ollama pour la recherche sémantique
 ```
 
-Une URL `127.0.0.1` dans un conteneur désigne **le conteneur**, pas l'hôte Windows. Adaptez `NEXUS_OLLAMA_BASE_URL` à votre topologie Docker lorsque Ollama tourne hors du conteneur.
+Si cochée :
+
+```text
+NEXUS_SEMANTIC_PROVIDER=ollama
+```
+
+URL par défaut :
+
+```text
+http://127.0.0.1:11434
+```
+
+Le setup NEXUS **n'installe pas Ollama** ; il configure uniquement la connexion.
+
+Dans un conteneur, `127.0.0.1` désigne le conteneur. Adaptez `NEXUS_OLLAMA_BASE_URL` si Ollama tourne sur l'hôte Windows ou ailleurs.
+
+## Récapitulatif Windows avant déploiement Docker
+
+Avant le bouton Installer, le setup affiche la page Ready avec :
+
+- image ;
+- conteneur ;
+- adresse/ports REST ;
+- repository ;
+- restart policy ;
+- Ollama activé/désactivé ;
+- cinq intégrations assistants ;
+- runtime MCP choisi ;
+- démarrage Docker post-install.
 
 ## Publication GHCR
 
@@ -210,11 +216,11 @@ Le workflow :
 .github/workflows/docker-distribution.yml
 ```
 
-construit et smoke l'image sur les PR concernées. Lors d'un push qualifié sur `main`, il publie :
+construit et smoke l'image sur les PR concernées. Sur `main`, il publie :
 
 ```text
 ghcr.io/fturleque/nexus-context-engine:<version>
 ghcr.io/fturleque/nexus-context-engine:latest
 ```
 
-L'installateur Windows utilise l'image versionnée comme valeur par défaut afin d'éviter qu'un upgrade silencieux de `latest` modifie un déploiement existant.
+Le setup utilise l'image versionnée par défaut.
