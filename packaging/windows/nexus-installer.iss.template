@@ -282,7 +282,7 @@ begin
   RuntimePage.Add('Token API REST (optionnel sur loopback) :', True);
   RuntimePage.Add('Provider sémantique (vide ou ollama) :', False);
   RuntimePage.Add('URL Ollama :', False);
-  RuntimePage.Values[0] := ExpandConstant('{userprofile}\.nexus');
+  RuntimePage.Values[0] := GetEnv('USERPROFILE') + '\.nexus';
   RuntimePage.Values[1] := '127.0.0.1';
   RuntimePage.Values[2] := '8080';
   RuntimePage.Values[3] := '';
@@ -305,7 +305,7 @@ begin
   DockerPage.Values[2] := '127.0.0.1';
   DockerPage.Values[3] := '8080';
   DockerPage.Values[4] := '8080';
-  DockerPage.Values[5] := ExpandConstant('{userprofile}');
+  DockerPage.Values[5] := GetEnv('USERPROFILE');
   DockerPage.Values[6] := 'unless-stopped';
 
   AssistantPage := CreateInputOptionPage(DockerPage.ID,
