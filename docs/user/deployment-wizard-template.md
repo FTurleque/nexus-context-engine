@@ -1,6 +1,6 @@
 # Template de référence — NEXUS Windows Deployment Wizard
 
-Ce document est le **contrat documentaire complet** du setup Windows. Toute évolution de `packaging/windows/nexus-installer.iss.template` qui ajoute, retire ou renomme un choix utilisateur doit mettre cette template à jour dans la même PR.
+Ce document est le **contrat documentaire complet** du setup Windows. Toute évolution de `packaging/windows/nexus-installer.iss.template` qui ajoute, retire ou renomme un choix utilisateur doit mettre ce document à jour dans la même PR.
 
 ## Métadonnées
 
@@ -15,6 +15,7 @@ data_dir_default: "%USERPROFILE%\\.nexus"
 native_java_system_required: false
 docker_required_for_native: false
 mcp_transport: stdio
+ready_summary_required: true
 ```
 
 ## Écran `deployment-mode`
@@ -64,9 +65,11 @@ choices:
   recommended:
     show_advanced_native_components: false
     show_runtime_advanced: false
+    show_ollama_url_advanced: false
   custom:
     show_advanced_native_components: true
     show_runtime_advanced: true
+    show_ollama_url_advanced: true
 ```
 
 ## Écran `native-components`
@@ -125,16 +128,53 @@ rest_api_token:
   default: ""
   required_if: "native_rest == true AND native_rest_host not in [127.0.0.1, localhost]"
   docker_behavior: "generate a local token when Docker is selected and value is blank"
+```
 
-semantic_provider:
-  type: string
-  default: ""
-  common_values: ["", "ollama"]
+## Écran `semantic-search`
 
+Le provider n'est **plus un champ texte libre**.
+
+```yaml
+id: semantic-search
+type: multi-choice
+required: false
+show_always: true
+choices:
+  ollama:
+    label: "Activer Ollama pour la recherche sémantique"
+    default: false
+    when_checked:
+      NEXUS_SEMANTIC_PROVIDER: ollama
+    when_unchecked:
+      NEXUS_SEMANTIC_PROVIDER: ""
+```
+
+Contrat :
+
+```yaml
+ollama_binary_installed_by_nexus_setup: false
+ollama_authentication_managed_by_nexus: false
+semantic_enabled_by_default: false
+```
+
+Le setup configure l'utilisation d'une instance Ollama accessible ; il ne doit pas prétendre installer le binaire Ollama.
+
+## Écran `ollama`
+
+Condition :
+
+```yaml
+show_if: "semantic-search.ollama == true AND profile == custom"
+```
+
+```yaml
 ollama_base_url:
   type: url
   default: "http://127.0.0.1:11434"
+  required: true
 ```
+
+En profil recommandé, cocher Ollama utilise l'URL par défaut sans exposer cet écran avancé.
 
 ## Écran `docker`
 
@@ -207,7 +247,7 @@ Condition :
 show_if: "native_mcp_stdio == true OR mode in [docker,both]"
 ```
 
-Choix :
+La même matrice doit apparaître dans le wizard, la documentation et le générateur standalone.
 
 ```yaml
 copilot_cli:
@@ -221,10 +261,22 @@ copilot_jetbrains:
   schema_root: servers
   auto_modify_ide_config: false
 
-claude_code_user:
+claude_cli:
+  label: "Claude CLI / Claude Code"
   default: true
   action: "connect if CLI detected and nexus entry absent"
+  command: "claude mcp add nexus --scope user -- <nexus-mcp-command>"
   scope: user
+  existing_entry_policy: preserve
+  generator_project_profile_retained: true
+
+codex_desktop:
+  default: true
+  action:
+    - "connect through codex CLI when detected and nexus entry absent"
+    - "generate integrations/codex-desktop.mcp.toml"
+  command: "codex mcp add nexus -- <nexus-mcp-command>"
+  config_snippet_root: "[mcp_servers.nexus]"
   existing_entry_policy: preserve
 
 generic_mcp:
@@ -238,6 +290,7 @@ Authentication contract :
 ```yaml
 manage_copilot_authentication: false
 manage_claude_authentication: false
+manage_codex_authentication: false
 store_external_tokens: false
 ```
 
@@ -268,6 +321,49 @@ choices:
       - "-jar"
       - "/opt/nexus/lib/nexus-mcp.jar"
 ```
+
+## Page standard `ready-summary`
+
+La page Inno Setup **Ready to Install** est obligatoire et constitue la dernière confirmation avant l'installation.
+
+Le setup surcharge `UpdateReadyMemo` et doit afficher au minimum :
+
+```yaml
+summary:
+  deployment_mode: required
+  profile: required
+  install_directory: required
+  nexus_home: required
+  native_components: required_if_native
+  native_rest_host_port: required_if_native_rest
+  add_to_path: required_if_selected
+  semantic_search: required
+  ollama_url: required_if_ollama
+  ollama_binary_install_note: required_if_ollama
+  docker_image: required_if_docker
+  docker_container: required_if_docker
+  docker_host_and_container_ports: required_if_docker
+  docker_repository: required_if_docker
+  docker_restart_policy: required_if_docker
+  start_docker_after_install: required_if_selected
+  assistants:
+    - copilot_cli
+    - copilot_jetbrains
+    - claude_cli
+    - codex_desktop
+    - generic_mcp
+  integration_runtime: required_if_any_assistant
+```
+
+Exemple sémantique :
+
+```text
+Recherche sémantique : Ollama ACTIVÉ
+  - URL : http://127.0.0.1:11434
+  - Le setup configure NEXUS mais n'installe pas le binaire Ollama.
+```
+
+Aucun fichier ni configuration externe ne doit être modifié avant que l'utilisateur confirme cette page et lance réellement l'installation.
 
 ## Tâches Windows
 
@@ -315,6 +411,21 @@ nexus-docker-up.cmd
 nexus-docker-down.cmd
 ```
 
+## Assets assistants générés
+
+Selon les choix :
+
+```text
+integrations\connect-copilot-cli.cmd
+integrations\copilot-jetbrains.mcp.json
+integrations\connect-claude-cli.cmd
+integrations\connect-codex-desktop.cmd
+integrations\codex-desktop.mcp.toml
+integrations\generic-mcp.json
+```
+
+Les scripts de connexion utilisent le runtime MCP choisi (Java embarqué ou `docker exec -i`).
+
 ## `.env` Docker généré
 
 ```dotenv
@@ -331,24 +442,10 @@ NEXUS_OLLAMA_BASE_URL=http://127.0.0.1:11434
 NEXUS_REST_API_TOKEN=<generated-or-user-value>
 ```
 
-## Compose de référence
+Avec Ollama activé :
 
-Source de vérité :
-
-```text
-packaging/docker/docker-compose.yml.template
-```
-
-Contrat :
-
-```yaml
-service: nexus
-runtime_mode: rest
-nexus_home_container: /data/nexus
-repository_container: /workspace
-repository_read_only: true
-health_endpoint: /q/health/live
-healthcheck_enabled: true
+```dotenv
+NEXUS_SEMANTIC_PROVIDER=ollama
 ```
 
 ## Intégration Copilot CLI
@@ -365,15 +462,9 @@ Docker :
 copilot mcp add nexus --tools "*" -- docker exec -i <container> java -jar /opt/nexus/lib/nexus-mcp.jar
 ```
 
-Avant ajout :
+Une entrée existante est préservée.
 
-```text
-copilot mcp get nexus
-```
-
-Si l'entrée existe : **ne rien écraser**.
-
-## Intégration Claude Code
+## Intégration Claude CLI
 
 Native :
 
@@ -387,13 +478,31 @@ Docker :
 claude mcp add nexus --scope user -- docker exec -i <container> java -jar /opt/nexus/lib/nexus-mcp.jar
 ```
 
-Avant ajout :
+Le profil projet reste disponible dans `nexus-assistant-clients`.
+
+## Intégration Codex Desktop
+
+Lorsque `codex` est disponible :
 
 ```text
-claude mcp get nexus
+codex mcp add nexus -- <commande MCP NEXUS>
 ```
 
-Si l'entrée existe : **ne rien écraser**.
+Un snippet est également généré :
+
+```toml
+[mcp_servers.nexus]
+command = "<java.exe ou docker>"
+args = ["..."]
+```
+
+Fichier :
+
+```text
+integrations\codex-desktop.mcp.toml
+```
+
+Le setup ne modifie pas directement un fichier Codex arbitraire si la CLI n'est pas détectée ; le snippet reste disponible pour import/copie manuelle.
 
 ## Désinstallation
 
@@ -402,7 +511,8 @@ remove_application_files: true
 remove_managed_path_entry: true
 stop_managed_docker_compose: true
 remove_managed_copilot_cli_entry: true
-remove_managed_claude_user_entry: true
+remove_managed_claude_cli_entry: true
+remove_managed_codex_entry: true
 remove_nexus_home: false
 remove_user_repositories: false
 uninstall_docker_engine: false
@@ -437,15 +547,20 @@ DockerRepository
 DockerRestartPolicy
 DockerManaged
 CopilotCliManaged
-ClaudeUserManaged
+ClaudeCliManaged
+CodexManaged
 ```
 
 ## Gates obligatoires
 
 ```yaml
 maven_reactor: required
+assistant_generator_claude_cli_test: required
+assistant_generator_codex_desktop_test: required
 windows_distribution_build: required
 inno_setup_compile: required
+windows_wizard_runtime_initialization: required
+windows_ready_summary_contract: required
 windows_smoke_install: required
 windows_cli_smoke: required
 windows_assistant_payload_smoke: required
@@ -467,6 +582,7 @@ packaging/windows/nexus-installer.iss.template
 packaging/docker/docker-compose.yml.template
 scripts/release/build-windows-distribution.ps1
 scripts/release/build-windows-installer.ps1
+scripts/release/test-windows-installer.ps1
 scripts/release/build-docker-image.ps1
 scripts/release/test-docker-runtime.ps1
 adapters/assistant-clients/**
