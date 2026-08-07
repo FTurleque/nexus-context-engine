@@ -78,6 +78,7 @@ var
   AssistantPage: TInputOptionWizardPage;
   IntegrationRuntimePage: TInputOptionWizardPage;
   DockerDesktopInstalledDuringSetup: Boolean;
+  UninstSilent: Boolean;
 
 function IsSmokeBuild(): Boolean;
 begin
@@ -1160,6 +1161,20 @@ begin
   end;
 end;
 
+function InitializeUninstall(): Boolean;
+var
+  i: Integer;
+begin
+  UninstSilent := False;
+  for i := 1 to ParamCount do
+    if (UpperCase(ParamStr(i)) = '/VERYSILENT') or (UpperCase(ParamStr(i)) = '/SILENT') then
+    begin
+      UninstSilent := True;
+      break;
+    end;
+  Result := True;
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usUninstall then
@@ -1181,7 +1196,7 @@ begin
     RemoveDir(ExpandConstant('{app}\rest'));
     { Offer to remove user configuration data (interactive mode only;
       silent uninstall preserves these directories). }
-    if not WizardSilent() then
+    if not UninstSilent then
     begin
       if DirExists(ExpandConstant('{app}\config')) or DirExists(ExpandConstant('{app}\integrations')) then
       begin
