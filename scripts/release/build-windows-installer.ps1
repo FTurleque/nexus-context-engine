@@ -56,6 +56,22 @@ foreach ($required in @(
     }
 }
 
+# The installer must be able to build the Docker runtime locally when the configured
+# registry image is unavailable/private. Stage the runtime-only Dockerfile and entrypoint
+# directly into the distribution consumed by Inno Setup.
+$dockerPayloadRoot = Join-Path $DistributionRoot 'docker'
+New-Item -ItemType Directory -Force -Path $dockerPayloadRoot | Out-Null
+$dockerRuntimePayload = @(
+    @{ Source = (Join-Path $repo 'packaging\docker\Dockerfile.runtime'); Destination = (Join-Path $dockerPayloadRoot 'Dockerfile.runtime') },
+    @{ Source = (Join-Path $repo 'packaging\docker\nexus-container-entrypoint.sh'); Destination = (Join-Path $dockerPayloadRoot 'nexus-container-entrypoint.sh') }
+)
+foreach ($item in $dockerRuntimePayload) {
+    if (-not (Test-Path -LiteralPath $item.Source -PathType Leaf)) {
+        throw "Required Docker fallback payload missing: $($item.Source)"
+    }
+    Copy-Item -LiteralPath $item.Source -Destination $item.Destination -Force
+}
+
 if ([string]::IsNullOrWhiteSpace($IsccPath)) {
     $ensure = Join-Path $PSScriptRoot 'ensure-inno-setup.ps1'
     $IsccPath = (& $ensure | Select-Object -Last 1)
@@ -124,6 +140,38 @@ if ($iss.IndexOf($legacyDockerDetection, [StringComparison]::Ordinal) -lt 0) {
 }
 $iss = $iss.Replace($legacyDockerDetection, $strictDockerDetection)
 
+# Include every Docker runtime support file staged in the Windows distribution.
+$legacyDockerFiles = 'Source: "{#NexusSourceDir}\docker\docker-compose.yml.template"; DestDir: "{app}\docker"; Flags: ignoreversion; Check: InstallDocker'
+$expandedDockerFiles = 'Source: "{#NexusSourceDir}\docker\*"; DestDir: "{app}\docker"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: InstallDocker'
+if ($iss.IndexOf($legacyDockerFiles, [StringComparison]::Ordinal) -lt 0) {
+    throw 'Installer template Docker payload entry changed unexpectedly; refusing to omit local Docker fallback files.'
+}
+$iss = $iss.Replace($legacyDockerFiles, $expandedDockerFiles)
+
+# The configured GHCR image can legitimately be unavailable before merge or remain private.
+# Prefer an existing local image, then try the registry, then build the same configured tag
+# from the NEXUS payload already installed on disk.
+$legacyComposeCommand = '''"%DOCKER_EXE%" compose --env-file "%~dp0docker\.env" -f "%~dp0docker\docker-compose.yml" up -d'''
+$fallbackComposeCommands = @'
+'set "NEXUS_DOCKER_IMAGE="' + #13#10 +
+    'if exist "%~dp0docker\.env" for /f "usebackq tokens=1,* delims==" %%A in ("%~dp0docker\.env") do if /I "%%A"=="NEXUS_DOCKER_IMAGE" set "NEXUS_DOCKER_IMAGE=%%B"' + #13#10 +
+    'if "%NEXUS_DOCKER_IMAGE%"=="" echo [NEXUS] NEXUS_DOCKER_IMAGE est absent de docker\.env. & if "%NEXUS_DOCKER_IMAGE%"=="" exit /b 31' + #13#10 +
+    '"%DOCKER_EXE%" image inspect "%NEXUS_DOCKER_IMAGE%" >nul 2>nul && goto nexus_image_ready' + #13#10 +
+    'echo [NEXUS] Image %NEXUS_DOCKER_IMAGE% absente localement; tentative de telechargement...' + #13#10 +
+    '"%DOCKER_EXE%" pull "%NEXUS_DOCKER_IMAGE%" && goto nexus_image_ready' + #13#10 +
+    'echo [NEXUS] Image registre indisponible ou privee; construction locale depuis le payload installe...' + #13#10 +
+    'if not exist "%~dp0docker\Dockerfile.runtime" echo [NEXUS] Dockerfile.runtime introuvable. & if not exist "%~dp0docker\Dockerfile.runtime" exit /b 32' + #13#10 +
+    'if not exist "%~dp0docker\nexus-container-entrypoint.sh" echo [NEXUS] Entrypoint Docker introuvable. & if not exist "%~dp0docker\nexus-container-entrypoint.sh" exit /b 33' + #13#10 +
+    '"%DOCKER_EXE%" build --pull --file "%~dp0docker\Dockerfile.runtime" --tag "%NEXUS_DOCKER_IMAGE%" "%~dp0"' + #13#10 +
+    'if errorlevel 1 echo [NEXUS] Construction locale de l''image NEXUS echouee. & if errorlevel 1 exit /b 34' + #13#10 +
+    ':nexus_image_ready' + #13#10 +
+    '"%DOCKER_EXE%" compose --env-file "%~dp0docker\.env" -f "%~dp0docker\docker-compose.yml" up -d'
+'@
+if ($iss.IndexOf($legacyComposeCommand, [StringComparison]::Ordinal) -lt 0) {
+    throw 'Installer template Docker compose launcher changed unexpectedly; refusing to build without registry fallback.'
+}
+$iss = $iss.Replace($legacyComposeCommand, $fallbackComposeCommands.TrimEnd("`r", "`n"))
+
 $iss = $iss.Replace('@@VERSION@@', (Escape-Inno $Version))
 $iss = $iss.Replace('@@APP_VERSION@@', (Escape-Inno $appVersion))
 $iss = $iss.Replace('@@APP_ID@@', (Escape-Inno $appId))
@@ -136,6 +184,16 @@ if ($iss -match '@@[A-Z0-9_]+@@') {
 }
 if ($iss.IndexOf('function DockerEngineReady(): Boolean;', [StringComparison]::Ordinal) -lt 0) {
     throw 'Generated installer is missing strict Docker engine readiness detection.'
+}
+foreach ($requiredFallbackFragment in @(
+    'Dockerfile.runtime',
+    'docker pull',
+    'docker build',
+    'nexus_image_ready'
+)) {
+    if ($iss.IndexOf($requiredFallbackFragment, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+        throw "Generated installer is missing Docker registry fallback fragment: $requiredFallbackFragment"
+    }
 }
 [IO.File]::WriteAllText($generatedIss, $iss, $utf8)
 
@@ -155,7 +213,7 @@ try {
     Write-Host "Setup   : $setup"
     Write-Host "SHA-256 : $hash"
     Write-Host 'Wizard  : Native / Docker / Both + runtime/integration customization'
-    Write-Host 'Docker  : client-only docker.exe does not suppress Docker Desktop bootstrap'
+    Write-Host 'Docker  : strict engine detection + registry pull with local runtime-image fallback'
     Write-Output $setup
 }
 finally {
