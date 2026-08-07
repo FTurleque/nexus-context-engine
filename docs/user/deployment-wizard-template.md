@@ -16,6 +16,7 @@ native_java_system_required: false
 docker_required_for_native: false
 mcp_transport: stdio
 ready_summary_required: true
+external_port_availability_check: true
 ```
 
 ## Écran `deployment-mode`
@@ -122,6 +123,11 @@ native_rest_port:
   default: 8080
   min: 1
   max: 65535
+  availability_check: tcp-bind
+  if_busy: "select first available TCP port starting from requested port"
+  fallback_scan: "requested..65535, then 1024..requested-1"
+  write_resolved_value_back_to_wizard: true
+  ready_summary_uses_resolved_value: true
 
 rest_api_token:
   type: secret-string
@@ -129,6 +135,8 @@ rest_api_token:
   required_if: "native_rest == true AND native_rest_host not in [127.0.0.1, localhost]"
   docker_behavior: "generate a local token when Docker is selected and value is blank"
 ```
+
+La disponibilité du port REST natif n'est testée que si le composant REST natif est réellement activé.
 
 ## Écran `semantic-search`
 
@@ -200,18 +208,26 @@ container_name:
 host_bind_address:
   type: string
   default: "127.0.0.1"
+  required: true
 
 host_rest_port:
   type: integer
   default: 8080
   min: 1
   max: 65535
+  availability_check: tcp-bind
+  if_busy: "select first available TCP port starting from requested port"
+  fallback_scan: "requested..65535, then 1024..requested-1"
+  write_resolved_value_back_to_wizard: true
+  ready_summary_uses_resolved_value: true
+  must_not_equal_native_rest_port_when_both_are_enabled: true
 
 container_rest_port:
   type: integer
   default: 8080
   min: 1
   max: 65535
+  availability_check_on_windows_host: false
   guidance: "prefer changing host_rest_port only"
 
 repository_bind:
@@ -235,9 +251,19 @@ Port contract :
 
 ```yaml
 rest_mapping: "${host_bind_address}:${host_rest_port}:${container_rest_port}"
+external_port_resolution:
+  probe: "temporary TCP listener on the selected host bind address"
+  keep_requested_port_if_available: true
+  auto_increment_until_available: true
+  wrap_after_65535_to: 1024
+  reserve_native_rest_port_for_docker_when_mode_is_both: true
+  notify_user_when_port_changes: true
+container_port_probe_on_windows_host: false
 mcp_port: null
 mcp_docker_transport: "docker exec -i <container> java -jar /opt/nexus/lib/nexus-mcp.jar"
 ```
+
+Le test de disponibilité est effectué sur le port **externe/hôte**. Le port REST interne du conteneur n'est pas sondé sur Windows : il appartient au réseau du conteneur. En mode `both`, le port REST natif retenu est réservé afin que Docker ne reçoive jamais le même port hôte.
 
 ## Écran `assistants`
 
@@ -336,6 +362,7 @@ summary:
   nexus_home: required
   native_components: required_if_native
   native_rest_host_port: required_if_native_rest
+  native_rest_port_is_resolved_available_value: true
   add_to_path: required_if_selected
   semantic_search: required
   ollama_url: required_if_ollama
@@ -343,6 +370,7 @@ summary:
   docker_image: required_if_docker
   docker_container: required_if_docker
   docker_host_and_container_ports: required_if_docker
+  docker_host_port_is_resolved_available_value: true
   docker_repository: required_if_docker
   docker_restart_policy: required_if_docker
   start_docker_after_install: required_if_selected
@@ -361,6 +389,16 @@ Exemple sémantique :
 Recherche sémantique : Ollama ACTIVÉ
   - URL : http://127.0.0.1:11434
   - Le setup configure NEXUS mais n'installe pas le binaire Ollama.
+```
+
+Exemple de résolution automatique de port :
+
+```text
+Port demandé : 8080
+8080 occupé
+8081 occupé
+8082 libre
+=> le wizard remplace la valeur par 8082 et le récapitulatif affiche 8082
 ```
 
 Aucun fichier ni configuration externe ne doit être modifié avant que l'utilisateur confirme cette page et lance réellement l'installation.
@@ -441,6 +479,8 @@ NEXUS_SEMANTIC_PROVIDER=
 NEXUS_OLLAMA_BASE_URL=http://127.0.0.1:11434
 NEXUS_REST_API_TOKEN=<generated-or-user-value>
 ```
+
+`NEXUS_DOCKER_HOST_PORT` contient la valeur finale retenue après vérification de disponibilité ; elle peut donc différer du port initialement demandé.
 
 Avec Ollama activé :
 
@@ -551,6 +591,8 @@ ClaudeCliManaged
 CodexManaged
 ```
 
+Les valeurs `NativeRestPort` et `DockerHostPort` persistées correspondent aux ports résolus et effectivement retenus par le wizard.
+
 ## Gates obligatoires
 
 ```yaml
@@ -560,6 +602,7 @@ assistant_generator_codex_desktop_test: required
 windows_distribution_build: required
 inno_setup_compile: required
 windows_wizard_runtime_initialization: required
+windows_external_port_resolution_contract: required
 windows_ready_summary_contract: required
 windows_smoke_install: required
 windows_cli_smoke: required
