@@ -34,12 +34,14 @@ jobs:
     name: Docker CLI MCP REST parity
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      NEXUS_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Checkout exact head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ env.NEXUS_HEAD_SHA }}
 
       - name: Read project version
         id: version
@@ -56,12 +58,12 @@ jobs:
 
       - name: Build Docker image
         shell: bash
-        run: docker build --pull --file packaging/docker/Dockerfile --tag nexus-context-engine:${{ github.sha }} .
+        run: docker build --pull --file packaging/docker/Dockerfile --tag nexus-context-engine:${NEXUS_HEAD_SHA} .
 
       - name: Smoke CLI
         shell: bash
         run: |
-          docker run --rm nexus-context-engine:${{ github.sha }} cli --version --json | tee /tmp/nexus-version.json
+          docker run --rm nexus-context-engine:${NEXUS_HEAD_SHA} cli --version --json | tee /tmp/nexus-version.json
           python3 - <<'PY'
           import json
           with open('/tmp/nexus-version.json', encoding='utf-8') as handle:
@@ -72,7 +74,7 @@ jobs:
       - name: Smoke MCP STDIO
         shell: bash
         run: |
-          CID="$(docker run -d -i nexus-context-engine:${{ github.sha }} mcp)"
+          CID="$(docker run -d -i nexus-context-engine:${NEXUS_HEAD_SHA} mcp)"
           trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
           sleep 2
           test "$(docker inspect -f '{{.State.Running}}' "$CID")" = true
@@ -80,7 +82,7 @@ jobs:
       - name: Smoke REST on custom host port
         shell: bash
         run: |
-          CID="$(docker run -d -p 127.0.0.1:18080:8080 nexus-context-engine:${{ github.sha }} rest)"
+          CID="$(docker run -d -p 127.0.0.1:18080:8080 nexus-context-engine:${NEXUS_HEAD_SHA} rest)"
           trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:18080/q/health/live | grep -q 'UP'; then
@@ -99,7 +101,7 @@ jobs:
         run: |
           echo "$GHCR_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           IMAGE="ghcr.io/fturleque/nexus-context-engine"
-          docker tag nexus-context-engine:${{ github.sha }} "$IMAGE:${{ steps.version.outputs.version }}"
-          docker tag nexus-context-engine:${{ github.sha }} "$IMAGE:latest"
+          docker tag nexus-context-engine:${NEXUS_HEAD_SHA} "$IMAGE:${{ steps.version.outputs.version }}"
+          docker tag nexus-context-engine:${NEXUS_HEAD_SHA} "$IMAGE:latest"
           docker push "$IMAGE:${{ steps.version.outputs.version }}"
           docker push "$IMAGE:latest"
