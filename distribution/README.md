@@ -126,7 +126,7 @@ integrations\copilot-jetbrains.mcp.json
 Le setup peut exécuter :
 
 ```text
-claude mcp add nexus --scope user -- <commande MCP NEXUS>
+claude mcp add --scope user nexus -- <commande MCP NEXUS>
 ```
 
 Le profil projet reste disponible via le générateur standalone.
