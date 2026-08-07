@@ -15,6 +15,36 @@ if ([string]::IsNullOrWhiteSpace($Version)) { $Version = [string]$pom.project.ve
 $Setup = [IO.Path]::GetFullPath($Setup)
 if (-not (Test-Path -LiteralPath $Setup -PathType Leaf)) { throw "Setup not found: $Setup" }
 
+function Assert-TextContains {
+    param(
+        [Parameter(Mandatory = $true)][string]$Text,
+        [Parameter(Mandatory = $true)][string]$Needle,
+        [Parameter(Mandatory = $true)][string]$Description
+    )
+    if (-not $Text.Contains($Needle, [StringComparison]::Ordinal)) {
+        throw "Windows installer contract missing: $Description"
+    }
+}
+
+Write-Host '[contract] Docker Desktop bootstrap'
+$installerTemplate = Join-Path $repo 'packaging\windows\nexus-installer.iss.template'
+if (-not (Test-Path -LiteralPath $installerTemplate -PathType Leaf)) {
+    throw "Installer template not found: $installerTemplate"
+}
+$installerSource = Get-Content -Raw -LiteralPath $installerTemplate
+Assert-TextContains -Text $installerSource -Needle 'DockerPrereqPage' -Description 'Docker prerequisite wizard page'
+Assert-TextContains -Text $installerSource -Needle 'DownloadTemporaryFile(' -Description 'runtime Docker Desktop download'
+Assert-TextContains -Text $installerSource -Needle 'https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe' -Description 'official Docker Desktop x64 URL'
+Assert-TextContains -Text $installerSource -Needle 'Get-AuthenticodeSignature' -Description 'Authenticode verification'
+Assert-TextContains -Text $installerSource -Needle 'CN=Docker Inc' -Description 'Docker Inc signer constraint'
+Assert-TextContains -Text $installerSource -Needle 'install --user --backend=wsl-2 --quiet' -Description 'per-user WSL 2 Docker Desktop install command'
+Assert-TextContains -Text $installerSource -Needle 'function PrepareToInstall' -Description 'post-Ready prerequisite bootstrap hook'
+Assert-TextContains -Text $installerSource -Needle 'DockerDesktopInstalledDuringSetup' -Description 'Docker Desktop installation state tracking'
+Assert-TextContains -Text $installerSource -Needle 'nexus-docker-up.cmd' -Description 'Docker runtime startup launcher'
+if ($installerSource.Contains('--accept-license', [StringComparison]::Ordinal)) {
+    throw 'Windows installer must not accept the Docker Desktop license on behalf of the user.'
+}
+
 $root = Join-Path $repo 'target\installer-smoke'
 $install = Join-Path $root 'install'
 $data = Join-Path $root 'nexus-home'
@@ -107,5 +137,5 @@ if (-not (Test-Path -LiteralPath $sentinel -PathType Leaf)) {
     throw 'NEXUS_HOME user data was deleted by uninstall.'
 }
 
-Write-Host 'NEXUS Windows installer install/CLI/MCP/Claude/Codex payload/uninstall smoke PASS' -ForegroundColor Green
+Write-Host 'NEXUS Windows installer Docker-bootstrap contract + install/CLI/MCP/Claude/Codex payload/uninstall smoke PASS' -ForegroundColor Green
 Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
