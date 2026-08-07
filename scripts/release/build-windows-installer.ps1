@@ -33,6 +33,11 @@ $DistributionRoot = [IO.Path]::GetFullPath($DistributionRoot)
 
 foreach ($required in @(
     'nexus.cmd',
+    'nexus-mcp.cmd',
+    'nexus-rest.cmd',
+    'nexus-assistant-clients.cmd',
+    'nexus-docker.cmd',
+    'nexus-docker-mcp.cmd',
     'VERSION',
     'RUNTIME-MODULES.txt',
     'LICENSE',
@@ -40,7 +45,11 @@ foreach ($required in @(
     'SBOM.cdx.json',
     'app\nexus.exe',
     'app\runtime\bin\java.exe',
-    'lib\nexus-cli.jar'
+    'lib\nexus-cli.jar',
+    'lib\nexus-mcp.jar',
+    'lib\nexus-assistant-clients.jar',
+    'rest\quarkus-run.jar',
+    'docker\docker-compose.yml.template'
 )) {
     if (-not (Test-Path -LiteralPath (Join-Path $DistributionRoot $required) -PathType Leaf)) {
         throw "Invalid NEXUS Windows distribution; missing $required"
@@ -105,6 +114,7 @@ try {
     Write-Host $(if ($Smoke) { 'NEXUS Windows smoke setup SUCCESS' } else { 'NEXUS Windows setup SUCCESS' }) -ForegroundColor Green
     Write-Host "Setup   : $setup"
     Write-Host "SHA-256 : $hash"
+    Write-Host 'Wizard  : Native / Docker / Both + runtime/integration customization'
     Write-Output $setup
 }
 finally {
