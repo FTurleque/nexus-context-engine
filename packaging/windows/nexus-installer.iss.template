@@ -570,7 +570,7 @@ begin
   DockerPage.Add('Repository / racine de projets à monter :', False);
   DockerPage.Add('Restart policy :', False);
   DockerPage.Values[0] := 'ghcr.io/fturleque/nexus-context-engine:{#NexusVersion}';
-  DockerPage.Values[1] := 'nexus';
+  DockerPage.Values[1] := 'nexus-context-engine';
   DockerPage.Values[2] := '127.0.0.1';
   DockerPage.Values[3] := '8080';
   DockerPage.Values[4] := '8080';
@@ -1168,5 +1168,28 @@ begin
     RemoveManagedAssistantIntegrations;
     RemoveNexusFromUserPath;
     { NEXUS_HOME and Docker Desktop are intentionally preserved. }
+  end;
+  if CurUninstallStep = usPostUninstall then
+  begin
+    { Remove directories not tracked by Inno Setup: installer-generated
+      docker/.env + docker-compose.yml, and empty lib/ rest/ dirs. }
+    DelTree(ExpandConstant('{app}\docker'), True, True, True);
+    RemoveDir(ExpandConstant('{app}\lib'));
+    RemoveDir(ExpandConstant('{app}\rest'));
+    { Offer to remove user configuration data }
+    if DirExists(ExpandConstant('{app}\config')) or DirExists(ExpandConstant('{app}\integrations')) then
+    begin
+      if MsgBox(
+        'Supprimer les données de configuration NEXUS ?' + #13#10 +
+        '  • ' + ExpandConstant('{app}\config') + #13#10 +
+        '  • ' + ExpandConstant('{app}\integrations') + #13#10 + #13#10 +
+        'Ces dossiers ne seront pas récupérables.',
+        mbConfirmation, MB_YESNO) = IDYES then
+      begin
+        DelTree(ExpandConstant('{app}\config'), True, True, True);
+        DelTree(ExpandConstant('{app}\integrations'), True, True, True);
+      end;
+    end;
+    RemoveDir(ExpandConstant('{app}'));
   end;
 end;
