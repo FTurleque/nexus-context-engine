@@ -22,7 +22,7 @@ services:
       - "${NEXUS_HOME_BIND:-./nexus-data}:/data/nexus"
       - "${NEXUS_REPOSITORY_BIND:-./workspace}:/workspace:ro"
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:${NEXUS_DOCKER_CONTAINER_PORT:-8080}/q/health/live >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "curl --fail --silent -H 'Authorization: Bearer ${NEXUS_REST_API_TOKEN}' http://127.0.0.1:${NEXUS_DOCKER_CONTAINER_PORT:-8080}/q/health/live >/dev/null || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 6
