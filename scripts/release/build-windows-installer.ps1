@@ -162,7 +162,7 @@ $fallbackComposeCommands = @'
     'echo [NEXUS] Image registre indisponible ou privee; construction locale depuis le payload installe...' + #13#10 +
     'if not exist "%~dp0docker\Dockerfile.runtime" echo [NEXUS] Dockerfile.runtime introuvable. & if not exist "%~dp0docker\Dockerfile.runtime" exit /b 32' + #13#10 +
     'if not exist "%~dp0docker\nexus-container-entrypoint.sh" echo [NEXUS] Entrypoint Docker introuvable. & if not exist "%~dp0docker\nexus-container-entrypoint.sh" exit /b 33' + #13#10 +
-    '"%DOCKER_EXE%" build --pull --file "%~dp0docker\Dockerfile.runtime" --tag "%NEXUS_DOCKER_IMAGE%" "%~dp0"' + #13#10 +
+    '"%DOCKER_EXE%" build --pull --file "%~dp0docker\Dockerfile.runtime" --tag "%NEXUS_DOCKER_IMAGE%" "%~dp0."' + #13#10 +
     'if errorlevel 1 echo [NEXUS] Construction locale de l''image NEXUS echouee. & if errorlevel 1 exit /b 34' + #13#10 +
     ':nexus_image_ready' + #13#10 +
     '"%DOCKER_EXE%" compose --env-file "%~dp0docker\.env" -f "%~dp0docker\docker-compose.yml" up -d'

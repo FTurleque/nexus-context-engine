@@ -46,8 +46,8 @@ Source: "{#NexusSourceDir}\VERSION"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#NexusSourceDir}\RUNTIME-MODULES.txt"; DestDir: "{app}"; Flags: ignoreversion; Check: InstallNative
 Source: "{#NexusSourceDir}\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#NexusSourceDir}\app\*"; DestDir: "{app}\app"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: InstallNative
-Source: "{#NexusSourceDir}\lib\*"; DestDir: "{app}\lib"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: InstallNative
-Source: "{#NexusSourceDir}\rest\*"; DestDir: "{app}\rest"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: InstallNativeRest
+Source: "{#NexusSourceDir}\lib\*"; DestDir: "{app}\lib"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#NexusSourceDir}\rest\*"; DestDir: "{app}\rest"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#NexusSourceDir}\nexus.cmd"; DestDir: "{app}"; Flags: ignoreversion; Check: InstallNativeCli
 Source: "{#NexusSourceDir}\nexus-mcp.cmd"; DestDir: "{app}"; Flags: ignoreversion; Check: InstallNativeMcp
 Source: "{#NexusSourceDir}\nexus-rest.cmd"; DestDir: "{app}"; Flags: ignoreversion; Check: InstallNativeRest
