@@ -137,7 +137,7 @@ Exemples générés :
 
 ```text
 copilot mcp add nexus --tools "*" -- docker exec -i nexus java -jar /opt/nexus/lib/nexus-mcp.jar
-claude mcp add nexus --scope user -- docker exec -i nexus java -jar /opt/nexus/lib/nexus-mcp.jar
+claude mcp add --scope user nexus -- docker exec -i nexus java -jar /opt/nexus/lib/nexus-mcp.jar
 codex mcp add nexus -- docker exec -i nexus java -jar /opt/nexus/lib/nexus-mcp.jar
 ```
 
