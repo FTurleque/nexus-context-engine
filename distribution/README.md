@@ -1,18 +1,19 @@
 # NEXUS Context Engine — distribution 0.2.0
 
-Cette archive contient la CLI NEXUS autonome. Elle ne nécessite pas de cloner le dépôt ni d'installer Maven.
+NEXUS peut être distribué sans cloner le dépôt et sans Maven sur la machine cible.
 
-## Licence
+Deux familles de livrables existent :
+
+- le ZIP multiplateforme Maven `nexus-context-engine-0.2.0.zip`, qui utilise le Java 21+ installé sur la machine ;
+- le ZIP Windows x64 et le setup `.exe` produits par `scripts/release/build-windows-release.ps1`, qui embarquent leur propre runtime Java.
+
+## Licence et conformité
 
 NEXUS Context Engine est un logiciel **propriétaire source-available**. Copyright © 2026 Fabrice Turleque. Tous droits réservés.
 
-L'accès à cette archive ne confère aucun droit général d'utilisation, copie, modification, redistribution, sous-licence, commercialisation ou mise à disposition à un tiers en dehors d'une autorisation écrite explicite du titulaire des droits, sous réserve des droits impératifs applicables.
+Les conditions complètes applicables à NEXUS sont fournies dans `LICENSE`. Les composants tiers restent soumis à leurs propres licences.
 
-Les conditions complètes applicables à NEXUS sont fournies dans `LICENSE`.
-
-Les composants tiers restent soumis à leurs propres licences. `THIRD_PARTY_NOTICES.txt` est généré à partir des métadonnées Maven des dépendances compile/runtime du reactor ; le build échoue si l'une de ces dépendances ne fournit pas d'information de licence exploitable. `SBOM.cdx.json` contient l'inventaire logiciel CycloneDX agrégé de la distribution.
-
-Fichiers de conformité inclus :
+Fichiers de conformité inclus dans les distributions :
 
 ```text
 LICENSE
@@ -20,23 +21,44 @@ THIRD_PARTY_NOTICES.txt
 SBOM.cdx.json
 ```
 
-## Prérequis
+Le build échoue si une dépendance compile/runtime distribuée ne fournit pas d'information de licence exploitable.
 
-- Java 21 ou supérieur ;
-- accès en lecture/écriture au répertoire configuré par `NEXUS_HOME` (ou au répertoire NEXUS par défaut).
+## Windows — setup EXE ou ZIP autonome
 
-## Windows
+Le livrable Windows x64 embarque un runtime Java construit avec `jpackage`. Aucun Java système n'est requis pour l'exécution.
+
+Après installation par le setup :
+
+```powershell
+nexus --version
+nexus --help
+```
+
+L'installateur peut ajouter le répertoire NEXUS au `PATH` de l'utilisateur. La désinstallation retire uniquement l'entrée PATH qu'elle a elle-même gérée et supprime les fichiers installés.
+
+Les données de `NEXUS_HOME` sont stockées hors du répertoire d'installation et sont volontairement conservées lors d'une désinstallation/réinstallation.
+
+Dans le ZIP Windows autonome :
+
+```powershell
+.\nexus.cmd --version --json
+.\nexus.cmd --help
+```
+
+## Distribution multiplateforme Maven
+
+Prérequis : Java 21 ou supérieur.
+
+Windows :
 
 ```powershell
 .\bin\nexus.cmd --version
-.\bin\nexus.cmd --help
 ```
 
-## Linux / macOS
+Linux / macOS :
 
 ```bash
 sh ./bin/nexus --version
-sh ./bin/nexus --help
 ```
 
 ## Configuration opérationnelle
@@ -55,6 +77,6 @@ Aucun provider externe ni moteur sémantique n'est activé par défaut.
 
 ## Intégrité
 
-Les livrables générés par le build sont accompagnés de fichiers `.sha256`. Vérifiez ces checksums avant distribution ou installation.
+Les ZIP et setup Windows générés par les scripts de release possèdent un sidecar `.sha256`. Vérifiez ces checksums avant distribution ou installation.
 
-Le SBOM CycloneDX et les notices tierces sont à la fois générés dans `target/` et embarqués dans l'archive autonome afin qu'un ZIP distribué conserve son propre inventaire de conformité.
+Le SBOM CycloneDX et les notices tierces sont embarqués afin que chaque distribution conserve son inventaire de conformité.

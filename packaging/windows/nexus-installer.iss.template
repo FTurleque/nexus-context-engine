@@ -1,0 +1,124 @@
+#define NexusName "NEXUS Context Engine"
+#define NexusVersion "@@VERSION@@"
+#define NexusAppVersion "@@APP_VERSION@@"
+#define NexusAppId "@@APP_ID@@"
+#define NexusSmokeMode @@SMOKE_MODE@@
+#define NexusSourceDir "@@SOURCE_DIR@@"
+#define NexusOutputDir "@@OUTPUT_DIR@@"
+#define NexusOutputBaseFilename "@@OUTPUT_BASENAME@@"
+
+[Setup]
+AppId={#NexusAppId}
+AppName={#NexusName}
+AppVersion={#NexusVersion}
+AppPublisher=FTurleque
+DefaultDirName={localappdata}\Programs\NEXUS
+DefaultGroupName=NEXUS
+DisableProgramGroupPage=yes
+PrivilegesRequired=lowest
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+OutputDir={#NexusOutputDir}
+OutputBaseFilename={#NexusOutputBaseFilename}
+Compression=lzma2/ultra64
+SolidCompression=yes
+WizardStyle=modern
+ChangesEnvironment=yes
+SetupLogging=yes
+UninstallDisplayName={#NexusName}
+VersionInfoVersion={#NexusAppVersion}
+VersionInfoCompany=FTurleque
+VersionInfoDescription={#NexusName} Windows installer
+VersionInfoProductName={#NexusName}
+VersionInfoProductVersion={#NexusAppVersion}
+VersionInfoProductTextVersion={#NexusVersion}
+
+[Tasks]
+Name: "addtopath"; Description: "Ajouter NEXUS au PATH de l'utilisateur"; GroupDescription: "Intégration Windows :"; Flags: checkedonce
+
+[Files]
+Source: "{#NexusSourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Icons]
+Name: "{userprograms}\NEXUS\Dossier d'installation NEXUS"; Filename: "{app}"
+
+[Code]
+function IsSmokeBuild(): Boolean;
+begin
+  Result := {#NexusSmokeMode} = 1;
+end;
+
+function InstallerRegistryPath(): String;
+begin
+  Result := 'Software\FTurleque\NEXUS';
+end;
+
+function TrimTrailingBackslash(Value: String): String;
+begin
+  Result := Value;
+  while (Length(Result) > 3) and (Result[Length(Result)] = '\') do
+    Delete(Result, Length(Result), 1);
+end;
+
+function PathContainsEntry(PathValue: String; Entry: String): Boolean;
+var
+  Haystack: String;
+  Needle: String;
+begin
+  Haystack := ';' + Lowercase(PathValue) + ';';
+  Needle := ';' + Lowercase(TrimTrailingBackslash(Entry)) + ';';
+  Result := Pos(Needle, Haystack) > 0;
+end;
+
+procedure AddNexusToUserPath;
+var
+  CurrentPath: String;
+  AppPath: String;
+begin
+  if IsSmokeBuild() or not WizardIsTaskSelected('addtopath') then exit;
+  AppPath := TrimTrailingBackslash(ExpandConstant('{app}'));
+  if not RegQueryStringValue(HKCU, 'Environment', 'Path', CurrentPath) then CurrentPath := '';
+  if not PathContainsEntry(CurrentPath, AppPath) then
+  begin
+    if (CurrentPath <> '') and (CurrentPath[Length(CurrentPath)] <> ';') then
+      CurrentPath := CurrentPath + ';';
+    CurrentPath := CurrentPath + AppPath;
+    RegWriteExpandStringValue(HKCU, 'Environment', 'Path', CurrentPath);
+    RegWriteStringValue(HKCU, InstallerRegistryPath(), 'ManagedPath', AppPath);
+  end;
+end;
+
+procedure RemoveNexusFromUserPath;
+var
+  CurrentPath: String;
+  ManagedPath: String;
+  PaddedPath: String;
+  Needle: String;
+begin
+  if IsSmokeBuild() then exit;
+  if not RegQueryStringValue(HKCU, InstallerRegistryPath(), 'ManagedPath', ManagedPath) then exit;
+  if not RegQueryStringValue(HKCU, 'Environment', 'Path', CurrentPath) then
+  begin
+    RegDeleteValue(HKCU, InstallerRegistryPath(), 'ManagedPath');
+    exit;
+  end;
+  PaddedPath := ';' + CurrentPath + ';';
+  Needle := ';' + TrimTrailingBackslash(ManagedPath) + ';';
+  StringChangeEx(PaddedPath, Needle, ';', True);
+  while (Length(PaddedPath) > 0) and (PaddedPath[1] = ';') do Delete(PaddedPath, 1, 1);
+  while (Length(PaddedPath) > 0) and (PaddedPath[Length(PaddedPath)] = ';') do Delete(PaddedPath, Length(PaddedPath), 1);
+  RegWriteExpandStringValue(HKCU, 'Environment', 'Path', PaddedPath);
+  RegDeleteValue(HKCU, InstallerRegistryPath(), 'ManagedPath');
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    AddNexusToUserPath;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usUninstall then
+    RemoveNexusFromUserPath;
+end;
