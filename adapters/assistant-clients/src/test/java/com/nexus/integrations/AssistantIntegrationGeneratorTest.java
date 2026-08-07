@@ -75,4 +75,44 @@ class AssistantIntegrationGeneratorTest {
         assertTrue(generator.claudeUserCommand(runner).contains("--scope user"));
         assertTrue(generator.claudeProjectCommand(runner).contains("-- java -jar \""));
     }
+
+    @Test
+    void nativeModeUsesTheBundledJavaExecutable() throws Exception {
+        Path java = temporaryDirectory.resolve("runtime").resolve("bin").resolve("java.exe");
+        Path runner = temporaryDirectory.resolve("lib").resolve("nexus-mcp.jar");
+        AssistantIntegrationGenerator.CommandSpec spec = generator.nativeMcp(java, runner);
+
+        JsonNode server = objectMapper.readTree(generator.genericMcpJson(spec)).path("mcpServers").path("nexus");
+
+        assertEquals(java.toAbsolutePath().normalize().toString(), server.path("command").asText());
+        assertEquals("-jar", server.path("args").get(0).asText());
+        assertEquals(runner.toAbsolutePath().normalize().toString(), server.path("args").get(1).asText());
+    }
+
+    @Test
+    void dockerModeKeepsMcpOnStdioThroughDockerExec() throws Exception {
+        AssistantIntegrationGenerator.CommandSpec spec = generator.dockerMcp("nexus-custom");
+
+        JsonNode server = objectMapper.readTree(generator.copilotJetBrainsJson(spec)).path("servers").path("nexus");
+
+        assertEquals("stdio", server.path("type").asText());
+        assertEquals("docker", server.path("command").asText());
+        assertEquals("exec", server.path("args").get(0).asText());
+        assertEquals("-i", server.path("args").get(1).asText());
+        assertEquals("nexus-custom", server.path("args").get(2).asText());
+        assertEquals("java", server.path("args").get(3).asText());
+        assertEquals("/opt/nexus/lib/nexus-mcp.jar", server.path("args").get(5).asText());
+        assertTrue(generator.copilotCliCommand(spec).contains("-- docker exec -i nexus-custom"));
+        assertTrue(generator.claudeUserCommand(spec).contains("--scope user"));
+    }
+
+    @Test
+    void genericProfileUsesPortableMcpServersSchema() throws Exception {
+        AssistantIntegrationGenerator.CommandSpec spec = generator.dockerMcp("nexus");
+
+        JsonNode root = objectMapper.readTree(generator.genericMcpJson(spec));
+
+        assertTrue(root.has("mcpServers"));
+        assertEquals("docker", root.path("mcpServers").path("nexus").path("command").asText());
+    }
 }
