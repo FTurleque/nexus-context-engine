@@ -79,6 +79,7 @@ var
   IntegrationRuntimePage: TInputOptionWizardPage;
   DockerDesktopInstalledDuringSetup: Boolean;
   UninstSilent: Boolean;
+  OllamaPrereqPage: TInputOptionWizardPage;
 
 function IsSmokeBuild(): Boolean;
 begin
@@ -196,6 +197,26 @@ var
   ResultCode: Integer;
 begin
   Result := Exec(ExpandConstant('{cmd}'), '/D /S /C "where ' + Name + ' >nul 2>nul"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+end;
+
+function OllamaExecutable(): String;
+var
+  Candidate: String;
+begin
+  Result := '';
+  Candidate := GetEnv('LOCALAPPDATA') + '\Programs\Ollama\ollama.exe';
+  if FileExists(Candidate) then begin Result := Candidate; exit; end;
+  if CommandExists('ollama') then begin Result := 'ollama'; exit; end;
+end;
+
+function OllamaPresent(): Boolean;
+begin
+  Result := OllamaExecutable() <> '';
+end;
+
+function OllamaAutoInstallSelected(): Boolean;
+begin
+  Result := OllamaEnabled() and OllamaPrereqPage.Values[0];
 end;
 
 function DockerDesktopExecutable(): String;
@@ -478,6 +499,7 @@ begin
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'RestApiToken', Value) then RuntimePage.Values[3] := Value;
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'SemanticProvider', Value) then SemanticPage.Values[0] := Lowercase(Trim(Value)) = 'ollama';
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'OllamaBaseUrl', Value) then OllamaPage.Values[0] := Value;
+  if RegQueryDWordValue(HKCU, InstallerRegistryPath(), 'OllamaAutoInstall', Mode) then OllamaPrereqPage.Values[0] := Mode <> 0;
   if RegQueryDWordValue(HKCU, InstallerRegistryPath(), 'DockerAutoInstall', Mode) then DockerPrereqPage.Values[0] := Mode <> 0;
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerImage', Value) then DockerPage.Values[0] := Value;
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerContainer', Value) then DockerPage.Values[1] := Value;
@@ -539,12 +561,20 @@ begin
   SemanticPage := CreateInputOptionPage(RuntimePage.ID,
     'Recherche sémantique',
     'Choisissez si NEXUS doit utiliser Ollama.',
-    'Décochez pour conserver la recherche sémantique désactivée. Cocher cette option configure NEXUS pour utiliser une instance Ollama accessible ; le setup n''installe pas le binaire Ollama.',
+    'Décochez pour conserver la recherche sémantique désactivée. Cocher cette option configure NEXUS pour utiliser une instance Ollama accessible. Si Ollama n''est pas détecté, le setup proposera de le télécharger et l''installer automatiquement.',
     False, False);
   SemanticPage.Add('Activer Ollama pour la recherche sémantique');
   SemanticPage.Values[0] := False;
 
-  OllamaPage := CreateInputQueryPage(SemanticPage.ID,
+  OllamaPrereqPage := CreateInputOptionPage(SemanticPage.ID,
+    'Ollama introuvable',
+    'Préparez le modèle de langage local nécessaire à la recherche sémantique.',
+    'Aucune installation Ollama n''a été détectée sur ce système. NEXUS peut télécharger et installer Ollama depuis ollama.com.',
+    False, False);
+  OllamaPrereqPage.Add('Installer automatiquement Ollama s''il est absent');
+  OllamaPrereqPage.Values[0] := True;
+
+  OllamaPage := CreateInputQueryPage(OllamaPrereqPage.ID,
     'Configuration Ollama',
     'Configurez l''instance Ollama utilisée par NEXUS.',
     'Cette page n''apparaît qu''avec Ollama activé et le profil personnalisé.');
@@ -624,6 +654,7 @@ begin
   Result := False;
   if PageID = NativeOptionsPage.ID then Result := (not InstallNative()) or (not IsCustomProfile())
   else if PageID = RuntimePage.ID then Result := not IsCustomProfile()
+  else if PageID = OllamaPrereqPage.ID then Result := (not OllamaEnabled()) or OllamaPresent()
   else if PageID = OllamaPage.ID then Result := (not OllamaEnabled()) or (not IsCustomProfile())
   else if PageID = DockerPrereqPage.ID then Result := (not InstallDocker()) or DockerRuntimePresent()
   else if PageID = DockerPage.ID then Result := not InstallDocker()
@@ -760,9 +791,48 @@ begin
   end;
 end;
 
+function InstallOllamaIfNeeded(): String;
+var
+  InstallerPath: String;
+  ResultCode: Integer;
+begin
+  Result := '';
+  if not OllamaEnabled() or OllamaPresent() then exit;
+  if not OllamaAutoInstallSelected() then
+  begin
+    Result := 'Ollama n''est pas installé et son installation automatique est désactivée. Installez Ollama manuellement (https://ollama.com) avant de démarrer NEXUS.';
+    exit;
+  end;
+
+  try
+    DownloadTemporaryFile(
+      'https://ollama.com/download/OllamaSetup.exe',
+      'NEXUS-Ollama-Installer.exe', '', nil);
+    Log('Ollama installer téléchargé.');
+  except
+    Result := 'Impossible de télécharger Ollama depuis ollama.com : ' + GetExceptionMessage;
+    exit;
+  end;
+
+  InstallerPath := ExpandConstant('{tmp}\NEXUS-Ollama-Installer.exe');
+  if not FileExists(InstallerPath) then
+  begin
+    Result := 'Le téléchargement Ollama n''a pas produit le fichier attendu.';
+    exit;
+  end;
+
+  if not Exec(InstallerPath, '/S', '', SW_SHOW, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
+  begin
+    Result := 'L''installation Ollama a échoué avec le code ' + IntToStr(ResultCode) + '.';
+    exit;
+  end;
+end;
+
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   NeedsRestart := False;
+  Result := InstallOllamaIfNeeded();
+  if Result <> '' then exit;
   Result := InstallDockerDesktopIfNeeded();
 end;
 
@@ -997,6 +1067,7 @@ begin
   RegWriteStringValue(HKCU, InstallerRegistryPath(), 'RestApiToken', RuntimePage.Values[3]);
   RegWriteStringValue(HKCU, InstallerRegistryPath(), 'SemanticProvider', SemanticProviderValue());
   RegWriteStringValue(HKCU, InstallerRegistryPath(), 'OllamaBaseUrl', OllamaPage.Values[0]);
+  RegWriteDWordValue(HKCU, InstallerRegistryPath(), 'OllamaAutoInstall', Ord(OllamaPrereqPage.Values[0]));
   RegWriteDWordValue(HKCU, InstallerRegistryPath(), 'DockerAutoInstall', Ord(DockerPrereqPage.Values[0]));
   if InstallDocker() then
   begin
@@ -1059,9 +1130,16 @@ begin
   end;
 
   if OllamaEnabled() then
+  begin
     Result := Result + NewLine + 'Recherche sémantique : Ollama ACTIVÉ' + NewLine +
-      '  - URL : ' + OllamaPage.Values[0] + NewLine +
-      '  - Le setup configure NEXUS mais n''installe pas le binaire Ollama.' + NewLine
+      '  - URL : ' + OllamaPage.Values[0] + NewLine;
+    if OllamaPresent() then
+      Result := Result + '  - Ollama : détecté sur ce système.' + NewLine
+    else if OllamaAutoInstallSelected() then
+      Result := Result + '  - Ollama : sera téléchargé depuis ollama.com et installé avant NEXUS.' + NewLine
+    else
+      Result := Result + '  - Ollama : absent — installation automatique désactivée. Installez Ollama manuellement avant de démarrer NEXUS.' + NewLine;
+  end
   else
     Result := Result + NewLine + 'Recherche sémantique : désactivée' + NewLine;
 
