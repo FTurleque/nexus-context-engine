@@ -73,9 +73,11 @@ var
   RuntimePage: TInputQueryWizardPage;
   SemanticPage: TInputOptionWizardPage;
   OllamaPage: TInputQueryWizardPage;
+  DockerPrereqPage: TInputOptionWizardPage;
   DockerPage: TInputQueryWizardPage;
   AssistantPage: TInputOptionWizardPage;
   IntegrationRuntimePage: TInputOptionWizardPage;
+  DockerDesktopInstalledDuringSetup: Boolean;
 
 function IsSmokeBuild(): Boolean;
 begin
@@ -193,6 +195,127 @@ var
   ResultCode: Integer;
 begin
   Result := Exec(ExpandConstant('{cmd}'), '/D /S /C "where ' + Name + ' >nul 2>nul"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+end;
+
+function DockerDesktopExecutable(): String;
+var
+  Candidate: String;
+begin
+  Result := '';
+  Candidate := GetEnv('LOCALAPPDATA') + '\Programs\DockerDesktop\Docker Desktop.exe';
+  if FileExists(Candidate) then
+  begin
+    Result := Candidate;
+    exit;
+  end;
+  Candidate := ExpandConstant('{autopf}\Docker\Docker\Docker Desktop.exe');
+  if FileExists(Candidate) then Result := Candidate;
+end;
+
+function DockerCliExecutable(): String;
+var
+  Candidate: String;
+begin
+  Result := '';
+  if CommandExists('docker') then
+  begin
+    Result := 'docker';
+    exit;
+  end;
+  Candidate := GetEnv('LOCALAPPDATA') + '\Programs\DockerDesktop\resources\bin\docker.exe';
+  if FileExists(Candidate) then
+  begin
+    Result := Candidate;
+    exit;
+  end;
+  Candidate := ExpandConstant('{autopf}\Docker\Docker\resources\bin\docker.exe');
+  if FileExists(Candidate) then Result := Candidate;
+end;
+
+function DockerRuntimePresent(): Boolean;
+begin
+  Result := (DockerCliExecutable() <> '') or (DockerDesktopExecutable() <> '');
+end;
+
+function DockerDesktopAutoInstallSelected(): Boolean;
+begin
+  Result := InstallDocker() and DockerPrereqPage.Values[0];
+end;
+
+function PowerShellSingleQuote(Value: String): String;
+begin
+  Result := Value;
+  StringChangeEx(Result, '''', '''''', True);
+end;
+
+function VerifyDockerDesktopInstaller(InstallerPath: String): Boolean;
+var
+  PowerShellPath: String;
+  Script: String;
+  Parameters: String;
+  ResultCode: Integer;
+begin
+  Result := False;
+  PowerShellPath := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+  if not FileExists(PowerShellPath) then exit;
+  Script :=
+    '$s=Get-AuthenticodeSignature -LiteralPath ''' + PowerShellSingleQuote(InstallerPath) + '''; ' +
+    'if (($s.Status -eq ''Valid'') -and ($null -ne $s.SignerCertificate) -and ' +
+    '($s.SignerCertificate.Subject -match ''(^|,\s*)CN=Docker Inc(,|$)'')) { exit 0 } else { exit 1 }';
+  Parameters := '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' + Script + '"';
+  Result := Exec(PowerShellPath, Parameters, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+end;
+
+function InstallDockerDesktopIfNeeded(): String;
+var
+  InstallerPath: String;
+  ResultCode: Integer;
+  DownloadedSize: Int64;
+begin
+  Result := '';
+  if not InstallDocker() or DockerRuntimePresent() then exit;
+  if not DockerDesktopAutoInstallSelected() then
+  begin
+    Result := 'Docker Desktop/CLI est absent et son installation automatique est désactivée.';
+    exit;
+  end;
+
+  try
+    DownloadedSize := DownloadTemporaryFile(
+      'https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe',
+      'NEXUS-Docker-Desktop-Installer.exe', '', nil);
+    Log('Docker Desktop téléchargé : ' + IntToStr(DownloadedSize) + ' octets.');
+  except
+    Result := 'Impossible de télécharger Docker Desktop depuis le domaine officiel Docker : ' + GetExceptionMessage;
+    exit;
+  end;
+
+  InstallerPath := ExpandConstant('{tmp}\NEXUS-Docker-Desktop-Installer.exe');
+  if not FileExists(InstallerPath) then
+  begin
+    Result := 'Le téléchargement Docker Desktop n''a pas produit le fichier attendu.';
+    exit;
+  end;
+  if not VerifyDockerDesktopInstaller(InstallerPath) then
+  begin
+    Result := 'La signature Authenticode de Docker Desktop est invalide ou le signataire n''est pas Docker Inc. Installation annulée.';
+    exit;
+  end;
+
+  if not Exec(InstallerPath, 'install --user --backend=wsl-2 --quiet', '', SW_SHOW, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
+  begin
+    Result := 'L''installation Docker Desktop a échoué avec le code ' + IntToStr(ResultCode) + '.';
+    exit;
+  end;
+
+  if not DockerRuntimePresent() then
+  begin
+    Result := 'Docker Desktop a terminé son installation mais aucun runtime Docker n''a été détecté.';
+    exit;
+  end;
+
+  DockerDesktopInstalledDuringSetup := True;
+  RegWriteStringValue(HKCU, InstallerRegistryPath(), 'DockerDesktopInstalledByNexus', '1');
 end;
 
 function IsSafeBindAddress(Value: String): Boolean;
@@ -354,6 +477,7 @@ begin
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'RestApiToken', Value) then RuntimePage.Values[3] := Value;
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'SemanticProvider', Value) then SemanticPage.Values[0] := Lowercase(Trim(Value)) = 'ollama';
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'OllamaBaseUrl', Value) then OllamaPage.Values[0] := Value;
+  if RegQueryDWordValue(HKCU, InstallerRegistryPath(), 'DockerAutoInstall', Mode) then DockerPrereqPage.Values[0] := Mode <> 0;
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerImage', Value) then DockerPage.Values[0] := Value;
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerContainer', Value) then DockerPage.Values[1] := Value;
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerBindAddress', Value) then DockerPage.Values[2] := Value;
@@ -365,10 +489,12 @@ end;
 
 procedure InitializeWizard;
 begin
+  DockerDesktopInstalledDuringSetup := False;
+
   DeploymentPage := CreateInputOptionPage(wpSelectDir,
     'Mode de déploiement',
     'Choisissez comment exécuter NEXUS.',
-    'Le mode natif ne nécessite ni Docker ni JVM système. Le mode Docker nécessite Docker Desktop/Engine. Vous pouvez installer les deux.',
+    'Le mode natif ne nécessite ni Docker ni JVM système. Le mode Docker peut installer automatiquement Docker Desktop s''il est absent.',
     True, False);
   DeploymentPage.Add('Natif Windows — recommandé pour MCP local');
   DeploymentPage.Add('Docker — conteneur avec volumes et port REST configurable');
@@ -424,7 +550,15 @@ begin
   OllamaPage.Add('URL Ollama :', False);
   OllamaPage.Values[0] := 'http://127.0.0.1:11434';
 
-  DockerPage := CreateInputQueryPage(OllamaPage.ID,
+  DockerPrereqPage := CreateInputOptionPage(OllamaPage.ID,
+    'Docker Desktop',
+    'Préparez le moteur Docker nécessaire au mode conteneur.',
+    'Si aucun runtime Docker n''est détecté, NEXUS peut télécharger Docker Desktop depuis desktop.docker.com et l''installer en mode utilisateur avec le backend WSL 2. La licence Docker reste à accepter par l''utilisateur au premier démarrage.',
+    False, False);
+  DockerPrereqPage.Add('Installer automatiquement Docker Desktop s''il est absent');
+  DockerPrereqPage.Values[0] := True;
+
+  DockerPage := CreateInputQueryPage(DockerPrereqPage.ID,
     'Configuration Docker',
     'Personnalisez l''image, le conteneur, les ports et le repository monté.',
     'Le port REST hôte est vérifié automatiquement. S''il est occupé, NEXUS choisit le premier port TCP disponible suivant. Le port interne du conteneur reste indépendant.');
@@ -473,6 +607,7 @@ begin
     DeploymentPage.SelectedValueIndex := 0;
     ProfilePage.SelectedValueIndex := 0;
     SemanticPage.Values[0] := False;
+    DockerPrereqPage.Values[0] := False;
     AssistantPage.Values[0] := False;
     AssistantPage.Values[1] := False;
     AssistantPage.Values[2] := False;
@@ -489,6 +624,7 @@ begin
   if PageID = NativeOptionsPage.ID then Result := (not InstallNative()) or (not IsCustomProfile())
   else if PageID = RuntimePage.ID then Result := not IsCustomProfile()
   else if PageID = OllamaPage.ID then Result := (not OllamaEnabled()) or (not IsCustomProfile())
+  else if PageID = DockerPrereqPage.ID then Result := (not InstallDocker()) or DockerRuntimePresent()
   else if PageID = DockerPage.ID then Result := not InstallDocker()
   else if PageID = AssistantPage.ID then Result := not AssistantIntegrationAvailable()
   else if PageID = IntegrationRuntimePage.ID then Result := not (InstallNative() and InstallDocker());
@@ -560,11 +696,18 @@ begin
     exit;
   end;
 
+  if (CurPageID = DockerPrereqPage.ID) and InstallDocker() and not DockerRuntimePresent() and not DockerPrereqPage.Values[0] then
+  begin
+    MsgBox('Docker Desktop/CLI n''est pas installé. Cochez l''installation automatique ou installez Docker avant de continuer.', mbError, MB_OK);
+    Result := False;
+    exit;
+  end;
+
   if CurPageID = DockerPage.ID then
   begin
-    if not CommandExists('docker') then
+    if (not DockerRuntimePresent()) and (not DockerDesktopAutoInstallSelected()) then
     begin
-      MsgBox('Docker CLI/Engine n''est pas disponible. Installez ou démarrez Docker Desktop/Engine avant de choisir le mode Docker.', mbError, MB_OK);
+      MsgBox('Docker Desktop/CLI n''est pas disponible et son installation automatique n''est pas sélectionnée.', mbError, MB_OK);
       Result := False;
       exit;
     end;
@@ -616,6 +759,12 @@ begin
   end;
 end;
 
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  NeedsRestart := False;
+  Result := InstallDockerDesktopIfNeeded();
+end;
+
 procedure WriteNativeConfiguration;
 var
   Content: String;
@@ -663,11 +812,33 @@ begin
     RaiseException('Impossible de lire la template Docker Compose installée.');
   SaveStringToFile(ExpandConstant('{app}\docker\docker-compose.yml'), ComposeTemplate, False);
 
-  UpScript := '@echo off' + #13#10 + 'setlocal' + #13#10 +
-    'docker compose --env-file "%~dp0docker\.env" -f "%~dp0docker\docker-compose.yml" up -d' + #13#10 +
+  UpScript := '@echo off' + #13#10 +
+    'setlocal EnableExtensions' + #13#10 +
+    'set "DOCKER_EXE=docker"' + #13#10 +
+    'where docker >nul 2>nul || (' + #13#10 +
+    '  if exist "%LOCALAPPDATA%\Programs\DockerDesktop\resources\bin\docker.exe" set "DOCKER_EXE=%LOCALAPPDATA%\Programs\DockerDesktop\resources\bin\docker.exe"' + #13#10 +
+    '  if exist "%ProgramFiles%\Docker\Docker\resources\bin\docker.exe" set "DOCKER_EXE=%ProgramFiles%\Docker\Docker\resources\bin\docker.exe"' + #13#10 +
+    ')' + #13#10 +
+    '"%DOCKER_EXE%" info >nul 2>nul && goto docker_ready' + #13#10 +
+    'if exist "%LOCALAPPDATA%\Programs\DockerDesktop\Docker Desktop.exe" start "" "%LOCALAPPDATA%\Programs\DockerDesktop\Docker Desktop.exe"' + #13#10 +
+    'if exist "%ProgramFiles%\Docker\Docker\Docker Desktop.exe" start "" "%ProgramFiles%\Docker\Docker\Docker Desktop.exe"' + #13#10 +
+    'for /L %%I in (1,1,90) do (' + #13#10 +
+    '  "%DOCKER_EXE%" info >nul 2>nul && goto docker_ready' + #13#10 +
+    '  timeout /t 2 /nobreak >nul' + #13#10 +
+    ')' + #13#10 +
+    'echo Docker Desktop n''est pas prêt. Acceptez les conditions Docker ou terminez la configuration WSL 2 puis relancez nexus-docker-up.cmd.' + #13#10 +
+    'exit /b 30' + #13#10 +
+    ':docker_ready' + #13#10 +
+    '"%DOCKER_EXE%" compose --env-file "%~dp0docker\.env" -f "%~dp0docker\docker-compose.yml" up -d' + #13#10 +
     'exit /b %ERRORLEVEL%' + #13#10;
-  DownScript := '@echo off' + #13#10 + 'setlocal' + #13#10 +
-    'docker compose --env-file "%~dp0docker\.env" -f "%~dp0docker\docker-compose.yml" down' + #13#10 +
+  DownScript := '@echo off' + #13#10 +
+    'setlocal EnableExtensions' + #13#10 +
+    'set "DOCKER_EXE=docker"' + #13#10 +
+    'where docker >nul 2>nul || (' + #13#10 +
+    '  if exist "%LOCALAPPDATA%\Programs\DockerDesktop\resources\bin\docker.exe" set "DOCKER_EXE=%LOCALAPPDATA%\Programs\DockerDesktop\resources\bin\docker.exe"' + #13#10 +
+    '  if exist "%ProgramFiles%\Docker\Docker\resources\bin\docker.exe" set "DOCKER_EXE=%ProgramFiles%\Docker\Docker\resources\bin\docker.exe"' + #13#10 +
+    ')' + #13#10 +
+    '"%DOCKER_EXE%" compose --env-file "%~dp0docker\.env" -f "%~dp0docker\docker-compose.yml" down' + #13#10 +
     'exit /b %ERRORLEVEL%' + #13#10;
   SaveStringToFile(ExpandConstant('{app}\nexus-docker-up.cmd'), UpScript, False);
   SaveStringToFile(ExpandConstant('{app}\nexus-docker-down.cmd'), DownScript, False);
@@ -825,6 +996,7 @@ begin
   RegWriteStringValue(HKCU, InstallerRegistryPath(), 'RestApiToken', RuntimePage.Values[3]);
   RegWriteStringValue(HKCU, InstallerRegistryPath(), 'SemanticProvider', SemanticProviderValue());
   RegWriteStringValue(HKCU, InstallerRegistryPath(), 'OllamaBaseUrl', OllamaPage.Values[0]);
+  RegWriteDWordValue(HKCU, InstallerRegistryPath(), 'DockerAutoInstall', Ord(DockerPrereqPage.Values[0]));
   if InstallDocker() then
   begin
     RegWriteStringValue(HKCU, InstallerRegistryPath(), 'DockerImage', DockerPage.Values[0]);
@@ -855,6 +1027,19 @@ begin
   else Result := 'Natif / Java embarqué';
 end;
 
+function DockerPrerequisiteSummary(NewLine: String): String;
+begin
+  Result := '';
+  if not InstallDocker() then exit;
+  if DockerRuntimePresent() then
+    Result := '  - Docker Desktop/CLI : détecté' + NewLine
+  else if DockerDesktopAutoInstallSelected() then
+    Result := '  - Docker Desktop : sera téléchargé depuis desktop.docker.com et installé en mode utilisateur (WSL 2)' + NewLine +
+      '  - La licence Docker devra être acceptée par l''utilisateur au premier démarrage ; NEXUS ne l''accepte pas automatiquement.' + NewLine
+  else
+    Result := '  - Docker Desktop/CLI : absent' + NewLine;
+end;
+
 function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
 begin
   Result := 'RÉCAPITULATIF NEXUS' + NewLine + NewLine +
@@ -881,7 +1066,7 @@ begin
 
   if InstallDocker() then
   begin
-    Result := Result + NewLine + 'Docker :' + NewLine +
+    Result := Result + NewLine + 'Docker :' + NewLine + DockerPrerequisiteSummary(NewLine) +
       '  - Image : ' + DockerPage.Values[0] + NewLine +
       '  - Conteneur : ' + DockerPage.Values[1] + NewLine +
       '  - REST : ' + DockerPage.Values[2] + ':' + DockerPage.Values[3] + ' (port hôte vérifié) -> conteneur:' + DockerPage.Values[4] + NewLine +
@@ -906,6 +1091,22 @@ begin
   Result := Result + NewLine + 'Cliquez sur Installer pour appliquer exactement cette configuration.';
 end;
 
+procedure StartDockerDesktopAfterInstall;
+var
+  DockerDesktopPath: String;
+  ResultCode: Integer;
+begin
+  if not DockerDesktopInstalledDuringSetup then exit;
+  DockerDesktopPath := DockerDesktopExecutable();
+  if DockerDesktopPath = '' then exit;
+  if Exec(DockerDesktopPath, '', '', SW_SHOWNORMAL, ewNoWait, ResultCode) then
+    MsgBox(
+      'Docker Desktop a été installé et vient d''être lancé.' + #13#10 +
+      'Au premier démarrage, acceptez les conditions Docker et terminez si nécessaire la préparation WSL 2. ' +
+      'Le script NEXUS Docker attendra ensuite que le moteur soit prêt.',
+      mbInformation, MB_OK);
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
@@ -915,6 +1116,7 @@ begin
     WriteAssistantAssets;
     AddNexusToUserPath;
     PersistSettings;
+    StartDockerDesktopAfterInstall;
     if (not IsSmokeBuild()) and HasAssistantSelection() then
     begin
       if AssistantPage.Values[0] then RunManagedIntegration('connect-copilot-cli.cmd', 'CopilotCliManaged');
@@ -965,6 +1167,6 @@ begin
     StopManagedDocker;
     RemoveManagedAssistantIntegrations;
     RemoveNexusFromUserPath;
-    { NEXUS_HOME is intentionally preserved. }
+    { NEXUS_HOME and Docker Desktop are intentionally preserved. }
   end;
 end;
