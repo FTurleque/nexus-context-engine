@@ -81,11 +81,13 @@ jobs:
 
       - name: Smoke REST on custom host port
         shell: bash
+        env:
+          NEXUS_REST_API_TOKEN: nexus-docker-ci-smoke
         run: |
-          CID="$(docker run -d -p 127.0.0.1:18080:8080 nexus-context-engine:${NEXUS_HEAD_SHA} rest)"
+          CID="$(docker run -d -e NEXUS_REST_API_TOKEN="$NEXUS_REST_API_TOKEN" -p 127.0.0.1:18080:8080 nexus-context-engine:${NEXUS_HEAD_SHA} rest)"
           trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
           for attempt in $(seq 1 30); do
-            if curl --fail --silent http://127.0.0.1:18080/q/health/live | grep -q 'UP'; then
+            if curl --fail --silent -H "Authorization: Bearer $NEXUS_REST_API_TOKEN" http://127.0.0.1:18080/q/health/live | grep -q 'UP'; then
               exit 0
             fi
             sleep 1
