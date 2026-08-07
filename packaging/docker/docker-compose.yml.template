@@ -1,6 +1,10 @@
 services:
   nexus:
-    image: "${NEXUS_DOCKER_IMAGE:-ghcr.io/fturleque/nexus-context-engine:0.2.0}"
+    image: "${NEXUS_DOCKER_IMAGE:-nexus-context-engine:0.2.0}"
+    pull_policy: build
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.runtime
     container_name: "${NEXUS_DOCKER_CONTAINER:-nexus}"
     restart: "${NEXUS_DOCKER_RESTART_POLICY:-unless-stopped}"
     environment:
