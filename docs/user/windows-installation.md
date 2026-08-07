@@ -2,15 +2,13 @@
 
 Ce document décrit le setup Windows NEXUS 0.2.0 et constitue la documentation fonctionnelle de l'assistant de déploiement.
 
-Le setup n'est plus uniquement un copieur de fichiers. Il permet de choisir **comment NEXUS sera exécuté**, quelles surfaces seront utilisées, quels paramètres seront appliqués et quels assistants MCP devront être préparés.
-
-La template exécutable de référence est :
+La template exécutable est :
 
 ```text
 packaging/windows/nexus-installer.iss.template
 ```
 
-La matrice documentaire exhaustive de toutes les valeurs est :
+Le contrat exhaustif de chaque écran est :
 
 ```text
 docs/user/deployment-wizard-template.md
@@ -27,15 +25,15 @@ target\dist\NEXUS-0.2.0-windows-x64-setup.exe
 target\dist\NEXUS-0.2.0-windows-x64-setup.exe.sha256
 ```
 
-Le payload natif embarque son propre runtime Java construit avec `jpackage`. Une JVM système n'est donc pas requise après installation.
+Le payload natif embarque son propre runtime Java construit avec `jpackage`. Une JVM système n'est pas requise après installation.
 
-Le payload Windows contient désormais les surfaces nécessaires à l'onboarding complet :
+Le payload contient :
 
 ```text
 app\                         app-image jpackage + runtime Java
 lib\nexus-cli.jar             CLI
 lib\nexus-mcp.jar             serveur MCP STDIO
-lib\nexus-assistant-clients.jar générateur de configurations assistants
+lib\nexus-assistant-clients.jar générateur d'intégrations assistants
 rest\                        application Quarkus
 nexus.cmd                    launcher CLI natif
 nexus-mcp.cmd                launcher MCP natif
@@ -46,106 +44,62 @@ nexus-docker-mcp.cmd         MCP STDIO via docker exec -i
 docker\docker-compose.yml.template
 ```
 
-## Prérequis selon le mode
+## Modes de déploiement
 
 ### Natif Windows
 
-Après installation :
-
-- Windows x64 compatible ;
-- aucune JVM système ;
-- aucun Maven ;
-- aucun Docker.
-
-Le Java embarqué est utilisé par CLI, MCP et REST.
+- aucun Docker requis ;
+- aucune JVM système requise après installation ;
+- accès direct aux repositories Windows ;
+- MCP local en STDIO.
 
 ### Docker
 
-Le setup ne tente pas d'installer Docker Desktop à la place de l'utilisateur. Le mode Docker exige :
-
-- Docker CLI présent ;
-- Docker Desktop ou Docker Engine démarré ;
-- accès au registre configuré pour l'image sélectionnée ;
-- partage/accès Docker aux lecteurs Windows montés comme repositories.
-
-Le setup vérifie que la commande `docker` est disponible avant d'accepter le mode Docker.
-
-### Natif + Docker
-
-Les prérequis Docker s'ajoutent aux garanties du mode natif. Les deux runtimes peuvent coexister et partager le même `NEXUS_HOME` si l'utilisateur conserve le mapping par défaut.
-
-## Écran 1 — Mode de déploiement
-
-Trois choix exclusifs :
-
-### Natif Windows
-
-Recommandé pour l'usage local avec Copilot CLI, Copilot JetBrains et Claude Code.
-
-Caractéristiques :
-
-- runtime Java embarqué ;
-- MCP local en STDIO ;
-- accès direct aux chemins Windows ;
-- Docker non requis.
-
-### Docker
-
-NEXUS est exécuté dans un conteneur.
-
-Caractéristiques :
-
-- image configurable ;
-- nom de conteneur configurable ;
-- `NEXUS_HOME` monté comme volume ;
-- repository Windows monté en lecture seule sous `/workspace` ;
-- REST publié avec adresse et port hôte configurables ;
+- Docker CLI + Docker Desktop/Engine requis ;
+- image NEXUS configurable ;
+- `NEXUS_HOME` persistant ;
+- repository monté sous `/workspace:ro` ;
+- REST publié sur un port hôte configurable ;
 - MCP reste en STDIO via `docker exec -i`.
 
 ### Natif + Docker
 
-Installe les deux modes. Une page supplémentaire permet alors de choisir quel runtime MCP les intégrations assistants utiliseront.
+Les deux runtimes sont installés. L'utilisateur choisit ensuite lequel sera utilisé par les intégrations MCP.
 
-## Écran 2 — Profil d'installation
+## Écran 1 — Mode de déploiement
 
-### Recommandé
+Choix exclusifs :
 
-Applique les valeurs sûres par défaut.
+```text
+Natif Windows
+Docker
+Natif + Docker
+```
 
-Pour le natif :
+Le mode natif est sélectionné par défaut.
 
-- CLI : activé ;
-- MCP STDIO : activé ;
-- REST natif : désactivé ;
-- `NEXUS_HOME` : `%USERPROFILE%\.nexus` ;
-- sémantique : désactivée.
+## Écran 2 — Profil
 
-Pour Docker :
+```text
+Recommandé
+Personnalisé
+```
 
-- image : `ghcr.io/fturleque/nexus-context-engine:0.2.0` ;
-- conteneur : `nexus` ;
-- bind REST hôte : `127.0.0.1` ;
-- port REST hôte : `8080` ;
-- port REST conteneur : `8080` ;
-- restart policy : `unless-stopped`.
-
-### Personnalisé
-
-Expose les composants natifs et les paramètres runtime détaillés.
+Le profil recommandé garde les valeurs sûres par défaut. Le profil personnalisé expose les composants natifs et les paramètres runtime avancés.
 
 ## Écran 3 — Composants natifs
 
-Visible uniquement en mode natif ou natif + Docker et avec le profil personnalisé.
+Visible uniquement en mode natif/both et profil personnalisé.
 
-Choix indépendants :
+Choix :
 
-- **CLI NEXUS** ;
-- **Serveur MCP STDIO** ;
-- **API REST Quarkus**.
+```text
+CLI NEXUS                  activé par défaut
+Serveur MCP STDIO          activé par défaut
+API REST Quarkus           désactivée par défaut
+```
 
 Au moins une surface native doit rester sélectionnée.
-
-Le runtime Java embarqué est partagé entre les surfaces natives installées.
 
 ## Écran 4 — Configuration runtime
 
@@ -159,181 +113,167 @@ Défaut :
 %USERPROFILE%\.nexus
 ```
 
-Ce répertoire contient les données persistantes NEXUS et n'est pas supprimé par le désinstallateur.
+Il est conservé lors de la désinstallation.
 
-### REST natif — adresse
+### REST natif
 
-Défaut :
-
-```text
-127.0.0.1
-```
-
-### REST natif — port
-
-Défaut :
+Défauts :
 
 ```text
-8080
+host = 127.0.0.1
+port = 8080
 ```
 
-Validation : entier de `1` à `65535`.
+Le port doit être compris entre `1` et `65535`.
+
+Si REST écoute hors loopback, un token est obligatoire.
 
 ### Token REST
 
-Optionnel lorsque REST natif écoute uniquement sur loopback.
+Sur loopback il peut rester vide. En Docker, le processus interne écoute nécessairement hors loopback ; si aucun token n'est fourni, le setup en génère un pour respecter la politique de sécurité NEXUS.
 
-Si l'adresse native n'est ni `127.0.0.1` ni `localhost`, un token est obligatoire. NEXUS refuse déjà un démarrage REST non-loopback sans token.
+## Écran 5 — Recherche sémantique
 
-Pour Docker, le processus Quarkus doit écouter `0.0.0.0` à l'intérieur du conteneur afin que Docker publie le port. Si aucun token n'est fourni, le setup génère une valeur locale et l'écrit dans le fichier `.env` Docker afin de respecter la frontière de sécurité REST NEXUS.
+Le provider sémantique n'est **plus saisi dans un champ texte libre**.
 
-### Sémantique
-
-Valeurs habituelles :
+Le wizard propose une case unique :
 
 ```text
-vide     recherche sémantique désactivée
-ollama   provider Ollama activé
+[ ] Activer Ollama pour la recherche sémantique
 ```
 
-URL Ollama par défaut proposée :
+Défaut : désactivé.
+
+Lorsque la case est cochée :
+
+```text
+NEXUS_SEMANTIC_PROVIDER=ollama
+```
+
+Lorsque la case est décochée :
+
+```text
+NEXUS_SEMANTIC_PROVIDER=
+```
+
+Important : le setup **configure NEXUS pour utiliser Ollama mais n'installe pas le binaire Ollama**. L'instance doit déjà être installée ou accessible.
+
+## Écran 6 — Configuration Ollama
+
+Visible uniquement si :
+
+```text
+Ollama activé + profil Personnalisé
+```
+
+URL par défaut :
 
 ```text
 http://127.0.0.1:11434
 ```
 
-En Docker, une instance Ollama installée sur l'hôte peut nécessiter une URL accessible depuis le conteneur, par exemple une adresse adaptée à Docker Desktop. Cette valeur doit être personnalisée selon l'environnement.
+En profil recommandé, cocher Ollama conserve cette URL sans afficher l'écran avancé.
 
-## Écran 5 — Configuration Docker
+En Docker, `127.0.0.1` pointe vers le conteneur lui-même. Si Ollama tourne sur l'hôte Windows, l'URL doit être adaptée à la topologie Docker utilisée.
 
-Visible dès que Docker fait partie du mode choisi.
+## Écran 7 — Configuration Docker
 
-### Image
+Visible dès que Docker est sélectionné.
 
-Défaut :
-
-```text
-ghcr.io/fturleque/nexus-context-engine:0.2.0
-```
-
-Pour tester une image construite localement, remplacer par exemple par :
+Valeurs par défaut :
 
 ```text
-nexus-context-engine:0.2.0
+Image                ghcr.io/fturleque/nexus-context-engine:0.2.0
+Conteneur            nexus
+Adresse hôte         127.0.0.1
+Port REST hôte       8080
+Port REST conteneur  8080
+Repository           %USERPROFILE%
+Restart policy       unless-stopped
 ```
 
-### Nom du conteneur
+Le port hôte est entièrement personnalisable. Il est généralement préférable de conserver `8080` dans le conteneur et de changer uniquement le port hôte.
 
-Défaut :
+Exemples :
 
 ```text
-nexus
+127.0.0.1:9080  -> container:8080
+127.0.0.1:18080 -> container:8080
 ```
 
-Les launchers `nexus-docker.cmd` et `nexus-docker-mcp.cmd` lisent ce nom depuis `docker\.env`.
-
-### Adresse d'écoute hôte
-
-Défaut :
-
-```text
-127.0.0.1
-```
-
-Conserver loopback évite d'exposer REST sur le LAN.
-
-### Port REST hôte
-
-Défaut : `8080`.
-
-Il est entièrement personnalisable. Exemples :
-
-```text
-127.0.0.1:9080  -> conteneur:8080
-127.0.0.1:18080 -> conteneur:8080
-```
-
-C'est le réglage à privilégier lorsque plusieurs instances ou services utilisent déjà `8080`.
-
-### Port REST conteneur
-
-Défaut : `8080`.
-
-Il peut être changé en mode avancé, mais il est généralement préférable de conserver `8080` en interne et de modifier uniquement le port hôte.
-
-### Repository / racine de projets
-
-Chemin Windows monté en lecture seule :
+Le repository choisi est monté :
 
 ```text
 <chemin Windows> -> /workspace:ro
 ```
 
-Exemple :
+`NEXUS_HOME` est monté en lecture/écriture sous `/data/nexus`.
 
-```text
-N:\workspace-dev -> /workspace:ro
-```
+## Écran 8 — Intégrations assistants IA
 
-Docker Desktop doit être autorisé à accéder au lecteur concerné. Les chemins sont normalisés avec `/` dans le `.env` généré.
-
-### Restart policy
-
-Défaut :
-
-```text
-unless-stopped
-```
-
-La valeur est transmise directement à Docker Compose.
-
-## Écran 6 — Intégrations assistants IA
-
-L'utilisateur choisit explicitement les intégrations à préparer.
+La même matrice est utilisée partout dans NEXUS : wizard, générateur standalone et documentation.
 
 ### GitHub Copilot CLI
 
-Si `copilot` est détecté et qu'aucune entrée MCP `nexus` n'existe déjà, le setup exécute une commande équivalente à :
-
-Mode natif :
+Si `copilot` est détecté et qu'aucune entrée `nexus` n'existe :
 
 ```text
-copilot mcp add nexus --tools "*" -- <java NEXUS> -jar <nexus-mcp.jar>
+copilot mcp add nexus --tools "*" -- <commande MCP NEXUS>
 ```
 
-Mode Docker :
-
-```text
-copilot mcp add nexus --tools "*" -- docker exec -i <container> java -jar /opt/nexus/lib/nexus-mcp.jar
-```
-
-Si une entrée `nexus` existe déjà, elle est préservée.
+Une entrée existante est préservée.
 
 ### GitHub Copilot JetBrains
 
-Le plugin JetBrains gère lui-même l'emplacement de son `mcp.json`. Le setup ne devine donc pas un chemin interne susceptible de varier selon l'IDE ou la version.
-
-Il génère :
+Le setup ne devine pas le chemin de configuration interne de l'IDE. Il génère :
 
 ```text
 {installation}\integrations\copilot-jetbrains.mcp.json
 ```
 
-Le JSON utilise le schéma `servers` et contient soit le Java NEXUS embarqué, soit `docker exec -i` selon le runtime MCP choisi.
+Le fichier utilise le schéma `servers`.
 
-Dans Copilot Chat JetBrains, utiliser **Configure your MCP server / Add MCP Tools** puis intégrer l'entrée `nexus` générée.
+### Claude CLI / Claude Code
 
-### Claude Code
-
-Le setup cible le scope utilisateur lorsque la CLI `claude` est détectée :
+Si `claude` est détecté et qu'aucune entrée `nexus` n'existe :
 
 ```text
 claude mcp add nexus --scope user -- <commande MCP NEXUS>
 ```
 
-Une entrée existante `nexus` est préservée.
+Le profil projet reste disponible avec `nexus-assistant-clients.cmd`.
 
-Le scope projet reste disponible via le générateur `nexus-assistant-clients.cmd` lorsque l'utilisateur veut produire un `.mcp.json` versionné avec un repository particulier.
+Asset géré :
+
+```text
+{installation}\integrations\connect-claude-cli.cmd
+```
+
+### Codex Desktop
+
+Le setup traite Codex Desktop comme un client de la configuration Codex locale partagée.
+
+Si la CLI `codex` est détectée et qu'aucune entrée `nexus` n'existe :
+
+```text
+codex mcp add nexus -- <commande MCP NEXUS>
+```
+
+Le setup génère **également** un snippet TOML :
+
+```text
+{installation}\integrations\codex-desktop.mcp.toml
+```
+
+Structure :
+
+```toml
+[mcp_servers.nexus]
+command = "<java.exe embarqué ou docker>"
+args = ["..."]
+```
+
+Cela permet une configuration manuelle si la CLI `codex` n'est pas présente. Une entrée existante `nexus` n'est pas écrasée.
 
 ### Client MCP générique
 
@@ -343,20 +283,81 @@ Le setup génère :
 {installation}\integrations\generic-mcp.json
 ```
 
-Le document utilise le schéma `mcpServers` et peut servir de base aux clients compatibles STDIO.
+avec le schéma `mcpServers`.
 
-## Écran 7 — Runtime MCP en mode Both
+### Authentification
 
-Visible uniquement lorsque **Natif + Docker** est sélectionné.
+NEXUS ne gère aucune authentification Copilot, Claude ou Codex et ne stocke aucun token externe.
+
+## Écran 9 — Runtime MCP en mode Both
+
+Visible uniquement en mode `Natif + Docker`.
 
 Choix :
 
-- MCP natif avec Java embarqué ;
-- MCP Docker via `docker exec -i`.
+```text
+MCP natif avec Java embarqué
+MCP Docker via docker exec -i
+```
 
-Ce choix affecte les configurations Copilot/Claude/génériques générées par le setup. Il ne désactive aucun des deux runtimes.
+Ce choix s'applique aux cinq intégrations assistants.
 
-## Fichiers de configuration générés
+## Dernière étape — Récapitulatif avant installation
+
+La page standard Inno Setup **Ready to Install** est obligatoire et affiche un récapitulatif construit par `UpdateReadyMemo`.
+
+Elle est la dernière étape avant le bouton **Installer**.
+
+Le récapitulatif contient :
+
+- mode Natif / Docker / Both ;
+- profil ;
+- répertoire d'installation ;
+- `NEXUS_HOME` ;
+- composants natifs ;
+- REST natif et port ;
+- ajout au PATH ;
+- recherche sémantique désactivée ou Ollama activé ;
+- URL Ollama si activé ;
+- rappel que le binaire Ollama n'est pas installé par NEXUS ;
+- image Docker ;
+- conteneur ;
+- bind/ports ;
+- repository ;
+- restart policy ;
+- démarrage Docker post-install ;
+- GitHub Copilot CLI ;
+- GitHub Copilot JetBrains ;
+- Claude CLI / Claude Code ;
+- Codex Desktop ;
+- MCP générique ;
+- runtime MCP utilisé par ces intégrations.
+
+Exemple :
+
+```text
+RÉCAPITULATIF NEXUS
+
+Mode : Natif + Docker
+Profil : Personnalisé
+NEXUS_HOME : C:\Users\<user>\.nexus
+
+Recherche sémantique : Ollama ACTIVÉ
+  - URL : http://127.0.0.1:11434
+  - Le setup configure NEXUS mais n'installe pas le binaire Ollama.
+
+Assistants MCP :
+  - GitHub Copilot CLI
+  - GitHub Copilot JetBrains
+  - Claude CLI / Claude Code
+  - Codex Desktop
+  - Client MCP générique
+  - Runtime MCP : Natif / Java embarqué
+```
+
+Aucune configuration externe n'est ajoutée avant la confirmation et l'exécution réelle de l'installation.
+
+## Fichiers générés
 
 ### Natif
 
@@ -364,7 +365,7 @@ Ce choix affecte les configurations Copilot/Claude/génériques générées par 
 {installation}\config\nexus-native.env.cmd
 ```
 
-Contient les valeurs choisies pour :
+Variables :
 
 ```text
 NEXUS_HOME
@@ -375,8 +376,6 @@ NEXUS_SEMANTIC_PROVIDER
 NEXUS_OLLAMA_BASE_URL
 ```
 
-Les launchers natifs chargent ce fichier avant de démarrer NEXUS.
-
 ### Docker
 
 ```text
@@ -386,13 +385,7 @@ Les launchers natifs chargent ce fichier avant de démarrer NEXUS.
 {installation}\nexus-docker-down.cmd
 ```
 
-Le Compose est issu de :
-
-```text
-packaging/docker/docker-compose.yml.template
-```
-
-Les variables principales sont :
+Variables principales :
 
 ```text
 NEXUS_DOCKER_IMAGE
@@ -408,19 +401,28 @@ NEXUS_OLLAMA_BASE_URL
 NEXUS_REST_API_TOKEN
 ```
 
+### Assistants
+
+Selon les choix :
+
+```text
+integrations\connect-copilot-cli.cmd
+integrations\copilot-jetbrains.mcp.json
+integrations\connect-claude-cli.cmd
+integrations\connect-codex-desktop.cmd
+integrations\codex-desktop.mcp.toml
+integrations\generic-mcp.json
+```
+
 ## MCP Docker et ports
 
-MCP ne possède **aucun port Docker** dans cette architecture.
-
-Le transport reste :
+MCP n'a aucun port Docker :
 
 ```text
 client IA -> STDIO -> docker exec -i -> NexusMcpServer
 ```
 
 Seule l'API REST utilise un mapping TCP.
-
-Cette séparation évite d'introduire un transport MCP HTTP simplement pour le packaging.
 
 ## PATH Windows
 
@@ -430,31 +432,15 @@ La tâche :
 Ajouter NEXUS au PATH de l'utilisateur
 ```
 
-est proposée uniquement lorsque le mode natif est installé.
+est proposée lorsque le mode natif est installé.
 
-Le setup enregistre exactement l'entrée qu'il gère dans :
+L'entrée gérée est mémorisée sous :
 
 ```text
 HKCU\Software\FTurleque\NEXUS\ManagedPath
 ```
 
 La désinstallation retire uniquement cette entrée.
-
-## Démarrage Docker
-
-Si la tâche **Démarrer le déploiement Docker à la fin de l'installation** est sélectionnée, le setup exécute :
-
-```text
-nexus-docker-up.cmd
-```
-
-Ce launcher utilise :
-
-```text
-docker compose --env-file docker\.env -f docker\docker-compose.yml up -d
-```
-
-Des raccourcis menu Démarrer permettent ensuite de démarrer ou arrêter le déploiement Docker.
 
 ## Upgrade / reconfiguration
 
@@ -464,105 +450,67 @@ Les principaux choix sont persistés sous :
 HKCU\Software\FTurleque\NEXUS
 ```
 
-Lors d'une réinstallation, l'assistant recharge notamment :
+Sont notamment conservés :
 
 - mode de déploiement ;
 - `NEXUS_HOME` ;
 - paramètres REST ;
-- sémantique/Ollama ;
+- état Ollama + URL ;
 - image et conteneur Docker ;
 - ports ;
 - repository ;
 - restart policy.
 
-La reconfiguration remplace les fichiers de configuration **gérés par le setup**, pas les données NEXUS.
-
 ## Désinstallation
 
 La désinstallation :
 
-- arrête le Compose NEXUS géré si Docker avait été configuré ;
-- supprime les fichiers applicatifs installés ;
-- retire du PATH uniquement l'entrée gérée par NEXUS ;
-- retire les entrées Copilot CLI / Claude Code uniquement lorsqu'elles avaient été ajoutées avec succès par le setup ;
-- ne supprime pas `NEXUS_HOME` ;
-- ne supprime pas les repositories utilisateur ;
-- ne désinstalle pas Docker Desktop/Engine ;
-- ne gère aucune authentification Copilot/Claude.
+- arrête le Compose NEXUS géré ;
+- retire l'entrée PATH gérée ;
+- retire uniquement les intégrations Copilot CLI / Claude CLI / Codex ajoutées avec succès par le setup ;
+- supprime les fichiers applicatifs ;
+- conserve `NEXUS_HOME` ;
+- conserve les repositories utilisateur ;
+- ne désinstalle pas Docker ;
+- ne désinstalle pas Ollama ;
+- ne supprime pas les configurations MCP qui n'ont pas été créées par NEXUS.
 
-## Générer un candidat Windows local
+## Construire localement
 
-Prérequis de build :
+Prérequis :
 
 - Windows x64 ;
-- `JAVA_HOME` vers un JDK 21 ou supérieur ;
-- réseau la première fois si Inno Setup n'est pas disponible.
+- `JAVA_HOME` vers JDK 21+ ;
+- Inno Setup 7 (le script peut le préparer si nécessaire).
 
-Commande complète :
-
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass -Force
-& .\scripts\release\build-windows-release.ps1
-```
-
-Pour une itération de packaging après qualification du code :
+Distribution :
 
 ```powershell
-& .\scripts\release\build-windows-release.ps1 -SkipVerify
+.\scripts\release\build-windows-distribution.ps1
 ```
 
-`-SkipVerify` ne constitue pas une preuve de release finale.
+EXE :
 
-## Construire et tester Docker localement
+```powershell
+.\scripts\release\build-windows-installer.ps1
+```
+
+Setup produit :
+
+```text
+target\dist\NEXUS-0.2.0-windows-x64-setup.exe
+```
+
+Smoke install/uninstall :
+
+```powershell
+$setup = (Resolve-Path '.\target\dist\NEXUS-0.2.0-windows-x64-setup.exe').Path
+.\scripts\release\test-windows-installer.ps1 -Setup $setup
+```
+
+## Docker local
 
 ```powershell
 $image = & .\scripts\release\build-docker-image.ps1
 & .\scripts\release\test-docker-runtime.ps1 -Image $image -HostPort 18080
 ```
-
-Le smoke vérifie :
-
-- CLI/version ;
-- maintien du serveur MCP STDIO avec stdin ouvert ;
-- REST/health sur un port hôte personnalisé.
-
-## Qualification setup
-
-La CI Windows construit une variante smoke non interactive puis exécute :
-
-```powershell
-& .\scripts\release\test-windows-installer.ps1 -Setup <smoke-setup.exe>
-```
-
-La variante smoke force le mode natif recommandé et désactive les intégrations assistants afin de ne jamais modifier la configuration réelle du runner CI.
-
-## Vérification d'intégrité
-
-```powershell
-$actual = (Get-FileHash .\target\dist\NEXUS-0.2.0-windows-x64-setup.exe -Algorithm SHA256).Hash.ToLowerInvariant()
-Get-Content .\target\dist\NEXUS-0.2.0-windows-x64-setup.exe.sha256
-$actual
-```
-
-Les distributions embarquent également :
-
-```text
-LICENSE
-THIRD_PARTY_NOTICES.txt
-SBOM.cdx.json
-VERSION
-RUNTIME-MODULES.txt
-```
-
-## Principes invariants
-
-1. Le mode natif ne dépend jamais de Docker.
-2. Le mode natif installé ne dépend jamais d'une JVM système.
-3. Docker reste optionnel.
-4. MCP reste STDIO tant qu'un besoin explicite ne justifie pas un transport distant.
-5. Le port Docker personnalisable concerne REST, pas MCP.
-6. `NEXUS_HOME` est persistant et n'est pas supprimé automatiquement.
-7. Les configurations MCP existantes ne sont pas écrasées silencieusement.
-8. NEXUS ne prend jamais possession de l'authentification Copilot ou Claude.
-9. Les repositories montés dans Docker sont en lecture seule par défaut.
-10. Une écoute REST exposée doit rester protégée par la politique de token NEXUS.
