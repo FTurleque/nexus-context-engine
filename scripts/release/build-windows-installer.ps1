@@ -87,6 +87,43 @@ $appId = if ($Smoke) { "NEXUS-Installer-Smoke-$Version" } else { '{{AE8110A7-369
 $smokeMode = if ($Smoke) { '1' } else { '0' }
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 $iss = [IO.File]::ReadAllText($template, $utf8)
+
+# Harden Docker prerequisite detection before compiling the generated Inno source.
+# A docker.exe on PATH is only a client binary; it must not suppress Docker Desktop
+# installation unless it can actually reach a Docker engine. A stopped but installed
+# Docker Desktop is also accepted because the post-install launcher starts it.
+$legacyDockerDetection = @'
+function DockerRuntimePresent(): Boolean;
+begin
+  Result := (DockerCliExecutable() <> '') or (DockerDesktopExecutable() <> '');
+end;
+'@
+$strictDockerDetection = @'
+function DockerEngineReady(): Boolean;
+var
+  DockerCli: String;
+  ResultCode: Integer;
+begin
+  Result := False;
+  DockerCli := DockerCliExecutable();
+  if DockerCli = '' then exit;
+
+  if DockerCli = 'docker' then
+    Result := Exec(ExpandConstant('{cmd}'), '/D /S /C "docker info >nul 2>nul"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0)
+  else
+    Result := Exec(DockerCli, 'info', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+end;
+
+function DockerRuntimePresent(): Boolean;
+begin
+  Result := DockerEngineReady() or (DockerDesktopExecutable() <> '');
+end;
+'@
+if ($iss.IndexOf($legacyDockerDetection, [StringComparison]::Ordinal) -lt 0) {
+    throw 'Installer template Docker runtime detector changed unexpectedly; refusing to build an EXE that could skip Docker Desktop bootstrap.'
+}
+$iss = $iss.Replace($legacyDockerDetection, $strictDockerDetection)
+
 $iss = $iss.Replace('@@VERSION@@', (Escape-Inno $Version))
 $iss = $iss.Replace('@@APP_VERSION@@', (Escape-Inno $appVersion))
 $iss = $iss.Replace('@@APP_ID@@', (Escape-Inno $appId))
@@ -96,6 +133,9 @@ $iss = $iss.Replace('@@OUTPUT_DIR@@', (Escape-Inno $installerOutput))
 $iss = $iss.Replace('@@OUTPUT_BASENAME@@', (Escape-Inno $outputBase))
 if ($iss -match '@@[A-Z0-9_]+@@') {
     throw "Unresolved Inno Setup template token: $($Matches[0])"
+}
+if ($iss.IndexOf('function DockerEngineReady(): Boolean;', [StringComparison]::Ordinal) -lt 0) {
+    throw 'Generated installer is missing strict Docker engine readiness detection.'
 }
 [IO.File]::WriteAllText($generatedIss, $iss, $utf8)
 
@@ -115,6 +155,7 @@ try {
     Write-Host "Setup   : $setup"
     Write-Host "SHA-256 : $hash"
     Write-Host 'Wizard  : Native / Docker / Both + runtime/integration customization'
+    Write-Host 'Docker  : client-only docker.exe does not suppress Docker Desktop bootstrap'
     Write-Output $setup
 }
 finally {
