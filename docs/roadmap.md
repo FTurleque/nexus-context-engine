@@ -7,7 +7,7 @@ Cette feuille de route est la source de vérité active pour l'évolution de NEX
 ```text
 repository   FTurleque/nexus-context-engine
 visibility   public
-main         Phase 6 + hardening + provenance + licence + documentation + supply-chain intégrés
+main         Phase 6 + hardening + provenance + licence + supply-chain + Windows EXE intégrés
 version      0.2.0
 Java         runtime >=21 / release 21
 Phase 1→6   livrées / intégrées
@@ -16,6 +16,7 @@ P1 audit    #19 + #20 intégrés via PR #24
 docs         #21 intégré via PR #26
 supply-chain #22 intégré via PR #28
 licence     propriétaire source-available via PR #25
+windows     EXE installer autonome intégré via PR #41
 ```
 
 Principe directeur :
@@ -38,6 +39,7 @@ Principe directeur :
 | Licence propriétaire publique | PR #25 | ✅ intégrée |
 | Réconciliation documentaire | issue #21 / PR #26 | ✅ intégrée |
 | CI / couverture / supply-chain | issue #22 / PR #28 | ✅ intégrée |
+| Distribution Windows EXE autonome | issue #40 / PR #41 | ✅ intégrée |
 | Benchmark scale SQLite/fédération | issue #23 | ⏳ prochain lot |
 
 ## Baseline fonctionnelle livrée
@@ -53,7 +55,8 @@ NEXUS 0.2.0 fournit notamment :
 - instructions AGENTS/Copilot/Claude/Gemini ;
 - Agent Skills locaux et AI Skills Registry ;
 - CLI, REST Quarkus et MCP Java STDIO ;
-- distribution CLI autonome avec checksums, licence, notices tierces et SBOM.
+- distribution CLI autonome avec checksums, licence, notices tierces et SBOM ;
+- installateur Windows EXE autonome avec runtime Java embarqué (sans prérequis JVM).
 
 Baseline grande échelle historique : 2 104 fichiers, 10 878 symboles, 10 087 relations, indexation complète 8 818 ms, fédération p50/p95 133/304 ms, contexte p50/p95 48/206 ms, hit@3 et MRR@3 à 1,0.
 
@@ -106,6 +109,28 @@ Qualification exacte-head de PR #28 (`a363e93dc97597d288389b4f4b9e8404abe4296c`)
 PR #28 est fusionnée dans `main` via `4c9b7cd4e26913af42f687b48718c8e733fa06f7`.
 
 Référence : [`developer/ci-and-supply-chain.md`](developer/ci-and-supply-chain.md).
+
+## Distribution Windows — PR #41
+
+L'issue #40 est clôturée.
+
+La release Windows x64 produit, sans prérequis JVM sur la machine cible :
+
+- un ZIP Windows autonome (`nexus-context-engine-0.2.0-windows-x64.zip`) ;
+- un setup Inno Setup EXE (`NEXUS-0.2.0-windows-x64-setup.exe`), current-user, sans élévation.
+
+Le runtime Java est embarqué via `jpackage`. Le setup ajoute NEXUS au `PATH` utilisateur et enregistre un désinstallateur standard Windows. `NEXUS_HOME` est conservé lors d'une désinstallation.
+
+Qualification exacte-head de PR #41 (`1be179c76a28ae57387b287df3dc7c33b1225443`) :
+
+- NEXUS CI run 31158371347 : Windows gate Java 24 PASS, Linux reactor Java 21 PASS ;
+- Windows Installer run 31158371344 : build, smoke install/execute/uninstall, production EXE PASS ;
+- OSV-Scanner run 31158371667 : PASS ;
+- CodeQL run 31158371350 : PASS.
+
+PR #41 est fusionnée dans `main` via `f4b41f8150d94ef983c486864e428023ab446b4f`.
+
+Référence : [`docs/user/windows-installation.md`](user/windows-installation.md) et [`distribution/README.md`](../distribution/README.md).
 
 ## Travail restant priorisé
 
