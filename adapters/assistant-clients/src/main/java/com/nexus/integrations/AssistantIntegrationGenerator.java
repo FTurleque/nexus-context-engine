@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,63 +31,143 @@ public final class AssistantIntegrationGenerator {
             return;
         }
 
-        String profile = args[0];
-        Path runner = Path.of(args[1]);
-        String format = args.length >= 3 ? args[2] : "command";
         AssistantIntegrationGenerator generator = new AssistantIntegrationGenerator();
+        String profile = args[0];
 
-        String output = switch (profile) {
+        // Backward-compatible Phase 6 syntax:
+        // <profile> <runner-mcp> [command|json]
+        if (!"native".equals(args[1]) && !"docker".equals(args[1])) {
+            Path runner = Path.of(args[1]);
+            String format = args.length >= 3 ? args[2] : "command";
+            System.out.println(generator.render(profile, generator.legacyJava(runner), format));
+            return;
+        }
+
+        CommandSpec commandSpec;
+        String format;
+        if ("native".equals(args[1])) {
+            if (args.length < 4) {
+                throw new IllegalArgumentException("Le mode native exige <java-exe> <runner-mcp>.");
+            }
+            commandSpec = generator.nativeMcp(Path.of(args[2]), Path.of(args[3]));
+            format = args.length >= 5 ? args[4] : "command";
+        } else {
+            if (args.length < 3) {
+                throw new IllegalArgumentException("Le mode docker exige <container-name>.");
+            }
+            commandSpec = generator.dockerMcp(args[2]);
+            format = args.length >= 4 ? args[3] : "command";
+        }
+
+        System.out.println(generator.render(profile, commandSpec, format));
+    }
+
+    private String render(String profile, CommandSpec commandSpec, String format) {
+        return switch (profile) {
             case "copilot-cli" -> "json".equals(format)
-                    ? generator.copilotCliJson(runner)
-                    : generator.copilotCliCommand(runner);
-            case "copilot-jetbrains" -> generator.copilotJetBrainsJson(runner);
+                    ? copilotCliJson(commandSpec)
+                    : copilotCliCommand(commandSpec);
+            case "copilot-jetbrains" -> copilotJetBrainsJson(commandSpec);
             case "claude-project" -> "json".equals(format)
-                    ? generator.claudeProjectJson(runner)
-                    : generator.claudeProjectCommand(runner);
-            case "claude-user" -> generator.claudeUserCommand(runner);
+                    ? claudeProjectJson(commandSpec)
+                    : claudeProjectCommand(commandSpec);
+            case "claude-user" -> claudeUserCommand(commandSpec);
+            case "generic" -> genericMcpJson(commandSpec);
             default -> throw new IllegalArgumentException("Profil inconnu : " + profile);
         };
+    }
 
-        System.out.println(output);
+    public CommandSpec nativeMcp(Path javaExecutable, Path runner) {
+        return new CommandSpec(normalize(javaExecutable), List.of("-jar", normalize(runner)));
+    }
+
+    public CommandSpec dockerMcp(String containerName) {
+        String container = Objects.requireNonNull(containerName, "containerName").trim();
+        if (container.isEmpty()) {
+            throw new IllegalArgumentException("containerName ne peut pas être vide");
+        }
+        return new CommandSpec("docker", List.of(
+                "exec", "-i", container,
+                "java", "-jar", "/opt/nexus/lib/nexus-mcp.jar"));
     }
 
     public String copilotCliCommand(Path runner) {
-        return "copilot mcp add " + SERVER_NAME + " --tools \"*\" -- java -jar " + quote(normalize(runner));
+        return copilotCliCommand(legacyJava(runner));
+    }
+
+    public String copilotCliCommand(CommandSpec commandSpec) {
+        return "copilot mcp add " + SERVER_NAME + " --tools \"*\" -- " + renderCommand(commandSpec);
     }
 
     public String copilotCliJson(Path runner) {
-        Map<String, Object> server = new LinkedHashMap<>();
-        server.put("type", "stdio");
-        server.put("command", "java");
-        server.put("args", List.of("-jar", normalize(runner)));
+        return copilotCliJson(legacyJava(runner));
+    }
+
+    public String copilotCliJson(CommandSpec commandSpec) {
+        Map<String, Object> server = stdioServer(commandSpec);
         server.put("env", Map.of());
         server.put("tools", List.of("*"));
         return json(Map.of("mcpServers", Map.of(SERVER_NAME, server)));
     }
 
     public String copilotJetBrainsJson(Path runner) {
-        Map<String, Object> server = new LinkedHashMap<>();
-        server.put("type", "stdio");
-        server.put("command", "java");
-        server.put("args", List.of("-jar", normalize(runner)));
-        return json(Map.of("servers", Map.of(SERVER_NAME, server)));
+        return copilotJetBrainsJson(legacyJava(runner));
+    }
+
+    public String copilotJetBrainsJson(CommandSpec commandSpec) {
+        return json(Map.of("servers", Map.of(SERVER_NAME, stdioServer(commandSpec))));
     }
 
     public String claudeProjectCommand(Path runner) {
-        return "claude mcp add " + SERVER_NAME + " --scope project -- java -jar " + quote(normalize(runner));
+        return claudeProjectCommand(legacyJava(runner));
+    }
+
+    public String claudeProjectCommand(CommandSpec commandSpec) {
+        return "claude mcp add " + SERVER_NAME + " --scope project -- " + renderCommand(commandSpec);
     }
 
     public String claudeUserCommand(Path runner) {
-        return "claude mcp add " + SERVER_NAME + " --scope user -- java -jar " + quote(normalize(runner));
+        return claudeUserCommand(legacyJava(runner));
+    }
+
+    public String claudeUserCommand(CommandSpec commandSpec) {
+        return "claude mcp add " + SERVER_NAME + " --scope user -- " + renderCommand(commandSpec);
     }
 
     public String claudeProjectJson(Path runner) {
-        Map<String, Object> server = new LinkedHashMap<>();
-        server.put("type", "stdio");
-        server.put("command", "java");
-        server.put("args", List.of("-jar", normalize(runner)));
+        return claudeProjectJson(legacyJava(runner));
+    }
+
+    public String claudeProjectJson(CommandSpec commandSpec) {
+        Map<String, Object> server = stdioServer(commandSpec);
         server.put("env", Map.of());
         return json(Map.of("mcpServers", Map.of(SERVER_NAME, server)));
+    }
+
+    public String genericMcpJson(CommandSpec commandSpec) {
+        return json(Map.of("mcpServers", Map.of(SERVER_NAME, stdioServer(commandSpec))));
+    }
+
+    private CommandSpec legacyJava(Path runner) {
+        return new CommandSpec("java", List.of("-jar", normalize(runner)));
+    }
+
+    private static Map<String, Object> stdioServer(CommandSpec commandSpec) {
+        Objects.requireNonNull(commandSpec, "commandSpec");
+        Map<String, Object> server = new LinkedHashMap<>();
+        server.put("type", "stdio");
+        server.put("command", commandSpec.command());
+        server.put("args", commandSpec.args());
+        return server;
+    }
+
+    private static String renderCommand(CommandSpec commandSpec) {
+        List<String> parts = new ArrayList<>();
+        parts.add(quote(commandSpec.command()));
+        for (String arg : commandSpec.args()) {
+            parts.add(quote(arg));
+        }
+        return String.join(" ", parts);
     }
 
     private String json(Map<String, Object> value) {
@@ -97,26 +178,46 @@ public final class AssistantIntegrationGenerator {
         }
     }
 
-    private static String normalize(Path runner) {
-        Objects.requireNonNull(runner, "runner");
-        return runner.toAbsolutePath().normalize().toString();
+    private static String normalize(Path path) {
+        Objects.requireNonNull(path, "path");
+        return path.toAbsolutePath().normalize().toString();
     }
 
     private static String quote(String value) {
-        return '"' + value.replace("\"", "\\\"") + '"';
+        String normalized = Objects.requireNonNull(value, "value");
+        if (!normalized.contains(" ") && !normalized.contains("\t") && !normalized.contains("\"")) {
+            return normalized;
+        }
+        return '"' + normalized.replace("\"", "\\\"") + '"';
     }
 
     private static String usage() {
         return """
-                Usage: java -jar nexus-assistant-clients-...-runner.jar <profil> <runner-mcp> [command|json]
+                Usage:
+                  java -jar nexus-assistant-clients-...-runner.jar <profil> <runner-mcp> [command|json]
+                  java -jar nexus-assistant-clients-...-runner.jar <profil> native <java-exe> <runner-mcp> [command|json]
+                  java -jar nexus-assistant-clients-...-runner.jar <profil> docker <container-name> [command|json]
 
                 Profils:
                   copilot-cli       command ou json
                   copilot-jetbrains json
                   claude-project    command ou json
                   claude-user       command
+                  generic           json mcpServers
 
+                Le mode native permet de viser explicitement le Java embarqué NEXUS.
+                Le mode docker utilise docker exec -i et conserve MCP en STDIO.
                 Le générateur n'écrit aucun fichier et ne modifie aucune configuration utilisateur.
                 """;
+    }
+
+    public record CommandSpec(String command, List<String> args) {
+        public CommandSpec {
+            command = Objects.requireNonNull(command, "command").trim();
+            if (command.isEmpty()) {
+                throw new IllegalArgumentException("command ne peut pas être vide");
+            }
+            args = List.copyOf(Objects.requireNonNull(args, "args"));
+        }
     }
 }
