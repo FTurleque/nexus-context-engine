@@ -76,7 +76,7 @@ try {
     $mcpJar = Join-Path $install 'lib\nexus-mcp.jar'
 
     $claudeCommand = & $assistant 'claude-cli' 'native' $javaExe $mcpJar 'command' | Out-String
-    if ($LASTEXITCODE -ne 0 -or $claudeCommand -notmatch 'claude mcp add nexus --scope user --') {
+    if ($LASTEXITCODE -ne 0 -or $claudeCommand -notmatch 'claude mcp add --scope user nexus --') {
         throw 'Installed Claude CLI integration generation smoke failed.'
     }
     if ($claudeCommand -notmatch [regex]::Escape($javaExe)) {
