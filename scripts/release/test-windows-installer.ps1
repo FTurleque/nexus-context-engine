@@ -33,7 +33,20 @@ $arguments = @(
 $process = Start-Process -FilePath $Setup -ArgumentList $arguments -Wait -PassThru
 if ($process.ExitCode -ne 0) { throw "Setup smoke install failed with exit code $($process.ExitCode)" }
 
-foreach ($required in @('nexus.cmd', 'app\nexus.exe', 'app\runtime\bin\java.exe', 'LICENSE', 'THIRD_PARTY_NOTICES.txt', 'SBOM.cdx.json')) {
+foreach ($required in @(
+    'nexus.cmd',
+    'nexus-mcp.cmd',
+    'nexus-assistant-clients.cmd',
+    'app\nexus.exe',
+    'app\runtime\bin\java.exe',
+    'lib\nexus-cli.jar',
+    'lib\nexus-mcp.jar',
+    'lib\nexus-assistant-clients.jar',
+    'config\nexus-native.env.cmd',
+    'LICENSE',
+    'THIRD_PARTY_NOTICES.txt',
+    'SBOM.cdx.json'
+)) {
     if (-not (Test-Path -LiteralPath (Join-Path $install $required) -PathType Leaf)) {
         throw "Installed NEXUS is missing $required"
     }
@@ -46,6 +59,11 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Installed NEXUS CLI failed with exit code $LASTEXITCODE" }
     $parsed = $json | ConvertFrom-Json
     if ($parsed.version -ne $Version) { throw "Installed version mismatch: $($parsed.version) != $Version" }
+
+    $assistantUsage = & (Join-Path $install 'nexus-assistant-clients.cmd') | Out-String
+    if ($LASTEXITCODE -ne 0 -or $assistantUsage -notmatch 'Usage:') {
+        throw 'Installed assistant integration runner smoke failed.'
+    }
 }
 finally {
     $env:NEXUS_HOME = $previousHome
@@ -63,5 +81,5 @@ if (-not (Test-Path -LiteralPath $sentinel -PathType Leaf)) {
     throw 'NEXUS_HOME user data was deleted by uninstall.'
 }
 
-Write-Host 'NEXUS Windows installer install/CLI/uninstall smoke PASS' -ForegroundColor Green
+Write-Host 'NEXUS Windows installer install/CLI/MCP payload/uninstall smoke PASS' -ForegroundColor Green
 Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
