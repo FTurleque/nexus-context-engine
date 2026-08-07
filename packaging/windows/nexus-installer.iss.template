@@ -614,12 +614,12 @@ begin
     'NEXUS ne gère aucune authentification. Les entrées existantes nommées "nexus" ne sont jamais écrasées.',
     False, False);
   AssistantPage.Add('GitHub Copilot CLI — connecter si la CLI est détectée');
-  AssistantPage.Add('GitHub Copilot JetBrains — générer un mcp.json prêt à importer');
+  AssistantPage.Add('GitHub Copilot JetBrains — connecter si le plugin est détecté');
   AssistantPage.Add('Claude CLI / Claude Code — scope utilisateur, connecter si la CLI est détectée');
   AssistantPage.Add('Codex Desktop — connecter via la CLI codex si détectée + générer un snippet TOML');
   AssistantPage.Add('Client MCP générique — générer un JSON STDIO');
   AssistantPage.Values[0] := True;
-  AssistantPage.Values[1] := True;
+  AssistantPage.Values[1] := False;
   AssistantPage.Values[2] := True;
   AssistantPage.Values[3] := True;
   AssistantPage.Values[4] := True;
@@ -973,6 +973,8 @@ var
   CopilotScript: String;
   ClaudeScript: String;
   CodexScript: String;
+  JetBrainsPsScript: String;
+  JetBrainsCmd: String;
   CommandTail: String;
 begin
   if not HasAssistantSelection() then exit;
@@ -986,10 +988,33 @@ begin
 
   if AssistantPage.Values[1] then
   begin
-    if UseDockerForIntegrations() then
-      SaveStringToFile(Dir + '\copilot-jetbrains.mcp.json', DockerMcpCommandJson('servers'), False)
-    else
-      SaveStringToFile(Dir + '\copilot-jetbrains.mcp.json', NativeMcpCommandJson('servers'), False);
+    { Static JSON fallback — kept for users who prefer manual import. }
+    SaveStringToFile(Dir + '\copilot-jetbrains.mcp.json', NativeMcpCommandJson('servers'), False);
+
+    { PS1: check/merge nexus entry into the real IntelliJ Copilot mcp.json.
+      - exit 10 : mcp.json absent (plugin not installed)
+      - exit 20 : nexus already present (idempotent)
+      - exit 0  : nexus added successfully }
+    JetBrainsPsScript :=
+      '$mcp = Join-Path $env:LOCALAPPDATA ''github-copilot\intellij\mcp.json''' + #13#10 +
+      'if (-not (Test-Path $mcp)) { exit 10 }' + #13#10 +
+      '$c = Get-Content $mcp -Raw | ConvertFrom-Json' + #13#10 +
+      'if ($null -ne $c.servers.nexus) { exit 20 }' + #13#10 +
+      '$e = [PSCustomObject]@{ type = ''stdio''; command = ''' +
+          ExpandConstant('{app}\app\runtime\bin\java.exe') + '''; ' +
+          'args = @(''-jar'', ''' + ExpandConstant('{app}\lib\nexus-mcp.jar') + ''') }' + #13#10 +
+      '$c.servers | Add-Member -MemberType NoteProperty -Name nexus -Value $e' + #13#10 +
+      '[System.IO.File]::WriteAllText($mcp, ($c | ConvertTo-Json -Depth 5), ' +
+          '[System.Text.UTF8Encoding]::new($false))' + #13#10 +
+      'exit 0' + #13#10;
+    SaveStringToFile(Dir + '\connect-copilot-jetbrains.ps1', JetBrainsPsScript, False);
+
+    JetBrainsCmd :=
+      '@echo off' + #13#10 +
+      'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass' +
+          ' -File "%~dp0connect-copilot-jetbrains.ps1"' + #13#10 +
+      'exit /b %ERRORLEVEL%' + #13#10;
+    SaveStringToFile(Dir + '\connect-copilot-jetbrains.cmd', JetBrainsCmd, False);
   end;
 
   if AssistantPage.Values[3] then
@@ -1199,6 +1224,7 @@ begin
     if (not IsSmokeBuild()) and HasAssistantSelection() then
     begin
       if AssistantPage.Values[0] then RunManagedIntegration('connect-copilot-cli.cmd', 'CopilotCliManaged');
+      if AssistantPage.Values[1] then RunManagedIntegration('connect-copilot-jetbrains.cmd', 'CopilotJetBrainsManaged');
       if AssistantPage.Values[2] then RunManagedIntegration('connect-claude-cli.cmd', 'ClaudeCliManaged');
       if AssistantPage.Values[3] then RunManagedIntegration('connect-codex-desktop.cmd', 'CodexManaged');
     end;
