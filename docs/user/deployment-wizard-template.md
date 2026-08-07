@@ -14,6 +14,12 @@ install_dir_default: "%LOCALAPPDATA%\\Programs\\NEXUS"
 data_dir_default: "%USERPROFILE%\\.nexus"
 native_java_system_required: false
 docker_required_for_native: false
+docker_runtime_required_for_docker_execution: true
+docker_preinstalled_required: false
+docker_desktop_auto_install_if_missing: true
+docker_desktop_download_is_runtime: true
+docker_desktop_authenticode_verification: true
+docker_license_not_auto_accepted: true
 mcp_transport: stdio
 ready_summary_required: true
 external_port_availability_check: true
@@ -45,14 +51,18 @@ Règles :
 
 ```yaml
 native:
-  docker_cli_required: false
+  docker_runtime_required: false
   system_jvm_required_after_install: false
+
 docker:
-  docker_cli_required: true
-  docker_engine_required: true
+  docker_runtime_required_at_execution: true
+  docker_preinstalled_required: false
+  wizard_can_provision_docker_desktop: true
+
 both:
-  docker_cli_required: true
-  docker_engine_required: true
+  docker_runtime_required_at_execution: true
+  docker_preinstalled_required: false
+  wizard_can_provision_docker_desktop: true
 ```
 
 ## Écran `profile`
@@ -140,7 +150,7 @@ La disponibilité du port REST natif n'est testée que si le composant REST nati
 
 ## Écran `semantic-search`
 
-Le provider n'est **plus un champ texte libre**.
+Le provider n'est **pas un champ texte libre**.
 
 ```yaml
 id: semantic-search
@@ -165,17 +175,11 @@ ollama_authentication_managed_by_nexus: false
 semantic_enabled_by_default: false
 ```
 
-Le setup configure l'utilisation d'une instance Ollama accessible ; il ne doit pas prétendre installer le binaire Ollama.
-
 ## Écran `ollama`
 
-Condition :
-
 ```yaml
+id: ollama
 show_if: "semantic-search.ollama == true AND profile == custom"
-```
-
-```yaml
 ollama_base_url:
   type: url
   default: "http://127.0.0.1:11434"
@@ -183,6 +187,78 @@ ollama_base_url:
 ```
 
 En profil recommandé, cocher Ollama utilise l'URL par défaut sans exposer cet écran avancé.
+
+## Écran `docker-desktop`
+
+Cet écran distingue le **runtime NEXUS Docker** du moteur Docker nécessaire pour l'exécuter.
+
+Condition :
+
+```yaml
+id: docker-desktop
+show_if: "mode in [docker,both] AND docker_runtime_detected == false"
+```
+
+Option :
+
+```yaml
+auto_install_docker_desktop:
+  type: boolean
+  label: "Installer automatiquement Docker Desktop s'il est absent"
+  default: true
+  required_to_continue_if_runtime_missing: true
+```
+
+Contrat de téléchargement :
+
+```yaml
+download:
+  timing: "PrepareToInstall, après affichage et validation de Ready to Install"
+  url: "https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe"
+  protocol: https
+  temporary_file: true
+  embedded_in_nexus_setup: false
+```
+
+Contrat de confiance :
+
+```yaml
+authenticode:
+  required: true
+  status: Valid
+  signer_cn: "Docker Inc"
+  on_failure: abort_docker_desktop_installation
+```
+
+Contrat d'installation :
+
+```yaml
+install:
+  mode: per-user
+  backend: wsl-2
+  command: "Docker Desktop Installer.exe install --user --backend=wsl-2 --quiet"
+  accept_license_flag: false
+  first_start_user_acceptance_required: true
+  expected_user_install_root: "%LOCALAPPDATA%\\Programs\\DockerDesktop"
+  wsl2_may_require_admin_or_restart: true
+```
+
+Règles :
+
+```yaml
+if_docker_runtime_already_present:
+  download_docker_desktop: false
+  reinstall_docker_desktop: false
+
+if_auto_install_disabled_and_runtime_missing:
+  allow_continue: false
+
+uninstall:
+  remove_docker_desktop: false
+  remove_wsl: false
+```
+
+Après installation de Docker Desktop, NEXUS lance Docker Desktop. L'utilisateur doit accepter les conditions Docker au premier démarrage et terminer, si nécessaire, la préparation WSL 2.
 
 ## Écran `docker`
 
@@ -263,7 +339,25 @@ mcp_port: null
 mcp_docker_transport: "docker exec -i <container> java -jar /opt/nexus/lib/nexus-mcp.jar"
 ```
 
-Le test de disponibilité est effectué sur le port **externe/hôte**. Le port REST interne du conteneur n'est pas sondé sur Windows : il appartient au réseau du conteneur. En mode `both`, le port REST natif retenu est réservé afin que Docker ne reçoive jamais le même port hôte.
+Le test de disponibilité est effectué uniquement sur le port **externe/hôte**.
+
+### Launcher Docker généré
+
+`nexus-docker-up.cmd` doit :
+
+```yaml
+steps:
+  - locate docker from PATH
+  - locate Docker Desktop per-user CLI if PATH is stale
+  - locate Docker Desktop all-users CLI if PATH is stale
+  - run docker info
+  - start Docker Desktop when engine is not ready
+  - wait up to approximately 180 seconds
+  - run docker compose up -d
+on_engine_not_ready:
+  exit_code: 30
+  action: "tell user to finish Docker Desktop license/WSL onboarding and retry"
+```
 
 ## Écran `assistants`
 
@@ -322,30 +416,18 @@ store_external_tokens: false
 
 ## Écran `integration-runtime`
 
-Condition :
-
 ```yaml
+id: integration-runtime
 show_if: "mode == both"
-```
-
-```yaml
 type: single-choice
 default: native
 choices:
   native:
     command: "<install-dir>\\app\\runtime\\bin\\java.exe"
-    args:
-      - "-jar"
-      - "<install-dir>\\lib\\nexus-mcp.jar"
+    args: ["-jar", "<install-dir>\\lib\\nexus-mcp.jar"]
   docker:
-    command: "docker"
-    args:
-      - "exec"
-      - "-i"
-      - "<container_name>"
-      - "java"
-      - "-jar"
-      - "/opt/nexus/lib/nexus-mcp.jar"
+    command: docker
+    args: ["exec", "-i", "<container_name>", "java", "-jar", "/opt/nexus/lib/nexus-mcp.jar"]
 ```
 
 ## Page standard `ready-summary`
@@ -367,6 +449,10 @@ summary:
   semantic_search: required
   ollama_url: required_if_ollama
   ollama_binary_install_note: required_if_ollama
+  docker_runtime_state: required_if_docker
+  docker_desktop_auto_install_plan: required_if_runtime_missing
+  docker_desktop_download_source: required_if_auto_install
+  docker_license_acceptance_note: required_if_auto_install
   docker_image: required_if_docker
   docker_container: required_if_docker
   docker_host_and_container_ports: required_if_docker
@@ -381,6 +467,14 @@ summary:
     - codex_desktop
     - generic_mcp
   integration_runtime: required_if_any_assistant
+```
+
+Exemple Docker absent :
+
+```text
+Docker :
+  - Docker Desktop : sera téléchargé depuis desktop.docker.com et installé en mode utilisateur (WSL 2)
+  - La licence Docker devra être acceptée par l'utilisateur au premier démarrage.
 ```
 
 Exemple sémantique :
@@ -401,7 +495,7 @@ Port demandé : 8080
 => le wizard remplace la valeur par 8082 et le récapitulatif affiche 8082
 ```
 
-Aucun fichier ni configuration externe ne doit être modifié avant que l'utilisateur confirme cette page et lance réellement l'installation.
+**Aucun téléchargement Docker Desktop, aucune installation Docker Desktop et aucune modification externe ne doit avoir lieu avant que l'utilisateur confirme cette page.**
 
 ## Tâches Windows
 
@@ -440,6 +534,8 @@ nexus-docker-mcp.cmd
 docker\docker-compose.yml.template
 ```
 
+Docker Desktop n'est pas embarqué dans le payload NEXUS : il est téléchargé à la demande depuis Docker lorsque nécessaire.
+
 Après configuration :
 
 ```text
@@ -462,8 +558,6 @@ integrations\codex-desktop.mcp.toml
 integrations\generic-mcp.json
 ```
 
-Les scripts de connexion utilisent le runtime MCP choisi (Java embarqué ou `docker exec -i`).
-
 ## `.env` Docker généré
 
 ```dotenv
@@ -480,69 +574,27 @@ NEXUS_OLLAMA_BASE_URL=http://127.0.0.1:11434
 NEXUS_REST_API_TOKEN=<generated-or-user-value>
 ```
 
-`NEXUS_DOCKER_HOST_PORT` contient la valeur finale retenue après vérification de disponibilité ; elle peut donc différer du port initialement demandé.
+`NEXUS_DOCKER_HOST_PORT` contient la valeur finale retenue après vérification de disponibilité.
 
-Avec Ollama activé :
-
-```dotenv
-NEXUS_SEMANTIC_PROVIDER=ollama
-```
-
-## Intégration Copilot CLI
+## Intégrations MCP
 
 Native :
 
 ```text
 copilot mcp add nexus --tools "*" -- "<install>\app\runtime\bin\java.exe" -jar "<install>\lib\nexus-mcp.jar"
+claude mcp add --scope user nexus -- "<install>\app\runtime\bin\java.exe" -jar "<install>\lib\nexus-mcp.jar"
+codex mcp add nexus -- "<install>\app\runtime\bin\java.exe" -jar "<install>\lib\nexus-mcp.jar"
 ```
 
 Docker :
 
 ```text
 copilot mcp add nexus --tools "*" -- docker exec -i <container> java -jar /opt/nexus/lib/nexus-mcp.jar
-```
-
-Une entrée existante est préservée.
-
-## Intégration Claude CLI
-
-Native :
-
-```text
-claude mcp add --scope user nexus -- "<install>\app\runtime\bin\java.exe" -jar "<install>\lib\nexus-mcp.jar"
-```
-
-Docker :
-
-```text
 claude mcp add --scope user nexus -- docker exec -i <container> java -jar /opt/nexus/lib/nexus-mcp.jar
+codex mcp add nexus -- docker exec -i <container> java -jar /opt/nexus/lib/nexus-mcp.jar
 ```
 
-Le profil projet reste disponible dans `nexus-assistant-clients`.
-
-## Intégration Codex Desktop
-
-Lorsque `codex` est disponible :
-
-```text
-codex mcp add nexus -- <commande MCP NEXUS>
-```
-
-Un snippet est également généré :
-
-```toml
-[mcp_servers.nexus]
-command = "<java.exe ou docker>"
-args = ["..."]
-```
-
-Fichier :
-
-```text
-integrations\codex-desktop.mcp.toml
-```
-
-Le setup ne modifie pas directement un fichier Codex arbitraire si la CLI n'est pas détectée ; le snippet reste disponible pour import/copie manuelle.
+Une entrée `nexus` existante est toujours préservée.
 
 ## Désinstallation
 
@@ -555,9 +607,12 @@ remove_managed_claude_cli_entry: true
 remove_managed_codex_entry: true
 remove_nexus_home: false
 remove_user_repositories: false
-uninstall_docker_engine: false
+uninstall_docker_desktop: false
+remove_wsl: false
 remove_unmanaged_mcp_entries: false
 ```
+
+Docker Desktop est un prérequis partagé et reste installé même lorsqu'il a été provisionné par NEXUS.
 
 ## Persistance de reconfiguration
 
@@ -578,6 +633,8 @@ NativeRestPort
 RestApiToken
 SemanticProvider
 OllamaBaseUrl
+DockerAutoInstall
+DockerDesktopInstalledByNexus
 DockerImage
 DockerContainer
 DockerBindAddress
@@ -602,6 +659,8 @@ assistant_generator_codex_desktop_test: required
 windows_distribution_build: required
 inno_setup_compile: required
 windows_wizard_runtime_initialization: required
+windows_docker_desktop_bootstrap_static_contract: required
+windows_docker_desktop_download_disabled_in_smoke: required
 windows_external_port_resolution_contract: required
 windows_ready_summary_contract: required
 windows_smoke_install: required
@@ -615,6 +674,8 @@ docker_rest_custom_port_smoke: required
 codeql: required
 osv: required
 ```
+
+Le smoke Windows standard reste volontairement en mode natif afin de ne jamais télécharger ni installer Docker Desktop sur un runner GitHub Actions. Le contrat Docker Desktop est vérifié statiquement et la compilation Inno Setup prouve que le code Pascal Script est valide.
 
 ## Règles de synchronisation
 
