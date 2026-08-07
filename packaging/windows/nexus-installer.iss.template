@@ -615,7 +615,7 @@ begin
     False, False);
   AssistantPage.Add('GitHub Copilot CLI — connecter si la CLI est détectée');
   AssistantPage.Add('GitHub Copilot JetBrains — connecter si le plugin est détecté');
-  AssistantPage.Add('Claude CLI / Claude Code — scope utilisateur, connecter si la CLI est détectée');
+  AssistantPage.Add('Claude Desktop / Claude Code — connecter si détecté');
   AssistantPage.Add('Codex Desktop — connecter via la CLI codex si détectée + générer un snippet TOML');
   AssistantPage.Add('Client MCP générique — générer un JSON STDIO');
   AssistantPage.Values[0] := False;
@@ -972,6 +972,8 @@ var
   Dir: String;
   CopilotScript: String;
   ClaudeScript: String;
+  ClaudeDesktopPsScript: String;
+  ClaudeDesktopCmd: String;
   CodexScript: String;
   JetBrainsPsScript: String;
   JetBrainsCmd: String;
@@ -1050,6 +1052,36 @@ begin
 
   if AssistantPage.Values[2] then
   begin
+    { PS1: merge nexus into Claude Desktop's mcpServers (cmd.exe + nexus-mcp.cmd,
+      same pattern as mcp-search-net). Depth 10 preserves the nested preferences.
+      - exit 10 : claude_desktop_config.json absent OR nexus-mcp.cmd not installed
+      - exit 20 : nexus already present (idempotent)
+      - exit 0  : nexus added successfully }
+    ClaudeDesktopPsScript :=
+      '$cfg = Join-Path $env:APPDATA ''Claude\claude_desktop_config.json''' + #13#10 +
+      'if (-not (Test-Path $cfg)) { exit 10 }' + #13#10 +
+      '$launcher = ''' + ExpandConstant('{app}\nexus-mcp.cmd') + '''' + #13#10 +
+      'if (-not (Test-Path $launcher)) { exit 10 }' + #13#10 +
+      '$c = Get-Content $cfg -Raw | ConvertFrom-Json' + #13#10 +
+      'if ($null -ne $c.mcpServers.nexus) { exit 20 }' + #13#10 +
+      '$e = [PSCustomObject]@{ command = ''cmd.exe''; args = @(''/d'', ''/s'', ''/c'', $launcher) }' + #13#10 +
+      'if ($null -eq ($c | Get-Member -Name mcpServers -MemberType NoteProperty)) {' + #13#10 +
+      '    $c | Add-Member -MemberType NoteProperty -Name mcpServers -Value ([PSCustomObject]@{})' + #13#10 +
+      '}' + #13#10 +
+      '$c.mcpServers | Add-Member -MemberType NoteProperty -Name nexus -Value $e' + #13#10 +
+      '[System.IO.File]::WriteAllText($cfg, ($c | ConvertTo-Json -Depth 10), ' +
+          '[System.Text.UTF8Encoding]::new($false))' + #13#10 +
+      'exit 0' + #13#10;
+    SaveStringToFile(Dir + '\connect-claude-desktop.ps1', ClaudeDesktopPsScript, False);
+
+    ClaudeDesktopCmd :=
+      '@echo off' + #13#10 +
+      'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass' +
+          ' -File "%~dp0connect-claude-desktop.ps1"' + #13#10 +
+      'exit /b %ERRORLEVEL%' + #13#10;
+    SaveStringToFile(Dir + '\connect-claude-desktop.cmd', ClaudeDesktopCmd, False);
+
+    { Also keep the Claude Code CLI integration (best-effort; exit 10 if not on PATH) }
     ClaudeScript := '@echo off' + #13#10 +
       'where claude >nul 2>nul || exit /b 10' + #13#10 +
       'claude mcp get nexus >nul 2>nul && exit /b 20' + #13#10 +
@@ -1189,7 +1221,7 @@ begin
   begin
     if AssistantPage.Values[0] then Result := Result + '  - GitHub Copilot CLI' + NewLine;
     if AssistantPage.Values[1] then Result := Result + '  - GitHub Copilot JetBrains' + NewLine;
-    if AssistantPage.Values[2] then Result := Result + '  - Claude CLI / Claude Code' + NewLine;
+    if AssistantPage.Values[2] then Result := Result + '  - Claude Desktop / Claude Code' + NewLine;
     if AssistantPage.Values[3] then Result := Result + '  - Codex Desktop' + NewLine;
     if AssistantPage.Values[4] then Result := Result + '  - Client MCP générique' + NewLine;
     Result := Result + '  - Runtime MCP : ' + IntegrationRuntimeLabel() + NewLine;
@@ -1230,6 +1262,7 @@ begin
     begin
       if AssistantPage.Values[0] then RunManagedIntegration('connect-copilot-cli.cmd', 'CopilotCliManaged');
       if AssistantPage.Values[1] then RunManagedIntegration('connect-copilot-jetbrains.cmd', 'CopilotJetBrainsManaged');
+      if AssistantPage.Values[2] then RunManagedIntegration('connect-claude-desktop.cmd', 'ClaudeDesktopManaged');
       if AssistantPage.Values[2] then RunManagedIntegration('connect-claude-cli.cmd', 'ClaudeCliManaged');
       if AssistantPage.Values[3] then RunManagedIntegration('connect-codex-desktop.cmd', 'CodexManaged');
     end;
