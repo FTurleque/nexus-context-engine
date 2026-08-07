@@ -126,7 +126,7 @@ public final class AssistantIntegrationGenerator {
     }
 
     public String claudeProjectCommand(CommandSpec commandSpec) {
-        return "claude mcp add " + SERVER_NAME + " --scope project -- " + renderCommand(commandSpec);
+        return "claude mcp add --scope project " + SERVER_NAME + " -- " + renderCommand(commandSpec);
     }
 
     public String claudeUserCommand(Path runner) {
@@ -134,7 +134,7 @@ public final class AssistantIntegrationGenerator {
     }
 
     public String claudeUserCommand(CommandSpec commandSpec) {
-        return "claude mcp add " + SERVER_NAME + " --scope user -- " + renderCommand(commandSpec);
+        return "claude mcp add --scope user " + SERVER_NAME + " -- " + renderCommand(commandSpec);
     }
 
     public String claudeProjectJson(Path runner) {
