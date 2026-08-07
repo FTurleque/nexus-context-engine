@@ -195,6 +195,101 @@ begin
   Result := Exec(ExpandConstant('{cmd}'), '/D /S /C "where ' + Name + ' >nul 2>nul"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
 end;
 
+function IsSafeBindAddress(Value: String): Boolean;
+var
+  I: Integer;
+  C: Char;
+begin
+  Value := Trim(Value);
+  Result := Value <> '';
+  if not Result then exit;
+
+  for I := 1 to Length(Value) do
+  begin
+    C := Value[I];
+    if not (((C >= 'a') and (C <= 'z')) or
+            ((C >= 'A') and (C <= 'Z')) or
+            ((C >= '0') and (C <= '9')) or
+            (C = '.') or (C = ':') or (C = '-')) then
+    begin
+      Result := False;
+      exit;
+    end;
+  end;
+end;
+
+function IsTcpPortAvailable(BindAddress: String; Port: Integer): Boolean;
+var
+  PowerShellPath: String;
+  Script: String;
+  Parameters: String;
+  ResultCode: Integer;
+begin
+  Result := False;
+  BindAddress := Trim(BindAddress);
+  if (Port < 1) or (Port > 65535) or not IsSafeBindAddress(BindAddress) then exit;
+
+  PowerShellPath := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+  if not FileExists(PowerShellPath) then
+  begin
+    Log('PowerShell Windows introuvable pour le test de disponibilité du port.');
+    exit;
+  end;
+
+  Script :=
+    '$ErrorActionPreference=''Stop''; $listener=$null; try { ' +
+    '$address=''' + BindAddress + '''; ' +
+    'if ($address -eq ''localhost'') { $address=''127.0.0.1'' }; ' +
+    '$ip=$null; if (-not [System.Net.IPAddress]::TryParse($address,[ref]$ip)) { ' +
+    '$ip=[System.Net.Dns]::GetHostAddresses($address) | Select-Object -First 1 }; ' +
+    'if ($null -eq $ip) { exit 2 }; ' +
+    '$listener=[System.Net.Sockets.TcpListener]::new($ip,' + IntToStr(Port) + '); ' +
+    '$listener.Start(); $listener.Stop(); exit 0 } catch { ' +
+    'if ($null -ne $listener) { try { $listener.Stop() } catch {} }; exit 1 }';
+  Parameters := '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' + Script + '"';
+
+  Result := Exec(PowerShellPath, Parameters, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+end;
+
+function FindAvailableTcpPort(BindAddress: String; RequestedPort: Integer; ReservedPort: Integer): Integer;
+var
+  Candidate: Integer;
+begin
+  Result := -1;
+  if (RequestedPort < 1) or (RequestedPort > 65535) then exit;
+
+  Candidate := RequestedPort;
+  while Candidate <= 65535 do
+  begin
+    if ((ReservedPort < 1) or (Candidate <> ReservedPort)) and IsTcpPortAvailable(BindAddress, Candidate) then
+    begin
+      Result := Candidate;
+      exit;
+    end;
+    Candidate := Candidate + 1;
+  end;
+
+  Candidate := 1024;
+  while Candidate < RequestedPort do
+  begin
+    if ((ReservedPort < 1) or (Candidate <> ReservedPort)) and IsTcpPortAvailable(BindAddress, Candidate) then
+    begin
+      Result := Candidate;
+      exit;
+    end;
+    Candidate := Candidate + 1;
+  end;
+end;
+
+procedure NotifyPortSelection(Description: String; RequestedPort: Integer; SelectedPort: Integer);
+begin
+  if RequestedPort <> SelectedPort then
+    MsgBox(
+      Description + ' ' + IntToStr(RequestedPort) + ' est déjà utilisé.' + #13#10 +
+      'NEXUS a sélectionné automatiquement le premier port TCP disponible : ' + IntToStr(SelectedPort) + '.',
+      mbInformation, MB_OK);
+end;
+
 function GenerateLocalToken(): String;
 var
   I: Integer;
@@ -304,10 +399,10 @@ begin
   RuntimePage := CreateInputQueryPage(NativeOptionsPage.ID,
     'Configuration runtime',
     'Personnalisez le stockage et les services.',
-    'NEXUS_HOME est conservé lors de la désinstallation. Un token REST est obligatoire pour une écoute native non-loopback et est généré automatiquement pour Docker si laissé vide.');
+    'NEXUS_HOME est conservé lors de la désinstallation. Si REST natif est activé, le port demandé est vérifié et remplacé automatiquement par le premier port TCP disponible si nécessaire.');
   RuntimePage.Add('NEXUS_HOME :', False);
   RuntimePage.Add('REST natif — adresse :', False);
-  RuntimePage.Add('REST natif — port :', False);
+  RuntimePage.Add('REST natif — port externe :', False);
   RuntimePage.Add('Token API REST (optionnel sur loopback) :', True);
   RuntimePage.Values[0] := GetEnv('USERPROFILE') + '\.nexus';
   RuntimePage.Values[1] := '127.0.0.1';
@@ -332,11 +427,11 @@ begin
   DockerPage := CreateInputQueryPage(OllamaPage.ID,
     'Configuration Docker',
     'Personnalisez l''image, le conteneur, les ports et le repository monté.',
-    'Le port hôte peut être modifié librement. Le port interne reste 8080 par défaut. Le repository est monté en lecture seule sous /workspace.');
+    'Le port REST hôte est vérifié automatiquement. S''il est occupé, NEXUS choisit le premier port TCP disponible suivant. Le port interne du conteneur reste indépendant.');
   DockerPage.Add('Image :', False);
   DockerPage.Add('Nom du conteneur :', False);
   DockerPage.Add('Adresse d''écoute hôte :', False);
-  DockerPage.Add('Port REST hôte :', False);
+  DockerPage.Add('Port REST hôte externe :', False);
   DockerPage.Add('Port REST conteneur :', False);
   DockerPage.Add('Repository / racine de projets à monter :', False);
   DockerPage.Add('Restart policy :', False);
@@ -402,6 +497,8 @@ end;
 function NextButtonClick(CurPageID: Integer): Boolean;
 var
   PortValue: Integer;
+  ResolvedPort: Integer;
+  ReservedPort: Integer;
 begin
   Result := True;
 
@@ -430,7 +527,25 @@ begin
       Result := False;
       exit;
     end;
-    if InstallNativeRest() and (RuntimePage.Values[1] <> '127.0.0.1') and (RuntimePage.Values[1] <> 'localhost') and (Trim(RuntimePage.Values[3]) = '') then
+    if InstallNativeRest() then
+    begin
+      if not IsSafeBindAddress(RuntimePage.Values[1]) then
+      begin
+        MsgBox('L''adresse d''écoute REST native est vide ou invalide.', mbError, MB_OK);
+        Result := False;
+        exit;
+      end;
+      ResolvedPort := FindAvailableTcpPort(RuntimePage.Values[1], PortValue, -1);
+      if ResolvedPort < 1 then
+      begin
+        MsgBox('Aucun port TCP disponible n''a été trouvé pour le REST natif.', mbError, MB_OK);
+        Result := False;
+        exit;
+      end;
+      RuntimePage.Values[2] := IntToStr(ResolvedPort);
+      NotifyPortSelection('Le port REST natif', PortValue, ResolvedPort);
+    end;
+    if InstallNativeRest() and (Lowercase(Trim(RuntimePage.Values[1])) <> '127.0.0.1') and (Lowercase(Trim(RuntimePage.Values[1])) <> 'localhost') and (Trim(RuntimePage.Values[3]) = '') then
     begin
       MsgBox('Un token API REST est obligatoire pour une écoute native non-loopback.', mbError, MB_OK);
       Result := False;
@@ -459,6 +574,12 @@ begin
       Result := False;
       exit;
     end;
+    if not IsSafeBindAddress(DockerPage.Values[2]) then
+    begin
+      MsgBox('L''adresse d''écoute hôte Docker est vide ou invalide.', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
     PortValue := StrToIntDef(DockerPage.Values[3], -1);
     if (PortValue < 1) or (PortValue > 65535) then
     begin
@@ -466,6 +587,25 @@ begin
       Result := False;
       exit;
     end;
+    ReservedPort := -1;
+    if InstallNativeRest() then
+      ReservedPort := StrToIntDef(RuntimePage.Values[2], -1);
+    ResolvedPort := FindAvailableTcpPort(DockerPage.Values[2], PortValue, ReservedPort);
+    if ResolvedPort < 1 then
+    begin
+      MsgBox('Aucun port TCP disponible n''a été trouvé pour le REST Docker.', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+    DockerPage.Values[3] := IntToStr(ResolvedPort);
+    if (ReservedPort = PortValue) and (ResolvedPort <> PortValue) then
+      MsgBox(
+        'Le port REST hôte Docker ' + IntToStr(PortValue) + ' est déjà réservé au REST natif NEXUS.' + #13#10 +
+        'NEXUS utilisera le port TCP disponible ' + IntToStr(ResolvedPort) + ' pour Docker.',
+        mbInformation, MB_OK)
+    else
+      NotifyPortSelection('Le port REST hôte Docker', PortValue, ResolvedPort);
+
     PortValue := StrToIntDef(DockerPage.Values[4], -1);
     if (PortValue < 1) or (PortValue > 65535) then
     begin
@@ -728,7 +868,7 @@ begin
     Result := Result + NewLine + 'Natif :' + NewLine;
     if InstallNativeCli() then Result := Result + '  - CLI NEXUS' + NewLine;
     if InstallNativeMcp() then Result := Result + '  - Serveur MCP STDIO' + NewLine;
-    if InstallNativeRest() then Result := Result + '  - REST ' + RuntimePage.Values[1] + ':' + RuntimePage.Values[2] + NewLine;
+    if InstallNativeRest() then Result := Result + '  - REST ' + RuntimePage.Values[1] + ':' + RuntimePage.Values[2] + ' (port externe vérifié)' + NewLine;
     if WizardIsTaskSelected('addtopath') then Result := Result + '  - Ajouter NEXUS au PATH utilisateur' + NewLine;
   end;
 
@@ -744,7 +884,7 @@ begin
     Result := Result + NewLine + 'Docker :' + NewLine +
       '  - Image : ' + DockerPage.Values[0] + NewLine +
       '  - Conteneur : ' + DockerPage.Values[1] + NewLine +
-      '  - REST : ' + DockerPage.Values[2] + ':' + DockerPage.Values[3] + ' -> conteneur:' + DockerPage.Values[4] + NewLine +
+      '  - REST : ' + DockerPage.Values[2] + ':' + DockerPage.Values[3] + ' (port hôte vérifié) -> conteneur:' + DockerPage.Values[4] + NewLine +
       '  - Repository : ' + DockerPage.Values[5] + ' -> /workspace:ro' + NewLine +
       '  - Restart policy : ' + DockerPage.Values[6] + NewLine;
     if WizardIsTaskSelected('startdocker') then Result := Result + '  - Démarrage Docker après installation' + NewLine;
