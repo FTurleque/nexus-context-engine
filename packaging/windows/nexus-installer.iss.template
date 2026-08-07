@@ -130,9 +130,15 @@ begin
     Result := '';
 end;
 
+function AssistantIntegrationAvailable(): Boolean;
+begin
+  Result := InstallNativeMcp() or InstallDocker();
+end;
+
 function HasAssistantSelection(): Boolean;
 begin
-  Result := AssistantPage.Values[0] or AssistantPage.Values[1] or AssistantPage.Values[2] or AssistantPage.Values[3] or AssistantPage.Values[4];
+  Result := AssistantIntegrationAvailable() and
+    (AssistantPage.Values[0] or AssistantPage.Values[1] or AssistantPage.Values[2] or AssistantPage.Values[3] or AssistantPage.Values[4]);
 end;
 
 function UseDockerForIntegrations(): Boolean;
@@ -389,7 +395,7 @@ begin
   else if PageID = RuntimePage.ID then Result := not IsCustomProfile()
   else if PageID = OllamaPage.ID then Result := (not OllamaEnabled()) or (not IsCustomProfile())
   else if PageID = DockerPage.ID then Result := not InstallDocker()
-  else if PageID = AssistantPage.ID then Result := (not InstallNativeMcp()) and (not InstallDocker())
+  else if PageID = AssistantPage.ID then Result := not AssistantIntegrationAvailable()
   else if PageID = IntegrationRuntimePage.ID then Result := not (InstallNative() and InstallDocker());
 end;
 
@@ -745,15 +751,17 @@ begin
   end;
 
   Result := Result + NewLine + 'Assistants MCP :' + NewLine;
-  if AssistantPage.Values[0] then Result := Result + '  - GitHub Copilot CLI' + NewLine;
-  if AssistantPage.Values[1] then Result := Result + '  - GitHub Copilot JetBrains' + NewLine;
-  if AssistantPage.Values[2] then Result := Result + '  - Claude CLI / Claude Code' + NewLine;
-  if AssistantPage.Values[3] then Result := Result + '  - Codex Desktop' + NewLine;
-  if AssistantPage.Values[4] then Result := Result + '  - Client MCP générique' + NewLine;
-  if not HasAssistantSelection() then Result := Result + '  - Aucune intégration sélectionnée' + NewLine;
-
   if HasAssistantSelection() then
+  begin
+    if AssistantPage.Values[0] then Result := Result + '  - GitHub Copilot CLI' + NewLine;
+    if AssistantPage.Values[1] then Result := Result + '  - GitHub Copilot JetBrains' + NewLine;
+    if AssistantPage.Values[2] then Result := Result + '  - Claude CLI / Claude Code' + NewLine;
+    if AssistantPage.Values[3] then Result := Result + '  - Codex Desktop' + NewLine;
+    if AssistantPage.Values[4] then Result := Result + '  - Client MCP générique' + NewLine;
     Result := Result + '  - Runtime MCP : ' + IntegrationRuntimeLabel() + NewLine;
+  end
+  else
+    Result := Result + '  - Aucune intégration sélectionnée' + NewLine;
 
   Result := Result + NewLine + 'Cliquez sur Installer pour appliquer exactement cette configuration.';
 end;
@@ -767,7 +775,7 @@ begin
     WriteAssistantAssets;
     AddNexusToUserPath;
     PersistSettings;
-    if not IsSmokeBuild() then
+    if (not IsSmokeBuild()) and HasAssistantSelection() then
     begin
       if AssistantPage.Values[0] then RunManagedIntegration('connect-copilot-cli.cmd', 'CopilotCliManaged');
       if AssistantPage.Values[2] then RunManagedIntegration('connect-claude-cli.cmd', 'ClaudeCliManaged');
