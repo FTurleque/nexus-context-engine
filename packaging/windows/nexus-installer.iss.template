@@ -1171,8 +1171,11 @@ begin
   end;
   if CurUninstallStep = usPostUninstall then
   begin
-    { Remove directories not tracked by Inno Setup: installer-generated
-      docker/.env + docker-compose.yml, and empty lib/ rest/ dirs. }
+    { Remove files and directories not tracked by Inno Setup: installer-generated
+      nexus-docker-up/down.cmd, docker/.env + docker-compose.yml, and
+      empty lib/ rest/ dirs. }
+    DeleteFile(ExpandConstant('{app}\nexus-docker-up.cmd'));
+    DeleteFile(ExpandConstant('{app}\nexus-docker-down.cmd'));
     DelTree(ExpandConstant('{app}\docker'), True, True, True);
     RemoveDir(ExpandConstant('{app}\lib'));
     RemoveDir(ExpandConstant('{app}\rest'));
