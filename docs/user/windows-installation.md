@@ -238,7 +238,7 @@ Le fichier utilise le schéma `servers`.
 Si `claude` est détecté et qu'aucune entrée `nexus` n'existe :
 
 ```text
-claude mcp add nexus --scope user -- <commande MCP NEXUS>
+claude mcp add --scope user nexus -- <commande MCP NEXUS>
 ```
 
 Le profil projet reste disponible avec `nexus-assistant-clients.cmd`.
