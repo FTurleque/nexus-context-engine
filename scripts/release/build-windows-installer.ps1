@@ -187,9 +187,9 @@ if ($iss.IndexOf('function DockerEngineReady(): Boolean;', [StringComparison]::O
 }
 foreach ($requiredFallbackFragment in @(
     'Dockerfile.runtime',
-    'docker pull',
-    'docker build',
-    'nexus_image_ready'
+    '"%DOCKER_EXE%" pull "%NEXUS_DOCKER_IMAGE%"',
+    '"%DOCKER_EXE%" build --pull --file',
+    ':nexus_image_ready'
 )) {
     if ($iss.IndexOf($requiredFallbackFragment, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
         throw "Generated installer is missing Docker registry fallback fragment: $requiredFallbackFragment"
