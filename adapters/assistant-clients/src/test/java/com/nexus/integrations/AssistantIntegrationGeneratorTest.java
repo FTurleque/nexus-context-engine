@@ -115,4 +115,41 @@ class AssistantIntegrationGeneratorTest {
         assertTrue(root.has("mcpServers"));
         assertEquals("docker", root.path("mcpServers").path("nexus").path("command").asText());
     }
+
+    @Test
+    void claudeCliUsesUserScopeWithBundledRuntime() {
+        Path java = temporaryDirectory.resolve("runtime").resolve("bin").resolve("java.exe");
+        Path runner = temporaryDirectory.resolve("lib").resolve("nexus-mcp.jar");
+        AssistantIntegrationGenerator.CommandSpec spec = generator.nativeMcp(java, runner);
+
+        String command = generator.claudeUserCommand(spec);
+
+        assertTrue(command.startsWith("claude mcp add nexus --scope user --"));
+        assertTrue(command.contains(java.toAbsolutePath().normalize().toString()));
+        assertTrue(command.contains(runner.toAbsolutePath().normalize().toString()));
+    }
+
+    @Test
+    void codexDesktopTomlUsesSharedCodexMcpConfiguration() {
+        Path java = temporaryDirectory.resolve("runtime").resolve("bin").resolve("java.exe");
+        Path runner = temporaryDirectory.resolve("lib").resolve("nexus-mcp.jar");
+        AssistantIntegrationGenerator.CommandSpec spec = generator.nativeMcp(java, runner);
+
+        String toml = generator.codexDesktopToml(spec);
+
+        assertTrue(toml.contains("[mcp_servers.nexus]"));
+        assertTrue(toml.contains("command = \""));
+        assertTrue(toml.contains("args = [\"-jar\""));
+        assertTrue(toml.contains("nexus-mcp.jar"));
+    }
+
+    @Test
+    void codexCommandCanConfigureDesktopThroughTheSharedCodexConfig() {
+        AssistantIntegrationGenerator.CommandSpec spec = generator.dockerMcp("nexus");
+
+        String command = generator.codexCommand(spec);
+
+        assertTrue(command.startsWith("codex mcp add nexus -- docker exec -i nexus"));
+        assertTrue(command.endsWith("/opt/nexus/lib/nexus-mcp.jar"));
+    }
 }
