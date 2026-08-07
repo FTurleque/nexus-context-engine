@@ -443,7 +443,7 @@ end;
 procedure WriteDockerConfiguration;
 var
   EnvContent: String;
-  ComposeTemplate: String;
+  ComposeTemplate: AnsiString;
   DockerToken: String;
   UpScript: String;
   DownScript: String;
