@@ -136,7 +136,7 @@ New-Item -ItemType Directory -Force -Path (Join-Path $distribution 'lib'), (Join
 Copy-Item -LiteralPath $cliJar -Destination (Join-Path $distribution 'lib\nexus-cli.jar')
 Copy-Item -LiteralPath $mcpJar -Destination (Join-Path $distribution 'lib\nexus-mcp.jar')
 Copy-Item -LiteralPath $assistantJar -Destination (Join-Path $distribution 'lib\nexus-assistant-clients.jar')
-Copy-Item -LiteralPath (Join-Path $restRoot '*') -Destination (Join-Path $distribution 'rest') -Recurse
+Copy-Item -Path (Join-Path $restRoot '*') -Destination (Join-Path $distribution 'rest') -Recurse
 Copy-Item -LiteralPath (Join-Path $repo 'packaging\docker\docker-compose.yml.template') -Destination (Join-Path $distribution 'docker\docker-compose.yml.template')
 Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination (Join-Path $distribution 'LICENSE')
 Copy-Item -LiteralPath (Join-Path $repo 'target\licenses\THIRD_PARTY_NOTICES.txt') -Destination (Join-Path $distribution 'THIRD_PARTY_NOTICES.txt')
@@ -148,6 +148,7 @@ $moduleList | Set-Content -LiteralPath (Join-Path $distribution 'RUNTIME-MODULES
 @'
 @echo off
 setlocal
+if exist "%~dp0config\nexus-native.env.cmd" call "%~dp0config\nexus-native.env.cmd"
 "%~dp0app\nexus.exe" %*
 exit /b %ERRORLEVEL%
 '@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus.cmd') -Encoding ascii
@@ -155,6 +156,7 @@ exit /b %ERRORLEVEL%
 @'
 @echo off
 setlocal
+if exist "%~dp0config\nexus-native.env.cmd" call "%~dp0config\nexus-native.env.cmd"
 "%~dp0app\runtime\bin\java.exe" -jar "%~dp0lib\nexus-mcp.jar" %*
 exit /b %ERRORLEVEL%
 '@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus-mcp.cmd') -Encoding ascii
@@ -162,6 +164,7 @@ exit /b %ERRORLEVEL%
 @'
 @echo off
 setlocal
+if exist "%~dp0config\nexus-native.env.cmd" call "%~dp0config\nexus-native.env.cmd"
 "%~dp0app\runtime\bin\java.exe" -jar "%~dp0lib\nexus-assistant-clients.jar" %*
 exit /b %ERRORLEVEL%
 '@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus-assistant-clients.cmd') -Encoding ascii
@@ -169,6 +172,7 @@ exit /b %ERRORLEVEL%
 @'
 @echo off
 setlocal
+if exist "%~dp0config\nexus-native.env.cmd" call "%~dp0config\nexus-native.env.cmd"
 if "%NEXUS_REST_HOST%"=="" set "NEXUS_REST_HOST=127.0.0.1"
 if "%NEXUS_REST_PORT%"=="" set "NEXUS_REST_PORT=8080"
 "%~dp0app\runtime\bin\java.exe" "-Dquarkus.http.host=%NEXUS_REST_HOST%" "-Dquarkus.http.port=%NEXUS_REST_PORT%" -jar "%~dp0rest\quarkus-run.jar" %*
@@ -178,6 +182,7 @@ exit /b %ERRORLEVEL%
 @'
 @echo off
 setlocal
+if exist "%~dp0docker\.env" for /f "usebackq tokens=1,* delims==" %%A in ("%~dp0docker\.env") do if /I "%%A"=="NEXUS_DOCKER_CONTAINER" set "NEXUS_DOCKER_CONTAINER=%%B"
 if "%NEXUS_DOCKER_CONTAINER%"=="" set "NEXUS_DOCKER_CONTAINER=nexus"
 docker exec -i "%NEXUS_DOCKER_CONTAINER%" java -jar /opt/nexus/lib/nexus-mcp.jar %*
 exit /b %ERRORLEVEL%
@@ -186,6 +191,7 @@ exit /b %ERRORLEVEL%
 @'
 @echo off
 setlocal
+if exist "%~dp0docker\.env" for /f "usebackq tokens=1,* delims==" %%A in ("%~dp0docker\.env") do if /I "%%A"=="NEXUS_DOCKER_CONTAINER" set "NEXUS_DOCKER_CONTAINER=%%B"
 if "%NEXUS_DOCKER_CONTAINER%"=="" set "NEXUS_DOCKER_CONTAINER=nexus"
 docker exec -i "%NEXUS_DOCKER_CONTAINER%" java -jar /opt/nexus/lib/nexus-cli.jar %*
 exit /b %ERRORLEVEL%
