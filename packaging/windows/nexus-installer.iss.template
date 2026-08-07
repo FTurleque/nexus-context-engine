@@ -167,11 +167,11 @@ begin
 end;
 
 function GenerateLocalToken(): String;
-const
-  Chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 var
   I: Integer;
+  Chars: String;
 begin
+  Chars := 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   Result := '';
   for I := 1 to 48 do
     Result := Result + Chars[Random(Length(Chars)) + 1];
