@@ -25,7 +25,10 @@ COPY --from=build /workspace/adapters/assistant-clients/target/nexus-assistant-c
 COPY --from=build /workspace/adapters/rest-quarkus/target/quarkus-app/ /opt/nexus/rest/
 COPY --chown=10001:0 packaging/docker/nexus-container-entrypoint.sh /usr/local/bin/nexus-entrypoint
 
-RUN chmod 0755 /usr/local/bin/nexus-entrypoint
+# A Windows checkout can materialize shell scripts with CRLF. Normalize the
+# entrypoint inside the Linux image so the shebang remains /bin/sh, not /bin/sh\r.
+RUN sed -i 's/\r$//' /usr/local/bin/nexus-entrypoint \
+    && chmod 0755 /usr/local/bin/nexus-entrypoint
 
 ENV NEXUS_HOME=/data/nexus \
     NEXUS_MODE=rest \
