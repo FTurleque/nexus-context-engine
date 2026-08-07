@@ -151,7 +151,7 @@ $iss = $iss.Replace($legacyDockerFiles, $expandedDockerFiles)
 # The configured GHCR image can legitimately be unavailable before merge or remain private.
 # Prefer an existing local image, then try the registry, then build the same configured tag
 # from the NEXUS payload already installed on disk.
-$legacyComposeCommand = '''"%DOCKER_EXE%" compose --env-file "%~dp0docker\.env" -f "%~dp0docker\docker-compose.yml" up -d'''
+$legacyComposeCommand = [char]39 + '"%DOCKER_EXE%" compose --env-file "%~dp0docker\.env" -f "%~dp0docker\docker-compose.yml" up -d' + [char]39
 $fallbackComposeCommands = @'
 'set "NEXUS_DOCKER_IMAGE="' + #13#10 +
     'if exist "%~dp0docker\.env" for /f "usebackq tokens=1,* delims==" %%A in ("%~dp0docker\.env") do if /I "%%A"=="NEXUS_DOCKER_IMAGE" set "NEXUS_DOCKER_IMAGE=%%B"' + #13#10 +
