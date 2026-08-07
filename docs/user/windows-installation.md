@@ -59,12 +59,14 @@ docker\docker-compose.yml.template
 - image NEXUS configurable ;
 - `NEXUS_HOME` persistant ;
 - repository monté sous `/workspace:ro` ;
-- REST publié sur un port hôte configurable ;
+- REST publié sur un port hôte configurable et vérifié avant installation ;
 - MCP reste en STDIO via `docker exec -i`.
 
 ### Natif + Docker
 
 Les deux runtimes sont installés. L'utilisateur choisit ensuite lequel sera utilisé par les intégrations MCP.
+
+Si REST natif et REST Docker sont tous les deux configurés, leurs ports externes ne peuvent pas être identiques : le wizard réserve le port natif et déplace automatiquement le port hôte Docker si nécessaire.
 
 ## Écran 1 — Mode de déploiement
 
@@ -125,6 +127,24 @@ port = 8080
 ```
 
 Le port doit être compris entre `1` et `65535`.
+
+Lorsque REST natif est activé, NEXUS vérifie la disponibilité du port par une tentative de bind TCP sur l'adresse choisie :
+
+```text
+port demandé libre     -> le port est conservé
+port demandé occupé    -> recherche du premier port disponible suivant
+```
+
+La recherche avance jusqu'à `65535`; si nécessaire elle reprend à `1024`. La valeur finale remplace automatiquement le champ du wizard et c'est cette valeur qui est persistée et affichée dans le récapitulatif final.
+
+Exemple :
+
+```text
+8080 occupé
+8081 occupé
+8082 libre
+=> REST natif utilisera 8082
+```
 
 Si REST écoute hors loopback, un token est obligatoire.
 
@@ -192,7 +212,21 @@ Repository           %USERPROFILE%
 Restart policy       unless-stopped
 ```
 
-Le port hôte est entièrement personnalisable. Il est généralement préférable de conserver `8080` dans le conteneur et de changer uniquement le port hôte.
+Le port hôte est entièrement personnalisable. Avant de quitter l'écran, le wizard tente réellement de réserver temporairement ce port TCP sur l'adresse hôte choisie. S'il est déjà utilisé, il teste automatiquement les ports suivants jusqu'à trouver le premier disponible, met le champ à jour et informe l'utilisateur du changement.
+
+Exemple :
+
+```text
+Port demandé : 8080
+8080 occupé
+8081 occupé
+8082 disponible
+=> Port REST hôte retenu : 8082
+```
+
+En mode `Natif + Docker`, si le REST natif utilise déjà `8080`, Docker ne pourra pas reprendre `8080` même s'il est encore libre au niveau OS au moment du wizard : ce port est considéré comme réservé au runtime natif et Docker reçoit le premier autre port disponible.
+
+Il est généralement préférable de conserver `8080` dans le conteneur et de changer uniquement le port hôte. Le **port REST interne du conteneur n'est pas testé sur Windows**, car il appartient à l'espace réseau du conteneur.
 
 Exemples :
 
@@ -315,14 +349,15 @@ Le récapitulatif contient :
 - répertoire d'installation ;
 - `NEXUS_HOME` ;
 - composants natifs ;
-- REST natif et port ;
+- REST natif et **port externe final vérifié** ;
 - ajout au PATH ;
 - recherche sémantique désactivée ou Ollama activé ;
 - URL Ollama si activé ;
 - rappel que le binaire Ollama n'est pas installé par NEXUS ;
 - image Docker ;
 - conteneur ;
-- bind/ports ;
+- bind et **port hôte Docker final vérifié** ;
+- port REST interne du conteneur ;
 - repository ;
 - restart policy ;
 - démarrage Docker post-install ;
@@ -376,6 +411,8 @@ NEXUS_SEMANTIC_PROVIDER
 NEXUS_OLLAMA_BASE_URL
 ```
 
+`NEXUS_REST_PORT` contient le port externe final retenu après vérification de disponibilité.
+
 ### Docker
 
 ```text
@@ -400,6 +437,8 @@ NEXUS_SEMANTIC_PROVIDER
 NEXUS_OLLAMA_BASE_URL
 NEXUS_REST_API_TOKEN
 ```
+
+`NEXUS_DOCKER_HOST_PORT` contient le port hôte final retenu après vérification ; il peut donc différer du port initialement demandé. `NEXUS_DOCKER_CONTAINER_PORT` reste la valeur interne explicitement choisie.
 
 ### Assistants
 
@@ -454,7 +493,7 @@ Sont notamment conservés :
 
 - mode de déploiement ;
 - `NEXUS_HOME` ;
-- paramètres REST ;
+- paramètres REST et ports résolus ;
 - état Ollama + URL ;
 - image et conteneur Docker ;
 - ports ;
