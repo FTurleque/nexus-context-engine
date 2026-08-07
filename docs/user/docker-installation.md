@@ -1,6 +1,65 @@
 # Distribution Docker NEXUS
 
-NEXUS 0.2.0 peut être exécuté nativement ou dans Docker. Docker est **optionnel** et n'est jamais requis pour le mode Windows natif.
+NEXUS 0.2.0 peut être exécuté nativement ou dans Docker. Docker reste **optionnel** et n'est jamais requis pour le mode Windows natif.
+
+Lorsque `Docker` ou `Natif + Docker` est sélectionné dans l'assistant Windows, le setup peut désormais **installer Docker Desktop automatiquement s'il est absent**.
+
+## Docker Desktop sur Windows
+
+Le wizard distingue le runtime NEXUS Docker du moteur Docker nécessaire pour l'exécuter.
+
+Comportement :
+
+```text
+Docker/CLI déjà détecté
+  -> aucune installation Docker Desktop
+
+Docker/CLI absent
+  -> option "Installer automatiquement Docker Desktop s'il est absent"
+     cochée par défaut
+  -> téléchargement officiel
+  -> vérification Authenticode Docker Inc
+  -> installation per-user / backend WSL 2
+```
+
+Source de téléchargement utilisée par le setup :
+
+```text
+https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe
+```
+
+Commande d'installation :
+
+```text
+Docker Desktop Installer.exe install --user --backend=wsl-2 --quiet
+```
+
+NEXUS ne passe **pas** `--accept-license`. La Docker Subscription Service Agreement reste à accepter par l'utilisateur au premier démarrage de Docker Desktop.
+
+Le mode per-user installe normalement Docker Desktop sous :
+
+```text
+%LOCALAPPDATA%\Programs\DockerDesktop
+```
+
+et ne requiert pas de privilèges administrateur pour l'installation Docker Desktop elle-même. En revanche, la première activation ou mise à jour de WSL 2 peut nécessiter une élévation et éventuellement un redémarrage Windows.
+
+Le setup vérifie l'Authenticode du binaire téléchargé et refuse de l'exécuter si la signature n'est pas valide ou si le signataire n'est pas `Docker Inc`.
+
+Docker Desktop est un prérequis partagé : **la désinstallation de NEXUS ne désinstalle jamais Docker Desktop ni WSL**.
+
+Après une installation Docker Desktop effectuée par NEXUS, Docker Desktop est lancé. Au premier démarrage, l'utilisateur doit accepter les conditions Docker et terminer si nécessaire la préparation WSL 2.
+
+Le script généré `nexus-docker-up.cmd` :
+
+1. cherche `docker` dans le `PATH` ;
+2. cherche aussi la CLI dans les emplacements Docker Desktop per-user/all-users ;
+3. teste `docker info` ;
+4. démarre Docker Desktop si le moteur n'est pas prêt ;
+5. attend jusqu'à environ 180 secondes ;
+6. lance ensuite `docker compose up -d`.
+
+Si Docker n'est toujours pas prêt, le script sort avec un code d'erreur et peut être relancé après la fin de l'onboarding Docker Desktop/WSL 2.
 
 ## Image
 
@@ -107,6 +166,8 @@ Mapping :
 
 Le port hôte est celui à changer en priorité.
 
+Le wizard Windows vérifie le **port hôte externe** demandé avant installation. S'il est occupé, il sélectionne automatiquement le premier port TCP libre suivant. Le port interne du conteneur n'est pas sondé sur Windows.
+
 ## REST et token
 
 À l'intérieur de Docker, Quarkus écoute sur `0.0.0.0` pour pouvoir être publié. La politique de sécurité NEXUS exige donc un `NEXUS_REST_API_TOKEN`.
@@ -198,15 +259,30 @@ Dans un conteneur, `127.0.0.1` désigne le conteneur. Adaptez `NEXUS_OLLAMA_BASE
 
 Avant le bouton Installer, le setup affiche la page Ready avec :
 
+- état Docker Desktop/CLI : détecté ou installation automatique prévue ;
+- rappel que la licence Docker reste à accepter au premier démarrage ;
 - image ;
 - conteneur ;
-- adresse/ports REST ;
+- adresse/ports REST résolus ;
 - repository ;
 - restart policy ;
 - Ollama activé/désactivé ;
 - cinq intégrations assistants ;
 - runtime MCP choisi ;
 - démarrage Docker post-install.
+
+Aucun téléchargement ni installation Docker Desktop n'est lancé avant la validation de ce récapitulatif.
+
+## Désinstallation
+
+La désinstallation NEXUS :
+
+- arrête le Compose NEXUS géré ;
+- supprime les fichiers NEXUS installés ;
+- conserve `NEXUS_HOME` et les repositories ;
+- **conserve Docker Desktop**, même lorsqu'il a été installé par le wizard ;
+- conserve WSL ;
+- ne retire aucune image ou configuration Docker qui n'appartient pas au déploiement NEXUS géré.
 
 ## Publication GHCR
 
