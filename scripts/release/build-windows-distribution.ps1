@@ -20,9 +20,7 @@ $OutputRoot = [IO.Path]::GetFullPath($OutputRoot)
 
 [xml]$pom = Get-Content -LiteralPath (Join-Path $repo 'pom.xml') -Raw
 $projectVersion = [string]$pom.project.version
-if ([string]::IsNullOrWhiteSpace($Version)) {
-    $Version = $projectVersion
-}
+if ([string]::IsNullOrWhiteSpace($Version)) { $Version = $projectVersion }
 if ($Version -ne $projectVersion) {
     throw "Requested version $Version does not match pom.xml version $projectVersion. Update the reactor version first."
 }
@@ -35,9 +33,7 @@ $java = Join-Path $javaHome 'bin\java.exe'
 $jpackage = Join-Path $javaHome 'bin\jpackage.exe'
 $jdeps = Join-Path $javaHome 'bin\jdeps.exe'
 foreach ($tool in @($java, $jpackage, $jdeps)) {
-    if (-not (Test-Path -LiteralPath $tool -PathType Leaf)) {
-        throw "Required JDK tool not found: $tool"
-    }
+    if (-not (Test-Path -LiteralPath $tool -PathType Leaf)) { throw "Required JDK tool not found: $tool" }
 }
 
 $previousPreference = $ErrorActionPreference
@@ -46,65 +42,55 @@ try {
     $versionOutput = ((& $java -version 2>&1) | Out-String)
     $versionExit = $LASTEXITCODE
 }
-finally {
-    $ErrorActionPreference = $previousPreference
-}
+finally { $ErrorActionPreference = $previousPreference }
 if ($versionExit -ne 0 -or $versionOutput -notmatch 'version "(\d+)') {
     throw "Unable to determine JAVA_HOME runtime version: $versionOutput"
 }
 $javaMajor = [int]$Matches[1]
-if ($javaMajor -lt 21) {
-    throw "NEXUS Windows packaging requires JDK 21 or newer; found Java $javaMajor."
-}
+if ($javaMajor -lt 21) { throw "NEXUS Windows packaging requires JDK 21 or newer; found Java $javaMajor." }
 
 Push-Location $repo
 try {
     $mavenArgs = @('-B', 'clean')
     $mavenArgs += if ($SkipVerify) { 'package' } else { 'verify' }
     & '.\mvnw.cmd' @mavenArgs
-    if ($LASTEXITCODE -ne 0) {
-        throw "NEXUS Maven build failed with exit code $LASTEXITCODE"
-    }
+    if ($LASTEXITCODE -ne 0) { throw "NEXUS Maven build failed with exit code $LASTEXITCODE" }
 }
-finally {
-    Pop-Location
-}
+finally { Pop-Location }
 
-$jar = Join-Path $repo "target\nexus-context-engine-$Version-cli.jar"
-if (-not (Test-Path -LiteralPath $jar -PathType Leaf)) {
-    throw "NEXUS shaded CLI JAR not found: $jar"
+$cliJar = Join-Path $repo "target\nexus-context-engine-$Version-cli.jar"
+$mcpJar = Join-Path $repo "adapters\mcp-java\target\nexus-mcp-java-$Version-runner.jar"
+$assistantJar = Join-Path $repo "adapters\assistant-clients\target\nexus-assistant-clients-$Version-runner.jar"
+$restRoot = Join-Path $repo 'adapters\rest-quarkus\target\quarkus-app'
+foreach ($artifact in @($cliJar, $mcpJar, $assistantJar, (Join-Path $restRoot 'quarkus-run.jar'))) {
+    if (-not (Test-Path -LiteralPath $artifact -PathType Leaf)) { throw "Required NEXUS runtime artifact not found: $artifact" }
 }
 foreach ($evidence in @(
     (Join-Path $repo 'LICENSE'),
     (Join-Path $repo 'target\licenses\THIRD_PARTY_NOTICES.txt'),
-    (Join-Path $repo 'target\sbom\bom.json')
+    (Join-Path $repo 'target\sbom\bom.json'),
+    (Join-Path $repo 'packaging\docker\docker-compose.yml.template')
 )) {
-    if (-not (Test-Path -LiteralPath $evidence -PathType Leaf)) {
-        throw "Required distribution evidence not found: $evidence"
-    }
+    if (-not (Test-Path -LiteralPath $evidence -PathType Leaf)) { throw "Required distribution evidence not found: $evidence" }
 }
 
-$previousPreference = $ErrorActionPreference
-try {
-    $ErrorActionPreference = 'Continue'
-    $jdepsOutput = @(& $jdeps '--multi-release' '21' '--ignore-missing-deps' '--print-module-deps' $jar 2>&1 |
-        ForEach-Object { $_.ToString().Trim() })
-    $jdepsExit = $LASTEXITCODE
+function Get-JdepsModules([string]$Artifact) {
+    $previous = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $output = @(& $jdeps '--multi-release' '21' '--ignore-missing-deps' '--print-module-deps' $Artifact 2>&1 |
+            ForEach-Object { $_.ToString().Trim() })
+        $exit = $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $previous }
+    if ($exit -ne 0) { throw "jdeps failed for $Artifact`: $($output -join [Environment]::NewLine)" }
+    $line = $output | Where-Object { $_ -match '^[A-Za-z0-9_.]+(?:,[A-Za-z0-9_.]+)*$' } | Select-Object -Last 1
+    if ([string]::IsNullOrWhiteSpace($line)) { return @() }
+    return @($line -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 }
-finally {
-    $ErrorActionPreference = $previousPreference
-}
-if ($jdepsExit -ne 0) {
-    throw "jdeps failed while deriving runtime modules: $($jdepsOutput -join [Environment]::NewLine)"
-}
-$moduleLine = $jdepsOutput |
-    Where-Object { $_ -match '^[A-Za-z0-9_.]+(?:,[A-Za-z0-9_.]+)*$' } |
-    Select-Object -Last 1
-if ([string]::IsNullOrWhiteSpace($moduleLine)) {
-    throw "jdeps did not return module dependencies: $($jdepsOutput -join [Environment]::NewLine)"
-}
-$modules = @($moduleLine -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$modules += @('java.logging', 'java.naming', 'java.net.http', 'java.sql', 'java.xml', 'jdk.crypto.ec', 'jdk.unsupported')
+
+$modules = @('java.se', 'jdk.crypto.ec', 'jdk.unsupported')
+foreach ($artifact in @($cliJar, $mcpJar, $assistantJar)) { $modules += Get-JdepsModules $artifact }
 $modules = @($modules | Sort-Object -Unique)
 $moduleList = $modules -join ','
 Write-Host "NEXUS packaged runtime roots: $moduleList" -ForegroundColor Cyan
@@ -119,7 +105,7 @@ $checksum = "$zip.sha256"
 Remove-Item -LiteralPath $stage, $appImages, $distribution -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $zip, $checksum -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $stage, $appImages, $distribution | Out-Null
-Copy-Item -LiteralPath $jar -Destination (Join-Path $stage 'nexus-cli.jar')
+Copy-Item -LiteralPath $cliJar -Destination (Join-Path $stage 'nexus-cli.jar')
 
 $appVersion = ($Version -split '[-+]')[0]
 $jlinkOptions = '--strip-debug --no-man-pages --no-header-files'
@@ -136,22 +122,22 @@ $jlinkOptions = '--strip-debug --no-man-pages --no-header-files'
     '--dest', $appImages,
     '--win-console'
 )
-if ($LASTEXITCODE -ne 0) {
-    throw "jpackage app-image failed with exit code $LASTEXITCODE"
-}
+if ($LASTEXITCODE -ne 0) { throw "jpackage app-image failed with exit code $LASTEXITCODE" }
 
 $appImage = Join-Path $appImages 'nexus'
 $launcher = Join-Path $appImage 'nexus.exe'
 $runtimeJava = Join-Path $appImage 'runtime\bin\java.exe'
 foreach ($required in @($launcher, $runtimeJava)) {
-    if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
-        throw "Invalid NEXUS app-image; missing $required"
-    }
+    if (-not (Test-Path -LiteralPath $required -PathType Leaf)) { throw "Invalid NEXUS app-image; missing $required" }
 }
 
 Move-Item -LiteralPath $appImage -Destination (Join-Path $distribution 'app')
-New-Item -ItemType Directory -Force -Path (Join-Path $distribution 'lib') | Out-Null
-Copy-Item -LiteralPath $jar -Destination (Join-Path $distribution 'lib\nexus-cli.jar')
+New-Item -ItemType Directory -Force -Path (Join-Path $distribution 'lib'), (Join-Path $distribution 'rest'), (Join-Path $distribution 'docker') | Out-Null
+Copy-Item -LiteralPath $cliJar -Destination (Join-Path $distribution 'lib\nexus-cli.jar')
+Copy-Item -LiteralPath $mcpJar -Destination (Join-Path $distribution 'lib\nexus-mcp.jar')
+Copy-Item -LiteralPath $assistantJar -Destination (Join-Path $distribution 'lib\nexus-assistant-clients.jar')
+Copy-Item -LiteralPath (Join-Path $restRoot '*') -Destination (Join-Path $distribution 'rest') -Recurse
+Copy-Item -LiteralPath (Join-Path $repo 'packaging\docker\docker-compose.yml.template') -Destination (Join-Path $distribution 'docker\docker-compose.yml.template')
 Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination (Join-Path $distribution 'LICENSE')
 Copy-Item -LiteralPath (Join-Path $repo 'target\licenses\THIRD_PARTY_NOTICES.txt') -Destination (Join-Path $distribution 'THIRD_PARTY_NOTICES.txt')
 Copy-Item -LiteralPath (Join-Path $repo 'target\sbom\bom.json') -Destination (Join-Path $distribution 'SBOM.cdx.json')
@@ -166,6 +152,45 @@ setlocal
 exit /b %ERRORLEVEL%
 '@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus.cmd') -Encoding ascii
 
+@'
+@echo off
+setlocal
+"%~dp0app\runtime\bin\java.exe" -jar "%~dp0lib\nexus-mcp.jar" %*
+exit /b %ERRORLEVEL%
+'@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus-mcp.cmd') -Encoding ascii
+
+@'
+@echo off
+setlocal
+"%~dp0app\runtime\bin\java.exe" -jar "%~dp0lib\nexus-assistant-clients.jar" %*
+exit /b %ERRORLEVEL%
+'@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus-assistant-clients.cmd') -Encoding ascii
+
+@'
+@echo off
+setlocal
+if "%NEXUS_REST_HOST%"=="" set "NEXUS_REST_HOST=127.0.0.1"
+if "%NEXUS_REST_PORT%"=="" set "NEXUS_REST_PORT=8080"
+"%~dp0app\runtime\bin\java.exe" "-Dquarkus.http.host=%NEXUS_REST_HOST%" "-Dquarkus.http.port=%NEXUS_REST_PORT%" -jar "%~dp0rest\quarkus-run.jar" %*
+exit /b %ERRORLEVEL%
+'@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus-rest.cmd') -Encoding ascii
+
+@'
+@echo off
+setlocal
+if "%NEXUS_DOCKER_CONTAINER%"=="" set "NEXUS_DOCKER_CONTAINER=nexus"
+docker exec -i "%NEXUS_DOCKER_CONTAINER%" java -jar /opt/nexus/lib/nexus-mcp.jar %*
+exit /b %ERRORLEVEL%
+'@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus-docker-mcp.cmd') -Encoding ascii
+
+@'
+@echo off
+setlocal
+if "%NEXUS_DOCKER_CONTAINER%"=="" set "NEXUS_DOCKER_CONTAINER=nexus"
+docker exec -i "%NEXUS_DOCKER_CONTAINER%" java -jar /opt/nexus/lib/nexus-cli.jar %*
+exit /b %ERRORLEVEL%
+'@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus-docker.cmd') -Encoding ascii
+
 $smokeHome = Join-Path $OutputRoot '.distribution-smoke-home'
 Remove-Item -LiteralPath $smokeHome -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $smokeHome | Out-Null
@@ -175,18 +200,18 @@ try {
     $versionJson = & (Join-Path $distribution 'nexus.cmd') '--version' '--json' | Out-String
     if ($LASTEXITCODE -ne 0) { throw "Packaged NEXUS launcher failed with exit code $LASTEXITCODE" }
     $parsed = $versionJson | ConvertFrom-Json
-    if ($parsed.version -ne $Version) {
-        throw "Packaged NEXUS version mismatch: expected $Version, got $($parsed.version)"
-    }
+    if ($parsed.version -ne $Version) { throw "Packaged NEXUS version mismatch: expected $Version, got $($parsed.version)" }
+
+    $assistantUsage = & (Join-Path $distribution 'nexus-assistant-clients.cmd') | Out-String
+    if ($LASTEXITCODE -ne 0 -or $assistantUsage -notmatch 'Usage:') { throw 'Packaged assistant integration runner smoke failed.' }
 }
 finally {
     $env:NEXUS_HOME = $previousHome
     Remove-Item -LiteralPath $smokeHome -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-$runtimeModules = @(& (Join-Path $distribution 'app\runtime\bin\java.exe') '--list-modules' 2>&1 |
-    ForEach-Object { $_.ToString().Trim() })
-foreach ($requiredModule in $modules) {
+$runtimeModules = @(& (Join-Path $distribution 'app\runtime\bin\java.exe') '--list-modules' 2>&1 | ForEach-Object { $_.ToString().Trim() })
+foreach ($requiredModule in @('java.base', 'java.sql', 'java.net.http', 'jdk.unsupported')) {
     if (-not ($runtimeModules | Where-Object { $_ -match "^$([regex]::Escape($requiredModule))@" })) {
         throw "Packaged runtime is missing required module $requiredModule"
     }
@@ -202,4 +227,5 @@ Write-Host "Distribution : $distribution"
 Write-Host "ZIP          : $zip"
 Write-Host "SHA-256      : $hash"
 Write-Host "Bundled Java : $javaMajor"
+Write-Host 'Surfaces     : CLI + MCP STDIO + REST + assistant integrations + Docker launchers'
 Write-Output $distribution
