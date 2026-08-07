@@ -2,13 +2,13 @@
 
 NEXUS peut être distribué sans cloner le dépôt et sans Maven sur la machine cible.
 
-Trois modes d'exécution sont supportés par la stratégie de distribution :
+Trois modes d'exécution sont supportés :
 
 - ZIP multiplateforme Maven avec Java 21+ système ;
 - Windows natif autonome avec runtime Java embarqué ;
 - Docker avec CLI, MCP STDIO et REST dans la même image.
 
-Le setup Windows permet de choisir **Natif**, **Docker** ou **Natif + Docker** et de personnaliser les options de déploiement.
+Le setup Windows permet de choisir **Natif**, **Docker** ou **Natif + Docker**, de personnaliser les options et d'afficher un récapitulatif final avant installation.
 
 ## Licence et conformité
 
@@ -35,13 +35,11 @@ nexus-rest.cmd               REST Quarkus
 nexus-assistant-clients.cmd  génération d'intégrations assistants
 ```
 
-Le setup peut ajouter le répertoire NEXUS au PATH utilisateur.
-
 `NEXUS_HOME` est stocké hors des fichiers applicatifs et est conservé à la désinstallation.
 
 ## Docker
 
-La distribution Docker expose les modes :
+La distribution Docker expose :
 
 ```text
 rest
@@ -50,13 +48,13 @@ mcp
 assistant
 ```
 
-MCP reste en STDIO et ne possède pas de port réseau. Depuis un client installé sur l'hôte :
+MCP reste en STDIO et ne possède pas de port réseau :
 
 ```text
 docker exec -i <container> java -jar /opt/nexus/lib/nexus-mcp.jar
 ```
 
-REST utilise un port configurable. Le Compose généré par le setup mappe par défaut :
+REST utilise un port configurable. Le Compose généré mappe par défaut :
 
 ```text
 127.0.0.1:8080 -> container:8080
@@ -64,37 +62,128 @@ REST utilise un port configurable. Le Compose généré par le setup mappe par d
 
 Le port hôte, le port interne, l'image, le nom du conteneur, la restart policy, `NEXUS_HOME` et la racine de repositories sont personnalisables.
 
-Le repository monté par le template Compose est en lecture seule sous `/workspace`.
+Le repository est monté en lecture seule sous `/workspace`.
+
+## Recherche sémantique
+
+La recherche sémantique est désactivée par défaut.
+
+Le setup Windows ne demande plus un nom de provider libre. Il propose :
+
+```text
+[ ] Activer Ollama pour la recherche sémantique
+```
+
+Si activé :
+
+```text
+NEXUS_SEMANTIC_PROVIDER=ollama
+```
+
+URL par défaut :
+
+```text
+http://127.0.0.1:11434
+```
+
+Le setup configure NEXUS pour utiliser Ollama mais **n'installe pas le binaire Ollama**.
 
 ## Intégrations assistants
 
-Le setup sait préparer :
+La matrice de distribution est :
 
 - GitHub Copilot CLI ;
 - GitHub Copilot JetBrains ;
-- Claude Code scope utilisateur ;
-- JSON MCP générique.
+- Claude CLI / Claude Code ;
+- Codex Desktop ;
+- client MCP générique.
 
 Une entrée MCP `nexus` existante n'est pas écrasée.
 
-Le runtime des intégrations peut être :
+Le runtime MCP peut être :
 
 - natif, via le `java.exe` embarqué ;
 - Docker, via `docker exec -i`.
 
-NEXUS ne gère aucune authentification Copilot/Claude.
+### Copilot CLI
+
+Le setup peut exécuter :
+
+```text
+copilot mcp add nexus --tools "*" -- <commande MCP NEXUS>
+```
+
+### Copilot JetBrains
+
+Asset généré :
+
+```text
+integrations\copilot-jetbrains.mcp.json
+```
+
+### Claude CLI
+
+Le setup peut exécuter :
+
+```text
+claude mcp add nexus --scope user -- <commande MCP NEXUS>
+```
+
+Le profil projet reste disponible via le générateur standalone.
+
+### Codex Desktop
+
+Le setup peut exécuter, si `codex` est détecté :
+
+```text
+codex mcp add nexus -- <commande MCP NEXUS>
+```
+
+Il génère aussi :
+
+```text
+integrations\codex-desktop.mcp.toml
+```
+
+avec une section :
+
+```toml
+[mcp_servers.nexus]
+```
+
+### Générique
+
+Asset généré :
+
+```text
+integrations\generic-mcp.json
+```
+
+NEXUS ne gère aucune authentification Copilot, Claude ou Codex.
+
+## Récapitulatif avant installation
+
+La page **Ready to Install** doit afficher exactement les choix courants avant le bouton Installer :
+
+- mode et profil ;
+- composants natifs ;
+- `NEXUS_HOME` ;
+- REST ;
+- Ollama activé/désactivé + URL ;
+- Docker image/conteneur/ports/volumes ;
+- cinq intégrations assistants ;
+- runtime MCP ;
+- PATH et démarrage Docker post-install.
 
 ## ZIP Windows autonome
 
-Le ZIP Windows contient également les launchers natifs/Docker et les templates nécessaires :
+Le ZIP Windows contient les launchers natifs/Docker et les templates nécessaires :
 
 ```powershell
 .\nexus.cmd --version --json
 .\nexus-mcp.cmd
 .\nexus-assistant-clients.cmd --help
 ```
-
-Le launcher REST est présent, mais l'utilisateur doit fournir les variables de configuration souhaitées lorsqu'il utilise directement le ZIP sans passer par l'assistant d'installation.
 
 ## Distribution multiplateforme Maven
 
@@ -131,23 +220,11 @@ Aucun provider externe ni moteur sémantique n'est activé par défaut.
 
 ## Documentation complète
 
-Dans le repository :
-
 ```text
 docs/user/windows-installation.md
 docs/user/docker-installation.md
 docs/user/deployment-wizard-template.md
-```
-
-Template Inno Setup :
-
-```text
 packaging/windows/nexus-installer.iss.template
-```
-
-Template Compose :
-
-```text
 packaging/docker/docker-compose.yml.template
 ```
 
