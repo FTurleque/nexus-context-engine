@@ -25,6 +25,7 @@ SolidCompression=yes
 WizardStyle=modern
 ChangesEnvironment=yes
 SetupLogging=yes
+DisableReadyPage=no
 UninstallDisplayName={#NexusName}
 VersionInfoVersion={#NexusAppVersion}
 VersionInfoCompany=FTurleque
@@ -70,6 +71,8 @@ var
   ProfilePage: TInputOptionWizardPage;
   NativeOptionsPage: TInputOptionWizardPage;
   RuntimePage: TInputQueryWizardPage;
+  SemanticPage: TInputOptionWizardPage;
+  OllamaPage: TInputQueryWizardPage;
   DockerPage: TInputQueryWizardPage;
   AssistantPage: TInputOptionWizardPage;
   IntegrationRuntimePage: TInputOptionWizardPage;
@@ -114,9 +117,22 @@ begin
   Result := InstallNative() and NativeOptionsPage.Values[2];
 end;
 
+function OllamaEnabled(): Boolean;
+begin
+  Result := SemanticPage.Values[0];
+end;
+
+function SemanticProviderValue(): String;
+begin
+  if OllamaEnabled() then
+    Result := 'ollama'
+  else
+    Result := '';
+end;
+
 function HasAssistantSelection(): Boolean;
 begin
-  Result := AssistantPage.Values[0] or AssistantPage.Values[1] or AssistantPage.Values[2] or AssistantPage.Values[3];
+  Result := AssistantPage.Values[0] or AssistantPage.Values[1] or AssistantPage.Values[2] or AssistantPage.Values[3] or AssistantPage.Values[4];
 end;
 
 function UseDockerForIntegrations(): Boolean;
@@ -137,6 +153,13 @@ begin
 end;
 
 function JsonEscape(Value: String): String;
+begin
+  Result := Value;
+  StringChangeEx(Result, '\', '\\', True);
+  StringChangeEx(Result, '"', '\"', True);
+end;
+
+function TomlEscape(Value: String): String;
 begin
   Result := Value;
   StringChangeEx(Result, '\', '\\', True);
@@ -228,8 +251,8 @@ begin
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'NativeRestHost', Value) then RuntimePage.Values[1] := Value;
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'NativeRestPort', Value) then RuntimePage.Values[2] := Value;
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'RestApiToken', Value) then RuntimePage.Values[3] := Value;
-  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'SemanticProvider', Value) then RuntimePage.Values[4] := Value;
-  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'OllamaBaseUrl', Value) then RuntimePage.Values[5] := Value;
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'SemanticProvider', Value) then SemanticPage.Values[0] := Lowercase(Trim(Value)) = 'ollama';
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'OllamaBaseUrl', Value) then OllamaPage.Values[0] := Value;
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerImage', Value) then DockerPage.Values[0] := Value;
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerContainer', Value) then DockerPage.Values[1] := Value;
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerBindAddress', Value) then DockerPage.Values[2] := Value;
@@ -254,7 +277,7 @@ begin
   ProfilePage := CreateInputOptionPage(DeploymentPage.ID,
     'Profil d''installation',
     'Choisissez le niveau de personnalisation.',
-    'Le profil recommandé applique les valeurs sûres par défaut. Le profil personnalisé expose les composants, ports, volumes et options runtime.',
+    'Le profil recommandé applique les valeurs sûres par défaut. Le profil personnalisé expose les composants et paramètres runtime avancés.',
     True, False);
   ProfilePage.Add('Recommandé');
   ProfilePage.Add('Personnalisé');
@@ -280,16 +303,27 @@ begin
   RuntimePage.Add('REST natif — adresse :', False);
   RuntimePage.Add('REST natif — port :', False);
   RuntimePage.Add('Token API REST (optionnel sur loopback) :', True);
-  RuntimePage.Add('Provider sémantique (vide ou ollama) :', False);
-  RuntimePage.Add('URL Ollama :', False);
   RuntimePage.Values[0] := GetEnv('USERPROFILE') + '\.nexus';
   RuntimePage.Values[1] := '127.0.0.1';
   RuntimePage.Values[2] := '8080';
   RuntimePage.Values[3] := '';
-  RuntimePage.Values[4] := '';
-  RuntimePage.Values[5] := 'http://127.0.0.1:11434';
 
-  DockerPage := CreateInputQueryPage(RuntimePage.ID,
+  SemanticPage := CreateInputOptionPage(RuntimePage.ID,
+    'Recherche sémantique',
+    'Choisissez si NEXUS doit utiliser Ollama.',
+    'Décochez pour conserver la recherche sémantique désactivée. Cocher cette option configure NEXUS pour utiliser une instance Ollama accessible ; le setup n''installe pas le binaire Ollama.',
+    False, False);
+  SemanticPage.Add('Activer Ollama pour la recherche sémantique');
+  SemanticPage.Values[0] := False;
+
+  OllamaPage := CreateInputQueryPage(SemanticPage.ID,
+    'Configuration Ollama',
+    'Configurez l''instance Ollama utilisée par NEXUS.',
+    'Cette page n''apparaît qu''avec Ollama activé et le profil personnalisé.');
+  OllamaPage.Add('URL Ollama :', False);
+  OllamaPage.Values[0] := 'http://127.0.0.1:11434';
+
+  DockerPage := CreateInputQueryPage(OllamaPage.ID,
     'Configuration Docker',
     'Personnalisez l''image, le conteneur, les ports et le repository monté.',
     'Le port hôte peut être modifié librement. Le port interne reste 8080 par défaut. Le repository est monté en lecture seule sous /workspace.');
@@ -315,12 +349,14 @@ begin
     False, False);
   AssistantPage.Add('GitHub Copilot CLI — connecter si la CLI est détectée');
   AssistantPage.Add('GitHub Copilot JetBrains — générer un mcp.json prêt à importer');
-  AssistantPage.Add('Claude Code — scope utilisateur, connecter si la CLI est détectée');
+  AssistantPage.Add('Claude CLI / Claude Code — scope utilisateur, connecter si la CLI est détectée');
+  AssistantPage.Add('Codex Desktop — connecter via la CLI codex si détectée + générer un snippet TOML');
   AssistantPage.Add('Client MCP générique — générer un JSON STDIO');
   AssistantPage.Values[0] := True;
   AssistantPage.Values[1] := True;
   AssistantPage.Values[2] := True;
   AssistantPage.Values[3] := True;
+  AssistantPage.Values[4] := True;
 
   IntegrationRuntimePage := CreateInputOptionPage(AssistantPage.ID,
     'Runtime MCP des assistants',
@@ -335,10 +371,12 @@ begin
   begin
     DeploymentPage.SelectedValueIndex := 0;
     ProfilePage.SelectedValueIndex := 0;
+    SemanticPage.Values[0] := False;
     AssistantPage.Values[0] := False;
     AssistantPage.Values[1] := False;
     AssistantPage.Values[2] := False;
     AssistantPage.Values[3] := False;
+    AssistantPage.Values[4] := False;
   end
   else
     LoadPreviousSettings;
@@ -349,6 +387,7 @@ begin
   Result := False;
   if PageID = NativeOptionsPage.ID then Result := (not InstallNative()) or (not IsCustomProfile())
   else if PageID = RuntimePage.ID then Result := not IsCustomProfile()
+  else if PageID = OllamaPage.ID then Result := (not OllamaEnabled()) or (not IsCustomProfile())
   else if PageID = DockerPage.ID then Result := not InstallDocker()
   else if PageID = AssistantPage.ID then Result := (not InstallNativeMcp()) and (not InstallDocker())
   else if PageID = IntegrationRuntimePage.ID then Result := not (InstallNative() and InstallDocker());
@@ -393,6 +432,13 @@ begin
     end;
   end;
 
+  if (CurPageID = OllamaPage.ID) and OllamaEnabled() and (Trim(OllamaPage.Values[0]) = '') then
+  begin
+    MsgBox('L''URL Ollama ne peut pas être vide lorsque Ollama est activé.', mbError, MB_OK);
+    Result := False;
+    exit;
+  end;
+
   if CurPageID = DockerPage.ID then
   begin
     if not CommandExists('docker') then
@@ -435,8 +481,8 @@ begin
     'set "NEXUS_REST_HOST=' + RuntimePage.Values[1] + '"' + #13#10 +
     'set "NEXUS_REST_PORT=' + RuntimePage.Values[2] + '"' + #13#10 +
     'set "NEXUS_REST_API_TOKEN=' + RuntimePage.Values[3] + '"' + #13#10 +
-    'set "NEXUS_SEMANTIC_PROVIDER=' + RuntimePage.Values[4] + '"' + #13#10 +
-    'set "NEXUS_OLLAMA_BASE_URL=' + RuntimePage.Values[5] + '"' + #13#10;
+    'set "NEXUS_SEMANTIC_PROVIDER=' + SemanticProviderValue() + '"' + #13#10 +
+    'set "NEXUS_OLLAMA_BASE_URL=' + OllamaPage.Values[0] + '"' + #13#10;
   SaveStringToFile(ExpandConstant('{app}\config\nexus-native.env.cmd'), Content, False);
 end;
 
@@ -462,8 +508,8 @@ begin
     'NEXUS_DOCKER_CONTAINER_PORT=' + DockerPage.Values[4] + #13#10 +
     'NEXUS_HOME_BIND=' + DockerPath(RuntimePage.Values[0]) + #13#10 +
     'NEXUS_REPOSITORY_BIND=' + DockerPath(DockerPage.Values[5]) + #13#10 +
-    'NEXUS_SEMANTIC_PROVIDER=' + RuntimePage.Values[4] + #13#10 +
-    'NEXUS_OLLAMA_BASE_URL=' + RuntimePage.Values[5] + #13#10 +
+    'NEXUS_SEMANTIC_PROVIDER=' + SemanticProviderValue() + #13#10 +
+    'NEXUS_OLLAMA_BASE_URL=' + OllamaPage.Values[0] + #13#10 +
     'NEXUS_REST_API_TOKEN=' + DockerToken + #13#10;
   SaveStringToFile(ExpandConstant('{app}\docker\.env'), EnvContent, False);
 
@@ -514,11 +560,31 @@ begin
     '}' + #13#10;
 end;
 
+function NativeCodexToml(): String;
+var
+  JavaPath: String;
+  RunnerPath: String;
+begin
+  JavaPath := TomlEscape(ExpandConstant('{app}\app\runtime\bin\java.exe'));
+  RunnerPath := TomlEscape(ExpandConstant('{app}\lib\nexus-mcp.jar'));
+  Result := '[mcp_servers.nexus]' + #13#10 +
+    'command = "' + JavaPath + '"' + #13#10 +
+    'args = ["-jar", "' + RunnerPath + '"]' + #13#10;
+end;
+
+function DockerCodexToml(): String;
+begin
+  Result := '[mcp_servers.nexus]' + #13#10 +
+    'command = "docker"' + #13#10 +
+    'args = ["exec", "-i", "' + TomlEscape(DockerPage.Values[1]) + '", "java", "-jar", "/opt/nexus/lib/nexus-mcp.jar"]' + #13#10;
+end;
+
 procedure WriteAssistantAssets;
 var
   Dir: String;
   CopilotScript: String;
   ClaudeScript: String;
+  CodexScript: String;
   CommandTail: String;
 begin
   if not HasAssistantSelection() then exit;
@@ -539,6 +605,14 @@ begin
   end;
 
   if AssistantPage.Values[3] then
+  begin
+    if UseDockerForIntegrations() then
+      SaveStringToFile(Dir + '\codex-desktop.mcp.toml', DockerCodexToml(), False)
+    else
+      SaveStringToFile(Dir + '\codex-desktop.mcp.toml', NativeCodexToml(), False);
+  end;
+
+  if AssistantPage.Values[4] then
   begin
     if UseDockerForIntegrations() then
       SaveStringToFile(Dir + '\generic-mcp.json', DockerMcpCommandJson('mcpServers'), False)
@@ -563,7 +637,17 @@ begin
       'claude mcp get nexus >nul 2>nul && exit /b 20' + #13#10 +
       'claude mcp add nexus --scope user -- ' + CommandTail + #13#10 +
       'exit /b %ERRORLEVEL%' + #13#10;
-    SaveStringToFile(Dir + '\connect-claude-user.cmd', ClaudeScript, False);
+    SaveStringToFile(Dir + '\connect-claude-cli.cmd', ClaudeScript, False);
+  end;
+
+  if AssistantPage.Values[3] then
+  begin
+    CodexScript := '@echo off' + #13#10 +
+      'where codex >nul 2>nul || exit /b 10' + #13#10 +
+      'codex mcp get nexus >nul 2>nul && exit /b 20' + #13#10 +
+      'codex mcp add nexus -- ' + CommandTail + #13#10 +
+      'exit /b %ERRORLEVEL%' + #13#10;
+    SaveStringToFile(Dir + '\connect-codex-desktop.cmd', CodexScript, False);
   end;
 end;
 
@@ -590,8 +674,8 @@ begin
   RegWriteStringValue(HKCU, InstallerRegistryPath(), 'NativeRestHost', RuntimePage.Values[1]);
   RegWriteStringValue(HKCU, InstallerRegistryPath(), 'NativeRestPort', RuntimePage.Values[2]);
   RegWriteStringValue(HKCU, InstallerRegistryPath(), 'RestApiToken', RuntimePage.Values[3]);
-  RegWriteStringValue(HKCU, InstallerRegistryPath(), 'SemanticProvider', RuntimePage.Values[4]);
-  RegWriteStringValue(HKCU, InstallerRegistryPath(), 'OllamaBaseUrl', RuntimePage.Values[5]);
+  RegWriteStringValue(HKCU, InstallerRegistryPath(), 'SemanticProvider', SemanticProviderValue());
+  RegWriteStringValue(HKCU, InstallerRegistryPath(), 'OllamaBaseUrl', OllamaPage.Values[0]);
   if InstallDocker() then
   begin
     RegWriteStringValue(HKCU, InstallerRegistryPath(), 'DockerImage', DockerPage.Values[0]);
@@ -602,6 +686,73 @@ begin
     RegWriteStringValue(HKCU, InstallerRegistryPath(), 'DockerRepository', DockerPage.Values[5]);
     RegWriteStringValue(HKCU, InstallerRegistryPath(), 'DockerRestartPolicy', DockerPage.Values[6]);
   end;
+end;
+
+function DeploymentModeLabel(): String;
+begin
+  if DeploymentPage.SelectedValueIndex = 0 then Result := 'Natif Windows'
+  else if DeploymentPage.SelectedValueIndex = 1 then Result := 'Docker'
+  else Result := 'Natif + Docker';
+end;
+
+function ProfileLabel(): String;
+begin
+  if IsCustomProfile() then Result := 'Personnalisé' else Result := 'Recommandé';
+end;
+
+function IntegrationRuntimeLabel(): String;
+begin
+  if UseDockerForIntegrations() then Result := 'Docker / docker exec -i'
+  else Result := 'Natif / Java embarqué';
+end;
+
+function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
+begin
+  Result := 'RÉCAPITULATIF NEXUS' + NewLine + NewLine +
+    'Mode : ' + DeploymentModeLabel() + NewLine +
+    'Profil : ' + ProfileLabel() + NewLine +
+    'Répertoire : ' + WizardDirValue() + NewLine +
+    'NEXUS_HOME : ' + RuntimePage.Values[0] + NewLine;
+
+  if InstallNative() then
+  begin
+    Result := Result + NewLine + 'Natif :' + NewLine;
+    if InstallNativeCli() then Result := Result + '  - CLI NEXUS' + NewLine;
+    if InstallNativeMcp() then Result := Result + '  - Serveur MCP STDIO' + NewLine;
+    if InstallNativeRest() then Result := Result + '  - REST ' + RuntimePage.Values[1] + ':' + RuntimePage.Values[2] + NewLine;
+    if WizardIsTaskSelected('addtopath') then Result := Result + '  - Ajouter NEXUS au PATH utilisateur' + NewLine;
+  end;
+
+  if OllamaEnabled() then
+    Result := Result + NewLine + 'Recherche sémantique : Ollama ACTIVÉ' + NewLine +
+      '  - URL : ' + OllamaPage.Values[0] + NewLine +
+      '  - Le setup configure NEXUS mais n''installe pas le binaire Ollama.' + NewLine
+  else
+    Result := Result + NewLine + 'Recherche sémantique : désactivée' + NewLine;
+
+  if InstallDocker() then
+  begin
+    Result := Result + NewLine + 'Docker :' + NewLine +
+      '  - Image : ' + DockerPage.Values[0] + NewLine +
+      '  - Conteneur : ' + DockerPage.Values[1] + NewLine +
+      '  - REST : ' + DockerPage.Values[2] + ':' + DockerPage.Values[3] + ' -> conteneur:' + DockerPage.Values[4] + NewLine +
+      '  - Repository : ' + DockerPage.Values[5] + ' -> /workspace:ro' + NewLine +
+      '  - Restart policy : ' + DockerPage.Values[6] + NewLine;
+    if WizardIsTaskSelected('startdocker') then Result := Result + '  - Démarrage Docker après installation' + NewLine;
+  end;
+
+  Result := Result + NewLine + 'Assistants MCP :' + NewLine;
+  if AssistantPage.Values[0] then Result := Result + '  - GitHub Copilot CLI' + NewLine;
+  if AssistantPage.Values[1] then Result := Result + '  - GitHub Copilot JetBrains' + NewLine;
+  if AssistantPage.Values[2] then Result := Result + '  - Claude CLI / Claude Code' + NewLine;
+  if AssistantPage.Values[3] then Result := Result + '  - Codex Desktop' + NewLine;
+  if AssistantPage.Values[4] then Result := Result + '  - Client MCP générique' + NewLine;
+  if not HasAssistantSelection() then Result := Result + '  - Aucune intégration sélectionnée' + NewLine;
+
+  if HasAssistantSelection() then
+    Result := Result + '  - Runtime MCP : ' + IntegrationRuntimeLabel() + NewLine;
+
+  Result := Result + NewLine + 'Cliquez sur Installer pour appliquer exactement cette configuration.';
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -616,7 +767,8 @@ begin
     if not IsSmokeBuild() then
     begin
       if AssistantPage.Values[0] then RunManagedIntegration('connect-copilot-cli.cmd', 'CopilotCliManaged');
-      if AssistantPage.Values[2] then RunManagedIntegration('connect-claude-user.cmd', 'ClaudeUserManaged');
+      if AssistantPage.Values[2] then RunManagedIntegration('connect-claude-cli.cmd', 'ClaudeCliManaged');
+      if AssistantPage.Values[3] then RunManagedIntegration('connect-codex-desktop.cmd', 'CodexManaged');
     end;
   end;
 end;
@@ -631,10 +783,15 @@ begin
     Exec(ExpandConstant('{cmd}'), '/D /S /C "copilot mcp remove nexus"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     RegDeleteValue(HKCU, InstallerRegistryPath(), 'CopilotCliManaged');
   end;
-  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'ClaudeUserManaged', Value) and (Value = '1') and CommandExists('claude') then
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'ClaudeCliManaged', Value) and (Value = '1') and CommandExists('claude') then
   begin
     Exec(ExpandConstant('{cmd}'), '/D /S /C "claude mcp remove --scope user nexus"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    RegDeleteValue(HKCU, InstallerRegistryPath(), 'ClaudeUserManaged');
+    RegDeleteValue(HKCU, InstallerRegistryPath(), 'ClaudeCliManaged');
+  end;
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'CodexManaged', Value) and (Value = '1') and CommandExists('codex') then
+  begin
+    Exec(ExpandConstant('{cmd}'), '/D /S /C "codex mcp remove nexus"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    RegDeleteValue(HKCU, InstallerRegistryPath(), 'CodexManaged');
   end;
 end;
 
