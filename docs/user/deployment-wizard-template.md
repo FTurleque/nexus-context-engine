@@ -265,7 +265,7 @@ claude_cli:
   label: "Claude CLI / Claude Code"
   default: true
   action: "connect if CLI detected and nexus entry absent"
-  command: "claude mcp add nexus --scope user -- <nexus-mcp-command>"
+  command: "claude mcp add --scope user nexus -- <nexus-mcp-command>"
   scope: user
   existing_entry_policy: preserve
   generator_project_profile_retained: true
@@ -469,13 +469,13 @@ Une entrée existante est préservée.
 Native :
 
 ```text
-claude mcp add nexus --scope user -- "<install>\app\runtime\bin\java.exe" -jar "<install>\lib\nexus-mcp.jar"
+claude mcp add --scope user nexus -- "<install>\app\runtime\bin\java.exe" -jar "<install>\lib\nexus-mcp.jar"
 ```
 
 Docker :
 
 ```text
-claude mcp add nexus --scope user -- docker exec -i <container> java -jar /opt/nexus/lib/nexus-mcp.jar
+claude mcp add --scope user nexus -- docker exec -i <container> java -jar /opt/nexus/lib/nexus-mcp.jar
 ```
 
 Le profil projet reste disponible dans `nexus-assistant-clients`.
