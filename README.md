@@ -9,16 +9,18 @@ NEXUS n'est ni un chatbot, ni un LLM, ni un orchestrateur d'agents. Il se place 
 ```text
 repository   FTurleque/nexus-context-engine
 visibility   public
-main         Phase 6 + hardening + provenance des index intégrés
+main         Phase 6 + hardening + provenance + supply-chain + Windows EXE intégrés
 Java         runtime >=21 / release 21
 version      0.2.0
 Phase 1→6    livrées / intégrées
 hardening    post-Phase 6 intégré via PR #18
 provenance   externe + sémantique intégrée via PR #24
 licence      propriétaire source-available via PR #25
+supply-chain CI/couverture/OSV/CodeQL intégrés via PR #28
+windows      EXE installer autonome intégré via PR #41
 ```
 
-La Phase 6 a été fusionnée via PR #15. Le hardening post-Phase 6 a été intégré via PR #18. Les deux P1 issus de l'audit de stabilisation (#19/#20) ont été qualifiés puis intégrés via PR #24.
+La Phase 6 a été fusionnée via PR #15. Le hardening post-Phase 6 a été intégré via PR #18. Les deux P1 issus de l'audit de stabilisation (#19/#20) ont été qualifiés puis intégrés via PR #24. La distribution Windows autonome et l'installateur EXE Inno Setup sans prérequis JVM ont été intégrés via PR #41 (issue #40).
 
 ## Capacités
 
@@ -36,7 +38,8 @@ La Phase 6 a été fusionnée via PR #15. Le hardening post-Phase 6 a été int�
 - CLI, REST Quarkus et MCP Java STDIO ;
 - générateurs de configuration Copilot/Claude ;
 - liveness/readiness REST et métriques ;
-- distribution CLI autonome versionnée.
+- distribution CLI autonome versionnée ;
+- installateur Windows EXE autonome avec runtime Java embarqué (sans prérequis JVM).
 
 ## Hardening intégré
 
@@ -120,6 +123,19 @@ target/sbom/bom.json
 ```
 
 Le ZIP contient `bin/nexus.cmd`, `bin/nexus`, `lib/nexus-cli.jar`, `README.md` et `LICENSE`. Maven n'est pas requis sur la machine cible ; une JVM Java 21 ou supérieure est nécessaire.
+
+### Windows — EXE installer ou ZIP autonome
+
+`scripts/release/build-windows-release.ps1` produit en plus :
+
+```text
+target\dist\nexus-context-engine-0.2.0-windows-x64.zip
+target\dist\nexus-context-engine-0.2.0-windows-x64.zip.sha256
+target\dist\NEXUS-0.2.0-windows-x64-setup.exe
+target\dist\NEXUS-0.2.0-windows-x64-setup.exe.sha256
+```
+
+Le ZIP Windows et le setup embarquent un runtime Java construit avec `jpackage`. Aucune JVM système n'est requise sur Windows. Voir [`docs/user/windows-installation.md`](docs/user/windows-installation.md).
 
 ## Correctness et scale
 
@@ -212,14 +228,15 @@ La qualification Windows reste pilotée par :
 powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
 ```
 
-Preuve récente : PR #24, head exact `25c12b100b774a4ec3d69d221675bf31d8ebaa0c`, NEXUS CI run #15 :
+Preuve récente : PR #41, head exact `1be179c76a28ae57387b287df3dc7c33b1225443` :
 
-- Windows / Java 24 : **PASS** ;
-- script de qualification local : **PASS** ;
-- Linux / Java 21 Maven reactor : **PASS** ;
-- distribution Linux : **PASS**.
+- NEXUS CI Windows gate / Java 24 : **PASS** (run 31158371347) ;
+- NEXUS CI Linux reactor Maven build : **PASS** (run 31158371347) ;
+- Windows Installer : **PASS** (run 31158371344) ;
+- OSV-Scanner : **PASS** (run 31158371667) ;
+- CodeQL : **PASS** (run 31158371350).
 
-PR #24 est intégrée dans `main` via `c7a03479a78713b78ec2ddc477e1d07d400d8aba`.
+PR #41 est fusionnée dans `main` via `f4b41f8150d94ef983c486864e428023ab446b4f`.
 
 ## Documentation
 
@@ -233,6 +250,7 @@ PR #24 est intégrée dans `main` via `c7a03479a78713b78ec2ddc477e1d07d400d8aba`
 - sémantique : [`docs/developer/semantic-search.md`](docs/developer/semantic-search.md) ;
 - limites/watch items : [`docs/developer/current-limitations.md`](docs/developer/current-limitations.md) ;
 - release/recovery : [`docs/developer/release-and-recovery.md`](docs/developer/release-and-recovery.md) ;
+- installation Windows : [`docs/user/windows-installation.md`](docs/user/windows-installation.md) ;
 - roadmap : [`docs/roadmap.md`](docs/roadmap.md).
 
 ## Licence
