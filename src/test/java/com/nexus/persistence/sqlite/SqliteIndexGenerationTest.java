@@ -3,9 +3,15 @@ package com.nexus.persistence.sqlite;
 import com.nexus.config.NexusPaths;
 import com.nexus.index.AnalysisResult;
 import com.nexus.index.CodeIntelligenceSnapshot;
+import com.nexus.index.CodeSymbol;
 import com.nexus.index.FileCategory;
 import com.nexus.index.IndexedFileUpdate;
+import com.nexus.index.IndexedRelation;
+import com.nexus.index.IndexedSymbol;
+import com.nexus.index.RelationKind;
 import com.nexus.index.ScannedFile;
+import com.nexus.index.SymbolKind;
+import com.nexus.index.SymbolRelation;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;
@@ -72,5 +78,33 @@ class SqliteIndexGenerationTest {
 
         reopened.replaceExternalCodeIntelligence(projectId, CodeIntelligenceSnapshot.empty("minos"));
         assertEquals(1L, reopened.generation(projectId));
+
+        CodeIntelligenceSnapshot populated = new CodeIntelligenceSnapshot(
+                "scip",
+                List.of(new IndexedSymbol(
+                        "src/Main.java",
+                        new CodeSymbol(
+                                SymbolKind.TYPE,
+                                "Main",
+                                "scip:demo/Main#",
+                                "Main",
+                                1,
+                                1,
+                                "scip"))),
+                List.of(new IndexedRelation(
+                        "src/Main.java",
+                        new SymbolRelation(
+                                RelationKind.REFERENCES,
+                                "scip:demo/Main#",
+                                "scip:demo/Dependency#",
+                                1.0d,
+                                "scip"))));
+
+        reopened.replaceExternalCodeIntelligence(projectId, populated);
+        assertEquals(2L, reopened.generation(projectId));
+
+        // Importing the exact same non-empty provider state again must not invalidate caches.
+        reopened.replaceExternalCodeIntelligence(projectId, populated);
+        assertEquals(2L, reopened.generation(projectId));
     }
 }
