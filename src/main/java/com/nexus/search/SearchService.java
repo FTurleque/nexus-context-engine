@@ -45,11 +45,11 @@ public final class SearchService {
         if (query.isBlank()) {
             throw new IllegalArgumentException("query must not be blank");
         }
-        if (limit <= 0) {
-            throw new IllegalArgumentException("limit must be greater than zero");
-        }
+        ResultLimitPolicy.validate(limit);
 
-        int retrievalLimit = Math.min(500, Math.max(20, limit * 3));
+        int retrievalLimit = Math.min(
+                ResultLimitPolicy.MAX_RESULT_LIMIT,
+                Math.max(20, limit * 3));
         List<SearchCandidate> rawCandidates = new ArrayList<>();
         for (SearchStrategy strategy : strategies) {
             rawCandidates.addAll(strategy.search(project, query, retrievalLimit));
