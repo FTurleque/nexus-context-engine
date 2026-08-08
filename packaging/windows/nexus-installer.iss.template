@@ -975,6 +975,7 @@ var
   ClaudeDesktopPsScript: String;
   ClaudeDesktopCmd: String;
   CodexScript: String;
+  CodexCmd: String;
   JetBrainsPsScript: String;
   JetBrainsCmd: String;
   CommandTail: String;
@@ -1002,12 +1003,14 @@ begin
       - exit 20 : nexus key already present (idempotent)
       - exit 0  : nexus added successfully }
     JetBrainsPsScript :=
-      '$mcp = Join-Path $env:LOCALAPPDATA ''github-copilot\intellij\mcp.json''' + #13#10 +
-      'if (-not (Test-Path $mcp)) { exit 10 }' + #13#10 +
+      '$dir = Join-Path $env:LOCALAPPDATA ''github-copilot\intellij''' + #13#10 +
+      'if (-not (Test-Path $dir)) { exit 10 }' + #13#10 +
       '$launcher = ''' + ExpandConstant('{app}\nexus-mcp.cmd') + '''' + #13#10 +
       'if (-not (Test-Path $launcher)) { exit 10 }' + #13#10 +
-      '$c = Get-Content $mcp -Raw | ConvertFrom-Json' + #13#10 +
-      'if ($null -ne $c.servers.nexus) { exit 20 }' + #13#10 +
+      '$mcp = Join-Path $dir ''mcp.json''' + #13#10 +
+      '$c = if (Test-Path $mcp) { Get-Content $mcp -Raw | ConvertFrom-Json } else { [PSCustomObject]@{ servers = [PSCustomObject]@{} } }' + #13#10 +
+      'if ($null -eq ($c | Get-Member -Name servers -MemberType NoteProperty)) { $c | Add-Member -MemberType NoteProperty -Name servers -Value ([PSCustomObject]@{}) }' + #13#10 +
+      'if ($null -ne ($c.servers | Get-Member -Name nexus -MemberType NoteProperty)) { exit 20 }' + #13#10 +
       '$e = [PSCustomObject]@{ type = ''stdio''; command = ''cmd.exe''; ' +
           'args = @(''/d'', ''/s'', ''/c'', $launcher) }' + #13#10 +
       '$c.servers | Add-Member -MemberType NoteProperty -Name nexus -Value $e' + #13#10 +
@@ -1015,6 +1018,16 @@ begin
           '[System.Text.UTF8Encoding]::new($false))' + #13#10 +
       'exit 0' + #13#10;
     SaveStringToFile(Dir + '\connect-copilot-jetbrains.ps1', JetBrainsPsScript, False);
+    SaveStringToFile(Dir + '\disconnect-copilot-jetbrains.ps1',
+      '$mcp = Join-Path $env:LOCALAPPDATA ''github-copilot\intellij\mcp.json''' + #13#10 +
+      'if (-not (Test-Path $mcp)) { exit 0 }' + #13#10 +
+      '$c = Get-Content $mcp -Raw | ConvertFrom-Json' + #13#10 +
+      'if ($null -eq ($c | Get-Member -Name servers -MemberType NoteProperty)) { exit 0 }' + #13#10 +
+      'if ($null -eq ($c.servers | Get-Member -Name nexus -MemberType NoteProperty)) { exit 0 }' + #13#10 +
+      '$c.servers.PSObject.Properties.Remove(''nexus'')' + #13#10 +
+      '[System.IO.File]::WriteAllText($mcp, ($c | ConvertTo-Json -Depth 5), [System.Text.UTF8Encoding]::new($false))' + #13#10 +
+      'exit 0' + #13#10,
+      False);
 
     JetBrainsCmd :=
       '@echo off' + #13#10 +
@@ -1058,21 +1071,38 @@ begin
       - exit 20 : nexus already present (idempotent)
       - exit 0  : nexus added successfully }
     ClaudeDesktopPsScript :=
-      '$cfg = Join-Path $env:APPDATA ''Claude\claude_desktop_config.json''' + #13#10 +
-      'if (-not (Test-Path $cfg)) { exit 10 }' + #13#10 +
+      '$cfg = $null' + #13#10 +
+      '$pkgs = Join-Path $env:LOCALAPPDATA ''Packages''' + #13#10 +
+      'if (Test-Path $pkgs) { foreach ($p in (Get-ChildItem $pkgs -Directory -Filter ''Claude_*'' -EA SilentlyContinue)) { $cand = Join-Path $p.FullName ''LocalCache\Roaming\Claude\claude_desktop_config.json''; if (Test-Path (Split-Path $cand -Parent)) { $cfg = $cand; break } } }' + #13#10 +
+      'if (-not $cfg) { $fb = Join-Path $env:APPDATA ''Claude''; if (Test-Path $fb) { $cfg = Join-Path $fb ''claude_desktop_config.json'' } }' + #13#10 +
+      'if (-not $cfg) { exit 10 }' + #13#10 +
       '$launcher = ''' + ExpandConstant('{app}\nexus-mcp.cmd') + '''' + #13#10 +
       'if (-not (Test-Path $launcher)) { exit 10 }' + #13#10 +
-      '$c = Get-Content $cfg -Raw | ConvertFrom-Json' + #13#10 +
-      'if ($null -ne $c.mcpServers.nexus) { exit 20 }' + #13#10 +
+      '$c = if (Test-Path $cfg) { Get-Content $cfg -Raw | ConvertFrom-Json } else { [PSCustomObject]@{} }' + #13#10 +
+      'if (($null -ne ($c | Get-Member -Name mcpServers -MemberType NoteProperty)) -and ($null -ne ($c.mcpServers | Get-Member -Name nexus -MemberType NoteProperty))) { exit 20 }' + #13#10 +
       '$e = [PSCustomObject]@{ command = ''cmd.exe''; args = @(''/d'', ''/s'', ''/c'', $launcher) }' + #13#10 +
       'if ($null -eq ($c | Get-Member -Name mcpServers -MemberType NoteProperty)) {' + #13#10 +
       '    $c | Add-Member -MemberType NoteProperty -Name mcpServers -Value ([PSCustomObject]@{})' + #13#10 +
       '}' + #13#10 +
       '$c.mcpServers | Add-Member -MemberType NoteProperty -Name nexus -Value $e' + #13#10 +
-      '[System.IO.File]::WriteAllText($cfg, ($c | ConvertTo-Json -Depth 10), ' +
-          '[System.Text.UTF8Encoding]::new($false))' + #13#10 +
+      '$cfgDir = Split-Path $cfg -Parent' + #13#10 +
+      'if (-not (Test-Path $cfgDir)) { New-Item -ItemType Directory -Force -Path $cfgDir | Out-Null }' + #13#10 +
+      '[System.IO.File]::WriteAllText($cfg, ($c | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))' + #13#10 +
       'exit 0' + #13#10;
     SaveStringToFile(Dir + '\connect-claude-desktop.ps1', ClaudeDesktopPsScript, False);
+    SaveStringToFile(Dir + '\disconnect-claude-desktop.ps1',
+      '$cfg = $null' + #13#10 +
+      '$pkgs = Join-Path $env:LOCALAPPDATA ''Packages''' + #13#10 +
+      'if (Test-Path $pkgs) { foreach ($p in (Get-ChildItem $pkgs -Directory -Filter ''Claude_*'' -EA SilentlyContinue)) { $cand = Join-Path $p.FullName ''LocalCache\Roaming\Claude\claude_desktop_config.json''; if (Test-Path $cand) { $cfg = $cand; break } } }' + #13#10 +
+      'if (-not $cfg) { $fb = Join-Path $env:APPDATA ''Claude\claude_desktop_config.json''; if (Test-Path $fb) { $cfg = $fb } }' + #13#10 +
+      'if (-not $cfg) { exit 0 }' + #13#10 +
+      '$c = Get-Content $cfg -Raw | ConvertFrom-Json' + #13#10 +
+      'if ($null -eq ($c | Get-Member -Name mcpServers -MemberType NoteProperty)) { exit 0 }' + #13#10 +
+      'if ($null -eq ($c.mcpServers | Get-Member -Name nexus -MemberType NoteProperty)) { exit 0 }' + #13#10 +
+      '$c.mcpServers.PSObject.Properties.Remove(''nexus'')' + #13#10 +
+      '[System.IO.File]::WriteAllText($cfg, ($c | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))' + #13#10 +
+      'exit 0' + #13#10,
+      False);
 
     ClaudeDesktopCmd :=
       '@echo off' + #13#10 +
@@ -1092,15 +1122,37 @@ begin
 
   if AssistantPage.Values[3] then
   begin
-    CodexScript := '@echo off' + #13#10 +
-      'where codex >nul 2>nul || exit /b 10' + #13#10 +
-      'set "CODEX_CONFIG=%USERPROFILE%\.codex\config.toml"' + #13#10 +
-      'if not exist "%CODEX_CONFIG%" goto codex_add_nexus' + #13#10 +
-      'findstr /R /C:"^\[mcp_servers\.nexus\]" "%CODEX_CONFIG%" >nul 2>nul && exit /b 20' + #13#10 +
-      ':codex_add_nexus' + #13#10 +
-      'codex mcp add nexus -- ' + CommandTail + #13#10 +
+    CodexScript :=
+      '$scriptDir = Split-Path $MyInvocation.MyCommand.Path -Parent' + #13#10 +
+      '$tomlSrc = Join-Path $scriptDir ''codex-desktop.mcp.toml''' + #13#10 +
+      '$cfg = Join-Path $env:USERPROFILE ''.codex\config.toml''' + #13#10 +
+      '$marker = ''# BEGIN NEXUS-MCP''' + #13#10 +
+      '$codexOk = (Test-Path $cfg) -or (Test-Path (Join-Path $env:LOCALAPPDATA ''Programs\Codex\Codex.exe'')) -or (Test-Path (Join-Path $env:LOCALAPPDATA ''Codex\Codex.exe'')) -or ($null -ne (Get-Command codex -EA SilentlyContinue))' + #13#10 +
+      'if (-not $codexOk) { exit 10 }' + #13#10 +
+      'if ((Test-Path $cfg) -and ([System.IO.File]::ReadAllText($cfg) -match [regex]::Escape($marker))) { exit 20 }' + #13#10 +
+      'if (-not (Test-Path $tomlSrc)) { exit 10 }' + #13#10 +
+      '$tomlBlock = $marker + [Environment]::NewLine + ([System.IO.File]::ReadAllText($tomlSrc, [System.Text.Encoding]::UTF8).TrimEnd()) + [Environment]::NewLine' + #13#10 +
+      '$cfgDir = Split-Path $cfg -Parent' + #13#10 +
+      'if (-not (Test-Path $cfgDir)) { New-Item -ItemType Directory -Force -Path $cfgDir | Out-Null }' + #13#10 +
+      'if (Test-Path $cfg) { $existing = [System.IO.File]::ReadAllText($cfg, [System.Text.Encoding]::UTF8).TrimEnd(); $newText = $existing + [Environment]::NewLine + [Environment]::NewLine + $tomlBlock } else { $newText = $tomlBlock }' + #13#10 +
+      '[System.IO.File]::WriteAllText($cfg, $newText, [System.Text.UTF8Encoding]::new($false))' + #13#10 +
+      'exit 0' + #13#10;
+    SaveStringToFile(Dir + '\connect-codex-desktop.ps1', CodexScript, False);
+    CodexCmd :=
+      '@echo off' + #13#10 +
+      'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0connect-codex-desktop.ps1"' + #13#10 +
       'exit /b %ERRORLEVEL%' + #13#10;
-    SaveStringToFile(Dir + '\connect-codex-desktop.cmd', CodexScript, False);
+    SaveStringToFile(Dir + '\connect-codex-desktop.cmd', CodexCmd, False);
+    SaveStringToFile(Dir + '\disconnect-codex-desktop.ps1',
+      '$cfg = Join-Path $env:USERPROFILE ''.codex\config.toml''' + #13#10 +
+      'if (-not (Test-Path $cfg)) { exit 0 }' + #13#10 +
+      '$marker = ''# BEGIN NEXUS-MCP''' + #13#10 +
+      '$text = [System.IO.File]::ReadAllText($cfg, [System.Text.Encoding]::UTF8)' + #13#10 +
+      'if ($text -notmatch [regex]::Escape($marker)) { exit 0 }' + #13#10 +
+      '$cleaned = ([regex]::Replace($text, ''(?s)'' + [regex]::Escape($marker) + ''.*?(\r?\n)'', '''')).TrimEnd()' + #13#10 +
+      '[System.IO.File]::WriteAllText($cfg, (if ($cleaned) { $cleaned + [Environment]::NewLine } else { '''' }), [System.Text.UTF8Encoding]::new($false))' + #13#10 +
+      'exit 0' + #13#10,
+      False);
   end;
 end;
 
@@ -1273,20 +1325,35 @@ procedure RemoveManagedAssistantIntegrations;
 var
   Value: String;
   ResultCode: Integer;
+  PsExe: String;
 begin
+  PsExe := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'CopilotCliManaged', Value) and (Value = '1') and CommandExists('copilot') then
   begin
     Exec(ExpandConstant('{cmd}'), '/D /S /C "copilot mcp remove nexus"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     RegDeleteValue(HKCU, InstallerRegistryPath(), 'CopilotCliManaged');
+  end;
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'CopilotJetBrainsManaged', Value) and (Value = '1') and
+     FileExists(ExpandConstant('{app}\integrations\disconnect-copilot-jetbrains.ps1')) then
+  begin
+    Exec(PsExe, '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\integrations\disconnect-copilot-jetbrains.ps1') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    RegDeleteValue(HKCU, InstallerRegistryPath(), 'CopilotJetBrainsManaged');
+  end;
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'ClaudeDesktopManaged', Value) and (Value = '1') and
+     FileExists(ExpandConstant('{app}\integrations\disconnect-claude-desktop.ps1')) then
+  begin
+    Exec(PsExe, '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\integrations\disconnect-claude-desktop.ps1') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    RegDeleteValue(HKCU, InstallerRegistryPath(), 'ClaudeDesktopManaged');
   end;
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'ClaudeCliManaged', Value) and (Value = '1') and CommandExists('claude') then
   begin
     Exec(ExpandConstant('{cmd}'), '/D /S /C "claude mcp remove nexus"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     RegDeleteValue(HKCU, InstallerRegistryPath(), 'ClaudeCliManaged');
   end;
-  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'CodexManaged', Value) and (Value = '1') and CommandExists('codex') then
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'CodexManaged', Value) and (Value = '1') and
+     FileExists(ExpandConstant('{app}\integrations\disconnect-codex-desktop.ps1')) then
   begin
-    Exec(ExpandConstant('{cmd}'), '/D /S /C "codex mcp remove nexus"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(PsExe, '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\integrations\disconnect-codex-desktop.ps1') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     RegDeleteValue(HKCU, InstallerRegistryPath(), 'CodexManaged');
   end;
 end;
