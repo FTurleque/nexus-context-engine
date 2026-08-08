@@ -61,6 +61,15 @@ class AssistantIntegrationEscapingTest {
     }
 
     @Test
+    void commandFormRejectsEmptyArgumentsInsteadOfSilentlyDroppingThem() {
+        IllegalArgumentException failure = assertThrows(
+                IllegalArgumentException.class,
+                () -> AssistantIntegrationGenerator.renderCommand(new CommandSpec("java", List.of(""))));
+        assertTrue(failure.getMessage().contains("argument vide"), failure.getMessage());
+        assertTrue(failure.getMessage().contains("JSON/TOML"), failure.getMessage());
+    }
+
+    @Test
     void jsonFormRoundTripsStructuredArgvIncludingShellAmbiguities() throws Exception {
         List<String> expected = List.of(
                 "",
@@ -109,7 +118,6 @@ class AssistantIntegrationEscapingTest {
                 "space & value",
                 "paren(value)",
                 "semi;comma,value",
-                "",
                 "C:\\literal\\backslash\\path",
                 "été漢字");
 
