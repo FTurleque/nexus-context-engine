@@ -40,7 +40,8 @@ public class NexusApiApplicationService {
     }
 
     public ProjectDescriptor registerProject(java.nio.file.Path rootPath, String name) throws IOException {
-        return application.registerProject(rootPath, name);
+        java.nio.file.Path allowedRoot = NexusRestProjectRootPolicy.requireAllowed(rootPath);
+        return application.registerProject(allowedRoot, name);
     }
 
     public ProjectDescriptor getProject(UUID projectId) {
