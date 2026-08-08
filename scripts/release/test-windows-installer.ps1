@@ -45,6 +45,21 @@ if ($installerSource.IndexOf('--accept-license', [StringComparison]::Ordinal) -g
     throw 'Windows installer must not accept the Docker Desktop license on behalf of the user.'
 }
 
+Write-Host '[contract] assistant MCP wiring writes clean JSON and reversible markers'
+# The uninstall disconnect must not re-serialize third-party config files with
+# Windows PowerShell 5.1's deep-aligned ConvertTo-Json (it visually mangles them).
+# All JSON config writes must route through the Save-CleanJson / Format-Json helper.
+Assert-TextContains -Text $installerSource -Needle 'function Format-Json(' -Description 'clean 2-space JSON formatter helper'
+Assert-TextContains -Text $installerSource -Needle 'Save-CleanJson $mcp $c' -Description 'JetBrains config written via clean formatter'
+Assert-TextContains -Text $installerSource -Needle 'Save-CleanJson $cfg $c' -Description 'Claude Desktop config written via clean formatter'
+Assert-TextContains -Text $installerSource -Needle '# END NEXUS-MCP' -Description 'Codex block has a reversible END marker'
+# Fail closed if any connect/disconnect script writes JSON via raw deep-align ConvertTo-Json.
+foreach ($rawDepth in @('ConvertTo-Json -Depth 5', 'ConvertTo-Json -Depth 10')) {
+    if ($installerSource.IndexOf($rawDepth, [StringComparison]::Ordinal) -ge 0) {
+        throw "Installer must not write MCP config JSON via raw '$rawDepth' (mangles indentation); use Save-CleanJson."
+    }
+}
+
 Write-Host '[contract] client-only docker.exe must not suppress Docker Desktop bootstrap'
 $installerBuilder = Join-Path $repo 'scripts\release\build-windows-installer.ps1'
 $builderSource = Get-Content -Raw -LiteralPath $installerBuilder
