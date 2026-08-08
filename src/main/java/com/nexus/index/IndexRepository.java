@@ -84,6 +84,52 @@ public interface IndexRepository {
     }
 
     /**
+     * Projection de voisinage bornée pour l'enrichissement de graphe.
+     *
+     * <p>Le fallback maintient la compatibilité des repositories de test mais
+     * peut matérialiser leurs projections. Les repositories persistants doivent
+     * surcharger ce contrat et filtrer les paths/relations côté stockage.</p>
+     */
+    default Map<String, Set<String>> findGraphNeighbors(
+            UUID projectId,
+            Set<String> relativePaths,
+            int maxEdges) {
+        Objects.requireNonNull(relativePaths, "relativePaths");
+        relativePaths.forEach(path -> Objects.requireNonNull(path, "relativePaths must not contain null"));
+        ResultLimitPolicy.validateInternalRetrieval(maxEdges);
+        if (relativePaths.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<String, String> typeOwners = findTypeOwners(projectId);
+        Map<String, Set<String>> neighbors = new LinkedHashMap<>();
+        int edgeCount = 0;
+        for (SymbolRelation relation : findImportRelations(projectId)) {
+            String targetPath = resolveImportedType(typeOwners, relation.target());
+            if (targetPath == null || targetPath.equals(relation.source())) {
+                continue;
+            }
+            if (relativePaths.contains(relation.source())
+                    && addNeighbor(neighbors, relation.source(), targetPath)) {
+                edgeCount++;
+            }
+            if (edgeCount >= maxEdges) {
+                break;
+            }
+            if (relativePaths.contains(targetPath)
+                    && addNeighbor(neighbors, targetPath, relation.source())) {
+                edgeCount++;
+            }
+            if (edgeCount >= maxEdges) {
+                break;
+            }
+        }
+        Map<String, Set<String>> immutable = new LinkedHashMap<>();
+        neighbors.forEach((path, values) -> immutable.put(path, Set.copyOf(values)));
+        return Map.copyOf(immutable);
+    }
+
+    /**
      * Providers externes persistés. SQLite surcharge cette méthode avec un
      * UNION DISTINCT afin d'éviter un scan projet-wide des symboles/relations.
      */
@@ -130,6 +176,26 @@ public interface IndexRepository {
      */
     default long generation(UUID projectId) {
         return 0L;
+    }
+
+    private static boolean addNeighbor(Map<String, Set<String>> neighbors, String source, String target) {
+        return neighbors.computeIfAbsent(source, ignored -> new LinkedHashSet<>()).add(target);
+    }
+
+    private static String resolveImportedType(Map<String, String> owners, String targetRef) {
+        String candidate = targetRef;
+        while (!candidate.isBlank()) {
+            String owner = owners.get(candidate);
+            if (owner != null) {
+                return owner;
+            }
+            int separator = candidate.lastIndexOf('.');
+            if (separator < 0) {
+                return null;
+            }
+            candidate = candidate.substring(0, separator);
+        }
+        return null;
     }
 
     private static boolean isType(SymbolKind kind) {
