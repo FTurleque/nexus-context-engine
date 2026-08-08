@@ -71,6 +71,14 @@ $failures = New-Object System.Collections.Generic.List[string]
 function Assert([bool]$Condition, [string]$Message) {
     if (-not $Condition) { $script:failures.Add($Message) } else { Write-Host "  [PASS] $Message" }
 }
+# Accès propriété tolérant à Set-StrictMode (les appelants comme test-docker-runtime.ps1 l'activent).
+function HasProp($Object, [string]$Name) {
+    return ($null -ne $Object) -and ($Object.PSObject.Properties.Name -contains $Name)
+}
+function Prop($Object, [string]$Name) {
+    if (HasProp $Object $Name) { return $Object.$Name }
+    return $null
+}
 
 Write-Host "[$Label] smoke protocolaire MCP JSON-RPC..." -ForegroundColor Cyan
 
@@ -128,16 +136,19 @@ try {
     Assert ($seen.ContainsKey('1')) 'réponse initialize reçue'
     if ($seen.ContainsKey('1')) {
         $init = $seen['1']
-        Assert ($init.jsonrpc -eq '2.0') 'initialize : JSON-RPC 2.0'
-        Assert ($null -ne $init.result -and $null -ne $init.result.serverInfo) 'initialize : serverInfo présent'
-        Assert ($init.result.serverInfo.name -match 'nexus') "initialize : serveur identifié ($($init.result.serverInfo.name))"
+        Assert ((Prop $init 'jsonrpc') -eq '2.0') 'initialize : JSON-RPC 2.0'
+        $initResult = Prop $init 'result'
+        $serverInfo = Prop $initResult 'serverInfo'
+        Assert ($null -ne $serverInfo) 'initialize : serverInfo présent'
+        $serverName = Prop $serverInfo 'name'
+        Assert ($serverName -match 'nexus') "initialize : serveur identifié ($serverName)"
     }
 
     Assert ($seen.ContainsKey('2')) 'réponse tools/list reçue'
     if ($seen.ContainsKey('2')) {
-        $tools = $seen['2'].result.tools
-        Assert ($null -ne $tools -and $tools.Count -ge 1) 'tools/list : liste non vide'
-        $names = @($tools | ForEach-Object { $_.name })
+        $tools = Prop (Prop $seen['2'] 'result') 'tools'
+        Assert ($null -ne $tools -and @($tools).Count -ge 1) 'tools/list : liste non vide'
+        $names = @($tools | ForEach-Object { Prop $_ 'name' })
         foreach ($t in $expectedTools) {
             Assert ($names -contains $t) "tools/list : outil '$t' présent"
         }
@@ -146,8 +157,8 @@ try {
     Assert ($seen.ContainsKey('3')) 'réponse tools/call list_projects reçue'
     if ($seen.ContainsKey('3')) {
         $call = $seen['3']
-        Assert ($null -ne $call.result) 'tools/call list_projects : result (pas erreur)'
-        Assert ($null -eq $call.error) 'tools/call list_projects : aucune erreur JSON-RPC'
+        Assert ($null -ne (Prop $call 'result')) 'tools/call list_projects : result (pas erreur)'
+        Assert (-not (HasProp $call 'error')) 'tools/call list_projects : aucune erreur JSON-RPC'
     }
 
     # stdout doit être exclusivement du protocole : chaque ligne non vide parse en JSON-RPC.
@@ -156,7 +167,7 @@ try {
         $trim = $line.Trim()
         if (-not $trim) { continue }
         try { $o = $trim | ConvertFrom-Json } catch { $nonJson += $trim; continue }
-        if (-not ($o.PSObject.Properties.Name -contains 'jsonrpc')) { $nonJson += $trim }
+        if (-not (HasProp $o 'jsonrpc')) { $nonJson += $trim }
     }
     Assert ($nonJson.Count -eq 0) 'stdout ne contient que du JSON-RPC (aucun log parasite)'
     if ($nonJson.Count -gt 0) { Write-Host "    lignes non-protocole: $($nonJson -join ' | ')" -ForegroundColor Yellow }

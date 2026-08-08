@@ -770,6 +770,55 @@ begin
   else if PageID = IntegrationRuntimePage.ID then Result := not (InstallNative() and InstallDocker());
 end;
 
+function IsValidDockerName(Value: String): Boolean;
+var
+  I: Integer;
+  C: Char;
+begin
+  // Syntaxe conteneur Docker : [a-zA-Z0-9][a-zA-Z0-9_.-]* (borne raisonnable de longueur).
+  Value := Trim(Value);
+  Result := False;
+  if (Value = '') or (Length(Value) > 128) then exit;
+  C := Value[1];
+  if not (((C >= 'a') and (C <= 'z')) or ((C >= 'A') and (C <= 'Z')) or ((C >= '0') and (C <= '9'))) then exit;
+  for I := 2 to Length(Value) do
+  begin
+    C := Value[I];
+    if not (((C >= 'a') and (C <= 'z')) or ((C >= 'A') and (C <= 'Z')) or ((C >= '0') and (C <= '9'))
+        or (C = '_') or (C = '.') or (C = '-')) then exit;
+  end;
+  Result := True;
+end;
+
+function IsValidRestartPolicy(Value: String): Boolean;
+var
+  Prefix, Rest: String;
+begin
+  // Choix fermé Docker : no | always | unless-stopped | on-failure | on-failure:N.
+  Value := Lowercase(Trim(Value));
+  Result := (Value = 'no') or (Value = 'always') or (Value = 'unless-stopped') or (Value = 'on-failure');
+  if Result then exit;
+  Prefix := 'on-failure:';
+  if Copy(Value, 1, Length(Prefix)) = Prefix then
+  begin
+    Rest := Copy(Value, Length(Prefix) + 1, Length(Value));
+    Result := (Rest <> '') and (StrToIntDef(Rest, -1) >= 0);
+  end;
+end;
+
+function HasWhitespace(Value: String): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 1 to Length(Value) do
+    if (Value[I] = ' ') or (Value[I] = #9) then
+    begin
+      Result := True;
+      exit;
+    end;
+end;
+
 function NextButtonClick(CurPageID: Integer): Boolean;
 var
   PortValue: Integer;
@@ -854,6 +903,30 @@ begin
     if (Trim(DockerPage.Values[0]) = '') or (Trim(DockerPage.Values[1]) = '') or (Trim(DockerPage.Values[5]) = '') then
     begin
       MsgBox('Image, nom du conteneur et repository Docker sont obligatoires.', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+    if HasWhitespace(Trim(DockerPage.Values[0])) then
+    begin
+      MsgBox('L''image Docker ne doit pas contenir d''espace (ex. ghcr.io/org/nexus:tag).', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+    if not IsValidDockerName(DockerPage.Values[1]) then
+    begin
+      MsgBox('Le nom du conteneur est invalide. Attendu : lettres/chiffres puis [a-zA-Z0-9_.-].', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+    if not IsValidRestartPolicy(DockerPage.Values[6]) then
+    begin
+      MsgBox('Restart policy invalide. Valeurs acceptées : no, always, unless-stopped, on-failure, on-failure:N.', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+    if not DirExists(Trim(DockerPage.Values[5])) then
+    begin
+      MsgBox('Le repository / racine de projets à monter est introuvable : ' + Trim(DockerPage.Values[5]), mbError, MB_OK);
       Result := False;
       exit;
     end;

@@ -325,8 +325,20 @@ nexus_home_bind:
   access: read-write
 
 restart_policy:
-  type: string
+  type: enum
   default: "unless-stopped"
+  allowed: ["no", "always", "unless-stopped", "on-failure", "on-failure:N"]
+  validation: wizard   # rejeté avant docker compose si hors de cet ensemble
+
+container_name:
+  type: string
+  validation: "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$"   # syntaxe Docker, vérifiée par le wizard
+
+repository:
+  validation: "chemin existant vérifié par le wizard avant montage"
+
+image:
+  validation: "non vide, sans espace"
 ```
 
 Port contract :
