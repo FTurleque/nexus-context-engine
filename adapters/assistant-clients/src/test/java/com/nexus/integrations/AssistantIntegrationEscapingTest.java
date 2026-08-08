@@ -80,6 +80,7 @@ class AssistantIntegrationEscapingTest {
 
         String powershell = Path.of(System.getenv("SystemRoot"),
                 "System32", "WindowsPowerShell", "v1.0", "powershell.exe").toString();
+        String cmdExe = Path.of(System.getenv("SystemRoot"), "System32", "cmd.exe").toString();
         List<String> expected = List.of("space & value", "paren(value)", "semi;comma,value");
 
         Path cmdOutput = work.resolve("cmd argv.txt");
@@ -87,7 +88,7 @@ class AssistantIntegrationEscapingTest {
                 "-NoLogo", "-NoProfile", "-NonInteractive", "-File", capture.toString(),
                 cmdOutput.toString(), expected.get(0), expected.get(1), expected.get(2)));
         String portable = AssistantIntegrationGenerator.renderCommand(cmdSpec);
-        Process cmd = new ProcessBuilder("cmd.exe", "/D", "/S", "/C", portable).start();
+        Process cmd = new ProcessBuilder(cmdExe, "/D", "/S", "/C", portable).start();
         assertEquals(0, cmd.waitFor());
         assertEquals(expected, Files.readAllLines(cmdOutput));
 
