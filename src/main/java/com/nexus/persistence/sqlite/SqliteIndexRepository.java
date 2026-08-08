@@ -215,6 +215,108 @@ public final class SqliteIndexRepository implements IndexRepository {
     }
 
     @Override
+    public Map<String, Set<String>> findGraphNeighbors(
+            UUID projectId,
+            Set<String> relativePaths,
+            int maxEdges) {
+        Objects.requireNonNull(relativePaths, "relativePaths");
+        relativePaths.forEach(path -> Objects.requireNonNull(path, "relativePaths must not contain null"));
+        ResultLimitPolicy.validateInternalRetrieval(maxEdges);
+        if (relativePaths.isEmpty()) {
+            return Map.of();
+        }
+
+        String requestedPaths = serializePaths(relativePaths.stream().sorted().toList());
+        try (Connection connection = database.openConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     WITH requested(path) AS (
+                         SELECT value FROM json_each(?)
+                     ),
+                     requested_types AS (
+                         SELECT s.qualified_name, f.relative_path
+                         FROM requested q
+                         JOIN indexed_files f
+                           ON f.project_id = ? AND f.relative_path = q.path
+                         JOIN symbols s ON s.file_id = f.id
+                         WHERE s.kind IN ('CLASS', 'INTERFACE', 'RECORD', 'ENUM', 'ANNOTATION', 'TYPE')
+                     ),
+                     outgoing AS (
+                         SELECT q.path AS seed_path,
+                                (
+                                    SELECT f2.relative_path
+                                    FROM symbols s2
+                                    JOIN indexed_files f2 ON f2.id = s2.file_id
+                                    WHERE f2.project_id = ?
+                                      AND s2.kind IN ('CLASS', 'INTERFACE', 'RECORD', 'ENUM', 'ANNOTATION', 'TYPE')
+                                      AND (
+                                          r.target_ref = s2.qualified_name
+                                          OR r.target_ref LIKE s2.qualified_name || '.%'
+                                      )
+                                    ORDER BY LENGTH(s2.qualified_name) DESC, f2.relative_path
+                                    LIMIT 1
+                                ) AS neighbor_path
+                         FROM requested q
+                         JOIN symbol_relations r
+                           ON r.project_id = ?
+                          AND r.kind = ?
+                          AND r.source_ref = q.path
+                         ORDER BY q.path, r.target_ref
+                         LIMIT ?
+                     ),
+                     incoming AS (
+                         SELECT rt.relative_path AS seed_path,
+                                r.source_ref AS neighbor_path
+                         FROM requested_types rt
+                         JOIN symbol_relations r
+                           ON r.project_id = ?
+                          AND r.kind = ?
+                          AND (
+                              r.target_ref = rt.qualified_name
+                              OR r.target_ref LIKE rt.qualified_name || '.%'
+                          )
+                         ORDER BY rt.relative_path, r.source_ref
+                         LIMIT ?
+                     )
+                     SELECT DISTINCT seed_path, neighbor_path
+                     FROM (
+                         SELECT seed_path, neighbor_path FROM outgoing
+                         UNION ALL
+                         SELECT seed_path, neighbor_path FROM incoming
+                     )
+                     WHERE neighbor_path IS NOT NULL
+                       AND neighbor_path <> seed_path
+                     ORDER BY seed_path, neighbor_path
+                     LIMIT ?
+                     """)) {
+            statement.setString(1, requestedPaths);
+            statement.setString(2, projectId.toString());
+            statement.setString(3, projectId.toString());
+            statement.setString(4, projectId.toString());
+            statement.setString(5, RelationKind.IMPORTS.name());
+            statement.setInt(6, maxEdges);
+            statement.setString(7, projectId.toString());
+            statement.setString(8, RelationKind.IMPORTS.name());
+            statement.setInt(9, maxEdges);
+            statement.setInt(10, maxEdges);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                Map<String, Set<String>> neighbors = new LinkedHashMap<>();
+                while (resultSet.next()) {
+                    neighbors.computeIfAbsent(
+                                    resultSet.getString("seed_path"),
+                                    ignored -> new LinkedHashSet<>())
+                            .add(resultSet.getString("neighbor_path"));
+                }
+                Map<String, Set<String>> immutable = new LinkedHashMap<>();
+                neighbors.forEach((path, values) -> immutable.put(path, Set.copyOf(values)));
+                return Map.copyOf(immutable);
+            }
+        } catch (SQLException exception) {
+            throw persistence("Impossible de projeter le voisinage graphe du projet " + projectId, exception);
+        }
+    }
+
+    @Override
     public Set<String> findExternalProviders(UUID projectId) {
         try (Connection connection = database.openConnection();
              PreparedStatement statement = connection.prepareStatement("""
