@@ -81,6 +81,15 @@ var
   UninstSilent: Boolean;
   OllamaPrereqPage: TInputOptionWizardPage;
 
+const
+  BCRYPT_USE_SYSTEM_PREFERRED_RNG = $00000002;
+
+// CSPRNG Windows : remplit un buffer d'octets à partir du générateur cryptographique système.
+// Utilisé pour générer le token Bearer REST avec une entropie forte (>= 256 bits), au lieu du
+// PRNG Random() non cryptographique. hAlgorithm = 0 + BCRYPT_USE_SYSTEM_PREFERRED_RNG.
+function BCryptGenRandom(hAlgorithm: Cardinal; var pbBuffer: Byte; cbBuffer: Cardinal; dwFlags: Cardinal): Integer;
+  external 'BCryptGenRandom@bcrypt.dll stdcall';
+
 function IsSmokeBuild(): Boolean;
 begin
   Result := {#NexusSmokeMode} = 1;
@@ -187,6 +196,68 @@ begin
   StringChangeEx(Result, '\', '/', True);
 end;
 
+function IsLoopbackOllamaHost(Host: String): Boolean;
+begin
+  // Miroir de com.nexus.search.semantic.ollama.OllamaEndpointResolver#isLoopbackHost.
+  Host := Lowercase(Trim(Host));
+  if (Length(Host) >= 2) and (Host[1] = '[') and (Host[Length(Host)] = ']') then
+    Host := Copy(Host, 2, Length(Host) - 2);
+  Result := (Host = 'localhost') or (Host = '::1') or (Copy(Host, 1, 4) = '127.');
+end;
+
+function OllamaUrlForDocker(Url: String): String;
+var
+  SchemePos, PathPos, PortColon, BracketEnd: Integer;
+  Prefix, Authority, HostPart, Suffix, Rest: String;
+begin
+  // Résout une URL Ollama de bouclage vers host.docker.internal pour le runtime Docker Desktop.
+  // Tout hôte non-bouclage (distant, DNS personnalisé, IPv6 non-::1) est renvoyé inchangé afin de
+  // rester joignable à l'identique depuis les deux runtimes. Le runtime NEXUS applique la même
+  // résolution défensivement via NEXUS_RUNTIME=docker ; cette fonction garantit surtout que le
+  // fichier .env généré affiche l'endpoint réellement utilisé.
+  Result := Url;
+  Url := Trim(Url);
+  SchemePos := Pos('://', Url);
+  if SchemePos = 0 then exit;
+  Prefix := Copy(Url, 1, SchemePos + 2);
+  Rest := Copy(Url, SchemePos + 3, Length(Url));
+  PathPos := Pos('/', Rest);
+  if PathPos > 0 then
+  begin
+    Authority := Copy(Rest, 1, PathPos - 1);
+    Suffix := Copy(Rest, PathPos, Length(Rest));
+  end
+  else
+  begin
+    Authority := Rest;
+    Suffix := '';
+  end;
+
+  if (Length(Authority) > 0) and (Authority[1] = '[') then
+  begin
+    BracketEnd := Pos(']', Authority);
+    if BracketEnd = 0 then exit;
+    HostPart := Copy(Authority, 1, BracketEnd);
+    if IsLoopbackOllamaHost(HostPart) then
+      Result := Prefix + 'host.docker.internal' + Copy(Authority, BracketEnd + 1, Length(Authority)) + Suffix;
+  end
+  else
+  begin
+    PortColon := Pos(':', Authority);
+    if PortColon > 0 then
+      HostPart := Copy(Authority, 1, PortColon - 1)
+    else
+      HostPart := Authority;
+    if IsLoopbackOllamaHost(HostPart) then
+    begin
+      if PortColon > 0 then
+        Result := Prefix + 'host.docker.internal' + Copy(Authority, PortColon, Length(Authority)) + Suffix
+      else
+        Result := Prefix + 'host.docker.internal' + Suffix;
+    end;
+  end;
+end;
+
 function PathContainsEntry(PathValue: String; Entry: String): Boolean;
 var
   Haystack: String;
@@ -289,6 +360,28 @@ begin
     '$s=Get-AuthenticodeSignature -LiteralPath ''' + PowerShellSingleQuote(InstallerPath) + '''; ' +
     'if (($s.Status -eq ''Valid'') -and ($null -ne $s.SignerCertificate) -and ' +
     '($s.SignerCertificate.Subject -match ''(^|,\s*)CN=Docker Inc(,|$)'')) { exit 0 } else { exit 1 }';
+  Parameters := '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' + Script + '"';
+  Result := Exec(PowerShellPath, Parameters, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+end;
+
+function VerifyOllamaInstaller(InstallerPath: String): Boolean;
+var
+  PowerShellPath: String;
+  Script: String;
+  Parameters: String;
+  ResultCode: Integer;
+begin
+  // Vérification Authenticode fail-closed du programme d'installation Ollama, alignée sur celle de
+  // Docker Desktop. Le signataire attendu (CN=Ollama Inc.) provient du certificat DigiCert réel du
+  // binaire officiellement distribué par Ollama — jamais une valeur arbitraire. Toute signature
+  // absente, invalide, ou d'un autre signataire entraîne un refus d'exécution.
+  Result := False;
+  PowerShellPath := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+  if not FileExists(PowerShellPath) then exit;
+  Script :=
+    '$s=Get-AuthenticodeSignature -LiteralPath ''' + PowerShellSingleQuote(InstallerPath) + '''; ' +
+    'if (($s.Status -eq ''Valid'') -and ($null -ne $s.SignerCertificate) -and ' +
+    '($s.SignerCertificate.Subject -match ''(^|,\s*)CN=Ollama Inc\.(,|$)'')) { exit 0 } else { exit 1 }';
   Parameters := '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' + Script + '"';
   Result := Exec(PowerShellPath, Parameters, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
 end;
@@ -442,13 +535,23 @@ end;
 
 function GenerateLocalToken(): String;
 var
+  Buffer: array of Byte;
+  Status: Integer;
   I: Integer;
-  Chars: String;
+  Hex: String;
 begin
-  Chars := 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  // 32 octets = 256 bits d'entropie issus du CSPRNG système. Encodage hexadécimal : alphabet
+  // [0-9a-f] strictement sûr pour .env, cmd, Docker Compose et l'en-tête HTTP Authorization —
+  // aucun caractère nécessitant un échappement, aucun CR/LF. Aucun fallback non cryptographique.
+  SetLength(Buffer, 32);
+  Status := BCryptGenRandom(0, Buffer[0], 32, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+  if Status <> 0 then
+    RaiseException('Génération cryptographique du token REST échouée (BCryptGenRandom, status '
+      + IntToStr(Status) + ').');
+  Hex := '0123456789abcdef';
   Result := '';
-  for I := 1 to 48 do
-    Result := Result + Chars[Random(Length(Chars)) + 1];
+  for I := 0 to 31 do
+    Result := Result + Hex[((Buffer[I] shr 4) and 15) + 1] + Hex[(Buffer[I] and 15) + 1];
 end;
 
 procedure AddNexusToUserPath;
@@ -800,8 +903,11 @@ function InstallOllamaIfNeeded(): String;
 var
   InstallerPath: String;
   ResultCode: Integer;
+  DownloadedSize: Int64;
 begin
   Result := '';
+  // Fail-closed strict : aucun téléchargement ni exécution si la sémantique est désactivée, si
+  // Ollama est déjà présent, ou si l'installation automatique n'a pas été explicitement choisie.
   if not OllamaEnabled() or OllamaPresent() then exit;
   if not OllamaAutoInstallSelected() then
   begin
@@ -810,12 +916,12 @@ begin
   end;
 
   try
-    DownloadTemporaryFile(
+    DownloadedSize := DownloadTemporaryFile(
       'https://ollama.com/download/OllamaSetup.exe',
       'NEXUS-Ollama-Installer.exe', '', nil);
-    Log('Ollama installer téléchargé.');
+    Log('Ollama installer téléchargé depuis le domaine officiel : ' + IntToStr(DownloadedSize) + ' octets.');
   except
-    Result := 'Impossible de télécharger Ollama depuis ollama.com : ' + GetExceptionMessage;
+    Result := 'Impossible de télécharger Ollama depuis le domaine officiel ollama.com : ' + GetExceptionMessage;
     exit;
   end;
 
@@ -826,9 +932,25 @@ begin
     exit;
   end;
 
+  // Vérification Authenticode obligatoire AVANT toute exécution du binaire téléchargé. Signataire
+  // attendu : CN=Ollama Inc. (certificat DigiCert officiel). Aucun fallback « exécuter quand même ».
+  if not VerifyOllamaInstaller(InstallerPath) then
+  begin
+    Log('Signature Authenticode Ollama invalide ou signataire inattendu : installation annulée.');
+    Result := 'La signature Authenticode du programme d''installation Ollama est invalide ou le signataire n''est pas Ollama Inc. Installation annulée.';
+    exit;
+  end;
+  Log('Signature Authenticode Ollama validée (CN=Ollama Inc.).');
+
   if not Exec(InstallerPath, '/S', '', SW_SHOW, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
   begin
     Result := 'L''installation Ollama a échoué avec le code ' + IntToStr(ResultCode) + '.';
+    exit;
+  end;
+
+  if not OllamaPresent() then
+  begin
+    Result := 'Ollama a terminé son installation mais aucun exécutable Ollama n''a été détecté.';
     exit;
   end;
 end;
@@ -879,8 +1001,9 @@ begin
     'NEXUS_DOCKER_CONTAINER_PORT=' + DockerPage.Values[4] + #13#10 +
     'NEXUS_HOME_BIND=' + DockerPath(RuntimePage.Values[0]) + #13#10 +
     'NEXUS_REPOSITORY_BIND=' + DockerPath(DockerPage.Values[5]) + #13#10 +
+    'NEXUS_RUNTIME=docker' + #13#10 +
     'NEXUS_SEMANTIC_PROVIDER=' + SemanticProviderValue() + #13#10 +
-    'NEXUS_OLLAMA_BASE_URL=' + OllamaPage.Values[0] + #13#10 +
+    'NEXUS_OLLAMA_BASE_URL=' + OllamaUrlForDocker(OllamaPage.Values[0]) + #13#10 +
     'NEXUS_REST_API_TOKEN=' + DockerToken + #13#10;
   SaveStringToFile(ExpandConstant('{app}\docker\.env'), EnvContent, False);
 
@@ -1343,17 +1466,22 @@ begin
 
   if OllamaEnabled() then
   begin
-    Result := Result + NewLine + 'Recherche sémantique : Ollama ACTIVÉ' + NewLine +
-      '  - URL : ' + OllamaPage.Values[0] + NewLine;
+    Result := Result + NewLine + 'Recherche sémantique : Ollama ACTIVÉ' + NewLine;
+    // Endpoints réellement retenus par runtime. En mode Both, le natif joint Ollama en direct
+    // tandis que le conteneur Docker passe par host.docker.internal (résolu depuis l'URL saisie).
+    if InstallNative() then
+      Result := Result + '  - URL (Natif) : ' + OllamaPage.Values[0] + NewLine;
+    if InstallDocker() then
+      Result := Result + '  - URL (Docker) : ' + OllamaUrlForDocker(OllamaPage.Values[0]) + NewLine;
     if OllamaPresent() then
-      Result := Result + '  - Ollama : détecté sur ce système.' + NewLine
+      Result := Result + '  - Ollama : détecté sur ce système (aucun téléchargement).' + NewLine
     else if OllamaAutoInstallSelected() then
-      Result := Result + '  - Ollama : sera téléchargé depuis ollama.com et installé avant NEXUS.' + NewLine
+      Result := Result + '  - Ollama : sera TÉLÉCHARGÉ depuis ollama.com puis INSTALLÉ (signature Authenticode vérifiée) avant NEXUS.' + NewLine
     else
       Result := Result + '  - Ollama : absent — installation automatique désactivée. Installez Ollama manuellement avant de démarrer NEXUS.' + NewLine;
   end
   else
-    Result := Result + NewLine + 'Recherche sémantique : désactivée' + NewLine;
+    Result := Result + NewLine + 'Recherche sémantique : désactivée (aucun téléchargement Ollama)' + NewLine;
 
   if InstallDocker() then
   begin

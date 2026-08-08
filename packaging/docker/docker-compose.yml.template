@@ -11,6 +11,7 @@ services:
     environment:
       NEXUS_HOME: /data/nexus
       NEXUS_MODE: rest
+      NEXUS_RUNTIME: "${NEXUS_RUNTIME:-docker}"
       NEXUS_REST_HOST: 0.0.0.0
       NEXUS_REST_PORT: "${NEXUS_DOCKER_CONTAINER_PORT:-8080}"
       NEXUS_MAX_FILE_SIZE_BYTES: "${NEXUS_MAX_FILE_SIZE_BYTES:-8388608}"
@@ -20,7 +21,14 @@ services:
       NEXUS_OLLAMA_EMBEDDING_MODEL: "${NEXUS_OLLAMA_EMBEDDING_MODEL:-}"
       NEXUS_OLLAMA_EMBEDDING_DIMENSIONS: "${NEXUS_OLLAMA_EMBEDDING_DIMENSIONS:-}"
       NEXUS_OLLAMA_TIMEOUT_SECONDS: "${NEXUS_OLLAMA_TIMEOUT_SECONDS:-}"
-      NEXUS_REST_API_TOKEN: "${NEXUS_REST_API_TOKEN:-}"
+      # Fail-fast : le REST NEXUS refuse un bind non-loopback (0.0.0.0) sans token. Compose échoue
+      # donc immédiatement et explicitement si NEXUS_REST_API_TOKEN est absent ou vide, plutôt que
+      # de laisser le conteneur démarrer puis mourir.
+      NEXUS_REST_API_TOKEN: "${NEXUS_REST_API_TOKEN:?NEXUS_REST_API_TOKEN is required (le wizard le génère automatiquement ; en autonome, définissez-le dans .env)}"
+    # host.docker.internal pointe vers l'hôte : natif sur Docker Desktop, explicite ici pour rester
+    # portable sur Docker Engine Linux (Ollama tournant sur la machine hôte).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${NEXUS_DOCKER_BIND_ADDRESS:-127.0.0.1}:${NEXUS_DOCKER_HOST_PORT:-8080}:${NEXUS_DOCKER_CONTAINER_PORT:-8080}"
     volumes:

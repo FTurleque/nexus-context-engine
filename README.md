@@ -71,7 +71,7 @@ La recherche sémantique est désactivée par défaut. Le setup propose une case
 [ ] Activer Ollama pour la recherche sémantique
 ```
 
-Si elle est cochée, NEXUS utilise `NEXUS_SEMANTIC_PROVIDER=ollama`. Le setup configure la connexion à Ollama mais n'installe pas le binaire Ollama.
+Si elle est cochée, NEXUS utilise `NEXUS_SEMANTIC_PROVIDER=ollama`. La recherche sémantique reste **désactivée par défaut**. Lorsqu'elle est activée et qu'aucun Ollama n'est détecté, le setup peut, **si l'utilisateur choisit explicitement l'installation automatique**, télécharger l'installateur officiel depuis `ollama.com`, **vérifier sa signature Authenticode (CN=Ollama Inc.)** puis l'installer — jamais en silence, jamais si la sémantique est désactivée, jamais si Ollama est déjà présent. L'installation automatique peut être décochée pour se limiter à la configuration de la connexion. Les endpoints réellement retenus (URL Native, et `host.docker.internal` côté Docker) sont affichés sur la page Ready to Install avant le bouton Installer.
 
 La page **Ready to Install** affiche le récapitulatif complet des choix avant le bouton Installer : mode, composants, `NEXUS_HOME`, REST, Ollama, Docker, assistants, runtime MCP et tâches Windows.
 

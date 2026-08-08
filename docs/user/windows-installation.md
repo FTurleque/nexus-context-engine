@@ -177,7 +177,7 @@ Lorsque la case est décochée :
 NEXUS_SEMANTIC_PROVIDER=
 ```
 
-Important : le setup **configure NEXUS pour utiliser Ollama mais n'installe pas le binaire Ollama**. L'instance doit déjà être installée ou accessible.
+Important : le setup peut **installer automatiquement Ollama** sur Windows, mais **uniquement** si toutes les conditions suivantes sont réunies : la recherche sémantique est activée explicitement, aucun Ollama n'est détecté, et l'option d'installation automatique est cochée. Le binaire est alors téléchargé depuis le domaine officiel `ollama.com` et **sa signature Authenticode (CN=Ollama Inc.) est vérifiée avant exécution** ; toute signature absente, invalide ou d'un autre signataire annule l'installation (fail-closed, aucun fallback). Si l'installation automatique est décochée, le setup se contente de configurer la connexion et Ollama doit déjà être installé ou accessible. NEXUS ne télécharge jamais Ollama quand la sémantique est désactivée et ne le réinstalle jamais s'il est déjà présent.
 
 ## Écran 6 — Configuration Ollama
 
@@ -410,8 +410,8 @@ Le récapitulatif contient :
 - REST natif et **port externe final vérifié** ;
 - ajout au PATH ;
 - recherche sémantique désactivée ou Ollama activé ;
-- URL Ollama si activé ;
-- rappel que le binaire Ollama n'est pas installé par NEXUS ;
+- endpoints Ollama réellement retenus par runtime (URL Native, et `host.docker.internal` côté Docker) ;
+- action Ollama annoncée avant installation : détecté / installation automatique après vérification Authenticode / absent sans installation automatique ;
 - état Docker Desktop/CLI : déjà détecté ou installation automatique prévue ;
 - rappel que la licence Docker reste à accepter par l'utilisateur lorsqu'une installation Docker Desktop est prévue ;
 - image Docker ;
@@ -444,8 +444,9 @@ Docker :
   - REST : 127.0.0.1:8081 -> conteneur:8080
 
 Recherche sémantique : Ollama ACTIVÉ
-  - URL : http://127.0.0.1:11434
-  - Le setup configure NEXUS mais n'installe pas le binaire Ollama.
+  - URL (Natif) : http://127.0.0.1:11434
+  - URL (Docker) : http://host.docker.internal:11434
+  - Ollama : sera TÉLÉCHARGÉ depuis ollama.com puis INSTALLÉ (signature Authenticode vérifiée) avant NEXUS.
 
 Assistants MCP :
   - GitHub Copilot CLI

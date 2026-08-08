@@ -170,7 +170,13 @@ choices:
 Contrat :
 
 ```yaml
-ollama_binary_installed_by_nexus_setup: false
+# NEXUS peut installer Ollama, mais seulement si : sémantique activée + Ollama absent +
+# installation automatique choisie + signature Authenticode (CN=Ollama Inc.) vérifiée.
+ollama_binary_auto_install_supported: true
+ollama_installer_authenticode_verified: true       # signataire attendu : CN=Ollama Inc.
+ollama_auto_install_requires_explicit_optin: true
+ollama_never_installed_when_semantic_disabled: true
+ollama_never_reinstalled_when_present: true
 ollama_authentication_managed_by_nexus: false
 semantic_enabled_by_default: false
 ```
@@ -447,8 +453,9 @@ summary:
   native_rest_port_is_resolved_available_value: true
   add_to_path: required_if_selected
   semantic_search: required
-  ollama_url: required_if_ollama
-  ollama_binary_install_note: required_if_ollama
+  ollama_url_native: required_if_ollama
+  ollama_url_docker: required_if_ollama_and_docker   # host.docker.internal résolu
+  ollama_auto_install_plan: required_if_ollama       # détecté / auto-install vérifié / absent
   docker_runtime_state: required_if_docker
   docker_desktop_auto_install_plan: required_if_runtime_missing
   docker_desktop_download_source: required_if_auto_install
@@ -481,8 +488,9 @@ Exemple sémantique :
 
 ```text
 Recherche sémantique : Ollama ACTIVÉ
-  - URL : http://127.0.0.1:11434
-  - Le setup configure NEXUS mais n'installe pas le binaire Ollama.
+  - URL (Natif) : http://127.0.0.1:11434
+  - URL (Docker) : http://host.docker.internal:11434
+  - Ollama : sera TÉLÉCHARGÉ depuis ollama.com puis INSTALLÉ (signature Authenticode vérifiée) avant NEXUS.
 ```
 
 Exemple de résolution automatique de port :

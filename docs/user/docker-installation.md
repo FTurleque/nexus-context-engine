@@ -172,7 +172,19 @@ Le wizard Windows vérifie le **port hôte externe** demandé avant installation
 
 À l'intérieur de Docker, Quarkus écoute sur `0.0.0.0` pour pouvoir être publié. La politique de sécurité NEXUS exige donc un `NEXUS_REST_API_TOKEN`.
 
-L'assistant Windows génère un token local si Docker est choisi et que l'utilisateur n'en fournit pas.
+L'assistant Windows génère un token local **cryptographiquement sûr** (BCryptGenRandom, 256 bits, encodé en hexadécimal) si Docker est choisi et que l'utilisateur n'en fournit pas.
+
+Le template Compose est **fail-fast** : `NEXUS_REST_API_TOKEN` y est déclaré obligatoire (`${NEXUS_REST_API_TOKEN:?...}`). En utilisation autonome (hors assistant), `docker compose` refuse donc de démarrer immédiatement et explicitement tant qu'aucun token n'est fourni. Définissez-le dans le fichier `.env` à côté du `docker-compose.yml` :
+
+```dotenv
+NEXUS_REST_API_TOKEN=<votre-token>
+```
+
+Vous pouvez générer un token robuste avec, par exemple :
+
+```bash
+openssl rand -hex 32
+```
 
 ## MCP Docker
 
@@ -251,9 +263,9 @@ URL par défaut :
 http://127.0.0.1:11434
 ```
 
-Le setup NEXUS **n'installe pas Ollama** ; il configure uniquement la connexion.
+Le setup NEXUS peut **installer automatiquement Ollama** (sémantique activée + Ollama absent + option d'installation automatique cochée + signature Authenticode `CN=Ollama Inc.` vérifiée) ; sinon il configure uniquement la connexion. Ollama n'est jamais installé si la sémantique est désactivée, ni réinstallé s'il est déjà présent.
 
-Dans un conteneur, `127.0.0.1` désigne le conteneur. Adaptez `NEXUS_OLLAMA_BASE_URL` si Ollama tourne sur l'hôte Windows ou ailleurs.
+Dans un conteneur, `127.0.0.1` désigne le conteneur lui-même. Pour un Ollama tournant sur l'hôte Windows, NEXUS écrit automatiquement `http://host.docker.internal:11434` dans le `.env` Docker et résout aussi cette bascule à l'exécution (`NEXUS_RUNTIME=docker`). Le service Compose déclare `extra_hosts: host.docker.internal:host-gateway` pour rester portable sur Docker Engine Linux. Un Ollama distant ou sur DNS personnalisé est conservé tel quel.
 
 ## Récapitulatif Windows avant déploiement Docker
 

@@ -86,7 +86,7 @@ URL par défaut :
 http://127.0.0.1:11434
 ```
 
-Le setup configure NEXUS pour utiliser Ollama mais **n'installe pas le binaire Ollama**.
+Le setup peut **installer automatiquement Ollama** lorsque la sémantique est activée, qu'aucun Ollama n'est détecté et que l'installation automatique est choisie ; le binaire officiel est alors téléchargé depuis `ollama.com` et **sa signature Authenticode (CN=Ollama Inc.) est vérifiée avant exécution** (fail-closed). Sinon le setup se limite à configurer la connexion. Ollama n'est jamais téléchargé si la sémantique est désactivée ni réinstallé s'il est déjà présent.
 
 ## Intégrations assistants
 
