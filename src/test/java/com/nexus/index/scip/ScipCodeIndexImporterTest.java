@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ScipCodeIndexImporterTest {
@@ -154,6 +155,22 @@ class ScipCodeIndexImporterTest {
                 indexed.relation().kind() == RelationKind.REFERENCES
                         && indexed.relation().source().equals(relativePath)
                         && indexed.relation().target().equals(fieldSymbol)));
+    }
+
+    @Test
+    void rejectsOversizedIndexAndLengthDelimitedDocumentBeforeAllocation() throws Exception {
+        Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("bounded-project"));
+        Path index = projectRoot.resolve("index.scip");
+        Files.write(index, new byte[32]);
+        assertThrows(IOException.class, () ->
+                new ScipCodeIndexImporter("index.scip", 16, 16).importIndex(projectRoot));
+
+        ByteArrayOutputStream encoded = new ByteArrayOutputStream();
+        writeVarint(encoded, ((long) 2 << 3) | 2L);
+        writeVarint(encoded, 17L);
+        Files.write(index, encoded.toByteArray());
+        assertThrows(IOException.class, () ->
+                new ScipCodeIndexImporter("index.scip", 1024, 16).importIndex(projectRoot));
     }
 
     private static byte[] message(byte[]... fields) throws IOException {
