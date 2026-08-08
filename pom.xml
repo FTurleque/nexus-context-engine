@@ -37,12 +37,13 @@
         <lucene.version>10.5.0</lucene.version>
         <jgit.version>7.7.0.202606012155-r</jgit.version>
         <jackson.version>2.22.1</jackson.version>
+        <micrometer.version>1.16.6</micrometer.version>
         <snakeyaml-engine.version>3.0.1</snakeyaml-engine.version>
         <junit.version>6.0.2</junit.version>
         <mcp.sdk.version>2.0.0</mcp.sdk.version>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
-        <quarkus.platform.version>3.33.2.1</quarkus.platform.version>
+        <quarkus.platform.version>3.33.3</quarkus.platform.version>
 
         <maven.compiler-plugin.version>3.15.0</maven.compiler-plugin.version>
         <maven.surefire-plugin.version>3.5.4</maven.surefire-plugin.version>
@@ -58,6 +59,22 @@
 
     <dependencyManagement>
         <dependencies>
+            <!-- These project-level BOMs intentionally precede Quarkus so Maven
+                 cannot silently downgrade the security baselines selected here. -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.micrometer</groupId>
+                <artifactId>micrometer-bom</artifactId>
+                <version>${micrometer.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>io.quarkus.platform</groupId>
                 <artifactId>quarkus-bom</artifactId>
@@ -69,13 +86,6 @@
                 <groupId>io.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp-bom</artifactId>
                 <version>${mcp.sdk.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-            <dependency>
-                <groupId>com.fasterxml.jackson</groupId>
-                <artifactId>jackson-bom</artifactId>
-                <version>${jackson.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
