@@ -46,29 +46,53 @@ class AssistantIntegrationEscapingTest {
     @Test
     void commandFormRejectsShellAmbiguousCharactersInsteadOfPretendingUniversalQuoting() {
         for (String path : List.of(
-                "C:\\weird%dir\\runner.jar",
-                "C:\\weird!dir\\runner.jar",
-                "C:\\weird$dir\\runner.jar",
-                "C:\\weird`dir\\runner.jar",
+                "C:\\weird%VAR%\\runner.jar",
+                "C:\\weird!var!\\runner.jar",
+                "C:\\weird$var\\runner.jar",
+                "C:\\weird`var\\runner.jar",
                 "C:\\has\"quote\\runner.jar",
                 "C:\\has'quote\\runner.jar")) {
-            assertThrows(IllegalArgumentException.class, () -> generator.codexCommand(javaSpec(path)), path);
+            IllegalArgumentException failure = assertThrows(
+                    IllegalArgumentException.class,
+                    () -> generator.codexCommand(javaSpec(path)),
+                    path);
+            assertTrue(failure.getMessage().contains("JSON/TOML"), failure.getMessage());
         }
     }
 
     @Test
-    void jsonFormRoundTripsSpecialCharactersExactly() throws Exception {
-        String path = "C:\\a&b (x86)\\has\"quote\\runner.jar";
-        JsonNode root = objectMapper.readTree(generator.copilotCliJson(javaSpec(path)));
-        assertEquals(path, root.path("mcpServers").path("nexus").path("args").get(1).asText());
+    void jsonFormRoundTripsStructuredArgvIncludingShellAmbiguities() throws Exception {
+        List<String> expected = List.of(
+                "",
+                "C:\\a&b (x86)\\backslash\\path",
+                "has\"quote",
+                "%VAR%",
+                "$var",
+                "!var!",
+                "`literal`",
+                "été漢字");
+        CommandSpec spec = new CommandSpec("C:\\Program Files\\java.exe", expected);
+        JsonNode server = objectMapper.readTree(generator.copilotCliJson(spec))
+                .path("mcpServers").path("nexus");
+        assertEquals(spec.command(), server.path("command").asText());
+        assertEquals(expected.size(), server.path("args").size());
+        for (int index = 0; index < expected.size(); index++) {
+            assertEquals(expected.get(index), server.path("args").get(index).asText());
+        }
     }
 
     @Test
-    void tomlFormEscapesBackslashAndQuote() {
+    void tomlFormEscapesStructuredBackslashesQuotesAndControls() {
         String path = "C:\\a&b\\has\"quote\\runner.jar";
-        String toml = generator.codexDesktopToml(javaSpec(path));
+        CommandSpec spec = new CommandSpec("java", List.of(path, "", "%VAR%", "$var", "!var!", "été漢字"));
+        String toml = generator.codexDesktopToml(spec);
         assertTrue(toml.contains("\\\\a&b\\\\"), "backslashes échappés : " + toml);
         assertTrue(toml.contains("has\\\"quote"), "guillemet échappé : " + toml);
+        assertTrue(toml.contains("\"\""), "argument vide structuré : " + toml);
+        assertTrue(toml.contains("\"%VAR%\""), "pourcentage littéral structuré : " + toml);
+        assertTrue(toml.contains("\"$var\""), "dollar littéral structuré : " + toml);
+        assertTrue(toml.contains("\"!var!\""), "exclamation littérale structurée : " + toml);
+        assertTrue(toml.contains("\"été漢字\""), "Unicode structuré : " + toml);
     }
 
     @Test
@@ -81,27 +105,40 @@ class AssistantIntegrationEscapingTest {
         String powershell = Path.of(System.getenv("SystemRoot"),
                 "System32", "WindowsPowerShell", "v1.0", "powershell.exe").toString();
         String cmdExe = Path.of(System.getenv("SystemRoot"), "System32", "cmd.exe").toString();
-        List<String> expected = List.of("space & value", "paren(value)", "semi;comma,value");
+        List<String> expected = List.of(
+                "space & value",
+                "paren(value)",
+                "semi;comma,value",
+                "",
+                "C:\\literal\\backslash\\path",
+                "été漢字");
 
         Path cmdOutput = work.resolve("cmd argv.txt");
-        CommandSpec cmdSpec = new CommandSpec(powershell, List.of(
-                "-NoLogo", "-NoProfile", "-NonInteractive", "-File", capture.toString(),
-                cmdOutput.toString(), expected.get(0), expected.get(1), expected.get(2)));
+        CommandSpec cmdSpec = captureSpec(powershell, capture, cmdOutput, expected);
         String portable = AssistantIntegrationGenerator.renderCommand(cmdSpec);
         Process cmd = new ProcessBuilder(cmdExe, "/D", "/S", "/C", portable).start();
         assertEquals(0, cmd.waitFor());
-        assertEquals(expected, Files.readAllLines(cmdOutput));
+        assertEquals(expected, Files.readAllLines(cmdOutput, StandardCharsets.UTF_8));
 
         Path psOutput = work.resolve("powershell argv.txt");
-        CommandSpec psSpec = new CommandSpec(powershell, List.of(
-                "-NoLogo", "-NoProfile", "-NonInteractive", "-File", capture.toString(),
-                psOutput.toString(), expected.get(0), expected.get(1), expected.get(2)));
+        CommandSpec psSpec = captureSpec(powershell, capture, psOutput, expected);
         String psPortable = AssistantIntegrationGenerator.renderCommand(psSpec);
         Path invocation = work.resolve("invoke portable command.ps1");
         Files.writeString(invocation, "& " + psPortable + "\r\n", StandardCharsets.UTF_8);
         Process ps = new ProcessBuilder(
                 powershell, "-NoLogo", "-NoProfile", "-NonInteractive", "-File", invocation.toString()).start();
         assertEquals(0, ps.waitFor());
-        assertEquals(expected, Files.readAllLines(psOutput));
+        assertEquals(expected, Files.readAllLines(psOutput, StandardCharsets.UTF_8));
+    }
+
+    private static CommandSpec captureSpec(
+            String powershell,
+            Path capture,
+            Path output,
+            List<String> expected) {
+        java.util.ArrayList<String> args = new java.util.ArrayList<>(List.of(
+                "-NoLogo", "-NoProfile", "-NonInteractive", "-File", capture.toString(), output.toString()));
+        args.addAll(expected);
+        return new CommandSpec(powershell, args);
     }
 }
