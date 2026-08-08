@@ -48,6 +48,31 @@ begin
             (Pos('"', Value) > 0) or (Pos('^', Value) > 0);
 end;
 
+function IsValidDockerImageReference(Value: String): Boolean;
+var
+  I: Integer;
+  C: Char;
+begin
+  { A deliberately conservative Docker-reference alphabet. Besides rejecting
+    CR/LF and shell/dotenv metacharacters, this still supports registry ports,
+    repository paths, tags and digest syntax. Docker remains the final semantic
+    validator for the reference itself. }
+  Value := Trim(Value);
+  Result := False;
+  if (Value = '') or (Length(Value) > 512) then exit;
+  for I := 1 to Length(Value) do
+  begin
+    C := Value[I];
+    if not (((C >= 'a') and (C <= 'z')) or
+            ((C >= 'A') and (C <= 'Z')) or
+            ((C >= '0') and (C <= '9')) or
+            (C = '.') or (C = '_') or (C = '-') or
+            (C = '/') or (C = ':') or (C = '@') or (C = '+')) then
+      exit;
+  end;
+  Result := True;
+end;
+
 function IsLoopbackRestHost(Value: String): Boolean;
 begin
   Value := Lowercase(Trim(Value));
@@ -93,6 +118,24 @@ end;
     end;
 '@
     $Source = Replace-ExactlyOnce $Source $remoteNative $remoteNativeReplacement 'native REST remote exposure guard'
+
+    $dockerImageValidation = @'
+    if HasWhitespace(Trim(DockerPage.Values[0])) then
+    begin
+      MsgBox('L''image Docker ne doit pas contenir d''espace (ex. ghcr.io/org/nexus:tag).', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+'@
+    $dockerImageValidationReplacement = @'
+    if not IsValidDockerImageReference(DockerPage.Values[0]) then
+    begin
+      MsgBox('L''image Docker contient un caractère non autorisé. Utilisez une référence registry/repository:tag ou @digest sans espace, retour à la ligne, $, #, guillemet ou antislash.', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+'@
+    $Source = Replace-ExactlyOnce $Source $dockerImageValidation $dockerImageValidationReplacement 'Docker image reference validation'
 
     $dockerBindValidation = @'
     if not IsSafeBindAddress(DockerPage.Values[2]) then
