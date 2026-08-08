@@ -31,15 +31,13 @@ try {
     $parsed = $versionJson | ConvertFrom-Json
     if ($parsed.version -ne $version) { throw "Docker CLI version mismatch: $($parsed.version) != $version" }
 
-    Write-Host 'Docker MCP STDIO process smoke...' -ForegroundColor Cyan
-    & $docker.Source run -d -i --name $mcpName $Image mcp | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'Unable to start the MCP STDIO container.' }
-    Start-Sleep -Seconds 2
-    $mcpRunning = (& $docker.Source inspect -f '{{.State.Running}}' $mcpName | Out-String).Trim()
-    if ($mcpRunning -ne 'true') {
-        $logs = (& $docker.Source logs $mcpName 2>&1 | Out-String)
-        throw "MCP container did not remain available for STDIO: $logs"
-    }
+    Write-Host 'Docker MCP JSON-RPC protocol smoke...' -ForegroundColor Cyan
+    # Vrai smoke protocolaire (initialize/tools/list/tools/call) et non plus un simple test de
+    # liveness du conteneur. --rm : le conteneur éphémère est retiré à la fin du run STDIO.
+    $mcpSmoke = Join-Path $PSScriptRoot 'test-mcp-protocol.ps1'
+    & $mcpSmoke -Exe $docker.Source `
+        -LaunchArgs @('run', '-i', '--rm', '--name', $mcpName, $Image, 'mcp') `
+        -Label 'Docker'
     Remove-Container $mcpName
 
     Write-Host "Docker REST smoke on host port $HostPort..." -ForegroundColor Cyan
