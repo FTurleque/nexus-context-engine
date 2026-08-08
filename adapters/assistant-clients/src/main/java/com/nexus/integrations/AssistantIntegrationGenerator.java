@@ -213,8 +213,13 @@ public final class AssistantIntegrationGenerator {
 
     private static String quotePortable(String value) {
         String normalized = Objects.requireNonNull(value, "value");
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "La forme commande n'est pas portable entre cmd.exe et PowerShell pour un argument vide. "
+                            + "Utilisez JSON/TOML ou les scripts de connexion générés.");
+        }
         rejectShellAmbiguous(normalized);
-        if (!normalized.isEmpty() && !containsShellSignificant(normalized)) {
+        if (!containsShellSignificant(normalized)) {
             return normalized;
         }
         return '"' + normalized + '"';
