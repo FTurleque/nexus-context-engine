@@ -23,9 +23,7 @@ public record ContextRequest(
         if (query.isBlank()) {
             throw new IllegalArgumentException("query must not be blank");
         }
-        if (tokenBudget <= 0) {
-            throw new IllegalArgumentException("tokenBudget must be greater than zero");
-        }
+        ContextBudgetPolicy.validate(tokenBudget);
         requestedSources = Set.copyOf(requestedSources);
         constraints = Map.copyOf(constraints);
     }

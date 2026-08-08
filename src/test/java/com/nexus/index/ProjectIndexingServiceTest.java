@@ -228,8 +228,11 @@ class ProjectIndexingServiceTest {
                 List.of(importer));
 
         IndexingReport enriched = service.index(project.id());
-        assertEquals(new IndexStatistics(1, 3, 1), enriched.statistics());
-        assertEquals(1, indexRepository.findSymbols(project.id()).stream()
+        // Persistence provenance-aware (P1) : le symbole `run` du provider externe n'est plus
+        // avalé par le `run` embarqué équivalent — chaque provenance conserve sa ligne. On a donc
+        // 2 symboles embarqués (App, run) + 2 symboles externes (run, ExternalOnly) = 4 au total.
+        assertEquals(new IndexStatistics(1, 4, 1), enriched.statistics());
+        assertEquals(2, indexRepository.findSymbols(project.id()).stream()
                 .filter(indexed -> indexed.symbol().sourceProvider().equals(provider))
                 .count());
         assertEquals(provider, indexRepository.findRelations(project.id()).getFirst().sourceProvider());

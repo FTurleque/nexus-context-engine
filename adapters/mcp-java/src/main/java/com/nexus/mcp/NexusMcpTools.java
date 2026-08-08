@@ -27,7 +27,8 @@ import java.util.stream.Collectors;
 final class NexusMcpTools {
 
     private static final int DEFAULT_LIMIT = 10;
-    private static final int DEFAULT_TOKEN_BUDGET = 2_000;
+    private static final int DEFAULT_TOKEN_BUDGET =
+            com.nexus.context.ContextBudgetPolicy.DEFAULT_CONTEXT_TOKEN_BUDGET;
 
     private final NexusApplication application;
     private final ObjectMapper objectMapper;

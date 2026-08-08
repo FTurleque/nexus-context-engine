@@ -242,7 +242,7 @@ public final class NexusCli {
     }
 
     private static ParsedContext parseContext(String[] args, int start, String command) {
-        int budget = 2_000;
+        int budget = com.nexus.context.ContextBudgetPolicy.DEFAULT_CONTEXT_TOKEN_BUDGET;
         boolean explain = false;
         List<String> queryParts = new ArrayList<>();
         for (int index = start; index < args.length; index++) {
@@ -309,8 +309,10 @@ public final class NexusCli {
 
     private static String version() {
         String implementationVersion = NexusCli.class.getPackage().getImplementationVersion();
+        // En l'absence de manifeste (exécution depuis les classes : IDE, tests), on n'invente
+        // pas de numéro de version — un ancien numéro codé en dur mentirait sur le build réel.
         return implementationVersion == null || implementationVersion.isBlank()
-                ? "0.1.0-SNAPSHOT"
+                ? "0.0.0-dev"
                 : implementationVersion;
     }
 

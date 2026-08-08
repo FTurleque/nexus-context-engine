@@ -507,10 +507,16 @@ public final class SqliteIndexRepository implements IndexRepository {
             Connection connection,
             Map<String, Long> fileIds,
             List<IndexedSymbol> symbols) throws SQLException {
+        // La persistence est provenance-aware : deux providers indépendants qui
+        // décrivent un fait équivalent produisent deux lignes distinctes, une par
+        // provider. Le contrôle d'existence porte donc sur source_provider afin de
+        // ne dédupliquer qu'à l'intérieur du snapshot du provider courant (défense
+        // contre les doublons internes), jamais entre providers. Voir P1 provenance.
         try (PreparedStatement exists = connection.prepareStatement("""
                 SELECT 1
                 FROM symbols
                 WHERE file_id = ? AND kind = ? AND name = ? AND start_line = ?
+                  AND source_provider = ?
                 LIMIT 1
                 """)) {
             for (IndexedSymbol indexedSymbol : symbols) {
@@ -529,6 +535,7 @@ public final class SqliteIndexRepository implements IndexRepository {
         statement.setString(2, symbol.kind().name());
         statement.setString(3, symbol.name());
         statement.setInt(4, symbol.startLine());
+        statement.setString(5, symbol.sourceProvider());
         try (ResultSet resultSet = statement.executeQuery()) {
             return resultSet.next();
         }
@@ -539,10 +546,15 @@ public final class SqliteIndexRepository implements IndexRepository {
             UUID projectId,
             Map<String, Long> fileIds,
             List<IndexedRelation> relations) throws SQLException {
+        // Même sémantique provenance-aware que pour les symboles : une relation
+        // équivalente fournie par deux providers distincts est conservée en deux
+        // lignes, de sorte que la suppression d'un provider ne détruit pas la
+        // relation encore fournie par l'autre. Voir P1 provenance.
         try (PreparedStatement exists = connection.prepareStatement("""
                 SELECT 1
                 FROM symbol_relations
                 WHERE project_id = ? AND kind = ? AND source_ref = ? AND target_ref = ?
+                  AND source_provider = ?
                 LIMIT 1
                 """)) {
             for (IndexedRelation indexedRelation : relations) {
@@ -563,6 +575,7 @@ public final class SqliteIndexRepository implements IndexRepository {
         statement.setString(2, relation.kind().name());
         statement.setString(3, relation.source());
         statement.setString(4, relation.target());
+        statement.setString(5, relation.sourceProvider());
         try (ResultSet resultSet = statement.executeQuery()) {
             return resultSet.next();
         }
