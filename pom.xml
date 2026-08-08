@@ -37,7 +37,6 @@
         <lucene.version>10.5.0</lucene.version>
         <jgit.version>7.7.0.202606012155-r</jgit.version>
         <jackson.version>2.22.1</jackson.version>
-        <jackson.annotations.version>2.21</jackson.annotations.version>
         <snakeyaml-engine.version>3.0.1</snakeyaml-engine.version>
         <junit.version>6.0.2</junit.version>
         <mcp.sdk.version>2.0.0</mcp.sdk.version>
@@ -70,6 +69,13 @@
                 <groupId>io.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp-bom</artifactId>
                 <version>${mcp.sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -112,7 +118,7 @@
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-annotations</artifactId>
-                <version>${jackson.annotations.version}</version>
+                <version>${jackson.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.snakeyaml</groupId>
