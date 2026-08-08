@@ -97,8 +97,10 @@ class AssistantIntegrationEscapingTest {
                 "-NoLogo", "-NoProfile", "-NonInteractive", "-File", capture.toString(),
                 psOutput.toString(), expected.get(0), expected.get(1), expected.get(2)));
         String psPortable = AssistantIntegrationGenerator.renderCommand(psSpec);
+        Path invocation = work.resolve("invoke portable command.ps1");
+        Files.writeString(invocation, "& " + psPortable + "\r\n", StandardCharsets.UTF_8);
         Process ps = new ProcessBuilder(
-                powershell, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "& " + psPortable).start();
+                powershell, "-NoLogo", "-NoProfile", "-NonInteractive", "-File", invocation.toString()).start();
         assertEquals(0, ps.waitFor());
         assertEquals(expected, Files.readAllLines(psOutput));
     }
