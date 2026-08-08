@@ -3,6 +3,7 @@ package com.nexus.mcp;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexus.application.NexusApplication;
+import com.nexus.context.ContextBudgetPolicy;
 import com.nexus.context.ContextItem;
 import com.nexus.context.FederatedContextItem;
 import com.nexus.index.IndexedSymbol;
@@ -11,9 +12,11 @@ import com.nexus.project.ProjectDescriptor;
 import com.nexus.ranking.RankedCandidate;
 import com.nexus.search.CandidateType;
 import com.nexus.search.FederatedSearchHit;
+import com.nexus.search.ResultLimitPolicy;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.spec.McpSchema;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,9 +29,8 @@ import java.util.stream.Collectors;
 
 final class NexusMcpTools {
 
-    private static final int DEFAULT_LIMIT = 10;
-    private static final int DEFAULT_TOKEN_BUDGET =
-            com.nexus.context.ContextBudgetPolicy.DEFAULT_CONTEXT_TOKEN_BUDGET;
+    private static final int DEFAULT_LIMIT = ResultLimitPolicy.DEFAULT_RESULT_LIMIT;
+    private static final int DEFAULT_TOKEN_BUDGET = ContextBudgetPolicy.DEFAULT_CONTEXT_TOKEN_BUDGET;
 
     private final NexusApplication application;
     private final ObjectMapper objectMapper;
@@ -67,7 +69,7 @@ final class NexusMcpTools {
                         Map.of(
                                 "project", stringProperty("UUID ou nom unique du projet NEXUS"),
                                 "query", stringProperty("Requête de recherche"),
-                                "limit", integerProperty("Nombre maximal de résultats, 10 par défaut"),
+                                "limit", integerProperty("Nombre maximal de résultats, 10 par défaut", ResultLimitPolicy.MAX_RESULT_LIMIT),
                                 "explain", booleanProperty("Inclure les explications de ranking")),
                         List.of("project", "query")),
                 arguments -> {
@@ -75,7 +77,7 @@ final class NexusMcpTools {
                     NexusApplication.SearchOperation operation = application.search(
                             project.id(),
                             requiredString(arguments, "query"),
-                            positiveInteger(arguments, "limit", DEFAULT_LIMIT),
+                            positiveInteger(arguments, "limit", DEFAULT_LIMIT, ResultLimitPolicy.MAX_RESULT_LIMIT),
                             booleanValue(arguments, "explain", false));
                     return search(operation);
                 });
@@ -89,7 +91,7 @@ final class NexusMcpTools {
                         Map.of(
                                 "projects", arrayOfStringsProperty("UUID ou noms uniques des projets NEXUS"),
                                 "query", stringProperty("Requête de recherche"),
-                                "limit", integerProperty("Top-K global, 10 par défaut"),
+                                "limit", integerProperty("Top-K global, 10 par défaut", ResultLimitPolicy.MAX_RESULT_LIMIT),
                                 "explain", booleanProperty("Inclure les explications de ranking")),
                         List.of("projects", "query")),
                 arguments -> {
@@ -97,7 +99,7 @@ final class NexusMcpTools {
                     NexusApplication.FederatedSearchOperation operation = application.searchAcrossProjects(
                             projects.stream().map(ProjectDescriptor::id).toList(),
                             requiredString(arguments, "query"),
-                            positiveInteger(arguments, "limit", DEFAULT_LIMIT),
+                            positiveInteger(arguments, "limit", DEFAULT_LIMIT, ResultLimitPolicy.MAX_RESULT_LIMIT),
                             booleanValue(arguments, "explain", false));
                     return federatedSearch(operation);
                 });
@@ -111,13 +113,14 @@ final class NexusMcpTools {
                         Map.of(
                                 "project", stringProperty("UUID ou nom unique du projet NEXUS"),
                                 "query", stringProperty("Nom ou fragment de nom du symbole"),
-                                "limit", integerProperty("Nombre maximal de symboles, 10 par défaut")),
+                                "limit", integerProperty("Nombre maximal de symboles, 10 par défaut", ResultLimitPolicy.MAX_RESULT_LIMIT)),
                         List.of("project", "query")),
                 arguments -> {
                     ProjectDescriptor project = resolveProject(arguments);
                     String query = requiredString(arguments, "query");
                     List<IndexedSymbol> symbols = application.findSymbols(
-                            project.id(), query, positiveInteger(arguments, "limit", DEFAULT_LIMIT));
+                            project.id(), query,
+                            positiveInteger(arguments, "limit", DEFAULT_LIMIT, ResultLimitPolicy.MAX_RESULT_LIMIT));
                     return Map.of(
                             "project", project(project),
                             "query", query,
@@ -133,13 +136,14 @@ final class NexusMcpTools {
                         Map.of(
                                 "project", stringProperty("UUID ou nom unique du projet NEXUS"),
                                 "symbol", stringProperty("Nom ou nom qualifié du symbole"),
-                                "limit", integerProperty("Nombre maximal de relations, 20 par défaut")),
+                                "limit", integerProperty("Nombre maximal de relations, 20 par défaut", ResultLimitPolicy.MAX_RESULT_LIMIT)),
                         List.of("project", "symbol")),
                 arguments -> {
                     ProjectDescriptor project = resolveProject(arguments);
                     String symbol = requiredString(arguments, "symbol");
                     List<SymbolRelation> relations = application.findUsages(
-                            project.id(), symbol, positiveInteger(arguments, "limit", 20));
+                            project.id(), symbol,
+                            positiveInteger(arguments, "limit", 20, ResultLimitPolicy.MAX_RESULT_LIMIT));
                     return Map.of(
                             "project", project(project),
                             "symbol", symbol,
@@ -158,7 +162,7 @@ final class NexusMcpTools {
                         Map.of(
                                 "project", stringProperty("UUID ou nom unique du projet NEXUS"),
                                 "query", stringProperty("Tâche ou demande de contexte"),
-                                "tokenBudget", integerProperty("Budget maximal, 2000 par défaut"),
+                                "tokenBudget", integerProperty("Budget maximal, 2000 par défaut", ContextBudgetPolicy.MAX_CONTEXT_TOKEN_BUDGET),
                                 "requestedSources", arrayOfStringsProperty("Sources optionnelles NEXUS"),
                                 "constraints", objectProperty("Contraintes clé/valeur optionnelles")),
                         List.of("project", "query")),
@@ -167,7 +171,9 @@ final class NexusMcpTools {
                     NexusApplication.ContextOperation operation = application.context(
                             project.id(),
                             requiredString(arguments, "query"),
-                            positiveInteger(arguments, "tokenBudget", DEFAULT_TOKEN_BUDGET),
+                            positiveInteger(
+                                    arguments, "tokenBudget", DEFAULT_TOKEN_BUDGET,
+                                    ContextBudgetPolicy.MAX_CONTEXT_TOKEN_BUDGET),
                             requestedSources(arguments.get("requestedSources")),
                             stringMap(arguments.get("constraints")),
                             forceExplain);
@@ -186,7 +192,7 @@ final class NexusMcpTools {
                         Map.of(
                                 "projects", arrayOfStringsProperty("UUID ou noms uniques des projets NEXUS"),
                                 "query", stringProperty("Tâche ou demande de contexte"),
-                                "tokenBudget", integerProperty("Budget global maximal, 2000 par défaut"),
+                                "tokenBudget", integerProperty("Budget global maximal, 2000 par défaut", ContextBudgetPolicy.MAX_CONTEXT_TOKEN_BUDGET),
                                 "requestedSources", arrayOfStringsProperty("Sources optionnelles NEXUS"),
                                 "constraints", objectProperty("Contraintes clé/valeur optionnelles")),
                         List.of("projects", "query")),
@@ -195,7 +201,9 @@ final class NexusMcpTools {
                     NexusApplication.FederatedContextOperation operation = application.contextAcrossProjects(
                             projects.stream().map(ProjectDescriptor::id).toList(),
                             requiredString(arguments, "query"),
-                            positiveInteger(arguments, "tokenBudget", DEFAULT_TOKEN_BUDGET),
+                            positiveInteger(
+                                    arguments, "tokenBudget", DEFAULT_TOKEN_BUDGET,
+                                    ContextBudgetPolicy.MAX_CONTEXT_TOKEN_BUDGET),
                             requestedSources(arguments.get("requestedSources")),
                             stringMap(arguments.get("constraints")),
                             forceExplain);
@@ -405,8 +413,12 @@ final class NexusMcpTools {
         return Map.of("type", "string", "description", description);
     }
 
-    private static Map<String, Object> integerProperty(String description) {
-        return Map.of("type", "integer", "minimum", 1, "description", description);
+    private static Map<String, Object> integerProperty(String description, int maximum) {
+        return Map.of(
+                "type", "integer",
+                "minimum", 1,
+                "maximum", maximum,
+                "description", description);
     }
 
     private static Map<String, Object> booleanProperty(String description) {
@@ -432,25 +444,27 @@ final class NexusMcpTools {
         return string.trim();
     }
 
-    private static int positiveInteger(Map<String, Object> arguments, String name, int defaultValue) {
+    private static int positiveInteger(
+            Map<String, Object> arguments,
+            String name,
+            int defaultValue,
+            int maximum) {
         Object value = arguments.get(name);
         if (value == null) {
             return defaultValue;
         }
-        int parsed;
-        if (value instanceof Number number) {
-            parsed = number.intValue();
-        } else {
-            try {
-                parsed = Integer.parseInt(value.toString());
-            } catch (NumberFormatException exception) {
-                throw new IllegalArgumentException(name + " doit être un entier", exception);
+        try {
+            int parsed = new BigDecimal(value.toString()).toBigIntegerExact().intValueExact();
+            if (parsed <= 0) {
+                throw new IllegalArgumentException(name + " doit être strictement positif");
             }
+            if (parsed > maximum) {
+                throw new IllegalArgumentException(name + " doit être inférieur ou égal à " + maximum);
+            }
+            return parsed;
+        } catch (NumberFormatException | ArithmeticException exception) {
+            throw new IllegalArgumentException(name + " doit être un entier dans les bornes autorisées", exception);
         }
-        if (parsed <= 0) {
-            throw new IllegalArgumentException(name + " doit être strictement positif");
-        }
-        return parsed;
     }
 
     private static boolean booleanValue(Map<String, Object> arguments, String name, boolean defaultValue) {
