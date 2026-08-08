@@ -45,11 +45,30 @@ if ($installerSource.IndexOf('--accept-license', [StringComparison]::Ordinal) -g
     throw 'Windows installer must not accept the Docker Desktop license on behalf of the user.'
 }
 
-Write-Host '[contract] template is the single source of installer logic (no build-time patching)'
+Write-Host '[contract] deterministic generated-source hardening'
+$hardener = Join-Path $repo 'scripts\release\harden-windows-installer-source.ps1'
+if (-not (Test-Path -LiteralPath $hardener -PathType Leaf)) { throw "Installer hardener not found: $hardener" }
+. $hardener
+$hardenedSource = Protect-NexusInstallerSource -Source $installerSource
+Assert-TextContains -Text $hardenedSource -Needle 'function CmdEnvEscape(Value: String): String;' -Description 'cmd percent escaping helper'
+Assert-TextContains -Text $hardenedSource -Needle 'function DotEnvQuoted(Value: String): String;' -Description 'Compose dotenv quoting helper'
+Assert-TextContains -Text $hardenedSource -Needle 'function IsLoopbackRestHost(Value: String): Boolean;' -Description 'wizard loopback-only REST policy'
+Assert-TextContains -Text $hardenedSource -Needle 'CmdEnvEscape(RuntimePage.Values[0])' -Description 'NEXUS_HOME batch escaping'
+Assert-TextContains -Text $hardenedSource -Needle 'DotEnvQuoted(DockerPath(RuntimePage.Values[0]))' -Description 'Docker home path dotenv quoting'
+Assert-TextContains -Text $hardenedSource -Needle 'NEXUS_REST_EXPOSURE_MODE=loopback-forward' -Description 'explicit Docker REST exposure mode'
+if ($hardenedSource.IndexOf("'set `"NEXUS_HOME=' + RuntimePage.Values[0]", [StringComparison]::Ordinal) -ge 0) {
+    throw 'Generated installer source still writes raw NEXUS_HOME into batch configuration.'
+}
+
+Write-Host '[contract] template carries Docker runtime logic; build applies only security hardening'
 Assert-TextContains -Text $installerSource -Needle 'function DockerEngineReady(): Boolean;' -Description 'strict Docker engine detection lives in the template'
 Assert-TextContains -Text $installerSource -Needle 'Source: "{#NexusSourceDir}\docker\*"' -Description 'full Docker payload staged from the template'
 Assert-TextContains -Text $installerSource -Needle ':nexus_image_ready' -Description 'local-image/pull/build fallback lives in the template'
 Assert-TextContains -Text $installerSource -Needle '"%DOCKER_EXE%" build --pull --file' -Description 'local runtime-image build fallback lives in the template'
+$installerBuilder = Join-Path $repo 'scripts\release\build-windows-installer.ps1'
+$builderSource = Get-Content -Raw -LiteralPath $installerBuilder
+Assert-TextContains -Text $builderSource -Needle 'Protect-NexusInstallerSource' -Description 'deterministic generated-source hardening hook'
+Assert-TextContains -Text $builderSource -Needle 'missing strict Docker engine readiness detection' -Description 'build-time integrity guard for Docker detector drift'
 
 Write-Host '[contract] Ollama auto-install is Authenticode-verified (fail-closed)'
 Assert-TextContains -Text $installerSource -Needle 'function VerifyOllamaInstaller' -Description 'Ollama installer Authenticode verifier'
@@ -71,14 +90,10 @@ Assert-TextContains -Text $installerSource -Needle 'function OllamaUrlForDocker'
 Assert-TextContains -Text $installerSource -Needle 'host.docker.internal' -Description 'Docker loopback resolves to host gateway'
 
 Write-Host '[contract] assistant MCP wiring writes clean JSON and reversible markers'
-# The uninstall disconnect must not re-serialize third-party config files with
-# Windows PowerShell 5.1's deep-aligned ConvertTo-Json (it visually mangles them).
-# All JSON config writes must route through the Save-CleanJson / Format-Json helper.
 Assert-TextContains -Text $installerSource -Needle 'function Format-Json(' -Description 'clean 2-space JSON formatter helper'
 Assert-TextContains -Text $installerSource -Needle 'Save-CleanJson $mcp $c' -Description 'JetBrains config written via clean formatter'
 Assert-TextContains -Text $installerSource -Needle 'Save-CleanJson $cfg $c' -Description 'Claude Desktop config written via clean formatter'
 Assert-TextContains -Text $installerSource -Needle '# END NEXUS-MCP' -Description 'Codex block has a reversible END marker'
-# Fail closed if any connect/disconnect script writes JSON via raw deep-align ConvertTo-Json.
 foreach ($rawDepth in @('ConvertTo-Json -Depth 5', 'ConvertTo-Json -Depth 10')) {
     if ($installerSource.IndexOf($rawDepth, [StringComparison]::Ordinal) -ge 0) {
         throw "Installer must not write MCP config JSON via raw '$rawDepth' (mangles indentation); use Save-CleanJson."
@@ -86,20 +101,8 @@ foreach ($rawDepth in @('ConvertTo-Json -Depth 5', 'ConvertTo-Json -Depth 10')) 
 }
 
 Write-Host '[contract] client-only docker.exe must not suppress Docker Desktop bootstrap'
-# The strict Docker engine detection now lives in the .iss template (single source of truth),
-# not injected by the build script. Assert the template carries the real reachability probe and
-# strict prerequisite semantics.
 Assert-TextContains -Text $installerSource -Needle 'docker info >nul 2>nul' -Description 'real Docker engine reachability probe'
 Assert-TextContains -Text $installerSource -Needle 'Result := DockerEngineReady() or (DockerDesktopExecutable() <> '''');' -Description 'Docker Desktop or working engine prerequisite semantics'
-
-# And assert the build script no longer patches installer logic by search/replace, but guards it.
-$installerBuilder = Join-Path $repo 'scripts\release\build-windows-installer.ps1'
-$builderSource = Get-Content -Raw -LiteralPath $installerBuilder
-Assert-TextContains -Text $builderSource -Needle 'single source of truth' -Description 'build script defers all logic to the template'
-Assert-TextContains -Text $builderSource -Needle 'missing strict Docker engine readiness detection' -Description 'build-time integrity guard for Docker detector drift'
-if ($builderSource.IndexOf('.Replace($legacyDockerDetection', [StringComparison]::Ordinal) -ge 0) {
-    throw 'Build script must not inject Docker detection logic by search/replace; the template is the source of truth.'
-}
 
 $root = Join-Path $repo 'target\installer-smoke'
 $install = Join-Path $root 'install'
@@ -122,6 +125,7 @@ if ($process.ExitCode -ne 0) { throw "Setup smoke install failed with exit code 
 foreach ($required in @(
     'nexus.cmd',
     'nexus-mcp.cmd',
+    'nexus-rest.cmd',
     'nexus-assistant-clients.cmd',
     'app\nexus.exe',
     'app\runtime\bin\java.exe',
@@ -135,6 +139,14 @@ foreach ($required in @(
 )) {
     if (-not (Test-Path -LiteralPath (Join-Path $install $required) -PathType Leaf)) {
         throw "Installed NEXUS is missing $required"
+    }
+}
+
+foreach ($launcherName in @('nexus.cmd','nexus-mcp.cmd','nexus-rest.cmd','nexus-assistant-clients.cmd','nexus-docker.cmd','nexus-docker-mcp.cmd')) {
+    $launcherPath = Join-Path $install $launcherName
+    if (Test-Path -LiteralPath $launcherPath) {
+        $launcherSource = Get-Content -Raw -LiteralPath $launcherPath
+        Assert-TextContains -Text $launcherSource -Needle 'setlocal DisableDelayedExpansion' -Description "$launcherName disables delayed expansion"
     }
 }
 
@@ -161,7 +173,6 @@ try {
     $javaExe = Join-Path $install 'app\runtime\bin\java.exe'
     $mcpJar = Join-Path $install 'lib\nexus-mcp.jar'
 
-    # Smoke protocolaire MCP natif (JSON-RPC) contre le runtime Java embarqué installé.
     $mcpProtocolSmoke = Join-Path $PSScriptRoot 'test-mcp-protocol.ps1'
     & $mcpProtocolSmoke -Exe $javaExe -LaunchArgs @('-jar', $mcpJar) -NexusHome $env:NEXUS_HOME -Label 'Native'
 
@@ -197,5 +208,5 @@ if (-not (Test-Path -LiteralPath $sentinel -PathType Leaf)) {
     throw 'NEXUS_HOME user data was deleted by uninstall.'
 }
 
-Write-Host 'NEXUS Windows installer strict-Docker-bootstrap contract + install/CLI/MCP/Claude/Codex payload/uninstall smoke PASS' -ForegroundColor Green
+Write-Host 'NEXUS Windows installer hardened source + install/CLI/MCP/Claude/Codex payload/uninstall smoke PASS' -ForegroundColor Green
 Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
