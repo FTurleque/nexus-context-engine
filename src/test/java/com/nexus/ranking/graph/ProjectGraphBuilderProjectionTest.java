@@ -46,8 +46,7 @@ class ProjectGraphBuilderProjectionTest {
                 return List.of(new SymbolRelation(
                         RelationKind.IMPORTS,
                         "src/App.java",
-                        "demo.Dependency",
-                        1.0d));
+                        "demo.Dependency"));
             }
 
             @Override
