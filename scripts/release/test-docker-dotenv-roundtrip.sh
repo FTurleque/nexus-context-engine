@@ -38,9 +38,20 @@ escaped = value.replace('$', '$$').replace('\\', '\\\\').replace('"', '\\"')
 (root / 'expected.json').write_text(json.dumps({'value': value}), encoding='utf-8')
 PY
 
-grep -F "StringChangeEx(Result, '$', '$$', True);" "$repo/scripts/release/harden-windows-installer-source.ps1" >/dev/null
-grep -F "StringChangeEx(Result, '\\', '\\\\', True);" "$repo/scripts/release/harden-windows-installer-source.ps1" >/dev/null
-grep -F "StringChangeEx(Result, '\"', '\\\"', True);" "$repo/scripts/release/harden-windows-installer-source.ps1" >/dev/null
+python3 - "$repo/scripts/release/harden-windows-installer-source.ps1" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding='utf-8-sig')
+required = (
+    "StringChangeEx(Result, '$', '$$', True);",
+    r"StringChangeEx(Result, '\', '\\', True);",
+    r'''StringChangeEx(Result, '"', '\"', True);''',
+)
+missing = [needle for needle in required if needle not in source]
+if missing:
+    raise SystemExit('DotEnvQuoted source contract missing: ' + ', '.join(repr(item) for item in missing))
+PY
 
 docker compose --env-file "$root/.env" -f "$root/compose.yml" config --format json > "$root/actual.json"
 python3 - "$root" <<'PY'
