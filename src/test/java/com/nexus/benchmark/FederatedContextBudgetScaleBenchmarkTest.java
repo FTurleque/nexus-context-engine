@@ -36,6 +36,7 @@ class FederatedContextBudgetScaleBenchmarkTest {
 
     private static final int PROJECTS = 100;
     private static final int GLOBAL_BUDGET = 200_000;
+    private static final int EXPECTED_OVERFETCH_FACTOR = 3;
     private static final int ITEM_TOKENS = 1_000;
 
     @TempDir
@@ -80,7 +81,9 @@ class FederatedContextBudgetScaleBenchmarkTest {
                 false);
 
         int candidateBudgetTotal = ((Number) first.metadata().get("candidateBudgetTotal")).intValue();
-        assertEquals(GLOBAL_BUDGET * FederatedContextService.LOCAL_OVERFETCH_FACTOR, candidateBudgetTotal);
+        assertEquals(GLOBAL_BUDGET * EXPECTED_OVERFETCH_FACTOR, candidateBudgetTotal);
+        assertEquals(EXPECTED_OVERFETCH_FACTOR,
+                ((Number) first.metadata().get("candidateBudgetOverfetchFactor")).intValue());
         assertEquals(candidateBudgetTotal, firstBudgets.stream().mapToInt(Integer::intValue).sum());
         assertTrue(firstBudgets.stream().allMatch(budget -> budget <= 6_000));
         assertTrue(first.estimatedTokens() <= GLOBAL_BUDGET);
