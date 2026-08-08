@@ -62,17 +62,20 @@ final class SchemaMigrator {
         // Ajout additif et rétro-compatible : les bases existantes disposent déjà de la table
         // sans colonne d'empreinte. La colonne est nullable pour tolérer les lignes « pré-hash »
         // qui seront renseignées (backfill) au premier démarrage suivant la mise à niveau.
-        if (!columnExists(connection, "schema_migrations", "script_sha256")) {
+        if (!hasSchemaMigrationsColumn(connection, "script_sha256")) {
             try (Statement statement = connection.createStatement()) {
                 statement.executeUpdate("ALTER TABLE schema_migrations ADD COLUMN script_sha256 TEXT");
             }
         }
     }
 
-    private static boolean columnExists(Connection connection, String table, String column)
+    private static boolean hasSchemaMigrationsColumn(Connection connection, String column)
             throws SQLException {
+        // Requête PRAGMA sur une table constante et de confiance : le nom de table est un littéral
+        // (PRAGMA n'accepte pas de bind variable pour le nom de table), aucune entrée externe n'est
+        // concaténée dans le SQL. `column` ne sert qu'à la comparaison en mémoire.
         try (Statement statement = connection.createStatement();
-             ResultSet resultSet = statement.executeQuery("PRAGMA table_info(" + table + ")")) {
+             ResultSet resultSet = statement.executeQuery("PRAGMA table_info(schema_migrations)")) {
             while (resultSet.next()) {
                 if (column.equalsIgnoreCase(resultSet.getString("name"))) {
                     return true;
