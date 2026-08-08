@@ -45,6 +45,31 @@ if ($installerSource.IndexOf('--accept-license', [StringComparison]::Ordinal) -g
     throw 'Windows installer must not accept the Docker Desktop license on behalf of the user.'
 }
 
+Write-Host '[contract] template is the single source of installer logic (no build-time patching)'
+Assert-TextContains -Text $installerSource -Needle 'function DockerEngineReady(): Boolean;' -Description 'strict Docker engine detection lives in the template'
+Assert-TextContains -Text $installerSource -Needle 'Source: "{#NexusSourceDir}\docker\*"' -Description 'full Docker payload staged from the template'
+Assert-TextContains -Text $installerSource -Needle ':nexus_image_ready' -Description 'local-image/pull/build fallback lives in the template'
+Assert-TextContains -Text $installerSource -Needle '"%DOCKER_EXE%" build --pull --file' -Description 'local runtime-image build fallback lives in the template'
+
+Write-Host '[contract] Ollama auto-install is Authenticode-verified (fail-closed)'
+Assert-TextContains -Text $installerSource -Needle 'function VerifyOllamaInstaller' -Description 'Ollama installer Authenticode verifier'
+Assert-TextContains -Text $installerSource -Needle 'CN=Ollama Inc' -Description 'Ollama Inc signer constraint'
+$ollamaVerifyIdx = $installerSource.IndexOf('VerifyOllamaInstaller(InstallerPath)', [StringComparison]::Ordinal)
+$ollamaExecIdx = $installerSource.IndexOf("Exec(InstallerPath, '/S'", [StringComparison]::Ordinal)
+if ($ollamaVerifyIdx -lt 0 -or $ollamaExecIdx -lt 0 -or $ollamaVerifyIdx -gt $ollamaExecIdx) {
+    throw 'Ollama installer must be Authenticode-verified BEFORE it is executed (fail-closed ordering).'
+}
+
+Write-Host '[contract] REST Bearer token uses a CSPRNG, not Random()'
+Assert-TextContains -Text $installerSource -Needle 'BCryptGenRandom' -Description 'REST token generated via Windows CSPRNG'
+if ($installerSource.IndexOf('Random(Length(Chars))', [StringComparison]::Ordinal) -ge 0) {
+    throw 'REST token must not be generated with the non-cryptographic Random().'
+}
+
+Write-Host '[contract] Ollama endpoint is Docker-runtime aware'
+Assert-TextContains -Text $installerSource -Needle 'function OllamaUrlForDocker' -Description 'Docker Ollama endpoint resolver'
+Assert-TextContains -Text $installerSource -Needle 'host.docker.internal' -Description 'Docker loopback resolves to host gateway'
+
 Write-Host '[contract] assistant MCP wiring writes clean JSON and reversible markers'
 # The uninstall disconnect must not re-serialize third-party config files with
 # Windows PowerShell 5.1's deep-aligned ConvertTo-Json (it visually mangles them).
@@ -127,6 +152,10 @@ try {
 
     $javaExe = Join-Path $install 'app\runtime\bin\java.exe'
     $mcpJar = Join-Path $install 'lib\nexus-mcp.jar'
+
+    # Smoke protocolaire MCP natif (JSON-RPC) contre le runtime Java embarqué installé.
+    $mcpProtocolSmoke = Join-Path $PSScriptRoot 'test-mcp-protocol.ps1'
+    & $mcpProtocolSmoke -Exe $javaExe -LaunchArgs @('-jar', $mcpJar) -NexusHome $env:NEXUS_HOME -Label 'Native'
 
     $claudeCommand = & $assistant 'claude-cli' 'native' $javaExe $mcpJar 'command' | Out-String
     if ($LASTEXITCODE -ne 0 -or $claudeCommand -notmatch 'claude mcp add --scope user nexus --') {

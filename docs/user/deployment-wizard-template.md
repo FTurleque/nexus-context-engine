@@ -2,6 +2,8 @@
 
 Ce document est le **contrat documentaire complet** du setup Windows. Toute évolution de `packaging/windows/nexus-installer.iss.template` qui ajoute, retire ou renomme un choix utilisateur doit mettre ce document à jour dans la même PR.
 
+> **Source de vérité.** `packaging/windows/nexus-installer.iss.template` contient l'intégralité de la logique de l'installateur (détection Docker stricte, payload Docker, fallback image locale/pull/build, wizard, assistants, sécurité). `scripts/release/build-windows-installer.ps1` se limite à substituer les jetons de build `@@...@@` (version, app id, dossiers, mode smoke), stager le payload, compiler via ISCC et calculer le SHA-256 ; il n'injecte plus aucune logique Pascal par recherche/remplacement. Des gardes d'intégrité y échouent la build si un bloc critique disparaissait du template.
+
 ## Métadonnées
 
 ```yaml
