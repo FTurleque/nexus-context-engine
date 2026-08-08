@@ -1,14 +1,10 @@
 package com.nexus.ranking.graph;
 
 import com.nexus.index.IndexRepository;
-import com.nexus.index.IndexedSymbol;
-import com.nexus.index.RelationKind;
-import com.nexus.index.SymbolKind;
 import com.nexus.index.SymbolRelation;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -49,13 +45,10 @@ public final class ProjectGraphBuilder {
     }
 
     private ProjectGraph buildFresh(UUID projectId) {
-        Map<String, String> typeOwners = typeOwners(indexRepository.findSymbols(projectId));
+        Map<String, String> typeOwners = indexRepository.findTypeOwners(projectId);
         Map<String, Set<String>> edges = new LinkedHashMap<>();
 
-        for (SymbolRelation relation : indexRepository.findRelations(projectId)) {
-            if (relation.kind() != RelationKind.IMPORTS) {
-                continue;
-            }
+        for (SymbolRelation relation : indexRepository.findImportRelations(projectId)) {
             String targetPath = resolveImportedType(typeOwners, relation.target());
             if (targetPath == null || targetPath.equals(relation.source())) {
                 continue;
@@ -64,23 +57,6 @@ public final class ProjectGraphBuilder {
         }
 
         return ProjectGraph.undirected(edges);
-    }
-
-    private static Map<String, String> typeOwners(List<IndexedSymbol> symbols) {
-        Map<String, String> owners = new LinkedHashMap<>();
-        for (IndexedSymbol indexedSymbol : symbols) {
-            if (isType(indexedSymbol.symbol().kind())) {
-                owners.putIfAbsent(indexedSymbol.symbol().qualifiedName(), indexedSymbol.relativePath());
-            }
-        }
-        return owners;
-    }
-
-    private static boolean isType(SymbolKind kind) {
-        return switch (kind) {
-            case CLASS, INTERFACE, RECORD, ENUM, ANNOTATION, TYPE -> true;
-            case METHOD, CONSTRUCTOR -> false;
-        };
     }
 
     private static String resolveImportedType(Map<String, String> owners, String targetRef) {
