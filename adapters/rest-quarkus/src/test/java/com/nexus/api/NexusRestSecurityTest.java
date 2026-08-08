@@ -45,7 +45,7 @@ class NexusRestSecurityTest {
     }
 
     @Test
-    void requiresHttpsCapableModesForNonLoopbackAdministration() {
+    void scopesLoopbackForwardToDockerAndKeepsRemoteHttpsModesExplicit() {
         assertTrue(NexusRestSecurity.isSupportedRemoteExposureMode("loopback-forward"));
         assertTrue(NexusRestSecurity.isSupportedRemoteExposureMode("reverse-proxy-https"));
         assertTrue(NexusRestSecurity.isSupportedRemoteExposureMode("direct-https"));
@@ -55,6 +55,23 @@ class NexusRestSecurityTest {
         assertTrue(NexusRestSecurity.isSecureNonLoopbackExposureMode("reverse-proxy-https"));
         assertTrue(NexusRestSecurity.isSecureNonLoopbackExposureMode("direct-https"));
         assertFalse(NexusRestSecurity.isSecureNonLoopbackExposureMode("plain-http"));
+
+        String previous = System.getProperty(NexusRestSecurity.RUNTIME_PROPERTY);
+        try {
+            System.clearProperty(NexusRestSecurity.RUNTIME_PROPERTY);
+            assertFalse(NexusRestSecurity.isDockerLoopbackForward("loopback-forward"));
+            System.setProperty(NexusRestSecurity.RUNTIME_PROPERTY, "native");
+            assertFalse(NexusRestSecurity.isDockerLoopbackForward("loopback-forward"));
+            System.setProperty(NexusRestSecurity.RUNTIME_PROPERTY, "docker");
+            assertTrue(NexusRestSecurity.isDockerLoopbackForward("loopback-forward"));
+            assertFalse(NexusRestSecurity.isDockerLoopbackForward("direct-https"));
+        } finally {
+            if (previous == null) {
+                System.clearProperty(NexusRestSecurity.RUNTIME_PROPERTY);
+            } else {
+                System.setProperty(NexusRestSecurity.RUNTIME_PROPERTY, previous);
+            }
+        }
     }
 
     @Test
