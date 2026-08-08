@@ -205,18 +205,43 @@ public final class AssistantIntegrationGenerator {
         return path.toAbsolutePath().normalize().toString();
     }
 
+    /**
+     * Rend un argument pour la <em>forme commande</em> (lignes {@code copilot/claude/codex mcp add
+     * -- ...} destinées à être copiées/exécutées dans un shell Windows). Contrairement au JSON et au
+     * TOML — qui possèdent leurs propres sérialiseurs — cette forme cible un shell : on entoure de
+     * guillemets doubles dès qu'un espace, une tabulation, un guillemet ou un métacaractère shell
+     * ({@code & | < > ^ ( ) % ! ; , }, backtick) est présent, de sorte que les caractères comme
+     * {@code &} dans un chemin sans espace (ex. {@code C:\a&b\java.exe}) ne soient pas interprétés.
+     * Le double-quoting neutralise {@code & | < > ^ ( )} sous cmd ; les configurations exotiques
+     * restent de toute façon couvertes plus sûrement par les formes JSON/TOML.
+     */
     private static String quote(String value) {
         String normalized = Objects.requireNonNull(value, "value");
-        if (!normalized.contains(" ") && !normalized.contains("\t") && !normalized.contains("\"")) {
+        if (!normalized.isEmpty() && !containsShellSignificant(normalized)) {
             return normalized;
         }
         return '"' + normalized.replace("\"", "\\\"") + '"';
+    }
+
+    private static boolean containsShellSignificant(String value) {
+        for (int index = 0; index < value.length(); index++) {
+            char character = value.charAt(index);
+            if (character == ' ' || character == '\t' || character == '"'
+                    || character == '&' || character == '|' || character == '<' || character == '>'
+                    || character == '^' || character == '(' || character == ')' || character == '%'
+                    || character == '!' || character == ';' || character == ',' || character == '`'
+                    || character == '\'') {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String tomlEscape(String value) {
         return Objects.requireNonNull(value, "value")
                 .replace("\\", "\\\\")
                 .replace("\"", "\\\"")
+                .replace("\t", "\\t")
                 .replace("\n", "\\n")
                 .replace("\r", "\\r");
     }

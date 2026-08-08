@@ -39,7 +39,7 @@ Ce registre distingue les constats **fermés** des limites **réellement ouverte
 | H06 | REST non-loopback sans auth | fail-fast + Bearer token | fermé / qualifié |
 | H07 | UUID inconnu réinterprété comme nom | résolution UUID/nom séparée | fermé / qualifié |
 | H08 | mutex JVM conservés indéfiniment | slots libérés après usage | fermé / qualifié |
-| H09 | coût SQLite `%substring%` | benchmark avant FTS5/trigram/autre moteur | ouvert / #23 |
+| H09 | coût SQLite `%substring%` | benchmark avant FTS5/trigram/autre moteur | benchmark établi (#23 clos) — watch item |
 
 ## Audit de provenance — issues #19/#20 / PR #24
 
@@ -102,7 +102,7 @@ Ce dernier point reste un risque résiduel ; isolation processus/circuit-breaker
 
 ### Fédération
 
-Le fair floor et le refill évitent la starvation et réutilisent le budget libéré après déduplication. Le coût d'overfetch local reste borné mais doit être benchmarké pour des portfolios beaucoup plus larges (#23).
+Le fair floor et le refill évitent la starvation et réutilisent le budget libéré après déduplication. Le coût d'overfetch local reste borné ; le benchmark de scale (#23, clos, outillé par le workflow *Scale Benchmark*) couvre les portfolios beaucoup plus larges.
 
 ### Sécurité REST
 
@@ -111,10 +111,10 @@ Le fair floor et le refill évitent la starvation et réutilisent le budget lib�
 - non-loopback + aucun token : démarrage refusé ;
 - non-loopback + token : exposition autorisée.
 
-## Watch items ouverts
+## Watch items
 
-1. **Scale SQLite substring** — benchmark #23 avant FTS5/trigram/autre moteur.
-2. **Portfolios très larges** — mesurer overfetch et coût fédéré #23.
+1. **Scale SQLite substring** — benchmark établi (#23 clos, workflow *Scale Benchmark*) ; requis avant FTS5/trigram/autre moteur.
+2. **Portfolios très larges** — overfetch et coût fédéré couverts par le benchmark #23.
 3. **Lifecycle Lucene persistant** — writer/SearcherManager partagé uniquement si benchmark utile.
 4. **Cache Git** — pas de cache persistant sans mesure multi-repository.
 5. **Provider Java non coopératif** — envisager isolation processus seulement avec preuve opérationnelle.

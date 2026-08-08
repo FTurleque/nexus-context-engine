@@ -186,7 +186,7 @@ Voir [`docs/user/windows-installation.md`](docs/user/windows-installation.md).
 - MINOS valide contre les fichiers canoniques déjà indexés ;
 - le contexte fédéré peut redistribuer son budget restant après fair floor et déduplication.
 
-Les recherches SQLite utilisant des recherches de sous-chaîne restent un **watch item** suivi par #23 : aucun FTS5, trigram ou moteur supplémentaire ne sera introduit sans benchmark montrant un bénéfice matériel sur les corpus cibles.
+Les recherches SQLite par sous-chaîne restent un **watch item** : le benchmark de scale (#23, désormais clos et outillé par le workflow *Scale Benchmark*) sert de garde — aucun FTS5, trigram ou moteur supplémentaire ne sera introduit sans mesure montrant un bénéfice matériel sur les corpus cibles.
 
 ## Configuration
 
@@ -252,7 +252,7 @@ Le contexte fédéré applique un budget global, conserve la provenance projet, 
 
 ## Qualification
 
-La qualification Windows reste pilotée par les scripts de release et de validation du dépôt. La PR #46 reste draft tant que tous ses gates exact-head ne sont pas verts.
+La qualification Windows reste pilotée par les scripts de release et de validation du dépôt. L'assistant de déploiement Windows est suivi par l'issue #45 et la PR #46 ; celle-ci n'est mergée dans `main` qu'une fois tous ses gates exact-head verts (NEXUS CI, Windows Installer, Docker Distribution, CodeQL, OSV-Scanner).
 
 ## Documentation
 

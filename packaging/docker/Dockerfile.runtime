@@ -1,4 +1,6 @@
-ARG RUNTIME_IMAGE=eclipse-temurin:21-jre-jammy
+# Base épinglée par digest (tag lisible conservé) pour une build reproductible. Mettre à jour via
+# `docker buildx imagetools inspect eclipse-temurin:21-jre-jammy --format '{{.Manifest.Digest}}'`.
+ARG RUNTIME_IMAGE=eclipse-temurin:21-jre-jammy@sha256:3097cbbebb7d490494a98aed2301f284b38f79eba158eef098c6fc8c8af11c23
 FROM ${RUNTIME_IMAGE}
 
 USER root
