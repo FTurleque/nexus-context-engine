@@ -2,6 +2,7 @@ package com.nexus.application;
 
 import com.nexus.config.NexusPaths;
 import com.nexus.index.ProjectIndexLockManager;
+import com.nexus.search.ResultLimitPolicy;
 import com.nexus.search.semantic.SemanticSearchConfiguration;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -27,8 +28,9 @@ class NexusApplicationHardeningTest {
 
         NexusApplication.ReadinessSnapshot empty = application.readiness();
         assertTrue(empty.operational());
-        assertTrue(empty.allProjectsReady());
+        assertFalse(empty.allProjectsReady());
         assertFalse(empty.degraded());
+        assertTrue(empty.registeredProjects() == 0);
 
         Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("project"));
         application.registerProject(projectRoot, "demo");
@@ -37,6 +39,24 @@ class NexusApplicationHardeningTest {
         assertTrue(registered.operational());
         assertFalse(registered.allProjectsReady());
         assertFalse(registered.degraded());
+    }
+
+    @Test
+    void publicSearchSurfacesRejectExcessiveResultLimits() throws Exception {
+        NexusApplication application = NexusApplication.create(
+                new NexusPaths(temporaryDirectory.resolve("limit-home")),
+                SemanticSearchConfiguration.disabled());
+        Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("limit-project"));
+        Files.writeString(projectRoot.resolve("App.java"), "class App {}\n");
+        var project = application.registerProject(projectRoot, "limit-demo");
+        application.index(project.id(), false, false);
+
+        assertThrows(IllegalArgumentException.class, () ->
+                application.search(project.id(), "App", ResultLimitPolicy.MAX_RESULT_LIMIT + 1, false));
+        assertThrows(IllegalArgumentException.class, () ->
+                application.findSymbols(project.id(), "App", ResultLimitPolicy.MAX_RESULT_LIMIT + 1));
+        assertThrows(IllegalArgumentException.class, () ->
+                application.findUsages(project.id(), "App", ResultLimitPolicy.MAX_RESULT_LIMIT + 1));
     }
 
     @Test
