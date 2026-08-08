@@ -138,7 +138,7 @@ public final class SqliteIndexRepository implements IndexRepository {
         if (query.isBlank()) {
             throw new IllegalArgumentException("query must not be blank");
         }
-        ResultLimitPolicy.validate(limit);
+        ResultLimitPolicy.validateInternalRetrieval(limit);
         String normalized = query.trim().toLowerCase(Locale.ROOT);
         String contains = "%" + escapeLike(normalized) + "%";
         String prefix = escapeLike(normalized) + "%";
