@@ -11,6 +11,7 @@ import com.nexus.search.semantic.SemanticIndexingService;
 import com.nexus.security.SafeFileIO;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -20,7 +21,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -236,14 +236,21 @@ public final class ProjectIndexingService {
                     continue;
                 }
 
-                AnalysisResult analysis = analyzeScannedFile(project.rootPath(), scannedFile);
+                byte[] snapshotBytes = SafeFileIO.readBytesNoFollow(scannedFile.absolutePath());
+                String snapshotHash = FileHasher.sha256(snapshotBytes);
+                if (!snapshotHash.equals(scannedFile.contentHash())) {
+                    throw new IOException(
+                            "Le fichier a changé pendant l'indexation : " + scannedFile.relativePath());
+                }
+                String snapshotContent = new String(snapshotBytes, StandardCharsets.UTF_8);
+                AnalysisResult analysis = analyzeScannedFile(project.rootPath(), scannedFile, snapshotContent);
                 SearchDocument document = null;
                 if (genericSearchEligible) {
                     document = new SearchDocument(
                             scannedFile.relativePath(),
                             scannedFile.language(),
                             scannedFile.category(),
-                            SafeFileIO.readStringNoFollow(scannedFile.absolutePath()),
+                            snapshotContent,
                             analysis.symbols());
                 }
 
@@ -261,7 +268,7 @@ public final class ProjectIndexingService {
             boolean codeSourcesChanged = codeIntelligenceSourcesChanged(
                     fullRebuild, updates, removedPaths, existingFiles);
             Set<String> staleExternalProviders = codeSourcesChanged
-                    ? externalProviders(projectId)
+                    ? indexRepository.findExternalProviders(projectId)
                     : Set.of();
 
             indexRepository.applyChanges(projectId, updates, removedPaths);
@@ -291,6 +298,17 @@ public final class ProjectIndexingService {
                     semanticIndexingService.applyChanges(
                             projectId, canonicalFingerprint, semanticDocuments, searchRemovedPaths);
                 }
+            }
+
+            // Une modification externe peut survenir après le scan initial ou pendant
+            // l'exécution d'un provider. On ne publie jamais READY si le repository
+            // canonique n'est plus exactement celui dont le fingerprint a servi à
+            // construire SQLite/Lucene. L'état FAILED force un rebuild complet au
+            // prochain passage et rend les dérivés partiels inaccessibles entre-temps.
+            ProjectScanResult finalScan = scanner.scanWithDiagnostics(project.rootPath());
+            String finalFingerprint = CanonicalIndexFingerprint.fromScannedFiles(finalScan.files());
+            if (!canonicalFingerprint.equals(finalFingerprint)) {
+                throw new IOException("Le repository a changé pendant l'indexation ; un rebuild est requis");
             }
 
             Set<String> languages = scannedFiles.stream()
@@ -356,19 +374,6 @@ public final class ProjectIndexingService {
         }
     }
 
-    private Set<String> externalProviders(UUID projectId) {
-        Set<String> providers = new TreeSet<>();
-        indexRepository.findSymbols(projectId).stream()
-                .map(indexed -> indexed.symbol().sourceProvider())
-                .filter(provider -> !CodeSymbol.DEFAULT_SOURCE_PROVIDER.equals(provider))
-                .forEach(providers::add);
-        indexRepository.findRelations(projectId).stream()
-                .map(SymbolRelation::sourceProvider)
-                .filter(provider -> !CodeSymbol.DEFAULT_SOURCE_PROVIDER.equals(provider))
-                .forEach(providers::add);
-        return Set.copyOf(providers);
-    }
-
     private void purgeExternalCodeIntelligence(UUID projectId, Set<String> providers) {
         for (String provider : providers.stream().sorted().toList()) {
             indexRepository.replaceExternalCodeIntelligence(
@@ -410,10 +415,13 @@ public final class ProjectIndexingService {
         return category == FileCategory.SOURCE || category == FileCategory.TEST;
     }
 
-    private AnalysisResult analyzeScannedFile(java.nio.file.Path projectRoot, ScannedFile file) throws IOException {
+    private AnalysisResult analyzeScannedFile(
+            java.nio.file.Path projectRoot,
+            ScannedFile file,
+            String content) throws IOException {
         for (LanguageAnalyzer analyzer : analyzers) {
             if (analyzer.supports(file.absolutePath())) {
-                return analyzer.analyze(projectRoot, file.absolutePath());
+                return analyzer.analyze(projectRoot, file.absolutePath(), content);
             }
         }
         return new AnalysisResult(file.absolutePath(), file.language(), List.of(), List.of());
