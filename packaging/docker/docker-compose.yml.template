@@ -14,16 +14,19 @@ services:
       NEXUS_RUNTIME: "${NEXUS_RUNTIME:-docker}"
       NEXUS_REST_HOST: 0.0.0.0
       NEXUS_REST_PORT: "${NEXUS_DOCKER_CONTAINER_PORT:-8080}"
+      NEXUS_REST_ALLOWED_PROJECT_ROOTS: "/workspace"
+      NEXUS_REST_EXPOSURE_MODE: "${NEXUS_REST_EXPOSURE_MODE:-loopback-forward}"
       NEXUS_MAX_FILE_SIZE_BYTES: "${NEXUS_MAX_FILE_SIZE_BYTES:-8388608}"
+      NEXUS_MAX_SCIP_INDEX_BYTES: "${NEXUS_MAX_SCIP_INDEX_BYTES:-268435456}"
+      NEXUS_MAX_SCIP_MESSAGE_BYTES: "${NEXUS_MAX_SCIP_MESSAGE_BYTES:-16777216}"
       NEXUS_CODE_INTELLIGENCE_TIMEOUT_SECONDS: "${NEXUS_CODE_INTELLIGENCE_TIMEOUT_SECONDS:-180}"
       NEXUS_SEMANTIC_PROVIDER: "${NEXUS_SEMANTIC_PROVIDER:-}"
       NEXUS_OLLAMA_BASE_URL: "${NEXUS_OLLAMA_BASE_URL:-}"
       NEXUS_OLLAMA_EMBEDDING_MODEL: "${NEXUS_OLLAMA_EMBEDDING_MODEL:-}"
       NEXUS_OLLAMA_EMBEDDING_DIMENSIONS: "${NEXUS_OLLAMA_EMBEDDING_DIMENSIONS:-}"
       NEXUS_OLLAMA_TIMEOUT_SECONDS: "${NEXUS_OLLAMA_TIMEOUT_SECONDS:-}"
-      # Fail-fast : le REST NEXUS refuse un bind non-loopback (0.0.0.0) sans token. Compose échoue
-      # donc immédiatement et explicitement si NEXUS_REST_API_TOKEN est absent ou vide, plutôt que
-      # de laisser le conteneur démarrer puis mourir.
+      # Fail-fast : le REST NEXUS refuse un bind non-loopback sans token. Le token généré par le
+      # wizard contient 256 bits d'entropie ; en autonome, utilisez au moins 32 octets aléatoires.
       NEXUS_REST_API_TOKEN: "${NEXUS_REST_API_TOKEN:?NEXUS_REST_API_TOKEN is required (le wizard le génère automatiquement ; en autonome, définissez-le dans .env)}"
     # host.docker.internal pointe vers l'hôte : natif sur Docker Desktop, explicite ici pour rester
     # portable sur Docker Engine Linux (Ollama tournant sur la machine hôte).
