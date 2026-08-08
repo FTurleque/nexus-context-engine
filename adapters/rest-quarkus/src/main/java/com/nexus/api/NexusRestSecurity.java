@@ -16,6 +16,8 @@ final class NexusRestSecurity {
     static final String TOKEN_PROPERTY = "nexus.rest.api-token";
     static final String EXPOSURE_MODE_ENVIRONMENT_VARIABLE = "NEXUS_REST_EXPOSURE_MODE";
     static final String EXPOSURE_MODE_PROPERTY = "nexus.rest.exposure-mode";
+    static final String RUNTIME_ENVIRONMENT_VARIABLE = "NEXUS_RUNTIME";
+    static final String RUNTIME_PROPERTY = "nexus.runtime";
     static final int MIN_REMOTE_TOKEN_BYTES = 32;
     static final double MIN_REMOTE_TOKEN_ESTIMATED_ENTROPY_BITS = 96.0d;
 
@@ -42,14 +44,24 @@ final class NexusRestSecurity {
     }
 
     static Optional<String> configuredExposureMode() {
-        String mode = System.getProperty(EXPOSURE_MODE_PROPERTY);
-        if (mode == null || mode.isBlank()) {
-            mode = System.getenv(EXPOSURE_MODE_ENVIRONMENT_VARIABLE);
+        return configuredValue(EXPOSURE_MODE_PROPERTY, EXPOSURE_MODE_ENVIRONMENT_VARIABLE)
+                .map(value -> value.toLowerCase(Locale.ROOT));
+    }
+
+    static Optional<String> configuredRuntime() {
+        return configuredValue(RUNTIME_PROPERTY, RUNTIME_ENVIRONMENT_VARIABLE)
+                .map(value -> value.toLowerCase(Locale.ROOT));
+    }
+
+    private static Optional<String> configuredValue(String property, String environmentVariable) {
+        String value = System.getProperty(property);
+        if (value == null || value.isBlank()) {
+            value = System.getenv(environmentVariable);
         }
-        if (mode == null || mode.isBlank()) {
+        if (value == null || value.isBlank()) {
             return Optional.empty();
         }
-        return Optional.of(mode.trim().toLowerCase(Locale.ROOT));
+        return Optional.of(value.trim());
     }
 
     static boolean isSupportedRemoteExposureMode(String mode) {
@@ -58,6 +70,12 @@ final class NexusRestSecurity {
 
     static boolean isSecureNonLoopbackExposureMode(String mode) {
         return mode != null && NON_LOOPBACK_EXPOSURE_MODES.contains(mode.trim().toLowerCase(Locale.ROOT));
+    }
+
+    static boolean isDockerLoopbackForward(String mode) {
+        return mode != null
+                && "loopback-forward".equals(mode.trim().toLowerCase(Locale.ROOT))
+                && configuredRuntime().filter("docker"::equals).isPresent();
     }
 
     static boolean isStrongRemoteToken(String token) {
