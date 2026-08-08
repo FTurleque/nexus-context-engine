@@ -36,6 +36,7 @@ RUN sed -i 's/\r$//' /usr/local/bin/nexus-entrypoint \
 
 ENV NEXUS_HOME=/data/nexus \
     NEXUS_MODE=rest \
+    NEXUS_RUNTIME=docker \
     NEXUS_REST_HOST=0.0.0.0 \
     NEXUS_REST_PORT=8080 \
     NEXUS_REST_ALLOWED_PROJECT_ROOTS=/workspace \
