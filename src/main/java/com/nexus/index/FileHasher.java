@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.Objects;
 
 public final class FileHasher {
 
@@ -43,6 +44,13 @@ public final class FileHasher {
                 digest.update(buffer, 0, read);
             }
         }
+        return HexFormat.of().formatHex(digest.digest());
+    }
+
+    public static String sha256(byte[] content) {
+        Objects.requireNonNull(content, "content");
+        MessageDigest digest = sha256Digest();
+        digest.update(content);
         return HexFormat.of().formatHex(digest.digest());
     }
 
