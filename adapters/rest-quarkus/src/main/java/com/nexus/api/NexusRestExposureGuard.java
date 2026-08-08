@@ -47,12 +47,14 @@ public class NexusRestExposureGuard {
                 .orElseThrow(() -> new IllegalStateException(
                         "Une écoute REST hors loopback exige "
                                 + NexusRestSecurity.EXPOSURE_MODE_ENVIRONMENT_VARIABLE
-                                + "=reverse-proxy-https|direct-https"));
-        if (!NexusRestSecurity.isSecureNonLoopbackExposureMode(exposureMode)) {
+                                + "=reverse-proxy-https|direct-https, ou loopback-forward dans le runtime Docker."));
+        boolean acceptedDockerForward = NexusRestSecurity.isDockerLoopbackForward(exposureMode);
+        if (!acceptedDockerForward && !NexusRestSecurity.isSecureNonLoopbackExposureMode(exposureMode)) {
             throw new IllegalStateException(
                     "Une écoute REST hors loopback refuse le mode " + exposureMode
-                            + ". Utilisez reverse-proxy-https ou direct-https ; "
-                            + "loopback-forward exige une écoute Quarkus réellement loopback.");
+                            + ". Utilisez reverse-proxy-https ou direct-https. "
+                            + "loopback-forward n'est admis que lorsque NEXUS_RUNTIME=docker ; "
+                            + "le port hôte Docker doit alors rester publié sur une adresse loopback.");
         }
     }
 }
