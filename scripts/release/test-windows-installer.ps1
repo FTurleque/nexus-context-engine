@@ -86,12 +86,20 @@ foreach ($rawDepth in @('ConvertTo-Json -Depth 5', 'ConvertTo-Json -Depth 10')) 
 }
 
 Write-Host '[contract] client-only docker.exe must not suppress Docker Desktop bootstrap'
+# The strict Docker engine detection now lives in the .iss template (single source of truth),
+# not injected by the build script. Assert the template carries the real reachability probe and
+# strict prerequisite semantics.
+Assert-TextContains -Text $installerSource -Needle 'docker info >nul 2>nul' -Description 'real Docker engine reachability probe'
+Assert-TextContains -Text $installerSource -Needle 'Result := DockerEngineReady() or (DockerDesktopExecutable() <> '''');' -Description 'Docker Desktop or working engine prerequisite semantics'
+
+# And assert the build script no longer patches installer logic by search/replace, but guards it.
 $installerBuilder = Join-Path $repo 'scripts\release\build-windows-installer.ps1'
 $builderSource = Get-Content -Raw -LiteralPath $installerBuilder
-Assert-TextContains -Text $builderSource -Needle 'function DockerEngineReady(): Boolean;' -Description 'strict Docker engine readiness detector'
-Assert-TextContains -Text $builderSource -Needle 'docker info >nul 2>nul' -Description 'real Docker engine reachability probe'
-Assert-TextContains -Text $builderSource -Needle 'Result := DockerEngineReady() or (DockerDesktopExecutable() <> '''');' -Description 'Docker Desktop or working engine prerequisite semantics'
-Assert-TextContains -Text $builderSource -Needle 'refusing to build an EXE that could skip Docker Desktop bootstrap' -Description 'fail-closed build guard for Docker detector drift'
+Assert-TextContains -Text $builderSource -Needle 'single source of truth' -Description 'build script defers all logic to the template'
+Assert-TextContains -Text $builderSource -Needle 'missing strict Docker engine readiness detection' -Description 'build-time integrity guard for Docker detector drift'
+if ($builderSource.IndexOf('.Replace($legacyDockerDetection', [StringComparison]::Ordinal) -ge 0) {
+    throw 'Build script must not inject Docker detection logic by search/replace; the template is the source of truth.'
+}
 
 $root = Join-Path $repo 'target\installer-smoke'
 $install = Join-Path $root 'install'
