@@ -30,7 +30,9 @@ public class NexusRestExposureGuard {
             throw new IllegalStateException(
                     NexusRestSecurity.TOKEN_ENVIRONMENT_VARIABLE + " doit contenir au moins "
                             + NexusRestSecurity.MIN_REMOTE_TOKEN_BYTES
-                            + " octets pour une écoute hors loopback");
+                            + " octets et présenter une entropie estimée d'au moins "
+                            + (int) NexusRestSecurity.MIN_REMOTE_TOKEN_ESTIMATED_ENTROPY_BITS
+                            + " bits pour une écoute hors loopback");
         }
 
         List<Path> roots = NexusRestProjectRootPolicy.configuredRoots();
@@ -45,11 +47,12 @@ public class NexusRestExposureGuard {
                 .orElseThrow(() -> new IllegalStateException(
                         "Une écoute REST hors loopback exige "
                                 + NexusRestSecurity.EXPOSURE_MODE_ENVIRONMENT_VARIABLE
-                                + "=loopback-forward|reverse-proxy-https|direct-https"));
-        if (!NexusRestSecurity.isSupportedRemoteExposureMode(exposureMode)) {
+                                + "=reverse-proxy-https|direct-https"));
+        if (!NexusRestSecurity.isSecureNonLoopbackExposureMode(exposureMode)) {
             throw new IllegalStateException(
-                    "Mode d'exposition REST inconnu : " + exposureMode
-                            + ". Valeurs : loopback-forward, reverse-proxy-https, direct-https");
+                    "Une écoute REST hors loopback refuse le mode " + exposureMode
+                            + ". Utilisez reverse-proxy-https ou direct-https ; "
+                            + "loopback-forward exige une écoute Quarkus réellement loopback.");
         }
     }
 }
