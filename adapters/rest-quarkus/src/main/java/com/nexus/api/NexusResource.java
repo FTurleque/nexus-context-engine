@@ -32,7 +32,8 @@ import java.util.UUID;
 public class NexusResource {
 
     private static final int DEFAULT_SEARCH_LIMIT = 10;
-    private static final int DEFAULT_TOKEN_BUDGET = 2_000;
+    private static final int DEFAULT_TOKEN_BUDGET =
+            com.nexus.context.ContextBudgetPolicy.DEFAULT_CONTEXT_TOKEN_BUDGET;
 
     @Inject
     NexusApiApplicationService service;

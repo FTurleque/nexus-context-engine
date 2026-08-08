@@ -40,7 +40,8 @@ Principe directeur :
 | Réconciliation documentaire | issue #21 / PR #26 | ✅ intégrée |
 | CI / couverture / supply-chain | issue #22 / PR #28 | ✅ intégrée |
 | Distribution Windows EXE autonome | issue #40 / PR #41 | ✅ intégrée |
-| Benchmark scale SQLite/fédération | issue #23 | ⏳ prochain lot |
+| Benchmark scale SQLite/fédération | issue #23 | ✅ établi (workflow Scale Benchmark) |
+| Assistant de déploiement Windows (Natif/Docker/Both) | issue #45 / PR #46 | 🔄 en qualification |
 
 ## Baseline fonctionnelle livrée
 
@@ -134,15 +135,15 @@ Référence : [`docs/user/windows-installation.md`](user/windows-installation.md
 
 ## Travail restant priorisé
 
-### P3 — #23 Benchmark scale
+### #23 Benchmark scale — ✅ établi (clos)
 
-Mesurer avant toute nouvelle complexité d'indexation :
+Le benchmark de scale est en place (issue #23 close, workflow *Scale Benchmark*) et mesure :
 
 - recherches SQLite lexicales sur corpus croissants ;
 - coût fédéré multi-projet ;
 - seuils justifiant ou non FTS5/trigram/autre stratégie.
 
-Aucun FTS supplémentaire, vector DB, index distribué ou nouveau moteur n'est adopté sans benchmark montrant un bénéfice matériel.
+Il sert désormais de garde permanente : aucun FTS supplémentaire, vector DB, index distribué ou nouveau moteur n'est adopté sans benchmark montrant un bénéfice matériel.
 
 ## Références
 

@@ -1,0 +1,42 @@
+name: "nexus-context-engine"
+services:
+  nexus:
+    image: "${NEXUS_DOCKER_IMAGE:-nexus-context-engine:0.2.0}"
+    pull_policy: build
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.runtime
+    container_name: "${NEXUS_DOCKER_CONTAINER:-nexus-context-engine}"
+    restart: "${NEXUS_DOCKER_RESTART_POLICY:-unless-stopped}"
+    environment:
+      NEXUS_HOME: /data/nexus
+      NEXUS_MODE: rest
+      NEXUS_RUNTIME: "${NEXUS_RUNTIME:-docker}"
+      NEXUS_REST_HOST: 0.0.0.0
+      NEXUS_REST_PORT: "${NEXUS_DOCKER_CONTAINER_PORT:-8080}"
+      NEXUS_MAX_FILE_SIZE_BYTES: "${NEXUS_MAX_FILE_SIZE_BYTES:-8388608}"
+      NEXUS_CODE_INTELLIGENCE_TIMEOUT_SECONDS: "${NEXUS_CODE_INTELLIGENCE_TIMEOUT_SECONDS:-180}"
+      NEXUS_SEMANTIC_PROVIDER: "${NEXUS_SEMANTIC_PROVIDER:-}"
+      NEXUS_OLLAMA_BASE_URL: "${NEXUS_OLLAMA_BASE_URL:-}"
+      NEXUS_OLLAMA_EMBEDDING_MODEL: "${NEXUS_OLLAMA_EMBEDDING_MODEL:-}"
+      NEXUS_OLLAMA_EMBEDDING_DIMENSIONS: "${NEXUS_OLLAMA_EMBEDDING_DIMENSIONS:-}"
+      NEXUS_OLLAMA_TIMEOUT_SECONDS: "${NEXUS_OLLAMA_TIMEOUT_SECONDS:-}"
+      # Fail-fast : le REST NEXUS refuse un bind non-loopback (0.0.0.0) sans token. Compose échoue
+      # donc immédiatement et explicitement si NEXUS_REST_API_TOKEN est absent ou vide, plutôt que
+      # de laisser le conteneur démarrer puis mourir.
+      NEXUS_REST_API_TOKEN: "${NEXUS_REST_API_TOKEN:?NEXUS_REST_API_TOKEN is required (le wizard le génère automatiquement ; en autonome, définissez-le dans .env)}"
+    # host.docker.internal pointe vers l'hôte : natif sur Docker Desktop, explicite ici pour rester
+    # portable sur Docker Engine Linux (Ollama tournant sur la machine hôte).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${NEXUS_DOCKER_BIND_ADDRESS:-127.0.0.1}:${NEXUS_DOCKER_HOST_PORT:-8080}:${NEXUS_DOCKER_CONTAINER_PORT:-8080}"
+    volumes:
+      - "${NEXUS_HOME_BIND:-./nexus-data}:/data/nexus"
+      - "${NEXUS_REPOSITORY_BIND:-./workspace}:/workspace:ro"
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent -H 'Authorization: Bearer ${NEXUS_REST_API_TOKEN}' http://127.0.0.1:${NEXUS_DOCKER_CONTAINER_PORT:-8080}/q/health/live >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s

@@ -22,6 +22,8 @@ windows      EXE installer autonome intégré via PR #41
 
 La Phase 6 a été fusionnée via PR #15. Le hardening post-Phase 6 a été intégré via PR #18. Les deux P1 issus de l'audit de stabilisation (#19/#20) ont été qualifiés puis intégrés via PR #24. La distribution Windows autonome et l'installateur EXE Inno Setup sans prérequis JVM ont été intégrés via PR #41 (issue #40).
 
+La PR #46, encore en cours de qualification, étend ce setup en assistant de déploiement **Natif / Docker / Natif + Docker** avec configuration des ports, recherche sémantique Ollama explicite, intégrations assistants et récapitulatif avant installation.
+
 ## Capacités
 
 - indexation locale incrémentale ;
@@ -36,10 +38,48 @@ La Phase 6 a été fusionnée via PR #15. Le hardening post-Phase 6 a été int�
 - Agent Skills locaux + AI Skills Registry local ;
 - contexte Git local borné ;
 - CLI, REST Quarkus et MCP Java STDIO ;
-- générateurs de configuration Copilot/Claude ;
+- générateurs de configuration Copilot, Claude et Codex ;
 - liveness/readiness REST et métriques ;
 - distribution CLI autonome versionnée ;
-- installateur Windows EXE autonome avec runtime Java embarqué (sans prérequis JVM).
+- installateur Windows EXE autonome avec runtime Java embarqué.
+
+## Assistant de déploiement Windows — PR #46
+
+Le candidat de la PR #46 propose :
+
+```text
+Natif Windows
+Docker
+Natif + Docker
+```
+
+La matrice assistants est :
+
+```text
+GitHub Copilot CLI
+GitHub Copilot JetBrains
+Claude CLI / Claude Code
+Codex Desktop
+Client MCP générique
+```
+
+MCP reste en transport **STDIO**. En Docker, les clients utilisent `docker exec -i` ; aucun port MCP HTTP n'est ajouté.
+
+La recherche sémantique est désactivée par défaut. Le setup propose une case explicite :
+
+```text
+[ ] Activer Ollama pour la recherche sémantique
+```
+
+Si elle est cochée, NEXUS utilise `NEXUS_SEMANTIC_PROVIDER=ollama`. La recherche sémantique reste **désactivée par défaut**. Lorsqu'elle est activée et qu'aucun Ollama n'est détecté, le setup peut, **si l'utilisateur choisit explicitement l'installation automatique**, télécharger l'installateur officiel depuis `ollama.com`, **vérifier sa signature Authenticode (CN=Ollama Inc.)** puis l'installer — jamais en silence, jamais si la sémantique est désactivée, jamais si Ollama est déjà présent. L'installation automatique peut être décochée pour se limiter à la configuration de la connexion. Les endpoints réellement retenus (URL Native, et `host.docker.internal` côté Docker) sont affichés sur la page Ready to Install avant le bouton Installer.
+
+La page **Ready to Install** affiche le récapitulatif complet des choix avant le bouton Installer : mode, composants, `NEXUS_HOME`, REST, Ollama, Docker, assistants, runtime MCP et tâches Windows.
+
+Voir :
+
+- [`docs/user/windows-installation.md`](docs/user/windows-installation.md) ;
+- [`docs/user/docker-installation.md`](docs/user/docker-installation.md) ;
+- [`docs/user/deployment-wizard-template.md`](docs/user/deployment-wizard-template.md).
 
 ## Hardening intégré
 
@@ -108,8 +148,6 @@ inspect
 --version
 ```
 
-Les sélecteurs fédérés CLI sont des noms/UUID séparés par des virgules.
-
 ## Distribution sans clone
 
 `clean install` produit :
@@ -122,11 +160,9 @@ target/distribution/nexus-context-engine-0.2.0.zip.sha256
 target/sbom/bom.json
 ```
 
-Le ZIP contient `bin/nexus.cmd`, `bin/nexus`, `lib/nexus-cli.jar`, `README.md` et `LICENSE`. Maven n'est pas requis sur la machine cible ; une JVM Java 21 ou supérieure est nécessaire.
+Le ZIP multiplateforme nécessite Java 21+. Le ZIP Windows et le setup embarquent un runtime Java `jpackage`.
 
 ### Windows — EXE installer ou ZIP autonome
-
-`scripts/release/build-windows-release.ps1` produit en plus :
 
 ```text
 target\dist\nexus-context-engine-0.2.0-windows-x64.zip
@@ -135,7 +171,7 @@ target\dist\NEXUS-0.2.0-windows-x64-setup.exe
 target\dist\NEXUS-0.2.0-windows-x64-setup.exe.sha256
 ```
 
-Le ZIP Windows et le setup embarquent un runtime Java construit avec `jpackage`. Aucune JVM système n'est requise sur Windows. Voir [`docs/user/windows-installation.md`](docs/user/windows-installation.md).
+Voir [`docs/user/windows-installation.md`](docs/user/windows-installation.md).
 
 ## Correctness et scale
 
@@ -150,7 +186,7 @@ Le ZIP Windows et le setup embarquent un runtime Java construit avec `jpackage`.
 - MINOS valide contre les fichiers canoniques déjà indexés ;
 - le contexte fédéré peut redistribuer son budget restant après fair floor et déduplication.
 
-Les recherches SQLite utilisant des recherches de sous-chaîne restent un **watch item** suivi par #23 : aucun FTS5, trigram ou moteur supplémentaire ne sera introduit sans benchmark montrant un bénéfice matériel sur les corpus cibles.
+Les recherches SQLite par sous-chaîne restent un **watch item** : le benchmark de scale (#23, désormais clos et outillé par le workflow *Scale Benchmark*) sert de garde — aucun FTS5, trigram ou moteur supplémentaire ne sera introduit sans mesure montrant un bénéfice matériel sur les corpus cibles.
 
 ## Configuration
 
@@ -172,7 +208,7 @@ NEXUS_REST_API_TOKEN
 
 `NEXUS_MAX_FILE_SIZE_BYTES` vaut 8 MiB par défaut. Le timeout global de code intelligence vaut 180 s. Les providers lourds et la sémantique sont **désactivés par défaut**.
 
-Pour activer explicitement Ollama :
+Activation manuelle d'Ollama hors setup :
 
 ```powershell
 $env:NEXUS_SEMANTIC_PROVIDER = "ollama"
@@ -186,13 +222,7 @@ La configuration par défaut reste :
 quarkus.http.host=127.0.0.1
 ```
 
-Sur loopback, aucun token n'est imposé par défaut. Si `NEXUS_REST_API_TOKEN` est défini, les ressources REST JAX-RS exigent :
-
-```text
-Authorization: Bearer <token>
-```
-
-Une écoute non-loopback (`0.0.0.0`, adresse LAN, etc.) sans `NEXUS_REST_API_TOKEN` est refusée au démarrage. Le token peut également être fourni par `-Dnexus.rest.api-token=...`.
+Sur loopback, aucun token n'est imposé par défaut. Une écoute non-loopback sans `NEXUS_REST_API_TOKEN` est refusée au démarrage.
 
 ## Surfaces fédérées
 
@@ -222,35 +252,23 @@ Le contexte fédéré applique un budget global, conserve la provenance projet, 
 
 ## Qualification
 
-La qualification Windows reste pilotée par :
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
-```
-
-Preuve récente : PR #41, head exact `1be179c76a28ae57387b287df3dc7c33b1225443` :
-
-- NEXUS CI Windows gate / Java 24 : **PASS** (run 31158371347) ;
-- NEXUS CI Linux reactor Maven build : **PASS** (run 31158371347) ;
-- Windows Installer : **PASS** (run 31158371344) ;
-- OSV-Scanner : **PASS** (run 31158371667) ;
-- CodeQL : **PASS** (run 31158371350).
-
-PR #41 est fusionnée dans `main` via `f4b41f8150d94ef983c486864e428023ab446b4f`.
+La qualification Windows reste pilotée par les scripts de release et de validation du dépôt. L'assistant de déploiement Windows est suivi par l'issue #45 et la PR #46 ; celle-ci n'est mergée dans `main` qu'une fois tous ses gates exact-head verts (NEXUS CI, Windows Installer, Docker Distribution, CodeQL, OSV-Scanner).
 
 ## Documentation
 
 - architecture : [`docs/architecture.md`](docs/architecture.md) ;
 - Arc42 : [`docs/architecture/README.md`](docs/architecture/README.md) ;
-- provenance des index : [`docs/index-provenance.md`](docs/index-provenance.md) ;
+- provenance : [`docs/index-provenance.md`](docs/index-provenance.md) ;
 - implémentation : [`docs/developer/architecture-implementation.md`](docs/developer/architecture-implementation.md) ;
 - CLI : [`docs/developer/cli.md`](docs/developer/cli.md) ;
 - recherche : [`docs/developer/search-ranking.md`](docs/developer/search-ranking.md) ;
 - contexte : [`docs/developer/context-building.md`](docs/developer/context-building.md) ;
 - sémantique : [`docs/developer/semantic-search.md`](docs/developer/semantic-search.md) ;
-- limites/watch items : [`docs/developer/current-limitations.md`](docs/developer/current-limitations.md) ;
+- limites : [`docs/developer/current-limitations.md`](docs/developer/current-limitations.md) ;
 - release/recovery : [`docs/developer/release-and-recovery.md`](docs/developer/release-and-recovery.md) ;
 - installation Windows : [`docs/user/windows-installation.md`](docs/user/windows-installation.md) ;
+- Docker : [`docs/user/docker-installation.md`](docs/user/docker-installation.md) ;
+- template wizard : [`docs/user/deployment-wizard-template.md`](docs/user/deployment-wizard-template.md) ;
 - roadmap : [`docs/roadmap.md`](docs/roadmap.md).
 
 ## Licence

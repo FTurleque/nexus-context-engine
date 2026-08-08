@@ -33,6 +33,11 @@ $DistributionRoot = [IO.Path]::GetFullPath($DistributionRoot)
 
 foreach ($required in @(
     'nexus.cmd',
+    'nexus-mcp.cmd',
+    'nexus-rest.cmd',
+    'nexus-assistant-clients.cmd',
+    'nexus-docker.cmd',
+    'nexus-docker-mcp.cmd',
     'VERSION',
     'RUNTIME-MODULES.txt',
     'LICENSE',
@@ -40,11 +45,33 @@ foreach ($required in @(
     'SBOM.cdx.json',
     'app\nexus.exe',
     'app\runtime\bin\java.exe',
-    'lib\nexus-cli.jar'
+    'lib\nexus-cli.jar',
+    'lib\nexus-mcp.jar',
+    'lib\nexus-assistant-clients.jar',
+    'rest\quarkus-run.jar',
+    'docker\docker-compose.yml.template'
 )) {
     if (-not (Test-Path -LiteralPath (Join-Path $DistributionRoot $required) -PathType Leaf)) {
         throw "Invalid NEXUS Windows distribution; missing $required"
     }
+}
+
+# The installer must be able to build the Docker runtime locally when the configured
+# registry image is unavailable/private. Stage the runtime-only Dockerfile and entrypoint
+# directly into the distribution consumed by Inno Setup. The installer logic that consumes
+# these files (local-image/pull/build fallback) lives in the .iss template — see below.
+$dockerPayloadRoot = Join-Path $DistributionRoot 'docker'
+New-Item -ItemType Directory -Force -Path $dockerPayloadRoot | Out-Null
+$dockerRuntimePayload = @(
+    @{ Source = (Join-Path $repo 'packaging\docker\docker-compose.yml.template'); Destination = (Join-Path $dockerPayloadRoot 'docker-compose.yml.template') },
+    @{ Source = (Join-Path $repo 'packaging\docker\Dockerfile.runtime'); Destination = (Join-Path $dockerPayloadRoot 'Dockerfile.runtime') },
+    @{ Source = (Join-Path $repo 'packaging\docker\nexus-container-entrypoint.sh'); Destination = (Join-Path $dockerPayloadRoot 'nexus-container-entrypoint.sh') }
+)
+foreach ($item in $dockerRuntimePayload) {
+    if (-not (Test-Path -LiteralPath $item.Source -PathType Leaf)) {
+        throw "Required Docker fallback payload missing: $($item.Source)"
+    }
+    Copy-Item -LiteralPath $item.Source -Destination $item.Destination -Force
 }
 
 if ([string]::IsNullOrWhiteSpace($IsccPath)) {
@@ -78,6 +105,11 @@ $appId = if ($Smoke) { "NEXUS-Installer-Smoke-$Version" } else { '{{AE8110A7-369
 $smokeMode = if ($Smoke) { '1' } else { '0' }
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 $iss = [IO.File]::ReadAllText($template, $utf8)
+
+# The .iss template is the single source of truth for ALL installer logic (strict Docker engine
+# detection, Docker runtime payload, local-image/pull/build fallback, wizard, assistants, etc.).
+# This script performs ONLY build-time token substitution + payload staging + compile + checksum.
+# It intentionally does NOT patch any Pascal logic by search/replace.
 $iss = $iss.Replace('@@VERSION@@', (Escape-Inno $Version))
 $iss = $iss.Replace('@@APP_VERSION@@', (Escape-Inno $appVersion))
 $iss = $iss.Replace('@@APP_ID@@', (Escape-Inno $appId))
@@ -87,6 +119,26 @@ $iss = $iss.Replace('@@OUTPUT_DIR@@', (Escape-Inno $installerOutput))
 $iss = $iss.Replace('@@OUTPUT_BASENAME@@', (Escape-Inno $outputBase))
 if ($iss -match '@@[A-Z0-9_]+@@') {
     throw "Unresolved Inno Setup template token: $($Matches[0])"
+}
+
+# Integrity guards on the template source of truth: fail the build if the critical installer logic
+# (that used to be injected here) is ever removed from the template. These check content, they do
+# not modify it.
+if ($iss.IndexOf('function DockerEngineReady(): Boolean;', [StringComparison]::Ordinal) -lt 0) {
+    throw 'Installer template is missing strict Docker engine readiness detection (DockerEngineReady).'
+}
+if ($iss.IndexOf('Source: "{#NexusSourceDir}\docker\*"', [StringComparison]::Ordinal) -lt 0) {
+    throw 'Installer template must ship the full Docker payload (docker\* recurse) for the local fallback.'
+}
+foreach ($requiredFallbackFragment in @(
+    'Dockerfile.runtime',
+    '"%DOCKER_EXE%" pull "%NEXUS_DOCKER_IMAGE%"',
+    '"%DOCKER_EXE%" build --pull --file',
+    ':nexus_image_ready'
+)) {
+    if ($iss.IndexOf($requiredFallbackFragment, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+        throw "Installer template is missing Docker registry fallback fragment: $requiredFallbackFragment"
+    }
 }
 [IO.File]::WriteAllText($generatedIss, $iss, $utf8)
 
@@ -105,6 +157,8 @@ try {
     Write-Host $(if ($Smoke) { 'NEXUS Windows smoke setup SUCCESS' } else { 'NEXUS Windows setup SUCCESS' }) -ForegroundColor Green
     Write-Host "Setup   : $setup"
     Write-Host "SHA-256 : $hash"
+    Write-Host 'Wizard  : Native / Docker / Both + runtime/integration customization'
+    Write-Host 'Docker  : strict engine detection + registry pull with local runtime-image fallback'
     Write-Output $setup
 }
 finally {

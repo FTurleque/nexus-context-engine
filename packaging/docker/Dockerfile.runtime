@@ -1,0 +1,34 @@
+# Base épinglée par digest (tag lisible conservé) pour une build reproductible. Mettre à jour via
+# `docker buildx imagetools inspect eclipse-temurin:21-jre-jammy --format '{{.Manifest.Digest}}'`.
+ARG RUNTIME_IMAGE=eclipse-temurin:21-jre-jammy@sha256:3097cbbebb7d490494a98aed2301f284b38f79eba158eef098c6fc8c8af11c23
+FROM ${RUNTIME_IMAGE}
+
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 10001 --gid root --home-dir /data/nexus --shell /usr/sbin/nologin nexus \
+    && mkdir -p /opt/nexus/lib /opt/nexus/rest /data/nexus /workspace \
+    && chown -R 10001:0 /opt/nexus /data/nexus /workspace
+
+COPY lib/nexus-cli.jar /opt/nexus/lib/nexus-cli.jar
+COPY lib/nexus-mcp.jar /opt/nexus/lib/nexus-mcp.jar
+COPY lib/nexus-assistant-clients.jar /opt/nexus/lib/nexus-assistant-clients.jar
+COPY rest/ /opt/nexus/rest/
+COPY docker/nexus-container-entrypoint.sh /usr/local/bin/nexus-entrypoint
+
+RUN sed -i 's/\r$//' /usr/local/bin/nexus-entrypoint \
+    && chmod 0755 /usr/local/bin/nexus-entrypoint \
+    && chown -R 10001:0 /opt/nexus
+
+ENV NEXUS_HOME=/data/nexus \
+    NEXUS_MODE=rest \
+    NEXUS_REST_HOST=0.0.0.0 \
+    NEXUS_REST_PORT=8080
+
+VOLUME ["/data/nexus", "/workspace"]
+EXPOSE 8080
+USER 10001
+WORKDIR /workspace
+ENTRYPOINT ["/usr/local/bin/nexus-entrypoint"]
+CMD ["rest"]
