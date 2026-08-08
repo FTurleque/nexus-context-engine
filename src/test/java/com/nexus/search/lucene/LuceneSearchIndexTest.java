@@ -7,7 +7,9 @@ import com.nexus.search.SearchDocument;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -57,6 +59,26 @@ class LuceneSearchIndexTest {
 
         assertEquals(1, hits.size());
         assertEquals("singleton.md", hits.getFirst().relativePath());
+    }
+
+    @Test
+    void closesAllHandlesAfterRebuildAndSearch() throws Exception {
+        NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("lifecycle-home"));
+        LuceneSearchIndex index = new LuceneSearchIndex(paths);
+        UUID projectId = UUID.randomUUID();
+        index.rebuild(projectId, List.of(document("lifecycle.md", "lifecycle resource handles")));
+        assertEquals(1, index.search(projectId, "lifecycle", 10).size());
+
+        deleteTree(paths.projectLuceneIndex(projectId));
+        assertFalse(Files.exists(paths.projectLuceneIndex(projectId)));
+    }
+
+    private static void deleteTree(Path root) throws Exception {
+        try (var paths = Files.walk(root)) {
+            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
+                Files.delete(path);
+            }
+        }
     }
 
     private static SearchDocument document(String relativePath, String content) {
