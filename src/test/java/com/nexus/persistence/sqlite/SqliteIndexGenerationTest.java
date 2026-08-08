@@ -1,7 +1,11 @@
 package com.nexus.persistence.sqlite;
 
 import com.nexus.config.NexusPaths;
+import com.nexus.index.AnalysisResult;
 import com.nexus.index.CodeIntelligenceSnapshot;
+import com.nexus.index.FileCategory;
+import com.nexus.index.IndexedFileUpdate;
+import com.nexus.index.ScannedFile;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;
@@ -9,6 +13,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.time.Instant;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -20,17 +26,18 @@ class SqliteIndexGenerationTest {
     Path tempDir;
 
     @Test
-    void generationIsMonotoneAndPersistsAcrossDatabaseReopen() throws Exception {
+    void generationPersistsAndNoOpExternalSnapshotsDoNotInvalidateCaches() throws Exception {
         NexusPaths paths = new NexusPaths(tempDir.resolve("nexus-home"));
         SqliteDatabase database = new SqliteDatabase(paths);
         SqliteProjectRepository projects = new SqliteProjectRepository(database);
         SqliteIndexRepository index = new SqliteIndexRepository(database);
 
         UUID projectId = UUID.randomUUID();
+        Path projectRoot = tempDir.resolve("project").toAbsolutePath().normalize();
         projects.save(new ProjectDescriptor(
                 projectId,
                 "generation-test",
-                tempDir.resolve("project").toAbsolutePath().normalize(),
+                projectRoot,
                 ProjectSourceType.LOCAL,
                 Set.of(),
                 Set.of(),
@@ -39,13 +46,31 @@ class SqliteIndexGenerationTest {
 
         assertEquals(0L, index.generation(projectId));
 
+        // An empty external snapshot against an already-empty provider is a true no-op.
         index.replaceExternalCodeIntelligence(projectId, CodeIntelligenceSnapshot.empty("scip"));
+        assertEquals(0L, index.generation(projectId));
+
+        ScannedFile file = new ScannedFile(
+                projectRoot.resolve("src/Main.java"),
+                "src/Main.java",
+                "java",
+                12,
+                "abc",
+                Instant.parse("2026-08-08T00:00:00Z"),
+                3,
+                FileCategory.SOURCE);
+        index.applyChanges(
+                projectId,
+                List.of(new IndexedFileUpdate(
+                        file,
+                        new AnalysisResult(file.absolutePath(), "java", List.of(), List.of()))),
+                Set.of());
         assertEquals(1L, index.generation(projectId));
 
         SqliteIndexRepository reopened = new SqliteIndexRepository(new SqliteDatabase(paths));
         assertEquals(1L, reopened.generation(projectId));
 
         reopened.replaceExternalCodeIntelligence(projectId, CodeIntelligenceSnapshot.empty("minos"));
-        assertEquals(2L, reopened.generation(projectId));
+        assertEquals(1L, reopened.generation(projectId));
     }
 }
