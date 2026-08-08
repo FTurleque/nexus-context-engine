@@ -23,4 +23,15 @@ class NexusRestSecurityTest {
         assertFalse(NexusRestSecurity.tokenMatches("secret-value", "secret-value"));
         assertFalse(NexusRestSecurity.tokenMatches("secret-value", "Bearer wrong"));
     }
+
+    @Test
+    void requiresStrongSecretsAndExplicitSecureExposureModesForRemoteAdministration() {
+        assertFalse(NexusRestSecurity.isStrongRemoteToken("short"));
+        assertTrue(NexusRestSecurity.isStrongRemoteToken("0123456789abcdef0123456789abcdef"));
+
+        assertTrue(NexusRestSecurity.isSupportedRemoteExposureMode("loopback-forward"));
+        assertTrue(NexusRestSecurity.isSupportedRemoteExposureMode("reverse-proxy-https"));
+        assertTrue(NexusRestSecurity.isSupportedRemoteExposureMode("direct-https"));
+        assertFalse(NexusRestSecurity.isSupportedRemoteExposureMode("plain-http"));
+    }
 }
