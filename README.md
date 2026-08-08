@@ -22,7 +22,7 @@ windows      EXE installer autonome intégré via PR #41
 
 La Phase 6 a été fusionnée via PR #15. Le hardening post-Phase 6 a été intégré via PR #18. Les deux P1 issus de l'audit de stabilisation (#19/#20) ont été qualifiés puis intégrés via PR #24. La distribution Windows autonome et l'installateur EXE Inno Setup sans prérequis JVM ont été intégrés via PR #41 (issue #40).
 
-La PR #46, encore en cours de qualification, étend ce setup en assistant de déploiement **Natif / Docker / Natif + Docker** avec configuration des ports, recherche sémantique Ollama explicite, intégrations assistants et récapitulatif avant installation.
+Ce setup a été étendu (issue #45, PR #46 intégrée) en assistant de déploiement **Natif / Docker / Natif + Docker** avec configuration des ports, recherche sémantique Ollama explicite, intégrations assistants et récapitulatif avant installation.
 
 ## Capacités
 
@@ -43,9 +43,9 @@ La PR #46, encore en cours de qualification, étend ce setup en assistant de dé
 - distribution CLI autonome versionnée ;
 - installateur Windows EXE autonome avec runtime Java embarqué.
 
-## Assistant de déploiement Windows — PR #46
+## Assistant de déploiement Windows (Natif / Docker / Both)
 
-Le candidat de la PR #46 propose :
+Intégré via la PR #46 (issue #45), l'assistant propose :
 
 ```text
 Natif Windows
@@ -252,7 +252,7 @@ Le contexte fédéré applique un budget global, conserve la provenance projet, 
 
 ## Qualification
 
-La qualification Windows reste pilotée par les scripts de release et de validation du dépôt. L'assistant de déploiement Windows est suivi par l'issue #45 et la PR #46 ; celle-ci n'est mergée dans `main` qu'une fois tous ses gates exact-head verts (NEXUS CI, Windows Installer, Docker Distribution, CodeQL, OSV-Scanner).
+La qualification Windows reste pilotée par les scripts de release et de validation du dépôt. L'assistant de déploiement Windows (issue #45, PR #46) est intégré dans `main` après validation exact-head de tous les gates (NEXUS CI, Windows Installer, Docker Distribution, CodeQL, OSV-Scanner, SonarCloud).
 
 ## Documentation
 
