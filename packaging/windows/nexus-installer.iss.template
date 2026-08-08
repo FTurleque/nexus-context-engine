@@ -1031,7 +1031,7 @@ begin
 
     JetBrainsCmd :=
       '@echo off' + #13#10 +
-      'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass' +
+      '"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass' +
           ' -File "%~dp0connect-copilot-jetbrains.ps1"' + #13#10 +
       'exit /b %ERRORLEVEL%' + #13#10;
     SaveStringToFile(Dir + '\connect-copilot-jetbrains.cmd', JetBrainsCmd, False);
@@ -1106,7 +1106,7 @@ begin
 
     ClaudeDesktopCmd :=
       '@echo off' + #13#10 +
-      'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass' +
+      '"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass' +
           ' -File "%~dp0connect-claude-desktop.ps1"' + #13#10 +
       'exit /b %ERRORLEVEL%' + #13#10;
     SaveStringToFile(Dir + '\connect-claude-desktop.cmd', ClaudeDesktopCmd, False);
@@ -1140,7 +1140,7 @@ begin
     SaveStringToFile(Dir + '\connect-codex-desktop.ps1', CodexScript, False);
     CodexCmd :=
       '@echo off' + #13#10 +
-      'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0connect-codex-desktop.ps1"' + #13#10 +
+      '"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0connect-codex-desktop.ps1"' + #13#10 +
       'exit /b %ERRORLEVEL%' + #13#10;
     SaveStringToFile(Dir + '\connect-codex-desktop.cmd', CodexCmd, False);
     SaveStringToFile(Dir + '\disconnect-codex-desktop.ps1',
