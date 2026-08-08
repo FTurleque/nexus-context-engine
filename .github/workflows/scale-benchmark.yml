@@ -61,12 +61,13 @@ jobs:
         run: |
           chmod +x ./mvnw
           ./mvnw -B -pl core \
-            -Dtest=ScaleRegressionBenchmarkTest,GraphScaleRegressionBenchmarkTest \
+            -Dtest=ScaleRegressionBenchmarkTest,GraphScaleRegressionBenchmarkTest,FederatedContextBudgetScaleBenchmarkTest \
             -Djunit.jupiter.execution.timeout.test.method.default=20m \
             -Dnexus.scale.benchmark.enabled=true \
             -Dnexus.scale.benchmark.profile=${{ steps.profile.outputs.value }} \
             -Dnexus.scale.benchmark.output=target/scale-benchmark.json \
             -Dnexus.graph.scale.benchmark.output=target/graph-scale-benchmark.json \
+            -Dnexus.federated.scale.benchmark.output=target/federated-budget-scale-benchmark.json \
             test
 
       - name: Verify report and regression budgets
@@ -74,12 +75,14 @@ jobs:
         run: |
           test -s target/scale-benchmark.json
           test -s target/graph-scale-benchmark.json
+          test -s target/federated-budget-scale-benchmark.json
           python3 - <<'PY'
           import json
           from pathlib import Path
 
           report = json.loads(Path('target/scale-benchmark.json').read_text())
           graph = json.loads(Path('target/graph-scale-benchmark.json').read_text())
+          federated = json.loads(Path('target/federated-budget-scale-benchmark.json').read_text())
           profile = report['profile']
           assert profile in ('ci', 'full')
           assert graph['profile'] == profile
@@ -90,9 +93,9 @@ jobs:
           sqlite = {tier['symbols']: tier for tier in report['sqliteTiers']}
           portfolio = {tier['projects']: tier for tier in report['portfolio']['tiers']}
 
-          # Budgets calibrated from two full GitHub-hosted runner executions on #23.
-          # They are intentionally above the observed maxima to absorb runner noise
-          # while remaining low enough to detect material algorithmic regressions.
+          # Budgets calibrated from full GitHub-hosted runner executions. They are
+          # intentionally above observed maxima to absorb runner noise while still
+          # detecting material algorithmic regressions.
           sqlite_budgets = {
               10_000:  {'exact': 50,   'contains': 30,   'miss': 30,   'relation': 25,  'population': 700},
               100_000: {'exact': 250,  'contains': 150,  'miss': 150,  'relation': 100, 'population': 2500},
@@ -134,6 +137,18 @@ jobs:
           assert graph['heapDeltaBytes'] <= 256 * 1024 * 1024, graph['heapDeltaBytes']
           assert graph['databaseBytes'] <= 900 * 1024 * 1024, graph['databaseBytes']
 
+          # P1-04: at the real public ceiling, 100 projects share one bounded
+          # global work budget. Local preparation may overfetch by at most 3x
+          # globally; it must never devolve into projects × global budget.
+          assert federated['projects'] == 100, federated['projects']
+          assert federated['globalBudget'] == 200_000, federated['globalBudget']
+          assert federated['candidateBudgetTotal'] == 600_000, federated['candidateBudgetTotal']
+          assert federated['candidateBudgetMultiplier'] <= 3.0, federated['candidateBudgetMultiplier']
+          assert federated['maxPerProjectCandidateBudget'] <= 6_000, federated['maxPerProjectCandidateBudget']
+          assert federated['selectedTokens'] <= 200_000, federated['selectedTokens']
+          assert federated['deterministic'] is True
+          assert federated['durationMs'] <= 5_000, federated['durationMs']
+
           if profile == 'full':
               assert report['portfolio']['totalFullIndexMs'] <= 6000, report['portfolio']['totalFullIndexMs']
               assert report['semanticRecovery']['initialRebuildMs'] <= 12000, report['semanticRecovery']['initialRebuildMs']
@@ -152,6 +167,9 @@ jobs:
           print('graph-symbols=', graph['symbols'])
           print('graph-relations=', graph['relations'])
           print('graph-p95-ms=', graph['p95Ms'])
+          print('federated-projects=', federated['projects'])
+          print('federated-global-budget=', federated['globalBudget'])
+          print('federated-work-budget=', federated['candidateBudgetTotal'])
           print('total-duration-ms=', report['totalDurationMs'])
           print('all-regression-budgets=PASS')
           PY
@@ -166,3 +184,4 @@ jobs:
           path: |
             target/scale-benchmark.json
             target/graph-scale-benchmark.json
+            target/federated-budget-scale-benchmark.json
