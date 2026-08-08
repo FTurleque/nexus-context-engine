@@ -24,6 +24,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 public final class JavaParserLanguageAnalyzer implements LanguageAnalyzer {
 
@@ -37,8 +38,13 @@ public final class JavaParserLanguageAnalyzer implements LanguageAnalyzer {
 
     @Override
     public AnalysisResult analyze(Path projectRoot, Path file) throws IOException {
+        return analyze(projectRoot, file, SafeFileIO.readStringNoFollow(file));
+    }
+
+    @Override
+    public AnalysisResult analyze(Path projectRoot, Path file, String source) throws IOException {
+        Objects.requireNonNull(source, "source");
         JavaParser parser = new JavaParser(new ParserConfiguration().setLanguageLevel(LANGUAGE_LEVEL));
-        String source = SafeFileIO.readStringNoFollow(file);
         CompilationUnit unit = parser.parse(source)
                 .getResult()
                 .orElseThrow(() -> new IOException("Impossible d'analyser le fichier Java 21 : " + file));
