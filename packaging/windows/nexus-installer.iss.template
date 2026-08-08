@@ -88,7 +88,12 @@ end;
 
 function InstallerRegistryPath(): String;
 begin
-  Result := 'Software\FTurleque\NEXUS';
+  { Smoke builds use an isolated key so install/uninstall smoke cycles never mutate
+    a real user's NEXUS registry state (managed markers, ManagedPath, etc.). }
+  if IsSmokeBuild() then
+    Result := 'Software\FTurleque\NEXUS-Smoke'
+  else
+    Result := 'Software\FTurleque\NEXUS';
 end;
 
 function InstallNative(): Boolean;
@@ -967,10 +972,84 @@ begin
     'args = ["exec", "-i", "' + TomlEscape(DockerPage.Values[1]) + '", "java", "-jar", "/opt/nexus/lib/nexus-mcp.jar"]' + #13#10;
 end;
 
+{ Emit a shared PowerShell helper (integrations\nexus-json.ps1) that re-serializes
+  JSON with clean 2-space indentation. Windows PowerShell 5.1's ConvertTo-Json emits
+  a deep-aligned layout that mangles third-party config files; this walks the
+  compressed JSON and re-indents it properly. Written with [char] codes and
+  double-quoted strings only, so there are no single quotes to escape through Pascal. }
+procedure WriteJsonHelper(Dir: String);
+var
+  S: String;
+begin
+  S :=
+    'function Format-Json([string]$Compressed) {' + #13#10 +
+    '  $sb = New-Object System.Text.StringBuilder' + #13#10 +
+    '  $indent = 0; $inStr = $false; $esc = $false' + #13#10 +
+    '  for ($i = 0; $i -lt $Compressed.Length; $i++) {' + #13#10 +
+    '    $ch = $Compressed[$i]' + #13#10 +
+    '    if ($inStr) {' + #13#10 +
+    '      [void]$sb.Append($ch)' + #13#10 +
+    '      if ($esc) { $esc = $false } elseif ($ch -eq [char]92) { $esc = $true } elseif ($ch -eq [char]34) { $inStr = $false }' + #13#10 +
+    '      continue' + #13#10 +
+    '    }' + #13#10 +
+    '    if ($ch -eq [char]34) { $inStr = $true; [void]$sb.Append($ch); continue }' + #13#10 +
+    '    if ($ch -eq [char]123 -or $ch -eq [char]91) {' + #13#10 +
+    '      if ((($i + 1) -lt $Compressed.Length) -and ($Compressed[$i + 1] -eq [char]125 -or $Compressed[$i + 1] -eq [char]93)) {' + #13#10 +
+    '        [void]$sb.Append($ch); [void]$sb.Append($Compressed[$i + 1]); $i++' + #13#10 +
+    '      } else {' + #13#10 +
+    '        $indent++; [void]$sb.Append($ch); [void]$sb.Append("`r`n" + ("  " * $indent))' + #13#10 +
+    '      }' + #13#10 +
+    '      continue' + #13#10 +
+    '    }' + #13#10 +
+    '    if ($ch -eq [char]125 -or $ch -eq [char]93) { $indent--; [void]$sb.Append("`r`n" + ("  " * $indent)); [void]$sb.Append($ch); continue }' + #13#10 +
+    '    if ($ch -eq [char]44) { [void]$sb.Append($ch); [void]$sb.Append("`r`n" + ("  " * $indent)); continue }' + #13#10 +
+    '    if ($ch -eq [char]58) { [void]$sb.Append($ch); [void]$sb.Append([char]32); continue }' + #13#10 +
+    '    [void]$sb.Append($ch)' + #13#10 +
+    '  }' + #13#10 +
+    '  return $sb.ToString()' + #13#10 +
+    '}' + #13#10 +
+    'function Save-CleanJson([string]$Path, [object]$Data) {' + #13#10 +
+    '  $compressed = $Data | ConvertTo-Json -Depth 30 -Compress' + #13#10 +
+    '  $pretty = Format-Json $compressed' + #13#10 +
+    '  $dir = Split-Path $Path -Parent' + #13#10 +
+    '  if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }' + #13#10 +
+    '  [System.IO.File]::WriteAllText($Path, $pretty + "`r`n", [System.Text.UTF8Encoding]::new($false))' + #13#10 +
+    '}' + #13#10;
+  SaveStringToFile(Dir + '\nexus-json.ps1', S, False);
+end;
+
+{ Return a PowerShell literal for the nexus MCP entry, honouring the runtime choice
+  (docker exec vs native cmd.exe launcher). IncludeType adds the "type":"stdio"
+  field required by GitHub Copilot's JetBrains config. }
+function McpEntryPsLiteral(IncludeType: Boolean): String;
+var
+  TypePart: String;
+begin
+  if IncludeType then TypePart := 'type = ''stdio''; ' else TypePart := '';
+  if UseDockerForIntegrations() then
+    Result := '[PSCustomObject]@{ ' + TypePart + 'command = ''docker''; args = @(''exec'', ''-i'', ''' +
+      PowerShellSingleQuote(DockerPage.Values[1]) + ''', ''java'', ''-jar'', ''/opt/nexus/lib/nexus-mcp.jar'') }'
+  else
+    Result := '[PSCustomObject]@{ ' + TypePart + 'command = ''cmd.exe''; args = @(''/d'', ''/s'', ''/c'', ''' +
+      PowerShellSingleQuote(ExpandConstant('{app}\nexus-mcp.cmd')) + ''') }';
+end;
+
+{ Return a PowerShell array literal for the MCP command+args (for CLI `mcp add -- ...`). }
+function McpCommandArrayPs(): String;
+begin
+  if UseDockerForIntegrations() then
+    Result := '@(''docker'', ''exec'', ''-i'', ''' + PowerShellSingleQuote(DockerPage.Values[1]) +
+      ''', ''java'', ''-jar'', ''/opt/nexus/lib/nexus-mcp.jar'')'
+  else
+    Result := '@(''cmd.exe'', ''/d'', ''/s'', ''/c'', ''' +
+      PowerShellSingleQuote(ExpandConstant('{app}\nexus-mcp.cmd')) + ''')';
+end;
+
 procedure WriteAssistantAssets;
 var
   Dir: String;
   CopilotScript: String;
+  CopilotCmd: String;
   ClaudeScript: String;
   ClaudeDesktopPsScript: String;
   ClaudeDesktopCmd: String;
@@ -983,6 +1062,7 @@ begin
   if not HasAssistantSelection() then exit;
   Dir := ExpandConstant('{app}\integrations');
   ForceDirectories(Dir);
+  WriteJsonHelper(Dir);
 
   if UseDockerForIntegrations() then
     CommandTail := 'docker exec -i "' + DockerPage.Values[1] + '" java -jar /opt/nexus/lib/nexus-mcp.jar'
@@ -1003,29 +1083,27 @@ begin
       - exit 20 : nexus key already present (idempotent)
       - exit 0  : nexus added successfully }
     JetBrainsPsScript :=
+      '. (Join-Path $PSScriptRoot ''nexus-json.ps1'')' + #13#10 +
       '$dir = Join-Path $env:LOCALAPPDATA ''github-copilot\intellij''' + #13#10 +
       'if (-not (Test-Path $dir)) { exit 10 }' + #13#10 +
-      '$launcher = ''' + ExpandConstant('{app}\nexus-mcp.cmd') + '''' + #13#10 +
-      'if (-not (Test-Path $launcher)) { exit 10 }' + #13#10 +
       '$mcp = Join-Path $dir ''mcp.json''' + #13#10 +
       '$c = if (Test-Path $mcp) { Get-Content $mcp -Raw | ConvertFrom-Json } else { [PSCustomObject]@{ servers = [PSCustomObject]@{} } }' + #13#10 +
       'if ($null -eq ($c | Get-Member -Name servers -MemberType NoteProperty)) { $c | Add-Member -MemberType NoteProperty -Name servers -Value ([PSCustomObject]@{}) }' + #13#10 +
       'if ($null -ne ($c.servers | Get-Member -Name nexus -MemberType NoteProperty)) { exit 20 }' + #13#10 +
-      '$e = [PSCustomObject]@{ type = ''stdio''; command = ''cmd.exe''; ' +
-          'args = @(''/d'', ''/s'', ''/c'', $launcher) }' + #13#10 +
+      '$e = ' + McpEntryPsLiteral(True) + #13#10 +
       '$c.servers | Add-Member -MemberType NoteProperty -Name nexus -Value $e' + #13#10 +
-      '[System.IO.File]::WriteAllText($mcp, ($c | ConvertTo-Json -Depth 5), ' +
-          '[System.Text.UTF8Encoding]::new($false))' + #13#10 +
+      'Save-CleanJson $mcp $c' + #13#10 +
       'exit 0' + #13#10;
     SaveStringToFile(Dir + '\connect-copilot-jetbrains.ps1', JetBrainsPsScript, False);
     SaveStringToFile(Dir + '\disconnect-copilot-jetbrains.ps1',
+      '. (Join-Path $PSScriptRoot ''nexus-json.ps1'')' + #13#10 +
       '$mcp = Join-Path $env:LOCALAPPDATA ''github-copilot\intellij\mcp.json''' + #13#10 +
       'if (-not (Test-Path $mcp)) { exit 0 }' + #13#10 +
       '$c = Get-Content $mcp -Raw | ConvertFrom-Json' + #13#10 +
       'if ($null -eq ($c | Get-Member -Name servers -MemberType NoteProperty)) { exit 0 }' + #13#10 +
       'if ($null -eq ($c.servers | Get-Member -Name nexus -MemberType NoteProperty)) { exit 0 }' + #13#10 +
       '$c.servers.PSObject.Properties.Remove(''nexus'')' + #13#10 +
-      '[System.IO.File]::WriteAllText($mcp, ($c | ConvertTo-Json -Depth 5), [System.Text.UTF8Encoding]::new($false))' + #13#10 +
+      'Save-CleanJson $mcp $c' + #13#10 +
       'exit 0' + #13#10,
       False);
 
@@ -1055,12 +1133,28 @@ begin
 
   if AssistantPage.Values[0] then
   begin
-    CopilotScript := '@echo off' + #13#10 +
-      'where copilot >nul 2>nul || exit /b 10' + #13#10 +
-      'copilot mcp get nexus >nul 2>nul && exit /b 20' + #13#10 +
-      'copilot mcp add nexus --tools "*" -- ' + CommandTail + #13#10 +
+    { PS1: resolve copilot via Get-Command (handles the VS Code copilot.ps1 shim that
+      `where copilot` cannot find), then `copilot mcp add nexus -- <cmd> <args...>`.
+      Args are passed as an array so PowerShell does not swallow the `--` separator.
+      - exit 10 : copilot CLI not resolvable
+      - exit 20 : nexus already present
+      - exit 0  : nexus added }
+    CopilotScript :=
+      '$c = Get-Command copilot -EA SilentlyContinue' + #13#10 +
+      'if (-not $c -or ($c.CommandType -notin @(''Application'', ''ExternalScript''))) { exit 10 }' + #13#10 +
+      '$exe = $c.Source' + #13#10 +
+      '$list = (& $exe mcp list 2>&1 | Out-String)' + #13#10 +
+      'if ($list -match ''(?m)^\s*nexus\b'') { exit 20 }' + #13#10 +
+      '$cmd = ' + McpCommandArrayPs() + #13#10 +
+      '$addArgs = @(''mcp'', ''add'', ''nexus'', ''--tools'', ''*'', ''--'') + $cmd' + #13#10 +
+      '& $exe @addArgs' + #13#10 +
+      'exit $LASTEXITCODE' + #13#10;
+    SaveStringToFile(Dir + '\connect-copilot-cli.ps1', CopilotScript, False);
+    CopilotCmd :=
+      '@echo off' + #13#10 +
+      '"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0connect-copilot-cli.ps1"' + #13#10 +
       'exit /b %ERRORLEVEL%' + #13#10;
-    SaveStringToFile(Dir + '\connect-copilot-cli.cmd', CopilotScript, False);
+    SaveStringToFile(Dir + '\connect-copilot-cli.cmd', CopilotCmd, False);
   end;
 
   if AssistantPage.Values[2] then
@@ -1071,26 +1165,24 @@ begin
       - exit 20 : nexus already present (idempotent)
       - exit 0  : nexus added successfully }
     ClaudeDesktopPsScript :=
+      '. (Join-Path $PSScriptRoot ''nexus-json.ps1'')' + #13#10 +
       '$cfg = $null' + #13#10 +
       '$pkgs = Join-Path $env:LOCALAPPDATA ''Packages''' + #13#10 +
       'if (Test-Path $pkgs) { foreach ($p in (Get-ChildItem $pkgs -Directory -Filter ''Claude_*'' -EA SilentlyContinue)) { $cand = Join-Path $p.FullName ''LocalCache\Roaming\Claude\claude_desktop_config.json''; if (Test-Path (Split-Path $cand -Parent)) { $cfg = $cand; break } } }' + #13#10 +
       'if (-not $cfg) { $fb = Join-Path $env:APPDATA ''Claude''; if (Test-Path $fb) { $cfg = Join-Path $fb ''claude_desktop_config.json'' } }' + #13#10 +
       'if (-not $cfg) { exit 10 }' + #13#10 +
-      '$launcher = ''' + ExpandConstant('{app}\nexus-mcp.cmd') + '''' + #13#10 +
-      'if (-not (Test-Path $launcher)) { exit 10 }' + #13#10 +
       '$c = if (Test-Path $cfg) { Get-Content $cfg -Raw | ConvertFrom-Json } else { [PSCustomObject]@{} }' + #13#10 +
       'if (($null -ne ($c | Get-Member -Name mcpServers -MemberType NoteProperty)) -and ($null -ne ($c.mcpServers | Get-Member -Name nexus -MemberType NoteProperty))) { exit 20 }' + #13#10 +
-      '$e = [PSCustomObject]@{ command = ''cmd.exe''; args = @(''/d'', ''/s'', ''/c'', $launcher) }' + #13#10 +
+      '$e = ' + McpEntryPsLiteral(False) + #13#10 +
       'if ($null -eq ($c | Get-Member -Name mcpServers -MemberType NoteProperty)) {' + #13#10 +
       '    $c | Add-Member -MemberType NoteProperty -Name mcpServers -Value ([PSCustomObject]@{})' + #13#10 +
       '}' + #13#10 +
       '$c.mcpServers | Add-Member -MemberType NoteProperty -Name nexus -Value $e' + #13#10 +
-      '$cfgDir = Split-Path $cfg -Parent' + #13#10 +
-      'if (-not (Test-Path $cfgDir)) { New-Item -ItemType Directory -Force -Path $cfgDir | Out-Null }' + #13#10 +
-      '[System.IO.File]::WriteAllText($cfg, ($c | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))' + #13#10 +
+      'Save-CleanJson $cfg $c' + #13#10 +
       'exit 0' + #13#10;
     SaveStringToFile(Dir + '\connect-claude-desktop.ps1', ClaudeDesktopPsScript, False);
     SaveStringToFile(Dir + '\disconnect-claude-desktop.ps1',
+      '. (Join-Path $PSScriptRoot ''nexus-json.ps1'')' + #13#10 +
       '$cfg = $null' + #13#10 +
       '$pkgs = Join-Path $env:LOCALAPPDATA ''Packages''' + #13#10 +
       'if (Test-Path $pkgs) { foreach ($p in (Get-ChildItem $pkgs -Directory -Filter ''Claude_*'' -EA SilentlyContinue)) { $cand = Join-Path $p.FullName ''LocalCache\Roaming\Claude\claude_desktop_config.json''; if (Test-Path $cand) { $cfg = $cand; break } } }' + #13#10 +
@@ -1100,7 +1192,7 @@ begin
       'if ($null -eq ($c | Get-Member -Name mcpServers -MemberType NoteProperty)) { exit 0 }' + #13#10 +
       'if ($null -eq ($c.mcpServers | Get-Member -Name nexus -MemberType NoteProperty)) { exit 0 }' + #13#10 +
       '$c.mcpServers.PSObject.Properties.Remove(''nexus'')' + #13#10 +
-      '[System.IO.File]::WriteAllText($cfg, ($c | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))' + #13#10 +
+      'Save-CleanJson $cfg $c' + #13#10 +
       'exit 0' + #13#10,
       False);
 
@@ -1126,12 +1218,14 @@ begin
       '$scriptDir = Split-Path $MyInvocation.MyCommand.Path -Parent' + #13#10 +
       '$tomlSrc = Join-Path $scriptDir ''codex-desktop.mcp.toml''' + #13#10 +
       '$cfg = Join-Path $env:USERPROFILE ''.codex\config.toml''' + #13#10 +
-      '$marker = ''# BEGIN NEXUS-MCP''' + #13#10 +
+      '$begin = ''# BEGIN NEXUS-MCP''' + #13#10 +
+      '$end = ''# END NEXUS-MCP''' + #13#10 +
       '$codexOk = (Test-Path $cfg) -or (Test-Path (Join-Path $env:LOCALAPPDATA ''Programs\Codex\Codex.exe'')) -or (Test-Path (Join-Path $env:LOCALAPPDATA ''Codex\Codex.exe'')) -or ($null -ne (Get-Command codex -EA SilentlyContinue))' + #13#10 +
       'if (-not $codexOk) { exit 10 }' + #13#10 +
-      'if ((Test-Path $cfg) -and ([System.IO.File]::ReadAllText($cfg) -match [regex]::Escape($marker))) { exit 20 }' + #13#10 +
+      'if ((Test-Path $cfg) -and ([System.IO.File]::ReadAllText($cfg) -match [regex]::Escape($begin))) { exit 20 }' + #13#10 +
       'if (-not (Test-Path $tomlSrc)) { exit 10 }' + #13#10 +
-      '$tomlBlock = $marker + [Environment]::NewLine + ([System.IO.File]::ReadAllText($tomlSrc, [System.Text.Encoding]::UTF8).TrimEnd()) + [Environment]::NewLine' + #13#10 +
+      '$toml = [System.IO.File]::ReadAllText($tomlSrc, [System.Text.Encoding]::UTF8).TrimEnd()' + #13#10 +
+      '$tomlBlock = $begin + [Environment]::NewLine + $toml + [Environment]::NewLine + $end + [Environment]::NewLine' + #13#10 +
       '$cfgDir = Split-Path $cfg -Parent' + #13#10 +
       'if (-not (Test-Path $cfgDir)) { New-Item -ItemType Directory -Force -Path $cfgDir | Out-Null }' + #13#10 +
       'if (Test-Path $cfg) { $existing = [System.IO.File]::ReadAllText($cfg, [System.Text.Encoding]::UTF8).TrimEnd(); $newText = $existing + [Environment]::NewLine + [Environment]::NewLine + $tomlBlock } else { $newText = $tomlBlock }' + #13#10 +
@@ -1146,11 +1240,15 @@ begin
     SaveStringToFile(Dir + '\disconnect-codex-desktop.ps1',
       '$cfg = Join-Path $env:USERPROFILE ''.codex\config.toml''' + #13#10 +
       'if (-not (Test-Path $cfg)) { exit 0 }' + #13#10 +
-      '$marker = ''# BEGIN NEXUS-MCP''' + #13#10 +
+      '$begin = ''# BEGIN NEXUS-MCP''' + #13#10 +
+      '$end = ''# END NEXUS-MCP''' + #13#10 +
       '$text = [System.IO.File]::ReadAllText($cfg, [System.Text.Encoding]::UTF8)' + #13#10 +
-      'if ($text -notmatch [regex]::Escape($marker)) { exit 0 }' + #13#10 +
-      '$cleaned = ([regex]::Replace($text, ''(?s)'' + [regex]::Escape($marker) + ''.*?(\r?\n)'', '''')).TrimEnd()' + #13#10 +
-      '[System.IO.File]::WriteAllText($cfg, (if ($cleaned) { $cleaned + [Environment]::NewLine } else { '''' }), [System.Text.UTF8Encoding]::new($false))' + #13#10 +
+      'if ($text -notmatch [regex]::Escape($begin)) { exit 0 }' + #13#10 +
+      '$pat = ''(?s)'' + [regex]::Escape($begin) + ''.*?'' + [regex]::Escape($end) + ''\r?\n?''' + #13#10 +
+      '$cleaned = ([regex]::Replace($text, $pat, '''')).TrimEnd()' + #13#10 +
+      '$out = ''''' + #13#10 +
+      'if ($cleaned) { $out = $cleaned + [Environment]::NewLine }' + #13#10 +
+      '[System.IO.File]::WriteAllText($cfg, $out, [System.Text.UTF8Encoding]::new($false))' + #13#10 +
       'exit 0' + #13#10,
       False);
   end;
