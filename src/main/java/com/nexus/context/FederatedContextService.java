@@ -16,12 +16,15 @@ import java.util.UUID;
  * d'un projet vers un autre.
  *
  * <p>Chaque projet dispose d'un fair floor déterministe. Les builders locaux
- * peuvent néanmoins overfetcher jusqu'au budget global ; après le premier tour
- * équitable et la déduplication, le budget libéré est redistribué globalement
- * en round-robin. Un projet peu fourni ne laisse donc plus des tokens inutilisés
- * si un autre projet possède encore du contexte pertinent.</p>
+ * reçoivent un budget candidat proportionnel à ce fair floor, avec un facteur
+ * d'overfetch borné. Le coût de préparation local est donc O(budget global)
+ * plutôt que O(nombre de projets × budget global). Après le premier tour
+ * équitable et la déduplication, le budget libéré est redistribué globalement.</p>
  */
 public final class FederatedContextService {
+
+    public static final int MAX_FEDERATED_PROJECTS = 100;
+    static final int LOCAL_OVERFETCH_FACTOR = 3;
 
     private final ContextBuilder contextBuilder;
 
@@ -46,9 +49,7 @@ public final class FederatedContextService {
         if (query.isBlank()) {
             throw new IllegalArgumentException("query must not be blank");
         }
-        if (tokenBudget <= 0) {
-            throw new IllegalArgumentException("tokenBudget must be greater than zero");
-        }
+        ContextBudgetPolicy.validate(tokenBudget);
 
         Map<UUID, ProjectDescriptor> unique = new LinkedHashMap<>();
         for (ProjectDescriptor project : projects) {
@@ -56,6 +57,10 @@ public final class FederatedContextService {
             unique.putIfAbsent(nonNull.id(), nonNull);
         }
         List<ProjectDescriptor> scope = List.copyOf(unique.values());
+        if (scope.size() > MAX_FEDERATED_PROJECTS) {
+            throw new IllegalArgumentException(
+                    "federated scope must not exceed " + MAX_FEDERATED_PROJECTS + " projects");
+        }
         if (tokenBudget < scope.size()) {
             throw new IllegalArgumentException(
                     "tokenBudget must be at least the number of projects in the federated scope");
@@ -66,15 +71,14 @@ public final class FederatedContextService {
         List<List<FederatedContextItem>> perProjectItems = new ArrayList<>();
         List<String> excluded = new ArrayList<>();
         Map<String, Integer> allocatedByProject = new LinkedHashMap<>();
+        Map<String, Integer> candidateBudgetByProject = new LinkedHashMap<>();
         Map<String, Integer> localTokensByProject = new LinkedHashMap<>();
         Map<String, Integer> localItemsByProject = new LinkedHashMap<>();
 
-        // Overfetch borné par le budget global. Cela reste déterministe et évite
-        // une seconde construction locale après déduplication.
-        int candidateBudget = tokenBudget;
         for (int index = 0; index < scope.size(); index++) {
             ProjectDescriptor project = scope.get(index);
             int fairAllocation = baseBudget + (index < remainder ? 1 : 0);
+            int candidateBudget = Math.min(tokenBudget, fairAllocation * LOCAL_OVERFETCH_FACTOR);
             ContextBundle local = contextBuilder.build(new ContextRequest(
                     project.id(),
                     query,
@@ -87,6 +91,7 @@ public final class FederatedContextService {
                     .toList();
             perProjectItems.add(items);
             allocatedByProject.put(project.id().toString(), fairAllocation);
+            candidateBudgetByProject.put(project.id().toString(), candidateBudget);
             localTokensByProject.put(project.id().toString(), local.estimatedTokens());
             localItemsByProject.put(project.id().toString(), local.items().size());
             if (explain) {
@@ -182,7 +187,9 @@ public final class FederatedContextService {
         metadata.put("projectCount", scope.size());
         metadata.put("projectIds", scope.stream().map(project -> project.id().toString()).toList());
         metadata.put("allocationByProject", Map.copyOf(allocatedByProject));
-        metadata.put("candidateBudgetPerProject", candidateBudget);
+        metadata.put("candidateBudgetByProject", Map.copyOf(candidateBudgetByProject));
+        metadata.put("candidateBudgetTotal", candidateBudgetByProject.values().stream().mapToInt(Integer::intValue).sum());
+        metadata.put("candidateBudgetOverfetchFactor", LOCAL_OVERFETCH_FACTOR);
         metadata.put("localTokensByProject", Map.copyOf(localTokensByProject));
         metadata.put("localItemsByProject", Map.copyOf(localItemsByProject));
         metadata.put("selectedTokensByProject", Map.copyOf(selectedTokensByProject));
@@ -193,7 +200,7 @@ public final class FederatedContextService {
         metadata.put("starvedProjects", starvedProjects);
         metadata.put("starvedProjectCount", starvedProjects.size());
         metadata.put("crossProjectDeduplicatedItems", crossProjectDuplicates[0]);
-        metadata.put("mergePolicy", "fair-floor-global-refill");
+        metadata.put("mergePolicy", "fair-floor-bounded-overfetch-global-refill");
         metadata.put("nativeSourceScope", "project-local");
 
         return new FederatedContextBundle(
