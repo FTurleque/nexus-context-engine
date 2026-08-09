@@ -20,7 +20,10 @@ foreach ($required in @(
     'function ContainsUnsafeConfigChars(Value: String): Boolean;',
     'function IsValidDockerImageReference(Value: String): Boolean;',
     'CmdEnvEscape(RuntimePage.Values[3])',
-    'DotEnvQuoted(DockerToken)'
+    'DotEnvQuoted(DockerToken)',
+    'NEXUS_REST_EXPOSURE_MODE=loopback-forward',
+    '# NEXUS_DOCKER_HOST_FORWARD_ADDRESS is derived by Compose from NEXUS_DOCKER_BIND_ADDRESS',
+    'Le mode loopback-forward exige que'
 )) {
     if ($hardened.IndexOf($required, [StringComparison]::Ordinal) -lt 0) {
         throw "Generated installer hardening contract missing: $required"
@@ -63,7 +66,7 @@ try {
         throw "cmd.exe escaping round-trip mismatch.`nExpected: $expected`nActual:   $actual"
     }
 
-    Write-Host 'NEXUS Windows cmd configuration escaping round-trip PASS' -ForegroundColor Green
+    Write-Host 'NEXUS Windows cmd configuration escaping and Docker forward contract PASS' -ForegroundColor Green
 }
 finally {
     Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue

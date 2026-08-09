@@ -91,7 +91,11 @@ jobs:
         env:
           NEXUS_REST_API_TOKEN: 6df1462d571a6925e3bc3934ee10c6c55a965116fb47e2bc4db77ac7a5d69d34
         run: |
-          CID="$(docker run -d -e NEXUS_REST_API_TOKEN="$NEXUS_REST_API_TOKEN" -p 127.0.0.1:18080:8080 nexus-context-engine:${NEXUS_HEAD_SHA} rest)"
+          CID="$(docker run -d \
+            -e NEXUS_REST_API_TOKEN="$NEXUS_REST_API_TOKEN" \
+            -e NEXUS_DOCKER_HOST_FORWARD_ADDRESS=127.0.0.1 \
+            -p 127.0.0.1:18080:8080 \
+            nexus-context-engine:${NEXUS_HEAD_SHA} rest)"
           trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
           for attempt in $(seq 1 30); do
             if curl --fail --silent -H "Authorization: Bearer $NEXUS_REST_API_TOKEN" http://127.0.0.1:18080/q/health/live | grep -q 'UP'; then
@@ -101,6 +105,46 @@ jobs:
           done
           docker logs "$CID"
           exit 1
+
+      - name: Reject remote Compose loopback-forward
+        shell: bash
+        env:
+          NEXUS_REST_API_TOKEN: 6df1462d571a6925e3bc3934ee10c6c55a965116fb47e2bc4db77ac7a5d69d34
+        run: |
+          set -euo pipefail
+          export NEXUS_DOCKER_IMAGE="nexus-context-engine:${NEXUS_HEAD_SHA}"
+          export NEXUS_DOCKER_CONTAINER="nexus-negative-${NEXUS_HEAD_SHA:0:12}"
+          export NEXUS_DOCKER_BIND_ADDRESS="0.0.0.0"
+          export NEXUS_DOCKER_HOST_PORT="18081"
+          export NEXUS_DOCKER_RESTART_POLICY="no"
+          export NEXUS_REST_EXPOSURE_MODE="loopback-forward"
+          COMPOSE_FILE="packaging/docker/docker-compose.yml.template"
+
+          cleanup() {
+            docker compose -f "$COMPOSE_FILE" down --remove-orphans >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker compose -f "$COMPOSE_FILE" up -d --no-build --pull never nexus
+          CID="$(docker compose -f "$COMPOSE_FILE" ps -a -q nexus)"
+          test -n "$CID"
+
+          for attempt in $(seq 1 30); do
+            if [ "$(docker inspect -f '{{.State.Running}}' "$CID")" = "false" ]; then
+              break
+            fi
+            sleep 1
+          done
+
+          if [ "$(docker inspect -f '{{.State.Running}}' "$CID")" != "false" ]; then
+            docker logs "$CID"
+            echo 'Remote loopback-forward container unexpectedly remained running' >&2
+            exit 1
+          fi
+          EXIT_CODE="$(docker inspect -f '{{.State.ExitCode}}' "$CID")"
+          test "$EXIT_CODE" -ne 0
+          docker logs "$CID" 2>&1 | tee /tmp/nexus-remote-loopback-forward.log
+          grep -q 'NEXUS_DOCKER_HOST_FORWARD_ADDRESS' /tmp/nexus-remote-loopback-forward.log
 
       - name: Smoke installed-payload fallback image
         shell: bash

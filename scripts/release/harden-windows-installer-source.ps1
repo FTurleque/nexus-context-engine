@@ -147,7 +147,7 @@ end;
     $dockerBindReplacement = $dockerBindValidation + @'
     if not IsLoopbackRestHost(DockerPage.Values[2]) then
     begin
-      MsgBox('Le wizard Windows limite la publication REST Docker au loopback. Utilisez un reverse proxy HTTPS ou un tunnel pour une exposition distante.', mbError, MB_OK);
+      MsgBox('Le wizard Windows limite la publication REST Docker au loopback. Le mode loopback-forward exige que l''adresse hôte réellement déclarée soit loopback ; utilisez un reverse proxy HTTPS ou un tunnel pour une exposition distante.', mbError, MB_OK);
       Result := False;
       exit;
     end;
@@ -203,6 +203,7 @@ end;
     'NEXUS_DOCKER_CONTAINER=' + DockerPage.Values[1] + #13#10 +
     'NEXUS_DOCKER_RESTART_POLICY=' + DockerPage.Values[6] + #13#10 +
     'NEXUS_DOCKER_BIND_ADDRESS=' + DockerPage.Values[2] + #13#10 +
+    '# NEXUS_DOCKER_HOST_FORWARD_ADDRESS is derived by Compose from NEXUS_DOCKER_BIND_ADDRESS' + #13#10 +
     'NEXUS_DOCKER_HOST_PORT=' + DockerPage.Values[3] + #13#10 +
     'NEXUS_DOCKER_CONTAINER_PORT=' + DockerPage.Values[4] + #13#10 +
     'NEXUS_HOME_BIND=' + DotEnvQuoted(DockerPath(RuntimePage.Values[0])) + #13#10 +
@@ -213,7 +214,7 @@ end;
     'NEXUS_OLLAMA_BASE_URL=' + DotEnvQuoted(OllamaUrlForDocker(OllamaPage.Values[0])) + #13#10 +
     'NEXUS_REST_API_TOKEN=' + DotEnvQuoted(DockerToken) + #13#10;
 '@
-    $Source = Replace-ExactlyOnce $Source $dockerEnv $dockerEnvReplacement 'Docker dotenv escaping'
+    $Source = Replace-ExactlyOnce $Source $dockerEnv $dockerEnvReplacement 'Docker dotenv escaping and forward declaration contract'
 
     return $Source
 }
