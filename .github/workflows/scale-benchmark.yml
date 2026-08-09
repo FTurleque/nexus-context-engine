@@ -53,7 +53,7 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "value=${{ inputs.profile }}" >> "$GITHUB_OUTPUT"
           else
-            echo "value=full" >> "$GITHUB_OUTPUT"
+            echo "value=ci" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run hermetic scale benchmark
