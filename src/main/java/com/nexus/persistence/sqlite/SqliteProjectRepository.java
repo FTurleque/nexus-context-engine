@@ -29,21 +29,13 @@ public final class SqliteProjectRepository implements ProjectRepository {
 
     @Override
     public ProjectDescriptor save(ProjectDescriptor project) {
-        try (Connection connection = database.openConnection()) {
-            boolean initialAutoCommit = connection.getAutoCommit();
-            connection.setAutoCommit(false);
-            try {
+        try {
+            return database.writeTransaction("save project " + project.id(), connection -> {
                 upsertProject(connection, project);
                 replaceValues(connection, "project_languages", "language", project.id(), project.languages());
                 replaceValues(connection, "project_technologies", "technology", project.id(), project.technologies());
-                connection.commit();
                 return project;
-            } catch (SQLException exception) {
-                connection.rollback();
-                throw exception;
-            } finally {
-                connection.setAutoCommit(initialAutoCommit);
-            }
+            });
         } catch (SQLException exception) {
             throw new PersistenceException("Impossible d'enregistrer le projet " + project.id(), exception);
         }
