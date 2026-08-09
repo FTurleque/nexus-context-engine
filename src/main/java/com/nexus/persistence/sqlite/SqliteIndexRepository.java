@@ -850,37 +850,15 @@ public final class SqliteIndexRepository implements IndexRepository {
             Connection connection,
             Map<String, Long> fileIds,
             List<IndexedSymbol> symbols) throws SQLException {
-        // La persistence est provenance-aware : deux providers indépendants qui
-        // décrivent un fait équivalent produisent deux lignes distinctes, une par
-        // provider. Le contrôle d'existence porte donc sur source_provider afin de
-        // ne dédupliquer qu'à l'intérieur du snapshot du provider courant (défense
-        // contre les doublons internes), jamais entre providers.
-        try (PreparedStatement exists = connection.prepareStatement("""
-                SELECT 1
-                FROM symbols
-                WHERE file_id = ? AND kind = ? AND name = ? AND start_line = ?
-                  AND source_provider = ?
-                LIMIT 1
-                """)) {
-            for (IndexedSymbol indexedSymbol : symbols) {
-                Long fileId = fileIds.get(indexedSymbol.relativePath());
-                if (fileId == null || symbolExists(exists, fileId, indexedSymbol.symbol())) {
-                    continue;
-                }
-                insertSymbols(connection, fileId, List.of(indexedSymbol.symbol()));
+        // CodeIntelligenceSnapshot canonicalise les faits par ExternalSymbolIdentity avant
+        // d'entrer dans le repository. Après suppression des anciennes lignes du provider,
+        // chaque symbole de cette liste est donc un fait canonique distinct à persister.
+        for (IndexedSymbol indexedSymbol : symbols) {
+            Long fileId = fileIds.get(indexedSymbol.relativePath());
+            if (fileId == null) {
+                continue;
             }
-        }
-    }
-
-    private static boolean symbolExists(PreparedStatement statement, long fileId, CodeSymbol symbol)
-            throws SQLException {
-        statement.setLong(1, fileId);
-        statement.setString(2, symbol.kind().name());
-        statement.setString(3, symbol.name());
-        statement.setInt(4, symbol.startLine());
-        statement.setString(5, symbol.sourceProvider());
-        try (ResultSet resultSet = statement.executeQuery()) {
-            return resultSet.next();
+            insertSymbols(connection, fileId, List.of(indexedSymbol.symbol()));
         }
     }
 
