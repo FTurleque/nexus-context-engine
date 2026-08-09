@@ -393,10 +393,8 @@ public final class SqliteIndexRepository implements IndexRepository {
 
     @Override
     public void applyChanges(UUID projectId, List<IndexedFileUpdate> updates, Set<String> removedPaths) {
-        try (Connection connection = database.openConnection()) {
-            boolean initialAutoCommit = connection.getAutoCommit();
-            connection.setAutoCommit(false);
-            try {
+        try {
+            database.writeTransaction("apply index changes for project " + projectId, connection -> {
                 deleteRemovedFiles(connection, projectId, removedPaths);
                 for (IndexedFileUpdate update : updates) {
                     long fileId = upsertFile(connection, projectId, update.file());
@@ -405,13 +403,7 @@ public final class SqliteIndexRepository implements IndexRepository {
                 if (!updates.isEmpty() || !removedPaths.isEmpty()) {
                     bumpGeneration(connection, projectId);
                 }
-                connection.commit();
-            } catch (SQLException exception) {
-                connection.rollback();
-                throw exception;
-            } finally {
-                connection.setAutoCommit(initialAutoCommit);
-            }
+            });
         } catch (SQLException exception) {
             throw persistence("Impossible de mettre à jour l'index SQLite du projet " + projectId, exception);
         }
@@ -423,26 +415,19 @@ public final class SqliteIndexRepository implements IndexRepository {
         if (EMBEDDED_SOURCE_PROVIDER.equals(snapshot.sourceProvider())) {
             throw new IllegalArgumentException("Le provider embarqué ne peut pas être remplacé comme index externe");
         }
-        try (Connection connection = database.openConnection()) {
-            boolean initialAutoCommit = connection.getAutoCommit();
-            connection.setAutoCommit(false);
-            try {
-                Map<String, Long> fileIds = findFileIds(connection, projectId);
-                if (externalSnapshotMatches(connection, projectId, fileIds.keySet(), snapshot)) {
-                    connection.commit();
-                    return;
-                }
-                deleteProviderData(connection, projectId, snapshot.sourceProvider());
-                insertExternalSymbols(connection, fileIds, snapshot.symbols());
-                insertExternalRelations(connection, projectId, fileIds, snapshot.relations());
-                bumpGeneration(connection, projectId);
-                connection.commit();
-            } catch (SQLException exception) {
-                connection.rollback();
-                throw exception;
-            } finally {
-                connection.setAutoCommit(initialAutoCommit);
-            }
+        try {
+            database.writeTransaction(
+                    "replace external code intelligence " + snapshot.sourceProvider() + " for project " + projectId,
+                    connection -> {
+                        Map<String, Long> fileIds = findFileIds(connection, projectId);
+                        if (externalSnapshotMatches(connection, projectId, fileIds.keySet(), snapshot)) {
+                            return;
+                        }
+                        deleteProviderData(connection, projectId, snapshot.sourceProvider());
+                        insertExternalSymbols(connection, fileIds, snapshot.symbols());
+                        insertExternalRelations(connection, projectId, fileIds, snapshot.relations());
+                        bumpGeneration(connection, projectId);
+                    });
         } catch (SQLException exception) {
             throw persistence(
                     "Impossible de remplacer l'intelligence de code du provider " + snapshot.sourceProvider(),
