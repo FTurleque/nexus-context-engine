@@ -1,8 +1,8 @@
 # Limites actuelles et dette de consolidation
 
-> Phase 6 intégrée via PR #15 ; hardening post-Phase 6 via PR #18 ; provenance des index via PR #24 ; licence propriétaire publique via PR #25 ; CI/supply-chain via PR #28.
+> Phase 6 intégrée via PR #15 ; hardening post-Phase 6 via PR #18 ; provenance des index via PR #24 ; licence via PR #25 ; CI/supply-chain via PR #28 ; consolidation post-audit via PR #49.
 
-Ce registre distingue les constats **fermés** des limites **réellement ouvertes**. Les ADR et PR conservent l'historique détaillé ; les anciennes branches/gates ne sont pas des états courants.
+Ce registre distingue les constats **fermés** des limites **réellement ouvertes**. Les ADR, issues et PR conservent l'historique détaillé ; les anciennes branches, anciennes formulations de sécurité et anciens gates ne sont pas des états courants.
 
 ## Registre Phase 6
 
@@ -13,18 +13,18 @@ Ce registre distingue les constats **fermés** des limites **réellement ouverte
 | F03 | fenêtre SQLite/index dérivés | lecture hors READY interdite, recovery non-READY par rebuild | fermé |
 | F04 | scan complet recherche symbolique | préfiltrage SQLite borné avant fuzzy Java | fermé |
 | F05 | `findSymbols`/`findUsages` projet-wide | requêtes SQL bornées | fermé |
-| F06 | graphe reconstruit par requête | cache dérivé par génération | fermé |
+| F06 | graphe reconstruit par requête | cache dérivé par génération, puis projections SQL bornées via PR #49 | fermé |
 | F07 | composition CLI dupliquée | `NexusApplication` composition root | fermé |
 | F08 | drift Maven | reactor parent + dependency/plugin management + Enforcer | fermé |
 | F09 | coupling Skills Registry | providers composés indépendamment | fermé |
-| F10 | absence single-flight | mutex JVM, renforcé ensuite par `FileLock` OS | fermé |
+| F10 | absence single-flight | mutex JVM, renforcé par `FileLock` OS | fermé |
 | F11 | fichiers non bornés | plafond commun avant hash/lecture | fermé |
 | F12 | MINOS full walk | validation contre `indexed_files` canonique | fermé |
 | F13 | lifecycle Lucene par opération | aucun changement sans benchmark | watch item |
 | F14 | opt-in sémantique non uniforme | configuration commune CLI/REST/MCP | fermé |
 | F15 | fédération non exposée | CLI + REST + MCP | fermé |
 | F16 | coûts Git/embeddings | batching embeddings ; cache Git différé | partiellement optimisé |
-| F17 | absence ContextBundle fédéré | budget global, provenance, fairness, déduplication | fermé |
+| F17 | absence ContextBundle fédéré | budget global, provenance, fairness, déduplication et borne de travail | fermé |
 | F18 | distribution orientée checkout | wrapper, ZIP, checksums, SBOM, runbook | fermé |
 
 ## Hardening post-Phase 6 — issue #16 / PR #18
@@ -36,7 +36,7 @@ Ce registre distingue les constats **fermés** des limites **réellement ouverte
 | H03 | timeouts externes incohérents | `ExternalTaskRunner` commun aux importers/providers | fermé / qualifié |
 | H04 | readiness ambiguë | liveness/readiness service/project séparées | fermé / qualifié |
 | H05 | budget fédéré perdu | fair floor + refill global + ordre local préservé | fermé / qualifié |
-| H06 | REST non-loopback sans auth | fail-fast + Bearer token | fermé / qualifié |
+| H06 | REST non-loopback insuffisamment protégé | initialement Bearer token ; complété par PR #49 avec robustesse, allowlist et mode d'exposition | fermé / qualifié |
 | H07 | UUID inconnu réinterprété comme nom | résolution UUID/nom séparée | fermé / qualifié |
 | H08 | mutex JVM conservés indéfiniment | slots libérés après usage | fermé / qualifié |
 | H09 | coût SQLite `%substring%` | benchmark avant FTS5/trigram/autre moteur | benchmark établi (#23 clos) — watch item |
@@ -45,23 +45,60 @@ Ce registre distingue les constats **fermés** des limites **réellement ouverte
 
 | ID | Constat | Traitement intégré | État |
 |---|---|---|---|
-| P19 | snapshot externe JDT/MINOS/provider potentiellement obsolète | changement SOURCE/TEST ⇒ invalidation de tous les snapshots non embarqués persistés, même provider absent du runtime courant | fermé / qualifié |
-| P20 | index sémantique réutilisable avec état/modèle/profil incompatible | manifeste Lucene de provenance + rebuild sur mismatch + garde de recherche avant embedding | fermé / qualifié |
+| P19 | snapshot externe JDT/MINOS/provider potentiellement obsolète | changement SOURCE/TEST ⇒ invalidation des snapshots non embarqués persistés | fermé / qualifié |
+| P20 | index sémantique réutilisable avec état/modèle/profil incompatible | manifeste Lucene de provenance + rebuild sur mismatch + garde avant embedding | fermé / qualifié |
 
-La provenance sémantique comprend le fingerprint canonique, l'identité provider/modèle, les dimensions, le profil de préparation du contenu et la version de schéma. Voir [`../index-provenance.md`](../index-provenance.md).
+La provenance sémantique comprend fingerprint canonique, identité provider/modèle, dimensions, profil de préparation du contenu et version de schéma. Voir [`../index-provenance.md`](../index-provenance.md).
 
-## CI / couverture / supply-chain — issue #22 / PR #28
+## CI / couverture / supply-chain — issue #22 / PR #28 puis PR #49
 
 | ID | Constat | Traitement intégré | État |
 |---|---|---|---|
 | S22-1 | JaCoCo report-only | gate `check` core à 70 % lignes / 50 % branches | fermé / qualifié |
-| S22-2 | absence de gate vulnérabilités | OSV-Scanner PR + scan courant/hebdomadaire | fermé / qualifié |
+| S22-2 | gate vulnérabilités incomplet | delta PR + SBOM CycloneDX agrégé du reactor scanné en mode bloquant | fermé / qualifié |
 | S22-3 | absence d'analyse statique sécurité | CodeQL Java/Kotlin `security-extended` | fermé / qualifié |
 | S22-4 | Actions par tags mutables | Actions contrôlées épinglées à des SHA immuables | fermé / qualifié |
-| S22-5 | SBOM non conservé avec la distribution | SBOM embarqué dans le ZIP + artefact CI 90 jours | fermé / qualifié |
+| S22-5 | SBOM non conservé avec la distribution | SBOM embarqué dans le ZIP + artefact CI | fermé / qualifié |
 | S22-6 | notices tierces non matérialisées | `THIRD_PARTY_NOTICES.txt`, `failOnMissing=true`, embarqué dans le ZIP | fermé / qualifié |
+| S49-D1 | image Docker sans gate CVE complet | Trivy JSON + gate fixable HIGH/CRITICAL | fermé / qualifié |
+| S49-D2 | image Docker sans SBOM/provenance publiés | SBOM CycloneDX + attestations sur digest GHCR publié depuis `main` | fermé / qualifié |
+| S49-D3 | `.env` Docker généré insuffisamment qualifié | round-trip littéral dédié dans Docker Distribution | fermé / qualifié |
 
-Baseline qualifiée de couverture : **77,07 % lignes / 58,46 % branches**. Voir [`ci-and-supply-chain.md`](ci-and-supply-chain.md).
+Baseline de couverture de référence : **77,07 % lignes / 58,46 % branches**. Les minima bloquants restent 70 % / 50 %.
+
+## Consolidation post-audit — issue #48 / PR #49
+
+### P1
+
+| Constat | Traitement intégré | État |
+|---|---|---|
+| snapshot d'indexation incohérent face aux mutations concurrentes | fingerprint/snapshot revalidé et opération fail-closed avant publication d'un état mixte | fermé / qualifié |
+| OSV incomplet sur le reactor | génération Maven du SBOM agrégé puis scan OSV bloquant | fermé / qualifié |
+| matérialisation globale graphe | projections SQL bornées et budgets de nœuds/arêtes | fermé / qualifié |
+| coût de travail du contexte fédéré non borné | budget de travail distinct du budget final | fermé / qualifié |
+| SCIP partageait une limite générique | politique SCIP dédiée + borne du message Protobuf avant allocation | fermé / qualifié |
+
+### P2
+
+| Constat | Traitement intégré | État |
+|---|---|---|
+| limites de résultats divergentes | `ResultLimitPolicy` commune CLI/REST/MCP | fermé / qualifié |
+| exposition REST distante trop permissive | token robuste + racines autorisées + mode TLS/exposition explicite | fermé / qualifié |
+| génération `.cmd` native | échappement durci + qualification dédiée | fermé / qualifié |
+| génération `.env` Docker | échappement littéral + test round-trip | fermé / qualifié |
+| supply-chain image Docker | Trivy + SBOM + attestations | fermé / qualifié |
+| intégrations assistants testées sans argv réel Windows | tests argv réels PowerShell/cmd | fermé / qualifié |
+
+### P3
+
+| Constat | Traitement intégré | État |
+|---|---|---|
+| readiness sans projet ambiguë | état explicite sans projet enregistré | fermé / qualifié |
+| `index_generation` bump sans changement | bump supprimé pour les no-op effectifs | fermé / qualifié |
+| providers externes dupliqués | déduplication SQL + migration/indexes | fermé / qualifié |
+| alignement Jackson | dependency management/BOM cohérent | fermé / qualifié |
+| stratégie `develop` | documentation et workflow réconciliés avec `main` comme branche d'intégration protégée | fermé / qualifié |
+| docs post-correctifs | réconciliation finale dans la PR documentaire post-merge | en cours jusqu'au merge de cette PR |
 
 ## Invariants actuels
 
@@ -80,6 +117,8 @@ SQLite reste canonique. Lucene lexical/sémantique et intelligence externe sont 
 - lecture dépendant d'un index ⇒ projet `READY` ;
 - état persistant non-READY ⇒ rebuild complet à l'indexation suivante ;
 - mutation par projet ⇒ mutex JVM + `FileLock` OS ;
+- snapshot canonique revalidé avant publication ; une mutation concurrente détectée fait échouer l'indexation ;
+- `index_generation` ne progresse pas pour un no-op effectif ;
 - support de verrouillage inter-processus revendiqué pour un `NEXUS_HOME` local ;
 - filesystem réseau ⇒ non supporté sans qualification spécifique.
 
@@ -87,6 +126,7 @@ SQLite reste canonique. Lucene lexical/sémantique et intelligence externe sont 
 
 - `NEXUS_MAX_FILE_SIZE_BYTES` : 8 MiB par défaut ;
 - `NEXUS_CODE_INTELLIGENCE_TIMEOUT_SECONDS` : 180 s par défaut ;
+- SCIP possède en plus ses propres plafonds de fichier/message ;
 - importers et providers utilisent la même enveloppe wall-clock ;
 - un worker Java tiers qui ignore définitivement l'interruption peut survivre comme daemon après timeout.
 
@@ -97,40 +137,59 @@ Ce dernier point reste un risque résiduel ; isolation processus/circuit-breaker
 - **liveness** : processus vivant ;
 - **readiness service** : dépendances de base accessibles ;
 - **project readiness** : projet `READY` avant lecture indexée ;
+- **aucun projet enregistré** : état explicite, sans être confondu avec « tous les projets sont READY » ;
 - **degraded** : au moins un projet `FAILED` ;
-- **allProjectsReady** : tous les projets enregistrés `READY`.
+- **allProjectsReady** : vrai uniquement lorsque l'ensemble enregistré satisfait réellement le contrat.
 
-### Fédération
+### Graphe et fédération
 
-Le fair floor et le refill évitent la starvation et réutilisent le budget libéré après déduplication. Le coût d'overfetch local reste borné ; le benchmark de scale (#23, clos, outillé par le workflow *Scale Benchmark*) couvre les portfolios beaucoup plus larges.
+Le graphe projet n'exige plus de charger globalement tous les symboles/relations pour répondre aux besoins de ranking : le repository expose des projections bornées.
+
+Le fair floor et le refill évitent la starvation et réutilisent le budget libéré après déduplication. Le coût de préparation du contexte fédéré est lui-même borné ; le budget final n'est donc plus l'unique protection contre un travail excessif.
+
+### Limites de résultats
+
+Les surfaces CLI, REST et MCP partagent une politique maximale commune. Une surface ne peut plus contourner le plafond en acceptant une valeur arbitrairement supérieure.
 
 ### Sécurité REST
 
-- loopback + aucun token : fonctionnement local ;
-- token configuré : Bearer auth requise ;
-- non-loopback + aucun token : démarrage refusé ;
-- non-loopback + token : exposition autorisée.
+- loopback + aucun token : fonctionnement local autorisé ;
+- hors loopback + token absent/faible : démarrage refusé ;
+- hors loopback + allowlist de racines absente : démarrage refusé ;
+- hors loopback + mode d'exposition absent/invalide : démarrage refusé ;
+- modes distants admis : `reverse-proxy-https` ou `direct-https` ;
+- `loopback-forward` : uniquement avec `NEXUS_RUNTIME=docker`, pour une publication hôte maintenue sur loopback ;
+- racines administrables : canonicalisées et limitées par `NEXUS_REST_ALLOWED_PROJECT_ROOTS`.
 
-## Watch items
+La robustesse du token distant exige au moins 32 octets et une entropie estimée d'au moins 96 bits.
 
-1. **Scale SQLite substring** — benchmark établi (#23 clos, workflow *Scale Benchmark*) ; requis avant FTS5/trigram/autre moteur.
-2. **Portfolios très larges** — overfetch et coût fédéré couverts par le benchmark #23.
-3. **Lifecycle Lucene persistant** — writer/SearcherManager partagé uniquement si benchmark utile.
-4. **Cache Git** — pas de cache persistant sans mesure multi-repository.
-5. **Provider Java non coopératif** — envisager isolation processus seulement avec preuve opérationnelle.
-6. **Filesystem activement hostile** — sécurité absolue hors périmètre portable actuel.
-7. **Filesystem réseau pour `NEXUS_HOME`** — non supporté sans qualification dédiée.
-8. **Compatibilité juridique d'une nouvelle dépendance inhabituelle** — revue explicite malgré l'inventaire automatisé des licences.
-9. **Ollama indisponible / corruption physique Lucene** — renforcer les scénarios de récupération explicites.
+## Watch items réellement ouverts
+
+1. **Scale SQLite substring** — benchmark requis avant FTS5/trigram/autre moteur.
+2. **Lifecycle Lucene persistant** — writer/SearcherManager partagé uniquement si un benchmark montre un bénéfice matériel.
+3. **Cache Git** — pas de cache persistant sans mesure multi-repository.
+4. **Provider Java non coopératif** — envisager isolation processus seulement avec preuve opérationnelle.
+5. **Filesystem activement hostile** — sécurité absolue hors périmètre portable actuel.
+6. **Filesystem réseau pour `NEXUS_HOME`** — non supporté sans qualification dédiée.
+7. **Compatibilité juridique d'une nouvelle dépendance inhabituelle** — revue explicite malgré l'inventaire automatisé des licences.
+8. **Ollama indisponible / corruption physique Lucene** — conserver et renforcer les scénarios de récupération explicites lorsque des cas réels le justifient.
 
 ## Qualification récente
 
-PR #28, head exact `a363e93dc97597d288389b4f4b9e8404abe4296c` :
+Consolidation post-audit PR #49 :
 
-- NEXUS CI run #31 : Windows Java 24 PASS ; Linux Java 21 PASS ; JaCoCo 70/50 PASS ; distribution/compliance PASS ;
-- OSV-Scanner run #4 : PASS ;
-- CodeQL run #6 : PASS.
+```text
+QUALIFIED_HEAD=4f04c1ad3ff5b41aa9d1892ade57ad62b90a43f9
+MERGE_SHA=c1ff9ef03ef33097c0d51154e02c30109b0a46f1
+```
 
-PR #28 est intégrée dans `main` via `4c9b7cd4e26913af42f687b48718c8e733fa06f7`.
+- NEXUS CI `31314135008` : PASS ;
+- Scale Benchmark `31314135000` : PASS ;
+- Windows Installer `31314134983` : PASS ;
+- Docker Distribution `31314134994` : PASS ;
+- CodeQL `31314134977` : PASS ;
+- OSV-Scanner `31314135231` : PASS.
+
+Aucun workflow/configuration/status SonarCloud actif n'est défini dans le dépôt qualifié ; SonarCloud n'est pas un gate exécutable actuel.
 
 Voir aussi : [`release-and-recovery.md`](release-and-recovery.md), [`ci-and-supply-chain.md`](ci-and-supply-chain.md), [`../roadmap.md`](../roadmap.md) et [`../index-provenance.md`](../index-provenance.md).

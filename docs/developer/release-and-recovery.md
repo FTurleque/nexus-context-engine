@@ -1,6 +1,6 @@
 # Release, installation et recovery
 
-> État courant : Phase 6, hardening post-Phase 6, licence propriétaire, provenance des index et hardening CI/supply-chain sont intégrés dans `main`.
+> État courant : Phase 6, hardening post-Phase 6, provenance des index, assistant Windows/Docker et consolidation post-audit sont intégrés dans `main`.
 
 ## Version produit
 
@@ -13,9 +13,9 @@ Le reactor Maven est piloté par le `pom.xml` racine et contient :
 - `adapters/mcp-java` ;
 - `adapters/assistant-clients`.
 
-Maven doit être exécuté avec un JDK 21 ou supérieur ; le bytecode et les API restent ciblés sur Java 21 via `maven.compiler.release=21`. Maven est reproductible via `mvnw.cmd` / `mvnw`, épinglé sur Maven 3.9.11.
+Maven doit être exécuté avec un JDK 21 ou supérieur ; le bytecode et les API ciblent Java 21 via `maven.compiler.release=21`. Le wrapper est épinglé sur Maven 3.9.11.
 
-## Livrables
+## Livrables Maven
 
 `mvnw.cmd clean install` produit notamment :
 
@@ -33,52 +33,89 @@ target/
     └── bom.json
 ```
 
-L'archive autonome contient :
+Le ZIP multiplateforme fonctionne sans clone du dépôt ni Maven installé sur la machine cible, mais nécessite Java 21+.
+
+NEXUS est un logiciel **propriétaire source-available**. `LICENSE` est la source de vérité pour les droits sur NEXUS ; les composants tiers restent soumis à leurs propres licences.
+
+## Livrables Windows
+
+La distribution Windows x64 self-contained produit :
 
 ```text
-nexus-context-engine-0.2.0/
-├── bin/
-│   ├── nexus.cmd
-│   └── nexus
-├── lib/
-│   └── nexus-cli.jar
-├── LICENSE
-├── THIRD_PARTY_NOTICES.txt
-├── SBOM.cdx.json
-└── README.md
+target\dist\nexus-context-engine-0.2.0-windows-x64.zip
+target\dist\nexus-context-engine-0.2.0-windows-x64.zip.sha256
+target\dist\NEXUS-0.2.0-windows-x64-setup.exe
+target\dist\NEXUS-0.2.0-windows-x64-setup.exe.sha256
 ```
 
-Elle fonctionne sans clone du dépôt et sans Maven installé sur la machine cible. Une JVM Java 21 ou supérieure reste requise.
+Le runtime Java est embarqué via `jpackage`. Le setup est current-user et supporte les modes :
 
-NEXUS est un logiciel **propriétaire source-available**. `LICENSE` est la source de vérité pour les droits accordés sur NEXUS. Les composants tiers restent soumis à leurs propres licences ; `THIRD_PARTY_NOTICES.txt` matérialise l'inventaire de licences compile/runtime utilisé pour la distribution.
+```text
+Natif Windows
+Docker
+Natif + Docker
+```
+
+REST est un composant natif optionnel ; CLI et MCP peuvent être installés sans REST. `NEXUS_HOME` est conservé lors de la désinstallation.
+
+Voir [`../user/windows-installation.md`](../user/windows-installation.md).
+
+## Livrable Docker
+
+L'image NEXUS est construite depuis `packaging/docker` et qualifiée par le workflow **Docker Distribution**.
+
+Le pipeline de publication sur `main` :
+
+1. reconstruit l'image exacte du SHA ;
+2. bloque les vulnérabilités HIGH/CRITICAL corrigibles ;
+3. génère un SBOM CycloneDX image ;
+4. publie les tags versionné et `latest` vers GHCR ;
+5. résout le digest publié ;
+6. atteste la provenance sur ce digest ;
+7. atteste le SBOM sur ce même digest.
+
+Une release conteneur ne doit pas être considérée comme qualifiée si le digest publié n'est pas celui couvert par les attestations.
 
 ## Intégrité et inventaire logiciel
 
-Les deux livrables distribuables sont accompagnés de SHA-256.
+Les livrables distribuables sont accompagnés de SHA-256 lorsque prévu par les scripts de release.
 
-Le build génère un SBOM CycloneDX agrégé et les notices tierces. Depuis PR #28 :
+Le reactor génère un SBOM CycloneDX agrégé et les notices tierces :
 
-- `license-maven-plugin` s'exécute avec `failOnMissing=true` ;
-- le ZIP embarque `LICENSE`, les notices et le SBOM ;
-- la qualification Windows vérifie que les fichiers embarqués sont identiques aux fichiers générés ;
-- la CI Linux vérifie leur présence et conserve SBOM/notices/JaCoCo pendant 90 jours dans un artefact nommé avec le head exact qualifié.
+```text
+target/sbom/bom.json
+target/licenses/THIRD_PARTY_NOTICES.txt
+```
 
-Aucun secret, requête utilisateur, contenu source ou chemin de projet n'est injecté dans le SBOM.
+Le ZIP autonome embarque :
+
+```text
+LICENSE
+THIRD_PARTY_NOTICES.txt
+SBOM.cdx.json
+```
+
+La qualification Windows vérifie que les artefacts de conformité embarqués correspondent aux outputs générés.
+
+L'image Docker possède son propre SBOM et ses propres preuves Trivy ; le SBOM du reactor et le SBOM de l'image répondent à deux périmètres différents et ne doivent pas être substitués l'un à l'autre.
 
 ## Gates release et supply-chain
 
-Le reactor applique un gate JaCoCo bloquant au module `core` :
+La baseline active comprend :
+
+- **NEXUS CI** : Windows Java 24 + Linux Java 21, reactor complet, tests, JaCoCo et compliance ;
+- **Windows Installer** : build Windows, smoke install/execute/uninstall, setup production ;
+- **Docker Distribution** : parité runtime, dotenv, Trivy, SBOM, publication/attestation sur `main` ;
+- **Scale Benchmark** : SQLite, graphe, contexte fédéré ;
+- **CodeQL** ;
+- **OSV-Scanner** : delta PR + scan bloquant du SBOM agrégé du reactor.
+
+Le gate JaCoCo du module `core` reste :
 
 - lignes : minimum 70 % ;
-- branches : minimum 50 % ;
-- baseline mesurée lors de PR #28 : 77,07 % lignes / 58,46 % branches.
+- branches : minimum 50 %.
 
-GitHub Actions complète le reactor par :
-
-- OSV-Scanner : nouvelles vulnérabilités bloquantes sur PR, scan courant/hebdomadaire ;
-- CodeQL Java/Kotlin `security-extended` ;
-- Dependabot Maven + GitHub Actions hebdomadaire ;
-- pins immuables des Actions contrôlées dans le dépôt.
+Aucun workflow/configuration/status SonarCloud actif n'est défini dans la baseline actuelle ; SonarCloud n'est donc pas un gate exécutable de release.
 
 Voir [`ci-and-supply-chain.md`](ci-and-supply-chain.md).
 
@@ -86,25 +123,28 @@ Voir [`ci-and-supply-chain.md`](ci-and-supply-chain.md).
 
 SQLite reste la source canonique. Les migrations sont forward-only et enregistrées dans `schema_migrations`.
 
-La Phase 6 ajoute `V002__index_generation.sql` :
+Les migrations pertinentes comprennent notamment :
 
-- génération monotone par projet pour invalider les vues dérivées ;
-- index SQL pour les recherches de relations ciblées ;
-- initialisation des projets existants sans écraser leur état.
+- `V002__index_generation.sql` — génération par projet pour invalider les vues dérivées ;
+- `V003__provider_and_graph_indexes.sql` — indexes/déduplication nécessaires aux providers persistés et aux projections de graphe.
 
-Avant une montée de version de production, sauvegarder le fichier SQLite NEXUS lorsque le service est arrêté. Ne jamais restaurer uniquement les index Lucene en ignorant SQLite.
+La génération d'index n'est plus incrémentée pour un no-op effectif : une génération doit représenter un changement canonique réel, pas une simple tentative d'indexation.
+
+Avant une montée de version de production, sauvegarder SQLite lorsque le service est arrêté. Ne jamais restaurer uniquement les index Lucene en ignorant SQLite.
 
 ## Autorité et provenance des index
 
-SQLite et l'état des fichiers canoniques restent l'autorité. Les index Lucene lexicaux et sémantiques ainsi que les snapshots d'intelligence externes sont dérivés/reconstructibles.
+SQLite et l'état des fichiers canoniques restent l'autorité. Les index Lucene lexicaux/sémantiques et snapshots externes sont dérivés et reconstructibles.
 
 Depuis PR #24 :
 
 - un fingerprint canonique déterministe représente l'état pertinent des fichiers indexés ;
-- un changement SOURCE/TEST invalide les snapshots persistés des providers externes non embarqués ;
-- l'index sémantique porte un manifeste Lucene avec fingerprint canonique, provider, modèle, dimensions, profil de préparation et version de schéma ;
-- une provenance absente ou incompatible entraîne un rebuild sémantique ;
-- une recherche sémantique ne consomme pas un index dont la compatibilité avec l'état canonique courant n'est pas démontrée.
+- un changement SOURCE/TEST invalide les snapshots persistés concernés ;
+- l'index sémantique porte un manifeste de provenance ;
+- une provenance absente ou incompatible entraîne un rebuild ;
+- une recherche sémantique refuse un index dont la compatibilité n'est pas démontrée.
+
+Depuis PR #49, l'indexation revalide aussi le snapshot canonique avant publication : si le repository a muté pendant l'opération, NEXUS échoue **fail-closed** plutôt que de publier un mélange d'états.
 
 Voir [`../index-provenance.md`](../index-provenance.md).
 
@@ -115,46 +155,89 @@ Une mutation d'index par projet est protégée à deux niveaux :
 1. mutex JVM par `projectId` ;
 2. `FileLock` OS par projet sous `NEXUS_HOME/locks`.
 
-Cette coordination couvre les mutations d'index, rebuilds/deep-Java et imports MINOS concernés par le même verrou de mutation. Le fichier de lock n'est pas un marqueur métier : sa simple présence ne signifie pas qu'un verrou est actif.
+Cette coordination couvre les mutations d'index concernées par le même verrou. Le support cible reste un `NEXUS_HOME` sur filesystem local.
 
-Le support cible est un `NEXUS_HOME` sur filesystem **local**. NEXUS ne revendique pas de garantie de cohérence inter-processus sur des filesystems réseau dont les sémantiques de `FileLock` diffèrent ou ne sont pas garanties.
+Le verrou empêche deux mutations simultanées du même projet ; la revalidation du snapshot protège en plus contre une **mutation externe du repository source** qui survient pendant l'indexation.
 
-## Recovery
+## Recovery d'indexation
 
 En cas de panne pendant une indexation :
 
 1. le projet est normalement marqué `FAILED` ;
 2. un crash brutal peut laisser `INDEXING` persistant ;
-3. les recherches et ContextBundle refusent tout projet qui n'est pas `READY` ;
-4. la prochaine indexation d'un projet non-`READY` force une reconstruction complète ;
-5. le verrou JVM + OS évite deux mutations concurrentes actives du même projet sur un `NEXUS_HOME` local partagé entre processus.
+3. les lectures indexées refusent un projet non `READY` ;
+4. la prochaine indexation d'un projet non `READY` force une reconstruction complète ;
+5. les index dérivés peuvent être reconstruits depuis SQLite et les fichiers canoniques.
 
-En cas de corruption d'un index Lucene, supprimer uniquement l'index dérivé puis lancer un rebuild. En cas de corruption SQLite, restaurer la sauvegarde canonique puis reconstruire les index dérivés.
+En cas de détection d'une mutation concurrente du repository pendant l'indexation, corriger/stabiliser la source puis relancer l'indexation. Ne pas contourner cette erreur : elle protège contre la publication d'un snapshot incohérent.
 
-Pour un index sémantique ancien sans métadonnées de provenance compatibles, le comportement attendu est également un rebuild : l'absence de preuve de compatibilité n'autorise pas sa réutilisation.
+## Recovery Lucene
 
-## Qualification release
+En cas de corruption d'un index Lucene :
 
-Sous Windows, la qualification est pilotée par :
+- arrêter les opérations concernées ;
+- supprimer uniquement l'index dérivé corrompu ;
+- conserver SQLite ;
+- lancer un rebuild.
+
+Pour un index sémantique sans provenance compatible, le comportement attendu est également un rebuild.
+
+## Recovery Docker
+
+`NEXUS_HOME` est persistant et doit être traité comme l'état à sauvegarder. Une image Docker est remplaçable ; les données persistantes ne le sont pas.
+
+Pour diagnostiquer une release image :
+
+- identifier le digest réellement exécuté ;
+- vérifier qu'il correspond à l'image attendue ;
+- utiliser les preuves Trivy/SBOM du workflow concerné ;
+- pour une image publiée depuis `main`, vérifier les attestations rattachées au digest.
+
+Ne pas considérer `latest` seul comme une preuve d'identité immuable.
+
+## Sécurité REST en exploitation
+
+La configuration locale par défaut écoute sur loopback et peut fonctionner sans token.
+
+Une écoute hors loopback exige :
+
+- `NEXUS_REST_API_TOKEN` robuste ;
+- `NEXUS_REST_ALLOWED_PROJECT_ROOTS` non vide ;
+- `NEXUS_REST_EXPOSURE_MODE=reverse-proxy-https|direct-https` ;
+- ou `loopback-forward` uniquement dans le runtime Docker (`NEXUS_RUNTIME=docker`) pour une publication hôte maintenue sur loopback.
+
+Le token distant doit contenir au moins 32 octets et atteindre une entropie estimée minimale de 96 bits. Les racines autorisées sont canonicalisées.
+
+Un serveur qui refuse de démarrer après passage hors loopback doit être corrigé par configuration explicite ; désactiver ou contourner les gardes n'est pas une procédure de recovery valide.
+
+## Qualification release Windows
+
+Sous Windows, la qualification locale principale reste pilotée par :
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
 ```
 
-Le script impose notamment :
+Selon le périmètre de release, les scripts de `scripts/release/` ajoutent les contrôles Windows Installer, Docker et configuration.
 
-- JVM Java 21+ et `maven.compiler.release=21` ;
-- Maven Wrapper ;
-- `clean install` du reactor complet ;
-- self-smoke ;
-- checksums ;
-- SBOM CycloneDX ;
-- notices tierces et rapport JaCoCo ;
-- archive autonome avec artefacts de conformité identiques aux outputs de build ;
-- exact-head via `NEXUS_EXPECTED_HEAD_SHA` en CI.
+En CI, `NEXUS_EXPECTED_HEAD_SHA` permet d'imposer l'exact-head lorsque le workflow le prévoit.
 
-Preuve récente : PR #28, head `a363e93dc97597d288389b4f4b9e8404abe4296c` : NEXUS CI run #31 Windows Java 24 PASS / Linux Java 21 PASS / JaCoCo 70/50 PASS / distribution-compliance PASS ; OSV run #4 PASS ; CodeQL run #6 PASS.
+## Preuve post-audit de référence
 
-PR #28 est intégrée dans `main` via `4c9b7cd4e26913af42f687b48718c8e733fa06f7`.
+PR #49 :
 
-Une release, un tag ou un merge ne doit pas être déclaré qualifié sans preuve exécutable sur le head concerné.
+```text
+QUALIFIED_HEAD=4f04c1ad3ff5b41aa9d1892ade57ad62b90a43f9
+MERGE_SHA=c1ff9ef03ef33097c0d51154e02c30109b0a46f1
+```
+
+- NEXUS CI `31314135008` — PASS ;
+- Windows Installer `31314134983` — PASS ;
+- Docker Distribution `31314134994` — PASS ;
+- Scale Benchmark `31314135000` — PASS ;
+- CodeQL `31314134977` — PASS ;
+- OSV-Scanner `31314135231` — PASS.
+
+Le Scale Benchmark a été rerun une seule fois sur le même HEAD après qualification d'un outlier I/O runner ; aucun budget n'a été assoupli.
+
+Une release, un tag ou un merge ne doit jamais être déclaré qualifié sans preuve exécutable rattachée au HEAD concerné.
