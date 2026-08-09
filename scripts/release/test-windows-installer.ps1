@@ -31,7 +31,7 @@ $installerTemplate = Join-Path $repo 'packaging\windows\nexus-installer.iss.temp
 if (-not (Test-Path -LiteralPath $installerTemplate -PathType Leaf)) {
     throw "Installer template not found: $installerTemplate"
 }
-$installerSource = Get-Content -Raw -LiteralPath $installerTemplate
+$installerSource = [IO.File]::ReadAllText($installerTemplate, [Text.Encoding]::UTF8)
 Assert-TextContains -Text $installerSource -Needle 'DockerPrereqPage' -Description 'Docker prerequisite wizard page'
 Assert-TextContains -Text $installerSource -Needle 'DownloadTemporaryFile(' -Description 'runtime Docker Desktop download'
 Assert-TextContains -Text $installerSource -Needle 'https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe' -Description 'official Docker Desktop x64 URL'
