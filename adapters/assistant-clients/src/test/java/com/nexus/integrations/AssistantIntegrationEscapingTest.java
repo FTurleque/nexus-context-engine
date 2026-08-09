@@ -132,11 +132,21 @@ class AssistantIntegrationEscapingTest {
         CommandSpec psSpec = captureSpec(powershell, capture, psOutput, expected);
         String psPortable = AssistantIntegrationGenerator.renderCommand(psSpec);
         Path invocation = work.resolve("invoke portable command.ps1");
-        Files.writeString(invocation, "& " + psPortable + "\r\n", StandardCharsets.UTF_8);
+        writeUtf8Bom(invocation, "& " + psPortable + "\r\n");
         Process ps = new ProcessBuilder(
                 powershell, "-NoLogo", "-NoProfile", "-NonInteractive", "-File", invocation.toString()).start();
         assertEquals(0, ps.waitFor());
         assertEquals(expected, Files.readAllLines(psOutput, StandardCharsets.UTF_8));
+    }
+
+    private static void writeUtf8Bom(Path path, String content) throws Exception {
+        byte[] payload = content.getBytes(StandardCharsets.UTF_8);
+        byte[] bytes = new byte[payload.length + 3];
+        bytes[0] = (byte) 0xEF;
+        bytes[1] = (byte) 0xBB;
+        bytes[2] = (byte) 0xBF;
+        System.arraycopy(payload, 0, bytes, 3, payload.length);
+        Files.write(path, bytes);
     }
 
     private static CommandSpec captureSpec(
