@@ -30,9 +30,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Non-regression tests for P1 provenance correctness: two independent providers may describe an
- * equivalent symbol/relation without either provider's fact being lost. Removing one provider must
- * never destroy a fact still supplied by another provider.
+ * Non-regression tests for provenance correctness: independent providers and distinct facts inside
+ * one provider must survive persistence without producing artificial generation bumps.
  */
 class ProviderProvenanceCollisionTest {
 
@@ -83,7 +82,6 @@ class ProviderProvenanceCollisionTest {
         persistSymbol(PROVIDER_A);
         persistSymbol(PROVIDER_B);
 
-        // A est invalidé/supprimé (snapshot vide).
         removeProvider(PROVIDER_A);
 
         assertFalse(hasSymbolFrom(PROVIDER_A), "A supprimé");
@@ -92,7 +90,6 @@ class ProviderProvenanceCollisionTest {
 
     @Test
     void removingSecondProviderKeepsSymbolStillSuppliedByFirst() {
-        // Ordre inverse : B inséré en premier, puis A.
         persistSymbol(PROVIDER_B);
         persistSymbol(PROVIDER_A);
 
@@ -127,7 +124,6 @@ class ProviderProvenanceCollisionTest {
 
     @Test
     void duplicateWithinSameProviderSnapshotIsDeduplicated() {
-        // Deux symboles identiques dans le même snapshot d'un provider → une seule ligne.
         repository.replaceExternalCodeIntelligence(
                 project.id(),
                 new CodeIntelligenceSnapshot(
@@ -138,18 +134,63 @@ class ProviderProvenanceCollisionTest {
     }
 
     @Test
+    void sameProviderKeepsStructurallyDistinctSymbolsAndRefreshGenerationIsStable() {
+        IndexedSymbol noArg = collidingMethod(PROVIDER_A, "run()", "demo.App.run", 7, 7);
+        IndexedSymbol withArgument = collidingMethod(PROVIDER_A, "run(java.lang.String)", "demo.App.run", 7, 8);
+        CodeIntelligenceSnapshot snapshot = new CodeIntelligenceSnapshot(
+                PROVIDER_A,
+                List.of(noArg, withArgument, noArg),
+                List.of());
+
+        long generationBefore = repository.generation(project.id());
+        repository.replaceExternalCodeIntelligence(project.id(), snapshot);
+        long generationAfterChange = repository.generation(project.id());
+
+        assertEquals(generationBefore + 1, generationAfterChange, "un vrai changement incrémente une fois");
+        assertEquals(2, countSymbolsNamedFrom("run", PROVIDER_A),
+                "deux faits structurellement distincts du même provider doivent survivre");
+
+        repository.replaceExternalCodeIntelligence(project.id(), snapshot);
+        assertEquals(generationAfterChange, repository.generation(project.id()),
+                "un refresh strictement identique ne doit pas incrémenter la génération");
+        assertEquals(2, countSymbolsNamedFrom("run", PROVIDER_A));
+
+        IndexedSymbol changed = collidingMethod(PROVIDER_A, "run(int)", "demo.App.run", 7, 9);
+        repository.replaceExternalCodeIntelligence(
+                project.id(),
+                new CodeIntelligenceSnapshot(PROVIDER_A, List.of(noArg, changed), List.of()));
+        assertEquals(generationAfterChange + 1, repository.generation(project.id()),
+                "un changement structurel réel incrémente exactement une fois");
+        assertEquals(2, countSymbolsNamedFrom("run", PROVIDER_A));
+    }
+
+    @Test
+    void equivalentSymbolFromSecondProviderSurvivesRemovalOfFirstAfterCollisionRefresh() {
+        IndexedSymbol providerASymbol = collidingMethod(PROVIDER_A, "run()", "demo.App.run", 7, 7);
+        IndexedSymbol providerBSymbol = collidingMethod(PROVIDER_B, "run()", "demo.App.run", 7, 7);
+
+        repository.replaceExternalCodeIntelligence(
+                project.id(),
+                new CodeIntelligenceSnapshot(PROVIDER_A, List.of(providerASymbol), List.of()));
+        repository.replaceExternalCodeIntelligence(
+                project.id(),
+                new CodeIntelligenceSnapshot(PROVIDER_B, List.of(providerBSymbol), List.of()));
+        removeProvider(PROVIDER_A);
+
+        assertEquals(0, countSymbolsNamedFrom("run", PROVIDER_A));
+        assertEquals(1, countSymbolsNamedFrom("run", PROVIDER_B));
+    }
+
+    @Test
     void sameProviderRefreshReplacesOwnRowsWithoutTouchingOther() {
         persistSymbol(PROVIDER_A);
         persistSymbol(PROVIDER_B);
 
-        // Refresh de A : ré-insertion du même fait. Ne doit pas dupliquer A ni toucher B.
         persistSymbol(PROVIDER_A);
 
         assertEquals(1, countSymbolsFrom(PROVIDER_A), "une seule ligne A après refresh");
         assertEquals(1, countSymbolsFrom(PROVIDER_B), "B intact après refresh de A");
     }
-
-    // --- helpers -----------------------------------------------------------------------------
 
     private void persistSymbol(String provider) {
         repository.replaceExternalCodeIntelligence(
@@ -170,10 +211,27 @@ class ProviderProvenanceCollisionTest {
     }
 
     private static IndexedSymbol symbol(String provider) {
-        // Symbole EQUIVALENT quelle que soit la provenance : mêmes kind/name/start_line.
         return new IndexedSymbol(
                 PATH,
                 new CodeSymbol(SymbolKind.TYPE, "SharedType", "demo.SharedType", "SharedType", 1, 1, provider));
+    }
+
+    private static IndexedSymbol collidingMethod(
+            String provider,
+            String signature,
+            String qualifiedName,
+            int startLine,
+            int endLine) {
+        return new IndexedSymbol(
+                PATH,
+                new CodeSymbol(
+                        SymbolKind.METHOD,
+                        "run",
+                        qualifiedName,
+                        signature,
+                        startLine,
+                        endLine,
+                        provider));
     }
 
     private static IndexedRelation relation(String provider) {
@@ -189,6 +247,13 @@ class ProviderProvenanceCollisionTest {
     private long countSymbolsFrom(String provider) {
         return repository.findSymbols(project.id()).stream()
                 .filter(symbol -> "SharedType".equals(symbol.symbol().name()))
+                .filter(symbol -> provider.equals(symbol.symbol().sourceProvider()))
+                .count();
+    }
+
+    private long countSymbolsNamedFrom(String name, String provider) {
+        return repository.findSymbols(project.id()).stream()
+                .filter(symbol -> name.equals(symbol.symbol().name()))
                 .filter(symbol -> provider.equals(symbol.symbol().sourceProvider()))
                 .count();
     }
