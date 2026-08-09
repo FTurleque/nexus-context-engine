@@ -1,5 +1,6 @@
 package com.nexus.context;
 
+import com.nexus.project.FederatedScopePolicy;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.search.CandidateType;
 
@@ -23,7 +24,13 @@ import java.util.UUID;
  */
 public final class FederatedContextService {
 
-    public static final int MAX_FEDERATED_PROJECTS = 100;
+    /**
+     * Alias de compatibilité. La politique canonique est définie exclusivement
+     * par {@link FederatedScopePolicy#MAX_PROJECTS}.
+     */
+    @Deprecated(forRemoval = false)
+    public static final int MAX_FEDERATED_PROJECTS = FederatedScopePolicy.MAX_PROJECTS;
+
     static final int LOCAL_OVERFETCH_FACTOR = 3;
 
     private final ContextBuilder contextBuilder;
@@ -39,28 +46,14 @@ public final class FederatedContextService {
             Set<CandidateType> requestedSources,
             Map<String, String> constraints,
             boolean explain) {
-        Objects.requireNonNull(projects, "projects");
         Objects.requireNonNull(query, "query");
         Objects.requireNonNull(requestedSources, "requestedSources");
         Objects.requireNonNull(constraints, "constraints");
-        if (projects.isEmpty()) {
-            throw new IllegalArgumentException("projects must not be empty");
-        }
+        List<ProjectDescriptor> scope = FederatedScopePolicy.normalizeProjects(projects);
         if (query.isBlank()) {
             throw new IllegalArgumentException("query must not be blank");
         }
         ContextBudgetPolicy.validate(tokenBudget);
-
-        Map<UUID, ProjectDescriptor> unique = new LinkedHashMap<>();
-        for (ProjectDescriptor project : projects) {
-            ProjectDescriptor nonNull = Objects.requireNonNull(project, "project");
-            unique.putIfAbsent(nonNull.id(), nonNull);
-        }
-        List<ProjectDescriptor> scope = List.copyOf(unique.values());
-        if (scope.size() > MAX_FEDERATED_PROJECTS) {
-            throw new IllegalArgumentException(
-                    "federated scope must not exceed " + MAX_FEDERATED_PROJECTS + " projects");
-        }
         if (tokenBudget < scope.size()) {
             throw new IllegalArgumentException(
                     "tokenBudget must be at least the number of projects in the federated scope");
@@ -109,10 +102,6 @@ public final class FederatedContextService {
         int selectedTokens = 0;
         int maxItems = perProjectItems.stream().mapToInt(List::size).max().orElse(0);
 
-        // Passe 1 : chaque projet peut consommer un préfixe de son ranking local
-        // dans son fair floor. Dès que le prochain candidat ne tient plus, tous
-        // les candidats suivants de ce projet sont différés afin de ne jamais
-        // faire passer un résultat local moins bien classé devant lui.
         for (int itemIndex = 0; itemIndex < maxItems; itemIndex++) {
             for (int projectIndex = 0; projectIndex < scope.size(); projectIndex++) {
                 List<FederatedContextItem> projectItems = perProjectItems.get(projectIndex);
@@ -147,9 +136,6 @@ public final class FederatedContextService {
             }
         }
 
-        // Passe 2 : les préfixes différés réutilisent le budget laissé libre par
-        // les projets clairsemés ou par le dedup. L'ordre de deferred est issu du
-        // round-robin de la passe 1 et conserve l'ordre relatif de chaque projet.
         int refillTokens = 0;
         int refillItems = 0;
         for (FederatedContextItem federated : deferred) {

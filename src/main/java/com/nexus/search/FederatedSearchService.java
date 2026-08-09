@@ -1,5 +1,6 @@
 package com.nexus.search;
 
+import com.nexus.project.FederatedScopePolicy;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.ranking.RankedCandidate;
 
@@ -44,11 +45,8 @@ public final class FederatedSearchService {
             String query,
             int limit,
             boolean explain) throws IOException {
-        Objects.requireNonNull(projects, "projects");
         Objects.requireNonNull(query, "query");
-        if (projects.isEmpty()) {
-            throw new IllegalArgumentException("projects must not be empty");
-        }
+        List<ProjectDescriptor> scope = FederatedScopePolicy.normalizeProjects(projects);
         if (query.isBlank()) {
             throw new IllegalArgumentException("query must not be blank");
         }
@@ -56,16 +54,10 @@ public final class FederatedSearchService {
             throw new IllegalArgumentException("limit must be greater than zero");
         }
 
-        Map<UUID, ProjectDescriptor> uniqueProjects = new LinkedHashMap<>();
-        for (ProjectDescriptor project : projects) {
-            ProjectDescriptor nonNullProject = Objects.requireNonNull(project, "project");
-            uniqueProjects.putIfAbsent(nonNullProject.id(), nonNullProject);
-        }
-
         int localLimit = localRetrievalLimit(limit);
         List<OrderedFederatedHit> candidates = new ArrayList<>();
         int projectOrder = 0;
-        for (ProjectDescriptor project : uniqueProjects.values()) {
+        for (ProjectDescriptor project : scope) {
             List<RankedCandidate> projectResults = searchService.search(project, query, localLimit, explain);
             for (int localOrder = 0; localOrder < projectResults.size(); localOrder++) {
                 candidates.add(new OrderedFederatedHit(

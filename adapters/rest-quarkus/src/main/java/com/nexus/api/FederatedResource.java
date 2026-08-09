@@ -4,6 +4,7 @@ import com.nexus.api.ApiModels.FederatedContextRequest;
 import com.nexus.api.ApiModels.FederatedContextResponse;
 import com.nexus.api.ApiModels.FederatedSearchRequest;
 import com.nexus.api.ApiModels.FederatedSearchResponse;
+import com.nexus.project.FederatedScopePolicy;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
@@ -61,10 +62,7 @@ public class FederatedResource {
     }
 
     private static List<UUID> requireProjects(List<UUID> projectIds) {
-        if (projectIds == null || projectIds.isEmpty()) {
-            throw new IllegalArgumentException("projectIds doit contenir au moins un projet");
-        }
-        return projectIds.stream().distinct().toList();
+        return FederatedScopePolicy.normalizeProjectIds(projectIds);
     }
 
     private static String requireNonBlank(String value, String message) {
