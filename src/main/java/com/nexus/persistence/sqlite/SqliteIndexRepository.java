@@ -434,7 +434,7 @@ public final class SqliteIndexRepository implements IndexRepository {
                 }
                 deleteProviderData(connection, projectId, snapshot.sourceProvider());
                 insertExternalSymbols(connection, fileIds, snapshot.symbols());
-                insertExternalRelations(connection, fileIds, snapshot.relations());
+                insertExternalRelations(connection, projectId, fileIds, snapshot.relations());
                 bumpGeneration(connection, projectId);
                 connection.commit();
             } catch (SQLException exception) {
@@ -864,6 +864,7 @@ public final class SqliteIndexRepository implements IndexRepository {
 
     private static void insertExternalRelations(
             Connection connection,
+            UUID projectId,
             Map<String, Long> fileIds,
             List<IndexedRelation> relations) throws SQLException {
         // CodeIntelligenceSnapshot canonicalise les relations par ExternalRelationIdentity.
@@ -874,12 +875,8 @@ public final class SqliteIndexRepository implements IndexRepository {
             if (fileId == null) {
                 continue;
             }
-            insertRelations(connection, indexedRelationProjectIdNotNeeded(), fileId, List.of(indexedRelation.relation()));
+            insertRelations(connection, projectId, fileId, List.of(indexedRelation.relation()));
         }
-    }
-
-    private static UUID indexedRelationProjectIdNotNeeded() {
-        throw new UnsupportedOperationException("project id must be provided by caller");
     }
 
     private static void bumpGeneration(Connection connection, UUID projectId) throws SQLException {
