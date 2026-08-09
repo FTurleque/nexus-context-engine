@@ -18,6 +18,8 @@ final class NexusRestSecurity {
     static final String EXPOSURE_MODE_PROPERTY = "nexus.rest.exposure-mode";
     static final String RUNTIME_ENVIRONMENT_VARIABLE = "NEXUS_RUNTIME";
     static final String RUNTIME_PROPERTY = "nexus.runtime";
+    static final String DOCKER_HOST_FORWARD_ADDRESS_ENVIRONMENT_VARIABLE = "NEXUS_DOCKER_HOST_FORWARD_ADDRESS";
+    static final String DOCKER_HOST_FORWARD_ADDRESS_PROPERTY = "nexus.docker.host-forward-address";
     static final int MIN_REMOTE_TOKEN_BYTES = 32;
     static final double MIN_REMOTE_TOKEN_ESTIMATED_ENTROPY_BITS = 96.0d;
 
@@ -53,6 +55,12 @@ final class NexusRestSecurity {
                 .map(value -> value.toLowerCase(Locale.ROOT));
     }
 
+    static Optional<String> configuredDockerHostForwardAddress() {
+        return configuredValue(
+                DOCKER_HOST_FORWARD_ADDRESS_PROPERTY,
+                DOCKER_HOST_FORWARD_ADDRESS_ENVIRONMENT_VARIABLE);
+    }
+
     private static Optional<String> configuredValue(String property, String environmentVariable) {
         String value = System.getProperty(property);
         if (value == null || value.isBlank()) {
@@ -68,14 +76,28 @@ final class NexusRestSecurity {
         return mode != null && EXPOSURE_MODES.contains(mode.trim().toLowerCase(Locale.ROOT));
     }
 
+    static boolean isLoopbackForwardMode(String mode) {
+        return mode != null && "loopback-forward".equals(mode.trim().toLowerCase(Locale.ROOT));
+    }
+
     static boolean isSecureNonLoopbackExposureMode(String mode) {
         return mode != null && NON_LOOPBACK_EXPOSURE_MODES.contains(mode.trim().toLowerCase(Locale.ROOT));
     }
 
+    /**
+     * Validates the declared Docker forwarding contract.
+     *
+     * <p>NEXUS cannot introspect the Docker daemon's actual published host address from inside the
+     * container. Therefore loopback-forward is accepted only when the deployment explicitly
+     * declares the host forward address and that declaration is loopback. Official Compose wiring
+     * derives this declaration from the exact same bind-address variable used by the port mapping.</p>
+     */
     static boolean isDockerLoopbackForward(String mode) {
-        return mode != null
-                && "loopback-forward".equals(mode.trim().toLowerCase(Locale.ROOT))
-                && configuredRuntime().filter("docker"::equals).isPresent();
+        return isLoopbackForwardMode(mode)
+                && configuredRuntime().filter("docker"::equals).isPresent()
+                && configuredDockerHostForwardAddress()
+                        .filter(NexusRestSecurity::isLoopbackHost)
+                        .isPresent();
     }
 
     static boolean isStrongRemoteToken(String token) {
