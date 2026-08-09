@@ -10,11 +10,13 @@ import com.nexus.index.IndexedSymbol;
 import com.nexus.index.RelationKind;
 import com.nexus.index.SymbolKind;
 import com.nexus.index.SymbolRelation;
+import com.nexus.security.SafeFileIO;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -76,9 +78,10 @@ public final class MinosCodeIndexImporter {
             throw new IOException("MINOS export belongs to another project root: " + exportedRoot);
         }
 
+        Map<String, Integer> sourceLineCounts = new LinkedHashMap<>();
         Map<ExternalSymbolIdentity, IndexedSymbol> symbols = new LinkedHashMap<>();
         for (JsonNode symbolNode : requiredArray(document, "symbols")) {
-            IndexedSymbol symbol = mapSymbol(safeProjectFiles, symbolNode);
+            IndexedSymbol symbol = mapSymbol(root, safeProjectFiles, sourceLineCounts, symbolNode);
             if (symbol == null) {
                 continue;
             }
@@ -107,7 +110,11 @@ public final class MinosCodeIndexImporter {
         return document;
     }
 
-    private static IndexedSymbol mapSymbol(Set<String> safeProjectFiles, JsonNode node) throws IOException {
+    private static IndexedSymbol mapSymbol(
+            Path projectRoot,
+            Set<String> safeProjectFiles,
+            Map<String, Integer> sourceLineCounts,
+            JsonNode node) throws IOException {
         if (!"RESOLVED".equals(optionalText(node, "resolutionStatus"))) {
             return null;
         }
@@ -123,6 +130,12 @@ public final class MinosCodeIndexImporter {
         int endLine = positiveLine(node, "endLine");
         if (endLine < startLine) {
             throw new IOException("MINOS export contains an invalid symbol line range");
+        }
+        int sourceLineCount = canonicalLineCount(projectRoot, relativePath, sourceLineCounts);
+        if (sourceLineCount >= 0 && !CodeSymbol.isWithinLineCount(startLine, endLine, sourceLineCount)) {
+            throw new IOException("MINOS export symbol line range exceeds canonical file '"
+                    + relativePath + "': " + startLine + "-" + endLine
+                    + " for " + sourceLineCount + " line(s)");
         }
         String name = requiredText(node, "name");
         String qualifiedName = optionalText(node, "qualifiedName");
@@ -163,6 +176,31 @@ public final class MinosCodeIndexImporter {
         return new IndexedRelation(
                 relativePath,
                 new SymbolRelation(kind, source, target, confidence, SOURCE_PROVIDER));
+    }
+
+    private static int canonicalLineCount(
+            Path projectRoot,
+            String relativePath,
+            Map<String, Integer> sourceLineCounts) throws IOException {
+        Integer cached = sourceLineCounts.get(relativePath);
+        if (cached != null) {
+            return cached;
+        }
+        Path source = projectRoot.resolve(relativePath).normalize();
+        int lineCount = -1;
+        if (source.startsWith(projectRoot) && Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS)) {
+            lineCount = countLines(SafeFileIO.readStringNoFollow(source));
+        }
+        sourceLineCounts.put(relativePath, lineCount);
+        return lineCount;
+    }
+
+    private static int countLines(String content) throws IOException {
+        long lineCount = content.lines().count();
+        if (lineCount > Integer.MAX_VALUE) {
+            throw new IOException("Source file contains too many lines to validate a MINOS symbol range");
+        }
+        return (int) lineCount;
     }
 
     private static SymbolKind mapSymbolKind(String value) {
