@@ -3,6 +3,7 @@ package com.nexus.context;
 import com.nexus.index.CodeSymbol;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.ranking.RankedCandidate;
+import com.nexus.security.ProjectPathGuard;
 import com.nexus.security.SafeFileIO;
 import com.nexus.token.TokenEstimator;
 
@@ -19,6 +20,15 @@ import java.util.Set;
 
 /**
  * Transforme les candidats classés en fragments de source concrets.
+ *
+ * <p>Cette classe constitue la frontière de matérialisation des
+ * {@code SearchCandidate}. Aucun chemin fourni par une stratégie ou un enricher
+ * n'est lu directement : il est d'abord résolu et validé par
+ * {@link ProjectPathGuard}, puis ouvert par {@link SafeFileIO} qui refuse de
+ * suivre un lien symbolique sur le composant final au moment de l'ouverture.
+ * Les sources synthétiques Git/instructions/skills sont construites par leurs
+ * factories dédiées à partir de contenu déjà chargé et ne passent pas par cette
+ * lecture de fichiers candidats.</p>
  *
  * <p>Les symboles utilisent leurs bornes AST. Les candidats fichier servent de
  * repli : le fichier complet est conservé lorsqu'il est court, sinon des
@@ -43,6 +53,14 @@ public final class ContextFragmentFactory {
             String query,
             List<RankedCandidate> rankedCandidates,
             int tokenBudget) throws IOException {
+        return materialize(project, query, rankedCandidates, tokenBudget).fragments();
+    }
+
+    MaterializationResult materialize(
+            ProjectDescriptor project,
+            String query,
+            List<RankedCandidate> rankedCandidates,
+            int tokenBudget) throws IOException {
         Objects.requireNonNull(project, "project");
         Objects.requireNonNull(query, "query");
         Objects.requireNonNull(rankedCandidates, "rankedCandidates");
@@ -50,6 +68,7 @@ public final class ContextFragmentFactory {
             throw new IllegalArgumentException("tokenBudget must be greater than zero");
         }
 
+        ProjectPathGuard pathGuard = new ProjectPathGuard(project.rootPath());
         Map<Path, List<RankedCandidate>> byPath = new LinkedHashMap<>();
         for (RankedCandidate candidate : rankedCandidates) {
             byPath.computeIfAbsent(candidate.candidate().path(), ignored -> new ArrayList<>())
@@ -57,30 +76,55 @@ public final class ContextFragmentFactory {
         }
 
         List<ContextFragment> fragments = new ArrayList<>();
+        List<String> diagnostics = new ArrayList<>();
         for (Map.Entry<Path, List<RankedCandidate>> entry : byPath.entrySet()) {
-            Path absolutePath = entry.getKey();
-            Path relativePath = project.rootPath().relativize(absolutePath);
-            String content = SafeFileIO.readStringNoFollow(absolutePath);
-            List<String> lines = List.of(content.split("\\r?\\n", -1));
-            int sourceLineCount = countSourceLines(content);
-            List<RankedCandidate> symbolCandidates = entry.getValue().stream()
-                    .filter(candidate -> candidate.candidate().symbol() != null)
-                    .toList();
+            Path candidatePath = entry.getKey();
+            try {
+                Path absolutePath = requireReadableCandidate(pathGuard, candidatePath);
+                Path relativePath = pathGuard.root().relativize(absolutePath);
+                String content = SafeFileIO.readStringNoFollow(absolutePath);
+                List<String> lines = List.of(content.split("\\r?\\n", -1));
+                int sourceLineCount = countSourceLines(content);
+                List<RankedCandidate> symbolCandidates = entry.getValue().stream()
+                        .filter(candidate -> candidate.candidate().symbol() != null)
+                        .toList();
 
-            if (!symbolCandidates.isEmpty()) {
-                for (RankedCandidate candidate : symbolCandidates) {
-                    ContextFragment fragment = symbolFragment(relativePath, lines, sourceLineCount, candidate);
-                    if (fragment != null) {
-                        fragments.add(fragment);
+                if (!symbolCandidates.isEmpty()) {
+                    for (RankedCandidate candidate : symbolCandidates) {
+                        ContextFragment fragment = symbolFragment(relativePath, lines, sourceLineCount, candidate);
+                        if (fragment != null) {
+                            fragments.add(fragment);
+                        }
                     }
+                    continue;
                 }
-                continue;
-            }
 
-            RankedCandidate fileCandidate = entry.getValue().getFirst();
-            fragments.addAll(fileFragments(relativePath, lines, query, fileCandidate, tokenBudget));
+                RankedCandidate fileCandidate = entry.getValue().getFirst();
+                fragments.addAll(fileFragments(relativePath, lines, query, fileCandidate, tokenBudget));
+            } catch (IOException exception) {
+                String diagnostic = materializationDiagnostic(candidatePath, exception);
+                diagnostics.add(diagnostic);
+                LOGGER.log(System.Logger.Level.WARNING, diagnostic);
+            }
         }
-        return List.copyOf(fragments);
+        return new MaterializationResult(fragments, diagnostics);
+    }
+
+    private static Path requireReadableCandidate(ProjectPathGuard pathGuard, Path candidatePath) throws IOException {
+        Path contained = candidatePath.isAbsolute()
+                ? candidatePath
+                : pathGuard.resolve(candidatePath);
+        return pathGuard.requireRegularFile(contained);
+    }
+
+    private static String materializationDiagnostic(Path candidatePath, IOException exception) {
+        String reason = exception.getMessage();
+        if (reason == null || reason.isBlank()) {
+            reason = exception.getClass().getSimpleName();
+        }
+        return "Candidat de contexte exclu sans lecture : "
+                + candidatePath.toString().replace('\\', '/')
+                + " (" + reason + ")";
     }
 
     private static ContextFragment symbolFragment(
@@ -213,6 +257,13 @@ public final class ContextFragmentFactory {
 
     private static String joinLines(List<String> lines, int startLine, int endLine) {
         return String.join(System.lineSeparator(), lines.subList(startLine - 1, endLine));
+    }
+
+    record MaterializationResult(List<ContextFragment> fragments, List<String> diagnostics) {
+        MaterializationResult {
+            fragments = List.copyOf(fragments);
+            diagnostics = List.copyOf(diagnostics);
+        }
     }
 
     private record LineRange(int startLine, int endLine) {
