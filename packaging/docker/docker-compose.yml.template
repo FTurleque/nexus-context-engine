@@ -16,6 +16,10 @@ services:
       NEXUS_REST_PORT: "${NEXUS_DOCKER_CONTAINER_PORT:-8080}"
       NEXUS_REST_ALLOWED_PROJECT_ROOTS: "/workspace"
       NEXUS_REST_EXPOSURE_MODE: "${NEXUS_REST_EXPOSURE_MODE:-loopback-forward}"
+      # Contractual declaration of the Docker host forward. It deliberately comes from the exact
+      # same deployment variable as the published port below, so the official Compose path cannot
+      # claim loopback-forward while publishing on a remote address.
+      NEXUS_DOCKER_HOST_FORWARD_ADDRESS: "${NEXUS_DOCKER_BIND_ADDRESS:-127.0.0.1}"
       NEXUS_MAX_FILE_SIZE_BYTES: "${NEXUS_MAX_FILE_SIZE_BYTES:-8388608}"
       NEXUS_MAX_SCIP_INDEX_BYTES: "${NEXUS_MAX_SCIP_INDEX_BYTES:-268435456}"
       NEXUS_MAX_SCIP_MESSAGE_BYTES: "${NEXUS_MAX_SCIP_MESSAGE_BYTES:-16777216}"
