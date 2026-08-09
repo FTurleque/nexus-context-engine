@@ -79,7 +79,7 @@ class AssistantIntegrationEscapingTest {
                 "$var",
                 "!var!",
                 "`literal`",
-                "été漢字");
+                "\u00e9t\u00e9\u6f22\u5b57");
         CommandSpec spec = new CommandSpec("C:\\Program Files\\java.exe", expected);
         JsonNode server = objectMapper.readTree(generator.copilotCliJson(spec))
                 .path("mcpServers").path("nexus");
@@ -93,7 +93,7 @@ class AssistantIntegrationEscapingTest {
     @Test
     void tomlFormEscapesStructuredBackslashesQuotesAndControls() {
         String path = "C:\\a&b\\has\"quote\\runner.jar";
-        CommandSpec spec = new CommandSpec("java", List.of(path, "", "%VAR%", "$var", "!var!", "été漢字"));
+        CommandSpec spec = new CommandSpec("java", List.of(path, "", "%VAR%", "$var", "!var!", "\u00e9t\u00e9\u6f22\u5b57"));
         String toml = generator.codexDesktopToml(spec);
         assertTrue(toml.contains("\\\\a&b\\\\"), "backslashes échappés : " + toml);
         assertTrue(toml.contains("has\\\"quote"), "guillemet échappé : " + toml);
@@ -101,7 +101,7 @@ class AssistantIntegrationEscapingTest {
         assertTrue(toml.contains("\"%VAR%\""), "pourcentage littéral structuré : " + toml);
         assertTrue(toml.contains("\"$var\""), "dollar littéral structuré : " + toml);
         assertTrue(toml.contains("\"!var!\""), "exclamation littérale structurée : " + toml);
-        assertTrue(toml.contains("\"été漢字\""), "Unicode structuré : " + toml);
+        assertTrue(toml.contains("\"\u00e9t\u00e9\u6f22\u5b57\""), "Unicode structuré : " + toml);
     }
 
     @Test
@@ -119,7 +119,7 @@ class AssistantIntegrationEscapingTest {
                 "paren(value)",
                 "semi;comma,value",
                 "C:\\literal\\backslash\\path",
-                "été漢字");
+                "\u00e9t\u00e9\u6f22\u5b57");
 
         Path cmdOutput = work.resolve("cmd argv.txt");
         CommandSpec cmdSpec = captureSpec(powershell, capture, cmdOutput, expected);
