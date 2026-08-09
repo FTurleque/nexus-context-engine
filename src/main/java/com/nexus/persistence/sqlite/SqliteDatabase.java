@@ -15,6 +15,7 @@ public final class SqliteDatabase {
 
     public static final int DEFAULT_BUSY_TIMEOUT_MILLIS = 5_000;
     private static final int MAX_BUSY_TIMEOUT_MILLIS = 60_000;
+    private static final System.Logger LOGGER = System.getLogger(SqliteDatabase.class.getName());
 
     private final Path databaseFile;
     private final int busyTimeoutMillis;
@@ -87,6 +88,7 @@ public final class SqliteDatabase {
     private <T> T executeTransactionAttempt(SqlTransaction<T> transaction) throws SQLException {
         Connection connection = openConnection();
         boolean committed = false;
+        Throwable pendingFailure = null;
         try {
             connection.setAutoCommit(false);
             T result = transaction.execute(connection);
@@ -94,17 +96,23 @@ public final class SqliteDatabase {
             committed = true;
             return result;
         } catch (SQLException | RuntimeException failure) {
-            if (!committed) {
-                rollbackPreserving(connection, failure);
-            }
+            pendingFailure = failure;
+            rollbackPreserving(connection, failure);
             throw failure;
         } finally {
             try {
                 connection.close();
             } catch (SQLException closeFailure) {
-                // Une transaction déjà commitée ne doit jamais être rejouée à cause
-                // d'un échec de fermeture de connexion : cela violerait l'exactly-once.
-                if (!committed) {
+                if (pendingFailure != null) {
+                    pendingFailure.addSuppressed(closeFailure);
+                } else if (committed) {
+                    // Une transaction déjà commitée ne doit jamais être rejouée à
+                    // cause d'un échec de fermeture : cela violerait l'exactly-once.
+                    LOGGER.log(
+                            System.Logger.Level.WARNING,
+                            "Connexion SQLite non fermée proprement après commit; transaction non rejouée",
+                            closeFailure);
+                } else {
                     throw closeFailure;
                 }
             }
