@@ -57,11 +57,11 @@ public final class SafeFileIO {
         return new BufferedReader(new InputStreamReader(newInputStreamNoFollow(file, maxBytes), charset));
     }
 
-    public static String readStringNoFollow(Path file) throws IOException {
-        return readStringNoFollow(file, ProjectFileLimits.maxFileSizeFromEnvironment());
+    public static byte[] readBytesNoFollow(Path file) throws IOException {
+        return readBytesNoFollow(file, ProjectFileLimits.maxFileSizeFromEnvironment());
     }
 
-    public static String readStringNoFollow(Path file, long maxBytes) throws IOException {
+    public static byte[] readBytesNoFollow(Path file, long maxBytes) throws IOException {
         try (InputStream input = newInputStreamNoFollow(file, maxBytes);
              ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             byte[] buffer = new byte[BUFFER_SIZE];
@@ -71,8 +71,16 @@ public final class SafeFileIO {
                     output.write(buffer, 0, read);
                 }
             }
-            return output.toString(StandardCharsets.UTF_8);
+            return output.toByteArray();
         }
+    }
+
+    public static String readStringNoFollow(Path file) throws IOException {
+        return readStringNoFollow(file, ProjectFileLimits.maxFileSizeFromEnvironment());
+    }
+
+    public static String readStringNoFollow(Path file, long maxBytes) throws IOException {
+        return new String(readBytesNoFollow(file, maxBytes), StandardCharsets.UTF_8);
     }
 
     private static final class BoundedInputStream extends FilterInputStream {

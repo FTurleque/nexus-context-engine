@@ -147,7 +147,7 @@ $moduleList | Set-Content -LiteralPath (Join-Path $distribution 'RUNTIME-MODULES
 
 @'
 @echo off
-setlocal
+setlocal DisableDelayedExpansion
 if exist "%~dp0config\nexus-native.env.cmd" call "%~dp0config\nexus-native.env.cmd"
 "%~dp0app\nexus.exe" %*
 exit /b %ERRORLEVEL%
@@ -155,7 +155,7 @@ exit /b %ERRORLEVEL%
 
 @'
 @echo off
-setlocal
+setlocal DisableDelayedExpansion
 if exist "%~dp0config\nexus-native.env.cmd" call "%~dp0config\nexus-native.env.cmd"
 "%~dp0app\runtime\bin\java.exe" -jar "%~dp0lib\nexus-mcp.jar" %*
 exit /b %ERRORLEVEL%
@@ -163,7 +163,7 @@ exit /b %ERRORLEVEL%
 
 @'
 @echo off
-setlocal
+setlocal DisableDelayedExpansion
 if exist "%~dp0config\nexus-native.env.cmd" call "%~dp0config\nexus-native.env.cmd"
 "%~dp0app\runtime\bin\java.exe" -jar "%~dp0lib\nexus-assistant-clients.jar" %*
 exit /b %ERRORLEVEL%
@@ -171,7 +171,7 @@ exit /b %ERRORLEVEL%
 
 @'
 @echo off
-setlocal
+setlocal DisableDelayedExpansion
 if exist "%~dp0config\nexus-native.env.cmd" call "%~dp0config\nexus-native.env.cmd"
 if "%NEXUS_REST_HOST%"=="" set "NEXUS_REST_HOST=127.0.0.1"
 if "%NEXUS_REST_PORT%"=="" set "NEXUS_REST_PORT=8080"
@@ -181,7 +181,7 @@ exit /b %ERRORLEVEL%
 
 @'
 @echo off
-setlocal
+setlocal DisableDelayedExpansion
 if exist "%~dp0docker\.env" for /f "usebackq tokens=1,* delims==" %%A in ("%~dp0docker\.env") do if /I "%%A"=="NEXUS_DOCKER_CONTAINER" set "NEXUS_DOCKER_CONTAINER=%%B"
 if "%NEXUS_DOCKER_CONTAINER%"=="" set "NEXUS_DOCKER_CONTAINER=nexus"
 docker exec -i "%NEXUS_DOCKER_CONTAINER%" java -jar /opt/nexus/lib/nexus-mcp.jar %*
@@ -190,7 +190,7 @@ exit /b %ERRORLEVEL%
 
 @'
 @echo off
-setlocal
+setlocal DisableDelayedExpansion
 if exist "%~dp0docker\.env" for /f "usebackq tokens=1,* delims==" %%A in ("%~dp0docker\.env") do if /I "%%A"=="NEXUS_DOCKER_CONTAINER" set "NEXUS_DOCKER_CONTAINER=%%B"
 if "%NEXUS_DOCKER_CONTAINER%"=="" set "NEXUS_DOCKER_CONTAINER=nexus"
 docker exec -i "%NEXUS_DOCKER_CONTAINER%" java -jar /opt/nexus/lib/nexus-cli.jar %*

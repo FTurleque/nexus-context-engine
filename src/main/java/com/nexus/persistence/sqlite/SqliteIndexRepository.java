@@ -16,6 +16,7 @@ import com.nexus.index.ScannedFile;
 import com.nexus.index.SymbolKind;
 import com.nexus.index.SymbolRelation;
 import com.nexus.persistence.PersistenceException;
+import com.nexus.search.ResultLimitPolicy;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -23,13 +24,17 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 public final class SqliteIndexRepository implements IndexRepository {
 
@@ -103,14 +108,37 @@ public final class SqliteIndexRepository implements IndexRepository {
     }
 
     @Override
+    public Map<String, String> findTypeOwners(UUID projectId) {
+        try (Connection connection = database.openConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT s.qualified_name, MIN(f.relative_path) AS relative_path
+                     FROM symbols s
+                     JOIN indexed_files f ON f.id = s.file_id
+                     WHERE f.project_id = ?
+                       AND s.kind IN ('CLASS', 'INTERFACE', 'RECORD', 'ENUM', 'ANNOTATION', 'TYPE')
+                     GROUP BY s.qualified_name
+                     ORDER BY s.qualified_name
+                     """)) {
+            statement.setString(1, projectId.toString());
+            try (ResultSet resultSet = statement.executeQuery()) {
+                Map<String, String> owners = new LinkedHashMap<>();
+                while (resultSet.next()) {
+                    owners.put(resultSet.getString("qualified_name"), resultSet.getString("relative_path"));
+                }
+                return Map.copyOf(owners);
+            }
+        } catch (SQLException exception) {
+            throw persistence("Impossible de projeter les propriétaires de types du projet " + projectId, exception);
+        }
+    }
+
+    @Override
     public List<IndexedSymbol> searchSymbols(UUID projectId, String query, int limit) {
         Objects.requireNonNull(query, "query");
         if (query.isBlank()) {
             throw new IllegalArgumentException("query must not be blank");
         }
-        if (limit <= 0) {
-            throw new IllegalArgumentException("limit must be greater than zero");
-        }
+        ResultLimitPolicy.validateInternalRetrieval(limit);
         String normalized = query.trim().toLowerCase(Locale.ROOT);
         String contains = "%" + escapeLike(normalized) + "%";
         String prefix = escapeLike(normalized) + "%";
@@ -170,14 +198,165 @@ public final class SqliteIndexRepository implements IndexRepository {
     }
 
     @Override
+    public List<SymbolRelation> findImportRelations(UUID projectId) {
+        try (Connection connection = database.openConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT kind, source_ref, target_ref, confidence, source_provider
+                     FROM symbol_relations
+                     WHERE project_id = ? AND kind = ?
+                     ORDER BY source_ref, target_ref, source_provider
+                     """)) {
+            statement.setString(1, projectId.toString());
+            statement.setString(2, RelationKind.IMPORTS.name());
+            return readRelations(statement);
+        } catch (SQLException exception) {
+            throw persistence("Impossible de projeter les imports du projet " + projectId, exception);
+        }
+    }
+
+    @Override
+    public Map<String, Set<String>> findGraphNeighbors(
+            UUID projectId,
+            Set<String> relativePaths,
+            int maxEdges) {
+        Objects.requireNonNull(relativePaths, "relativePaths");
+        relativePaths.forEach(path -> Objects.requireNonNull(path, "relativePaths must not contain null"));
+        ResultLimitPolicy.validateInternalRetrieval(maxEdges);
+        if (relativePaths.isEmpty()) {
+            return Map.of();
+        }
+
+        String requestedPaths = serializePaths(relativePaths.stream().sorted().toList());
+        Map<String, String> typeOwners = findTypeOwners(projectId);
+        Map<String, Set<String>> neighbors = new LinkedHashMap<>();
+        int projectedEdges = 0;
+
+        try (Connection connection = database.openConnection()) {
+            try (PreparedStatement outgoing = connection.prepareStatement("""
+                    WITH requested(path) AS (
+                        SELECT value FROM json_each(?)
+                    )
+                    SELECT DISTINCT r.source_ref AS seed_path, r.target_ref
+                    FROM requested q
+                    JOIN symbol_relations r
+                      ON r.project_id = ?
+                     AND r.kind = ?
+                     AND r.source_ref = q.path
+                    ORDER BY r.source_ref, r.target_ref
+                    LIMIT ?
+                    """)) {
+                outgoing.setString(1, requestedPaths);
+                outgoing.setString(2, projectId.toString());
+                outgoing.setString(3, RelationKind.IMPORTS.name());
+                outgoing.setInt(4, maxEdges);
+                try (ResultSet resultSet = outgoing.executeQuery()) {
+                    while (resultSet.next() && projectedEdges < maxEdges) {
+                        String seedPath = resultSet.getString("seed_path");
+                        String neighborPath = resolveTypeOwner(typeOwners, resultSet.getString("target_ref"));
+                        if (addGraphNeighbor(neighbors, seedPath, neighborPath)) {
+                            projectedEdges++;
+                        }
+                    }
+                }
+            }
+
+            int remainingEdges = maxEdges - projectedEdges;
+            if (remainingEdges > 0) {
+                try (PreparedStatement incoming = connection.prepareStatement("""
+                        WITH requested(path) AS (
+                            SELECT value FROM json_each(?)
+                        ),
+                        requested_types AS (
+                            SELECT s.qualified_name, f.relative_path
+                            FROM requested q
+                            JOIN indexed_files f
+                              ON f.project_id = ? AND f.relative_path = q.path
+                            JOIN symbols s ON s.file_id = f.id
+                            WHERE s.kind IN ('CLASS', 'INTERFACE', 'RECORD', 'ENUM', 'ANNOTATION', 'TYPE')
+                        )
+                        SELECT DISTINCT rt.relative_path AS seed_path,
+                                        r.source_ref AS neighbor_path
+                        FROM requested_types rt
+                        JOIN symbol_relations r
+                          ON r.project_id = ?
+                         AND r.kind = ?
+                         AND (
+                             r.target_ref = rt.qualified_name
+                             OR (
+                                 r.target_ref >= rt.qualified_name || '.'
+                                 AND r.target_ref < rt.qualified_name || '/'
+                             )
+                         )
+                        WHERE r.source_ref <> rt.relative_path
+                        ORDER BY rt.relative_path, r.source_ref
+                        LIMIT ?
+                        """)) {
+                    incoming.setString(1, requestedPaths);
+                    incoming.setString(2, projectId.toString());
+                    incoming.setString(3, projectId.toString());
+                    incoming.setString(4, RelationKind.IMPORTS.name());
+                    incoming.setInt(5, remainingEdges);
+                    try (ResultSet resultSet = incoming.executeQuery()) {
+                        while (resultSet.next() && projectedEdges < maxEdges) {
+                            if (addGraphNeighbor(
+                                    neighbors,
+                                    resultSet.getString("seed_path"),
+                                    resultSet.getString("neighbor_path"))) {
+                                projectedEdges++;
+                            }
+                        }
+                    }
+                }
+            }
+
+            Map<String, Set<String>> immutable = new LinkedHashMap<>();
+            neighbors.forEach((path, values) -> immutable.put(path, Set.copyOf(values)));
+            return Map.copyOf(immutable);
+        } catch (SQLException exception) {
+            throw persistence("Impossible de projeter le voisinage graphe du projet " + projectId, exception);
+        }
+    }
+
+    @Override
+    public Set<String> findExternalProviders(UUID projectId) {
+        try (Connection connection = database.openConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT source_provider
+                     FROM (
+                         SELECT DISTINCT s.source_provider AS source_provider
+                         FROM symbols s
+                         JOIN indexed_files f ON f.id = s.file_id
+                         WHERE f.project_id = ? AND s.source_provider <> ?
+                         UNION
+                         SELECT DISTINCT r.source_provider AS source_provider
+                         FROM symbol_relations r
+                         WHERE r.project_id = ? AND r.source_provider <> ?
+                     )
+                     ORDER BY source_provider
+                     """)) {
+            statement.setString(1, projectId.toString());
+            statement.setString(2, EMBEDDED_SOURCE_PROVIDER);
+            statement.setString(3, projectId.toString());
+            statement.setString(4, EMBEDDED_SOURCE_PROVIDER);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                Set<String> providers = new LinkedHashSet<>();
+                while (resultSet.next()) {
+                    providers.add(resultSet.getString("source_provider"));
+                }
+                return Collections.unmodifiableSet(providers);
+            }
+        } catch (SQLException exception) {
+            throw persistence("Impossible de lire les providers externes du projet " + projectId, exception);
+        }
+    }
+
+    @Override
     public List<SymbolRelation> searchRelations(UUID projectId, String symbol, int limit) {
         Objects.requireNonNull(symbol, "symbol");
         if (symbol.isBlank()) {
             throw new IllegalArgumentException("symbol must not be blank");
         }
-        if (limit <= 0) {
-            throw new IllegalArgumentException("limit must be greater than zero");
-        }
+        ResultLimitPolicy.validate(limit);
         String normalized = symbol.trim().toLowerCase(Locale.ROOT);
         String contains = "%" + escapeLike(normalized) + "%";
         try (Connection connection = database.openConnection();
@@ -228,6 +407,7 @@ public final class SqliteIndexRepository implements IndexRepository {
 
     @Override
     public void replaceExternalCodeIntelligence(UUID projectId, CodeIntelligenceSnapshot snapshot) {
+        Objects.requireNonNull(snapshot, "snapshot");
         if (EMBEDDED_SOURCE_PROVIDER.equals(snapshot.sourceProvider())) {
             throw new IllegalArgumentException("Le provider embarqué ne peut pas être remplacé comme index externe");
         }
@@ -235,8 +415,12 @@ public final class SqliteIndexRepository implements IndexRepository {
             boolean initialAutoCommit = connection.getAutoCommit();
             connection.setAutoCommit(false);
             try {
-                deleteProviderData(connection, projectId, snapshot.sourceProvider());
                 Map<String, Long> fileIds = findFileIds(connection, projectId);
+                if (externalSnapshotMatches(connection, projectId, fileIds.keySet(), snapshot)) {
+                    connection.commit();
+                    return;
+                }
+                deleteProviderData(connection, projectId, snapshot.sourceProvider());
                 insertExternalSymbols(connection, fileIds, snapshot.symbols());
                 insertExternalRelations(connection, projectId, fileIds, snapshot.relations());
                 bumpGeneration(connection, projectId);
@@ -342,6 +526,34 @@ public final class SqliteIndexRepository implements IndexRepository {
             }
             return List.copyOf(relations);
         }
+    }
+
+    private static String resolveTypeOwner(Map<String, String> typeOwners, String targetRef) {
+        if (targetRef == null || targetRef.isBlank()) {
+            return null;
+        }
+        String candidate = targetRef;
+        while (true) {
+            String owner = typeOwners.get(candidate);
+            if (owner != null) {
+                return owner;
+            }
+            int separator = candidate.lastIndexOf('.');
+            if (separator < 0) {
+                return null;
+            }
+            candidate = candidate.substring(0, separator);
+        }
+    }
+
+    private static boolean addGraphNeighbor(
+            Map<String, Set<String>> neighbors,
+            String seedPath,
+            String neighborPath) {
+        if (neighborPath == null || neighborPath.equals(seedPath)) {
+            return false;
+        }
+        return neighbors.computeIfAbsent(seedPath, ignored -> new LinkedHashSet<>()).add(neighborPath);
     }
 
     private static void deleteRemovedFiles(Connection connection, UUID projectId, Set<String> removedPaths)
@@ -471,6 +683,77 @@ public final class SqliteIndexRepository implements IndexRepository {
         }
     }
 
+    private static boolean externalSnapshotMatches(
+            Connection connection,
+            UUID projectId,
+            Set<String> indexedPaths,
+            CodeIntelligenceSnapshot snapshot) throws SQLException {
+        Set<IndexedSymbol> expectedSymbols = snapshot.symbols().stream()
+                .filter(symbol -> indexedPaths.contains(symbol.relativePath()))
+                .collect(Collectors.toCollection(HashSet::new));
+        Set<IndexedRelation> expectedRelations = snapshot.relations().stream()
+                .filter(relation -> indexedPaths.contains(relation.relativePath()))
+                .collect(Collectors.toCollection(HashSet::new));
+
+        List<IndexedSymbol> persistedSymbols = readProviderSymbols(
+                connection, projectId, snapshot.sourceProvider());
+        List<IndexedRelation> persistedRelations = readProviderRelations(
+                connection, projectId, snapshot.sourceProvider());
+
+        return persistedSymbols.size() == expectedSymbols.size()
+                && persistedRelations.size() == expectedRelations.size()
+                && new HashSet<>(persistedSymbols).equals(expectedSymbols)
+                && new HashSet<>(persistedRelations).equals(expectedRelations);
+    }
+
+    private static List<IndexedSymbol> readProviderSymbols(
+            Connection connection,
+            UUID projectId,
+            String sourceProvider) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT f.relative_path, s.kind, s.name, s.qualified_name,
+                       s.signature, s.start_line, s.end_line, s.source_provider
+                FROM symbols s
+                JOIN indexed_files f ON f.id = s.file_id
+                WHERE f.project_id = ? AND s.source_provider = ?
+                ORDER BY f.relative_path, s.start_line, s.name
+                """)) {
+            statement.setString(1, projectId.toString());
+            statement.setString(2, sourceProvider);
+            return readSymbols(statement);
+        }
+    }
+
+    private static List<IndexedRelation> readProviderRelations(
+            Connection connection,
+            UUID projectId,
+            String sourceProvider) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT f.relative_path, r.kind, r.source_ref, r.target_ref, r.confidence, r.source_provider
+                FROM symbol_relations r
+                JOIN indexed_files f ON f.id = r.file_id
+                WHERE r.project_id = ? AND r.source_provider = ?
+                ORDER BY f.relative_path, r.kind, r.source_ref, r.target_ref
+                """)) {
+            statement.setString(1, projectId.toString());
+            statement.setString(2, sourceProvider);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                List<IndexedRelation> relations = new ArrayList<>();
+                while (resultSet.next()) {
+                    relations.add(new IndexedRelation(
+                            resultSet.getString("relative_path"),
+                            new SymbolRelation(
+                                    RelationKind.valueOf(resultSet.getString("kind")),
+                                    resultSet.getString("source_ref"),
+                                    resultSet.getString("target_ref"),
+                                    resultSet.getDouble("confidence"),
+                                    resultSet.getString("source_provider"))));
+                }
+                return List.copyOf(relations);
+            }
+        }
+    }
+
     private static void deleteProviderData(Connection connection, UUID projectId, String sourceProvider)
             throws SQLException {
         try (PreparedStatement deleteRelations = connection.prepareStatement(
@@ -511,7 +794,7 @@ public final class SqliteIndexRepository implements IndexRepository {
         // décrivent un fait équivalent produisent deux lignes distinctes, une par
         // provider. Le contrôle d'existence porte donc sur source_provider afin de
         // ne dédupliquer qu'à l'intérieur du snapshot du provider courant (défense
-        // contre les doublons internes), jamais entre providers. Voir P1 provenance.
+        // contre les doublons internes), jamais entre providers.
         try (PreparedStatement exists = connection.prepareStatement("""
                 SELECT 1
                 FROM symbols
@@ -549,7 +832,7 @@ public final class SqliteIndexRepository implements IndexRepository {
         // Même sémantique provenance-aware que pour les symboles : une relation
         // équivalente fournie par deux providers distincts est conservée en deux
         // lignes, de sorte que la suppression d'un provider ne détruit pas la
-        // relation encore fournie par l'autre. Voir P1 provenance.
+        // relation encore fournie par l'autre.
         try (PreparedStatement exists = connection.prepareStatement("""
                 SELECT 1
                 FROM symbol_relations

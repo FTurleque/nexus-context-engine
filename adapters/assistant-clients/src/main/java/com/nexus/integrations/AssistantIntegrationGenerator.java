@@ -183,11 +183,17 @@ public final class AssistantIntegrationGenerator {
         return server;
     }
 
-    private static String renderCommand(CommandSpec commandSpec) {
+    /**
+     * Rendu volontairement limité au sous-ensemble commun à cmd.exe et PowerShell.
+     * Les caractères dont l'expansion diffère entre les deux shells sont refusés :
+     * pour eux, JSON/TOML (ou les scripts PowerShell du wizard, qui passent un tableau
+     * argv) sont la représentation sûre.
+     */
+    static String renderCommand(CommandSpec commandSpec) {
         List<String> parts = new ArrayList<>();
-        parts.add(quote(commandSpec.command()));
+        parts.add(quotePortable(commandSpec.command()));
         for (String arg : commandSpec.args()) {
-            parts.add(quote(arg));
+            parts.add(quotePortable(arg));
         }
         return String.join(" ", parts);
     }
@@ -205,32 +211,42 @@ public final class AssistantIntegrationGenerator {
         return path.toAbsolutePath().normalize().toString();
     }
 
-    /**
-     * Rend un argument pour la <em>forme commande</em> (lignes {@code copilot/claude/codex mcp add
-     * -- ...} destinées à être copiées/exécutées dans un shell Windows). Contrairement au JSON et au
-     * TOML — qui possèdent leurs propres sérialiseurs — cette forme cible un shell : on entoure de
-     * guillemets doubles dès qu'un espace, une tabulation, un guillemet ou un métacaractère shell
-     * ({@code & | < > ^ ( ) % ! ; , }, backtick) est présent, de sorte que les caractères comme
-     * {@code &} dans un chemin sans espace (ex. {@code C:\a&b\java.exe}) ne soient pas interprétés.
-     * Le double-quoting neutralise {@code & | < > ^ ( )} sous cmd ; les configurations exotiques
-     * restent de toute façon couvertes plus sûrement par les formes JSON/TOML.
-     */
-    private static String quote(String value) {
+    private static String quotePortable(String value) {
         String normalized = Objects.requireNonNull(value, "value");
-        if (!normalized.isEmpty() && !containsShellSignificant(normalized)) {
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "La forme commande n'est pas portable entre cmd.exe et PowerShell pour un argument vide. "
+                            + "Utilisez JSON/TOML ou les scripts de connexion générés.");
+        }
+        rejectShellAmbiguous(normalized);
+        if (!containsShellSignificant(normalized)) {
             return normalized;
         }
-        return '"' + normalized.replace("\"", "\\\"") + '"';
+        return '"' + normalized + '"';
+    }
+
+    private static void rejectShellAmbiguous(String value) {
+        for (int index = 0; index < value.length(); index++) {
+            char character = value.charAt(index);
+            if (character == '%' || character == '!' || character == '$'
+                    || character == '`' || character == '"' || character == '\'') {
+                throw new IllegalArgumentException(
+                        "La forme commande n'est pas portable entre cmd.exe et PowerShell pour le caractère '"
+                                + character + "'. Utilisez JSON/TOML ou les scripts de connexion générés.");
+            }
+            if (character == '\r' || character == '\n' || character == '\0') {
+                throw new IllegalArgumentException("La forme commande refuse les caractères de contrôle.");
+            }
+        }
     }
 
     private static boolean containsShellSignificant(String value) {
         for (int index = 0; index < value.length(); index++) {
             char character = value.charAt(index);
-            if (character == ' ' || character == '\t' || character == '"'
+            if (character == ' ' || character == '\t'
                     || character == '&' || character == '|' || character == '<' || character == '>'
-                    || character == '^' || character == '(' || character == ')' || character == '%'
-                    || character == '!' || character == ';' || character == ',' || character == '`'
-                    || character == '\'') {
+                    || character == '^' || character == '(' || character == ')' || character == ';'
+                    || character == ',') {
                 return true;
             }
         }
@@ -264,6 +280,8 @@ public final class AssistantIntegrationGenerator {
 
                 Le mode native permet de viser explicitement le Java embarqué NEXUS.
                 Le mode docker utilise docker exec -i et conserve MCP en STDIO.
+                La forme command vise uniquement le sous-ensemble d'arguments portable cmd.exe/PowerShell ;
+                utilisez JSON/TOML pour les chemins contenant %, !, $, backtick ou guillemets.
                 Le générateur n'écrit aucun fichier et ne modifie aucune configuration utilisateur.
                 """;
     }

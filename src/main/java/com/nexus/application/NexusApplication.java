@@ -49,6 +49,7 @@ import com.nexus.ranking.graph.GraphCandidateEnricher;
 import com.nexus.search.CandidateType;
 import com.nexus.search.FederatedSearchHit;
 import com.nexus.search.FederatedSearchService;
+import com.nexus.search.ResultLimitPolicy;
 import com.nexus.search.SearchIndex;
 import com.nexus.search.SearchService;
 import com.nexus.search.SearchStrategy;
@@ -388,7 +389,7 @@ public final class NexusApplication {
         projects.forEach(project -> counts.merge(project.indexStatus(), 1, Integer::sum));
 
         boolean degraded = counts.get(IndexStatus.FAILED) > 0;
-        boolean allProjectsReady = projects.stream()
+        boolean allProjectsReady = !projects.isEmpty() && projects.stream()
                 .allMatch(project -> project.indexStatus() == IndexStatus.READY);
 
         // Si la lecture du repository a réussi, le service applicatif est prêt à
@@ -422,10 +423,7 @@ public final class NexusApplication {
     }
 
     private static int positiveLimit(int limit) {
-        if (limit <= 0) {
-            throw new IllegalArgumentException("limit doit être strictement positif");
-        }
-        return Math.min(limit, 500);
+        return ResultLimitPolicy.validate(limit);
     }
 
     private static long elapsedMillis(long startedAt) {

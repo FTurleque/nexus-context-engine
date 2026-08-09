@@ -38,16 +38,36 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
     private static final double SCIP_CONFIDENCE = 1.0d;
 
     private final String indexFileName;
+    private final long maxIndexBytes;
+    private final int maxMessageBytes;
 
     public ScipCodeIndexImporter() {
-        this(DEFAULT_INDEX_FILE);
+        this(
+                DEFAULT_INDEX_FILE,
+                ScipIndexLimits.maxIndexBytesFromEnvironment(),
+                ScipIndexLimits.maxMessageBytesFromEnvironment());
     }
 
     public ScipCodeIndexImporter(String indexFileName) {
+        this(
+                indexFileName,
+                ScipIndexLimits.maxIndexBytesFromEnvironment(),
+                ScipIndexLimits.maxMessageBytesFromEnvironment());
+    }
+
+    ScipCodeIndexImporter(String indexFileName, long maxIndexBytes, int maxMessageBytes) {
         this.indexFileName = Objects.requireNonNull(indexFileName, "indexFileName");
         if (indexFileName.isBlank()) {
             throw new IllegalArgumentException("indexFileName ne doit pas être vide");
         }
+        if (maxIndexBytes <= 0) {
+            throw new IllegalArgumentException("maxIndexBytes doit être strictement positif");
+        }
+        if (maxMessageBytes <= 0) {
+            throw new IllegalArgumentException("maxMessageBytes doit être strictement positif");
+        }
+        this.maxIndexBytes = maxIndexBytes;
+        this.maxMessageBytes = maxMessageBytes;
     }
 
     @Override
@@ -67,7 +87,8 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
         List<IndexedRelation> relations = new ArrayList<>();
         Set<String> relationKeys = new LinkedHashSet<>();
 
-        try (InputStream input = new BufferedInputStream(SafeFileIO.newInputStreamNoFollow(indexFile))) {
+        try (InputStream input = new BufferedInputStream(
+                SafeFileIO.newInputStreamNoFollow(indexFile, maxIndexBytes))) {
             while (true) {
                 long rawTag = readVarintOrEof(input);
                 if (rawTag < 0) {
@@ -77,8 +98,13 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
                 int fieldNumber = tag >>> 3;
                 int wireType = tag & 0x7;
                 if (fieldNumber == 2 && wireType == WireType.LENGTH_DELIMITED) {
-                    byte[] documentPayload = readLengthDelimited(input);
-                    importDocument(root, parseDocument(documentPayload), symbols, relations, relationKeys);
+                    byte[] documentPayload = readLengthDelimited(input, maxMessageBytes);
+                    importDocument(
+                            root,
+                            parseDocument(documentPayload, maxMessageBytes),
+                            symbols,
+                            relations,
+                            relationKeys);
                 } else {
                     skipField(input, wireType);
                 }
@@ -254,8 +280,8 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
         };
     }
 
-    private static ScipDocument parseDocument(byte[] payload) throws IOException {
-        ProtoReader reader = new ProtoReader(payload);
+    private static ScipDocument parseDocument(byte[] payload, int maxMessageBytes) throws IOException {
+        ProtoReader reader = new ProtoReader(payload, maxMessageBytes);
         String relativePath = "";
         List<ScipOccurrence> occurrences = new ArrayList<>();
         List<ScipSymbolInformation> symbols = new ArrayList<>();
@@ -437,8 +463,13 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
         throw new IOException("Varint SCIP invalide");
     }
 
-    private static byte[] readLengthDelimited(InputStream input) throws IOException {
+    private static byte[] readLengthDelimited(InputStream input, int maxMessageBytes) throws IOException {
         long rawLength = readRequiredVarint(input);
+        if (rawLength > maxMessageBytes) {
+            throw new IOException(
+                    "Message SCIP trop volumineux : " + rawLength
+                            + " octets (maximum " + maxMessageBytes + ")");
+        }
         int length = checkedInt(rawLength, "longueur SCIP");
         byte[] payload = input.readNBytes(length);
         if (payload.length != length) {
@@ -528,10 +559,12 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
     private static final class ProtoReader {
 
         private final byte[] data;
+        private final int maxMessageBytes;
         private int position;
 
-        private ProtoReader(byte[] data) {
+        private ProtoReader(byte[] data, int maxMessageBytes) {
             this.data = Objects.requireNonNull(data, "data");
+            this.maxMessageBytes = maxMessageBytes;
         }
 
         private boolean hasRemaining() {
@@ -559,12 +592,18 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
 
         private ProtoReader readMessage(int wireType) throws IOException {
             requireWireType(wireType, WireType.LENGTH_DELIMITED);
-            int length = checkedInt(readVarint(), "longueur Protobuf");
+            long rawLength = readVarint();
+            if (rawLength > maxMessageBytes) {
+                throw new IOException(
+                        "Message Protobuf SCIP trop volumineux : " + rawLength
+                                + " octets (maximum " + maxMessageBytes + ")");
+            }
+            int length = checkedInt(rawLength, "longueur Protobuf");
             ensureAvailable(length);
             byte[] payload = new byte[length];
             System.arraycopy(data, position, payload, 0, length);
             position += length;
-            return new ProtoReader(payload);
+            return new ProtoReader(payload, maxMessageBytes);
         }
 
         private List<Integer> readPackedInt32(int wireType) throws IOException {

@@ -20,7 +20,8 @@ final class SchemaMigrator {
 
     private static final List<Migration> MIGRATIONS = List.of(
             new Migration(1, "db/migration/V001__initial_schema.sql"),
-            new Migration(2, "db/migration/V002__index_generation.sql"));
+            new Migration(2, "db/migration/V002__index_generation.sql"),
+            new Migration(3, "db/migration/V003__provider_and_graph_indexes.sql"));
 
     private SchemaMigrator() {
     }

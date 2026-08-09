@@ -8,6 +8,8 @@ import com.nexus.api.ApiModels.IndexStatisticsResponse;
 import com.nexus.api.ApiModels.ProjectResponse;
 import com.nexus.api.ApiModels.SearchRequest;
 import com.nexus.api.ApiModels.SearchResponse;
+import com.nexus.context.ContextBudgetPolicy;
+import com.nexus.search.ResultLimitPolicy;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
@@ -31,9 +33,8 @@ import java.util.UUID;
 @Produces(MediaType.APPLICATION_JSON)
 public class NexusResource {
 
-    private static final int DEFAULT_SEARCH_LIMIT = 10;
-    private static final int DEFAULT_TOKEN_BUDGET =
-            com.nexus.context.ContextBudgetPolicy.DEFAULT_CONTEXT_TOKEN_BUDGET;
+    private static final int DEFAULT_SEARCH_LIMIT = ResultLimitPolicy.DEFAULT_RESULT_LIMIT;
+    private static final int DEFAULT_TOKEN_BUDGET = ContextBudgetPolicy.DEFAULT_CONTEXT_TOKEN_BUDGET;
 
     @Inject
     NexusApiApplicationService service;
@@ -106,7 +107,9 @@ public class NexusResource {
     private SearchResponse search(UUID projectId, SearchRequest request, Boolean forceExplain) throws IOException {
         requireRequest(request, "Le corps de la requête de recherche est obligatoire");
         String query = requireNonBlank(request.query(), "query est obligatoire");
-        int limit = positiveOrDefault(request.limit(), DEFAULT_SEARCH_LIMIT, "limit");
+        int limit = request.limit() == null
+                ? DEFAULT_SEARCH_LIMIT
+                : ResultLimitPolicy.validate(request.limit());
         boolean explain = forceExplain != null ? forceExplain : Boolean.TRUE.equals(request.explain());
         return ApiMapper.search(service.search(projectId, query, limit, explain));
     }
@@ -114,7 +117,9 @@ public class NexusResource {
     private ContextResponse context(UUID projectId, ContextRequestDto request, Boolean forceExplain) {
         requireRequest(request, "Le corps de la requête de contexte est obligatoire");
         String query = requireNonBlank(request.query(), "query est obligatoire");
-        int tokenBudget = positiveOrDefault(request.tokenBudget(), DEFAULT_TOKEN_BUDGET, "tokenBudget");
+        int tokenBudget = request.tokenBudget() == null
+                ? DEFAULT_TOKEN_BUDGET
+                : ContextBudgetPolicy.validate(request.tokenBudget());
         boolean explain = forceExplain != null ? forceExplain : Boolean.TRUE.equals(request.explain());
         Set<String> requestedSources = request.requestedSources() == null ? Set.of() : request.requestedSources();
         Map<String, String> constraints = request.constraints() == null ? Map.of() : request.constraints();
@@ -139,13 +144,5 @@ public class NexusResource {
             throw new IllegalArgumentException(message);
         }
         return value.trim();
-    }
-
-    private static int positiveOrDefault(Integer value, int defaultValue, String field) {
-        int resolved = value == null ? defaultValue : value;
-        if (resolved <= 0) {
-            throw new IllegalArgumentException(field + " doit être strictement positif");
-        }
-        return resolved;
     }
 }

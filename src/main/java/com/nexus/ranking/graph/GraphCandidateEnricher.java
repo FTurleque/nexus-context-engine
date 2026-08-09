@@ -34,8 +34,7 @@ public final class GraphCandidateEnricher implements CandidateEnricher {
 
     @Override
     public List<SearchCandidate> enrich(ProjectDescriptor project, List<SearchCandidate> directCandidates) {
-        ProjectGraph graph = graphBuilder.build(project.id());
-        Map<String, Double> graphScores = graphScores(project, graph, directCandidates);
+        Map<String, Double> graphScores = graphScores(project, directCandidates);
         Map<String, IndexedFile> indexedFiles = indexRepository.findFiles(project.id(), graphScores.keySet());
         Map<String, SearchCandidate> candidates = new LinkedHashMap<>();
         for (SearchCandidate candidate : directCandidates) {
@@ -46,26 +45,44 @@ public final class GraphCandidateEnricher implements CandidateEnricher {
         return List.copyOf(candidates.values());
     }
 
-    private static Map<String, Double> graphScores(
+    private Map<String, Double> graphScores(
             ProjectDescriptor project,
-            ProjectGraph graph,
             List<SearchCandidate> directCandidates) {
-        Map<String, Double> scores = new LinkedHashMap<>();
+        Map<String, Double> seedScores = new LinkedHashMap<>();
         for (SearchCandidate seed : directCandidates) {
             double seedScore = directScore(seed);
-            if (seedScore <= 0.0d) {
-                continue;
-            }
-            String seedPath = relativePath(project, seed);
-            for (String firstHop : graph.neighbors(seedPath)) {
-                scores.merge(firstHop, seedScore * FIRST_HOP_FACTOR, Math::max);
-                for (String secondHop : graph.neighbors(firstHop)) {
-                    if (!secondHop.equals(seedPath)) {
-                        scores.merge(secondHop, seedScore * SECOND_HOP_FACTOR, Math::max);
-                    }
-                }
+            if (seedScore > 0.0d) {
+                seedScores.merge(relativePath(project, seed), seedScore, Math::max);
             }
         }
+        if (seedScores.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<String, Set<String>> firstHop = graphBuilder.neighbors(project.id(), seedScores.keySet());
+        Map<String, Double> firstHopBaseScores = new LinkedHashMap<>();
+        Map<String, Double> scores = new LinkedHashMap<>();
+        firstHop.forEach((seedPath, neighbors) -> {
+            double seedScore = seedScores.getOrDefault(seedPath, 0.0d);
+            for (String neighbor : neighbors) {
+                firstHopBaseScores.merge(neighbor, seedScore, Math::max);
+                scores.merge(neighbor, seedScore * FIRST_HOP_FACTOR, Math::max);
+            }
+        });
+
+        if (firstHopBaseScores.isEmpty()) {
+            return Map.copyOf(scores);
+        }
+
+        Map<String, Set<String>> secondHop = graphBuilder.neighbors(project.id(), firstHopBaseScores.keySet());
+        secondHop.forEach((firstHopPath, neighbors) -> {
+            double originatingSeedScore = firstHopBaseScores.getOrDefault(firstHopPath, 0.0d);
+            for (String neighbor : neighbors) {
+                if (!neighbor.equals(firstHopPath)) {
+                    scores.merge(neighbor, originatingSeedScore * SECOND_HOP_FACTOR, Math::max);
+                }
+            }
+        });
         return Map.copyOf(scores);
     }
 

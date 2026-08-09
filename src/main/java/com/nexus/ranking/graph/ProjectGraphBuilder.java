@@ -1,104 +1,36 @@
 package com.nexus.ranking.graph;
 
 import com.nexus.index.IndexRepository;
-import com.nexus.index.IndexedSymbol;
-import com.nexus.index.RelationKind;
-import com.nexus.index.SymbolKind;
-import com.nexus.index.SymbolRelation;
+import com.nexus.search.ResultLimitPolicy;
 
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 /**
- * Matérialise le graphe relationnel une seule fois par génération d'index.
- * SQLite reste la source canonique ; le cache est purement dérivé et peut être
- * reconstruit à tout moment.
+ * Projection bornée du voisinage graphe nécessaire au ranking.
+ *
+ * <p>Le graphe projet complet n'est plus matérialisé ni mis en cache. Chaque
+ * expansion demande au repository uniquement les arêtes touchant les paths
+ * courants, avec une borne globale indépendante de la taille de l'index.</p>
  */
 public final class ProjectGraphBuilder {
 
+    public static final int MAX_NEIGHBOR_EDGES = ResultLimitPolicy.MAX_INTERNAL_RETRIEVAL_LIMIT;
+
     private final IndexRepository indexRepository;
-    private final ConcurrentMap<UUID, CachedGraph> cache = new ConcurrentHashMap<>();
 
     public ProjectGraphBuilder(IndexRepository indexRepository) {
         this.indexRepository = Objects.requireNonNull(indexRepository, "indexRepository");
     }
 
-    public ProjectGraph build(UUID projectId) {
-        long generation = indexRepository.generation(projectId);
-        CachedGraph cached = cache.get(projectId);
-        if (cached != null && cached.generation() == generation) {
-            return cached.graph();
+    public Map<String, Set<String>> neighbors(UUID projectId, Set<String> relativePaths) {
+        Objects.requireNonNull(projectId, "projectId");
+        Objects.requireNonNull(relativePaths, "relativePaths");
+        if (relativePaths.isEmpty()) {
+            return Map.of();
         }
-        return cache.compute(projectId, (ignored, current) -> {
-            if (current != null && current.generation() == generation) {
-                return current;
-            }
-            return new CachedGraph(generation, buildFresh(projectId));
-        }).graph();
-    }
-
-    public void invalidate(UUID projectId) {
-        cache.remove(projectId);
-    }
-
-    private ProjectGraph buildFresh(UUID projectId) {
-        Map<String, String> typeOwners = typeOwners(indexRepository.findSymbols(projectId));
-        Map<String, Set<String>> edges = new LinkedHashMap<>();
-
-        for (SymbolRelation relation : indexRepository.findRelations(projectId)) {
-            if (relation.kind() != RelationKind.IMPORTS) {
-                continue;
-            }
-            String targetPath = resolveImportedType(typeOwners, relation.target());
-            if (targetPath == null || targetPath.equals(relation.source())) {
-                continue;
-            }
-            edges.computeIfAbsent(relation.source(), ignored -> new LinkedHashSet<>()).add(targetPath);
-        }
-
-        return ProjectGraph.undirected(edges);
-    }
-
-    private static Map<String, String> typeOwners(List<IndexedSymbol> symbols) {
-        Map<String, String> owners = new LinkedHashMap<>();
-        for (IndexedSymbol indexedSymbol : symbols) {
-            if (isType(indexedSymbol.symbol().kind())) {
-                owners.putIfAbsent(indexedSymbol.symbol().qualifiedName(), indexedSymbol.relativePath());
-            }
-        }
-        return owners;
-    }
-
-    private static boolean isType(SymbolKind kind) {
-        return switch (kind) {
-            case CLASS, INTERFACE, RECORD, ENUM, ANNOTATION, TYPE -> true;
-            case METHOD, CONSTRUCTOR -> false;
-        };
-    }
-
-    private static String resolveImportedType(Map<String, String> owners, String targetRef) {
-        String candidate = targetRef;
-        while (!candidate.isBlank()) {
-            String owner = owners.get(candidate);
-            if (owner != null) {
-                return owner;
-            }
-            int separator = candidate.lastIndexOf('.');
-            if (separator < 0) {
-                return null;
-            }
-            candidate = candidate.substring(0, separator);
-        }
-        return null;
-    }
-
-    private record CachedGraph(long generation, ProjectGraph graph) {
+        return indexRepository.findGraphNeighbors(projectId, relativePaths, MAX_NEIGHBOR_EDGES);
     }
 }

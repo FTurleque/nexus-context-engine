@@ -13,8 +13,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FederatedContextServiceTest {
@@ -89,7 +91,7 @@ class FederatedContextServiceTest {
         assertEquals(50, bundle.metadata().get("refillTokens"));
         assertEquals(1, bundle.metadata().get("refillItems"));
         assertEquals(30, bundle.metadata().get("unusedTokens"));
-        assertEquals("fair-floor-global-refill", bundle.metadata().get("mergePolicy"));
+        assertEquals("fair-floor-bounded-overfetch-global-refill", bundle.metadata().get("mergePolicy"));
     }
 
     @Test
@@ -124,6 +126,33 @@ class FederatedContextServiceTest {
         assertEquals("lower-ranked", bundle.items().get(2).item().content());
         assertEquals(150, bundle.metadata().get("refillTokens"));
         assertEquals(2, bundle.metadata().get("refillItems"));
+    }
+
+    @Test
+    void boundsLocalCandidateBudgetsAndRejectsOversizedProjectScopes() {
+        List<ProjectDescriptor> projects = new ArrayList<>();
+        for (int index = 0; index < 10; index++) {
+            projects.add(project("p" + index, root.resolve("p" + index)));
+        }
+        AtomicInteger candidateBudgetTotal = new AtomicInteger();
+        ContextBuilder builder = request -> {
+            candidateBudgetTotal.addAndGet(request.tokenBudget());
+            return new ContextBundle(List.of(), request.tokenBudget(), 0, List.of(), Map.of());
+        };
+
+        FederatedContextBundle bundle = new FederatedContextService(builder).build(
+                projects, "task", 1_000, Set.of(), Map.of(), false);
+
+        assertEquals(3_000, candidateBudgetTotal.get());
+        assertEquals(3_000, bundle.metadata().get("candidateBudgetTotal"));
+
+        List<ProjectDescriptor> tooMany = new ArrayList<>();
+        for (int index = 0; index <= FederatedContextService.MAX_FEDERATED_PROJECTS; index++) {
+            tooMany.add(project("too-many-" + index, root.resolve("too-many-" + index)));
+        }
+        assertThrows(IllegalArgumentException.class, () ->
+                new FederatedContextService(builder).build(
+                        tooMany, "task", 1_000, Set.of(), Map.of(), false));
     }
 
     private static ContextBundle withinBudget(int tokenBudget, List<ContextItem> candidates) {

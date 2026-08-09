@@ -34,6 +34,12 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Qualify generated cmd configuration escaping
+        shell: powershell
+        run: |
+          Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+          .\scripts\release\test-windows-config-escaping.ps1
+
       - name: Build self-contained Windows distribution
         shell: powershell
         run: |
