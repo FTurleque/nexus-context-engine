@@ -127,17 +127,17 @@ final class SqliteWriteRetryPolicy {
         return code == SQLiteErrorCode.SQLITE_BUSY || code == SQLiteErrorCode.SQLITE_LOCKED;
     }
 
-    private static SQLiteErrorCode contentionCode(SQLException failure) {
+    private static String contentionCode(SQLException failure) {
         Throwable current = failure;
         Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
         while (current != null && visited.add(current)) {
             if (current instanceof SQLiteException sqliteException
                     && isRetryableCode(sqliteException.getResultCode())) {
-                return sqliteException.getResultCode();
+                return sqliteException.getResultCode().name();
             }
             current = current.getCause();
         }
-        return SQLiteErrorCode.UNKNOWN_ERROR;
+        return "BUSY_OR_LOCKED";
     }
 
     private Duration backoffForRetry(int retryNumber) {
