@@ -227,11 +227,11 @@ public final class SqliteIndexRepository implements IndexRepository {
         }
 
         String requestedPaths = serializePaths(relativePaths.stream().sorted().toList());
-        Map<String, String> typeOwners = findTypeOwners(projectId);
         Map<String, Set<String>> neighbors = new LinkedHashMap<>();
         int projectedEdges = 0;
 
         try (Connection connection = database.openConnection()) {
+            List<GraphImportTarget> outgoingRelations = new ArrayList<>();
             try (PreparedStatement outgoing = connection.prepareStatement("""
                     WITH requested(path) AS (
                         SELECT value FROM json_each(?)
@@ -250,13 +250,25 @@ public final class SqliteIndexRepository implements IndexRepository {
                 outgoing.setString(3, RelationKind.IMPORTS.name());
                 outgoing.setInt(4, maxEdges);
                 try (ResultSet resultSet = outgoing.executeQuery()) {
-                    while (resultSet.next() && projectedEdges < maxEdges) {
-                        String seedPath = resultSet.getString("seed_path");
-                        String neighborPath = resolveTypeOwner(typeOwners, resultSet.getString("target_ref"));
-                        if (addGraphNeighbor(neighbors, seedPath, neighborPath)) {
-                            projectedEdges++;
-                        }
+                    while (resultSet.next()) {
+                        outgoingRelations.add(new GraphImportTarget(
+                                resultSet.getString("seed_path"),
+                                resultSet.getString("target_ref")));
                     }
+                }
+            }
+
+            Map<String, String> typeOwners = findTypeOwners(
+                    connection,
+                    projectId,
+                    collectTypeOwnerCandidates(outgoingRelations));
+            for (GraphImportTarget relation : outgoingRelations) {
+                if (projectedEdges >= maxEdges) {
+                    break;
+                }
+                String neighborPath = resolveTypeOwner(typeOwners, relation.targetRef());
+                if (addGraphNeighbor(neighbors, relation.seedPath(), neighborPath)) {
+                    projectedEdges++;
                 }
             }
 
@@ -526,6 +538,54 @@ public final class SqliteIndexRepository implements IndexRepository {
             }
             return List.copyOf(relations);
         }
+    }
+
+    private static Map<String, String> findTypeOwners(
+            Connection connection,
+            UUID projectId,
+            Set<String> qualifiedNames) throws SQLException {
+        if (qualifiedNames.isEmpty()) {
+            return Map.of();
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                WITH requested(qualified_name) AS (
+                    SELECT value FROM json_each(?)
+                )
+                SELECT s.qualified_name, MIN(f.relative_path) AS relative_path
+                FROM requested q
+                JOIN symbols s ON s.qualified_name = q.qualified_name
+                JOIN indexed_files f ON f.id = s.file_id
+                WHERE f.project_id = ?
+                  AND s.kind IN ('CLASS', 'INTERFACE', 'RECORD', 'ENUM', 'ANNOTATION', 'TYPE')
+                GROUP BY s.qualified_name
+                ORDER BY s.qualified_name
+                """)) {
+            statement.setString(1, serializePaths(qualifiedNames.stream().sorted().toList()));
+            statement.setString(2, projectId.toString());
+            try (ResultSet resultSet = statement.executeQuery()) {
+                Map<String, String> owners = new LinkedHashMap<>();
+                while (resultSet.next()) {
+                    owners.put(resultSet.getString("qualified_name"), resultSet.getString("relative_path"));
+                }
+                return Map.copyOf(owners);
+            }
+        }
+    }
+
+    private static Set<String> collectTypeOwnerCandidates(List<GraphImportTarget> relations) {
+        Set<String> candidates = new LinkedHashSet<>();
+        for (GraphImportTarget relation : relations) {
+            String candidate = relation.targetRef();
+            while (candidate != null && !candidate.isBlank()) {
+                candidates.add(candidate);
+                int separator = candidate.lastIndexOf('.');
+                if (separator < 0) {
+                    break;
+                }
+                candidate = candidate.substring(0, separator);
+            }
+        }
+        return candidates;
     }
 
     private static String resolveTypeOwner(Map<String, String> typeOwners, String targetRef) {
@@ -898,5 +958,8 @@ public final class SqliteIndexRepository implements IndexRepository {
 
     private static PersistenceException persistence(String message, SQLException exception) {
         return new PersistenceException(message, exception);
+    }
+
+    private record GraphImportTarget(String seedPath, String targetRef) {
     }
 }
