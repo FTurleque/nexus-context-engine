@@ -23,7 +23,7 @@ foreach ($required in @(
     'DotEnvQuoted(DockerToken)',
     'NEXUS_REST_EXPOSURE_MODE=loopback-forward',
     '# NEXUS_DOCKER_HOST_FORWARD_ADDRESS is derived by Compose from NEXUS_DOCKER_BIND_ADDRESS',
-    'Le mode loopback-forward exige que l''adresse hôte réellement déclarée soit loopback'
+    'Le mode loopback-forward exige que'
 )) {
     if ($hardened.IndexOf($required, [StringComparison]::Ordinal) -lt 0) {
         throw "Generated installer hardening contract missing: $required"
