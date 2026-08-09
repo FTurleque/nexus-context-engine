@@ -66,7 +66,17 @@ expected = json.loads((root / 'expected.json').read_text(encoding='utf-8'))['val
 actual = json.loads((root / 'actual.json').read_text(encoding='utf-8'))
 environment = actual['services']['probe']['environment']
 value = environment['NEXUS_TEST_VALUE']
-if value != expected:
-    raise SystemExit(f'Compose dotenv round-trip mismatch\nExpected: {expected!r}\nActual:   {value!r}')
-print('NEXUS Docker Compose dotenv literal round-trip PASS')
+
+# `docker compose config` serializes a literal dollar as `$$` in the canonical
+# Compose model so that a later Compose parse still produces one literal `$`.
+# The installer contract above deliberately keeps the .env source at a single
+# `$`; compare against Compose's canonical representation instead of treating
+# its escaping layer as a mutation of the runtime value.
+expected_config_value = expected.replace('$', '$$')
+if value != expected_config_value:
+    raise SystemExit(
+        'Compose dotenv canonical serialization mismatch\n'
+        f'Expected model: {expected_config_value!r}\n'
+        f'Actual model:   {value!r}')
+print('NEXUS Docker Compose dotenv literal serialization PASS')
 PY
