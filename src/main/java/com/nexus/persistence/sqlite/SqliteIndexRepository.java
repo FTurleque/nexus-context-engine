@@ -227,90 +227,91 @@ public final class SqliteIndexRepository implements IndexRepository {
         }
 
         String requestedPaths = serializePaths(relativePaths.stream().sorted().toList());
-        try (Connection connection = database.openConnection();
-             PreparedStatement statement = connection.prepareStatement("""
-                     WITH requested(path) AS (
-                         SELECT value FROM json_each(?)
-                     ),
-                     requested_types AS (
-                         SELECT s.qualified_name, f.relative_path
-                         FROM requested q
-                         JOIN indexed_files f
-                           ON f.project_id = ? AND f.relative_path = q.path
-                         JOIN symbols s ON s.file_id = f.id
-                         WHERE s.kind IN ('CLASS', 'INTERFACE', 'RECORD', 'ENUM', 'ANNOTATION', 'TYPE')
-                     ),
-                     outgoing AS (
-                         SELECT q.path AS seed_path,
-                                (
-                                    SELECT f2.relative_path
-                                    FROM symbols s2
-                                    JOIN indexed_files f2 ON f2.id = s2.file_id
-                                    WHERE f2.project_id = ?
-                                      AND s2.kind IN ('CLASS', 'INTERFACE', 'RECORD', 'ENUM', 'ANNOTATION', 'TYPE')
-                                      AND (
-                                          r.target_ref = s2.qualified_name
-                                          OR r.target_ref LIKE s2.qualified_name || '.%'
-                                      )
-                                    ORDER BY LENGTH(s2.qualified_name) DESC, f2.relative_path
-                                    LIMIT 1
-                                ) AS neighbor_path
-                         FROM requested q
-                         JOIN symbol_relations r
-                           ON r.project_id = ?
-                          AND r.kind = ?
-                          AND r.source_ref = q.path
-                         ORDER BY q.path, r.target_ref
-                         LIMIT ?
-                     ),
-                     incoming AS (
-                         SELECT rt.relative_path AS seed_path,
-                                r.source_ref AS neighbor_path
-                         FROM requested_types rt
-                         JOIN symbol_relations r
-                           ON r.project_id = ?
-                          AND r.kind = ?
-                          AND (
-                              r.target_ref = rt.qualified_name
-                              OR r.target_ref LIKE rt.qualified_name || '.%'
-                          )
-                         ORDER BY rt.relative_path, r.source_ref
-                         LIMIT ?
-                     )
-                     SELECT DISTINCT seed_path, neighbor_path
-                     FROM (
-                         SELECT seed_path, neighbor_path FROM outgoing
-                         UNION ALL
-                         SELECT seed_path, neighbor_path FROM incoming
-                     )
-                     WHERE neighbor_path IS NOT NULL
-                       AND neighbor_path <> seed_path
-                     ORDER BY seed_path, neighbor_path
-                     LIMIT ?
-                     """)) {
-            statement.setString(1, requestedPaths);
-            statement.setString(2, projectId.toString());
-            statement.setString(3, projectId.toString());
-            statement.setString(4, projectId.toString());
-            statement.setString(5, RelationKind.IMPORTS.name());
-            statement.setInt(6, maxEdges);
-            statement.setString(7, projectId.toString());
-            statement.setString(8, RelationKind.IMPORTS.name());
-            statement.setInt(9, maxEdges);
-            statement.setInt(10, maxEdges);
+        Map<String, String> typeOwners = findTypeOwners(projectId);
+        Map<String, Set<String>> neighbors = new LinkedHashMap<>();
+        int projectedEdges = 0;
 
-            try (ResultSet resultSet = statement.executeQuery()) {
-                Map<String, Set<String>> neighbors = new LinkedHashMap<>();
-                while (resultSet.next()) {
-                    neighbors.computeIfAbsent(
-                                    resultSet.getString("seed_path"),
-                                    ignored -> new LinkedHashSet<>())
-                            .add(resultSet.getString("neighbor_path"));
+        try (Connection connection = database.openConnection()) {
+            try (PreparedStatement outgoing = connection.prepareStatement("""
+                    WITH requested(path) AS (
+                        SELECT value FROM json_each(?)
+                    )
+                    SELECT DISTINCT r.source_ref AS seed_path, r.target_ref
+                    FROM requested q
+                    JOIN symbol_relations r
+                      ON r.project_id = ?
+                     AND r.kind = ?
+                     AND r.source_ref = q.path
+                    ORDER BY r.source_ref, r.target_ref
+                    LIMIT ?
+                    """)) {
+                outgoing.setString(1, requestedPaths);
+                outgoing.setString(2, projectId.toString());
+                outgoing.setString(3, RelationKind.IMPORTS.name());
+                outgoing.setInt(4, maxEdges);
+                try (ResultSet resultSet = outgoing.executeQuery()) {
+                    while (resultSet.next() && projectedEdges < maxEdges) {
+                        String seedPath = resultSet.getString("seed_path");
+                        String neighborPath = resolveTypeOwner(typeOwners, resultSet.getString("target_ref"));
+                        if (addGraphNeighbor(neighbors, seedPath, neighborPath)) {
+                            projectedEdges++;
+                        }
+                    }
                 }
-                Map<String, Set<String>> immutable = new LinkedHashMap<>();
-                neighbors.forEach((path, values) -> immutable.put(path, Set.copyOf(values)));
-                return Map.copyOf(immutable);
             }
+
+            int remainingEdges = maxEdges - projectedEdges;
+            if (remainingEdges > 0) {
+                try (PreparedStatement incoming = connection.prepareStatement("""
+                        WITH requested(path) AS (
+                            SELECT value FROM json_each(?)
+                        ),
+                        requested_types AS (
+                            SELECT s.qualified_name, f.relative_path
+                            FROM requested q
+                            JOIN indexed_files f
+                              ON f.project_id = ? AND f.relative_path = q.path
+                            JOIN symbols s ON s.file_id = f.id
+                            WHERE s.kind IN ('CLASS', 'INTERFACE', 'RECORD', 'ENUM', 'ANNOTATION', 'TYPE')
+                        )
+                        SELECT DISTINCT rt.relative_path AS seed_path,
+                                        r.source_ref AS neighbor_path
+                        FROM requested_types rt
+                        JOIN symbol_relations r
+                          ON r.project_id = ?
+                         AND r.kind = ?
+                         AND (
+                             r.target_ref = rt.qualified_name
+                             OR (
+                                 r.target_ref >= rt.qualified_name || '.'
+                                 AND r.target_ref < rt.qualified_name || '/'
+                             )
+                         )
+                        WHERE r.source_ref <> rt.relative_path
+                        ORDER BY rt.relative_path, r.source_ref
+                        LIMIT ?
+                        """)) {
+                    incoming.setString(1, requestedPaths);
+                    incoming.setString(2, projectId.toString());
+                    incoming.setString(3, projectId.toString());
+                    incoming.setString(4, RelationKind.IMPORTS.name());
+                    incoming.setInt(5, remainingEdges);
+                    try (ResultSet resultSet = incoming.executeQuery()) {
+                        while (resultSet.next() && projectedEdges < maxEdges) {
+                            if (addGraphNeighbor(
+                                    neighbors,
+                                    resultSet.getString("seed_path"),
+                                    resultSet.getString("neighbor_path"))) {
+                                projectedEdges++;
+                            }
+                        }
+                    }
+                }
+            }
+
+            Map<String, Set<String>> immutable = new LinkedHashMap<>();
+            neighbors.forEach((path, values) -> immutable.put(path, Set.copyOf(values)));
+            return Map.copyOf(immutable);
         } catch (SQLException exception) {
             throw persistence("Impossible de projeter le voisinage graphe du projet " + projectId, exception);
         }
@@ -525,6 +526,34 @@ public final class SqliteIndexRepository implements IndexRepository {
             }
             return List.copyOf(relations);
         }
+    }
+
+    private static String resolveTypeOwner(Map<String, String> typeOwners, String targetRef) {
+        if (targetRef == null || targetRef.isBlank()) {
+            return null;
+        }
+        String candidate = targetRef;
+        while (true) {
+            String owner = typeOwners.get(candidate);
+            if (owner != null) {
+                return owner;
+            }
+            int separator = candidate.lastIndexOf('.');
+            if (separator < 0) {
+                return null;
+            }
+            candidate = candidate.substring(0, separator);
+        }
+    }
+
+    private static boolean addGraphNeighbor(
+            Map<String, Set<String>> neighbors,
+            String seedPath,
+            String neighborPath) {
+        if (neighborPath == null || neighborPath.equals(seedPath)) {
+            return false;
+        }
+        return neighbors.computeIfAbsent(seedPath, ignored -> new LinkedHashSet<>()).add(neighborPath);
     }
 
     private static void deleteRemovedFiles(Connection connection, UUID projectId, Set<String> removedPaths)
