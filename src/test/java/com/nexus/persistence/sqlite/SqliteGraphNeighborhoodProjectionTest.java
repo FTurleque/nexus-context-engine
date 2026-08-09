@@ -18,6 +18,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SqliteGraphNeighborhoodProjectionTest {
 
+    private static final int UNRELATED_STRUCTURAL_TYPES = 20_000;
+
     @TempDir
     Path tempDir;
 
@@ -54,6 +56,41 @@ class SqliteGraphNeighborhoodProjectionTest {
                 repository.findGraphNeighbors(projectId, Set.of("src/App.java"), 1);
         long materializedEdges = bounded.values().stream().mapToLong(Set::size).sum();
         assertTrue(materializedEdges <= 1, "graph projection must honor the global edge budget");
+    }
+
+    @Test
+    void remainsBoundedAndDeterministicWithHighStructuralTypeCardinality() throws Exception {
+        SqliteDatabase database = new SqliteDatabase(new NexusPaths(tempDir.resolve("high-cardinality-home")));
+        UUID projectId = UUID.randomUUID();
+        try (Connection connection = database.openConnection()) {
+            insertProject(connection, projectId);
+            long seed = insertFile(connection, projectId, "src/Seed.java");
+            long target = insertFile(connection, projectId, "src/Target.java");
+            long importer = insertFile(connection, projectId, "src/Importer.java");
+            long unrelated = insertFile(connection, projectId, "src/StructuralNoise.java");
+
+            insertType(connection, seed, "Seed", "demo.Seed");
+            insertType(connection, target, "Target", "demo.Target");
+            insertType(connection, target, "Inner", "demo.Target.Inner");
+            insertType(connection, importer, "Importer", "demo.Importer");
+            insertStructuralTypes(connection, unrelated, UNRELATED_STRUCTURAL_TYPES);
+
+            insertImport(connection, projectId, seed, "src/Seed.java", "demo.Target.Inner.Deep");
+            insertImport(connection, projectId, importer, "src/Importer.java", "demo.Seed");
+            insertImport(connection, projectId, unrelated, "src/StructuralNoise.java", "noise.Type19999");
+        }
+
+        SqliteIndexRepository repository = new SqliteIndexRepository(database);
+        Map<String, Set<String>> expected = Map.of(
+                "src/Seed.java", Set.of("src/Target.java", "src/Importer.java"));
+
+        for (int attempt = 0; attempt < 5; attempt++) {
+            Map<String, Set<String>> projection =
+                    repository.findGraphNeighbors(projectId, Set.of("src/Seed.java"), 2);
+            assertEquals(expected, projection, "graph projection must be deterministic");
+            long materializedEdges = projection.values().stream().mapToLong(Set::size).sum();
+            assertTrue(materializedEdges <= 2, "graph projection must stay within the global edge budget");
+        }
     }
 
     private static void insertProject(Connection connection, UUID projectId) throws SQLException {
@@ -106,6 +143,30 @@ class SqliteGraphNeighborhoodProjectionTest {
             statement.setString(3, qualifiedName);
             statement.setString(4, "class " + name);
             statement.executeUpdate();
+        }
+    }
+
+    private static void insertStructuralTypes(Connection connection, long fileId, int count) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO symbols(
+                    file_id, kind, name, qualified_name, signature,
+                    start_line, end_line, source_provider)
+                VALUES (?, 'CLASS', ?, ?, ?, ?, ?, 'embedded')
+                """)) {
+            for (int index = 0; index < count; index++) {
+                String name = "Type" + index;
+                statement.setLong(1, fileId);
+                statement.setString(2, name);
+                statement.setString(3, "noise." + name);
+                statement.setString(4, "class " + name);
+                statement.setInt(5, index + 1);
+                statement.setInt(6, index + 1);
+                statement.addBatch();
+                if ((index + 1) % 1_000 == 0) {
+                    statement.executeBatch();
+                }
+            }
+            statement.executeBatch();
         }
     }
 
