@@ -39,6 +39,7 @@ class GraphScaleRegressionBenchmarkTest {
 
     private static final int BATCH_SIZE = 5_000;
     private static final int SYMBOLS_PER_FILE = 100;
+    private static final int DEFAULT_STRUCTURAL_TYPE_PERCENT = 80;
     private static final int SEED_COUNT = 20;
     private static final int SAMPLES = 3;
 
@@ -53,16 +54,27 @@ class GraphScaleRegressionBenchmarkTest {
             throw new IllegalArgumentException("nexus.scale.benchmark.profile must be ci or full");
         }
 
+        int structuralTypePercent = Integer.getInteger(
+                "nexus.scale.benchmark.structuralTypePercent",
+                DEFAULT_STRUCTURAL_TYPE_PERCENT);
+        if (structuralTypePercent < 1 || structuralTypePercent > 100) {
+            throw new IllegalArgumentException("nexus.scale.benchmark.structuralTypePercent must be between 1 and 100");
+        }
+
         int symbolCount = full ? 1_000_000 : 100_000;
         int relationCount = full ? 1_000_000 : 100_000;
         int fileCount = Math.max(1, symbolCount / SYMBOLS_PER_FILE);
+        int structuralTypeCount = Math.max(fileCount, symbolCount * structuralTypePercent / 100);
+        assertTrue(
+                structuralTypeCount >= symbolCount / 2,
+                "graph scale profile must remain structural-type heavy enough to detect global owner scans");
 
         Path home = temporaryDirectory.resolve("graph-scale-home");
         SqliteDatabase database = new SqliteDatabase(new NexusPaths(home));
         UUID projectId = UUID.randomUUID();
 
         long populateStarted = System.nanoTime();
-        populateGraphProject(database, projectId, fileCount, symbolCount, relationCount);
+        populateGraphProject(database, projectId, fileCount, symbolCount, structuralTypeCount, relationCount);
         long populationMs = elapsedMillis(populateStarted);
 
         SqliteIndexRepository repository = new SqliteIndexRepository(database);
@@ -117,6 +129,8 @@ class GraphScaleRegressionBenchmarkTest {
         report.put("generatedAt", Instant.now().toString());
         report.put("profile", profile);
         report.put("symbols", symbolCount);
+        report.put("structuralTypeSymbols", structuralTypeCount);
+        report.put("structuralTypePercent", structuralTypePercent);
         report.put("relations", relationCount);
         report.put("files", fileCount);
         report.put("seedFiles", seeds.size());
@@ -139,9 +153,10 @@ class GraphScaleRegressionBenchmarkTest {
 
         System.out.printf(
                 Locale.ROOT,
-                "NEXUS graph scale benchmark: profile=%s symbols=%d relations=%d candidates=%d p95=%.2fms heapDelta=%d output=%s%n",
+                "NEXUS graph scale benchmark: profile=%s symbols=%d structuralTypes=%d relations=%d candidates=%d p95=%.2fms heapDelta=%d output=%s%n",
                 profile,
                 symbolCount,
+                structuralTypeCount,
                 relationCount,
                 graphCandidates,
                 p95Ms,
@@ -154,6 +169,7 @@ class GraphScaleRegressionBenchmarkTest {
             UUID projectId,
             int fileCount,
             int symbolCount,
+            int structuralTypeCount,
             int relationCount) throws Exception {
         try (Connection connection = database.openConnection()) {
             connection.setAutoCommit(false);
@@ -192,13 +208,34 @@ class GraphScaleRegressionBenchmarkTest {
                         """)) {
                     for (int index = 0; index < symbolCount; index++) {
                         int fileIndex = index % fileCount;
-                        boolean type = index < fileCount;
-                        String typeName = typeName(fileIndex);
+                        boolean primaryType = index < fileCount;
+                        boolean structuralType = index < structuralTypeCount;
+                        String ownerTypeName = typeName(fileIndex);
+                        String symbolName;
+                        String qualifiedName;
+                        String signature;
+                        String kind;
+                        if (primaryType) {
+                            kind = "CLASS";
+                            symbolName = simpleTypeName(fileIndex);
+                            qualifiedName = ownerTypeName;
+                            signature = "class " + symbolName;
+                        } else if (structuralType) {
+                            kind = "CLASS";
+                            symbolName = "Nested" + index;
+                            qualifiedName = ownerTypeName + "." + symbolName;
+                            signature = "class " + symbolName;
+                        } else {
+                            kind = "METHOD";
+                            symbolName = "method" + index;
+                            qualifiedName = ownerTypeName + "." + symbolName;
+                            signature = "void " + symbolName + "()";
+                        }
                         symbols.setLong(1, fileIndex + 1L);
-                        symbols.setString(2, type ? "CLASS" : "METHOD");
-                        symbols.setString(3, type ? simpleTypeName(fileIndex) : "method" + index);
-                        symbols.setString(4, type ? typeName : typeName + ".method" + index);
-                        symbols.setString(5, type ? "class " + simpleTypeName(fileIndex) : "void method" + index + "()");
+                        symbols.setString(2, kind);
+                        symbols.setString(3, symbolName);
+                        symbols.setString(4, qualifiedName);
+                        symbols.setString(5, signature);
                         symbols.addBatch();
                         executeBatch(symbols, index + 1);
                     }
