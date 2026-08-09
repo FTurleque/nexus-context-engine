@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -84,23 +85,18 @@ public final class MinosCodeIndexImporter {
             symbols.putIfAbsent(ExternalSymbolIdentity.of(symbol), symbol);
         }
 
-        Map<String, IndexedRelation> relations = new LinkedHashMap<>();
+        List<IndexedRelation> relations = new ArrayList<>();
         for (JsonNode relationNode : requiredArray(document, "relations")) {
             IndexedRelation relation = mapRelation(safeProjectFiles, relationNode);
-            if (relation == null) {
-                continue;
+            if (relation != null) {
+                relations.add(relation);
             }
-            String key = relation.relativePath() + '\u0000'
-                    + relation.relation().kind() + '\u0000'
-                    + relation.relation().source() + '\u0000'
-                    + relation.relation().target();
-            relations.putIfAbsent(key, relation);
         }
 
         return new CodeIntelligenceSnapshot(
                 SOURCE_PROVIDER,
                 List.copyOf(symbols.values()),
-                List.copyOf(relations.values()));
+                relations);
     }
 
     private JsonNode readDocument(String payload) throws IOException {

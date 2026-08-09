@@ -27,15 +27,24 @@ public record CodeIntelligenceSnapshot(
         }
         symbols = List.copyOf(canonicalSymbols.values());
 
-        relations = List.copyOf(relations);
+        Map<ExternalRelationIdentity, IndexedRelation> canonicalRelations = new LinkedHashMap<>();
         for (IndexedRelation indexedRelation : relations) {
             if (!sourceProvider.equals(indexedRelation.relation().sourceProvider())) {
                 throw new IllegalArgumentException("La provenance d'une relation ne correspond pas au snapshot");
             }
+            canonicalRelations.merge(
+                    ExternalRelationIdentity.of(indexedRelation),
+                    indexedRelation,
+                    CodeIntelligenceSnapshot::preferHigherConfidence);
         }
+        relations = List.copyOf(canonicalRelations.values());
     }
 
     public static CodeIntelligenceSnapshot empty(String sourceProvider) {
         return new CodeIntelligenceSnapshot(sourceProvider, List.of(), List.of());
+    }
+
+    private static IndexedRelation preferHigherConfidence(IndexedRelation current, IndexedRelation candidate) {
+        return candidate.relation().confidence() > current.relation().confidence() ? candidate : current;
     }
 }
