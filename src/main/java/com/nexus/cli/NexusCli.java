@@ -2,9 +2,11 @@ package com.nexus.cli;
 
 import com.nexus.application.NexusApplication;
 import com.nexus.config.NexusPaths;
+import com.nexus.context.ContextBudgetPolicy;
 import com.nexus.index.CodeIntelligenceSnapshot;
 import com.nexus.index.minos.MinosCodeIndexImporter;
 import com.nexus.project.ProjectDescriptor;
+import com.nexus.search.ResultLimitPolicy;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -221,7 +223,7 @@ public final class NexusCli {
     }
 
     private static ParsedSearch parseSearch(String[] args, int start, String command) {
-        int limit = 10;
+        int limit = ResultLimitPolicy.DEFAULT_RESULT_LIMIT;
         boolean explain = false;
         List<String> queryParts = new ArrayList<>();
         for (int index = start; index < args.length; index++) {
@@ -231,7 +233,7 @@ public final class NexusCli {
                 if (index + 1 >= args.length) {
                     throw new IllegalArgumentException("--limit attend une valeur entière");
                 }
-                limit = positiveInteger("--limit", args[++index]);
+                limit = boundedInteger("--limit", args[++index], ResultLimitPolicy.MAX_RESULT_LIMIT);
             } else if (args[index].startsWith("--")) {
                 throw new IllegalArgumentException("Option inconnue pour " + command + " : " + args[index]);
             } else {
@@ -242,7 +244,7 @@ public final class NexusCli {
     }
 
     private static ParsedContext parseContext(String[] args, int start, String command) {
-        int budget = 2_000;
+        int budget = ContextBudgetPolicy.DEFAULT_CONTEXT_TOKEN_BUDGET;
         boolean explain = false;
         List<String> queryParts = new ArrayList<>();
         for (int index = start; index < args.length; index++) {
@@ -252,7 +254,8 @@ public final class NexusCli {
                 if (index + 1 >= args.length) {
                     throw new IllegalArgumentException("--budget attend une valeur entière");
                 }
-                budget = positiveInteger("--budget", args[++index]);
+                budget = boundedInteger(
+                        "--budget", args[++index], ContextBudgetPolicy.MAX_CONTEXT_TOKEN_BUDGET);
             } else if (args[index].startsWith("--")) {
                 throw new IllegalArgumentException("Option inconnue pour " + command + " : " + args[index]);
             } else {
@@ -276,11 +279,14 @@ public final class NexusCli {
         return ids;
     }
 
-    private static int positiveInteger(String option, String value) {
+    private static int boundedInteger(String option, String value, int maximum) {
         try {
             int parsed = Integer.parseInt(value);
             if (parsed <= 0) {
                 throw new IllegalArgumentException(option + " doit être strictement positif");
+            }
+            if (parsed > maximum) {
+                throw new IllegalArgumentException(option + " doit être inférieur ou égal à " + maximum);
             }
             return parsed;
         } catch (NumberFormatException exception) {
@@ -309,8 +315,10 @@ public final class NexusCli {
 
     private static String version() {
         String implementationVersion = NexusCli.class.getPackage().getImplementationVersion();
+        // En l'absence de manifeste (exécution depuis les classes : IDE, tests), on n'invente
+        // pas de numéro de version — un ancien numéro codé en dur mentirait sur le build réel.
         return implementationVersion == null || implementationVersion.isBlank()
-                ? "0.1.0-SNAPSHOT"
+                ? "0.0.0-dev"
                 : implementationVersion;
     }
 

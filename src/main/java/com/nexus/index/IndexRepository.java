@@ -1,7 +1,10 @@
 package com.nexus.index;
 
+import com.nexus.search.ResultLimitPolicy;
+
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -35,6 +38,21 @@ public interface IndexRepository {
     List<IndexedSymbol> findSymbols(UUID projectId);
 
     /**
+     * Projection minimale nécessaire au graphe : nom qualifié d'un type vers
+     * son fichier propriétaire. Les repositories persistants doivent filtrer
+     * côté stockage afin de ne pas matérialiser tous les symboles.
+     */
+    default Map<String, String> findTypeOwners(UUID projectId) {
+        Map<String, String> owners = new LinkedHashMap<>();
+        for (IndexedSymbol indexed : findSymbols(projectId)) {
+            if (isType(indexed.symbol().kind())) {
+                owners.putIfAbsent(indexed.symbol().qualifiedName(), indexed.relativePath());
+            }
+        }
+        return Map.copyOf(owners);
+    }
+
+    /**
      * Recherche bornée de symboles. Les implémentations persistantes doivent
      * appliquer le filtre avant de matérialiser les résultats.
      */
@@ -43,9 +61,7 @@ public interface IndexRepository {
         if (query.isBlank()) {
             throw new IllegalArgumentException("query must not be blank");
         }
-        if (limit <= 0) {
-            throw new IllegalArgumentException("limit must be greater than zero");
-        }
+        ResultLimitPolicy.validate(limit);
         String normalized = query.trim().toLowerCase(Locale.ROOT);
         return findSymbols(projectId).stream()
                 .filter(indexed -> indexed.symbol().name().toLowerCase(Locale.ROOT).contains(normalized)
@@ -60,15 +76,83 @@ public interface IndexRepository {
 
     List<SymbolRelation> findRelations(UUID projectId);
 
+    /** Projection minimale des imports utilisée pour construire le graphe de fichiers. */
+    default List<SymbolRelation> findImportRelations(UUID projectId) {
+        return findRelations(projectId).stream()
+                .filter(relation -> relation.kind() == RelationKind.IMPORTS)
+                .toList();
+    }
+
+    /**
+     * Projection de voisinage bornée pour l'enrichissement de graphe.
+     *
+     * <p>Le fallback maintient la compatibilité des repositories de test mais
+     * peut matérialiser leurs projections. Les repositories persistants doivent
+     * surcharger ce contrat et filtrer les paths/relations côté stockage.</p>
+     */
+    default Map<String, Set<String>> findGraphNeighbors(
+            UUID projectId,
+            Set<String> relativePaths,
+            int maxEdges) {
+        Objects.requireNonNull(relativePaths, "relativePaths");
+        relativePaths.forEach(path -> Objects.requireNonNull(path, "relativePaths must not contain null"));
+        ResultLimitPolicy.validateInternalRetrieval(maxEdges);
+        if (relativePaths.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<String, String> typeOwners = findTypeOwners(projectId);
+        Map<String, Set<String>> neighbors = new LinkedHashMap<>();
+        int edgeCount = 0;
+        for (SymbolRelation relation : findImportRelations(projectId)) {
+            String targetPath = resolveImportedType(typeOwners, relation.target());
+            if (targetPath == null || targetPath.equals(relation.source())) {
+                continue;
+            }
+            if (relativePaths.contains(relation.source())
+                    && addNeighbor(neighbors, relation.source(), targetPath)) {
+                edgeCount++;
+            }
+            if (edgeCount >= maxEdges) {
+                break;
+            }
+            if (relativePaths.contains(targetPath)
+                    && addNeighbor(neighbors, targetPath, relation.source())) {
+                edgeCount++;
+            }
+            if (edgeCount >= maxEdges) {
+                break;
+            }
+        }
+        Map<String, Set<String>> immutable = new LinkedHashMap<>();
+        neighbors.forEach((path, values) -> immutable.put(path, Set.copyOf(values)));
+        return Map.copyOf(immutable);
+    }
+
+    /**
+     * Providers externes persistés. SQLite surcharge cette méthode avec un
+     * UNION DISTINCT afin d'éviter un scan projet-wide des symboles/relations.
+     */
+    default Set<String> findExternalProviders(UUID projectId) {
+        Set<String> providers = new LinkedHashSet<>();
+        findSymbols(projectId).stream()
+                .map(indexed -> indexed.symbol().sourceProvider())
+                .filter(provider -> !CodeSymbol.DEFAULT_SOURCE_PROVIDER.equals(provider))
+                .forEach(providers::add);
+        findRelations(projectId).stream()
+                .map(SymbolRelation::sourceProvider)
+                .filter(provider -> !CodeSymbol.DEFAULT_SOURCE_PROVIDER.equals(provider))
+                .forEach(providers::add);
+        return Set.copyOf(providers);
+    }
+
     /** Recherche bornée des relations portant sur un symbole. */
     default List<SymbolRelation> searchRelations(UUID projectId, String symbol, int limit) {
         Objects.requireNonNull(symbol, "symbol");
         if (symbol.isBlank()) {
             throw new IllegalArgumentException("symbol must not be blank");
         }
-        if (limit <= 0) {
-            throw new IllegalArgumentException("limit must be greater than zero");
-        }
+        ResultLimitPolicy.validate(limit);
         String normalized = symbol.trim().toLowerCase(Locale.ROOT);
         return findRelations(projectId).stream()
                 .filter(relation -> relation.source().toLowerCase(Locale.ROOT).contains(normalized)
@@ -92,5 +176,32 @@ public interface IndexRepository {
      */
     default long generation(UUID projectId) {
         return 0L;
+    }
+
+    private static boolean addNeighbor(Map<String, Set<String>> neighbors, String source, String target) {
+        return neighbors.computeIfAbsent(source, ignored -> new LinkedHashSet<>()).add(target);
+    }
+
+    private static String resolveImportedType(Map<String, String> owners, String targetRef) {
+        String candidate = targetRef;
+        while (!candidate.isBlank()) {
+            String owner = owners.get(candidate);
+            if (owner != null) {
+                return owner;
+            }
+            int separator = candidate.lastIndexOf('.');
+            if (separator < 0) {
+                return null;
+            }
+            candidate = candidate.substring(0, separator);
+        }
+        return null;
+    }
+
+    private static boolean isType(SymbolKind kind) {
+        return switch (kind) {
+            case CLASS, INTERFACE, RECORD, ENUM, ANNOTATION, TYPE -> true;
+            case METHOD, CONSTRUCTOR -> false;
+        };
     }
 }

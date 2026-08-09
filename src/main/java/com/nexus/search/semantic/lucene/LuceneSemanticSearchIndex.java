@@ -2,6 +2,7 @@ package com.nexus.search.semantic.lucene;
 
 import com.nexus.config.NexusPaths;
 import com.nexus.index.FileCategory;
+import com.nexus.search.semantic.SemanticIndexProvenance;
 import com.nexus.search.semantic.SemanticSearchHit;
 import com.nexus.search.semantic.SemanticSearchIndex;
 import com.nexus.search.semantic.SemanticVectorDocument;
@@ -58,7 +59,40 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
     }
 
     @Override
+    public boolean isCompatible(UUID projectId, SemanticIndexProvenance provenance) throws IOException {
+        Objects.requireNonNull(projectId, "projectId");
+        Objects.requireNonNull(provenance, "provenance");
+        Path indexPath = paths.projectSemanticLuceneIndex(projectId);
+        if (!Files.isDirectory(indexPath)) {
+            return false;
+        }
+        try (Directory directory = FSDirectory.open(indexPath)) {
+            if (!DirectoryReader.indexExists(directory)) {
+                return false;
+            }
+            try (DirectoryReader reader = DirectoryReader.open(directory)) {
+                return provenance.matches(reader.getIndexCommit().getUserData());
+            }
+        }
+    }
+
+    @Override
     public void rebuild(UUID projectId, List<SemanticVectorDocument> documents) throws IOException {
+        rebuildInternal(projectId, null, documents);
+    }
+
+    @Override
+    public void rebuild(
+            UUID projectId,
+            SemanticIndexProvenance provenance,
+            List<SemanticVectorDocument> documents) throws IOException {
+        rebuildInternal(projectId, Objects.requireNonNull(provenance, "provenance"), documents);
+    }
+
+    private void rebuildInternal(
+            UUID projectId,
+            SemanticIndexProvenance provenance,
+            List<SemanticVectorDocument> documents) throws IOException {
         Objects.requireNonNull(projectId, "projectId");
         Objects.requireNonNull(documents, "documents");
         Path indexPath = paths.projectSemanticLuceneIndex(projectId);
@@ -70,6 +104,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
                 for (SemanticVectorDocument document : documents) {
                     writer.addDocument(toLuceneDocument(document));
                 }
+                applyProvenance(writer, provenance);
             }
         }
     }
@@ -77,6 +112,27 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
     @Override
     public void applyChanges(
             UUID projectId,
+            List<SemanticVectorDocument> documents,
+            Set<String> removedRelativePaths) throws IOException {
+        applyChangesInternal(projectId, null, documents, removedRelativePaths);
+    }
+
+    @Override
+    public void applyChanges(
+            UUID projectId,
+            SemanticIndexProvenance provenance,
+            List<SemanticVectorDocument> documents,
+            Set<String> removedRelativePaths) throws IOException {
+        applyChangesInternal(
+                projectId,
+                Objects.requireNonNull(provenance, "provenance"),
+                documents,
+                removedRelativePaths);
+    }
+
+    private void applyChangesInternal(
+            UUID projectId,
+            SemanticIndexProvenance provenance,
             List<SemanticVectorDocument> documents,
             Set<String> removedRelativePaths) throws IOException {
         Objects.requireNonNull(projectId, "projectId");
@@ -97,6 +153,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
                     writer.deleteDocuments(new Term(PATH_FIELD, document.relativePath()));
                     writer.addDocument(toLuceneDocument(document));
                 }
+                applyProvenance(writer, provenance);
             }
         }
     }
@@ -137,6 +194,12 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
                 }
                 return List.copyOf(hits);
             }
+        }
+    }
+
+    private static void applyProvenance(IndexWriter writer, SemanticIndexProvenance provenance) {
+        if (provenance != null) {
+            writer.setLiveCommitData(provenance.asCommitData().entrySet());
         }
     }
 

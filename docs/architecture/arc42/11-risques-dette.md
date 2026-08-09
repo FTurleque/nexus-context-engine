@@ -1,42 +1,81 @@
 # Section 11 — Risques et dette technique
 
 Probabilité : **F** = faible, **M** = moyenne, **E** = élevée  
-Impact : **F** = faible, **M** = moyen, **E** = élevé  
-Exposition = Probabilité × Impact
+Impact : **F** = faible, **M** = moyen, **E** = élevé
 
 ## 11.1 Registre des risques
 
-| ID | Risque | Prob. | Impact | Exp. | Statut | Mitigation | Propriétaire | Date cible |
-|----|--------|-------|--------|------|--------|-----------|--------------|------------|
-| R1 | **Scale SQLite lexical** — `LOWER(...) LIKE '%...%'` peut se dégrader sur 100k+ symboles | M | M | MM | Surveillance | Benchmark différé sur jeux de 10k/100k/500k/1M symboles avant toute modification (H8, `docs/roadmap.md`) | Équipe cœur | Sur benchmark |
-| R2 | **Corruption SQLite** lors d'une coupure de courant en cours d'écriture | F | E | FM | Accepté | Transactions ACID, rollback automatique, Lucene reconstructible, runbook de recovery | Équipe hardening | Continu |
-| R3 | **Symlink race** — acteur local remplaçant un répertoire ancêtre pendant le traitement | F | E | FM | Accepté (limite documentée) | `ProjectPathGuard` + `SafeFileIO` NOFOLLOW_LINKS — protection contre les cas statiques uniquement | Équipe hardening | Phase 7 si besoin |
-| R4 | **FileLock FS réseau** — sémantique non qualifiée sur filesystem réseau | M | E | ME | Non-support documenté | NEXUS_HOME doit être local ; documentation explicite dans roadmap H2 | Équipe hardening | Sur demande |
-| R5 | **Provider JDT LS non-coopératif** — ignore l'interruption indéfiniment | M | M | MM | Accepté | Worker daemon, timeout wall-clock, risque accepté si ce cas apparaît avec de futurs providers (H3) | Équipe hardening | Sur incident |
-| R6 | **Migration SQLite sans rollback** — une V002 défectueuse ne peut pas être annulée | F | E | FM | Watch item | Tester les migrations sur copie avant production ; runbook de restore depuis backup | Équipe cœur | Avant V002 |
-| R7 | **Glissement fonctionnel** — NEXUS devient orchestrateur ou chatbot | F | E | FM | Maîtrisé | ADR-0001 + revues de frontière régulières | Architecte | Continu |
-| R8 | **Dépendance Quarkus dans le cœur** — importation accidentelle | F | M | FM | Maîtrisé | Build séparé (reactor Maven), pas de dépendance Quarkus dans `core/pom.xml` | Équipe cœur | Continu |
-| R9 | **Dérive de qualité de recherche** lors de l'ajout de nouveaux langages | M | M | MM | Watch item | Baseline `hit@3` / `MRR@3` maintenue, qualification avant intégration | Équipe qualité | Par itération |
-| R10 | **Compatibilité MCP SDK** — rupture de contrat lors d'une mise à jour du SDK MCP Java | M | M | MM | Watch item | ADR-0016, test d'intégration `NexusMcpServerIntegrationTest` | Équipe adaptateur | Sur upgrade |
-| R11 | **Registre AI Skills** indisponible | M | F | MF | Accepté | Provider local en fallback (snapshot) ; `AiSkillsRegistryProvider` opt-in (ADR-0042) | Équipe cœur | N/A |
-| R12 | **Qualification post-Phase 6 non exécutée** (issue #16) — état actuel de la branche | E | M | EM | Bloquant | Gate explicite dans `docs/roadmap.md` — aucun merge avant validation du propriétaire | Propriétaire | Branche actuelle |
+| ID | Risque | Prob. | Impact | Statut | Mitigation / suivi |
+|---|---|---:|---:|---|---|
+| R1 | Scale SQLite lexical `%substring%` | M | M | Surveillance | benchmark avant FTS5/trigram/autre moteur |
+| R2 | Corruption SQLite lors d'une coupure | F | E | Accepté | ACID, sauvegarde canonique, runbook recovery |
+| R3 | Race filesystem locale hostile | F | E | Limite documentée | `ProjectPathGuard` + `SafeFileIO` + `NOFOLLOW_LINKS`; #52 |
+| R4 | `FileLock` sur filesystem réseau | M | E | Non supporté sans qualification | `NEXUS_HOME` local ; #52 |
+| R5 | Provider Java non coopératif | M | M | Watch item | timeout wall-clock ; isolation seulement sur cas réel ; #51 |
+| R6 | Migration SQLite forward-only | F | E | Watch item | backup avant upgrade, restore canonique si nécessaire |
+| R7 | Glissement fonctionnel vers orchestrateur/chatbot | F | E | Maîtrisé | frontières ADR + revues |
+| R8 | Dépendance adaptateur dans le cœur | F | M | Maîtrisé | reactor séparé |
+| R9 | Dérive qualité de recherche | M | M | Watch item | baseline + benchmark/qualification |
+| R10 | Compatibilité MCP lors d'une mise à jour | M | M | Watch item | tests protocole/intégration |
+| R11 | AI Skills Registry indisponible | M | F | Accepté | provider local/fallback |
+| R13 | Snapshots externes obsolètes | M | E | **Clôturé** | invalidation sur changement SOURCE/TEST ; PR #24/#49 |
+| R14 | Index sémantique incompatible | M | E | **Clôturé** | provenance Lucene + rebuild + garde de recherche |
+| R15 | Supply-chain reactor/image incomplète | M | E | **Clôturé / renforcé** | PR #28 + PR #49 : JaCoCo, OSV reactor, CodeQL, Trivy, SBOM, attestations |
+| R16 | Nouvelle dépendance à licence inhabituelle | F | E | Watch item | revue explicite ; #55 |
+| R17 | Snapshot publié après mutation concurrente | M | E | **Clôturé** | revalidation canonique avant READY ; PR #49 |
+| R18 | Exposition REST distante trop permissive | M | E | **Clôturé** | token robuste + roots + exposure mode ; PR #49 |
+| R19 | Graphe/contexte fédéré non bornés en travail | M | E | **Clôturé** | projections SQL + budget de travail ; PR #49 |
+| R20 | Recovery sémantique opérationnel incomplet | M | M | Watch item | Ollama/corruption Lucene ; #54 |
+| R21 | Cache Git persistant complexe/invalide | M | M | Watch item | aucune adoption sans mesures + modèle d'invalidation ; #53 |
+| R22 | Lifecycle Lucene partagé ajoute complexité/recovery | M | M | Watch item | benchmark + qualification crash/rebuild ; #50 |
+
+Le registre opérationnel détaillé est maintenu dans [`../risks/register.md`](../risks/register.md).
 
 ## 11.2 Dette technique identifiée
 
 | ID | Dette | Impact | Effort | Priorité |
-|----|-------|--------|--------|---------|
-| D1 | **Sources historiques dans `src/`** — `core/pom.xml` les référence via `sourceDirectory` au lieu d'un déplacement physique | Faible (fonctionne, inconvenant en IDEs) | Moyen | Faible |
-| D2 | **Pas de rollback de schéma SQLite** — toute migration est forward-only sans procédure de downgrade documentée | Moyen | Faible | Moyen |
-| D3 | **Sélection de skills lexicale uniquement** — pas de sélection sémantique | Moyen (qualité skill matching) | Élevé | Faible (attendu phase future) |
-| D4 | **Instructions utilisateur home non chargées** — limitation documentée | Faible | Moyen | Faible |
-| D5 | **H8 — scale SQLite lexical non benchmarké** sur grands corpus | Moyen potentiel | Élevé (benchmark + décision) | Moyen — différé intentionnellement |
+|---|---|---|---|---|
+| D1 | Sources historiques dans `src/`, référencées par `core/pom.xml` | Faible | Moyen | Faible |
+| D2 | Pas de rollback de schéma SQLite | Moyen | Faible | Moyen |
+| D3 | Sélection de skills principalement lexicale | Moyen | Élevé | Faible |
+| D4 | Instructions utilisateur home non chargées | Faible | Moyen | Faible |
+| D5 | Scale SQLite lexical | Moyen potentiel | Élevé | Conditionné au benchmark |
+| D6 | Gates supply-chain incomplets | Élevé | Moyen | **Clôturé par PR #28/#49** |
+| D7 | Recovery Ollama/Lucene physique | Moyen | Moyen | Watch item #54 |
 
-## 11.3 Choix volontairement non adoptés
+## 11.3 Frontières de support
 
-> Ces choix ne sont pas de la dette mais des décisions conscientes documentées dans
-> `docs/architecture.md` § Choix volontairement non adoptés.
+### Filesystem
 
-- Pas de Zoekt/OpenGrok/OpenSearch, index distribué, vector DB ou FTS5 supplémentaire
-  sans benchmark démontrant le besoin.
-- Pas de cache Git persistant ni de lifecycle Lucene partagé plus complexe.
-- Pas d'isolation en processus/circuit-breaker pour les providers — différé si un cas réel l'exige.
+NEXUS protège les chemins applicatifs contre les symlinks et borne les lectures, mais ne constitue pas un sandbox absolu contre un utilisateur local hostile modifiant activement l'arborescence. Le support réseau exige une qualification dédiée (#52).
+
+### Verrouillage et cohérence
+
+La garantie de single-flight combine mutex JVM et `FileLock` OS sur `NEXUS_HOME` local. Le snapshot canonique est revalidé avant publication ; une mutation concurrente détectée fait échouer l'indexation plutôt que de publier un état mixte.
+
+### Index dérivés
+
+SQLite reste canonique. Un index sémantique sans provenance compatible n'est pas réutilisé ; les snapshots externes obsolètes sont invalidés.
+
+### REST
+
+Loopback est la configuration locale sûre. Hors loopback, token robuste, allowlist de racines et mode d'exposition explicite sont obligatoires. `reverse-proxy-https` ou `direct-https` sont les modes distants admis ; `loopback-forward` est réservé au runtime Docker publié sur loopback côté hôte.
+
+### Supply-chain
+
+Le reactor et l'image Docker ont des gates distincts et complémentaires. OSV, CodeQL, Trivy, SBOM, notices tierces et attestations ne remplacent pas la revue juridique contextuelle d'une nouvelle dépendance inhabituelle.
+
+## 11.4 Choix volontairement non adoptés
+
+Ces choix ne sont pas de la dette ; ils restent conditionnés à une preuve :
+
+- pas de Zoekt/OpenGrok/OpenSearch, index distribué, vector DB ou FTS supplémentaire sans benchmark ;
+- pas de cache Git persistant sans mesures multi-repository ;
+- pas de lifecycle Lucene partagé sans benchmark + qualification recovery ;
+- pas d'isolation processus systématique des providers externes sans cas réel non coopératif.
+
+## 11.5 Qualification récente
+
+PR #49 : head exact `4f04c1ad3ff5b41aa9d1892ade57ad62b90a43f9` — NEXUS CI, Scale Benchmark, Windows Installer, Docker Distribution, CodeQL et OSV-Scanner PASS.
+
+PR #61 : head exact `ba91be044a600d2396e0939fc154848dc47f6310` — NEXUS CI, CodeQL et OSV-Scanner PASS ; merge `660ca9f07a23950d2a5284605531524372331bc5`.

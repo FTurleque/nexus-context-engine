@@ -1,6 +1,6 @@
-# Architecture d'implémentation — Phase 6
+# Architecture d'implémentation — NEXUS 0.2.0
 
-Ce chapitre décrit l'organisation concrète du code sur `phase-6-consolidation-hardening`. La qualification locale exact-head reste nécessaire avant promotion.
+Ce chapitre décrit l'organisation concrète du code **courant sur `main`** après Phase 6, hardening, provenance, supply-chain, Windows/Docker et consolidation post-audit.
 
 ## Repository
 
@@ -8,26 +8,25 @@ Ce chapitre décrit l'organisation concrète du code sur `phase-6-consolidation-
 nexus-context-engine/
 ├── pom.xml                         parent/reactor 0.2.0
 ├── core/pom.xml                    module core, sources historiques dans ../src
-├── src/main/java/com/nexus/        domaine + application + adapters locaux
+├── src/main/java/com/nexus/        domaine + application
 ├── src/main/resources/             migrations SQLite
 ├── src/test/java/com/nexus/
 ├── adapters/
 │   ├── rest-quarkus/
 │   ├── mcp-java/
 │   └── assistant-clients/
-├── distribution/                   launchers + assembly
+├── distribution/
+├── packaging/windows/
 ├── scripts/
-│   ├── self-smoke.ps1
-│   └── validate-phase-6.ps1
-├── mvnw.cmd / mvnw
+├── .github/workflows/
 └── docs/
 ```
 
-Le parent centralise Java 21, versions de dépendances/BOM, plugins, Enforcer et SBOM. Les adaptateurs restent des modules optionnels mais ne dérivent plus chacun leur propre gouvernance Maven.
+Le parent centralise Java 21, versions/BOM, plugins, Enforcer, licence, JaCoCo et SBOM. Les adaptateurs restent séparés du cœur tout en partageant la gouvernance Maven.
 
 ## Composition root
 
-`NexusApplication` compose les ports et adapters partagés par toutes les surfaces :
+`NexusApplication` compose les ports partagés par toutes les surfaces :
 
 ```text
 NexusPaths
@@ -44,29 +43,51 @@ DefaultContextBuilder
 FederatedContextService
 ```
 
-La CLI fait uniquement parsing/rendu et délègue les opérations à cette façade. REST et MCP font de même.
+CLI, REST et MCP délèguent à cette façade ; leurs politiques de résultat s'appuient sur la même `ResultLimitPolicy`.
 
 ## Indexation et cohérence
 
-`ProjectIndexingService` :
+`ProjectIndexingService` orchestre :
 
-1. acquiert un verrou single-flight par projet ;
-2. marque le projet `INDEXING` ;
-3. scanne les fichiers supportés sous plafond de taille ;
-4. analyse les fichiers modifiés ;
-5. met à jour SQLite ;
-6. rafraîchit SCIP/JDT selon configuration ;
-7. met à jour les index dérivés ;
-8. marque `READY` ;
-9. en cas d'échec, marque `FAILED`.
+1. acquisition du verrou de mutation — mutex JVM puis `FileLock` OS ;
+2. passage à `INDEXING` ;
+3. scan sécurisé et borné ;
+4. construction du snapshot/fingerprint canonique ;
+5. analyses embarquées et mise à jour SQLite ;
+6. invalidation/refresh des données externes dérivées ;
+7. mise à jour Lucene lexical ;
+8. mise à jour/rebuild sémantique selon provenance ;
+9. **revalidation du snapshot canonique avant publication** ;
+10. passage à `READY`, ou `FAILED` si une mutation concurrente ou une autre erreur rend le résultat incohérent.
 
-Un état persistant non-`READY` force le prochain rebuild complet. Un `INDEXING` laissé par un crash est donc récupérable.
+Un état persistant non-`READY` force le prochain rebuild complet.
 
-V002 ajoute `project_index_generations`. Les mises à jour canoniques font avancer cette génération, utilisée pour invalider le cache de graphe.
+### Single-flight
 
-## Repositories à grande échelle
+- mutex JVM par `projectId` ;
+- `FileLock` OS sous `NEXUS_HOME/locks/{projectId}.lock`.
 
-`IndexRepository` garde les APIs exhaustives nécessaires aux rebuilds, mais ajoute des chemins bornés :
+Cette garantie vise un `NEXUS_HOME` local. La présence du fichier de lock n'est pas un lease ; seul le `FileLock` actif compte.
+
+## Génération et fingerprint
+
+`project_index_generations` sert à invalider des caches dérivés. La génération ne progresse pas lorsqu'une opération est un no-op effectif.
+
+`CanonicalIndexFingerprint` représente de façon déterministe l'état canonique pertinent. Il sert à la provenance sémantique et à la revalidation du snapshot avant publication.
+
+## Intelligence de code externe
+
+Les snapshots externes sont des enrichissements dérivés.
+
+- changement SOURCE/TEST ⇒ invalidation des snapshots persistés concernés ;
+- providers/importers configurés peuvent republier un snapshot courant ;
+- persistance SQL des providers externes dédupliquée ;
+- exécution externe bornée par `ExternalTaskRunner` ;
+- SCIP possède une politique de taille dédiée et une borne du message Protobuf avant allocation.
+
+## Repository et graphe à grande échelle
+
+`IndexRepository` expose des opérations bornées pour éviter la matérialisation globale :
 
 ```java
 findFiles(projectId, relativePaths)
@@ -75,46 +96,88 @@ searchRelations(projectId, symbol, limit)
 generation(projectId)
 ```
 
-SQLite surcharge ces méthodes pour filtrer avant matérialisation. Les doubles de tests restent compatibles via les implémentations par défaut.
+Les besoins de graphe utilisent des projections/voisinages SQL bornés avec budgets de nœuds/arêtes. SQLite filtre avant matérialisation.
 
-## Ranking
+## Ranking et recherche
 
-- Lucene : candidats fichiers ;
+- Lucene lexical : candidats fichiers ;
 - SQLite borné : candidats symboles ;
-- graphe : cache dérivé par génération ;
+- graphe : enrichissement sur projections bornées ;
 - Git : signal local ;
-- sémantique : stratégie optionnelle ;
-- ranker déterministe, ou hybrid RRF lorsque le sémantique est activé.
+- sémantique : stratégie optionnelle avec garde de provenance ;
+- ranker déterministe ou hybrid RRF si sémantique activée.
 
-La fédération sur-récupère localement puis trie/diversifie globalement.
+La fédération sur-récupère localement puis trie/diversifie globalement sous bornes explicites.
 
 ## ContextBuilder
 
-`DefaultContextBuilder` reste projet-local. `FederatedContextService` orchestre plusieurs ContextBundle locaux sous un budget global et ajoute provenance/fairness/déduplication sans changer les règles natives de chaque projet.
+`DefaultContextBuilder` reste projet-local. `FederatedContextService` orchestre plusieurs bundles sous :
 
-## Providers
-
-Code intelligence :
-
-- JavaParser embarqué ;
-- SCIP import opportuniste ;
-- JDT LS explicite ;
-- MINOS import explicite et hors orchestration NEXUS.
-
-Skills :
-
-- `LocalAgentSkillsProvider` ;
-- `AiSkillsRegistryProvider` ;
-- composition indépendante via `SkillDiscoveryService`.
+- budget global final ;
+- fair floor ;
+- déduplication ;
+- refill ;
+- provenance projet ;
+- **budget de travail** distinct, afin de borner le coût préparatoire même si le budget final est petit.
 
 ## Sémantique
 
-`SemanticSearchConfiguration.fromEnvironment()` est la seule résolution opérationnelle commune. Sans `NEXUS_SEMANTIC_PROVIDER`, aucun provider d'embeddings n'est créé.
+`SemanticSearchConfiguration.fromEnvironment()` est la résolution commune. Sans `NEXUS_SEMANTIC_PROVIDER`, aucun provider d'embeddings n'est créé.
 
-`SemanticIndexingService` batch les documents. `OllamaEmbeddingProvider` surcharge `embedAll` et utilise l'entrée tableau de `/api/embed`.
+`SemanticIndexProvenance` persiste :
 
-## Packaging
+- fingerprint canonique ;
+- provider ID ;
+- model ID ;
+- dimensions ;
+- content profile ;
+- semantic schema version.
 
-Le module core produit dans `core/target`, puis copie les deux JAR attendus dans `target/` pour conserver la compatibilité avec les scripts historiques. Le parent conserve son propre `target/sbom`, évitant toute collision de `clean` entre modules.
+Mismatch/absence ⇒ rebuild. `SemanticSearchStrategy` refuse un index incompatible avant `EmbeddingProvider.embed(...)` pour la requête.
 
-Le ZIP standalone est assemblé dans `target/distribution` et accompagné d'un SHA-256.
+## Filesystem
+
+`ProjectPathGuard` + `SafeFileIO` imposent :
+
+- racine canonique ;
+- refus des symlinks pour les lectures sensibles ;
+- `NOFOLLOW_LINKS` sur le composant final ;
+- lecture réellement bornée.
+
+La protection portable n'est pas un sandbox absolu contre un acteur local hostile ; `NEXUS_HOME` réseau n'est pas qualifié pour la garantie `FileLock`.
+
+## REST
+
+La configuration locale par défaut reste loopback. Une exposition hors loopback est validée par les gardes REST :
+
+- token robuste ;
+- allowlist `NEXUS_REST_ALLOWED_PROJECT_ROOTS` ;
+- mode `NEXUS_REST_EXPOSURE_MODE` explicite ;
+- `reverse-proxy-https` ou `direct-https` ;
+- `loopback-forward` réservé à `NEXUS_RUNTIME=docker` avec publication hôte loopback.
+
+## Packaging Windows et Docker
+
+Le build produit CLI/ZIP multiplateforme, distribution Windows autonome et setup EXE. Le profil Windows recommandé ne rend pas REST obligatoire.
+
+Le runtime Docker conserve MCP en STDIO via `docker exec -i`. La qualification image couvre round-trip dotenv, Trivy, SBOM CycloneDX et gate des vulnérabilités HIGH/CRITICAL corrigibles. Les publications `main` portent des attestations de provenance et de SBOM liées au digest publié.
+
+## Qualification récente
+
+PR #49 :
+
+```text
+QUALIFIED_HEAD=4f04c1ad3ff5b41aa9d1892ade57ad62b90a43f9
+MERGE_SHA=c1ff9ef03ef33097c0d51154e02c30109b0a46f1
+```
+
+NEXUS CI, Scale Benchmark, Windows Installer, Docker Distribution, CodeQL et OSV-Scanner : PASS.
+
+PR #61 :
+
+```text
+QUALIFIED_HEAD=ba91be044a600d2396e0939fc154848dc47f6310
+MERGE_SHA=660ca9f07a23950d2a5284605531524372331bc5
+```
+
+NEXUS CI, CodeQL et OSV-Scanner : PASS.

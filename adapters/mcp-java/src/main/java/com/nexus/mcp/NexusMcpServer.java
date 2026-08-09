@@ -46,8 +46,10 @@ public final class NexusMcpServer {
 
     private static String version() {
         String implementationVersion = NexusMcpServer.class.getPackage().getImplementationVersion();
+        // Sans manifeste (exécution depuis les classes), on annonce explicitement un build de
+        // développement plutôt qu'un numéro codé en dur qui dériverait à chaque montée de version.
         return implementationVersion == null || implementationVersion.isBlank()
-                ? "0.2.0"
+                ? "0.0.0-dev"
                 : implementationVersion;
     }
 }

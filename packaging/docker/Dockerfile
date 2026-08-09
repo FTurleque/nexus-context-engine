@@ -1,0 +1,52 @@
+# Bases épinglées par digest (tag lisible conservé) pour une build reproductible : le tag peut
+# être re-poussé en amont, le digest fige l'image exacte. Mettre à jour via
+# `docker buildx imagetools inspect <image> --format '{{.Manifest.Digest}}'`.
+ARG MAVEN_IMAGE=maven:3.9.11-eclipse-temurin-21@sha256:6fdc855a6ed81d288ca7ca37ac6ff5e9308b612485c0801d70b25a858c83d237
+ARG RUNTIME_IMAGE=eclipse-temurin:21-jre-jammy@sha256:3097cbbebb7d490494a98aed2301f284b38f79eba158eef098c6fc8c8af11c23
+
+FROM ${MAVEN_IMAGE} AS build
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends unzip \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /workspace
+COPY . .
+RUN chmod +x ./mvnw && ./mvnw -B -DskipTests package
+
+FROM ${RUNTIME_IMAGE} AS runtime
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 10001 nexus \
+    && useradd --system --uid 10001 --gid 10001 --home-dir /data/nexus --shell /usr/sbin/nologin nexus \
+    && mkdir -p /opt/nexus/lib /opt/nexus/rest /data/nexus /workspace \
+    && chown -R 10001:10001 /opt/nexus /data/nexus /workspace
+
+COPY --from=build /workspace/target/nexus-context-engine-*-cli.jar /opt/nexus/lib/nexus-cli.jar
+COPY --from=build /workspace/adapters/mcp-java/target/nexus-mcp-java-*-runner.jar /opt/nexus/lib/nexus-mcp.jar
+COPY --from=build /workspace/adapters/assistant-clients/target/nexus-assistant-clients-*-runner.jar /opt/nexus/lib/nexus-assistant-clients.jar
+COPY --from=build /workspace/adapters/rest-quarkus/target/quarkus-app/ /opt/nexus/rest/
+COPY --chown=10001:10001 packaging/docker/nexus-container-entrypoint.sh /usr/local/bin/nexus-entrypoint
+
+# A Windows checkout can materialize shell scripts with CRLF. Normalize the
+# entrypoint inside the Linux image so the shebang remains /bin/sh, not /bin/sh\r.
+RUN sed -i 's/\r$//' /usr/local/bin/nexus-entrypoint \
+    && chmod 0755 /usr/local/bin/nexus-entrypoint
+
+ENV NEXUS_HOME=/data/nexus \
+    NEXUS_MODE=rest \
+    NEXUS_RUNTIME=docker \
+    NEXUS_REST_HOST=0.0.0.0 \
+    NEXUS_REST_PORT=8080 \
+    NEXUS_REST_ALLOWED_PROJECT_ROOTS=/workspace \
+    NEXUS_REST_EXPOSURE_MODE=loopback-forward \
+    NEXUS_MAX_SCIP_INDEX_BYTES=268435456 \
+    NEXUS_MAX_SCIP_MESSAGE_BYTES=16777216
+
+VOLUME ["/data/nexus", "/workspace"]
+EXPOSE 8080
+USER 10001:10001
+WORKDIR /workspace
+ENTRYPOINT ["/usr/local/bin/nexus-entrypoint"]
+CMD ["rest"]

@@ -1,148 +1,154 @@
 # Limites actuelles et dette de consolidation
 
-> Phase 6 : intégrée dans `main` via PR #15 ; issue #13 clôturée.
-> Hardening post-Phase 6 : intégré dans `main` via PR #18 ; issue #16 clôturée.
-> Qualification exécutée localement sous Windows (gates A–D PASS, self-smoke 13/13) et validée par CI (2026-08-05).
+> État courant : Phase 6 PR #15 ; hardening PR #18 ; provenance PR #24 ; licence PR #25 ; CI/supply-chain PR #28 ; consolidation post-audit PR #49 ; réconciliation documentaire finale PR #61.
 
-Ce registre conserve les constats F01–F18 issus de l'audit de juillet 2026 et ajoute les constats de l'audit post-Phase 6. Les ADR acceptés restent historiques et ne sont pas réécrits.
+Ce registre distingue les constats **fermés** des limites **réellement ouvertes**. Les anciennes formulations et anciennes preuves de qualification ne représentent pas l'état courant.
 
-## Registre Phase 6
+## Consolidation terminée
 
-| ID | Sujet | Traitement Phase 6 | État |
-|---|---|---|---|
-| F01 | top-K fédéré sous-rempli | sur-récupération bornée avant diversification + test de régression | fermé |
-| F02 | gate `READY` non uniforme | gate applicatif commun pour search/context/symbols/usages/fédération/MINOS | fermé |
-| F03 | fenêtre SQLite/index dérivés | lecture interdite hors `READY`, recovery non-READY par rebuild complet, génération canonique | fermé |
-| F04 | scan complet recherche symbolique | préfiltrage SQLite borné avant fuzzy Java | fermé |
-| F05 | `findSymbols`/`findUsages` projet-wide | requêtes repository SQL avec `LIMIT` | fermé |
-| F06 | graphe reconstruit par requête | cache dérivé par génération d'index | fermé |
-| F07 | composition CLI dupliquée | CLI déléguée entièrement à `NexusApplication` | fermé |
-| F08 | drift Maven | reactor parent, dependency/plugin management et Enforcer communs | fermé |
-| F09 | coupling Skills Registry | providers local/registry composés indépendamment | fermé |
-| F10 | absence single-flight | verrou in-process par `projectId` | fermé en Phase 6, renforcé post-Phase 6 |
-| F11 | fichiers non bornés | plafond configurable avant hash/lecture, 8 MiB par défaut, diagnostics | fermé, renforcé post-Phase 6 |
-| F12 | MINOS full walk | chemin applicatif validé contre `indexed_files` canonique | fermé |
-| F13 | lifecycle Lucene par opération | **pas de changement sans preuve de benchmark** | différé sur preuve |
-| F14 | opt-in sémantique non uniforme | configuration environnement commune CLI/REST/MCP, désactivée par défaut | fermé |
-| F15 | fédération non exposée | CLI + REST + MCP exposent recherche fédérée | fermé |
-| F16 | coûts Git/embeddings | embeddings batchables + batch Ollama ; aucun cache Git sans mesure | partiellement optimisé, watch item Git |
-| F17 | absence ContextBundle fédéré | budget global, provenance, fairness, déduplication et sources natives projet-locales | fermé, renforcé post-Phase 6 |
-| F18 | distribution orientée checkout | version 0.2.0, wrapper, ZIP autonome, SHA-256, SBOM, runbook recovery | fermé |
+### Phase 6 / hardening
 
-## Audit post-Phase 6 — issue #16
+| Sujet | Traitement | État |
+|---|---|---|
+| top-K fédéré sous-rempli | sur-récupération bornée avant diversification | fermé |
+| gate `READY` non uniforme | gate applicatif commun | fermé |
+| fenêtre SQLite/index dérivés | lecture hors READY interdite, recovery non-READY par rebuild | fermé |
+| recherche symbolique projet-wide | requêtes SQL bornées | fermé |
+| graphe reconstruit/matérialisé globalement | cache dérivé puis projections SQL bornées | fermé |
+| absence single-flight | mutex JVM + `FileLock` OS par projet | fermé |
+| fichiers non bornés | plafond commun avant consommation | fermé |
+| lifecycle Lucene par opération | changement conditionné à un benchmark | watch item #50 |
+| distribution orientée checkout | wrapper, ZIP, Windows EXE, checksums, SBOM, runbooks | fermé |
 
-| ID | Constat | Traitement implémenté | État actuel |
-|---|---|---|---|
-| H01 | lecture possible d'une cible extérieure via symlink | `ProjectPathGuard`, racine canonique, refus des symlinks sous le repository, ouverture finale `NOFOLLOW_LINKS`, flux et lectures bornés ; `SafeFileIO` couvre scanner, instructions, références, Agent Skills, provider JDT LS, `ContextFragmentFactory` et importeur SCIP | qualifié |
-| H02 | single-flight limité à une JVM | mutex local + `FileLock` OS par `projectId` sous `NEXUS_HOME/locks` ; indexations et import MINOS sérialisés | qualifié |
-| H03 | timeout provider potentiellement bloquant et importers non bornés | `ExternalTaskRunner` daemon non bloquant ; même enveloppe pour importers et providers | qualifié |
-| H04 | readiness mélangeait santé du service et disponibilité des projets | liveness explicite, readiness service, `allProjectsReady`, `degraded`, gate projet `READY` séparé | qualifié |
-| H05 | budget fédéré perdu après projet clairsemé ou déduplication | fair floor, overfetch local borné, refill global et préservation de l'ordre de ranking local | qualifié |
-| H06 | exposition REST non-loopback possible sans authentification | fail-fast hors loopback sans token + Bearer auth si token configuré | qualifié |
-| H07 | UUID inconnu réinterprété comme nom | séparation parse UUID / résolution par nom | qualifié |
-| H08 | map des mutex JVM conservée indéfiniment | slots référencés et suppression quand plus aucun utilisateur | qualifié |
-| H09 | coût SQLite des recherches `%substring%` à grande échelle | aucun changement prématuré ; benchmark requis avant FTS5/trigram/autre moteur | watch item mesuré |
+### Provenance — PR #24
 
-## Invariants renforcés
+- changement SOURCE/TEST ⇒ invalidation des snapshots externes persistés concernés ;
+- index sémantique ⇒ manifeste avec fingerprint canonique, provider, modèle, dimensions, profil de préparation et version de schéma ;
+- provenance absente/incompatible ⇒ rebuild ;
+- recherche sémantique stale refusée avant embedding de requête.
 
-### Frontière filesystem
+### CI / supply-chain — PR #28 puis PR #49
 
-La racine projet est canonicalisée une fois. Les chemins lus par le scanner, les ignore files, les instructions/références et les Agent Skills sont validés par rapport à cette frontière.
+- JaCoCo core bloquant : 70 % lignes / 50 % branches ;
+- CodeQL Java/Kotlin `security-extended` ;
+- OSV delta PR + SBOM CycloneDX agrégé du reactor scanné en mode bloquant ;
+- Actions contrôlées épinglées à des SHA immuables ;
+- `THIRD_PARTY_NOTICES.txt` avec `failOnMissing=true` ;
+- SBOM distribué et conservé comme preuve CI ;
+- Dependabot Maven, GitHub Actions et Docker ;
+- image Docker : Trivy, SBOM CycloneDX, gate HIGH/CRITICAL corrigibles, attestations de provenance et SBOM sur publication `main`.
 
-La politique post-Phase 6 est volontairement conservatrice : **un lien symbolique présent sous la racine du repository n'est pas suivi**. Une racine fournie elle-même via symlink peut être résolue vers sa cible canonique ; cette cible devient ensuite la frontière de confiance.
+## Consolidation post-audit — issue #48 / PR #49
 
-La protection est en deux couches :
+### P1 — tous fermés / qualifiés
 
-1. `ProjectPathGuard` valide le confinement réel, le type de l'entrée et l'absence de composants symlinkés sous la racine ;
-2. `SafeFileIO` ouvre le composant final avec `NOFOLLOW_LINKS` et borne effectivement le nombre d'octets consommés.
+- snapshot d'indexation cohérent face aux mutations concurrentes du repository ;
+- gate OSV complet pour le reactor Maven via SBOM agrégé ;
+- projections SQL bornées pour le graphe projet ;
+- coût de travail du contexte fédéré borné indépendamment du budget final ;
+- politique SCIP dédiée + borne du message Protobuf avant allocation.
 
-`NEXUS_MAX_FILE_SIZE_BYTES` est une politique commune : scanner, hash et lectures de contenu utilisent le même plafond de production. Les `.gitignore`, `.nexusignore`, instructions, références et `SKILL.md` héritent aussi des flux bornés, même lorsqu'ils sont découverts hors du scanner générique.
+### P2 — tous fermés / qualifiés
 
-Cela ferme notamment le remplacement concurrent du **fichier final** par un symlink ou un fichier devenu beaucoup plus gros entre validation et consommation.
+- `ResultLimitPolicy` commune CLI/REST/MCP ;
+- exposition REST distante : token robuste + racines autorisées + mode d'exposition explicite ;
+- génération `.cmd` native durcie ;
+- génération `.env` Docker durcie et qualifiée par round-trip ;
+- image Docker : CVE/SBOM/attestations ;
+- tests argv réels Windows pour les intégrations assistants.
 
-**Limites résiduelles du modèle Java portable :** NEXUS ne prétend pas fournir un sandbox filesystem contre un acteur local qui modifie agressivement l'arborescence pendant l'indexation. Un remplacement concurrent d'un **répertoire ancêtre** après validation, ou un hard-link créé localement vers un inode extérieur au modèle logique du repository, ne peut pas être éliminé complètement avec les seules primitives `Path` portables utilisées ici. Une défense absolue nécessiterait une marche par handles/`SecureDirectoryStream` disponible selon le filesystem, ou une isolation de processus/OS. Git ne versionne pas les hard-links en tant que tels, ce risque concerne donc surtout un repository local activement hostile pendant son traitement.
+### P3 — tous fermés / qualifiés
 
-Le provider JDT LS opt-in réutilise le scanner sécurisé pour déterminer les fichiers, mais sa lecture interne de document reste une surface TOCTOU plus étroite si le filesystem est modifié activement après le scan. Les repositories non fiables ne doivent pas être mutés concurremment pendant `--deep-java` tant qu'une isolation plus forte n'est pas justifiée.
+- readiness explicite lorsqu'aucun projet n'est enregistré ;
+- pas de bump `index_generation` sur no-op effectif ;
+- déduplication SQL des providers externes persistés ;
+- alignement Jackson via dependency management/BOM ;
+- stratégie `develop` réconciliée avec `main` comme branche d'intégration protégée ;
+- README, roadmap, current limitations et runbooks réconciliés via PR #61.
+
+## Invariants actuels
+
+### Filesystem
+
+La racine projet est canonicalisée. `ProjectPathGuard`, `SafeFileIO` et `NOFOLLOW_LINKS` protègent les lectures sensibles. `NEXUS_MAX_FILE_SIZE_BYTES` est appliqué au moment de la consommation.
+
+**Limite résiduelle :** les primitives Java portables ne constituent pas un sandbox absolu contre un acteur local qui modifie agressivement des ancêtres ou hard-links pendant le traitement. Suivi : issue #52.
 
 ### Cohérence et concurrence d'index
 
-SQLite reste la source canonique. Lucene lexical et sémantique restent dérivés et reconstructibles. Une lecture dépendant d'un index exige `IndexStatus.READY` au niveau de la façade applicative.
+SQLite reste canonique ; Lucene lexical/sémantique et intelligence externe sont dérivés.
 
-Une panne pendant l'indexation conduit normalement à `FAILED`. Un crash brutal peut laisser `INDEXING`; cet état ne constitue pas un lease persistant et la prochaine indexation force un rebuild complet.
+- lecture indexée ⇒ projet `READY` ;
+- état persistant non-READY ⇒ rebuild complet à la prochaine indexation ;
+- mutation par projet ⇒ mutex JVM + `FileLock` OS ;
+- snapshot canonique revalidé avant publication ;
+- mutation concurrente détectée ⇒ échec fail-closed ;
+- `index_generation` ne progresse pas pour un no-op effectif ;
+- garantie inter-processus revendiquée uniquement sur filesystem local.
 
-La façade de production utilise désormais deux niveaux de single-flight :
+### Providers externes
 
-1. mutex JVM par projet ;
-2. verrou fichier OS par projet sous `NEXUS_HOME/locks`.
-
-Le verrou OS couvre les indexations/rebuilds, les providers de code intelligence et l'import MINOS piloté par la façade. Le fichier de lock peut rester présent après libération ; c'est le `FileLock` OS, et non la présence du fichier, qui représente la propriété exclusive.
-
-La garantie inter-processus suppose un filesystem local respectant correctement les locks de fichiers. Un `NEXUS_HOME` placé sur un filesystem réseau exotique doit être qualifié séparément avant d'être considéré supporté.
-
-### Ressources et providers
-
-- `NEXUS_MAX_FILE_SIZE_BYTES` : 8 MiB par défaut ;
 - `NEXUS_CODE_INTELLIGENCE_TIMEOUT_SECONDS` : 180 s par défaut ;
-- importers et providers passent par la même enveloppe de temps globale ;
-- le runner annule/interrompt le worker et ne bloque pas sur la fermeture d'un executor récalcitrant ;
-- les durées importer/provider restent structurées dans `IndexingReport`.
+- importers/providers utilisent une enveloppe wall-clock commune ;
+- un worker Java tiers ignorant définitivement l'interruption peut survivre comme daemon.
 
-**Risque résiduel connu :** une intégration Java tierce qui ignore définitivement l'interruption peut continuer sur son thread daemon après le timeout. Elle ne bloque plus l'indexation ni l'arrêt de la JVM, mais des timeouts répétés d'un provider malveillant pourraient accumuler des workers jusqu'au redémarrage. Les providers pilotant un processus externe doivent donc conserver leur propre politique de destruction ; JDT LS dispose déjà d'un cleanup de session/processus.
+Ce risque est suivi par l'issue #51 ; l'isolation processus n'est pas introduite sans cas réel reproductible.
 
 ### Readiness
 
-Les notions suivantes sont séparées :
+- liveness : processus vivant ;
+- readiness service : dépendances de base accessibles ;
+- project readiness : projet `READY` avant lecture indexée ;
+- aucun projet enregistré : état explicite, distinct de « tous les projets sont READY » ;
+- degraded : au moins un projet `FAILED`.
 
-- **liveness** : le processus Quarkus est vivant ;
-- **readiness service** : la façade peut accéder à ses dépendances de base et accepter les opérations de gestion ;
-- **project readiness** : un projet individuel doit être `READY` avant toute lecture dépendant de son index ;
-- **degraded** : au moins un projet est en `FAILED` ;
-- **allProjectsReady** : tous les projets enregistrés sont `READY`.
+### Graphe, fédération et résultats
 
-Un service peut donc rester opérationnel pendant l'indexation d'un projet sans faire croire que ce projet est consultable.
-
-### Fédération
-
-Le contexte fédéré conserve un fair floor déterministe par projet, mais les builders locaux peuvent produire un pool de candidats borné par le budget global. La première passe ne consomme qu'un **préfixe** du ranking local de chaque projet ; dès que le prochain candidat ne tient plus dans son fair floor, le suffixe est différé. Après déduplication, ces suffixes peuvent réutiliser les tokens rendus disponibles sans faire passer un candidat local moins bien classé devant un candidat différé plus pertinent.
-
-Les métadonnées exposent notamment `refillTokens`, `refillItems`, `unusedTokens`, allocation/sélection par projet, starvation et déduplication.
-
-Le coût de construction local peut augmenter avec le nombre de projets car chaque builder peut produire un pool jusqu'au budget fédéré global. Ce coût reste borné, mais doit être mesuré si les portfolios deviennent très larges.
+- graphe projet : projections et voisinages bornés côté repository ;
+- contexte fédéré : fair floor, déduplication, refill global et borne du travail préparatoire ;
+- CLI/REST/MCP : plafond maximal commun des résultats.
 
 ### Sécurité REST
 
-Le host par défaut reste `127.0.0.1`.
+Loopback sans token reste autorisé localement. Hors loopback :
 
-- loopback + aucun token : fonctionnement local historique ;
-- token configuré : les ressources REST JAX-RS exigent `Authorization: Bearer ...` ;
-- host non-loopback + aucun token : bootstrap refusé ;
-- host non-loopback + token : exposition autorisée avec Bearer auth.
+- token absent/faible ⇒ démarrage refusé ;
+- allowlist `NEXUS_REST_ALLOWED_PROJECT_ROOTS` absente/vide ⇒ refus ;
+- `NEXUS_REST_EXPOSURE_MODE` absent/invalide ⇒ refus ;
+- modes distants admis : `reverse-proxy-https` ou `direct-https` ;
+- `loopback-forward` uniquement avec `NEXUS_RUNTIME=docker` et publication hôte sur loopback ;
+- token distant : minimum 32 octets et entropie estimée ≥ 96 bits.
 
-Variable : `NEXUS_REST_API_TOKEN` ; alternative JVM : `-Dnexus.rest.api-token=...`.
+## Watch items réellement ouverts
 
-Les endpoints techniques fournis directement par Quarkus (health/métriques) ne doivent pas être assimilés à des endpoints de contexte applicatif ; leur exposition doit rester traitée comme un choix d'exploitation.
+1. **#50 Lifecycle Lucene persistant** — benchmark représentatif avant writer/SearcherManager partagé.
+2. **#51 Provider externe non coopératif** — isolation processus seulement sur fixture/cas réel.
+3. **#52 Filesystem hostile/réseau** — qualification spécifique avant extension du support.
+4. **#53 Cache Git persistant** — mesures cold/warm et invalidation avant adoption.
+5. **#54 Recovery sémantique** — Ollama indisponible et corruption Lucene physique.
+6. **#55 Dépendance inhabituelle** — revue juridique explicite malgré l'inventaire automatisé.
+7. **Scale SQLite substring** — aucun FTS5/trigram/autre moteur sans benchmark matériellement favorable.
 
-## Watch items conservés
+## Qualification récente
 
-1. **Recherche SQLite substring / scale** : mesurer 10k / 100k / 500k / 1M symboles avant de choisir FTS5, n-gram/trigram ou un moteur supplémentaire.
-2. **Lifecycle Lucene persistant** : `SearcherManager`/writer partagé uniquement si un benchmark REST/MCP démontre un gain matériel.
-3. **Cache Git** : aucun cache persistant sans mesure multi-repository.
-4. **Moteur externe** : Zoekt/OpenGrok/OpenSearch uniquement si les requêtes bornées et le cache graphe ne suffisent plus.
-5. **Vector DB** : non justifiée par le corpus actuel.
-6. **Transport MCP distant** : hors périmètre ; stdio local reste la surface prévue.
-7. **Worker externe récalcitrant** : envisager isolation processus/circuit-breaker si de futurs providers Java non coopératifs deviennent une réalité opérationnelle.
-8. **Filesystem activement hostile / TOCTOU ancêtre / hard-links** : isolation par handles ou processus seulement si NEXUS doit accepter ce threat model.
-9. **JDT LS et mutation concurrente du repository** : qualifier/renforcer si `--deep-java` doit devenir sûr contre un workspace local hostile en mouvement.
-10. **Portfolios très larges** : mesurer le coût d'overfetch du contexte fédéré avant toute stratégie adaptative plus complexe.
+PR #49 :
 
-## Gate de validation post-Phase 6
+```text
+QUALIFIED_HEAD=4f04c1ad3ff5b41aa9d1892ade57ad62b90a43f9
+MERGE_SHA=c1ff9ef03ef33097c0d51154e02c30109b0a46f1
+```
 
-Issue #16 **clôturée**. Qualification complète exécutée :
+NEXUS CI `31314135008`, Scale Benchmark `31314135000`, Windows Installer `31314134983`, Docker Distribution `31314134994`, CodeQL `31314134977`, OSV-Scanner `31314135231` — PASS.
 
-1. revue statique complète de la branche ✓
-2. validation explicite du propriétaire ✓
-3. intégration dans `develop` via PR #17, puis dans `main` via PR #18 ✓
-4. qualification locale Windows : gates A–D PASS, self-smoke 13/13, CI Windows + Linux success ✓
-5. ce registre mis à jour avec les preuves réelles ✓
+PR #61 :
 
-Voir aussi : `docs/developer/release-and-recovery.md` et `docs/roadmap.md`.
+```text
+QUALIFIED_HEAD=ba91be044a600d2396e0939fc154848dc47f6310
+MERGE_SHA=660ca9f07a23950d2a5284605531524372331bc5
+```
+
+NEXUS CI `31315318844`, CodeQL `31315318865`, OSV-Scanner `31315319213` — PASS. Le premier Linux a rencontré un HTTP 429 Maven Central ; un unique rerun exact-head est passé sans modification du projet.
+
+Aucun workflow/configuration/status SonarCloud actif n'est défini dans la baseline courante.
+
+Voir aussi : [`release-and-recovery.md`](release-and-recovery.md), [`ci-and-supply-chain.md`](ci-and-supply-chain.md), [`../roadmap.md`](../roadmap.md) et [`../index-provenance.md`](../index-provenance.md).

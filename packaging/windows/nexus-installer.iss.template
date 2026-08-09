@@ -1,0 +1,1755 @@
+#define NexusName "NEXUS Context Engine"
+#define NexusVersion "@@VERSION@@"
+#define NexusAppVersion "@@APP_VERSION@@"
+#define NexusAppId "@@APP_ID@@"
+#define NexusSmokeMode @@SMOKE_MODE@@
+#define NexusSourceDir "@@SOURCE_DIR@@"
+#define NexusOutputDir "@@OUTPUT_DIR@@"
+#define NexusOutputBaseFilename "@@OUTPUT_BASENAME@@"
+
+[Setup]
+AppId={#NexusAppId}
+AppName={#NexusName}
+AppVersion={#NexusVersion}
+AppPublisher=FTurleque
+DefaultDirName={localappdata}\Programs\NEXUS
+DefaultGroupName=NEXUS
+DisableProgramGroupPage=yes
+PrivilegesRequired=lowest
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+OutputDir={#NexusOutputDir}
+OutputBaseFilename={#NexusOutputBaseFilename}
+Compression=lzma2/ultra64
+SolidCompression=yes
+WizardStyle=modern
+ChangesEnvironment=yes
+SetupLogging=yes
+DisableReadyPage=no
+UninstallDisplayName={#NexusName}
+VersionInfoVersion={#NexusAppVersion}
+VersionInfoCompany=FTurleque
+VersionInfoDescription={#NexusName} Windows deployment wizard
+VersionInfoProductName={#NexusName}
+VersionInfoProductVersion={#NexusAppVersion}
+VersionInfoProductTextVersion={#NexusVersion}
+
+[Tasks]
+Name: "addtopath"; Description: "Ajouter NEXUS au PATH de l'utilisateur"; GroupDescription: "Intégration Windows :"; Flags: checkedonce; Check: InstallNative
+Name: "startdocker"; Description: "Démarrer le déploiement Docker à la fin de l'installation"; GroupDescription: "Docker :"; Flags: checkedonce; Check: InstallDocker
+
+[Files]
+Source: "{#NexusSourceDir}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#NexusSourceDir}\THIRD_PARTY_NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#NexusSourceDir}\SBOM.cdx.json"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#NexusSourceDir}\VERSION"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#NexusSourceDir}\RUNTIME-MODULES.txt"; DestDir: "{app}"; Flags: ignoreversion; Check: InstallNative
+Source: "{#NexusSourceDir}\README.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#NexusSourceDir}\app\*"; DestDir: "{app}\app"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: InstallNative
+Source: "{#NexusSourceDir}\lib\*"; DestDir: "{app}\lib"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#NexusSourceDir}\rest\*"; DestDir: "{app}\rest"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#NexusSourceDir}\nexus.cmd"; DestDir: "{app}"; Flags: ignoreversion; Check: InstallNativeCli
+Source: "{#NexusSourceDir}\nexus-mcp.cmd"; DestDir: "{app}"; Flags: ignoreversion; Check: InstallNativeMcp
+Source: "{#NexusSourceDir}\nexus-rest.cmd"; DestDir: "{app}"; Flags: ignoreversion; Check: InstallNativeRest
+Source: "{#NexusSourceDir}\nexus-assistant-clients.cmd"; DestDir: "{app}"; Flags: ignoreversion; Check: InstallNative
+Source: "{#NexusSourceDir}\nexus-docker.cmd"; DestDir: "{app}"; Flags: ignoreversion; Check: InstallDocker
+Source: "{#NexusSourceDir}\nexus-docker-mcp.cmd"; DestDir: "{app}"; Flags: ignoreversion; Check: InstallDocker
+Source: "{#NexusSourceDir}\docker\*"; DestDir: "{app}\docker"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: InstallDocker
+
+[Icons]
+Name: "{userprograms}\NEXUS\Dossier d'installation NEXUS"; Filename: "{app}"
+Name: "{userprograms}\NEXUS\Démarrer NEXUS Docker"; Filename: "{cmd}"; Parameters: "/C ""{app}\nexus-docker-up.cmd"""; WorkingDir: "{app}"; Check: InstallDocker
+Name: "{userprograms}\NEXUS\Arrêter NEXUS Docker"; Filename: "{cmd}"; Parameters: "/C ""{app}\nexus-docker-down.cmd"""; WorkingDir: "{app}"; Check: InstallDocker
+Name: "{userprograms}\NEXUS\Intégrations assistants"; Filename: "{app}\integrations"; Check: HasAssistantSelection
+
+[Run]
+Filename: "{cmd}"; Parameters: "/D /S /C ""{app}\nexus-docker-up.cmd"""; WorkingDir: "{app}"; Description: "Démarrer NEXUS Docker"; Flags: postinstall runhidden skipifsilent; Tasks: startdocker; Check: InstallDocker
+
+[Code]
+var
+  DeploymentPage: TInputOptionWizardPage;
+  ProfilePage: TInputOptionWizardPage;
+  NativeOptionsPage: TInputOptionWizardPage;
+  RuntimePage: TInputQueryWizardPage;
+  SemanticPage: TInputOptionWizardPage;
+  OllamaPage: TInputQueryWizardPage;
+  DockerPrereqPage: TInputOptionWizardPage;
+  DockerPage: TInputQueryWizardPage;
+  AssistantPage: TInputOptionWizardPage;
+  IntegrationRuntimePage: TInputOptionWizardPage;
+  DockerDesktopInstalledDuringSetup: Boolean;
+  UninstSilent: Boolean;
+  OllamaPrereqPage: TInputOptionWizardPage;
+
+const
+  BCRYPT_USE_SYSTEM_PREFERRED_RNG = $00000002;
+
+// CSPRNG Windows : remplit un buffer d'octets à partir du générateur cryptographique système.
+// Utilisé pour générer le token Bearer REST avec une entropie forte (>= 256 bits), au lieu du
+// PRNG Random() non cryptographique. hAlgorithm = 0 + BCRYPT_USE_SYSTEM_PREFERRED_RNG.
+function BCryptGenRandom(hAlgorithm: Cardinal; var pbBuffer: Byte; cbBuffer: Cardinal; dwFlags: Cardinal): Integer;
+  external 'BCryptGenRandom@bcrypt.dll stdcall';
+
+function IsSmokeBuild(): Boolean;
+begin
+  Result := {#NexusSmokeMode} = 1;
+end;
+
+function InstallerRegistryPath(): String;
+begin
+  { Smoke builds use an isolated key so install/uninstall smoke cycles never mutate
+    a real user's NEXUS registry state (managed markers, ManagedPath, etc.). }
+  if IsSmokeBuild() then
+    Result := 'Software\FTurleque\NEXUS-Smoke'
+  else
+    Result := 'Software\FTurleque\NEXUS';
+end;
+
+function InstallNative(): Boolean;
+begin
+  Result := (DeploymentPage.SelectedValueIndex = 0) or (DeploymentPage.SelectedValueIndex = 2);
+end;
+
+function InstallDocker(): Boolean;
+begin
+  Result := (not IsSmokeBuild()) and ((DeploymentPage.SelectedValueIndex = 1) or (DeploymentPage.SelectedValueIndex = 2));
+end;
+
+function IsCustomProfile(): Boolean;
+begin
+  Result := ProfilePage.SelectedValueIndex = 1;
+end;
+
+function InstallNativeCli(): Boolean;
+begin
+  Result := InstallNative() and NativeOptionsPage.Values[0];
+end;
+
+function InstallNativeMcp(): Boolean;
+begin
+  Result := InstallNative() and NativeOptionsPage.Values[1];
+end;
+
+function InstallNativeRest(): Boolean;
+begin
+  Result := InstallNative() and NativeOptionsPage.Values[2];
+end;
+
+function OllamaEnabled(): Boolean;
+begin
+  Result := SemanticPage.Values[0];
+end;
+
+function SemanticProviderValue(): String;
+begin
+  if OllamaEnabled() then
+    Result := 'ollama'
+  else
+    Result := '';
+end;
+
+function AssistantIntegrationAvailable(): Boolean;
+begin
+  Result := InstallNativeMcp() or InstallDocker();
+end;
+
+function HasAssistantSelection(): Boolean;
+begin
+  Result := AssistantIntegrationAvailable() and
+    (AssistantPage.Values[0] or AssistantPage.Values[1] or AssistantPage.Values[2] or AssistantPage.Values[3] or AssistantPage.Values[4]);
+end;
+
+function UseDockerForIntegrations(): Boolean;
+begin
+  if InstallDocker() and not InstallNative() then
+    Result := True
+  else if InstallDocker() and InstallNative() then
+    Result := IntegrationRuntimePage.SelectedValueIndex = 1
+  else
+    Result := False;
+end;
+
+function TrimTrailingBackslash(Value: String): String;
+begin
+  Result := Value;
+  while (Length(Result) > 3) and (Result[Length(Result)] = '\') do
+    Delete(Result, Length(Result), 1);
+end;
+
+function JsonEscape(Value: String): String;
+begin
+  Result := Value;
+  StringChangeEx(Result, '\', '\\', True);
+  StringChangeEx(Result, '"', '\"', True);
+end;
+
+function TomlEscape(Value: String): String;
+begin
+  Result := Value;
+  StringChangeEx(Result, '\', '\\', True);
+  StringChangeEx(Result, '"', '\"', True);
+end;
+
+function DockerPath(Value: String): String;
+begin
+  Result := TrimTrailingBackslash(Value);
+  StringChangeEx(Result, '\', '/', True);
+end;
+
+function IsLoopbackOllamaHost(Host: String): Boolean;
+begin
+  // Miroir de com.nexus.search.semantic.ollama.OllamaEndpointResolver#isLoopbackHost.
+  Host := Lowercase(Trim(Host));
+  if (Length(Host) >= 2) and (Host[1] = '[') and (Host[Length(Host)] = ']') then
+    Host := Copy(Host, 2, Length(Host) - 2);
+  Result := (Host = 'localhost') or (Host = '::1') or (Copy(Host, 1, 4) = '127.');
+end;
+
+function OllamaUrlForDocker(Url: String): String;
+var
+  SchemePos, PathPos, PortColon, BracketEnd: Integer;
+  Prefix, Authority, HostPart, Suffix, Rest: String;
+begin
+  // Résout une URL Ollama de bouclage vers host.docker.internal pour le runtime Docker Desktop.
+  // Tout hôte non-bouclage (distant, DNS personnalisé, IPv6 non-::1) est renvoyé inchangé afin de
+  // rester joignable à l'identique depuis les deux runtimes. Le runtime NEXUS applique la même
+  // résolution défensivement via NEXUS_RUNTIME=docker ; cette fonction garantit surtout que le
+  // fichier .env généré affiche l'endpoint réellement utilisé.
+  Result := Url;
+  Url := Trim(Url);
+  SchemePos := Pos('://', Url);
+  if SchemePos = 0 then exit;
+  Prefix := Copy(Url, 1, SchemePos + 2);
+  Rest := Copy(Url, SchemePos + 3, Length(Url));
+  PathPos := Pos('/', Rest);
+  if PathPos > 0 then
+  begin
+    Authority := Copy(Rest, 1, PathPos - 1);
+    Suffix := Copy(Rest, PathPos, Length(Rest));
+  end
+  else
+  begin
+    Authority := Rest;
+    Suffix := '';
+  end;
+
+  if (Length(Authority) > 0) and (Authority[1] = '[') then
+  begin
+    BracketEnd := Pos(']', Authority);
+    if BracketEnd = 0 then exit;
+    HostPart := Copy(Authority, 1, BracketEnd);
+    if IsLoopbackOllamaHost(HostPart) then
+      Result := Prefix + 'host.docker.internal' + Copy(Authority, BracketEnd + 1, Length(Authority)) + Suffix;
+  end
+  else
+  begin
+    PortColon := Pos(':', Authority);
+    if PortColon > 0 then
+      HostPart := Copy(Authority, 1, PortColon - 1)
+    else
+      HostPart := Authority;
+    if IsLoopbackOllamaHost(HostPart) then
+    begin
+      if PortColon > 0 then
+        Result := Prefix + 'host.docker.internal' + Copy(Authority, PortColon, Length(Authority)) + Suffix
+      else
+        Result := Prefix + 'host.docker.internal' + Suffix;
+    end;
+  end;
+end;
+
+function PathContainsEntry(PathValue: String; Entry: String): Boolean;
+var
+  Haystack: String;
+  Needle: String;
+begin
+  Haystack := ';' + Lowercase(PathValue) + ';';
+  Needle := ';' + Lowercase(TrimTrailingBackslash(Entry)) + ';';
+  Result := Pos(Needle, Haystack) > 0;
+end;
+
+function CommandExists(Name: String): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Result := Exec(ExpandConstant('{cmd}'), '/D /S /C "where ' + Name + ' >nul 2>nul"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+end;
+
+function OllamaExecutable(): String;
+var
+  Candidate: String;
+begin
+  Result := '';
+  Candidate := GetEnv('LOCALAPPDATA') + '\Programs\Ollama\ollama.exe';
+  if FileExists(Candidate) then begin Result := Candidate; exit; end;
+  if CommandExists('ollama') then begin Result := 'ollama'; exit; end;
+end;
+
+function OllamaPresent(): Boolean;
+begin
+  Result := OllamaExecutable() <> '';
+end;
+
+function OllamaAutoInstallSelected(): Boolean;
+begin
+  Result := OllamaEnabled() and OllamaPrereqPage.Values[0];
+end;
+
+function DockerDesktopExecutable(): String;
+var
+  Candidate: String;
+begin
+  Result := '';
+  Candidate := GetEnv('LOCALAPPDATA') + '\Programs\DockerDesktop\Docker Desktop.exe';
+  if FileExists(Candidate) then
+  begin
+    Result := Candidate;
+    exit;
+  end;
+  Candidate := ExpandConstant('{autopf}\Docker\Docker\Docker Desktop.exe');
+  if FileExists(Candidate) then Result := Candidate;
+end;
+
+function DockerCliExecutable(): String;
+var
+  Candidate: String;
+begin
+  Result := '';
+  if CommandExists('docker') then
+  begin
+    Result := 'docker';
+    exit;
+  end;
+  Candidate := GetEnv('LOCALAPPDATA') + '\Programs\DockerDesktop\resources\bin\docker.exe';
+  if FileExists(Candidate) then
+  begin
+    Result := Candidate;
+    exit;
+  end;
+  Candidate := ExpandConstant('{autopf}\Docker\Docker\resources\bin\docker.exe');
+  if FileExists(Candidate) then Result := Candidate;
+end;
+
+function DockerEngineReady(): Boolean;
+var
+  DockerCli: String;
+  ResultCode: Integer;
+begin
+  // Un docker.exe sur le PATH n'est qu'un client : il ne doit pas supprimer l'installation de
+  // Docker Desktop s'il ne peut pas réellement joindre un engine. Un Docker Desktop installé mais
+  // arrêté reste accepté (le lanceur post-install le démarre).
+  Result := False;
+  DockerCli := DockerCliExecutable();
+  if DockerCli = '' then exit;
+
+  if DockerCli = 'docker' then
+    Result := Exec(ExpandConstant('{cmd}'), '/D /S /C "docker info >nul 2>nul"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0)
+  else
+    Result := Exec(DockerCli, 'info', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+end;
+
+function DockerRuntimePresent(): Boolean;
+begin
+  Result := DockerEngineReady() or (DockerDesktopExecutable() <> '');
+end;
+
+function DockerDesktopAutoInstallSelected(): Boolean;
+begin
+  Result := InstallDocker() and DockerPrereqPage.Values[0];
+end;
+
+function PowerShellSingleQuote(Value: String): String;
+begin
+  Result := Value;
+  StringChangeEx(Result, '''', '''''', True);
+end;
+
+function VerifyDockerDesktopInstaller(InstallerPath: String): Boolean;
+var
+  PowerShellPath: String;
+  Script: String;
+  Parameters: String;
+  ResultCode: Integer;
+begin
+  Result := False;
+  PowerShellPath := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+  if not FileExists(PowerShellPath) then exit;
+  Script :=
+    '$s=Get-AuthenticodeSignature -LiteralPath ''' + PowerShellSingleQuote(InstallerPath) + '''; ' +
+    'if (($s.Status -eq ''Valid'') -and ($null -ne $s.SignerCertificate) -and ' +
+    '($s.SignerCertificate.Subject -match ''(^|,\s*)CN=Docker Inc(,|$)'')) { exit 0 } else { exit 1 }';
+  Parameters := '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' + Script + '"';
+  Result := Exec(PowerShellPath, Parameters, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+end;
+
+function VerifyOllamaInstaller(InstallerPath: String): Boolean;
+var
+  PowerShellPath: String;
+  Script: String;
+  Parameters: String;
+  ResultCode: Integer;
+begin
+  // Vérification Authenticode fail-closed du programme d'installation Ollama, alignée sur celle de
+  // Docker Desktop. Le signataire attendu (CN=Ollama Inc.) provient du certificat DigiCert réel du
+  // binaire officiellement distribué par Ollama — jamais une valeur arbitraire. Toute signature
+  // absente, invalide, ou d'un autre signataire entraîne un refus d'exécution.
+  Result := False;
+  PowerShellPath := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+  if not FileExists(PowerShellPath) then exit;
+  Script :=
+    '$s=Get-AuthenticodeSignature -LiteralPath ''' + PowerShellSingleQuote(InstallerPath) + '''; ' +
+    'if (($s.Status -eq ''Valid'') -and ($null -ne $s.SignerCertificate) -and ' +
+    '($s.SignerCertificate.Subject -match ''(^|,\s*)CN=Ollama Inc\.(,|$)'')) { exit 0 } else { exit 1 }';
+  Parameters := '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' + Script + '"';
+  Result := Exec(PowerShellPath, Parameters, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+end;
+
+function InstallDockerDesktopIfNeeded(): String;
+var
+  InstallerPath: String;
+  ResultCode: Integer;
+  DownloadedSize: Int64;
+begin
+  Result := '';
+  if not InstallDocker() or DockerRuntimePresent() then exit;
+  if not DockerDesktopAutoInstallSelected() then
+  begin
+    Result := 'Docker Desktop/CLI est absent et son installation automatique est désactivée.';
+    exit;
+  end;
+
+  try
+    DownloadedSize := DownloadTemporaryFile(
+      'https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe',
+      'NEXUS-Docker-Desktop-Installer.exe', '', nil);
+    Log('Docker Desktop téléchargé : ' + IntToStr(DownloadedSize) + ' octets.');
+  except
+    Result := 'Impossible de télécharger Docker Desktop depuis le domaine officiel Docker : ' + GetExceptionMessage;
+    exit;
+  end;
+
+  InstallerPath := ExpandConstant('{tmp}\NEXUS-Docker-Desktop-Installer.exe');
+  if not FileExists(InstallerPath) then
+  begin
+    Result := 'Le téléchargement Docker Desktop n''a pas produit le fichier attendu.';
+    exit;
+  end;
+  if not VerifyDockerDesktopInstaller(InstallerPath) then
+  begin
+    Result := 'La signature Authenticode de Docker Desktop est invalide ou le signataire n''est pas Docker Inc. Installation annulée.';
+    exit;
+  end;
+
+  if not Exec(InstallerPath, 'install --user --backend=wsl-2 --quiet', '', SW_SHOW, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
+  begin
+    Result := 'L''installation Docker Desktop a échoué avec le code ' + IntToStr(ResultCode) + '.';
+    exit;
+  end;
+
+  if not DockerRuntimePresent() then
+  begin
+    Result := 'Docker Desktop a terminé son installation mais aucun runtime Docker n''a été détecté.';
+    exit;
+  end;
+
+  DockerDesktopInstalledDuringSetup := True;
+  RegWriteStringValue(HKCU, InstallerRegistryPath(), 'DockerDesktopInstalledByNexus', '1');
+end;
+
+function IsSafeBindAddress(Value: String): Boolean;
+var
+  I: Integer;
+  C: Char;
+begin
+  Value := Trim(Value);
+  Result := Value <> '';
+  if not Result then exit;
+
+  for I := 1 to Length(Value) do
+  begin
+    C := Value[I];
+    if not (((C >= 'a') and (C <= 'z')) or
+            ((C >= 'A') and (C <= 'Z')) or
+            ((C >= '0') and (C <= '9')) or
+            (C = '.') or (C = ':') or (C = '-')) then
+    begin
+      Result := False;
+      exit;
+    end;
+  end;
+end;
+
+function IsTcpPortAvailable(BindAddress: String; Port: Integer): Boolean;
+var
+  PowerShellPath: String;
+  Script: String;
+  Parameters: String;
+  ResultCode: Integer;
+begin
+  Result := False;
+  BindAddress := Trim(BindAddress);
+  if (Port < 1) or (Port > 65535) or not IsSafeBindAddress(BindAddress) then exit;
+
+  PowerShellPath := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+  if not FileExists(PowerShellPath) then
+  begin
+    Log('PowerShell Windows introuvable pour le test de disponibilité du port.');
+    exit;
+  end;
+
+  Script :=
+    '$ErrorActionPreference=''Stop''; $listener=$null; try { ' +
+    '$address=''' + BindAddress + '''; ' +
+    'if ($address -eq ''localhost'') { $address=''127.0.0.1'' }; ' +
+    '$ip=$null; if (-not [System.Net.IPAddress]::TryParse($address,[ref]$ip)) { ' +
+    '$ip=[System.Net.Dns]::GetHostAddresses($address) | Select-Object -First 1 }; ' +
+    'if ($null -eq $ip) { exit 2 }; ' +
+    '$listener=[System.Net.Sockets.TcpListener]::new($ip,' + IntToStr(Port) + '); ' +
+    '$listener.Start(); $listener.Stop(); exit 0 } catch { ' +
+    'if ($null -ne $listener) { try { $listener.Stop() } catch {} }; exit 1 }';
+  Parameters := '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' + Script + '"';
+
+  Result := Exec(PowerShellPath, Parameters, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+end;
+
+function FindAvailableTcpPort(BindAddress: String; RequestedPort: Integer; ReservedPort: Integer): Integer;
+var
+  Candidate: Integer;
+begin
+  Result := -1;
+  if (RequestedPort < 1) or (RequestedPort > 65535) then exit;
+
+  Candidate := RequestedPort;
+  while Candidate <= 65535 do
+  begin
+    if ((ReservedPort < 1) or (Candidate <> ReservedPort)) and IsTcpPortAvailable(BindAddress, Candidate) then
+    begin
+      Result := Candidate;
+      exit;
+    end;
+    Candidate := Candidate + 1;
+  end;
+
+  Candidate := 1024;
+  while Candidate < RequestedPort do
+  begin
+    if ((ReservedPort < 1) or (Candidate <> ReservedPort)) and IsTcpPortAvailable(BindAddress, Candidate) then
+    begin
+      Result := Candidate;
+      exit;
+    end;
+    Candidate := Candidate + 1;
+  end;
+end;
+
+procedure NotifyPortSelection(Description: String; RequestedPort: Integer; SelectedPort: Integer);
+begin
+  if RequestedPort <> SelectedPort then
+    MsgBox(
+      Description + ' ' + IntToStr(RequestedPort) + ' est déjà utilisé.' + #13#10 +
+      'NEXUS a sélectionné automatiquement le premier port TCP disponible : ' + IntToStr(SelectedPort) + '.',
+      mbInformation, MB_OK);
+end;
+
+function GenerateLocalToken(): String;
+var
+  Buffer: array of Byte;
+  Status: Integer;
+  I: Integer;
+  Hex: String;
+begin
+  // 32 octets = 256 bits d'entropie issus du CSPRNG système. Encodage hexadécimal : alphabet
+  // [0-9a-f] strictement sûr pour .env, cmd, Docker Compose et l'en-tête HTTP Authorization —
+  // aucun caractère nécessitant un échappement, aucun CR/LF. Aucun fallback non cryptographique.
+  SetLength(Buffer, 32);
+  Status := BCryptGenRandom(0, Buffer[0], 32, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+  if Status <> 0 then
+    RaiseException('Génération cryptographique du token REST échouée (BCryptGenRandom, status '
+      + IntToStr(Status) + ').');
+  Hex := '0123456789abcdef';
+  Result := '';
+  for I := 0 to 31 do
+    Result := Result + Hex[((Buffer[I] shr 4) and 15) + 1] + Hex[(Buffer[I] and 15) + 1];
+end;
+
+procedure AddNexusToUserPath;
+var
+  CurrentPath: String;
+  AppPath: String;
+begin
+  if IsSmokeBuild() or not InstallNative() or not WizardIsTaskSelected('addtopath') then exit;
+  AppPath := TrimTrailingBackslash(ExpandConstant('{app}'));
+  if not RegQueryStringValue(HKCU, 'Environment', 'Path', CurrentPath) then CurrentPath := '';
+  if not PathContainsEntry(CurrentPath, AppPath) then
+  begin
+    if (CurrentPath <> '') and (CurrentPath[Length(CurrentPath)] <> ';') then CurrentPath := CurrentPath + ';';
+    CurrentPath := CurrentPath + AppPath;
+    RegWriteExpandStringValue(HKCU, 'Environment', 'Path', CurrentPath);
+    RegWriteStringValue(HKCU, InstallerRegistryPath(), 'ManagedPath', AppPath);
+  end;
+end;
+
+procedure RemoveNexusFromUserPath;
+var
+  CurrentPath: String;
+  ManagedPath: String;
+  PaddedPath: String;
+  Needle: String;
+begin
+  if IsSmokeBuild() then exit;
+  if not RegQueryStringValue(HKCU, InstallerRegistryPath(), 'ManagedPath', ManagedPath) then exit;
+  if not RegQueryStringValue(HKCU, 'Environment', 'Path', CurrentPath) then
+  begin
+    RegDeleteValue(HKCU, InstallerRegistryPath(), 'ManagedPath');
+    exit;
+  end;
+  PaddedPath := ';' + CurrentPath + ';';
+  Needle := ';' + TrimTrailingBackslash(ManagedPath) + ';';
+  StringChangeEx(PaddedPath, Needle, ';', True);
+  while (Length(PaddedPath) > 0) and (PaddedPath[1] = ';') do Delete(PaddedPath, 1, 1);
+  while (Length(PaddedPath) > 0) and (PaddedPath[Length(PaddedPath)] = ';') do Delete(PaddedPath, Length(PaddedPath), 1);
+  RegWriteExpandStringValue(HKCU, 'Environment', 'Path', PaddedPath);
+  RegDeleteValue(HKCU, InstallerRegistryPath(), 'ManagedPath');
+end;
+
+procedure LoadPreviousSettings;
+var
+  Value: String;
+  Mode: Cardinal;
+begin
+  if RegQueryDWordValue(HKCU, InstallerRegistryPath(), 'DeploymentMode', Mode) and (Mode <= 2) then
+    DeploymentPage.SelectedValueIndex := Mode;
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'NexusHome', Value) then RuntimePage.Values[0] := Value;
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'NativeRestHost', Value) then RuntimePage.Values[1] := Value;
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'NativeRestPort', Value) then RuntimePage.Values[2] := Value;
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'RestApiToken', Value) then RuntimePage.Values[3] := Value;
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'SemanticProvider', Value) then SemanticPage.Values[0] := Lowercase(Trim(Value)) = 'ollama';
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'OllamaBaseUrl', Value) then OllamaPage.Values[0] := Value;
+  if RegQueryDWordValue(HKCU, InstallerRegistryPath(), 'OllamaAutoInstall', Mode) then OllamaPrereqPage.Values[0] := Mode <> 0;
+  if RegQueryDWordValue(HKCU, InstallerRegistryPath(), 'DockerAutoInstall', Mode) then DockerPrereqPage.Values[0] := Mode <> 0;
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerImage', Value) then DockerPage.Values[0] := Value;
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerContainer', Value) then DockerPage.Values[1] := Value;
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerBindAddress', Value) then DockerPage.Values[2] := Value;
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerHostPort', Value) then DockerPage.Values[3] := Value;
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerContainerPort', Value) then DockerPage.Values[4] := Value;
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerRepository', Value) then DockerPage.Values[5] := Value;
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerRestartPolicy', Value) then DockerPage.Values[6] := Value;
+end;
+
+procedure InitializeWizard;
+begin
+  DockerDesktopInstalledDuringSetup := False;
+
+  DeploymentPage := CreateInputOptionPage(wpSelectDir,
+    'Mode de déploiement',
+    'Choisissez comment exécuter NEXUS.',
+    'Le mode natif ne nécessite ni Docker ni JVM système. Le mode Docker peut installer automatiquement Docker Desktop s''il est absent.',
+    True, False);
+  DeploymentPage.Add('Natif Windows — recommandé pour MCP local');
+  DeploymentPage.Add('Docker — conteneur avec volumes et port REST configurable');
+  DeploymentPage.Add('Natif + Docker — installer les deux modes');
+  DeploymentPage.SelectedValueIndex := 0;
+
+  ProfilePage := CreateInputOptionPage(DeploymentPage.ID,
+    'Profil d''installation',
+    'Choisissez le niveau de personnalisation.',
+    'Le profil recommandé applique les valeurs sûres par défaut. Le profil personnalisé expose les composants et paramètres runtime avancés.',
+    True, False);
+  ProfilePage.Add('Recommandé');
+  ProfilePage.Add('Personnalisé');
+  ProfilePage.SelectedValueIndex := 0;
+
+  NativeOptionsPage := CreateInputOptionPage(ProfilePage.ID,
+    'Composants natifs',
+    'Sélectionnez les surfaces NEXUS natives.',
+    'Le runtime Java embarqué est partagé. MCP reste en STDIO ; REST est optionnel.',
+    False, False);
+  NativeOptionsPage.Add('CLI NEXUS');
+  NativeOptionsPage.Add('Serveur MCP STDIO');
+  NativeOptionsPage.Add('API REST Quarkus');
+  NativeOptionsPage.Values[0] := True;
+  NativeOptionsPage.Values[1] := True;
+  NativeOptionsPage.Values[2] := False;
+
+  RuntimePage := CreateInputQueryPage(NativeOptionsPage.ID,
+    'Configuration runtime',
+    'Personnalisez le stockage et les services.',
+    'NEXUS_HOME est conservé lors de la désinstallation. Si REST natif est activé, le port demandé est vérifié et remplacé automatiquement par le premier port TCP disponible si nécessaire.');
+  RuntimePage.Add('NEXUS_HOME :', False);
+  RuntimePage.Add('REST natif — adresse :', False);
+  RuntimePage.Add('REST natif — port externe :', False);
+  RuntimePage.Add('Token API REST (optionnel sur loopback) :', True);
+  RuntimePage.Values[0] := GetEnv('USERPROFILE') + '\.nexus';
+  RuntimePage.Values[1] := '127.0.0.1';
+  RuntimePage.Values[2] := '8080';
+  RuntimePage.Values[3] := '';
+
+  SemanticPage := CreateInputOptionPage(RuntimePage.ID,
+    'Recherche sémantique',
+    'Choisissez si NEXUS doit utiliser Ollama.',
+    'Décochez pour conserver la recherche sémantique désactivée. Cocher cette option configure NEXUS pour utiliser une instance Ollama accessible. Si Ollama n''est pas détecté, le setup proposera de le télécharger et l''installer automatiquement.',
+    False, False);
+  SemanticPage.Add('Activer Ollama pour la recherche sémantique');
+  SemanticPage.Values[0] := False;
+
+  OllamaPrereqPage := CreateInputOptionPage(SemanticPage.ID,
+    'Ollama introuvable',
+    'Préparez le modèle de langage local nécessaire à la recherche sémantique.',
+    'Aucune installation Ollama n''a été détectée sur ce système. NEXUS peut télécharger et installer Ollama depuis ollama.com.',
+    False, False);
+  OllamaPrereqPage.Add('Installer automatiquement Ollama s''il est absent');
+  OllamaPrereqPage.Values[0] := True;
+
+  OllamaPage := CreateInputQueryPage(OllamaPrereqPage.ID,
+    'Configuration Ollama',
+    'Configurez l''instance Ollama utilisée par NEXUS.',
+    'Cette page n''apparaît qu''avec Ollama activé et le profil personnalisé.');
+  OllamaPage.Add('URL Ollama :', False);
+  OllamaPage.Values[0] := 'http://127.0.0.1:11434';
+
+  DockerPrereqPage := CreateInputOptionPage(OllamaPage.ID,
+    'Docker Desktop',
+    'Préparez le moteur Docker nécessaire au mode conteneur.',
+    'Si aucun runtime Docker n''est détecté, NEXUS peut télécharger Docker Desktop depuis desktop.docker.com et l''installer en mode utilisateur avec le backend WSL 2. La licence Docker reste à accepter par l''utilisateur au premier démarrage.',
+    False, False);
+  DockerPrereqPage.Add('Installer automatiquement Docker Desktop s''il est absent');
+  DockerPrereqPage.Values[0] := True;
+
+  DockerPage := CreateInputQueryPage(DockerPrereqPage.ID,
+    'Configuration Docker',
+    'Personnalisez l''image, le conteneur, les ports et le repository monté.',
+    'Le port REST hôte est vérifié automatiquement. S''il est occupé, NEXUS choisit le premier port TCP disponible suivant. Le port interne du conteneur reste indépendant.');
+  DockerPage.Add('Image :', False);
+  DockerPage.Add('Nom du conteneur :', False);
+  DockerPage.Add('Adresse d''écoute hôte :', False);
+  DockerPage.Add('Port REST hôte externe :', False);
+  DockerPage.Add('Port REST conteneur :', False);
+  DockerPage.Add('Repository / racine de projets à monter :', False);
+  DockerPage.Add('Restart policy :', False);
+  DockerPage.Values[0] := 'ghcr.io/fturleque/nexus-context-engine:{#NexusVersion}';
+  DockerPage.Values[1] := 'nexus-context-engine';
+  DockerPage.Values[2] := '127.0.0.1';
+  DockerPage.Values[3] := '8080';
+  DockerPage.Values[4] := '8080';
+  DockerPage.Values[5] := GetEnv('USERPROFILE');
+  DockerPage.Values[6] := 'unless-stopped';
+
+  AssistantPage := CreateInputOptionPage(DockerPage.ID,
+    'Intégrations assistants IA',
+    'Choisissez les clients MCP à préparer ou connecter.',
+    'NEXUS ne gère aucune authentification. Les entrées existantes nommées "nexus" ne sont jamais écrasées.',
+    False, False);
+  AssistantPage.Add('GitHub Copilot CLI — connecter si la CLI est détectée');
+  AssistantPage.Add('GitHub Copilot JetBrains — connecter si le plugin est détecté');
+  AssistantPage.Add('Claude Desktop / Claude Code — connecter si détecté');
+  AssistantPage.Add('Codex Desktop — connecter via la CLI codex si détectée + générer un snippet TOML');
+  AssistantPage.Add('Client MCP générique — générer un JSON STDIO');
+  AssistantPage.Values[0] := False;
+  AssistantPage.Values[1] := False;
+  AssistantPage.Values[2] := False;
+  AssistantPage.Values[3] := False;
+  AssistantPage.Values[4] := False;
+
+  IntegrationRuntimePage := CreateInputOptionPage(AssistantPage.ID,
+    'Runtime MCP des assistants',
+    'NEXUS natif et Docker sont tous les deux installés.',
+    'Choisissez le runtime utilisé par les configurations assistants. Cette option n''apparaît qu''en mode Natif + Docker.',
+    True, False);
+  IntegrationRuntimePage.Add('MCP natif avec Java embarqué');
+  IntegrationRuntimePage.Add('MCP Docker via docker exec -i');
+  IntegrationRuntimePage.SelectedValueIndex := 0;
+
+  if IsSmokeBuild() then
+  begin
+    DeploymentPage.SelectedValueIndex := 0;
+    ProfilePage.SelectedValueIndex := 0;
+    SemanticPage.Values[0] := False;
+    DockerPrereqPage.Values[0] := False;
+    AssistantPage.Values[0] := False;
+    AssistantPage.Values[1] := False;
+    AssistantPage.Values[2] := False;
+    AssistantPage.Values[3] := False;
+    AssistantPage.Values[4] := False;
+  end
+  else
+    LoadPreviousSettings;
+end;
+
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := False;
+  if PageID = NativeOptionsPage.ID then Result := (not InstallNative()) or (not IsCustomProfile())
+  else if PageID = RuntimePage.ID then Result := not IsCustomProfile()
+  else if PageID = OllamaPrereqPage.ID then Result := (not OllamaEnabled()) or OllamaPresent()
+  else if PageID = OllamaPage.ID then Result := (not OllamaEnabled()) or (not IsCustomProfile())
+  else if PageID = DockerPrereqPage.ID then Result := (not InstallDocker()) or DockerRuntimePresent()
+  else if PageID = DockerPage.ID then Result := not InstallDocker()
+  else if PageID = AssistantPage.ID then Result := not AssistantIntegrationAvailable()
+  else if PageID = IntegrationRuntimePage.ID then Result := not (InstallNative() and InstallDocker());
+end;
+
+function IsValidDockerName(Value: String): Boolean;
+var
+  I: Integer;
+  C: Char;
+begin
+  // Syntaxe conteneur Docker : [a-zA-Z0-9][a-zA-Z0-9_.-]* (borne raisonnable de longueur).
+  Value := Trim(Value);
+  Result := False;
+  if (Value = '') or (Length(Value) > 128) then exit;
+  C := Value[1];
+  if not (((C >= 'a') and (C <= 'z')) or ((C >= 'A') and (C <= 'Z')) or ((C >= '0') and (C <= '9'))) then exit;
+  for I := 2 to Length(Value) do
+  begin
+    C := Value[I];
+    if not (((C >= 'a') and (C <= 'z')) or ((C >= 'A') and (C <= 'Z')) or ((C >= '0') and (C <= '9'))
+        or (C = '_') or (C = '.') or (C = '-')) then exit;
+  end;
+  Result := True;
+end;
+
+function IsValidRestartPolicy(Value: String): Boolean;
+var
+  Prefix, Rest: String;
+begin
+  // Choix fermé Docker : no | always | unless-stopped | on-failure | on-failure:N.
+  Value := Lowercase(Trim(Value));
+  Result := (Value = 'no') or (Value = 'always') or (Value = 'unless-stopped') or (Value = 'on-failure');
+  if Result then exit;
+  Prefix := 'on-failure:';
+  if Copy(Value, 1, Length(Prefix)) = Prefix then
+  begin
+    Rest := Copy(Value, Length(Prefix) + 1, Length(Value));
+    Result := (Rest <> '') and (StrToIntDef(Rest, -1) >= 0);
+  end;
+end;
+
+function HasWhitespace(Value: String): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 1 to Length(Value) do
+    if (Value[I] = ' ') or (Value[I] = #9) then
+    begin
+      Result := True;
+      exit;
+    end;
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+var
+  PortValue: Integer;
+  ResolvedPort: Integer;
+  ReservedPort: Integer;
+begin
+  Result := True;
+
+  if (CurPageID = NativeOptionsPage.ID) and InstallNative() then
+  begin
+    if not (NativeOptionsPage.Values[0] or NativeOptionsPage.Values[1] or NativeOptionsPage.Values[2]) then
+    begin
+      MsgBox('Sélectionnez au moins une surface native.', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+  end;
+
+  if CurPageID = RuntimePage.ID then
+  begin
+    if Trim(RuntimePage.Values[0]) = '' then
+    begin
+      MsgBox('NEXUS_HOME ne peut pas être vide.', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+    PortValue := StrToIntDef(RuntimePage.Values[2], -1);
+    if (PortValue < 1) or (PortValue > 65535) then
+    begin
+      MsgBox('Le port REST natif doit être compris entre 1 et 65535.', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+    if InstallNativeRest() then
+    begin
+      if not IsSafeBindAddress(RuntimePage.Values[1]) then
+      begin
+        MsgBox('L''adresse d''écoute REST native est vide ou invalide.', mbError, MB_OK);
+        Result := False;
+        exit;
+      end;
+      ResolvedPort := FindAvailableTcpPort(RuntimePage.Values[1], PortValue, -1);
+      if ResolvedPort < 1 then
+      begin
+        MsgBox('Aucun port TCP disponible n''a été trouvé pour le REST natif.', mbError, MB_OK);
+        Result := False;
+        exit;
+      end;
+      RuntimePage.Values[2] := IntToStr(ResolvedPort);
+      NotifyPortSelection('Le port REST natif', PortValue, ResolvedPort);
+    end;
+    if InstallNativeRest() and (Lowercase(Trim(RuntimePage.Values[1])) <> '127.0.0.1') and (Lowercase(Trim(RuntimePage.Values[1])) <> 'localhost') and (Trim(RuntimePage.Values[3]) = '') then
+    begin
+      MsgBox('Un token API REST est obligatoire pour une écoute native non-loopback.', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+  end;
+
+  if (CurPageID = OllamaPage.ID) and OllamaEnabled() and (Trim(OllamaPage.Values[0]) = '') then
+  begin
+    MsgBox('L''URL Ollama ne peut pas être vide lorsque Ollama est activé.', mbError, MB_OK);
+    Result := False;
+    exit;
+  end;
+
+  if (CurPageID = DockerPrereqPage.ID) and InstallDocker() and not DockerRuntimePresent() and not DockerPrereqPage.Values[0] then
+  begin
+    MsgBox('Docker Desktop/CLI n''est pas installé. Cochez l''installation automatique ou installez Docker avant de continuer.', mbError, MB_OK);
+    Result := False;
+    exit;
+  end;
+
+  if CurPageID = DockerPage.ID then
+  begin
+    if (not DockerRuntimePresent()) and (not DockerDesktopAutoInstallSelected()) then
+    begin
+      MsgBox('Docker Desktop/CLI n''est pas disponible et son installation automatique n''est pas sélectionnée.', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+    if (Trim(DockerPage.Values[0]) = '') or (Trim(DockerPage.Values[1]) = '') or (Trim(DockerPage.Values[5]) = '') then
+    begin
+      MsgBox('Image, nom du conteneur et repository Docker sont obligatoires.', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+    if HasWhitespace(Trim(DockerPage.Values[0])) then
+    begin
+      MsgBox('L''image Docker ne doit pas contenir d''espace (ex. ghcr.io/org/nexus:tag).', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+    if not IsValidDockerName(DockerPage.Values[1]) then
+    begin
+      MsgBox('Le nom du conteneur est invalide. Attendu : lettres/chiffres puis [a-zA-Z0-9_.-].', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+    if not IsValidRestartPolicy(DockerPage.Values[6]) then
+    begin
+      MsgBox('Restart policy invalide. Valeurs acceptées : no, always, unless-stopped, on-failure, on-failure:N.', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+    if not DirExists(Trim(DockerPage.Values[5])) then
+    begin
+      MsgBox('Le repository / racine de projets à monter est introuvable : ' + Trim(DockerPage.Values[5]), mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+    if not IsSafeBindAddress(DockerPage.Values[2]) then
+    begin
+      MsgBox('L''adresse d''écoute hôte Docker est vide ou invalide.', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+    PortValue := StrToIntDef(DockerPage.Values[3], -1);
+    if (PortValue < 1) or (PortValue > 65535) then
+    begin
+      MsgBox('Le port REST hôte Docker doit être compris entre 1 et 65535.', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+    ReservedPort := -1;
+    if InstallNativeRest() then
+      ReservedPort := StrToIntDef(RuntimePage.Values[2], -1);
+    ResolvedPort := FindAvailableTcpPort(DockerPage.Values[2], PortValue, ReservedPort);
+    if ResolvedPort < 1 then
+    begin
+      MsgBox('Aucun port TCP disponible n''a été trouvé pour le REST Docker.', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+    DockerPage.Values[3] := IntToStr(ResolvedPort);
+    if (ReservedPort = PortValue) and (ResolvedPort <> PortValue) then
+      MsgBox(
+        'Le port REST hôte Docker ' + IntToStr(PortValue) + ' est déjà réservé au REST natif NEXUS.' + #13#10 +
+        'NEXUS utilisera le port TCP disponible ' + IntToStr(ResolvedPort) + ' pour Docker.',
+        mbInformation, MB_OK)
+    else
+      NotifyPortSelection('Le port REST hôte Docker', PortValue, ResolvedPort);
+
+    PortValue := StrToIntDef(DockerPage.Values[4], -1);
+    if (PortValue < 1) or (PortValue > 65535) then
+    begin
+      MsgBox('Le port REST interne Docker doit être compris entre 1 et 65535.', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+  end;
+end;
+
+function InstallOllamaIfNeeded(): String;
+var
+  InstallerPath: String;
+  ResultCode: Integer;
+  DownloadedSize: Int64;
+begin
+  Result := '';
+  // Fail-closed strict : aucun téléchargement ni exécution si la sémantique est désactivée, si
+  // Ollama est déjà présent, ou si l'installation automatique n'a pas été explicitement choisie.
+  if not OllamaEnabled() or OllamaPresent() then exit;
+  if not OllamaAutoInstallSelected() then
+  begin
+    Result := 'Ollama n''est pas installé et son installation automatique est désactivée. Installez Ollama manuellement (https://ollama.com) avant de démarrer NEXUS.';
+    exit;
+  end;
+
+  try
+    DownloadedSize := DownloadTemporaryFile(
+      'https://ollama.com/download/OllamaSetup.exe',
+      'NEXUS-Ollama-Installer.exe', '', nil);
+    Log('Ollama installer téléchargé depuis le domaine officiel : ' + IntToStr(DownloadedSize) + ' octets.');
+  except
+    Result := 'Impossible de télécharger Ollama depuis le domaine officiel ollama.com : ' + GetExceptionMessage;
+    exit;
+  end;
+
+  InstallerPath := ExpandConstant('{tmp}\NEXUS-Ollama-Installer.exe');
+  if not FileExists(InstallerPath) then
+  begin
+    Result := 'Le téléchargement Ollama n''a pas produit le fichier attendu.';
+    exit;
+  end;
+
+  // Vérification Authenticode obligatoire AVANT toute exécution du binaire téléchargé. Signataire
+  // attendu : CN=Ollama Inc. (certificat DigiCert officiel). Aucun fallback « exécuter quand même ».
+  if not VerifyOllamaInstaller(InstallerPath) then
+  begin
+    Log('Signature Authenticode Ollama invalide ou signataire inattendu : installation annulée.');
+    Result := 'La signature Authenticode du programme d''installation Ollama est invalide ou le signataire n''est pas Ollama Inc. Installation annulée.';
+    exit;
+  end;
+  Log('Signature Authenticode Ollama validée (CN=Ollama Inc.).');
+
+  if not Exec(InstallerPath, '/S', '', SW_SHOW, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
+  begin
+    Result := 'L''installation Ollama a échoué avec le code ' + IntToStr(ResultCode) + '.';
+    exit;
+  end;
+
+  if not OllamaPresent() then
+  begin
+    Result := 'Ollama a terminé son installation mais aucun exécutable Ollama n''a été détecté.';
+    exit;
+  end;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  NeedsRestart := False;
+  Result := InstallOllamaIfNeeded();
+  if Result <> '' then exit;
+  Result := InstallDockerDesktopIfNeeded();
+end;
+
+procedure WriteNativeConfiguration;
+var
+  Content: String;
+begin
+  if not InstallNative() then exit;
+  ForceDirectories(ExpandConstant('{app}\config'));
+  Content := '@echo off' + #13#10 +
+    'set "NEXUS_HOME=' + RuntimePage.Values[0] + '"' + #13#10 +
+    'set "NEXUS_REST_HOST=' + RuntimePage.Values[1] + '"' + #13#10 +
+    'set "NEXUS_REST_PORT=' + RuntimePage.Values[2] + '"' + #13#10 +
+    'set "NEXUS_REST_API_TOKEN=' + RuntimePage.Values[3] + '"' + #13#10 +
+    'set "NEXUS_SEMANTIC_PROVIDER=' + SemanticProviderValue() + '"' + #13#10 +
+    'set "NEXUS_OLLAMA_BASE_URL=' + OllamaPage.Values[0] + '"' + #13#10;
+  SaveStringToFile(ExpandConstant('{app}\config\nexus-native.env.cmd'), Content, False);
+end;
+
+procedure WriteDockerConfiguration;
+var
+  EnvContent: String;
+  ComposeTemplate: AnsiString;
+  DockerToken: String;
+  UpScript: String;
+  DownScript: String;
+begin
+  if not InstallDocker() then exit;
+  ForceDirectories(ExpandConstant('{app}\docker'));
+  DockerToken := RuntimePage.Values[3];
+  if Trim(DockerToken) = '' then DockerToken := GenerateLocalToken();
+
+  EnvContent :=
+    'NEXUS_DOCKER_IMAGE=' + DockerPage.Values[0] + #13#10 +
+    'NEXUS_DOCKER_CONTAINER=' + DockerPage.Values[1] + #13#10 +
+    'NEXUS_DOCKER_RESTART_POLICY=' + DockerPage.Values[6] + #13#10 +
+    'NEXUS_DOCKER_BIND_ADDRESS=' + DockerPage.Values[2] + #13#10 +
+    'NEXUS_DOCKER_HOST_PORT=' + DockerPage.Values[3] + #13#10 +
+    'NEXUS_DOCKER_CONTAINER_PORT=' + DockerPage.Values[4] + #13#10 +
+    'NEXUS_HOME_BIND=' + DockerPath(RuntimePage.Values[0]) + #13#10 +
+    'NEXUS_REPOSITORY_BIND=' + DockerPath(DockerPage.Values[5]) + #13#10 +
+    'NEXUS_RUNTIME=docker' + #13#10 +
+    'NEXUS_SEMANTIC_PROVIDER=' + SemanticProviderValue() + #13#10 +
+    'NEXUS_OLLAMA_BASE_URL=' + OllamaUrlForDocker(OllamaPage.Values[0]) + #13#10 +
+    'NEXUS_REST_API_TOKEN=' + DockerToken + #13#10;
+  SaveStringToFile(ExpandConstant('{app}\docker\.env'), EnvContent, False);
+
+  if not LoadStringFromFile(ExpandConstant('{app}\docker\docker-compose.yml.template'), ComposeTemplate) then
+    RaiseException('Impossible de lire la template Docker Compose installée.');
+  SaveStringToFile(ExpandConstant('{app}\docker\docker-compose.yml'), ComposeTemplate, False);
+
+  UpScript := '@echo off' + #13#10 +
+    'setlocal EnableExtensions' + #13#10 +
+    'set "DOCKER_EXE=docker"' + #13#10 +
+    'where docker >nul 2>nul || (' + #13#10 +
+    '  if exist "%LOCALAPPDATA%\Programs\DockerDesktop\resources\bin\docker.exe" set "DOCKER_EXE=%LOCALAPPDATA%\Programs\DockerDesktop\resources\bin\docker.exe"' + #13#10 +
+    '  if exist "%ProgramFiles%\Docker\Docker\resources\bin\docker.exe" set "DOCKER_EXE=%ProgramFiles%\Docker\Docker\resources\bin\docker.exe"' + #13#10 +
+    ')' + #13#10 +
+    '"%DOCKER_EXE%" info >nul 2>nul && goto docker_ready' + #13#10 +
+    'if exist "%LOCALAPPDATA%\Programs\DockerDesktop\Docker Desktop.exe" start "" "%LOCALAPPDATA%\Programs\DockerDesktop\Docker Desktop.exe"' + #13#10 +
+    'if exist "%ProgramFiles%\Docker\Docker\Docker Desktop.exe" start "" "%ProgramFiles%\Docker\Docker\Docker Desktop.exe"' + #13#10 +
+    'for /L %%I in (1,1,90) do (' + #13#10 +
+    '  "%DOCKER_EXE%" info >nul 2>nul && goto docker_ready' + #13#10 +
+    '  timeout /t 2 /nobreak >nul' + #13#10 +
+    ')' + #13#10 +
+    'echo Docker Desktop n''est pas prêt. Acceptez les conditions Docker ou terminez la configuration WSL 2 puis relancez nexus-docker-up.cmd.' + #13#10 +
+    'exit /b 30' + #13#10 +
+    ':docker_ready' + #13#10 +
+    'set "NEXUS_DOCKER_IMAGE="' + #13#10 +
+    'if exist "%~dp0docker\.env" for /f "usebackq tokens=1,* delims==" %%A in ("%~dp0docker\.env") do if /I "%%A"=="NEXUS_DOCKER_IMAGE" set "NEXUS_DOCKER_IMAGE=%%B"' + #13#10 +
+    'if "%NEXUS_DOCKER_IMAGE%"=="" echo [NEXUS] NEXUS_DOCKER_IMAGE est absent de docker\.env. & if "%NEXUS_DOCKER_IMAGE%"=="" exit /b 31' + #13#10 +
+    '"%DOCKER_EXE%" image inspect "%NEXUS_DOCKER_IMAGE%" >nul 2>nul && goto nexus_image_ready' + #13#10 +
+    'echo [NEXUS] Image %NEXUS_DOCKER_IMAGE% absente localement; tentative de telechargement...' + #13#10 +
+    '"%DOCKER_EXE%" pull "%NEXUS_DOCKER_IMAGE%" && goto nexus_image_ready' + #13#10 +
+    'echo [NEXUS] Image registre indisponible ou privee; construction locale depuis le payload installe...' + #13#10 +
+    'if not exist "%~dp0docker\Dockerfile.runtime" echo [NEXUS] Dockerfile.runtime introuvable. & if not exist "%~dp0docker\Dockerfile.runtime" exit /b 32' + #13#10 +
+    'if not exist "%~dp0docker\nexus-container-entrypoint.sh" echo [NEXUS] Entrypoint Docker introuvable. & if not exist "%~dp0docker\nexus-container-entrypoint.sh" exit /b 33' + #13#10 +
+    '"%DOCKER_EXE%" build --pull --file "%~dp0docker\Dockerfile.runtime" --tag "%NEXUS_DOCKER_IMAGE%" "%~dp0."' + #13#10 +
+    'if errorlevel 1 echo [NEXUS] Construction locale de l''image NEXUS echouee. & if errorlevel 1 exit /b 34' + #13#10 +
+    ':nexus_image_ready' + #13#10 +
+    '"%DOCKER_EXE%" compose --env-file "%~dp0docker\.env" -f "%~dp0docker\docker-compose.yml" up -d' + #13#10 +
+    'exit /b %ERRORLEVEL%' + #13#10;
+  DownScript := '@echo off' + #13#10 +
+    'setlocal EnableExtensions' + #13#10 +
+    'set "DOCKER_EXE=docker"' + #13#10 +
+    'where docker >nul 2>nul || (' + #13#10 +
+    '  if exist "%LOCALAPPDATA%\Programs\DockerDesktop\resources\bin\docker.exe" set "DOCKER_EXE=%LOCALAPPDATA%\Programs\DockerDesktop\resources\bin\docker.exe"' + #13#10 +
+    '  if exist "%ProgramFiles%\Docker\Docker\resources\bin\docker.exe" set "DOCKER_EXE=%ProgramFiles%\Docker\Docker\resources\bin\docker.exe"' + #13#10 +
+    ')' + #13#10 +
+    '"%DOCKER_EXE%" compose --env-file "%~dp0docker\.env" -f "%~dp0docker\docker-compose.yml" down' + #13#10 +
+    'exit /b %ERRORLEVEL%' + #13#10;
+  SaveStringToFile(ExpandConstant('{app}\nexus-docker-up.cmd'), UpScript, False);
+  SaveStringToFile(ExpandConstant('{app}\nexus-docker-down.cmd'), DownScript, False);
+
+  RegWriteStringValue(HKCU, InstallerRegistryPath(), 'DockerManaged', '1');
+end;
+
+function NativeMcpCommandJson(ServersKey: String): String;
+var
+  JavaPath: String;
+  RunnerPath: String;
+begin
+  JavaPath := JsonEscape(ExpandConstant('{app}\app\runtime\bin\java.exe'));
+  RunnerPath := JsonEscape(ExpandConstant('{app}\lib\nexus-mcp.jar'));
+  Result := '{' + #13#10 +
+    '  "' + ServersKey + '": {' + #13#10 +
+    '    "nexus": {' + #13#10 +
+    '      "type": "stdio",' + #13#10 +
+    '      "command": "' + JavaPath + '",' + #13#10 +
+    '      "args": ["-jar", "' + RunnerPath + '"]' + #13#10 +
+    '    }' + #13#10 +
+    '  }' + #13#10 +
+    '}' + #13#10;
+end;
+
+function DockerMcpCommandJson(ServersKey: String): String;
+begin
+  Result := '{' + #13#10 +
+    '  "' + ServersKey + '": {' + #13#10 +
+    '    "nexus": {' + #13#10 +
+    '      "type": "stdio",' + #13#10 +
+    '      "command": "docker",' + #13#10 +
+    '      "args": ["exec", "-i", "' + JsonEscape(DockerPage.Values[1]) + '", "java", "-jar", "/opt/nexus/lib/nexus-mcp.jar"]' + #13#10 +
+    '    }' + #13#10 +
+    '  }' + #13#10 +
+    '}' + #13#10;
+end;
+
+function NativeCodexToml(): String;
+var
+  JavaPath: String;
+  RunnerPath: String;
+begin
+  JavaPath := TomlEscape(ExpandConstant('{app}\app\runtime\bin\java.exe'));
+  RunnerPath := TomlEscape(ExpandConstant('{app}\lib\nexus-mcp.jar'));
+  Result := '[mcp_servers.nexus]' + #13#10 +
+    'command = "' + JavaPath + '"' + #13#10 +
+    'args = ["-jar", "' + RunnerPath + '"]' + #13#10;
+end;
+
+function DockerCodexToml(): String;
+begin
+  Result := '[mcp_servers.nexus]' + #13#10 +
+    'command = "docker"' + #13#10 +
+    'args = ["exec", "-i", "' + TomlEscape(DockerPage.Values[1]) + '", "java", "-jar", "/opt/nexus/lib/nexus-mcp.jar"]' + #13#10;
+end;
+
+{ Emit a shared PowerShell helper (integrations\nexus-json.ps1) that re-serializes
+  JSON with clean 2-space indentation. Windows PowerShell 5.1's ConvertTo-Json emits
+  a deep-aligned layout that mangles third-party config files; this walks the
+  compressed JSON and re-indents it properly. Written with [char] codes and
+  double-quoted strings only, so there are no single quotes to escape through Pascal. }
+procedure WriteJsonHelper(Dir: String);
+var
+  S: String;
+begin
+  S :=
+    'function Format-Json([string]$Compressed) {' + #13#10 +
+    '  $sb = New-Object System.Text.StringBuilder' + #13#10 +
+    '  $indent = 0; $inStr = $false; $esc = $false' + #13#10 +
+    '  for ($i = 0; $i -lt $Compressed.Length; $i++) {' + #13#10 +
+    '    $ch = $Compressed[$i]' + #13#10 +
+    '    if ($inStr) {' + #13#10 +
+    '      [void]$sb.Append($ch)' + #13#10 +
+    '      if ($esc) { $esc = $false } elseif ($ch -eq [char]92) { $esc = $true } elseif ($ch -eq [char]34) { $inStr = $false }' + #13#10 +
+    '      continue' + #13#10 +
+    '    }' + #13#10 +
+    '    if ($ch -eq [char]34) { $inStr = $true; [void]$sb.Append($ch); continue }' + #13#10 +
+    '    if ($ch -eq [char]123 -or $ch -eq [char]91) {' + #13#10 +
+    '      if ((($i + 1) -lt $Compressed.Length) -and ($Compressed[$i + 1] -eq [char]125 -or $Compressed[$i + 1] -eq [char]93)) {' + #13#10 +
+    '        [void]$sb.Append($ch); [void]$sb.Append($Compressed[$i + 1]); $i++' + #13#10 +
+    '      } else {' + #13#10 +
+    '        $indent++; [void]$sb.Append($ch); [void]$sb.Append("`r`n" + ("  " * $indent))' + #13#10 +
+    '      }' + #13#10 +
+    '      continue' + #13#10 +
+    '    }' + #13#10 +
+    '    if ($ch -eq [char]125 -or $ch -eq [char]93) { $indent--; [void]$sb.Append("`r`n" + ("  " * $indent)); [void]$sb.Append($ch); continue }' + #13#10 +
+    '    if ($ch -eq [char]44) { [void]$sb.Append($ch); [void]$sb.Append("`r`n" + ("  " * $indent)); continue }' + #13#10 +
+    '    if ($ch -eq [char]58) { [void]$sb.Append($ch); [void]$sb.Append([char]32); continue }' + #13#10 +
+    '    [void]$sb.Append($ch)' + #13#10 +
+    '  }' + #13#10 +
+    '  return $sb.ToString()' + #13#10 +
+    '}' + #13#10 +
+    'function Save-CleanJson([string]$Path, [object]$Data) {' + #13#10 +
+    '  $compressed = $Data | ConvertTo-Json -Depth 30 -Compress' + #13#10 +
+    '  $pretty = Format-Json $compressed' + #13#10 +
+    '  $dir = Split-Path $Path -Parent' + #13#10 +
+    '  if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }' + #13#10 +
+    '  [System.IO.File]::WriteAllText($Path, $pretty + "`r`n", [System.Text.UTF8Encoding]::new($false))' + #13#10 +
+    '}' + #13#10;
+  SaveStringToFile(Dir + '\nexus-json.ps1', S, False);
+end;
+
+{ Return a PowerShell literal for the nexus MCP entry, honouring the runtime choice
+  (docker exec vs native cmd.exe launcher). IncludeType adds the "type":"stdio"
+  field required by GitHub Copilot's JetBrains config. }
+function McpEntryPsLiteral(IncludeType: Boolean): String;
+var
+  TypePart: String;
+begin
+  if IncludeType then TypePart := 'type = ''stdio''; ' else TypePart := '';
+  if UseDockerForIntegrations() then
+    Result := '[PSCustomObject]@{ ' + TypePart + 'command = ''docker''; args = @(''exec'', ''-i'', ''' +
+      PowerShellSingleQuote(DockerPage.Values[1]) + ''', ''java'', ''-jar'', ''/opt/nexus/lib/nexus-mcp.jar'') }'
+  else
+    Result := '[PSCustomObject]@{ ' + TypePart + 'command = ''cmd.exe''; args = @(''/d'', ''/s'', ''/c'', ''' +
+      PowerShellSingleQuote(ExpandConstant('{app}\nexus-mcp.cmd')) + ''') }';
+end;
+
+{ Return a PowerShell array literal for the MCP command+args (for CLI `mcp add -- ...`). }
+function McpCommandArrayPs(): String;
+begin
+  if UseDockerForIntegrations() then
+    Result := '@(''docker'', ''exec'', ''-i'', ''' + PowerShellSingleQuote(DockerPage.Values[1]) +
+      ''', ''java'', ''-jar'', ''/opt/nexus/lib/nexus-mcp.jar'')'
+  else
+    Result := '@(''cmd.exe'', ''/d'', ''/s'', ''/c'', ''' +
+      PowerShellSingleQuote(ExpandConstant('{app}\nexus-mcp.cmd')) + ''')';
+end;
+
+procedure WriteAssistantAssets;
+var
+  Dir: String;
+  CopilotScript: String;
+  CopilotCmd: String;
+  ClaudeScript: String;
+  ClaudeDesktopPsScript: String;
+  ClaudeDesktopCmd: String;
+  CodexScript: String;
+  CodexCmd: String;
+  JetBrainsPsScript: String;
+  JetBrainsCmd: String;
+  CommandTail: String;
+begin
+  if not HasAssistantSelection() then exit;
+  Dir := ExpandConstant('{app}\integrations');
+  ForceDirectories(Dir);
+  WriteJsonHelper(Dir);
+
+  if UseDockerForIntegrations() then
+    CommandTail := 'docker exec -i "' + DockerPage.Values[1] + '" java -jar /opt/nexus/lib/nexus-mcp.jar'
+  else
+    CommandTail := '"' + ExpandConstant('{app}\app\runtime\bin\java.exe') + '" -jar "' + ExpandConstant('{app}\lib\nexus-mcp.jar') + '"';
+
+  if AssistantPage.Values[1] then
+  begin
+    { Static JSON fallback — restored Docker handling, kept for manual import. }
+    if UseDockerForIntegrations() then
+      SaveStringToFile(Dir + '\copilot-jetbrains.mcp.json', DockerMcpCommandJson('servers'), False)
+    else
+      SaveStringToFile(Dir + '\copilot-jetbrains.mcp.json', NativeMcpCommandJson('servers'), False);
+
+    { PS1: merge nexus entry into the live IntelliJ Copilot mcp.json using the
+      same cmd.exe + nexus-mcp.cmd pattern as mcp-search-net.
+      - exit 10 : mcp.json absent OR nexus-mcp.cmd not installed
+      - exit 20 : nexus key already present (idempotent)
+      - exit 0  : nexus added successfully }
+    JetBrainsPsScript :=
+      '. (Join-Path $PSScriptRoot ''nexus-json.ps1'')' + #13#10 +
+      '$dir = Join-Path $env:LOCALAPPDATA ''github-copilot\intellij''' + #13#10 +
+      'if (-not (Test-Path $dir)) { exit 10 }' + #13#10 +
+      '$mcp = Join-Path $dir ''mcp.json''' + #13#10 +
+      '$c = if (Test-Path $mcp) { Get-Content $mcp -Raw | ConvertFrom-Json } else { [PSCustomObject]@{ servers = [PSCustomObject]@{} } }' + #13#10 +
+      'if ($null -eq ($c | Get-Member -Name servers -MemberType NoteProperty)) { $c | Add-Member -MemberType NoteProperty -Name servers -Value ([PSCustomObject]@{}) }' + #13#10 +
+      'if ($null -ne ($c.servers | Get-Member -Name nexus -MemberType NoteProperty)) { exit 20 }' + #13#10 +
+      '$e = ' + McpEntryPsLiteral(True) + #13#10 +
+      '$c.servers | Add-Member -MemberType NoteProperty -Name nexus -Value $e' + #13#10 +
+      'Save-CleanJson $mcp $c' + #13#10 +
+      'exit 0' + #13#10;
+    SaveStringToFile(Dir + '\connect-copilot-jetbrains.ps1', JetBrainsPsScript, False);
+    SaveStringToFile(Dir + '\disconnect-copilot-jetbrains.ps1',
+      '. (Join-Path $PSScriptRoot ''nexus-json.ps1'')' + #13#10 +
+      '$mcp = Join-Path $env:LOCALAPPDATA ''github-copilot\intellij\mcp.json''' + #13#10 +
+      'if (-not (Test-Path $mcp)) { exit 0 }' + #13#10 +
+      '$c = Get-Content $mcp -Raw | ConvertFrom-Json' + #13#10 +
+      'if ($null -eq ($c | Get-Member -Name servers -MemberType NoteProperty)) { exit 0 }' + #13#10 +
+      'if ($null -eq ($c.servers | Get-Member -Name nexus -MemberType NoteProperty)) { exit 0 }' + #13#10 +
+      '$c.servers.PSObject.Properties.Remove(''nexus'')' + #13#10 +
+      'Save-CleanJson $mcp $c' + #13#10 +
+      'exit 0' + #13#10,
+      False);
+
+    JetBrainsCmd :=
+      '@echo off' + #13#10 +
+      '"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass' +
+          ' -File "%~dp0connect-copilot-jetbrains.ps1"' + #13#10 +
+      'exit /b %ERRORLEVEL%' + #13#10;
+    SaveStringToFile(Dir + '\connect-copilot-jetbrains.cmd', JetBrainsCmd, False);
+  end;
+
+  if AssistantPage.Values[3] then
+  begin
+    if UseDockerForIntegrations() then
+      SaveStringToFile(Dir + '\codex-desktop.mcp.toml', DockerCodexToml(), False)
+    else
+      SaveStringToFile(Dir + '\codex-desktop.mcp.toml', NativeCodexToml(), False);
+  end;
+
+  if AssistantPage.Values[4] then
+  begin
+    if UseDockerForIntegrations() then
+      SaveStringToFile(Dir + '\generic-mcp.json', DockerMcpCommandJson('mcpServers'), False)
+    else
+      SaveStringToFile(Dir + '\generic-mcp.json', NativeMcpCommandJson('mcpServers'), False);
+  end;
+
+  if AssistantPage.Values[0] then
+  begin
+    { PS1: resolve copilot via Get-Command (handles the VS Code copilot.ps1 shim that
+      `where copilot` cannot find), then `copilot mcp add nexus -- <cmd> <args...>`.
+      Args are passed as an array so PowerShell does not swallow the `--` separator.
+      - exit 10 : copilot CLI not resolvable
+      - exit 20 : nexus already present
+      - exit 0  : nexus added }
+    CopilotScript :=
+      '$c = Get-Command copilot -EA SilentlyContinue' + #13#10 +
+      'if (-not $c -or ($c.CommandType -notin @(''Application'', ''ExternalScript''))) { exit 10 }' + #13#10 +
+      '$exe = $c.Source' + #13#10 +
+      '$list = (& $exe mcp list 2>&1 | Out-String)' + #13#10 +
+      'if ($list -match ''(?m)^\s*nexus\b'') { exit 20 }' + #13#10 +
+      '$cmd = ' + McpCommandArrayPs() + #13#10 +
+      '$addArgs = @(''mcp'', ''add'', ''nexus'', ''--tools'', ''*'', ''--'') + $cmd' + #13#10 +
+      '& $exe @addArgs' + #13#10 +
+      'exit $LASTEXITCODE' + #13#10;
+    SaveStringToFile(Dir + '\connect-copilot-cli.ps1', CopilotScript, False);
+    CopilotCmd :=
+      '@echo off' + #13#10 +
+      '"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0connect-copilot-cli.ps1"' + #13#10 +
+      'exit /b %ERRORLEVEL%' + #13#10;
+    SaveStringToFile(Dir + '\connect-copilot-cli.cmd', CopilotCmd, False);
+  end;
+
+  if AssistantPage.Values[2] then
+  begin
+    { PS1: merge nexus into Claude Desktop's mcpServers (cmd.exe + nexus-mcp.cmd,
+      same pattern as mcp-search-net). Depth 10 preserves the nested preferences.
+      - exit 10 : claude_desktop_config.json absent OR nexus-mcp.cmd not installed
+      - exit 20 : nexus already present (idempotent)
+      - exit 0  : nexus added successfully }
+    ClaudeDesktopPsScript :=
+      '. (Join-Path $PSScriptRoot ''nexus-json.ps1'')' + #13#10 +
+      '$cfg = $null' + #13#10 +
+      '$pkgs = Join-Path $env:LOCALAPPDATA ''Packages''' + #13#10 +
+      'if (Test-Path $pkgs) { foreach ($p in (Get-ChildItem $pkgs -Directory -Filter ''Claude_*'' -EA SilentlyContinue)) { $cand = Join-Path $p.FullName ''LocalCache\Roaming\Claude\claude_desktop_config.json''; if (Test-Path (Split-Path $cand -Parent)) { $cfg = $cand; break } } }' + #13#10 +
+      'if (-not $cfg) { $fb = Join-Path $env:APPDATA ''Claude''; if (Test-Path $fb) { $cfg = Join-Path $fb ''claude_desktop_config.json'' } }' + #13#10 +
+      'if (-not $cfg) { exit 10 }' + #13#10 +
+      '$c = if (Test-Path $cfg) { Get-Content $cfg -Raw | ConvertFrom-Json } else { [PSCustomObject]@{} }' + #13#10 +
+      'if (($null -ne ($c | Get-Member -Name mcpServers -MemberType NoteProperty)) -and ($null -ne ($c.mcpServers | Get-Member -Name nexus -MemberType NoteProperty))) { exit 20 }' + #13#10 +
+      '$e = ' + McpEntryPsLiteral(False) + #13#10 +
+      'if ($null -eq ($c | Get-Member -Name mcpServers -MemberType NoteProperty)) {' + #13#10 +
+      '    $c | Add-Member -MemberType NoteProperty -Name mcpServers -Value ([PSCustomObject]@{})' + #13#10 +
+      '}' + #13#10 +
+      '$c.mcpServers | Add-Member -MemberType NoteProperty -Name nexus -Value $e' + #13#10 +
+      'Save-CleanJson $cfg $c' + #13#10 +
+      'exit 0' + #13#10;
+    SaveStringToFile(Dir + '\connect-claude-desktop.ps1', ClaudeDesktopPsScript, False);
+    SaveStringToFile(Dir + '\disconnect-claude-desktop.ps1',
+      '. (Join-Path $PSScriptRoot ''nexus-json.ps1'')' + #13#10 +
+      '$cfg = $null' + #13#10 +
+      '$pkgs = Join-Path $env:LOCALAPPDATA ''Packages''' + #13#10 +
+      'if (Test-Path $pkgs) { foreach ($p in (Get-ChildItem $pkgs -Directory -Filter ''Claude_*'' -EA SilentlyContinue)) { $cand = Join-Path $p.FullName ''LocalCache\Roaming\Claude\claude_desktop_config.json''; if (Test-Path $cand) { $cfg = $cand; break } } }' + #13#10 +
+      'if (-not $cfg) { $fb = Join-Path $env:APPDATA ''Claude\claude_desktop_config.json''; if (Test-Path $fb) { $cfg = $fb } }' + #13#10 +
+      'if (-not $cfg) { exit 0 }' + #13#10 +
+      '$c = Get-Content $cfg -Raw | ConvertFrom-Json' + #13#10 +
+      'if ($null -eq ($c | Get-Member -Name mcpServers -MemberType NoteProperty)) { exit 0 }' + #13#10 +
+      'if ($null -eq ($c.mcpServers | Get-Member -Name nexus -MemberType NoteProperty)) { exit 0 }' + #13#10 +
+      '$c.mcpServers.PSObject.Properties.Remove(''nexus'')' + #13#10 +
+      'Save-CleanJson $cfg $c' + #13#10 +
+      'exit 0' + #13#10,
+      False);
+
+    ClaudeDesktopCmd :=
+      '@echo off' + #13#10 +
+      '"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass' +
+          ' -File "%~dp0connect-claude-desktop.ps1"' + #13#10 +
+      'exit /b %ERRORLEVEL%' + #13#10;
+    SaveStringToFile(Dir + '\connect-claude-desktop.cmd', ClaudeDesktopCmd, False);
+
+    { Also keep the Claude Code CLI integration (best-effort; exit 10 if not on PATH) }
+    ClaudeScript := '@echo off' + #13#10 +
+      'where claude >nul 2>nul || exit /b 10' + #13#10 +
+      'claude mcp get nexus >nul 2>nul && exit /b 20' + #13#10 +
+      'claude mcp add --scope user nexus -- ' + CommandTail + #13#10 +
+      'exit /b %ERRORLEVEL%' + #13#10;
+    SaveStringToFile(Dir + '\connect-claude-cli.cmd', ClaudeScript, False);
+  end;
+
+  if AssistantPage.Values[3] then
+  begin
+    CodexScript :=
+      '$scriptDir = Split-Path $MyInvocation.MyCommand.Path -Parent' + #13#10 +
+      '$tomlSrc = Join-Path $scriptDir ''codex-desktop.mcp.toml''' + #13#10 +
+      '$cfg = Join-Path $env:USERPROFILE ''.codex\config.toml''' + #13#10 +
+      '$begin = ''# BEGIN NEXUS-MCP''' + #13#10 +
+      '$end = ''# END NEXUS-MCP''' + #13#10 +
+      '$codexOk = (Test-Path $cfg) -or (Test-Path (Join-Path $env:LOCALAPPDATA ''Programs\Codex\Codex.exe'')) -or (Test-Path (Join-Path $env:LOCALAPPDATA ''Codex\Codex.exe'')) -or ($null -ne (Get-Command codex -EA SilentlyContinue))' + #13#10 +
+      'if (-not $codexOk) { exit 10 }' + #13#10 +
+      'if ((Test-Path $cfg) -and ([System.IO.File]::ReadAllText($cfg) -match [regex]::Escape($begin))) { exit 20 }' + #13#10 +
+      'if (-not (Test-Path $tomlSrc)) { exit 10 }' + #13#10 +
+      '$toml = [System.IO.File]::ReadAllText($tomlSrc, [System.Text.Encoding]::UTF8).TrimEnd()' + #13#10 +
+      '$tomlBlock = $begin + [Environment]::NewLine + $toml + [Environment]::NewLine + $end + [Environment]::NewLine' + #13#10 +
+      '$cfgDir = Split-Path $cfg -Parent' + #13#10 +
+      'if (-not (Test-Path $cfgDir)) { New-Item -ItemType Directory -Force -Path $cfgDir | Out-Null }' + #13#10 +
+      'if (Test-Path $cfg) { $existing = [System.IO.File]::ReadAllText($cfg, [System.Text.Encoding]::UTF8).TrimEnd(); $newText = $existing + [Environment]::NewLine + [Environment]::NewLine + $tomlBlock } else { $newText = $tomlBlock }' + #13#10 +
+      '[System.IO.File]::WriteAllText($cfg, $newText, [System.Text.UTF8Encoding]::new($false))' + #13#10 +
+      'exit 0' + #13#10;
+    SaveStringToFile(Dir + '\connect-codex-desktop.ps1', CodexScript, False);
+    CodexCmd :=
+      '@echo off' + #13#10 +
+      '"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0connect-codex-desktop.ps1"' + #13#10 +
+      'exit /b %ERRORLEVEL%' + #13#10;
+    SaveStringToFile(Dir + '\connect-codex-desktop.cmd', CodexCmd, False);
+    SaveStringToFile(Dir + '\disconnect-codex-desktop.ps1',
+      '$cfg = Join-Path $env:USERPROFILE ''.codex\config.toml''' + #13#10 +
+      'if (-not (Test-Path $cfg)) { exit 0 }' + #13#10 +
+      '$begin = ''# BEGIN NEXUS-MCP''' + #13#10 +
+      '$end = ''# END NEXUS-MCP''' + #13#10 +
+      '$text = [System.IO.File]::ReadAllText($cfg, [System.Text.Encoding]::UTF8)' + #13#10 +
+      'if ($text -notmatch [regex]::Escape($begin)) { exit 0 }' + #13#10 +
+      '$pat = ''(?s)'' + [regex]::Escape($begin) + ''.*?'' + [regex]::Escape($end) + ''\r?\n?''' + #13#10 +
+      '$cleaned = ([regex]::Replace($text, $pat, '''')).TrimEnd()' + #13#10 +
+      '$out = ''''' + #13#10 +
+      'if ($cleaned) { $out = $cleaned + [Environment]::NewLine }' + #13#10 +
+      '[System.IO.File]::WriteAllText($cfg, $out, [System.Text.UTF8Encoding]::new($false))' + #13#10 +
+      'exit 0' + #13#10,
+      False);
+  end;
+end;
+
+procedure RunManagedIntegration(ScriptName: String; RegistryName: String);
+var
+  ResultCode: Integer;
+  ScriptPath: String;
+begin
+  ScriptPath := ExpandConstant('{app}\integrations\') + ScriptName;
+  if not FileExists(ScriptPath) then exit;
+  if Exec(ExpandConstant('{cmd}'), '/D /S /C ""' + ScriptPath + '""', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    if ResultCode = 0 then RegWriteStringValue(HKCU, InstallerRegistryPath(), RegistryName, '1')
+    else if ResultCode = 20 then Log(ScriptName + ': existing NEXUS MCP entry preserved')
+    else if ResultCode = 10 then Log(ScriptName + ': client CLI not detected; generated integration asset kept for later')
+    else Log(ScriptName + ': integration command exited with code ' + IntToStr(ResultCode));
+  end;
+end;
+
+procedure PersistSettings;
+begin
+  RegWriteDWordValue(HKCU, InstallerRegistryPath(), 'DeploymentMode', DeploymentPage.SelectedValueIndex);
+  RegWriteStringValue(HKCU, InstallerRegistryPath(), 'NexusHome', RuntimePage.Values[0]);
+  RegWriteStringValue(HKCU, InstallerRegistryPath(), 'NativeRestHost', RuntimePage.Values[1]);
+  RegWriteStringValue(HKCU, InstallerRegistryPath(), 'NativeRestPort', RuntimePage.Values[2]);
+  RegWriteStringValue(HKCU, InstallerRegistryPath(), 'RestApiToken', RuntimePage.Values[3]);
+  RegWriteStringValue(HKCU, InstallerRegistryPath(), 'SemanticProvider', SemanticProviderValue());
+  RegWriteStringValue(HKCU, InstallerRegistryPath(), 'OllamaBaseUrl', OllamaPage.Values[0]);
+  RegWriteDWordValue(HKCU, InstallerRegistryPath(), 'OllamaAutoInstall', Ord(OllamaPrereqPage.Values[0]));
+  RegWriteDWordValue(HKCU, InstallerRegistryPath(), 'DockerAutoInstall', Ord(DockerPrereqPage.Values[0]));
+  if InstallDocker() then
+  begin
+    RegWriteStringValue(HKCU, InstallerRegistryPath(), 'DockerImage', DockerPage.Values[0]);
+    RegWriteStringValue(HKCU, InstallerRegistryPath(), 'DockerContainer', DockerPage.Values[1]);
+    RegWriteStringValue(HKCU, InstallerRegistryPath(), 'DockerBindAddress', DockerPage.Values[2]);
+    RegWriteStringValue(HKCU, InstallerRegistryPath(), 'DockerHostPort', DockerPage.Values[3]);
+    RegWriteStringValue(HKCU, InstallerRegistryPath(), 'DockerContainerPort', DockerPage.Values[4]);
+    RegWriteStringValue(HKCU, InstallerRegistryPath(), 'DockerRepository', DockerPage.Values[5]);
+    RegWriteStringValue(HKCU, InstallerRegistryPath(), 'DockerRestartPolicy', DockerPage.Values[6]);
+  end;
+end;
+
+function DeploymentModeLabel(): String;
+begin
+  if DeploymentPage.SelectedValueIndex = 0 then Result := 'Natif Windows'
+  else if DeploymentPage.SelectedValueIndex = 1 then Result := 'Docker'
+  else Result := 'Natif + Docker';
+end;
+
+function ProfileLabel(): String;
+begin
+  if IsCustomProfile() then Result := 'Personnalisé' else Result := 'Recommandé';
+end;
+
+function IntegrationRuntimeLabel(): String;
+begin
+  if UseDockerForIntegrations() then Result := 'Docker / docker exec -i'
+  else Result := 'Natif / Java embarqué';
+end;
+
+function DockerPrerequisiteSummary(NewLine: String): String;
+begin
+  Result := '';
+  if not InstallDocker() then exit;
+  if DockerRuntimePresent() then
+    Result := '  - Docker Desktop/CLI : détecté' + NewLine
+  else if DockerDesktopAutoInstallSelected() then
+    Result := '  - Docker Desktop : sera téléchargé depuis desktop.docker.com et installé en mode utilisateur (WSL 2)' + NewLine +
+      '  - La licence Docker devra être acceptée par l''utilisateur au premier démarrage ; NEXUS ne l''accepte pas automatiquement.' + NewLine
+  else
+    Result := '  - Docker Desktop/CLI : absent' + NewLine;
+end;
+
+function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
+begin
+  Result := 'RÉCAPITULATIF NEXUS' + NewLine + NewLine +
+    'Mode : ' + DeploymentModeLabel() + NewLine +
+    'Profil : ' + ProfileLabel() + NewLine +
+    'Répertoire : ' + WizardDirValue() + NewLine +
+    'NEXUS_HOME : ' + RuntimePage.Values[0] + NewLine;
+
+  if InstallNative() then
+  begin
+    Result := Result + NewLine + 'Natif :' + NewLine;
+    if InstallNativeCli() then Result := Result + '  - CLI NEXUS' + NewLine;
+    if InstallNativeMcp() then Result := Result + '  - Serveur MCP STDIO' + NewLine;
+    if InstallNativeRest() then Result := Result + '  - REST ' + RuntimePage.Values[1] + ':' + RuntimePage.Values[2] + ' (port externe vérifié)' + NewLine;
+    if WizardIsTaskSelected('addtopath') then Result := Result + '  - Ajouter NEXUS au PATH utilisateur' + NewLine;
+  end;
+
+  if OllamaEnabled() then
+  begin
+    Result := Result + NewLine + 'Recherche sémantique : Ollama ACTIVÉ' + NewLine;
+    // Endpoints réellement retenus par runtime. En mode Both, le natif joint Ollama en direct
+    // tandis que le conteneur Docker passe par host.docker.internal (résolu depuis l'URL saisie).
+    if InstallNative() then
+      Result := Result + '  - URL (Natif) : ' + OllamaPage.Values[0] + NewLine;
+    if InstallDocker() then
+      Result := Result + '  - URL (Docker) : ' + OllamaUrlForDocker(OllamaPage.Values[0]) + NewLine;
+    if OllamaPresent() then
+      Result := Result + '  - Ollama : détecté sur ce système (aucun téléchargement).' + NewLine
+    else if OllamaAutoInstallSelected() then
+      Result := Result + '  - Ollama : sera TÉLÉCHARGÉ depuis ollama.com puis INSTALLÉ (signature Authenticode vérifiée) avant NEXUS.' + NewLine
+    else
+      Result := Result + '  - Ollama : absent — installation automatique désactivée. Installez Ollama manuellement avant de démarrer NEXUS.' + NewLine;
+  end
+  else
+    Result := Result + NewLine + 'Recherche sémantique : désactivée (aucun téléchargement Ollama)' + NewLine;
+
+  if InstallDocker() then
+  begin
+    Result := Result + NewLine + 'Docker :' + NewLine + DockerPrerequisiteSummary(NewLine) +
+      '  - Image : ' + DockerPage.Values[0] + NewLine +
+      '  - Conteneur : ' + DockerPage.Values[1] + NewLine +
+      '  - REST : ' + DockerPage.Values[2] + ':' + DockerPage.Values[3] + ' (port hôte vérifié) -> conteneur:' + DockerPage.Values[4] + NewLine +
+      '  - Repository : ' + DockerPage.Values[5] + ' -> /workspace:ro' + NewLine +
+      '  - Restart policy : ' + DockerPage.Values[6] + NewLine;
+    if WizardIsTaskSelected('startdocker') then Result := Result + '  - Démarrage Docker après installation' + NewLine;
+  end;
+
+  Result := Result + NewLine + 'Assistants MCP :' + NewLine;
+  if HasAssistantSelection() then
+  begin
+    if AssistantPage.Values[0] then Result := Result + '  - GitHub Copilot CLI' + NewLine;
+    if AssistantPage.Values[1] then Result := Result + '  - GitHub Copilot JetBrains' + NewLine;
+    if AssistantPage.Values[2] then Result := Result + '  - Claude Desktop / Claude Code' + NewLine;
+    if AssistantPage.Values[3] then Result := Result + '  - Codex Desktop' + NewLine;
+    if AssistantPage.Values[4] then Result := Result + '  - Client MCP générique' + NewLine;
+    Result := Result + '  - Runtime MCP : ' + IntegrationRuntimeLabel() + NewLine;
+  end
+  else
+    Result := Result + '  - Aucune intégration sélectionnée' + NewLine;
+
+  Result := Result + NewLine + 'Cliquez sur Installer pour appliquer exactement cette configuration.';
+end;
+
+procedure StartDockerDesktopAfterInstall;
+var
+  DockerDesktopPath: String;
+  ResultCode: Integer;
+begin
+  if not DockerDesktopInstalledDuringSetup then exit;
+  DockerDesktopPath := DockerDesktopExecutable();
+  if DockerDesktopPath = '' then exit;
+  if Exec(DockerDesktopPath, '', '', SW_SHOWNORMAL, ewNoWait, ResultCode) then
+    MsgBox(
+      'Docker Desktop a été installé et vient d''être lancé.' + #13#10 +
+      'Au premier démarrage, acceptez les conditions Docker et terminez si nécessaire la préparation WSL 2. ' +
+      'Le script NEXUS Docker attendra ensuite que le moteur soit prêt.',
+      mbInformation, MB_OK);
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+  begin
+    WriteNativeConfiguration;
+    WriteDockerConfiguration;
+    WriteAssistantAssets;
+    AddNexusToUserPath;
+    PersistSettings;
+    StartDockerDesktopAfterInstall;
+    if (not IsSmokeBuild()) and HasAssistantSelection() then
+    begin
+      if AssistantPage.Values[0] then RunManagedIntegration('connect-copilot-cli.cmd', 'CopilotCliManaged');
+      if AssistantPage.Values[1] then RunManagedIntegration('connect-copilot-jetbrains.cmd', 'CopilotJetBrainsManaged');
+      if AssistantPage.Values[2] then RunManagedIntegration('connect-claude-desktop.cmd', 'ClaudeDesktopManaged');
+      if AssistantPage.Values[2] then RunManagedIntegration('connect-claude-cli.cmd', 'ClaudeCliManaged');
+      if AssistantPage.Values[3] then RunManagedIntegration('connect-codex-desktop.cmd', 'CodexManaged');
+    end;
+  end;
+end;
+
+procedure RemoveManagedAssistantIntegrations;
+var
+  Value: String;
+  ResultCode: Integer;
+  PsExe: String;
+begin
+  PsExe := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'CopilotCliManaged', Value) and (Value = '1') and CommandExists('copilot') then
+  begin
+    Exec(ExpandConstant('{cmd}'), '/D /S /C "copilot mcp remove nexus"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    RegDeleteValue(HKCU, InstallerRegistryPath(), 'CopilotCliManaged');
+  end;
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'CopilotJetBrainsManaged', Value) and (Value = '1') and
+     FileExists(ExpandConstant('{app}\integrations\disconnect-copilot-jetbrains.ps1')) then
+  begin
+    Exec(PsExe, '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\integrations\disconnect-copilot-jetbrains.ps1') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    RegDeleteValue(HKCU, InstallerRegistryPath(), 'CopilotJetBrainsManaged');
+  end;
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'ClaudeDesktopManaged', Value) and (Value = '1') and
+     FileExists(ExpandConstant('{app}\integrations\disconnect-claude-desktop.ps1')) then
+  begin
+    Exec(PsExe, '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\integrations\disconnect-claude-desktop.ps1') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    RegDeleteValue(HKCU, InstallerRegistryPath(), 'ClaudeDesktopManaged');
+  end;
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'ClaudeCliManaged', Value) and (Value = '1') and CommandExists('claude') then
+  begin
+    Exec(ExpandConstant('{cmd}'), '/D /S /C "claude mcp remove nexus"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    RegDeleteValue(HKCU, InstallerRegistryPath(), 'ClaudeCliManaged');
+  end;
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'CodexManaged', Value) and (Value = '1') and
+     FileExists(ExpandConstant('{app}\integrations\disconnect-codex-desktop.ps1')) then
+  begin
+    Exec(PsExe, '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\integrations\disconnect-codex-desktop.ps1') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    RegDeleteValue(HKCU, InstallerRegistryPath(), 'CodexManaged');
+  end;
+end;
+
+procedure StopManagedDocker;
+var
+  Value: String;
+  ResultCode: Integer;
+begin
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerManaged', Value) and (Value = '1') and FileExists(ExpandConstant('{app}\nexus-docker-down.cmd')) then
+  begin
+    Exec(ExpandConstant('{cmd}'), '/D /S /C ""' + ExpandConstant('{app}\nexus-docker-down.cmd') + '""', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    RegDeleteValue(HKCU, InstallerRegistryPath(), 'DockerManaged');
+  end;
+end;
+
+function InitializeUninstall(): Boolean;
+var
+  i: Integer;
+begin
+  UninstSilent := False;
+  for i := 1 to ParamCount do
+    if (UpperCase(ParamStr(i)) = '/VERYSILENT') or (UpperCase(ParamStr(i)) = '/SILENT') then
+    begin
+      UninstSilent := True;
+      break;
+    end;
+  Result := True;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    StopManagedDocker;
+    RemoveManagedAssistantIntegrations;
+    RemoveNexusFromUserPath;
+    { NEXUS_HOME and Docker Desktop are intentionally preserved. }
+  end;
+  if CurUninstallStep = usPostUninstall then
+  begin
+    { Remove files and directories not tracked by Inno Setup: installer-generated
+      nexus-docker-up/down.cmd, docker/.env + docker-compose.yml, and
+      empty lib/ rest/ dirs. }
+    DeleteFile(ExpandConstant('{app}\nexus-docker-up.cmd'));
+    DeleteFile(ExpandConstant('{app}\nexus-docker-down.cmd'));
+    DelTree(ExpandConstant('{app}\docker'), True, True, True);
+    RemoveDir(ExpandConstant('{app}\lib'));
+    RemoveDir(ExpandConstant('{app}\rest'));
+    { Offer to remove user configuration data (interactive mode only;
+      silent uninstall preserves these directories). }
+    if not UninstSilent then
+    begin
+      if DirExists(ExpandConstant('{app}\config')) or DirExists(ExpandConstant('{app}\integrations')) then
+      begin
+        if MsgBox(
+          'Supprimer les données de configuration NEXUS ?' + #13#10 +
+          '  • ' + ExpandConstant('{app}\config') + #13#10 +
+          '  • ' + ExpandConstant('{app}\integrations') + #13#10 + #13#10 +
+          'Ces dossiers ne seront pas récupérables.',
+          mbConfirmation, MB_YESNO) = IDYES then
+        begin
+          DelTree(ExpandConstant('{app}\config'), True, True, True);
+          DelTree(ExpandConstant('{app}\integrations'), True, True, True);
+        end;
+      end;
+    end;
+    RemoveDir(ExpandConstant('{app}'));
+  end;
+end;

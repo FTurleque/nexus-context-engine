@@ -19,6 +19,7 @@ public final class SemanticIndexingService {
     public static final int DEFAULT_MAX_EMBEDDING_CHARS = 12_000;
     public static final int DEFAULT_EXCERPT_CHARS = 320;
     public static final int DEFAULT_BATCH_SIZE = 32;
+    private static final int CONTENT_PROFILE_VERSION = 1;
 
     private final EmbeddingProvider embeddingProvider;
     private final SemanticSearchIndex semanticSearchIndex;
@@ -66,8 +67,30 @@ public final class SemanticIndexingService {
         return embeddingProvider.modelId();
     }
 
+    public String profileId() {
+        return profileId(maxEmbeddingChars);
+    }
+
+    public static String defaultProfileId() {
+        return profileId(DEFAULT_MAX_EMBEDDING_CHARS);
+    }
+
+    public boolean isCompatible(UUID projectId, String canonicalFingerprint) throws IOException {
+        return semanticSearchIndex.isCompatible(projectId, provenance(canonicalFingerprint));
+    }
+
     public void rebuild(UUID projectId, List<SearchDocument> documents) throws IOException {
         semanticSearchIndex.rebuild(projectId, vectorize(documents));
+    }
+
+    public void rebuild(
+            UUID projectId,
+            String canonicalFingerprint,
+            List<SearchDocument> documents) throws IOException {
+        semanticSearchIndex.rebuild(
+                projectId,
+                provenance(canonicalFingerprint),
+                vectorize(documents));
     }
 
     public void applyChanges(
@@ -75,6 +98,31 @@ public final class SemanticIndexingService {
             List<SearchDocument> documents,
             Set<String> removedRelativePaths) throws IOException {
         semanticSearchIndex.applyChanges(projectId, vectorize(documents), removedRelativePaths);
+    }
+
+    public void applyChanges(
+            UUID projectId,
+            String canonicalFingerprint,
+            List<SearchDocument> documents,
+            Set<String> removedRelativePaths) throws IOException {
+        semanticSearchIndex.applyChanges(
+                projectId,
+                provenance(canonicalFingerprint),
+                vectorize(documents),
+                removedRelativePaths);
+    }
+
+    private SemanticIndexProvenance provenance(String canonicalFingerprint) {
+        return SemanticIndexProvenance.current(
+                canonicalFingerprint,
+                embeddingProvider,
+                profileId());
+    }
+
+    private static String profileId(int maxEmbeddingChars) {
+        return "content-v" + CONTENT_PROFILE_VERSION
+                + ";maxEmbeddingChars=" + maxEmbeddingChars
+                + ";excerptChars=" + DEFAULT_EXCERPT_CHARS;
     }
 
     private List<SemanticVectorDocument> vectorize(List<SearchDocument> documents) throws IOException {

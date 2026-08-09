@@ -33,5 +33,23 @@
             <destName>README.md</destName>
             <fileMode>0644</fileMode>
         </file>
+        <file>
+            <source>${project.basedir}/../LICENSE</source>
+            <outputDirectory>/</outputDirectory>
+            <destName>LICENSE</destName>
+            <fileMode>0644</fileMode>
+        </file>
+        <file>
+            <source>${project.basedir}/../target/licenses/THIRD_PARTY_NOTICES.txt</source>
+            <outputDirectory>/</outputDirectory>
+            <destName>THIRD_PARTY_NOTICES.txt</destName>
+            <fileMode>0644</fileMode>
+        </file>
+        <file>
+            <source>${project.basedir}/../target/sbom/bom.json</source>
+            <outputDirectory>/</outputDirectory>
+            <destName>SBOM.cdx.json</destName>
+            <fileMode>0644</fileMode>
+        </file>
     </files>
 </assembly>

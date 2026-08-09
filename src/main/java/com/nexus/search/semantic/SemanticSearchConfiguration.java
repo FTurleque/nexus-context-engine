@@ -1,6 +1,7 @@
 package com.nexus.search.semantic;
 
 import com.nexus.search.semantic.ollama.OllamaEmbeddingProvider;
+import com.nexus.search.semantic.ollama.OllamaEndpointResolver;
 
 import java.net.URI;
 import java.time.Duration;
@@ -17,6 +18,12 @@ public final class SemanticSearchConfiguration {
     public static final String PROVIDER_ENV = "NEXUS_SEMANTIC_PROVIDER";
     public static final String RRF_WEIGHT_ENV = "NEXUS_SEMANTIC_RRF_WEIGHT";
     public static final String OLLAMA_BASE_URL_ENV = "NEXUS_OLLAMA_BASE_URL";
+    /**
+     * Indice de runtime positionné par le template Docker Compose ({@code NEXUS_RUNTIME=docker}).
+     * Il permet de résoudre une URL Ollama de bouclage vers {@code host.docker.internal} lorsque
+     * NEXUS s'exécute en conteneur, y compris si le {@code .env} contient encore {@code 127.0.0.1}.
+     */
+    public static final String RUNTIME_ENV = "NEXUS_RUNTIME";
     public static final String OLLAMA_MODEL_ENV = "NEXUS_OLLAMA_EMBEDDING_MODEL";
     public static final String OLLAMA_DIMENSIONS_ENV = "NEXUS_OLLAMA_EMBEDDING_DIMENSIONS";
     public static final String OLLAMA_TIMEOUT_SECONDS_ENV = "NEXUS_OLLAMA_TIMEOUT_SECONDS";
@@ -70,9 +77,11 @@ public final class SemanticSearchConfiguration {
                     PROVIDER_ENV + " supporte uniquement 'ollama' ou 'disabled' actuellement");
         }
 
-        URI baseUri = URI.create(environment(
+        URI configuredBaseUri = URI.create(environment(
                 OLLAMA_BASE_URL_ENV,
                 OllamaEmbeddingProvider.DEFAULT_BASE_URI.toString()));
+        boolean dockerRuntime = "docker".equalsIgnoreCase(environment(RUNTIME_ENV, ""));
+        URI baseUri = OllamaEndpointResolver.resolveForRuntime(configuredBaseUri, dockerRuntime);
         String model = environment(OLLAMA_MODEL_ENV, OllamaEmbeddingProvider.DEFAULT_MODEL);
         int dimensions = positiveInt(
                 OLLAMA_DIMENSIONS_ENV,

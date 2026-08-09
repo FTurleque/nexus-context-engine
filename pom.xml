@@ -11,6 +11,15 @@
     <name>NEXUS Context Engine Reactor</name>
     <description>Reactor et gouvernance de build communs au cœur NEXUS et à ses adaptateurs optionnels.</description>
 
+    <licenses>
+        <license>
+            <name>NEXUS Proprietary Source-Available License - All Rights Reserved</name>
+            <url>https://github.com/FTurleque/nexus-context-engine/blob/main/LICENSE</url>
+            <distribution>repo</distribution>
+            <comments>Copyright (c) 2026 Fabrice Turleque. No general use, modification, distribution or commercial license is granted.</comments>
+        </license>
+    </licenses>
+
     <modules>
         <module>core</module>
         <module>adapters/rest-quarkus</module>
@@ -24,31 +33,48 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
         <javaparser.version>3.28.2</javaparser.version>
-        <sqlite-jdbc.version>3.53.2.0</sqlite-jdbc.version>
+        <sqlite-jdbc.version>3.53.2.1</sqlite-jdbc.version>
         <lucene.version>10.5.0</lucene.version>
-        <jgit.version>7.7.0.202606012155-r</jgit.version>
+        <jgit.version>7.7.1.202607240634-r</jgit.version>
         <jackson.version>2.22.1</jackson.version>
-        <jackson.annotations.version>2.21</jackson.annotations.version>
-        <snakeyaml-engine.version>3.0.1</snakeyaml-engine.version>
+        <micrometer.version>1.17.0</micrometer.version>
+        <snakeyaml-engine.version>3.1</snakeyaml-engine.version>
         <junit.version>6.0.2</junit.version>
         <mcp.sdk.version>2.0.0</mcp.sdk.version>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
-        <quarkus.platform.version>3.33.2.1</quarkus.platform.version>
+        <quarkus.platform.version>3.33.3</quarkus.platform.version>
 
         <maven.compiler-plugin.version>3.15.0</maven.compiler-plugin.version>
-        <maven.surefire-plugin.version>3.5.4</maven.surefire-plugin.version>
+        <maven.surefire-plugin.version>3.5.6</maven.surefire-plugin.version>
         <maven.shade-plugin.version>3.6.2</maven.shade-plugin.version>
         <exec-maven-plugin.version>3.6.3</exec-maven-plugin.version>
-        <maven.enforcer-plugin.version>3.6.2</maven.enforcer-plugin.version>
-        <maven.assembly-plugin.version>3.7.1</maven.assembly-plugin.version>
+        <maven.enforcer-plugin.version>3.6.3</maven.enforcer-plugin.version>
+        <maven.assembly-plugin.version>3.8.0</maven.assembly-plugin.version>
         <maven.antrun-plugin.version>3.2.0</maven.antrun-plugin.version>
-        <cyclonedx-maven-plugin.version>2.9.2</cyclonedx-maven-plugin.version>
-        <jacoco.version>0.8.12</jacoco.version>
+        <cyclonedx-maven-plugin.version>2.9.3</cyclonedx-maven-plugin.version>
+        <jacoco.version>0.8.15</jacoco.version>
+        <license-maven-plugin.version>2.7.1</license-maven-plugin.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <!-- These project-level BOMs intentionally precede Quarkus so Maven
+                 cannot silently downgrade the security baselines selected here. -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.micrometer</groupId>
+                <artifactId>micrometer-bom</artifactId>
+                <version>${micrometer.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>io.quarkus.platform</groupId>
                 <artifactId>quarkus-bom</artifactId>
@@ -88,21 +114,6 @@
                 <groupId>org.eclipse.jgit</groupId>
                 <artifactId>org.eclipse.jgit</artifactId>
                 <version>${jgit.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.fasterxml.jackson.core</groupId>
-                <artifactId>jackson-core</artifactId>
-                <version>${jackson.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.fasterxml.jackson.core</groupId>
-                <artifactId>jackson-databind</artifactId>
-                <version>${jackson.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.fasterxml.jackson.core</groupId>
-                <artifactId>jackson-annotations</artifactId>
-                <version>${jackson.annotations.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.snakeyaml</groupId>
@@ -164,6 +175,11 @@
                     <artifactId>jacoco-maven-plugin</artifactId>
                     <version>${jacoco.version}</version>
                 </plugin>
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>license-maven-plugin</artifactId>
+                    <version>${license-maven-plugin.version}</version>
+                </plugin>
             </plugins>
         </pluginManagement>
 
@@ -209,6 +225,32 @@
                                 </requireMavenVersion>
                                 <banDuplicatePomDependencyVersions/>
                             </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>license-maven-plugin</artifactId>
+                <version>${license-maven-plugin.version}</version>
+                <inherited>false</inherited>
+                <executions>
+                    <execution>
+                        <id>aggregate-third-party-notices</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>aggregate-add-third-party</goal>
+                        </goals>
+                        <configuration>
+                            <acceptPomPackaging>true</acceptPomPackaging>
+                            <includedScopes>compile,runtime</includedScopes>
+                            <excludedGroups>io.github.fturleque</excludedGroups>
+                            <failOnMissing>true</failOnMissing>
+                            <deployMissingFile>false</deployMissingFile>
+                            <useRepositoryMissingFiles>false</useRepositoryMissingFiles>
+                            <sortArtifactByName>true</sortArtifactByName>
+                            <outputDirectory>${project.build.directory}/licenses</outputDirectory>
+                            <thirdPartyFilename>THIRD_PARTY_NOTICES.txt</thirdPartyFilename>
                         </configuration>
                     </execution>
                 </executions>

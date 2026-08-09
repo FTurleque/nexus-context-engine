@@ -11,6 +11,7 @@ import com.nexus.search.semantic.SemanticIndexingService;
 import com.nexus.security.SafeFileIO;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -201,6 +202,7 @@ public final class ProjectIndexingService {
         try {
             ProjectScanResult scanResult = scanner.scanWithDiagnostics(project.rootPath());
             List<ScannedFile> scannedFiles = scanResult.files();
+            String canonicalFingerprint = CanonicalIndexFingerprint.fromScannedFiles(scannedFiles);
             List<String> diagnostics = new ArrayList<>(scanResult.diagnostics());
             Map<String, Long> providerDurationsMs = new LinkedHashMap<>();
             Map<String, IndexedFile> existingFiles = indexRepository.findFiles(projectId);
@@ -212,8 +214,12 @@ public final class ProjectIndexingService {
             removedPaths.removeAll(scannedPaths);
             Set<String> searchRemovedPaths = new HashSet<>(removedPaths);
 
+            boolean semanticFullRebuild = semanticIndexingService != null
+                    && (fullRebuild || !semanticIndexingService.isCompatible(projectId, canonicalFingerprint));
+
             List<IndexedFileUpdate> updates = new ArrayList<>();
             List<SearchDocument> searchDocuments = new ArrayList<>();
+            List<SearchDocument> semanticDocuments = new ArrayList<>();
 
             for (ScannedFile scannedFile : scannedFiles) {
                 boolean genericSearchEligible = isGenericSearchEligible(scannedFile.category());
@@ -222,43 +228,87 @@ public final class ProjectIndexingService {
                 }
 
                 IndexedFile existing = existingFiles.get(scannedFile.relativePath());
-                if (!fullRebuild && existing != null && existing.contentHash().equals(scannedFile.contentHash())) {
+                boolean changed = fullRebuild
+                        || existing == null
+                        || !existing.contentHash().equals(scannedFile.contentHash());
+                boolean requiredForSemanticRebuild = semanticFullRebuild && genericSearchEligible;
+                if (!changed && !requiredForSemanticRebuild) {
                     continue;
                 }
 
-                AnalysisResult analysis = analyzeScannedFile(project.rootPath(), scannedFile);
-                updates.add(new IndexedFileUpdate(scannedFile, analysis));
+                byte[] snapshotBytes = SafeFileIO.readBytesNoFollow(scannedFile.absolutePath());
+                String snapshotHash = FileHasher.sha256(snapshotBytes);
+                if (!snapshotHash.equals(scannedFile.contentHash())) {
+                    throw new IOException(
+                            "Le fichier a changé pendant l'indexation : " + scannedFile.relativePath());
+                }
+                String snapshotContent = new String(snapshotBytes, StandardCharsets.UTF_8);
+                AnalysisResult analysis = analyzeScannedFile(project.rootPath(), scannedFile, snapshotContent);
+                SearchDocument document = null;
                 if (genericSearchEligible) {
-                    searchDocuments.add(new SearchDocument(
+                    document = new SearchDocument(
                             scannedFile.relativePath(),
                             scannedFile.language(),
                             scannedFile.category(),
-                            SafeFileIO.readStringNoFollow(scannedFile.absolutePath()),
-                            analysis.symbols()));
+                            snapshotContent,
+                            analysis.symbols());
+                }
+
+                if (changed) {
+                    updates.add(new IndexedFileUpdate(scannedFile, analysis));
+                    if (document != null) {
+                        searchDocuments.add(document);
+                    }
+                }
+                if (document != null && (semanticFullRebuild || changed)) {
+                    semanticDocuments.add(document);
                 }
             }
 
-            boolean javaSourcesChanged = javaSourcesChanged(fullRebuild, updates, removedPaths, existingFiles);
+            boolean codeSourcesChanged = codeIntelligenceSourcesChanged(
+                    fullRebuild, updates, removedPaths, existingFiles);
+            Set<String> staleExternalProviders = codeSourcesChanged
+                    ? indexRepository.findExternalProviders(projectId)
+                    : Set.of();
+
             indexRepository.applyChanges(projectId, updates, removedPaths);
+            if (!staleExternalProviders.isEmpty()) {
+                purgeExternalCodeIntelligence(projectId, staleExternalProviders);
+                diagnostics.add("external code intelligence invalidated: "
+                        + String.join(", ", staleExternalProviders));
+            }
+
             refreshImportedCodeIntelligence(
                     projectId, project.rootPath(), diagnostics, providerDurationsMs);
             if (includeCodeIntelligenceProviders) {
                 refreshActiveCodeIntelligence(
                         projectId, project.rootPath(), diagnostics, providerDurationsMs);
-            } else if (javaSourcesChanged) {
-                purgeActiveCodeIntelligence(projectId);
             }
 
             if (fullRebuild) {
                 searchIndex.rebuild(projectId, searchDocuments);
-                if (semanticIndexingService != null) {
-                    semanticIndexingService.rebuild(projectId, searchDocuments);
-                }
             } else {
                 searchIndex.applyChanges(projectId, searchDocuments, searchRemovedPaths);
-                if (semanticIndexingService != null) {
-                    semanticIndexingService.applyChanges(projectId, searchDocuments, searchRemovedPaths);
+            }
+
+            if (semanticIndexingService != null) {
+                if (semanticFullRebuild) {
+                    semanticIndexingService.rebuild(projectId, canonicalFingerprint, semanticDocuments);
+                } else {
+                    semanticIndexingService.applyChanges(
+                            projectId, canonicalFingerprint, semanticDocuments, searchRemovedPaths);
                 }
+            }
+
+            // Une modification externe peut survenir après le scan initial ou pendant
+            // l'exécution d'un provider. On ne publie jamais READY si le repository
+            // canonique n'est plus exactement celui dont le fingerprint a servi à
+            // construire SQLite/Lucene. L'état FAILED force un rebuild complet au
+            // prochain passage et rend les dérivés partiels inaccessibles entre-temps.
+            ProjectScanResult finalScan = scanner.scanWithDiagnostics(project.rootPath());
+            String finalFingerprint = CanonicalIndexFingerprint.fromScannedFiles(finalScan.files());
+            if (!canonicalFingerprint.equals(finalFingerprint)) {
+                throw new IOException("Le repository a changé pendant l'indexation ; un rebuild est requis");
             }
 
             Set<String> languages = scannedFiles.stream()
@@ -324,11 +374,11 @@ public final class ProjectIndexingService {
         }
     }
 
-    private void purgeActiveCodeIntelligence(UUID projectId) {
-        for (CodeIntelligenceProvider provider : codeIntelligenceProviders) {
+    private void purgeExternalCodeIntelligence(UUID projectId, Set<String> providers) {
+        for (String provider : providers.stream().sorted().toList()) {
             indexRepository.replaceExternalCodeIntelligence(
                     projectId,
-                    CodeIntelligenceSnapshot.empty(provider.sourceProvider()));
+                    CodeIntelligenceSnapshot.empty(provider));
         }
     }
 
@@ -339,7 +389,7 @@ public final class ProjectIndexingService {
         }
     }
 
-    private static boolean javaSourcesChanged(
+    private static boolean codeIntelligenceSourcesChanged(
             boolean fullRebuild,
             List<IndexedFileUpdate> updates,
             Set<String> removedPaths,
@@ -347,22 +397,31 @@ public final class ProjectIndexingService {
         if (fullRebuild) {
             return true;
         }
-        boolean javaUpdated = updates.stream()
+        boolean sourceUpdated = updates.stream()
                 .map(IndexedFileUpdate::file)
-                .anyMatch(file -> "java".equalsIgnoreCase(file.language()));
-        if (javaUpdated) {
+                .map(ScannedFile::category)
+                .anyMatch(ProjectIndexingService::isCodeIntelligenceSource);
+        if (sourceUpdated) {
             return true;
         }
         return removedPaths.stream()
                 .map(existingFiles::get)
                 .filter(Objects::nonNull)
-                .anyMatch(file -> "java".equalsIgnoreCase(file.language()));
+                .map(IndexedFile::category)
+                .anyMatch(ProjectIndexingService::isCodeIntelligenceSource);
     }
 
-    private AnalysisResult analyzeScannedFile(java.nio.file.Path projectRoot, ScannedFile file) throws IOException {
+    private static boolean isCodeIntelligenceSource(FileCategory category) {
+        return category == FileCategory.SOURCE || category == FileCategory.TEST;
+    }
+
+    private AnalysisResult analyzeScannedFile(
+            java.nio.file.Path projectRoot,
+            ScannedFile file,
+            String content) throws IOException {
         for (LanguageAnalyzer analyzer : analyzers) {
             if (analyzer.supports(file.absolutePath())) {
-                return analyzer.analyze(projectRoot, file.absolutePath());
+                return analyzer.analyze(projectRoot, file.absolutePath(), content);
             }
         }
         return new AnalysisResult(file.absolutePath(), file.language(), List.of(), List.of());

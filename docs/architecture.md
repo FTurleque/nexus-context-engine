@@ -1,6 +1,6 @@
 # Architecture de NEXUS
 
-Ce document décrit l'architecture **Phase 6** de NEXUS sur `phase-6-consolidation-hardening`. Les ADR de `docs/adr/` restent historiques et ne sont pas réécrits. La Phase 6 est implémentée et qualifiée techniquement ; son intégration reste portée par la PR #15.
+Ce document décrit l'architecture **courante** de NEXUS 0.2.0 sur `main`. Les ADR conservent l'historique ; l'état actif inclut Phase 6, hardening, provenance, supply-chain, Windows/Docker et consolidation post-audit.
 
 ## Mission
 
@@ -14,15 +14,21 @@ en recherche classée ou en contexte minimal, pertinent, explicable et borné.
 
 ## Invariants
 
-1. JVM d'exécution 21 ou supérieure, bytecode/API ciblés sur Java 21.
-2. `NexusApplication` est le composition root applicatif partagé par CLI, REST et MCP.
+1. JVM d'exécution 21 ou supérieure ; bytecode/API ciblés Java 21.
+2. `NexusApplication` est le composition root partagé par CLI, REST et MCP.
 3. SQLite est canonique.
-4. Lucene lexical et sémantique sont dérivés/reconstructibles.
-5. Toute lecture d'index interactive exige un projet `READY`.
-6. Les providers externes sont optionnels et bornés.
+4. Lucene lexical/sémantique et intelligence externe sont dérivés/reconstructibles.
+5. Toute lecture interactive dépendant d'un index exige un projet `READY`.
+6. Les providers/importers externes sont optionnels et bornés par timeout wall-clock.
 7. Le sémantique est désactivé par défaut.
-8. Le ranking et les budgets restent déterministes/explicables.
-9. Le contexte fédéré conserve la provenance et n'étend pas implicitement les instructions/skills/Git d'un projet à un autre.
+8. Ranking, limites et budgets restent déterministes/explicables.
+9. Le contexte fédéré conserve la provenance et ne propage pas implicitement instructions/skills/Git entre projets.
+10. Une donnée dérivée n'est réutilisée que si sa compatibilité avec l'état canonique courant est démontrée.
+11. Une seule mutation d'index par projet est active sur un `NEXUS_HOME` local, y compris entre processus.
+12. Le snapshot canonique est revalidé avant publication ; une mutation concurrente détectée provoque un échec fail-closed.
+13. Le graphe et le contexte fédéré sont bornés en coût de travail, pas seulement en taille du résultat final.
+14. CLI, REST et MCP partagent une limite maximale commune des résultats.
+15. Une exposition REST hors loopback est fail-closed sans token robuste, allowlist de racines et mode d'exposition explicite.
 
 ## Reactor Maven
 
@@ -34,7 +40,7 @@ pom.xml                         parent/reactor 0.2.0
 └── adapters/assistant-clients/
 ```
 
-Les sources historiques du core restent dans `src/`; `core/pom.xml` les référence sans déplacement massif. Les dépendances/BOM/plugins sont gouvernés depuis le parent.
+Les dépendances, BOM et plugins sont gouvernés depuis le parent. Jackson est aligné par dependency management cohérent.
 
 ## Composition applicative
 
@@ -50,49 +56,66 @@ MCP ───────┘        │
                     └─ FederatedContextService
 ```
 
-La CLI ne reconstruit plus manuellement SQLite, Lucene, providers et ranking.
-
-## Indexation
+## Indexation et autorité
 
 ```text
 ProjectScanner
-  │  limite taille avant hash/lecture
+  │  ProjectPathGuard + SafeFileIO + limites
   ↓
-analyses embarquées Java/Markdown
+analyses embarquées
   ↓
-SQLite canonique
-  │  génération monotone V002
-  ├─ import SCIP opportuniste
+SQLite canonique + génération/fingerprint
+  │
+  ├─ SCIP opportuniste avec limites fichier/message
   ├─ JDT LS opt-in sous timeout
-  └─ MINOS explicite via payload
+  └─ MINOS explicite
   ↓
 Lucene lexical dérivé
   └─ Lucene sémantique dérivé si opt-in
 ```
 
-Un verrou single-flight empêche deux indexations actives du même projet dans le même processus. Un état persistant non-`READY`, y compris `INDEXING` après crash, impose un rebuild complet lors de la reprise.
+Une mutation par projet est protégée par mutex JVM + `FileLock` OS. Le snapshot canonique est revalidé avant passage à `READY`. Un état persistant non-READY impose un rebuild complet à la reprise.
 
-## Recherche
+`index_generation` est un signal de cache et ne progresse pas pour un no-op effectif.
 
-Pipeline mono-projet :
+## Provenance des index dérivés
+
+- changement SOURCE/TEST ⇒ invalidation des snapshots externes persistés concernés ;
+- index sémantique ⇒ manifeste avec fingerprint canonique, provider, modèle, dimensions, profil de préparation et version de schéma ;
+- provenance absente/incompatible ⇒ rebuild ;
+- recherche sémantique incompatible refusée avant embedding de requête.
+
+Voir [`index-provenance.md`](index-provenance.md).
+
+## Frontière filesystem
+
+`ProjectPathGuard` et `SafeFileIO` imposent :
+
+- racine canonique ;
+- refus des symlinks pour les lectures sensibles ;
+- `NOFOLLOW_LINKS` sur le composant final ;
+- revalidation de taille avant consommation.
+
+La garantie portable n'est pas un sandbox absolu contre un acteur local hostile modifiant ancêtres/hard-links. Les filesystems réseau ne sont pas déclarés supportés pour la garantie `FileLock` sans qualification dédiée.
+
+## Recherche et graphe
 
 ```text
 LuceneFileSearchStrategy
-SymbolSearchStrategy (pool SQLite borné)
+SymbolSearchStrategy (SQLite borné)
+SemanticSearchStrategy (opt-in + provenance guard)
        ↓
 CandidateMerger
        ↓
-GraphCandidateEnricher (graphe en cache par génération)
+GraphCandidateEnricher (projections/voisinages bornés)
 GitRecencyCandidateEnricher
        ↓
-ContextRanker
+ContextRanker / SemanticHybridContextRanker
        ↓
-top-K
+top-K borné
 ```
 
-Le mode sémantique ajoute `SemanticSearchStrategy` et `SemanticHybridContextRanker`. Les embeddings sont batchables ; Ollama utilise `/api/embed` en lots.
-
-Recherche fédérée : chaque projet READY est recherché séparément, avec sur-récupération locale bornée avant tri global et diversification `(projectId,path)`.
+La recherche fédérée applique une sur-récupération locale contrôlée avant tri/diversification globale.
 
 ## Contexte
 
@@ -102,41 +125,40 @@ Le contexte fédéré :
 
 - reçoit une portée explicite ;
 - partage un budget global ;
-- construit d'abord chaque contexte dans son projet ;
-- entrelace les items round-robin ;
-- déduplique les contenus identiques ;
-- conserve `ProjectDescriptor` comme provenance ;
-- expose allocation, sélection, starvation et déduplication dans les metadata.
-
-## Skills
-
-`SkillDiscoveryService` agrège des `SkillSourceProvider` indépendants. Phase 6 compose séparément :
-
-- `LocalAgentSkillsProvider` ;
-- `AiSkillsRegistryProvider`.
-
-Aucun provider n'instancie un autre provider.
+- utilise fair floor, déduplication et refill ;
+- conserve la provenance projet ;
+- applique une borne au travail préparatoire en plus du budget final.
 
 ## Surfaces
 
-CLI : mono-projet + `search-federated` + `context-federated`.
+- CLI : mono-projet + recherche/contexte fédérés ;
+- REST : API `/api/v1/`, health/readiness, métriques ;
+- MCP STDIO : tools mono-projet et fédérés ;
+- assistant-clients : intégrations Copilot, Claude, Codex et client MCP générique.
 
-REST : ressources projet/index/search/context et `/api/v1/federated/search|context`, health/readiness et métriques Micrometer.
+## Sécurité REST
 
-MCP STDIO : tools mono-projet + `search_across_projects` + `build_context_across_projects` + `explain_context_across_projects`.
+Loopback reste la configuration sûre par défaut. Hors loopback, le démarrage exige :
 
-## Opérabilité
+- `NEXUS_REST_API_TOKEN` robuste — minimum 32 octets et entropie estimée ≥ 96 bits ;
+- `NEXUS_REST_ALLOWED_PROJECT_ROOTS` non vide ;
+- `NEXUS_REST_EXPOSURE_MODE=reverse-proxy-https|direct-https` ;
+- `loopback-forward` uniquement avec `NEXUS_RUNTIME=docker` et publication hôte sur loopback.
 
-- `NEXUS_MAX_FILE_SIZE_BYTES` : 8 MiB par défaut ;
-- `NEXUS_CODE_INTELLIGENCE_TIMEOUT_SECONDS` : 180 s par défaut ;
-- `NEXUS_SEMANTIC_PROVIDER=ollama` : activation explicite du sémantique ;
-- readiness : compte les projets par état ;
-- métriques : durée opérations et providers, sans contenu privé comme label.
+## Distribution et supply-chain
 
-## Distribution
+NEXUS 0.2.0 fournit : Maven Wrapper, CLI, ZIP autonome, checksums, SBOM CycloneDX, notices tierces, Windows ZIP/EXE autonome et runtime Docker.
 
-Version 0.2.0 : Maven Wrapper, fat JAR CLI, ZIP autonome, SHA-256 et SBOM CycloneDX. Voir `docs/developer/release-and-recovery.md`.
+La baseline CI comprend : NEXUS CI, Windows Installer, Scale Benchmark, CodeQL, OSV delta + SBOM reactor agrégé, Docker Distribution avec Trivy/SBOM et attestations lors de la publication `main`.
+
+## Qualification intégrée
+
+PR #49 : head exact `4f04c1ad3ff5b41aa9d1892ade57ad62b90a43f9` — NEXUS CI, Scale Benchmark, Windows Installer, Docker Distribution, CodeQL et OSV-Scanner PASS ; merge `c1ff9ef03ef33097c0d51154e02c30109b0a46f1`.
+
+PR #61 : head exact `ba91be044a600d2396e0939fc154848dc47f6310` — NEXUS CI, CodeQL et OSV-Scanner PASS ; merge `660ca9f07a23950d2a5284605531524372331bc5`.
+
+Aucun workflow/configuration/status SonarCloud actif n'est défini dans la baseline courante.
 
 ## Choix volontairement non adoptés
 
-Sans benchmark justifiant le coût : pas de Zoekt/OpenGrok/OpenSearch, index distribué, vector DB, cache Git persistant ni lifecycle Lucene partagé plus complexe.
+Sans benchmark ou incident justifiant le coût : pas de Zoekt/OpenGrok/OpenSearch, index distribué, vector DB, FTS supplémentaire, cache Git persistant, lifecycle Lucene partagé plus complexe ni isolation processus systématique des providers externes.
