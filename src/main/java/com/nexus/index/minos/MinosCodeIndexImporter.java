@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexus.index.CodeIntelligenceSnapshot;
 import com.nexus.index.CodeSymbol;
+import com.nexus.index.ExternalSymbolIdentity;
 import com.nexus.index.IndexedRelation;
 import com.nexus.index.IndexedSymbol;
 import com.nexus.index.RelationKind;
@@ -74,17 +75,13 @@ public final class MinosCodeIndexImporter {
             throw new IOException("MINOS export belongs to another project root: " + exportedRoot);
         }
 
-        Map<String, IndexedSymbol> symbols = new LinkedHashMap<>();
+        Map<ExternalSymbolIdentity, IndexedSymbol> symbols = new LinkedHashMap<>();
         for (JsonNode symbolNode : requiredArray(document, "symbols")) {
             IndexedSymbol symbol = mapSymbol(safeProjectFiles, symbolNode);
             if (symbol == null) {
                 continue;
             }
-            String key = symbol.relativePath() + '\u0000'
-                    + symbol.symbol().kind() + '\u0000'
-                    + symbol.symbol().name() + '\u0000'
-                    + symbol.symbol().startLine();
-            symbols.putIfAbsent(key, symbol);
+            symbols.putIfAbsent(ExternalSymbolIdentity.of(symbol), symbol);
         }
 
         Map<String, IndexedRelation> relations = new LinkedHashMap<>();
