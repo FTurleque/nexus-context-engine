@@ -36,8 +36,18 @@ class MinosCodeIndexImporterTest {
     void mapsVersionedMinosFactsConservatively(@TempDir Path temp) throws Exception {
         Path project = Files.createDirectories(temp.resolve("project"));
         Path source = Files.createDirectories(project.resolve("src"));
-        Files.writeString(source.resolve("GreetingPort.ts"), "export interface GreetingPort {}\n");
-        Files.writeString(source.resolve("Greeter.ts"), "export class Greeter {}\n");
+        Files.writeString(source.resolve("GreetingPort.ts"), """
+                export interface GreetingPort {
+                    greet(): string;
+                }
+                """);
+        Files.writeString(source.resolve("Greeter.ts"), """
+                export class Greeter implements GreetingPort {
+                    greet(): string {
+                        return "hello";
+                    }
+                }
+                """);
         Files.writeString(source.resolve("Generic.ts"), "export type Generic = string;\n");
         ObjectMapper mapper = new ObjectMapper();
         String payload = payload(mapper, project, false);
@@ -61,7 +71,10 @@ class MinosCodeIndexImporterTest {
     void preservesStructurallyDistinctSymbolsWithSameKindNameAndStartLine(@TempDir Path temp) throws Exception {
         Path project = Files.createDirectories(temp.resolve("project"));
         Path source = Files.createDirectories(project.resolve("src"));
-        Files.writeString(source.resolve("Overloads.ts"), "export function run(value?: string) {}\n");
+        Files.writeString(source.resolve("Overloads.ts"), """
+                export function run(): void {}
+                export function run(value: string): void {}
+                """);
         ObjectMapper mapper = new ObjectMapper();
         ObjectNode document = baseDocument(mapper, project);
         ArrayNode symbols = document.withArray("symbols");
@@ -121,8 +134,18 @@ class MinosCodeIndexImporterTest {
     void ignoresUnsafeUnknownAndUnsupportedPaths(@TempDir Path temp) throws Exception {
         Path project = Files.createDirectories(temp.resolve("project"));
         Path source = Files.createDirectories(project.resolve("src"));
-        Files.writeString(source.resolve("GreetingPort.ts"), "export interface GreetingPort {}\n");
-        Files.writeString(source.resolve("Greeter.ts"), "export class Greeter {}\n");
+        Files.writeString(source.resolve("GreetingPort.ts"), """
+                export interface GreetingPort {
+                    greet(): string;
+                }
+                """);
+        Files.writeString(source.resolve("Greeter.ts"), """
+                export class Greeter implements GreetingPort {
+                    greet(): string {
+                        return "hello";
+                    }
+                }
+                """);
         ObjectMapper mapper = new ObjectMapper();
 
         CodeIntelligenceSnapshot snapshot = new MinosCodeIndexImporter()

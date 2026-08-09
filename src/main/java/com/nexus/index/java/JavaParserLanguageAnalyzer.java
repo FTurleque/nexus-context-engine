@@ -55,38 +55,38 @@ public final class JavaParserLanguageAnalyzer implements LanguageAnalyzer {
         List<CodeSymbol> symbols = new ArrayList<>();
         for (Node node : unit.findAll(Node.class)) {
             if (node instanceof TypeDeclaration<?> type) {
-                symbols.add(new CodeSymbol(
+                type.getRange().ifPresent(range -> symbols.add(new CodeSymbol(
                         symbolKind(type),
                         type.getNameAsString(),
                         qualifiedOwner(packageName, type),
                         type.getNameAsString(),
-                        startLine(type),
-                        endLine(type)));
+                        range.begin.line,
+                        range.end.line)));
             }
         }
 
         for (MethodDeclaration method : unit.findAll(MethodDeclaration.class)) {
             String qualifiedName = qualifiedOwner(packageName, method)
                     + "#" + method.getSignature().asString();
-            symbols.add(new CodeSymbol(
+            method.getRange().ifPresent(range -> symbols.add(new CodeSymbol(
                     SymbolKind.METHOD,
                     method.getNameAsString(),
                     qualifiedName,
                     method.getSignature().asString(),
-                    startLine(method),
-                    endLine(method)));
+                    range.begin.line,
+                    range.end.line)));
         }
 
         for (ConstructorDeclaration constructor : unit.findAll(ConstructorDeclaration.class)) {
             String qualifiedName = qualifiedOwner(packageName, constructor)
                     + "#" + constructor.getSignature().asString();
-            symbols.add(new CodeSymbol(
+            constructor.getRange().ifPresent(range -> symbols.add(new CodeSymbol(
                     SymbolKind.CONSTRUCTOR,
                     constructor.getNameAsString(),
                     qualifiedName,
                     constructor.getSignature().asString(),
-                    startLine(constructor),
-                    endLine(constructor)));
+                    range.begin.line,
+                    range.end.line)));
         }
 
         String relationSource = projectRoot.relativize(file).toString().replace('\\', '/');
@@ -131,13 +131,5 @@ public final class JavaParserLanguageAnalyzer implements LanguageAnalyzer {
 
     private static String qualify(String packageName, String name) {
         return packageName.isBlank() ? name : packageName + "." + name;
-    }
-
-    private static int startLine(Node node) {
-        return node.getRange().map(range -> range.begin.line).orElse(-1);
-    }
-
-    private static int endLine(Node node) {
-        return node.getRange().map(range -> range.end.line).orElse(-1);
     }
 }

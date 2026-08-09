@@ -32,5 +32,21 @@ public record CodeSymbol(
         if (sourceProvider.isBlank()) {
             throw new IllegalArgumentException("sourceProvider ne doit pas être vide");
         }
+        if (startLine < 1) {
+            throw new IllegalArgumentException("startLine doit être supérieur ou égal à 1");
+        }
+        if (endLine < startLine) {
+            throw new IllegalArgumentException("endLine doit être supérieur ou égal à startLine");
+        }
+    }
+
+    public static boolean isStructurallyValidRange(int startLine, int endLine) {
+        return startLine >= 1 && endLine >= startLine;
+    }
+
+    public static boolean isWithinLineCount(int startLine, int endLine, int lineCount) {
+        return lineCount >= 0
+                && isStructurallyValidRange(startLine, endLine)
+                && endLine <= lineCount;
     }
 }

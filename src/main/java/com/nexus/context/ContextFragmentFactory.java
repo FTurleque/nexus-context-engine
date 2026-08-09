@@ -26,6 +26,7 @@ import java.util.Set;
  */
 public final class ContextFragmentFactory {
 
+    private static final System.Logger LOGGER = System.getLogger(ContextFragmentFactory.class.getName());
     private static final int SYMBOL_CONTEXT_LINES = 2;
     private static final int QUERY_WINDOW_LINES = 5;
     private static final int MAX_QUERY_WINDOWS = 4;
@@ -59,14 +60,19 @@ public final class ContextFragmentFactory {
         for (Map.Entry<Path, List<RankedCandidate>> entry : byPath.entrySet()) {
             Path absolutePath = entry.getKey();
             Path relativePath = project.rootPath().relativize(absolutePath);
-            List<String> lines = List.of(SafeFileIO.readStringNoFollow(absolutePath).split("\\r?\\n", -1));
+            String content = SafeFileIO.readStringNoFollow(absolutePath);
+            List<String> lines = List.of(content.split("\\r?\\n", -1));
+            int sourceLineCount = countSourceLines(content);
             List<RankedCandidate> symbolCandidates = entry.getValue().stream()
                     .filter(candidate -> candidate.candidate().symbol() != null)
                     .toList();
 
             if (!symbolCandidates.isEmpty()) {
                 for (RankedCandidate candidate : symbolCandidates) {
-                    fragments.add(symbolFragment(relativePath, lines, candidate));
+                    ContextFragment fragment = symbolFragment(relativePath, lines, sourceLineCount, candidate);
+                    if (fragment != null) {
+                        fragments.add(fragment);
+                    }
                 }
                 continue;
             }
@@ -80,10 +86,21 @@ public final class ContextFragmentFactory {
     private static ContextFragment symbolFragment(
             Path relativePath,
             List<String> lines,
+            int sourceLineCount,
             RankedCandidate candidate) {
         CodeSymbol symbol = candidate.candidate().symbol();
+        if (!CodeSymbol.isWithinLineCount(symbol.startLine(), symbol.endLine(), sourceLineCount)) {
+            LOGGER.log(
+                    System.Logger.Level.WARNING,
+                    "Skipping invalid persisted symbol range {0}-{1} for {2} ({3} source line(s))",
+                    symbol.startLine(),
+                    symbol.endLine(),
+                    relativePath,
+                    sourceLineCount);
+            return null;
+        }
         int start = Math.max(1, symbol.startLine() - SYMBOL_CONTEXT_LINES);
-        int end = Math.min(lines.size(), symbol.endLine() + SYMBOL_CONTEXT_LINES);
+        int end = Math.min(sourceLineCount, symbol.endLine() + SYMBOL_CONTEXT_LINES);
         return new ContextFragment(
                 candidate.candidate().type(),
                 relativePath,
@@ -187,6 +204,11 @@ public final class ContextFragmentFactory {
             }
         }
         return List.copyOf(merged);
+    }
+
+    private static int countSourceLines(String content) {
+        long lineCount = content.lines().count();
+        return lineCount > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) lineCount;
     }
 
     private static String joinLines(List<String> lines, int startLine, int endLine) {
