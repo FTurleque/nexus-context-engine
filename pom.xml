@@ -38,7 +38,7 @@
         <jgit.version>7.7.0.202606012155-r</jgit.version>
         <jackson.version>2.22.1</jackson.version>
         <micrometer.version>1.16.6</micrometer.version>
-        <snakeyaml-engine.version>3.0.1</snakeyaml-engine.version>
+        <snakeyaml-engine.version>3.1</snakeyaml-engine.version>
         <junit.version>6.0.2</junit.version>
         <mcp.sdk.version>2.0.0</mcp.sdk.version>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
