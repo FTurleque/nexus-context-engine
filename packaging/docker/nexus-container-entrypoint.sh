@@ -25,6 +25,11 @@ case "$MODE" in
   rest)
     REST_HOST="${NEXUS_REST_HOST:-0.0.0.0}"
     REST_PORT="${NEXUS_REST_PORT:-8080}"
+    REST_EXPOSURE_MODE="${NEXUS_REST_EXPOSURE_MODE:-loopback-forward}"
+    if [ "$REST_EXPOSURE_MODE" = "loopback-forward" ] && [ -z "${NEXUS_DOCKER_HOST_FORWARD_ADDRESS:-}" ]; then
+      echo "NEXUS REST: loopback-forward requires explicit NEXUS_DOCKER_HOST_FORWARD_ADDRESS; the container cannot infer the Docker daemon host publish address." >&2
+      exit 64
+    fi
     exec "$JAVA_BIN" \
       "-Dquarkus.http.host=${REST_HOST}" \
       "-Dquarkus.http.port=${REST_PORT}" \
