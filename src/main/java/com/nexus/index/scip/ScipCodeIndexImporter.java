@@ -119,16 +119,21 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
             ScipDocument document,
             List<IndexedSymbol> symbols,
             List<IndexedRelation> relations,
-            Set<String> relationKeys) {
+            Set<String> relationKeys) throws IOException {
         String relativePath = normalizeRelativePath(projectRoot, document.relativePath());
         if (relativePath == null) {
             return;
         }
+        int sourceLineCount = canonicalLineCount(projectRoot, relativePath);
 
         for (ScipSymbolInformation symbolInformation : document.symbols()) {
             ScipOccurrence definition = findDefinition(document.occurrences(), symbolInformation.symbol());
             SymbolKind symbolKind = mapKind(symbolInformation.kind());
             if (definition != null && definition.range() != null && symbolKind != null) {
+                SourceRange validatedRange = validateDefinitionRange(
+                        relativePath,
+                        definition.range(),
+                        sourceLineCount);
                 String name = symbolName(symbolInformation);
                 symbols.add(new IndexedSymbol(
                         relativePath,
@@ -137,8 +142,8 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
                                 name,
                                 symbolInformation.symbol(),
                                 symbolInformation.signature().isBlank() ? name : symbolInformation.signature(),
-                                definition.range().startLine() + 1,
-                                definition.range().endLine() + 1,
+                                validatedRange.startLine() + 1,
+                                validatedRange.endLine() + 1,
                                 SOURCE_PROVIDER)));
             }
 
@@ -197,6 +202,41 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
                     relations,
                     relationKeys);
         }
+    }
+
+    private static SourceRange validateDefinitionRange(
+            String relativePath,
+            SourceRange range,
+            int sourceLineCount) throws IOException {
+        if (range.startLine() < 0 || range.endLine() < range.startLine()) {
+            throw new IOException("SCIP contains an invalid symbol line range for '"
+                    + relativePath + "': " + range.startLine() + "-" + range.endLine());
+        }
+        if (range.startLine() == Integer.MAX_VALUE || range.endLine() == Integer.MAX_VALUE) {
+            throw new IOException("SCIP symbol line range overflows one-based coordinates for '"
+                    + relativePath + "'");
+        }
+        int startLine = range.startLine() + 1;
+        int endLine = range.endLine() + 1;
+        if (sourceLineCount >= 0 && !CodeSymbol.isWithinLineCount(startLine, endLine, sourceLineCount)) {
+            throw new IOException("SCIP symbol line range exceeds canonical file '"
+                    + relativePath + "': " + startLine + "-" + endLine
+                    + " for " + sourceLineCount + " line(s)");
+        }
+        return range;
+    }
+
+    private static int canonicalLineCount(Path projectRoot, String relativePath) throws IOException {
+        Path source = projectRoot.resolve(relativePath).normalize();
+        if (!source.startsWith(projectRoot) || !Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS)) {
+            return -1;
+        }
+        long lineCount = SafeFileIO.readStringNoFollow(source).lines().count();
+        if (lineCount > Integer.MAX_VALUE) {
+            throw new IOException("Source file contains too many lines to validate SCIP symbol ranges: "
+                    + relativePath);
+        }
+        return (int) lineCount;
     }
 
     private static void addRelation(
@@ -399,7 +439,7 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
     }
 
     private static SourceRange parseSingleLineRange(ProtoReader reader) throws IOException {
-        int line = 0;
+        int line = -1;
         while (reader.hasRemaining()) {
             int tag = reader.readTag();
             int fieldNumber = tag >>> 3;
@@ -414,8 +454,8 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
     }
 
     private static SourceRange parseMultiLineRange(ProtoReader reader) throws IOException {
-        int startLine = 0;
-        int endLine = 0;
+        int startLine = -1;
+        int endLine = -1;
         while (reader.hasRemaining()) {
             int tag = reader.readTag();
             int fieldNumber = tag >>> 3;
