@@ -18,10 +18,26 @@ if ($null -eq $docker) { throw 'Docker CLI is required for the Docker smoke test
 $prefix = "nexus-smoke-$PID"
 $restName = "$prefix-rest"
 $mcpName = "$prefix-mcp"
-$restToken = "nexus-docker-smoke-$PID"
+$missingForwardName = "$prefix-rest-missing-forward"
+$remoteForwardName = "$prefix-rest-remote-forward"
+$restToken = '6df1462d571a6925e3bc3934ee10c6c55a965116fb47e2bc4db77ac7a5d69d34'
 
 function Remove-Container([string]$Name) {
     & $docker.Source rm -f $Name *> $null
+}
+
+function Assert-RestContainerRejected([string]$Name, [string[]]$DockerArgs, [string]$ExpectedDiagnostic) {
+    & $docker.Source run -d --name $Name @DockerArgs $Image rest | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Unable to create negative REST container $Name." }
+    & $docker.Source wait $Name *> $null
+    $exitCode = [int](& $docker.Source inspect -f '{{.State.ExitCode}}' $Name | Select-Object -First 1)
+    $logs = (& $docker.Source logs $Name 2>&1 | Out-String)
+    if ($exitCode -eq 0) {
+        throw "Negative REST container $Name unexpectedly exited successfully. Logs: $logs"
+    }
+    if ($logs.IndexOf($ExpectedDiagnostic, [StringComparison]::Ordinal) -lt 0) {
+        throw "Negative REST container $Name did not report '$ExpectedDiagnostic'. Logs: $logs"
+    }
 }
 
 try {
@@ -41,7 +57,10 @@ try {
     Remove-Container $mcpName
 
     Write-Host "Docker REST smoke on host port $HostPort..." -ForegroundColor Cyan
-    & $docker.Source run -d --name $restName -e "NEXUS_REST_API_TOKEN=$restToken" -p "127.0.0.1:${HostPort}:8080" $Image rest | Out-Null
+    & $docker.Source run -d --name $restName `
+        -e "NEXUS_REST_API_TOKEN=$restToken" `
+        -e 'NEXUS_DOCKER_HOST_FORWARD_ADDRESS=127.0.0.1' `
+        -p "127.0.0.1:${HostPort}:8080" $Image rest | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Unable to start the REST container.' }
 
     $healthy = $false
@@ -60,9 +79,25 @@ try {
         throw "Docker REST health smoke failed: $logs"
     }
 
-    Write-Host 'NEXUS Docker CLI/MCP/REST smoke PASS' -ForegroundColor Green
+    Write-Host 'Docker REST missing-forward negative smoke...' -ForegroundColor Cyan
+    Assert-RestContainerRejected `
+        -Name $missingForwardName `
+        -DockerArgs @('-e', "NEXUS_REST_API_TOKEN=$restToken") `
+        -ExpectedDiagnostic 'NEXUS_DOCKER_HOST_FORWARD_ADDRESS'
+
+    Write-Host 'Docker REST remote-forward negative smoke...' -ForegroundColor Cyan
+    Assert-RestContainerRejected `
+        -Name $remoteForwardName `
+        -DockerArgs @(
+            '-e', "NEXUS_REST_API_TOKEN=$restToken",
+            '-e', 'NEXUS_DOCKER_HOST_FORWARD_ADDRESS=0.0.0.0') `
+        -ExpectedDiagnostic 'NEXUS_DOCKER_HOST_FORWARD_ADDRESS'
+
+    Write-Host 'NEXUS Docker CLI/MCP/REST positive and negative smokes PASS' -ForegroundColor Green
 }
 finally {
     Remove-Container $mcpName
     Remove-Container $restName
+    Remove-Container $missingForwardName
+    Remove-Container $remoteForwardName
 }
