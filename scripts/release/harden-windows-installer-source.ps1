@@ -35,11 +35,10 @@ end;
 function DotEnvQuoted(Value: String): String;
 begin
   Result := Value;
-  { Compose interpolates $ in .env values; $$ preserves a literal dollar. }
-  StringChangeEx(Result, '$', '$$', True);
-  StringChangeEx(Result, '\', '\\', True);
-  StringChangeEx(Result, '"', '\"', True);
-  Result := '"' + Result + '"';
+  { Compose treats single-quoted .env values literally. Escape only an embedded
+    single quote so dollar signs, backslashes and double quotes survive unchanged. }
+  StringChangeEx(Result, '''', '\''', True);
+  Result := '''' + Result + '''';
 end;
 
 function ContainsUnsafeConfigChars(Value: String): Boolean;
