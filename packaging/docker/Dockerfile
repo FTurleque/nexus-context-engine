@@ -34,6 +34,9 @@ COPY --chown=10001:10001 packaging/docker/nexus-container-entrypoint.sh /usr/loc
 RUN sed -i 's/\r$//' /usr/local/bin/nexus-entrypoint \
     && chmod 0755 /usr/local/bin/nexus-entrypoint
 
+# NEXUS_DOCKER_HOST_FORWARD_ADDRESS intentionally has no image default. A container cannot infer
+# the host address chosen by the Docker daemon for -p/--publish. Official Compose injects the
+# declaration from NEXUS_DOCKER_BIND_ADDRESS; manual REST runs must declare it explicitly.
 ENV NEXUS_HOME=/data/nexus \
     NEXUS_MODE=rest \
     NEXUS_RUNTIME=docker \
