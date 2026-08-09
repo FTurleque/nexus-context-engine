@@ -104,6 +104,19 @@ Write-Host '[contract] client-only docker.exe must not suppress Docker Desktop b
 Assert-TextContains -Text $installerSource -Needle 'docker info >nul 2>nul' -Description 'real Docker engine reachability probe'
 Assert-TextContains -Text $installerSource -Needle 'Result := DockerEngineReady() or (DockerDesktopExecutable() <> '''');' -Description 'Docker Desktop or working engine prerequisite semantics'
 
+Write-Host '[contract] recommended native install keeps REST optional; every portable launcher remains hardened'
+Assert-TextContains -Text $installerSource -Needle 'NativeOptionsPage.Values[2] := False;' -Description 'recommended native profile keeps REST optional'
+Assert-TextContains -Text $installerSource -Needle 'Source: "{#NexusSourceDir}\nexus-rest.cmd"; DestDir: "{app}"; Flags: ignoreversion; Check: InstallNativeRest' -Description 'optional REST launcher remains installer-gated'
+$distribution = Join-Path $repo "target\dist\nexus-context-engine-$Version-windows-x64"
+foreach ($launcherName in @('nexus.cmd','nexus-mcp.cmd','nexus-rest.cmd','nexus-assistant-clients.cmd','nexus-docker.cmd','nexus-docker-mcp.cmd')) {
+    $launcherPath = Join-Path $distribution $launcherName
+    if (-not (Test-Path -LiteralPath $launcherPath -PathType Leaf)) {
+        throw "Built NEXUS distribution is missing $launcherName"
+    }
+    $launcherSource = Get-Content -Raw -LiteralPath $launcherPath
+    Assert-TextContains -Text $launcherSource -Needle 'setlocal DisableDelayedExpansion' -Description "$launcherName disables delayed expansion"
+}
+
 $root = Join-Path $repo 'target\installer-smoke'
 $install = Join-Path $root 'install'
 $data = Join-Path $root 'nexus-home'
@@ -125,7 +138,6 @@ if ($process.ExitCode -ne 0) { throw "Setup smoke install failed with exit code 
 foreach ($required in @(
     'nexus.cmd',
     'nexus-mcp.cmd',
-    'nexus-rest.cmd',
     'nexus-assistant-clients.cmd',
     'app\nexus.exe',
     'app\runtime\bin\java.exe',
