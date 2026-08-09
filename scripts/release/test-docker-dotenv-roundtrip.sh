@@ -17,17 +17,17 @@ mkdir -p "$root"
 trap 'rm -rf "$root"' EXIT
 
 # Keep this transformation intentionally identical to DotEnvQuoted in
-# harden-windows-installer-source.ps1. The source contract checks below make a
-# drift in the generated Inno helper fail this smoke rather than silently diverge.
+# harden-windows-installer-source.ps1. Compose documents single-quoted .env
+# values as literal; only an embedded single quote needs escaping.
 python3 - "$root" <<'PY'
 import json
 from pathlib import Path
 import sys
 
 root = Path(sys.argv[1])
-value = 'C:\\NEXUS path\\$HOME\\#literal-hash\\backslash "quoted" and spaces'
-escaped = value.replace('$', '$$').replace('\\', '\\\\').replace('"', '\\"')
-(root / '.env').write_text(f'NEXUS_TEST_VALUE="{escaped}"\n', encoding='utf-8')
+value = 'C:\\NEXUS path\\$HOME\\#literal-hash\\backslash "quoted" and it\'s literal'
+escaped = value.replace("'", "\\'")
+(root / '.env').write_text(f"NEXUS_TEST_VALUE='{escaped}'\n", encoding='utf-8')
 (root / 'compose.yml').write_text(
     'services:\n'
     '  probe:\n'
@@ -44,13 +44,15 @@ import sys
 
 source = Path(sys.argv[1]).read_text(encoding='utf-8-sig')
 required = (
-    "StringChangeEx(Result, '$', '$$', True);",
-    r"StringChangeEx(Result, '\', '\\', True);",
-    r'''StringChangeEx(Result, '"', '\"', True);''',
+    "function DotEnvQuoted(Value: String): String;",
+    "StringChangeEx(Result, '''',",
+    "Result := '''' + Result + '''';",
 )
 missing = [needle for needle in required if needle not in source]
 if missing:
     raise SystemExit('DotEnvQuoted source contract missing: ' + ', '.join(repr(item) for item in missing))
+if "StringChangeEx(Result, '$', '$$', True);" in source:
+    raise SystemExit('DotEnvQuoted must not double dollar signs inside single-quoted .env values')
 PY
 
 docker compose --env-file "$root/.env" -f "$root/compose.yml" config --format json > "$root/actual.json"
