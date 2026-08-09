@@ -58,6 +58,35 @@ class MinosCodeIndexImporterTest {
     }
 
     @Test
+    void preservesStructurallyDistinctSymbolsWithSameKindNameAndStartLine(@TempDir Path temp) throws Exception {
+        Path project = Files.createDirectories(temp.resolve("project"));
+        Path source = Files.createDirectories(project.resolve("src"));
+        Files.writeString(source.resolve("Overloads.ts"), "export function run(value?: string) {}\n");
+        ObjectMapper mapper = new ObjectMapper();
+        ObjectNode document = baseDocument(mapper, project);
+        ArrayNode symbols = document.withArray("symbols");
+
+        ObjectNode noArg = symbols.addObject();
+        symbol(noArg, "run-no-arg", "src/Overloads.ts", "METHOD", "run", "demo.run", 1, 1);
+        noArg.put("signature", "run()");
+
+        ObjectNode withArg = symbols.addObject();
+        symbol(withArg, "run-with-arg", "src/Overloads.ts", "METHOD", "run", "demo.run", 1, 2);
+        withArg.put("signature", "run(value: string)");
+
+        symbols.add(noArg.deepCopy());
+
+        CodeIntelligenceSnapshot snapshot = new MinosCodeIndexImporter()
+                .importPayload(project, mapper.writeValueAsString(document));
+
+        assertEquals(2, snapshot.symbols().size(),
+                "les deux faits structurellement distincts survivent et le doublon strict est éliminé");
+        assertTrue(snapshot.symbols().stream().anyMatch(indexed -> "run()".equals(indexed.symbol().signature())));
+        assertTrue(snapshot.symbols().stream().anyMatch(indexed ->
+                "run(value: string)".equals(indexed.symbol().signature())));
+    }
+
+    @Test
     void rejectsForeignContractVersionAndProjectRoot(@TempDir Path temp) throws Exception {
         Path project = Files.createDirectories(temp.resolve("project"));
         Path other = Files.createDirectories(temp.resolve("other"));
