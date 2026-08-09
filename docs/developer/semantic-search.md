@@ -51,6 +51,22 @@ résultats explicables
 
 `EmbeddingProvider.embedAll` possède un fallback séquentiel pour les providers existants. `OllamaEmbeddingProvider` l'implémente réellement en envoyant plusieurs textes dans une requête `/api/embed`.
 
+### Borne de réponse Ollama
+
+`OllamaEmbeddingProvider` ne matérialise plus directement la réponse HTTP avec `BodyHandlers.ofString()`. Le body est reçu comme `InputStream`, lu avec une limite stricte, puis seulement converti en UTF-8 et parsé en JSON.
+
+Le plafond par défaut est **1 MiB (1 048 576 octets)**. Le lot par défaut contient au plus 32 entrées et un embedding est borné à 1024 dimensions, soit 32 768 floats. En comptant environ 16 octets par valeur JSON (valeur, signe/exposant éventuel et séparateur), cette forme représente environ 512 KiB ; 1 MiB fournit donc une marge supérieure à 2× pour les crochets et métadonnées Ollama sans rendre la protection symbolique.
+
+La lecture consomme au maximum `limite + 1` octets :
+
+- exactement à la limite : réponse acceptée ;
+- un octet au-dessus : `IOException` explicite avec provider, opération `/api/embed`, endpoint et limite ;
+- réponse chunked ou sans `Content-Length` : même contrôle, car la borne porte sur les octets réellement lus ;
+- réponse HTTP non-2xx : body soumis à la même borne avant abréviation du message d'erreur ;
+- aucun méga-body n'est inclus dans l'exception d'overflow.
+
+Cette limite n'est pas exposée comme configuration opérationnelle : elle reste une politique interne cohérente avec les bornes de batching/dimensions, ce qui évite qu'une configuration arbitrairement élevée neutralise la protection.
+
 ## Baseline de décision
 
 Corpus hermétique historique : 236 fichiers, 946 symboles, 1 539 relations, 6 requêtes.
