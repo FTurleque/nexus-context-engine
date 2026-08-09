@@ -47,14 +47,37 @@ public class NexusRestExposureGuard {
                 .orElseThrow(() -> new IllegalStateException(
                         "Une écoute REST hors loopback exige "
                                 + NexusRestSecurity.EXPOSURE_MODE_ENVIRONMENT_VARIABLE
-                                + "=reverse-proxy-https|direct-https, ou loopback-forward dans le runtime Docker."));
-        boolean acceptedDockerForward = NexusRestSecurity.isDockerLoopbackForward(exposureMode);
-        if (!acceptedDockerForward && !NexusRestSecurity.isSecureNonLoopbackExposureMode(exposureMode)) {
+                                + "=reverse-proxy-https|direct-https, ou loopback-forward dans le runtime Docker "
+                                + "avec un forward hôte explicitement déclaré comme loopback."));
+
+        if (NexusRestSecurity.isLoopbackForwardMode(exposureMode)) {
+            validateDockerLoopbackForward();
+            return;
+        }
+        if (!NexusRestSecurity.isSecureNonLoopbackExposureMode(exposureMode)) {
             throw new IllegalStateException(
                     "Une écoute REST hors loopback refuse le mode " + exposureMode
                             + ". Utilisez reverse-proxy-https ou direct-https. "
-                            + "loopback-forward n'est admis que lorsque NEXUS_RUNTIME=docker ; "
-                            + "le port hôte Docker doit alors rester publié sur une adresse loopback.");
+                            + "loopback-forward est réservé à un forward Docker explicitement déclaré sur loopback.");
+        }
+    }
+
+    private static void validateDockerLoopbackForward() {
+        if (NexusRestSecurity.configuredRuntime().filter("docker"::equals).isEmpty()) {
+            throw new IllegalStateException(
+                    "NEXUS_REST_EXPOSURE_MODE=loopback-forward exige NEXUS_RUNTIME=docker");
+        }
+
+        String declaredForward = NexusRestSecurity.configuredDockerHostForwardAddress()
+                .orElseThrow(() -> new IllegalStateException(
+                        "NEXUS_REST_EXPOSURE_MODE=loopback-forward exige une déclaration explicite "
+                                + NexusRestSecurity.DOCKER_HOST_FORWARD_ADDRESS_ENVIRONMENT_VARIABLE
+                                + ". NEXUS ne peut pas introspecter l'adresse de publication choisie par le daemon Docker."));
+        if (!NexusRestSecurity.isLoopbackHost(declaredForward)) {
+            throw new IllegalStateException(
+                    NexusRestSecurity.DOCKER_HOST_FORWARD_ADDRESS_ENVIRONMENT_VARIABLE
+                            + " doit être une adresse loopback lorsque NEXUS_REST_EXPOSURE_MODE=loopback-forward; "
+                            + "une publication distante doit utiliser reverse-proxy-https ou direct-https");
         }
     }
 }
