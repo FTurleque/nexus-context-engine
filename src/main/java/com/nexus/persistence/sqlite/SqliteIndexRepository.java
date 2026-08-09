@@ -434,7 +434,7 @@ public final class SqliteIndexRepository implements IndexRepository {
                 }
                 deleteProviderData(connection, projectId, snapshot.sourceProvider());
                 insertExternalSymbols(connection, fileIds, snapshot.symbols());
-                insertExternalRelations(connection, projectId, fileIds, snapshot.relations());
+                insertExternalRelations(connection, fileIds, snapshot.relations());
                 bumpGeneration(connection, projectId);
                 connection.commit();
             } catch (SQLException exception) {
@@ -864,42 +864,22 @@ public final class SqliteIndexRepository implements IndexRepository {
 
     private static void insertExternalRelations(
             Connection connection,
-            UUID projectId,
             Map<String, Long> fileIds,
             List<IndexedRelation> relations) throws SQLException {
-        // Même sémantique provenance-aware que pour les symboles : une relation
-        // équivalente fournie par deux providers distincts est conservée en deux
-        // lignes, de sorte que la suppression d'un provider ne détruit pas la
-        // relation encore fournie par l'autre.
-        try (PreparedStatement exists = connection.prepareStatement("""
-                SELECT 1
-                FROM symbol_relations
-                WHERE project_id = ? AND kind = ? AND source_ref = ? AND target_ref = ?
-                  AND source_provider = ?
-                LIMIT 1
-                """)) {
-            for (IndexedRelation indexedRelation : relations) {
-                Long fileId = fileIds.get(indexedRelation.relativePath());
-                if (fileId == null || relationExists(exists, projectId, indexedRelation.relation())) {
-                    continue;
-                }
-                insertRelations(connection, projectId, fileId, List.of(indexedRelation.relation()));
+        // CodeIntelligenceSnapshot canonicalise les relations par ExternalRelationIdentity.
+        // Après suppression des anciennes lignes du provider, chaque élément conserve donc
+        // une provenance fichier distincte et la confiance canonique maximale de ce fait.
+        for (IndexedRelation indexedRelation : relations) {
+            Long fileId = fileIds.get(indexedRelation.relativePath());
+            if (fileId == null) {
+                continue;
             }
+            insertRelations(connection, indexedRelationProjectIdNotNeeded(), fileId, List.of(indexedRelation.relation()));
         }
     }
 
-    private static boolean relationExists(
-            PreparedStatement statement,
-            UUID projectId,
-            SymbolRelation relation) throws SQLException {
-        statement.setString(1, projectId.toString());
-        statement.setString(2, relation.kind().name());
-        statement.setString(3, relation.source());
-        statement.setString(4, relation.target());
-        statement.setString(5, relation.sourceProvider());
-        try (ResultSet resultSet = statement.executeQuery()) {
-            return resultSet.next();
-        }
+    private static UUID indexedRelationProjectIdNotNeeded() {
+        throw new UnsupportedOperationException("project id must be provided by caller");
     }
 
     private static void bumpGeneration(Connection connection, UUID projectId) throws SQLException {
