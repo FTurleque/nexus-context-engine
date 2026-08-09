@@ -24,6 +24,13 @@ import java.util.UUID;
  */
 public final class FederatedContextService {
 
+    /**
+     * Alias de compatibilité. La politique canonique est définie exclusivement
+     * par {@link FederatedScopePolicy#MAX_PROJECTS}.
+     */
+    @Deprecated(forRemoval = false)
+    public static final int MAX_FEDERATED_PROJECTS = FederatedScopePolicy.MAX_PROJECTS;
+
     static final int LOCAL_OVERFETCH_FACTOR = 3;
 
     private final ContextBuilder contextBuilder;
