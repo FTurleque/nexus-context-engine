@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexus.search.semantic.EmbeddingProvider;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -23,6 +25,16 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
     public static final String DEFAULT_MODEL = "qwen3-embedding:0.6b";
     public static final int DEFAULT_DIMENSIONS = 1024;
     public static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(60);
+    /**
+     * 32 entrées × 1024 dimensions représentent au plus 32 768 floats par lot.
+     * Un plafond de 1 MiB laisse plus de deux fois l'espace nécessaire à leur
+     * représentation JSON usuelle, plus les métadonnées Ollama, tout en bornant
+     * strictement la matérialisation d'une réponse anormale.
+     */
+    public static final int DEFAULT_MAX_RESPONSE_BYTES = 1024 * 1024;
+
+    private static final int RESPONSE_BUFFER_SIZE = 16 * 1024;
+    private static final int MAX_INTERNAL_RESPONSE_BYTES = 16 * 1024 * 1024;
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
@@ -30,6 +42,7 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
     private final String model;
     private final int dimensions;
     private final Duration timeout;
+    private final int maxResponseBytes;
 
     public OllamaEmbeddingProvider() {
         this(DEFAULT_BASE_URI, DEFAULT_MODEL, DEFAULT_DIMENSIONS, DEFAULT_TIMEOUT);
@@ -48,7 +61,8 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
                 baseUri,
                 model,
                 dimensions,
-                timeout);
+                timeout,
+                DEFAULT_MAX_RESPONSE_BYTES);
     }
 
     OllamaEmbeddingProvider(
@@ -58,6 +72,24 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
             String model,
             int dimensions,
             Duration timeout) {
+        this(
+                httpClient,
+                objectMapper,
+                baseUri,
+                model,
+                dimensions,
+                timeout,
+                DEFAULT_MAX_RESPONSE_BYTES);
+    }
+
+    OllamaEmbeddingProvider(
+            HttpClient httpClient,
+            ObjectMapper objectMapper,
+            URI baseUri,
+            String model,
+            int dimensions,
+            Duration timeout,
+            int maxResponseBytes) {
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
         Objects.requireNonNull(baseUri, "baseUri");
@@ -72,7 +104,12 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
         if (timeout.isZero() || timeout.isNegative()) {
             throw new IllegalArgumentException("timeout must be greater than zero");
         }
+        if (maxResponseBytes <= 0 || maxResponseBytes > MAX_INTERNAL_RESPONSE_BYTES) {
+            throw new IllegalArgumentException(
+                    "maxResponseBytes must be between 1 and " + MAX_INTERNAL_RESPONSE_BYTES);
+        }
         this.dimensions = dimensions;
+        this.maxResponseBytes = maxResponseBytes;
         String normalizedBase = baseUri.toString().replaceAll("/+$", "");
         this.embedEndpoint = URI.create(normalizedBase + "/api/embed");
     }
@@ -113,21 +150,27 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
                 .build();
 
-        HttpResponse<String> response;
+        HttpResponse<InputStream> response;
         try {
-            response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IOException("Appel Ollama interrompu", exception);
         }
 
+        byte[] responseBytes = readBoundedResponse(response.body(), maxResponseBytes, embedEndpoint);
+        String responseBody = new String(responseBytes, StandardCharsets.UTF_8);
+
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             throw new IOException(
                     "Ollama /api/embed a répondu HTTP " + response.statusCode()
-                            + " : " + abbreviate(response.body(), 500));
+                            + " : " + abbreviate(responseBody, 500));
         }
 
-        JsonNode root = objectMapper.readTree(response.body());
+        JsonNode root = objectMapper.readTree(responseBody);
+        if (root == null) {
+            throw new IOException("Réponse Ollama invalide : body JSON vide pour /api/embed");
+        }
         JsonNode embeddings = root.path("embeddings");
         if (!embeddings.isArray() || embeddings.size() != texts.size()) {
             throw new IOException(
@@ -139,6 +182,43 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
             vectors.add(parseVector(embeddings.get(vectorIndex), vectorIndex));
         }
         return List.copyOf(vectors);
+    }
+
+    static byte[] readBoundedResponse(InputStream body, int maxResponseBytes, URI endpoint) throws IOException {
+        Objects.requireNonNull(body, "body");
+        Objects.requireNonNull(endpoint, "endpoint");
+        if (maxResponseBytes <= 0) {
+            throw new IllegalArgumentException("maxResponseBytes must be greater than zero");
+        }
+
+        long remaining = (long) maxResponseBytes + 1L;
+        try (InputStream input = body;
+             ByteArrayOutputStream output = new ByteArrayOutputStream(
+                     Math.min(maxResponseBytes, RESPONSE_BUFFER_SIZE))) {
+            byte[] buffer = new byte[RESPONSE_BUFFER_SIZE];
+            while (remaining > 0L) {
+                int requested = (int) Math.min(buffer.length, remaining);
+                int read = input.read(buffer, 0, requested);
+                if (read < 0) {
+                    break;
+                }
+                if (read == 0) {
+                    continue;
+                }
+                output.write(buffer, 0, read);
+                remaining -= read;
+            }
+            if (output.size() > maxResponseBytes) {
+                throw responseTooLarge(endpoint, maxResponseBytes);
+            }
+            return output.toByteArray();
+        }
+    }
+
+    private static IOException responseTooLarge(URI endpoint, int maxResponseBytes) {
+        return new IOException(
+                "Ollama /api/embed response from " + endpoint
+                        + " exceeded the " + maxResponseBytes + " byte limit");
     }
 
     private float[] parseVector(JsonNode embedding, int vectorIndex) throws IOException {
