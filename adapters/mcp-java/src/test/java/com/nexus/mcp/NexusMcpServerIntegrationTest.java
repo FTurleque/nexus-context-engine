@@ -99,6 +99,11 @@ class NexusMcpServerIntegrationTest {
             assertEquals(EXPECTED_TOOLS.size(), tools.size());
             assertEquals(EXPECTED_TOOLS, Set.copyOf(tools));
 
+            McpSchema.CallToolResult projectList = client.callTool(
+                    McpSchema.CallToolRequest.builder("list_projects").arguments(Map.of()).build());
+            assertFalse(Boolean.TRUE.equals(projectList.isError()));
+            assertEquals(1, json(projectList).size());
+
             McpSchema.CallToolResult searchResult = client.callTool(
                     McpSchema.CallToolRequest.builder("search_code")
                             .arguments(Map.of(
@@ -132,6 +137,36 @@ class NexusMcpServerIntegrationTest {
                     directContext.bundle().items().getFirst().path().toString(),
                     contextJson.path("items").get(0).path("path").asText());
 
+            McpSchema.CallToolResult explainContext = client.callTool(
+                    McpSchema.CallToolRequest.builder("explain_context")
+                            .arguments(Map.of(
+                                    "project", project.id().toString(),
+                                    "query", "OrderService process order",
+                                    "tokenBudget", 200))
+                            .build());
+            assertFalse(Boolean.TRUE.equals(explainContext.isError()));
+            assertTrue(json(explainContext).path("explain").asBoolean());
+
+            McpSchema.CallToolResult federatedContext = client.callTool(
+                    McpSchema.CallToolRequest.builder("build_context_across_projects")
+                            .arguments(Map.of(
+                                    "projects", List.of(project.id().toString()),
+                                    "query", "OrderService process order",
+                                    "tokenBudget", 200))
+                            .build());
+            assertFalse(Boolean.TRUE.equals(federatedContext.isError()));
+            assertEquals(1, json(federatedContext).path("projects").size());
+
+            McpSchema.CallToolResult explainFederatedContext = client.callTool(
+                    McpSchema.CallToolRequest.builder("explain_context_across_projects")
+                            .arguments(Map.of(
+                                    "projects", List.of("mcp-validation"),
+                                    "query", "OrderService process order",
+                                    "tokenBudget", 200))
+                            .build());
+            assertFalse(Boolean.TRUE.equals(explainFederatedContext.isError()));
+            assertTrue(json(explainFederatedContext).path("explain").asBoolean());
+
             McpSchema.CallToolResult symbolResult = client.callTool(
                     McpSchema.CallToolRequest.builder("find_symbol")
                             .arguments(Map.of(
@@ -140,6 +175,16 @@ class NexusMcpServerIntegrationTest {
                             .build());
             assertFalse(Boolean.TRUE.equals(symbolResult.isError()));
             assertTrue(json(symbolResult).path("symbols").size() > 0);
+
+            McpSchema.CallToolResult usagesResult = client.callTool(
+                    McpSchema.CallToolRequest.builder("find_usages")
+                            .arguments(Map.of(
+                                    "project", project.id().toString(),
+                                    "symbol", "OrderService",
+                                    "limit", 20))
+                            .build());
+            assertFalse(Boolean.TRUE.equals(usagesResult.isError()));
+            assertTrue(json(usagesResult).path("relations").isArray());
 
             String oversizedUtf8 = "é".repeat(QueryPolicy.MAX_QUERY_UTF8_BYTES / 2 + 1);
             McpSchema.CallToolResult oversizedResult = client.callTool(
