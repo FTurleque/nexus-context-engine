@@ -33,6 +33,8 @@ class ScipCodeIndexImporterTest {
         Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("project"));
         String methodSymbol = "scip-java maven demo app 1.0 demo/App#run().";
         String contractSymbol = "scip-java maven demo api 1.0 demo/Contract#run().";
+        String relativePath = "src/main/java/demo/App.java";
+        writeSourceLines(projectRoot, relativePath, 12);
 
         byte[] typedRange = message(
                 varintField(1, 2),
@@ -63,7 +65,7 @@ class ScipCodeIndexImporterTest {
                 stringField(6, "run"),
                 messageField(7, signature));
         byte[] document = message(
-                stringField(1, "src/main/java/demo/App.java"),
+                stringField(1, relativePath),
                 messageField(2, definitionOccurrence),
                 messageField(2, referenceOccurrence),
                 messageField(3, symbolInformation),
@@ -76,7 +78,7 @@ class ScipCodeIndexImporterTest {
 
         assertEquals(ScipCodeIndexImporter.SOURCE_PROVIDER, snapshot.sourceProvider());
         assertEquals(1, snapshot.symbols().size());
-        assertEquals("src/main/java/demo/App.java", snapshot.symbols().getFirst().relativePath());
+        assertEquals(relativePath, snapshot.symbols().getFirst().relativePath());
         assertEquals(SymbolKind.METHOD, snapshot.symbols().getFirst().symbol().kind());
         assertEquals("run", snapshot.symbols().getFirst().symbol().name());
         assertEquals("void run()", snapshot.symbols().getFirst().symbol().signature());
@@ -90,7 +92,7 @@ class ScipCodeIndexImporterTest {
                         && indexed.relation().target().equals(contractSymbol)));
         assertTrue(snapshot.relations().stream().anyMatch(indexed ->
                 indexed.relation().kind() == RelationKind.REFERENCES
-                        && indexed.relation().source().equals("src/main/java/demo/App.java")
+                        && indexed.relation().source().equals(relativePath)
                         && indexed.relation().target().equals(methodSymbol)));
         assertTrue(snapshot.relations().stream().allMatch(indexed ->
                 indexed.relation().sourceProvider().equals(ScipCodeIndexImporter.SOURCE_PROVIDER)));
@@ -100,6 +102,8 @@ class ScipCodeIndexImporterTest {
     void fallsBackToLegacyPackedRangeWhenTypedRangeIsMissing() throws Exception {
         Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("legacy-project"));
         String typeSymbol = "scip-java maven demo app 1.0 demo/Legacy#";
+        String relativePath = "src/main/java/demo/Legacy.java";
+        writeSourceLines(projectRoot, relativePath, 8);
         byte[] definitionOccurrence = message(
                 packedInt32Field(1, 4, 0, 6, 1),
                 stringField(2, typeSymbol),
@@ -109,7 +113,7 @@ class ScipCodeIndexImporterTest {
                 varintField(5, 7),
                 stringField(6, "Legacy"));
         byte[] document = message(
-                stringField(1, "src/main/java/demo/Legacy.java"),
+                stringField(1, relativePath),
                 messageField(2, definitionOccurrence),
                 messageField(3, symbolInformation));
         Files.write(projectRoot.resolve("index.scip"), messageField(2, document));
@@ -129,6 +133,7 @@ class ScipCodeIndexImporterTest {
         Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("unsupported-kind-project"));
         String fieldSymbol = "scip-java maven demo app 1.0 demo/App#value.";
         String relativePath = "src/main/java/demo/App.java";
+        writeSourceLines(projectRoot, relativePath, 8);
         byte[] definitionOccurrence = message(
                 packedInt32Field(1, 2, 4, 2, 9),
                 stringField(2, fieldSymbol),
@@ -247,6 +252,19 @@ class ScipCodeIndexImporterTest {
         IOException malformedFailure = assertThrows(IOException.class, () ->
                 new ScipCodeIndexImporter("index.scip", 1024, 32).importIndex(projectRoot));
         assertTrue(malformedFailure.getMessage().contains("Varint SCIP invalide"), malformedFailure.getMessage());
+    }
+
+    private static void writeSourceLines(Path projectRoot, String relativePath, int lineCount) throws IOException {
+        Path source = projectRoot.resolve(relativePath);
+        Files.createDirectories(source.getParent());
+        StringBuilder content = new StringBuilder();
+        for (int line = 1; line <= lineCount; line++) {
+            content.append("line-").append(line);
+            if (line < lineCount) {
+                content.append('\n');
+            }
+        }
+        Files.writeString(source, content.toString());
     }
 
     private static byte[] message(byte[]... fields) throws IOException {

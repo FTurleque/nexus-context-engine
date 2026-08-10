@@ -19,6 +19,9 @@ class ScipRelationIdentityTest {
     @Test
     void keepsSameLogicalRelationFromDistinctDocuments(@TempDir Path temporaryDirectory) throws Exception {
         Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("project"));
+        Path sourceDirectory = Files.createDirectories(projectRoot.resolve("src"));
+        Files.writeString(sourceDirectory.resolve("One.java"), "class One {}\n");
+        Files.writeString(sourceDirectory.resolve("Two.java"), "class Two {}\n");
         String source = "scip-java maven demo app 1.0 demo/Source#";
         String target = "scip-java maven demo api 1.0 demo/Target#";
 
