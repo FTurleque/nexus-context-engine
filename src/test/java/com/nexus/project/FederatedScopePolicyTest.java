@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -35,6 +36,32 @@ class FederatedScopePolicyTest {
         }
 
         assertEquals(100, FederatedScopePolicy.normalizeProjectIds(duplicateHeavy).size());
+    }
+
+    @Test
+    void explicitUuidSelectorsFailFastWithoutRejectingDuplicateHeavyScopes() {
+        List<String> oversized = uniqueIds(101).stream().map(UUID::toString).toList();
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> FederatedScopePolicy.validateExplicitUuidSelectors(oversized));
+        assertEquals(FederatedScopePolicy.TOO_MANY_PROJECTS_MESSAGE, exception.getMessage());
+
+        List<String> duplicateHeavy = new ArrayList<>();
+        String oneProject = UUID.randomUUID().toString();
+        for (int repetition = 0; repetition < 1_000; repetition++) {
+            duplicateHeavy.add(oneProject);
+        }
+        assertDoesNotThrow(() -> FederatedScopePolicy.validateExplicitUuidSelectors(duplicateHeavy));
+    }
+
+    @Test
+    void selectorPreflightDoesNotGuessProjectNameIdentity() {
+        List<String> namesAndUuids = new ArrayList<>();
+        namesAndUuids.addAll(uniqueIds(100).stream().map(UUID::toString).toList());
+        namesAndUuids.add("project-alias");
+        namesAndUuids.add("PROJECT-ALIAS");
+
+        assertDoesNotThrow(() -> FederatedScopePolicy.validateExplicitUuidSelectors(namesAndUuids));
     }
 
     private static List<UUID> uniqueIds(int count) {
