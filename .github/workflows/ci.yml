@@ -112,11 +112,42 @@ jobs:
             exit 1
           fi
 
-      - name: Verify compliance artifacts
+      - name: Verify compliance and coverage artifacts
+        shell: bash
         run: |
+          set -euo pipefail
           test -s target/sbom/bom.json
           test -s target/licenses/THIRD_PARTY_NOTICES.txt
-          test -s core/target/site/jacoco/jacoco.xml
+          for report in \
+            core/target/site/jacoco/jacoco.xml \
+            adapters/rest-quarkus/target/site/jacoco/jacoco.xml \
+            adapters/mcp-java/target/site/jacoco/jacoco.xml \
+            adapters/assistant-clients/target/site/jacoco/jacoco.xml; do
+            test -s "$report"
+          done
+
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          reports = {
+              'core': Path('core/target/site/jacoco/jacoco.xml'),
+              'rest': Path('adapters/rest-quarkus/target/site/jacoco/jacoco.xml'),
+              'mcp': Path('adapters/mcp-java/target/site/jacoco/jacoco.xml'),
+              'assistant': Path('adapters/assistant-clients/target/site/jacoco/jacoco.xml'),
+          }
+
+          for name, path in reports.items():
+              root = ET.parse(path).getroot()
+              counters = {counter.attrib['type']: counter.attrib for counter in root.findall('counter')}
+              for counter_name in ('LINE', 'BRANCH'):
+                  counter = counters[counter_name]
+                  missed = int(counter['missed'])
+                  covered = int(counter['covered'])
+                  total = missed + covered
+                  ratio = covered / total if total else 1.0
+                  print(f'jacoco-{name}-{counter_name.lower()}={ratio:.6f} ({covered}/{total})')
+          PY
 
       - name: Retain Linux smoke diagnostics on failure
         if: failure()
@@ -141,3 +172,9 @@ jobs:
             target/licenses/THIRD_PARTY_NOTICES.txt
             core/target/site/jacoco/jacoco.xml
             core/target/site/jacoco/index.html
+            adapters/rest-quarkus/target/site/jacoco/jacoco.xml
+            adapters/rest-quarkus/target/site/jacoco/index.html
+            adapters/mcp-java/target/site/jacoco/jacoco.xml
+            adapters/mcp-java/target/site/jacoco/index.html
+            adapters/assistant-clients/target/site/jacoco/jacoco.xml
+            adapters/assistant-clients/target/site/jacoco/index.html
