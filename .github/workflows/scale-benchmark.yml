@@ -3,6 +3,7 @@ name: Scale Benchmark
 on:
   pull_request:
     branches:
+      - develop
       - main
     paths:
       - 'src/main/java/com/nexus/persistence/sqlite/**'
