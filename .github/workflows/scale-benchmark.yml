@@ -1,6 +1,13 @@
 name: Scale Benchmark
 
 on:
+  workflow_call:
+    inputs:
+      profile:
+        description: Benchmark profile
+        required: false
+        default: ci
+        type: string
   pull_request:
     branches:
       - develop
@@ -51,7 +58,9 @@ jobs:
         id: profile
         shell: bash
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          if [[ "${{ github.event_name }}" == "workflow_call" ]]; then
+            echo "value=${{ inputs.profile }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "value=${{ inputs.profile }}" >> "$GITHUB_OUTPUT"
           else
             echo "value=ci" >> "$GITHUB_OUTPUT"
