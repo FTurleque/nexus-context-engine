@@ -21,7 +21,14 @@ La première mesure sur GitHub Actions, avant correction de l'instrumentation MC
 
 Le score MCP initial ne reflétait pas les scénarios réellement exécutés : `NexusMcpServerIntegrationTest` démarre le serveur MCP dans un JVM enfant, alors que l'agent JaCoCo hérité de Surefire instrumentait seulement le JVM de test.
 
-NXA2-09 ajoute donc un agent JaCoCo au JVM enfant et fusionne ses données dans le même `adapters/mcp-java/target/jacoco.exec`. Le test STDIO réel exerce en outre la surface publique des outils MCP : listing projets, recherche, symboles/usages, contexte local, contexte expliqué, contexte fédéré, limite de requête et limite de portée fédérée.
+NXA2-09 ajoute donc un agent JaCoCo au JVM enfant. Pour rester fiable sur Linux **et Windows**, les deux JVM n'écrivent pas simultanément dans le même fichier :
+
+- le JVM Surefire écrit `target/jacoco.exec` ;
+- le serveur MCP enfant écrit `target/jacoco-mcp-child.exec` ;
+- `jacoco:merge` fusionne les deux après les tests dans `target/jacoco-merged.exec` ;
+- le rapport MCP et `jacoco:check` utilisent exclusivement ce fichier fusionné.
+
+Cette séparation évite les divergences de sémantique de verrouillage fichier entre systèmes d'exploitation. Le test STDIO réel exerce en outre la surface publique des outils MCP : listing projets, recherche, symboles/usages, contexte local, contexte expliqué, contexte fédéré, limite de requête et limite de portée fédérée.
 
 Après ce renforcement et l'ajout d'un test direct du filtre Bearer REST, la baseline qualifiée sur GitHub Actions est :
 
@@ -62,7 +69,7 @@ La qualification couvre notamment :
 
 Le serveur STDIO réel est instrumenté, pas simulé. La qualification couvre les handlers publics et leurs validations, y compris les contrats de limites NXA2-06 et NXA2-08.
 
-Le JVM enfant doit conserver l'agent défini via `nexus.mcp.child.jacoco.argLine`. Supprimer cette instrumentation provoquerait une chute de couverture et ferait échouer le gate MCP.
+Le JVM enfant doit conserver l'agent défini via `nexus.mcp.child.jacoco.argLine` et le merge explicite de ses données avec celles de Surefire. Supprimer l'un de ces mécanismes provoquerait une chute de couverture et ferait échouer le gate MCP.
 
 ### assistant-clients
 
