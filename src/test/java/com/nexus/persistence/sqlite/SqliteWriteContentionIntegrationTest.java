@@ -246,7 +246,7 @@ class SqliteWriteContentionIntegrationTest {
                          "SELECT COUNT(*) FROM schema_migrations");
                  ResultSet resultSet = statement.executeQuery()) {
                 assertTrue(resultSet.next());
-                assertEquals(3L, resultSet.getLong(1));
+                assertEquals(4L, resultSet.getLong(1));
             }
         } finally {
             executor.shutdownNow();
