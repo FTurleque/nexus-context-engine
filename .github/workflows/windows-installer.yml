@@ -3,6 +3,7 @@ name: Windows Installer
 on:
   pull_request:
     branches:
+      - develop
       - main
     paths:
       - 'packaging/windows/**'
