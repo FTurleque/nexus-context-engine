@@ -10,6 +10,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -171,6 +172,41 @@ class ScipCodeIndexImporterTest {
         Files.write(index, encoded.toByteArray());
         assertThrows(IOException.class, () ->
                 new ScipCodeIndexImporter("index.scip", 1024, 16).importIndex(projectRoot));
+    }
+
+    @Test
+    void unknownLengthDelimitedFieldCannotBypassTotalBudgetThroughSkip() throws Exception {
+        Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("unknown-skip-project"));
+        Path index = projectRoot.resolve("index.scip");
+        byte[] encoded = messageField(99, new byte[20_000]);
+        Files.write(index, encoded);
+
+        CodeIntelligenceSnapshot exactBoundary = new ScipCodeIndexImporter(
+                "index.scip",
+                encoded.length,
+                64)
+                .importIndex(projectRoot)
+                .orElseThrow();
+        assertTrue(exactBoundary.symbols().isEmpty());
+        assertTrue(exactBoundary.relations().isEmpty());
+
+        IOException failure = assertThrows(IOException.class, () ->
+                new ScipCodeIndexImporter("index.scip", encoded.length - 1L, 64)
+                        .importIndex(projectRoot));
+        assertTrue(failure.getMessage().contains("maximum " + (encoded.length - 1L) + " octets"),
+                failure.getMessage());
+    }
+
+    @Test
+    void truncatedUnknownLengthDelimitedFieldFailsWhileSkipping() throws Exception {
+        Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("truncated-skip-project"));
+        Path index = projectRoot.resolve("index.scip");
+        byte[] complete = messageField(99, new byte[20_000]);
+        Files.write(index, Arrays.copyOf(complete, 10_000));
+
+        IOException failure = assertThrows(IOException.class, () ->
+                new ScipCodeIndexImporter("index.scip", 30_000L, 64).importIndex(projectRoot));
+        assertTrue(failure.getMessage().contains("tronqué"), failure.getMessage());
     }
 
     @Test

@@ -15,6 +15,7 @@ import java.nio.file.LinkOption;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -25,6 +26,12 @@ import java.util.Set;
  * frontière et les composants du chemin ; {@code SafeFileIO} réduit la fenêtre
  * TOCTOU entre cette validation et l'ouverture effective du fichier. Tous les
  * flux publics sont également bornés par la politique de taille projet.</p>
+ *
+ * <p>La borne s'applique à tous les octets physiquement traversés par le flux,
+ * qu'ils soient retournés via une lecture ou ignorés via {@link InputStream#skip(long)}.
+ * Les opérations composées de {@link InputStream} ({@code readNBytes},
+ * {@code readAllBytes}, etc.) héritent ainsi du même budget sans voie de
+ * contournement par saut.</p>
  */
 public final class SafeFileIO {
 
@@ -106,20 +113,53 @@ public final class SafeFileIO {
 
         @Override
         public int read(byte[] buffer, int offset, int length) throws IOException {
-            int read = super.read(buffer, offset, length);
+            Objects.checkFromIndexSize(offset, length, buffer.length);
+            if (length == 0) {
+                return 0;
+            }
+            int boundedLength = (int) boundedTraversal(length);
+            int read = super.read(buffer, offset, boundedLength);
             if (read > 0) {
                 record(read);
             }
             return read;
         }
 
-        private void record(long bytes) throws IOException {
-            consumed += bytes;
-            if (consumed > maxBytes) {
-                throw new IOException(
-                        "Fichier trop volumineux pendant la lecture : " + file
-                                + " (maximum " + maxBytes + " octets)");
+        @Override
+        public long skip(long byteCount) throws IOException {
+            if (byteCount <= 0) {
+                return 0L;
             }
+            long skipped = super.skip(boundedTraversal(byteCount));
+            if (skipped > 0) {
+                record(skipped);
+            }
+            return skipped;
+        }
+
+        /**
+         * Autorise au plus le budget restant plus un octet sentinelle. Cet octet
+         * permet de distinguer une vraie EOF à la frontière exacte d'un contenu
+         * qui dépasse la borne, sans laisser une opération bulk/skip traverser
+         * arbitrairement loin au-delà du budget avant le rejet.
+         */
+        private long boundedTraversal(long requested) {
+            long remaining = maxBytes - consumed;
+            long detectable = remaining == Long.MAX_VALUE ? Long.MAX_VALUE : remaining + 1L;
+            return Math.min(requested, detectable);
+        }
+
+        private void record(long bytes) throws IOException {
+            if (bytes > maxBytes - consumed) {
+                throw tooLarge();
+            }
+            consumed += bytes;
+        }
+
+        private IOException tooLarge() {
+            return new IOException(
+                    "Fichier trop volumineux pendant la lecture : " + file
+                            + " (maximum " + maxBytes + " octets)");
         }
     }
 }
