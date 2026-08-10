@@ -2,6 +2,7 @@ package com.nexus.application;
 
 import com.nexus.config.NexusPaths;
 import com.nexus.index.ProjectIndexLockManager;
+import com.nexus.search.QueryPolicy;
 import com.nexus.search.ResultLimitPolicy;
 import com.nexus.search.semantic.SemanticSearchConfiguration;
 import org.junit.jupiter.api.Test;
@@ -9,6 +10,9 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -60,6 +64,23 @@ class NexusApplicationHardeningTest {
     }
 
     @Test
+    void everyPublicQuerySurfaceRejectsOversizedUtf8BeforeProjectOrEngineResolution() throws Exception {
+        NexusApplication application = NexusApplication.create(
+                new NexusPaths(temporaryDirectory.resolve("query-home")),
+                SemanticSearchConfiguration.disabled());
+        UUID unknownProject = UUID.randomUUID();
+        String oversized = "é".repeat(QueryPolicy.MAX_QUERY_UTF8_BYTES / 2 + 1);
+
+        assertOversized(() -> application.search(unknownProject, oversized, 10, false));
+        assertOversized(() -> application.searchAcrossProjects(List.of(unknownProject), oversized, 10, false));
+        assertOversized(() -> application.context(unknownProject, oversized, 100, Set.of(), Map.of(), false));
+        assertOversized(() -> application.contextAcrossProjects(
+                List.of(unknownProject), oversized, 100, Set.of(), Map.of(), false));
+        assertOversized(() -> application.findSymbols(unknownProject, oversized, 10));
+        assertOversized(() -> application.findUsages(unknownProject, oversized, 10));
+    }
+
+    @Test
     void doesNotReinterpretAValidUnknownUuidAsAProjectName() throws Exception {
         NexusApplication application = NexusApplication.create(
                 new NexusPaths(temporaryDirectory.resolve("uuid-home")),
@@ -90,5 +111,15 @@ class NexusApplicationHardeningTest {
                     () -> application.importMinos(project.id(), "{}"));
             assertTrue(failure.getMessage().contains("mutation d'index"));
         }
+    }
+
+    private static void assertOversized(ThrowingCall call) {
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, call::run);
+        assertTrue(failure.getMessage().contains("octets UTF-8"), failure.getMessage());
+    }
+
+    @FunctionalInterface
+    private interface ThrowingCall {
+        void run() throws Exception;
     }
 }
