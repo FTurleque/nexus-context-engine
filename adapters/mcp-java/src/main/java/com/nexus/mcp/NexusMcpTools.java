@@ -8,6 +8,7 @@ import com.nexus.context.ContextItem;
 import com.nexus.context.FederatedContextItem;
 import com.nexus.index.IndexedSymbol;
 import com.nexus.index.SymbolRelation;
+import com.nexus.project.FederatedScopePolicy;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.ranking.RankedCandidate;
 import com.nexus.search.CandidateType;
@@ -256,11 +257,24 @@ final class NexusMcpTools {
         if (!(value instanceof List<?> values) || values.isEmpty()) {
             throw new IllegalArgumentException("projects doit être un tableau non vide");
         }
+
+        Map<String, String> uniqueSelectors = new LinkedHashMap<>();
+        for (Object rawSelector : values) {
+            String selector = String.valueOf(rawSelector).trim();
+            uniqueSelectors.putIfAbsent(selector.toLowerCase(Locale.ROOT), selector);
+        }
+        List<String> selectors = List.copyOf(uniqueSelectors.values());
+
+        // Les UUID explicites permettent de prouver un dépassement avant le
+        // moindre accès repository. Les noms/alias restent résolus normalement.
+        FederatedScopePolicy.validateExplicitUuidSelectors(selectors);
+
         List<ProjectDescriptor> projects = new ArrayList<>();
         Set<UUID> seen = new java.util.LinkedHashSet<>();
-        for (Object selector : values) {
-            ProjectDescriptor project = application.resolveProject(String.valueOf(selector));
+        for (String selector : selectors) {
+            ProjectDescriptor project = application.resolveProject(selector);
             if (seen.add(project.id())) {
+                FederatedScopePolicy.validateUniqueCount(seen.size());
                 projects.add(project);
             }
         }
