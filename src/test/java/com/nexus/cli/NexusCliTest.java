@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.nexus.config.NexusPaths;
+import com.nexus.search.QueryPolicy;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -126,6 +127,13 @@ class NexusCliTest {
         assertTrue(contextPayload.path("items").size() > 0);
         assertFalse(Path.of(contextPayload.path("items").get(0).path("path").asText()).isAbsolute());
         assertTrue(contextPayload.path("durationMs").asLong() >= 0L);
+
+        String oversizedUtf8 = "é".repeat(QueryPolicy.MAX_QUERY_UTF8_BYTES / 2 + 1);
+        CliExecution oversizedSearch = execute(
+                "search", "demo-cli", oversizedUtf8, "--limit", "1", "--json");
+        assertEquals(NexusCli.EXIT_USAGE_ERROR, oversizedSearch.exitCode());
+        JsonNode oversizedError = JSON.readTree(oversizedSearch.stderr());
+        assertTrue(oversizedError.path("message").asText().contains("octets UTF-8"));
 
         CliExecution inspect = execute("inspect", "demo-cli", "--json");
         assertEquals(NexusCli.EXIT_SUCCESS, inspect.exitCode());
