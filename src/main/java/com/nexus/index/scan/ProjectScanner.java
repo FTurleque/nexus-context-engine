@@ -21,27 +21,52 @@ import java.util.Locale;
 
 public final class ProjectScanner {
 
-    /** Compatibilité API : la politique est désormais centralisée dans ProjectFileLimits. */
+    /** Compatibilité API : la politique par fichier reste centralisée dans ProjectFileLimits. */
     public static final String MAX_FILE_SIZE_ENVIRONMENT_VARIABLE =
             ProjectFileLimits.MAX_FILE_SIZE_ENVIRONMENT_VARIABLE;
     public static final long DEFAULT_MAX_FILE_SIZE_BYTES =
             ProjectFileLimits.DEFAULT_MAX_FILE_SIZE_BYTES;
 
+    public static final String MAX_FILES_ENVIRONMENT_VARIABLE =
+            ProjectScanLimits.MAX_FILES_ENVIRONMENT_VARIABLE;
+    public static final String MAX_TOTAL_BYTES_ENVIRONMENT_VARIABLE =
+            ProjectScanLimits.MAX_TOTAL_BYTES_ENVIRONMENT_VARIABLE;
+    public static final int DEFAULT_MAX_FILES = ProjectScanLimits.DEFAULT_MAX_FILES;
+    public static final long DEFAULT_MAX_TOTAL_BYTES = ProjectScanLimits.DEFAULT_MAX_TOTAL_BYTES;
+
     private final long maxFileSizeBytes;
+    private final ProjectScanLimits scanLimits;
 
     public ProjectScanner() {
-        this(ProjectFileLimits.maxFileSizeFromEnvironment());
+        this(ProjectFileLimits.maxFileSizeFromEnvironment(), ProjectScanLimits.fromEnvironment());
     }
 
     public ProjectScanner(long maxFileSizeBytes) {
+        this(maxFileSizeBytes, ProjectScanLimits.defaults());
+    }
+
+    public ProjectScanner(long maxFileSizeBytes, int maxFiles, long maxTotalBytes) {
+        this(maxFileSizeBytes, new ProjectScanLimits(maxFiles, maxTotalBytes));
+    }
+
+    private ProjectScanner(long maxFileSizeBytes, ProjectScanLimits scanLimits) {
         if (maxFileSizeBytes <= 0) {
             throw new IllegalArgumentException("maxFileSizeBytes must be greater than zero");
         }
         this.maxFileSizeBytes = maxFileSizeBytes;
+        this.scanLimits = scanLimits;
     }
 
     public long maxFileSizeBytes() {
         return maxFileSizeBytes;
+    }
+
+    public int maxFiles() {
+        return scanLimits.maxFiles();
+    }
+
+    public long maxTotalBytes() {
+        return scanLimits.maxTotalBytes();
     }
 
     public List<ScannedFile> scan(Path projectRoot) throws IOException {
@@ -55,6 +80,8 @@ public final class ProjectScanner {
         List<ScannedFile> files = new ArrayList<>();
         List<String> diagnostics = new ArrayList<>();
         int[] skippedFiles = {0};
+        int[] visitedFiles = {0};
+        long[] indexedBytes = {0L};
 
         Files.walkFileTree(root, new SimpleFileVisitor<>() {
             @Override
@@ -69,7 +96,17 @@ public final class ProjectScanner {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
-                if (ignoreMatcher.isIgnored(file, false) || !isSupportedTextSource(file)) {
+                if (ignoreMatcher.isIgnored(file, false)) {
+                    return FileVisitResult.CONTINUE;
+                }
+
+                visitedFiles[0]++;
+                if (visitedFiles[0] > scanLimits.maxFiles()) {
+                    throw new IOException("Corpus d'indexation trop volumineux : "
+                            + visitedFiles[0] + " fichiers visités > limite " + scanLimits.maxFiles());
+                }
+
+                if (!isSupportedTextSource(file)) {
                     return FileVisitResult.CONTINUE;
                 }
 
@@ -105,6 +142,16 @@ public final class ProjectScanner {
                             + " octets > limite " + maxFileSizeBytes + " octets");
                     return FileVisitResult.CONTINUE;
                 }
+
+                if (size > scanLimits.maxTotalBytes() - indexedBytes[0]) {
+                    long attempted = indexedBytes[0] > Long.MAX_VALUE - size
+                            ? Long.MAX_VALUE
+                            : indexedBytes[0] + size;
+                    throw new IOException("Corpus d'indexation trop volumineux : "
+                            + attempted + " octets indexables > limite "
+                            + scanLimits.maxTotalBytes() + " octets");
+                }
+                indexedBytes[0] += size;
 
                 files.add(new ScannedFile(
                         safeFile,

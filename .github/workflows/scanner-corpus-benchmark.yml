@@ -1,0 +1,97 @@
+name: Scanner Corpus Benchmark
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - 'src/main/java/com/nexus/index/scan/**'
+      - 'src/test/java/com/nexus/index/scan/**'
+      - 'src/test/java/com/nexus/index/ProjectIndexingCorpusLimitTest.java'
+      - 'src/test/java/com/nexus/benchmark/ProjectScannerCorpusBudgetBenchmarkTest.java'
+      - 'docs/developer/indexing-corpus-limits.md'
+      - '.github/workflows/scanner-corpus-benchmark.yml'
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Scanner benchmark profile
+        required: true
+        default: full
+        type: choice
+        options:
+          - ci
+          - full
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: Bounded scanner corpus benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Java 21
+        uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4.9.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Resolve benchmark profile
+        id: profile
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "value=${{ inputs.profile }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=ci" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run scanner corpus benchmark
+        shell: bash
+        run: |
+          chmod +x ./mvnw
+          ./mvnw -B -pl core \
+            -Dtest=ProjectScannerCorpusBudgetBenchmarkTest \
+            -Dnexus.scale.benchmark.enabled=true \
+            -Dnexus.scale.benchmark.profile=${{ steps.profile.outputs.value }} \
+            -Dnexus.scanner.scale.benchmark.output=target/scanner-corpus-benchmark.json \
+            test
+
+      - name: Verify scanner report and budget
+        shell: bash
+        run: |
+          test -s target/scanner-corpus-benchmark.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path('target/scanner-corpus-benchmark.json').read_text())
+          profile = report['profile']
+          expected_files = 10_000 if profile == 'full' else 2_000
+          assert report['files'] == expected_files, report
+          assert report['maxFiles'] == expected_files, report
+          assert report['maxTotalBytes'] == report['totalBytes'], report
+          assert report['scanMs'] <= 30_000, report['scanMs']
+          print('scanner-profile=', profile)
+          print('scanner-files=', report['files'])
+          print('scanner-total-bytes=', report['totalBytes'])
+          print('scanner-scan-ms=', report['scanMs'])
+          print('scanner-corpus-budget=PASS')
+          PY
+
+      - name: Retain scanner benchmark report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nexus-scanner-corpus-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}-${{ steps.profile.outputs.value }}
+          retention-days: 90
+          if-no-files-found: error
+          path: target/scanner-corpus-benchmark.json
