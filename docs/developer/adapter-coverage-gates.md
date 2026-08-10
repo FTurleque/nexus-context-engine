@@ -21,14 +21,15 @@ La première mesure sur GitHub Actions, avant correction de l'instrumentation MC
 
 Le score MCP initial ne reflétait pas les scénarios réellement exécutés : `NexusMcpServerIntegrationTest` démarre le serveur MCP dans un JVM enfant, alors que l'agent JaCoCo hérité de Surefire instrumentait seulement le JVM de test.
 
-NXA2-09 ajoute donc un agent JaCoCo au JVM enfant. Pour rester fiable sur Linux **et Windows**, les deux JVM n'écrivent pas simultanément dans le même fichier :
+NXA2-09 ajoute donc un agent JaCoCo au JVM enfant. Pour rester fiable sur Linux **et Windows**, la collecte ne dépend ni d'une écriture concurrente ni du dump automatique à l'arrêt du processus :
 
 - le JVM Surefire écrit `target/jacoco.exec` ;
-- le serveur MCP enfant écrit `target/jacoco-mcp-child.exec` ;
-- `jacoco:merge` fusionne les deux après les tests dans `target/jacoco-merged.exec` ;
+- le serveur MCP enfant expose son agent JaCoCo en `tcpserver` uniquement sur `127.0.0.1`, sur un port éphémère réservé par le test ;
+- avant `client.closeGracefully()`, `NexusMcpServerIntegrationTest` récupère explicitement les données d'exécution avec `ExecDumpClient` et les enregistre dans `target/jacoco-mcp-child.exec` ;
+- `jacoco:merge` fusionne ensuite `jacoco.exec` et `jacoco-mcp-child.exec` dans `target/jacoco-merged.exec` ;
 - le rapport MCP et `jacoco:check` utilisent exclusivement ce fichier fusionné.
 
-Cette séparation évite les divergences de sémantique de verrouillage fichier entre systèmes d'exploitation. Le test STDIO réel exerce en outre la surface publique des outils MCP : listing projets, recherche, symboles/usages, contexte local, contexte expliqué, contexte fédéré, limite de requête et limite de portée fédérée.
+Le dump explicite avant arrêt est nécessaire parce que le transport STDIO client du SDK MCP peut terminer le processus serveur ; la couverture ne doit donc pas dépendre d'un flush de fin de JVM dont la sémantique diffère selon le système d'exploitation. Le test STDIO réel exerce en outre la surface publique des outils MCP : listing projets, recherche, symboles/usages, contexte local, contexte expliqué, contexte fédéré, limite de requête et limite de portée fédérée.
 
 Après ce renforcement et l'ajout d'un test direct du filtre Bearer REST, la baseline qualifiée sur GitHub Actions est :
 
@@ -69,7 +70,7 @@ La qualification couvre notamment :
 
 Le serveur STDIO réel est instrumenté, pas simulé. La qualification couvre les handlers publics et leurs validations, y compris les contrats de limites NXA2-06 et NXA2-08.
 
-Le JVM enfant doit conserver l'agent défini via `nexus.mcp.child.jacoco.argLine` et le merge explicite de ses données avec celles de Surefire. Supprimer l'un de ces mécanismes provoquerait une chute de couverture et ferait échouer le gate MCP.
+Le JVM enfant doit conserver l'agent défini via `nexus.mcp.child.jacoco.argLine`, le dump explicite loopback via `ExecDumpClient` avant fermeture du client MCP, puis le merge de ces données avec celles de Surefire. Supprimer l'un de ces mécanismes provoquerait une chute de couverture et ferait échouer le gate MCP.
 
 ### assistant-clients
 
