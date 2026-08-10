@@ -60,6 +60,8 @@ public class NexusRestExposureGuard {
                             + ". Utilisez reverse-proxy-https ou direct-https. "
                             + "loopback-forward est réservé à un forward Docker explicitement déclaré sur loopback.");
         }
+
+        NexusRestTransportPolicy.validateSecureNonLoopbackExposure(exposureMode);
     }
 
     private static void validateDockerLoopbackForward() {
