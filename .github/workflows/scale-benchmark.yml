@@ -1,6 +1,13 @@
 name: Scale Benchmark
 
 on:
+  workflow_call:
+    inputs:
+      profile:
+        description: Benchmark profile
+        required: false
+        default: ci
+        type: string
   pull_request:
     branches:
       - develop
@@ -51,11 +58,15 @@ jobs:
         id: profile
         shell: bash
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "value=${{ inputs.profile }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "value=ci" >> "$GITHUB_OUTPUT"
+          REQUESTED="${{ inputs.profile }}"
+          if [[ -z "$REQUESTED" ]]; then
+            REQUESTED=ci
           fi
+          if [[ "$REQUESTED" != "ci" && "$REQUESTED" != "full" ]]; then
+            echo "::error::Unsupported benchmark profile: $REQUESTED"
+            exit 1
+          fi
+          echo "value=$REQUESTED" >> "$GITHUB_OUTPUT"
 
       - name: Run hermetic scale benchmark
         shell: bash
@@ -94,9 +105,6 @@ jobs:
           sqlite = {tier['symbols']: tier for tier in report['sqliteTiers']}
           portfolio = {tier['projects']: tier for tier in report['portfolio']['tiers']}
 
-          # Budgets calibrated from full GitHub-hosted runner executions. They are
-          # intentionally above observed maxima to absorb runner noise while still
-          # detecting material algorithmic regressions.
           sqlite_budgets = {
               10_000:  {'exact': 50,   'contains': 30,   'miss': 30,   'relation': 25,  'population': 700},
               100_000: {'exact': 250,  'contains': 150,  'miss': 150,  'relation': 100, 'population': 2500},
@@ -138,9 +146,6 @@ jobs:
           assert graph['heapDeltaBytes'] <= 256 * 1024 * 1024, graph['heapDeltaBytes']
           assert graph['databaseBytes'] <= 900 * 1024 * 1024, graph['databaseBytes']
 
-          # P1-04: at the real public ceiling, 100 projects share one bounded
-          # global work budget. Local preparation may overfetch by at most 3x
-          # globally; it must never devolve into projects × global budget.
           assert federated['projects'] == 100, federated['projects']
           assert federated['globalBudget'] == 200_000, federated['globalBudget']
           assert federated['candidateBudgetTotal'] == 600_000, federated['candidateBudgetTotal']

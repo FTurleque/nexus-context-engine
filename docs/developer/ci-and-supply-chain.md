@@ -1,6 +1,6 @@
 # CI, couverture et supply-chain
 
-Ce document décrit les gates de qualité et de sécurité applicables à NEXUS 0.2.0 après la consolidation post-audit de l'issue #48 / PR #49 et le durcissement de qualification NXA2-04.
+Ce document décrit les gates de qualité et de sécurité applicables à NEXUS 0.2.0 après la consolidation post-audit de l'issue #48 / PR #49, le durcissement de qualification NXA2-04 et la séparation qualification/publication NXA2-07.
 
 ## Objectifs
 
@@ -16,11 +16,11 @@ La CI doit empêcher l'intégration silencieuse de régressions de :
 
 Les workflows GitHub Actions utilisent des **SHA de commit immuables** pour les Actions contrôlées par le dépôt. Les commentaires de version (`# vX.Y.Z`) sont informatifs ; le SHA est l'autorité exécutée.
 
-## Contrat de branches
+## Contrat de branches et de release
 
 `develop` est la branche d'intégration. Les pull requests vers `develop` doivent exécuter directement les mêmes gates techniques pertinents qu'une pull request vers `main`, sans PR artificielle de qualification vers `main`.
 
-`main` reste la branche de release. Les effets de bord de publication restent strictement réservés aux événements explicitement prévus pour `main` ; en particulier, le job de publication Docker exige un `push` sur `refs/heads/main`.
+`main` reste la branche de release, mais **un push ordinaire sur `main` ne publie aucune image GHCR**. La publication est réservée à `.github/workflows/release.yml`, déclenché par un tag Git `vX.Y.Z` validé contre la version Maven et le HEAD exact courant de `main`.
 
 Une promotion `develop` vers `main` est autorisée uniquement si :
 
@@ -30,9 +30,11 @@ Une promotion `develop` vers `main` est autorisée uniquement si :
 - aucun artefact de release n'a été publié depuis `develop` ;
 - les exceptions de gate, lorsqu'elles sont réellement non applicables à cause des `paths`, sont explicables par le diff et non par une absence de trigger de branche.
 
+Une publication de release ajoute une contrainte supplémentaire : tous les gates release sont réexécutés via `workflow_call` sur le commit taggé avant toute écriture GHCR.
+
 ## NEXUS CI
 
-`.github/workflows/ci.yml` qualifie les pull requests vers `develop` et `main`, ainsi que les pushes configurés :
+`.github/workflows/ci.yml` qualifie les pull requests vers `develop` et `main`, ainsi que les pushes configurés. Il expose aussi `workflow_call` pour la qualification de release.
 
 - **Windows gate** : Java 24, script de qualification locale ;
 - **Linux reactor Maven build** : Java 21, reactor complet, distribution autonome et artefacts de conformité.
@@ -54,7 +56,7 @@ Le rapport XML est produit dans `core/target/site/jacoco/jacoco.xml`.
 
 ## Vulnérabilités — OSV-Scanner
 
-`.github/workflows/osv-scanner.yml` combine deux protections complémentaires sur les pull requests vers `develop` et `main`.
+`.github/workflows/osv-scanner.yml` combine deux protections complémentaires sur les pull requests vers `develop` et `main` et expose `workflow_call` pour la release.
 
 ### Delta PR
 
@@ -74,7 +76,7 @@ Cette étape est l'autorité pour la couverture complète du reactor et de ses d
 
 ## CodeQL
 
-`.github/workflows/codeql.yml` analyse Java/Kotlin avec CodeQL et les queries `security-extended` sur les pull requests vers `develop` et `main`, ainsi que sur les autres événements configurés dans le workflow.
+`.github/workflows/codeql.yml` analyse Java/Kotlin avec CodeQL et les queries `security-extended` sur les pull requests vers `develop` et `main`, ainsi que sur les autres événements configurés dans le workflow. Il expose aussi `workflow_call` pour la release.
 
 Un finding CodeQL doit être trié avant merge lorsqu'il est exposé comme bloquant. Les suppressions doivent être explicites et justifiées.
 
@@ -88,7 +90,7 @@ Le workflow exécute un benchmark hermétique sur trois axes :
 - projections et voisinages de graphe ;
 - coût de travail du contexte fédéré.
 
-Le profil automatique de PR utilise la taille `ci`; le profil `full` reste disponible en déclenchement manuel lorsque nécessaire.
+Le profil automatique de PR utilise la taille `ci`. Le profil `full` reste disponible en déclenchement manuel et est **obligatoirement demandé par le workflow release** via `workflow_call`.
 
 Le gate produit et vérifie :
 
@@ -100,9 +102,13 @@ target/federated-budget-scale-benchmark.json
 
 Les budgets sont des garde-fous de régression. Un outlier d'infrastructure peut justifier un rerun exact-head documenté, mais ne justifie pas d'assouplir le budget sans analyse.
 
+## Scanner Corpus Benchmark
+
+`.github/workflows/scanner-corpus-benchmark.yml` qualifie le budget global du scanner. Les PR utilisent le profil `ci`; une release l'appelle en profil `full` afin de vérifier la borne sur le corpus étendu avant publication.
+
 ## Windows Installer
 
-`.github/workflows/windows-installer.yml` qualifie les pull requests vers `develop` et `main` lorsqu'elles touchent le périmètre Windows/release déclaré par le workflow.
+`.github/workflows/windows-installer.yml` qualifie les pull requests vers `develop` et `main` lorsqu'elles touchent le périmètre Windows/release déclaré par le workflow. Il expose `workflow_call` afin que la release réexécute le même gate.
 
 Le workflow vérifie :
 
@@ -117,12 +123,13 @@ Le smoke valide le **profil réellement installé** : REST reste optionnel dans 
 
 ## Docker Distribution
 
-`.github/workflows/docker-distribution.yml` qualifie les pull requests vers `develop` et `main` lorsque leur diff touche le périmètre Docker/runtime déclaré par le workflow.
+`.github/workflows/docker-distribution.yml` est désormais un workflow de **qualification uniquement**. Il qualifie les pull requests vers `develop` et `main`, les pushes `main` configurés et les appels de release, mais ne possède plus de job publiant dans GHCR.
 
 ### Runtime
 
 Le job principal vérifie :
 
+- la politique tag/version via `test-release-tag-policy.sh` ;
 - round-trip littéral de la configuration dotenv/Compose ;
 - build de l'image exacte ;
 - smoke CLI ;
@@ -143,21 +150,40 @@ Le workflow bloque ensuite les vulnérabilités **HIGH ou CRITICAL corrigibles**
 
 Les preuves de sécurité image sont conservées en artefacts CI.
 
-### Publication et attestations
+## Publication de release et attestations
 
-Le job `publish` ne s'exécute que lorsque l'événement est un `push` et que `github.ref == 'refs/heads/main'`. Une pull request vers `develop`, une pull request vers `main` ou un push sur une branche de travail ne publie donc aucune image GHCR.
+La publication est entièrement portée par `.github/workflows/release.yml`.
 
-Sur un push vers `main`, après succès du job Docker :
+Le signal accepté est un tag `vX.Y.Z`. Avant qualification, le workflow exige :
+
+1. un SemVer strict ;
+2. l'égalité entre `X.Y.Z` et la version racine de `pom.xml` ;
+3. l'égalité entre le commit taggé et le HEAD exact courant de `main`.
+
+Le job de publication ne peut démarrer qu'après succès de :
+
+1. NEXUS CI ;
+2. Windows Installer ;
+3. Docker Distribution ;
+4. Scale Benchmark `full` ;
+5. Scanner Corpus Benchmark `full` ;
+6. CodeQL ;
+7. OSV-Scanner.
+
+Après ces gates seulement :
 
 1. l'image exacte est reconstruite ;
-2. le gate Trivy est rejoué sur l'image de publication ;
-3. un SBOM CycloneDX de publication est généré ;
-4. les tags versionné et `latest` sont poussés vers GHCR ;
-5. le digest réellement publié est résolu ;
-6. une attestation de provenance est publiée pour ce digest ;
-7. une attestation SBOM est publiée pour ce même digest.
+2. Trivy est rejoué sur l'image de publication et bloque les HIGH/CRITICAL corrigibles ;
+3. un SBOM CycloneDX de release est généré ;
+4. GHCR est interrogé pour refuser explicitement tout tag immuable déjà présent ;
+5. les tags `X.Y.Z` et `sha-<commit>` sont publiés ;
+6. le workflow vérifie qu'ils résolvent le même digest ;
+7. les attestations de provenance et de SBOM sont publiées sur ce digest ;
+8. `latest` n'est déplacé qu'après ces étapes et est vérifié contre le même digest.
 
-Les attestations portent donc sur le sujet publié, pas seulement sur un tag mutable.
+Les tags versionné et SHA sont immuables. `latest` reste le seul pointeur mutable explicite.
+
+Le contrat détaillé, y compris reprise après échec, reproductibilité et rollback, est documenté dans `docs/developer/immutable-release-publishing.md`.
 
 ## Politique de licences tierces
 
@@ -211,8 +237,9 @@ Un gate rouge n'est jamais interprété comme PASS sans preuve contraire exécut
 - CodeQL : corriger ou justifier la suppression ;
 - Trivy image : corriger les vulnérabilités HIGH/CRITICAL corrigibles ;
 - SBOM/notices absents : échec de conformité ;
-- Windows Installer/Docker/Scale : analyser le log exact avant rerun ;
-- rerun : uniquement lorsqu'une cause transitoire est démontrée et toujours sur le même HEAD qualifié.
+- Windows Installer/Docker/Scale/Scanner : analyser le log exact avant rerun ;
+- rerun : uniquement lorsqu'une cause transitoire est démontrée et toujours sur le même HEAD qualifié ;
+- tag de release déjà publié : échec explicite, jamais d'écrasement automatique du tag immuable.
 
 ## SonarQube Cloud / SonarCloud
 
@@ -245,7 +272,7 @@ La source de vérité des gates exécutés reste la combinaison :
 - checks réellement associés au HEAD de la PR ;
 - règles de protection GitHub actives.
 
-Pour `develop`, une PR ne doit plus nécessiter une PR temporaire parallèle vers `main` pour déclencher les gates techniques pertinents. Pour `main`, le passage par pull request reste la voie normale de promotion ; les publications restent séparées des checks de PR.
+Pour `develop`, une PR ne doit plus nécessiter une PR temporaire parallèle vers `main` pour déclencher les gates techniques pertinents. Pour `main`, le passage par pull request reste la voie normale de promotion. **La promotion et la publication sont deux opérations distinctes** : merger dans `main` ne publie rien ; seul un tag release valide déclenche la chaîne de publication.
 
 Une PR documentaire ne doit pas inventer un gate absent ; elle doit attendre tous les checks réellement déclenchés pour son HEAD.
 
