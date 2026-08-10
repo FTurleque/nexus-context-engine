@@ -55,13 +55,15 @@ jobs:
         id: profile
         shell: bash
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_call" ]]; then
-            echo "value=${{ inputs.profile }}" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "value=${{ inputs.profile }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "value=ci" >> "$GITHUB_OUTPUT"
+          REQUESTED="${{ inputs.profile }}"
+          if [[ -z "$REQUESTED" ]]; then
+            REQUESTED=ci
           fi
+          if [[ "$REQUESTED" != "ci" && "$REQUESTED" != "full" ]]; then
+            echo "::error::Unsupported scanner benchmark profile: $REQUESTED"
+            exit 1
+          fi
+          echo "value=$REQUESTED" >> "$GITHUB_OUTPUT"
 
       - name: Run scanner corpus benchmark
         shell: bash
