@@ -18,7 +18,9 @@ public final class QueryPolicy {
     }
 
     public static String normalize(String value) {
-        Objects.requireNonNull(value, "query");
+        if (value == null) {
+            throw new IllegalArgumentException("La requête ne peut pas être nulle");
+        }
         String normalized = value.trim();
         if (normalized.isBlank()) {
             throw new IllegalArgumentException("La requête ne peut pas être vide");
