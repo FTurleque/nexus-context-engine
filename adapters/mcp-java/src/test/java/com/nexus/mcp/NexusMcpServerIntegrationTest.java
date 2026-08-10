@@ -12,9 +12,13 @@ import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.spec.McpSchema;
+import org.jacoco.core.tools.ExecDumpClient;
+import org.jacoco.core.tools.ExecFileLoader;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.net.InetAddress;
+import java.net.ServerSocket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -31,6 +35,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class NexusMcpServerIntegrationTest {
 
     private static final String CHILD_JACOCO_PROPERTY = "nexus.mcp.child.jacoco.argLine";
+    private static final String CHILD_JACOCO_DEST_FILE_PROPERTY = "nexus.mcp.child.jacoco.destFile";
+    private static final String LOOPBACK_ADDRESS = "127.0.0.1";
 
     private static final Set<String> EXPECTED_TOOLS = Set.of(
             "list_projects",
@@ -74,10 +80,10 @@ class NexusMcpServerIntegrationTest {
                 Map.of(),
                 false);
 
+        ChildCoverage childCoverage = childCoverage();
         List<String> serverArguments = new ArrayList<>();
-        String childJacocoArgLine = System.getProperty(CHILD_JACOCO_PROPERTY);
-        if (childJacocoArgLine != null && !childJacocoArgLine.isBlank()) {
-            serverArguments.add(childJacocoArgLine.trim());
+        if (childCoverage != null) {
+            serverArguments.add(childCoverage.agentArgLine());
         }
         serverArguments.add("-Dnexus.home=" + nexusHome.toAbsolutePath());
         serverArguments.add("-cp");
@@ -226,9 +232,55 @@ class NexusMcpServerIntegrationTest {
                             .build());
             assertFalse(Boolean.TRUE.equals(duplicateScope.isError()));
             assertEquals(1, json(duplicateScope).path("projects").size());
+
+            if (childCoverage != null) {
+                dumpChildCoverage(childCoverage);
+            }
         } finally {
             assertTrue(client.closeGracefully(), "The MCP server process must stop before the test completes");
         }
+    }
+
+    private static ChildCoverage childCoverage() throws Exception {
+        String configuredArgLine = System.getProperty(CHILD_JACOCO_PROPERTY);
+        if (configuredArgLine == null || configuredArgLine.isBlank() || configuredArgLine.contains("${")) {
+            return null;
+        }
+
+        String destination = System.getProperty(CHILD_JACOCO_DEST_FILE_PROPERTY);
+        if (destination == null || destination.isBlank() || destination.contains("${")) {
+            throw new IllegalStateException("Missing MCP child JaCoCo destination while the child agent is enabled");
+        }
+
+        int optionsSeparator = configuredArgLine.indexOf('=');
+        String javaAgent = optionsSeparator < 0
+                ? configuredArgLine.trim()
+                : configuredArgLine.substring(0, optionsSeparator).trim();
+        int port = freeLoopbackPort();
+        String agentArgLine = javaAgent
+                + "=output=tcpserver,address=" + LOOPBACK_ADDRESS
+                + ",port=" + port
+                + ",dumponexit=false";
+        return new ChildCoverage(agentArgLine, Path.of(destination).toAbsolutePath(), port);
+    }
+
+    private static int freeLoopbackPort() throws Exception {
+        try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getByName(LOOPBACK_ADDRESS))) {
+            return socket.getLocalPort();
+        }
+    }
+
+    private static void dumpChildCoverage(ChildCoverage coverage) throws Exception {
+        ExecDumpClient dumpClient = new ExecDumpClient();
+        dumpClient.setRetryCount(20);
+        dumpClient.setRetryDelay(100);
+        ExecFileLoader executionData = dumpClient.dump(LOOPBACK_ADDRESS, coverage.port());
+        assertFalse(
+                executionData.getExecutionDataStore().getContents().isEmpty(),
+                "The MCP child JVM must expose JaCoCo execution data before it is stopped");
+        Files.deleteIfExists(coverage.destination());
+        executionData.save(coverage.destination().toFile(), false);
+        assertTrue(Files.size(coverage.destination()) > 0, "The MCP child JaCoCo dump must be persisted before merge");
     }
 
     private JsonNode json(McpSchema.CallToolResult result) throws Exception {
@@ -247,5 +299,8 @@ class NexusMcpServerIntegrationTest {
     private static String javaExecutable() {
         String executable = System.getProperty("os.name").toLowerCase().contains("win") ? "java.exe" : "java";
         return Path.of(System.getProperty("java.home"), "bin", executable).toString();
+    }
+
+    private record ChildCoverage(String agentArgLine, Path destination, int port) {
     }
 }
