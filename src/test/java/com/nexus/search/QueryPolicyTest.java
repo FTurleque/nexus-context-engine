@@ -11,8 +11,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class QueryPolicyTest {
 
     @Test
-    void trimsAndRejectsBlankQueries() {
+    void trimsAndRejectsMissingOrBlankQueries() {
         assertEquals("hello", QueryPolicy.normalize("  hello  "));
+        assertThrows(IllegalArgumentException.class, () -> QueryPolicy.normalize(null));
         assertThrows(IllegalArgumentException.class, () -> QueryPolicy.normalize("   \t\n"));
     }
 
