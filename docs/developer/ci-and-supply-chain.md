@@ -1,13 +1,13 @@
 # CI, couverture et supply-chain
 
-Ce document décrit les gates de qualité et de sécurité applicables à NEXUS 0.2.0 après la consolidation post-audit de l'issue #48 / PR #49, le durcissement de qualification NXA2-04 et la séparation qualification/publication NXA2-07.
+Ce document décrit les gates de qualité et de sécurité applicables à NEXUS 0.2.0 après la consolidation post-audit de l'issue #48 / PR #49, le durcissement de qualification NXA2-04, la séparation qualification/publication NXA2-07 et les gates de couverture adaptateurs NXA2-09.
 
 ## Objectifs
 
 La CI doit empêcher l'intégration silencieuse de régressions de :
 
 1. build, tests ou distribution sur les plateformes supportées ;
-2. couverture du cœur ;
+2. couverture du cœur et des adaptateurs publics ;
 3. vulnérabilités du reactor Maven ;
 4. sécurité de l'image Docker ;
 5. inventaire de conformité (licence, notices tierces, SBOM) ;
@@ -39,20 +39,33 @@ Une publication de release ajoute une contrainte supplémentaire : tous les gate
 - **Windows gate** : Java 24, script de qualification locale ;
 - **Linux reactor Maven build** : Java 21, reactor complet, distribution autonome et artefacts de conformité.
 
-Le reactor porte le gate JaCoCo, les tests unitaires/intégration et les contrôles Maven. Les surfaces REST et MCP sont couvertes par les modules du reactor.
+Le reactor porte les gates JaCoCo, les tests unitaires/intégration et les contrôles Maven. Les surfaces REST, MCP et assistant-clients sont couvertes par les modules du reactor.
 
 ### Couverture JaCoCo
 
-Le gate de couverture s'applique au module `core`.
+Quatre modules disposent désormais d'un contrat de couverture bloquant :
 
-| Compteur | Baseline historique qualifiée | Minimum bloquant |
-|---|---:|---:|
-| lignes | 77,07 % | 70 % |
-| branches | 58,46 % | 50 % |
+| Module | Baseline qualifiée lignes | Minimum lignes | Baseline qualifiée branches | Minimum branches |
+|---|---:|---:|---:|---:|
+| core | 79,07 % | 70 % | 61,85 % | 50 % |
+| REST | 63,10 % | 60 % | 66,44 % | 60 % |
+| MCP | 88,72 % | 80 % | 60,34 % | 55 % |
+| assistant-clients | 66,39 % | 60 % | 49,44 % | 45 % |
 
-Les seuils sont des planchers de non-régression. Ils ne doivent pas être abaissés pour contourner un défaut de tests.
+Les seuils sont des planchers de non-régression. Ils ne doivent pas être abaissés pour contourner un défaut de tests et NXA2-09 n'introduit aucune exclusion de classe/package pour les atteindre.
 
-Le rapport XML est produit dans `core/target/site/jacoco/jacoco.xml`.
+Le serveur MCP étant exercé dans un JVM enfant par le test STDIO réel, ce JVM reçoit explicitement l'agent JaCoCo et fusionne ses données avec celles du JVM Surefire. Sans cette instrumentation, la couverture MCP serait artificiellement sous-évaluée.
+
+Les rapports XML sont produits dans :
+
+```text
+core/target/site/jacoco/jacoco.xml
+adapters/rest-quarkus/target/site/jacoco/jacoco.xml
+adapters/mcp-java/target/site/jacoco/jacoco.xml
+adapters/assistant-clients/target/site/jacoco/jacoco.xml
+```
+
+Le job Linux imprime les ratios lignes/branches et conserve les quatre rapports comme preuves CI. Le script de qualification Windows exige également leur présence. Le contrat détaillé et les baselines sont documentés dans `docs/developer/adapter-coverage-gates.md`.
 
 ## Vulnérabilités — OSV-Scanner
 
