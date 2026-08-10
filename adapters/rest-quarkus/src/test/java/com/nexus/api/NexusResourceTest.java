@@ -1,5 +1,6 @@
 package com.nexus.api;
 
+import com.nexus.search.QueryPolicy;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import org.junit.jupiter.api.Test;
@@ -10,12 +11,13 @@ import java.nio.file.Path;
 import java.util.Map;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.blankOrNullString;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.blankOrNullString;
 
 @QuarkusTest
 class NexusResourceTest {
@@ -126,6 +128,27 @@ class NexusResourceTest {
                 .then()
                 .statusCode(400)
                 .body("error", equalTo("bad_request"));
+
+        String oversizedUtf8 = "é".repeat(QueryPolicy.MAX_QUERY_UTF8_BYTES / 2 + 1);
+        given()
+                .contentType(ContentType.JSON)
+                .body(Map.of("query", oversizedUtf8, "limit", 1))
+                .when()
+                .post("/api/v1/projects/{projectId}/search", projectId)
+                .then()
+                .statusCode(400)
+                .body("error", equalTo("bad_request"))
+                .body("message", containsString("octets UTF-8"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body(Map.of("query", oversizedUtf8, "tokenBudget", 100))
+                .when()
+                .post("/api/v1/projects/{projectId}/context", projectId)
+                .then()
+                .statusCode(400)
+                .body("error", equalTo("bad_request"))
+                .body("message", containsString("octets UTF-8"));
 
         given()
                 .when()

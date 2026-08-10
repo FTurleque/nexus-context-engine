@@ -9,6 +9,7 @@ import com.nexus.api.ApiModels.ProjectResponse;
 import com.nexus.api.ApiModels.SearchRequest;
 import com.nexus.api.ApiModels.SearchResponse;
 import com.nexus.context.ContextBudgetPolicy;
+import com.nexus.search.QueryPolicy;
 import com.nexus.search.ResultLimitPolicy;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -106,7 +107,7 @@ public class NexusResource {
 
     private SearchResponse search(UUID projectId, SearchRequest request, Boolean forceExplain) throws IOException {
         requireRequest(request, "Le corps de la requête de recherche est obligatoire");
-        String query = requireNonBlank(request.query(), "query est obligatoire");
+        String query = QueryPolicy.normalize(request.query());
         int limit = request.limit() == null
                 ? DEFAULT_SEARCH_LIMIT
                 : ResultLimitPolicy.validate(request.limit());
@@ -116,7 +117,7 @@ public class NexusResource {
 
     private ContextResponse context(UUID projectId, ContextRequestDto request, Boolean forceExplain) {
         requireRequest(request, "Le corps de la requête de contexte est obligatoire");
-        String query = requireNonBlank(request.query(), "query est obligatoire");
+        String query = QueryPolicy.normalize(request.query());
         int tokenBudget = request.tokenBudget() == null
                 ? DEFAULT_TOKEN_BUDGET
                 : ContextBudgetPolicy.validate(request.tokenBudget());
