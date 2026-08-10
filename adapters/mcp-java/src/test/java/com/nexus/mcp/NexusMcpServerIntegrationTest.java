@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexus.application.NexusApplication;
 import com.nexus.config.NexusPaths;
+import com.nexus.search.QueryPolicy;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.ServerParameters;
@@ -127,8 +128,20 @@ class NexusMcpServerIntegrationTest {
                             .build());
             assertFalse(Boolean.TRUE.equals(symbolResult.isError()));
             assertTrue(json(symbolResult).path("symbols").size() > 0);
-        }
-        finally {
+
+            String oversizedUtf8 = "é".repeat(QueryPolicy.MAX_QUERY_UTF8_BYTES / 2 + 1);
+            McpSchema.CallToolResult oversizedResult = client.callTool(
+                    McpSchema.CallToolRequest.builder("search_code")
+                            .arguments(Map.of(
+                                    "project", project.id().toString(),
+                                    "query", oversizedUtf8,
+                                    "limit", 1))
+                            .build());
+            assertTrue(Boolean.TRUE.equals(oversizedResult.isError()));
+            JsonNode oversizedJson = json(oversizedResult);
+            assertEquals("nexus_tool_error", oversizedJson.path("error").asText());
+            assertTrue(oversizedJson.path("message").asText().contains("octets UTF-8"));
+        } finally {
             assertTrue(client.closeGracefully(), "The MCP server process must stop before the test completes");
         }
     }
