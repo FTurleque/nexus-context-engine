@@ -83,17 +83,68 @@ class NexusRestExposureGuardTest {
     }
 
     @Test
-    void acceptsExplicitRemoteReverseProxyHttpsWithStrongTokenAndRoots() {
-        rememberAndSet(NexusRestSecurity.RUNTIME_PROPERTY, "native");
-        rememberAndSet(NexusRestSecurity.EXPOSURE_MODE_PROPERTY, "reverse-proxy-https");
-        rememberAndClear(NexusRestSecurity.DOCKER_HOST_FORWARD_ADDRESS_PROPERTY);
-
+    void acceptsDirectHttpsOnlyWithTlsMaterialAndHttpDisabled() {
+        configureDirectHttpsTransport();
         assertDoesNotThrow(this::validateWildcardRestHost);
     }
 
     @Test
+    void rejectsDirectHttpsWithoutEffectiveTlsMaterial() {
+        rememberAndSet(NexusRestSecurity.RUNTIME_PROPERTY, "native");
+        rememberAndSet(NexusRestSecurity.EXPOSURE_MODE_PROPERTY, "direct-https");
+        rememberAndSet(NexusRestTransportPolicy.INSECURE_REQUESTS_PROPERTY, "disabled");
+        rememberAndClear(NexusRestTransportPolicy.LEGACY_KEYSTORE_FILE_PROPERTY);
+        rememberAndClear(NexusRestTransportPolicy.LEGACY_CERTIFICATE_FILES_PROPERTY);
+        rememberAndClear(NexusRestTransportPolicy.LEGACY_KEY_FILES_PROPERTY);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, this::validateWildcardRestHost);
+        assertTrue(error.getMessage().contains("configuration TLS serveur Quarkus"));
+    }
+
+    @Test
+    void rejectsDirectHttpsWhilePlainHttpListenerRemainsEnabled() {
+        configureDirectHttpsTransport();
+        rememberAndSet(NexusRestTransportPolicy.INSECURE_REQUESTS_PROPERTY, "enabled");
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, this::validateWildcardRestHost);
+        assertTrue(error.getMessage().contains(NexusRestTransportPolicy.INSECURE_REQUESTS_PROPERTY));
+    }
+
+    @Test
+    void acceptsExplicitRemoteReverseProxyHttpsWithTlsAndTrustedProxyBoundary() {
+        configureReverseProxyHttpsTransport("127.0.0.1");
+        assertDoesNotThrow(this::validateWildcardRestHost);
+    }
+
+    @Test
+    void rejectsReverseProxyHttpsWithoutProxyAddressForwarding() {
+        configureReverseProxyHttpsTransport("127.0.0.1");
+        rememberAndSet(NexusRestTransportPolicy.PROXY_ADDRESS_FORWARDING_PROPERTY, "false");
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, this::validateWildcardRestHost);
+        assertTrue(error.getMessage().contains(NexusRestTransportPolicy.PROXY_ADDRESS_FORWARDING_PROPERTY));
+    }
+
+    @Test
+    void rejectsReverseProxyHttpsWithoutExplicitTrustedProxy() {
+        configureReverseProxyHttpsTransport("127.0.0.1");
+        rememberAndClear(NexusRestTransportPolicy.TRUSTED_PROXIES_PROPERTY);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, this::validateWildcardRestHost);
+        assertTrue(error.getMessage().contains(NexusRestTransportPolicy.TRUSTED_PROXIES_PROPERTY));
+    }
+
+    @Test
+    void rejectsReverseProxyHttpsWithCatchAllTrustedProxy() {
+        configureReverseProxyHttpsTransport("0.0.0.0/0");
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, this::validateWildcardRestHost);
+        assertTrue(error.getMessage().contains("plage de confiance globale"));
+    }
+
+    @Test
     void remoteExposureStillRejectsMissingOrWeakBearerToken() {
-        rememberAndSet(NexusRestSecurity.EXPOSURE_MODE_PROPERTY, "reverse-proxy-https");
+        configureReverseProxyHttpsTransport("127.0.0.1");
         rememberAndClear(NexusRestSecurity.TOKEN_PROPERTY);
         assertThrows(IllegalStateException.class, this::validateWildcardRestHost);
 
@@ -106,6 +157,23 @@ class NexusRestExposureGuardTest {
         rememberAndSet(NexusRestSecurity.RUNTIME_PROPERTY, "docker");
         rememberAndSet(NexusRestSecurity.EXPOSURE_MODE_PROPERTY, "loopback-forward");
         rememberAndSet(NexusRestSecurity.DOCKER_HOST_FORWARD_ADDRESS_PROPERTY, declaredForward);
+    }
+
+    private void configureDirectHttpsTransport() {
+        rememberAndSet(NexusRestSecurity.RUNTIME_PROPERTY, "native");
+        rememberAndSet(NexusRestSecurity.EXPOSURE_MODE_PROPERTY, "direct-https");
+        rememberAndSet(NexusRestTransportPolicy.INSECURE_REQUESTS_PROPERTY, "disabled");
+        rememberAndSet(
+                NexusRestTransportPolicy.LEGACY_KEYSTORE_FILE_PROPERTY,
+                temporaryDirectory.resolve("server-keystore.p12").toString());
+        rememberAndClear(NexusRestSecurity.DOCKER_HOST_FORWARD_ADDRESS_PROPERTY);
+    }
+
+    private void configureReverseProxyHttpsTransport(String trustedProxy) {
+        configureDirectHttpsTransport();
+        rememberAndSet(NexusRestSecurity.EXPOSURE_MODE_PROPERTY, "reverse-proxy-https");
+        rememberAndSet(NexusRestTransportPolicy.PROXY_ADDRESS_FORWARDING_PROPERTY, "true");
+        rememberAndSet(NexusRestTransportPolicy.TRUSTED_PROXIES_PROPERTY, trustedProxy);
     }
 
     private void validateWildcardRestHost() {
