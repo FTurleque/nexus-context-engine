@@ -48,6 +48,12 @@
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.jacoco</groupId>
+            <artifactId>org.jacoco.core</artifactId>
+            <version>${jacoco.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -123,6 +129,7 @@
                 <configuration>
                     <systemPropertyVariables>
                         <nexus.mcp.child.jacoco.argLine>${mcpChildJacocoArgLine}</nexus.mcp.child.jacoco.argLine>
+                        <nexus.mcp.child.jacoco.destFile>${project.build.directory}/jacoco-mcp-child.exec</nexus.mcp.child.jacoco.destFile>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>
