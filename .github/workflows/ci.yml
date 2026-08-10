@@ -1,6 +1,7 @@
 name: NEXUS CI
 
 on:
+  workflow_call:
   pull_request:
     branches:
       - develop
