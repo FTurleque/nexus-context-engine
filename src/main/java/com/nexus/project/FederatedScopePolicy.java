@@ -59,13 +59,16 @@ public final class FederatedScopePolicy {
             if (selector == null) {
                 continue;
             }
+            UUID explicitId;
             try {
-                explicitIds.add(UUID.fromString(selector.trim()));
-                validateUniqueCount(explicitIds.size());
+                explicitId = UUID.fromString(selector.trim());
             } catch (IllegalArgumentException invalidUuid) {
                 // Un nom de projet ou un sélecteur invalide doit être traité par
                 // la résolution normale ; il ne prouve pas une cardinalité UUID.
+                continue;
             }
+            explicitIds.add(explicitId);
+            validateUniqueCount(explicitIds.size());
         }
     }
 
