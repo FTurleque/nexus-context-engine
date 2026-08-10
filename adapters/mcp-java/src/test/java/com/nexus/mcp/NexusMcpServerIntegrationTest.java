@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexus.application.NexusApplication;
 import com.nexus.config.NexusPaths;
+import com.nexus.project.FederatedScopePolicy;
 import com.nexus.search.QueryPolicy;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
@@ -17,8 +18,11 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -141,6 +145,34 @@ class NexusMcpServerIntegrationTest {
             JsonNode oversizedJson = json(oversizedResult);
             assertEquals("nexus_tool_error", oversizedJson.path("error").asText());
             assertTrue(oversizedJson.path("message").asText().contains("octets UTF-8"));
+
+            McpSchema.CallToolResult oversizedScope = client.callTool(
+                    McpSchema.CallToolRequest.builder("search_across_projects")
+                            .arguments(Map.of(
+                                    "projects", uniqueProjectSelectors(FederatedScopePolicy.MAX_PROJECTS + 1),
+                                    "query", "OrderService",
+                                    "limit", 1))
+                            .build());
+            assertTrue(Boolean.TRUE.equals(oversizedScope.isError()));
+            JsonNode oversizedScopeJson = json(oversizedScope);
+            assertEquals("nexus_tool_error", oversizedScopeJson.path("error").asText());
+            assertEquals(
+                    FederatedScopePolicy.TOO_MANY_PROJECTS_MESSAGE,
+                    oversizedScopeJson.path("message").asText());
+
+            List<String> duplicateHeavyScope = new ArrayList<>();
+            for (int repetition = 0; repetition < FederatedScopePolicy.MAX_PROJECTS + 50; repetition++) {
+                duplicateHeavyScope.add(project.id().toString());
+            }
+            McpSchema.CallToolResult duplicateScope = client.callTool(
+                    McpSchema.CallToolRequest.builder("search_across_projects")
+                            .arguments(Map.of(
+                                    "projects", duplicateHeavyScope,
+                                    "query", "OrderService",
+                                    "limit", 1))
+                            .build());
+            assertFalse(Boolean.TRUE.equals(duplicateScope.isError()));
+            assertEquals(1, json(duplicateScope).path("projects").size());
         } finally {
             assertTrue(client.closeGracefully(), "The MCP server process must stop before the test completes");
         }
@@ -149,6 +181,14 @@ class NexusMcpServerIntegrationTest {
     private JsonNode json(McpSchema.CallToolResult result) throws Exception {
         McpSchema.TextContent content = (McpSchema.TextContent) result.content().getFirst();
         return new ObjectMapper().readTree(content.text());
+    }
+
+    private static List<String> uniqueProjectSelectors(int count) {
+        List<String> selectors = new ArrayList<>(count);
+        for (int index = 0; index < count; index++) {
+            selectors.add(new UUID(1L, index + 1L).toString());
+        }
+        return List.copyOf(selectors);
     }
 
     private static String javaExecutable() {
