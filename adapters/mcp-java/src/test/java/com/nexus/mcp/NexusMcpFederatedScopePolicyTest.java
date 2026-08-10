@@ -12,6 +12,7 @@ import com.nexus.project.ProjectSourceType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -21,6 +22,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class NexusMcpFederatedScopePolicyTest {
@@ -29,27 +31,49 @@ class NexusMcpFederatedScopePolicyTest {
     Path temporaryDirectory;
 
     @Test
-    void mcpFederatedResolutionDelegatesToTheCommonSearchAndContextLimit() throws Exception {
-        Fixture fixture = fixture(101);
+    void mcpRejectsOneHundredAndOneExplicitUuidsBeforeAnyProjectResolution() throws Exception {
+        NexusApplication application = NexusApplication.create(
+                new NexusPaths(temporaryDirectory.resolve("empty-nexus-home")));
+        NexusMcpTools tools = new NexusMcpTools(application, new ObjectMapper());
+        Method resolveProjects = resolveProjectsMethod();
+
+        List<String> selectors = new ArrayList<>();
+        for (int index = 1; index <= FederatedScopePolicy.MAX_PROJECTS + 1; index++) {
+            selectors.add(new UUID(7L, index).toString());
+        }
+
+        InvocationTargetException invocation = assertThrows(
+                InvocationTargetException.class,
+                () -> resolveProjects.invoke(tools, Map.of("projects", selectors)));
+        IllegalArgumentException failure = assertInstanceOf(IllegalArgumentException.class, invocation.getCause());
+
+        assertEquals(FederatedScopePolicy.TOO_MANY_PROJECTS_MESSAGE, failure.getMessage());
+    }
+
+    @Test
+    void mcpKeepsUuidDeduplicationWhenSelectorsAliasTheSameProject() throws Exception {
+        Fixture fixture = fixture(1);
         NexusMcpTools tools = new NexusMcpTools(fixture.application(), new ObjectMapper());
-        Method resolveProjects = NexusMcpTools.class.getDeclaredMethod("resolveProjects", Map.class);
-        resolveProjects.setAccessible(true);
+        Method resolveProjects = resolveProjectsMethod();
+        UUID id = fixture.ids().getFirst();
 
         @SuppressWarnings("unchecked")
         List<ProjectDescriptor> resolved = (List<ProjectDescriptor>) resolveProjects.invoke(
                 tools,
-                Map.of("projects", fixture.ids().stream().map(UUID::toString).toList()));
-        List<UUID> ids = resolved.stream().map(ProjectDescriptor::id).toList();
+                Map.of("projects", List.of(
+                        id.toString(),
+                        id.toString(),
+                        "project-1",
+                        "PROJECT-1")));
 
-        IllegalArgumentException search = assertThrows(
-                IllegalArgumentException.class,
-                () -> fixture.application().searchAcrossProjects(ids, "query", 10, false));
-        IllegalArgumentException context = assertThrows(
-                IllegalArgumentException.class,
-                () -> fixture.application().contextAcrossProjects(ids, "task", 1_000, Set.of(), Map.of(), false));
+        assertEquals(1, resolved.size());
+        assertEquals(id, resolved.getFirst().id());
+    }
 
-        assertEquals(FederatedScopePolicy.TOO_MANY_PROJECTS_MESSAGE, search.getMessage());
-        assertEquals(FederatedScopePolicy.TOO_MANY_PROJECTS_MESSAGE, context.getMessage());
+    private static Method resolveProjectsMethod() throws NoSuchMethodException {
+        Method method = NexusMcpTools.class.getDeclaredMethod("resolveProjects", Map.class);
+        method.setAccessible(true);
+        return method;
     }
 
     private Fixture fixture(int count) throws Exception {
