@@ -1,9 +1,11 @@
 package com.nexus.project;
 
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /** Common cardinality contract for every federated NEXUS surface. */
@@ -42,6 +44,29 @@ public final class FederatedScopePolicy {
             validateUniqueCount(unique.size());
         }
         return List.copyOf(unique.values());
+    }
+
+    /**
+     * Rejette avant toute résolution projet une portée qui contient déjà plus de
+     * {@link #MAX_PROJECTS} UUID explicites distincts. Les sélecteurs par nom sont
+     * volontairement ignorés ici : seul le UUID résolu peut prouver leur identité
+     * canonique sans faux positif lié aux alias nom/UUID.
+     */
+    public static void validateExplicitUuidSelectors(List<String> selectors) {
+        Objects.requireNonNull(selectors, "selectors");
+        Set<UUID> explicitIds = new LinkedHashSet<>();
+        for (String selector : selectors) {
+            if (selector == null) {
+                continue;
+            }
+            try {
+                explicitIds.add(UUID.fromString(selector.trim()));
+                validateUniqueCount(explicitIds.size());
+            } catch (IllegalArgumentException invalidUuid) {
+                // Un nom de projet ou un sélecteur invalide doit être traité par
+                // la résolution normale ; il ne prouve pas une cardinalité UUID.
+            }
+        }
     }
 
     public static void validateUniqueCount(int uniqueProjectCount) {
