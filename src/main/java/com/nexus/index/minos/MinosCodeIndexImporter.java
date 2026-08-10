@@ -10,13 +10,13 @@ import com.nexus.index.IndexedSymbol;
 import com.nexus.index.RelationKind;
 import com.nexus.index.SymbolKind;
 import com.nexus.index.SymbolRelation;
+import com.nexus.security.ProjectPathGuard;
 import com.nexus.security.SafeFileIO;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -59,6 +59,7 @@ public final class MinosCodeIndexImporter {
             Set<String> indexedProjectFiles,
             String payload) throws IOException {
         Path root = Objects.requireNonNull(projectRoot, "projectRoot").toRealPath();
+        ProjectPathGuard pathGuard = new ProjectPathGuard(root);
         Set<String> safeProjectFiles = canonicalIndexedFiles(indexedProjectFiles);
         String documentPayload = Objects.requireNonNull(payload, "payload");
         if (documentPayload.getBytes(StandardCharsets.UTF_8).length > MAX_EXPORT_BYTES) {
@@ -81,7 +82,7 @@ public final class MinosCodeIndexImporter {
         Map<String, Integer> sourceLineCounts = new LinkedHashMap<>();
         Map<ExternalSymbolIdentity, IndexedSymbol> symbols = new LinkedHashMap<>();
         for (JsonNode symbolNode : requiredArray(document, "symbols")) {
-            IndexedSymbol symbol = mapSymbol(root, safeProjectFiles, sourceLineCounts, symbolNode);
+            IndexedSymbol symbol = mapSymbol(pathGuard, safeProjectFiles, sourceLineCounts, symbolNode);
             if (symbol == null) {
                 continue;
             }
@@ -111,7 +112,7 @@ public final class MinosCodeIndexImporter {
     }
 
     private static IndexedSymbol mapSymbol(
-            Path projectRoot,
+            ProjectPathGuard pathGuard,
             Set<String> safeProjectFiles,
             Map<String, Integer> sourceLineCounts,
             JsonNode node) throws IOException {
@@ -131,8 +132,8 @@ public final class MinosCodeIndexImporter {
         if (endLine < startLine) {
             throw new IOException("MINOS export contains an invalid symbol line range");
         }
-        int sourceLineCount = canonicalLineCount(projectRoot, relativePath, sourceLineCounts);
-        if (sourceLineCount >= 0 && !CodeSymbol.isWithinLineCount(startLine, endLine, sourceLineCount)) {
+        int sourceLineCount = canonicalLineCount(pathGuard, relativePath, sourceLineCounts);
+        if (!CodeSymbol.isWithinLineCount(startLine, endLine, sourceLineCount)) {
             throw new IOException("MINOS export symbol line range exceeds canonical file '"
                     + relativePath + "': " + startLine + "-" + endLine
                     + " for " + sourceLineCount + " line(s)");
@@ -179,18 +180,15 @@ public final class MinosCodeIndexImporter {
     }
 
     private static int canonicalLineCount(
-            Path projectRoot,
+            ProjectPathGuard pathGuard,
             String relativePath,
             Map<String, Integer> sourceLineCounts) throws IOException {
         Integer cached = sourceLineCounts.get(relativePath);
         if (cached != null) {
             return cached;
         }
-        Path source = projectRoot.resolve(relativePath).normalize();
-        int lineCount = -1;
-        if (source.startsWith(projectRoot) && Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS)) {
-            lineCount = countLines(SafeFileIO.readStringNoFollow(source));
-        }
+        Path source = pathGuard.requireRegularFile(pathGuard.resolve(Path.of(relativePath)));
+        int lineCount = countLines(SafeFileIO.readStringNoFollow(source));
         sourceLineCounts.put(relativePath, lineCount);
         return lineCount;
     }
