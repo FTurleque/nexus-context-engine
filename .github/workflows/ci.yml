@@ -3,6 +3,7 @@ name: NEXUS CI
 on:
   pull_request:
     branches:
+      - develop
       - main
   push:
     branches:
@@ -66,7 +67,7 @@ jobs:
           test -s target/linux-distribution-smoke/nexus-context-engine-0.2.0/LICENSE
           test -s target/linux-distribution-smoke/nexus-context-engine-0.2.0/THIRD_PARTY_NOTICES.txt
           test -s target/linux-distribution-smoke/nexus-context-engine-0.2.0/SBOM.cdx.json
-          target/linux-distribution-smoke/nexus-context-engine-0.2.0/bin/nexus --version --json | grep -Eq '"version"[[:space:]]*:[[:space:]]*"0\.2\.0"'
+          target/linux-distribution-smoke/nexus-context-engine-0.2.0/bin/nexus --version --json | grep -Eq '\"version\"[[:space:]]*:[[:space:]]*\"0\\.2\\.0\"'
 
       - name: Verify compliance artifacts
         run: |
