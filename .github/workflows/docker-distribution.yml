@@ -2,7 +2,7 @@ name: Docker Distribution
 
 on:
   pull_request:
-    branches: [main]
+    branches: [develop, main]
     paths:
       - 'packaging/docker/**'
       - 'scripts/release/build-docker-image.ps1'
