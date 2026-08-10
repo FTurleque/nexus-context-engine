@@ -30,6 +30,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NexusMcpServerIntegrationTest {
 
+    private static final String CHILD_JACOCO_PROPERTY = "nexus.mcp.child.jacoco.argLine";
+
     private static final Set<String> EXPECTED_TOOLS = Set.of(
             "list_projects",
             "search_code",
@@ -72,12 +74,18 @@ class NexusMcpServerIntegrationTest {
                 Map.of(),
                 false);
 
+        List<String> serverArguments = new ArrayList<>();
+        String childJacocoArgLine = System.getProperty(CHILD_JACOCO_PROPERTY);
+        if (childJacocoArgLine != null && !childJacocoArgLine.isBlank()) {
+            serverArguments.add(childJacocoArgLine.trim());
+        }
+        serverArguments.add("-Dnexus.home=" + nexusHome.toAbsolutePath());
+        serverArguments.add("-cp");
+        serverArguments.add(System.getProperty("java.class.path"));
+        serverArguments.add(NexusMcpServer.class.getName());
+
         ServerParameters parameters = ServerParameters.builder(javaExecutable())
-                .args(
-                        "-Dnexus.home=" + nexusHome.toAbsolutePath(),
-                        "-cp",
-                        System.getProperty("java.class.path"),
-                        NexusMcpServer.class.getName())
+                .args(serverArguments.toArray(String[]::new))
                 .build();
 
         McpSyncClient client = McpClient.sync(
