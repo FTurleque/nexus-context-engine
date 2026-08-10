@@ -1,0 +1,273 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate-release:
+    name: Validate immutable release identity
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.identity.outputs.version }}
+      release_sha: ${{ steps.identity.outputs.release_sha }}
+    steps:
+      - name: Checkout release ref
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Validate tag, Maven version and main HEAD
+        id: identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('pom.xml').getroot()
+          ns = {'m': 'http://maven.apache.org/POM/4.0.0'}
+          print(root.find('m:version', ns).text)
+          PY
+          )"
+          RELEASE_SHA="$(git rev-parse HEAD)"
+          git fetch --no-tags origin main
+          MAIN_SHA="$(git rev-parse origin/main)"
+          chmod +x scripts/release/validate-release-tag.sh
+          scripts/release/validate-release-tag.sh "$GITHUB_REF_NAME" "$VERSION" "$RELEASE_SHA" "$MAIN_SHA"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "release_sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+
+  nexus-ci:
+    name: NEXUS CI release gate
+    needs: validate-release
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  windows-installer:
+    name: Windows installer release gate
+    needs: validate-release
+    uses: ./.github/workflows/windows-installer.yml
+    permissions:
+      contents: read
+
+  docker-distribution:
+    name: Docker distribution release gate
+    needs: validate-release
+    uses: ./.github/workflows/docker-distribution.yml
+    permissions:
+      contents: read
+
+  scale-benchmark:
+    name: Full scale release gate
+    needs: validate-release
+    uses: ./.github/workflows/scale-benchmark.yml
+    with:
+      profile: full
+    permissions:
+      contents: read
+
+  scanner-corpus-benchmark:
+    name: Full scanner corpus release gate
+    needs: validate-release
+    uses: ./.github/workflows/scanner-corpus-benchmark.yml
+    with:
+      profile: full
+    permissions:
+      contents: read
+
+  codeql:
+    name: CodeQL release gate
+    needs: validate-release
+    uses: ./.github/workflows/codeql.yml
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+
+  osv:
+    name: OSV release gate
+    needs: validate-release
+    uses: ./.github/workflows/osv-scanner.yml
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+
+  publish:
+    name: Publish immutable GHCR release
+    needs:
+      - validate-release
+      - nexus-ci
+      - windows-installer
+      - docker-distribution
+      - scale-benchmark
+      - scanner-corpus-benchmark
+      - codeql
+      - osv
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      NEXUS_HEAD_SHA: ${{ needs.validate-release.outputs.release_sha }}
+      NEXUS_VERSION: ${{ needs.validate-release.outputs.version }}
+      NEXUS_IMAGE: ghcr.io/fturleque/nexus-context-engine
+    steps:
+      - name: Checkout exact qualified commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ env.NEXUS_HEAD_SHA }}
+
+      - name: Revalidate release identity before publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          MAIN_SHA="$(git rev-parse origin/main)"
+          chmod +x scripts/release/validate-release-tag.sh
+          scripts/release/validate-release-tag.sh "$GITHUB_REF_NAME" "$NEXUS_VERSION" "$NEXUS_HEAD_SHA" "$MAIN_SHA"
+
+      - name: Build exact release image
+        shell: bash
+        run: docker build --pull --file packaging/docker/Dockerfile --tag nexus-context-engine:${NEXUS_HEAD_SHA} .
+
+      - name: Prepare release security evidence
+        shell: bash
+        run: mkdir -p target/release
+
+      - name: Generate full release Trivy vulnerability report
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: nexus-context-engine:${{ env.NEXUS_HEAD_SHA }}
+          scan-type: image
+          format: json
+          output: target/release/trivy-image-vulnerabilities.json
+          vuln-type: os,library
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          exit-code: '0'
+
+      - name: Generate release CycloneDX SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: nexus-context-engine:${{ env.NEXUS_HEAD_SHA }}
+          scan-type: image
+          format: cyclonedx
+          output: target/release/nexus-image.cdx.json
+          skip-setup-trivy: true
+          exit-code: '0'
+
+      - name: Block fixable HIGH or CRITICAL vulnerabilities on release image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: nexus-context-engine:${{ env.NEXUS_HEAD_SHA }}
+          scan-type: image
+          format: table
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          skip-setup-trivy: true
+          exit-code: '1'
+
+      - name: Retain release image security evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
+        with:
+          name: nexus-release-container-security-${{ env.NEXUS_HEAD_SHA }}
+          path: |
+            target/release/trivy-image-vulnerabilities.json
+            target/release/nexus-image.cdx.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Authenticate to GHCR
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Refuse existing immutable tags
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION_REF="$NEXUS_IMAGE:$NEXUS_VERSION"
+          SHA_REF="$NEXUS_IMAGE:sha-$NEXUS_HEAD_SHA"
+          if docker manifest inspect "$VERSION_REF" >/dev/null 2>&1; then
+            echo "::error::Immutable version tag already exists: $VERSION_REF"
+            exit 1
+          fi
+          if docker manifest inspect "$SHA_REF" >/dev/null 2>&1; then
+            echo "::error::Immutable SHA tag already exists: $SHA_REF"
+            exit 1
+          fi
+
+      - name: Publish immutable version and SHA tags
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION_REF="$NEXUS_IMAGE:$NEXUS_VERSION"
+          SHA_REF="$NEXUS_IMAGE:sha-$NEXUS_HEAD_SHA"
+          docker tag nexus-context-engine:${NEXUS_HEAD_SHA} "$VERSION_REF"
+          docker tag nexus-context-engine:${NEXUS_HEAD_SHA} "$SHA_REF"
+          docker push "$VERSION_REF"
+          docker push "$SHA_REF"
+          docker pull "$VERSION_REF" >/dev/null
+          REPO_DIGEST="$(docker image inspect "$VERSION_REF" --format '{{range .RepoDigests}}{{println .}}{{end}}' | grep "^${NEXUS_IMAGE}@" | head -n 1)"
+          DIGEST="${REPO_DIGEST#*@}"
+          if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Unable to resolve published version digest: $REPO_DIGEST"
+            exit 1
+          fi
+          docker pull "$SHA_REF" >/dev/null
+          SHA_REPO_DIGEST="$(docker image inspect "$SHA_REF" --format '{{range .RepoDigests}}{{println .}}{{end}}' | grep "^${NEXUS_IMAGE}@" | head -n 1)"
+          SHA_DIGEST="${SHA_REPO_DIGEST#*@}"
+          if [[ "$SHA_DIGEST" != "$DIGEST" ]]; then
+            echo "::error::Version/SHA digest mismatch: version=$DIGEST sha=$SHA_DIGEST"
+            exit 1
+          fi
+          echo "image=$NEXUS_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+
+      - name: Attest container build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ steps.publish.outputs.image }}
+          subject-digest: ${{ steps.publish.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest container SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ steps.publish.outputs.image }}
+          subject-digest: ${{ steps.publish.outputs.digest }}
+          sbom-path: target/release/nexus-image.cdx.json
+          push-to-registry: true
+
+      - name: Move latest only after immutable publication and attestations
+        shell: bash
+        run: |
+          set -euo pipefail
+          LATEST_REF="$NEXUS_IMAGE:latest"
+          docker tag nexus-context-engine:${NEXUS_HEAD_SHA} "$LATEST_REF"
+          docker push "$LATEST_REF"
+          docker pull "$LATEST_REF" >/dev/null
+          LATEST_REPO_DIGEST="$(docker image inspect "$LATEST_REF" --format '{{range .RepoDigests}}{{println .}}{{end}}' | grep "^${NEXUS_IMAGE}@" | head -n 1)"
+          LATEST_DIGEST="${LATEST_REPO_DIGEST#*@}"
+          if [[ "$LATEST_DIGEST" != "${{ steps.publish.outputs.digest }}" ]]; then
+            echo "::error::latest does not point to the qualified release digest: latest=$LATEST_DIGEST release=${{ steps.publish.outputs.digest }}"
+            exit 1
+          fi
+          printf 'published-version=%s\npublished-sha=%s\npublished-digest=%s\n' "$NEXUS_VERSION" "$NEXUS_HEAD_SHA" "${{ steps.publish.outputs.digest }}"
