@@ -49,6 +49,7 @@ import com.nexus.ranking.graph.GraphCandidateEnricher;
 import com.nexus.search.CandidateType;
 import com.nexus.search.FederatedSearchHit;
 import com.nexus.search.FederatedSearchService;
+import com.nexus.search.QueryPolicy;
 import com.nexus.search.ResultLimitPolicy;
 import com.nexus.search.SearchIndex;
 import com.nexus.search.SearchService;
@@ -293,8 +294,8 @@ public final class NexusApplication {
     }
 
     public SearchOperation search(UUID projectId, String query, int limit, boolean explain) throws IOException {
-        ProjectDescriptor project = requireReadyProject(projectId);
         String resolvedQuery = requireQuery(query);
+        ProjectDescriptor project = requireReadyProject(projectId);
         int resolvedLimit = positiveLimit(limit);
         long startedAt = System.nanoTime();
         List<RankedCandidate> results = searchService.search(project, resolvedQuery, resolvedLimit, explain);
@@ -330,8 +331,8 @@ public final class NexusApplication {
             Set<CandidateType> requestedSources,
             Map<String, String> constraints,
             boolean explain) {
-        ProjectDescriptor project = requireReadyProject(projectId);
         String resolvedQuery = requireQuery(query);
+        ProjectDescriptor project = requireReadyProject(projectId);
         long startedAt = System.nanoTime();
         ContextBundle bundle = contextBuilder.build(new ContextRequest(
                 projectId,
@@ -371,13 +372,15 @@ public final class NexusApplication {
     }
 
     public List<IndexedSymbol> findSymbols(UUID projectId, String query, int limit) {
+        String resolvedQuery = requireQuery(query);
         requireReadyProject(projectId);
-        return indexRepository.searchSymbols(projectId, requireQuery(query), positiveLimit(limit));
+        return indexRepository.searchSymbols(projectId, resolvedQuery, positiveLimit(limit));
     }
 
     public List<SymbolRelation> findUsages(UUID projectId, String symbol, int limit) {
+        String resolvedSymbol = requireQuery(symbol);
         requireReadyProject(projectId);
-        return indexRepository.searchRelations(projectId, requireQuery(symbol), positiveLimit(limit));
+        return indexRepository.searchRelations(projectId, resolvedSymbol, positiveLimit(limit));
     }
 
     public ReadinessSnapshot readiness() {
@@ -414,12 +417,7 @@ public final class NexusApplication {
     }
 
     private static String requireQuery(String value) {
-        Objects.requireNonNull(value, "query");
-        String normalized = value.trim();
-        if (normalized.isBlank()) {
-            throw new IllegalArgumentException("La requête ne peut pas être vide");
-        }
-        return normalized;
+        return QueryPolicy.normalize(value);
     }
 
     private static int positiveLimit(int limit) {
