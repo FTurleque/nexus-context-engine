@@ -8,6 +8,7 @@ import com.nexus.index.IndexedSymbol;
 import com.nexus.index.RelationKind;
 import com.nexus.index.SymbolKind;
 import com.nexus.index.SymbolRelation;
+import com.nexus.security.ProjectPathGuard;
 import com.nexus.security.SafeFileIO;
 
 import java.io.BufferedInputStream;
@@ -77,9 +78,16 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
 
     @Override
     public Optional<CodeIntelligenceSnapshot> importIndex(Path projectRoot) throws IOException {
-        Path root = projectRoot.toAbsolutePath().normalize();
-        Path indexFile = root.resolve(indexFileName).normalize();
-        if (!indexFile.startsWith(root) || !Files.isRegularFile(indexFile, LinkOption.NOFOLLOW_LINKS)) {
+        ProjectPathGuard pathGuard = new ProjectPathGuard(projectRoot);
+        Path root = pathGuard.root();
+        Path indexCandidate = pathGuard.resolve(Path.of(indexFileName));
+        Path indexFile;
+        try {
+            indexFile = pathGuard.requireRegularFile(indexCandidate);
+        } catch (IOException missingOrUnsafeIndex) {
+            if (Files.exists(indexCandidate, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(indexCandidate)) {
+                throw missingOrUnsafeIndex;
+            }
             return Optional.empty();
         }
 
@@ -100,7 +108,7 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
                 if (fieldNumber == 2 && wireType == WireType.LENGTH_DELIMITED) {
                     byte[] documentPayload = readLengthDelimited(input, maxMessageBytes);
                     importDocument(
-                            root,
+                            pathGuard,
                             parseDocument(documentPayload, maxMessageBytes),
                             symbols,
                             relations,
@@ -115,16 +123,16 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
     }
 
     private static void importDocument(
-            Path projectRoot,
+            ProjectPathGuard pathGuard,
             ScipDocument document,
             List<IndexedSymbol> symbols,
             List<IndexedRelation> relations,
             Set<String> relationKeys) throws IOException {
-        String relativePath = normalizeRelativePath(projectRoot, document.relativePath());
+        String relativePath = normalizeRelativePath(pathGuard, document.relativePath());
         if (relativePath == null) {
             return;
         }
-        int sourceLineCount = canonicalLineCount(projectRoot, relativePath);
+        int sourceLineCount = canonicalLineCount(pathGuard, relativePath);
 
         for (ScipSymbolInformation symbolInformation : document.symbols()) {
             ScipOccurrence definition = findDefinition(document.occurrences(), symbolInformation.symbol());
@@ -218,7 +226,7 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
         }
         int startLine = range.startLine() + 1;
         int endLine = range.endLine() + 1;
-        if (sourceLineCount >= 0 && !CodeSymbol.isWithinLineCount(startLine, endLine, sourceLineCount)) {
+        if (!CodeSymbol.isWithinLineCount(startLine, endLine, sourceLineCount)) {
             throw new IOException("SCIP symbol line range exceeds canonical file '"
                     + relativePath + "': " + startLine + "-" + endLine
                     + " for " + sourceLineCount + " line(s)");
@@ -226,11 +234,8 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
         return range;
     }
 
-    private static int canonicalLineCount(Path projectRoot, String relativePath) throws IOException {
-        Path source = projectRoot.resolve(relativePath).normalize();
-        if (!source.startsWith(projectRoot) || !Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS)) {
-            return -1;
-        }
+    private static int canonicalLineCount(ProjectPathGuard pathGuard, String relativePath) throws IOException {
+        Path source = pathGuard.requireRegularFile(pathGuard.resolve(Path.of(relativePath)));
         long lineCount = SafeFileIO.readStringNoFollow(source).lines().count();
         if (lineCount > Integer.MAX_VALUE) {
             throw new IOException("Source file contains too many lines to validate SCIP symbol ranges: "
@@ -271,15 +276,12 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
         return (roles & ROLE_DEFINITION) != 0;
     }
 
-    private static String normalizeRelativePath(Path projectRoot, String relativePath) {
+    private static String normalizeRelativePath(ProjectPathGuard pathGuard, String relativePath) throws IOException {
         if (relativePath == null || relativePath.isBlank()) {
             return null;
         }
-        Path resolved = projectRoot.resolve(relativePath).normalize();
-        if (!resolved.startsWith(projectRoot)) {
-            return null;
-        }
-        return projectRoot.relativize(resolved).toString().replace('\\', '/');
+        Path resolved = pathGuard.resolve(Path.of(relativePath));
+        return pathGuard.root().relativize(resolved).toString().replace('\\', '/');
     }
 
     private static String symbolName(ScipSymbolInformation symbolInformation) {
