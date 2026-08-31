@@ -53,7 +53,7 @@ Les trois surfaces CLI/REST/MCP délèguent aux mêmes politiques applicatives.
 
 ## Portée fédérée
 
-`projects` est une liste non vide de sélecteurs. Le contrat commun impose au maximum **100 UUID uniques**.
+`projects` est une liste non vide de sélecteurs. Le contrat commun impose au maximum **100 projets uniques** (UUID canoniques).
 
 L'ordre de validation est volontaire :
 
