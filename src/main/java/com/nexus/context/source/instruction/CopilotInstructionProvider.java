@@ -4,9 +4,11 @@ import com.nexus.context.source.ContextSourceDescriptor;
 import com.nexus.context.source.ContextSourceProvider;
 import com.nexus.context.source.ContextSourceQuery;
 import com.nexus.context.source.ContextSourceScope;
+import com.nexus.security.ProjectPathGuard;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -18,6 +20,7 @@ import java.util.List;
 public final class CopilotInstructionProvider implements ContextSourceProvider {
 
     private static final String PROVIDER_ID = "github-copilot";
+    private static final Path REPOSITORY_INSTRUCTIONS = Path.of(".github", "copilot-instructions.md");
     private final InstructionDescriptorFactory descriptorFactory = new InstructionDescriptorFactory();
 
     @Override
@@ -28,10 +31,12 @@ public final class CopilotInstructionProvider implements ContextSourceProvider {
     @Override
     public List<ContextSourceDescriptor> discover(ContextSourceQuery query) throws IOException {
         List<ContextSourceDescriptor> descriptors = new ArrayList<>();
-        Path root = query.project().rootPath();
-
-        Path repositoryInstructions = root.resolve(".github/copilot-instructions.md");
-        if (Files.isRegularFile(repositoryInstructions)) {
+        ProjectPathGuard pathGuard = new ProjectPathGuard(query.project().rootPath());
+        Path repositoryCandidate = pathGuard.resolve(REPOSITORY_INSTRUCTIONS);
+        if (Files.exists(repositoryCandidate, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(repositoryCandidate)) {
+            query.discoveryBudget().visit(repositoryCandidate);
+            Path repositoryInstructions = pathGuard.requireRegularFile(repositoryCandidate);
+            query.discoveryBudget().candidate(repositoryInstructions);
             descriptors.addAll(descriptorFactory.create(
                     query.project(),
                     PROVIDER_ID,
@@ -43,12 +48,16 @@ public final class CopilotInstructionProvider implements ContextSourceProvider {
                     List.of(
                             "instructions GitHub Copilot applicables au repository",
                             "scope repository"),
-                    true));
+                    true,
+                    query.discoveryBudget()));
         }
 
         for (Path file : InstructionDiscoverySupport.findFilesBelow(
-                query.project(), Path.of(".github", "instructions"), ".instructions.md")) {
-            String content = InstructionDiscoverySupport.read(query.project(), file);
+                query.project(),
+                Path.of(".github", "instructions"),
+                ".instructions.md",
+                query.discoveryBudget())) {
+            String content = InstructionDiscoverySupport.read(query.project(), file, query.discoveryBudget());
             List<String> applyTo = parseApplyTo(content);
             if (applyTo.isEmpty() || !RepositoryGlobMatcher.matchesAny(applyTo, query.targetPaths())) {
                 continue;
@@ -65,7 +74,8 @@ public final class CopilotInstructionProvider implements ContextSourceProvider {
                             "instruction GitHub Copilot path-specific applicable",
                             "applyTo : " + String.join(", ", applyTo),
                             "priorité élevée par spécificité de chemin"),
-                    false));
+                    false,
+                    query.discoveryBudget()));
         }
         return List.copyOf(descriptors);
     }
