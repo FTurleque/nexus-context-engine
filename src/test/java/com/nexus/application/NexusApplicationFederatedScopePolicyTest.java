@@ -55,4 +55,25 @@ class NexusApplicationFederatedScopePolicyTest {
         assertEquals(FederatedScopePolicy.TOO_MANY_PROJECTS_MESSAGE, search.getMessage());
         assertEquals(FederatedScopePolicy.TOO_MANY_PROJECTS_MESSAGE, context.getMessage());
     }
+
+    @Test
+    void tooManyDistinctUuidsWinsBeforeAnyMissingProjectLookup() throws Exception {
+        NexusApplication application = NexusApplication.create(
+                new NexusPaths(temporaryDirectory.resolve("empty-nexus-home")));
+        List<UUID> nonexistentIds = new ArrayList<>();
+        for (int index = 1; index <= FederatedScopePolicy.MAX_PROJECTS + 1; index++) {
+            nonexistentIds.add(new UUID(1L, index));
+        }
+
+        IllegalArgumentException search = assertThrows(
+                IllegalArgumentException.class,
+                () -> application.searchAcrossProjects(nonexistentIds, "query", 10, false));
+        IllegalArgumentException context = assertThrows(
+                IllegalArgumentException.class,
+                () -> application.contextAcrossProjects(
+                        nonexistentIds, "task", 1_000, Set.of(), Map.of(), false));
+
+        assertEquals(FederatedScopePolicy.TOO_MANY_PROJECTS_MESSAGE, search.getMessage());
+        assertEquals(FederatedScopePolicy.TOO_MANY_PROJECTS_MESSAGE, context.getMessage());
+    }
 }
