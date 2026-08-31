@@ -27,7 +27,8 @@ public final class ClaudeInstructionProvider implements ContextSourceProvider {
     @Override
     public List<ContextSourceDescriptor> discover(ContextSourceQuery query) throws IOException {
         List<ContextSourceDescriptor> descriptors = new ArrayList<>();
-        for (Path file : InstructionDiscoverySupport.findNamedFiles(query.project(), Set.of("CLAUDE.md"))) {
+        for (Path file : InstructionDiscoverySupport.findNamedFiles(
+                query.project(), Set.of("CLAUDE.md"), query.discoveryBudget())) {
             Path relative = InstructionDiscoverySupport.relative(query.project(), file);
             boolean claudeDirectoryRoot = InstructionDiscoverySupport.repositoryPath(relative)
                     .equalsIgnoreCase(".claude/CLAUDE.md");
@@ -55,7 +56,8 @@ public final class ClaudeInstructionProvider implements ContextSourceProvider {
                                     ? "scope repository"
                                     : "scope répertoire : "
                                         + InstructionDiscoverySupport.repositoryPath(relative.getParent())),
-                    true));
+                    true,
+                    query.discoveryBudget()));
         }
         return List.copyOf(descriptors);
     }
