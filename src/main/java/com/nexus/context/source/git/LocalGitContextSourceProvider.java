@@ -1,9 +1,11 @@
 package com.nexus.context.source.git;
 
 import com.nexus.context.ContextFragment;
+import com.nexus.context.source.ContextDiscoveryLimitExceededException;
 import com.nexus.search.CandidateType;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.Status;
+import org.eclipse.jgit.api.StatusCommand;
 import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.diff.DiffFormatter;
 import org.eclipse.jgit.errors.RepositoryNotFoundException;
@@ -14,8 +16,8 @@ import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 import org.eclipse.jgit.treewalk.filter.PathFilterGroup;
 import org.eclipse.jgit.util.io.DisabledOutputStream;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -37,7 +39,13 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
     static final int MAX_TARGET_HISTORY_PATHS = 5;
     static final int MAX_HISTORY_PER_PATH = 5;
     static final int MAX_CO_CHANGES = 8;
+    static final int MAX_CHANGED_PATHS_PER_COMMIT = 2_000;
+    static final int MAX_CUMULATIVE_CHANGED_PATHS = 10_000;
     static final int MAX_LOCAL_DIFF_CHARS = 6_000;
+    static final int MAX_LOCAL_DIFF_BYTES = MAX_LOCAL_DIFF_CHARS * 4 + 1_024;
+
+    private static final Path GIT_HISTORY_WORK = Path.of(".nexus", "git", "history");
+    private static final Path GIT_DIFF_WORK = Path.of(".nexus", "git", "working-tree-diff");
 
     @Override
     public String id() {
@@ -56,6 +64,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
         Map<String, List<CommitSummary>> history = new LinkedHashMap<>();
         Map<String, Integer> coChanges = new HashMap<>();
         int commitsInspected = 0;
+        int cumulativeChangedPaths = 0;
 
         try (Repository repository = openRepository(query.project().rootPath());
              Git git = new Git(repository);
@@ -72,13 +81,21 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
             Set<String> gitTargets = projectPathByGitTarget.keySet();
 
             for (RevCommit commit : git.log().setMaxCount(MAX_COMMITS).call()) {
+                query.discoveryBudget().checkpoint();
+                query.discoveryBudget().candidate(GIT_HISTORY_WORK);
                 commitsInspected++;
                 if (commit.getParentCount() == 0) {
                     continue;
                 }
 
                 RevCommit parent = revWalk.parseCommit(commit.getParent(0).getId());
-                Set<String> changedGitPaths = changedPaths(historyDiffFormatter, parent, commit);
+                Set<String> changedGitPaths = changedPaths(historyDiffFormatter, parent, commit, query);
+                cumulativeChangedPaths += changedGitPaths.size();
+                if (cumulativeChangedPaths > MAX_CUMULATIVE_CHANGED_PATHS) {
+                    throw new ContextDiscoveryLimitExceededException(
+                            "Budget Git dépassé: plus de " + MAX_CUMULATIVE_CHANGED_PATHS
+                                    + " chemins modifiés dans la fenêtre d'historique");
+                }
                 Set<String> touchedGitTargets = intersection(changedGitPaths, gitTargets);
                 if (touchedGitTargets.isEmpty()) {
                     continue;
@@ -120,9 +137,10 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
             addWorkingTreeFragment(
                     fragments,
                     git,
-                    git.status().call(),
+                    targetStatus(git, gitTargets),
                     projectPathByGitTarget,
-                    projectPrefix);
+                    projectPrefix,
+                    query);
             int coChangeLinks = addCoChangesFragment(fragments, coChanges);
 
             return new GitContextResult(
@@ -133,6 +151,8 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
                     related.size(),
                     coChangeLinks,
                     diagnostics);
+        } catch (ContextDiscoveryLimitExceededException limitExceeded) {
+            throw limitExceeded;
         } catch (RepositoryNotFoundException exception) {
             return GitContextResult.unavailable("aucun repository Git local détecté");
         } catch (Exception exception) {
@@ -151,17 +171,32 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
     private static Set<String> changedPaths(
             DiffFormatter formatter,
             RevCommit parent,
-            RevCommit commit) throws IOException {
+            RevCommit commit,
+            GitContextQuery query) throws IOException {
         Set<String> changed = new LinkedHashSet<>();
         for (DiffEntry entry : formatter.scan(parent.getTree(), commit.getTree())) {
+            query.discoveryBudget().visit(GIT_HISTORY_WORK);
             if (!DiffEntry.DEV_NULL.equals(entry.getOldPath())) {
                 changed.add(entry.getOldPath());
             }
             if (!DiffEntry.DEV_NULL.equals(entry.getNewPath())) {
                 changed.add(entry.getNewPath());
             }
+            if (changed.size() > MAX_CHANGED_PATHS_PER_COMMIT) {
+                throw new ContextDiscoveryLimitExceededException(
+                        "Budget Git dépassé: un commit contient plus de "
+                                + MAX_CHANGED_PATHS_PER_COMMIT + " chemins modifiés");
+            }
         }
         return changed;
+    }
+
+    private static Status targetStatus(Git git, Set<String> gitTargets) throws Exception {
+        StatusCommand command = git.status();
+        for (String gitTarget : gitTargets) {
+            command.addPath(gitTarget);
+        }
+        return command.call();
     }
 
     private static void addRecentCommitsFragment(
@@ -234,7 +269,8 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
             Git git,
             Status status,
             Map<String, String> projectPathByGitTarget,
-            String projectPrefix) throws Exception {
+            String projectPrefix,
+            GitContextQuery query) throws Exception {
         List<String> changes = new ArrayList<>();
         collectStatus(changes, "ajouté", status.getAdded(), projectPathByGitTarget);
         collectStatus(changes, "modifié", status.getModified(), projectPathByGitTarget);
@@ -244,8 +280,8 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
         collectStatus(changes, "non suivi", status.getUntracked(), projectPathByGitTarget);
 
         Set<String> gitTargets = projectPathByGitTarget.keySet();
-        String unstagedPatch = formatTargetDiff(git, gitTargets, projectPrefix, false);
-        String stagedPatch = formatTargetDiff(git, gitTargets, projectPrefix, true);
+        String unstagedPatch = formatTargetDiff(git, gitTargets, projectPrefix, false, query);
+        String stagedPatch = formatTargetDiff(git, gitTargets, projectPrefix, true, query);
 
         if (changes.isEmpty() && unstagedPatch.isBlank() && stagedPatch.isBlank()) {
             return;
@@ -275,37 +311,37 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
                 List.of(
                         "patches et changements locaux liés aux chemins candidats",
                         "aucun diff d'un fichier non ciblé n'est injecté",
-                        "diff local borné à " + MAX_LOCAL_DIFF_CHARS + " caractères par zone",
+                        "diff local borné avant allocation à " + MAX_LOCAL_DIFF_CHARS + " caractères par zone",
                         "provider : local-git")));
     }
 
-    /**
-     * Demande à DiffCommand de produire directement le patch. Le formatter interne
-     * conserve ainsi l'accès aux itérateurs du working tree pour les contenus non indexés.
-     */
     private static String formatTargetDiff(
             Git git,
             Set<String> gitTargets,
             String projectPrefix,
-            boolean cached) throws Exception {
+            boolean cached,
+            GitContextQuery query) throws Exception {
         if (gitTargets.isEmpty()) {
             return "";
         }
 
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        BoundedOutput output = new BoundedOutput(MAX_LOCAL_DIFF_BYTES);
         git.diff()
                 .setCached(cached)
                 .setPathFilter(PathFilterGroup.createFromStrings(gitTargets))
                 .setOutputStream(output)
                 .call();
 
-        String patch = output.toString(StandardCharsets.UTF_8);
-        patch = relativizePatch(projectPrefix, patch);
-        if (patch.length() <= MAX_LOCAL_DIFF_CHARS) {
-            return patch.stripTrailing();
+        query.discoveryBudget().bytes(GIT_DIFF_WORK, output.size());
+        String patch = relativizePatch(projectPrefix, output.toUtf8String());
+        boolean truncated = output.truncated() || patch.length() > MAX_LOCAL_DIFF_CHARS;
+        if (patch.length() > MAX_LOCAL_DIFF_CHARS) {
+            patch = patch.substring(0, MAX_LOCAL_DIFF_CHARS);
         }
-        return patch.substring(0, MAX_LOCAL_DIFF_CHARS).stripTrailing()
-                + "\n... [diff Git tronqué par NEXUS]";
+        patch = patch.stripTrailing();
+        return truncated
+                ? patch + "\n... [diff Git tronqué par NEXUS]"
+                : patch;
     }
 
     private static String relativizePatch(String projectPrefix, String patch) {
@@ -430,6 +466,56 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
             return exception.getClass().getSimpleName();
         }
         return exception.getClass().getSimpleName() + ": " + message;
+    }
+
+    private static final class BoundedOutput extends OutputStream {
+        private final byte[] buffer;
+        private int size;
+        private boolean truncated;
+
+        private BoundedOutput(int capacity) {
+            this.buffer = new byte[capacity];
+        }
+
+        @Override
+        public void write(int value) {
+            if (size < buffer.length) {
+                buffer[size++] = (byte) value;
+            } else {
+                truncated = true;
+            }
+        }
+
+        @Override
+        public void write(byte[] source, int offset, int length) {
+            if (source == null) {
+                throw new NullPointerException("source");
+            }
+            if (offset < 0 || length < 0 || offset + length > source.length) {
+                throw new IndexOutOfBoundsException();
+            }
+            int remaining = buffer.length - size;
+            int copied = Math.min(remaining, length);
+            if (copied > 0) {
+                System.arraycopy(source, offset, buffer, size, copied);
+                size += copied;
+            }
+            if (copied < length) {
+                truncated = true;
+            }
+        }
+
+        int size() {
+            return size;
+        }
+
+        boolean truncated() {
+            return truncated;
+        }
+
+        String toUtf8String() {
+            return new String(buffer, 0, size, StandardCharsets.UTF_8);
+        }
     }
 
     private record CommitSummary(
