@@ -37,6 +37,7 @@ import com.nexus.index.scip.ScipCodeIndexImporter;
 import com.nexus.persistence.sqlite.SqliteDatabase;
 import com.nexus.persistence.sqlite.SqliteIndexRepository;
 import com.nexus.persistence.sqlite.SqliteProjectRepository;
+import com.nexus.project.FederatedScopePolicy;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectRegistry;
@@ -308,13 +309,10 @@ public final class NexusApplication {
             String query,
             int limit,
             boolean explain) throws IOException {
-        Objects.requireNonNull(projectIds, "projectIds");
-        if (projectIds.isEmpty()) {
-            throw new IllegalArgumentException("projectIds must not be empty");
-        }
+        List<UUID> scope = FederatedScopePolicy.normalizeProjectIds(projectIds);
         String resolvedQuery = requireQuery(query);
         int resolvedLimit = positiveLimit(limit);
-        List<ProjectDescriptor> projects = projectIds.stream()
+        List<ProjectDescriptor> projects = scope.stream()
                 .map(this::requireReadyProject)
                 .toList();
         long startedAt = System.nanoTime();
@@ -351,12 +349,9 @@ public final class NexusApplication {
             Set<CandidateType> requestedSources,
             Map<String, String> constraints,
             boolean explain) {
-        Objects.requireNonNull(projectIds, "projectIds");
-        if (projectIds.isEmpty()) {
-            throw new IllegalArgumentException("projectIds must not be empty");
-        }
+        List<UUID> scope = FederatedScopePolicy.normalizeProjectIds(projectIds);
         String resolvedQuery = requireQuery(query);
-        List<ProjectDescriptor> projects = projectIds.stream()
+        List<ProjectDescriptor> projects = scope.stream()
                 .map(this::requireReadyProject)
                 .toList();
         long startedAt = System.nanoTime();
@@ -395,9 +390,6 @@ public final class NexusApplication {
         boolean allProjectsReady = !projects.isEmpty() && projects.stream()
                 .allMatch(project -> project.indexStatus() == IndexStatus.READY);
 
-        // Si la lecture du repository a réussi, le service applicatif est prêt à
-        // accepter du trafic de gestion. La disponibilité d'un projet reste un
-        // gate distinct, contrôlé par requireReadyProject().
         return new ReadinessSnapshot(
                 true,
                 allProjectsReady,
