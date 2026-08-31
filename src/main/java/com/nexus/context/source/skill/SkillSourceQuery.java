@@ -1,5 +1,7 @@
 package com.nexus.context.source.skill;
 
+import com.nexus.context.source.ContextDiscoveryBudget;
+import com.nexus.context.source.ContextDiscoveryLimits;
 import com.nexus.project.ProjectDescriptor;
 
 import java.util.Objects;
@@ -9,9 +11,15 @@ import java.util.Objects;
  */
 public record SkillSourceQuery(
         ProjectDescriptor project,
-        boolean explain) {
+        boolean explain,
+        ContextDiscoveryBudget discoveryBudget) {
 
     public SkillSourceQuery {
         Objects.requireNonNull(project, "project");
+        Objects.requireNonNull(discoveryBudget, "discoveryBudget");
+    }
+
+    public SkillSourceQuery(ProjectDescriptor project, boolean explain) {
+        this(project, explain, ContextDiscoveryLimits.defaults().newBudget());
     }
 }
