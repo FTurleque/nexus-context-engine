@@ -10,12 +10,13 @@ $ErrorActionPreference = "Stop"
 $archiveName = "jdt-language-server-$Version.tar.gz"
 $downloadBase = "https://download.eclipse.org/jdtls/snapshots"
 $archiveUrl = "$downloadBase/$archiveName"
-$checksumUrl = "$archiveUrl.sha256"
 $installDirectory = Join-Path $InstallRoot "jdtls-$Version"
 $pluginsDirectory = Join-Path $installDirectory "plugins"
 $tempDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ("nexus-jdtls-" + [Guid]::NewGuid().ToString("N"))
 $archivePath = Join-Path $tempDirectory $archiveName
-$checksumPath = "$archivePath.sha256"
+$repoRoot = Split-Path -Parent $PSScriptRoot
+$integrityFile = Join-Path $repoRoot "config\tool-integrity.properties"
+$integrityKey = "jdtls.$Version.sha256"
 
 function Assert-NativeSuccess {
     param([Parameter(Mandatory = $true)][string]$CommandDescription)
@@ -24,11 +25,35 @@ function Assert-NativeSuccess {
     }
 }
 
+function Get-PinnedHash {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Key
+    )
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "Fichier d'ancres d'integrite introuvable : $Path"
+    }
+    $prefix = "$Key="
+    $line = Get-Content -LiteralPath $Path -Encoding UTF8 |
+        Where-Object { $_.StartsWith($prefix, [StringComparison]::Ordinal) } |
+        Select-Object -First 1
+    if ([string]::IsNullOrWhiteSpace($line)) {
+        throw "Ancre SHA-256 JDT LS absente de $Path pour $Version"
+    }
+    $value = $line.Substring($prefix.Length).Trim().ToLowerInvariant()
+    if ($value -notmatch '^[0-9a-f]{64}$') {
+        throw "Ancre SHA-256 JDT LS invalide dans $Path pour $Version"
+    }
+    return $value
+}
+
 try {
     Write-Host "=== Installation Eclipse JDT Language Server pour NEXUS ==="
     Write-Host "Version : $Version"
     Write-Host "Destination : $installDirectory"
     Write-Host
+
+    $expectedHash = Get-PinnedHash -Path $integrityFile -Key $integrityKey
 
     if ((Test-Path $pluginsDirectory) -and -not $Force) {
         Write-Host "JDT LS est deja installe. Reutilisation de l'installation existante."
@@ -44,18 +69,13 @@ try {
     New-Item -ItemType Directory -Path $tempDirectory -Force | Out-Null
     New-Item -ItemType Directory -Path $InstallRoot -Force | Out-Null
 
-    Write-Host "[1/4] Telechargement de JDT LS"
+    Write-Host "[1/3] Telechargement de JDT LS"
     Invoke-WebRequest -Uri $archiveUrl -OutFile $archivePath -UseBasicParsing
 
-    Write-Host "[2/4] Telechargement du checksum SHA-256"
-    Invoke-WebRequest -Uri $checksumUrl -OutFile $checksumPath -UseBasicParsing
-
-    Write-Host "[3/4] Verification SHA-256"
-    $checksumContent = (Get-Content -Raw -Path $checksumPath).Trim()
-    $expectedHash = ($checksumContent -split '\s+')[0].ToUpperInvariant()
-    $actualHash = (Get-FileHash -Path $archivePath -Algorithm SHA256).Hash.ToUpperInvariant()
+    Write-Host "[2/3] Verification contre l'ancre SHA-256 versionnee dans le repository"
+    $actualHash = (Get-FileHash -Path $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($expectedHash -ne $actualHash) {
-        throw "Checksum SHA-256 invalide. Attendu=$expectedHash, obtenu=$actualHash"
+        throw "Checksum SHA-256 JDT LS invalide. Attendu=$expectedHash, obtenu=$actualHash"
     }
 
     if (Test-Path $installDirectory) {
@@ -63,7 +83,7 @@ try {
     }
     New-Item -ItemType Directory -Path $installDirectory -Force | Out-Null
 
-    Write-Host "[4/4] Extraction"
+    Write-Host "[3/3] Extraction"
     & tar.exe -xzf $archivePath -C $installDirectory
     Assert-NativeSuccess "L'extraction de JDT LS"
 
