@@ -22,9 +22,24 @@ jobs:
   analyze:
     name: CodeQL Java analysis
     runs-on: ubuntu-latest
+    env:
+      NEXUS_CODEQL_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
     steps:
-      - name: Checkout
+      - name: Checkout exact qualified head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ env.NEXUS_CODEQL_HEAD_SHA }}
+
+      - name: Assert exact-head contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL="$(git rev-parse HEAD)"
+          if [[ "$ACTUAL" != "$NEXUS_CODEQL_HEAD_SHA" ]]; then
+            echo "::error::CodeQL checkout drift: expected=$NEXUS_CODEQL_HEAD_SHA actual=$ACTUAL"
+            exit 1
+          fi
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
@@ -33,7 +48,7 @@ jobs:
           build-mode: none
           queries: security-extended
 
-      - name: Analyze
+      - name: Analyze exact head
         uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
         with:
           category: '/language:java-kotlin'
