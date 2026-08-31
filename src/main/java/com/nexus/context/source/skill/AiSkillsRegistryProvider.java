@@ -49,7 +49,9 @@ public final class AiSkillsRegistryProvider implements SkillSourceProvider {
 
         Files.walkFileTree(skillsRoot, new SimpleFileVisitor<>() {
             @Override
-            public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) {
+            public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes)
+                    throws IOException {
+                query.discoveryBudget().visit(directory);
                 if (attributes.isSymbolicLink() || Files.isSymbolicLink(directory)) {
                     diagnostics.add(repositoryPath(projectRoot.relativize(directory))
                             + " ignoré : lien symbolique interdit");
@@ -60,6 +62,7 @@ public final class AiSkillsRegistryProvider implements SkillSourceProvider {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+                query.discoveryBudget().visit(file);
                 if (!file.getFileName().toString().equalsIgnoreCase("SKILL.md")) {
                     return FileVisitResult.CONTINUE;
                 }
@@ -68,8 +71,28 @@ public final class AiSkillsRegistryProvider implements SkillSourceProvider {
                             + " ignoré : lien symbolique ou entrée non régulière");
                     return FileVisitResult.CONTINUE;
                 }
+
+                Path safeFile;
                 try {
-                    Path safeFile = pathGuard.requireRegularFile(file);
+                    safeFile = pathGuard.requireRegularFile(file);
+                } catch (IOException unsafePath) {
+                    diagnostics.add(repositoryPath(projectRoot.relativize(file))
+                            + " ignoré : " + unsafePath.getMessage());
+                    return FileVisitResult.CONTINUE;
+                }
+
+                long chargedBytes;
+                try {
+                    chargedBytes = Math.min(Files.size(safeFile), SkillFrontmatterParser.MAX_DISCOVERY_BYTES);
+                } catch (IOException unreadable) {
+                    diagnostics.add(repositoryPath(projectRoot.relativize(file))
+                            + " ignoré : " + unreadable.getMessage());
+                    return FileVisitResult.CONTINUE;
+                }
+                query.discoveryBudget().candidate(safeFile);
+                query.discoveryBudget().bytes(safeFile, chargedBytes);
+
+                try {
                     SkillFrontmatter frontmatter = parser.parse(safeFile);
                     Path absoluteSkillRoot = safeFile.getParent();
                     Path relativeSkillRoot = projectRoot.relativize(absoluteSkillRoot);
