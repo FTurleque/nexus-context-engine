@@ -73,13 +73,14 @@ jobs:
         run: |
           chmod +x ./mvnw
           ./mvnw -B -pl core \
-            -Dtest=ScaleRegressionBenchmarkTest,GraphScaleRegressionBenchmarkTest,FederatedContextBudgetScaleBenchmarkTest \
+            -Dtest=ScaleRegressionBenchmarkTest,GraphScaleRegressionBenchmarkTest,FederatedContextBudgetScaleBenchmarkTest,NativeContextDiscoveryBudgetBenchmarkTest \
             -Djunit.jupiter.execution.timeout.test.method.default=20m \
             -Dnexus.scale.benchmark.enabled=true \
             -Dnexus.scale.benchmark.profile=${{ steps.profile.outputs.value }} \
             -Dnexus.scale.benchmark.output=target/scale-benchmark.json \
             -Dnexus.graph.scale.benchmark.output=target/graph-scale-benchmark.json \
             -Dnexus.federated.scale.benchmark.output=target/federated-budget-scale-benchmark.json \
+            -Dnexus.native.discovery.scale.benchmark.output=target/native-discovery-scale-benchmark.json \
             test
 
       - name: Verify report and regression budgets
@@ -88,6 +89,7 @@ jobs:
           test -s target/scale-benchmark.json
           test -s target/graph-scale-benchmark.json
           test -s target/federated-budget-scale-benchmark.json
+          test -s target/native-discovery-scale-benchmark.json
           python3 - <<'PY'
           import json
           from pathlib import Path
@@ -95,6 +97,7 @@ jobs:
           report = json.loads(Path('target/scale-benchmark.json').read_text())
           graph = json.loads(Path('target/graph-scale-benchmark.json').read_text())
           federated = json.loads(Path('target/federated-budget-scale-benchmark.json').read_text())
+          native = json.loads(Path('target/native-discovery-scale-benchmark.json').read_text())
           profile = report['profile']
           assert profile in ('ci', 'full')
           assert graph['profile'] == profile
@@ -155,6 +158,13 @@ jobs:
           assert federated['deterministic'] is True
           assert federated['durationMs'] <= 5_000, federated['durationMs']
 
+          assert native['skills'] == 1_000, native
+          assert native['visitedEntries'] == 2_001, native
+          assert native['candidateResources'] == 1_000, native
+          assert native['cumulativeBytes'] > 0, native
+          assert native['deterministic'] is True, native
+          assert native['durationMs'] <= native['maxDurationMs'] <= 10_000, native
+
           if profile == 'full':
               assert report['portfolio']['totalFullIndexMs'] <= 6000, report['portfolio']['totalFullIndexMs']
               assert report['semanticRecovery']['initialRebuildMs'] <= 12000, report['semanticRecovery']['initialRebuildMs']
@@ -176,6 +186,9 @@ jobs:
           print('federated-projects=', federated['projects'])
           print('federated-global-budget=', federated['globalBudget'])
           print('federated-work-budget=', federated['candidateBudgetTotal'])
+          print('native-skills=', native['skills'])
+          print('native-visited=', native['visitedEntries'])
+          print('native-duration-ms=', native['durationMs'])
           print('total-duration-ms=', report['totalDurationMs'])
           print('all-regression-budgets=PASS')
           PY
@@ -191,3 +204,4 @@ jobs:
             target/scale-benchmark.json
             target/graph-scale-benchmark.json
             target/federated-budget-scale-benchmark.json
+            target/native-discovery-scale-benchmark.json

@@ -56,6 +56,18 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Verify repository-pinned tool integrity anchors
+        shell: bash
+        run: |
+          chmod +x scripts/release/test-tool-integrity-anchors.sh
+          scripts/release/test-tool-integrity-anchors.sh
+
+      - name: Verify operational documentation contracts
+        shell: bash
+        run: |
+          chmod +x scripts/release/test-operational-doc-contracts.sh
+          scripts/release/test-operational-doc-contracts.sh
+
       - name: Run Maven reactor
         run: |
           chmod +x ./mvnw

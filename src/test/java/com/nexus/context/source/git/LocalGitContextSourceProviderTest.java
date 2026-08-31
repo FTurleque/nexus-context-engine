@@ -9,12 +9,16 @@ import org.eclipse.jgit.api.Git;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.OutputStream;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -102,6 +106,62 @@ class LocalGitContextSourceProviderTest {
         assertTrue(combined.contains("localChange"));
         assertFalse(combined.contains("frontend/App.ts"));
         assertFalse(combined.contains("backend/order-app/src/OrderService.java"));
+    }
+
+    @Test
+    void truncatesLargeTargetDiffDeterministically() throws Exception {
+        Path target = write("src/LargeService.java", "class LargeService {}\n");
+
+        try (Git git = Git.init().setDirectory(temporaryDirectory.toFile()).call()) {
+            commitAll(git, "initial large diff fixture");
+            StringBuilder changed = new StringBuilder("class LargeService {\n");
+            for (int index = 0; index < 8_000; index++) {
+                changed.append("  String value").append(index).append(" = \"")
+                        .append("x".repeat(32)).append("\";\n");
+            }
+            changed.append("}\n");
+            Files.writeString(target, changed);
+        }
+
+        GitContextResult result = new LocalGitContextSourceProvider().discover(new GitContextQuery(
+                project(),
+                "large service",
+                List.of(Path.of("src/LargeService.java")),
+                true));
+
+        ContextFragment diff = result.fragments().stream()
+                .filter(fragment -> fragment.path().toString().replace('\\', '/')
+                        .equals(".nexus/git/working-tree-diff.md"))
+                .findFirst()
+                .orElseThrow();
+        String content = diff.content();
+        String marker = "... [diff Git tronqué par NEXUS]";
+        assertTrue(content.contains(marker));
+
+        int fenceStart = content.indexOf("```diff\n") + "```diff\n".length();
+        int fenceEnd = content.indexOf("\n```", fenceStart);
+        String renderedPatch = content.substring(fenceStart, fenceEnd);
+        assertTrue(renderedPatch.length() <= LocalGitContextSourceProvider.MAX_LOCAL_DIFF_CHARS
+                        + 1 + marker.length(),
+                "le patch rendu doit rester borné même pour une modification massive");
+    }
+
+    @Test
+    void fixedCapacityDiffSinkNeverRetainsBytesPastItsCapacity() throws Exception {
+        Class<?> sinkClass = Class.forName(
+                "com.nexus.context.source.git.LocalGitContextSourceProvider$BoundedOutput");
+        Constructor<?> constructor = sinkClass.getDeclaredConstructor(int.class);
+        constructor.setAccessible(true);
+        OutputStream sink = (OutputStream) constructor.newInstance(128);
+
+        sink.write(new byte[4_096]);
+
+        Method size = sinkClass.getDeclaredMethod("size");
+        Method truncated = sinkClass.getDeclaredMethod("truncated");
+        size.setAccessible(true);
+        truncated.setAccessible(true);
+        assertEquals(128, ((Number) size.invoke(sink)).intValue());
+        assertTrue((Boolean) truncated.invoke(sink));
     }
 
     @Test

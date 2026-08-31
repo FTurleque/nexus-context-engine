@@ -12,14 +12,17 @@ import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SchemaMigratorSymbolRangeUpgradeTest {
@@ -28,49 +31,87 @@ class SchemaMigratorSymbolRangeUpgradeTest {
     Path temporaryDirectory;
 
     @Test
-    void freshDatabaseAppliesRangeCompatibilityMigration() throws Exception {
+    void freshDatabaseAppliesV005AndRejectsInvalidDirectInserts() throws Exception {
         NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("fresh-home"));
         SqliteDatabase database = new SqliteDatabase(paths);
+        UUID projectId = UUID.randomUUID();
+        seedProject(paths.databaseFile(), projectId, 101, 3, 7, 5);
 
         try (Connection connection = database.openConnection();
              Statement statement = connection.createStatement();
              ResultSet resultSet = statement.executeQuery(
-                     "SELECT script_name, script_sha256 FROM schema_migrations WHERE version = 4")) {
+                     "SELECT script_name, script_sha256 FROM schema_migrations WHERE version = 5")) {
             assertTrue(resultSet.next());
             assertEquals(
-                    "db/migration/V004__invalidate_invalid_symbol_ranges.sql",
+                    "db/migration/V005__enforce_symbol_range_constraints.sql",
                     resultSet.getString("script_name"));
             assertEquals(64, resultSet.getString("script_sha256").length());
+        }
+
+        assertDirectSymbolInsertRejected(paths.databaseFile(), 101, 0, 1);
+        assertDirectSymbolInsertRejected(paths.databaseFile(), 101, 9, 8);
+
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + paths.databaseFile());
+             Statement statement = connection.createStatement()) {
+            statement.execute("PRAGMA foreign_keys = ON");
+            statement.executeUpdate("""
+                    INSERT INTO symbols(
+                        file_id, kind, name, qualified_name, signature,
+                        start_line, end_line, source_provider)
+                    VALUES (101, 'METHOD', 'valid', 'example.Foo.valid', 'void valid()', 8, 9, 'javaparser')
+                    """);
+            assertEquals(2L, scalar(statement, "SELECT COUNT(*) FROM symbols WHERE file_id = 101"));
         }
     }
 
     @Test
-    void legacyInvalidRangesInvalidateOnlyAffectedProjectAndRemainIdempotent() throws Exception {
+    void upgradesDatabaseFromV004PreservingValidRowsAndConstraints() throws Exception {
+        NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("v004-home"));
+        Path databaseFile = paths.databaseFile();
+        bootstrapMainCompatibleDatabase(databaseFile);
+        UUID projectId = UUID.randomUUID();
+        seedProject(databaseFile, projectId, 202, 4, 12, 11);
+        applyV004(databaseFile);
+
+        SqliteDatabase upgraded = new SqliteDatabase(paths);
+        SqliteIndexRepository repository = new SqliteIndexRepository(upgraded);
+
+        assertProjectState(upgraded, projectId, "READY", "2026-01-01T00:00:00Z", 11, 1, 1, 1);
+        List<IndexedSymbol> symbols = repository.findSymbols(projectId);
+        assertEquals(1, symbols.size());
+        assertEquals(4, symbols.getFirst().symbol().startLine());
+        assertEquals(12, symbols.getFirst().symbol().endLine());
+        assertMigrationApplied(upgraded, 5, "db/migration/V005__enforce_symbol_range_constraints.sql");
+        assertDirectSymbolInsertRejected(databaseFile, 202, -1, -1);
+
+        try (Connection connection = upgraded.openConnection()) {
+            connection.setAutoCommit(true);
+            assertDoesNotThrow(() -> SchemaMigrator.migrate(connection));
+        }
+        assertMigrationCount(upgraded, 5L);
+    }
+
+    @Test
+    void legacyInvalidRangesAreInvalidatedBeforeV005RebuildsSymbols() throws Exception {
         NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("legacy-home"));
         Path databaseFile = paths.databaseFile();
         bootstrapMainCompatibleDatabase(databaseFile);
 
         UUID invalidProject = UUID.randomUUID();
         UUID validProject = UUID.randomUUID();
-        seedProject(databaseFile, invalidProject, 101, -1, -1, 5);
-        seedProject(databaseFile, validProject, 202, 3, 7, 11);
+        seedProject(databaseFile, invalidProject, 301, -1, -1, 5);
+        seedProject(databaseFile, validProject, 302, 3, 7, 11);
 
         SqliteDatabase upgraded = new SqliteDatabase(paths);
         SqliteIndexRepository repository = new SqliteIndexRepository(upgraded);
 
         assertProjectState(upgraded, invalidProject, "NOT_INDEXED", null, 6, 0, 0, 0);
         assertProjectState(upgraded, validProject, "READY", "2026-01-01T00:00:00Z", 11, 1, 1, 1);
-
         assertTrue(repository.findSymbols(invalidProject).isEmpty(),
                 "la lecture domaine ne doit jamais reconstruire un ancien CodeSymbol invalide");
-        List<IndexedSymbol> validSymbols = repository.findSymbols(validProject);
-        assertEquals(1, validSymbols.size());
-        assertEquals(3, validSymbols.getFirst().symbol().startLine());
-        assertEquals(7, validSymbols.getFirst().symbol().endLine());
-
-        SqliteDatabase reopened = new SqliteDatabase(paths);
-        assertProjectState(reopened, invalidProject, "NOT_INDEXED", null, 6, 0, 0, 0);
-        assertProjectState(reopened, validProject, "READY", "2026-01-01T00:00:00Z", 11, 1, 1, 1);
+        assertEquals(1, repository.findSymbols(validProject).size());
+        assertMigrationApplied(upgraded, 4, "db/migration/V004__invalidate_invalid_symbol_ranges.sql");
+        assertMigrationApplied(upgraded, 5, "db/migration/V005__enforce_symbol_range_constraints.sql");
     }
 
     private static void bootstrapMainCompatibleDatabase(Path databaseFile) throws Exception {
@@ -95,6 +136,18 @@ class SchemaMigratorSymbolRangeUpgradeTest {
                       (1, 'db/migration/V001__initial_schema.sql', '2026-01-01T00:00:00Z', NULL),
                       (2, 'db/migration/V002__index_generation.sql', '2026-01-01T00:00:00Z', NULL),
                       (3, 'db/migration/V003__provider_and_graph_indexes.sql', '2026-01-01T00:00:00Z', NULL)
+                    """);
+        }
+    }
+
+    private static void applyV004(Path databaseFile) throws Exception {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databaseFile);
+             Statement statement = connection.createStatement()) {
+            statement.execute("PRAGMA foreign_keys = ON");
+            executeMigrationResource(statement, "db/migration/V004__invalidate_invalid_symbol_ranges.sql");
+            statement.executeUpdate("""
+                    INSERT INTO schema_migrations(version, script_name, applied_at, script_sha256)
+                    VALUES (4, 'db/migration/V004__invalidate_invalid_symbol_ranges.sql', '2026-01-02T00:00:00Z', NULL)
                     """);
         }
     }
@@ -152,6 +205,49 @@ class SchemaMigratorSymbolRangeUpgradeTest {
                         project_id, file_id, kind, source_ref, target_ref, confidence, source_provider)
                     VALUES ('%s', %d, 'IMPORTS', 'src/Foo%d.java', 'java.lang.String', 1.0, 'javaparser')
                     """.formatted(id, fileId, fileId));
+        }
+    }
+
+    private static void assertDirectSymbolInsertRejected(
+            Path databaseFile,
+            long fileId,
+            int startLine,
+            int endLine) {
+        assertThrows(SQLException.class, () -> {
+            try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databaseFile);
+                 Statement statement = connection.createStatement()) {
+                statement.execute("PRAGMA foreign_keys = ON");
+                statement.executeUpdate("""
+                        INSERT INTO symbols(
+                            file_id, kind, name, qualified_name, signature,
+                            start_line, end_line, source_provider)
+                        VALUES (%d, 'METHOD', 'invalid', 'example.Foo.invalid', 'void invalid()', %d, %d, 'direct-test')
+                        """.formatted(fileId, startLine, endLine));
+            }
+        });
+    }
+
+    private static void assertMigrationApplied(
+            SqliteDatabase database,
+            int version,
+            String expectedScript) throws Exception {
+        try (Connection connection = database.openConnection();
+             Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery("""
+                     SELECT script_name, script_sha256
+                     FROM schema_migrations
+                     WHERE version = %d
+                     """.formatted(version))) {
+            assertTrue(resultSet.next());
+            assertEquals(expectedScript, resultSet.getString("script_name"));
+            assertEquals(64, resultSet.getString("script_sha256").length());
+        }
+    }
+
+    private static void assertMigrationCount(SqliteDatabase database, long expected) throws Exception {
+        try (Connection connection = database.openConnection();
+             Statement statement = connection.createStatement()) {
+            assertEquals(expected, scalar(statement, "SELECT COUNT(*) FROM schema_migrations"));
         }
     }
 
