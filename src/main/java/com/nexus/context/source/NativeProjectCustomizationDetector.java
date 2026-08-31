@@ -1,10 +1,15 @@
 package com.nexus.context.source;
 
 import com.nexus.project.ProjectDescriptor;
+import com.nexus.security.ProjectPathGuard;
 
 import java.io.IOException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -17,51 +22,106 @@ import java.util.Map;
 public final class NativeProjectCustomizationDetector {
 
     public Map<String, List<String>> detect(ProjectDescriptor project) throws IOException {
-        Path root = project.rootPath().toAbsolutePath().normalize();
+        return detect(project, ContextDiscoveryLimits.defaults().newBudget());
+    }
+
+    public Map<String, List<String>> detect(
+            ProjectDescriptor project,
+            ContextDiscoveryBudget budget) throws IOException {
+        ProjectPathGuard pathGuard = new ProjectPathGuard(project.rootPath());
         Map<String, List<String>> detected = new LinkedHashMap<>();
 
-        List<String> operational = existing(root, List.of(
+        List<String> operational = existing(pathGuard, List.of(
                 ".claude/settings.json",
                 ".claude/settings.local.json",
                 ".mcp.json",
                 "mcp.json",
-                ".gemini/settings.json"));
+                ".gemini/settings.json"), budget);
         putIfNotEmpty(detected, "operationalConfigurations", operational);
 
         List<String> agentProfiles = new ArrayList<>();
-        agentProfiles.addAll(findBelow(root, ".github/agents", ".md"));
-        agentProfiles.addAll(findBelow(root, ".claude/agents", ".md"));
+        agentProfiles.addAll(findBelow(pathGuard, ".github/agents", ".md", budget));
+        agentProfiles.addAll(findBelow(pathGuard, ".claude/agents", ".md", budget));
         putIfNotEmpty(detected, "agentProfiles", agentProfiles);
 
         List<String> hooks = new ArrayList<>();
-        hooks.addAll(findBelow(root, ".github/hooks", ".json"));
-        hooks.addAll(findBelow(root, ".claude/hooks", ".json"));
+        hooks.addAll(findBelow(pathGuard, ".github/hooks", ".json", budget));
+        hooks.addAll(findBelow(pathGuard, ".claude/hooks", ".json", budget));
         putIfNotEmpty(detected, "hooks", hooks);
 
         return Map.copyOf(detected);
     }
 
-    private static List<String> existing(Path root, List<String> relativePaths) {
-        return relativePaths.stream()
-                .filter(relative -> Files.isRegularFile(root.resolve(relative)))
-                .toList();
+    private static List<String> existing(
+            ProjectPathGuard pathGuard,
+            List<String> relativePaths,
+            ContextDiscoveryBudget budget) throws IOException {
+        List<String> found = new ArrayList<>();
+        for (String relative : relativePaths) {
+            budget.checkpoint();
+            Path candidate = pathGuard.resolve(Path.of(relative));
+            if (!Files.exists(candidate, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(candidate)) {
+                continue;
+            }
+            budget.visit(candidate);
+            try {
+                Path safeFile = pathGuard.requireRegularFile(candidate);
+                budget.candidate(safeFile);
+                found.add(relative);
+            } catch (IOException unsafeEntry) {
+                // Une personnalisation non sûre n'est ni lue ni annoncée comme disponible.
+            }
+        }
+        return List.copyOf(found);
     }
 
-    private static List<String> findBelow(Path root, String relativeDirectory, String suffix) throws IOException {
-        Path directory = root.resolve(relativeDirectory);
-        if (!Files.isDirectory(directory)) {
+    private static List<String> findBelow(
+            ProjectPathGuard pathGuard,
+            String relativeDirectory,
+            String suffix,
+            ContextDiscoveryBudget budget) throws IOException {
+        Path root = pathGuard.root();
+        Path candidate = pathGuard.resolve(Path.of(relativeDirectory));
+        Path directory;
+        try {
+            directory = pathGuard.requireDirectory(candidate);
+        } catch (IOException missingOrUnsafe) {
             return List.of();
         }
-        try (var stream = Files.walk(directory)) {
-            return stream
-                    .filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().toLowerCase()
-                            .endsWith(suffix.toLowerCase()))
-                    .map(root::relativize)
-                    .map(NativeProjectCustomizationDetector::repositoryPath)
-                    .sorted()
-                    .toList();
-        }
+
+        List<String> found = new ArrayList<>();
+        Files.walkFileTree(directory, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path current, BasicFileAttributes attributes)
+                    throws IOException {
+                budget.visit(current);
+                if (attributes.isSymbolicLink() || Files.isSymbolicLink(current)) {
+                    return FileVisitResult.SKIP_SUBTREE;
+                }
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+                budget.visit(file);
+                if (attributes.isSymbolicLink()
+                        || Files.isSymbolicLink(file)
+                        || !attributes.isRegularFile()
+                        || !file.getFileName().toString().toLowerCase().endsWith(suffix.toLowerCase())) {
+                    return FileVisitResult.CONTINUE;
+                }
+                try {
+                    Path safeFile = pathGuard.requireRegularFile(file);
+                    budget.candidate(safeFile);
+                    found.add(repositoryPath(root.relativize(safeFile)));
+                } catch (IOException unsafeEntry) {
+                    // Ignore une entrée devenue non sûre pendant le parcours.
+                }
+                return FileVisitResult.CONTINUE;
+            }
+        });
+        found.sort(String::compareTo);
+        return List.copyOf(found);
     }
 
     private static void putIfNotEmpty(
