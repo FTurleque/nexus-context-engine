@@ -1,5 +1,7 @@
 package com.nexus.context.source.instruction;
 
+import com.nexus.context.source.ContextDiscoveryBudget;
+import com.nexus.context.source.ContextDiscoveryLimits;
 import com.nexus.index.scan.ProjectIgnoreMatcher;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.security.ProjectPathGuard;
@@ -23,6 +25,13 @@ final class InstructionDiscoverySupport {
     }
 
     static List<Path> findNamedFiles(ProjectDescriptor project, Set<String> names) throws IOException {
+        return findNamedFiles(project, names, ContextDiscoveryLimits.defaults().newBudget());
+    }
+
+    static List<Path> findNamedFiles(
+            ProjectDescriptor project,
+            Set<String> names,
+            ContextDiscoveryBudget budget) throws IOException {
         ProjectPathGuard pathGuard = new ProjectPathGuard(project.rootPath());
         Path root = pathGuard.root();
         ProjectIgnoreMatcher ignoreMatcher = new ProjectIgnoreMatcher(root);
@@ -35,6 +44,7 @@ final class InstructionDiscoverySupport {
             @Override
             public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes)
                     throws IOException {
+                budget.visit(directory);
                 if (!directory.equals(root) && ignoreMatcher.isIgnored(directory, true)) {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
@@ -44,6 +54,7 @@ final class InstructionDiscoverySupport {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+                budget.visit(file);
                 if (ignoreMatcher.isIgnored(file, false)
                         || attributes.isSymbolicLink()
                         || Files.isSymbolicLink(file)
@@ -53,7 +64,9 @@ final class InstructionDiscoverySupport {
                 String name = file.getFileName().toString().toLowerCase(Locale.ROOT);
                 if (normalizedNames.contains(name)) {
                     try {
-                        matches.add(pathGuard.requireRegularFile(file));
+                        Path safeFile = pathGuard.requireRegularFile(file);
+                        budget.candidate(safeFile);
+                        matches.add(safeFile);
                     } catch (IOException unsafePath) {
                         // Une entrée devenue non sûre pendant le scan n'est jamais exposée au provider.
                     }
@@ -68,6 +81,18 @@ final class InstructionDiscoverySupport {
 
     static List<Path> findFilesBelow(ProjectDescriptor project, Path relativeDirectory, String suffix)
             throws IOException {
+        return findFilesBelow(
+                project,
+                relativeDirectory,
+                suffix,
+                ContextDiscoveryLimits.defaults().newBudget());
+    }
+
+    static List<Path> findFilesBelow(
+            ProjectDescriptor project,
+            Path relativeDirectory,
+            String suffix,
+            ContextDiscoveryBudget budget) throws IOException {
         ProjectPathGuard pathGuard = new ProjectPathGuard(project.rootPath());
         Path root = pathGuard.root();
         Path directory;
@@ -89,6 +114,7 @@ final class InstructionDiscoverySupport {
             @Override
             public FileVisitResult preVisitDirectory(Path current, BasicFileAttributes attributes)
                     throws IOException {
+                budget.visit(current);
                 if (!current.equals(directory) && ignoreMatcher.isIgnored(current, true)) {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
@@ -98,6 +124,7 @@ final class InstructionDiscoverySupport {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+                budget.visit(file);
                 if (ignoreMatcher.isIgnored(file, false)
                         || attributes.isSymbolicLink()
                         || Files.isSymbolicLink(file)
@@ -107,7 +134,9 @@ final class InstructionDiscoverySupport {
                 if (file.getFileName().toString().toLowerCase(Locale.ROOT)
                         .endsWith(suffix.toLowerCase(Locale.ROOT))) {
                     try {
-                        matches.add(pathGuard.requireRegularFile(file));
+                        Path safeFile = pathGuard.requireRegularFile(file);
+                        budget.candidate(safeFile);
+                        matches.add(safeFile);
                     } catch (IOException unsafePath) {
                         // Ignore une entrée remplacée par un lien ou sortie de la frontière entre-temps.
                     }
@@ -121,8 +150,16 @@ final class InstructionDiscoverySupport {
     }
 
     static String read(ProjectDescriptor project, Path file) throws IOException {
+        return read(project, file, ContextDiscoveryLimits.defaults().newBudget());
+    }
+
+    static String read(
+            ProjectDescriptor project,
+            Path file,
+            ContextDiscoveryBudget budget) throws IOException {
         ProjectPathGuard pathGuard = new ProjectPathGuard(project.rootPath());
         Path safeFile = pathGuard.requireRegularFile(file);
+        budget.bytes(safeFile, Files.size(safeFile));
         return SafeFileIO.readStringNoFollow(safeFile);
     }
 
