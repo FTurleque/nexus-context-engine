@@ -28,7 +28,7 @@ public final class AgentsMdInstructionProvider implements ContextSourceProvider 
     public List<ContextSourceDescriptor> discover(ContextSourceQuery query) throws IOException {
         List<ContextSourceDescriptor> descriptors = new ArrayList<>();
         for (Path file : InstructionDiscoverySupport.findNamedFiles(
-                query.project(), Set.of("AGENTS.md", "AGENT.md"))) {
+                query.project(), Set.of("AGENTS.md", "AGENT.md"), query.discoveryBudget())) {
             Path relative = InstructionDiscoverySupport.relative(query.project(), file);
             if (!InstructionDiscoverySupport.directoryScopeApplies(relative, query.targetPaths())) {
                 continue;
@@ -60,7 +60,8 @@ public final class AgentsMdInstructionProvider implements ContextSourceProvider 
                     List.of(),
                     priority,
                     reasons,
-                    true));
+                    true,
+                    query.discoveryBudget()));
         }
         return List.copyOf(descriptors);
     }
