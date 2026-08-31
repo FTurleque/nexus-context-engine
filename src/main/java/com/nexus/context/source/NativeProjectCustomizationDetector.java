@@ -64,13 +64,14 @@ public final class NativeProjectCustomizationDetector {
                 continue;
             }
             budget.visit(candidate);
+            Path safeFile;
             try {
-                Path safeFile = pathGuard.requireRegularFile(candidate);
-                budget.candidate(safeFile);
-                found.add(relative);
+                safeFile = pathGuard.requireRegularFile(candidate);
             } catch (IOException unsafeEntry) {
-                // Une personnalisation non sûre n'est ni lue ni annoncée comme disponible.
+                continue;
             }
+            budget.candidate(safeFile);
+            found.add(relative);
         }
         return List.copyOf(found);
     }
@@ -110,13 +111,14 @@ public final class NativeProjectCustomizationDetector {
                         || !file.getFileName().toString().toLowerCase().endsWith(suffix.toLowerCase())) {
                     return FileVisitResult.CONTINUE;
                 }
+                Path safeFile;
                 try {
-                    Path safeFile = pathGuard.requireRegularFile(file);
-                    budget.candidate(safeFile);
-                    found.add(repositoryPath(root.relativize(safeFile)));
+                    safeFile = pathGuard.requireRegularFile(file);
                 } catch (IOException unsafeEntry) {
-                    // Ignore une entrée devenue non sûre pendant le parcours.
+                    return FileVisitResult.CONTINUE;
                 }
+                budget.candidate(safeFile);
+                found.add(repositoryPath(root.relativize(safeFile)));
                 return FileVisitResult.CONTINUE;
             }
         });
