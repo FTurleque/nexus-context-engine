@@ -1,92 +1,50 @@
 # Documentation d'architecture — NEXUS Context Engine
 
-Ce répertoire contient la documentation d'architecture structurée selon **arc42**, avec diagrammes C4/Mermaid et ADR MADR.
+Ce répertoire contient la documentation arc42, les risques et les décisions d'architecture. Les ADR restent historiques/append-only ; les synthèses courantes doivent suivre le code versionné.
 
-## Organisation
+## Branches
 
 ```text
-docs/architecture/
-├── README.md
-├── arc42/
-│   ├── 01-introduction-objectifs.md
-│   ├── 02-contraintes.md
-│   ├── 03-contexte-perimetre.md
-│   ├── 04-strategie-solution.md
-│   ├── 05-vue-blocs.md
-│   ├── 06-vue-execution.md
-│   ├── 07-vue-deploiement.md
-│   ├── 08-concepts-transverses.md
-│   ├── 09-decisions.md
-│   ├── 10-exigences-qualite.md
-│   ├── 11-risques-dette.md
-│   └── 12-glossaire.md
-├── quality/scenarios.md
-└── risks/register.md
+develop = intégration et qualification
+main    = release
 ```
 
-## Conventions
-
-- français pour la documentation, anglais pour les identifiants de code ;
-- Mermaid pour les diagrammes ;
-- niveaux C4 séparés ;
-- ADR append-only : une décision remplacée est supersédée, jamais supprimée.
+La protection effective de `develop` est une règle GitHub de repository et non un comportement du runtime. Voir [`../developer/branch-governance.md`](../developer/branch-governance.md).
 
 ## Sources primaires
 
 | Source | Rôle |
 |---|---|
-| `docs/architecture.md` | synthèse d'architecture courante |
+| `docs/architecture.md` | synthèse courante |
+| `docs/architecture/arc42/` | vues arc42 courantes |
 | `docs/adr/` | historique décisionnel |
-| `docs/roadmap.md` | état courant et travail réellement restant |
-| `docs/developer/` | documentation technique détaillée |
-| `docs/index-provenance.md` | autorité et fraîcheur des index |
-| `src/main/java/` | cœur Java |
-| `adapters/` | REST / MCP / intégrations assistants |
+| `docs/roadmap.md` | état/travail restant |
+| `docs/developer/` | contrats techniques détaillés |
+| code + workflows | autorité exécutable |
 
-## Statut courant
+## Frontières actives
 
-- **Version** : 0.2.0
-- **Phase 6** : PR #15
-- **Hardening post-Phase 6** : PR #18
-- **Provenance des index** : PR #24
-- **Licence propriétaire source-available** : PR #25
-- **Supply-chain** : PR #28, renforcée par PR #49
-- **Distribution Windows** : PR #41
-- **Assistant Natif/Docker/Both** : PR #46
-- **Consolidation post-audit P1/P2/P3** : issue #48 / PR #49
-- **Réconciliation documentaire post-audit** : PR #61
+- SQLite canonique ; Lucene/intelligence externe dérivés.
+- V005 impose les plages de symboles valides au niveau base.
+- filesystem projet durci par `ProjectPathGuard` ; SCIP/skills/customisations concernés utilisent la frontière commune.
+- découverte native bornée avant sélection de tokens.
+- portée fédérée <= 100 uniques validée avant résolution/readiness.
+- Git local/read-only avec patch à capacité fixe.
+- REST distant fail-closed sur auth, roots et transport TLS effectif.
+- exact-head pour les gates pré-merge.
+- image Docker construite une fois, qualifiée puis publiée sans rebuild.
+- Maven/JDT LS contrôlés par ancres d'intégrité versionnées.
 
-### Preuves récentes
+## Preuve de qualification
 
-PR #49 :
+Une ancienne PR verte n'est jamais recopiée ici comme preuve de l'état courant. La preuve applicable est le run GitHub Actions attaché au SHA exact concerné.
 
-```text
-QUALIFIED_HEAD=4f04c1ad3ff5b41aa9d1892ade57ad62b90a43f9
-MERGE_SHA=c1ff9ef03ef33097c0d51154e02c30109b0a46f1
-```
-
-NEXUS CI, Scale Benchmark, Windows Installer, Docker Distribution, CodeQL et OSV-Scanner : PASS.
-
-PR #61 :
+## Organisation
 
 ```text
-QUALIFIED_HEAD=ba91be044a600d2396e0939fc154848dc47f6310
-MERGE_SHA=660ca9f07a23950d2a5284605531524372331bc5
+arc42/        vues architecture
+quality/      scénarios qualité
+risks/        registre de risques
 ```
 
-NEXUS CI, CodeQL et OSV-Scanner : PASS.
-
-Aucun workflow/configuration/status SonarCloud actif n'est défini dans la baseline actuelle.
-
-## Frontières actives à conserver
-
-- SQLite canonique ; Lucene et intelligence externe dérivés ;
-- mutation d'index single-flight JVM + OS sur filesystem local ;
-- snapshot canonique revalidé avant publication ;
-- filesystem borné et symlinks refusés pour les lectures sensibles ;
-- providers/importers externes optionnels et bornés ;
-- graphe, résultats et contexte fédéré bornés ;
-- exposition REST distante fail-closed ;
-- supply-chain reactor + image Docker qualifiée.
-
-Dernière réconciliation : post-audit #48/#49/#61.
+Les documents d'itération peuvent conserver des numéros de PR, dates et mesures historiques ; les documents marqués courants doivent décrire le contrat actif.

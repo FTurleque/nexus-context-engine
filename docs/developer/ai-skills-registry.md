@@ -1,45 +1,49 @@
 # AI Skills Registry dans NEXUS
 
-## Statut
-
-Capacité livrée depuis l'Itération 14. Phase 6 corrige la dérive de composition identifiée lors de l'audit de consolidation.
-
-NEXUS peut découvrir des skills provenant d'un snapshot local AI Skills Registry sans accès réseau pendant la construction du contexte.
-
-## Snapshot local
+NEXUS peut découvrir des skills depuis un snapshot local :
 
 ```text
 .nexus/registry/skills/**/SKILL.md
 ```
 
-`.nexus/registry` est un cache local non versionné. Son absence n'empêche jamais les skills propres au projet de fonctionner.
+Aucun accès réseau n'est effectué pendant la construction du contexte.
 
-## Sources et priorités
+## Composition
 
 ```text
-LocalAgentSkillsProvider       priorité 80
-AiSkillsRegistryProvider      priorité 60
-            ↓
+LocalAgentSkillsProvider   priorité 80
+AiSkillsRegistryProvider   priorité 60
+          ↓
 SkillDiscoveryService
-            ↓
-tri / déduplication par nom
+          ↓
+déduplication / sélection / activation progressive
 ```
 
-Un skill local de même nom conserve la priorité sur le snapshot partagé.
+Un skill local de même nom reste prioritaire.
 
-## Composition Phase 6
+## Frontière filesystem
 
-Les deux providers sont maintenant composés indépendamment dans `NexusApplication` :
+Le registry n'est pas une exception de sécurité. Les résolutions projet passent par `ProjectPathGuard` :
 
-```text
-NexusApplication
-   ├─ LocalAgentSkillsProvider
-   └─ AiSkillsRegistryProvider
-            ↓
-     SkillDiscoveryService
-```
+- traversal refusé ;
+- symlink final refusé ;
+- symlink d'ancêtre refusé ;
+- disparition/remplacement unsafe pendant l'opération échoue fermé selon le point de lecture concerné.
 
-`LocalAgentSkillsProvider` ne crée plus et n'appelle plus `AiSkillsRegistryProvider`. La composition est donc conforme au port `SkillSourceProvider` et la politique d'agrégation reste centralisée.
+Les mêmes principes s'appliquent aux customisations projet durcies.
+
+## Budget de découverte
+
+`AiSkillsRegistryProvider` consomme le `ContextDiscoveryBudget` partagé :
+
+- chaque entrée visitée ;
+- chaque `SKILL.md` candidat ;
+- les octets de frontmatter lus ;
+- la deadline commune.
+
+Un registry pathologique ne peut donc pas effectuer un scan illimité avant la sélection de tokens.
+
+Le benchmark `NativeContextDiscoveryBudgetBenchmarkTest` crée 1 000 skills réels et vérifie la frontière exacte, l'ordre déterministe, les compteurs et le temps de découverte.
 
 ## Divulgation progressive
 
@@ -50,29 +54,14 @@ activation  → SKILL.md complet
 ressources  → inventoriées, jamais exécutées automatiquement
 ```
 
-Cette politique reste identique pour origine locale et registry.
-
-## Absence de réseau
-
-Pendant `ContextBuilder` :
-
-- aucune requête HTTP ;
-- aucun clone/fetch Git ;
-- aucun secret ;
-- aucune dépendance à la disponibilité d'un registre distant.
-
-La synchronisation éventuelle du snapshot appartient à un outil externe.
+Les ressources/scripts ne sont jamais exécutés par NEXUS.
 
 ## Contexte fédéré
 
-Phase 6 conserve les skills dans leur portée projet : chaque `DefaultContextBuilder` découvre ses providers pour son propre projet avant que `FederatedContextService` ne fusionne les résultats. Aucun skill d'un projet n'est propagé implicitement à un autre.
+Chaque projet découvre ses propres providers dans son `DefaultContextBuilder`. Aucun skill d'un projet n'est propagé implicitement à un autre.
 
-## Validation
+## Absence du snapshot
 
-Les tests historiques I14 continuent de couvrir découverte progressive, priorité locale, absence de snapshot et non-exécution des ressources. Le gate Phase 6 ajoute la qualification du reactor/composition complet :
+`.nexus/registry` est optionnel. Son absence n'empêche pas les skills propres au projet de fonctionner.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
-```
-
-Voir [`agent-skills.md`](agent-skills.md), [`current-limitations.md`](current-limitations.md) et la [`roadmap`](../roadmap.md).
+Voir [`agent-skills.md`](agent-skills.md), [`native-context-discovery-limits.md`](native-context-discovery-limits.md) et [`current-limitations.md`](current-limitations.md).

@@ -1,32 +1,31 @@
 # Architecture d'implémentation — NEXUS 0.2.0
 
-Ce chapitre décrit l'organisation concrète du code **courant sur `main`** après Phase 6, hardening, provenance, supply-chain, Windows/Docker et consolidation post-audit.
+Ce chapitre décrit l'organisation concrète du code versionné. `develop` reçoit l'intégration qualifiée ; `main` reste la branche de release.
 
 ## Repository
 
 ```text
 nexus-context-engine/
-├── pom.xml                         parent/reactor 0.2.0
-├── core/pom.xml                    module core, sources historiques dans ../src
-├── src/main/java/com/nexus/        domaine + application
-├── src/main/resources/             migrations SQLite
+├── pom.xml
+├── core/pom.xml
+├── src/main/java/com/nexus/
+├── src/main/resources/db/migration/
 ├── src/test/java/com/nexus/
-├── adapters/
-│   ├── rest-quarkus/
-│   ├── mcp-java/
-│   └── assistant-clients/
+├── adapters/rest-quarkus/
+├── adapters/mcp-java/
+├── adapters/assistant-clients/
 ├── distribution/
-├── packaging/windows/
+├── packaging/
 ├── scripts/
 ├── .github/workflows/
 └── docs/
 ```
 
-Le parent centralise Java 21, versions/BOM, plugins, Enforcer, licence, JaCoCo et SBOM. Les adaptateurs restent séparés du cœur tout en partageant la gouvernance Maven.
+Le parent gouverne Java 21, BOM/plugins, JaCoCo, SBOM et dépendances communes. Quarkus est en 3.39.1 et le SDK MCP en 2.0.1.
 
 ## Composition root
 
-`NexusApplication` compose les ports partagés par toutes les surfaces :
+`NexusApplication` compose les ports communs :
 
 ```text
 NexusPaths
@@ -43,141 +42,72 @@ DefaultContextBuilder
 FederatedContextService
 ```
 
-CLI, REST et MCP délèguent à cette façade ; leurs politiques de résultat s'appuient sur la même `ResultLimitPolicy`.
+CLI, REST et MCP délèguent à cette façade.
 
-## Indexation et cohérence
+## Indexation et persistance
 
-`ProjectIndexingService` orchestre :
+`ProjectIndexingService` orchestre mutex JVM + `FileLock`, scan borné, fingerprint canonique, analyses, SQLite, index dérivés, revalidation puis `READY`.
 
-1. acquisition du verrou de mutation — mutex JVM puis `FileLock` OS ;
-2. passage à `INDEXING` ;
-3. scan sécurisé et borné ;
-4. construction du snapshot/fingerprint canonique ;
-5. analyses embarquées et mise à jour SQLite ;
-6. invalidation/refresh des données externes dérivées ;
-7. mise à jour Lucene lexical ;
-8. mise à jour/rebuild sémantique selon provenance ;
-9. **revalidation du snapshot canonique avant publication** ;
-10. passage à `READY`, ou `FAILED` si une mutation concurrente ou une autre erreur rend le résultat incohérent.
+V004 invalide les anciens index contenant des plages invalides ; V005 reconstruit `symbols` avec les `CHECK` :
 
-Un état persistant non-`READY` force le prochain rebuild complet.
-
-### Single-flight
-
-- mutex JVM par `projectId` ;
-- `FileLock` OS sous `NEXUS_HOME/locks/{projectId}.lock`.
-
-Cette garantie vise un `NEXUS_HOME` local. La présence du fichier de lock n'est pas un lease ; seul le `FileLock` actif compte.
-
-## Génération et fingerprint
-
-`project_index_generations` sert à invalider des caches dérivés. La génération ne progresse pas lorsqu'une opération est un no-op effectif.
-
-`CanonicalIndexFingerprint` représente de façon déterministe l'état canonique pertinent. Il sert à la provenance sémantique et à la revalidation du snapshot avant publication.
-
-## Intelligence de code externe
-
-Les snapshots externes sont des enrichissements dérivés.
-
-- changement SOURCE/TEST ⇒ invalidation des snapshots persistés concernés ;
-- providers/importers configurés peuvent republier un snapshot courant ;
-- persistance SQL des providers externes dédupliquée ;
-- exécution externe bornée par `ExternalTaskRunner` ;
-- SCIP possède une politique de taille dédiée et une borne du message Protobuf avant allocation.
-
-## Repository et graphe à grande échelle
-
-`IndexRepository` expose des opérations bornées pour éviter la matérialisation globale :
-
-```java
-findFiles(projectId, relativePaths)
-searchSymbols(projectId, query, limit)
-searchRelations(projectId, symbol, limit)
-generation(projectId)
+```text
+start_line >= 1
+end_line >= start_line
 ```
 
-Les besoins de graphe utilisent des projections/voisinages SQL bornés avec budgets de nœuds/arêtes. SQLite filtre avant matérialisation.
+Les migrations sont forward-only et enregistrées avec checksum.
 
-## Ranking et recherche
+## Frontière filesystem
 
-- Lucene lexical : candidats fichiers ;
-- SQLite borné : candidats symboles ;
-- graphe : enrichissement sur projections bornées ;
-- Git : signal local ;
-- sémantique : stratégie optionnelle avec garde de provenance ;
-- ranker déterministe ou hybrid RRF si sémantique activée.
+`ProjectPathGuard` est la frontière partagée pour les lectures projet durcies. SCIP, instructions/références, skills locaux/registry et customisations concernées refusent traversal, symlink final et symlink d'ancêtre.
 
-La fédération sur-récupère localement puis trie/diversifie globalement sous bornes explicites.
+La découverte native utilise un `ContextDiscoveryBudget` commun à `DefaultContextBuilder` :
 
-## ContextBuilder
+- entrées visitées ;
+- candidats ;
+- octets cumulés ;
+- deadline.
 
-`DefaultContextBuilder` reste projet-local. `FederatedContextService` orchestre plusieurs bundles sous :
+Les limites sont consommées avant le travail coûteux lorsque possible et un dépassement échoue fermé.
 
-- budget global final ;
-- fair floor ;
-- déduplication ;
-- refill ;
-- provenance projet ;
-- **budget de travail** distinct, afin de borner le coût préparatoire même si le budget final est petit.
+## Fédération
 
-## Sémantique
+`FederatedScopePolicy` limite la portée à 100 UUID uniques. Les surfaces valident la cardinalité canonique **avant** `requireReadyProject` ou résolution équivalente ; un 101e projet unique échoue donc avant les lookups/readiness ultérieurs.
 
-`SemanticSearchConfiguration.fromEnvironment()` est la résolution commune. Sans `NEXUS_SEMANTIC_PROVIDER`, aucun provider d'embeddings n'est créé.
+Une portée valide est ensuite résolue puis transmise à `FederatedSearchService`/`FederatedContextService` sous budget de travail et budget final.
 
-`SemanticIndexProvenance` persiste :
+## Git local
 
-- fingerprint canonique ;
-- provider ID ;
-- model ID ;
-- dimensions ;
-- content profile ;
-- semantic schema version.
+`LocalGitContextSourceProvider` borne :
 
-Mismatch/absence ⇒ rebuild. `SemanticSearchStrategy` refuse un index incompatible avant `EmbeddingProvider.embed(...)` pour la requête.
+- 50 commits récents ;
+- chemins modifiés par commit et cumulés ;
+- historique court ;
+- co-changements ;
+- patches cibles.
 
-## Filesystem
-
-`ProjectPathGuard` + `SafeFileIO` imposent :
-
-- racine canonique ;
-- refus des symlinks pour les lectures sensibles ;
-- `NOFOLLOW_LINKS` sur le composant final ;
-- lecture réellement bornée.
-
-La protection portable n'est pas un sandbox absolu contre un acteur local hostile ; `NEXUS_HOME` réseau n'est pas qualifié pour la garantie `FileLock`.
+Le patch working-tree est écrit dans `BoundedOutput`, sink à capacité fixe, avant conversion/troncature à 6 000 caractères. Le statut est filtré aux chemins cibles.
 
 ## REST
 
-La configuration locale par défaut reste loopback. Une exposition hors loopback est validée par les gardes REST :
+`NexusRestExposureGuard` et `NexusRestTransportPolicy` valident une exposition non-loopback :
 
 - token robuste ;
-- allowlist `NEXUS_REST_ALLOWED_PROJECT_ROOTS` ;
-- mode `NEXUS_REST_EXPOSURE_MODE` explicite ;
-- `reverse-proxy-https` ou `direct-https` ;
-- `loopback-forward` réservé à `NEXUS_RUNTIME=docker` avec publication hôte loopback.
+- roots autorisées ;
+- `direct-https` avec HTTP clair désactivé et key material TLS effectif ;
+- `reverse-proxy-https` avec le même backend TLS plus forwarding et trusted proxies bornés ;
+- `loopback-forward` uniquement pour Docker publié côté hôte sur loopback.
 
-## Packaging Windows et Docker
+## MCP
 
-Le build produit CLI/ZIP multiplateforme, distribution Windows autonome et setup EXE. Le profil Windows recommandé ne rend pas REST obligatoire.
+Le module utilise le SDK MCP 2.0.1 en STDIO. `stdout` reste réservé au framing JSON-RPC. Le SDK amont 2.0.1 apporte notamment des lectures HTTP/STDIO bornées ; NEXUS conserve STDIO comme transport local supporté.
 
-Le runtime Docker conserve MCP en STDIO via `docker exec -i`. La qualification image couvre round-trip dotenv, Trivy, SBOM CycloneDX et gate des vulnérabilités HIGH/CRITICAL corrigibles. Les publications `main` portent des attestations de provenance et de SBOM liées au digest publié.
+## Supply-chain
 
-## Qualification récente
+NEXUS CI vérifie les ancres Maven/JDT LS et les contrats documentaires avant le reactor. CodeQL qualifie l'exact head. OSV scanne delta PR + SBOM reactor. Docker Distribution construit une image unique, exécute smokes/Trivy/SBOM, puis exporte l'image exacte si la release la demande.
 
-PR #49 :
+`release.yml` ne rebuild pas cette image : il vérifie l'archive et l'ID Docker, puis publie les tags immuables sous préflight GHCR fail-closed/resumable.
 
-```text
-QUALIFIED_HEAD=4f04c1ad3ff5b41aa9d1892ade57ad62b90a43f9
-MERGE_SHA=c1ff9ef03ef33097c0d51154e02c30109b0a46f1
-```
+## Gouvernance
 
-NEXUS CI, Scale Benchmark, Windows Installer, Docker Distribution, CodeQL et OSV-Scanner : PASS.
-
-PR #61 :
-
-```text
-QUALIFIED_HEAD=ba91be044a600d2396e0939fc154848dc47f6310
-MERGE_SHA=660ca9f07a23950d2a5284605531524372331bc5
-```
-
-NEXUS CI, CodeQL et OSV-Scanner : PASS.
+La configuration GitHub de `develop` doit imposer le contrat de [`branch-governance.md`](branch-governance.md). Ce contrôle repository-admin n'est pas remplacé par les workflows versionnés.

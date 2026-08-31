@@ -1,192 +1,99 @@
-# Construction du contexte et gestion du budget
+# Construction du contexte et gestion des budgets
 
-Ce chapitre décrit `DefaultContextBuilder` et l'orchestration fédérée ajoutée en Phase 6.
+Ce chapitre décrit les contrats courants de `DefaultContextBuilder` et de la fédération.
 
-## ContextBundle projet-local
+## Deux niveaux de bornes
 
-`ContextRequest` contient :
+NEXUS borne le travail **avant** et **après** la découverte :
 
-```text
-projectId
-query
-tokenBudget
-requestedSources
-constraints
-explain
-```
+1. `ContextDiscoveryLimits` limite visites, candidats, octets et durée des sources natives/Git avant sélection ;
+2. le budget de tokens limite le `ContextBundle` final.
 
-`ContextBundle` contient :
+Une sortie finale petite n'autorise donc pas un scan natif non borné en amont.
+
+Defaults de découverte :
 
 ```text
-items
-tokenBudget
-estimatedTokens
-excluded
-metadata
+visited entries  100000
+candidates       5000
+bytes            32 MiB
+elapsed          15 s
 ```
 
-Invariant : `estimatedTokens <= tokenBudget`.
-
-## Gate READY
-
-`DefaultContextBuilder` exigeait déjà `READY`. Phase 6 applique désormais le même gate dans `NexusApplication` à toutes les lectures indexées : recherche, symboles, usages, contexte, recherche fédérée, contexte fédéré et import MINOS.
+Voir [`native-context-discovery-limits.md`](native-context-discovery-limits.md).
 
 ## Pipeline mono-projet
 
 ```text
 ContextRequest
-   ↓
+  ↓
 SearchService
-   ↓
-RankedCandidate[]
-   ├─ filtre requestedSources
-   ├─ instructions natives
-   ├─ Agent Skills
-   └─ Git ciblé
-   ↓
-ContextFragmentFactory
-   ↓
-déduplication cross-source
-   ↓
-FragmentMerger
-   ↓
+  ↓
+instructions / skills / Git
+  │  même ContextDiscoveryBudget
+  ↓
+fragments + déduplication
+  ↓
 BudgetedContextSelector
-   ↓
+  ↓
 ContextBundle
 ```
 
-La limite de retrieval dépend du budget :
+Invariant : `estimatedTokens <= tokenBudget`.
 
-```text
-retrievalLimit = min(100, max(20, tokenBudget / 40))
-```
-
-## Instructions natives
-
-Providers : AGENTS.md, Copilot, Claude et Gemini. Les références locales restent confinées au repository et bornées en profondeur.
-
-## Agent Skills
-
-```text
-SkillSourceProvider[]
-        ↓
-SkillDiscoveryService
-        ↓
-SkillSelector
-        ↓
-SkillLoader
-        ↓
-SkillContextSelector
-```
-
-Phase 6 compose `LocalAgentSkillsProvider` et `AiSkillsRegistryProvider` indépendamment. Le provider local n'instancie plus le registre. La priorité local > registry reste portée par les descriptors et la déduplication du service.
-
-Les ressources sont inventoriées mais jamais exécutées automatiquement.
+Les instructions, références, skills et customisations projet passent par les frontières filesystem durcies. Les ressources de skills sont inventoriées, jamais exécutées automatiquement.
 
 ## Git
 
-`LocalGitContextSourceProvider` reste local/read-only. Il est désactivé sous 500 tokens de budget global et reçoit un sous-budget borné lorsqu'il est actif.
+Git est local/read-only. Le provider n'est actif que lorsque le budget final le permet, mais il reste également soumis au budget de découverte partagé. Historique, chemins et patch sont bornés avant le sélecteur de tokens.
 
-Aucun cache Git persistant n'est introduit sans benchmark.
+## Fédération : ordre de validation
 
-## Budgets par famille
-
-Instructions : environ 25 %, plafonné à 600 tokens.
-
-Skills : environ 20 %, plafonné à 2 000 tokens.
-
-Git : environ 15 %, plafonné à 500 tokens, seulement si budget global >= 500.
-
-La tâche utilise le budget restant. Les portions inutilisées restent disponibles aux familles suivantes.
-
-## Fragments et déduplication
-
-Pour un symbole précis, NEXUS privilégie un extrait autour de ses lignes. Pour un fichier, le builder choisit fichier entier, fenêtres autour des termes ou fallback borné selon le budget.
-
-Les doublons entre recherche générique et sources natives sont supprimés avant fusion. `FragmentMerger` fusionne les plages adjacentes/chevauchantes d'un même fichier.
-
-## Estimation des tokens
-
-`HeuristicTokenEstimator` reste local, déterministe et remplaçable. La valeur estimée n'est pas présentée comme équivalente à un tokenizer de fournisseur LLM.
-
-## ContextBundle fédéré — Phase 6
-
-`FederatedContextService` reçoit une portée explicite de projets READY et un **budget global unique**.
+Une requête fédérée ne commence pas par résoudre tous les projets.
 
 ```text
-projects[] + query + globalBudget
-            ↓
-allocation déterministe du budget
-            ↓
-DefaultContextBuilder(Project A)
-DefaultContextBuilder(Project B)
-...
-            ↓
-round-robin inter-projet
-            ↓
-déduplication inter-projet du contenu
-            ↓
-FederatedContextBundle
+sélecteurs explicites
+  ↓
+normalisation / UUID
+  ↓
+cardinalité canonique <= 100 projets uniques
+  ↓
+résolution projet
+  ↓
+gate READY
+  ↓
+service fédéré
 ```
 
-Chaque item devient un `FederatedContextItem` contenant :
+La limite de 100 uniques est donc fail-fast : le 101e UUID unique provoque l'erreur de portée avant `PROJECT_NOT_FOUND` ou `requireReadyProject` sur les sélecteurs concernés.
 
-```text
-ProjectDescriptor project
-ContextItem item
-```
+## FederatedContextService
 
-Cela empêche toute ambiguïté de provenance même lorsque deux repositories contiennent le même chemin relatif.
+Pour une portée valide et READY :
 
-### Fairness
+- budget global ;
+- budget de travail préparatoire ;
+- fair floor ;
+- provenance projet ;
+- round-robin/refill ;
+- déduplication inter-projet ;
+- metadata de starvation.
 
-Le budget est réparti entre les projets de la portée, reste strictement <= budget global, puis les items sont entrelacés round-robin. Les metadata exposent :
+Les sources natives sont évaluées dans leur projet d'origine. Une instruction, un skill ou un fragment Git n'est jamais propagé implicitement d'un projet à un autre.
 
-```text
-allocationByProject
-localTokensByProject
-localItemsByProject
-selectedTokensByProject
-selectedItemsByProject
-starvedProjects
-starvedProjectCount
-crossProjectDeduplicatedItems
-mergePolicy=fair-budget-round-robin
-nativeSourceScope=project-local
-```
+## Budgets de familles
 
-### Sources natives
+Le sélecteur final conserve les sous-budgets usuels : instructions, skills, Git puis contexte de tâche, avec restitution des portions inutilisées. Ils complètent `ContextDiscoveryLimits` ; ils ne le remplacent pas.
 
-Instructions, Skills et Git sont calculés **dans le projet d'origine**. Phase 6 n'autorise aucune propagation implicite d'une instruction ou d'un skill d'un projet vers un autre.
+## Métadonnées
 
-### Déduplication inter-projet
-
-Deux items de même type dont le contenu normalisé est identique ne sont conservés qu'une fois dans le bundle fédéré. Leur chemin seul n'est jamais utilisé pour dédupliquer entre projets.
-
-## Surfaces fédérées
-
-```text
-CLI  context-federated
-REST POST /api/v1/federated/context
-MCP  build_context_across_projects
-MCP  explain_context_across_projects
-```
-
-## Sécurité
-
-- chemins confinés aux racines projets ;
-- aucune exécution de skill ;
-- Git read-only ;
-- providers externes non requis pour le contexte standard ;
-- projet non-READY refusé ;
-- budget local ou fédéré strictement respecté.
+Le bundle explicable expose notamment les métriques de découverte, sélection, déduplication, Git, skills et budget de travail afin qu'une consommation ou une starvation soit diagnostiquable.
 
 ## Validation
 
-La Phase 6 ajoute un test dédié au budget global, à la provenance et à la déduplication fédérée. Le gate final Windows est :
+- `ContextDiscoveryLimitsTest` : frontière exacte et N+1 ;
+- `NativeContextDiscoveryBudgetBenchmarkTest` : 1 000 skills filesystem au seuil exact ;
+- tests fédérés application/CLI : cardinalité avant résolution ;
+- benchmark fédéré : 100 projets et budget de travail global.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
-```
-
-Voir [`current-limitations.md`](current-limitations.md) et la [`roadmap`](../roadmap.md).
+Les mêmes contrats sont utilisés par CLI, REST et MCP.
