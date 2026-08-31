@@ -18,6 +18,8 @@ Quarkus      3.39.1
 MCP SDK      2.0.1
 ```
 
+Le build courant utilise **Maven 3.9.16** via le wrapper et son ancre d'intégrité versionnée.
+
 La campagne NXA3 durcit REST, filesystem/SCIP/skills, découverte native, fédération, Git, supply-chain, release Docker, SQLite et documentation. Les preuves d'une PR ou d'une itération ne sont pas recopiées ici comme état courant : la preuve applicable reste le run exact-head du commit concerné.
 
 ## Parcours recommandé

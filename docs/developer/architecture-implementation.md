@@ -72,7 +72,7 @@ Les limites sont consommées avant le travail coûteux lorsque possible et un d�
 
 ## Fédération
 
-`FederatedScopePolicy` limite la portée à 100 UUID uniques. Les surfaces valident la cardinalité canonique **avant** `requireReadyProject` ou résolution équivalente ; un 101e projet unique échoue donc avant les lookups/readiness ultérieurs.
+`FederatedScopePolicy` limite la portée à **100 projets uniques** (UUID canoniques). Les surfaces valident la cardinalité canonique **avant** `requireReadyProject` ou résolution équivalente ; un 101e projet unique échoue donc avant les lookups/readiness ultérieurs.
 
 Une portée valide est ensuite résolue puis transmise à `FederatedSearchService`/`FederatedContextService` sous budget de travail et budget final.
 
