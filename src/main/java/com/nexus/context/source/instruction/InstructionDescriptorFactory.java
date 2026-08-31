@@ -53,6 +53,7 @@ final class InstructionDescriptorFactory {
             boolean resolveReferences,
             ContextDiscoveryBudget budget) throws IOException {
         Path relativePath = InstructionDiscoverySupport.relative(project, absolutePath);
+        String primaryContent = InstructionDiscoverySupport.read(project, absolutePath, budget);
         List<ContextSourceDescriptor> descriptors = new ArrayList<>();
         descriptors.add(new ContextSourceDescriptor(
                 provider + ":" + InstructionDiscoverySupport.repositoryPath(relativePath),
@@ -63,7 +64,7 @@ final class InstructionDescriptorFactory {
                 scope,
                 applyTo,
                 priority,
-                InstructionDiscoverySupport.read(project, absolutePath, budget),
+                primaryContent,
                 Map.of(),
                 reasons));
 
@@ -72,7 +73,7 @@ final class InstructionDescriptorFactory {
         }
 
         for (InstructionReferenceResolver.ResolvedReference reference :
-                referenceResolver.resolve(project, absolutePath, budget)) {
+                referenceResolver.resolve(project, absolutePath, primaryContent, budget)) {
             Map<String, Object> metadata = new LinkedHashMap<>();
             metadata.put("referencedFrom", InstructionDiscoverySupport.repositoryPath(relativePath));
             metadata.put("referenceDepth", reference.depth());
