@@ -1,5 +1,6 @@
 package com.nexus.context.source.skill;
 
+import com.nexus.context.source.ContextDiscoveryBudget;
 import com.nexus.index.scan.ProjectIgnoreMatcher;
 import com.nexus.security.ProjectPathGuard;
 
@@ -39,6 +40,7 @@ public final class LocalAgentSkillsProvider implements SkillSourceProvider {
         List<String> diagnostics = new ArrayList<>();
 
         for (String relativeRoot : SKILL_ROOTS) {
+            query.discoveryBudget().checkpoint();
             Path candidate = pathGuard.resolve(Path.of(relativeRoot));
             Path skillContainer;
             try {
@@ -57,7 +59,8 @@ public final class LocalAgentSkillsProvider implements SkillSourceProvider {
                     relativeRoot,
                     ignoreMatcher,
                     skills,
-                    diagnostics);
+                    diagnostics,
+                    query.discoveryBudget());
         }
 
         skills.sort(Comparator
@@ -73,11 +76,13 @@ public final class LocalAgentSkillsProvider implements SkillSourceProvider {
             String originRoot,
             ProjectIgnoreMatcher ignoreMatcher,
             List<SkillDescriptor> skills,
-            List<String> diagnostics) throws IOException {
+            List<String> diagnostics,
+            ContextDiscoveryBudget budget) throws IOException {
         Files.walkFileTree(skillContainer, new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes)
                     throws IOException {
+                budget.visit(directory);
                 if (!directory.equals(skillContainer) && ignoreMatcher.isIgnored(directory, true)) {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
@@ -87,6 +92,7 @@ public final class LocalAgentSkillsProvider implements SkillSourceProvider {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+                budget.visit(file);
                 if (!file.getFileName().toString().equalsIgnoreCase("SKILL.md")
                         || ignoreMatcher.isIgnored(file, false)) {
                     return FileVisitResult.CONTINUE;
@@ -97,8 +103,27 @@ public final class LocalAgentSkillsProvider implements SkillSourceProvider {
                     return FileVisitResult.CONTINUE;
                 }
 
+                Path safeFile;
                 try {
-                    Path safeFile = pathGuard.requireRegularFile(file);
+                    safeFile = pathGuard.requireRegularFile(file);
+                } catch (IOException unsafePath) {
+                    diagnostics.add(repositoryPath(projectRoot.relativize(file))
+                            + " ignoré : " + unsafePath.getMessage());
+                    return FileVisitResult.CONTINUE;
+                }
+
+                long chargedBytes;
+                try {
+                    chargedBytes = Math.min(Files.size(safeFile), SkillFrontmatterParser.MAX_DISCOVERY_BYTES);
+                } catch (IOException unreadable) {
+                    diagnostics.add(repositoryPath(projectRoot.relativize(file))
+                            + " ignoré : " + unreadable.getMessage());
+                    return FileVisitResult.CONTINUE;
+                }
+                budget.candidate(safeFile);
+                budget.bytes(safeFile, chargedBytes);
+
+                try {
                     SkillFrontmatter frontmatter = parser.parse(safeFile);
                     Path absoluteSkillRoot = safeFile.getParent();
                     Path relativeSkillRoot = projectRoot.relativize(absoluteSkillRoot);
@@ -108,7 +133,8 @@ public final class LocalAgentSkillsProvider implements SkillSourceProvider {
                             projectRoot,
                             absoluteSkillRoot,
                             safeFile,
-                            ignoreMatcher);
+                            ignoreMatcher,
+                            budget);
                     skills.add(new SkillDescriptor(
                             id() + ":" + repositoryPath(relativeDefinition),
                             id(),
@@ -139,12 +165,14 @@ public final class LocalAgentSkillsProvider implements SkillSourceProvider {
             Path projectRoot,
             Path skillRoot,
             Path definitionFile,
-            ProjectIgnoreMatcher ignoreMatcher) throws IOException {
+            ProjectIgnoreMatcher ignoreMatcher,
+            ContextDiscoveryBudget budget) throws IOException {
         List<SkillResourceDescriptor> resources = new ArrayList<>();
         Files.walkFileTree(skillRoot, new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes)
                     throws IOException {
+                budget.visit(directory);
                 if (!directory.equals(skillRoot) && ignoreMatcher.isIgnored(directory, true)) {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
@@ -153,7 +181,8 @@ public final class LocalAgentSkillsProvider implements SkillSourceProvider {
             }
 
             @Override
-            public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+                budget.visit(file);
                 if (file.equals(definitionFile)
                         || ignoreMatcher.isIgnored(file, false)
                         || attributes.isSymbolicLink()
@@ -161,16 +190,18 @@ public final class LocalAgentSkillsProvider implements SkillSourceProvider {
                         || !attributes.isRegularFile()) {
                     return FileVisitResult.CONTINUE;
                 }
+                Path safeFile;
                 try {
-                    Path safeFile = pathGuard.requireRegularFile(file);
-                    Path relativeToSkill = skillRoot.relativize(safeFile);
-                    resources.add(new SkillResourceDescriptor(
-                            projectRoot.relativize(safeFile),
-                            resourceType(relativeToSkill),
-                            attributes.size()));
+                    safeFile = pathGuard.requireRegularFile(file);
                 } catch (IOException unsafePath) {
-                    // Les ressources non sûres ne sont ni chargées ni inventoriées.
+                    return FileVisitResult.CONTINUE;
                 }
+                budget.candidate(safeFile);
+                Path relativeToSkill = skillRoot.relativize(safeFile);
+                resources.add(new SkillResourceDescriptor(
+                        projectRoot.relativize(safeFile),
+                        resourceType(relativeToSkill),
+                        attributes.size()));
                 return FileVisitResult.CONTINUE;
             }
         });
