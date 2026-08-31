@@ -1,6 +1,7 @@
 package com.nexus.context.source.skill;
 
 import com.nexus.context.source.ContextDiscoveryBudget;
+import com.nexus.context.source.ContextDiscoveryLimitExceededException;
 import com.nexus.index.scan.ProjectIgnoreMatcher;
 import com.nexus.security.ProjectPathGuard;
 
@@ -151,6 +152,8 @@ public final class LocalAgentSkillsProvider implements SkillSourceProvider {
                             List.of(
                                     "Agent Skill découvert dans " + originRoot,
                                     "découverte progressive : frontmatter uniquement")));
+                } catch (ContextDiscoveryLimitExceededException limitExceeded) {
+                    throw limitExceeded;
                 } catch (IllegalArgumentException | IOException exception) {
                     diagnostics.add(repositoryPath(projectRoot.relativize(file))
                             + " ignoré : " + exception.getMessage());
