@@ -63,13 +63,14 @@ final class InstructionDiscoverySupport {
                 }
                 String name = file.getFileName().toString().toLowerCase(Locale.ROOT);
                 if (normalizedNames.contains(name)) {
+                    Path safeFile;
                     try {
-                        Path safeFile = pathGuard.requireRegularFile(file);
-                        budget.candidate(safeFile);
-                        matches.add(safeFile);
+                        safeFile = pathGuard.requireRegularFile(file);
                     } catch (IOException unsafePath) {
-                        // Une entrée devenue non sûre pendant le scan n'est jamais exposée au provider.
+                        return FileVisitResult.CONTINUE;
                     }
+                    budget.candidate(safeFile);
+                    matches.add(safeFile);
                 }
                 return FileVisitResult.CONTINUE;
             }
@@ -133,13 +134,14 @@ final class InstructionDiscoverySupport {
                 }
                 if (file.getFileName().toString().toLowerCase(Locale.ROOT)
                         .endsWith(suffix.toLowerCase(Locale.ROOT))) {
+                    Path safeFile;
                     try {
-                        Path safeFile = pathGuard.requireRegularFile(file);
-                        budget.candidate(safeFile);
-                        matches.add(safeFile);
+                        safeFile = pathGuard.requireRegularFile(file);
                     } catch (IOException unsafePath) {
-                        // Ignore une entrée remplacée par un lien ou sortie de la frontière entre-temps.
+                        return FileVisitResult.CONTINUE;
                     }
+                    budget.candidate(safeFile);
+                    matches.add(safeFile);
                 }
                 return FileVisitResult.CONTINUE;
             }
