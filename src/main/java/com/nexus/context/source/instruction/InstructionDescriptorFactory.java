@@ -1,5 +1,7 @@
 package com.nexus.context.source.instruction;
 
+import com.nexus.context.source.ContextDiscoveryBudget;
+import com.nexus.context.source.ContextDiscoveryLimits;
 import com.nexus.context.source.ContextSourceDescriptor;
 import com.nexus.context.source.ContextSourceScope;
 import com.nexus.project.ProjectDescriptor;
@@ -26,6 +28,30 @@ final class InstructionDescriptorFactory {
             int priority,
             List<String> reasons,
             boolean resolveReferences) throws IOException {
+        return create(
+                project,
+                provider,
+                origin,
+                absolutePath,
+                scope,
+                applyTo,
+                priority,
+                reasons,
+                resolveReferences,
+                ContextDiscoveryLimits.defaults().newBudget());
+    }
+
+    List<ContextSourceDescriptor> create(
+            ProjectDescriptor project,
+            String provider,
+            String origin,
+            Path absolutePath,
+            ContextSourceScope scope,
+            List<String> applyTo,
+            int priority,
+            List<String> reasons,
+            boolean resolveReferences,
+            ContextDiscoveryBudget budget) throws IOException {
         Path relativePath = InstructionDiscoverySupport.relative(project, absolutePath);
         List<ContextSourceDescriptor> descriptors = new ArrayList<>();
         descriptors.add(new ContextSourceDescriptor(
@@ -37,7 +63,7 @@ final class InstructionDescriptorFactory {
                 scope,
                 applyTo,
                 priority,
-                InstructionDiscoverySupport.read(project, absolutePath),
+                InstructionDiscoverySupport.read(project, absolutePath, budget),
                 Map.of(),
                 reasons));
 
@@ -45,7 +71,8 @@ final class InstructionDescriptorFactory {
             return List.copyOf(descriptors);
         }
 
-        for (InstructionReferenceResolver.ResolvedReference reference : referenceResolver.resolve(project, absolutePath)) {
+        for (InstructionReferenceResolver.ResolvedReference reference :
+                referenceResolver.resolve(project, absolutePath, budget)) {
             Map<String, Object> metadata = new LinkedHashMap<>();
             metadata.put("referencedFrom", InstructionDiscoverySupport.repositoryPath(relativePath));
             metadata.put("referenceDepth", reference.depth());
