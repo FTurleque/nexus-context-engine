@@ -1,62 +1,27 @@
 # CI, couverture et supply-chain
 
-Ce document décrit les gates de qualité et de sécurité applicables à NEXUS 0.2.0 après la consolidation post-audit de l'issue #48 / PR #49, le durcissement de qualification NXA2-04, la séparation qualification/publication NXA2-07 et les gates de couverture adaptateurs NXA2-09.
+Ce document décrit le contrat courant de qualification et de publication de NEXUS 0.2.0 après la campagne NXA3. Le code et les workflows versionnés restent l'autorité exécutable ; ce document explicite les invariants attendus.
 
-## Objectifs
+## Branches et qualification
 
-La CI doit empêcher l'intégration silencieuse de régressions de :
+`develop` est la branche d'intégration. `main` est la branche de release. Une promotion `develop -> main` n'est autorisée qu'après qualification du **HEAD exact** candidat par les gates applicables au diff.
 
-1. build, tests ou distribution sur les plateformes supportées ;
-2. couverture du cœur et des adaptateurs publics ;
-3. vulnérabilités du reactor Maven ;
-4. sécurité de l'image Docker ;
-5. inventaire de conformité (licence, notices tierces, SBOM) ;
-6. comportement Windows/Docker de l'installateur et des launchers ;
-7. passage à l'échelle sur SQLite, graphe et contexte fédéré.
+Les workflows NEXUS CI et CodeQL utilisent explicitement le SHA de tête de la pull request pour le checkout. CodeQL ne doit donc pas être interprété comme une qualification implicite du merge-ref synthétique GitHub.
 
-Les workflows GitHub Actions utilisent des **SHA de commit immuables** pour les Actions contrôlées par le dépôt. Les commentaires de version (`# vX.Y.Z`) sont informatifs ; le SHA est l'autorité exécutée.
-
-## Contrat de branches et de release
-
-`develop` est la branche d'intégration. Les pull requests vers `develop` doivent exécuter directement les mêmes gates techniques pertinents qu'une pull request vers `main`, sans PR artificielle de qualification vers `main`.
-
-`main` reste la branche de release, mais **un push ordinaire sur `main` ne publie aucune image GHCR**. La publication est réservée à `.github/workflows/release.yml`, déclenché par un tag Git `vX.Y.Z` validé contre la version Maven et le HEAD exact courant de `main`.
-
-Une promotion `develop` vers `main` est autorisée uniquement si :
-
-- le HEAD exact candidat a été qualifié par les workflows applicables à son diff ;
-- aucun check déclenché n'est rouge ou annulé sans justification traçable ;
-- les findings de sécurité/reliability externes exposés sur la PR ont été triés ;
-- aucun artefact de release n'a été publié depuis `develop` ;
-- les exceptions de gate, lorsqu'elles sont réellement non applicables à cause des `paths`, sont explicables par le diff et non par une absence de trigger de branche.
-
-Une publication de release ajoute une contrainte supplémentaire : tous les gates release sont réexécutés via `workflow_call` sur le commit taggé avant toute écriture GHCR.
+La protection GitHub de `develop` (PR obligatoire, checks requis, interdiction force-push/suppression) est un contrôle de gouvernance distinct du code versionné et doit être configurée par un administrateur du repository.
 
 ## NEXUS CI
 
-`.github/workflows/ci.yml` qualifie les pull requests vers `develop` et `main`, ainsi que les pushes configurés. Il expose aussi `workflow_call` pour la qualification de release.
+`.github/workflows/ci.yml` qualifie `develop` et `main` sur Windows et Linux :
 
-- **Windows gate** : Java 24, script de qualification locale ;
-- **Linux reactor Maven build** : Java 21, reactor complet, distribution autonome et artefacts de conformité.
+- Windows : Java 24 et script de qualification locale ;
+- Linux : Java 21, reactor Maven complet, tests, JaCoCo, distribution autonome, SBOM et notices.
 
-Le reactor porte les gates JaCoCo, les tests unitaires/intégration et les contrôles Maven. Les surfaces REST, MCP et assistant-clients sont couvertes par les modules du reactor.
+Les actions GitHub contrôlées par le dépôt sont référencées par SHA immuable. Les commentaires de version sont informatifs ; le SHA est l'autorité.
 
-### Couverture JaCoCo
+### Couverture
 
-Quatre modules disposent désormais d'un contrat de couverture bloquant :
-
-| Module | Baseline qualifiée lignes | Minimum lignes | Baseline qualifiée branches | Minimum branches |
-|---|---:|---:|---:|---:|
-| core | 79,07 % | 70 % | 61,85 % | 50 % |
-| REST | 63,10 % | 60 % | 66,44 % | 60 % |
-| MCP | 88,72 % | 80 % | 60,34 % | 55 % |
-| assistant-clients | 66,39 % | 60 % | 49,44 % | 45 % |
-
-Les seuils sont des planchers de non-régression. Ils ne doivent pas être abaissés pour contourner un défaut de tests et NXA2-09 n'introduit aucune exclusion de classe/package pour les atteindre.
-
-Le serveur MCP étant exercé dans un JVM enfant par le test STDIO réel, ce JVM reçoit explicitement l'agent JaCoCo et fusionne ses données avec celles du JVM Surefire. Sans cette instrumentation, la couverture MCP serait artificiellement sous-évaluée.
-
-Les rapports XML sont produits dans :
+Les planchers bloquants restent définis dans les POM des modules. Les rapports sont conservés sous :
 
 ```text
 core/target/site/jacoco/jacoco.xml
@@ -65,246 +30,115 @@ adapters/mcp-java/target/site/jacoco/jacoco.xml
 adapters/assistant-clients/target/site/jacoco/jacoco.xml
 ```
 
-Le job Linux imprime les ratios lignes/branches et conserve les quatre rapports comme preuves CI. Le script de qualification Windows exige également leur présence. Le contrat détaillé et les baselines sont documentés dans `docs/developer/adapter-coverage-gates.md`.
+Un seuil ne doit pas être abaissé pour faire passer une régression.
 
-## Vulnérabilités — OSV-Scanner
+## OSV et CodeQL
 
-`.github/workflows/osv-scanner.yml` combine deux protections complémentaires sur les pull requests vers `develop` et `main` et expose `workflow_call` pour la release.
+`.github/workflows/osv-scanner.yml` scanne le delta PR et le SBOM CycloneDX agrégé du reactor avec échec sur vulnérabilité selon la politique du workflow.
 
-### Delta PR
+`.github/workflows/codeql.yml` analyse Java/Kotlin avec `security-extended`. Sur pull request, le workflow checkout et vérifie le SHA exact `github.event.pull_request.head.sha`; pour les autres événements il qualifie `github.sha`. Toute dérive de checkout est un échec explicite.
 
-Sur une pull request vers `develop` ou `main`, le workflow réutilisable OSV compare la base et le changement et bloque l'introduction d'une **nouvelle vulnérabilité**.
+## Benchmarks
 
-### SBOM agrégé du reactor
+`scale-benchmark.yml` et `scanner-corpus-benchmark.yml` fournissent des budgets de non-régression. Les PR utilisent leur profil automatique ; la release exige les profils `full` via `workflow_call`.
 
-Le workflow construit en plus le reactor Maven avec Java 21 et génère :
+Le contexte natif possède en outre des bornes de travail avant sélection de tokens (`ContextDiscoveryLimits`) sur :
 
-```text
-target/sbom/bom.json
-```
+- entrées filesystem/Git visitées ;
+- ressources candidates ;
+- octets cumulés lus/rendus ;
+- durée globale de découverte.
 
-Le SBOM CycloneDX agrégé est vérifié comme non trivial, copié sous `nexus.cdx.json`, publié temporairement comme artefact puis scanné par OSV avec `fail-on-vuln: true`.
+Le dépassement est fail-closed. Les limites peuvent être ajustées par les variables `NEXUS_CONTEXT_DISCOVERY_*` documentées dans `native-context-discovery-limits.md`.
 
-Cette étape est l'autorité pour la couverture complète du reactor et de ses dépendances transitives matérialisées dans le SBOM. Elle remplace l'ancienne formulation « scan courant non bloquant » qui ne correspond plus à la politique active.
+## Docker Distribution : build unique qualifié
 
-## CodeQL
+`.github/workflows/docker-distribution.yml` ne publie rien dans GHCR. Il construit l'image NEXUS **une seule fois** puis exécute sur cette même image :
 
-`.github/workflows/codeql.yml` analyse Java/Kotlin avec CodeQL et les queries `security-extended` sur les pull requests vers `develop` et `main`, ainsi que sur les autres événements configurés dans le workflow. Il expose aussi `workflow_call` pour la release.
+1. smokes CLI, MCP et REST ;
+2. qualification Docker/Compose ;
+3. rapport Trivy ;
+4. SBOM CycloneDX image ;
+5. gate HIGH/CRITICAL corrigibles.
 
-Un finding CodeQL doit être trié avant merge lorsqu'il est exposé comme bloquant. Les suppressions doivent être explicites et justifiées.
+Lorsqu'il est appelé par le workflow de release avec `export_qualified_image: true`, il exporte ensuite exactement cette image via `docker save`, calcule le SHA-256 de l'archive et expose aussi l'ID de configuration Docker de l'image. L'archive et ses métadonnées sont conservées comme artefact à courte rétention.
 
-## Scale Benchmark
+Le job de publication **ne reconstruit jamais l'image**.
 
-`.github/workflows/scale-benchmark.yml` qualifie les pull requests vers `develop` et `main` lorsque leur diff touche le périmètre de performance déclaré par ses `paths`.
+## Publication GHCR immuable et reprise
 
-Le workflow exécute un benchmark hermétique sur trois axes :
+`.github/workflows/release.yml` est déclenché uniquement par un tag `vX.Y.Z`. Avant publication, il vérifie :
 
-- SQLite/recherches et concurrence ;
-- projections et voisinages de graphe ;
-- coût de travail du contexte fédéré.
+- SemVer strict ;
+- égalité avec la version Maven ;
+- égalité entre commit taggé et HEAD courant de `main` ;
+- succès de NEXUS CI, Windows Installer, Docker Distribution, benchmarks `full`, CodeQL et OSV.
 
-Le profil automatique de PR utilise la taille `ci`. Le profil `full` reste disponible en déclenchement manuel et est **obligatoirement demandé par le workflow release** via `workflow_call`.
+Le job de publication télécharge l'archive Docker qualifiée et les preuves de sécurité produites par le gate Docker. Il vérifie le SHA-256 de l'archive contre l'output du workflow appelant, charge l'image, puis vérifie son ID Docker. Il n'exécute aucun second `docker build`.
 
-Le gate produit et vérifie :
+### Préflight GHCR fail-closed
 
-```text
-target/scale-benchmark.json
-target/graph-scale-benchmark.json
-target/federated-budget-scale-benchmark.json
-```
+`scripts/release/ghcr-immutable-preflight.sh` distingue :
 
-Les budgets sont des garde-fous de régression. Un outlier d'infrastructure peut justifier un rerun exact-head documenté, mais ne justifie pas d'assouplir le budget sans analyse.
+- tag réellement absent : publication permise ;
+- erreur auth/réseau/serveur ou résultat ambigu : échec ;
+- tag existant avec le même ID d'image qualifiée : reprise idempotente permise ;
+- tag existant avec un autre contenu : conflit d'immutabilité et échec.
 
-## Scanner Corpus Benchmark
+Si les tags version et SHA existent tous deux, ils doivent également résoudre le même digest de manifeste.
 
-`.github/workflows/scanner-corpus-benchmark.yml` qualifie le budget global du scanner. Les PR utilisent le profil `ci`; une release l'appelle en profil `full` afin de vérifier la borne sur le corpus étendu avant publication.
+### Publication et attestations
 
-## Windows Installer
-
-`.github/workflows/windows-installer.yml` qualifie les pull requests vers `develop` et `main` lorsqu'elles touchent le périmètre Windows/release déclaré par le workflow. Il expose `workflow_call` afin que la release réexécute le même gate.
-
-Le workflow vérifie :
-
-- échappement des configurations `.cmd` générées ;
-- construction de la distribution Windows ;
-- construction d'un setup smoke isolé ;
-- installation, exécution et désinstallation smoke ;
-- construction du setup production ;
-- vérification et conservation des artefacts.
-
-Le smoke valide le **profil réellement installé** : REST reste optionnel dans le profil natif recommandé. Les launchers portables complets sont qualifiés au niveau de la distribution, sans forcer l'installation d'un composant optionnel.
-
-## Docker Distribution
-
-`.github/workflows/docker-distribution.yml` est désormais un workflow de **qualification uniquement**. Il qualifie les pull requests vers `develop` et `main`, les pushes `main` configurés et les appels de release, mais ne possède plus de job publiant dans GHCR.
-
-### Runtime
-
-Le job principal vérifie :
-
-- la politique tag/version via `test-release-tag-policy.sh` ;
-- round-trip littéral de la configuration dotenv/Compose ;
-- build de l'image exacte ;
-- smoke CLI ;
-- smoke MCP STDIO ;
-- smoke REST sur port hôte personnalisé ;
-- fallback de payload installé.
-
-### Vulnérabilités et SBOM image
-
-Trivy produit :
+Les tags immuables sont :
 
 ```text
-target/trivy-image-vulnerabilities.json
-target/nexus-image.cdx.json
+<X.Y.Z>
+sha-<commit>
 ```
 
-Le workflow bloque ensuite les vulnérabilités **HIGH ou CRITICAL corrigibles** avec `ignore-unfixed: true` et `exit-code: 1`.
+Un retry après publication partielle complète uniquement le tag manquant à partir du tag immuable déjà validé. Les deux tags sont ensuite relus et doivent correspondre exactement à l'image qualifiée et au même digest.
 
-Les preuves de sécurité image sont conservées en artefacts CI.
+Les attestations de provenance et de SBOM portent sur ce digest publié. `latest` est le seul pointeur mutable et n'est déplacé qu'après succès des tags immuables et des attestations.
 
-## Publication de release et attestations
+## Ancres d'intégrité des outils téléchargés
 
-La publication est entièrement portée par `.github/workflows/release.yml`.
+Les outils à version fixe ne téléchargent plus leur archive **et** leur checksum depuis la même origine pendant l'installation.
 
-Le signal accepté est un tag `vX.Y.Z`. Avant qualification, le workflow exige :
-
-1. un SemVer strict ;
-2. l'égalité entre `X.Y.Z` et la version racine de `pom.xml` ;
-3. l'égalité entre le commit taggé et le HEAD exact courant de `main`.
-
-Le job de publication ne peut démarrer qu'après succès de :
-
-1. NEXUS CI ;
-2. Windows Installer ;
-3. Docker Distribution ;
-4. Scale Benchmark `full` ;
-5. Scanner Corpus Benchmark `full` ;
-6. CodeQL ;
-7. OSV-Scanner.
-
-Après ces gates seulement :
-
-1. l'image exacte est reconstruite ;
-2. Trivy est rejoué sur l'image de publication et bloque les HIGH/CRITICAL corrigibles ;
-3. un SBOM CycloneDX de release est généré ;
-4. GHCR est interrogé pour refuser explicitement tout tag immuable déjà présent ;
-5. les tags `X.Y.Z` et `sha-<commit>` sont publiés ;
-6. le workflow vérifie qu'ils résolvent le même digest ;
-7. les attestations de provenance et de SBOM sont publiées sur ce digest ;
-8. `latest` n'est déplacé qu'après ces étapes et est vérifié contre le même digest.
-
-Les tags versionné et SHA sont immuables. `latest` reste le seul pointeur mutable explicite.
-
-Le contrat détaillé, y compris reprise après échec, reproductibilité et rollback, est documenté dans `docs/developer/immutable-release-publishing.md`.
-
-## Politique de licences tierces
-
-La compatibilité juridique ne doit pas être déduite d'une simple recherche de chaîne dans un nom de licence.
-
-La politique automatisée de NEXUS est :
-
-- chaque dépendance compile/runtime distribuée doit fournir une information de licence exploitable ;
-- `license-maven-plugin` s'exécute avec `failOnMissing=true` ;
-- les modules `io.github.fturleque` et dépendances de test ne sont pas comptés comme composants tiers distribués ;
-- toute dépendance sous conditions inhabituelles exige une revue explicite ;
-- aucune exception ne doit être créée en désactivant silencieusement la génération de notices.
-
-## SBOM et notices tierces
-
-Le reactor génère :
+Les valeurs attendues sont versionnées dans :
 
 ```text
-target/sbom/bom.json
-target/licenses/THIRD_PARTY_NOTICES.txt
+config/tool-integrity.properties
 ```
 
-L'archive autonome contient :
+Actuellement :
+
+- Maven 3.9.11 : SHA-512 épinglé dans Git ;
+- Eclipse JDT LS 1.60.0-202606262232 : SHA-256 épinglé dans Git.
+
+`mvnw` et `scripts/install-jdtls.ps1` échouent si l'ancre manque, est invalide ou ne correspond pas aux octets téléchargés. Une montée de version doit modifier version + hash dans la même revue et justifier la provenance de l'ancre indépendante.
+
+## SQLite
+
+Les migrations sont forward-only et protégées par checksum. Depuis V005, la table `symbols` impose au niveau SQLite les mêmes invariants que le domaine Java :
 
 ```text
-LICENSE
-THIRD_PARTY_NOTICES.txt
-SBOM.cdx.json
+start_line >= 1
+end_line >= start_line
 ```
 
-La qualification Windows compare les artefacts embarqués aux outputs générés afin d'éviter une distribution avec un inventaire obsolète.
-
-Le job Linux conserve les preuves de conformité prévues par le workflow. L'image Docker possède en parallèle son propre SBOM et ses propres preuves Trivy.
+V004 nettoie les index historiques invalides avant la reconstruction V005.
 
 ## Dependabot
 
-`.github/dependabot.yml` surveille chaque semaine :
-
-- Maven ;
-- GitHub Actions ;
-- Docker sous `packaging/docker`.
-
-Les PR Dependabot passent par les mêmes gates déclenchés par leur diff. Une mise à jour d'Action doit conserver un pin sur un SHA immuable.
+`.github/dependabot.yml` surveille Maven, GitHub Actions et Docker chaque semaine et cible explicitement `develop`. Une mise à jour urgente qui contournerait cette branche d'intégration doit être un chemin d'exception explicite et revu, jamais le comportement par défaut.
 
 ## Politique d'échec
 
-Un gate rouge n'est jamais interprété comme PASS sans preuve contraire exécutable.
+Un gate rouge ou ambigu n'est pas un PASS :
 
-- Maven/tests/JaCoCo : corriger le code ou les tests ;
-- OSV : mettre à jour/remplacer la dépendance ou traiter explicitement le risque ;
-- CodeQL : corriger ou justifier la suppression ;
-- Trivy image : corriger les vulnérabilités HIGH/CRITICAL corrigibles ;
-- SBOM/notices absents : échec de conformité ;
-- Windows Installer/Docker/Scale/Scanner : analyser le log exact avant rerun ;
-- rerun : uniquement lorsqu'une cause transitoire est démontrée et toujours sur le même HEAD qualifié ;
-- tag de release déjà publié : échec explicite, jamais d'écrasement automatique du tag immuable.
-
-## SonarQube Cloud / SonarCloud
-
-Aucun workflow Sonar versionné dans `.github/workflows` n'est actuellement défini comme gate reproductible du dépôt. Le dépôt ne doit donc pas prétendre qu'un status Sonar est un required check qu'il sait exécuter lui-même.
-
-En revanche, lorsqu'une intégration GitHub Sonar publie un résultat sur une PR, **un Quality Gate rouge ne doit pas être ignoré** : il devient un signal de triage obligatoire avant promotion vers `main`. Le traitement acceptable est soit la correction, soit une justification finding par finding permettant de démontrer un faux positif, une non-applicabilité ou un risque explicitement accepté.
-
-### Signal historique NXA-09
-
-Sur la PR #78, SonarQube Cloud a publié le 9 août 2026 :
-
-```text
-Quality Gate: FAILED
-Security Rating on New Code: C (required >= A)
-Reliability Rating on New Code: D (required >= A)
-```
-
-Le commentaire GitHub expose ces ratings agrégés mais pas le détail des findings individuels. Il serait incorrect d'en déduire une vulnérabilité exploitable ou une cause racine précise sans ces findings.
-
-Conséquence de gouvernance : tant que ce signal historique n'est pas remplacé par une analyse Sonar actuelle verte sur le code concerné, ou par un triage détaillé et traçable des findings correspondants, il reste un **point de contrôle de promotion**. Il ne remet pas en cause les PASS exact-head déjà obtenus sur NEXUS CI, Windows Installer, Docker Distribution, Scale Benchmark, CodeQL et OSV pour le même HEAD ; il représente un signal statique distinct à traiter explicitement.
-
-## Protection de `develop` et `main`
-
-Les rulesets GitHub sont gérés dans GitHub et ne sont pas versionnés dans le repository.
-
-La source de vérité des gates exécutés reste la combinaison :
-
-- workflows présents dans `.github/workflows` ;
-- événements/path filters qui s'appliquent au diff ;
-- checks réellement associés au HEAD de la PR ;
-- règles de protection GitHub actives.
-
-Pour `develop`, une PR ne doit plus nécessiter une PR temporaire parallèle vers `main` pour déclencher les gates techniques pertinents. Pour `main`, le passage par pull request reste la voie normale de promotion. **La promotion et la publication sont deux opérations distinctes** : merger dans `main` ne publie rien ; seul un tag release valide déclenche la chaîne de publication.
-
-Une PR documentaire ne doit pas inventer un gate absent ; elle doit attendre tous les checks réellement déclenchés pour son HEAD.
-
-## Qualification post-audit de référence
-
-PR #49 :
-
-```text
-QUALIFIED_HEAD=4f04c1ad3ff5b41aa9d1892ade57ad62b90a43f9
-MERGE_SHA=c1ff9ef03ef33097c0d51154e02c30109b0a46f1
-```
-
-Résultats :
-
-- NEXUS CI `31314135008` — PASS ;
-- Windows Installer `31314134983` — PASS ;
-- Docker Distribution `31314134994` — PASS ;
-- Scale Benchmark `31314135000` — PASS ;
-- CodeQL `31314134977` — PASS ;
-- OSV-Scanner `31314135231` — PASS.
-
-La qualification finale d'une future PR doit toujours être rattachée à son propre HEAD exact.
+- Maven/tests/JaCoCo : corriger code ou tests ;
+- CodeQL/OSV/Trivy : corriger ou traiter explicitement le finding ;
+- artefact/hachage/digest incohérent : échec ;
+- registry indisponible pendant le préflight : échec ;
+- benchmark hors budget : analyser le run exact-head avant tout rerun ;
+- tag immuable avec contenu différent : échec définitif, jamais écrasement automatique.
