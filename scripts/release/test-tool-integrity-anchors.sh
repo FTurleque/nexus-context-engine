@@ -25,11 +25,17 @@ if "$VERIFY" sha512 "00000000000000000000000000000000000000000000000000000000000
   exit 1
 fi
 
-grep -Eq '^maven\.3\.9\.11\.sha512=[0-9a-f]{128}$' "$INTEGRITY"
+grep -Eq '^maven\.3\.9\.16\.sha512=[0-9a-f]{128}$' "$INTEGRITY"
 grep -Eq '^jdtls\.1\.60\.0-202606262232\.sha256=[0-9a-f]{64}$' "$INTEGRITY"
+grep -q 'MAVEN_VERSION="3.9.16"' "$ROOT/mvnw"
+grep -q 'MAVEN_VERSION=3.9.16' "$ROOT/mvnw.cmd"
 
 if grep -q 'MAVEN_DIST_SHA512_URL' "$ROOT/mvnw"; then
   echo 'mvnw still trusts a remote checksum URL' >&2
+  exit 1
+fi
+if grep -q 'MAVEN_DIST_SHA512_URL' "$ROOT/mvnw.cmd"; then
+  echo 'mvnw.cmd still trusts a remote checksum URL' >&2
   exit 1
 fi
 if grep -q '\$checksumUrl' "$ROOT/scripts/install-jdtls.ps1"; then
