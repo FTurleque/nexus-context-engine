@@ -36,7 +36,7 @@
         <sqlite-jdbc.version>3.53.2.1</sqlite-jdbc.version>
         <lucene.version>10.5.0</lucene.version>
         <jgit.version>7.7.1.202607240634-r</jgit.version>
-        <jackson.version>2.22.1</jackson.version>
+        <jackson.version>2.22.2</jackson.version>
         <micrometer.version>1.17.0</micrometer.version>
         <snakeyaml-engine.version>3.1</snakeyaml-engine.version>
         <junit.version>6.0.2</junit.version>
