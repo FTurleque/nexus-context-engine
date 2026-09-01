@@ -11,13 +11,11 @@ import java.nio.file.Path;
 import java.util.Map;
 
 import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.blankOrNullString;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
-import static org.hamcrest.Matchers.not;
 
 @QuarkusTest
 class NexusResourceTest {
@@ -150,18 +148,9 @@ class NexusResourceTest {
                 .body("error", equalTo("bad_request"))
                 .body("message", containsString("octets UTF-8"));
 
-        given()
-                .when()
-                .get("/q/health/ready")
-                .then()
-                .statusCode(200)
-                .body("status", equalTo("UP"));
-
-        given()
-                .when()
-                .get("/q/metrics")
-                .then()
-                .statusCode(200)
-                .body(not(blankOrNullString()));
+        // Health et métriques vivent désormais uniquement sur l'interface de management
+        // loopback dédiée ; ils ne doivent plus être publiés par le listener applicatif.
+        given().when().get("/q/health/ready").then().statusCode(404);
+        given().when().get("/q/metrics").then().statusCode(404);
     }
 }
