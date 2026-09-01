@@ -1,6 +1,6 @@
 # Feuille de route NEXUS
 
-Cette feuille de route décrit l'état architectural courant et les travaux encore réellement ouverts. Les détails historiques restent dans GitHub.
+Cette feuille de route décrit l'état architectural **courant** et les travaux encore réellement ouverts. Les détails historiques restent dans GitHub.
 
 ## Stratégie de branches
 
@@ -25,9 +25,9 @@ Toute promotion vers `main` doit partir d'un HEAD exact qualifié. Le contrat de
 - distribution ZIP, Windows self-contained et Docker ;
 - CodeQL, OSV, Trivy, SBOM, attestations et benchmarks de régression.
 
-## Hardening NXA3
+## Hardening intégré — NXA3
 
-La campagne NXA3 couvre les contrats suivants :
+NXA3 a établi les contrats suivants :
 
 - TLS REST effectif hors loopback ;
 - confinement SCIP et sources natives contre traversal/symlinks ;
@@ -40,34 +40,60 @@ La campagne NXA3 couvre les contrats suivants :
 - préflight GHCR fail-closed et reprise idempotente ;
 - V005 SQLite pour les invariants de plage ;
 - Dependabot ciblé sur `develop` ;
-- documentation opérationnelle vérifiée par CI.
+- documentation opérationnelle contrôlée par CI.
+
+## Hardening intégré — NXA4
+
+NXA4 complète cette baseline avec :
+
+- frames JSON-RPC JDT LS bornées avant allocation, headers bornés et file entrante limitée à 256 messages ;
+- tâches externes bornées à **8 workers réellement actifs** avec saturation explicite ;
+- requêtes Lucene analysées bornées à **128 termes uniques** avant expansion multi-champs ;
+- limites REST fédérées alignées sur les politiques globales ;
+- `constraints` non supportées refusées explicitement au lieu d'être ignorées ;
+- health/metrics Quarkus déplacés vers un listener de management dédié `127.0.0.1:9000` ;
+- Ollama distant en HTTPS par défaut, HTTP distant seulement via opt-in administratif explicite ;
+- credentials intégrés dans l'URI Ollama refusés ;
+- redaction conservatrice des secrets avant embeddings et avant restitution des fragments de contexte ;
+- exclusions scanner étendues pour les fichiers/répertoires sensibles ;
+- profil sémantique `content-v2` pour reconstruire les vecteurs historiques incompatibles ;
+- `NEXUS_HOME`/SQLite privés sur POSIX (`0700` répertoires, `0600` fichier) et refus des chemins persistants symboliques concernés ;
+- checks de bounds SCIP résistants aux overflows ;
+- parcours JavaParser limité aux catégories AST nécessaires.
 
 ## Qualification de scale
 
-Le Scale Benchmark couvre désormais quatre familles :
+Le Scale Benchmark couvre :
 
 1. SQLite/recherche ;
 2. graphe ;
-3. fédération jusqu'à 100 projets et budget 200k tokens ;
+3. fédération jusqu'à 100 projets et budget de travail contrôlé ;
 4. découverte native filesystem avec 1 000 skills synthétiques au seuil exact du budget.
 
-Aucun nouveau moteur FTS/trigram, cache Git persistant ou lifecycle Lucene plus complexe n'est adopté sans régression mesurée et besoin démontré.
+La recherche lexicale contient en plus un test de non-régression sur les requêtes à forte cardinalité afin d'éviter un dépassement du budget de clauses Lucene.
 
 ## Travail restant
 
-### Gouvernance
+### Gouvernance — NXA3-14 / #130
 
-Le contrôle NXA3 qui ne peut pas être réalisé par un commit est la protection effective de `develop` dans GitHub : PR obligatoire, checks requis, force-push/suppression interdits et exceptions administratives limitées et traçables. Tant que l'API GitHub indique que la branche est non protégée, ce point reste ouvert.
+Le principal contrôle non réalisable par un commit reste la protection effective de `develop` dans GitHub :
+
+- PR obligatoire ;
+- checks requis selon la politique approuvée ;
+- force-push et suppression interdits ;
+- exceptions administratives limitées et traçables.
+
+Tant que l'API GitHub indique `protected=false`, ce point reste **ouvert**.
 
 ### Watch items
 
-Les améliorations suivantes restent conditionnées à une preuve :
+Les améliorations suivantes restent conditionnées à une preuve reproductible :
 
-- lifecycle Lucene persistant ;
-- isolation processus de providers non coopératifs ;
+- lifecycle Lucene persistant/partagé ;
+- isolation processus plus forte d'un provider réellement non coopératif ;
 - filesystem réseau/hostile ;
 - cache Git persistant ;
-- recovery sémantique renforcé ;
+- recovery sémantique renforcé selon les scénarios de corruption/provider indisponible ;
 - moteur de recherche substring alternatif.
 
 ## Références
@@ -75,6 +101,7 @@ Les améliorations suivantes restent conditionnées à une preuve :
 - Architecture : [`architecture.md`](architecture.md)
 - CI / supply-chain : [`developer/ci-and-supply-chain.md`](developer/ci-and-supply-chain.md)
 - Release/recovery : [`developer/release-and-recovery.md`](developer/release-and-recovery.md)
-- Publication immuable : [`developer/immutable-release-publishing.md`](developer/immutable-release-publishing.md)
-- Limites natives : [`developer/native-context-discovery-limits.md`](developer/native-context-discovery-limits.md)
+- REST : [`developer/rest-api.md`](developer/rest-api.md)
+- Sémantique : [`developer/semantic-search.md`](developer/semantic-search.md)
+- JDT LS : [`developer/jdt-language-server.md`](developer/jdt-language-server.md)
 - Limites courantes : [`developer/current-limitations.md`](developer/current-limitations.md)
