@@ -46,7 +46,9 @@ jobs:
         shell: powershell
         run: |
           Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
-          .\scripts\release\build-windows-distribution.ps1
+          # Functional tests are qualified independently by NEXUS CI on this exact SHA.
+          # This workflow is responsible for Windows packaging and installer smokes.
+          .\scripts\release\build-windows-distribution.ps1 -SkipTests
 
       - name: Build isolated smoke installer
         shell: powershell
