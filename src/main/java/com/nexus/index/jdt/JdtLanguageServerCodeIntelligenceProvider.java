@@ -1055,7 +1055,10 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
 
         private void failInbound(IOException failure) {
             inbox.clear();
-            inbox.offer(new Inbound(null, failure));
+            if (!inbox.offer(new Inbound(null, failure))) {
+                process.destroyForcibly();
+                return;
+            }
             process.destroy();
         }
 
