@@ -6,21 +6,15 @@ import java.util.Locale;
 import java.util.Objects;
 
 /**
- * Résout l'endpoint Ollama en fonction du runtime d'exécution.
+ * Résout et valide l'endpoint Ollama en fonction du runtime d'exécution.
  *
  * <p>En natif Windows, {@code http://127.0.0.1:11434} désigne bien l'hôte qui exécute Ollama. Dans
  * un conteneur Docker en revanche, {@code 127.0.0.1} désigne le conteneur NEXUS lui-même : pour
  * joindre un Ollama qui tourne sur l'hôte Windows via Docker Desktop, il faut utiliser
- * {@code host.docker.internal}. Ce résolveur applique cette bascule <strong>uniquement</strong>
- * pour les adresses de bouclage, afin de ne jamais casser :</p>
- * <ul>
- *   <li>un hôte distant explicite ;</li>
- *   <li>un DNS personnalisé ;</li>
- *   <li>un Ollama dans un autre conteneur ;</li>
- *   <li>un Ollama sur une autre machine ;</li>
- *   <li>une adresse IPv6 non-bouclage.</li>
- * </ul>
- * Ces cas, accessibles à l'identique depuis les deux runtimes, sont renvoyés inchangés.
+ * {@code host.docker.internal}. Cette bascule est appliquée uniquement aux adresses de bouclage.</p>
+ *
+ * <p>Par sécurité, HTTP est accepté sans opt-in uniquement pour une adresse de bouclage configurée.
+ * Tout endpoint distant doit utiliser HTTPS, sauf opt-in administratif explicite.</p>
  */
 public final class OllamaEndpointResolver {
 
@@ -30,20 +24,31 @@ public final class OllamaEndpointResolver {
     private OllamaEndpointResolver() {
     }
 
+    /** Résout l'URI en refusant par défaut tout HTTP distant. */
+    public static URI resolveForRuntime(URI baseUri, boolean dockerRuntime) {
+        return resolveForRuntime(baseUri, dockerRuntime, false);
+    }
+
     /**
      * Résout l'URI de base Ollama pour le runtime cible.
      *
-     * @param baseUri       URI configurée par l'utilisateur
-     * @param dockerRuntime {@code true} si NEXUS s'exécute dans un conteneur Docker
-     * @return l'URI adaptée au runtime ; identique à l'entrée hors cas bouclage en Docker
+     * @param baseUri                     URI configurée par l'utilisateur
+     * @param dockerRuntime               {@code true} si NEXUS s'exécute dans un conteneur Docker
+     * @param allowInsecureRemoteEndpoint autorise explicitement HTTP vers un hôte distant
+     * @return l'URI validée et adaptée au runtime
      */
-    public static URI resolveForRuntime(URI baseUri, boolean dockerRuntime) {
+    public static URI resolveForRuntime(
+            URI baseUri,
+            boolean dockerRuntime,
+            boolean allowInsecureRemoteEndpoint) {
         Objects.requireNonNull(baseUri, "baseUri");
+        validateEndpoint(baseUri, allowInsecureRemoteEndpoint);
+
         if (!dockerRuntime) {
             return baseUri;
         }
         String host = baseUri.getHost();
-        if (host == null || !isLoopbackHost(host)) {
+        if (!isLoopbackHost(host)) {
             return baseUri;
         }
         try {
@@ -56,9 +61,29 @@ public final class OllamaEndpointResolver {
                     baseUri.getQuery(),
                     baseUri.getFragment());
         } catch (URISyntaxException exception) {
-            // Reconstruire avec un hôte DNS trivial ne peut échouer que sur une URI déjà invalide ;
-            // dans le doute on préserve l'entrée plutôt que de propager une erreur ici.
-            return baseUri;
+            throw new IllegalArgumentException("Impossible d'adapter l'endpoint Ollama au runtime Docker", exception);
+        }
+    }
+
+    static void validateEndpoint(URI baseUri, boolean allowInsecureRemoteEndpoint) {
+        String scheme = baseUri.getScheme();
+        String host = baseUri.getHost();
+        if (scheme == null || host == null || host.isBlank()) {
+            throw new IllegalArgumentException("NEXUS_OLLAMA_BASE_URL doit être une URI HTTP(S) absolue avec hôte");
+        }
+        String normalizedScheme = scheme.toLowerCase(Locale.ROOT);
+        if (!"http".equals(normalizedScheme) && !"https".equals(normalizedScheme)) {
+            throw new IllegalArgumentException("NEXUS_OLLAMA_BASE_URL accepte uniquement http ou https");
+        }
+        if (baseUri.getUserInfo() != null) {
+            throw new IllegalArgumentException("NEXUS_OLLAMA_BASE_URL ne doit pas contenir de credentials dans l'URI");
+        }
+        if ("http".equals(normalizedScheme)
+                && !isLoopbackHost(host)
+                && !allowInsecureRemoteEndpoint) {
+            throw new IllegalArgumentException(
+                    "Un endpoint Ollama distant doit utiliser HTTPS. "
+                            + "Pour accepter explicitement HTTP, activez NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA=true");
         }
     }
 
@@ -67,6 +92,9 @@ public final class OllamaEndpointResolver {
      * {@code ::1}). {@link URI#getHost()} conserve les crochets pour un IPv6 littéral, gérés ici.
      */
     static boolean isLoopbackHost(String host) {
+        if (host == null) {
+            return false;
+        }
         String normalized = host.trim().toLowerCase(Locale.ROOT);
         if (normalized.startsWith("[") && normalized.endsWith("]")) {
             normalized = normalized.substring(1, normalized.length() - 1);
