@@ -48,8 +48,13 @@ public final class JavaParserLanguageAnalyzer implements LanguageAnalyzer {
         // locale évite un état parseur partagé, tandis que les parcours AST ci-dessous ciblent
         // directement les catégories utiles au lieu d'énumérer tous les Node du fichier.
         JavaParser parser = new JavaParser(new ParserConfiguration().setLanguageLevel(LANGUAGE_LEVEL));
-        CompilationUnit unit = parser.parse(source)
-                .getResult()
+        var parseResult = parser.parse(source);
+        if (!parseResult.isSuccessful()) {
+            throw new IOException(
+                    "Impossible d'analyser complètement le fichier Java 21 : " + file
+                            + " (" + parseResult.getProblems().size() + " problème(s) de parsing)");
+        }
+        CompilationUnit unit = parseResult.getResult()
                 .orElseThrow(() -> new IOException("Impossible d'analyser le fichier Java 21 : " + file));
         String packageName = unit.getPackageDeclaration()
                 .map(declaration -> declaration.getNameAsString())
