@@ -11,19 +11,61 @@ $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $innoVersion = '7.0.2'
 $assetName = "innosetup-$innoVersion-x64.exe"
 $assetUri = "https://github.com/jrsoftware/issrc/releases/download/is-7_0_2/$assetName"
+$expectedSigner = 'Pyrsys B\.V\.'
+$expectedVersionPattern = '^7\.0\.2(?:\.0)?(?:\D.*)?$'
 
 if ([string]::IsNullOrWhiteSpace($ToolDirectory)) {
     $ToolDirectory = Join-Path $repo "target\tooling\inno-setup-$innoVersion"
 }
 $toolRoot = [IO.Path]::GetFullPath($ToolDirectory)
 
-function Find-Iscc {
+function Test-IsccQualified {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return $false
+    }
+
+    $resolved = (Resolve-Path -LiteralPath $Path).Path
+    $signature = Get-AuthenticodeSignature -LiteralPath $resolved
+    if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+        Write-Warning "Ignoring unqualified ISCC.exe with invalid Authenticode signature: $resolved ($($signature.Status))"
+        return $false
+    }
+
+    $subject = [string]$signature.SignerCertificate.Subject
+    if ($subject -notmatch $script:expectedSigner) {
+        Write-Warning "Ignoring ISCC.exe signed by unexpected publisher: $resolved ($subject)"
+        return $false
+    }
+
+    $versionInfo = [Diagnostics.FileVersionInfo]::GetVersionInfo($resolved)
+    $productVersion = [string]$versionInfo.ProductVersion
+    $fileVersion = [string]$versionInfo.FileVersion
+    if ($productVersion -notmatch $script:expectedVersionPattern -and
+        $fileVersion -notmatch $script:expectedVersionPattern) {
+        Write-Warning "Ignoring ISCC.exe with unexpected version: $resolved (product=$productVersion file=$fileVersion expected=$script:innoVersion)"
+        return $false
+    }
+
+    Write-Host "Qualified Inno Setup compiler: $resolved (version=$productVersion signer=$subject)"
+    return $true
+}
+
+function Find-QualifiedIscc {
+    $candidates = [Collections.Generic.List[string]]::new()
+
     if ($env:NEXUS_ISCC -and (Test-Path -LiteralPath $env:NEXUS_ISCC -PathType Leaf)) {
-        return (Resolve-Path -LiteralPath $env:NEXUS_ISCC).Path
+        $candidates.Add((Resolve-Path -LiteralPath $env:NEXUS_ISCC).Path)
     }
 
     $command = Get-Command ISCC.exe -ErrorAction SilentlyContinue
-    if ($command) { return $command.Source }
+    if ($command) {
+        $candidates.Add($command.Source)
+    }
 
     $roots = @($env:LOCALAPPDATA, $env:ProgramFiles, ${env:ProgramFiles(x86)}) | Where-Object { $_ }
     foreach ($root in $roots) {
@@ -34,14 +76,20 @@ function Find-Iscc {
             (Join-Path $root 'Inno Setup 6\ISCC.exe')
         )) {
             if (Test-Path -LiteralPath $candidate -PathType Leaf) {
-                return (Resolve-Path -LiteralPath $candidate).Path
+                $candidates.Add((Resolve-Path -LiteralPath $candidate).Path)
             }
+        }
+    }
+
+    foreach ($candidate in ($candidates | Select-Object -Unique)) {
+        if (Test-IsccQualified -Path $candidate) {
+            return $candidate
         }
     }
     return $null
 }
 
-$existing = Find-Iscc
+$existing = Find-QualifiedIscc
 if ($existing) {
     Write-Output $existing
     exit 0
@@ -61,12 +109,13 @@ if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid)
     throw "Inno Setup bootstrap Authenticode signature is not valid: $($signature.Status)"
 }
 $subject = [string]$signature.SignerCertificate.Subject
-if ($subject -notmatch 'Pyrsys B\.V\.') {
+if ($subject -notmatch $expectedSigner) {
     throw "Unexpected Inno Setup signer: $subject"
 }
 Write-Host "Inno Setup bootstrap signature: PASS ($subject)"
 
 $iscc = Get-ChildItem -LiteralPath $compilerRoot -Recurse -Filter ISCC.exe -File -ErrorAction SilentlyContinue |
+    Where-Object { Test-IsccQualified -Path $_.FullName } |
     Select-Object -First 1
 if ($null -eq $iscc) {
     Remove-Item -LiteralPath $compilerRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -85,11 +134,12 @@ if ($null -eq $iscc) {
         throw "Inno Setup bootstrap installer failed with exit code $($process.ExitCode)"
     }
     $iscc = Get-ChildItem -LiteralPath $compilerRoot -Recurse -Filter ISCC.exe -File -ErrorAction SilentlyContinue |
+        Where-Object { Test-IsccQualified -Path $_.FullName } |
         Select-Object -First 1
 }
 
 if ($null -eq $iscc) {
-    throw "Inno Setup bootstrap completed but ISCC.exe was not found under $compilerRoot"
+    throw "Inno Setup bootstrap completed but no qualified ISCC.exe $innoVersion was found under $compilerRoot"
 }
 
 Write-Host "Inno Setup compiler ready: $($iscc.FullName)"
