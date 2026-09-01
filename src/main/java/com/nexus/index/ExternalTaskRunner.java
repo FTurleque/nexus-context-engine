@@ -4,8 +4,8 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -49,11 +49,11 @@ public final class ExternalTaskRunner {
                             + " tâches simultanées) ; réessayez après la fin des providers actifs");
         }
 
-        CompletableFuture<T> result = new CompletableFuture<>();
+        FutureTask<T> result = new FutureTask<>(task);
         Thread worker = Thread.ofPlatform()
                 .daemon(true)
                 .name("nexus-external-" + THREAD_SEQUENCE.incrementAndGet())
-                .unstarted(() -> execute(task, result));
+                .unstarted(() -> execute(result));
         try {
             worker.start();
         } catch (RuntimeException | Error startupFailure) {
@@ -88,13 +88,9 @@ public final class ExternalTaskRunner {
         }
     }
 
-    private static <T> void execute(Callable<T> task, CompletableFuture<T> result) {
+    private static void execute(FutureTask<?> task) {
         try {
-            result.complete(task.call());
-        } catch (Exception failure) {
-            result.completeExceptionally(failure);
-        } catch (Error error) {
-            result.completeExceptionally(error);
+            task.run();
         } finally {
             CAPACITY.release();
         }
