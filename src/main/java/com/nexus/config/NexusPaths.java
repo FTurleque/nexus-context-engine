@@ -1,6 +1,7 @@
 package com.nexus.config;
 
 import java.io.IOException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -52,6 +53,26 @@ public record NexusPaths(Path home) {
         ensurePrivateDirectory(locksDirectory());
     }
 
+    /**
+     * Crée un répertoire persistant sous {@code NEXUS_HOME} sans suivre de lien symbolique
+     * préexistant dans sa hiérarchie relative. Chaque composant enfant est créé et revalidé
+     * séparément afin qu'un symlink tel que {@code indexes/<projectId>} ne puisse pas rediriger
+     * les écritures Lucene hors du stockage NEXUS.
+     */
+    public void ensurePrivateDirectory(Path directory) throws IOException {
+        Path normalized = requireInsideHome(directory);
+        ensureHomeDirectory();
+        if (normalized.equals(home)) {
+            return;
+        }
+
+        Path current = home;
+        for (Path segment : home.relativize(normalized)) {
+            current = current.resolve(segment);
+            ensurePrivateChildDirectory(current);
+        }
+    }
+
     /** Rend un fichier persistant privé lorsque le système de fichiers expose les permissions POSIX. */
     public void hardenPrivateFile(Path file) throws IOException {
         Path normalized = requireInsideHome(file);
@@ -91,16 +112,35 @@ public record NexusPaths(Path home) {
         return indexesDirectory().resolve(projectId.toString()).resolve("semantic-lucene");
     }
 
-    private void ensurePrivateDirectory(Path directory) throws IOException {
-        Path normalized = requireInsideHome(directory);
-        if (Files.isSymbolicLink(normalized)) {
-            throw new IOException("Refus d'un répertoire NEXUS symbolique : " + normalized);
+    private void ensureHomeDirectory() throws IOException {
+        if (Files.isSymbolicLink(home)) {
+            throw new IOException("Refus d'un répertoire NEXUS symbolique : " + home);
         }
-        Files.createDirectories(normalized);
-        if (!Files.isDirectory(normalized, LinkOption.NOFOLLOW_LINKS)) {
-            throw new IOException("Répertoire NEXUS attendu : " + normalized);
+        Files.createDirectories(home);
+        validateDirectory(home);
+        applyPosixPermissions(home, PRIVATE_DIRECTORY_PERMISSIONS);
+    }
+
+    private static void ensurePrivateChildDirectory(Path directory) throws IOException {
+        if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) {
+            try {
+                Files.createDirectory(directory);
+            } catch (FileAlreadyExistsException ignored) {
+                // Une création concurrente est acceptable uniquement si la revalidation
+                // NOFOLLOW_LINKS ci-dessous confirme qu'il s'agit bien d'un répertoire réel.
+            }
         }
-        applyPosixPermissions(normalized, PRIVATE_DIRECTORY_PERMISSIONS);
+        validateDirectory(directory);
+        applyPosixPermissions(directory, PRIVATE_DIRECTORY_PERMISSIONS);
+    }
+
+    private static void validateDirectory(Path directory) throws IOException {
+        if (Files.isSymbolicLink(directory)) {
+            throw new IOException("Refus d'un répertoire NEXUS symbolique : " + directory);
+        }
+        if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IOException("Répertoire NEXUS attendu : " + directory);
+        }
     }
 
     private Path requireInsideHome(Path path) throws IOException {
