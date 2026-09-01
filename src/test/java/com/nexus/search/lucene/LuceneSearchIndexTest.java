@@ -12,7 +12,10 @@ import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -59,6 +62,22 @@ class LuceneSearchIndexTest {
 
         assertEquals(1, hits.size());
         assertEquals("singleton.md", hits.getFirst().relativePath());
+    }
+
+    @Test
+    void boundsHighCardinalityQueriesInsteadOfTriggeringTooManyClauses() throws Exception {
+        LuceneSearchIndex index = new LuceneSearchIndex(new NexusPaths(temporaryDirectory.resolve("bounded-home")));
+        UUID projectId = UUID.randomUUID();
+        index.rebuild(projectId, List.of(document("bounded.md", "q0 q1 q2")));
+        String query = IntStream.range(0, 1_500)
+                .mapToObj(indexValue -> "q" + indexValue)
+                .collect(Collectors.joining(" "));
+
+        List<LexicalSearchHit> hits = assertDoesNotThrow(() -> index.search(projectId, query, 10));
+
+        assertFalse(hits.isEmpty());
+        assertEquals("bounded.md", hits.getFirst().relativePath());
+        assertEquals(128, LuceneSearchIndex.MAX_ANALYZED_QUERY_TERMS);
     }
 
     @Test

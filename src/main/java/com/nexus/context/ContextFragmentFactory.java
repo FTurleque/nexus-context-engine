@@ -5,6 +5,7 @@ import com.nexus.project.ProjectDescriptor;
 import com.nexus.ranking.RankedCandidate;
 import com.nexus.security.ProjectPathGuard;
 import com.nexus.security.SafeFileIO;
+import com.nexus.security.SensitiveContentRedactor;
 import com.nexus.token.TokenEstimator;
 
 import java.io.IOException;
@@ -32,7 +33,8 @@ import java.util.Set;
  *
  * <p>Les symboles utilisent leurs bornes AST. Les candidats fichier servent de
  * repli : le fichier complet est conservé lorsqu'il est court, sinon des
- * fenêtres lexicales sont extraites autour des termes de la requête.</p>
+ * fenêtres lexicales sont extraites autour des termes de la requête. Les secrets
+ * à forte confiance sont expurgés avant la construction des fragments retournés.</p>
  */
 public final class ContextFragmentFactory {
 
@@ -82,7 +84,7 @@ public final class ContextFragmentFactory {
             try {
                 Path absolutePath = requireReadableCandidate(pathGuard, candidatePath);
                 Path relativePath = pathGuard.root().relativize(absolutePath);
-                String content = SafeFileIO.readStringNoFollow(absolutePath);
+                String content = SensitiveContentRedactor.redact(SafeFileIO.readStringNoFollow(absolutePath));
                 List<String> lines = List.of(content.split("\\r?\\n", -1));
                 int sourceLineCount = countSourceLines(content);
                 List<RankedCandidate> symbolCandidates = entry.getValue().stream()

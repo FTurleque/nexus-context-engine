@@ -26,5 +26,9 @@ public record ContextRequest(
         ContextBudgetPolicy.validate(tokenBudget);
         requestedSources = Set.copyOf(requestedSources);
         constraints = Map.copyOf(constraints);
+        if (!constraints.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "constraints are not supported yet; omit the field or provide an empty object");
+        }
     }
 }

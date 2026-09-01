@@ -5,23 +5,26 @@ import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Exécute les intégrations externes dans un worker daemon borné en temps.
+ * Exécute les intégrations externes dans des workers daemon bornés en temps et en concurrence.
  *
- * <p>Contrairement à la fermeture bloquante d'un executor en try-with-resources,
- * un timeout rend immédiatement le contrôle à NEXUS après interruption du worker.
- * Une intégration qui ignore l'interruption peut continuer en arrière-plan sur son
- * thread daemon ; elle ne peut toutefois plus bloquer l'indexation ni empêcher
- * l'arrêt de la JVM. Les providers de processus doivent en plus nettoyer leur
- * processus enfant lorsqu'ils observent l'interruption.</p>
+ * <p>Un timeout interrompt le worker et rend immédiatement le contrôle à NEXUS. Une intégration
+ * tierce peut ignorer l'interruption ; le sémaphore global empêche toutefois ce comportement de
+ * créer un nombre non borné de threads. La capacité n'est rendue que lorsque le worker termine
+ * réellement. Une fois la limite atteinte, les nouvelles tâches sont rejetées explicitement au
+ * lieu d'épuiser progressivement la JVM.</p>
  */
 public final class ExternalTaskRunner {
+
+    static final int MAX_CONCURRENT_TASKS = 8;
+    private static final Semaphore CAPACITY = new Semaphore(MAX_CONCURRENT_TASKS);
+    private static final AtomicLong THREAD_SEQUENCE = new AtomicLong();
 
     private final Duration timeout;
 
@@ -40,23 +43,34 @@ public final class ExternalTaskRunner {
         Objects.requireNonNull(taskName, "taskName");
         Objects.requireNonNull(task, "task");
 
-        String safeName = taskName.replaceAll("[^A-Za-z0-9._-]", "-");
-        ExecutorService executor = Executors.newSingleThreadExecutor(runnable ->
-                Thread.ofPlatform()
-                        .daemon(true)
-                        .name("nexus-external-" + safeName)
-                        .unstarted(runnable));
-        Future<T> future = executor.submit(task);
+        if (!CAPACITY.tryAcquire()) {
+            throw new IOException(
+                    "Capacité des tâches externes saturée (maximum " + MAX_CONCURRENT_TASKS
+                            + " tâches simultanées) ; réessayez après la fin des providers actifs");
+        }
+
+        FutureTask<T> result = new FutureTask<>(task);
+        Thread worker = Thread.ofPlatform()
+                .daemon(true)
+                .name("nexus-external-" + THREAD_SEQUENCE.incrementAndGet())
+                .unstarted(() -> execute(result));
         try {
-            return future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+            worker.start();
+        } catch (RuntimeException | Error startupFailure) {
+            CAPACITY.release();
+            throw startupFailure;
+        }
+
+        try {
+            return result.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (TimeoutException timeoutFailure) {
-            future.cancel(true);
+            worker.interrupt();
             throw new IOException(
                     "La tâche externe " + taskName + " a dépassé le timeout global de "
                             + timeout.toMillis() + " ms",
                     timeoutFailure);
         } catch (InterruptedException interrupted) {
-            future.cancel(true);
+            worker.interrupt();
             Thread.currentThread().interrupt();
             throw new IOException("La tâche externe " + taskName + " a été interrompue", interrupted);
         } catch (ExecutionException executionFailure) {
@@ -71,8 +85,14 @@ public final class ExternalTaskRunner {
                 throw error;
             }
             throw new IOException("La tâche externe " + taskName + " a échoué", cause);
+        }
+    }
+
+    private static void execute(FutureTask<?> task) {
+        try {
+            task.run();
         } finally {
-            executor.shutdownNow();
+            CAPACITY.release();
         }
     }
 }

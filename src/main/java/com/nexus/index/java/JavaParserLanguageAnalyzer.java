@@ -44,6 +44,9 @@ public final class JavaParserLanguageAnalyzer implements LanguageAnalyzer {
     @Override
     public AnalysisResult analyze(Path projectRoot, Path file, String source) throws IOException {
         Objects.requireNonNull(source, "source");
+        // JavaParser n'est pas partagé entre indexations concurrentes : conserver une instance
+        // locale évite un état parseur partagé, tandis que les parcours AST ci-dessous ciblent
+        // directement les catégories utiles au lieu d'énumérer tous les Node du fichier.
         JavaParser parser = new JavaParser(new ParserConfiguration().setLanguageLevel(LANGUAGE_LEVEL));
         CompilationUnit unit = parser.parse(source)
                 .getResult()
@@ -53,16 +56,14 @@ public final class JavaParserLanguageAnalyzer implements LanguageAnalyzer {
                 .orElse("");
 
         List<CodeSymbol> symbols = new ArrayList<>();
-        for (Node node : unit.findAll(Node.class)) {
-            if (node instanceof TypeDeclaration<?> type) {
-                type.getRange().ifPresent(range -> symbols.add(new CodeSymbol(
-                        symbolKind(type),
-                        type.getNameAsString(),
-                        qualifiedOwner(packageName, type),
-                        type.getNameAsString(),
-                        range.begin.line,
-                        range.end.line)));
-            }
+        for (TypeDeclaration<?> type : unit.findAll(TypeDeclaration.class)) {
+            type.getRange().ifPresent(range -> symbols.add(new CodeSymbol(
+                    symbolKind(type),
+                    type.getNameAsString(),
+                    qualifiedOwner(packageName, type),
+                    type.getNameAsString(),
+                    range.begin.line,
+                    range.end.line)));
         }
 
         for (MethodDeclaration method : unit.findAll(MethodDeclaration.class)) {

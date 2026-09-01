@@ -26,6 +26,11 @@ public final class ProjectIgnoreMatcher {
             ".idea",
             ".gradle",
             ".nexus",
+            ".aws",
+            ".ssh",
+            ".gnupg",
+            ".kube",
+            ".secrets",
             "target",
             "build",
             "out",
@@ -35,16 +40,27 @@ public final class ProjectIgnoreMatcher {
 
     private static final Set<String> SENSITIVE_FILE_NAMES = Set.of(
             ".env",
+            ".npmrc",
+            ".pypirc",
+            ".netrc",
+            ".git-credentials",
             "id_rsa",
             "id_ed25519",
+            "credentials",
             "credentials.json",
-            "secrets.json");
+            "secrets.json",
+            "secrets.yml",
+            "secrets.yaml",
+            "application-secrets.properties");
 
     private static final Set<String> SENSITIVE_SUFFIXES = Set.of(
             ".pem",
             ".key",
             ".p12",
-            ".pfx");
+            ".pfx",
+            ".jks",
+            ".keystore",
+            ".kdbx");
 
     private final ProjectPathGuard pathGuard;
     private final Path projectRoot;
