@@ -31,7 +31,7 @@ public final class SensitiveContentRedactor {
                     + "[A-Za-z0-9_-]{10," + MAX_SECRET_CHARS + "}+\\b");
     private static final Pattern SECRET_ASSIGNMENT = Pattern.compile(
             "(?im)(\\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|password|passwd|secret)"
-                    + "\\b\\s{0,32}+[:=]\\s{0,32}+)([\"']?)([A-Za-z0-9+/=_-]{8," + MAX_SECRET_CHARS + "}+)([\"']?)");
+                    + "\\b\\s{0,32}+[:=]\\s{0,32}+)([\"']?)([^\\s\"']{8," + MAX_SECRET_CHARS + "}+)([\"']?)");
     private static final Pattern URI_CREDENTIAL = Pattern.compile(
             "(?i)(\\b[a-z][a-z0-9+.-]{0,31}+://[^\\s/:@]{1," + MAX_URI_USER_CHARS + "}+:)"
                     + "([^\\s/@]{3," + MAX_SECRET_CHARS + "}+)(@)");
@@ -75,8 +75,10 @@ public final class SensitiveContentRedactor {
             String endMarker = PRIVATE_KEY_END + keyType + "-----";
             int end = content.indexOf(endMarker, markerEnd);
             if (end < 0) {
-                output.append(content, cursor, content.length());
-                break;
+                output.append(content, cursor, begin).append(REDACTED);
+                appendLineSeparators(output, content, begin, content.length());
+                cursor = content.length();
+                continue;
             }
             end += endMarker.length();
 

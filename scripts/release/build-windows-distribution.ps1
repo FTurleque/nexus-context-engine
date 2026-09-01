@@ -2,7 +2,8 @@
 param(
     [string]$Version = '',
     [string]$OutputRoot = '',
-    [switch]$SkipVerify
+    [switch]$SkipVerify,
+    [switch]$SkipTests
 )
 
 Set-StrictMode -Version Latest
@@ -53,6 +54,9 @@ Push-Location $repo
 try {
     $mavenArgs = @('-B', 'clean')
     $mavenArgs += if ($SkipVerify) { 'package' } else { 'verify' }
+    if ($SkipTests) {
+        $mavenArgs += '-DskipTests'
+    }
     & '.\mvnw.cmd' @mavenArgs
     if ($LASTEXITCODE -ne 0) { throw "NEXUS Maven build failed with exit code $LASTEXITCODE" }
 }

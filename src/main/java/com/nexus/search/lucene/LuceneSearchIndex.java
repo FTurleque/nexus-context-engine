@@ -32,6 +32,7 @@ import org.apache.lucene.store.FSDirectory;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -127,9 +128,10 @@ public final class LuceneSearchIndex implements SearchIndex {
         }
 
         Path indexPath = paths.projectLuceneIndex(projectId);
-        if (!Files.isDirectory(indexPath)) {
+        if (!Files.exists(indexPath, LinkOption.NOFOLLOW_LINKS)) {
             return List.of();
         }
+        paths.ensurePrivateDirectory(indexPath);
 
         try (Directory directory = FSDirectory.open(indexPath)) {
             if (!DirectoryReader.indexExists(directory)) {
@@ -194,7 +196,7 @@ public final class LuceneSearchIndex implements SearchIndex {
 
     private IndexResources open(UUID projectId) throws IOException {
         Path indexPath = paths.projectLuceneIndex(projectId);
-        Files.createDirectories(indexPath);
+        paths.ensurePrivateDirectory(indexPath);
         Directory directory = FSDirectory.open(indexPath);
         Analyzer analyzer = new StandardAnalyzer();
         IndexWriterConfig configuration = new IndexWriterConfig(analyzer)

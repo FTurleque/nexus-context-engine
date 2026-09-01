@@ -574,7 +574,11 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
             return null;
         }
         try {
-            Path absolutePath = Path.of(URI.create(uri)).toAbsolutePath().normalize();
+            URI parsedUri = URI.create(uri);
+            if (!"file".equalsIgnoreCase(parsedUri.getScheme())) {
+                return null;
+            }
+            Path absolutePath = Path.of(parsedUri).toAbsolutePath().normalize();
             if (!absolutePath.startsWith(projectRoot)) {
                 return null;
             }
@@ -714,11 +718,16 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
         }
 
         Path workspaceFor(Path projectRoot) throws IOException {
-            Files.createDirectories(workspaceRoot);
+            Path storageHome = workspaceRoot.getParent();
+            if (storageHome == null) {
+                throw new IOException("Racine de workspaces JDT LS sans parent : " + workspaceRoot);
+            }
+            NexusPaths storagePaths = new NexusPaths(storageHome);
+            storagePaths.ensurePrivateDirectory(workspaceRoot);
             String id = UUID.nameUUIDFromBytes(
                     projectRoot.toAbsolutePath().normalize().toString().getBytes(StandardCharsets.UTF_8)).toString();
             Path workspace = workspaceRoot.resolve(id);
-            Files.createDirectories(workspace);
+            storagePaths.ensurePrivateDirectory(workspace);
             return workspace;
         }
     }

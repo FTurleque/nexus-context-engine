@@ -51,7 +51,7 @@ NEXUS_CONTEXT_DISCOVERY_MAX_MILLIS
 
 Les défauts sont respectivement 100000 entrées, 5000 candidats, 32 MiB et 15 s. Un dépassement est fail-closed.
 
-Sur POSIX, `NEXUS_HOME`, `indexes` et `locks` sont rendus privés (`0700`) et le fichier SQLite est durci en `0600`. Les chemins persistants NEXUS concernés sont refusés lorsqu'ils sont symboliques. Sur Windows/filesystems sans vue POSIX, les ACL natives ne sont pas réécrites destructivement.
+Sur POSIX, `NEXUS_HOME`, `indexes` et `locks` sont rendus privés (`0700`) et le fichier SQLite est durci en `0600`. Les chemins persistants NEXUS sont créés et revalidés composant par composant avec `NOFOLLOW_LINKS` : un symlink enfant précréé sous `indexes`, `locks` ou `jdtls-workspaces` est refusé. Sur Windows/filesystems sans vue POSIX, les ACL natives ne sont pas réécrites destructivement.
 
 ### Recherche et fédération
 
@@ -61,9 +61,11 @@ Les limites REST fédérées réutilisent les politiques centrales de résultats
 
 La recherche Lucene borne une requête analysée à **128 termes uniques** avant expansion sur les cinq champs de recherche pour rester sous le budget de clauses du moteur.
 
-### Code Intelligence externe
+### Code Intelligence externe et indexation
 
-Le framing JDT LS est borné avant allocation : message 16 MiB, headers 64 KiB, ligne de header 8 KiB et file entrante 256 messages maximum. Les tâches externes sont en plus limitées à **8 workers réellement actifs** à l'échelle JVM ; la saturation est rejetée explicitement.
+Le framing JDT LS est borné avant allocation : message 16 MiB, headers 64 KiB, ligne de header 8 KiB et file entrante 256 messages maximum. Les URI JDT externes non `file:` sont ignorées plutôt que converties en chemins locaux.
+
+Les tâches externes sont limitées à **8 workers réellement actifs** à l'échelle JVM. Les mutations d'index file-backed disposent en plus d'un budget global non bloquant : `NEXUS_MAX_CONCURRENT_INDEXING` vaut **2** par défaut, accepte de 1 à 16 et rejette explicitement la surcharge au lieu d'empiler un travail sans borne.
 
 ### REST et observabilité
 
@@ -77,6 +79,8 @@ Le listener applicatif reste local-first sur `127.0.0.1:8080`. Health et métriq
 
 Les endpoints `/q/*` ne sont pas servis par le listener applicatif. Hors loopback, l'API métier échoue fermé si transport sécurisé effectif, token robuste ou allowlist de racines ne sont pas démontrés.
 
+Les corps HTTP applicatifs sont limités explicitement à **1 MiB** avant désérialisation. Les mappers d'erreur REST retournent des messages publics stables sans recopier les chemins ou diagnostics internes des exceptions ; une saturation du budget d'indexation est exposée en `503 Service Unavailable` avec `Retry-After`.
+
 ### Sémantique, Ollama et secrets
 
 Le sémantique reste désactivé par défaut. Une URL Ollama distante doit utiliser HTTPS ; HTTP distant exige explicitement :
@@ -85,7 +89,7 @@ Le sémantique reste désactivé par défaut. Une URL Ollama distante doit utili
 NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA=true
 ```
 
-Les credentials intégrés dans `NEXUS_OLLAMA_BASE_URL` sont refusés. Les secrets à forte confiance sont redigés avant embeddings et avant restitution des fragments de contexte. Le profil sémantique courant est `content-v2`, ce qui force le rebuild d'un ancien index incompatible.
+Les credentials intégrés dans `NEXUS_OLLAMA_BASE_URL` sont refusés. Les secrets à forte confiance sont redigés avant embeddings et à la frontière finale de chaque `ContextBundle`, y compris pour instructions natives, skills et diff Git. Les clés privées reconnues mais tronquées sont redigées jusqu'à la fin du contenu. Le profil sémantique courant est `content-v2`, ce qui force le rebuild d'un ancien index incompatible.
 
 ### SQLite
 
@@ -95,6 +99,8 @@ SQLite reste l'autorité canonique. Depuis V005, `symbols` impose aussi au nivea
 start_line >= 1
 end_line >= start_line
 ```
+
+Les snapshots de Code Intelligence externes sont persistés avec des `PreparedStatement` réutilisés et des batches bornés de 1 000 faits afin d'éviter un statement SQL par symbole/relation.
 
 ## Build
 
@@ -111,6 +117,8 @@ sh ./mvnw clean install
 ```
 
 Le wrapper utilise **Maven 3.9.16**. Son archive est vérifiée contre une ancre SHA-512 stockée dans `config/tool-integrity.properties`. JDT LS utilise de la même façon une ancre SHA-256 versionnée.
+
+Pour l'installateur Windows, tout `ISCC.exe` réutilisé doit correspondre à la version Inno Setup épinglée et présenter une signature Authenticode valide de l'éditeur attendu ; sinon le bootstrap versionné est utilisé puis requalifié.
 
 ## CLI
 
@@ -180,6 +188,7 @@ Les tags version et SHA sont immuables. Le préflight GHCR échoue fermé sur le
 NEXUS_HOME
 NEXUS_MAX_FILE_SIZE_BYTES
 NEXUS_CODE_INTELLIGENCE_TIMEOUT_SECONDS
+NEXUS_MAX_CONCURRENT_INDEXING
 NEXUS_JDTLS_HOME
 NEXUS_CONTEXT_DISCOVERY_MAX_VISITED_ENTRIES
 NEXUS_CONTEXT_DISCOVERY_MAX_CANDIDATES

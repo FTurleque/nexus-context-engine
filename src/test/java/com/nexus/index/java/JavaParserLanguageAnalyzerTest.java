@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JavaParserLanguageAnalyzerTest {
@@ -64,5 +65,20 @@ class JavaParserLanguageAnalyzerTest {
                 symbol.kind() == SymbolKind.CLASS && symbol.name().equals("ModernSyntax")));
         assertTrue(result.symbols().stream().anyMatch(symbol ->
                 symbol.kind() == SymbolKind.METHOD && symbol.name().equals("template")));
+    }
+
+    @Test
+    void rejectsRecoveredPartialAstWhenSyntaxIsInvalid() throws IOException {
+        Path source = tempDir.resolve("Broken.java");
+        Files.writeString(source, """
+                package demo;
+                class Broken {
+                    void run( {
+                }
+                """);
+
+        JavaParserLanguageAnalyzer analyzer = new JavaParserLanguageAnalyzer();
+
+        assertThrows(IOException.class, () -> analyzer.analyze(tempDir, source));
     }
 }
