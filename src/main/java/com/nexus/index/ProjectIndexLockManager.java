@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
-import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -19,6 +18,10 @@ import java.util.UUID;
  * <p>Le fichier de lock reste présent après libération ; c'est le verrou OS porté
  * par {@link FileLock} qui représente la propriété exclusive. Son contenu n'a
  * aucune sémantique et NEXUS ne le tronque ni ne l'utilise comme stockage.</p>
+ *
+ * <p>La composition de production porte également le budget global non bloquant
+ * des indexations coûteuses. La capacité est acquise avant le verrou fichier et
+ * libérée avec le même handle, y compris lorsqu'une acquisition échoue.</p>
  */
 public final class ProjectIndexLockManager {
 
@@ -47,35 +50,44 @@ public final class ProjectIndexLockManager {
             return LockHandle.noop();
         }
 
-        Path locksDirectory = paths.locksDirectory();
-        Files.createDirectories(locksDirectory);
-        if (Files.isSymbolicLink(locksDirectory)
-                || !Files.isDirectory(locksDirectory, LinkOption.NOFOLLOW_LINKS)) {
-            throw new IOException("Le répertoire de locks NEXUS est invalide ou symbolique : " + locksDirectory);
-        }
-
-        Path lockPath = paths.projectIndexLock(projectId);
-        FileChannel channel = FileChannel.open(
-                lockPath,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.WRITE,
-                LinkOption.NOFOLLOW_LINKS);
-        FileLock fileLock;
+        IndexingCapacityGate.Permit capacityPermit = IndexingCapacityGate.acquireShared();
         try {
-            fileLock = channel.tryLock();
-        } catch (OverlappingFileLockException alreadyLockedInJvm) {
-            closeQuietly(channel);
-            throw busy(projectId);
-        } catch (IOException failure) {
-            closeQuietly(channel);
+            Path locksDirectory = paths.locksDirectory();
+            paths.ensurePrivateDirectory(locksDirectory);
+
+            Path lockPath = paths.projectIndexLock(projectId);
+            FileChannel channel = FileChannel.open(
+                    lockPath,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.WRITE,
+                    LinkOption.NOFOLLOW_LINKS);
+            try {
+                paths.hardenPrivateFile(lockPath);
+            } catch (IOException failure) {
+                closeQuietly(channel);
+                throw failure;
+            }
+
+            FileLock fileLock;
+            try {
+                fileLock = channel.tryLock();
+            } catch (OverlappingFileLockException alreadyLockedInJvm) {
+                closeQuietly(channel);
+                throw busy(projectId);
+            } catch (IOException failure) {
+                closeQuietly(channel);
+                throw failure;
+            }
+            if (fileLock == null) {
+                closeQuietly(channel);
+                throw busy(projectId);
+            }
+
+            return new LockHandle(channel, fileLock, capacityPermit);
+        } catch (IOException | RuntimeException | Error failure) {
+            capacityPermit.close();
             throw failure;
         }
-        if (fileLock == null) {
-            closeQuietly(channel);
-            throw busy(projectId);
-        }
-
-        return new LockHandle(channel, fileLock);
     }
 
     private static IllegalStateException busy(UUID projectId) {
@@ -93,15 +105,20 @@ public final class ProjectIndexLockManager {
 
     public static final class LockHandle implements AutoCloseable {
 
-        private static final LockHandle NOOP = new LockHandle(null, null);
+        private static final LockHandle NOOP = new LockHandle(null, null, null);
 
         private final FileChannel channel;
         private final FileLock fileLock;
+        private final IndexingCapacityGate.Permit capacityPermit;
         private boolean closed;
 
-        private LockHandle(FileChannel channel, FileLock fileLock) {
+        private LockHandle(
+                FileChannel channel,
+                FileLock fileLock,
+                IndexingCapacityGate.Permit capacityPermit) {
             this.channel = channel;
             this.fileLock = fileLock;
+            this.capacityPermit = capacityPermit;
         }
 
         private static LockHandle noop() {
@@ -129,7 +146,12 @@ public final class ProjectIndexLockManager {
                 if (releaseFailure != null) {
                     closeFailure.addSuppressed(releaseFailure);
                 }
-                throw closeFailure;
+                releaseFailure = closeFailure;
+            } finally {
+                capacityPermit.close();
+            }
+            if (releaseFailure != null) {
+                throw releaseFailure;
             }
         }
     }
