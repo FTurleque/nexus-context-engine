@@ -27,6 +27,16 @@ class SensitiveContentRedactorTest {
     }
 
     @Test
+    void redactsPunctuatedQuotedSecrets() {
+        String source = "password=\"P@ssw0rd!2026#prod\";";
+
+        String redacted = SensitiveContentRedactor.redact(source);
+
+        assertFalse(redacted.contains("P@ssw0rd!2026#prod"));
+        assertEquals("password=\"[REDACTED]\";", redacted);
+    }
+
+    @Test
     void redactsPrivateKeyBlocksWithoutChangingSourceLineCount() {
         String source = """
                 before
@@ -41,6 +51,23 @@ class SensitiveContentRedactorTest {
         assertFalse(redacted.contains("abcdefghijklmnopqrstuvwxyz"));
         assertTrue(redacted.contains("before"));
         assertTrue(redacted.contains("after"));
+        assertEquals(source.lines().count(), redacted.lines().count());
+    }
+
+    @Test
+    void redactsTruncatedPrivateKeyBlockThroughEndOfContent() {
+        String source = """
+                before
+                -----BEGIN PRIVATE KEY-----
+                abcdefghijklmnopqrstuvwxyz
+                still-secret
+                """;
+
+        String redacted = SensitiveContentRedactor.redact(source);
+
+        assertTrue(redacted.contains("before"));
+        assertFalse(redacted.contains("abcdefghijklmnopqrstuvwxyz"));
+        assertFalse(redacted.contains("still-secret"));
         assertEquals(source.lines().count(), redacted.lines().count());
     }
 }
