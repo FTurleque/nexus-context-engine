@@ -120,9 +120,12 @@ for needle in (
 for path in (
     "README.md",
     "docs/architecture.md",
+    "docs/architecture/arc42/06-vue-execution.md",
     "docs/architecture/arc42/07-vue-deploiement.md",
     "docs/architecture/arc42/08-concepts-transverses.md",
+    "docs/architecture/arc42/10-exigences-qualite.md",
     "docs/developer/current-limitations.md",
+    "docs/developer/release-and-recovery.md",
     "docs/developer/rest-api.md",
 ):
     require(path, "127.0.0.1:9000")
@@ -134,9 +137,12 @@ require(semantic_cfg, "NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA")
 for path in (
     "README.md",
     "docs/architecture.md",
+    "docs/architecture/arc42/06-vue-execution.md",
     "docs/architecture/arc42/07-vue-deploiement.md",
     "docs/architecture/arc42/08-concepts-transverses.md",
+    "docs/architecture/arc42/10-exigences-qualite.md",
     "docs/developer/current-limitations.md",
+    "docs/developer/release-and-recovery.md",
     "docs/developer/rest-api.md",
     "docs/developer/semantic-search.md",
 ):
@@ -148,7 +154,9 @@ for path in (
     "README.md",
     "docs/architecture.md",
     "docs/architecture/arc42/08-concepts-transverses.md",
+    "docs/architecture/arc42/10-exigences-qualite.md",
     "docs/developer/current-limitations.md",
+    "docs/developer/release-and-recovery.md",
     "docs/developer/semantic-search.md",
 ):
     require(path, "content-v2")
@@ -156,7 +164,13 @@ for path in (
 # NXA4: external work/JDT framing bounds.
 external_runner = "src/main/java/com/nexus/index/ExternalTaskRunner.java"
 require(external_runner, "MAX_CONCURRENT_TASKS = 8")
-require("docs/developer/jdt-language-server.md", "8 workers")
+for path in (
+    "docs/architecture/arc42/06-vue-execution.md",
+    "docs/architecture/arc42/10-exigences-qualite.md",
+    "docs/architecture/quality/scenarios.md",
+    "docs/developer/jdt-language-server.md",
+):
+    require(path, "8 tâches externes")
 
 jdt_reader = "src/main/java/com/nexus/index/jdt/JdtJsonRpcFrameReader.java"
 for needle in (
@@ -168,7 +182,9 @@ for needle in (
     require(jdt_reader, needle)
 for path in (
     "docs/architecture.md",
+    "docs/architecture/arc42/06-vue-execution.md",
     "docs/architecture/arc42/08-concepts-transverses.md",
+    "docs/architecture/quality/scenarios.md",
     "docs/developer/code-intelligence.md",
     "docs/developer/current-limitations.md",
     "docs/developer/jdt-language-server.md",
@@ -189,9 +205,13 @@ require(lucene, "MAX_ANALYZED_QUERY_TERMS = 128")
 for path in (
     "README.md",
     "docs/architecture.md",
+    "docs/architecture/arc42/06-vue-execution.md",
     "docs/architecture/arc42/08-concepts-transverses.md",
+    "docs/architecture/arc42/10-exigences-qualite.md",
+    "docs/architecture/quality/scenarios.md",
     "docs/developer/code-intelligence.md",
     "docs/developer/current-limitations.md",
+    "docs/developer/large-scale-search.md",
 ):
     require(path, "128 termes")
 
@@ -204,6 +224,7 @@ for path in (
     "docs/architecture.md",
     "docs/architecture/arc42/07-vue-deploiement.md",
     "docs/developer/current-limitations.md",
+    "docs/developer/release-and-recovery.md",
 ):
     require(path, "0700")
     require(path, "0600")
@@ -214,6 +235,9 @@ require(context_request, "constraints are not supported yet")
 for path in (
     "docs/architecture.md",
     "docs/architecture/arc42/05-vue-blocs.md",
+    "docs/architecture/arc42/06-vue-execution.md",
+    "docs/architecture/arc42/10-exigences-qualite.md",
+    "docs/developer/context-building.md",
     "docs/developer/rest-api.md",
 ):
     require(path, "constraints")
@@ -224,20 +248,29 @@ require("docs/architecture/arc42/05-vue-blocs.md", "script_sha256")
 for stale in ("java_parser|jdt|scip|minos", "string checksum"):
     forbid("docs/architecture/arc42/05-vue-blocs.md", stale)
 
-# Remove two known stale statements that survived the first NXA3 documentation pass.
+# Known stale statements that survived the first NXA3 documentation pass.
 forbid("docs/developer/code-intelligence.md", "planifié en Itération 19")
 forbid("docs/developer/code-intelligence.md", "chargent encore des ensembles projet-wide")
+forbid("docs/architecture/arc42/06-vue-execution.md", "continuer sans résultats JDT")
+forbid("docs/architecture/arc42/06-vue-execution.md", "indexation réussie sans intelligence profonde")
 
 current_docs = (
+    "README.md",
+    "docs/roadmap.md",
     "docs/architecture.md",
     "docs/architecture/README.md",
-    "docs/developer/README.md",
-    "docs/developer/architecture-implementation.md",
     "docs/architecture/arc42/05-vue-blocs.md",
+    "docs/architecture/arc42/06-vue-execution.md",
     "docs/architecture/arc42/07-vue-deploiement.md",
     "docs/architecture/arc42/08-concepts-transverses.md",
+    "docs/architecture/arc42/10-exigences-qualite.md",
     "docs/architecture/arc42/11-risques-dette.md",
+    "docs/architecture/quality/scenarios.md",
     "docs/architecture/risks/register.md",
+    "docs/developer/README.md",
+    "docs/developer/architecture-implementation.md",
+    "docs/developer/ci-and-supply-chain.md",
+    "docs/developer/release-and-recovery.md",
     "docs/developer/rest-api.md",
     "docs/developer/mcp.md",
     "docs/developer/context-building.md",
@@ -248,10 +281,16 @@ current_docs = (
     "docs/developer/code-intelligence.md",
     "docs/developer/jdt-language-server.md",
     "docs/developer/current-limitations.md",
-    "docs/roadmap.md",
 )
 for path in current_docs:
-    for stale in ("PR #49", "PR #61", "courant sur `main`", "Quarkus 3.33", "MCP SDK     2.0.0"):
+    for stale in (
+        "PR #49",
+        "PR #61",
+        "courant sur `main`",
+        "Quarkus 3.33",
+        "MCP SDK     2.0.0",
+        "après la campagne NXA3.",
+    ):
         forbid(path, stale)
 
 print("operational-documentation-contracts=PASS")
