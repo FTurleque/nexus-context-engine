@@ -196,7 +196,7 @@ public final class ContextFragmentFactory {
                     joinLines(lines, range.startLine(), range.endLine()),
                     candidate.score(),
                     candidate.components(),
-                    candidate.reasons());
+                    candidate.reasons()));
         }
         return List.copyOf(fragments);
     }
