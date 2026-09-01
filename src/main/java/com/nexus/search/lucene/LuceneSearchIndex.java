@@ -168,10 +168,6 @@ public final class LuceneSearchIndex implements SearchIndex {
             return coordinated.build();
         } catch (ParseException exception) {
             throw new IOException("Requête Lucene invalide : " + query, exception);
-        } catch (BooleanQuery.TooManyClauses exception) {
-            throw new IllegalArgumentException(
-                    "query contains too many searchable terms; maximum is " + MAX_ANALYZED_QUERY_TERMS,
-                    exception);
         }
     }
 
