@@ -688,7 +688,7 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
         }
 
         private void ensureAvailable(int length) throws EOFException {
-            if (length < 0 || position + length > data.length) {
+            if (length < 0 || position < 0 || position > data.length || length > data.length - position) {
                 throw new EOFException("Message Protobuf SCIP tronqué");
             }
         }
