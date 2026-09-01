@@ -26,15 +26,15 @@ public final class SensitiveContentRedactor {
     private static final Pattern STRUCTURED_TOKEN = Pattern.compile(
             "\\b(?:gh[pousr]_[A-Za-z0-9]{20,255}+|github_pat_[A-Za-z0-9_]{20,255}+|(?:AKIA|ASIA)[0-9A-Z]{16})\\b");
     private static final Pattern JWT = Pattern.compile(
-            "\\beyJ[A-Za-z0-9_-]{10," + MAX_SECRET_CHARS + "+}\\."
-                    + "[A-Za-z0-9_-]{10," + MAX_SECRET_CHARS + "+}\\."
-                    + "[A-Za-z0-9_-]{10," + MAX_SECRET_CHARS + "+}\\b");
+            "\\beyJ[A-Za-z0-9_-]{10," + MAX_SECRET_CHARS + "}+\\."
+                    + "[A-Za-z0-9_-]{10," + MAX_SECRET_CHARS + "}+\\."
+                    + "[A-Za-z0-9_-]{10," + MAX_SECRET_CHARS + "}+\\b");
     private static final Pattern SECRET_ASSIGNMENT = Pattern.compile(
             "(?im)(\\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|password|passwd|secret)"
-                    + "\\b\\s{0,32}+[:=]\\s{0,32}+)([\"']?)([A-Za-z0-9+/=_-]{8," + MAX_SECRET_CHARS + "+})([\"']?)");
+                    + "\\b\\s{0,32}+[:=]\\s{0,32}+)([\"']?)([A-Za-z0-9+/=_-]{8," + MAX_SECRET_CHARS + "}+)([\"']?)");
     private static final Pattern URI_CREDENTIAL = Pattern.compile(
-            "(?i)(\\b[a-z][a-z0-9+.-]{0,31}+://[^\\s/:@]{1," + MAX_URI_USER_CHARS + "+}:)"
-                    + "([^\\s/@]{3," + MAX_SECRET_CHARS + "+})(@)");
+            "(?i)(\\b[a-z][a-z0-9+.-]{0,31}+://[^\\s/:@]{1," + MAX_URI_USER_CHARS + "}+:)"
+                    + "([^\\s/@]{3," + MAX_SECRET_CHARS + "}+)(@)");
 
     private SensitiveContentRedactor() {
     }
