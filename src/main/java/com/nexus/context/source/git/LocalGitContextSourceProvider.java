@@ -28,6 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -103,7 +104,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
 
                 List<String> changedProjectPaths = changedGitPaths.stream()
                         .map(path -> toProjectPath(projectPrefix, path))
-                        .filter(java.util.Objects::nonNull)
+                        .filter(Objects::nonNull)
                         .sorted()
                         .toList();
                 CommitSummary summary = new CommitSummary(
@@ -488,12 +489,8 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
 
         @Override
         public void write(byte[] source, int offset, int length) {
-            if (source == null) {
-                throw new NullPointerException("source");
-            }
-            if (offset < 0 || length < 0 || offset + length > source.length) {
-                throw new IndexOutOfBoundsException();
-            }
+            Objects.requireNonNull(source, "source");
+            Objects.checkFromIndexSize(offset, length, source.length);
             int remaining = buffer.length - size;
             int copied = Math.min(remaining, length);
             if (copied > 0) {

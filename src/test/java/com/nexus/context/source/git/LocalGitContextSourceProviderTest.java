@@ -20,6 +20,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LocalGitContextSourceProviderTest {
@@ -148,20 +149,26 @@ class LocalGitContextSourceProviderTest {
 
     @Test
     void fixedCapacityDiffSinkNeverRetainsBytesPastItsCapacity() throws Exception {
-        Class<?> sinkClass = Class.forName(
-                "com.nexus.context.source.git.LocalGitContextSourceProvider$BoundedOutput");
-        Constructor<?> constructor = sinkClass.getDeclaredConstructor(int.class);
-        constructor.setAccessible(true);
-        OutputStream sink = (OutputStream) constructor.newInstance(128);
+        OutputStream sink = boundedOutput(128);
 
         sink.write(new byte[4_096]);
 
+        Class<?> sinkClass = sink.getClass();
         Method size = sinkClass.getDeclaredMethod("size");
         Method truncated = sinkClass.getDeclaredMethod("truncated");
         size.setAccessible(true);
         truncated.setAccessible(true);
         assertEquals(128, ((Number) size.invoke(sink)).intValue());
         assertTrue((Boolean) truncated.invoke(sink));
+    }
+
+    @Test
+    void fixedCapacityDiffSinkRejectsOverflowingSourceRange() throws Exception {
+        OutputStream sink = boundedOutput(128);
+
+        assertThrows(
+                IndexOutOfBoundsException.class,
+                () -> sink.write(new byte[8], Integer.MAX_VALUE, 1));
     }
 
     @Test
@@ -178,6 +185,14 @@ class LocalGitContextSourceProviderTest {
         assertFalse(result.repositoryAvailable());
         assertTrue(result.fragments().isEmpty());
         assertFalse(result.diagnostics().isEmpty());
+    }
+
+    private static OutputStream boundedOutput(int capacity) throws Exception {
+        Class<?> sinkClass = Class.forName(
+                "com.nexus.context.source.git.LocalGitContextSourceProvider$BoundedOutput");
+        Constructor<?> constructor = sinkClass.getDeclaredConstructor(int.class);
+        constructor.setAccessible(true);
+        return (OutputStream) constructor.newInstance(capacity);
     }
 
     private Path write(String relativePath, String content) throws Exception {
