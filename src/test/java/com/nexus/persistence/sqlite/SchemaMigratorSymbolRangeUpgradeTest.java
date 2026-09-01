@@ -213,18 +213,21 @@ class SchemaMigratorSymbolRangeUpgradeTest {
             long fileId,
             int startLine,
             int endLine) {
-        assertThrows(SQLException.class, () -> {
-            try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databaseFile);
-                 Statement statement = connection.createStatement()) {
-                statement.execute("PRAGMA foreign_keys = ON");
-                statement.executeUpdate("""
-                        INSERT INTO symbols(
-                            file_id, kind, name, qualified_name, signature,
-                            start_line, end_line, source_provider)
-                        VALUES (%d, 'METHOD', 'invalid', 'example.Foo.invalid', 'void invalid()', %d, %d, 'direct-test')
-                        """.formatted(fileId, startLine, endLine));
-            }
-        });
+        String insertSql = """
+                INSERT INTO symbols(
+                    file_id, kind, name, qualified_name, signature,
+                    start_line, end_line, source_provider)
+                VALUES (%d, 'METHOD', 'invalid', 'example.Foo.invalid', 'void invalid()', %d, %d, 'direct-test')
+                """.formatted(fileId, startLine, endLine);
+        assertThrows(SQLException.class, () -> executeDirectSymbolInsert(databaseFile, insertSql));
+    }
+
+    private static void executeDirectSymbolInsert(Path databaseFile, String insertSql) throws SQLException {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databaseFile);
+             Statement statement = connection.createStatement()) {
+            statement.execute("PRAGMA foreign_keys = ON");
+            statement.executeUpdate(insertSql);
+        }
     }
 
     private static void assertMigrationApplied(

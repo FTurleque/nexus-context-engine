@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class ContextDiscoveryLimitsTest {
 
     @Test
-    void acceptsExactBoundariesAndRejectsNPlusOne() throws Exception {
+    void acceptsExactBoundariesAndRejectsNPlusOne() {
         ContextDiscoveryBudget budget = new ContextDiscoveryLimits(2, 2, 10, 10_000).newBudget();
 
         assertDoesNotThrow(() -> budget.visit(Path.of("a")));
@@ -43,9 +43,12 @@ class ContextDiscoveryLimitsTest {
         assertEquals(6789, limits.maxCumulativeBytes());
         assertEquals(9876, limits.maxElapsedMillis());
 
-        assertThrows(IllegalArgumentException.class, () -> ContextDiscoveryLimits.from(Map.of(
-                ContextDiscoveryLimits.ENV_MAX_VISITED_ENTRIES, "0")));
-        assertThrows(IllegalArgumentException.class, () -> ContextDiscoveryLimits.from(Map.of(
-                ContextDiscoveryLimits.ENV_MAX_BYTES, "not-a-number")));
+        Map<String, String> zeroVisitedEntries = Map.of(
+                ContextDiscoveryLimits.ENV_MAX_VISITED_ENTRIES, "0");
+        assertThrows(IllegalArgumentException.class, () -> ContextDiscoveryLimits.from(zeroVisitedEntries));
+
+        Map<String, String> invalidByteLimit = Map.of(
+                ContextDiscoveryLimits.ENV_MAX_BYTES, "not-a-number");
+        assertThrows(IllegalArgumentException.class, () -> ContextDiscoveryLimits.from(invalidByteLimit));
     }
 }

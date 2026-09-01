@@ -37,18 +37,21 @@ public final class CopilotInstructionProvider implements ContextSourceProvider {
             query.discoveryBudget().visit(repositoryCandidate);
             Path repositoryInstructions = pathGuard.requireRegularFile(repositoryCandidate);
             query.discoveryBudget().candidate(repositoryInstructions);
+            InstructionDescriptorFactory.InstructionSpec repositorySpec =
+                    new InstructionDescriptorFactory.InstructionSpec(
+                            PROVIDER_ID,
+                            "COPILOT_REPOSITORY",
+                            ContextSourceScope.REPOSITORY,
+                            List.of(),
+                            78,
+                            List.of(
+                                    "instructions GitHub Copilot applicables au repository",
+                                    "scope repository"),
+                            true);
             descriptors.addAll(descriptorFactory.create(
                     query.project(),
-                    PROVIDER_ID,
-                    "COPILOT_REPOSITORY",
                     repositoryInstructions,
-                    ContextSourceScope.REPOSITORY,
-                    List.of(),
-                    78,
-                    List.of(
-                            "instructions GitHub Copilot applicables au repository",
-                            "scope repository"),
-                    true,
+                    repositorySpec,
                     query.discoveryBudget()));
         }
 
@@ -62,19 +65,22 @@ public final class CopilotInstructionProvider implements ContextSourceProvider {
             if (applyTo.isEmpty() || !RepositoryGlobMatcher.matchesAny(applyTo, query.targetPaths())) {
                 continue;
             }
+            InstructionDescriptorFactory.InstructionSpec pathSpec =
+                    new InstructionDescriptorFactory.InstructionSpec(
+                            PROVIDER_ID,
+                            "COPILOT_PATH_SPECIFIC",
+                            ContextSourceScope.PATH_GLOB,
+                            applyTo,
+                            96,
+                            List.of(
+                                    "instruction GitHub Copilot path-specific applicable",
+                                    "applyTo : " + String.join(", ", applyTo),
+                                    "priorité élevée par spécificité de chemin"),
+                            false);
             descriptors.addAll(descriptorFactory.create(
                     query.project(),
-                    PROVIDER_ID,
-                    "COPILOT_PATH_SPECIFIC",
                     file,
-                    ContextSourceScope.PATH_GLOB,
-                    applyTo,
-                    96,
-                    List.of(
-                            "instruction GitHub Copilot path-specific applicable",
-                            "applyTo : " + String.join(", ", applyTo),
-                            "priorité élevée par spécificité de chemin"),
-                    false,
+                    pathSpec,
                     query.discoveryBudget()));
         }
         return List.copyOf(descriptors);

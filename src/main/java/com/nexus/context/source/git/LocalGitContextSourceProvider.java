@@ -6,6 +6,7 @@ import com.nexus.search.CandidateType;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.Status;
 import org.eclipse.jgit.api.StatusCommand;
+import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.diff.DiffFormatter;
 import org.eclipse.jgit.errors.RepositoryNotFoundException;
@@ -45,8 +46,9 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
     static final int MAX_LOCAL_DIFF_CHARS = 6_000;
     static final int MAX_LOCAL_DIFF_BYTES = MAX_LOCAL_DIFF_CHARS * 4 + 1_024;
 
-    private static final Path GIT_HISTORY_WORK = Path.of(".nexus", "git", "history");
-    private static final Path GIT_DIFF_WORK = Path.of(".nexus", "git", "working-tree-diff");
+    private static final String NEXUS_DIRECTORY = ".nexus";
+    private static final Path GIT_HISTORY_WORK = Path.of(NEXUS_DIRECTORY, "git", "history");
+    private static final Path GIT_DIFF_WORK = Path.of(NEXUS_DIRECTORY, "git", "working-tree-diff");
 
     @Override
     public String id() {
@@ -192,7 +194,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
         return changed;
     }
 
-    private static Status targetStatus(Git git, Set<String> gitTargets) throws Exception {
+    private static Status targetStatus(Git git, Set<String> gitTargets) throws GitAPIException {
         StatusCommand command = git.status();
         for (String gitTarget : gitTargets) {
             command.addPath(gitTarget);
@@ -223,7 +225,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
         }
 
         fragments.add(fragment(
-                Path.of(".nexus", "git", "recent-commits.md"),
+                Path.of(NEXUS_DIRECTORY, "git", "recent-commits.md"),
                 content.toString(),
                 0.78d,
                 List.of(
@@ -257,7 +259,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
                 });
 
         fragments.add(fragment(
-                Path.of(".nexus", "git", "file-history.md"),
+                Path.of(NEXUS_DIRECTORY, "git", "file-history.md"),
                 content.toString(),
                 0.70d,
                 List.of(
@@ -271,7 +273,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
             Status status,
             Map<String, String> projectPathByGitTarget,
             String projectPrefix,
-            GitContextQuery query) throws Exception {
+            GitContextQuery query) throws IOException, GitAPIException {
         List<String> changes = new ArrayList<>();
         collectStatus(changes, "ajouté", status.getAdded(), projectPathByGitTarget);
         collectStatus(changes, "modifié", status.getModified(), projectPathByGitTarget);
@@ -306,7 +308,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
         }
 
         fragments.add(fragment(
-                Path.of(".nexus", "git", "working-tree-diff.md"),
+                Path.of(NEXUS_DIRECTORY, "git", "working-tree-diff.md"),
                 content.toString(),
                 0.85d,
                 List.of(
@@ -321,7 +323,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
             Set<String> gitTargets,
             String projectPrefix,
             boolean cached,
-            GitContextQuery query) throws Exception {
+            GitContextQuery query) throws IOException, GitAPIException {
         if (gitTargets.isEmpty()) {
             return "";
         }
@@ -376,7 +378,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
         }
 
         fragments.add(fragment(
-                Path.of(".nexus", "git", "co-changes.md"),
+                Path.of(NEXUS_DIRECTORY, "git", "co-changes.md"),
                 content.toString(),
                 0.60d,
                 List.of(

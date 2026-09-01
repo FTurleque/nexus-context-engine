@@ -73,28 +73,25 @@ final class InstructionReferenceResolver {
 
         for (String reference : references(sourceContent)) {
             Path target = resolvePath(pathGuard, sourceFile.getParent(), reference);
-            if (target == null || !visited.add(target)) {
-                continue;
+            if (target != null && visited.add(target)) {
+                budget.visit(target);
+                registerIgnoreScopes(pathGuard.root(), target.getParent(), ignoreMatcher);
+                if (!ignoreMatcher.isIgnored(target, false)) {
+                    budget.candidate(target);
+                    String referencedContent = InstructionDiscoverySupport.read(project, target, budget);
+                    resolved.add(new ResolvedReference(pathGuard.root().relativize(target), referencedContent, depth));
+                    resolveRecursively(
+                            project,
+                            pathGuard,
+                            target,
+                            referencedContent,
+                            depth + 1,
+                            ignoreMatcher,
+                            visited,
+                            resolved,
+                            budget);
+                }
             }
-            budget.visit(target);
-            registerIgnoreScopes(pathGuard.root(), target.getParent(), ignoreMatcher);
-            if (ignoreMatcher.isIgnored(target, false)) {
-                continue;
-            }
-
-            budget.candidate(target);
-            String referencedContent = InstructionDiscoverySupport.read(project, target, budget);
-            resolved.add(new ResolvedReference(pathGuard.root().relativize(target), referencedContent, depth));
-            resolveRecursively(
-                    project,
-                    pathGuard,
-                    target,
-                    referencedContent,
-                    depth + 1,
-                    ignoreMatcher,
-                    visited,
-                    resolved,
-                    budget);
         }
     }
 
@@ -153,14 +150,11 @@ final class InstructionReferenceResolver {
             String trimmed = line.trim();
             if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
                 fenced = !fenced;
-                continue;
-            }
-            if (fenced) {
-                continue;
-            }
-            Matcher matcher = REFERENCE.matcher(line);
-            while (matcher.find()) {
-                references.add(matcher.group(1));
+            } else if (!fenced) {
+                Matcher matcher = REFERENCE.matcher(line);
+                while (matcher.find()) {
+                    references.add(matcher.group(1));
+                }
             }
         }
         return List.copyOf(references);

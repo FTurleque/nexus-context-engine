@@ -51,16 +51,18 @@ public final class AgentsMdInstructionProvider implements ContextSourceProvider 
                 reasons.add("priorité augmentée par la proximité avec le fichier cible");
             }
 
-            descriptors.addAll(descriptorFactory.create(
-                    query.project(),
+            InstructionDescriptorFactory.InstructionSpec spec = new InstructionDescriptorFactory.InstructionSpec(
                     PROVIDER_ID,
                     alias ? "AGENT_MD_COMPAT" : "AGENTS_MD",
-                    file,
                     scope,
                     List.of(),
                     priority,
                     reasons,
-                    true,
+                    true);
+            descriptors.addAll(descriptorFactory.create(
+                    query.project(),
+                    file,
+                    spec,
                     query.discoveryBudget()));
         }
         return List.copyOf(descriptors);

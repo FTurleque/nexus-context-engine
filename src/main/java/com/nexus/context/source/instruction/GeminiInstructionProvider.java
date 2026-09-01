@@ -35,11 +35,9 @@ public final class GeminiInstructionProvider implements ContextSourceProvider {
             }
             int depth = InstructionDiscoverySupport.directoryDepth(relative);
             boolean repositoryWide = relative.getParent() == null;
-            descriptors.addAll(descriptorFactory.create(
-                    query.project(),
+            InstructionDescriptorFactory.InstructionSpec spec = new InstructionDescriptorFactory.InstructionSpec(
                     PROVIDER_ID,
                     "GEMINI_MD",
-                    file,
                     repositoryWide ? ContextSourceScope.REPOSITORY : ContextSourceScope.DIRECTORY_TREE,
                     List.of(),
                     Math.min(90, 70 + depth * 3),
@@ -51,7 +49,11 @@ public final class GeminiInstructionProvider implements ContextSourceProvider {
                                     ? "scope repository"
                                     : "scope répertoire : "
                                         + InstructionDiscoverySupport.repositoryPath(relative.getParent())),
-                    false,
+                    false);
+            descriptors.addAll(descriptorFactory.create(
+                    query.project(),
+                    file,
+                    spec,
                     query.discoveryBudget()));
         }
         return List.copyOf(descriptors);

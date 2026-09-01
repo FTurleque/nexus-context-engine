@@ -61,18 +61,14 @@ public final class NativeProjectCustomizationDetector {
         for (String relative : relativePaths) {
             budget.checkpoint();
             Path candidate = pathGuard.resolve(Path.of(relative));
-            if (!Files.exists(candidate, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(candidate)) {
-                continue;
+            if (Files.exists(candidate, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(candidate)) {
+                budget.visit(candidate);
+                Path safeFile = safeRegularFile(pathGuard, candidate);
+                if (safeFile != null) {
+                    budget.candidate(safeFile);
+                    found.add(relative);
+                }
             }
-            budget.visit(candidate);
-            Path safeFile;
-            try {
-                safeFile = pathGuard.requireRegularFile(candidate);
-            } catch (IOException unsafeEntry) {
-                continue;
-            }
-            budget.candidate(safeFile);
-            found.add(relative);
         }
         return List.copyOf(found);
     }
@@ -126,6 +122,14 @@ public final class NativeProjectCustomizationDetector {
         });
         found.sort(String::compareTo);
         return List.copyOf(found);
+    }
+
+    private static Path safeRegularFile(ProjectPathGuard pathGuard, Path candidate) {
+        try {
+            return pathGuard.requireRegularFile(candidate);
+        } catch (IOException unsafeOrMissing) {
+            return null;
+        }
     }
 
     private static void putIfNotEmpty(

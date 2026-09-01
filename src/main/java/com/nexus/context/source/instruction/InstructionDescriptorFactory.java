@@ -20,55 +20,37 @@ final class InstructionDescriptorFactory {
 
     List<ContextSourceDescriptor> create(
             ProjectDescriptor project,
-            String provider,
-            String origin,
             Path absolutePath,
-            ContextSourceScope scope,
-            List<String> applyTo,
-            int priority,
-            List<String> reasons,
-            boolean resolveReferences) throws IOException {
+            InstructionSpec spec) throws IOException {
         return create(
                 project,
-                provider,
-                origin,
                 absolutePath,
-                scope,
-                applyTo,
-                priority,
-                reasons,
-                resolveReferences,
+                spec,
                 ContextDiscoveryLimits.defaults().newBudget());
     }
 
     List<ContextSourceDescriptor> create(
             ProjectDescriptor project,
-            String provider,
-            String origin,
             Path absolutePath,
-            ContextSourceScope scope,
-            List<String> applyTo,
-            int priority,
-            List<String> reasons,
-            boolean resolveReferences,
+            InstructionSpec spec,
             ContextDiscoveryBudget budget) throws IOException {
         Path relativePath = InstructionDiscoverySupport.relative(project, absolutePath);
         String primaryContent = InstructionDiscoverySupport.read(project, absolutePath, budget);
         List<ContextSourceDescriptor> descriptors = new ArrayList<>();
         descriptors.add(new ContextSourceDescriptor(
-                provider + ":" + InstructionDiscoverySupport.repositoryPath(relativePath),
+                spec.provider() + ":" + InstructionDiscoverySupport.repositoryPath(relativePath),
                 CandidateType.INSTRUCTION,
-                provider,
-                origin,
+                spec.provider(),
+                spec.origin(),
                 relativePath,
-                scope,
-                applyTo,
-                priority,
+                spec.scope(),
+                spec.applyTo(),
+                spec.priority(),
                 primaryContent,
                 Map.of(),
-                reasons));
+                spec.reasons()));
 
-        if (!resolveReferences) {
+        if (!spec.resolveReferences()) {
             return List.copyOf(descriptors);
         }
 
@@ -78,14 +60,15 @@ final class InstructionDescriptorFactory {
             metadata.put("referencedFrom", InstructionDiscoverySupport.repositoryPath(relativePath));
             metadata.put("referenceDepth", reference.depth());
             descriptors.add(new ContextSourceDescriptor(
-                    provider + ":reference:" + InstructionDiscoverySupport.repositoryPath(reference.relativePath()),
+                    spec.provider() + ":reference:"
+                            + InstructionDiscoverySupport.repositoryPath(reference.relativePath()),
                     CandidateType.INSTRUCTION,
-                    provider,
-                    origin + "_REFERENCE",
+                    spec.provider(),
+                    spec.origin() + "_REFERENCE",
                     reference.relativePath(),
-                    scope,
-                    applyTo,
-                    Math.max(0, priority - 5 - reference.depth()),
+                    spec.scope(),
+                    spec.applyTo(),
+                    Math.max(0, spec.priority() - 5 - reference.depth()),
                     reference.content(),
                     metadata,
                     List.of(
@@ -94,5 +77,15 @@ final class InstructionDescriptorFactory {
                             "référence locale confinée au repository")));
         }
         return List.copyOf(descriptors);
+    }
+
+    record InstructionSpec(
+            String provider,
+            String origin,
+            ContextSourceScope scope,
+            List<String> applyTo,
+            int priority,
+            List<String> reasons,
+            boolean resolveReferences) {
     }
 }
