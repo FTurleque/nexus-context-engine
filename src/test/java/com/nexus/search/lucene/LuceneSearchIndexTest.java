@@ -77,7 +77,7 @@ class LuceneSearchIndexTest {
 
         assertFalse(hits.isEmpty());
         assertEquals("bounded.md", hits.getFirst().relativePath());
-        assertEquals(256, LuceneSearchIndex.MAX_ANALYZED_QUERY_TERMS);
+        assertEquals(128, LuceneSearchIndex.MAX_ANALYZED_QUERY_TERMS);
     }
 
     @Test
