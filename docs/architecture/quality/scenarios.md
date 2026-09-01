@@ -12,7 +12,7 @@ Ce fichier complète la Section 10 de l'arc42 avec les scénarios de qualité **
 | QS-04 — Exclusion mutuelle inter-processus | Défaillance | mutex JVM + `FileLock` | Couvert |
 | QS-05 — Budget contexte/découverte | Usage | `BudgetedContextSelector`, `ContextDiscoveryLimits`, benchmark 1 000 skills | Couvert |
 | QS-06 — Provider/importer timeout | Défaillance | `ExternalTaskRunner` | Couvert |
-| QS-07 — Saturation providers externes | Défaillance | sémaphore global max 8 workers actifs | Couvert |
+| QS-07 — Saturation providers externes | Défaillance | sémaphore global max 8 tâches externes actives | Couvert |
 | QS-08 — JDT JSON-RPC hostile | Sécurité/Résilience | `JdtJsonRpcFrameReaderTest` | Couvert |
 | QS-09 — Recherche Lucene forte cardinalité | Performance/Résilience | cap 128 termes + test de régression | Couvert |
 | QS-10 — Fédération bornée | Usage/Performance | 100 uniques fail-fast + budget de travail | Couvert |
