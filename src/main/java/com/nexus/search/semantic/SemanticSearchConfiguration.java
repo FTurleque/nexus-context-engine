@@ -18,6 +18,7 @@ public final class SemanticSearchConfiguration {
     public static final String PROVIDER_ENV = "NEXUS_SEMANTIC_PROVIDER";
     public static final String RRF_WEIGHT_ENV = "NEXUS_SEMANTIC_RRF_WEIGHT";
     public static final String OLLAMA_BASE_URL_ENV = "NEXUS_OLLAMA_BASE_URL";
+    public static final String ALLOW_INSECURE_REMOTE_OLLAMA_ENV = "NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA";
     /**
      * Indice de runtime positionné par le template Docker Compose ({@code NEXUS_RUNTIME=docker}).
      * Il permet de résoudre une URL Ollama de bouclage vers {@code host.docker.internal} lorsque
@@ -81,7 +82,13 @@ public final class SemanticSearchConfiguration {
                 OLLAMA_BASE_URL_ENV,
                 OllamaEmbeddingProvider.DEFAULT_BASE_URI.toString()));
         boolean dockerRuntime = "docker".equalsIgnoreCase(environment(RUNTIME_ENV, ""));
-        URI baseUri = OllamaEndpointResolver.resolveForRuntime(configuredBaseUri, dockerRuntime);
+        boolean allowInsecureRemote = booleanValue(
+                ALLOW_INSECURE_REMOTE_OLLAMA_ENV,
+                environment(ALLOW_INSECURE_REMOTE_OLLAMA_ENV, "false"));
+        URI baseUri = OllamaEndpointResolver.resolveForRuntime(
+                configuredBaseUri,
+                dockerRuntime,
+                allowInsecureRemote);
         String model = environment(OLLAMA_MODEL_ENV, OllamaEmbeddingProvider.DEFAULT_MODEL);
         int dimensions = positiveInt(
                 OLLAMA_DIMENSIONS_ENV,
@@ -117,6 +124,16 @@ public final class SemanticSearchConfiguration {
     private static String environment(String name, String defaultValue) {
         String value = System.getenv(name);
         return value == null || value.isBlank() ? defaultValue : value.trim();
+    }
+
+    private static boolean booleanValue(String name, String value) {
+        if ("true".equalsIgnoreCase(value)) {
+            return true;
+        }
+        if ("false".equalsIgnoreCase(value)) {
+            return false;
+        }
+        throw new IllegalArgumentException(name + " doit valoir true ou false");
     }
 
     private static int positiveInt(String name, String value) {
