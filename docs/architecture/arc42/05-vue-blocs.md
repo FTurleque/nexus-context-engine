@@ -150,7 +150,7 @@ erDiagram
         string version PK
         string script_name
         string applied_at
-        string checksum
+        string script_sha256
     }
 ```
 
