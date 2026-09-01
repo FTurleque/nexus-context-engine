@@ -44,7 +44,12 @@ import java.util.regex.Pattern;
 
 public final class LuceneSearchIndex implements SearchIndex {
 
-    static final int MAX_ANALYZED_QUERY_TERMS = 256;
+    /**
+     * MultiFieldQueryParser expands each analyzed term across the five search fields.
+     * Keeping 128 terms caps the resulting query well below Lucene's default 1024
+     * nested-clause budget, including the surrounding coordination BooleanQuery.
+     */
+    static final int MAX_ANALYZED_QUERY_TERMS = 128;
 
     private static final String FIELD_DOCUMENT_KEY = "document_key";
     private static final String FIELD_PATH = "path";
