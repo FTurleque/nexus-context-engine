@@ -21,7 +21,6 @@ import com.nexus.security.SafeFileIO;
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.URI;
@@ -781,7 +780,7 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
             this.process = process;
             this.input = new BufferedInputStream(process.getInputStream());
             this.output = process.getOutputStream();
-            this.inbox = new LinkedBlockingQueue<>();
+            this.inbox = new LinkedBlockingQueue<>(JdtJsonRpcFrameReader.MAX_PENDING_MESSAGES);
             this.nextRequestId = new AtomicLong(1L);
             this.stderrTail = new ArrayDeque<>();
             this.writeLock = new Object();
@@ -1035,59 +1034,29 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
                 while (true) {
                     JsonNode message = readFrame();
                     if (message == null) {
-                        inbox.offer(new Inbound(null, new IOException("Flux stdout JDT LS fermé")));
+                        failInbound(new IOException("Flux stdout JDT LS fermé"));
                         return;
                     }
-                    inbox.put(new Inbound(message, null));
+                    if (!inbox.offer(new Inbound(message, null))) {
+                        failInbound(new IOException(
+                                "File de messages JDT LS saturée (maximum "
+                                        + JdtJsonRpcFrameReader.MAX_PENDING_MESSAGES + ")"));
+                        return;
+                    }
                 }
             } catch (IOException exception) {
-                inbox.offer(new Inbound(null, exception));
-            } catch (InterruptedException interrupted) {
-                Thread.currentThread().interrupt();
+                failInbound(exception);
             }
         }
 
         private JsonNode readFrame() throws IOException {
-            int contentLength = -1;
-            while (true) {
-                String line = readHeaderLine(input);
-                if (line == null) {
-                    return null;
-                }
-                if (line.isEmpty()) {
-                    break;
-                }
-                int separator = line.indexOf(':');
-                if (separator > 0 && "content-length".equalsIgnoreCase(line.substring(0, separator).trim())) {
-                    contentLength = Integer.parseInt(line.substring(separator + 1).trim());
-                }
-            }
-            if (contentLength < 0) {
-                throw new IOException("En-tête Content-Length absent dans la réponse JDT LS");
-            }
-            byte[] payload = input.readNBytes(contentLength);
-            if (payload.length != contentLength) {
-                throw new IOException("Réponse JDT LS tronquée");
-            }
-            return mapper.readTree(payload);
+            return JdtJsonRpcFrameReader.read(input, mapper);
         }
 
-        private static String readHeaderLine(InputStream stream) throws IOException {
-            StringBuilder line = new StringBuilder();
-            while (true) {
-                int value = stream.read();
-                if (value < 0) {
-                    return line.isEmpty() ? null : line.toString();
-                }
-                if (value == '\n') {
-                    int length = line.length();
-                    if (length > 0 && line.charAt(length - 1) == '\r') {
-                        line.setLength(length - 1);
-                    }
-                    return line.toString();
-                }
-                line.append((char) value);
-            }
+        private void failInbound(IOException failure) {
+            inbox.clear();
+            inbox.offer(new Inbound(null, failure));
+            process.destroy();
         }
 
         private void drainStderr() {
