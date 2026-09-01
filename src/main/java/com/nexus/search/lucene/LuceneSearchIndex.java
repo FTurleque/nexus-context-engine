@@ -44,6 +44,8 @@ import java.util.regex.Pattern;
 
 public final class LuceneSearchIndex implements SearchIndex {
 
+    static final int MAX_ANALYZED_QUERY_TERMS = 256;
+
     private static final String FIELD_DOCUMENT_KEY = "document_key";
     private static final String FIELD_PATH = "path";
     private static final String FIELD_PATH_TEXT = "path_text";
@@ -166,6 +168,10 @@ public final class LuceneSearchIndex implements SearchIndex {
             return coordinated.build();
         } catch (ParseException exception) {
             throw new IOException("Requête Lucene invalide : " + query, exception);
+        } catch (BooleanQuery.TooManyClauses exception) {
+            throw new IllegalArgumentException(
+                    "query contains too many searchable terms; maximum is " + MAX_ANALYZED_QUERY_TERMS,
+                    exception);
         }
     }
 
@@ -176,6 +182,9 @@ public final class LuceneSearchIndex implements SearchIndex {
             tokenStream.reset();
             while (tokenStream.incrementToken()) {
                 terms.add(termAttribute.toString());
+                if (terms.size() >= MAX_ANALYZED_QUERY_TERMS) {
+                    break;
+                }
             }
             tokenStream.end();
         }
