@@ -121,7 +121,7 @@ sequenceDiagram
     participant SQLite as SQLite
 
     Index->>Runner: run(provider jdtls)
-    Runner->>JDT: worker daemon (capacité globale <= 8)
+    Runner->>JDT: worker daemon (capacité globale <= 8 tâches externes actives)
     JDT-->>Frame: JSON-RPC / LSP STDIO
     alt frame valide et dans les bornes
         Frame-->>Index: message JSON
