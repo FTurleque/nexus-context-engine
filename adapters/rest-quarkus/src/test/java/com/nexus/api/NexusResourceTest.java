@@ -1,6 +1,8 @@
 package com.nexus.api;
 
+import com.nexus.context.ContextBudgetPolicy;
 import com.nexus.search.QueryPolicy;
+import com.nexus.search.ResultLimitPolicy;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import org.junit.jupiter.api.Test;
@@ -8,6 +10,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 
 import static io.restassured.RestAssured.given;
@@ -117,6 +120,43 @@ class NexusResourceTest {
                 .statusCode(200)
                 .body("explain", equalTo(true))
                 .body("items", hasSize(greaterThan(0)));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body(Map.of(
+                        "query", "OrderService",
+                        "tokenBudget", 200,
+                        "constraints", Map.of("language", "java")))
+                .when()
+                .post("/api/v1/projects/{projectId}/context", projectId)
+                .then()
+                .statusCode(400)
+                .body("error", equalTo("bad_request"))
+                .body("message", containsString("constraints are not supported"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body(Map.of(
+                        "projectIds", List.of(projectId),
+                        "query", "OrderService",
+                        "limit", ResultLimitPolicy.MAX_RESULT_LIMIT + 1))
+                .when()
+                .post("/api/v1/federated/search")
+                .then()
+                .statusCode(400)
+                .body("error", equalTo("bad_request"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body(Map.of(
+                        "projectIds", List.of(projectId),
+                        "query", "OrderService",
+                        "tokenBudget", ContextBudgetPolicy.MAX_CONTEXT_TOKEN_BUDGET + 1))
+                .when()
+                .post("/api/v1/federated/context")
+                .then()
+                .statusCode(400)
+                .body("error", equalTo("bad_request"));
 
         given()
                 .contentType(ContentType.JSON)
