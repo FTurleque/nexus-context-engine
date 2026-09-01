@@ -5,12 +5,8 @@ import org.junit.jupiter.api.Test;
 import java.net.URI;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/**
- * Non-regression tests for P1: resolving the Ollama endpoint per runtime. Loopback must become
- * {@code host.docker.internal} inside Docker; every other host must pass through untouched in both
- * runtimes so that remote hosts, custom DNS and IPv6 are never broken.
- */
 class OllamaEndpointResolverTest {
 
     @Test
@@ -41,21 +37,25 @@ class OllamaEndpointResolverTest {
     }
 
     @Test
-    void dockerRuntimePreservesRemoteHost() {
-        URI uri = URI.create("http://ollama.internal.example.com:11434");
-        assertEquals(uri, OllamaEndpointResolver.resolveForRuntime(uri, true));
+    void rejectsRemoteHttpByDefault() {
+        assertThrows(IllegalArgumentException.class, () -> OllamaEndpointResolver.resolveForRuntime(
+                URI.create("http://ollama.internal.example.com:11434"), true));
+        assertThrows(IllegalArgumentException.class, () -> OllamaEndpointResolver.resolveForRuntime(
+                URI.create("http://10.1.2.3:11434"), false));
     }
 
     @Test
-    void dockerRuntimePreservesExplicitRemoteIp() {
-        URI uri = URI.create("http://10.1.2.3:11434");
-        assertEquals(uri, OllamaEndpointResolver.resolveForRuntime(uri, true));
+    void preservesRemoteHttps() {
+        URI dns = URI.create("https://ollama.internal.example.com:11434");
+        URI ipv6 = URI.create("https://[2001:db8::1]:11434");
+        assertEquals(dns, OllamaEndpointResolver.resolveForRuntime(dns, true));
+        assertEquals(ipv6, OllamaEndpointResolver.resolveForRuntime(ipv6, true));
     }
 
     @Test
-    void dockerRuntimePreservesNonLoopbackIpv6() {
-        URI uri = URI.create("http://[2001:db8::1]:11434");
-        assertEquals(uri, OllamaEndpointResolver.resolveForRuntime(uri, true));
+    void explicitOptInAllowsRemoteHttp() {
+        URI uri = URI.create("http://my-ollama:11434");
+        assertEquals(uri, OllamaEndpointResolver.resolveForRuntime(uri, true, true));
     }
 
     @Test
@@ -66,8 +66,8 @@ class OllamaEndpointResolverTest {
     }
 
     @Test
-    void dockerRuntimePreservesCustomDnsName() {
-        URI uri = URI.create("http://my-ollama:11434");
-        assertEquals(uri, OllamaEndpointResolver.resolveForRuntime(uri, true));
+    void rejectsCredentialsEmbeddedInEndpointUri() {
+        assertThrows(IllegalArgumentException.class, () -> OllamaEndpointResolver.resolveForRuntime(
+                URI.create("https://user:password@ollama.example.com:11434"), false));
     }
 }
