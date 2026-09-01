@@ -39,6 +39,7 @@ import java.util.stream.Collectors;
 public final class SqliteIndexRepository implements IndexRepository {
 
     private static final String EMBEDDED_SOURCE_PROVIDER = CodeSymbol.DEFAULT_SOURCE_PROVIDER;
+    private static final int EXTERNAL_BATCH_SIZE = 1_000;
     private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
 
     private final SqliteDatabase database;
@@ -835,15 +836,41 @@ public final class SqliteIndexRepository implements IndexRepository {
             Connection connection,
             Map<String, Long> fileIds,
             List<IndexedSymbol> symbols) throws SQLException {
-        // CodeIntelligenceSnapshot canonicalise les faits par ExternalSymbolIdentity avant
-        // d'entrer dans le repository. Après suppression des anciennes lignes du provider,
-        // chaque symbole de cette liste est donc un fait canonique distinct à persister.
-        for (IndexedSymbol indexedSymbol : symbols) {
-            Long fileId = fileIds.get(indexedSymbol.relativePath());
-            if (fileId == null) {
-                continue;
+        if (symbols.isEmpty()) {
+            return;
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO symbols(
+                    file_id, kind, name, qualified_name, signature,
+                    start_line, end_line, source_provider)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """)) {
+            int pending = 0;
+            for (IndexedSymbol indexedSymbol : symbols) {
+                Long fileId = fileIds.get(indexedSymbol.relativePath());
+                if (fileId == null) {
+                    continue;
+                }
+                CodeSymbol symbol = indexedSymbol.symbol();
+                statement.setLong(1, fileId);
+                statement.setString(2, symbol.kind().name());
+                statement.setString(3, symbol.name());
+                statement.setString(4, symbol.qualifiedName());
+                statement.setString(5, symbol.signature());
+                statement.setInt(6, symbol.startLine());
+                statement.setInt(7, symbol.endLine());
+                statement.setString(8, symbol.sourceProvider());
+                statement.addBatch();
+                pending++;
+                if (pending >= EXTERNAL_BATCH_SIZE) {
+                    statement.executeBatch();
+                    statement.clearBatch();
+                    pending = 0;
+                }
             }
-            insertSymbols(connection, fileId, List.of(indexedSymbol.symbol()));
+            if (pending > 0) {
+                statement.executeBatch();
+            }
         }
     }
 
@@ -852,15 +879,39 @@ public final class SqliteIndexRepository implements IndexRepository {
             UUID projectId,
             Map<String, Long> fileIds,
             List<IndexedRelation> relations) throws SQLException {
-        // CodeIntelligenceSnapshot canonicalise les relations par ExternalRelationIdentity.
-        // Après suppression des anciennes lignes du provider, chaque élément conserve donc
-        // une provenance fichier distincte et la confiance canonique maximale de ce fait.
-        for (IndexedRelation indexedRelation : relations) {
-            Long fileId = fileIds.get(indexedRelation.relativePath());
-            if (fileId == null) {
-                continue;
+        if (relations.isEmpty()) {
+            return;
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO symbol_relations(
+                    project_id, file_id, kind, source_ref, target_ref, confidence, source_provider)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """)) {
+            int pending = 0;
+            for (IndexedRelation indexedRelation : relations) {
+                Long fileId = fileIds.get(indexedRelation.relativePath());
+                if (fileId == null) {
+                    continue;
+                }
+                SymbolRelation relation = indexedRelation.relation();
+                statement.setString(1, projectId.toString());
+                statement.setLong(2, fileId);
+                statement.setString(3, relation.kind().name());
+                statement.setString(4, relation.source());
+                statement.setString(5, relation.target());
+                statement.setDouble(6, relation.confidence());
+                statement.setString(7, relation.sourceProvider());
+                statement.addBatch();
+                pending++;
+                if (pending >= EXTERNAL_BATCH_SIZE) {
+                    statement.executeBatch();
+                    statement.clearBatch();
+                    pending = 0;
+                }
             }
-            insertRelations(connection, projectId, fileId, List.of(indexedRelation.relation()));
+            if (pending > 0) {
+                statement.executeBatch();
+            }
         }
     }
 
