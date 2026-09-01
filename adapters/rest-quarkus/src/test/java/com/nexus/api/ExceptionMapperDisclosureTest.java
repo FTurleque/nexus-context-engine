@@ -11,6 +11,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class ExceptionMapperDisclosureTest {
 
+    private static final String UNSUPPORTED_CONSTRAINTS =
+            "constraints are not supported yet; omit the field or provide an empty object";
+
     @Test
     void ioMapperDoesNotExposeInternalExceptionMessage() {
         String internal = "C:\\private\\workspace\\secret.txt";
@@ -33,6 +36,17 @@ class ExceptionMapperDisclosureTest {
             assertEquals(400, response.getStatus());
             assertEquals("bad_request", entity.error());
             assertFalse(entity.message().contains(internal));
+        }
+    }
+
+    @Test
+    void invalidArgumentMapperPreservesAllowlistedPublicValidationMessage() {
+        try (Response response = new IllegalArgumentExceptionMapper()
+                .toResponse(new IllegalArgumentException(UNSUPPORTED_CONSTRAINTS))) {
+            ApiModels.ErrorResponse entity = (ApiModels.ErrorResponse) response.getEntity();
+            assertEquals(400, response.getStatus());
+            assertEquals("bad_request", entity.error());
+            assertEquals(UNSUPPORTED_CONSTRAINTS, entity.message());
         }
     }
 
