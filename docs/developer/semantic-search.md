@@ -21,21 +21,45 @@ $env:NEXUS_SEMANTIC_PROVIDER = "ollama"
 Variables :
 
 ```text
-NEXUS_SEMANTIC_PROVIDER              ollama | disabled/off
-NEXUS_SEMANTIC_RRF_WEIGHT            8.0 par défaut, <= 10
-NEXUS_OLLAMA_BASE_URL                http://localhost:11434 par défaut
-NEXUS_OLLAMA_EMBEDDING_MODEL         qwen3-embedding:0.6b par défaut
-NEXUS_OLLAMA_EMBEDDING_DIMENSIONS    1024 par défaut
-NEXUS_OLLAMA_TIMEOUT_SECONDS         60 par défaut
+NEXUS_SEMANTIC_PROVIDER                 ollama | disabled/off
+NEXUS_SEMANTIC_RRF_WEIGHT               8.0 par défaut, <= 10
+NEXUS_OLLAMA_BASE_URL                   http://localhost:11434 par défaut
+NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA      false par défaut
+NEXUS_OLLAMA_EMBEDDING_MODEL            qwen3-embedding:0.6b par défaut
+NEXUS_OLLAMA_EMBEDDING_DIMENSIONS       1024 par défaut
+NEXUS_OLLAMA_TIMEOUT_SECONDS            60 par défaut
 ```
 
 L'activation programmable reste disponible avec `SemanticSearchConfiguration.enabled(...)` pour les tests/intégrations spécialisées.
+
+### Politique transport Ollama
+
+Une URL HTTP est autorisée sans opt-in uniquement lorsqu'elle cible une adresse de bouclage (`localhost`, `127.0.0.0/8`, `::1`). Un endpoint distant doit utiliser HTTPS.
+
+L'exception volontaire pour un environnement administré exige :
+
+```text
+NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA=true
+```
+
+Cette option doit rester exceptionnelle : elle autorise le transport du contenu d'embedding sur HTTP. Les credentials intégrés directement dans l'URI Ollama sont refusés.
+
+En runtime Docker, une URL de bouclage configurée est adaptée vers `host.docker.internal` après validation de la politique ; une URL distante n'est jamais réécrite.
+
+## Protection des secrets
+
+Avant chaque embedding, `SemanticIndexingService` applique une redaction conservatrice des secrets à forte confiance : clés privées, tokens structurés connus, JWT, affectations évidentes de mots de passe/secrets et credentials d'URI. La redaction est également appliquée aux excerpts sémantiques.
+
+Le profil d'index sémantique est passé à `content-v2`. Un index créé avec l'ancien profil n'est donc pas considéré compatible : la prochaine indexation reconstruit les vecteurs afin de ne pas conserver silencieusement des embeddings historiques issus d'un contenu non redigé.
+
+Cette protection complète, sans la remplacer, la politique d'exclusion des chemins sensibles du scanner.
 
 ## Pipeline
 
 ```text
 indexation
 SearchDocument[]
+  ↓ redaction secrets à forte confiance
   ↓ lots de 32 par défaut
 EmbeddingProvider.embedAll(...)
   ↓
