@@ -2,6 +2,7 @@ package com.nexus.search.semantic;
 
 import com.nexus.index.CodeSymbol;
 import com.nexus.search.SearchDocument;
+import com.nexus.security.SensitiveContentRedactor;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -19,7 +20,7 @@ public final class SemanticIndexingService {
     public static final int DEFAULT_MAX_EMBEDDING_CHARS = 12_000;
     public static final int DEFAULT_EXCERPT_CHARS = 320;
     public static final int DEFAULT_BATCH_SIZE = 32;
-    private static final int CONTENT_PROFILE_VERSION = 1;
+    private static final int CONTENT_PROFILE_VERSION = 2;
 
     private final EmbeddingProvider embeddingProvider;
     private final SemanticSearchIndex semanticSearchIndex;
@@ -179,14 +180,16 @@ public final class SemanticIndexingService {
         }
         int remaining = Math.max(0, maxEmbeddingChars - text.length());
         if (remaining > 0) {
-            String content = document.content();
+            String content = SensitiveContentRedactor.redact(document.content());
             text.append(content, 0, Math.min(content.length(), remaining));
         }
         return text.toString();
     }
 
     private static String excerpt(SearchDocument document) {
-        String normalized = document.content().replaceAll("\\s+", " ").trim();
+        String normalized = SensitiveContentRedactor.redact(document.content())
+                .replaceAll("\\s+", " ")
+                .trim();
         if (normalized.isEmpty()) {
             return document.relativePath();
         }
