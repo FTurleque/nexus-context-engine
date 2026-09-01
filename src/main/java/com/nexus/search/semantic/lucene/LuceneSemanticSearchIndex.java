@@ -25,6 +25,7 @@ import org.apache.lucene.store.FSDirectory;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -63,9 +64,10 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
         Objects.requireNonNull(projectId, "projectId");
         Objects.requireNonNull(provenance, "provenance");
         Path indexPath = paths.projectSemanticLuceneIndex(projectId);
-        if (!Files.isDirectory(indexPath)) {
+        if (!Files.exists(indexPath, LinkOption.NOFOLLOW_LINKS)) {
             return false;
         }
+        paths.ensurePrivateDirectory(indexPath);
         try (Directory directory = FSDirectory.open(indexPath)) {
             if (!DirectoryReader.indexExists(directory)) {
                 return false;
@@ -96,7 +98,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
         Objects.requireNonNull(projectId, "projectId");
         Objects.requireNonNull(documents, "documents");
         Path indexPath = paths.projectSemanticLuceneIndex(projectId);
-        Files.createDirectories(indexPath);
+        paths.ensurePrivateDirectory(indexPath);
         try (Directory directory = FSDirectory.open(indexPath)) {
             IndexWriterConfig configuration = new IndexWriterConfig()
                     .setOpenMode(IndexWriterConfig.OpenMode.CREATE);
@@ -139,7 +141,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
         Objects.requireNonNull(documents, "documents");
         Objects.requireNonNull(removedRelativePaths, "removedRelativePaths");
         Path indexPath = paths.projectSemanticLuceneIndex(projectId);
-        Files.createDirectories(indexPath);
+        paths.ensurePrivateDirectory(indexPath);
         try (Directory directory = FSDirectory.open(indexPath)) {
             IndexWriterConfig configuration = new IndexWriterConfig()
                     .setOpenMode(IndexWriterConfig.OpenMode.CREATE_OR_APPEND);
@@ -167,9 +169,10 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
         }
 
         Path indexPath = paths.projectSemanticLuceneIndex(projectId);
-        if (!Files.isDirectory(indexPath)) {
+        if (!Files.exists(indexPath, LinkOption.NOFOLLOW_LINKS)) {
             return List.of();
         }
+        paths.ensurePrivateDirectory(indexPath);
 
         try (Directory directory = FSDirectory.open(indexPath)) {
             if (!DirectoryReader.indexExists(directory)) {
