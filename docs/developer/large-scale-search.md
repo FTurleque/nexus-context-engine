@@ -46,7 +46,7 @@ Le pool local est borné et la limite publique des résultats est commune à CLI
 MAX_ANALYZED_QUERY_TERMS = 128
 ```
 
-Le `MultiFieldQueryParser` développe ensuite ces termes sur cinq champs. La borne 128 conserve une marge sous la limite Lucene par défaut de 1 024 clauses imbriquées, en incluant la coordination externe.
+La limite opérationnelle est donc de **128 termes analysés uniques** avant expansion multi-champs. Le `MultiFieldQueryParser` développe ensuite ces termes sur cinq champs ; cette borne conserve une marge sous la limite Lucene par défaut de 1 024 clauses imbriquées, en incluant la coordination externe.
 
 Un test de non-régression utilise une requête de 1 500 termes et vérifie qu'elle ne déclenche pas `TooManyClauses`.
 
