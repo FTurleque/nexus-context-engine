@@ -11,7 +11,8 @@ import java.util.regex.Pattern;
  * <p>La détection privilégie les formats fortement structurés afin d'éviter de transformer
  * arbitrairement le code utilisateur. Elle ne remplace pas un scanner de secrets spécialisé,
  * mais empêche les fuites accidentelles les plus courantes (clés privées, tokens structurés,
- * mots de passe/secrets littéraux et credentials dans une URI).</p>
+ * mots de passe/secrets littéraux et credentials dans une URI). Les redactions multilignes
+ * préservent les séparateurs de lignes afin de ne jamais décaler les ranges source persistés.</p>
  */
 public final class SensitiveContentRedactor {
 
@@ -34,11 +35,29 @@ public final class SensitiveContentRedactor {
 
     public static String redact(String content) {
         Objects.requireNonNull(content, "content");
-        String redacted = PRIVATE_KEY_BLOCK.matcher(content).replaceAll(REDACTED);
+        String redacted = replacePrivateKeyBlocks(content);
         redacted = STRUCTURED_TOKEN.matcher(redacted).replaceAll(REDACTED);
         redacted = JWT.matcher(redacted).replaceAll(REDACTED);
         redacted = replaceSecretAssignments(redacted);
         return URI_CREDENTIAL.matcher(redacted).replaceAll("$1" + REDACTED + "$3");
+    }
+
+    private static String replacePrivateKeyBlocks(String content) {
+        Matcher matcher = PRIVATE_KEY_BLOCK.matcher(content);
+        StringBuffer output = new StringBuffer(content.length());
+        while (matcher.find()) {
+            String block = matcher.group();
+            StringBuilder replacement = new StringBuilder(REDACTED);
+            for (int index = 0; index < block.length(); index++) {
+                char character = block.charAt(index);
+                if (character == '\r' || character == '\n') {
+                    replacement.append(character);
+                }
+            }
+            matcher.appendReplacement(output, Matcher.quoteReplacement(replacement.toString()));
+        }
+        matcher.appendTail(output);
+        return output.toString();
     }
 
     private static String replaceSecretAssignments(String content) {
