@@ -24,6 +24,8 @@ La protection effective de `develop` est une règle GitHub de repository et non 
 
 ## Frontières actives
 
+### Baseline NXA3
+
 - SQLite canonique ; Lucene/intelligence externe dérivés.
 - V005 impose les plages de symboles valides au niveau base.
 - filesystem projet durci par `ProjectPathGuard` ; SCIP/skills/customisations concernés utilisent la frontière commune.
@@ -35,9 +37,19 @@ La protection effective de `develop` est une règle GitHub de repository et non 
 - image Docker construite une fois, qualifiée puis publiée sans rebuild.
 - Maven/JDT LS contrôlés par ancres d'intégrité versionnées.
 
+### Baseline NXA4
+
+- management Quarkus isolé du listener applicatif sur `127.0.0.1:9000`.
+- frames/backlog JDT LS bornés et concurrence externe limitée à 8 workers actifs.
+- requêtes Lucene à forte cardinalité bornées à 128 termes analysés uniques.
+- limites REST fédérées centralisées et `constraints` non supportées rejetées explicitement.
+- Ollama distant HTTPS par défaut ; HTTP distant uniquement via opt-in administratif explicite.
+- secrets à forte confiance redigés avant embeddings/fragments ; profil sémantique `content-v2`.
+- `NEXUS_HOME`/SQLite privés sur POSIX ; chemins persistants symboliques durcis refusés.
+
 ## Preuve de qualification
 
-Une ancienne PR verte n'est jamais recopiée ici comme preuve de l'état courant. La preuve applicable est le run GitHub Actions attaché au SHA exact concerné.
+Une ancienne PR verte n'est jamais recopiée ici comme preuve de l'état courant. La preuve applicable est le run attaché au SHA exact concerné.
 
 ## Organisation
 
