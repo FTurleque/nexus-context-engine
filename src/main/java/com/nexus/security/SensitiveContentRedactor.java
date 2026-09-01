@@ -18,7 +18,8 @@ public final class SensitiveContentRedactor {
 
     private static final String REDACTED = "[REDACTED]";
     private static final String PRIVATE_KEY_BEGIN = "-----BEGIN ";
-    private static final String PRIVATE_KEY_SUFFIX = " PRIVATE KEY-----";
+    private static final String PRIVATE_KEY_END = "-----END ";
+    private static final String PRIVATE_KEY_SUFFIX = "PRIVATE KEY-----";
     private static final int MAX_SECRET_CHARS = 4096;
     private static final int MAX_URI_USER_CHARS = 1024;
 
@@ -57,14 +58,21 @@ public final class SensitiveContentRedactor {
                 break;
             }
 
-            int markerEnd = content.indexOf(PRIVATE_KEY_SUFFIX, begin + PRIVATE_KEY_BEGIN.length());
+            int markerEnd = content.indexOf("-----", begin + PRIVATE_KEY_BEGIN.length());
             if (markerEnd < 0) {
                 output.append(content, cursor, content.length());
                 break;
             }
-            markerEnd += PRIVATE_KEY_SUFFIX.length();
+            markerEnd += 5;
             String beginMarker = content.substring(begin, markerEnd);
-            String endMarker = beginMarker.replaceFirst("-----BEGIN ", "-----END ");
+            if (!beginMarker.endsWith(PRIVATE_KEY_SUFFIX)) {
+                output.append(content, cursor, markerEnd);
+                cursor = markerEnd;
+                continue;
+            }
+
+            String keyType = beginMarker.substring(PRIVATE_KEY_BEGIN.length(), beginMarker.length() - 5);
+            String endMarker = PRIVATE_KEY_END + keyType + "-----";
             int end = content.indexOf(endMarker, markerEnd);
             if (end < 0) {
                 output.append(content, cursor, content.length());
