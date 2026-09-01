@@ -1,6 +1,7 @@
 package com.nexus.api;
 
 import com.nexus.index.IndexingCapacityExceededException;
+import com.nexus.search.QueryPolicy;
 import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.Test;
 
@@ -47,6 +48,33 @@ class ExceptionMapperDisclosureTest {
             assertEquals(400, response.getStatus());
             assertEquals("bad_request", entity.error());
             assertEquals(UNSUPPORTED_CONSTRAINTS, entity.message());
+        }
+    }
+
+    @Test
+    void invalidArgumentMapperPreservesBoundedOversizedQueryMessage() {
+        String message = "La requête dépasse la limite de " + QueryPolicy.MAX_QUERY_UTF8_BYTES
+                + " octets UTF-8 (taille mesurée ou minimale 16386 octets)";
+
+        try (Response response = new IllegalArgumentExceptionMapper()
+                .toResponse(new IllegalArgumentException(message))) {
+            ApiModels.ErrorResponse entity = (ApiModels.ErrorResponse) response.getEntity();
+            assertEquals(400, response.getStatus());
+            assertEquals("bad_request", entity.error());
+            assertEquals(message, entity.message());
+        }
+    }
+
+    @Test
+    void invalidArgumentMapperRejectsForgedOversizedQueryMessage() {
+        String forged = "La requête dépasse la limite de " + QueryPolicy.MAX_QUERY_UTF8_BYTES
+                + " octets UTF-8 (taille mesurée ou minimale 16386 octets) /srv/private";
+
+        try (Response response = new IllegalArgumentExceptionMapper()
+                .toResponse(new IllegalArgumentException(forged))) {
+            ApiModels.ErrorResponse entity = (ApiModels.ErrorResponse) response.getEntity();
+            assertEquals(400, response.getStatus());
+            assertEquals("Requête invalide", entity.message());
         }
     }
 
