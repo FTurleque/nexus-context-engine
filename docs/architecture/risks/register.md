@@ -18,17 +18,17 @@ La garantie inter-processus vise `NEXUS_HOME` sur filesystem local. SMB/NFS exig
 
 ### Provider externe non coopératif
 
-Les tâches sont bornées en wall-clock. L'isolation processus généralisée reste conditionnée à un cas reproductible.
+Les tâches sont bornées en wall-clock et à **8 workers réellement actifs maximum**. Un provider qui ignore l'interruption peut continuer jusqu'à sa terminaison réelle ; une isolation processus généralisée plus forte reste conditionnée à un cas reproductible.
 
 ### Recovery sémantique
 
-L'indisponibilité d'un provider ou une corruption physique Lucene nécessite encore des procédures opérationnelles spécifiques selon le scénario. SQLite reste l'autorité.
+L'indisponibilité d'un provider ou une corruption physique Lucene nécessite encore des procédures opérationnelles spécifiques selon le scénario. SQLite reste l'autorité. Le profil `content-v2` garantit en revanche qu'un ancien index sémantique incompatible est reconstruit plutôt que réutilisé silencieusement.
 
 ### Gouvernance `develop`
 
-Le contrat est versionné mais l'état GitHub doit être effectif : PR obligatoire, checks retenus, suppression/force-push interdits et exceptions administratives limitées. Tant que `develop` retourne `protected=false`, ce risque reste ouvert.
+Le contrat est versionné mais l'état GitHub doit être effectif : PR obligatoire, checks retenus, suppression/force-push interdits et exceptions administratives limitées. Tant que `develop` retourne `protected=false`, ce risque reste ouvert (#130).
 
-## Risques clôturés/fortement mitigés par NXA3
+## Risques fortement mitigés par NXA3
 
 ### REST distant
 
@@ -60,15 +60,41 @@ Mitigation : build unique, gates sur cette image, handoff hash/ID, publication s
 
 ### GHCR ambigu/partiel
 
-Mitigation : préflight fail-closed ; reprise idempotente uniquement pour contenu identique ; tags version/SHA immuables.
+Mitigation : preflight fail-closed ; reprise idempotente uniquement pour contenu identique ; tags version/SHA immuables.
 
 ### Données SQLite incompatibles
 
 Mitigation : V004 invalide les anciens index aux plages impossibles ; V005 impose les `CHECK` de `CodeSymbol`.
 
+## Risques fortement mitigés par NXA4
+
+### Management REST exposé avec l'API métier
+
+Mitigation : health/metrics sont retirés du listener applicatif et servis sur le listener management loopback `127.0.0.1:9000`. Le smoke Docker valide le management depuis l'intérieur du conteneur sans publier ce port.
+
+### JDT LS défectueux ou hostile
+
+Mitigation : `JdtJsonRpcFrameReader` borne messages à 16 MiB, headers à 64 KiB, lignes à 8 KiB et backlog à 256 messages. Framing invalide/tronqué ou saturation provoquent un échec fermé.
+
+### Requête Lucene à très forte cardinalité
+
+Mitigation : maximum 128 termes analysés uniques avant expansion sur les cinq champs de recherche, avec test de non-régression.
+
+### Fuite accidentelle de secrets vers embeddings ou contexte
+
+Mitigation : exclusions scanner sensibles + `SensitiveContentRedactor` avant embeddings et fragments retournés. La redaction cible les formats à forte confiance et conserve les séparateurs de lignes des blocs multilignes.
+
+### Transport Ollama distant non sécurisé
+
+Mitigation : HTTPS distant obligatoire par défaut ; HTTP distant uniquement avec `NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA=true` ; credentials/userinfo intégrés à l'URI refusés.
+
+### Permissions de stockage local trop larges
+
+Mitigation : `NEXUS_HOME`, `indexes`, `locks` en `0700` et SQLite en `0600` sur POSIX ; chemins persistants symboliques concernés refusés. Les ACL Windows natives ne sont pas remplacées destructivement.
+
 ### Dérive documentaire
 
-Mitigation : documentation courante réconciliée et `test-operational-doc-contracts.sh` exécuté par NEXUS CI.
+Mitigation : documentation courante réconciliée et `test-operational-doc-contracts.sh` exécuté par NEXUS CI. Les contrats machine-vérifiables couvrent désormais aussi les invariants NXA4.
 
 ## Mise à jour
 

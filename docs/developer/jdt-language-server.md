@@ -1,363 +1,133 @@
 # Analyse Java profonde optionnelle avec Eclipse JDT Language Server
 
-Ce chapitre décrit l'intégration initiale de l'Itération 9.
+Ce chapitre décrit le contrat **courant** de l'intégration JDT LS dans NEXUS 0.2.0. JDT LS reste un provider externe opt-in : il enrichit l'intelligence Java sans devenir une dépendance obligatoire du chemin d'indexation normal.
 
-L'objectif est d'utiliser Eclipse JDT Language Server pour enrichir certains projets Java complexes sans modifier le chemin d'indexation normal de NEXUS.
-
-## 1. Positionnement
-
-NEXUS dispose désormais de trois niveaux complémentaires :
+## Positionnement
 
 ```text
 JavaParser
-→ structure Java embarquée
-→ toujours disponible
+→ structure Java embarquée, toujours disponible
 
 SCIP
-→ index externe importé opportunément
-→ utilisé lorsqu'un index.scip est présent
+→ index externe importé opportunément lorsqu'un index.scip sûr est présent
 
 JDT Language Server
-→ provider Java profond actif
-→ lancé uniquement avec --deep-java
+→ provider Java profond lancé uniquement avec --deep-java
 ```
 
-JDT LS n'est ni une dépendance Maven de NEXUS, ni un runtime obligatoire.
+Le cœur conserve son propre modèle (`CodeSymbol`, `SymbolRelation`, `CodeIntelligenceSnapshot`) et ne persiste jamais des types JDT.
 
-Le cœur continue de manipuler uniquement :
+## Installation et intégrité
 
-- `CodeSymbol` ;
-- `SymbolRelation` ;
-- `CodeIntelligenceSnapshot` ;
-- `CodeIntelligenceProvider`.
-
-L'adaptateur JDT reste confiné dans :
-
-```text
-com.nexus.index.jdt
-```
-
-## 2. Pourquoi JDT LS
-
-JavaParser fournit une excellente base syntaxique mais ne résout pas à lui seul toute la sémantique d'un projet Maven ou Gradle complexe.
-
-JDT LS peut s'appuyer sur le modèle de compilation du projet pour fournir notamment :
-
-- références ;
-- implémentations ;
-- hiérarchies de types ;
-- hiérarchies d'appels.
-
-Le prototype NEXUS utilise les méthodes LSP correspondantes puis normalise les résultats dans SQLite.
-
-## 3. Pré-requis
-
-JDT LS nécessite Java 21 au minimum pour exécuter le serveur.
-
-NEXUS utilise une distribution JDT LS extraite contenant notamment :
-
-```text
-plugins/
-config_win/
-config_linux/
-config_mac/
-```
-
-Sous Windows, le script fourni installe une version figée pour rendre les mesures reproductibles :
+Sous Windows :
 
 ```powershell
 .\scripts\install-jdtls.ps1
 ```
 
+La version supportée et reproductible est actuellement :
+
+```text
+1.60.0-202606262232
+```
+
 Le script :
 
-1. télécharge `jdt-language-server-1.60.0-202606262232.tar.gz` depuis les snapshots Eclipse ;
-2. télécharge le checksum SHA-256 publié ;
-3. vérifie l'archive ;
-4. extrait JDT LS sous `~/.nexus/tools` ;
-5. positionne `NEXUS_JDTLS_HOME` dans le processus PowerShell courant.
+1. lit l'ancre `jdtls.<version>.sha256` dans `config/tool-integrity.properties` ;
+2. télécharge uniquement l'archive JDT LS depuis Eclipse ;
+3. calcule localement son SHA-256 ;
+4. compare les octets téléchargés à **l'ancre versionnée dans le repository** ;
+5. échoue fermé si l'ancre manque, est invalide ou ne correspond pas ;
+6. extrait l'installation sous `~/.nexus/tools` puis positionne `NEXUS_JDTLS_HOME` pour le processus PowerShell courant.
 
-Une installation existante peut également être utilisée directement :
+NEXUS ne télécharge donc pas un checksum de confiance depuis le même origin que l'archive pour décider de son authenticité.
 
-```powershell
-$env:NEXUS_JDTLS_HOME = "C:\chemin\vers\jdtls"
-```
-
-Le chemin doit pointer vers la racine contenant `plugins` et `config_win` sous Windows.
-
-## 4. Configuration
-
-### `NEXUS_JDTLS_HOME`
-
-Obligatoire pour activer le provider.
+## Configuration
 
 ```text
-NEXUS_JDTLS_HOME=C:\...\jdtls-1.60.0-202606262232
+NEXUS_JDTLS_HOME             racine JDT LS contenant plugins/ et config_<os>/
+NEXUS_JDTLS_JAVA             java par défaut
+NEXUS_JDTLS_TIMEOUT_SECONDS  120 par défaut
+NEXUS_JDTLS_MAX_SYMBOLS      250 par défaut
 ```
 
-### `NEXUS_JDTLS_JAVA`
-
-Optionnel.
-
-Commande ou chemin de l'exécutable Java utilisé pour lancer JDT LS.
-
-Valeur par défaut :
-
-```text
-java
-```
-
-### `NEXUS_JDTLS_TIMEOUT_SECONDS`
-
-Optionnel.
-
-Timeout d'un échange avec JDT LS.
-
-Valeur par défaut :
-
-```text
-120
-```
-
-### `NEXUS_JDTLS_MAX_SYMBOLS`
-
-Optionnel.
-
-Nombre maximal de symboles sur lesquels NEXUS lance les requêtes sémantiques profondes.
-
-Valeur par défaut :
-
-```text
-250
-```
-
-Ce bornage évite qu'un premier prototype déclenche un nombre incontrôlé de requêtes LSP sur un très grand projet.
-
-## 5. Activation explicite
-
-L'indexation normale reste :
-
-```powershell
-nexus index mon-projet
-```
-
-Elle n'exécute jamais JDT LS.
-
-L'analyse profonde est activée par :
+Activation :
 
 ```powershell
 nexus index mon-projet --deep-java
-```
-
-Une reconstruction complète avec analyse profonde utilise :
-
-```powershell
 nexus index mon-projet --rebuild --deep-java
 ```
 
-Les options `--rebuild` et `--deep-java` peuvent être combinées dans la même commande.
+Sans `NEXUS_JDTLS_HOME`, une demande `--deep-java` échoue explicitement.
 
-Si `--deep-java` est demandé sans `NEXUS_JDTLS_HOME`, NEXUS retourne une erreur explicite.
+## Cycle de vie du snapshot
 
-## 6. Cycle de vie du snapshot JDT
+Une indexation normale conserve le snapshot JDT tant qu'aucun fichier Java canonique n'a changé. Dès qu'un fichier Java change ou disparaît, l'ancien snapshot JDT est purgé afin d'éviter des références/hiérarchies obsolètes. Une nouvelle analyse profonde le reconstruit.
 
-Le snapshot JDT suit une règle de fraîcheur conservatrice.
+## Transport JSON-RPC / LSP durci
 
-### Aucun fichier Java ne change
+JDT LS est lancé comme processus enfant en STDIO. `CLIENT_PORT` et `CLIENT_HOST` sont retirés de son environnement afin de forcer le transport local standard.
 
-Une indexation normale incrémentale conserve le dernier snapshot JDT.
-
-Cela évite de lancer le serveur à chaque commande lorsque le code Java est inchangé.
-
-### Un fichier Java change ou disparaît
-
-Une indexation normale purge le snapshot JDT existant.
+Le framing entrant est fail-closed et borné **avant allocation** :
 
 ```text
-Code Java modifié
-      │
-      ▼
-nexus index
-      │
-      ├── JavaParser recalculé
-      └── snapshot jdtls purgé
+message JSON-RPC      <= 16 MiB
+ensemble des headers  <= 64 KiB
+une ligne de header   <= 8 KiB
+messages en attente   <= 256
 ```
 
-Cette purge empêche des références, appels ou hiérarchies devenus obsolètes de rester dans SQLite.
+`Content-Length` absent, invalide, contradictoire ou supérieur à la limite est rejeté. Un header tronqué avant son terminateur de ligne est également rejeté. Si la file entrante est saturée, la session détruit le processus au lieu d'accumuler un backlog non borné.
 
-Pour reconstruire l'intelligence profonde :
+Ces limites sont implémentées par `JdtJsonRpcFrameReader` et couvertes par des tests de non-régression.
 
-```powershell
-nexus index mon-projet --deep-java
-```
+## Bornes de travail externe
 
-## 7. Communication avec JDT LS
+Les intégrations externes passent par `ExternalTaskRunner` :
 
-Le provider lance JDT LS comme processus externe.
+- timeout global par tâche ;
+- interruption du worker au timeout ;
+- maximum **8 tâches externes réellement actives** à l'échelle JVM ;
+- capacité rendue seulement lorsque le worker termine réellement ;
+- saturation rejetée explicitement au lieu de créer des threads non bornés.
 
-```text
-NEXUS
-  │
-  │ stdin / stdout
-  │ JSON-RPC 2.0 + LSP
-  ▼
-JDT Language Server
-```
+Un provider tiers peut toujours ignorer une interruption. NEXUS ne revendique donc pas une isolation processus absolue, mais l'accumulation de workers JVM est bornée.
 
-NEXUS retire `CLIENT_PORT` et `CLIENT_HOST` de l'environnement du processus afin d'utiliser le transport standard `stdio`.
+## Workspace et lecture seule
 
-Le processus reçoit un workspace dédié par projet sous :
+Chaque projet utilise un workspace dédié sous :
 
 ```text
 NEXUS_HOME/jdtls-workspaces/<identifiant-du-projet>
 ```
 
-Le prototype arrête le processus après chaque analyse profonde.
+Le provider est read-only. Une requête `workspace/applyEdit` reçue du serveur est refusée.
 
-Un daemon persistant ne sera étudié que si les métriques montrent que le coût de démarrage justifie cette complexité.
+Le processus JDT LS est arrêté après l'analyse profonde ; un daemon persistant n'est pas adopté sans justification mesurée.
 
-## 8. Requêtes LSP utilisées
-
-### Symboles
+## Requêtes LSP utilisées
 
 ```text
 textDocument/documentSymbol
-```
-
-NEXUS normalise les classes, interfaces, records, enums, méthodes et constructeurs représentables.
-
-### Références
-
-```text
 textDocument/references
-```
-
-Normalisation :
-
-```text
-RelationKind.REFERENCES
-```
-
-### Implémentations
-
-```text
 textDocument/implementation
-```
-
-Normalisation :
-
-```text
-RelationKind.IMPLEMENTS
-```
-
-### Hiérarchie de types
-
-```text
 textDocument/prepareTypeHierarchy
 typeHierarchy/supertypes
 typeHierarchy/subtypes
-```
-
-Normalisation :
-
-```text
-RelationKind.EXTENDS
-RelationKind.IMPLEMENTS
-```
-
-### Hiérarchie d'appels
-
-```text
 textDocument/prepareCallHierarchy
 callHierarchy/incomingCalls
 callHierarchy/outgoingCalls
 ```
 
-Normalisation :
+Les faits compatibles sont normalisés vers `CodeSymbol` et les relations NEXUS (`REFERENCES`, `IMPLEMENTS`, `EXTENDS`, `CALLS`) avec `sourceProvider=jdtls`.
 
-```text
-RelationKind.CALLS
-```
+## Qualification
 
-## 9. Provenance et fusion
+Le contrat courant est couvert notamment par :
 
-Tous les éléments produits par le provider utilisent :
+- tests du framing `JdtJsonRpcFrameReader` ;
+- tests du provider JDT et de son cycle de vie ;
+- tests de `ExternalTaskRunner` ;
+- vérification de l'ancre JDT LS par `scripts/release/test-tool-integrity-anchors.sh` dans NEXUS CI.
 
-```text
-sourceProvider = jdtls
-```
-
-Les relations initiales directement retournées par JDT LS utilisent :
-
-```text
-confidence = 1.0
-```
-
-La persistance réutilise la stratégie générique introduite à l'Itération 8 :
-
-- remplacement atomique du snapshot du provider ;
-- déduplication avec les informations déjà présentes ;
-- aucun rattachement à un fichier absent de l'index canonique ;
-- SQLite reste la source de vérité structurelle.
-
-## 10. Lecture seule
-
-Le provider ne transforme pas NEXUS en IDE.
-
-Si JDT LS demande un `workspace/applyEdit`, NEXUS refuse l'édition.
-
-NEXUS consomme l'intelligence produite mais ne modifie pas le repository par l'intermédiaire du serveur de langage.
-
-## 11. Comparaison reproductible
-
-Le script :
-
-```powershell
-.\scripts\compare-jdt.ps1
-```
-
-compare deux états sur le même repository :
-
-```text
-A. socle normal
-   JavaParser + importers opportunistes disponibles
-
-B. même socle + JDT LS
-   via --deep-java
-```
-
-Le script utilise un `NEXUS_HOME` dédié afin de ne pas polluer les données locales normales.
-
-Il mesure :
-
-- fichiers ;
-- symboles ;
-- relations ;
-- temps d'indexation ;
-- `precision@3` ;
-- `recall@3`.
-
-Le rapport détaillé est écrit dans :
-
-```text
-target/jdt-evaluation/summary.json
-```
-
-L'objectif n'est pas de prouver que JDT LS produit plus de données à tout prix.
-
-L'Itération 9 ne sera recommandée que si les mesures montrent un gain utile sur des cas Java profonds pour un coût acceptable.
-
-## 12. Validation de l'Itération 9
-
-Avant de déclarer l'itération terminée :
-
-```powershell
-mvn clean install
-.\scripts\self-smoke.ps1
-.\scripts\install-jdtls.ps1
-.\scripts\compare-jdt.ps1
-```
-
-Les mesures réelles doivent ensuite être enregistrées dans la roadmap.
-
-Le provider doit rester optionnel même si son gain est validé.
+Voir aussi [`code-intelligence.md`](code-intelligence.md), [`ci-and-supply-chain.md`](ci-and-supply-chain.md) et [`current-limitations.md`](current-limitations.md).

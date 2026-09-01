@@ -1,16 +1,21 @@
 # Limites actuelles et dette de consolidation
 
-Ce registre décrit l'état courant après la campagne NXA3. Les anciens numéros de PR/runs ne constituent pas une preuve permanente ; la preuve de qualification est toujours le run attaché au HEAD exact concerné.
+Ce registre décrit l'état courant après les campagnes **NXA3 + NXA4**. Les anciens numéros de PR/runs ne constituent pas une preuve permanente ; la preuve de qualification est toujours le run attaché au HEAD exact concerné.
 
 ## Invariants techniques désormais couverts
 
-### Filesystem et sources natives
+### Filesystem, stockage et sources natives
 
 - `ProjectPathGuard` protège les lectures sensibles sous la racine canonique ;
 - traversal, symlink final et symlink d'ancêtre sont refusés sur les chemins durcis ;
-- SCIP relit ses sources canoniques via la même frontière ;
+- SCIP relit ses sources canoniques via la même frontière et vérifie ses bounds protobuf sans overflow arithmétique ;
 - skills/customisations projet utilisent la frontière commune ;
-- la découverte native partage `ContextDiscoveryLimits` avant sélection de tokens.
+- la découverte native partage `ContextDiscoveryLimits` avant sélection de tokens ;
+- le scanner exclut davantage de répertoires/fichiers sensibles (`.ssh`, `.aws`, `.gnupg`, `.kube`, credentials, keystores, etc.) ;
+- `NEXUS_HOME`, `indexes` et `locks` sont forcés à `0700` sur POSIX ; le fichier SQLite est forcé à `0600` ;
+- les chemins persistants NEXUS durcis concernés sont refusés lorsqu'ils sont symboliques.
+
+Sur Windows/filesystems sans vue POSIX, NEXUS conserve les ACL natives au lieu de les réécrire naïvement.
 
 Limite résiduelle : les primitives Java portables ne sont pas un sandbox absolu contre un acteur local capable de muter agressivement le filesystem pendant l'opération.
 
@@ -19,14 +24,27 @@ Limite résiduelle : les primitives Java portables ne sont pas un sandbox absolu
 - commits, historique et chemins modifiés sont bornés ;
 - les statuts sont filtrés aux cibles ;
 - les diffs utilisent un sink à capacité fixe et sont tronqués déterministiquement ;
-- un test de diff massif et un test du sink fixe empêchent le retour à un buffer extensible non borné.
+- un test de diff massif empêche le retour à un buffer extensible non borné.
 
-### Fédération
+### Recherche et fédération
 
 - maximum de 100 projets uniques ;
 - validation de cardinalité avant résolution/readiness ;
 - CLI, application et MCP partagent le contrat ;
-- le travail préparatoire du contexte fédéré est borné indépendamment du budget final.
+- le travail préparatoire du contexte fédéré est borné indépendamment du budget final ;
+- les limites publiques REST utilisent les politiques centrales de résultats et de budget contexte ;
+- une requête Lucene analysée est bornée à **128 termes uniques** avant expansion sur les cinq champs de recherche.
+
+Le champ `constraints` existe encore dans certains contrats DTO/records pour compatibilité, mais aucune sémantique n'est implémentée : une map non vide est rejetée explicitement.
+
+### Code Intelligence externe
+
+- JDT LS reste opt-in ;
+- les tâches externes sont bornées en temps et à **8 workers actifs maximum** à l'échelle JVM ;
+- le framing JDT LS borne message (16 MiB), headers (64 KiB), ligne de header (8 KiB) et queue entrante (256) ;
+- saturation ou framing invalide déclenchent un échec fermé et l'arrêt de la session concernée.
+
+Limite résiduelle : un provider tiers peut ignorer l'interruption ; NEXUS borne alors l'accumulation de workers mais ne revendique pas une isolation processus absolue.
 
 ### SQLite
 
@@ -39,9 +57,25 @@ end_line >= start_line
 
 Les index Lucene restent dérivés et reconstructibles.
 
-### REST
+### REST et management
 
-Loopback reste disponible pour le développement local. Hors loopback, le démarrage échoue fermé si le contrat de transport sécurisé, le token robuste ou l'allowlist de racines ne sont pas démontrés.
+- listener applicatif par défaut : `127.0.0.1:8080` ;
+- health/metrics sont isolés sur le listener de management `127.0.0.1:9000` ;
+- `/q/*` n'est pas servi par le listener applicatif ;
+- hors loopback, le démarrage échoue fermé si transport sécurisé effectif, token robuste ou allowlist de racines ne sont pas démontrés.
+
+Le listener de management est volontairement loopback-only et ne doit pas être publié par un reverse proxy.
+
+### Sémantique / Ollama / secrets
+
+- sémantique désactivé par défaut ;
+- Ollama HTTP sans opt-in est limité aux adresses de bouclage ; un endpoint distant doit utiliser HTTPS ;
+- `NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA=true` est l'exception administrative explicite pour HTTP distant ;
+- credentials intégrés dans `NEXUS_OLLAMA_BASE_URL` refusés ;
+- secrets à forte confiance redigés avant embeddings et avant restitution des fragments de contexte ;
+- le profil sémantique est `content-v2`, ce qui force le rebuild d'un ancien index incompatible.
+
+La redaction conservatrice réduit les fuites accidentelles mais ne remplace pas un scanner de secrets spécialisé.
 
 ### CI, release et supply-chain
 
@@ -49,21 +83,22 @@ Loopback reste disponible pour le développement local. Hors loopback, le démar
 - OSV, CodeQL, Trivy et SBOM actifs ;
 - Maven/JDT LS vérifiés contre des ancres versionnées indépendantes ;
 - image Docker construite une fois, qualifiée puis publiée sans rebuild ;
-- GHCR préflight fail-closed avec reprise idempotente uniquement pour le même contenu ;
-- Dependabot cible `develop`.
+- GHCR preflight fail-closed avec reprise idempotente uniquement pour le même contenu ;
+- Dependabot cible `develop` ;
+- les contrats documentaires courants sont vérifiés automatiquement par NEXUS CI.
 
 ## Contrôle de gouvernance encore externe au code
 
 La protection GitHub de `develop` est un état repository-admin, pas un fichier versionné. Le contrat attendu est décrit dans [`branch-governance.md`](branch-governance.md).
 
-Tant que GitHub retourne `protected=false` pour `develop`, NXA3-14 reste ouvert : une poussée directe peut entrer avant le gate PR même si la CI se déclenche ensuite.
+Tant que GitHub retourne `protected=false` pour `develop`, NXA3-14 / #130 reste ouvert : une poussée directe peut entrer avant le gate PR même si la CI se déclenche ensuite.
 
 ## Watch items
 
 Les sujets suivants ne doivent pas être changés sans mesure ou scénario reproductible :
 
-- lifecycle Lucene persistant ;
-- isolation processus d'un provider externe réellement non coopératif ;
+- lifecycle Lucene persistant/partagé ;
+- isolation processus plus forte d'un provider réellement non coopératif ;
 - garanties supplémentaires sur filesystem réseau/hostile ;
 - cache Git persistant ;
 - recovery sémantique face à une indisponibilité provider ou corruption physique ;
@@ -79,4 +114,4 @@ Un finding n'est déclaré fermé que si :
 4. les gates applicables sont verts sur le HEAD exact ;
 5. les contrôles GitHub externes requis sont effectivement configurés lorsqu'ils font partie du finding.
 
-Voir aussi [`ci-and-supply-chain.md`](ci-and-supply-chain.md), [`release-and-recovery.md`](release-and-recovery.md), [`native-context-discovery-limits.md`](native-context-discovery-limits.md) et [`branch-governance.md`](branch-governance.md).
+Voir aussi [`ci-and-supply-chain.md`](ci-and-supply-chain.md), [`release-and-recovery.md`](release-and-recovery.md), [`rest-api.md`](rest-api.md), [`semantic-search.md`](semantic-search.md) et [`branch-governance.md`](branch-governance.md).

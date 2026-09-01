@@ -1,6 +1,6 @@
 # CI, couverture et supply-chain
 
-Ce document décrit le contrat courant de qualification et de publication de NEXUS 0.2.0 après la campagne NXA3. Le code et les workflows versionnés restent l'autorité exécutable.
+Ce document décrit le contrat courant de qualification et de publication de NEXUS 0.2.0 après les campagnes **NXA3 + NXA4**. Le code et les workflows versionnés restent l'autorité exécutable.
 
 ## Branches et exact-head
 
@@ -8,7 +8,7 @@ Ce document décrit le contrat courant de qualification et de publication de NEX
 
 NEXUS CI et CodeQL checkoutent explicitement `github.event.pull_request.head.sha` sur pull request. CodeQL vérifie ensuite que `git rev-parse HEAD` correspond au SHA attendu.
 
-La protection GitHub de `develop` est un contrôle de gouvernance distinct. Le contrat attendu est documenté dans [`branch-governance.md`](branch-governance.md).
+La protection GitHub de `develop` est un contrôle de gouvernance distinct. Le contrat attendu est documenté dans [`branch-governance.md`](branch-governance.md). Tant que `develop` retourne `protected=false`, #130 reste ouvert.
 
 ## NEXUS CI
 
@@ -17,15 +17,31 @@ La protection GitHub de `develop` est un contrôle de gouvernance distinct. Le c
 - Windows : Java 24 et qualification locale ;
 - Linux : Java 21, **Maven 3.9.16**, reactor complet, tests, distribution, JaCoCo, SBOM et notices ;
 - vérification explicite des ancres d'intégrité Maven/JDT LS ;
-- vérification des contrats documentaires machine-vérifiables avant le build.
+- vérification des contrats documentaires machine-vérifiables **avant** le reactor.
+
+Le gate documentaire contrôle désormais aussi les invariants NXA4 :
+
+- listener management `127.0.0.1:9000` séparé du listener API ;
+- politique Ollama distante et opt-in HTTP ;
+- redaction de secrets + profil `content-v2` ;
+- JDT LS : 16 MiB / 64 KiB / 8 KiB / 256 messages ;
+- maximum 8 tâches externes actives ;
+- Lucene : 128 termes analysés uniques ;
+- stockage POSIX : 0700/0600 ;
+- `constraints` non supportées rejetées ;
+- installateur JDT LS vérifié contre l'ancre repository-pinned ;
+- noms de providers et colonne `script_sha256` de la documentation de schéma.
 
 Les actions GitHub contrôlées par le dépôt sont référencées par SHA immuable.
 
-## CodeQL et OSV
+## CodeQL, OSV et SonarCloud
 
 - CodeQL : Java/Kotlin `security-extended`, contrat exact-head ;
 - OSV : delta PR + scan bloquant du SBOM CycloneDX agrégé ;
-- le reusable workflow OSV est épinglé au SHA qui échoue fermé lorsqu'un scan ne se termine pas correctement.
+- reusable workflow OSV épinglé au SHA qui échoue fermé lorsqu'un scan est incomplet ;
+- SonarCloud : Quality Gate externe sur les changements de PR.
+
+Un check externe n'apparaît pas nécessairement dans la liste des workflows GitHub Actions ; la qualification finale d'une PR doit donc regarder les **check-runs du commit**, pas seulement les workflow runs.
 
 ## Benchmarks
 
@@ -34,15 +50,25 @@ Les actions GitHub contrôlées par le dépôt sont référencées par SHA immua
 - SQLite ;
 - graphe ;
 - fédération ;
-- **découverte native filesystem sous `ContextDiscoveryLimits`**.
+- découverte native filesystem sous `ContextDiscoveryLimits`.
 
-Le benchmark natif crée un corpus hermétique de 1 000 skills et vérifie le nombre exact d'entrées visitées, de candidats, les octets consommés, le déterminisme et la durée. Voir [`native-context-discovery-limits.md`](native-context-discovery-limits.md).
+Le benchmark natif crée un corpus hermétique de 1 000 skills et vérifie frontière exacte, compteurs, déterminisme et durée. Voir [`native-context-discovery-limits.md`](native-context-discovery-limits.md).
+
+`scanner-corpus-benchmark.yml` qualifie séparément le comportement/performance du scanner sur son corpus dédié.
+
+La borne Lucene de 128 termes est couverte par un test de non-régression du reactor plutôt que par une baisse de seuil benchmark.
 
 ## Docker Distribution : construire une fois
 
 `.github/workflows/docker-distribution.yml` ne publie rien dans GHCR. Il construit l'image une seule fois et exécute sur cette image les smokes CLI/MCP/REST, Trivy, SBOM et gates de vulnérabilités.
 
-Pour une release, il exporte ensuite l'image qualifiée avec son SHA-256 d'archive, son ID Docker et le SHA Git. Le job de publication vérifie ce handoff et **ne reconstruit jamais l'image**.
+Le smoke REST respecte la séparation NXA4 :
+
+- health sondé **dans le conteneur** sur `127.0.0.1:9000/q/health/live` ;
+- endpoint métier vérifié séparément via le port applicatif publié ;
+- le port management n'est pas exposé à l'hôte uniquement pour satisfaire la CI.
+
+Pour une release, Docker Distribution exporte ensuite l'image qualifiée avec son SHA-256 d'archive, son ID Docker et le SHA Git. Le job de publication vérifie ce handoff et **ne reconstruit jamais l'image**.
 
 ## Publication GHCR
 
@@ -60,16 +86,18 @@ Les attestations de provenance et SBOM portent sur le digest publié. `latest` n
 
 ## Ancres d'intégrité
 
-`config/tool-integrity.properties` contient les ancres indépendantes des outils téléchargés à version fixe :
+`config/tool-integrity.properties` contient les ancres indépendantes :
 
 - Maven 3.9.16 : SHA-512 ;
 - Eclipse JDT LS 1.60.0-202606262232 : SHA-256.
+
+`scripts/install-jdtls.ps1` télécharge l'archive JDT LS puis la compare à **l'ancre versionnée dans le repository** ; il ne prend pas sa décision de confiance sur un checksum téléchargé depuis le même origin.
 
 `scripts/release/test-tool-integrity-anchors.sh` est exécuté par NEXUS CI. Une montée de version doit modifier version + hash dans la même revue.
 
 ## SQLite
 
-Les migrations sont forward-only et protégées par checksum. Depuis V005, `symbols` impose :
+Les migrations sont forward-only et protégées par checksum `script_sha256`. Depuis V005, `symbols` impose :
 
 ```text
 start_line >= 1
@@ -87,7 +115,8 @@ V004 invalide les index historiques incompatibles avant V005. Les tests couvrent
 Un résultat rouge ou ambigu n'est pas un PASS :
 
 - tests/JaCoCo : corriger code ou test ;
-- CodeQL/OSV/Trivy : traiter le finding ;
+- CodeQL/OSV/Trivy/SonarCloud : traiter le finding/gate ;
+- contrat documentaire divergent : corriger doc ou source de vérité, jamais supprimer le contrôle sans justification ;
 - artefact/hash/digest incohérent : échec ;
 - registry ambiguë : échec ;
 - benchmark hors budget : analyser le run exact-head ;

@@ -36,9 +36,9 @@ La stratégie de branche est explicite : les changements sont intégrés et qual
 
 ## Invariants de hardening
 
-### Filesystem et découverte native
+### Filesystem et stockage
 
-`ProjectPathGuard` protège les lectures sensibles sous la racine canonique et refuse traversal, symlink final et symlink d'ancêtre. Les sources SCIP, skills et customisations durcis passent par cette frontière.
+`ProjectPathGuard` protège les lectures sensibles sous la racine canonique et refuse traversal, symlink final et symlink d'ancêtre. Les sources SCIP, skills et customisations durcies passent par cette frontière.
 
 La découverte native partage un budget avant sélection de tokens :
 
@@ -51,13 +51,41 @@ NEXUS_CONTEXT_DISCOVERY_MAX_MILLIS
 
 Les défauts sont respectivement 100000 entrées, 5000 candidats, 32 MiB et 15 s. Un dépassement est fail-closed.
 
-### Git local
+Sur POSIX, `NEXUS_HOME`, `indexes` et `locks` sont rendus privés (`0700`) et le fichier SQLite est durci en `0600`. Les chemins persistants NEXUS concernés sont refusés lorsqu'ils sont symboliques. Sur Windows/filesystems sans vue POSIX, les ACL natives ne sont pas réécrites destructivement.
 
-Le provider Git borne commits, chemins et historique. Les patches sont écrits dans un sink à capacité fixe avant conversion en texte, puis tronqués à 6000 caractères par zone. Un gros diff ne doit donc pas être accumulé dans un buffer extensible complet avant troncature.
+### Recherche et fédération
 
-### Fédération
+Le scope fédéré est limité à 100 projets uniques. La cardinalité canonique est vérifiée avant résolution/readiness.
 
-Le scope fédéré est limité à 100 projets uniques. La cardinalité canonique est vérifiée avant `requireReadyProject`/résolution équivalente afin qu'un scope surdimensionné échoue avant le travail de repository/readiness.
+Les limites REST fédérées réutilisent les politiques centrales de résultats et de budget contexte. Une map `constraints` non vide est rejetée tant qu'aucune sémantique de contrainte n'est implémentée.
+
+La recherche Lucene borne une requête analysée à **128 termes uniques** avant expansion sur les cinq champs de recherche pour rester sous le budget de clauses du moteur.
+
+### Code Intelligence externe
+
+Le framing JDT LS est borné avant allocation : message 16 MiB, headers 64 KiB, ligne de header 8 KiB et file entrante 256 messages maximum. Les tâches externes sont en plus limitées à **8 workers réellement actifs** à l'échelle JVM ; la saturation est rejetée explicitement.
+
+### REST et observabilité
+
+Le listener applicatif reste local-first sur `127.0.0.1:8080`. Health et métriques vivent sur un listener de management distinct, loopback-only :
+
+```text
+127.0.0.1:9000/q/health
+127.0.0.1:9000/q/health/ready
+127.0.0.1:9000/q/metrics
+```
+
+Les endpoints `/q/*` ne sont pas servis par le listener applicatif. Hors loopback, l'API métier échoue fermé si transport sécurisé effectif, token robuste ou allowlist de racines ne sont pas démontrés.
+
+### Sémantique, Ollama et secrets
+
+Le sémantique reste désactivé par défaut. Une URL Ollama distante doit utiliser HTTPS ; HTTP distant exige explicitement :
+
+```text
+NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA=true
+```
+
+Les credentials intégrés dans `NEXUS_OLLAMA_BASE_URL` sont refusés. Les secrets à forte confiance sont redigés avant embeddings et avant restitution des fragments de contexte. Le profil sémantique courant est `content-v2`, ce qui force le rebuild d'un ancien index incompatible.
 
 ### SQLite
 
@@ -67,12 +95,6 @@ SQLite reste l'autorité canonique. Depuis V005, `symbols` impose aussi au nivea
 start_line >= 1
 end_line >= start_line
 ```
-
-V004 invalide d'abord les anciens index contenant des plages incompatibles afin que V005 puisse reconstruire la table sans conserver d'état que le domaine Java refuserait.
-
-### REST
-
-Loopback reste sûr par défaut. Hors loopback, le démarrage échoue fermé si le transport sécurisé effectif, le token robuste ou l'allowlist de racines ne sont pas démontrés. `direct-https` exige un listener TLS effectif ; `reverse-proxy-https` impose une frontière proxy/backend explicite.
 
 ## Build
 
@@ -137,8 +159,10 @@ Les gates comprennent :
 - **Windows Installer** ;
 - **Docker Distribution** : smokes CLI/MCP/REST, Trivy, SBOM image et gate de vulnérabilités ;
 - **Scale Benchmark** : SQLite, graphe, fédération et découverte native filesystem ;
+- **Scanner Corpus Benchmark** ;
 - **CodeQL** exact-head ;
-- **OSV-Scanner** : delta PR + SBOM agrégé.
+- **OSV-Scanner** : delta PR + SBOM agrégé ;
+- **SonarCloud** : Quality Gate sur les changements de PR.
 
 Les Actions contrôlées sont épinglées par SHA immuable.
 
@@ -163,6 +187,7 @@ NEXUS_CONTEXT_DISCOVERY_MAX_BYTES
 NEXUS_CONTEXT_DISCOVERY_MAX_MILLIS
 NEXUS_SEMANTIC_PROVIDER
 NEXUS_OLLAMA_BASE_URL
+NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA
 NEXUS_OLLAMA_EMBEDDING_MODEL
 NEXUS_REST_API_TOKEN
 NEXUS_REST_ALLOWED_PROJECT_ROOTS
@@ -175,8 +200,9 @@ NEXUS_RUNTIME
 - architecture : [`docs/architecture.md`](docs/architecture.md) ;
 - CI/supply-chain : [`docs/developer/ci-and-supply-chain.md`](docs/developer/ci-and-supply-chain.md) ;
 - release/recovery : [`docs/developer/release-and-recovery.md`](docs/developer/release-and-recovery.md) ;
-- publication immuable : [`docs/developer/immutable-release-publishing.md`](docs/developer/immutable-release-publishing.md) ;
-- limites de découverte : [`docs/developer/native-context-discovery-limits.md`](docs/developer/native-context-discovery-limits.md) ;
+- REST : [`docs/developer/rest-api.md`](docs/developer/rest-api.md) ;
+- sémantique : [`docs/developer/semantic-search.md`](docs/developer/semantic-search.md) ;
+- Code Intelligence/JDT : [`docs/developer/code-intelligence.md`](docs/developer/code-intelligence.md) ;
 - gouvernance des branches : [`docs/developer/branch-governance.md`](docs/developer/branch-governance.md) ;
 - limites courantes : [`docs/developer/current-limitations.md`](docs/developer/current-limitations.md) ;
 - roadmap : [`docs/roadmap.md`](docs/roadmap.md).
