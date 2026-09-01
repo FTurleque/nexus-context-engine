@@ -2,6 +2,7 @@ package com.nexus.security;
 
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -26,7 +27,7 @@ class SensitiveContentRedactorTest {
     }
 
     @Test
-    void redactsPrivateKeyBlocks() {
+    void redactsPrivateKeyBlocksWithoutChangingSourceLineCount() {
         String source = """
                 before
                 -----BEGIN PRIVATE KEY-----
@@ -40,5 +41,6 @@ class SensitiveContentRedactorTest {
         assertFalse(redacted.contains("abcdefghijklmnopqrstuvwxyz"));
         assertTrue(redacted.contains("before"));
         assertTrue(redacted.contains("after"));
+        assertEquals(source.lines().count(), redacted.lines().count());
     }
 }
