@@ -7,17 +7,18 @@ import org.junit.jupiter.api.Test;
 import java.net.URL;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.blankOrNullString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.blankOrNullString;
 
 @QuarkusTest
 class ManagementEndpointIsolationTest {
 
-    @TestHTTPResource(value = "/q/health/ready", management = true)
+    // management=true already prefixes the configured management root path (/q).
+    @TestHTTPResource(value = "/health/ready", management = true)
     URL readinessUrl;
 
-    @TestHTTPResource(value = "/q/metrics", management = true)
+    @TestHTTPResource(value = "/metrics", management = true)
     URL metricsUrl;
 
     @Test
