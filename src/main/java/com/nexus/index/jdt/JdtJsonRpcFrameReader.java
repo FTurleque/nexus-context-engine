@@ -83,7 +83,10 @@ final class JdtJsonRpcFrameReader {
         while (true) {
             int value = stream.read();
             if (value < 0) {
-                return line.isEmpty() && consumed == 0 ? null : new HeaderLine(line.toString(), consumed);
+                if (line.isEmpty() && consumed == 0) {
+                    return null;
+                }
+                throw new IOException("En-tête JSON-RPC JDT LS tronqué");
             }
             consumed++;
             if (alreadyConsumed + consumed > MAX_HEADER_BYTES) {
