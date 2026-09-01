@@ -6,9 +6,11 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.nexus.index.CodeIntelligenceSnapshot;
 import com.nexus.index.RelationKind;
 import com.nexus.index.SymbolRelation;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -16,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JdtLanguageServerCodeIntelligenceProviderTest {
@@ -42,13 +45,7 @@ class JdtLanguageServerCodeIntelligenceProviderTest {
                 """);
 
         FakeSession session = new FakeSession(base.toRealPath().toUri().toString(), implementation.toRealPath().toUri().toString());
-        JdtLanguageServerCodeIntelligenceProvider.Configuration configuration =
-                new JdtLanguageServerCodeIntelligenceProvider.Configuration(
-                        temporaryDirectory.resolve("jdtls"),
-                        temporaryDirectory.resolve("workspaces"),
-                        "java",
-                        Duration.ofSeconds(5),
-                        20);
+        JdtLanguageServerCodeIntelligenceProvider.Configuration configuration = configuration();
         JdtLanguageServerCodeIntelligenceProvider provider =
                 new JdtLanguageServerCodeIntelligenceProvider(configuration, (ignored, root) -> session, JSON);
 
@@ -70,6 +67,66 @@ class JdtLanguageServerCodeIntelligenceProviderTest {
         assertTrue(relations.stream().anyMatch(relation -> relation.kind() == RelationKind.CALLS));
         assertTrue(relations.stream().allMatch(relation ->
                 JdtLanguageServerCodeIntelligenceProvider.SOURCE_PROVIDER.equals(relation.sourceProvider())));
+    }
+
+    @Test
+    void ignoresNonFileLocationsReturnedByLanguageServer() throws Exception {
+        Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("non-file-project"));
+        Path base = write(projectRoot, "src/main/java/demo/Base.java", """
+                package demo;
+                abstract class Base {
+                    abstract void run();
+                }
+                """);
+        write(projectRoot, "src/main/java/demo/Impl.java", """
+                package demo;
+                class Impl extends Base {
+                    public void run() {}
+                }
+                """);
+
+        FakeSession session = new FakeSession(
+                base.toRealPath().toUri().toString(),
+                "jdt://contents/java.base/java/lang/Object.class");
+        JdtLanguageServerCodeIntelligenceProvider provider =
+                new JdtLanguageServerCodeIntelligenceProvider(configuration(), (ignored, root) -> session, JSON);
+
+        CodeIntelligenceSnapshot snapshot = provider.analyze(projectRoot);
+
+        assertEquals(4, snapshot.symbols().size());
+        assertTrue(snapshot.relations().stream().allMatch(indexed ->
+                !indexed.relativePath().startsWith("jdt:")));
+    }
+
+    @Test
+    void rejectsSymlinkedWorkspaceRoot() throws Exception {
+        Path home = Files.createDirectories(temporaryDirectory.resolve("nexus-home"));
+        Path outside = Files.createDirectories(temporaryDirectory.resolve("outside"));
+        Path workspaceRoot = home.resolve("jdtls-workspaces");
+        try {
+            Files.createSymbolicLink(workspaceRoot, outside);
+        } catch (IOException | UnsupportedOperationException | SecurityException exception) {
+            Assumptions.assumeTrue(false, "symbolic links unavailable: " + exception.getMessage());
+        }
+
+        JdtLanguageServerCodeIntelligenceProvider.Configuration configuration =
+                new JdtLanguageServerCodeIntelligenceProvider.Configuration(
+                        temporaryDirectory.resolve("jdtls"),
+                        workspaceRoot,
+                        "java",
+                        Duration.ofSeconds(5),
+                        20);
+
+        assertThrows(IOException.class, () -> configuration.workspaceFor(home.resolve("project")));
+    }
+
+    private JdtLanguageServerCodeIntelligenceProvider.Configuration configuration() {
+        return new JdtLanguageServerCodeIntelligenceProvider.Configuration(
+                temporaryDirectory.resolve("jdtls"),
+                temporaryDirectory.resolve("workspaces"),
+                "java",
+                Duration.ofSeconds(5),
+                20);
     }
 
     private static Path write(Path root, String relativePath, String content) throws Exception {
