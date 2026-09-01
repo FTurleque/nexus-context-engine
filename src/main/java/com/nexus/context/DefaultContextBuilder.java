@@ -1,5 +1,7 @@
 package com.nexus.context;
 
+import com.nexus.context.source.ContextDiscoveryBudget;
+import com.nexus.context.source.ContextDiscoveryLimits;
 import com.nexus.context.source.ContextSourceDescriptor;
 import com.nexus.context.source.ContextSourceDiscoveryResult;
 import com.nexus.context.source.ContextSourceDiscoveryService;
@@ -167,6 +169,7 @@ public final class DefaultContextBuilder implements ContextBuilder {
         }
 
         try {
+            ContextDiscoveryBudget discoveryBudget = ContextDiscoveryLimits.fromEnvironment().newBudget();
             int retrievalLimit = retrievalLimit(request.tokenBudget());
             List<RankedCandidate> ranked = searchService.search(
                     project,
@@ -179,14 +182,19 @@ public final class DefaultContextBuilder implements ContextBuilder {
             ContextSourceDiscoveryResult nativeDiscovery = discoverNativeSources(
                     request,
                     project,
-                    targetPaths);
+                    targetPaths,
+                    discoveryBudget);
             List<ContextFragment> instructionFragments = sourceFragmentFactory.create(nativeDiscovery.sources());
 
-            SkillDiscoveryResult skillDiscovery = discoverSkills(request, project);
+            SkillDiscoveryResult skillDiscovery = discoverSkills(request, project, discoveryBudget);
             List<SkillMatch> skillMatches = skillSelector.select(request.query(), skillDiscovery.skills());
-            SkillActivationResult skillActivation = skillLoader.load(project, skillMatches);
+            SkillActivationResult skillActivation = skillLoader.load(project, skillMatches, discoveryBudget);
 
-            GitContextResult gitContext = discoverGitContext(request, project, targetPaths);
+            GitContextResult gitContext = discoverGitContext(
+                    request,
+                    project,
+                    targetPaths,
+                    discoveryBudget);
 
             List<ContextFragment> taskFragments = fragmentFactory.create(
                     project,
@@ -251,7 +259,7 @@ public final class DefaultContextBuilder implements ContextBuilder {
                     skillSelection,
                     gitSelection,
                     taskSelection);
-            Map<String, List<String>> nativeCustomizations = customizationDetector.detect(project);
+            Map<String, List<String>> nativeCustomizations = customizationDetector.detect(project, discoveryBudget);
             Map<String, Object> metadata = metadata(
                     request,
                     ranked,
@@ -273,12 +281,15 @@ public final class DefaultContextBuilder implements ContextBuilder {
                     gitSelection,
                     combined,
                     nativeCustomizations);
+            Map<String, Object> boundedMetadata = new LinkedHashMap<>(metadata);
+            boundedMetadata.put("nativeDiscoveryLimits", discoveryBudget.limits());
+            boundedMetadata.put("nativeDiscoveryWork", discoveryBudget.snapshot());
             return new ContextBundle(
                     combined.items(),
                     request.tokenBudget(),
                     combined.selectedEstimatedTokens(),
                     request.explain() ? combined.excluded() : List.of(),
-                    metadata);
+                    Map.copyOf(boundedMetadata));
         } catch (IOException exception) {
             throw new ContextBuildingException(
                     "Impossible de matérialiser le contexte du projet " + project.name(),
@@ -289,30 +300,38 @@ public final class DefaultContextBuilder implements ContextBuilder {
     private ContextSourceDiscoveryResult discoverNativeSources(
             ContextRequest request,
             ProjectDescriptor project,
-            List<Path> targetPaths) throws IOException {
+            List<Path> targetPaths,
+            ContextDiscoveryBudget discoveryBudget) throws IOException {
         if (!sourceRequested(request, CandidateType.INSTRUCTION) || sourceProviders.isEmpty()) {
             return new ContextSourceDiscoveryResult(List.of(), List.of());
         }
         return sourceDiscoveryService.discover(
                 sourceProviders,
-                new ContextSourceQuery(project, request.query(), targetPaths, request.explain()));
+                new ContextSourceQuery(
+                        project,
+                        request.query(),
+                        targetPaths,
+                        request.explain(),
+                        discoveryBudget));
     }
 
     private SkillDiscoveryResult discoverSkills(
             ContextRequest request,
-            ProjectDescriptor project) throws IOException {
+            ProjectDescriptor project,
+            ContextDiscoveryBudget discoveryBudget) throws IOException {
         if (!sourceRequested(request, CandidateType.SKILL) || skillProviders.isEmpty()) {
             return new SkillDiscoveryResult(List.of(), List.of(), List.of());
         }
         return skillDiscoveryService.discover(
                 skillProviders,
-                new SkillSourceQuery(project, request.explain()));
+                new SkillSourceQuery(project, request.explain(), discoveryBudget));
     }
 
     private GitContextResult discoverGitContext(
             ContextRequest request,
             ProjectDescriptor project,
-            List<Path> targetPaths) throws IOException {
+            List<Path> targetPaths,
+            ContextDiscoveryBudget discoveryBudget) throws IOException {
         if (!sourceRequested(request, CandidateType.GIT) || gitContextProvider == null) {
             return GitContextResult.disabled("provider Git absent ou source GIT non demandée");
         }
@@ -323,7 +342,8 @@ public final class DefaultContextBuilder implements ContextBuilder {
                 project,
                 request.query(),
                 targetPaths,
-                request.explain()));
+                request.explain(),
+                discoveryBudget));
     }
 
     private ContextSelectionResult selectOrEmpty(

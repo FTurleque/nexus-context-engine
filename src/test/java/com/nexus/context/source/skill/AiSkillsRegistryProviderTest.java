@@ -3,9 +3,11 @@ package com.nexus.context.source.skill;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -92,6 +94,51 @@ class AiSkillsRegistryProviderTest {
                 .anyMatch(message -> message.contains(".nexus/registry")));
     }
 
+    @Test
+    void rejectsAncestorSymlinkForRegistrySkillsRoot() throws Exception {
+        Path outside = Files.createDirectories(temporaryDirectory.resolveSibling(
+                temporaryDirectory.getFileName() + "-outside-registry"));
+        Path outsideSkill = outside.resolve("shared/java/SKILL.md");
+        Files.createDirectories(outsideSkill.getParent());
+        Files.writeString(outsideSkill, """
+                ---
+                name: escaped
+                description: Must never be discovered outside the project.
+                ---
+                OUTSIDE
+                """);
+
+        Path registry = Files.createDirectories(temporaryDirectory.resolve(".nexus/registry"));
+        assumeSymlink(registry.resolve("skills"), outside);
+
+        SkillProviderResult result = new AiSkillsRegistryProvider().discover(
+                new SkillSourceQuery(project(), true));
+
+        assertTrue(result.skills().isEmpty());
+        assertFalse(result.diagnostics().isEmpty());
+    }
+
+    @Test
+    void rejectsFinalSkillDefinitionSymlink() throws Exception {
+        Path outside = temporaryDirectory.resolveSibling(temporaryDirectory.getFileName() + "-outside-skill.md");
+        Files.writeString(outside, """
+                ---
+                name: escaped-final
+                description: Must never be loaded through a symlink.
+                ---
+                OUTSIDE
+                """);
+        Path skillDirectory = Files.createDirectories(
+                temporaryDirectory.resolve(".nexus/registry/skills/shared/java/escaped-final"));
+        assumeSymlink(skillDirectory.resolve("SKILL.md"), outside);
+
+        SkillProviderResult result = new AiSkillsRegistryProvider().discover(
+                new SkillSourceQuery(project(), true));
+
+        assertTrue(result.skills().isEmpty());
+        assertFalse(result.diagnostics().isEmpty());
+    }
+
     private ProjectDescriptor project() {
         return new ProjectDescriptor(
                 UUID.randomUUID(),
@@ -108,5 +155,13 @@ class AiSkillsRegistryProviderTest {
         Path file = temporaryDirectory.resolve(relativePath);
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);
+    }
+
+    private static void assumeSymlink(Path link, Path target) throws IOException {
+        try {
+            Files.createSymbolicLink(link, target);
+        } catch (UnsupportedOperationException | SecurityException | IOException exception) {
+            Assumptions.assumeTrue(false, "Symbolic links unavailable: " + exception.getMessage());
+        }
     }
 }

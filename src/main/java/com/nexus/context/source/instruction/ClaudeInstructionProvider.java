@@ -27,7 +27,8 @@ public final class ClaudeInstructionProvider implements ContextSourceProvider {
     @Override
     public List<ContextSourceDescriptor> discover(ContextSourceQuery query) throws IOException {
         List<ContextSourceDescriptor> descriptors = new ArrayList<>();
-        for (Path file : InstructionDiscoverySupport.findNamedFiles(query.project(), Set.of("CLAUDE.md"))) {
+        for (Path file : InstructionDiscoverySupport.findNamedFiles(
+                query.project(), Set.of("CLAUDE.md"), query.discoveryBudget())) {
             Path relative = InstructionDiscoverySupport.relative(query.project(), file);
             boolean claudeDirectoryRoot = InstructionDiscoverySupport.repositoryPath(relative)
                     .equalsIgnoreCase(".claude/CLAUDE.md");
@@ -39,11 +40,9 @@ public final class ClaudeInstructionProvider implements ContextSourceProvider {
 
             int depth = repositoryWide ? 0 : InstructionDiscoverySupport.directoryDepth(relative);
             int priority = repositoryWide ? 80 : Math.min(94, 80 + depth * 3);
-            descriptors.addAll(descriptorFactory.create(
-                    query.project(),
+            InstructionDescriptorFactory.InstructionSpec spec = new InstructionDescriptorFactory.InstructionSpec(
                     PROVIDER_ID,
                     claudeDirectoryRoot ? "CLAUDE_DOT_DIRECTORY" : "CLAUDE_MD",
-                    file,
                     repositoryWide ? ContextSourceScope.REPOSITORY : ContextSourceScope.DIRECTORY_TREE,
                     List.of(),
                     priority,
@@ -55,7 +54,12 @@ public final class ClaudeInstructionProvider implements ContextSourceProvider {
                                     ? "scope repository"
                                     : "scope répertoire : "
                                         + InstructionDiscoverySupport.repositoryPath(relative.getParent())),
-                    true));
+                    true);
+            descriptors.addAll(descriptorFactory.create(
+                    query.project(),
+                    file,
+                    spec,
+                    query.discoveryBudget()));
         }
         return List.copyOf(descriptors);
     }

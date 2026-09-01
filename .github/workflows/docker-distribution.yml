@@ -2,6 +2,19 @@ name: Docker Distribution
 
 on:
   workflow_call:
+    inputs:
+      export_qualified_image:
+        description: Export the exact qualified image for a release caller
+        required: false
+        type: boolean
+        default: false
+    outputs:
+      qualified_image_sha256:
+        description: SHA-256 of the exported docker-save archive
+        value: ${{ jobs.docker.outputs.qualified_image_sha256 }}
+      qualified_image_id:
+        description: Docker image config digest of the qualified image
+        value: ${{ jobs.docker.outputs.qualified_image_id }}
   pull_request:
     branches: [develop, main]
     paths:
@@ -11,6 +24,8 @@ on:
       - 'scripts/release/test-docker-dotenv-roundtrip.sh'
       - 'scripts/release/validate-release-tag.sh'
       - 'scripts/release/test-release-tag-policy.sh'
+      - 'scripts/release/ghcr-immutable-preflight.sh'
+      - 'scripts/release/test-ghcr-immutable-preflight.sh'
       - 'src/**'
       - 'core/**'
       - 'adapters/**'
@@ -26,6 +41,8 @@ on:
       - 'scripts/release/test-docker-dotenv-roundtrip.sh'
       - 'scripts/release/validate-release-tag.sh'
       - 'scripts/release/test-release-tag-policy.sh'
+      - 'scripts/release/ghcr-immutable-preflight.sh'
+      - 'scripts/release/test-ghcr-immutable-preflight.sh'
       - 'src/**'
       - 'core/**'
       - 'adapters/**'
@@ -42,6 +59,9 @@ jobs:
     name: Docker CLI MCP REST parity and supply chain
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    outputs:
+      qualified_image_sha256: ${{ steps.export_image.outputs.sha256 }}
+      qualified_image_id: ${{ steps.export_image.outputs.image_id }}
     env:
       NEXUS_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
     steps:
@@ -51,11 +71,17 @@ jobs:
           fetch-depth: 0
           ref: ${{ env.NEXUS_HEAD_SHA }}
 
-      - name: Qualify release tag policy
+      - name: Qualify release policy scripts
         shell: bash
         run: |
-          chmod +x scripts/release/validate-release-tag.sh scripts/release/test-release-tag-policy.sh
+          set -euo pipefail
+          chmod +x \
+            scripts/release/validate-release-tag.sh \
+            scripts/release/test-release-tag-policy.sh \
+            scripts/release/ghcr-immutable-preflight.sh \
+            scripts/release/test-ghcr-immutable-preflight.sh
           scripts/release/test-release-tag-policy.sh
+          scripts/release/test-ghcr-immutable-preflight.sh
 
       - name: Read project version
         id: version
@@ -76,7 +102,7 @@ jobs:
           chmod +x scripts/release/test-docker-dotenv-roundtrip.sh
           scripts/release/test-docker-dotenv-roundtrip.sh
 
-      - name: Build Docker image
+      - name: Build Docker image once
         shell: bash
         run: docker build --pull --file packaging/docker/Dockerfile --tag nexus-context-engine:${NEXUS_HEAD_SHA} .
 
@@ -214,7 +240,7 @@ jobs:
 
       - name: Retain image security evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: nexus-container-security-${{ env.NEXUS_HEAD_SHA }}
           path: |
@@ -234,3 +260,41 @@ jobs:
           ignore-unfixed: true
           skip-setup-trivy: true
           exit-code: '1'
+
+      - name: Export exact qualified image
+        if: ${{ inputs.export_qualified_image == true }}
+        id: export_image
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/qualified-image
+          IMAGE_REF="nexus-context-engine:${NEXUS_HEAD_SHA}"
+          IMAGE_ID="$(docker image inspect "$IMAGE_REF" --format '{{.Id}}')"
+          if [[ ! "$IMAGE_ID" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Invalid qualified image id: $IMAGE_ID"
+            exit 1
+          fi
+          docker save "$IMAGE_REF" --output target/qualified-image/nexus-qualified-image.tar
+          TAR_SHA256="$(sha256sum target/qualified-image/nexus-qualified-image.tar | awk '{print $1}')"
+          if [[ ! "$TAR_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Invalid qualified archive hash: $TAR_SHA256"
+            exit 1
+          fi
+          cat > target/qualified-image/metadata.txt <<EOF
+          head_sha=$NEXUS_HEAD_SHA
+          image_ref=$IMAGE_REF
+          image_id=$IMAGE_ID
+          tar_sha256=$TAR_SHA256
+          EOF
+          echo "sha256=$TAR_SHA256" >> "$GITHUB_OUTPUT"
+          echo "image_id=$IMAGE_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Retain exact qualified image for release
+        if: ${{ inputs.export_qualified_image == true }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nexus-qualified-image-${{ env.NEXUS_HEAD_SHA }}
+          path: target/qualified-image/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7

@@ -1,5 +1,7 @@
 package com.nexus.context.source.instruction;
 
+import com.nexus.context.source.ContextDiscoveryBudget;
+import com.nexus.context.source.ContextDiscoveryLimits;
 import com.nexus.index.scan.ProjectIgnoreMatcher;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.security.ProjectPathGuard;
@@ -16,7 +18,7 @@ import java.util.regex.Pattern;
 /**
  * Résout les références @chemin présentes dans les instructions supportées.
  * Les références sont confinées au repository, refusent les liens symboliques
- * et sont limitées à cinq niveaux.
+ * et sont limitées à cinq niveaux ainsi que par le budget global de découverte.
  */
 final class InstructionReferenceResolver {
 
@@ -24,6 +26,16 @@ final class InstructionReferenceResolver {
     private static final Pattern REFERENCE = Pattern.compile("(?:^|\\s)@([A-Za-z0-9._/\\\\-]+)");
 
     List<ResolvedReference> resolve(ProjectDescriptor project, Path instructionFile) throws IOException {
+        ContextDiscoveryBudget budget = ContextDiscoveryLimits.defaults().newBudget();
+        String content = InstructionDiscoverySupport.read(project, instructionFile, budget);
+        return resolve(project, instructionFile, content, budget);
+    }
+
+    List<ResolvedReference> resolve(
+            ProjectDescriptor project,
+            Path instructionFile,
+            String instructionContent,
+            ContextDiscoveryBudget budget) throws IOException {
         ProjectPathGuard pathGuard = new ProjectPathGuard(project.rootPath());
         Path root = pathGuard.root();
         Path safeInstructionFile = pathGuard.requireRegularFile(instructionFile);
@@ -35,10 +47,12 @@ final class InstructionReferenceResolver {
                 project,
                 pathGuard,
                 safeInstructionFile,
+                instructionContent,
                 1,
                 ignoreMatcher,
                 visited,
-                resolved);
+                resolved,
+                budget);
         return List.copyOf(resolved);
     }
 
@@ -46,35 +60,38 @@ final class InstructionReferenceResolver {
             ProjectDescriptor project,
             ProjectPathGuard pathGuard,
             Path sourceFile,
+            String sourceContent,
             int depth,
             ProjectIgnoreMatcher ignoreMatcher,
             Set<Path> visited,
-            List<ResolvedReference> resolved) throws IOException {
+            List<ResolvedReference> resolved,
+            ContextDiscoveryBudget budget) throws IOException {
+        budget.checkpoint();
         if (depth > MAX_DEPTH) {
             return;
         }
 
-        String content = InstructionDiscoverySupport.read(project, sourceFile);
-        for (String reference : references(content)) {
+        for (String reference : references(sourceContent)) {
             Path target = resolvePath(pathGuard, sourceFile.getParent(), reference);
-            if (target == null || !visited.add(target)) {
-                continue;
+            if (target != null && visited.add(target)) {
+                budget.visit(target);
+                registerIgnoreScopes(pathGuard.root(), target.getParent(), ignoreMatcher);
+                if (!ignoreMatcher.isIgnored(target, false)) {
+                    budget.candidate(target);
+                    String referencedContent = InstructionDiscoverySupport.read(project, target, budget);
+                    resolved.add(new ResolvedReference(pathGuard.root().relativize(target), referencedContent, depth));
+                    resolveRecursively(
+                            project,
+                            pathGuard,
+                            target,
+                            referencedContent,
+                            depth + 1,
+                            ignoreMatcher,
+                            visited,
+                            resolved,
+                            budget);
+                }
             }
-            registerIgnoreScopes(pathGuard.root(), target.getParent(), ignoreMatcher);
-            if (ignoreMatcher.isIgnored(target, false)) {
-                continue;
-            }
-
-            String referencedContent = InstructionDiscoverySupport.read(project, target);
-            resolved.add(new ResolvedReference(pathGuard.root().relativize(target), referencedContent, depth));
-            resolveRecursively(
-                    project,
-                    pathGuard,
-                    target,
-                    depth + 1,
-                    ignoreMatcher,
-                    visited,
-                    resolved);
         }
     }
 
@@ -133,14 +150,11 @@ final class InstructionReferenceResolver {
             String trimmed = line.trim();
             if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
                 fenced = !fenced;
-                continue;
-            }
-            if (fenced) {
-                continue;
-            }
-            Matcher matcher = REFERENCE.matcher(line);
-            while (matcher.find()) {
-                references.add(matcher.group(1));
+            } else if (!fenced) {
+                Matcher matcher = REFERENCE.matcher(line);
+                while (matcher.find()) {
+                    references.add(matcher.group(1));
+                }
             }
         }
         return List.copyOf(references);

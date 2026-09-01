@@ -22,7 +22,8 @@ final class SchemaMigrator {
             new Migration(1, "db/migration/V001__initial_schema.sql"),
             new Migration(2, "db/migration/V002__index_generation.sql"),
             new Migration(3, "db/migration/V003__provider_and_graph_indexes.sql"),
-            new Migration(4, "db/migration/V004__invalidate_invalid_symbol_ranges.sql"));
+            new Migration(4, "db/migration/V004__invalidate_invalid_symbol_ranges.sql"),
+            new Migration(5, "db/migration/V005__enforce_symbol_range_constraints.sql"));
 
     private SchemaMigrator() {
     }
@@ -61,9 +62,6 @@ final class SchemaMigrator {
                     )
                     """);
         }
-        // Ajout additif et rétro-compatible : les bases existantes disposent déjà de la table
-        // sans colonne d'empreinte. La colonne est nullable pour tolérer les lignes « pré-hash »
-        // qui seront renseignées (backfill) au premier démarrage suivant la mise à niveau.
         if (!hasSchemaMigrationsColumn(connection, "script_sha256")) {
             try (Statement statement = connection.createStatement()) {
                 statement.executeUpdate("ALTER TABLE schema_migrations ADD COLUMN script_sha256 TEXT");
@@ -73,9 +71,6 @@ final class SchemaMigrator {
 
     private static boolean hasSchemaMigrationsColumn(Connection connection, String column)
             throws SQLException {
-        // Requête PRAGMA sur une table constante et de confiance : le nom de table est un littéral
-        // (PRAGMA n'accepte pas de bind variable pour le nom de table), aucune entrée externe n'est
-        // concaténée dans le SQL. `column` ne sert qu'à la comparaison en mémoire.
         try (Statement statement = connection.createStatement();
              ResultSet resultSet = statement.executeQuery("PRAGMA table_info(schema_migrations)")) {
             while (resultSet.next()) {
@@ -93,8 +88,6 @@ final class SchemaMigrator {
              ResultSet resultSet = statement.executeQuery(
                      "SELECT version, script_sha256 FROM schema_migrations")) {
             while (resultSet.next()) {
-                // getString renvoie null pour une ligne pré-hash : la clé est présente,
-                // la valeur nulle signale un backfill nécessaire.
                 hashes.put(resultSet.getInt("version"), resultSet.getString("script_sha256"));
             }
         }
@@ -107,8 +100,6 @@ final class SchemaMigrator {
             String storedHash,
             String currentHash) throws SQLException {
         if (storedHash == null || storedHash.isBlank()) {
-            // Base pré-hash : on adopte l'empreinte courante comme référence (bootstrap). Aucune
-            // détection possible pour cette première exécution, faute de baseline enregistrée.
             try (PreparedStatement statement = connection.prepareStatement(
                     "UPDATE schema_migrations SET script_sha256 = ? WHERE version = ?")) {
                 statement.setString(1, currentHash);
@@ -118,9 +109,6 @@ final class SchemaMigrator {
             return;
         }
         if (!storedHash.equals(currentHash)) {
-            // Fail-closed : un script de migration déjà appliqué a été modifié après coup. On ne
-            // réapplique jamais silencieusement et on refuse d'ouvrir la base pour éviter une
-            // divergence de schéma indétectable.
             throw new IllegalStateException(
                     "Migration " + migration.version() + " (" + migration.resource() + ") a été "
                             + "modifiée après application : empreinte enregistrée " + storedHash
@@ -152,11 +140,6 @@ final class SchemaMigrator {
         }
     }
 
-    /**
-     * Empreinte SHA-256 du contenu logique d'un script de migration. Les fins de ligne sont
-     * normalisées (CRLF → LF) afin qu'un simple changement d'EOL au checkout (Windows/Linux) ne
-     * déclenche pas de faux positif d'intégrité.
-     */
     private static String sha256(String script) {
         String normalized = script.replace("\r\n", "\n").replace("\r", "\n");
         try {
@@ -183,11 +166,6 @@ final class SchemaMigrator {
         }
     }
 
-    /**
-     * Découpe les scripts du projet sur les points-virgules hors chaînes SQL.
-     * Le migrateur reste volontairement minimal : les migrations NEXUS doivent
-     * utiliser des instructions SQL simples et portables pour SQLite.
-     */
     private static List<String> splitStatements(String script) {
         List<String> statements = new ArrayList<>();
         StringBuilder current = new StringBuilder();

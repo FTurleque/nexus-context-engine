@@ -27,18 +27,17 @@ public final class GeminiInstructionProvider implements ContextSourceProvider {
     @Override
     public List<ContextSourceDescriptor> discover(ContextSourceQuery query) throws IOException {
         List<ContextSourceDescriptor> descriptors = new ArrayList<>();
-        for (Path file : InstructionDiscoverySupport.findNamedFiles(query.project(), Set.of("GEMINI.md"))) {
+        for (Path file : InstructionDiscoverySupport.findNamedFiles(
+                query.project(), Set.of("GEMINI.md"), query.discoveryBudget())) {
             Path relative = InstructionDiscoverySupport.relative(query.project(), file);
             if (!InstructionDiscoverySupport.directoryScopeApplies(relative, query.targetPaths())) {
                 continue;
             }
             int depth = InstructionDiscoverySupport.directoryDepth(relative);
             boolean repositoryWide = relative.getParent() == null;
-            descriptors.addAll(descriptorFactory.create(
-                    query.project(),
+            InstructionDescriptorFactory.InstructionSpec spec = new InstructionDescriptorFactory.InstructionSpec(
                     PROVIDER_ID,
                     "GEMINI_MD",
-                    file,
                     repositoryWide ? ContextSourceScope.REPOSITORY : ContextSourceScope.DIRECTORY_TREE,
                     List.of(),
                     Math.min(90, 70 + depth * 3),
@@ -50,7 +49,12 @@ public final class GeminiInstructionProvider implements ContextSourceProvider {
                                     ? "scope repository"
                                     : "scope répertoire : "
                                         + InstructionDiscoverySupport.repositoryPath(relative.getParent())),
-                    false));
+                    false);
+            descriptors.addAll(descriptorFactory.create(
+                    query.project(),
+                    file,
+                    spec,
+                    query.discoveryBudget()));
         }
         return List.copyOf(descriptors);
     }

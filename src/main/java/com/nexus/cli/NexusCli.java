@@ -5,6 +5,7 @@ import com.nexus.config.NexusPaths;
 import com.nexus.context.ContextBudgetPolicy;
 import com.nexus.index.CodeIntelligenceSnapshot;
 import com.nexus.index.minos.MinosCodeIndexImporter;
+import com.nexus.project.FederatedScopePolicy;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.search.ResultLimitPolicy;
 
@@ -15,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -266,17 +268,23 @@ public final class NexusCli {
     }
 
     private static List<UUID> resolveProjectScope(NexusApplication application, String selectors) {
-        List<UUID> ids = Arrays.stream(selectors.split(","))
+        List<String> scopeSelectors = Arrays.stream(selectors.split(","))
                 .map(String::trim)
                 .filter(value -> !value.isBlank())
-                .map(application::resolveProject)
-                .map(ProjectDescriptor::id)
-                .distinct()
                 .toList();
-        if (ids.isEmpty()) {
+        if (scopeSelectors.isEmpty()) {
             throw new IllegalArgumentException("La portée fédérée doit contenir au moins un projet");
         }
-        return ids;
+
+        FederatedScopePolicy.validateExplicitUuidSelectors(scopeSelectors);
+        Set<UUID> ids = new LinkedHashSet<>();
+        for (String selector : scopeSelectors) {
+            ProjectDescriptor project = application.resolveProject(selector);
+            if (ids.add(project.id())) {
+                FederatedScopePolicy.validateUniqueCount(ids.size());
+            }
+        }
+        return List.copyOf(ids);
     }
 
     private static int boundedInteger(String option, String value, int maximum) {
@@ -315,8 +323,6 @@ public final class NexusCli {
 
     private static String version() {
         String implementationVersion = NexusCli.class.getPackage().getImplementationVersion();
-        // En l'absence de manifeste (exécution depuis les classes : IDE, tests), on n'invente
-        // pas de numéro de version — un ancien numéro codé en dur mentirait sur le build réel.
         return implementationVersion == null || implementationVersion.isBlank()
                 ? "0.0.0-dev"
                 : implementationVersion;

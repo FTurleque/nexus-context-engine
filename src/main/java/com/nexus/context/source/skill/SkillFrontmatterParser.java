@@ -24,6 +24,7 @@ final class SkillFrontmatterParser {
     private static final int MAX_DESCRIPTION_LENGTH = 1_024;
     private static final int MAX_COMPATIBILITY_LENGTH = 500;
     private static final int MAX_FRONTMATTER_CHARS = 65_536;
+    static final long MAX_DISCOVERY_BYTES = 4L * MAX_FRONTMATTER_CHARS + 4_096L;
 
     private final Load yaml = new Load(LoadSettings.builder()
             .setAllowDuplicateKeys(false)

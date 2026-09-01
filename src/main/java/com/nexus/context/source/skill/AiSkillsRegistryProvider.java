@@ -1,14 +1,19 @@
 package com.nexus.context.source.skill;
 
+import com.nexus.security.ProjectPathGuard;
+
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+
+import static com.nexus.context.source.skill.SkillDefinitionDiscoverySupport.repositoryPath;
 
 /**
  * Découvre les skills d'un snapshot local AI Skills Registry placé sous
@@ -28,26 +33,58 @@ public final class AiSkillsRegistryProvider implements SkillSourceProvider {
 
     @Override
     public SkillProviderResult discover(SkillSourceQuery query) throws IOException {
-        Path projectRoot = query.project().rootPath().toAbsolutePath().normalize();
-        Path skillsRoot = projectRoot.resolve(REGISTRY_SKILLS).normalize();
+        ProjectPathGuard pathGuard = new ProjectPathGuard(query.project().rootPath());
+        Path projectRoot = pathGuard.root();
+        Path candidate = pathGuard.resolve(REGISTRY_SKILLS);
         List<SkillDescriptor> skills = new ArrayList<>();
         List<String> diagnostics = new ArrayList<>();
 
-        if (!Files.isDirectory(skillsRoot) || !skillsRoot.startsWith(projectRoot)) {
+        Path skillsRoot;
+        try {
+            skillsRoot = pathGuard.requireDirectory(candidate);
+        } catch (IOException missingOrUnsafe) {
+            if (Files.exists(candidate, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(candidate)) {
+                diagnostics.add(repositoryPath(REGISTRY_SKILLS) + " ignoré : " + missingOrUnsafe.getMessage());
+            }
             return new SkillProviderResult(skills, diagnostics);
         }
 
         Files.walkFileTree(skillsRoot, new SimpleFileVisitor<>() {
             @Override
+            public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes)
+                    throws IOException {
+                query.discoveryBudget().visit(directory);
+                if (attributes.isSymbolicLink() || Files.isSymbolicLink(directory)) {
+                    diagnostics.add(repositoryPath(projectRoot.relativize(directory))
+                            + " ignoré : lien symbolique interdit");
+                    return FileVisitResult.SKIP_SUBTREE;
+                }
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+                query.discoveryBudget().visit(file);
                 if (!file.getFileName().toString().equalsIgnoreCase("SKILL.md")) {
                     return FileVisitResult.CONTINUE;
                 }
+
+                Path safeFile = SkillDefinitionDiscoverySupport.validateAndCharge(
+                        pathGuard,
+                        projectRoot,
+                        file,
+                        attributes,
+                        query.discoveryBudget(),
+                        diagnostics);
+                if (safeFile == null) {
+                    return FileVisitResult.CONTINUE;
+                }
+
                 try {
-                    SkillFrontmatter frontmatter = parser.parse(file);
-                    Path absoluteSkillRoot = file.getParent().toAbsolutePath().normalize();
+                    SkillFrontmatter frontmatter = parser.parse(safeFile);
+                    Path absoluteSkillRoot = safeFile.getParent();
                     Path relativeSkillRoot = projectRoot.relativize(absoluteSkillRoot);
-                    Path relativeDefinition = projectRoot.relativize(file.toAbsolutePath().normalize());
+                    Path relativeDefinition = projectRoot.relativize(safeFile);
                     skills.add(new SkillDescriptor(
                             id() + ":" + repositoryPath(relativeDefinition),
                             id(),
@@ -65,7 +102,7 @@ public final class AiSkillsRegistryProvider implements SkillSourceProvider {
                                     "Agent Skill découvert dans AI Skills Registry",
                                     "découverte progressive : frontmatter uniquement",
                                     "priorité registre inférieure aux skills locaux du projet")));
-                } catch (IllegalArgumentException exception) {
+                } catch (IllegalArgumentException | IOException exception) {
                     diagnostics.add(repositoryPath(projectRoot.relativize(file))
                             + " ignoré : " + exception.getMessage());
                 }
@@ -77,9 +114,5 @@ public final class AiSkillsRegistryProvider implements SkillSourceProvider {
                 .comparing(SkillDescriptor::name)
                 .thenComparing(skill -> repositoryPath(skill.definitionPath())));
         return new SkillProviderResult(skills, diagnostics);
-    }
-
-    private static String repositoryPath(Path path) {
-        return path.toString().replace('\\', '/');
     }
 }
