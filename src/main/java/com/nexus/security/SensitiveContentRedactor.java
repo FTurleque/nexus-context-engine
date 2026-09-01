@@ -17,18 +17,23 @@ import java.util.regex.Pattern;
 public final class SensitiveContentRedactor {
 
     private static final String REDACTED = "[REDACTED]";
+    private static final String PRIVATE_KEY_BEGIN = "-----BEGIN ";
+    private static final String PRIVATE_KEY_SUFFIX = " PRIVATE KEY-----";
+    private static final int MAX_SECRET_CHARS = 4096;
+    private static final int MAX_URI_USER_CHARS = 1024;
 
-    private static final Pattern PRIVATE_KEY_BLOCK = Pattern.compile(
-            "-----BEGIN(?: [A-Z0-9]+)? PRIVATE KEY-----[\\s\\S]*?-----END(?: [A-Z0-9]+)? PRIVATE KEY-----");
     private static final Pattern STRUCTURED_TOKEN = Pattern.compile(
             "\\b(?:gh[pousr]_[A-Za-z0-9]{20,255}|github_pat_[A-Za-z0-9_]{20,255}|(?:AKIA|ASIA)[0-9A-Z]{16})\\b");
     private static final Pattern JWT = Pattern.compile(
-            "\\beyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\b");
+            "\\beyJ[A-Za-z0-9_-]{10," + MAX_SECRET_CHARS + "}\\."
+                    + "[A-Za-z0-9_-]{10," + MAX_SECRET_CHARS + "}\\."
+                    + "[A-Za-z0-9_-]{10," + MAX_SECRET_CHARS + "}\\b");
     private static final Pattern SECRET_ASSIGNMENT = Pattern.compile(
             "(?im)(\\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|password|passwd|secret)"
-                    + "\\b\\s*[:=]\\s*)([\"']?)([A-Za-z0-9+/=_-]{8,})([\"']?)");
+                    + "\\b\\s{0,32}[:=]\\s{0,32})([\"']?)([A-Za-z0-9+/=_-]{8," + MAX_SECRET_CHARS + "})([\"']?)");
     private static final Pattern URI_CREDENTIAL = Pattern.compile(
-            "(?i)(\\b[a-z][a-z0-9+.-]*://[^\\s/:@]+:)([^\\s/@]{3,})(@)");
+            "(?i)(\\b[a-z][a-z0-9+.-]{0,31}://[^\\s/:@]{1," + MAX_URI_USER_CHARS + "}:)"
+                    + "([^\\s/@]{3," + MAX_SECRET_CHARS + "})(@)");
 
     private SensitiveContentRedactor() {
     }
@@ -43,26 +48,49 @@ public final class SensitiveContentRedactor {
     }
 
     private static String replacePrivateKeyBlocks(String content) {
-        Matcher matcher = PRIVATE_KEY_BLOCK.matcher(content);
-        StringBuffer output = new StringBuffer(content.length());
-        while (matcher.find()) {
-            String block = matcher.group();
-            StringBuilder replacement = new StringBuilder(REDACTED);
-            for (int index = 0; index < block.length(); index++) {
-                char character = block.charAt(index);
-                if (character == '\r' || character == '\n') {
-                    replacement.append(character);
-                }
+        StringBuilder output = new StringBuilder(content.length());
+        int cursor = 0;
+        while (cursor < content.length()) {
+            int begin = content.indexOf(PRIVATE_KEY_BEGIN, cursor);
+            if (begin < 0) {
+                output.append(content, cursor, content.length());
+                break;
             }
-            matcher.appendReplacement(output, Matcher.quoteReplacement(replacement.toString()));
+
+            int markerEnd = content.indexOf(PRIVATE_KEY_SUFFIX, begin + PRIVATE_KEY_BEGIN.length());
+            if (markerEnd < 0) {
+                output.append(content, cursor, content.length());
+                break;
+            }
+            markerEnd += PRIVATE_KEY_SUFFIX.length();
+            String beginMarker = content.substring(begin, markerEnd);
+            String endMarker = beginMarker.replaceFirst("-----BEGIN ", "-----END ");
+            int end = content.indexOf(endMarker, markerEnd);
+            if (end < 0) {
+                output.append(content, cursor, content.length());
+                break;
+            }
+            end += endMarker.length();
+
+            output.append(content, cursor, begin).append(REDACTED);
+            appendLineSeparators(output, content, begin, end);
+            cursor = end;
         }
-        matcher.appendTail(output);
         return output.toString();
+    }
+
+    private static void appendLineSeparators(StringBuilder output, String content, int begin, int end) {
+        for (int index = begin; index < end; index++) {
+            char character = content.charAt(index);
+            if (character == '\r' || character == '\n') {
+                output.append(character);
+            }
+        }
     }
 
     private static String replaceSecretAssignments(String content) {
         Matcher matcher = SECRET_ASSIGNMENT.matcher(content);
-        StringBuffer output = new StringBuffer(content.length());
+        StringBuilder output = new StringBuilder(content.length());
         while (matcher.find()) {
             String replacement = matcher.group(1)
                     + matcher.group(2)
