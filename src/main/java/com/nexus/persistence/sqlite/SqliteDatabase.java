@@ -3,7 +3,6 @@ package com.nexus.persistence.sqlite;
 import com.nexus.config.NexusPaths;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -17,6 +16,7 @@ public final class SqliteDatabase {
     private static final int MAX_BUSY_TIMEOUT_MILLIS = 60_000;
     private static final System.Logger LOGGER = System.getLogger(SqliteDatabase.class.getName());
 
+    private final NexusPaths paths;
     private final Path databaseFile;
     private final int busyTimeoutMillis;
     private final SqliteWriteRetryPolicy writeRetryPolicy;
@@ -29,19 +29,17 @@ public final class SqliteDatabase {
             NexusPaths paths,
             int busyTimeoutMillis,
             SqliteWriteRetryPolicy writeRetryPolicy) throws SQLException, IOException {
-        Objects.requireNonNull(paths, "paths");
+        this.paths = Objects.requireNonNull(paths, "paths");
         if (busyTimeoutMillis < 0 || busyTimeoutMillis > MAX_BUSY_TIMEOUT_MILLIS) {
             throw new IllegalArgumentException(
                     "busyTimeoutMillis must be between 0 and " + MAX_BUSY_TIMEOUT_MILLIS);
         }
+        paths.ensurePrivateStorage();
         this.databaseFile = paths.databaseFile();
         this.busyTimeoutMillis = busyTimeoutMillis;
         this.writeRetryPolicy = Objects.requireNonNull(writeRetryPolicy, "writeRetryPolicy");
-        Path parent = databaseFile.getParent();
-        if (parent != null) {
-            Files.createDirectories(parent);
-        }
         migrateWithRetry();
+        paths.hardenPrivateFile(databaseFile);
     }
 
     public Connection openConnection() throws SQLException {
