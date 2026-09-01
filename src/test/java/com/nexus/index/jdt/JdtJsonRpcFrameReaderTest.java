@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -24,6 +25,7 @@ class JdtJsonRpcFrameReaderTest {
 
         JsonNode message = JdtJsonRpcFrameReader.read(stream(frame), JSON);
 
+        assertNotNull(message);
         assertEquals("2.0", message.path("jsonrpc").asText());
         assertEquals(1, message.path("id").asInt());
     }
@@ -31,9 +33,10 @@ class JdtJsonRpcFrameReaderTest {
     @Test
     void rejectsOversizedContentLengthBeforeAllocatingPayload() {
         String header = "Content-Length: " + (JdtJsonRpcFrameReader.MAX_MESSAGE_BYTES + 1) + "\r\n\r\n";
+        BufferedInputStream input = stream(header.getBytes(StandardCharsets.US_ASCII));
 
         IOException failure = assertThrows(IOException.class,
-                () -> JdtJsonRpcFrameReader.read(stream(header.getBytes(StandardCharsets.US_ASCII)), JSON));
+                () -> JdtJsonRpcFrameReader.read(input, JSON));
 
         assertTrue(failure.getMessage().contains("trop volumineuse"));
     }
@@ -42,9 +45,10 @@ class JdtJsonRpcFrameReaderTest {
     void rejectsOversizedHeaderLine() {
         String header = "X-Fill: " + "a".repeat(JdtJsonRpcFrameReader.MAX_HEADER_LINE_BYTES) + "\r\n"
                 + "Content-Length: 2\r\n\r\n{}";
+        BufferedInputStream input = stream(header.getBytes(StandardCharsets.US_ASCII));
 
         IOException failure = assertThrows(IOException.class,
-                () -> JdtJsonRpcFrameReader.read(stream(header.getBytes(StandardCharsets.US_ASCII)), JSON));
+                () -> JdtJsonRpcFrameReader.read(input, JSON));
 
         assertTrue(failure.getMessage().contains("Ligne d'en-tête"));
     }
@@ -53,9 +57,10 @@ class JdtJsonRpcFrameReaderTest {
     void rejectsConflictingContentLengths() {
         byte[] frame = ("Content-Length: 2\r\nContent-Length: 3\r\n\r\n{}")
                 .getBytes(StandardCharsets.US_ASCII);
+        BufferedInputStream input = stream(frame);
 
         IOException failure = assertThrows(IOException.class,
-                () -> JdtJsonRpcFrameReader.read(stream(frame), JSON));
+                () -> JdtJsonRpcFrameReader.read(input, JSON));
 
         assertTrue(failure.getMessage().contains("contradictoires"));
     }
@@ -63,11 +68,23 @@ class JdtJsonRpcFrameReaderTest {
     @Test
     void rejectsMalformedContentLength() {
         byte[] frame = "Content-Length: lots\r\n\r\n{}".getBytes(StandardCharsets.US_ASCII);
+        BufferedInputStream input = stream(frame);
 
         IOException failure = assertThrows(IOException.class,
-                () -> JdtJsonRpcFrameReader.read(stream(frame), JSON));
+                () -> JdtJsonRpcFrameReader.read(input, JSON));
 
         assertTrue(failure.getMessage().contains("invalide"));
+    }
+
+    @Test
+    void rejectsHeaderTruncatedBeforeLineTerminator() {
+        byte[] frame = "Content-Length: 2".getBytes(StandardCharsets.US_ASCII);
+        BufferedInputStream input = stream(frame);
+
+        IOException failure = assertThrows(IOException.class,
+                () -> JdtJsonRpcFrameReader.read(input, JSON));
+
+        assertTrue(failure.getMessage().contains("tronqué"));
     }
 
     private static BufferedInputStream stream(byte[] bytes) {
