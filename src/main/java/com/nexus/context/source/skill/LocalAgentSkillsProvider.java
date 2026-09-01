@@ -15,6 +15,9 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
+
+import static com.nexus.context.source.skill.SkillDefinitionDiscoverySupport.repositoryPath;
 
 /** Provider local des Agent Skills versionnés dans le repository. */
 public final class LocalAgentSkillsProvider implements SkillSourceProvider {
@@ -98,31 +101,17 @@ public final class LocalAgentSkillsProvider implements SkillSourceProvider {
                         || ignoreMatcher.isIgnored(file, false)) {
                     return FileVisitResult.CONTINUE;
                 }
-                if (attributes.isSymbolicLink() || Files.isSymbolicLink(file) || !attributes.isRegularFile()) {
-                    diagnostics.add(repositoryPath(projectRoot.relativize(file))
-                            + " ignoré : lien symbolique ou entrée non régulière");
-                    return FileVisitResult.CONTINUE;
-                }
 
-                Path safeFile;
-                try {
-                    safeFile = pathGuard.requireRegularFile(file);
-                } catch (IOException unsafePath) {
-                    diagnostics.add(repositoryPath(projectRoot.relativize(file))
-                            + " ignoré : " + unsafePath.getMessage());
+                Path safeFile = SkillDefinitionDiscoverySupport.validateAndCharge(
+                        pathGuard,
+                        projectRoot,
+                        file,
+                        attributes,
+                        budget,
+                        diagnostics);
+                if (safeFile == null) {
                     return FileVisitResult.CONTINUE;
                 }
-
-                long chargedBytes;
-                try {
-                    chargedBytes = Math.min(Files.size(safeFile), SkillFrontmatterParser.MAX_DISCOVERY_BYTES);
-                } catch (IOException unreadable) {
-                    diagnostics.add(repositoryPath(projectRoot.relativize(file))
-                            + " ignoré : " + unreadable.getMessage());
-                    return FileVisitResult.CONTINUE;
-                }
-                budget.candidate(safeFile);
-                budget.bytes(safeFile, chargedBytes);
 
                 try {
                     SkillFrontmatter frontmatter = parser.parse(safeFile);
@@ -216,7 +205,7 @@ public final class LocalAgentSkillsProvider implements SkillSourceProvider {
         if (relativeToSkill.getNameCount() == 0) {
             return SkillResourceType.OTHER;
         }
-        return switch (relativeToSkill.getName(0).toString().toLowerCase()) {
+        return switch (relativeToSkill.getName(0).toString().toLowerCase(Locale.ROOT)) {
             case "scripts" -> SkillResourceType.SCRIPT;
             case "references" -> SkillResourceType.REFERENCE;
             case "assets" -> SkillResourceType.ASSET;
@@ -233,9 +222,5 @@ public final class LocalAgentSkillsProvider implements SkillSourceProvider {
             current = current.resolve(part);
             ignoreMatcher.registerDirectory(current);
         }
-    }
-
-    private static String repositoryPath(Path path) {
-        return path.toString().replace('\\', '/');
     }
 }

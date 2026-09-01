@@ -13,6 +13,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
+import static com.nexus.context.source.skill.SkillDefinitionDiscoverySupport.repositoryPath;
+
 /**
  * Découvre les skills d'un snapshot local AI Skills Registry placé sous
  * .nexus/registry/skills dans le projet courant.
@@ -66,31 +68,17 @@ public final class AiSkillsRegistryProvider implements SkillSourceProvider {
                 if (!file.getFileName().toString().equalsIgnoreCase("SKILL.md")) {
                     return FileVisitResult.CONTINUE;
                 }
-                if (attributes.isSymbolicLink() || Files.isSymbolicLink(file) || !attributes.isRegularFile()) {
-                    diagnostics.add(repositoryPath(projectRoot.relativize(file))
-                            + " ignoré : lien symbolique ou entrée non régulière");
-                    return FileVisitResult.CONTINUE;
-                }
 
-                Path safeFile;
-                try {
-                    safeFile = pathGuard.requireRegularFile(file);
-                } catch (IOException unsafePath) {
-                    diagnostics.add(repositoryPath(projectRoot.relativize(file))
-                            + " ignoré : " + unsafePath.getMessage());
+                Path safeFile = SkillDefinitionDiscoverySupport.validateAndCharge(
+                        pathGuard,
+                        projectRoot,
+                        file,
+                        attributes,
+                        query.discoveryBudget(),
+                        diagnostics);
+                if (safeFile == null) {
                     return FileVisitResult.CONTINUE;
                 }
-
-                long chargedBytes;
-                try {
-                    chargedBytes = Math.min(Files.size(safeFile), SkillFrontmatterParser.MAX_DISCOVERY_BYTES);
-                } catch (IOException unreadable) {
-                    diagnostics.add(repositoryPath(projectRoot.relativize(file))
-                            + " ignoré : " + unreadable.getMessage());
-                    return FileVisitResult.CONTINUE;
-                }
-                query.discoveryBudget().candidate(safeFile);
-                query.discoveryBudget().bytes(safeFile, chargedBytes);
 
                 try {
                     SkillFrontmatter frontmatter = parser.parse(safeFile);
@@ -126,9 +114,5 @@ public final class AiSkillsRegistryProvider implements SkillSourceProvider {
                 .comparing(SkillDescriptor::name)
                 .thenComparing(skill -> repositoryPath(skill.definitionPath())));
         return new SkillProviderResult(skills, diagnostics);
-    }
-
-    private static String repositoryPath(Path path) {
-        return path.toString().replace('\\', '/');
     }
 }

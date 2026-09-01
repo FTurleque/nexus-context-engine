@@ -13,6 +13,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -108,7 +109,8 @@ public final class NativeProjectCustomizationDetector {
                 if (attributes.isSymbolicLink()
                         || Files.isSymbolicLink(file)
                         || !attributes.isRegularFile()
-                        || !file.getFileName().toString().toLowerCase().endsWith(suffix.toLowerCase())) {
+                        || !file.getFileName().toString().toLowerCase(Locale.ROOT)
+                                .endsWith(suffix.toLowerCase(Locale.ROOT))) {
                     return FileVisitResult.CONTINUE;
                 }
                 Path safeFile;
