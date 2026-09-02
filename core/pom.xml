@@ -52,20 +52,6 @@
     </dependencies>
 
     <build>
-        <!-- Les sources restent à leur emplacement historique ; seul le module
-             Maven est introduit. Les outputs Maven restent isolés dans core/target. -->
-        <sourceDirectory>${project.basedir}/../src/main/java</sourceDirectory>
-        <testSourceDirectory>${project.basedir}/../src/test/java</testSourceDirectory>
-        <resources>
-            <resource>
-                <directory>${project.basedir}/../src/main/resources</directory>
-            </resource>
-        </resources>
-        <testResources>
-            <testResource>
-                <directory>${project.basedir}/../src/test/resources</directory>
-            </testResource>
-        </testResources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
