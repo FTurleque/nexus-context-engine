@@ -14,6 +14,8 @@ final class NexusRestSecurity {
 
     static final String TOKEN_ENVIRONMENT_VARIABLE = "NEXUS_REST_API_TOKEN";
     static final String TOKEN_PROPERTY = "nexus.rest.api-token";
+    static final String LOCAL_HARDENING_ENVIRONMENT_VARIABLE = "NEXUS_REST_HARDEN_LOCAL";
+    static final String LOCAL_HARDENING_PROPERTY = "nexus.rest.harden-local";
     static final String EXPOSURE_MODE_ENVIRONMENT_VARIABLE = "NEXUS_REST_EXPOSURE_MODE";
     static final String EXPOSURE_MODE_PROPERTY = "nexus.rest.exposure-mode";
     static final String RUNTIME_ENVIRONMENT_VARIABLE = "NEXUS_RUNTIME";
@@ -43,6 +45,21 @@ final class NexusRestSecurity {
             return Optional.empty();
         }
         return Optional.of(token.trim());
+    }
+
+    static boolean isLocalHardeningRequired() {
+        Optional<String> configured = configuredValue(
+                LOCAL_HARDENING_PROPERTY,
+                LOCAL_HARDENING_ENVIRONMENT_VARIABLE);
+        if (configured.isEmpty()) {
+            return false;
+        }
+        return switch (configured.get().toLowerCase(Locale.ROOT)) {
+            case "true" -> true;
+            case "false" -> false;
+            default -> throw new IllegalStateException(
+                    LOCAL_HARDENING_ENVIRONMENT_VARIABLE + " doit valoir true ou false");
+        };
     }
 
     static Optional<String> configuredExposureMode() {
