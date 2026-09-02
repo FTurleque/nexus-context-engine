@@ -1,4 +1,4 @@
-﻿Set-StrictMode -Version Latest
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 function Protect-NexusInstallerSource {
@@ -215,6 +215,30 @@ end;
     'NEXUS_REST_API_TOKEN=' + DotEnvQuoted(DockerToken) + #13#10;
 '@
     $Source = Replace-ExactlyOnce $Source $dockerEnv $dockerEnvReplacement 'Docker dotenv escaping and forward declaration contract'
+
+    $nativeJsonArgument = @'
+    '      \"args\": [\"-jar\", \"' + RunnerPath + '\"]' + #13#10 +
+'@
+    $nativeJsonArgumentReplacement = @'
+    '      \"args\": [\"--enable-native-access=ALL-UNNAMED\", \"-jar\", \"' + RunnerPath + '\"]' + #13#10 +
+'@
+    $Source = Replace-ExactlyOnce $Source $nativeJsonArgument $nativeJsonArgumentReplacement 'native MCP JSON runtime option'
+
+    $nativeTomlArgument = @'
+    'args = [\"-jar\", \"' + RunnerPath + '\"]' + #13#10;
+'@
+    $nativeTomlArgumentReplacement = @'
+    'args = [\"--enable-native-access=ALL-UNNAMED\", \"-jar\", \"' + RunnerPath + '\"]' + #13#10;
+'@
+    $Source = Replace-ExactlyOnce $Source $nativeTomlArgument $nativeTomlArgumentReplacement 'native Codex TOML runtime option'
+
+    $nativeCommandTail = @'
+    CommandTail := '"' + ExpandConstant('{app}\app\runtime\bin\java.exe') + '" -jar "' + ExpandConstant('{app}\lib\nexus-mcp.jar') + '"';
+'@
+    $nativeCommandTailReplacement = @'
+    CommandTail := '"' + ExpandConstant('{app}\app\runtime\bin\java.exe') + '" --enable-native-access=ALL-UNNAMED -jar "' + ExpandConstant('{app}\lib\nexus-mcp.jar') + '"';
+'@
+    $Source = Replace-ExactlyOnce $Source $nativeCommandTail $nativeCommandTailReplacement 'native assistant CLI runtime option'
 
     return $Source
 }
