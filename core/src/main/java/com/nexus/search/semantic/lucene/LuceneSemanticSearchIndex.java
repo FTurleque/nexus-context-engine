@@ -166,11 +166,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
 
     @Override
     public List<SemanticSearchHit> search(UUID projectId, float[] queryVector, int limit) throws IOException {
-        Objects.requireNonNull(projectId, "projectId");
-        validateVector(queryVector);
-        if (limit <= 0) {
-            throw new IllegalArgumentException("limit must be greater than zero");
-        }
+        validateSearchRequest(projectId, queryVector, limit);
 
         Path indexPath = paths.projectSemanticLuceneIndex(projectId);
         if (!Files.exists(indexPath, LinkOption.NOFOLLOW_LINKS)) {
@@ -183,25 +179,37 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
                 return List.of();
             }
             try (DirectoryReader reader = DirectoryReader.open(directory)) {
-                if (reader.numDocs() == 0) {
-                    return List.of();
-                }
-                IndexSearcher searcher = new IndexSearcher(reader);
-                int k = Math.min(limit, reader.numDocs());
-                Query query = KnnFloatVectorField.newVectorQuery(VECTOR_FIELD, queryVector, k);
-                TopDocs topDocs = searcher.search(query, k);
-                List<SemanticSearchHit> hits = new ArrayList<>(topDocs.scoreDocs.length);
-                for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
-                    Document document = searcher.storedFields().document(scoreDoc.doc);
-                    hits.add(new SemanticSearchHit(
-                            document.get(PATH_FIELD),
-                            FileCategory.valueOf(document.get(CATEGORY_FIELD)),
-                            document.get(EXCERPT_FIELD),
-                            clamp(scoreDoc.score)));
-                }
-                return List.copyOf(hits);
+                return search(new IndexSearcher(reader), queryVector, limit);
             }
         }
+    }
+
+    void validateSearchRequest(UUID projectId, float[] queryVector, int limit) {
+        Objects.requireNonNull(projectId, "projectId");
+        validateVector(queryVector);
+        if (limit <= 0) {
+            throw new IllegalArgumentException("limit must be greater than zero");
+        }
+    }
+
+    List<SemanticSearchHit> search(IndexSearcher searcher, float[] queryVector, int limit) throws IOException {
+        int documents = searcher.getIndexReader().numDocs();
+        if (documents == 0) {
+            return List.of();
+        }
+        int k = Math.min(limit, documents);
+        Query query = KnnFloatVectorField.newVectorQuery(VECTOR_FIELD, queryVector, k);
+        TopDocs topDocs = searcher.search(query, k);
+        List<SemanticSearchHit> hits = new ArrayList<>(topDocs.scoreDocs.length);
+        for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
+            Document document = searcher.storedFields().document(scoreDoc.doc);
+            hits.add(new SemanticSearchHit(
+                    document.get(PATH_FIELD),
+                    FileCategory.valueOf(document.get(CATEGORY_FIELD)),
+                    document.get(EXCERPT_FIELD),
+                    clamp(scoreDoc.score)));
+        }
+        return List.copyOf(hits);
     }
 
     private static void clearDerivedIndexDirectory(Path indexPath) throws IOException {

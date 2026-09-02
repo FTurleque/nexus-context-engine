@@ -118,14 +118,7 @@ public final class LuceneSearchIndex implements SearchIndex {
 
     @Override
     public List<LexicalSearchHit> search(UUID projectId, String query, int limit) throws IOException {
-        Objects.requireNonNull(projectId, "projectId");
-        Objects.requireNonNull(query, "query");
-        if (query.isBlank()) {
-            throw new IllegalArgumentException("query must not be blank");
-        }
-        if (limit <= 0) {
-            throw new IllegalArgumentException("limit must be greater than zero");
-        }
+        validateSearchRequest(projectId, query, limit);
 
         Path indexPath = paths.projectLuceneIndex(projectId);
         if (!Files.exists(indexPath, LinkOption.NOFOLLOW_LINKS)) {
@@ -137,22 +130,37 @@ public final class LuceneSearchIndex implements SearchIndex {
             if (!DirectoryReader.indexExists(directory)) {
                 return List.of();
             }
-            try (DirectoryReader reader = DirectoryReader.open(directory);
-                 Analyzer analyzer = new StandardAnalyzer()) {
-                Query luceneQuery = parseQuery(query, analyzer);
-                IndexSearcher searcher = new IndexSearcher(reader);
-                TopDocs topDocs = searcher.search(luceneQuery, limit);
-                List<LexicalSearchHit> hits = new ArrayList<>(topDocs.scoreDocs.length);
-                for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
-                    Document document = searcher.storedFields().document(scoreDoc.doc);
-                    hits.add(new LexicalSearchHit(
-                            document.get(FIELD_PATH),
-                            document.get(FIELD_LANGUAGE),
-                            FileCategory.valueOf(document.get(FIELD_CATEGORY)),
-                            scoreDoc.score));
-                }
-                return List.copyOf(hits);
+            try (DirectoryReader reader = DirectoryReader.open(directory)) {
+                return search(new IndexSearcher(reader), query, limit);
             }
+        }
+    }
+
+    static void validateSearchRequest(UUID projectId, String query, int limit) {
+        Objects.requireNonNull(projectId, "projectId");
+        Objects.requireNonNull(query, "query");
+        if (query.isBlank()) {
+            throw new IllegalArgumentException("query must not be blank");
+        }
+        if (limit <= 0) {
+            throw new IllegalArgumentException("limit must be greater than zero");
+        }
+    }
+
+    static List<LexicalSearchHit> search(IndexSearcher searcher, String query, int limit) throws IOException {
+        try (Analyzer analyzer = new StandardAnalyzer()) {
+            Query luceneQuery = parseQuery(query, analyzer);
+            TopDocs topDocs = searcher.search(luceneQuery, limit);
+            List<LexicalSearchHit> hits = new ArrayList<>(topDocs.scoreDocs.length);
+            for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
+                Document document = searcher.storedFields().document(scoreDoc.doc);
+                hits.add(new LexicalSearchHit(
+                        document.get(FIELD_PATH),
+                        document.get(FIELD_LANGUAGE),
+                        FileCategory.valueOf(document.get(FIELD_CATEGORY)),
+                        scoreDoc.score));
+            }
+            return List.copyOf(hits);
         }
     }
 
