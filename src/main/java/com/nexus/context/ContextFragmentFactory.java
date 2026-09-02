@@ -85,8 +85,8 @@ public final class ContextFragmentFactory {
                 Path absolutePath = requireReadableCandidate(pathGuard, candidatePath);
                 Path relativePath = pathGuard.root().relativize(absolutePath);
                 String content = SensitiveContentRedactor.redact(SafeFileIO.readStringNoFollow(absolutePath));
-                List<String> lines = List.of(content.split("\\r?\\n", -1));
-                int sourceLineCount = countSourceLines(content);
+                List<String> lines = content.lines().toList();
+                int sourceLineCount = lines.size();
                 List<RankedCandidate> symbolCandidates = entry.getValue().stream()
                         .filter(candidate -> candidate.candidate().symbol() != null)
                         .toList();
@@ -250,11 +250,6 @@ public final class ContextFragmentFactory {
             }
         }
         return List.copyOf(merged);
-    }
-
-    private static int countSourceLines(String content) {
-        long lineCount = content.lines().count();
-        return lineCount > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) lineCount;
     }
 
     private static String joinLines(List<String> lines, int startLine, int endLine) {
