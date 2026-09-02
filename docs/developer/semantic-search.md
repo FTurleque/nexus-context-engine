@@ -91,6 +91,47 @@ La lecture consomme au maximum `limite + 1` octets :
 
 Cette limite n'est pas exposée comme configuration opérationnelle : elle reste une politique interne cohérente avec les bornes de batching/dimensions, ce qui évite qu'une configuration arbitrairement élevée neutralise la protection.
 
+## Dégradation et récupération
+
+La recherche sémantique est un signal optionnel. Une indisponibilité transitoire du provider d'embeddings ou une panne I/O du Lucene sémantique ne doit donc pas rendre indisponibles les stratégies lexicales et symboliques déjà cohérentes.
+
+En recherche :
+
+- timeout, connexion impossible, HTTP 429 ou HTTP 5xx Ollama → `EmbeddingProviderUnavailableException`, zéro candidat sémantique pour cette requête et poursuite avec les autres stratégies ;
+- erreur I/O de lecture/compatibilité du Lucene sémantique → même fallback ;
+- un diagnostic stable est journalisé avec `code=embedding_provider_unavailable` ou `code=semantic_index_unavailable` ;
+- une erreur de protocole ou de contrat, par exemple JSON invalide, dimension incorrecte ou valeur non finie, reste une `IOException` bloquante : elle ne doit pas être masquée comme indisponibilité transitoire.
+
+Le retry Ollama est automatique à la requête suivante : aucun circuit ouvert persistant n'est conservé. Une instance de provider qui reçoit temporairement HTTP 503 ou dépasse son timeout peut donc reprendre sans redémarrer NEXUS dès que le service répond à nouveau.
+
+L'**indexation**, elle, reste fail-closed. Si la construction des embeddings ou de l'index dérivé échoue, le projet passe `FAILED` et n'est pas publié `READY`. Cette règle protège la cohérence canonique ; la dégradation sémantique ne s'applique qu'à la lecture d'un projet déjà READY.
+
+### Procédure normale pour un index sémantique corrompu
+
+La première action est toujours une reconstruction explicite :
+
+```text
+nexus index <id-ou-nom> --rebuild
+```
+
+Le Lucene sémantique est dérivé de l'index canonique et des fichiers du repository. Avant `OpenMode.CREATE`, un rebuild vide explicitement **le contenu du seul répertoire `semantic-lucene`** avec une traversée `NOFOLLOW` : un lien symbolique rencontré est supprimé comme lien et n'est jamais suivi vers sa cible. Cette étape est nécessaire car Lucene peut tenter de lire un commit `segments_*` corrompu avant même d'appliquer `OpenMode.CREATE`.
+
+La qualification comprend une fixture qui corrompt physiquement les fichiers de commit Lucene, vérifie que la lecture échoue, puis exige qu'un rebuild restaure une recherche valide.
+
+### Mise en quarantaine manuelle — dernier recours
+
+Ne supprimer ni `nexus.db` ni l'index lexical. Si un problème de filesystem empêche même le rebuild du répertoire dérivé :
+
+1. arrêter **tous** les processus NEXUS utilisant le même `NEXUS_HOME` ;
+2. identifier l'UUID exact du projet et le répertoire `${NEXUS_HOME}/indexes/<uuid>/semantic-lucene` ;
+3. vérifier que ce chemin reste sous `NEXUS_HOME`, qu'aucun composant n'est un lien symbolique et qu'il s'agit bien du seul répertoire `semantic-lucene` ciblé ;
+4. renommer ce répertoire en quarantaine, par exemple `semantic-lucene.quarantine`, plutôt que de le supprimer immédiatement ;
+5. relancer `nexus index <uuid> --rebuild` ;
+6. vérifier que le projet revient `READY` et qu'une recherche fonctionne ;
+7. seulement après cette validation, supprimer la quarantaine.
+
+Cette procédure conserve une possibilité de rollback opérateur et limite l'action manuelle au cache vectoriel reconstructible.
+
 ## Baseline de décision
 
 Corpus hermétique historique : 236 fichiers, 946 symboles, 1 539 relations, 6 requêtes.

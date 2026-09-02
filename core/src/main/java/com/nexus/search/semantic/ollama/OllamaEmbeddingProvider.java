@@ -3,6 +3,7 @@ package com.nexus.search.semantic.ollama;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexus.search.semantic.EmbeddingProvider;
+import com.nexus.search.semantic.EmbeddingProviderUnavailableException;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -11,6 +12,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -153,6 +155,14 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
         HttpResponse<InputStream> response;
         try {
             response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+        } catch (HttpTimeoutException exception) {
+            throw new EmbeddingProviderUnavailableException(
+                    "Ollama /api/embed indisponible : délai dépassé après " + timeout.toMillis() + " ms",
+                    exception);
+        } catch (IOException exception) {
+            throw new EmbeddingProviderUnavailableException(
+                    "Ollama /api/embed indisponible : connexion impossible",
+                    exception);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IOException("Appel Ollama interrompu", exception);
@@ -162,9 +172,12 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
         String responseBody = new String(responseBytes, StandardCharsets.UTF_8);
 
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new IOException(
-                    "Ollama /api/embed a répondu HTTP " + response.statusCode()
-                            + " : " + abbreviate(responseBody, 500));
+            String message = "Ollama /api/embed a répondu HTTP " + response.statusCode()
+                    + " : " + abbreviate(responseBody, 500);
+            if (response.statusCode() == 429 || response.statusCode() >= 500) {
+                throw new EmbeddingProviderUnavailableException(message);
+            }
+            throw new IOException(message);
         }
 
         JsonNode root = objectMapper.readTree(responseBody);

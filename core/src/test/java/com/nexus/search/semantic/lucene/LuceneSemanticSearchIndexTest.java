@@ -7,8 +7,11 @@ import com.nexus.search.semantic.SemanticVectorDocument;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
@@ -16,6 +19,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class LuceneSemanticSearchIndexTest {
 
@@ -63,6 +67,29 @@ class LuceneSemanticSearchIndexTest {
     }
 
     @Test
+    void explicitRebuildRecoversPhysicallyCorruptIndex() throws Exception {
+        NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("semantic-corruption-home"));
+        LuceneSemanticSearchIndex index = new LuceneSemanticSearchIndex(paths, 3);
+        UUID projectId = UUID.randomUUID();
+        index.rebuild(projectId, List.of(
+                document("docs/before.md", FileCategory.DOCUMENTATION, "before", 1.0f, 0.0f, 0.0f)));
+
+        corruptCommitFiles(paths.projectSemanticLuceneIndex(projectId));
+
+        assertThrows(
+                IOException.class,
+                () -> index.search(projectId, new float[]{1.0f, 0.0f, 0.0f}, 5));
+
+        index.rebuild(projectId, List.of(
+                document("docs/recovered.md", FileCategory.DOCUMENTATION, "recovered", 1.0f, 0.0f, 0.0f)));
+        List<SemanticSearchHit> recovered =
+                index.search(projectId, new float[]{1.0f, 0.0f, 0.0f}, 5);
+
+        assertEquals(1, recovered.size());
+        assertEquals("docs/recovered.md", recovered.getFirst().relativePath());
+    }
+
+    @Test
     void closesAllHandlesAfterRebuildUpdateAndSearch() throws Exception {
         NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("semantic-lifecycle-home"));
         LuceneSemanticSearchIndex index = new LuceneSemanticSearchIndex(paths, 3);
@@ -75,6 +102,20 @@ class LuceneSemanticSearchIndexTest {
 
         deleteTree(paths.projectSemanticLuceneIndex(projectId));
         assertFalse(Files.exists(paths.projectSemanticLuceneIndex(projectId)));
+    }
+
+    private static void corruptCommitFiles(Path indexPath) throws IOException {
+        try (var files = Files.list(indexPath)) {
+            for (Path file : files
+                    .filter(path -> path.getFileName().toString().startsWith("segments_"))
+                    .toList()) {
+                Files.write(
+                        file,
+                        "corrupt-semantic-index".getBytes(StandardCharsets.UTF_8),
+                        StandardOpenOption.WRITE,
+                        StandardOpenOption.TRUNCATE_EXISTING);
+            }
+        }
     }
 
     private static void deleteTree(Path root) throws Exception {
