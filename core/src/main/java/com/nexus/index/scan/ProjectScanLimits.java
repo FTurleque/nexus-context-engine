@@ -6,11 +6,13 @@ import java.util.Objects;
 /**
  * Budget global du walk d'indexation, indépendant de la limite par fichier.
  *
- * <p>{@code maxFiles} borne le nombre d'entrées fichier non ignorées visitées,
- * y compris les extensions non indexables : le coût de traversée reste ainsi
- * borné face à un repository contenant des millions de petits fichiers.
- * {@code maxTotalBytes} borne le volume cumulé des sources supportées et sûres
- * qui entrent effectivement dans le pipeline de hash/analyse.</p>
+ * <p>{@code maxFiles} conserve son nom historique pour compatibilité de configuration,
+ * mais borne désormais toutes les entrées non racine rencontrées par le walk : fichiers,
+ * répertoires et entrées ensuite ignorées. Le coût de traversée reste ainsi borné face à
+ * un repository contenant des millions de petits fichiers, de répertoires vides ou une
+ * arborescence artificiellement profonde. {@code maxTotalBytes} borne le volume cumulé
+ * des sources supportées et sûres qui entrent effectivement dans le pipeline de
+ * hash/analyse.</p>
  */
 public record ProjectScanLimits(int maxFiles, long maxTotalBytes) {
 
