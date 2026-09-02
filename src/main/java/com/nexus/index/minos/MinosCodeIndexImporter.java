@@ -1,5 +1,7 @@
 package com.nexus.index.minos;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexus.index.CodeIntelligenceSnapshot;
@@ -13,7 +15,11 @@ import com.nexus.index.SymbolRelation;
 import com.nexus.security.ProjectPathGuard;
 import com.nexus.security.SafeFileIO;
 
+import java.io.FilterInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
@@ -34,14 +40,21 @@ import java.util.Set;
  * indexés par NEXUS. L'ancienne surcharge à deux arguments est conservée pour
  * les outils/tests autonomes mais réalise alors explicitement la découverte
  * physique historique.</p>
+ *
+ * <p>Le document est parsé en streaming : NEXUS ne matérialise jamais l'arbre
+ * JSON complet en mémoire. Les faits symboles/relations sont lus et validés un
+ * par un, avec des plafonds explicites en plus de la limite de transport.</p>
  */
 public final class MinosCodeIndexImporter {
 
     public static final String SOURCE_PROVIDER = "minos";
     public static final long MAX_EXPORT_BYTES = 128L * 1024L * 1024L;
+    public static final int MAX_SYMBOL_FACTS = 500_000;
+    public static final int MAX_RELATION_FACTS = 500_000;
 
     private static final String CONTRACT_VERSION = "1";
     private static final String PRODUCER = "MINOS";
+    private static final int READER_BUFFER_CHARS = 16 * 1024;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -62,39 +75,101 @@ public final class MinosCodeIndexImporter {
         ProjectPathGuard pathGuard = new ProjectPathGuard(root);
         Set<String> safeProjectFiles = canonicalIndexedFiles(indexedProjectFiles);
         String documentPayload = Objects.requireNonNull(payload, "payload");
-        if (documentPayload.getBytes(StandardCharsets.UTF_8).length > MAX_EXPORT_BYTES) {
-            throw new IOException("MINOS export exceeds the 128 MiB transport limit");
-        }
+        requireTransportSize(documentPayload);
 
-        JsonNode document = readDocument(documentPayload);
-        if (!document.isObject()) {
+        try (JsonParser parser = objectMapper.createParser(documentPayload)) {
+            return parseDocument(root, pathGuard, safeProjectFiles, parser);
+        }
+    }
+
+    /**
+     * Lit un payload UTF-8 borné sans conserver en parallèle un byte[] de la taille
+     * complète du document. Cette primitive est destinée notamment à la CLI stdin.
+     */
+    public static String readPayload(InputStream input) throws IOException {
+        Objects.requireNonNull(input, "input");
+        Reader reader = new InputStreamReader(new BoundedPayloadInputStream(input), StandardCharsets.UTF_8);
+        StringBuilder output = new StringBuilder(READER_BUFFER_CHARS);
+        char[] buffer = new char[READER_BUFFER_CHARS];
+        int read;
+        while ((read = reader.read(buffer)) >= 0) {
+            if (read > 0) {
+                output.append(buffer, 0, read);
+            }
+        }
+        return output.toString();
+    }
+
+    private CodeIntelligenceSnapshot parseDocument(
+            Path root,
+            ProjectPathGuard pathGuard,
+            Set<String> safeProjectFiles,
+            JsonParser parser) throws IOException {
+        if (parser.nextToken() != JsonToken.START_OBJECT) {
             throw new IOException("MINOS export root must be a JSON object");
         }
-        requireText(document, "contractVersion", CONTRACT_VERSION);
-        requireText(document, "producer", PRODUCER);
 
-        JsonNode project = requiredObject(document, "project");
-        Path exportedRoot = normalizedAbsolutePath(requiredText(project, "rootPath"), "project root");
+        String contractVersion = null;
+        String producer = null;
+        Path exportedRoot = null;
+        boolean symbolsSeen = false;
+        boolean relationsSeen = false;
+        int symbolFacts = 0;
+        int relationFacts = 0;
+        Map<String, Integer> sourceLineCounts = new LinkedHashMap<>();
+        Map<ExternalSymbolIdentity, IndexedSymbol> symbols = new LinkedHashMap<>();
+        List<IndexedRelation> relations = new ArrayList<>();
+
+        while (parser.nextToken() != JsonToken.END_OBJECT) {
+            if (parser.currentToken() != JsonToken.FIELD_NAME) {
+                throw new IOException("MINOS export root contains malformed JSON fields");
+            }
+            String field = parser.currentName();
+            JsonToken valueToken = parser.nextToken();
+            switch (field) {
+                case "contractVersion" -> contractVersion = requiredParserText(parser, valueToken, field);
+                case "producer" -> producer = requiredParserText(parser, valueToken, field);
+                case "project" -> exportedRoot = readProjectRoot(parser, valueToken);
+                case "symbols" -> {
+                    symbolsSeen = true;
+                    symbolFacts = readSymbols(
+                            parser,
+                            valueToken,
+                            pathGuard,
+                            safeProjectFiles,
+                            sourceLineCounts,
+                            symbols,
+                            symbolFacts);
+                }
+                case "relations" -> {
+                    relationsSeen = true;
+                    relationFacts = readRelations(
+                            parser,
+                            valueToken,
+                            safeProjectFiles,
+                            relations,
+                            relationFacts);
+                }
+                default -> parser.skipChildren();
+            }
+        }
+        if (parser.nextToken() != null) {
+            throw new IOException("MINOS export contains trailing JSON content");
+        }
+
+        requireExpectedValue("contractVersion", contractVersion, CONTRACT_VERSION);
+        requireExpectedValue("producer", producer, PRODUCER);
+        if (exportedRoot == null) {
+            throw new IOException("MINOS export field 'project' must be an object with a rootPath");
+        }
         if (!root.equals(exportedRoot)) {
             throw new IOException("MINOS export belongs to another project root: " + exportedRoot);
         }
-
-        Map<String, Integer> sourceLineCounts = new LinkedHashMap<>();
-        Map<ExternalSymbolIdentity, IndexedSymbol> symbols = new LinkedHashMap<>();
-        for (JsonNode symbolNode : requiredArray(document, "symbols")) {
-            IndexedSymbol symbol = mapSymbol(pathGuard, safeProjectFiles, sourceLineCounts, symbolNode);
-            if (symbol == null) {
-                continue;
-            }
-            symbols.putIfAbsent(ExternalSymbolIdentity.of(symbol), symbol);
+        if (!symbolsSeen) {
+            throw new IOException("MINOS export field 'symbols' must be an array");
         }
-
-        List<IndexedRelation> relations = new ArrayList<>();
-        for (JsonNode relationNode : requiredArray(document, "relations")) {
-            IndexedRelation relation = mapRelation(safeProjectFiles, relationNode);
-            if (relation != null) {
-                relations.add(relation);
-            }
+        if (!relationsSeen) {
+            throw new IOException("MINOS export field 'relations' must be an array");
         }
 
         return new CodeIntelligenceSnapshot(
@@ -103,12 +178,129 @@ public final class MinosCodeIndexImporter {
                 relations);
     }
 
-    private JsonNode readDocument(String payload) throws IOException {
-        JsonNode document = objectMapper.readTree(payload);
-        if (document == null) {
-            throw new IOException("MINOS export root must be a JSON object");
+    private int readSymbols(
+            JsonParser parser,
+            JsonToken valueToken,
+            ProjectPathGuard pathGuard,
+            Set<String> safeProjectFiles,
+            Map<String, Integer> sourceLineCounts,
+            Map<ExternalSymbolIdentity, IndexedSymbol> symbols,
+            int factsRead) throws IOException {
+        if (valueToken != JsonToken.START_ARRAY) {
+            throw new IOException("MINOS export field 'symbols' must be an array");
         }
-        return document;
+        while (parser.nextToken() != JsonToken.END_ARRAY) {
+            factsRead++;
+            if (factsRead > MAX_SYMBOL_FACTS) {
+                throw new IOException("MINOS export exceeds the symbol fact limit of " + MAX_SYMBOL_FACTS);
+            }
+            if (parser.currentToken() != JsonToken.START_OBJECT) {
+                throw new IOException("MINOS export symbols must be JSON objects");
+            }
+            JsonNode symbolNode = objectMapper.readTree(parser);
+            IndexedSymbol symbol = mapSymbol(pathGuard, safeProjectFiles, sourceLineCounts, symbolNode);
+            if (symbol != null) {
+                symbols.putIfAbsent(ExternalSymbolIdentity.of(symbol), symbol);
+            }
+        }
+        return factsRead;
+    }
+
+    private int readRelations(
+            JsonParser parser,
+            JsonToken valueToken,
+            Set<String> safeProjectFiles,
+            List<IndexedRelation> relations,
+            int factsRead) throws IOException {
+        if (valueToken != JsonToken.START_ARRAY) {
+            throw new IOException("MINOS export field 'relations' must be an array");
+        }
+        while (parser.nextToken() != JsonToken.END_ARRAY) {
+            factsRead++;
+            if (factsRead > MAX_RELATION_FACTS) {
+                throw new IOException("MINOS export exceeds the relation fact limit of " + MAX_RELATION_FACTS);
+            }
+            if (parser.currentToken() != JsonToken.START_OBJECT) {
+                throw new IOException("MINOS export relations must be JSON objects");
+            }
+            JsonNode relationNode = objectMapper.readTree(parser);
+            IndexedRelation relation = mapRelation(safeProjectFiles, relationNode);
+            if (relation != null) {
+                relations.add(relation);
+            }
+        }
+        return factsRead;
+    }
+
+    private static Path readProjectRoot(JsonParser parser, JsonToken valueToken) throws IOException {
+        if (valueToken != JsonToken.START_OBJECT) {
+            throw new IOException("MINOS export field 'project' must be an object");
+        }
+        String rootPath = null;
+        while (parser.nextToken() != JsonToken.END_OBJECT) {
+            if (parser.currentToken() != JsonToken.FIELD_NAME) {
+                throw new IOException("MINOS export project contains malformed JSON fields");
+            }
+            String field = parser.currentName();
+            JsonToken projectValue = parser.nextToken();
+            if ("rootPath".equals(field)) {
+                rootPath = requiredParserText(parser, projectValue, "rootPath");
+            } else {
+                parser.skipChildren();
+            }
+        }
+        if (rootPath == null) {
+            throw new IOException("MINOS export field 'rootPath' must not be blank");
+        }
+        return normalizedAbsolutePath(rootPath, "project root");
+    }
+
+    private static String requiredParserText(JsonParser parser, JsonToken valueToken, String field) throws IOException {
+        if (valueToken != JsonToken.VALUE_STRING) {
+            throw new IOException("MINOS export field '" + field + "' must not be blank");
+        }
+        String value = parser.getValueAsString().trim();
+        if (value.isBlank()) {
+            throw new IOException("MINOS export field '" + field + "' must not be blank");
+        }
+        return value;
+    }
+
+    private static void requireExpectedValue(String field, String value, String expected) throws IOException {
+        if (value == null) {
+            throw new IOException("MINOS export field '" + field + "' must not be blank");
+        }
+        if (!expected.equals(value)) {
+            throw new IOException(
+                    "unsupported MINOS export " + field + ": " + value + " (expected " + expected + ")");
+        }
+    }
+
+    private static void requireTransportSize(String payload) throws IOException {
+        long bytes = 0L;
+        for (int index = 0; index < payload.length(); index++) {
+            char character = payload.charAt(index);
+            if (character <= 0x7F) {
+                bytes += 1L;
+            } else if (character <= 0x7FF) {
+                bytes += 2L;
+            } else if (Character.isHighSurrogate(character)
+                    && index + 1 < payload.length()
+                    && Character.isLowSurrogate(payload.charAt(index + 1))) {
+                bytes += 4L;
+                index++;
+            } else {
+                // Conservative for non-BMP-invalid/unpaired UTF-16 input: never undercount.
+                bytes += 3L;
+            }
+            if (bytes > MAX_EXPORT_BYTES) {
+                throw transportTooLarge();
+            }
+        }
+    }
+
+    private static IOException transportTooLarge() {
+        return new IOException("MINOS export exceeds the 128 MiB transport limit");
     }
 
     private static IndexedSymbol mapSymbol(
@@ -333,30 +525,6 @@ public final class MinosCodeIndexImporter {
         }
     }
 
-    private static JsonNode requiredObject(JsonNode parent, String field) throws IOException {
-        JsonNode node = parent.get(field);
-        if (node == null || !node.isObject()) {
-            throw new IOException("MINOS export field '" + field + "' must be an object");
-        }
-        return node;
-    }
-
-    private static Iterable<JsonNode> requiredArray(JsonNode parent, String field) throws IOException {
-        JsonNode node = parent.get(field);
-        if (node == null || !node.isArray()) {
-            throw new IOException("MINOS export field '" + field + "' must be an array");
-        }
-        return node;
-    }
-
-    private static void requireText(JsonNode parent, String field, String expected) throws IOException {
-        String value = requiredText(parent, field);
-        if (!expected.equals(value)) {
-            throw new IOException(
-                    "unsupported MINOS export " + field + ": " + value + " (expected " + expected + ")");
-        }
-    }
-
     private static String requiredText(JsonNode parent, String field) throws IOException {
         String value = optionalText(parent, field);
         if (value == null) {
@@ -384,5 +552,45 @@ public final class MinosCodeIndexImporter {
             throw new IOException("MINOS export field '" + field + "' must be positive");
         }
         return value;
+    }
+
+    private static final class BoundedPayloadInputStream extends FilterInputStream {
+
+        private long consumed;
+
+        private BoundedPayloadInputStream(InputStream input) {
+            super(input);
+        }
+
+        @Override
+        public int read() throws IOException {
+            int value = super.read();
+            if (value >= 0) {
+                record(1L);
+            }
+            return value;
+        }
+
+        @Override
+        public int read(byte[] buffer, int offset, int length) throws IOException {
+            Objects.checkFromIndexSize(offset, length, buffer.length);
+            if (length == 0) {
+                return 0;
+            }
+            long remaining = MAX_EXPORT_BYTES - consumed;
+            int requested = (int) Math.min((long) length, remaining + 1L);
+            int read = super.read(buffer, offset, requested);
+            if (read > 0) {
+                record(read);
+            }
+            return read;
+        }
+
+        private void record(long bytes) throws IOException {
+            if (bytes > MAX_EXPORT_BYTES - consumed) {
+                throw transportTooLarge();
+            }
+            consumed += bytes;
+        }
     }
 }
