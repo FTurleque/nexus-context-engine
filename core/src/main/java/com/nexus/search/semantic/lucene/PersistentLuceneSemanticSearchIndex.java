@@ -54,9 +54,7 @@ public final class PersistentLuceneSemanticSearchIndex implements SemanticSearch
 
     @Override
     public void rebuild(UUID projectId, List<SemanticVectorDocument> documents) throws IOException {
-        readers.ensureOpen();
-        readers.invalidate(projectId);
-        operationScoped.rebuild(projectId, documents);
+        rebuildInternal(projectId, null, documents);
     }
 
     @Override
@@ -64,9 +62,20 @@ public final class PersistentLuceneSemanticSearchIndex implements SemanticSearch
             UUID projectId,
             SemanticIndexProvenance provenance,
             List<SemanticVectorDocument> documents) throws IOException {
+        rebuildInternal(projectId, Objects.requireNonNull(provenance, "provenance"), documents);
+    }
+
+    private void rebuildInternal(
+            UUID projectId,
+            SemanticIndexProvenance provenance,
+            List<SemanticVectorDocument> documents) throws IOException {
         readers.ensureOpen();
         readers.invalidate(projectId);
-        operationScoped.rebuild(projectId, provenance, documents);
+        if (provenance == null) {
+            operationScoped.rebuild(projectId, documents);
+        } else {
+            operationScoped.rebuild(projectId, provenance, documents);
+        }
     }
 
     @Override
@@ -74,9 +83,7 @@ public final class PersistentLuceneSemanticSearchIndex implements SemanticSearch
             UUID projectId,
             List<SemanticVectorDocument> documents,
             Set<String> removedRelativePaths) throws IOException {
-        readers.ensureOpen();
-        operationScoped.applyChanges(projectId, documents, removedRelativePaths);
-        readers.refreshIfCached(projectId);
+        applyChangesInternal(projectId, null, documents, removedRelativePaths);
     }
 
     @Override
@@ -85,8 +92,24 @@ public final class PersistentLuceneSemanticSearchIndex implements SemanticSearch
             SemanticIndexProvenance provenance,
             List<SemanticVectorDocument> documents,
             Set<String> removedRelativePaths) throws IOException {
+        applyChangesInternal(
+                projectId,
+                Objects.requireNonNull(provenance, "provenance"),
+                documents,
+                removedRelativePaths);
+    }
+
+    private void applyChangesInternal(
+            UUID projectId,
+            SemanticIndexProvenance provenance,
+            List<SemanticVectorDocument> documents,
+            Set<String> removedRelativePaths) throws IOException {
         readers.ensureOpen();
-        operationScoped.applyChanges(projectId, provenance, documents, removedRelativePaths);
+        if (provenance == null) {
+            operationScoped.applyChanges(projectId, documents, removedRelativePaths);
+        } else {
+            operationScoped.applyChanges(projectId, provenance, documents, removedRelativePaths);
+        }
         readers.refreshIfCached(projectId);
     }
 
