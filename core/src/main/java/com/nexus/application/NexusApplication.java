@@ -58,12 +58,14 @@ import com.nexus.search.SearchStrategy;
 import com.nexus.search.SymbolSearchStrategy;
 import com.nexus.search.lucene.LuceneFileSearchStrategy;
 import com.nexus.search.lucene.LuceneSearchIndex;
+import com.nexus.search.lucene.PersistentLuceneSearchIndex;
 import com.nexus.search.semantic.EmbeddingProvider;
 import com.nexus.search.semantic.SemanticIndexingService;
 import com.nexus.search.semantic.SemanticSearchConfiguration;
 import com.nexus.search.semantic.SemanticSearchIndex;
 import com.nexus.search.semantic.SemanticSearchStrategy;
 import com.nexus.search.semantic.lucene.LuceneSemanticSearchIndex;
+import com.nexus.search.semantic.lucene.PersistentLuceneSemanticSearchIndex;
 import com.nexus.token.HeuristicTokenEstimator;
 import com.nexus.token.TokenEstimator;
 
@@ -85,7 +87,7 @@ import java.util.UUID;
  * mêmes gates de cohérence, la même composition des providers et les mêmes
  * politiques de ranking/context.</p>
  */
-public final class NexusApplication {
+public final class NexusApplication implements AutoCloseable {
 
     private final ProjectRepository projectRepository;
     private final IndexRepository indexRepository;
@@ -96,6 +98,8 @@ public final class NexusApplication {
     private final FederatedSearchService federatedSearchService;
     private final ContextBuilder contextBuilder;
     private final FederatedContextService federatedContextService;
+    private final SearchIndex searchIndex;
+    private final SemanticSearchIndex semanticSearchIndex;
     private final boolean semanticSearchEnabled;
 
     private NexusApplication(
@@ -108,6 +112,8 @@ public final class NexusApplication {
             FederatedSearchService federatedSearchService,
             ContextBuilder contextBuilder,
             FederatedContextService federatedContextService,
+            SearchIndex searchIndex,
+            SemanticSearchIndex semanticSearchIndex,
             boolean semanticSearchEnabled) {
         this.projectRepository = Objects.requireNonNull(projectRepository, "projectRepository");
         this.indexRepository = Objects.requireNonNull(indexRepository, "indexRepository");
@@ -118,18 +124,43 @@ public final class NexusApplication {
         this.federatedSearchService = Objects.requireNonNull(federatedSearchService, "federatedSearchService");
         this.contextBuilder = Objects.requireNonNull(contextBuilder, "contextBuilder");
         this.federatedContextService = Objects.requireNonNull(federatedContextService, "federatedContextService");
+        this.searchIndex = Objects.requireNonNull(searchIndex, "searchIndex");
+        this.semanticSearchIndex = semanticSearchIndex;
         this.semanticSearchEnabled = semanticSearchEnabled;
     }
 
     /** Compose NEXUS avec les opt-ins opérationnels explicitement présents dans l'environnement. */
     public static NexusApplication create(NexusPaths paths) throws SQLException, IOException {
-        return create(paths, SemanticSearchConfiguration.fromEnvironment());
+        return create(paths, SemanticSearchConfiguration.fromEnvironment(), false);
     }
 
     /** Compose NEXUS avec une configuration sémantique fournie explicitement par l'appelant. */
     public static NexusApplication create(
             NexusPaths paths,
             SemanticSearchConfiguration semanticSearchConfiguration) throws SQLException, IOException {
+        return create(paths, semanticSearchConfiguration, false);
+    }
+
+    /**
+     * Compose NEXUS pour un processus longue durée (REST/MCP) en conservant des
+     * readers/searchers Lucene bornés entre les requêtes. Les writers restent
+     * operation-scoped afin de préserver les verrous inter-processus existants.
+     */
+    public static NexusApplication createLongLived(NexusPaths paths) throws SQLException, IOException {
+        return create(paths, SemanticSearchConfiguration.fromEnvironment(), true);
+    }
+
+    /** Variante longue durée avec configuration sémantique explicite. */
+    public static NexusApplication createLongLived(
+            NexusPaths paths,
+            SemanticSearchConfiguration semanticSearchConfiguration) throws SQLException, IOException {
+        return create(paths, semanticSearchConfiguration, true);
+    }
+
+    private static NexusApplication create(
+            NexusPaths paths,
+            SemanticSearchConfiguration semanticSearchConfiguration,
+            boolean persistentReaders) throws SQLException, IOException {
         Objects.requireNonNull(paths, "paths");
         Objects.requireNonNull(semanticSearchConfiguration, "semanticSearchConfiguration");
 
@@ -137,7 +168,9 @@ public final class NexusApplication {
         ProjectRepository projectRepository = new SqliteProjectRepository(database);
         IndexRepository indexRepository = new SqliteIndexRepository(database);
         ProjectRegistry projectRegistry = new ProjectRegistry(projectRepository);
-        SearchIndex searchIndex = new LuceneSearchIndex(paths);
+        SearchIndex searchIndex = persistentReaders
+                ? new PersistentLuceneSearchIndex(paths)
+                : new LuceneSearchIndex(paths);
         ProjectIndexLockManager projectIndexLockManager = ProjectIndexLockManager.fileBacked(paths);
 
         List<CodeIntelligenceProvider> codeIntelligenceProviders =
@@ -151,11 +184,13 @@ public final class NexusApplication {
         searchStrategies.add(new SymbolSearchStrategy(indexRepository));
 
         SemanticIndexingService semanticIndexingService = null;
+        SemanticSearchIndex semanticSearchIndex = null;
         if (semanticSearchConfiguration.enabled()) {
             EmbeddingProvider embeddingProvider = semanticSearchConfiguration.embeddingProvider()
                     .orElseThrow(() -> new IllegalStateException("Configuration sémantique activée sans provider"));
-            SemanticSearchIndex semanticSearchIndex =
-                    new LuceneSemanticSearchIndex(paths, embeddingProvider.dimensions());
+            semanticSearchIndex = persistentReaders
+                    ? new PersistentLuceneSemanticSearchIndex(paths, embeddingProvider.dimensions())
+                    : new LuceneSemanticSearchIndex(paths, embeddingProvider.dimensions());
             semanticIndexingService = new SemanticIndexingService(embeddingProvider, semanticSearchIndex);
             searchStrategies.add(new SemanticSearchStrategy(
                     embeddingProvider,
@@ -214,6 +249,8 @@ public final class NexusApplication {
                 federatedSearchService,
                 contextBuilder,
                 federatedContextService,
+                searchIndex,
+                semanticSearchIndex,
                 semanticSearchConfiguration.enabled());
     }
 
@@ -397,6 +434,30 @@ public final class NexusApplication {
                 projects.size(),
                 counts,
                 semanticSearchEnabled);
+    }
+
+    @Override
+    public void close() throws IOException {
+        IOException failure = null;
+        if (semanticSearchIndex != null) {
+            try {
+                semanticSearchIndex.close();
+            } catch (IOException exception) {
+                failure = exception;
+            }
+        }
+        try {
+            searchIndex.close();
+        } catch (IOException exception) {
+            if (failure == null) {
+                failure = exception;
+            } else {
+                failure.addSuppressed(exception);
+            }
+        }
+        if (failure != null) {
+            throw failure;
+        }
     }
 
     private ProjectDescriptor requireReadyProject(UUID projectId) {
