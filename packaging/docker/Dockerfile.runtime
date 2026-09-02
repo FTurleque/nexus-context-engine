@@ -22,7 +22,10 @@ RUN sed -i 's/\r$//' /usr/local/bin/nexus-entrypoint /usr/local/bin/nexus-health
 # NEXUS_DOCKER_HOST_FORWARD_ADDRESS intentionally has no image default. A container cannot infer
 # the host address chosen by the Docker daemon for -p/--publish. Official Compose injects the
 # declaration from NEXUS_DOCKER_BIND_ADDRESS; manual REST runs must declare it explicitly.
-ENV NEXUS_HOME=/data/nexus \
+# Keep the same native-access contract as the source-build Dockerfile so release handoff images
+# and direct `docker exec ... java` integrations behave identically.
+ENV JDK_JAVA_OPTIONS=--enable-native-access=ALL-UNNAMED \
+    NEXUS_HOME=/data/nexus \
     NEXUS_MODE=rest \
     NEXUS_RUNTIME=docker \
     NEXUS_REST_HOST=0.0.0.0 \

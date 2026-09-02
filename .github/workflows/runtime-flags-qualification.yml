@@ -6,6 +6,7 @@ on:
       - develop
     paths:
       - '.github/workflows/runtime-flags-qualification.yml'
+      - 'pom.xml'
       - 'core/src/main/java/com/nexus/persistence/sqlite/**'
       - 'core/src/main/java/com/nexus/search/**'
       - 'core/src/test/java/com/nexus/benchmark/**'
@@ -14,6 +15,7 @@ on:
       - 'packaging/docker/**'
       - 'adapters/mcp-java/**'
       - 'adapters/rest-quarkus/**'
+      - 'adapters/assistant-clients/**'
       - 'mvnw.cmd'
       - 'scripts/release/test-tool-integrity-anchors.sh'
       - 'docs/developer/runtime-flags-qualification.md'
@@ -24,12 +26,12 @@ permissions:
 
 jobs:
   warning-contract-linux:
-    name: Linux Java 21 warning contract (${{ matrix.profile }})
+    name: Linux Java 21 native-access contract (${{ matrix.profile }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        profile: [baseline, tuned]
+        profile: [control, adopted]
     steps:
       - name: Checkout exact head
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -41,52 +43,49 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Resolve supported tuned flags
+      - name: Detect Vector API availability
         id: flags
         shell: bash
         run: |
           set -euo pipefail
-          flags='--enable-native-access=ALL-UNNAMED'
           vector=false
           if java --list-modules | grep -q '^jdk.incubator.vector@'; then
-            flags="$flags --add-modules=jdk.incubator.vector"
             vector=true
           fi
-          echo "flags=$flags" >> "$GITHUB_OUTPUT"
           echo "vector=$vector" >> "$GITHUB_OUTPUT"
       - name: Run focused SQLite/Lucene contract
         shell: bash
         env:
           QUALIFICATION_PROFILE: ${{ matrix.profile }}
-          QUALIFIED_FLAGS: ${{ steps.flags.outputs.flags }}
           VECTOR_AVAILABLE: ${{ steps.flags.outputs.vector }}
         run: |
           set -euo pipefail
           mkdir -p target/runtime-flags
-          if [[ "$QUALIFICATION_PROFILE" == tuned ]]; then
-            export JDK_JAVA_OPTIONS="$QUALIFIED_FLAGS"
-          else
-            unset JDK_JAVA_OPTIONS || true
-          fi
+          unset JDK_JAVA_OPTIONS || true
           chmod +x ./mvnw
+          extra=()
+          if [[ "$QUALIFICATION_PROFILE" == control ]]; then
+            # Disable only the project-level adopted option. This proves the
+            # regression contract still observes the underlying runtime warning.
+            extra+=('-Dnexus.runtime.nativeAccessArg=')
+          fi
           ./mvnw -B -pl core \
+            "${extra[@]}" \
             -Dtest=SearchServiceIntegrationTest,LuceneSearchIndexTest \
             test 2>&1 | tee "target/runtime-flags/linux-java21-${QUALIFICATION_PROFILE}.log"
           log="target/runtime-flags/linux-java21-${QUALIFICATION_PROFILE}.log"
-          if [[ "$QUALIFICATION_PROFILE" == baseline ]]; then
-            grep -q -- '--enable-native-access=ALL-UNNAMED' "$log"
-            if [[ "$VECTOR_AVAILABLE" == true ]]; then
-              grep -q -- '--add-modules jdk.incubator.vector' "$log"
-            fi
+          if [[ "$QUALIFICATION_PROFILE" == control ]]; then
+            grep -q -- 'Use --enable-native-access=ALL-UNNAMED' "$log"
           else
             if grep -q -- 'Use --enable-native-access=ALL-UNNAMED' "$log"; then
-              echo '::error::Native-access warning remains with tuned flags'
+              echo '::error::Native-access warning remains under the adopted default contract'
               exit 1
             fi
-            if [[ "$VECTOR_AVAILABLE" == true ]] && grep -q -- 'vector incubator module is not readable' "$log"; then
-              echo '::error::Lucene vector warning remains with tuned flags'
-              exit 1
-            fi
+          fi
+          if [[ "$VECTOR_AVAILABLE" == true ]]; then
+            # Vector remains intentionally non-adopted; its advisory warning is
+            # expected in both control and production-default profiles.
+            grep -q -- 'vector incubator module is not readable' "$log"
           fi
       - name: Retain Linux warning evidence
         if: always()
@@ -98,12 +97,12 @@ jobs:
           path: target/runtime-flags/*.log
 
   warning-contract-windows:
-    name: Windows Java 24 warning contract (${{ matrix.profile }})
+    name: Windows Java 24 native-access contract (${{ matrix.profile }})
     runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
-        profile: [baseline, tuned]
+        profile: [control, adopted]
     steps:
       - name: Checkout exact head
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -115,41 +114,40 @@ jobs:
         with:
           distribution: temurin
           java-version: '24'
-      - name: Resolve supported tuned flags
+      - name: Detect Vector API availability
         id: flags
         shell: pwsh
         run: |
-          $flags = '--enable-native-access=ALL-UNNAMED'
           $modules = & java --list-modules | Out-String
           $vector = $modules -match '(?m)^jdk\.incubator\.vector@'
-          if ($vector) { $flags += ' --add-modules=jdk.incubator.vector' }
-          "flags=$flags" >> $env:GITHUB_OUTPUT
           "vector=$($vector.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
       - name: Run focused SQLite/Lucene contract
         shell: pwsh
         env:
           QUALIFICATION_PROFILE: ${{ matrix.profile }}
-          QUALIFIED_FLAGS: ${{ steps.flags.outputs.flags }}
           VECTOR_AVAILABLE: ${{ steps.flags.outputs.vector }}
         run: |
           New-Item -ItemType Directory -Force -Path target/runtime-flags | Out-Null
-          if ($env:QUALIFICATION_PROFILE -eq 'tuned') {
-            $env:JDK_JAVA_OPTIONS = $env:QUALIFIED_FLAGS
-          } else {
-            Remove-Item Env:JDK_JAVA_OPTIONS -ErrorAction SilentlyContinue
+          Remove-Item Env:JDK_JAVA_OPTIONS -ErrorAction SilentlyContinue
+          $extra = @()
+          if ($env:QUALIFICATION_PROFILE -eq 'control') {
+            $extra += '-Dnexus.runtime.nativeAccessArg='
           }
           $log = "target/runtime-flags/windows-java24-$($env:QUALIFICATION_PROFILE).log"
-          & .\mvnw.cmd -B -pl core `
+          & .\mvnw.cmd -B -pl core @extra `
             '-Dtest=SearchServiceIntegrationTest,LuceneSearchIndexTest' `
             test 2>&1 | Tee-Object -FilePath $log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $content = Get-Content -Raw -LiteralPath $log
-          if ($env:QUALIFICATION_PROFILE -eq 'baseline') {
-            if ($content -notmatch '--enable-native-access=ALL-UNNAMED') { throw 'Expected native-access baseline warning was not observed' }
-            if ($env:VECTOR_AVAILABLE -eq 'true' -and $content -notmatch '--add-modules jdk.incubator.vector') { throw 'Expected vector baseline warning was not observed' }
-          } else {
-            if ($content -match 'Use --enable-native-access=ALL-UNNAMED') { throw 'Native-access warning remains with tuned flags' }
-            if ($env:VECTOR_AVAILABLE -eq 'true' -and $content -match 'vector incubator module is not readable') { throw 'Lucene vector warning remains with tuned flags' }
+          if ($env:QUALIFICATION_PROFILE -eq 'control') {
+            if ($content -notmatch 'Use --enable-native-access=ALL-UNNAMED') {
+              throw 'Control profile did not reproduce the native-access warning'
+            }
+          } elseif ($content -match 'Use --enable-native-access=ALL-UNNAMED') {
+            throw 'Native-access warning remains under the adopted default contract'
+          }
+          if ($env:VECTOR_AVAILABLE -eq 'true' -and $content -notmatch 'vector incubator module is not readable') {
+            throw 'Expected advisory Vector API warning was not observed while Vector remains non-adopted'
           }
       - name: Retain Windows warning evidence
         if: always()
@@ -161,7 +159,7 @@ jobs:
           path: target/runtime-flags/*.log
 
   scale-comparison:
-    name: Linux Java 21 same-runner Vector API ABBA comparison
+    name: Linux Java 21 production-default / Vector API ABBA comparison
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -175,7 +173,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Run native-only/vector-enabled ABBA on one runner
+      - name: Run adopted-default/vector-enabled ABBA on one runner
         shell: bash
         run: |
           set -euo pipefail
@@ -188,7 +186,11 @@ jobs:
             flags="$2"
             out="target/runtime-flags/$label"
             mkdir -p "$out"
-            export JDK_JAVA_OPTIONS="$flags"
+            if [[ -n "$flags" ]]; then
+              export JDK_JAVA_OPTIONS="$flags"
+            else
+              unset JDK_JAVA_OPTIONS || true
+            fi
             ./mvnw -B -pl core \
               -Dtest=ScaleRegressionBenchmarkTest,GraphScaleRegressionBenchmarkTest,FederatedContextBudgetScaleBenchmarkTest,NativeContextDiscoveryBudgetBenchmarkTest \
               -Djunit.jupiter.execution.timeout.test.method.default=20m \
@@ -201,19 +203,18 @@ jobs:
               test 2>&1 | tee "$out/run.log"
           }
 
-          native='--enable-native-access=ALL-UNNAMED'
-          vector="$native --add-modules=jdk.incubator.vector"
-          run_profile native-a "$native"
+          vector='--add-modules=jdk.incubator.vector'
+          run_profile adopted-a ''
           run_profile vector-a "$vector"
           run_profile vector-b "$vector"
-          run_profile native-b "$native"
+          run_profile adopted-b ''
 
           python3 - <<'PY'
           import json
           import statistics
           from pathlib import Path
 
-          labels = ('native-a', 'vector-a', 'vector-b', 'native-b')
+          labels = ('adopted-a', 'vector-a', 'vector-b', 'adopted-b')
           reports = {}
           for label in labels:
               root = Path('target/runtime-flags') / label
@@ -234,18 +235,18 @@ jobs:
                   'federatedMs': federated['durationMs'],
               }
 
-          native_runs = [reports['native-a'], reports['native-b']]
+          adopted_runs = [reports['adopted-a'], reports['adopted-b']]
           vector_runs = [reports['vector-a'], reports['vector-b']]
           summary = {
               'order': list(labels),
               'runs': reports,
-              'nativeMedianTotalMs': statistics.median(x['totalMs'] for x in native_runs),
+              'adoptedMedianTotalMs': statistics.median(x['totalMs'] for x in adopted_runs),
               'vectorMedianTotalMs': statistics.median(x['totalMs'] for x in vector_runs),
-              'nativeMedianGraphP95Ms': statistics.median(x['graphP95Ms'] for x in native_runs),
+              'adoptedMedianGraphP95Ms': statistics.median(x['graphP95Ms'] for x in adopted_runs),
               'vectorMedianGraphP95Ms': statistics.median(x['graphP95Ms'] for x in vector_runs),
           }
-          summary['vectorTotalRatio'] = summary['vectorMedianTotalMs'] / summary['nativeMedianTotalMs']
-          summary['vectorGraphP95Ratio'] = summary['vectorMedianGraphP95Ms'] / summary['nativeMedianGraphP95Ms']
+          summary['vectorTotalRatio'] = summary['vectorMedianTotalMs'] / summary['adoptedMedianTotalMs']
+          summary['vectorGraphP95Ratio'] = summary['vectorMedianGraphP95Ms'] / summary['adoptedMedianGraphP95Ms']
           Path('target/runtime-flags/summary.json').write_text(json.dumps(summary, indent=2) + '\n')
           print(json.dumps(summary, indent=2))
           PY

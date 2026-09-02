@@ -18,6 +18,7 @@ import java.util.Objects;
 public final class AssistantIntegrationGenerator {
 
     public static final String SERVER_NAME = "nexus";
+    public static final String NATIVE_ACCESS_ARGUMENT = "--enable-native-access=ALL-UNNAMED";
 
     private final ObjectMapper objectMapper;
 
@@ -81,7 +82,9 @@ public final class AssistantIntegrationGenerator {
     }
 
     public CommandSpec nativeMcp(Path javaExecutable, Path runner) {
-        return new CommandSpec(normalize(javaExecutable), List.of("-jar", normalize(runner)));
+        return new CommandSpec(
+                normalize(javaExecutable),
+                List.of(NATIVE_ACCESS_ARGUMENT, "-jar", normalize(runner)));
     }
 
     public CommandSpec dockerMcp(String containerName) {
@@ -91,7 +94,7 @@ public final class AssistantIntegrationGenerator {
         }
         return new CommandSpec("docker", List.of(
                 "exec", "-i", container,
-                "java", "-jar", "/opt/nexus/lib/nexus-mcp.jar"));
+                "java", NATIVE_ACCESS_ARGUMENT, "-jar", "/opt/nexus/lib/nexus-mcp.jar"));
     }
 
     public String copilotCliCommand(Path runner) {
@@ -171,7 +174,7 @@ public final class AssistantIntegrationGenerator {
     }
 
     private CommandSpec legacyJava(Path runner) {
-        return new CommandSpec("java", List.of("-jar", normalize(runner)));
+        return new CommandSpec("java", List.of(NATIVE_ACCESS_ARGUMENT, "-jar", normalize(runner)));
     }
 
     private static Map<String, Object> stdioServer(CommandSpec commandSpec) {
@@ -280,6 +283,7 @@ public final class AssistantIntegrationGenerator {
 
                 Le mode native permet de viser explicitement le Java embarqué NEXUS.
                 Le mode docker utilise docker exec -i et conserve MCP en STDIO.
+                Les commandes MCP Java générées appliquent automatiquement le contrat native-access qualifié.
                 La forme command vise uniquement le sous-ensemble d'arguments portable cmd.exe/PowerShell ;
                 utilisez JSON/TOML pour les chemins contenant %, !, $, backtick ou guillemets.
                 Le générateur n'écrit aucun fichier et ne modifie aucune configuration utilisateur.
