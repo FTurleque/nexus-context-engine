@@ -1,6 +1,6 @@
 # Qualification des flags JVM runtime
 
-Ce document décrit la qualification NXA7-P3 suivie par #152. Les warnings Java observés sont advisory : aucun flag global n'est adopté avant comparaison reproductible des runtimes supportés.
+Ce document décrit la qualification NXA7-P3 suivie par #152 et la décision d'adoption issue des mesures exact-head.
 
 ## Warnings de départ
 
@@ -27,44 +27,67 @@ Le scope `ALL-UNNAMED` est évalué parce que les distributions NEXUS actuelles 
 
 Le protocole compare `native-only` à `native+vector` afin que l'effet mesuré soit celui du **Vector API uniquement**. L'ABBA same-runner réduit à la fois le bruit inter-machine et le biais d'échauffement.
 
-Cette première PR ne modifie aucun launcher utilisateur. Elle produit l'évidence nécessaire avant décision d'adoption.
+## Qualification fonctionnelle
 
-## Baseline avant qualification
-
-Le run CI du 2 septembre 2026 sur le correctif #155 a mesuré, sans flags additionnels :
-
-- profil `ci` ;
-- SQLite max : 100 000 symboles ;
-- portfolio max : 25 projets ;
-- récupération sémantique : 5 000 documents ;
-- graphe : 100 000 symboles / 100 000 relations ;
-- p95 graphe : environ 2 893 ms sur ce runner ;
-- durée du rapport scale : environ 14 902 ms ;
-- découverte native : 1 000 skills / 2 001 entrées, environ 189 ms.
-
-Ces valeurs servent de point de comparaison, pas de promesse de performance absolue entre runners GitHub différents.
-
-## Qualification fonctionnelle initiale des flags
-
-Le premier run qualifié sur le HEAD `7db489d...` a confirmé que :
+Les runs qualifiés ont confirmé que :
 
 - Java 21 / Linux expose `jdk.incubator.vector` et le profil tuned supprime les deux warnings ciblés ;
 - Java 24 / Windows (Temurin 24.0.2) expose également `jdk.incubator.vector` et le profil tuned supprime les deux warnings ciblés ;
-- les tests SQLite/Lucene restent verts avec et sans flags.
+- les tests SQLite/Lucene restent verts avec et sans flags ;
+- le wrapper Windows Maven conserve sa vérification SHA-512 repository-pinned avant extraction via `System.Security.Cryptography.SHA512` / `ComputeHash` ;
+- le packaging Windows self-contained complet reste fonctionnel avec ce bootstrap.
 
-La première tentative de comparaison performance exécutait baseline et tuned sur deux runners distincts. Elle a produit environ 14 914 ms / 3 188 ms p95 graphe en baseline contre 16 728 ms / 3 639 ms en tuned. **Ces nombres ne sont pas utilisés pour la décision d'adoption**, car ils mélangent l'effet des flags avec la variabilité de machines différentes et n'isolent pas le Vector API. Le protocole `native-only` / `native+vector` ABBA same-runner les remplace.
+La première tentative de comparaison performance exécutait baseline et tuned sur deux runners distincts. Ses nombres ont été explicitement écartés de la décision, car ils mélangeaient effet JVM et variabilité machine.
 
-## Bootstrap Windows découvert pendant la qualification
+## Résultat Vector API exact-head
 
-Le premier run Windows Java 24 a également révélé que le Windows PowerShell du runner pouvait ne pas fournir `Get-FileHash`. `mvnw.cmd` calcule désormais le SHA-512 Maven via `System.Security.Cryptography.SHA512` / `ComputeHash`, puis le compare à l'ancre versionnée dans `config/tool-integrity.properties` **avant** extraction. Le fallback HTTP `curl.exe` puis PowerShell reste inchangé.
+La comparaison same-runner ABBA finale a été exécutée sur le HEAD `55511bf545fc4434ddf688c64f458a79666bad42`, ensuite mergé par #156.
+
+Résultats médians :
+
+- `native-only` total : **14 760,5 ms** ;
+- `native+vector` total : **14 534,5 ms** ;
+- ratio Vector/native total : **0,98469** (~1,5 % plus rapide) ;
+- `native-only` graphe p95 : **3 027,92 ms** ;
+- `native+vector` graphe p95 : **3 049,13 ms** ;
+- ratio Vector/native graphe p95 : **1,00700** (~0,7 % plus lent).
+
+Le Vector API n'apporte donc pas de bénéfice robuste et univoque sur le workload NEXUS qualifié. Un gain global faible coexiste avec une légère régression du p95 graphe ; cela ne justifie pas d'imposer un module incubateur à toutes les surfaces runtime.
 
 ## Décision d'adoption
 
-Une seconde modification peut versionner les flags dans les launchers uniquement si :
+### Retenu
 
-- `--enable-native-access=ALL-UNNAMED` est supporté sur les runtimes qualifiés et supprime uniquement le warning ciblé ;
-- l'activation du Vector API présente un bénéfice mesurable ou, au minimum, aucune régression significative sur la comparaison ABBA ;
-- JaCoCo et le JVM enfant MCP restent fonctionnels ;
-- CLI, MCP, REST, Docker et Windows self-contained passent ensuite leurs smokes exact-head.
+`--enable-native-access=ALL-UNNAMED` est versionné dans les surfaces NEXUS supportées :
 
-Le flag native-access et le flag Vector peuvent donc avoir **des décisions d'adoption différentes**. Si `jdk.incubator.vector` n'existe pas sur un runtime supporté, le flag Vector ne doit jamais être imposé aveuglément à cette surface : le launcher devra soit détecter la capacité, soit rester sans ce flag.
+- Maven/Surefire via `argLine` à expansion tardive afin de préserver JaCoCo ;
+- launcher CLI Linux et Windows ;
+- JVM enfant MCP qualifiée avec l'agent JaCoCo ;
+- commandes MCP générées pour les assistants ;
+- image Docker, y compris les commandes `docker exec ... java` qui contournent l'entrypoint ;
+- runtime Windows self-contained : `jpackage`, MCP, assistant et REST.
+
+Cette option correspond au classpath non modulaire actuel et supprime le warning native-access qualifié sans élargir la surface au-delà de `ALL-UNNAMED`.
+
+### Non retenu
+
+`--add-modules=jdk.incubator.vector` **n'est pas activé par défaut**. Le warning Lucene associé reste un diagnostic d'optimisation advisory, pas une erreur de correction ou de sécurité.
+
+Une future adoption Vector devra être réévaluée si :
+
+- le workload évolue vers une charge vectorielle significativement plus importante ;
+- Lucene/JDK fournit une API non incubateur ou un bénéfice plus net ;
+- une nouvelle qualification same-runner montre un gain stable sans régression des chemins critiques.
+
+## Gate de clôture #152
+
+L'adoption native-access n'est considérée terminée qu'après qualification exact-head des surfaces suivantes :
+
+- reactor Maven/Surefire + JaCoCo ;
+- CLI shaded JAR ;
+- MCP STDIO et JVM enfant ;
+- REST/Quarkus ;
+- Docker distribution ;
+- Windows self-contained installer.
+
+Les workflows NEXUS CI, Docker Distribution et Windows Installer constituent les preuves de clôture.
