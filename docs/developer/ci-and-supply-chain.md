@@ -34,6 +34,17 @@ Le gate documentaire contrôle désormais aussi les invariants NXA4 :
 
 Les actions GitHub contrôlées par le dépôt sont référencées par SHA immuable.
 
+## Windows Installer
+
+`.github/workflows/windows-installer.yml` est un gate exact-head de packaging et de comportement Windows. Ses filtres PR couvrent les sources qui peuvent modifier le payload distribué :
+
+- `core/src/**` ;
+- `adapters/**` ;
+- POM, wrapper Maven et configuration `.mvn/**` ;
+- scripts/distribution/packaging Windows.
+
+Une modification Java ordinaire ne peut donc plus contourner le smoke du ZIP self-contained et de l'installateur Windows avant intégration dans `develop`.
+
 ## CodeQL, OSV et SonarCloud
 
 - CodeQL : Java/Kotlin `security-extended`, contrat exact-head ;
@@ -54,7 +65,7 @@ Un check externe n'apparaît pas nécessairement dans la liste des workflows Git
 
 Le benchmark natif crée un corpus hermétique de 1 000 skills et vérifie frontière exacte, compteurs, déterminisme et durée. Voir [`native-context-discovery-limits.md`](native-context-discovery-limits.md).
 
-`scanner-corpus-benchmark.yml` qualifie séparément le comportement/performance du scanner sur son corpus dédié.
+`scanner-corpus-benchmark.yml` qualifie séparément le comportement/performance du scanner sur son corpus dédié. Les tests du reactor couvrent en plus l'explosion de répertoires vides et le batching mémoire des index dérivés ; voir [`indexing-corpus-limits.md`](indexing-corpus-limits.md).
 
 La borne Lucene de 128 termes est couverte par un test de non-régression du reactor plutôt que par une baisse de seuil benchmark.
 
@@ -62,11 +73,21 @@ La borne Lucene de 128 termes est couverte par un test de non-régression du rea
 
 `.github/workflows/docker-distribution.yml` ne publie rien dans GHCR. Il construit l'image une seule fois et exécute sur cette image les smokes CLI/MCP/REST, Trivy, SBOM et gates de vulnérabilités.
 
+Les images de base builder/runtime sont épinglées par digest. Les Dockerfiles n'exécutent **aucun `apt-get`** après ces bases :
+
+- le builder utilise directement le Maven déjà fourni par l'image Maven épinglée ;
+- le runtime n'installe pas `curl`/`wget` uniquement pour le healthcheck ;
+- `/usr/local/bin/nexus-healthcheck` utilise le support TCP de Bash contre le listener management local.
+
+Le contenu OS de ces couches dépend donc des digests de base, et non de l'état courant d'un miroir APT au moment de la build.
+
 Le smoke REST respecte la séparation NXA4 :
 
-- health sondé **dans le conteneur** sur `127.0.0.1:9000/q/health/live` ;
+- health sondé **dans le conteneur** par `/usr/local/bin/nexus-healthcheck` sur `127.0.0.1:9000/q/health/live` ;
 - endpoint métier vérifié séparément via le port applicatif publié ;
 - le port management n'est pas exposé à l'hôte uniquement pour satisfaire la CI.
+
+Le template Compose réutilise le même probe embarqué : il ne tente plus de lire `/q/health/live` sur le listener applicatif.
 
 Pour une release, Docker Distribution exporte ensuite l'image qualifiée avec son SHA-256 d'archive, son ID Docker et le SHA Git. Le job de publication vérifie ce handoff et **ne reconstruit jamais l'image**.
 
