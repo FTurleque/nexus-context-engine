@@ -8,7 +8,7 @@ import java.util.UUID;
 /**
  * Port d'un index vectoriel local dérivé et reconstructible.
  */
-public interface SemanticSearchIndex {
+public interface SemanticSearchIndex extends AutoCloseable {
 
     /**
      * Dimension attendue par l'index.
@@ -62,4 +62,13 @@ public interface SemanticSearchIndex {
      * Recherche les documents sémantiquement les plus proches pour un projet.
      */
     List<SemanticSearchHit> search(UUID projectId, float[] queryVector, int limit) throws IOException;
+
+    /**
+     * Libère les readers persistants éventuels. Les implémentations historiques
+     * operation-scoped restent no-op.
+     */
+    @Override
+    default void close() throws IOException {
+        // no-op par défaut
+    }
 }
