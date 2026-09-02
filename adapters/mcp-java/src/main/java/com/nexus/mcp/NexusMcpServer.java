@@ -22,6 +22,8 @@ import java.util.concurrent.CountDownLatch;
  */
 public final class NexusMcpServer {
 
+    private static final System.Logger LOGGER = System.getLogger(NexusMcpServer.class.getName());
+
     private NexusMcpServer() {
     }
 
@@ -54,7 +56,10 @@ public final class NexusMcpServer {
             try {
                 application.close();
             } catch (IOException exception) {
-                System.err.println("NEXUS MCP: impossible de fermer les readers Lucene : " + exception.getMessage());
+                LOGGER.log(
+                        System.Logger.Level.ERROR,
+                        "Impossible de fermer les readers Lucene du serveur MCP",
+                        exception);
             }
         }
     }
