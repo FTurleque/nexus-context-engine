@@ -13,6 +13,12 @@ on:
       - 'docs/developer/indexing-corpus-limits.md'
       - '.github/workflows/scanner-corpus-benchmark.yml'
       - '.github/workflows/develop-push-scanner-corpus-benchmark.yml'
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - '.github/workflows/develop-push-scanner-corpus-benchmark.yml'
 
 permissions:
   contents: read
