@@ -32,7 +32,8 @@ grep -q 'MAVEN_VERSION=3.9.16' "$ROOT/mvnw.cmd"
 
 # Both wrappers must keep the repository-pinned digest as the trust anchor.
 grep -q 'verify-pinned-checksum.sh' "$ROOT/mvnw"
-grep -q 'Get-FileHash -Algorithm SHA512' "$ROOT/mvnw.cmd"
+grep -q 'System.Security.Cryptography.SHA512' "$ROOT/mvnw.cmd"
+grep -q 'ComputeHash' "$ROOT/mvnw.cmd"
 grep -q 'tool-integrity.properties' "$ROOT/mvnw.cmd"
 
 # Windows bootstrap resilience must not regress to a single HTTP client: curl is
