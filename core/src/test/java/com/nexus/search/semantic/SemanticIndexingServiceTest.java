@@ -10,6 +10,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SemanticIndexingServiceTest {
@@ -54,6 +55,61 @@ class SemanticIndexingServiceTest {
         assertEquals("docs/database.md", index.updated.getFirst().relativePath());
         assertEquals(Set.of("docs/architecture.md"), index.removed);
         assertTrue(index.updated.getFirst().excerpt().contains("database migration"));
+    }
+
+    @Test
+    void doesNotSplitSurrogatePairsAtEmbeddingOrExcerptBoundaries() throws Exception {
+        CapturingSemanticIndex index = new CapturingSemanticIndex(3);
+        String[] embeddedText = {null};
+        EmbeddingProvider provider = new EmbeddingProvider() {
+            @Override
+            public String modelId() {
+                return "test/unicode-model";
+            }
+
+            @Override
+            public int dimensions() {
+                return 3;
+            }
+
+            @Override
+            public float[] embed(String text) {
+                embeddedText[0] = text;
+                return new float[]{1.0f, 0.0f, 0.0f};
+            }
+        };
+
+        String path = "docs/unicode.md";
+        String header = "path: " + path + "\nlanguage: markdown\n";
+        String prefix = "x".repeat(319);
+        String content = prefix + "😀tail";
+        SemanticIndexingService service = new SemanticIndexingService(
+                provider,
+                index,
+                header.length() + 320,
+                1);
+
+        service.rebuild(UUID.randomUUID(), List.of(document(path, content)));
+
+        assertEquals(header + prefix, embeddedText[0]);
+        assertEquals(prefix, index.rebuilt.getFirst().excerpt());
+        assertFalse(hasIsolatedSurrogate(embeddedText[0]));
+        assertFalse(hasIsolatedSurrogate(index.rebuilt.getFirst().excerpt()));
+    }
+
+    private static boolean hasIsolatedSurrogate(String value) {
+        for (int index = 0; index < value.length(); index++) {
+            char current = value.charAt(index);
+            if (Character.isHighSurrogate(current)) {
+                if (index + 1 >= value.length() || !Character.isLowSurrogate(value.charAt(index + 1))) {
+                    return true;
+                }
+                index++;
+            } else if (Character.isLowSurrogate(current)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static SearchDocument document(String path, String content) {
