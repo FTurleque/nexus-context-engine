@@ -92,11 +92,11 @@ jobs:
         shell: pwsh
         run: |
           & .\mvnw.cmd -B -pl core `
-            -Dtest=LuceneLifecycleQualificationBenchmarkTest `
-            -Djunit.jupiter.execution.timeout.test.method.default=20m `
-            -Dnexus.scale.benchmark.enabled=true `
-            -Dnexus.scale.benchmark.profile=${{ steps.profile.outputs.value }} `
-            -Dnexus.lucene.lifecycle.benchmark.output=target/lucene-lifecycle-benchmark.json `
+            '-Dtest=LuceneLifecycleQualificationBenchmarkTest' `
+            '-Djunit.jupiter.execution.timeout.test.method.default=20m' `
+            '-Dnexus.scale.benchmark.enabled=true' `
+            '-Dnexus.scale.benchmark.profile=${{ steps.profile.outputs.value }}' `
+            '-Dnexus.lucene.lifecycle.benchmark.output=target/lucene-lifecycle-benchmark.json' `
             test
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
