@@ -27,7 +27,7 @@ class BudgetedContextSelectorUnicodeTest {
                 Map.of(),
                 List.of());
 
-        ContextSelectionResult result = new BudgetedContextSelector(String::length)
+        ContextSelectionResult result = new BudgetedContextSelector(CharSequence::length)
                 .select(List.of(fragment), 80, false);
 
         assertEquals(1, result.items().size());
