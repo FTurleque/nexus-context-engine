@@ -112,6 +112,7 @@ class LuceneSemanticSearchIndexTest {
                 Files.write(
                         file,
                         "corrupt-semantic-index".getBytes(StandardCharsets.UTF_8),
+                        StandardOpenOption.WRITE,
                         StandardOpenOption.TRUNCATE_EXISTING);
             }
         }
