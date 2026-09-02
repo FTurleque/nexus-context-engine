@@ -14,6 +14,8 @@ public final class SemanticSearchConfiguration {
 
     public static final double DEFAULT_SEMANTIC_RRF_WEIGHT = 8.0d;
     public static final double MAX_SEMANTIC_RRF_WEIGHT = 10.0d;
+    public static final int MAX_OLLAMA_DIMENSIONS = 1024;
+    public static final long MAX_OLLAMA_TIMEOUT_SECONDS = 600L;
 
     public static final String PROVIDER_ENV = "NEXUS_SEMANTIC_PROVIDER";
     public static final String RRF_WEIGHT_ENV = "NEXUS_SEMANTIC_RRF_WEIGHT";
@@ -90,13 +92,15 @@ public final class SemanticSearchConfiguration {
                 dockerRuntime,
                 allowInsecureRemote);
         String model = environment(OLLAMA_MODEL_ENV, OllamaEmbeddingProvider.DEFAULT_MODEL);
-        int dimensions = positiveInt(
+        int dimensions = boundedPositiveInt(
                 OLLAMA_DIMENSIONS_ENV,
-                environment(OLLAMA_DIMENSIONS_ENV, Integer.toString(OllamaEmbeddingProvider.DEFAULT_DIMENSIONS)));
-        long timeoutSeconds = positiveLong(
+                environment(OLLAMA_DIMENSIONS_ENV, Integer.toString(OllamaEmbeddingProvider.DEFAULT_DIMENSIONS)),
+                MAX_OLLAMA_DIMENSIONS);
+        long timeoutSeconds = boundedPositiveLong(
                 OLLAMA_TIMEOUT_SECONDS_ENV,
                 environment(OLLAMA_TIMEOUT_SECONDS_ENV,
-                        Long.toString(OllamaEmbeddingProvider.DEFAULT_TIMEOUT.toSeconds())));
+                        Long.toString(OllamaEmbeddingProvider.DEFAULT_TIMEOUT.toSeconds())),
+                MAX_OLLAMA_TIMEOUT_SECONDS);
         double weight = positiveDouble(
                 RRF_WEIGHT_ENV,
                 environment(RRF_WEIGHT_ENV, Double.toString(DEFAULT_SEMANTIC_RRF_WEIGHT)));
@@ -136,11 +140,14 @@ public final class SemanticSearchConfiguration {
         throw new IllegalArgumentException(name + " doit valoir true ou false");
     }
 
-    private static int positiveInt(String name, String value) {
+    static int boundedPositiveInt(String name, String value, int maximum) {
+        if (maximum <= 0) {
+            throw new IllegalArgumentException("maximum must be greater than zero");
+        }
         try {
             int parsed = Integer.parseInt(value);
-            if (parsed <= 0) {
-                throw new IllegalArgumentException(name + " doit être strictement positif");
+            if (parsed <= 0 || parsed > maximum) {
+                throw new IllegalArgumentException(name + " doit être compris entre 1 et " + maximum);
             }
             return parsed;
         } catch (NumberFormatException exception) {
@@ -148,11 +155,14 @@ public final class SemanticSearchConfiguration {
         }
     }
 
-    private static long positiveLong(String name, String value) {
+    static long boundedPositiveLong(String name, String value, long maximum) {
+        if (maximum <= 0L) {
+            throw new IllegalArgumentException("maximum must be greater than zero");
+        }
         try {
             long parsed = Long.parseLong(value);
-            if (parsed <= 0) {
-                throw new IllegalArgumentException(name + " doit être strictement positif");
+            if (parsed <= 0L || parsed > maximum) {
+                throw new IllegalArgumentException(name + " doit être compris entre 1 et " + maximum);
             }
             return parsed;
         } catch (NumberFormatException exception) {
