@@ -1,0 +1,37 @@
+name: Develop Push Docker Distribution
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'packaging/docker/**'
+      - 'scripts/release/build-docker-image.ps1'
+      - 'scripts/release/test-docker-runtime.ps1'
+      - 'scripts/release/test-docker-dotenv-roundtrip.sh'
+      - 'scripts/release/validate-release-tag.sh'
+      - 'scripts/release/test-release-tag-policy.sh'
+      - 'scripts/release/ghcr-immutable-preflight.sh'
+      - 'scripts/release/test-ghcr-immutable-preflight.sh'
+      - 'src/**'
+      - 'core/**'
+      - 'adapters/**'
+      - 'pom.xml'
+      - '.github/workflows/docker-distribution.yml'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/develop-push-docker-distribution.yml'
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - '.github/workflows/develop-push-docker-distribution.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    uses: ./.github/workflows/docker-distribution.yml
+    permissions:
+      contents: read

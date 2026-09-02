@@ -1,6 +1,6 @@
 # CI, couverture et supply-chain
 
-Ce document décrit le contrat courant de qualification et de publication de NEXUS 0.2.0 après les campagnes **NXA3 + NXA4**. Le code et les workflows versionnés restent l'autorité exécutable.
+Ce document décrit le contrat courant de qualification et de publication de NEXUS 0.2.0 après les campagnes **NXA3 + NXA4 + NXA7**. Le code et les workflows versionnés restent l'autorité exécutable.
 
 ## Branches et exact-head
 
@@ -9,6 +9,8 @@ Ce document décrit le contrat courant de qualification et de publication de NEX
 NEXUS CI et CodeQL checkoutent explicitement `github.event.pull_request.head.sha` sur pull request. CodeQL vérifie ensuite que `git rev-parse HEAD` correspond au SHA attendu.
 
 La protection GitHub de `develop` est un contrôle de gouvernance distinct. Le contrat attendu est documenté dans [`branch-governance.md`](branch-governance.md). Tant que `develop` retourne `protected=false`, #130 reste ouvert.
+
+Tant que ce contrôle repository-admin n'est pas actif, les workflows versionnés conservent une défense en profondeur sur les pushes directs `develop` : NEXUS CI, CodeQL et OSV écoutent directement la branche ; les gates Docker, benchmarks et Windows sont réutilisés par des callers dédiés avec leurs filtres de chemins.
 
 ## NEXUS CI
 
@@ -19,7 +21,7 @@ La protection GitHub de `develop` est un contrôle de gouvernance distinct. Le c
 - vérification explicite des ancres d'intégrité Maven/JDT LS ;
 - vérification des contrats documentaires machine-vérifiables **avant** le reactor.
 
-Le gate documentaire contrôle désormais aussi les invariants NXA4 :
+Le gate documentaire contrôle notamment les invariants NXA4 :
 
 - listener management `127.0.0.1:9000` séparé du listener API ;
 - politique Ollama distante et opt-in HTTP ;
@@ -44,6 +46,16 @@ Les actions GitHub contrôlées par le dépôt sont référencées par SHA immua
 - scripts/distribution/packaging Windows.
 
 Une modification Java ordinaire ne peut donc plus contourner le smoke du ZIP self-contained et de l'installateur Windows avant intégration dans `develop`.
+
+NXA7 a également durci le bootstrap `mvnw.cmd` après qu'un runner Windows a reçu un HTTP 403 via `Invoke-WebRequest` sur Maven Central. Le wrapper :
+
+1. conserve Maven **3.9.16** comme version de bootstrap ;
+2. préfère `curl.exe` avec suivi des redirections et retries ;
+3. bascule vers Windows PowerShell avec un User-Agent explicite si `curl.exe` est absent ou échoue ;
+4. refuse toujours l'archive si son SHA-512 ne correspond pas à l'ancre versionnée dans `config/tool-integrity.properties` ;
+5. n'extrait Maven qu'après cette vérification.
+
+La résilience réseau ne modifie donc pas la racine de confiance du bootstrap.
 
 ## CodeQL, OSV et SonarCloud
 
@@ -111,6 +123,8 @@ Les attestations de provenance et SBOM portent sur le digest publié. `latest` n
 
 - Maven 3.9.16 : SHA-512 ;
 - Eclipse JDT LS 1.60.0-202606262232 : SHA-256.
+
+Sur Unix, `mvnw` télécharge Maven puis vérifie l'ancre avant extraction. Sur Windows, `mvnw.cmd` applique le même contrat quel que soit le client HTTP utilisé (`curl.exe` ou fallback PowerShell).
 
 `scripts/install-jdtls.ps1` télécharge l'archive JDT LS puis la compare à **l'ancre versionnée dans le repository** ; il ne prend pas sa décision de confiance sur un checksum téléchargé depuis le même origin.
 

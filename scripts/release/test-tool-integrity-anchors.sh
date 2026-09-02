@@ -30,6 +30,18 @@ grep -Eq '^jdtls\.1\.60\.0-202606262232\.sha256=[0-9a-f]{64}$' "$INTEGRITY"
 grep -q 'MAVEN_VERSION="3.9.16"' "$ROOT/mvnw"
 grep -q 'MAVEN_VERSION=3.9.16' "$ROOT/mvnw.cmd"
 
+# Both wrappers must keep the repository-pinned digest as the trust anchor.
+grep -q 'verify-pinned-checksum.sh' "$ROOT/mvnw"
+grep -q 'Get-FileHash -Algorithm SHA512' "$ROOT/mvnw.cmd"
+grep -q 'tool-integrity.properties' "$ROOT/mvnw.cmd"
+
+# Windows bootstrap resilience must not regress to a single HTTP client: curl is
+# preferred, then PowerShell is a fallback, and verification happens afterwards.
+grep -q 'WHERE curl.exe' "$ROOT/mvnw.cmd"
+grep -q 'GOTO DOWNLOAD_POWERSHELL' "$ROOT/mvnw.cmd"
+grep -q '^:DOWNLOAD_POWERSHELL' "$ROOT/mvnw.cmd"
+grep -q '^:VERIFY_MAVEN' "$ROOT/mvnw.cmd"
+
 if grep -q 'MAVEN_DIST_SHA512_URL' "$ROOT/mvnw"; then
   echo 'mvnw still trusts a remote checksum URL' >&2
   exit 1

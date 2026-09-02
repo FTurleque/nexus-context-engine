@@ -1,0 +1,35 @@
+name: Develop Push Scale Benchmark
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'core/src/main/java/com/nexus/persistence/sqlite/**'
+      - 'core/src/main/java/com/nexus/search/**'
+      - 'core/src/main/java/com/nexus/ranking/graph/**'
+      - 'core/src/main/java/com/nexus/context/**'
+      - 'core/src/test/java/com/nexus/benchmark/**'
+      - 'core/pom.xml'
+      - 'scripts/measure-scale-regression.ps1'
+      - 'docs/developer/scale-regression-benchmark.md'
+      - 'docs/developer/scale-regression-results.md'
+      - '.github/workflows/scale-benchmark.yml'
+      - '.github/workflows/develop-push-scale-benchmark.yml'
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - '.github/workflows/develop-push-scale-benchmark.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    uses: ./.github/workflows/scale-benchmark.yml
+    with:
+      profile: ci
+    permissions:
+      contents: read
