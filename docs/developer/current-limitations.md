@@ -1,6 +1,6 @@
 # Limites actuelles et dette de consolidation
 
-Ce registre décrit l'état courant après les campagnes **NXA3 + NXA4** et la remédiation de l'audit `develop` du 2 septembre 2026. Les anciens numéros de PR/runs ne constituent pas une preuve permanente ; la preuve de qualification est toujours le run attaché au HEAD exact concerné.
+Ce registre décrit l'état courant après les campagnes **NXA3 + NXA4** et les remédiations de l'audit `develop` du 2 septembre 2026. Les anciens numéros de PR/runs ne constituent pas une preuve permanente ; la preuve de qualification est toujours le run attaché au HEAD exact concerné.
 
 ## Invariants techniques désormais couverts
 
@@ -46,7 +46,7 @@ Le champ `constraints` existe encore dans certains contrats DTO/records pour com
 - le framing JDT LS borne message (16 MiB), headers (64 KiB), ligne de header (8 KiB) et queue entrante (256) ;
 - saturation ou framing invalide déclenchent un échec fermé et l'arrêt de la session concernée.
 
-Limite résiduelle : un provider tiers peut ignorer l'interruption ; NEXUS borne alors l'accumulation de workers mais ne revendique pas une isolation processus absolue.
+Limite résiduelle : un provider tiers peut ignorer l'interruption ; NEXUS borne alors l'accumulation de workers, conserve les slots occupés jusqu'à la terminaison réelle et rejette explicitement les nouvelles tâches à saturation, mais ne revendique pas une isolation processus absolue. Une isolation plus forte exige de déplacer le provider concerné hors JVM ; elle reste un chantier architectural et non un correctif local sûr.
 
 ### SQLite et verrous d'indexation
 
@@ -66,7 +66,8 @@ La libération du verrou inter-processus ne transforme plus une mutation déjà 
 - listener applicatif par défaut : `127.0.0.1:8080` ;
 - health/metrics sont isolés sur le listener de management `127.0.0.1:9000` ;
 - `/q/*` n'est pas servi par le listener applicatif ;
-- hors loopback, le démarrage échoue fermé si transport sécurisé effectif, token robuste ou allowlist de racines ne sont pas démontrés.
+- hors loopback, le démarrage échoue fermé si transport sécurisé effectif, token robuste ou allowlist de racines ne sont pas démontrés ;
+- sur loopback, `NEXUS_REST_HARDEN_LOCAL=true` permet d'exiger explicitement le même token robuste et une allowlist de racines avant démarrage, sans casser le mode local-first historique par défaut.
 
 Le listener de management est volontairement loopback-only et ne doit pas être publié par un reverse proxy. Le runtime Docker et Compose sondent ce listener via le probe embarqué `/usr/local/bin/nexus-healthcheck`, sans exposer le port management.
 
@@ -92,13 +93,14 @@ La redaction conservatrice réduit les fuites accidentelles mais ne remplace pas
 - image Docker construite une fois, qualifiée puis publiée sans rebuild ;
 - GHCR preflight fail-closed avec reprise idempotente uniquement pour le même contenu ;
 - Dependabot cible `develop` ;
-- les contrats documentaires courants sont vérifiés automatiquement par NEXUS CI.
+- les contrats documentaires courants sont vérifiés automatiquement par NEXUS CI ;
+- tant que `develop` reste techniquement pushable, NEXUS CI, CodeQL et OSV couvrent aussi les pushes directs ; Docker Distribution, Scale Benchmark, Scanner Corpus Benchmark et Windows Installer sont réutilisés par des callers `Develop Push ...` avec leurs filtres de chemins respectifs.
 
 ## Contrôle de gouvernance encore externe au code
 
 La protection GitHub de `develop` est un état repository-admin, pas un fichier versionné. Le contrat attendu est décrit dans [`branch-governance.md`](branch-governance.md).
 
-Tant que GitHub retourne `protected=false` pour `develop`, NXA3-14 / #130 reste ouvert : une poussée directe peut entrer avant le gate PR même si la CI se déclenche ensuite. Ce point ne peut pas être clôturé par une modification de code ou de workflow ; il exige le ruleset GitHub effectif.
+Tant que GitHub retourne `protected=false` pour `develop`, NXA3-14 / #130 reste ouvert : une poussée directe peut encore **entrer avant** toute qualification, même si les gates applicables s'exécutent désormais ensuite en défense en profondeur. Ce point ne peut pas être clôturé par une modification de code ou de workflow ; il exige le ruleset GitHub effectif.
 
 ## Watch items
 
