@@ -18,6 +18,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.BiConsumer;
 
 /**
  * Stratégie sémantique optionnelle branchée sur les mêmes candidats que les
@@ -25,10 +26,13 @@ import java.util.concurrent.ConcurrentMap;
  */
 public final class SemanticSearchStrategy implements SearchStrategy {
 
+    private static final System.Logger LOGGER = System.getLogger(SemanticSearchStrategy.class.getName());
+
     private final EmbeddingProvider embeddingProvider;
     private final SemanticSearchIndex semanticSearchIndex;
     private final IndexRepository indexRepository;
     private final String contentProfile;
+    private final BiConsumer<String, Throwable> degradationReporter;
     private final ConcurrentMap<UUID, CachedFingerprint> fingerprints = new ConcurrentHashMap<>();
 
     public SemanticSearchStrategy(
@@ -57,10 +61,25 @@ public final class SemanticSearchStrategy implements SearchStrategy {
             SemanticSearchIndex semanticSearchIndex,
             IndexRepository indexRepository,
             String contentProfile) {
+        this(
+                embeddingProvider,
+                semanticSearchIndex,
+                indexRepository,
+                contentProfile,
+                (message, failure) -> LOGGER.log(System.Logger.Level.WARNING, message, failure));
+    }
+
+    SemanticSearchStrategy(
+            EmbeddingProvider embeddingProvider,
+            SemanticSearchIndex semanticSearchIndex,
+            IndexRepository indexRepository,
+            String contentProfile,
+            BiConsumer<String, Throwable> degradationReporter) {
         this.embeddingProvider = Objects.requireNonNull(embeddingProvider, "embeddingProvider");
         this.semanticSearchIndex = Objects.requireNonNull(semanticSearchIndex, "semanticSearchIndex");
         this.indexRepository = indexRepository;
         this.contentProfile = requireText(contentProfile, "contentProfile");
+        this.degradationReporter = Objects.requireNonNull(degradationReporter, "degradationReporter");
         if (embeddingProvider.dimensions() <= 0) {
             throw new IllegalArgumentException("embeddingProvider dimensions must be greater than zero");
         }
@@ -87,12 +106,23 @@ public final class SemanticSearchStrategy implements SearchStrategy {
                     canonicalFingerprint,
                     embeddingProvider,
                     contentProfile);
-            if (!semanticSearchIndex.isCompatible(project.id(), expected)) {
+            final boolean compatible;
+            try {
+                compatible = semanticSearchIndex.isCompatible(project.id(), expected);
+            } catch (IOException exception) {
+                return degradedIndex(project, exception);
+            }
+            if (!compatible) {
                 return List.of();
             }
         }
 
-        float[] queryVector = Objects.requireNonNull(embeddingProvider.embed(query), "embedding vector");
+        final float[] queryVector;
+        try {
+            queryVector = Objects.requireNonNull(embeddingProvider.embed(query), "embedding vector");
+        } catch (IOException exception) {
+            return degradedProvider(project, exception);
+        }
         if (queryVector.length != embeddingProvider.dimensions()) {
             throw new IOException(
                     "Le provider d'embeddings " + embeddingProvider.modelId()
@@ -100,7 +130,12 @@ public final class SemanticSearchStrategy implements SearchStrategy {
                             + " au lieu de " + embeddingProvider.dimensions());
         }
 
-        List<SemanticSearchHit> hits = semanticSearchIndex.search(project.id(), queryVector, limit);
+        final List<SemanticSearchHit> hits;
+        try {
+            hits = semanticSearchIndex.search(project.id(), queryVector, limit);
+        } catch (IOException exception) {
+            return degradedIndex(project, exception);
+        }
         List<SearchCandidate> candidates = new ArrayList<>(hits.size());
         for (SemanticSearchHit hit : hits) {
             if (!isGenericSearchEligible(hit.category()) || hit.score() <= 0.0d) {
@@ -120,6 +155,24 @@ public final class SemanticSearchStrategy implements SearchStrategy {
             }
         }
         return List.copyOf(candidates);
+    }
+
+    private List<SearchCandidate> degradedProvider(ProjectDescriptor project, IOException failure) {
+        degradationReporter.accept(
+                "semantic-search degraded: code=embedding_provider_unavailable project=" + project.id()
+                        + " provider=" + embeddingProvider.modelId()
+                        + "; fallback=lexical-symbolic; retry=automatic",
+                failure);
+        return List.of();
+    }
+
+    private List<SearchCandidate> degradedIndex(ProjectDescriptor project, IOException failure) {
+        degradationReporter.accept(
+                "semantic-search degraded: code=semantic_index_unavailable project=" + project.id()
+                        + "; fallback=lexical-symbolic; recovery=\"nexus index "
+                        + project.id() + " --rebuild\"",
+                failure);
+        return List.of();
     }
 
     private String canonicalFingerprint(ProjectDescriptor project) {
