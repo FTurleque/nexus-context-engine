@@ -23,6 +23,10 @@ public final class SensitiveContentRedactor {
     private static final int MAX_SECRET_CHARS = 4096;
     private static final int MAX_URI_USER_CHARS = 1024;
 
+    private static final String SECRET_KEY =
+            "(?:[A-Za-z0-9]+[_.-])*(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|"
+                    + "secret[_-]?access[_-]?key|password|passwd|secret)(?:[_.-][A-Za-z0-9]+)*";
+
     private static final Pattern STRUCTURED_TOKEN = Pattern.compile(
             "\\b(?:gh[pousr]_[A-Za-z0-9]{20,255}+|github_pat_[A-Za-z0-9_]{20,255}+|(?:AKIA|ASIA)[0-9A-Z]{16})\\b");
     private static final Pattern JWT = Pattern.compile(
@@ -30,8 +34,10 @@ public final class SensitiveContentRedactor {
                     + "[A-Za-z0-9_-]{10," + MAX_SECRET_CHARS + "}+\\."
                     + "[A-Za-z0-9_-]{10," + MAX_SECRET_CHARS + "}+\\b");
     private static final Pattern SECRET_ASSIGNMENT = Pattern.compile(
-            "(?im)(\\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|password|passwd|secret)"
-                    + "\\b\\s{0,32}+[:=]\\s{0,32}+)([\"']?)([^\\s\"']{8," + MAX_SECRET_CHARS + "}+)([\"']?)");
+            "(?im)(?<![\\p{L}\\p{N}_])(" + SECRET_KEY + "\\s{0,32}[:=]\\s{0,32})"
+                    + "(?:\"([^\"\\r\\n]{8," + MAX_SECRET_CHARS + "})\""
+                    + "|'([^'\\r\\n]{8," + MAX_SECRET_CHARS + "})'"
+                    + "|([^\\s\"'`;,#]{8," + MAX_SECRET_CHARS + "}))");
     private static final Pattern URI_CREDENTIAL = Pattern.compile(
             "(?i)(\\b[a-z][a-z0-9+.-]{0,31}+://[^\\s/:@]{1," + MAX_URI_USER_CHARS + "}+:)"
                     + "([^\\s/@]{3," + MAX_SECRET_CHARS + "}+)(@)");
@@ -102,10 +108,8 @@ public final class SensitiveContentRedactor {
         Matcher matcher = SECRET_ASSIGNMENT.matcher(content);
         StringBuilder output = new StringBuilder(content.length());
         while (matcher.find()) {
-            String replacement = matcher.group(1)
-                    + matcher.group(2)
-                    + REDACTED
-                    + matcher.group(4);
+            String quote = matcher.group(2) != null ? "\"" : matcher.group(3) != null ? "'" : "";
+            String replacement = matcher.group(1) + quote + REDACTED + quote;
             matcher.appendReplacement(output, Matcher.quoteReplacement(replacement));
         }
         matcher.appendTail(output);
