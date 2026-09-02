@@ -6,6 +6,23 @@ NEXUS treats every REST listener outside loopback as a privileged deployment bou
 
 `quarkus.http.host=127.0.0.1`, `localhost` or another loopback address remains the default development posture. The remote-exposure transport checks do not apply to a loopback-only listener.
 
+For workstations where other local processes must not inherit the full REST trust boundary, enable the opt-in hardened local posture:
+
+```text
+NEXUS_REST_HARDEN_LOCAL=true
+NEXUS_REST_API_TOKEN=<strong random token>
+NEXUS_REST_ALLOWED_PROJECT_ROOTS=<explicit allowed roots>
+```
+
+When `NEXUS_REST_HARDEN_LOCAL=true`, startup fails closed unless both conditions are satisfied:
+
+- a Bearer token meeting the same minimum strength contract as remote exposure (at least 32 UTF-8 bytes and at least 96 bits of estimated entropy);
+- a non-empty canonical project-root allowlist.
+
+The configured token is then enforced by the REST authentication filter on every JAX-RS resource. The allowlist constrains project registration/indexing even though the listener remains loopback-only. `NEXUS_REST_HARDEN_LOCAL` accepts only `true` or `false`; an invalid value is a startup error.
+
+The default remains `false` for backward compatibility with the local-first deployment model.
+
 ## Docker loopback forward
 
 `NEXUS_REST_EXPOSURE_MODE=loopback-forward` is reserved for the Docker runtime. It additionally requires `NEXUS_RUNTIME=docker` and an explicit `NEXUS_DOCKER_HOST_FORWARD_ADDRESS` that resolves to loopback. The official Compose wiring must derive this declaration from the same bind address used for Docker port publication.
@@ -34,3 +51,5 @@ This prevents arbitrary direct clients from being treated as trusted forwarding 
 ## Rationale
 
 The exposure mode is an operator intent, not proof of transport security. NEXUS therefore validates effective Quarkus settings before accepting a non-loopback listener. A missing certificate, an enabled plaintext HTTP listener, or an unbounded proxy trust configuration is a startup error rather than a warning.
+
+The hardened local profile follows the same fail-closed principle without changing the default local-first behavior: operators who need a stricter workstation boundary can make local authentication and root confinement mandatory and verifiable at startup.
