@@ -103,6 +103,33 @@ public final class ProjectIndexLockManager {
         }
     }
 
+    static void releaseAndClose(IoOperation releaseOperation, IoOperation closeOperation) throws IOException {
+        IOException releaseFailure = null;
+        try {
+            releaseOperation.run();
+        } catch (IOException failure) {
+            releaseFailure = failure;
+        }
+
+        try {
+            // La fermeture du channel libère également tous ses locks. Si elle réussit,
+            // un échec préalable de FileLock.release() n'a plus d'impact matériel et ne
+            // doit pas transformer une mutation déjà validée en faux échec métier.
+            closeOperation.run();
+            return;
+        } catch (IOException closeFailure) {
+            if (releaseFailure != null) {
+                closeFailure.addSuppressed(releaseFailure);
+            }
+            throw closeFailure;
+        }
+    }
+
+    @FunctionalInterface
+    interface IoOperation {
+        void run() throws IOException;
+    }
+
     public static final class LockHandle implements AutoCloseable {
 
         private static final LockHandle NOOP = new LockHandle(null, null, null);
@@ -131,27 +158,10 @@ public final class ProjectIndexLockManager {
                 return;
             }
             closed = true;
-            IOException releaseFailure = null;
             try {
-                fileLock.release();
-            } catch (IOException failure) {
-                releaseFailure = failure;
-            }
-            try {
-                // Fermer le channel libère également les locks associés. Si la
-                // fermeture réussit, une erreur préalable de release ne doit pas
-                // transformer une mutation déjà validée en faux échec métier.
-                channel.close();
-            } catch (IOException closeFailure) {
-                if (releaseFailure != null) {
-                    closeFailure.addSuppressed(releaseFailure);
-                }
-                releaseFailure = closeFailure;
+                releaseAndClose(fileLock::release, channel::close);
             } finally {
                 capacityPermit.close();
-            }
-            if (releaseFailure != null) {
-                throw releaseFailure;
             }
         }
     }
