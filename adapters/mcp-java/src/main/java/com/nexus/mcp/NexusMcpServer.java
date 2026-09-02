@@ -10,6 +10,7 @@ import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
@@ -21,11 +22,13 @@ import java.util.concurrent.CountDownLatch;
  */
 public final class NexusMcpServer {
 
+    private static final System.Logger LOGGER = System.getLogger(NexusMcpServer.class.getName());
+
     private NexusMcpServer() {
     }
 
     public static void main(String[] args) throws Exception {
-        NexusApplication application = NexusApplication.create(NexusPaths.fromEnvironment());
+        NexusApplication application = NexusApplication.createLongLived(NexusPaths.fromEnvironment());
         NexusMcpTools tools = new NexusMcpTools(application, new ObjectMapper());
         List<McpServerFeatures.SyncToolSpecification> specifications = tools.specifications();
 
@@ -40,8 +43,25 @@ public final class NexusMcpServer {
                 .tools(specifications.toArray(McpServerFeatures.SyncToolSpecification[]::new))
                 .build();
 
-        Runtime.getRuntime().addShutdownHook(new Thread(server::close, "nexus-mcp-shutdown"));
+        Runtime.getRuntime().addShutdownHook(new Thread(
+                () -> closeResources(server, application),
+                "nexus-mcp-shutdown"));
         new CountDownLatch(1).await();
+    }
+
+    private static void closeResources(McpSyncServer server, NexusApplication application) {
+        try {
+            server.close();
+        } finally {
+            try {
+                application.close();
+            } catch (IOException exception) {
+                LOGGER.log(
+                        System.Logger.Level.ERROR,
+                        "Impossible de fermer les readers Lucene du serveur MCP",
+                        exception);
+            }
+        }
     }
 
     private static String version() {

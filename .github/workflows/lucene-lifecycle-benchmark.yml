@@ -8,8 +8,13 @@ on:
     paths:
       - 'core/src/main/java/com/nexus/search/lucene/**'
       - 'core/src/main/java/com/nexus/search/semantic/lucene/**'
+      - 'core/src/main/java/com/nexus/application/NexusApplication.java'
+      - 'adapters/rest-quarkus/src/main/java/com/nexus/api/NexusApiApplicationService.java'
+      - 'adapters/mcp-java/src/main/java/com/nexus/mcp/NexusMcpServer.java'
       - 'core/src/test/java/com/nexus/benchmark/LuceneLifecycleQualificationBenchmarkTest.java'
+      - 'core/src/test/java/com/nexus/application/NexusApplicationLongLivedLifecycleTest.java'
       - 'docs/developer/lucene-lifecycle-qualification.md'
+      - 'docs/adr/0045-conserver-les-writers-operation-scoped-et-mettre-en-cache-les-readers-lucene.md'
       - '.github/workflows/lucene-lifecycle-benchmark.yml'
   push:
     branches:
@@ -17,8 +22,13 @@ on:
     paths:
       - 'core/src/main/java/com/nexus/search/lucene/**'
       - 'core/src/main/java/com/nexus/search/semantic/lucene/**'
+      - 'core/src/main/java/com/nexus/application/NexusApplication.java'
+      - 'adapters/rest-quarkus/src/main/java/com/nexus/api/NexusApiApplicationService.java'
+      - 'adapters/mcp-java/src/main/java/com/nexus/mcp/NexusMcpServer.java'
       - 'core/src/test/java/com/nexus/benchmark/LuceneLifecycleQualificationBenchmarkTest.java'
+      - 'core/src/test/java/com/nexus/application/NexusApplicationLongLivedLifecycleTest.java'
       - 'docs/developer/lucene-lifecycle-qualification.md'
+      - 'docs/adr/0045-conserver-les-writers-operation-scoped-et-mettre-en-cache-les-readers-lucene.md'
       - '.github/workflows/lucene-lifecycle-benchmark.yml'
   workflow_dispatch:
     inputs:
