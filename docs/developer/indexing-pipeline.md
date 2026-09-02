@@ -355,7 +355,7 @@ schema_migrations
 Migration actuelle :
 
 ```text
-src/main/resources/db/migration/V001__initial_schema.sql
+core/src/main/resources/db/migration/V001__initial_schema.sql
 ```
 
 Au démarrage de la base :
