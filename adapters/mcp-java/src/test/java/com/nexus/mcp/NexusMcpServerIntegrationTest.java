@@ -36,6 +36,7 @@ class NexusMcpServerIntegrationTest {
 
     private static final String CHILD_JACOCO_PROPERTY = "nexus.mcp.child.jacoco.argLine";
     private static final String CHILD_JACOCO_DEST_FILE_PROPERTY = "nexus.mcp.child.jacoco.destFile";
+    private static final String NATIVE_ACCESS_ARGUMENT = "--enable-native-access=ALL-UNNAMED";
     private static final String LOOPBACK_ADDRESS = "127.0.0.1";
 
     private static final Set<String> EXPECTED_TOOLS = Set.of(
@@ -82,6 +83,7 @@ class NexusMcpServerIntegrationTest {
 
         ChildCoverage childCoverage = childCoverage();
         List<String> serverArguments = new ArrayList<>();
+        serverArguments.add(NATIVE_ACCESS_ARGUMENT);
         if (childCoverage != null) {
             serverArguments.add(childCoverage.agentArgLine());
         }
