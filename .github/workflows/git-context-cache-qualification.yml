@@ -1,0 +1,196 @@
+name: Git Context Cache Qualification
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - 'core/src/main/java/com/nexus/context/source/git/**'
+      - 'core/src/test/java/com/nexus/context/source/git/**'
+      - 'core/src/test/java/com/nexus/benchmark/GitContextCacheQualificationBenchmarkTest.java'
+      - '.github/workflows/git-context-cache-qualification.yml'
+  push:
+    branches:
+      - develop
+    paths:
+      - 'core/src/main/java/com/nexus/context/source/git/**'
+      - 'core/src/test/java/com/nexus/context/source/git/**'
+      - 'core/src/test/java/com/nexus/benchmark/GitContextCacheQualificationBenchmarkTest.java'
+      - '.github/workflows/git-context-cache-qualification.yml'
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Benchmark profile
+        required: true
+        default: full
+        type: choice
+        options:
+          - ci
+          - full
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: Git cache benchmark (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux
+          - os: windows-latest
+            label: windows
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      BENCHMARK_PROFILE: ${{ github.event_name == 'workflow_dispatch' && inputs.profile || 'ci' }}
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Java 21
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Configure benchmark Git identity
+        shell: bash
+        run: |
+          git config --global user.name 'NEXUS Qualification'
+          git config --global user.email 'nexus-qualification@example.test'
+
+      - name: Run Git cache qualification (Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          chmod +x ./mvnw
+          ./mvnw -B -pl core \
+            -Dtest=GitContextCacheQualificationBenchmarkTest \
+            -Djunit.jupiter.execution.timeout.test.method.default=20m \
+            -Dnexus.git.cache.benchmark.enabled=true \
+            -Dnexus.scale.benchmark.profile="$BENCHMARK_PROFILE" \
+            -Dnexus.git.cache.benchmark.output=target/git-context-cache-qualification.json \
+            test
+
+      - name: Run Git cache qualification (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & .\mvnw.cmd -B -pl core `
+            '-Dtest=GitContextCacheQualificationBenchmarkTest' `
+            '-Djunit.jupiter.execution.timeout.test.method.default=20m' `
+            '-Dnexus.git.cache.benchmark.enabled=true' `
+            "-Dnexus.scale.benchmark.profile=$env:BENCHMARK_PROFILE" `
+            '-Dnexus.git.cache.benchmark.output=target/git-context-cache-qualification.json' `
+            test
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Verify qualification report (Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          test -s target/git-context-cache-qualification.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path('target/git-context-cache-qualification.json').read_text())
+          assert report['profile'] in ('ci', 'full')
+          assert report['repositories'] >= 6
+          assert report['commitsPerRepository'] >= 24
+
+          for key in ('baselineWarm', 'cachedWarm', 'coldCacheMiss'):
+              sample = report['latency'][key]
+              assert sample['samples'] > 0, (key, sample)
+              assert sample['p50Micros'] >= 0, (key, sample)
+              assert sample['p95Micros'] >= sample['p50Micros'], (key, sample)
+
+          invalidation = report['invalidation']
+          expected = ('headCommit', 'stagedIndex', 'workingTree', 'rename', 'rebase', 'linkedWorktreeIsolation')
+          for key in expected:
+              assert invalidation[key] is True, (key, invalidation)
+
+          storage = report['storage']
+          assert storage['bounded'] is True, storage
+          assert storage['entries'] <= storage['capacity'], storage
+          assert storage['peakEntries'] <= storage['capacity'], storage
+
+          decision = report['decision']
+          assert decision['recommendation'] in (
+              'retain_recomputation_without_persistent_git_context_cache',
+              'candidate_requires_budget_semantics_and_production_adr_before_adoption')
+
+          print('profile=', report['profile'])
+          print('repositories=', report['repositories'])
+          print('commits-per-repository=', report['commitsPerRepository'])
+          print('baseline-warm-p95-us=', report['latency']['baselineWarm']['p95Micros'])
+          print('cached-warm-p95-us=', report['latency']['cachedWarm']['p95Micros'])
+          print('warm-p95-improvement=', report['latency']['warmP95ImprovementRatio'])
+          print('persistent-cache-candidate=', decision['persistentCacheCandidate'])
+          print('recommendation=', decision['recommendation'])
+          print('git-context-cache-qualification=PASS')
+          PY
+
+      - name: Verify qualification report (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'target/git-context-cache-qualification.json'
+          if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -eq 0) {
+            throw "Qualification report missing or empty: $path"
+          }
+          $report = Get-Content -Raw -LiteralPath $path | ConvertFrom-Json
+          if ($report.profile -notin @('ci', 'full')) { throw "Unexpected profile: $($report.profile)" }
+          if ($report.repositories -lt 6 -or $report.commitsPerRepository -lt 24) { throw 'Representative Git corpus is too small' }
+
+          foreach ($key in @('baselineWarm', 'cachedWarm', 'coldCacheMiss')) {
+            $sample = $report.latency.$key
+            if ($sample.samples -le 0 -or $sample.p50Micros -lt 0 -or $sample.p95Micros -lt $sample.p50Micros) {
+              throw "Invalid latency sample: $key"
+            }
+          }
+
+          foreach ($key in @('headCommit', 'stagedIndex', 'workingTree', 'rename', 'rebase', 'linkedWorktreeIsolation')) {
+            if (-not $report.invalidation.$key) { throw "Invalidation qualification failed: $key" }
+          }
+
+          if (-not $report.storage.bounded -or
+              $report.storage.entries -gt $report.storage.capacity -or
+              $report.storage.peakEntries -gt $report.storage.capacity) {
+            throw 'Bounded storage qualification failed'
+          }
+
+          $recommendations = @(
+            'retain_recomputation_without_persistent_git_context_cache',
+            'candidate_requires_budget_semantics_and_production_adr_before_adoption')
+          if ($report.decision.recommendation -notin $recommendations) {
+            throw "Unexpected recommendation: $($report.decision.recommendation)"
+          }
+
+          Write-Host "profile=$($report.profile)"
+          Write-Host "repositories=$($report.repositories)"
+          Write-Host "commits-per-repository=$($report.commitsPerRepository)"
+          Write-Host "baseline-warm-p95-us=$($report.latency.baselineWarm.p95Micros)"
+          Write-Host "cached-warm-p95-us=$($report.latency.cachedWarm.p95Micros)"
+          Write-Host "warm-p95-improvement=$($report.latency.warmP95ImprovementRatio)"
+          Write-Host "persistent-cache-candidate=$($report.decision.persistentCacheCandidate)"
+          Write-Host "recommendation=$($report.decision.recommendation)"
+          Write-Host 'git-context-cache-qualification=PASS'
+
+      - name: Retain qualification report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nexus-git-context-cache-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}-${{ matrix.label }}-${{ env.BENCHMARK_PROFILE }}
+          retention-days: 90
+          if-no-files-found: error
+          path: target/git-context-cache-qualification.json
