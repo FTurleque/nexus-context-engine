@@ -22,6 +22,28 @@ patch rendu / zone            6000 caractères
 
 Le provider consomme aussi le `ContextDiscoveryBudget` partagé avec les autres sources natives.
 
+## Cache des runtimes longue durée
+
+REST et MCP utilisent `NexusApplication.createLongLived(...)`. Cette composition enveloppe le provider Git local dans `PersistentGitContextSourceProvider`, un cache **mémoire uniquement** limité à 16 résultats en LRU.
+
+La CLI et les usages one-shot continuent d'utiliser `NexusApplication.create(...)` et `LocalGitContextSourceProvider` sans cache persistant entre requêtes.
+
+Avant chaque hit, le cache recalcule un fingerprint borné :
+
+```text
+worktree réel
+HEAD exact
+status des chemins cibles
+SHA-256 du diff staged ciblé
+SHA-256 du diff unstaged ciblé
+```
+
+Toute variation provoque un miss puis un recalcul via `LocalGitContextSourceProvider`. Cela couvre notamment commit/rebase, index, working tree, rename et isolation des worktrees liés.
+
+La validation du fingerprint consomme elle aussi le `ContextDiscoveryBudget` via des visites et checkpoints ; le cache n'introduit donc aucun chemin de découverte hors budget. Un résultat `repositoryAvailable=false` n'est jamais conservé afin de retenter automatiquement une indisponibilité transitoire.
+
+Aucun fichier de cache, schéma SQLite, watcher filesystem ou thread de maintenance n'est ajouté. Voir ADR-0046.
+
 ## Diff local avant allocation
 
 Les patches working-tree sont filtrés aux chemins cibles puis écrits dans `BoundedOutput`, un `OutputStream` à capacité fixe. Le sink cesse de retenir des octets après sa capacité ; NEXUS ne rend donc pas d'abord le patch entier dans un `ByteArrayOutputStream` extensible avant de le tronquer.
@@ -61,4 +83,11 @@ Le contexte Git n'est activé que lorsque le budget global le permet et reçoit 
 - diff massif réellement tronqué ;
 - sink fixe qui ne retient jamais plus d'octets que sa capacité.
 
-Les benchmarks et tests exact-head restent l'autorité de qualification.
+`PersistentGitContextSourceProviderTest` couvre :
+
+- hit sur état Git stable ;
+- invalidation working tree, index et HEAD ;
+- éviction LRU et capacité stricte ;
+- absence de cache pour un repository indisponible.
+
+`GitContextCacheQualificationBenchmarkTest` couvre Linux et Windows sur plusieurs repositories ainsi que HEAD/index/working-tree/rename/rebase/worktrees liés. Les benchmarks et tests exact-head restent l'autorité de qualification.
