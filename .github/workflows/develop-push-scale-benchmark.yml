@@ -16,6 +16,12 @@ on:
       - 'docs/developer/scale-regression-results.md'
       - '.github/workflows/scale-benchmark.yml'
       - '.github/workflows/develop-push-scale-benchmark.yml'
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - '.github/workflows/develop-push-scale-benchmark.yml'
 
 permissions:
   contents: read
