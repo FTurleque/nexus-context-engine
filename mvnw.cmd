@@ -26,11 +26,11 @@ IF ERRORLEVEL 1 EXIT /B %ERRORLEVEL%
 WHERE curl.exe >NUL 2>NUL
 IF ERRORLEVEL 1 GOTO DOWNLOAD_POWERSHELL
 
-curl.exe --fail --location --silent --show-error --retry 3 --retry-delay 2 --output "%ARCHIVE%" "%MAVEN_DIST_URL%"
+curl.exe --fail --location --silent --show-error --retry 3 --retry-delay 2 --retry-all-errors --output "%ARCHIVE%" "%MAVEN_DIST_URL%"
 IF ERRORLEVEL 1 (
   IF EXIST "%ARCHIVE%" DEL /F /Q "%ARCHIVE%" >NUL 2>NUL
-  ECHO [NEXUS] Echec du telechargement Maven avec curl.exe.
-  EXIT /B 1
+  ECHO [NEXUS] curl.exe indisponible pour Maven Central, tentative Windows PowerShell...
+  GOTO DOWNLOAD_POWERSHELL
 )
 GOTO VERIFY_MAVEN
 
