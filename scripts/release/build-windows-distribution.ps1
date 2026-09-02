@@ -49,6 +49,7 @@ if ($versionExit -ne 0 -or $versionOutput -notmatch 'version "(\d+)') {
 }
 $javaMajor = [int]$Matches[1]
 if ($javaMajor -lt 21) { throw "NEXUS Windows packaging requires JDK 21 or newer; found Java $javaMajor." }
+$nativeAccessArgument = '--enable-native-access=ALL-UNNAMED'
 
 Push-Location $repo
 try {
@@ -123,6 +124,7 @@ $jlinkOptions = '--strip-debug --no-man-pages --no-header-files'
     '--main-class', 'com.nexus.cli.NexusCli',
     '--add-modules', $moduleList,
     '--jlink-options', $jlinkOptions,
+    '--java-options', $nativeAccessArgument,
     '--dest', $appImages,
     '--win-console'
 )
@@ -161,7 +163,7 @@ exit /b %ERRORLEVEL%
 @echo off
 setlocal DisableDelayedExpansion
 if exist "%~dp0config\nexus-native.env.cmd" call "%~dp0config\nexus-native.env.cmd"
-"%~dp0app\runtime\bin\java.exe" -jar "%~dp0lib\nexus-mcp.jar" %*
+"%~dp0app\runtime\bin\java.exe" --enable-native-access=ALL-UNNAMED -jar "%~dp0lib\nexus-mcp.jar" %*
 exit /b %ERRORLEVEL%
 '@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus-mcp.cmd') -Encoding ascii
 
@@ -169,7 +171,7 @@ exit /b %ERRORLEVEL%
 @echo off
 setlocal DisableDelayedExpansion
 if exist "%~dp0config\nexus-native.env.cmd" call "%~dp0config\nexus-native.env.cmd"
-"%~dp0app\runtime\bin\java.exe" -jar "%~dp0lib\nexus-assistant-clients.jar" %*
+"%~dp0app\runtime\bin\java.exe" --enable-native-access=ALL-UNNAMED -jar "%~dp0lib\nexus-assistant-clients.jar" %*
 exit /b %ERRORLEVEL%
 '@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus-assistant-clients.cmd') -Encoding ascii
 
@@ -179,7 +181,7 @@ setlocal DisableDelayedExpansion
 if exist "%~dp0config\nexus-native.env.cmd" call "%~dp0config\nexus-native.env.cmd"
 if "%NEXUS_REST_HOST%"=="" set "NEXUS_REST_HOST=127.0.0.1"
 if "%NEXUS_REST_PORT%"=="" set "NEXUS_REST_PORT=8080"
-"%~dp0app\runtime\bin\java.exe" "-Dquarkus.http.host=%NEXUS_REST_HOST%" "-Dquarkus.http.port=%NEXUS_REST_PORT%" -jar "%~dp0rest\quarkus-run.jar" %*
+"%~dp0app\runtime\bin\java.exe" --enable-native-access=ALL-UNNAMED "-Dquarkus.http.host=%NEXUS_REST_HOST%" "-Dquarkus.http.port=%NEXUS_REST_PORT%" -jar "%~dp0rest\quarkus-run.jar" %*
 exit /b %ERRORLEVEL%
 '@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus-rest.cmd') -Encoding ascii
 
@@ -188,7 +190,7 @@ exit /b %ERRORLEVEL%
 setlocal DisableDelayedExpansion
 if exist "%~dp0docker\.env" for /f "usebackq tokens=1,* delims==" %%A in ("%~dp0docker\.env") do if /I "%%A"=="NEXUS_DOCKER_CONTAINER" set "NEXUS_DOCKER_CONTAINER=%%B"
 if "%NEXUS_DOCKER_CONTAINER%"=="" set "NEXUS_DOCKER_CONTAINER=nexus"
-docker exec -i "%NEXUS_DOCKER_CONTAINER%" java -jar /opt/nexus/lib/nexus-mcp.jar %*
+docker exec -i "%NEXUS_DOCKER_CONTAINER%" java --enable-native-access=ALL-UNNAMED -jar /opt/nexus/lib/nexus-mcp.jar %*
 exit /b %ERRORLEVEL%
 '@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus-docker-mcp.cmd') -Encoding ascii
 
@@ -197,7 +199,7 @@ exit /b %ERRORLEVEL%
 setlocal DisableDelayedExpansion
 if exist "%~dp0docker\.env" for /f "usebackq tokens=1,* delims==" %%A in ("%~dp0docker\.env") do if /I "%%A"=="NEXUS_DOCKER_CONTAINER" set "NEXUS_DOCKER_CONTAINER=%%B"
 if "%NEXUS_DOCKER_CONTAINER%"=="" set "NEXUS_DOCKER_CONTAINER=nexus"
-docker exec -i "%NEXUS_DOCKER_CONTAINER%" java -jar /opt/nexus/lib/nexus-cli.jar %*
+docker exec -i "%NEXUS_DOCKER_CONTAINER%" java --enable-native-access=ALL-UNNAMED -jar /opt/nexus/lib/nexus-cli.jar %*
 exit /b %ERRORLEVEL%
 '@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus-docker.cmd') -Encoding ascii
 
