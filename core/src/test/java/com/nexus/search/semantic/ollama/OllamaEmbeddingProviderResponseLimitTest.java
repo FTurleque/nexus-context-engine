@@ -16,6 +16,7 @@ import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -178,7 +179,7 @@ class OllamaEmbeddingProviderResponseLimitTest {
     }
 
     @Test
-    void propagatesRequestTimeoutAsIOException() throws Exception {
+    void reportsRequestTimeoutWithStableDiagnostic() throws Exception {
         byte[] body = json("{\"embeddings\":[[1.0]]}");
         URI baseUri = serve(200, body, false, Duration.ofMillis(400));
 
@@ -186,8 +187,33 @@ class OllamaEmbeddingProviderResponseLimitTest {
                 IOException.class,
                 () -> provider(baseUri, 1, Duration.ofMillis(50), 1024).embed("timeout"));
 
-        assertTrue(exception.getClass().getName().contains("Timeout")
-                || exception.getMessage().toLowerCase().contains("timed out"));
+        assertEquals(
+                "Ollama /api/embed indisponible : délai dépassé après 50 ms",
+                exception.getMessage());
+    }
+
+    @Test
+    void sameProviderRecoversAfterTransientServiceUnavailableResponse() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        server.createContext("/api/embed", exchange -> {
+            int call = calls.incrementAndGet();
+            if (call == 1) {
+                respond(exchange, 503, json("{\"error\":\"temporarily unavailable\"}"), false, Duration.ZERO);
+            } else {
+                respond(exchange, 200, json("{\"embeddings\":[[1.0]]}"), false, Duration.ZERO);
+            }
+        });
+        server.start();
+        URI baseUri = serverUri(server);
+        OllamaEmbeddingProvider provider = provider(baseUri, 1, Duration.ofSeconds(2), 1024);
+
+        IOException unavailable = assertThrows(IOException.class, () -> provider.embed("first"));
+        assertTrue(unavailable.getMessage().contains("HTTP 503"));
+
+        float[] recovered = provider.embed("second");
+        assertArrayEquals(new float[]{1.0f}, recovered, 0.0f);
+        assertEquals(2, calls.get());
     }
 
     @Test
@@ -253,7 +279,11 @@ class OllamaEmbeddingProviderResponseLimitTest {
         server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         server.createContext("/api/embed", exchange -> respond(exchange, status, body, chunked, delay));
         server.start();
-        InetSocketAddress address = server.getAddress();
+        return serverUri(server);
+    }
+
+    private static URI serverUri(HttpServer httpServer) {
+        InetSocketAddress address = httpServer.getAddress();
         String host = address.getAddress() instanceof java.net.Inet6Address
                 ? "[" + address.getAddress().getHostAddress() + "]"
                 : address.getAddress().getHostAddress();
