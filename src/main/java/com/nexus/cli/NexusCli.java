@@ -10,9 +10,9 @@ import com.nexus.project.ProjectDescriptor;
 import com.nexus.search.ResultLimitPolicy;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -140,12 +140,15 @@ public final class NexusCli {
             throw new IllegalArgumentException("Usage : nexus minos-import <id-ou-nom> < export-minos.json [--json]");
         }
         ProjectDescriptor project = application.resolveProject(args[1]);
-        int readLimit = Math.toIntExact(MinosCodeIndexImporter.MAX_EXPORT_BYTES) + 1;
-        byte[] bytes = input.readNBytes(readLimit);
-        if (bytes.length > MinosCodeIndexImporter.MAX_EXPORT_BYTES) {
-            throw new IllegalArgumentException("Le payload MINOS dépasse la limite de 128 MiB");
+        String payload;
+        try {
+            payload = MinosCodeIndexImporter.readPayload(input);
+        } catch (IOException exception) {
+            if (exception.getMessage() != null && exception.getMessage().contains("128 MiB transport limit")) {
+                throw new IllegalArgumentException("Le payload MINOS dépasse la limite de 128 MiB", exception);
+            }
+            throw exception;
         }
-        String payload = new String(bytes, StandardCharsets.UTF_8);
         if (payload.isBlank()) {
             throw new IllegalArgumentException("Le payload MINOS doit être fourni sur stdin");
         }
