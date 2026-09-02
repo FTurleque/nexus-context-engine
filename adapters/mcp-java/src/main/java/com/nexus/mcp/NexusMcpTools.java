@@ -236,13 +236,13 @@ final class NexusMcpTools {
         try {
             String json = objectMapper.writeValueAsString(value);
             return McpSchema.CallToolResult.builder()
-                    .content(List.of(new McpSchema.TextContent(json)))
+                    .content(List.of(McpSchema.TextContent.builder(json).build()))
                     .isError(error)
                     .build();
         } catch (JsonProcessingException exception) {
             return McpSchema.CallToolResult.builder()
-                    .content(List.of(new McpSchema.TextContent(
-                            "{\"error\":\"serialization_error\",\"message\":\"Impossible de sérialiser la réponse NEXUS\"}")))
+                    .content(List.of(McpSchema.TextContent.builder(
+                            "{\"error\":\"serialization_error\",\"message\":\"Impossible de sérialiser la réponse NEXUS\"}").build()))
                     .isError(true)
                     .build();
         }
@@ -265,8 +265,6 @@ final class NexusMcpTools {
         }
         List<String> selectors = List.copyOf(uniqueSelectors.values());
 
-        // Les UUID explicites permettent de prouver un dépassement avant le
-        // moindre accès repository. Les noms/alias restent résolus normalement.
         FederatedScopePolicy.validateExplicitUuidSelectors(selectors);
 
         List<ProjectDescriptor> projects = new ArrayList<>();
