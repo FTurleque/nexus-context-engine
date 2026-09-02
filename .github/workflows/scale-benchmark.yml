@@ -13,11 +13,12 @@ on:
       - develop
       - main
     paths:
-      - 'src/main/java/com/nexus/persistence/sqlite/**'
-      - 'src/main/java/com/nexus/search/**'
-      - 'src/main/java/com/nexus/ranking/graph/**'
-      - 'src/main/java/com/nexus/context/**'
-      - 'src/test/java/com/nexus/benchmark/**'
+      - 'core/src/main/java/com/nexus/persistence/sqlite/**'
+      - 'core/src/main/java/com/nexus/search/**'
+      - 'core/src/main/java/com/nexus/ranking/graph/**'
+      - 'core/src/main/java/com/nexus/context/**'
+      - 'core/src/test/java/com/nexus/benchmark/**'
+      - 'core/pom.xml'
       - 'scripts/measure-scale-regression.ps1'
       - 'docs/developer/scale-regression-benchmark.md'
       - 'docs/developer/scale-regression-results.md'
