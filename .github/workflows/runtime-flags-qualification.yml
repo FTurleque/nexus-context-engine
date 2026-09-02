@@ -161,7 +161,7 @@ jobs:
           path: target/runtime-flags/*.log
 
   scale-comparison:
-    name: Linux Java 21 same-runner ABBA scale comparison
+    name: Linux Java 21 same-runner Vector API ABBA comparison
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -175,23 +175,20 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Run baseline/tuned ABBA on one runner
+      - name: Run native-only/vector-enabled ABBA on one runner
         shell: bash
         run: |
           set -euo pipefail
           chmod +x ./mvnw
           mkdir -p target/runtime-flags
+          java --list-modules | grep -q '^jdk.incubator.vector@'
 
           run_profile() {
             label="$1"
             flags="$2"
             out="target/runtime-flags/$label"
             mkdir -p "$out"
-            if [[ -n "$flags" ]]; then
-              export JDK_JAVA_OPTIONS="$flags"
-            else
-              unset JDK_JAVA_OPTIONS || true
-            fi
+            export JDK_JAVA_OPTIONS="$flags"
             ./mvnw -B -pl core \
               -Dtest=ScaleRegressionBenchmarkTest,GraphScaleRegressionBenchmarkTest,FederatedContextBudgetScaleBenchmarkTest,NativeContextDiscoveryBudgetBenchmarkTest \
               -Djunit.jupiter.execution.timeout.test.method.default=20m \
@@ -204,18 +201,19 @@ jobs:
               test 2>&1 | tee "$out/run.log"
           }
 
-          tuned='--enable-native-access=ALL-UNNAMED --add-modules=jdk.incubator.vector'
-          run_profile baseline-a ''
-          run_profile tuned-a "$tuned"
-          run_profile tuned-b "$tuned"
-          run_profile baseline-b ''
+          native='--enable-native-access=ALL-UNNAMED'
+          vector="$native --add-modules=jdk.incubator.vector"
+          run_profile native-a "$native"
+          run_profile vector-a "$vector"
+          run_profile vector-b "$vector"
+          run_profile native-b "$native"
 
           python3 - <<'PY'
           import json
           import statistics
           from pathlib import Path
 
-          labels = ('baseline-a', 'tuned-a', 'tuned-b', 'baseline-b')
+          labels = ('native-a', 'vector-a', 'vector-b', 'native-b')
           reports = {}
           for label in labels:
               root = Path('target/runtime-flags') / label
@@ -236,18 +234,18 @@ jobs:
                   'federatedMs': federated['durationMs'],
               }
 
-          baseline = [reports['baseline-a'], reports['baseline-b']]
-          tuned = [reports['tuned-a'], reports['tuned-b']]
+          native_runs = [reports['native-a'], reports['native-b']]
+          vector_runs = [reports['vector-a'], reports['vector-b']]
           summary = {
               'order': list(labels),
               'runs': reports,
-              'baselineMedianTotalMs': statistics.median(x['totalMs'] for x in baseline),
-              'tunedMedianTotalMs': statistics.median(x['totalMs'] for x in tuned),
-              'baselineMedianGraphP95Ms': statistics.median(x['graphP95Ms'] for x in baseline),
-              'tunedMedianGraphP95Ms': statistics.median(x['graphP95Ms'] for x in tuned),
+              'nativeMedianTotalMs': statistics.median(x['totalMs'] for x in native_runs),
+              'vectorMedianTotalMs': statistics.median(x['totalMs'] for x in vector_runs),
+              'nativeMedianGraphP95Ms': statistics.median(x['graphP95Ms'] for x in native_runs),
+              'vectorMedianGraphP95Ms': statistics.median(x['graphP95Ms'] for x in vector_runs),
           }
-          summary['totalRatio'] = summary['tunedMedianTotalMs'] / summary['baselineMedianTotalMs']
-          summary['graphP95Ratio'] = summary['tunedMedianGraphP95Ms'] / summary['baselineMedianGraphP95Ms']
+          summary['vectorTotalRatio'] = summary['vectorMedianTotalMs'] / summary['nativeMedianTotalMs']
+          summary['vectorGraphP95Ratio'] = summary['vectorMedianGraphP95Ms'] / summary['nativeMedianGraphP95Ms']
           Path('target/runtime-flags/summary.json').write_text(json.dumps(summary, indent=2) + '\n')
           print(json.dumps(summary, indent=2))
           PY
@@ -255,7 +253,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: runtime-flags-scale-abba-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          name: runtime-flags-vector-abba-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           retention-days: 90
           if-no-files-found: error
           path: target/runtime-flags/**
