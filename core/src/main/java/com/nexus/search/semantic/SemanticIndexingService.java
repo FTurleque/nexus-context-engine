@@ -181,7 +181,7 @@ public final class SemanticIndexingService {
         int remaining = Math.max(0, maxEmbeddingChars - text.length());
         if (remaining > 0) {
             String content = SensitiveContentRedactor.redact(document.content());
-            text.append(content, 0, Math.min(content.length(), remaining));
+            text.append(content, 0, safePrefixEnd(content, remaining));
         }
         return text.toString();
     }
@@ -193,6 +193,22 @@ public final class SemanticIndexingService {
         if (normalized.isEmpty()) {
             return document.relativePath();
         }
-        return normalized.substring(0, Math.min(normalized.length(), DEFAULT_EXCERPT_CHARS));
+        return normalized.substring(0, safePrefixEnd(normalized, DEFAULT_EXCERPT_CHARS));
+    }
+
+    /**
+     * Retourne une borne UTF-16 qui ne coupe jamais une paire surrogate. La limite
+     * publique reste exprimée en chars pour compatibilité, mais le préfixe produit
+     * reste toujours une chaîne Unicode valide.
+     */
+    private static int safePrefixEnd(String value, int maxChars) {
+        int end = Math.min(value.length(), Math.max(0, maxChars));
+        if (end > 0
+                && end < value.length()
+                && Character.isHighSurrogate(value.charAt(end - 1))
+                && Character.isLowSurrogate(value.charAt(end))) {
+            end--;
+        }
+        return end;
     }
 }
