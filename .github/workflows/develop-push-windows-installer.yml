@@ -17,6 +17,12 @@ on:
       - 'mvnw.cmd'
       - '.github/workflows/windows-installer.yml'
       - '.github/workflows/develop-push-windows-installer.yml'
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - '.github/workflows/develop-push-windows-installer.yml'
 
 permissions:
   contents: read
