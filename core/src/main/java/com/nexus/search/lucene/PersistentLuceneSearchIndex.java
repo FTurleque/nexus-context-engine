@@ -6,14 +6,11 @@ import com.nexus.search.SearchDocument;
 import com.nexus.search.SearchIndex;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Index lexical de production conservant uniquement les readers/searchers chauds.
@@ -28,8 +25,7 @@ public final class PersistentLuceneSearchIndex implements SearchIndex {
 
     private final NexusPaths paths;
     private final LuceneSearchIndex operationScoped;
-    private final BoundedLuceneSearcherCache searcherCache;
-    private final AtomicBoolean closed = new AtomicBoolean();
+    private final PersistentLuceneReaderSupport readers;
 
     public PersistentLuceneSearchIndex(NexusPaths paths) {
         this(paths, MAX_CACHED_PROJECTS);
@@ -38,58 +34,44 @@ public final class PersistentLuceneSearchIndex implements SearchIndex {
     PersistentLuceneSearchIndex(NexusPaths paths, int cacheCapacity) {
         this.paths = Objects.requireNonNull(paths, "paths");
         this.operationScoped = new LuceneSearchIndex(paths);
-        this.searcherCache = new BoundedLuceneSearcherCache(cacheCapacity);
+        this.readers = new PersistentLuceneReaderSupport(paths, cacheCapacity);
     }
 
     @Override
     public void applyChanges(UUID projectId, List<SearchDocument> documents, Set<String> removedPaths)
             throws IOException {
-        ensureOpen();
+        readers.ensureOpen();
         operationScoped.applyChanges(projectId, documents, removedPaths);
-        searcherCache.refreshIfCached(projectId);
+        readers.refreshIfCached(projectId);
     }
 
     @Override
     public void rebuild(UUID projectId, List<SearchDocument> documents) throws IOException {
-        ensureOpen();
+        readers.ensureOpen();
         // Repartir sans reader chaud rend aussi le rebuild sûr si le répertoire
         // doit un jour être remplacé plutôt que modifié en place.
-        searcherCache.invalidate(projectId);
+        readers.invalidate(projectId);
         operationScoped.rebuild(projectId, documents);
     }
 
     @Override
     public List<LexicalSearchHit> search(UUID projectId, String query, int limit) throws IOException {
-        ensureOpen();
+        readers.ensureOpen();
         LuceneSearchIndex.validateSearchRequest(projectId, query, limit);
-
         Path indexPath = paths.projectLuceneIndex(projectId);
-        if (!Files.exists(indexPath, LinkOption.NOFOLLOW_LINKS)) {
-            return List.of();
-        }
-        paths.ensurePrivateDirectory(indexPath);
-
-        BoundedLuceneSearcherCache.SearchLookup<List<LexicalSearchHit>> lookup = searcherCache.search(
+        return readers.search(
                 projectId,
                 indexPath,
-                searcher -> LuceneSearchIndex.search(searcher, query, limit));
-        return lookup.cached() ? lookup.value() : operationScoped.search(projectId, query, limit);
+                searcher -> LuceneSearchIndex.search(searcher, query, limit),
+                () -> operationScoped.search(projectId, query, limit));
     }
 
     @Override
     public void close() throws IOException {
-        if (closed.compareAndSet(false, true)) {
-            searcherCache.close();
-        }
+        readers.close();
     }
 
     int cachedProjectCount() {
-        return searcherCache.cachedProjectCount();
-    }
-
-    private void ensureOpen() {
-        if (closed.get()) {
-            throw new IllegalStateException("Persistent lexical Lucene index is closed");
-        }
+        return readers.cachedProjectCount();
     }
 }
