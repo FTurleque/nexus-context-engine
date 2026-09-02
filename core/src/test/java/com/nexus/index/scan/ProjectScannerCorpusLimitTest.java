@@ -17,8 +17,8 @@ class ProjectScannerCorpusLimitTest {
     Path temporaryDirectory;
 
     @Test
-    void acceptsExactFileBoundaryAndRejectsNextNonIgnoredFileEvenIfUnsupported() throws Exception {
-        Path root = Files.createDirectory(temporaryDirectory.resolve("file-budget"));
+    void acceptsExactEntryBoundaryAndRejectsNextEntryEvenIfUnsupported() throws Exception {
+        Path root = Files.createDirectory(temporaryDirectory.resolve("entry-budget"));
         Files.writeString(root.resolve("A.java"), "class A {}\n");
         Files.writeString(root.resolve("B.java"), "class B {}\n");
 
@@ -27,7 +27,7 @@ class ProjectScannerCorpusLimitTest {
 
         Files.write(root.resolve("payload.bin"), new byte[]{1});
         IOException failure = assertThrows(IOException.class, () -> scanner.scan(root));
-        assertTrue(failure.getMessage().contains("3 fichiers visités > limite 2"), failure.getMessage());
+        assertTrue(failure.getMessage().contains("3 entrées visitées > limite 2"), failure.getMessage());
     }
 
     @Test

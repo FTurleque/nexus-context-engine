@@ -10,8 +10,13 @@ on:
       - 'packaging/windows/**'
       - 'scripts/release/**'
       - 'distribution/**'
+      - 'core/src/**'
+      - 'adapters/**'
       - 'core/pom.xml'
       - 'pom.xml'
+      - '.mvn/**'
+      - 'mvnw'
+      - 'mvnw.cmd'
       - '.github/workflows/windows-installer.yml'
   workflow_dispatch:
 

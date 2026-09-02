@@ -43,7 +43,7 @@ class ProjectIndexingCorpusLimitTest {
         ProjectIndexingService service = new ProjectIndexingService(
                 projects,
                 index,
-                new ProjectScanner(1024L, 1, 1024L),
+                new ProjectScanner(1024L, 2, 1024L),
                 List.of(new JavaParserLanguageAnalyzer()),
                 new LuceneSearchIndex(paths));
 

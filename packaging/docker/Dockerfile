@@ -1,24 +1,18 @@
-# Bases épinglées par digest (tag lisible conservé) pour une build reproductible : le tag peut
-# être re-poussé en amont, le digest fige l'image exacte. Mettre à jour via
-# `docker buildx imagetools inspect <image> --format '{{.Manifest.Digest}}'`.
+# Bases épinglées par digest (tag lisible conservé) : aucune installation APT
+# réseau n'est exécutée ensuite, donc le contenu OS dépend uniquement de ces digests.
 ARG MAVEN_IMAGE=maven:3.9.11-eclipse-temurin-21@sha256:6fdc855a6ed81d288ca7ca37ac6ff5e9308b612485c0801d70b25a858c83d237
 ARG RUNTIME_IMAGE=eclipse-temurin:21-jre-jammy@sha256:3097cbbebb7d490494a98aed2301f284b38f79eba158eef098c6fc8c8af11c23
 
 FROM ${MAVEN_IMAGE} AS build
-USER root
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends unzip \
-    && rm -rf /var/lib/apt/lists/*
 WORKDIR /workspace
 COPY . .
-RUN chmod +x ./mvnw && ./mvnw -B -DskipTests package
+# Utilise le Maven déjà contenu dans l'image builder épinglée afin d'éviter
+# d'installer unzip via un dépôt APT mutable pendant la build Docker.
+RUN mvn -B -DskipTests package
 
 FROM ${RUNTIME_IMAGE} AS runtime
 USER root
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl \
-    && rm -rf /var/lib/apt/lists/* \
-    && groupadd --system --gid 10001 nexus \
+RUN groupadd --system --gid 10001 nexus \
     && useradd --system --uid 10001 --gid 10001 --home-dir /data/nexus --shell /usr/sbin/nologin nexus \
     && mkdir -p /opt/nexus/lib /opt/nexus/rest /data/nexus /workspace \
     && chown -R 10001:10001 /opt/nexus /data/nexus /workspace
@@ -28,11 +22,12 @@ COPY --from=build /workspace/adapters/mcp-java/target/nexus-mcp-java-*-runner.ja
 COPY --from=build /workspace/adapters/assistant-clients/target/nexus-assistant-clients-*-runner.jar /opt/nexus/lib/nexus-assistant-clients.jar
 COPY --from=build /workspace/adapters/rest-quarkus/target/quarkus-app/ /opt/nexus/rest/
 COPY --chown=10001:10001 packaging/docker/nexus-container-entrypoint.sh /usr/local/bin/nexus-entrypoint
+COPY --chown=10001:10001 packaging/docker/nexus-container-healthcheck.sh /usr/local/bin/nexus-healthcheck
 
-# A Windows checkout can materialize shell scripts with CRLF. Normalize the
-# entrypoint inside the Linux image so the shebang remains /bin/sh, not /bin/sh\r.
-RUN sed -i 's/\r$//' /usr/local/bin/nexus-entrypoint \
-    && chmod 0755 /usr/local/bin/nexus-entrypoint
+# A Windows checkout peut matérialiser les scripts avec CRLF. Les normaliser
+# dans l'image conserve des shebangs Linux valides sans paquet supplémentaire.
+RUN sed -i 's/\r$//' /usr/local/bin/nexus-entrypoint /usr/local/bin/nexus-healthcheck \
+    && chmod 0755 /usr/local/bin/nexus-entrypoint /usr/local/bin/nexus-healthcheck
 
 # NEXUS_DOCKER_HOST_FORWARD_ADDRESS intentionally has no image default. A container cannot infer
 # the host address chosen by the Docker daemon for -p/--publish. Official Compose injects the

@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProjectScannerTest {
@@ -110,6 +111,21 @@ class ProjectScannerTest {
         assertEquals(1, result.skippedFiles());
         assertTrue(result.diagnostics().stream().anyMatch(message ->
                 message.contains("LinkedSecret.java") && message.contains("lien symbolique")));
+    }
+
+    @Test
+    void boundsDirectoryOnlyTraversalWithTheGlobalEntryBudget() throws Exception {
+        Path projectRoot = Files.createDirectory(temporaryDirectory.resolve("directory-explosion"));
+        Files.createDirectory(projectRoot.resolve("dir-1"));
+        Files.createDirectory(projectRoot.resolve("dir-2"));
+        Files.createDirectory(projectRoot.resolve("dir-3"));
+        Files.createDirectory(projectRoot.resolve("dir-4"));
+
+        IOException failure = assertThrows(
+                IOException.class,
+                () -> new ProjectScanner(1024L, 3, 1024L).scan(projectRoot));
+
+        assertTrue(failure.getMessage().contains("4 entrées visitées > limite 3"));
     }
 
     private List<String> scanPaths() throws Exception {

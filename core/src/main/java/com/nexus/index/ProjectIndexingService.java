@@ -31,6 +31,8 @@ public final class ProjectIndexingService {
 
     public static final String PROVIDER_TIMEOUT_ENVIRONMENT_VARIABLE = "NEXUS_CODE_INTELLIGENCE_TIMEOUT_SECONDS";
     public static final Duration DEFAULT_PROVIDER_TIMEOUT = Duration.ofSeconds(180);
+    public static final int DEFAULT_INDEX_DOCUMENT_BATCH_FILES = 128;
+    public static final long DEFAULT_INDEX_DOCUMENT_BATCH_BYTES = 16L * 1024L * 1024L;
 
     private final ProjectRepository projectRepository;
     private final IndexRepository indexRepository;
@@ -42,6 +44,8 @@ public final class ProjectIndexingService {
     private final SemanticIndexingService semanticIndexingService;
     private final ExternalTaskRunner externalTaskRunner;
     private final ProjectIndexLockManager projectIndexLockManager;
+    private final int indexDocumentBatchFiles;
+    private final long indexDocumentBatchBytes;
     private final ConcurrentMap<UUID, LockSlot> projectLocks = new ConcurrentHashMap<>();
 
     public ProjectIndexingService(
@@ -134,6 +138,34 @@ public final class ProjectIndexingService {
             SemanticIndexingService semanticIndexingService,
             Duration providerTimeout,
             ProjectIndexLockManager projectIndexLockManager) {
+        this(
+                projectRepository,
+                indexRepository,
+                scanner,
+                analyzers,
+                searchIndex,
+                codeIndexImporters,
+                codeIntelligenceProviders,
+                semanticIndexingService,
+                providerTimeout,
+                projectIndexLockManager,
+                DEFAULT_INDEX_DOCUMENT_BATCH_FILES,
+                DEFAULT_INDEX_DOCUMENT_BATCH_BYTES);
+    }
+
+    ProjectIndexingService(
+            ProjectRepository projectRepository,
+            IndexRepository indexRepository,
+            ProjectScanner scanner,
+            List<LanguageAnalyzer> analyzers,
+            SearchIndex searchIndex,
+            List<CodeIndexImporter> codeIndexImporters,
+            List<CodeIntelligenceProvider> codeIntelligenceProviders,
+            SemanticIndexingService semanticIndexingService,
+            Duration providerTimeout,
+            ProjectIndexLockManager projectIndexLockManager,
+            int indexDocumentBatchFiles,
+            long indexDocumentBatchBytes) {
         this.projectRepository = Objects.requireNonNull(projectRepository, "projectRepository");
         this.indexRepository = Objects.requireNonNull(indexRepository, "indexRepository");
         this.scanner = Objects.requireNonNull(scanner, "scanner");
@@ -145,6 +177,14 @@ public final class ProjectIndexingService {
         this.semanticIndexingService = semanticIndexingService;
         this.externalTaskRunner = new ExternalTaskRunner(Objects.requireNonNull(providerTimeout, "providerTimeout"));
         this.projectIndexLockManager = Objects.requireNonNull(projectIndexLockManager, "projectIndexLockManager");
+        if (indexDocumentBatchFiles <= 0) {
+            throw new IllegalArgumentException("indexDocumentBatchFiles must be greater than zero");
+        }
+        if (indexDocumentBatchBytes <= 0) {
+            throw new IllegalArgumentException("indexDocumentBatchBytes must be greater than zero");
+        }
+        this.indexDocumentBatchFiles = indexDocumentBatchFiles;
+        this.indexDocumentBatchBytes = indexDocumentBatchBytes;
     }
 
     public IndexingReport index(UUID projectId) throws IOException {
@@ -213,27 +253,43 @@ public final class ProjectIndexingService {
             Set<String> removedPaths = new HashSet<>(existingFiles.keySet());
             removedPaths.removeAll(scannedPaths);
             Set<String> searchRemovedPaths = new HashSet<>(removedPaths);
+            scannedFiles.stream()
+                    .filter(file -> !isGenericSearchEligible(file.category()))
+                    .map(ScannedFile::relativePath)
+                    .forEach(searchRemovedPaths::add);
 
             boolean semanticFullRebuild = semanticIndexingService != null
                     && (fullRebuild || !semanticIndexingService.isCompatible(projectId, canonicalFingerprint));
 
+            prepareDerivedIndexes(
+                    projectId,
+                    canonicalFingerprint,
+                    fullRebuild,
+                    semanticFullRebuild,
+                    searchRemovedPaths);
+
             List<IndexedFileUpdate> updates = new ArrayList<>();
-            List<SearchDocument> searchDocuments = new ArrayList<>();
-            List<SearchDocument> semanticDocuments = new ArrayList<>();
+            IndexDocumentBatch documentBatch = new IndexDocumentBatch(
+                    indexDocumentBatchFiles,
+                    indexDocumentBatchBytes);
 
             for (ScannedFile scannedFile : scannedFiles) {
                 boolean genericSearchEligible = isGenericSearchEligible(scannedFile.category());
-                if (!genericSearchEligible) {
-                    searchRemovedPaths.add(scannedFile.relativePath());
-                }
-
                 IndexedFile existing = existingFiles.get(scannedFile.relativePath());
                 boolean changed = fullRebuild
                         || existing == null
                         || !existing.contentHash().equals(scannedFile.contentHash());
-                boolean requiredForSemanticRebuild = semanticFullRebuild && genericSearchEligible;
-                if (!changed && !requiredForSemanticRebuild) {
+                boolean lexicalDocumentRequired = changed && genericSearchEligible;
+                boolean semanticDocumentRequired = semanticIndexingService != null
+                        && genericSearchEligible
+                        && (semanticFullRebuild || changed);
+                if (!changed && !semanticDocumentRequired) {
                     continue;
+                }
+
+                if ((lexicalDocumentRequired || semanticDocumentRequired)
+                        && documentBatch.shouldFlushBefore(scannedFile.sizeBytes())) {
+                    flushDocumentBatch(projectId, canonicalFingerprint, documentBatch);
                 }
 
                 byte[] snapshotBytes = SafeFileIO.readBytesNoFollow(scannedFile.absolutePath());
@@ -244,26 +300,29 @@ public final class ProjectIndexingService {
                 }
                 String snapshotContent = new String(snapshotBytes, StandardCharsets.UTF_8);
                 AnalysisResult analysis = analyzeScannedFile(project.rootPath(), scannedFile, snapshotContent);
-                SearchDocument document = null;
-                if (genericSearchEligible) {
-                    document = new SearchDocument(
+
+                if (changed) {
+                    updates.add(new IndexedFileUpdate(scannedFile, analysis));
+                }
+
+                if (lexicalDocumentRequired || semanticDocumentRequired) {
+                    SearchDocument document = new SearchDocument(
                             scannedFile.relativePath(),
                             scannedFile.language(),
                             scannedFile.category(),
                             snapshotContent,
                             analysis.symbols());
-                }
-
-                if (changed) {
-                    updates.add(new IndexedFileUpdate(scannedFile, analysis));
-                    if (document != null) {
-                        searchDocuments.add(document);
+                    documentBatch.add(
+                            document,
+                            lexicalDocumentRequired,
+                            semanticDocumentRequired,
+                            scannedFile.sizeBytes());
+                    if (documentBatch.reachedLimit()) {
+                        flushDocumentBatch(projectId, canonicalFingerprint, documentBatch);
                     }
                 }
-                if (document != null && (semanticFullRebuild || changed)) {
-                    semanticDocuments.add(document);
-                }
             }
+            flushDocumentBatch(projectId, canonicalFingerprint, documentBatch);
 
             boolean codeSourcesChanged = codeIntelligenceSourcesChanged(
                     fullRebuild, updates, removedPaths, existingFiles);
@@ -283,21 +342,6 @@ public final class ProjectIndexingService {
             if (includeCodeIntelligenceProviders) {
                 refreshActiveCodeIntelligence(
                         projectId, project.rootPath(), diagnostics, providerDurationsMs);
-            }
-
-            if (fullRebuild) {
-                searchIndex.rebuild(projectId, searchDocuments);
-            } else {
-                searchIndex.applyChanges(projectId, searchDocuments, searchRemovedPaths);
-            }
-
-            if (semanticIndexingService != null) {
-                if (semanticFullRebuild) {
-                    semanticIndexingService.rebuild(projectId, canonicalFingerprint, semanticDocuments);
-                } else {
-                    semanticIndexingService.applyChanges(
-                            projectId, canonicalFingerprint, semanticDocuments, searchRemovedPaths);
-                }
             }
 
             // Une modification externe peut survenir après le scan initial ou pendant
@@ -331,6 +375,52 @@ public final class ProjectIndexingService {
             markFailed(project, exception);
             throw exception;
         }
+    }
+
+    private void prepareDerivedIndexes(
+            UUID projectId,
+            String canonicalFingerprint,
+            boolean fullRebuild,
+            boolean semanticFullRebuild,
+            Set<String> searchRemovedPaths) throws IOException {
+        if (fullRebuild) {
+            searchIndex.rebuild(projectId, List.of());
+        } else if (!searchRemovedPaths.isEmpty()) {
+            searchIndex.applyChanges(projectId, List.of(), searchRemovedPaths);
+        }
+
+        if (semanticIndexingService == null) {
+            return;
+        }
+        if (semanticFullRebuild) {
+            semanticIndexingService.rebuild(projectId, canonicalFingerprint, List.of());
+        } else if (!searchRemovedPaths.isEmpty()) {
+            semanticIndexingService.applyChanges(
+                    projectId,
+                    canonicalFingerprint,
+                    List.of(),
+                    searchRemovedPaths);
+        }
+    }
+
+    private void flushDocumentBatch(
+            UUID projectId,
+            String canonicalFingerprint,
+            IndexDocumentBatch batch) throws IOException {
+        if (batch.isEmpty()) {
+            return;
+        }
+        if (!batch.lexicalDocuments.isEmpty()) {
+            searchIndex.applyChanges(projectId, batch.lexicalDocuments, Set.of());
+        }
+        if (semanticIndexingService != null && !batch.semanticDocuments.isEmpty()) {
+            semanticIndexingService.applyChanges(
+                    projectId,
+                    canonicalFingerprint,
+                    batch.semanticDocuments,
+                    Set.of());
+        }
+        batch.clear();
     }
 
     private void refreshImportedCodeIntelligence(
@@ -499,6 +589,58 @@ public final class ProjectIndexingService {
 
     private static long elapsedMillis(long startedAt) {
         return Math.max(0L, (System.nanoTime() - startedAt) / 1_000_000L);
+    }
+
+    private static final class IndexDocumentBatch {
+        private final int maxFiles;
+        private final long maxBytes;
+        private final List<SearchDocument> lexicalDocuments = new ArrayList<>();
+        private final List<SearchDocument> semanticDocuments = new ArrayList<>();
+        private int retainedDocuments;
+        private long retainedBytes;
+
+        private IndexDocumentBatch(int maxFiles, long maxBytes) {
+            this.maxFiles = maxFiles;
+            this.maxBytes = maxBytes;
+        }
+
+        private boolean shouldFlushBefore(long nextBytes) {
+            if (isEmpty()) {
+                return false;
+            }
+            return retainedDocuments >= maxFiles
+                    || nextBytes > maxBytes - retainedBytes;
+        }
+
+        private void add(
+                SearchDocument document,
+                boolean lexical,
+                boolean semantic,
+                long sourceBytes) {
+            if (lexical) {
+                lexicalDocuments.add(document);
+            }
+            if (semantic) {
+                semanticDocuments.add(document);
+            }
+            retainedDocuments++;
+            retainedBytes += sourceBytes;
+        }
+
+        private boolean reachedLimit() {
+            return retainedDocuments >= maxFiles || retainedBytes >= maxBytes;
+        }
+
+        private boolean isEmpty() {
+            return retainedDocuments == 0;
+        }
+
+        private void clear() {
+            lexicalDocuments.clear();
+            semanticDocuments.clear();
+            retainedDocuments = 0;
+            retainedBytes = 0L;
+        }
     }
 
     private static final class LockSlot {

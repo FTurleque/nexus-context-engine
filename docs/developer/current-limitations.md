@@ -1,6 +1,6 @@
 # Limites actuelles et dette de consolidation
 
-Ce registre décrit l'état courant après les campagnes **NXA3 + NXA4**. Les anciens numéros de PR/runs ne constituent pas une preuve permanente ; la preuve de qualification est toujours le run attaché au HEAD exact concerné.
+Ce registre décrit l'état courant après les campagnes **NXA3 + NXA4** et la remédiation de l'audit `develop` du 2 septembre 2026. Les anciens numéros de PR/runs ne constituent pas une preuve permanente ; la preuve de qualification est toujours le run attaché au HEAD exact concerné.
 
 ## Invariants techniques désormais couverts
 
@@ -12,6 +12,8 @@ Ce registre décrit l'état courant après les campagnes **NXA3 + NXA4**. Les an
 - skills/customisations projet utilisent la frontière commune ;
 - la découverte native partage `ContextDiscoveryLimits` avant sélection de tokens ;
 - le scanner exclut davantage de répertoires/fichiers sensibles (`.ssh`, `.aws`, `.gnupg`, `.kube`, credentials, keystores, etc.) ;
+- `NEXUS_MAX_INDEX_FILES` conserve son nom historique mais borne toutes les entrées non racine rencontrées par le walk, y compris les répertoires et entrées ensuite ignorées ;
+- les rebuilds d'index dérivés ne conservent plus le corpus source complet en heap : les documents sont flushés par batches bornés à 128 fichiers / 16 MiB ;
 - `NEXUS_HOME`, `indexes` et `locks` sont forcés à `0700` sur POSIX ; le fichier SQLite est forcé à `0600` ;
 - les chemins persistants NEXUS durcis concernés sont refusés lorsqu'ils sont symboliques.
 
@@ -46,7 +48,7 @@ Le champ `constraints` existe encore dans certains contrats DTO/records pour com
 
 Limite résiduelle : un provider tiers peut ignorer l'interruption ; NEXUS borne alors l'accumulation de workers mais ne revendique pas une isolation processus absolue.
 
-### SQLite
+### SQLite et verrous d'indexation
 
 SQLite reste canonique. V004 invalide les index historiques contenant des plages de symboles impossibles ; V005 impose ensuite :
 
@@ -57,6 +59,8 @@ end_line >= start_line
 
 Les index Lucene restent dérivés et reconstructibles.
 
+La libération du verrou inter-processus ne transforme plus une mutation déjà validée en faux échec lorsque `FileLock.release()` signale une erreur mais que la fermeture du channel réussit effectivement. Une erreur de fermeture du channel reste propagée et conserve l'échec de release en exception supprimée.
+
 ### REST et management
 
 - listener applicatif par défaut : `127.0.0.1:8080` ;
@@ -64,7 +68,7 @@ Les index Lucene restent dérivés et reconstructibles.
 - `/q/*` n'est pas servi par le listener applicatif ;
 - hors loopback, le démarrage échoue fermé si transport sécurisé effectif, token robuste ou allowlist de racines ne sont pas démontrés.
 
-Le listener de management est volontairement loopback-only et ne doit pas être publié par un reverse proxy.
+Le listener de management est volontairement loopback-only et ne doit pas être publié par un reverse proxy. Le runtime Docker et Compose sondent ce listener via le probe embarqué `/usr/local/bin/nexus-healthcheck`, sans exposer le port management.
 
 ### Sémantique / Ollama / secrets
 
@@ -73,6 +77,7 @@ Le listener de management est volontairement loopback-only et ne doit pas être 
 - `NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA=true` est l'exception administrative explicite pour HTTP distant ;
 - credentials intégrés dans `NEXUS_OLLAMA_BASE_URL` refusés ;
 - secrets à forte confiance redigés avant embeddings et avant restitution des fragments de contexte ;
+- les troncatures embedding/excerpt ne coupent plus une paire surrogate UTF-16 ;
 - le profil sémantique est `content-v2`, ce qui force le rebuild d'un ancien index incompatible.
 
 La redaction conservatrice réduit les fuites accidentelles mais ne remplace pas un scanner de secrets spécialisé.
@@ -82,6 +87,8 @@ La redaction conservatrice réduit les fuites accidentelles mais ne remplace pas
 - exact-head explicite pour NEXUS CI/CodeQL ;
 - OSV, CodeQL, Trivy et SBOM actifs ;
 - Maven/JDT LS vérifiés contre des ancres versionnées indépendantes ;
+- le gate Windows Installer couvre désormais `core/src/**`, `adapters/**`, les POM et le wrapper Maven ;
+- les images Docker builder/runtime sont épinglées par digest et les Dockerfiles n'exécutent plus de `apt-get` dépendant de l'état courant d'un miroir ;
 - image Docker construite une fois, qualifiée puis publiée sans rebuild ;
 - GHCR preflight fail-closed avec reprise idempotente uniquement pour le même contenu ;
 - Dependabot cible `develop` ;
@@ -91,7 +98,7 @@ La redaction conservatrice réduit les fuites accidentelles mais ne remplace pas
 
 La protection GitHub de `develop` est un état repository-admin, pas un fichier versionné. Le contrat attendu est décrit dans [`branch-governance.md`](branch-governance.md).
 
-Tant que GitHub retourne `protected=false` pour `develop`, NXA3-14 / #130 reste ouvert : une poussée directe peut entrer avant le gate PR même si la CI se déclenche ensuite.
+Tant que GitHub retourne `protected=false` pour `develop`, NXA3-14 / #130 reste ouvert : une poussée directe peut entrer avant le gate PR même si la CI se déclenche ensuite. Ce point ne peut pas être clôturé par une modification de code ou de workflow ; il exige le ruleset GitHub effectif.
 
 ## Watch items
 

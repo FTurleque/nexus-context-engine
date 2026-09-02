@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -33,6 +34,32 @@ class ProjectIndexLockManagerTest {
         try (ProjectIndexLockManager.LockHandle ignored = secondManager.acquire(projectId)) {
             assertTrue(Files.isRegularFile(paths.projectIndexLock(projectId)));
         }
+    }
+
+    @Test
+    void ignoresReleaseFailureWhenClosingTheChannelSucceeds() {
+        assertDoesNotThrow(() -> ProjectIndexLockManager.releaseAndClose(
+                () -> {
+                    throw new IOException("release failed");
+                },
+                () -> {
+                    // Channel close succeeded: the OS resource is released.
+                }));
+    }
+
+    @Test
+    void reportsCloseFailureAndRetainsReleaseFailureAsSuppressed() {
+        IOException failure = assertThrows(IOException.class, () -> ProjectIndexLockManager.releaseAndClose(
+                () -> {
+                    throw new IOException("release failed");
+                },
+                () -> {
+                    throw new IOException("close failed");
+                }));
+
+        assertEquals("close failed", failure.getMessage());
+        assertEquals(1, failure.getSuppressed().length);
+        assertEquals("release failed", failure.getSuppressed()[0].getMessage());
     }
 
     @Test
