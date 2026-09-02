@@ -19,29 +19,12 @@ public class NexusRestExposureGuard {
     @PostConstruct
     void validateExposure() {
         if (NexusRestSecurity.isLoopbackHost(host)) {
+            validateHardenedLoopback();
             return;
         }
 
-        String token = NexusRestSecurity.configuredToken()
-                .orElseThrow(() -> new IllegalStateException(
-                        "NEXUS REST refuse une écoute hors loopback sans authentification. Configurez "
-                                + NexusRestSecurity.TOKEN_ENVIRONMENT_VARIABLE + "."));
-        if (!NexusRestSecurity.isStrongRemoteToken(token)) {
-            throw new IllegalStateException(
-                    NexusRestSecurity.TOKEN_ENVIRONMENT_VARIABLE + " doit contenir au moins "
-                            + NexusRestSecurity.MIN_REMOTE_TOKEN_BYTES
-                            + " octets et présenter une entropie estimée d'au moins "
-                            + (int) NexusRestSecurity.MIN_REMOTE_TOKEN_ESTIMATED_ENTROPY_BITS
-                            + " bits pour une écoute hors loopback");
-        }
-
-        List<Path> roots = NexusRestProjectRootPolicy.configuredRoots();
-        if (roots.isEmpty()) {
-            throw new IllegalStateException(
-                    "Une écoute REST hors loopback exige "
-                            + NexusRestProjectRootPolicy.ROOTS_ENVIRONMENT_VARIABLE
-                            + " afin de borner les répertoires administrables");
-        }
+        requireStrongToken("NEXUS REST refuse une écoute hors loopback sans authentification. Configurez ");
+        requireProjectRoots("Une écoute REST hors loopback exige ");
 
         String exposureMode = NexusRestSecurity.configuredExposureMode()
                 .orElseThrow(() -> new IllegalStateException(
@@ -62,6 +45,43 @@ public class NexusRestExposureGuard {
         }
 
         NexusRestTransportPolicy.validateSecureNonLoopbackExposure(exposureMode);
+    }
+
+    private static void validateHardenedLoopback() {
+        if (!NexusRestSecurity.isLocalHardeningRequired()) {
+            return;
+        }
+        requireStrongToken(
+                NexusRestSecurity.LOCAL_HARDENING_ENVIRONMENT_VARIABLE
+                        + "=true exige une authentification locale. Configurez ");
+        requireProjectRoots(
+                NexusRestSecurity.LOCAL_HARDENING_ENVIRONMENT_VARIABLE
+                        + "=true exige une allowlist de projets via ");
+    }
+
+    private static String requireStrongToken(String prefix) {
+        String token = NexusRestSecurity.configuredToken()
+                .orElseThrow(() -> new IllegalStateException(
+                        prefix + NexusRestSecurity.TOKEN_ENVIRONMENT_VARIABLE + "."));
+        if (!NexusRestSecurity.isStrongRemoteToken(token)) {
+            throw new IllegalStateException(
+                    NexusRestSecurity.TOKEN_ENVIRONMENT_VARIABLE + " doit contenir au moins "
+                            + NexusRestSecurity.MIN_REMOTE_TOKEN_BYTES
+                            + " octets et présenter une entropie estimée d'au moins "
+                            + (int) NexusRestSecurity.MIN_REMOTE_TOKEN_ESTIMATED_ENTROPY_BITS
+                            + " bits");
+        }
+        return token;
+    }
+
+    private static List<Path> requireProjectRoots(String prefix) {
+        List<Path> roots = NexusRestProjectRootPolicy.configuredRoots();
+        if (roots.isEmpty()) {
+            throw new IllegalStateException(
+                    prefix + NexusRestProjectRootPolicy.ROOTS_ENVIRONMENT_VARIABLE
+                            + " afin de borner les répertoires administrables");
+        }
+        return roots;
     }
 
     private static void validateDockerLoopbackForward() {
