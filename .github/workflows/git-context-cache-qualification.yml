@@ -7,16 +7,22 @@ on:
       - main
     paths:
       - 'core/src/main/java/com/nexus/context/source/git/**'
+      - 'core/src/main/java/com/nexus/application/NexusApplication.java'
       - 'core/src/test/java/com/nexus/context/source/git/**'
       - 'core/src/test/java/com/nexus/benchmark/GitContextCacheQualificationBenchmarkTest.java'
+      - 'docs/developer/git-context.md'
+      - 'docs/adr/0046-mettre-en-cache-le-contexte-git-dans-les-runtimes-longue-duree.md'
       - '.github/workflows/git-context-cache-qualification.yml'
   push:
     branches:
       - develop
     paths:
       - 'core/src/main/java/com/nexus/context/source/git/**'
+      - 'core/src/main/java/com/nexus/application/NexusApplication.java'
       - 'core/src/test/java/com/nexus/context/source/git/**'
       - 'core/src/test/java/com/nexus/benchmark/GitContextCacheQualificationBenchmarkTest.java'
+      - 'docs/developer/git-context.md'
+      - 'docs/adr/0046-mettre-en-cache-le-contexte-git-dans-les-runtimes-longue-duree.md'
       - '.github/workflows/git-context-cache-qualification.yml'
   workflow_dispatch:
     inputs:
@@ -72,7 +78,7 @@ jobs:
         run: |
           chmod +x ./mvnw
           ./mvnw -B -pl core \
-            -Dtest=GitContextCacheQualificationBenchmarkTest \
+            -Dtest=GitContextCacheQualificationBenchmarkTest,PersistentGitContextSourceProviderTest \
             -Djunit.jupiter.execution.timeout.test.method.default=20m \
             -Dnexus.git.cache.benchmark.enabled=true \
             -Dnexus.scale.benchmark.profile="$BENCHMARK_PROFILE" \
@@ -84,7 +90,7 @@ jobs:
         shell: pwsh
         run: |
           & .\mvnw.cmd -B -pl core `
-            '-Dtest=GitContextCacheQualificationBenchmarkTest' `
+            '-Dtest=GitContextCacheQualificationBenchmarkTest,PersistentGitContextSourceProviderTest' `
             '-Djunit.jupiter.execution.timeout.test.method.default=20m' `
             '-Dnexus.git.cache.benchmark.enabled=true' `
             "-Dnexus.scale.benchmark.profile=$env:BENCHMARK_PROFILE" `
