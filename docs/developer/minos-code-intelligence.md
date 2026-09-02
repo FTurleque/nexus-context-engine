@@ -2,7 +2,7 @@
 
 Statut historique : **terminée, validée et livrée le 24 juillet 2026** via NEXUS issue #11 / PR #12.
 
-Phase 6 conserve la frontière MINOS/NEXUS et optimise la validation des chemins dans le chemin applicatif.
+Phase 6 conserve la frontière MINOS/NEXUS et optimise la validation des chemins dans le chemin applicatif. Le hardening NXA6 conserve le contrat JSON mais remplace la matérialisation globale du document par un parsing streaming borné.
 
 ## Responsabilités
 
@@ -32,7 +32,21 @@ SQLite → search/ranking/context
 nexus minos-import <id-ou-nom> < export-minos.json [--json]
 ```
 
-Le payload est borné à 128 MiB. Le projet doit désormais être `READY` avant remplacement du snapshot MINOS, comme les autres opérations dépendant d'un index cohérent.
+Le payload est borné à 128 MiB. La CLI applique cette limite pendant la lecture UTF-8 sans conserver un `byte[]` complet du payload en parallèle. Le projet doit être `READY` avant remplacement du snapshot MINOS, comme les autres opérations dépendant d'un index cohérent.
+
+## Parsing et limites de ressources
+
+Le document JSON n'est plus chargé via `ObjectMapper.readTree(payload)` dans son intégralité. Le parser parcourt le root en streaming, puis matérialise au plus un objet symbole ou relation à la fois avant mapping vers les objets NEXUS.
+
+Les limites sont cumulatives :
+
+```text
+transport JSON       128 MiB
+symbol facts         500 000 maximum
+relation facts       500 000 maximum
+```
+
+Les champs top-level peuvent rester dans n'importe quel ordre JSON. Les métadonnées `contractVersion`, `producer` et `project.rootPath` sont validées avant que le snapshot final soit retourné/persisté ; un document invalide ne produit donc aucun remplacement partiel en base.
 
 ## Contrat et chemins
 
@@ -104,10 +118,6 @@ Sonar Quality Gate Passed
 
 Replay réel : 11 symboles, 6 relations, symbole `GreetingPort` retrouvé avec provenance `minos`.
 
-La Phase 6 ne modifie pas le contrat JSON MINOS ; elle modifie uniquement l'utilisation de l'état canonique NEXUS et le gate READY. Ces changements seront qualifiés via :
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
-```
+La Phase 6 ne modifie pas le contrat JSON MINOS ; elle modifie uniquement l'utilisation de l'état canonique NEXUS et le gate READY. NXA6 ne modifie pas non plus ce contrat : il borne davantage la consommation mémoire et le nombre de faits.
 
 Décision historique : [ADR-0044](../adr/0044-consommer-minos-via-un-contrat-json-local-versionne.md).
