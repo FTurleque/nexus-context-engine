@@ -1,5 +1,6 @@
 package com.nexus.context;
 
+import com.nexus.project.FederatedScopePolicy;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;
@@ -147,7 +148,7 @@ class FederatedContextServiceTest {
         assertEquals(3_000, bundle.metadata().get("candidateBudgetTotal"));
 
         List<ProjectDescriptor> tooMany = new ArrayList<>();
-        for (int index = 0; index <= FederatedContextService.MAX_FEDERATED_PROJECTS; index++) {
+        for (int index = 0; index <= FederatedScopePolicy.MAX_PROJECTS; index++) {
             tooMany.add(project("too-many-" + index, root.resolve("too-many-" + index)));
         }
         assertThrows(IllegalArgumentException.class, () ->
