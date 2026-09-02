@@ -12,8 +12,8 @@
     "scripts/measure-iteration-16-portfolio.ps1",
     "scripts/measure-iteration-16-small-delta.ps1",
     "scripts/validate-iteration-16.ps1",
-    "src/test/java/com/nexus/search/LargeScaleSearchBaselineTest.java",
-    "src/test/java/com/nexus/index/SmallDeltaIndexingBaselineTest.java"
+    "core/src/test/java/com/nexus/search/LargeScaleSearchBaselineTest.java",
+    "core/src/test/java/com/nexus/index/SmallDeltaIndexingBaselineTest.java"
   ],
   "queries": [
     {
@@ -21,7 +21,7 @@
       "relevant": [
         {
           "repository": "nexus-context-engine",
-          "path": "src/main/java/com/nexus/search/SearchService.java"
+          "path": "core/src/main/java/com/nexus/search/SearchService.java"
         },
         {
           "repository": "collection-manager",
