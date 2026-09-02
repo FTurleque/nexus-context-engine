@@ -80,15 +80,18 @@ public final class ProjectScanner {
         List<ScannedFile> files = new ArrayList<>();
         List<String> diagnostics = new ArrayList<>();
         int[] skippedFiles = {0};
-        int[] visitedFiles = {0};
+        int[] visitedEntries = {0};
         long[] indexedBytes = {0L};
 
         Files.walkFileTree(root, new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes)
                     throws IOException {
-                if (!directory.equals(root) && ignoreMatcher.isIgnored(directory, true)) {
-                    return FileVisitResult.SKIP_SUBTREE;
+                if (!directory.equals(root)) {
+                    consumeVisitedEntry(visitedEntries);
+                    if (ignoreMatcher.isIgnored(directory, true)) {
+                        return FileVisitResult.SKIP_SUBTREE;
+                    }
                 }
                 ignoreMatcher.registerDirectory(directory);
                 return FileVisitResult.CONTINUE;
@@ -96,14 +99,9 @@ public final class ProjectScanner {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+                consumeVisitedEntry(visitedEntries);
                 if (ignoreMatcher.isIgnored(file, false)) {
                     return FileVisitResult.CONTINUE;
-                }
-
-                visitedFiles[0]++;
-                if (visitedFiles[0] > scanLimits.maxFiles()) {
-                    throw new IOException("Corpus d'indexation trop volumineux : "
-                            + visitedFiles[0] + " fichiers visités > limite " + scanLimits.maxFiles());
                 }
 
                 if (!isSupportedTextSource(file)) {
@@ -169,6 +167,14 @@ public final class ProjectScanner {
         files.sort(Comparator.comparing(ScannedFile::relativePath));
         diagnostics.sort(String::compareTo);
         return new ProjectScanResult(files, skippedFiles[0], diagnostics);
+    }
+
+    private void consumeVisitedEntry(int[] visitedEntries) throws IOException {
+        visitedEntries[0]++;
+        if (visitedEntries[0] > scanLimits.maxFiles()) {
+            throw new IOException("Corpus d'indexation trop volumineux : "
+                    + visitedEntries[0] + " entrées visitées > limite " + scanLimits.maxFiles());
+        }
     }
 
     private static boolean isSupportedTextSource(Path file) {
