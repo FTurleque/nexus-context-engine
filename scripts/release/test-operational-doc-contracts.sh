@@ -37,7 +37,22 @@ for path in (
 ):
     require(path, "Maven 3.9.16")
 
-migrations = sorted((root / "src/main/resources/db/migration").glob("V*.sql"))
+# Core must own a standard Maven layout; the historical root src tree must not return.
+if (root / "src").exists():
+    raise SystemExit("core layout drift: repository-root src/ must not exist")
+for path in (
+    "core/src/main/java/com/nexus/application/NexusApplication.java",
+    "core/src/main/resources/db/migration/V005__enforce_symbol_range_constraints.sql",
+    "core/src/test/java/com/nexus/application/NexusApplicationSemanticConfigurationTest.java",
+):
+    if not (root / path).is_file():
+        raise SystemExit(f"core layout drift: missing {path}")
+core_pom = text("core/pom.xml")
+for stale in ("<sourceDirectory>", "<testSourceDirectory>", "../src/main", "../src/test"):
+    if stale in core_pom:
+        raise SystemExit(f"core layout drift: core/pom.xml still contains {stale!r}")
+
+migrations = sorted((root / "core/src/main/resources/db/migration").glob("V*.sql"))
 if not migrations or migrations[-1].name != "V005__enforce_symbol_range_constraints.sql":
     raise SystemExit(f"schema contract drift: latest migration is {migrations[-1].name if migrations else 'none'}")
 require("docs/developer/release-and-recovery.md", "V005__enforce_symbol_range_constraints.sql")
@@ -132,7 +147,7 @@ for path in (
 require("docs/developer/rest-api.md", "ne sont pas servis par le listener applicatif")
 
 # NXA4: remote Ollama transport and secret redaction.
-semantic_cfg = "src/main/java/com/nexus/search/semantic/SemanticSearchConfiguration.java"
+semantic_cfg = "core/src/main/java/com/nexus/search/semantic/SemanticSearchConfiguration.java"
 require(semantic_cfg, "NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA")
 for path in (
     "README.md",
@@ -148,8 +163,8 @@ for path in (
 ):
     require(path, "NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA")
 
-require("src/main/java/com/nexus/security/SensitiveContentRedactor.java", "[REDACTED]")
-require("src/main/java/com/nexus/search/semantic/SemanticIndexingService.java", "CONTENT_PROFILE_VERSION = 2")
+require("core/src/main/java/com/nexus/security/SensitiveContentRedactor.java", "[REDACTED]")
+require("core/src/main/java/com/nexus/search/semantic/SemanticIndexingService.java", "CONTENT_PROFILE_VERSION = 2")
 for path in (
     "README.md",
     "docs/architecture.md",
@@ -162,7 +177,7 @@ for path in (
     require(path, "content-v2")
 
 # NXA4: external work/JDT framing bounds.
-external_runner = "src/main/java/com/nexus/index/ExternalTaskRunner.java"
+external_runner = "core/src/main/java/com/nexus/index/ExternalTaskRunner.java"
 require(external_runner, "MAX_CONCURRENT_TASKS = 8")
 for path in (
     "docs/architecture/arc42/06-vue-execution.md",
@@ -172,7 +187,7 @@ for path in (
 ):
     require(path, "8 tâches externes")
 
-jdt_reader = "src/main/java/com/nexus/index/jdt/JdtJsonRpcFrameReader.java"
+jdt_reader = "core/src/main/java/com/nexus/index/jdt/JdtJsonRpcFrameReader.java"
 for needle in (
     "MAX_MESSAGE_BYTES = 16 * 1024 * 1024",
     "MAX_HEADER_BYTES = 64 * 1024",
@@ -200,7 +215,7 @@ require("docs/developer/jdt-language-server.md", "ancre versionnée dans le repo
 forbid("docs/developer/jdt-language-server.md", "télécharge le checksum SHA-256 publié")
 
 # NXA4: Lucene high-cardinality query cap.
-lucene = "src/main/java/com/nexus/search/lucene/LuceneSearchIndex.java"
+lucene = "core/src/main/java/com/nexus/search/lucene/LuceneSearchIndex.java"
 require(lucene, "MAX_ANALYZED_QUERY_TERMS = 128")
 for path in (
     "README.md",
@@ -216,7 +231,7 @@ for path in (
     require(path, "128 termes")
 
 # NXA4: persistent storage permissions.
-nexus_paths = "src/main/java/com/nexus/config/NexusPaths.java"
+nexus_paths = "core/src/main/java/com/nexus/config/NexusPaths.java"
 require(nexus_paths, 'PosixFilePermissions.fromString("rwx------")')
 require(nexus_paths, 'PosixFilePermissions.fromString("rw-------")')
 for path in (
@@ -230,7 +245,7 @@ for path in (
     require(path, "0600")
 
 # NXA4: unsupported constraints must fail explicitly.
-context_request = "src/main/java/com/nexus/context/ContextRequest.java"
+context_request = "core/src/main/java/com/nexus/context/ContextRequest.java"
 require(context_request, "constraints are not supported yet")
 for path in (
     "docs/architecture.md",

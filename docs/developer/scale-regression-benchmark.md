@@ -23,7 +23,7 @@ Le benchmark ne contacte aucun repository distant et aucun service externe.
 Harness :
 
 ```text
-src/test/java/com/nexus/benchmark/ScaleRegressionBenchmarkTest.java
+core/src/test/java/com/nexus/benchmark/ScaleRegressionBenchmarkTest.java
 ```
 
 Runner Windows :

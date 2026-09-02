@@ -11,7 +11,7 @@ NEXUS se positionne **entre** les sources d'information (code, documentation, in
 skills, Git) **et** les consommateurs (GitHub Copilot, Claude, agents maison, CLI). Il ne
 génère pas de réponses, n'exécute pas d'agents et ne route pas de modèles.
 
-> Preuve : `src/main/java/com/nexus/application/NexusApplication.java` — façade applicative
+> Preuve : `core/src/main/java/com/nexus/application/NexusApplication.java` — façade applicative
 > partagée entre CLI, REST et MCP ; aucune dépendance vers un fournisseur LLM.
 
 **Version actuelle** : 0.2.0 — Phase 6 (Consolidation, hardening et industrialisation).

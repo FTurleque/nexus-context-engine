@@ -92,12 +92,12 @@ try {
         "scripts/measure-iteration-17-real-semantic.ps1",
         "scripts/measure-iteration-17-real-semantic-diagnostic.ps1",
         "scripts/validate-iteration-17.ps1",
-        "src/test/java/com/nexus/search/semantic/SemanticSearchBenchmarkTest.java",
-        "src/test/java/com/nexus/search/semantic/RealSemanticSearchBenchmarkTest.java",
-        "src/test/java/com/nexus/search/semantic/RealSemanticRetrievalDiagnosticTest.java",
-        "src/test/java/com/nexus/application/NexusApplicationSemanticConfigurationTest.java",
-        "src/test/java/com/nexus/ranking/SemanticRankingTest.java",
-        "src/test/java/com/nexus/ranking/SemanticHybridContextRankerTest.java"
+        "core/src/test/java/com/nexus/search/semantic/SemanticSearchBenchmarkTest.java",
+        "core/src/test/java/com/nexus/search/semantic/RealSemanticSearchBenchmarkTest.java",
+        "core/src/test/java/com/nexus/search/semantic/RealSemanticRetrievalDiagnosticTest.java",
+        "core/src/test/java/com/nexus/application/NexusApplicationSemanticConfigurationTest.java",
+        "core/src/test/java/com/nexus/ranking/SemanticRankingTest.java",
+        "core/src/test/java/com/nexus/ranking/SemanticHybridContextRankerTest.java"
     )
 
     $snapshotFull = [System.IO.Path]::GetFullPath($snapshotRoot)

@@ -13,10 +13,11 @@ on:
       - develop
       - main
     paths:
-      - 'src/main/java/com/nexus/index/scan/**'
-      - 'src/test/java/com/nexus/index/scan/**'
-      - 'src/test/java/com/nexus/index/ProjectIndexingCorpusLimitTest.java'
-      - 'src/test/java/com/nexus/benchmark/ProjectScannerCorpusBudgetBenchmarkTest.java'
+      - 'core/src/main/java/com/nexus/index/scan/**'
+      - 'core/src/test/java/com/nexus/index/scan/**'
+      - 'core/src/test/java/com/nexus/index/ProjectIndexingCorpusLimitTest.java'
+      - 'core/src/test/java/com/nexus/benchmark/ProjectScannerCorpusBudgetBenchmarkTest.java'
+      - 'core/pom.xml'
       - 'docs/developer/indexing-corpus-limits.md'
       - '.github/workflows/scanner-corpus-benchmark.yml'
   workflow_dispatch:
