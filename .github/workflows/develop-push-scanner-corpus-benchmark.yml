@@ -1,0 +1,26 @@
+name: Develop Push Scanner Corpus Benchmark
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'core/src/main/java/com/nexus/index/scan/**'
+      - 'core/src/test/java/com/nexus/index/scan/**'
+      - 'core/src/test/java/com/nexus/index/ProjectIndexingCorpusLimitTest.java'
+      - 'core/src/test/java/com/nexus/benchmark/ProjectScannerCorpusBudgetBenchmarkTest.java'
+      - 'core/pom.xml'
+      - 'docs/developer/indexing-corpus-limits.md'
+      - '.github/workflows/scanner-corpus-benchmark.yml'
+      - '.github/workflows/develop-push-scanner-corpus-benchmark.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    uses: ./.github/workflows/scanner-corpus-benchmark.yml
+    with:
+      profile: ci
+    permissions:
+      contents: read
