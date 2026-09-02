@@ -217,18 +217,18 @@ end;
     $Source = Replace-ExactlyOnce $Source $dockerEnv $dockerEnvReplacement 'Docker dotenv escaping and forward declaration contract'
 
     $nativeJsonArgument = @'
-    '      \"args\": [\"-jar\", \"' + RunnerPath + '\"]' + #13#10 +
+    '      "args": ["-jar", "' + RunnerPath + '"]' + #13#10 +
 '@
     $nativeJsonArgumentReplacement = @'
-    '      \"args\": [\"--enable-native-access=ALL-UNNAMED\", \"-jar\", \"' + RunnerPath + '\"]' + #13#10 +
+    '      "args": ["--enable-native-access=ALL-UNNAMED", "-jar", "' + RunnerPath + '"]' + #13#10 +
 '@
     $Source = Replace-ExactlyOnce $Source $nativeJsonArgument $nativeJsonArgumentReplacement 'native MCP JSON runtime option'
 
     $nativeTomlArgument = @'
-    'args = [\"-jar\", \"' + RunnerPath + '\"]' + #13#10;
+    'args = ["-jar", "' + RunnerPath + '"]' + #13#10;
 '@
     $nativeTomlArgumentReplacement = @'
-    'args = [\"--enable-native-access=ALL-UNNAMED\", \"-jar\", \"' + RunnerPath + '\"]' + #13#10;
+    'args = ["--enable-native-access=ALL-UNNAMED", "-jar", "' + RunnerPath + '"]' + #13#10;
 '@
     $Source = Replace-ExactlyOnce $Source $nativeTomlArgument $nativeTomlArgumentReplacement 'native Codex TOML runtime option'
 
