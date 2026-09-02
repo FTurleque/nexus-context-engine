@@ -24,9 +24,12 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 
 import java.io.IOException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -99,6 +102,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
         Objects.requireNonNull(documents, "documents");
         Path indexPath = paths.projectSemanticLuceneIndex(projectId);
         paths.ensurePrivateDirectory(indexPath);
+        clearDerivedIndexDirectory(indexPath);
         try (Directory directory = FSDirectory.open(indexPath)) {
             IndexWriterConfig configuration = new IndexWriterConfig()
                     .setOpenMode(IndexWriterConfig.OpenMode.CREATE);
@@ -196,6 +200,29 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
                             clamp(scoreDoc.score)));
                 }
                 return List.copyOf(hits);
+            }
+        }
+    }
+
+    private static void clearDerivedIndexDirectory(Path indexPath) throws IOException {
+        try (var entries = Files.list(indexPath)) {
+            for (Path entry : entries.toList()) {
+                Files.walkFileTree(entry, new SimpleFileVisitor<>() {
+                    @Override
+                    public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+                        Files.delete(file);
+                        return FileVisitResult.CONTINUE;
+                    }
+
+                    @Override
+                    public FileVisitResult postVisitDirectory(Path directory, IOException failure) throws IOException {
+                        if (failure != null) {
+                            throw failure;
+                        }
+                        Files.delete(directory);
+                        return FileVisitResult.CONTINUE;
+                    }
+                });
             }
         }
     }

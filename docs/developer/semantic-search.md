@@ -93,14 +93,14 @@ Cette limite n'est pas exposée comme configuration opérationnelle : elle reste
 
 ## Dégradation et récupération
 
-La recherche sémantique est un signal optionnel. Une panne **I/O** du provider d'embeddings ou du Lucene sémantique ne doit donc pas rendre indisponibles les stratégies lexicales et symboliques déjà cohérentes.
+La recherche sémantique est un signal optionnel. Une indisponibilité transitoire du provider d'embeddings ou une panne I/O du Lucene sémantique ne doit donc pas rendre indisponibles les stratégies lexicales et symboliques déjà cohérentes.
 
 En recherche :
 
-- indisponibilité/timeout Ollama → le signal sémantique retourne zéro candidat pour cette requête et la recherche continue avec les autres stratégies ;
+- timeout, connexion impossible, HTTP 429 ou HTTP 5xx Ollama → `EmbeddingProviderUnavailableException`, zéro candidat sémantique pour cette requête et poursuite avec les autres stratégies ;
 - erreur I/O de lecture/compatibilité du Lucene sémantique → même fallback ;
 - un diagnostic stable est journalisé avec `code=embedding_provider_unavailable` ou `code=semantic_index_unavailable` ;
-- une erreur de contrat, par exemple un vecteur de dimension incorrecte, reste bloquante : elle ne doit pas être masquée comme indisponibilité transitoire.
+- une erreur de protocole ou de contrat, par exemple JSON invalide, dimension incorrecte ou valeur non finie, reste une `IOException` bloquante : elle ne doit pas être masquée comme indisponibilité transitoire.
 
 Le retry Ollama est automatique à la requête suivante : aucun circuit ouvert persistant n'est conservé. Une instance de provider qui reçoit temporairement HTTP 503 ou dépasse son timeout peut donc reprendre sans redémarrer NEXUS dès que le service répond à nouveau.
 
@@ -114,7 +114,9 @@ La première action est toujours une reconstruction explicite :
 nexus index <id-ou-nom> --rebuild
 ```
 
-Le Lucene sémantique est dérivé de l'index canonique et des fichiers du repository. Un rebuild utilise un `OpenMode.CREATE` et remplace son contenu ; la qualification comprend une fixture qui corrompt physiquement les fichiers de commit Lucene puis vérifie qu'un rebuild restaure une recherche valide.
+Le Lucene sémantique est dérivé de l'index canonique et des fichiers du repository. Avant `OpenMode.CREATE`, un rebuild vide explicitement **le contenu du seul répertoire `semantic-lucene`** avec une traversée `NOFOLLOW` : un lien symbolique rencontré est supprimé comme lien et n'est jamais suivi vers sa cible. Cette étape est nécessaire car Lucene peut tenter de lire un commit `segments_*` corrompu avant même d'appliquer `OpenMode.CREATE`.
+
+La qualification comprend une fixture qui corrompt physiquement les fichiers de commit Lucene, vérifie que la lecture échoue, puis exige qu'un rebuild restaure une recherche valide.
 
 ### Mise en quarantaine manuelle — dernier recours
 
