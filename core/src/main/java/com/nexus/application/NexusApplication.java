@@ -10,8 +10,10 @@ import com.nexus.context.DefaultContextBuilder;
 import com.nexus.context.FederatedContextBundle;
 import com.nexus.context.FederatedContextService;
 import com.nexus.context.FragmentMerger;
+import com.nexus.context.source.git.GitContextSourceProvider;
 import com.nexus.context.source.git.GitRecencyCandidateEnricher;
 import com.nexus.context.source.git.LocalGitContextSourceProvider;
+import com.nexus.context.source.git.PersistentGitContextSourceProvider;
 import com.nexus.context.source.instruction.AgentsMdInstructionProvider;
 import com.nexus.context.source.instruction.ClaudeInstructionProvider;
 import com.nexus.context.source.instruction.CopilotInstructionProvider;
@@ -143,8 +145,9 @@ public final class NexusApplication implements AutoCloseable {
 
     /**
      * Compose NEXUS pour un processus longue durée (REST/MCP) en conservant des
-     * readers/searchers Lucene bornés entre les requêtes. Les writers restent
-     * operation-scoped afin de préserver les verrous inter-processus existants.
+     * readers/searchers Lucene et un cache de contexte Git bornés entre les requêtes.
+     * Les writers Lucene restent operation-scoped afin de préserver les verrous
+     * inter-processus existants.
      */
     public static NexusApplication createLongLived(NexusPaths paths) throws SQLException, IOException {
         return create(paths, SemanticSearchConfiguration.fromEnvironment(), true);
@@ -221,6 +224,9 @@ public final class NexusApplication implements AutoCloseable {
         FederatedSearchService federatedSearchService = new FederatedSearchService(searchService);
 
         TokenEstimator tokenEstimator = new HeuristicTokenEstimator();
+        GitContextSourceProvider gitContextProvider = persistentReaders
+                ? new PersistentGitContextSourceProvider()
+                : new LocalGitContextSourceProvider();
         ContextBuilder contextBuilder = new DefaultContextBuilder(
                 projectRepository,
                 searchService,
@@ -236,7 +242,7 @@ public final class NexusApplication implements AutoCloseable {
                 List.of(
                         new LocalAgentSkillsProvider(),
                         new AiSkillsRegistryProvider()),
-                new LocalGitContextSourceProvider());
+                gitContextProvider);
         FederatedContextService federatedContextService = new FederatedContextService(contextBuilder);
 
         return new NexusApplication(
