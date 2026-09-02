@@ -1,6 +1,7 @@
 package com.nexus.search.semantic.ollama;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nexus.search.semantic.EmbeddingProviderUnavailableException;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
@@ -15,7 +16,6 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -106,8 +106,8 @@ class OllamaEmbeddingProviderResponseLimitTest {
         byte[] body = json("{\"error\":\"small failure\"}");
         URI baseUri = serve(500, body, false, Duration.ZERO);
 
-        IOException exception = assertThrows(
-                IOException.class,
+        EmbeddingProviderUnavailableException exception = assertThrows(
+                EmbeddingProviderUnavailableException.class,
                 () -> provider(baseUri, 1, Duration.ofSeconds(2), 1024).embed("http500"));
 
         assertTrue(exception.getMessage().contains("Ollama /api/embed"));
@@ -152,6 +152,7 @@ class OllamaEmbeddingProviderResponseLimitTest {
                 () -> provider(baseUri, 2, Duration.ofSeconds(2), 1024).embed("small-vector"));
 
         assertTrue(exception.getMessage().contains("dimension invalide"));
+        assertFalse(exception instanceof EmbeddingProviderUnavailableException);
     }
 
     @Test
@@ -164,6 +165,7 @@ class OllamaEmbeddingProviderResponseLimitTest {
                 () -> provider(baseUri, 2, Duration.ofSeconds(2), 1024).embed("large-vector"));
 
         assertTrue(exception.getMessage().contains("dimension invalide"));
+        assertFalse(exception instanceof EmbeddingProviderUnavailableException);
     }
 
     @Test
@@ -176,6 +178,7 @@ class OllamaEmbeddingProviderResponseLimitTest {
                 () -> provider(baseUri, 1, Duration.ofSeconds(2), 1024).embed("non-finite"));
 
         assertTrue(exception.getMessage().contains("valeur non finie"));
+        assertFalse(exception instanceof EmbeddingProviderUnavailableException);
     }
 
     @Test
@@ -183,8 +186,8 @@ class OllamaEmbeddingProviderResponseLimitTest {
         byte[] body = json("{\"embeddings\":[[1.0]]}");
         URI baseUri = serve(200, body, false, Duration.ofMillis(400));
 
-        IOException exception = assertThrows(
-                IOException.class,
+        EmbeddingProviderUnavailableException exception = assertThrows(
+                EmbeddingProviderUnavailableException.class,
                 () -> provider(baseUri, 1, Duration.ofMillis(50), 1024).embed("timeout"));
 
         assertEquals(
@@ -208,7 +211,9 @@ class OllamaEmbeddingProviderResponseLimitTest {
         URI baseUri = serverUri(server);
         OllamaEmbeddingProvider provider = provider(baseUri, 1, Duration.ofSeconds(2), 1024);
 
-        IOException unavailable = assertThrows(IOException.class, () -> provider.embed("first"));
+        EmbeddingProviderUnavailableException unavailable = assertThrows(
+                EmbeddingProviderUnavailableException.class,
+                () -> provider.embed("first"));
         assertTrue(unavailable.getMessage().contains("HTTP 503"));
 
         float[] recovered = provider.embed("second");

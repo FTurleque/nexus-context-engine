@@ -19,6 +19,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class SemanticSearchStrategyTest {
@@ -70,7 +71,7 @@ class SemanticSearchStrategyTest {
 
             @Override
             public float[] embed(String text) throws IOException {
-                throw new IOException("platform-specific transport failure");
+                throw new EmbeddingProviderUnavailableException("platform-specific transport failure");
             }
         };
         AtomicReference<String> diagnostic = new AtomicReference<>();
@@ -88,6 +89,40 @@ class SemanticSearchStrategyTest {
                 "semantic-search degraded: code=embedding_provider_unavailable project=" + FIXED_PROJECT_ID
                         + " provider=ollama/fixture; fallback=lexical-symbolic; retry=automatic",
                 diagnostic.get());
+    }
+
+    @Test
+    void propagatesProviderProtocolFailureInsteadOfDegradingIt() {
+        EmbeddingProvider provider = new EmbeddingProvider() {
+            @Override
+            public String modelId() {
+                return "ollama/fixture";
+            }
+
+            @Override
+            public int dimensions() {
+                return 3;
+            }
+
+            @Override
+            public float[] embed(String text) throws IOException {
+                throw new IOException("Réponse Ollama invalide : dimension incohérente");
+            }
+        };
+        AtomicReference<String> diagnostic = new AtomicReference<>();
+        SemanticSearchStrategy strategy = new SemanticSearchStrategy(
+                provider,
+                index(3, List.of()),
+                null,
+                SemanticIndexingService.defaultProfileId(),
+                (message, failure) -> diagnostic.set(message));
+
+        IOException failure = assertThrows(
+                IOException.class,
+                () -> strategy.search(project(FIXED_PROJECT_ID), "query", 5));
+
+        assertEquals("Réponse Ollama invalide : dimension incohérente", failure.getMessage());
+        assertNull(diagnostic.get());
     }
 
     @Test

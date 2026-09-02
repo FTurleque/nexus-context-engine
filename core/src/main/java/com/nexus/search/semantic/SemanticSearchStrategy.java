@@ -120,7 +120,7 @@ public final class SemanticSearchStrategy implements SearchStrategy {
         final float[] queryVector;
         try {
             queryVector = Objects.requireNonNull(embeddingProvider.embed(query), "embedding vector");
-        } catch (IOException exception) {
+        } catch (EmbeddingProviderUnavailableException exception) {
             return degradedProvider(project, exception);
         }
         if (queryVector.length != embeddingProvider.dimensions()) {
@@ -157,7 +157,9 @@ public final class SemanticSearchStrategy implements SearchStrategy {
         return List.copyOf(candidates);
     }
 
-    private List<SearchCandidate> degradedProvider(ProjectDescriptor project, IOException failure) {
+    private List<SearchCandidate> degradedProvider(
+            ProjectDescriptor project,
+            EmbeddingProviderUnavailableException failure) {
         degradationReporter.accept(
                 "semantic-search degraded: code=embedding_provider_unavailable project=" + project.id()
                         + " provider=" + embeddingProvider.modelId()
