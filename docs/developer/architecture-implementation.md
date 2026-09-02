@@ -7,10 +7,13 @@ Ce chapitre décrit l'organisation concrète du code versionné après NXA3 + NX
 ```text
 nexus-context-engine/
 ├── pom.xml
-├── core/pom.xml
-├── src/main/java/com/nexus/
-├── src/main/resources/db/migration/
-├── src/test/java/com/nexus/
+├── core/
+│   ├── pom.xml
+│   └── src/
+│       ├── main/java/com/nexus/
+│       ├── main/resources/db/migration/
+│       ├── test/java/com/nexus/
+│       └── test/resources/
 ├── adapters/rest-quarkus/
 ├── adapters/mcp-java/
 ├── adapters/assistant-clients/
@@ -20,6 +23,8 @@ nexus-context-engine/
 ├── .github/workflows/
 └── docs/
 ```
+
+Le module `core` possède désormais physiquement son layout Maven standard. Aucun `src/` applicatif n'existe à la racine et `core/pom.xml` ne redirige plus `sourceDirectory`, `testSourceDirectory`, resources ou test-resources vers le parent. Les artefacts publics et la distribution restent publiés sous les emplacements historiques de `target/` pour compatibilité.
 
 Le parent gouverne Java 21, BOM/plugins, JaCoCo, SBOM et dépendances communes. Quarkus est en 3.39.1 et le SDK MCP en 2.0.1.
 
