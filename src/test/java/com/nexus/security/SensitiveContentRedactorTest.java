@@ -37,6 +37,44 @@ class SensitiveContentRedactorTest {
     }
 
     @Test
+    void redactsQuotedSecretsContainingSpaces() {
+        String source = "password = \"correct horse battery staple\";";
+
+        String redacted = SensitiveContentRedactor.redact(source);
+
+        assertFalse(redacted.contains("correct horse battery staple"));
+        assertEquals("password = \"[REDACTED]\";", redacted);
+    }
+
+    @Test
+    void redactsCompositeSecretKeysAcrossCommonConfigurationStyles() {
+        String source = """
+                DB_PASSWORD="SuperSecret123!"
+                AWS_SECRET_ACCESS_KEY='wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'
+                MY_CLIENT_SECRET=client-secret-value
+                database.password: another-long-secret
+                """;
+
+        String redacted = SensitiveContentRedactor.redact(source);
+
+        assertFalse(redacted.contains("SuperSecret123!"));
+        assertFalse(redacted.contains("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"));
+        assertFalse(redacted.contains("client-secret-value"));
+        assertFalse(redacted.contains("another-long-secret"));
+        assertTrue(redacted.contains("DB_PASSWORD=\"[REDACTED]\""));
+        assertTrue(redacted.contains("AWS_SECRET_ACCESS_KEY='[REDACTED]'"));
+        assertTrue(redacted.contains("MY_CLIENT_SECRET=[REDACTED]"));
+        assertTrue(redacted.contains("database.password: [REDACTED]"));
+    }
+
+    @Test
+    void doesNotRedactIdentifiersThatMerelyContainSecretAsSubstring() {
+        String source = "notasecretvalue = \"ordinary configuration value\";";
+
+        assertEquals(source, SensitiveContentRedactor.redact(source));
+    }
+
+    @Test
     void redactsPrivateKeyBlocksWithoutChangingSourceLineCount() {
         String source = """
                 before

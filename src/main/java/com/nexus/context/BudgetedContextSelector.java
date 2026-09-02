@@ -150,17 +150,18 @@ public final class BudgetedContextSelector {
 
     private TruncatedContent truncateByCharacters(String content, int budget) {
         int low = 0;
-        int high = content.length();
+        int high = content.codePointCount(0, content.length());
         String best = "";
         while (low <= high) {
-            int middle = (low + high) >>> 1;
-            String prefix = content.substring(0, middle);
+            int middleCodePoints = (low + high) >>> 1;
+            int prefixEnd = content.offsetByCodePoints(0, middleCodePoints);
+            String prefix = content.substring(0, prefixEnd);
             String candidate = prefix + System.lineSeparator() + TRUNCATION_MARKER;
             if (tokenEstimator.estimate(candidate) <= budget) {
                 best = candidate;
-                low = middle + 1;
+                low = middleCodePoints + 1;
             } else {
-                high = middle - 1;
+                high = middleCodePoints - 1;
             }
         }
         if (best.isBlank()) {

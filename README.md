@@ -40,6 +40,8 @@ La stratégie de branche est explicite : les changements sont intégrés et qual
 
 `ProjectPathGuard` protège les lectures sensibles sous la racine canonique et refuse traversal, symlink final et symlink d'ancêtre. Les sources SCIP, skills et customisations durcies passent par cette frontière.
 
+`NEXUS_MAX_FILE_SIZE_BYTES` vaut 8 MiB par défaut et possède un plafond dur de **256 MiB**. Les artefacts SCIP sont bornés séparément : 256 MiB par défaut / **1 GiB maximum** pour l'index complet, 16 MiB par défaut / **64 MiB maximum** par message Protobuf.
+
 La découverte native partage un budget avant sélection de tokens :
 
 ```text
@@ -65,7 +67,9 @@ La recherche Lucene borne une requête analysée à **128 termes uniques** avant
 
 Le framing JDT LS est borné avant allocation : message 16 MiB, headers 64 KiB, ligne de header 8 KiB et file entrante 256 messages maximum. Les URI JDT externes non `file:` sont ignorées plutôt que converties en chemins locaux.
 
-Les tâches externes sont limitées à **8 workers réellement actifs** à l'échelle JVM. Les mutations d'index file-backed disposent en plus d'un budget global non bloquant : `NEXUS_MAX_CONCURRENT_INDEXING` vaut **2** par défaut, accepte de 1 à 16 et rejette explicitement la surcharge au lieu d'empiler un travail sans borne.
+Les tâches externes sont limitées à **8 workers réellement actifs** à l'échelle JVM et leur timeout global est plafonné à **3 600 s**. Les mutations d'index file-backed disposent en plus d'un budget global non bloquant : `NEXUS_MAX_CONCURRENT_INDEXING` vaut **2** par défaut, accepte de 1 à 16 et rejette explicitement la surcharge au lieu d'empiler un travail sans borne.
+
+L'import MINOS conserve une limite de transport de **128 MiB**, mais le JSON est traité en streaming : l'arbre complet n'est pas matérialisé, les symboles et relations sont validés un par un, et chaque catégorie est limitée à **500 000 faits**. La CLI lit stdin sous la même borne sans conserver un `byte[]` complet du payload en parallèle.
 
 ### REST et observabilité
 
@@ -89,7 +93,9 @@ Le sémantique reste désactivé par défaut. Une URL Ollama distante doit utili
 NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA=true
 ```
 
-Les credentials intégrés dans `NEXUS_OLLAMA_BASE_URL` sont refusés. Les secrets à forte confiance sont redigés avant embeddings et à la frontière finale de chaque `ContextBundle`, y compris pour instructions natives, skills et diff Git. Les clés privées reconnues mais tronquées sont redigées jusqu'à la fin du contenu. Le profil sémantique courant est `content-v2`, ce qui force le rebuild d'un ancien index incompatible.
+Les credentials intégrés dans `NEXUS_OLLAMA_BASE_URL` sont refusés. Les secrets à forte confiance sont redigés avant embeddings et à la frontière finale de chaque `ContextBundle`, y compris pour instructions natives, skills et diff Git. Les assignments quotés contenant des espaces et les clés composées usuelles (`DB_PASSWORD`, `AWS_SECRET_ACCESS_KEY`, `MY_CLIENT_SECRET`, `database.password`) sont pris en charge. Les clés privées reconnues mais tronquées sont redigées jusqu'à la fin du contenu. Le profil sémantique courant est `content-v2`, ce qui force le rebuild d'un ancien index incompatible.
+
+La configuration Ollama est bornée à **1 024 dimensions** et **600 s** de timeout maximum afin qu'une variable d'environnement ne puisse pas neutraliser les protections de ressources.
 
 ### SQLite
 
@@ -187,6 +193,8 @@ Les tags version et SHA sont immuables. Le préflight GHCR échoue fermé sur le
 ```text
 NEXUS_HOME
 NEXUS_MAX_FILE_SIZE_BYTES
+NEXUS_MAX_SCIP_INDEX_BYTES
+NEXUS_MAX_SCIP_MESSAGE_BYTES
 NEXUS_CODE_INTELLIGENCE_TIMEOUT_SECONDS
 NEXUS_MAX_CONCURRENT_INDEXING
 NEXUS_JDTLS_HOME
@@ -198,6 +206,8 @@ NEXUS_SEMANTIC_PROVIDER
 NEXUS_OLLAMA_BASE_URL
 NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA
 NEXUS_OLLAMA_EMBEDDING_MODEL
+NEXUS_OLLAMA_EMBEDDING_DIMENSIONS
+NEXUS_OLLAMA_TIMEOUT_SECONDS
 NEXUS_REST_API_TOKEN
 NEXUS_REST_ALLOWED_PROJECT_ROOTS
 NEXUS_REST_EXPOSURE_MODE

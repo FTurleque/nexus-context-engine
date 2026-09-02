@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class ExternalTaskRunner {
 
     static final int MAX_CONCURRENT_TASKS = 8;
+    static final Duration MAX_TIMEOUT = Duration.ofHours(1);
     private static final Semaphore CAPACITY = new Semaphore(MAX_CONCURRENT_TASKS);
     private static final AtomicLong THREAD_SEQUENCE = new AtomicLong();
 
@@ -30,8 +31,9 @@ public final class ExternalTaskRunner {
 
     public ExternalTaskRunner(Duration timeout) {
         this.timeout = Objects.requireNonNull(timeout, "timeout");
-        if (timeout.isZero() || timeout.isNegative()) {
-            throw new IllegalArgumentException("timeout must be greater than zero");
+        if (timeout.isZero() || timeout.isNegative() || timeout.compareTo(MAX_TIMEOUT) > 0) {
+            throw new IllegalArgumentException(
+                    "timeout must be greater than zero and at most " + MAX_TIMEOUT.toSeconds() + " seconds");
         }
     }
 

@@ -11,6 +11,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ExternalTaskRunnerTest {
 
     @Test
+    void rejectsTimeoutsAboveTheProcessHardLimit() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new ExternalTaskRunner(ExternalTaskRunner.MAX_TIMEOUT.plusSeconds(1)));
+    }
+
+    @Test
     void returnsAtTimeoutEvenWhenTheTaskIgnoresInterruption() {
         ExternalTaskRunner runner = new ExternalTaskRunner(Duration.ofMillis(50));
         long startedAt = System.nanoTime();

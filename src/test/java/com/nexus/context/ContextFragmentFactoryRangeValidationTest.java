@@ -88,6 +88,42 @@ class ContextFragmentFactoryRangeValidationTest {
         assertEquals(3, lastLineFragments.getFirst().endLine());
     }
 
+    @Test
+    void materializesCrOnlyFilesWithTheSameLineModelUsedForRangeValidation() throws Exception {
+        Path source = temporaryDirectory.resolve("Legacy.java");
+        Files.writeString(source, "one\rtwo\rthree");
+
+        List<ContextFragment> fragments = factory().create(
+                project(),
+                "three",
+                List.of(candidate(source, symbol(2, 3))),
+                1_000);
+
+        assertEquals(1, fragments.size());
+        assertEquals(1, fragments.getFirst().startLine());
+        assertEquals(3, fragments.getFirst().endLine());
+        assertTrue(fragments.getFirst().content().contains("two"));
+        assertTrue(fragments.getFirst().content().contains("three"));
+    }
+
+    @Test
+    void materializesMixedLineEndingsWithoutRangeDrift() throws Exception {
+        Path source = temporaryDirectory.resolve("Mixed.java");
+        Files.writeString(source, "one\r\ntwo\rthree\nfour");
+
+        List<ContextFragment> fragments = factory().create(
+                project(),
+                "four",
+                List.of(candidate(source, symbol(3, 4))),
+                1_000);
+
+        assertEquals(1, fragments.size());
+        assertEquals(1, fragments.getFirst().startLine());
+        assertEquals(4, fragments.getFirst().endLine());
+        assertTrue(fragments.getFirst().content().contains("three"));
+        assertTrue(fragments.getFirst().content().contains("four"));
+    }
+
     private ContextFragmentFactory factory() {
         return new ContextFragmentFactory(text -> text.length());
     }
