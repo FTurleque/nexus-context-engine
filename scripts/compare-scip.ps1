@@ -104,23 +104,23 @@ function Measure-Quality {
 $queries = @(
     [pscustomobject]@{
         Query = "ProjectIndexingService"
-        Relevant = @("src/main/java/com/nexus/index/ProjectIndexingService.java")
+        Relevant = @("core/src/main/java/com/nexus/index/ProjectIndexingService.java")
     },
     [pscustomobject]@{
         Query = "ScipCodeIndexImporter"
-        Relevant = @("src/main/java/com/nexus/index/scip/ScipCodeIndexImporter.java")
+        Relevant = @("core/src/main/java/com/nexus/index/scip/ScipCodeIndexImporter.java")
     },
     [pscustomobject]@{
         Query = "replaceExternalCodeIntelligence"
-        Relevant = @("src/main/java/com/nexus/persistence/sqlite/SqliteIndexRepository.java")
+        Relevant = @("core/src/main/java/com/nexus/persistence/sqlite/SqliteIndexRepository.java")
     },
     [pscustomobject]@{
         Query = "CodeIntelligenceSnapshot"
-        Relevant = @("src/main/java/com/nexus/index/CodeIntelligenceSnapshot.java")
+        Relevant = @("core/src/main/java/com/nexus/index/CodeIntelligenceSnapshot.java")
     },
     [pscustomobject]@{
         Query = "sourceProvider confidence SymbolRelation"
-        Relevant = @("src/main/java/com/nexus/index/SymbolRelation.java")
+        Relevant = @("core/src/main/java/com/nexus/index/SymbolRelation.java")
     }
 )
 
