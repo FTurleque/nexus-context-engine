@@ -20,6 +20,12 @@ on:
       - '.github/workflows/docker-distribution.yml'
       - '.github/workflows/release.yml'
       - '.github/workflows/develop-push-docker-distribution.yml'
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - '.github/workflows/develop-push-docker-distribution.yml'
 
 permissions:
   contents: read
