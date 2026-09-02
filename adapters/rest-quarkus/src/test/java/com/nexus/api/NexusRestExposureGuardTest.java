@@ -26,6 +26,7 @@ class NexusRestExposureGuardTest {
 
     @BeforeEach
     void configureRemotePrerequisites() throws Exception {
+        rememberAndSet(NexusRestSecurity.LOCAL_HARDENING_PROPERTY, "false");
         rememberAndSet(NexusRestSecurity.TOKEN_PROPERTY, STRONG_TOKEN);
         rememberAndSet(
                 NexusRestProjectRootPolicy.ROOTS_PROPERTY,
@@ -41,6 +42,46 @@ class NexusRestExposureGuardTest {
                 System.setProperty(name, value);
             }
         });
+    }
+
+    @Test
+    void keepsHistoricalLoopbackPostureWhenLocalHardeningIsDisabled() {
+        rememberAndClear(NexusRestSecurity.TOKEN_PROPERTY);
+        rememberAndClear(NexusRestProjectRootPolicy.ROOTS_PROPERTY);
+        assertDoesNotThrow(this::validateLoopbackRestHost);
+    }
+
+    @Test
+    void hardenedLoopbackAcceptsStrongTokenAndProjectRootAllowlist() {
+        rememberAndSet(NexusRestSecurity.LOCAL_HARDENING_PROPERTY, "true");
+        assertDoesNotThrow(this::validateLoopbackRestHost);
+    }
+
+    @Test
+    void hardenedLoopbackRejectsMissingOrWeakToken() {
+        rememberAndSet(NexusRestSecurity.LOCAL_HARDENING_PROPERTY, "true");
+        rememberAndClear(NexusRestSecurity.TOKEN_PROPERTY);
+        IllegalStateException missing = assertThrows(IllegalStateException.class, this::validateLoopbackRestHost);
+        assertTrue(missing.getMessage().contains(NexusRestSecurity.TOKEN_ENVIRONMENT_VARIABLE));
+
+        rememberAndSet(NexusRestSecurity.TOKEN_PROPERTY, "weak-token");
+        IllegalStateException weak = assertThrows(IllegalStateException.class, this::validateLoopbackRestHost);
+        assertTrue(weak.getMessage().contains(NexusRestSecurity.TOKEN_ENVIRONMENT_VARIABLE));
+    }
+
+    @Test
+    void hardenedLoopbackRejectsMissingProjectRootAllowlist() {
+        rememberAndSet(NexusRestSecurity.LOCAL_HARDENING_PROPERTY, "true");
+        rememberAndClear(NexusRestProjectRootPolicy.ROOTS_PROPERTY);
+        IllegalStateException error = assertThrows(IllegalStateException.class, this::validateLoopbackRestHost);
+        assertTrue(error.getMessage().contains(NexusRestProjectRootPolicy.ROOTS_ENVIRONMENT_VARIABLE));
+    }
+
+    @Test
+    void hardenedLoopbackRejectsInvalidBooleanConfiguration() {
+        rememberAndSet(NexusRestSecurity.LOCAL_HARDENING_PROPERTY, "sometimes");
+        IllegalStateException error = assertThrows(IllegalStateException.class, this::validateLoopbackRestHost);
+        assertTrue(error.getMessage().contains(NexusRestSecurity.LOCAL_HARDENING_ENVIRONMENT_VARIABLE));
     }
 
     @Test
@@ -174,6 +215,12 @@ class NexusRestExposureGuardTest {
         rememberAndSet(NexusRestSecurity.EXPOSURE_MODE_PROPERTY, "reverse-proxy-https");
         rememberAndSet(NexusRestTransportPolicy.PROXY_ADDRESS_FORWARDING_PROPERTY, "true");
         rememberAndSet(NexusRestTransportPolicy.TRUSTED_PROXIES_PROPERTY, trustedProxy);
+    }
+
+    private void validateLoopbackRestHost() {
+        NexusRestExposureGuard guard = new NexusRestExposureGuard();
+        guard.host = "127.0.0.1";
+        guard.validateExposure();
     }
 
     private void validateWildcardRestHost() {
