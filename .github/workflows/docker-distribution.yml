@@ -137,7 +137,7 @@ jobs:
             nexus-context-engine:${NEXUS_HEAD_SHA} rest)"
           trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
           for attempt in $(seq 1 30); do
-            if docker exec "$CID" curl --fail --silent http://127.0.0.1:9000/q/health/live | grep -q 'UP'; then
+            if docker exec "$CID" /usr/local/bin/nexus-healthcheck; then
               curl --fail --silent \
                 -H "Authorization: Bearer $NEXUS_REST_API_TOKEN" \
                 http://127.0.0.1:18080/api/v1/projects >/dev/null
@@ -205,6 +205,7 @@ jobs:
 
           cp packaging/docker/Dockerfile.runtime "$STAGE/docker/Dockerfile.runtime"
           cp packaging/docker/nexus-container-entrypoint.sh "$STAGE/docker/nexus-container-entrypoint.sh"
+          cp packaging/docker/nexus-container-healthcheck.sh "$STAGE/docker/nexus-container-healthcheck.sh"
 
           FALLBACK_IMAGE="nexus-context-engine:fallback-${NEXUS_HEAD_SHA}"
           docker build --pull --file "$STAGE/docker/Dockerfile.runtime" --tag "$FALLBACK_IMAGE" "$STAGE"
