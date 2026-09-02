@@ -1,0 +1,28 @@
+name: Develop Push Windows Installer
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'packaging/windows/**'
+      - 'scripts/release/**'
+      - 'distribution/**'
+      - 'core/src/**'
+      - 'adapters/**'
+      - 'core/pom.xml'
+      - 'pom.xml'
+      - '.mvn/**'
+      - 'mvnw'
+      - 'mvnw.cmd'
+      - '.github/workflows/windows-installer.yml'
+      - '.github/workflows/develop-push-windows-installer.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  windows-installer:
+    uses: ./.github/workflows/windows-installer.yml
+    permissions:
+      contents: read
