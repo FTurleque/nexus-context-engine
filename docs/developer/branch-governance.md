@@ -29,9 +29,23 @@ Les workflows versionnés doivent également qualifier un éventuel push direct 
 
 Cette défense en profondeur intervient **après** l'arrivée du commit sur la branche. Elle ne remplace donc jamais le ruleset GitHub exigeant une pull request et les checks applicables avant merge.
 
-## Contrat pour `main`
+## Contrat attendu pour `main`
 
-`main` reçoit uniquement des promotions qualifiées depuis `develop`. Une release conteneur exige ensuite un tag SemVer `vX.Y.Z` sur le HEAD exact de `main`.
+`main` reçoit uniquement des promotions qualifiées depuis `develop`. La configuration GitHub doit donc imposer avant merge d'une promotion :
+
+- passage par pull request ;
+- succès des checks exact-head permanents toujours créés sur une PR vers `main` :
+  - `NEXUS CI / Windows gate` ;
+  - `NEXUS CI / Linux reactor Maven build` ;
+  - `CodeQL / CodeQL Java analysis` ;
+  - `OSV-Scanner / OSV new-vulnerability delta gate` ;
+  - `OSV-Scanner / Build aggregate reactor SBOM` ;
+  - `OSV-Scanner / OSV aggregate SBOM vulnerability gate` ;
+- succès des gates distribution/benchmark applicables au diff lorsqu'ils sont déclenchés ;
+- interdiction des force pushes et de la suppression ;
+- bypass administrateur limité aux situations d'urgence, explicite et traçable.
+
+Les workflows à filtres de chemins ne doivent pas être ajoutés comme checks globaux requis lorsqu'ils peuvent légitimement ne pas être créés. Une release conteneur exige ensuite un tag SemVer `vX.Y.Z` sur le HEAD exact de `main`.
 
 Une correction urgente qui contourne le flux normal doit rester exceptionnelle : revue explicite, qualification exact-head équivalente et justification conservée dans GitHub.
 
@@ -47,4 +61,6 @@ deletion = disabled
 required checks = politique approuvée
 ```
 
-Tant que l'API GitHub retourne `protected=false` pour `develop`, le contrôle de gouvernance NXA3-14 reste **non satisfait**, même si les workflows CI eux-mêmes sont corrects.
+Pour `develop`, tant que l'API GitHub retourne `protected=false`, le contrôle de gouvernance NXA3-14 (#130) reste **non satisfait**, même si les workflows CI eux-mêmes sont corrects.
+
+Pour `main`, tant que le ruleset actif n'impose aucun `required_status_checks`, le contrôle de gouvernance NXA3-15 (#167) reste **non satisfait**, même si les workflows se déclenchent sur les pull requests.
