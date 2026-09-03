@@ -39,11 +39,11 @@ Les sources référencées par SCIP sont relues via `ProjectPathGuard`. Traversa
 Les limites par défaut sont :
 
 ```text
-index.scip                 <= 256 MiB
-message protobuf           <= 16 MiB
-faits symbole matérialisés <= 500000
-faits relation matérialisés<= 500000
-faits totaux matérialisés  <= 1000000
+index.scip                  <= 256 MiB
+message protobuf            <= 16 MiB
+faits symbole matérialisés  <= 500000
+faits relation matérialisés <= 500000
+faits totaux matérialisés   <= 1000000
 ```
 
 Les deux limites de transport peuvent être configurées dans leurs plafonds supportés via `NEXUS_MAX_SCIP_INDEX_BYTES` et `NEXUS_MAX_SCIP_MESSAGE_BYTES`. Les plafonds de faits sont des garde-fous du modèle en mémoire : l'import s'arrête avant d'ajouter le fait `N+1`, au lieu de laisser la taille du protobuf se transformer en cardinalité d'objets non bornée.
