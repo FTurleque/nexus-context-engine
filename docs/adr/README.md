@@ -99,6 +99,9 @@ Le numéro est un identifiant stable. Le nom de fichier utilise des minuscules, 
 | [ADR-0042](0042-consommer-ai-skills-registry-comme-snapshot-local-optionnel.md) | Consommer AI Skills Registry comme snapshot local optionnel | Accepté |
 | [ADR-0043](0043-federer-la-recherche-locale-par-projet-avant-un-moteur-externe.md) | Fédérer la recherche locale par projet avant d'introduire un moteur externe | Accepté |
 | [ADR-0044](0044-consommer-minos-via-un-contrat-json-local-versionne.md) | Consommer MINOS via un contrat JSON local versionné | Accepté |
+| [ADR-0045](0045-conserver-les-writers-operation-scoped-et-mettre-en-cache-les-readers-lucene.md) | Conserver les writers Lucene operation-scoped et mettre en cache les readers | Accepté |
+| [ADR-0046](0046-mettre-en-cache-le-contexte-git-dans-les-runtimes-longue-duree.md) | Mettre en cache le contexte Git dans les runtimes longue durée | Accepté |
+| [ADR-0047](0047-borner-le-support-filesystem-aux-filesystems-locaux-qualifies.md) | Borner le support filesystem aux filesystems locaux qualifiés | Accepté |
 
 ## Modèle
 

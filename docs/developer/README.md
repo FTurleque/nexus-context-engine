@@ -30,6 +30,7 @@ Les campagnes NXA3 et NXA4 constituent la baseline de hardening courante. Une an
 | Arc42 | [Documentation d'architecture](../architecture/README.md) |
 | architecture concrète | [Architecture d'implémentation](architecture-implementation.md) |
 | limites et watch items | [Limites actuelles](current-limitations.md) |
+| filesystem / locks / support réseau | [Support filesystem](filesystem-support.md) |
 | roadmap | [Roadmap](../roadmap.md) |
 | release / migration / recovery | [Release et recovery](release-and-recovery.md) |
 | CI / supply-chain | [CI et supply-chain](ci-and-supply-chain.md) |
@@ -65,6 +66,7 @@ NexusApplication
 
 - SQLite canonique ; index dérivés reconstructibles.
 - `ProjectPathGuard` pour les lectures projet sensibles ; traversal/symlinks refusés.
+- support filesystem borné aux filesystems locaux qualifiés Linux/Windows ; SMB/NFS et filesystems distribués restent non supportés sans qualification dédiée.
 - découverte native bornée avant sélection de tokens par `ContextDiscoveryLimits`/`ContextDiscoveryBudget`.
 - maximum 100 projets uniques, validé avant résolution/readiness.
 - Git local/read-only, historique borné et diff à capacité fixe.

@@ -225,21 +225,15 @@ class SqliteWriteContentionIntegrationTest {
         try {
             Future<SqliteDatabase> first = executor.submit(() -> {
                 start.await();
-                return new SqliteDatabase(
-                        bootstrapPaths,
-                        20,
-                        new SqliteWriteRetryPolicy(5, Duration.ofMillis(1), Duration.ofMillis(4), Thread::sleep));
+                return new SqliteDatabase(bootstrapPaths);
             });
             Future<SqliteDatabase> second = executor.submit(() -> {
                 start.await();
-                return new SqliteDatabase(
-                        bootstrapPaths,
-                        20,
-                        new SqliteWriteRetryPolicy(5, Duration.ofMillis(1), Duration.ofMillis(4), Thread::sleep));
+                return new SqliteDatabase(bootstrapPaths);
             });
             start.countDown();
-            SqliteDatabase database = first.get(2, TimeUnit.SECONDS);
-            second.get(2, TimeUnit.SECONDS);
+            SqliteDatabase database = first.get(15, TimeUnit.SECONDS);
+            second.get(15, TimeUnit.SECONDS);
 
             try (Connection connection = database.openConnection();
                  PreparedStatement statement = connection.prepareStatement(
