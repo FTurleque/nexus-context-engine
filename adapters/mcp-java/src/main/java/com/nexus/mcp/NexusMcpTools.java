@@ -479,9 +479,20 @@ final class NexusMcpTools {
         }
     }
 
-    private static boolean booleanValue(Map<String, Object> arguments, String name, boolean defaultValue) {
+    static boolean booleanValue(Map<String, Object> arguments, String name, boolean defaultValue) {
         Object value = arguments.get(name);
-        return value == null ? defaultValue : Boolean.parseBoolean(value.toString());
+        if (value == null) {
+            return defaultValue;
+        }
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        String normalized = value.toString().trim().toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case "true" -> true;
+            case "false" -> false;
+            default -> throw new IllegalArgumentException(name + " doit être un booléen true ou false");
+        };
     }
 
     private static Set<CandidateType> requestedSources(Object value) {
