@@ -1,5 +1,6 @@
 package com.nexus.context.source.git;
 
+import com.nexus.context.source.ContextDiscoveryBudget;
 import com.nexus.context.source.ContextDiscoveryLimitExceededException;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.Status;
@@ -161,9 +162,9 @@ public final class PersistentGitContextSourceProvider implements GitContextSourc
                 query.discoveryBudget().visit(CACHE_VALIDATION_WORK);
                 String status = statusSignature(git, targets);
                 query.discoveryBudget().visit(CACHE_VALIDATION_WORK);
-                String staged = diffDigest(git, targets, true);
+                String staged = diffDigest(git, targets, true, query.discoveryBudget());
                 query.discoveryBudget().visit(CACHE_VALIDATION_WORK);
-                String unstaged = diffDigest(git, targets, false);
+                String unstaged = diffDigest(git, targets, false, query.discoveryBudget());
                 query.discoveryBudget().checkpoint();
 
                 return new Fingerprint(workTree.toString(), head, status, staged, unstaged);
@@ -211,21 +212,46 @@ public final class PersistentGitContextSourceProvider implements GitContextSourc
             return label + "=" + String.join(",", paths.stream().sorted().toList());
         }
 
-        private static String diffDigest(Git git, List<String> targets, boolean cached) throws GitAPIException {
-            DigestOutput output = new DigestOutput();
-            git.diff()
-                    .setCached(cached)
-                    .setPathFilter(PathFilterGroup.createFromStrings(targets))
-                    .setOutputStream(output)
-                    .call();
+        private static String diffDigest(
+                Git git,
+                List<String> targets,
+                boolean cached,
+                ContextDiscoveryBudget budget) throws GitAPIException, ContextDiscoveryLimitExceededException {
+            DigestOutput output = new DigestOutput(budget);
+            try {
+                git.diff()
+                        .setCached(cached)
+                        .setPathFilter(PathFilterGroup.createFromStrings(targets))
+                        .setOutputStream(output)
+                        .call();
+            } catch (GitAPIException | RuntimeException failure) {
+                ContextDiscoveryLimitExceededException limitExceeded = discoveryLimitCause(failure);
+                if (limitExceeded != null) {
+                    throw limitExceeded;
+                }
+                throw failure;
+            }
             return output.hexDigest();
+        }
+
+        private static ContextDiscoveryLimitExceededException discoveryLimitCause(Throwable failure) {
+            Throwable current = failure;
+            while (current != null) {
+                if (current instanceof ContextDiscoveryLimitExceededException limitExceeded) {
+                    return limitExceeded;
+                }
+                current = current.getCause();
+            }
+            return null;
         }
     }
 
     private static final class DigestOutput extends OutputStream {
         private final MessageDigest digest;
+        private final ContextDiscoveryBudget budget;
 
-        private DigestOutput() {
+        private DigestOutput(ContextDiscoveryBudget budget) {
+            this.budget = Objects.requireNonNull(budget, "budget");
             try {
                 digest = MessageDigest.getInstance("SHA-256");
             } catch (NoSuchAlgorithmException impossible) {
@@ -234,13 +260,18 @@ public final class PersistentGitContextSourceProvider implements GitContextSourc
         }
 
         @Override
-        public void write(int value) {
+        public void write(int value) throws IOException {
+            budget.bytes(CACHE_VALIDATION_WORK, 1L);
             digest.update((byte) value);
         }
 
         @Override
-        public void write(byte[] bytes, int offset, int length) {
+        public void write(byte[] bytes, int offset, int length) throws IOException {
             Objects.checkFromIndexSize(offset, length, bytes.length);
+            if (length == 0) {
+                return;
+            }
+            budget.bytes(CACHE_VALIDATION_WORK, length);
             digest.update(bytes, offset, length);
         }
 
