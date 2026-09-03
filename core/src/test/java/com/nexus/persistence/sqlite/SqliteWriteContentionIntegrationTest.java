@@ -312,16 +312,14 @@ class SqliteWriteContentionIntegrationTest {
                 absolute,
                 relativePath,
                 "java",
-                FileCategory.SOURCE,
-                "sha256",
-                32L,
-                Instant.now());
-        AnalysisResult analysis = new AnalysisResult(
-                absolute,
-                "java",
-                List.of(),
-                List.of());
-        return new IndexedFileUpdate(file, analysis);
+                16,
+                "hash-" + relativePath,
+                Instant.parse("2026-08-09T00:00:00Z"),
+                4,
+                FileCategory.SOURCE);
+        return new IndexedFileUpdate(
+                file,
+                new AnalysisResult(absolute, "java", List.of(), List.of()));
     }
 
     private static SQLiteException sqliteFailure(Throwable failure) {
