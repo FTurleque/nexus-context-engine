@@ -1,0 +1,141 @@
+name: SMB Filesystem Qualification
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - 'core/src/main/java/com/nexus/config/NexusPaths.java'
+      - 'core/src/main/java/com/nexus/index/ProjectIndexLockManager.java'
+      - 'core/src/test/java/com/nexus/index/ProjectIndexLockProbe.java'
+      - 'core/src/test/java/com/nexus/index/SmbFilesystemQualificationTest.java'
+      - 'docs/developer/filesystem-support.md'
+      - '.github/workflows/smb-filesystem-qualification.yml'
+  push:
+    branches:
+      - develop
+    paths:
+      - 'core/src/main/java/com/nexus/config/NexusPaths.java'
+      - 'core/src/main/java/com/nexus/index/ProjectIndexLockManager.java'
+      - 'core/src/test/java/com/nexus/index/ProjectIndexLockProbe.java'
+      - 'core/src/test/java/com/nexus/index/SmbFilesystemQualificationTest.java'
+      - 'docs/developer/filesystem-support.md'
+      - '.github/workflows/smb-filesystem-qualification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify-smb-loopback:
+    name: Windows SMB loopback semantics
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Java 21
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Create isolated SMB loopback share
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $shareName = "nexus-ci-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          $sharePath = Join-Path $env:RUNNER_TEMP $shareName
+          New-Item -ItemType Directory -Force -Path $sharePath | Out-Null
+
+          $everyoneSid = New-Object System.Security.Principal.SecurityIdentifier('S-1-1-0')
+          $everyone = $everyoneSid.Translate([System.Security.Principal.NTAccount]).Value
+          New-SmbShare -Name $shareName -Path $sharePath -FullAccess $everyone | Out-Null
+
+          $uncRoot = "\\$env:COMPUTERNAME\$shareName"
+          if (-not (Test-Path -LiteralPath $uncRoot)) {
+            throw "Le partage SMB loopback n'est pas accessible via $uncRoot"
+          }
+
+          "NEXUS_SMB_ROOT=$uncRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "NEXUS_SMB_SHARE_NAME=$shareName" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "NEXUS_SMB_SHARE_PATH=$sharePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          New-Item -ItemType Directory -Force -Path core/target | Out-Null
+          @(
+            "runner.os=$env:RUNNER_OS",
+            "runner.arch=$env:RUNNER_ARCH",
+            "os=$([System.Environment]::OSVersion.VersionString)",
+            "computer=$env:COMPUTERNAME",
+            "share=$shareName",
+            "share.path=$sharePath",
+            "unc.root=$uncRoot",
+            "java=$(& java -version 2>&1 | Out-String)"
+          ) | Set-Content -LiteralPath core/target/smb-qualification-environment.txt
+
+      - name: Run selected SMB qualification
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $maven = Get-Command mvn -ErrorAction SilentlyContinue
+          if ($null -ne $maven) {
+            & $maven.Source -B -pl core `
+              '-Dtest=SmbFilesystemQualificationTest' `
+              '-Dnexus.smb.qualification.required=true' `
+              "-Dnexus.smb.root=$env:NEXUS_SMB_ROOT" `
+              '-Djunit.jupiter.execution.timeout.test.method.default=2m' `
+              test
+          } else {
+            & .\mvnw.cmd -B -pl core `
+              '-Dtest=SmbFilesystemQualificationTest' `
+              '-Dnexus.smb.qualification.required=true' `
+              "-Dnexus.smb.root=$env:NEXUS_SMB_ROOT" `
+              '-Djunit.jupiter.execution.timeout.test.method.default=2m' `
+              test
+          }
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Record SMB protocol evidence
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path core/target | Out-Null
+          @(
+            '=== Get-SmbShare ===',
+            (Get-SmbShare -Name $env:NEXUS_SMB_SHARE_NAME -ErrorAction SilentlyContinue | Format-List * | Out-String),
+            '=== Get-SmbConnection ===',
+            (Get-SmbConnection -ErrorAction SilentlyContinue | Format-List * | Out-String),
+            '=== Get-SmbClientConfiguration ===',
+            (Get-SmbClientConfiguration | Format-List * | Out-String),
+            '=== Get-SmbServerConfiguration ===',
+            (Get-SmbServerConfiguration | Format-List * | Out-String)
+          ) | Set-Content -LiteralPath core/target/smb-protocol-evidence.txt
+
+      - name: Retain SMB qualification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nexus-smb-filesystem-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}-windows
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            core/target/smb-qualification-environment.txt
+            core/target/smb-protocol-evidence.txt
+            core/target/surefire-reports/**
+
+      - name: Remove SMB loopback share
+        if: always()
+        shell: pwsh
+        run: |
+          if ($env:NEXUS_SMB_SHARE_NAME) {
+            Remove-SmbShare -Name $env:NEXUS_SMB_SHARE_NAME -Force -ErrorAction SilentlyContinue
+          }
+          if ($env:NEXUS_SMB_SHARE_PATH) {
+            Remove-Item -LiteralPath $env:NEXUS_SMB_SHARE_PATH -Recurse -Force -ErrorAction SilentlyContinue
+          }
