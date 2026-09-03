@@ -21,7 +21,7 @@ Ce registre décrit l'état courant après les campagnes **NXA3 + NXA4** et les 
 
 Sur Windows/filesystems sans vue POSIX, NEXUS conserve les ACL natives au lieu de les réécrire naïvement.
 
-Le contrat de support courant est volontairement borné aux filesystems locaux qualifiés Linux/Windows. SMB/CIFS, NFS, volumes distribués/synchronisés et montages à sémantique spéciale restent non supportés tant qu'une qualification dédiée n'existe pas. Voir [`filesystem-support.md`](filesystem-support.md) et ADR-0047.
+Le contrat de support courant reste volontairement borné aux filesystems locaux qualifiés Linux/Windows. Une fixture **SMB 3.1.1 loopback Windows** est désormais qualifiée comme preuve ciblée (round-trip UNC + lock inter-JVM), mais SMB/CIFS général, NFS, volumes distribués/synchronisés et montages à sémantique spéciale restent non supportés faute de qualification multi-client, panne/reconnexion et stockage complet SQLite/Lucene. Voir [`filesystem-support.md`](filesystem-support.md) et ADR-0047.
 
 Limite résiduelle : les primitives Java portables ne sont pas un sandbox absolu contre un acteur local capable de muter agressivement ancêtres, hard-links ou points de montage pendant l'opération.
 
@@ -103,6 +103,7 @@ La redaction conservatrice réduit les fuites accidentelles mais ne remplace pas
 - Dependabot cible `develop` ;
 - les contrats documentaires courants sont vérifiés automatiquement par NEXUS CI ;
 - les changements de frontière filesystem déclenchent une qualification locale dédiée Linux/Windows ;
+- la preuve SMB sélectionnée dispose d'un gate Windows séparé qui crée un vrai partage SMB, impose l'usage UNC et conserve les informations protocole/configuration ;
 - tant que `develop` reste techniquement pushable, NEXUS CI, CodeQL et OSV couvrent aussi les pushes directs ; Docker Distribution, Scale Benchmark, Scanner Corpus Benchmark et Windows Installer sont réutilisés par des callers `Develop Push ...` avec leurs filtres de chemins respectifs.
 
 ## Contrôle de gouvernance encore externe au code
@@ -116,7 +117,7 @@ Tant que GitHub retourne `protected=false` pour `develop`, NXA3-14 / #130 reste 
 Les sujets suivants ne doivent pas être changés sans mesure ou scénario reproductible :
 
 - isolation processus plus forte d'un provider réellement non coopératif (#51) ;
-- extension de support vers un filesystem réseau/distribué précis (#52) ;
+- extension de support vers un filesystem réseau/distribué précis : elle exige désormais de dépasser la preuve SMB loopback et de qualifier le protocole/configuration réellement visé, idéalement multi-client avec injection de panne ;
 - nouveau moteur FTS/trigram pour les recherches substring.
 
 Le watch item légal #55 reste un gate conditionnel pour toute dépendance ou modalité de redistribution inhabituelle ; il ne déclenche aucune modification tant qu'un candidat concret n'existe pas.
