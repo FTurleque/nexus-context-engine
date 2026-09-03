@@ -1,41 +1,62 @@
 # ADR-0037 — Intégrer JDT Language Server comme provider Java profond optionnel
 
-- Statut : accepté
-- Date : 2026-07-15
+- Statut : `accepted`
+- Date : 2026-07-20
 
-## Contexte
+## Contexte et problème
 
-NEXUS dispose déjà d'une analyse Java locale et déterministe fondée sur JavaParser. Cette analyse couvre les symboles structuraux utiles au moteur de contexte, mais ne résout pas toute la sémantique d'un projet Java réel : classpath Maven/Gradle, références inter-modules, hiérarchies, implémentations et appels deviennent rapidement coûteux à reconstruire correctement dans le cœur.
+L'Itération 8 a validé l'import opportuniste de SCIP et confirmé la séparation prévue par l'ADR-0009 :
 
-Le moteur supporte également des snapshots d'intelligence externes, notamment SCIP, mais leur disponibilité dépend des outils du projet analysé.
+```text
+LanguageAnalyzer
+→ analyse syntaxique embarquée
 
-Nous voulons pouvoir enrichir l'intelligence Java sur demande sans :
+CodeIndexImporter
+→ import d'un index déjà produit
 
-- transformer JDT LS en dépendance obligatoire ;
-- faire dépendre le domaine NEXUS de types Eclipse/LSP ;
-- ralentir toutes les indexations ;
-- masquer le coût d'un processus externe.
+CodeIntelligenceProvider
+→ intelligence calculée activement à la demande
+```
 
-## Options étudiées
+JavaParser reste rapide, local et autonome, tandis que SCIP apporte une couverture sémantique supplémentaire lorsqu'un `index.scip` est disponible. Certains projets Java complexes nécessitent cependant une compréhension plus profonde du classpath, des dépendances Maven/Gradle, des références résolues, des implémentations et des hiérarchies.
 
-### Option A — Étendre JavaParser jusqu'à une résolution sémantique complète
+Eclipse JDT Language Server fournit ces capacités, mais son coût opérationnel est supérieur : processus externe, initialisation d'un workspace, import du projet et protocole LSP.
+
+La question est donc : **comment exploiter JDT LS sans le rendre obligatoire ni ralentir l'indexation normale de NEXUS ?**
+
+## Facteurs de décision
+
+- JavaParser doit rester le socle embarqué par défaut.
+- SCIP et JDT doivent pouvoir coexister sans imposer leur présence.
+- JDT LS ne doit être lancé qu'à la demande.
+- Le processus JDT doit être isolé du processus NEXUS.
+- Le cœur métier ne doit dépendre d'aucun modèle Eclipse ou LSP.
+- Les données produites doivent être normalisées en `CodeSymbol` / `SymbolRelation`.
+- Les snapshots profonds ne doivent pas rester silencieusement périmés après une modification Java.
+- Le coût de l'analyse doit être bornable.
+- L'adoption durable doit dépendre de mesures réelles.
+
+## Options envisagées
+
+### Option A — Remplacer JavaParser par JDT LS
 
 Avantages :
 
-- aucune dépendance processus externe ;
-- chemin unique d'analyse.
+- intelligence Java riche en permanence ;
+- résolution du classpath et du modèle de compilation.
 
 Inconvénients :
 
-- résolution Maven/Gradle/classpath complexe ;
-- maintenance importante ;
-- risque de reconstruire un langage serveur incomplet dans NEXUS.
+- dépendance opérationnelle obligatoire ;
+- démarrage plus lent ;
+- perte du fonctionnement léger et autonome ;
+- complexité de cycle de vie pour chaque indexation.
 
-### Option B — Lancer JDT LS automatiquement à chaque indexation Java
+### Option B — Lancer JDT LS automatiquement à chaque `nexus index`
 
 Avantages :
 
-- informations sémantiques profondes toujours disponibles ;
+- snapshot profond toujours recalculé ;
 - expérience transparente.
 
 Inconvénients :
@@ -156,7 +177,7 @@ La valeur par défaut est de 250 symboles et peut être ajustée avec :
 NEXUS_JDTLS_MAX_SYMBOLS
 ```
 
-La valeur reste limitée à **10000 symboles**.
+La valeur maximale acceptée est de **10 000 symboles**.
 
 Le timeout par échange est configurable avec :
 
@@ -164,9 +185,9 @@ Le timeout par échange est configurable avec :
 NEXUS_JDTLS_TIMEOUT_SECONDS
 ```
 
-La valeur par défaut est de 120 secondes et le maximum accepté est de **3600 secondes**.
+La valeur par défaut est de 120 secondes et la valeur maximale acceptée est de **3 600 secondes**.
 
-Pour ces deux paramètres, une valeur non entière, nulle, négative ou supérieure au plafond est rejetée explicitement lorsque le provider JDT LS est configuré. Une valeur absente ou vide conserve le défaut. Cette règle évite qu'une erreur de configuration désactive silencieusement le contrat de bornage.
+Pour ces deux paramètres, une valeur non entière, nulle, négative ou supérieure au plafond est rejetée explicitement lorsque le provider JDT LS est configuré. Seule une valeur absente ou vide utilise le défaut.
 
 Le binaire Java utilisé pour lancer JDT LS peut être configuré avec :
 
@@ -187,8 +208,7 @@ Il n'applique pas les `workspace/applyEdit` demandés par le serveur et ne trans
 - les dépendances Eclipse restent hors du cœur NEXUS ;
 - les références, implémentations et hiérarchies partagent le modèle normalisé existant ;
 - les données profondes périmées sont purgées après changement Java ;
-- le coût est mesurable et configurable dans des plafonds explicites ;
-- une configuration numérique invalide échoue fermé au lieu de restaurer silencieusement un défaut.
+- le coût est mesurable et configurable.
 
 ## Conséquences négatives
 
