@@ -34,6 +34,9 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
 
     public static final String SOURCE_PROVIDER = "scip";
     public static final String DEFAULT_INDEX_FILE = "index.scip";
+    public static final int MAX_SYMBOL_FACTS = 500_000;
+    public static final int MAX_RELATION_FACTS = 500_000;
+    public static final int MAX_TOTAL_FACTS = MAX_SYMBOL_FACTS + MAX_RELATION_FACTS;
 
     private static final int ROLE_DEFINITION = 0x1;
     private static final double SCIP_CONFIDENCE = 1.0d;
@@ -41,6 +44,9 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
     private final String indexFileName;
     private final long maxIndexBytes;
     private final int maxMessageBytes;
+    private final int maxSymbolFacts;
+    private final int maxRelationFacts;
+    private final int maxTotalFacts;
 
     public ScipCodeIndexImporter() {
         this(
@@ -57,6 +63,22 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
     }
 
     ScipCodeIndexImporter(String indexFileName, long maxIndexBytes, int maxMessageBytes) {
+        this(
+                indexFileName,
+                maxIndexBytes,
+                maxMessageBytes,
+                MAX_SYMBOL_FACTS,
+                MAX_RELATION_FACTS,
+                MAX_TOTAL_FACTS);
+    }
+
+    ScipCodeIndexImporter(
+            String indexFileName,
+            long maxIndexBytes,
+            int maxMessageBytes,
+            int maxSymbolFacts,
+            int maxRelationFacts,
+            int maxTotalFacts) {
         this.indexFileName = Objects.requireNonNull(indexFileName, "indexFileName");
         if (indexFileName.isBlank()) {
             throw new IllegalArgumentException("indexFileName ne doit pas être vide");
@@ -67,8 +89,20 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
         if (maxMessageBytes <= 0) {
             throw new IllegalArgumentException("maxMessageBytes doit être strictement positif");
         }
+        if (maxSymbolFacts <= 0) {
+            throw new IllegalArgumentException("maxSymbolFacts doit être strictement positif");
+        }
+        if (maxRelationFacts <= 0) {
+            throw new IllegalArgumentException("maxRelationFacts doit être strictement positif");
+        }
+        if (maxTotalFacts <= 0) {
+            throw new IllegalArgumentException("maxTotalFacts doit être strictement positif");
+        }
         this.maxIndexBytes = maxIndexBytes;
         this.maxMessageBytes = maxMessageBytes;
+        this.maxSymbolFacts = maxSymbolFacts;
+        this.maxRelationFacts = maxRelationFacts;
+        this.maxTotalFacts = maxTotalFacts;
     }
 
     @Override
@@ -112,7 +146,10 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
                             parseDocument(documentPayload, maxMessageBytes),
                             symbols,
                             relations,
-                            relationKeys);
+                            relationKeys,
+                            maxSymbolFacts,
+                            maxRelationFacts,
+                            maxTotalFacts);
                 } else {
                     skipField(input, wireType);
                 }
@@ -127,7 +164,10 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
             ScipDocument document,
             List<IndexedSymbol> symbols,
             List<IndexedRelation> relations,
-            Set<String> relationKeys) throws IOException {
+            Set<String> relationKeys,
+            int maxSymbolFacts,
+            int maxRelationFacts,
+            int maxTotalFacts) throws IOException {
         String relativePath = normalizeRelativePath(pathGuard, document.relativePath());
         if (relativePath == null) {
             return;
@@ -143,6 +183,7 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
                         definition.range(),
                         sourceLineCount);
                 String name = symbolName(symbolInformation);
+                ensureSymbolCapacity(symbols.size(), relations.size(), maxSymbolFacts, maxTotalFacts);
                 symbols.add(new IndexedSymbol(
                         relativePath,
                         new CodeSymbol(
@@ -165,8 +206,11 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
                             RelationKind.IMPLEMENTS,
                             symbolInformation.symbol(),
                             relationship.symbol(),
+                            symbols.size(),
                             relations,
-                            relationKeys);
+                            relationKeys,
+                            maxRelationFacts,
+                            maxTotalFacts);
                 }
                 if (relationship.reference()) {
                     addRelation(
@@ -174,8 +218,11 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
                             RelationKind.REFERENCES,
                             symbolInformation.symbol(),
                             relationship.symbol(),
+                            symbols.size(),
                             relations,
-                            relationKeys);
+                            relationKeys,
+                            maxRelationFacts,
+                            maxTotalFacts);
                 }
                 if (relationship.typeDefinition()) {
                     addRelation(
@@ -183,8 +230,11 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
                             RelationKind.TYPE_DEFINITION,
                             symbolInformation.symbol(),
                             relationship.symbol(),
+                            symbols.size(),
                             relations,
-                            relationKeys);
+                            relationKeys,
+                            maxRelationFacts,
+                            maxTotalFacts);
                 }
                 if (relationship.definition()) {
                     addRelation(
@@ -192,8 +242,11 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
                             RelationKind.DEFINITION_OF,
                             symbolInformation.symbol(),
                             relationship.symbol(),
+                            symbols.size(),
                             relations,
-                            relationKeys);
+                            relationKeys,
+                            maxRelationFacts,
+                            maxTotalFacts);
                 }
             }
         }
@@ -207,8 +260,11 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
                     RelationKind.REFERENCES,
                     relativePath,
                     occurrence.symbol(),
+                    symbols.size(),
                     relations,
-                    relationKeys);
+                    relationKeys,
+                    maxRelationFacts,
+                    maxTotalFacts);
         }
     }
 
@@ -249,18 +305,51 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
             RelationKind kind,
             String source,
             String target,
+            int symbolCount,
             List<IndexedRelation> relations,
-            Set<String> relationKeys) {
+            Set<String> relationKeys,
+            int maxRelationFacts,
+            int maxTotalFacts) throws IOException {
         if (source.isBlank() || target.isBlank()) {
             return;
         }
         String key = relativePath + '\u0000' + kind + '\u0000' + source + '\u0000' + target;
-        if (!relationKeys.add(key)) {
+        if (relationKeys.contains(key)) {
             return;
         }
+        ensureRelationCapacity(symbolCount, relations.size(), maxRelationFacts, maxTotalFacts);
+        relationKeys.add(key);
         relations.add(new IndexedRelation(
                 relativePath,
                 new SymbolRelation(kind, source, target, SCIP_CONFIDENCE, SOURCE_PROVIDER)));
+    }
+
+    private static void ensureSymbolCapacity(
+            int symbolCount,
+            int relationCount,
+            int maxSymbolFacts,
+            int maxTotalFacts) throws IOException {
+        if (symbolCount >= maxSymbolFacts) {
+            throw new IOException("SCIP dépasse la limite de " + maxSymbolFacts + " faits symbole");
+        }
+        ensureTotalCapacity(symbolCount, relationCount, maxTotalFacts);
+    }
+
+    private static void ensureRelationCapacity(
+            int symbolCount,
+            int relationCount,
+            int maxRelationFacts,
+            int maxTotalFacts) throws IOException {
+        if (relationCount >= maxRelationFacts) {
+            throw new IOException("SCIP dépasse la limite de " + maxRelationFacts + " faits relation");
+        }
+        ensureTotalCapacity(symbolCount, relationCount, maxTotalFacts);
+    }
+
+    private static void ensureTotalCapacity(int symbolCount, int relationCount, int maxTotalFacts) throws IOException {
+        if ((long) symbolCount + relationCount >= maxTotalFacts) {
+            throw new IOException("SCIP dépasse la limite de " + maxTotalFacts + " faits totaux");
+        }
     }
 
     private static ScipOccurrence findDefinition(List<ScipOccurrence> occurrences, String symbol) {

@@ -64,7 +64,13 @@ final class SkillFrontmatterParser {
     }
 
     private static String readFrontmatter(Path skillFile) throws IOException {
-        try (BufferedReader reader = SafeFileIO.newBufferedReaderNoFollow(skillFile, StandardCharsets.UTF_8)) {
+        // The discovery phase charges at most MAX_DISCOVERY_BYTES for metadata. The reader must
+        // enforce the same physical-byte bound so BufferedReader.readLine() cannot materialize an
+        // arbitrarily large line before the character-level frontmatter guard runs.
+        try (BufferedReader reader = SafeFileIO.newBufferedReaderNoFollow(
+                skillFile,
+                StandardCharsets.UTF_8,
+                MAX_DISCOVERY_BYTES)) {
             String firstLine = reader.readLine();
             if (!"---".equals(firstLine)) {
                 throw new IllegalArgumentException("SKILL.md doit commencer par un frontmatter YAML : " + skillFile);

@@ -47,9 +47,11 @@ NEXUS ne télécharge donc pas un checksum de confiance depuis le même origin q
 ```text
 NEXUS_JDTLS_HOME             racine JDT LS contenant plugins/ et config_<os>/
 NEXUS_JDTLS_JAVA             java par défaut
-NEXUS_JDTLS_TIMEOUT_SECONDS  120 par défaut
-NEXUS_JDTLS_MAX_SYMBOLS      250 par défaut
+NEXUS_JDTLS_TIMEOUT_SECONDS  120 par défaut, maximum 3600
+NEXUS_JDTLS_MAX_SYMBOLS      250 par défaut, maximum 10000
 ```
+
+Les deux bornes numériques sont **fail-closed** lorsque JDT LS est configuré : une valeur non entière, nulle, négative ou supérieure au maximum provoque une erreur de configuration explicite au lieu de revenir silencieusement à la valeur par défaut. Seule une valeur absente ou vide utilise le défaut.
 
 Activation :
 
@@ -91,6 +93,8 @@ Les intégrations externes passent par `ExternalTaskRunner` :
 - capacité rendue seulement lorsque le worker termine réellement ;
 - saturation rejetée explicitement au lieu de créer des threads non bornés.
 
+Le provider JDT ajoute ses propres bornes administratives : **3600 secondes maximum** pour `NEXUS_JDTLS_TIMEOUT_SECONDS` et **10000 symboles maximum** pour `NEXUS_JDTLS_MAX_SYMBOLS`.
+
 Un provider tiers peut toujours ignorer une interruption. NEXUS ne revendique donc pas une isolation processus absolue, mais l'accumulation de workers JVM est bornée.
 
 ## Workspace et lecture seule
@@ -127,6 +131,7 @@ Le contrat courant est couvert notamment par :
 
 - tests du framing `JdtJsonRpcFrameReader` ;
 - tests du provider JDT et de son cycle de vie ;
+- tests fail-closed des bornes `NEXUS_JDTLS_TIMEOUT_SECONDS` / `NEXUS_JDTLS_MAX_SYMBOLS` ;
 - tests de `ExternalTaskRunner` ;
 - vérification de l'ancre JDT LS par `scripts/release/test-tool-integrity-anchors.sh` dans NEXUS CI.
 

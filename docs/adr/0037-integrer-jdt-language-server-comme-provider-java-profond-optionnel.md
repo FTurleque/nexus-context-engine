@@ -177,11 +177,17 @@ La valeur par défaut est de 250 symboles et peut être ajustée avec :
 NEXUS_JDTLS_MAX_SYMBOLS
 ```
 
+La valeur maximale acceptée est de **10 000 symboles**.
+
 Le timeout par échange est configurable avec :
 
 ```text
 NEXUS_JDTLS_TIMEOUT_SECONDS
 ```
+
+La valeur par défaut est de 120 secondes et la valeur maximale acceptée est de **3 600 secondes**.
+
+Pour ces deux paramètres, une valeur non entière, nulle, négative ou supérieure au plafond est rejetée explicitement lorsque le provider JDT LS est configuré. Seule une valeur absente ou vide utilise le défaut.
 
 Le binaire Java utilisé pour lancer JDT LS peut être configuré avec :
 

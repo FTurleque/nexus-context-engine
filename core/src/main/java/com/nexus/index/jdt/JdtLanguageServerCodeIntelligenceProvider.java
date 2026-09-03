@@ -67,6 +67,8 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
             System.getLogger(JdtLanguageServerCodeIntelligenceProvider.class.getName());
     private static final int DEFAULT_MAX_SYMBOLS = 250;
     private static final long DEFAULT_TIMEOUT_SECONDS = 120L;
+    static final int MAX_SYMBOLS = 10_000;
+    static final long MAX_TIMEOUT_SECONDS = 3_600L;
     private static final double JDT_CONFIDENCE = 1.0d;
     private static final Pattern PACKAGE_PATTERN = Pattern.compile(
             "(?m)^\\s*package\\s+([A-Za-z_$][\\w$]*(?:\\.[A-Za-z_$][\\w$]*)*)\\s*;");
@@ -102,8 +104,10 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
             return Optional.empty();
         }
         String javaCommand = environmentOrDefault(JAVA_ENVIRONMENT_VARIABLE, "java");
-        long timeoutSeconds = positiveLongEnvironment(TIMEOUT_ENVIRONMENT_VARIABLE, DEFAULT_TIMEOUT_SECONDS);
-        int maxSymbols = positiveIntEnvironment(MAX_SYMBOLS_ENVIRONMENT_VARIABLE, DEFAULT_MAX_SYMBOLS);
+        long timeoutSeconds = boundedPositiveLongEnvironment(
+                TIMEOUT_ENVIRONMENT_VARIABLE, DEFAULT_TIMEOUT_SECONDS, MAX_TIMEOUT_SECONDS);
+        int maxSymbols = boundedPositiveIntEnvironment(
+                MAX_SYMBOLS_ENVIRONMENT_VARIABLE, DEFAULT_MAX_SYMBOLS, MAX_SYMBOLS);
         Configuration configuration = new Configuration(
                 Path.of(configuredHome),
                 paths.home().resolve("jdtls-workspaces"),
@@ -628,30 +632,37 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
         return value == null || value.isBlank() ? defaultValue : value;
     }
 
-    private static int positiveIntEnvironment(String name, int defaultValue) {
-        String value = System.getenv(name);
-        if (value == null || value.isBlank()) {
-            return defaultValue;
-        }
-        try {
-            int parsed = Integer.parseInt(value);
-            return parsed > 0 ? parsed : defaultValue;
-        } catch (NumberFormatException ignored) {
-            return defaultValue;
-        }
+    private static int boundedPositiveIntEnvironment(String name, int defaultValue, int maximum) {
+        return parseBoundedPositiveInt(name, System.getenv(name), defaultValue, maximum);
     }
 
-    private static long positiveLongEnvironment(String name, long defaultValue) {
-        String value = System.getenv(name);
-        if (value == null || value.isBlank()) {
+    private static long boundedPositiveLongEnvironment(String name, long defaultValue, long maximum) {
+        return parseBoundedPositiveLong(name, System.getenv(name), defaultValue, maximum);
+    }
+
+    static int parseBoundedPositiveInt(String name, String rawValue, int defaultValue, int maximum) {
+        long parsed = parseBoundedPositiveLong(name, rawValue, defaultValue, maximum);
+        if (parsed > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException(name + " dépasse la capacité entière supportée: " + parsed);
+        }
+        return (int) parsed;
+    }
+
+    static long parseBoundedPositiveLong(String name, String rawValue, long defaultValue, long maximum) {
+        if (rawValue == null || rawValue.isBlank()) {
             return defaultValue;
         }
+        final long parsed;
         try {
-            long parsed = Long.parseLong(value);
-            return parsed > 0 ? parsed : defaultValue;
-        } catch (NumberFormatException ignored) {
-            return defaultValue;
+            parsed = Long.parseLong(rawValue.trim());
+        } catch (NumberFormatException invalid) {
+            throw new IllegalArgumentException(name + " doit être un entier compris entre 1 et " + maximum, invalid);
         }
+        if (parsed <= 0 || parsed > maximum) {
+            throw new IllegalArgumentException(
+                    name + " doit être compris entre 1 et " + maximum + " (reçu " + parsed + ")");
+        }
+        return parsed;
     }
 
     public record Configuration(
@@ -671,11 +682,14 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
             if (javaCommand.isBlank()) {
                 throw new IllegalArgumentException("javaCommand ne doit pas être vide");
             }
-            if (timeout.isZero() || timeout.isNegative()) {
-                throw new IllegalArgumentException("timeout doit être strictement positif");
+            if (timeout.isZero() || timeout.isNegative()
+                    || timeout.compareTo(Duration.ofSeconds(MAX_TIMEOUT_SECONDS)) > 0) {
+                throw new IllegalArgumentException(
+                        "timeout doit être compris entre 1 seconde et " + MAX_TIMEOUT_SECONDS + " secondes");
             }
-            if (maxSymbols <= 0) {
-                throw new IllegalArgumentException("maxSymbols doit être strictement positif");
+            if (maxSymbols <= 0 || maxSymbols > MAX_SYMBOLS) {
+                throw new IllegalArgumentException(
+                        "maxSymbols doit être compris entre 1 et " + MAX_SYMBOLS);
             }
         }
 

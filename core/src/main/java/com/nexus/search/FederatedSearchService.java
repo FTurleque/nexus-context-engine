@@ -45,20 +45,16 @@ public final class FederatedSearchService {
             String query,
             int limit,
             boolean explain) throws IOException {
-        Objects.requireNonNull(query, "query");
         List<ProjectDescriptor> scope = FederatedScopePolicy.normalizeProjects(projects);
-        if (query.isBlank()) {
-            throw new IllegalArgumentException("query must not be blank");
-        }
-        if (limit <= 0) {
-            throw new IllegalArgumentException("limit must be greater than zero");
-        }
+        String normalizedQuery = QueryPolicy.normalize(query);
+        int validatedLimit = ResultLimitPolicy.validate(limit);
 
-        int localLimit = localRetrievalLimit(limit);
+        int localLimit = localRetrievalLimit(validatedLimit);
         List<OrderedFederatedHit> candidates = new ArrayList<>();
         int projectOrder = 0;
         for (ProjectDescriptor project : scope) {
-            List<RankedCandidate> projectResults = searchService.search(project, query, localLimit, explain);
+            List<RankedCandidate> projectResults = searchService.search(
+                    project, normalizedQuery, localLimit, explain);
             for (int localOrder = 0; localOrder < projectResults.size(); localOrder++) {
                 candidates.add(new OrderedFederatedHit(
                         new FederatedSearchHit(project, projectResults.get(localOrder)),
@@ -82,7 +78,7 @@ public final class FederatedSearchService {
                     hit.project().id(),
                     hit.rankedCandidate().candidate().path().toAbsolutePath().normalize());
             diversified.putIfAbsent(key, hit);
-            if (diversified.size() >= limit) {
+            if (diversified.size() >= validatedLimit) {
                 break;
             }
         }

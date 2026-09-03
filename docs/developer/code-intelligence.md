@@ -36,6 +36,18 @@ sourceProvider = javaparser
 
 Les sources référencées par SCIP sont relues via `ProjectPathGuard`. Traversal, symlink final/ancêtre, source absente et plages incohérentes sont traités fail-closed. Le parseur protobuf utilise des vérifications de bornes résistantes aux overflows avant toute lecture.
 
+Les limites par défaut sont :
+
+```text
+index.scip                  <= 256 MiB
+message protobuf            <= 16 MiB
+faits symbole matérialisés  <= 500000
+faits relation matérialisés <= 500000
+faits totaux matérialisés   <= 1000000
+```
+
+Les deux limites de transport peuvent être configurées dans leurs plafonds supportés via `NEXUS_MAX_SCIP_INDEX_BYTES` et `NEXUS_MAX_SCIP_MESSAGE_BYTES`. Les plafonds de faits sont des garde-fous du modèle en mémoire : l'import s'arrête avant d'ajouter le fait `N+1`, au lieu de laisser la taille du protobuf se transformer en cardinalité d'objets non bornée.
+
 Le mapping reste conservateur : un kind sans équivalent fiable n'est pas inventé.
 
 ## JDT Language Server — analyse profonde opt-in
@@ -48,7 +60,7 @@ nexus index mon-projet --deep-java
 
 Il fournit références, implémentations, hiérarchies de types et d'appels. Le transport JSON-RPC/LSP est borné : messages 16 MiB, headers 64 KiB, lignes de header 8 KiB et file entrante 256 messages maximum.
 
-Les tâches externes sont en plus bornées en temps et en concurrence globale (8 workers actifs maximum). Voir [`jdt-language-server.md`](jdt-language-server.md).
+Les tâches externes sont en plus bornées en temps et en concurrence globale (8 workers actifs maximum). La configuration JDT conserve elle-même un plafond de **3600 secondes** et **10000 symboles** et rejette les valeurs numériques invalides ou hors borne au lieu de revenir silencieusement au défaut. Voir [`jdt-language-server.md`](jdt-language-server.md).
 
 ```text
 sourceProvider = jdtls
@@ -113,8 +125,8 @@ CLI, REST et MCP ne doivent pas perdre cette provenance.
 Les protections couvrent notamment :
 
 - JavaParser et ranges ;
-- SCIP absent/présent, confinement et bounds protobuf ;
-- JDT LS opt-in, framing borné, queue bornée et timeout ;
+- SCIP absent/présent, confinement, bounds protobuf et cardinalité globale des faits ;
+- JDT LS opt-in, framing borné, queue bornée, timeout et configuration fail-closed ;
 - contrat/replay MINOS ;
 - provenance/déduplication ;
 - recherche symbolique ciblée et graphe borné ;
