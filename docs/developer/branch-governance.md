@@ -12,7 +12,7 @@ main     = branche de release
 La configuration GitHub doit imposer :
 
 - passage par pull request avant toute modification de `develop` ;
-- au minimum les checks exact-head permanents définis par la politique du dépôt, notamment NEXUS CI et les gates sécurité retenus ;
+- au minimum les checks exact-head permanents définis par la politique du dépôt, notamment NEXUS CI, CodeQL, OSV-Scanner et SonarCloud ;
 - prise en compte des gates distribution/benchmark applicables au diff avant merge ;
 - interdiction des **force pushes** ;
 - interdiction de suppression de la branche ;
@@ -41,6 +41,7 @@ Cette défense en profondeur intervient **après** l'arrivée du commit sur la b
   - `OSV-Scanner / OSV new-vulnerability delta gate` ;
   - `OSV-Scanner / Build aggregate reactor SBOM` ;
   - `OSV-Scanner / OSV aggregate SBOM vulnerability gate` ;
+  - `SonarCloud Code Analysis` ;
 - succès des gates distribution/benchmark applicables au diff lorsqu'ils sont déclenchés ;
 - interdiction des force pushes et de la suppression ;
 - bypass administrateur limité aux situations d'urgence, explicite et traçable.
