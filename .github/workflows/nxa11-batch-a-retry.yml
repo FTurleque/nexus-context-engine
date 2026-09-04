@@ -51,19 +51,28 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          path = Path('core/src/test/java/com/nexus/index/jdt/JdtConfigurationBoundsTest.java')
-          text = path.read_text(encoding='utf-8')
-          replacements = {
-              'String oversizedTimeout = oversizedTimeout;':
-                  'String oversizedTimeout = Long.toString(JdtLanguageServerCodeIntelligenceProvider.MAX_TIMEOUT_SECONDS + 1L);',
-              'String oversizedSymbols = oversizedSymbols;':
-                  'String oversizedSymbols = Integer.toString(JdtLanguageServerCodeIntelligenceProvider.MAX_SYMBOLS + 1);',
+          fixes = {
+              'core/src/test/java/com/nexus/index/jdt/JdtConfigurationBoundsTest.java': {
+                  'String oversizedTimeout = oversizedTimeout;':
+                      'String oversizedTimeout = Long.toString(JdtLanguageServerCodeIntelligenceProvider.MAX_TIMEOUT_SECONDS + 1L);',
+                  'String oversizedSymbols = oversizedSymbols;':
+                      'String oversizedSymbols = Integer.toString(JdtLanguageServerCodeIntelligenceProvider.MAX_SYMBOLS + 1);',
+              },
+              'core/src/test/java/com/nexus/search/semantic/SemanticSearchConfigurationBoundsTest.java': {
+                  'String oversizedDimensions = oversizedDimensions;':
+                      'String oversizedDimensions = Integer.toString(SemanticSearchConfiguration.MAX_OLLAMA_DIMENSIONS + 1);',
+                  'String oversizedTimeout = oversizedTimeout;':
+                      'String oversizedTimeout = Long.toString(SemanticSearchConfiguration.MAX_OLLAMA_TIMEOUT_SECONDS + 1L);',
+              },
           }
-          for old, new in replacements.items():
-              if text.count(old) != 1:
-                  raise SystemExit(f'expected one replay edge-case match: {old}')
-              text = text.replace(old, new, 1)
-          path.write_text(text, encoding='utf-8')
+          for file_name, replacements in fixes.items():
+              path = Path(file_name)
+              text = path.read_text(encoding='utf-8')
+              for old, new in replacements.items():
+                  if text.count(old) != 1:
+                      raise SystemExit(f'{file_name}: expected one replay edge-case match: {old}')
+                  text = text.replace(old, new, 1)
+              path.write_text(text, encoding='utf-8')
 
           path = Path('core/src/main/java/com/nexus/cli/NexusCli.java')
           text = path.read_text(encoding='utf-8')
