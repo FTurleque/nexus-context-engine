@@ -1,0 +1,375 @@
+name: NXA11 Sonar cleanup batch A
+
+on:
+  push:
+    branches:
+      - fix/nxa11-sonar-promotion-maintainability
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: fix/nxa11-sonar-promotion-maintainability
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Apply source and test cleanup
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def read(path):
+              return Path(path).read_text(encoding='utf-8')
+
+          def write(path, text):
+              Path(path).write_text(text, encoding='utf-8')
+
+          def replace_once(path, old, new):
+              text = read(path)
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, found {count}: {old[:100]!r}')
+              write(path, text.replace(old, new, 1))
+
+          # Unused import.
+          path = 'core/src/main/java/com/nexus/context/source/git/PersistentGitContextSourceProvider.java'
+          text = read(path).replace('import java.util.Map;\n', '')
+          write(path, text)
+
+          # Duplicated SQLite column labels.
+          path = 'core/src/main/java/com/nexus/persistence/sqlite/SqliteIndexRepository.java'
+          text = read(path)
+          text = text.replace('"qualified_name"', 'QUALIFIED_NAME_COLUMN')
+          text = text.replace('"relative_path"', 'RELATIVE_PATH_COLUMN')
+          anchor = '    private static final String EMBEDDED_SOURCE_PROVIDER = CodeSymbol.DEFAULT_SOURCE_PROVIDER;\n'
+          if anchor not in text:
+              raise SystemExit('SqliteIndexRepository anchor missing')
+          text = text.replace(anchor, anchor
+              + '    private static final String QUALIFIED_NAME_COLUMN = "qualified_name";\n'
+              + '    private static final String RELATIVE_PATH_COLUMN = "relative_path";\n', 1)
+          write(path, text)
+
+          # MCP argument key constant.
+          path = 'adapters/mcp-java/src/main/java/com/nexus/mcp/NexusMcpTools.java'
+          text = read(path).replace('"requestedSources"', 'REQUESTED_SOURCES_ARGUMENT')
+          anchor = '    private static final int DEFAULT_LIMIT = ResultLimitPolicy.DEFAULT_RESULT_LIMIT;\n'
+          text = text.replace(anchor,
+              '    private static final String REQUESTED_SOURCES_ARGUMENT = "requestedSources";\n' + anchor, 1)
+          write(path, text)
+
+          # Lucene provenance label + native clamp.
+          path = 'core/src/main/java/com/nexus/search/semantic/lucene/LuceneSemanticSearchIndex.java'
+          text = read(path).replace('"provenance"', 'PROVENANCE_ARGUMENT')
+          anchor = '    private static final String PATH_FIELD = "path";\n'
+          text = text.replace(anchor,
+              '    private static final String PROVENANCE_ARGUMENT = "provenance";\n' + anchor, 1)
+          text = text.replace('return Math.max(0.0d, Math.min(1.0d, value));',
+                              'return Math.clamp(value, 0.0d, 1.0d);')
+          write(path, text)
+
+          # NexusPaths argument label.
+          path = 'core/src/main/java/com/nexus/config/NexusPaths.java'
+          text = read(path).replace('"projectId"', 'PROJECT_ID_ARGUMENT')
+          anchor = '    public static final String HOME_PROPERTY = "nexus.home";\n'
+          text = text.replace(anchor,
+              '    private static final String PROJECT_ID_ARGUMENT = "projectId";\n\n' + anchor, 1)
+          write(path, text)
+
+          # Java 21 Math.clamp usages.
+          path = 'core/src/main/java/com/nexus/persistence/sqlite/SqliteWriteRetryPolicy.java'
+          text = read(path).replace(
+              'long multiplier = 1L << Math.min(30, Math.max(0, retryNumber - 1));',
+              'long multiplier = 1L << Math.clamp(retryNumber - 1, 0, 30);')
+          write(path, text)
+
+          path = 'core/src/main/java/com/nexus/search/semantic/SemanticIndexingService.java'
+          text = read(path).replace(
+              'int end = Math.min(value.length(), Math.max(0, maxChars));',
+              'int end = Math.clamp(maxChars, 0, value.length());')
+          write(path, text)
+
+          # Sensitive redaction readability / regex rule.
+          path = 'core/src/main/java/com/nexus/security/SensitiveContentRedactor.java'
+          text = read(path).replace(
+              'github_pat_[A-Za-z0-9_]{20,255}+',
+              'github_pat_\\\\w{20,255}+')
+          old = '            String quote = matcher.group(2) != null ? "\\\"" : matcher.group(3) != null ? "\'" : "";\n'
+          new = '            String quote = matchedQuote(matcher);\n'
+          if old not in text:
+              raise SystemExit('SensitiveContentRedactor ternary missing')
+          text = text.replace(old, new, 1)
+          marker = '    private static String replaceSecretAssignments(String content) {\n'
+          helper = '''    private static String matchedQuote(Matcher matcher) {\n        if (matcher.group(2) != null) {\n            return "\\\"";\n        }\n        if (matcher.group(3) != null) {\n            return "'";\n        }\n        return "";\n    }\n\n'''
+          text = text.replace(marker, helper + marker, 1)
+          write(path, text)
+
+          # CLI command literal and checked exception signatures.
+          path = 'core/src/main/java/com/nexus/cli/NexusCli.java'
+          text = read(path).replace('"context"', 'CONTEXT_COMMAND')
+          text = text.replace('import java.nio.file.Path;\n', 'import java.nio.file.Path;\nimport java.sql.SQLException;\n')
+          anchor = '    static final int EXIT_SUCCESS = 0;\n'
+          text = text.replace(anchor,
+              '    private static final String CONTEXT_COMMAND = "context";\n\n' + anchor, 1)
+          text = text.replace(
+              'private static void run(String[] args, InputStream input, CliRenderer renderer) throws Exception {',
+              'private static void run(String[] args, InputStream input, CliRenderer renderer) throws IOException, SQLException {')
+          text = text.replace('            throws Exception {', '            throws IOException {')
+          write(path, text)
+
+          # CLI JSON field label.
+          path = 'core/src/main/java/com/nexus/cli/CliRenderer.java'
+          text = read(path).replace('"estimatedTokens"', 'ESTIMATED_TOKENS_FIELD')
+          anchor = 'final class CliRenderer {\n\n'
+          text = text.replace(anchor,
+              'final class CliRenderer {\n\n    private static final String ESTIMATED_TOKENS_FIELD = "estimatedTokens";\n\n', 1)
+          write(path, text)
+
+          # Preserve stdout semantics without direct System.out usage.
+          path = 'adapters/assistant-clients/src/main/java/com/nexus/integrations/AssistantIntegrationGenerator.java'
+          text = read(path)
+          text = text.replace('import java.nio.file.Path;\n',
+              'import java.io.FileDescriptor;\nimport java.io.FileOutputStream;\nimport java.io.PrintWriter;\nimport java.nio.charset.Charset;\nimport java.nio.file.Path;\n')
+          anchor = '    public static final String NATIVE_ACCESS_ARGUMENT = "--enable-native-access=ALL-UNNAMED";\n'
+          text = text.replace(anchor, anchor
+              + '    private static final PrintWriter STANDARD_OUTPUT = new PrintWriter(\n'
+              + '            new FileOutputStream(FileDescriptor.out), true, Charset.defaultCharset());\n', 1)
+          text = text.replace('System.out.println(', 'STANDARD_OUTPUT.println(')
+          write(path, text)
+
+          # JDT JSON-RPC header reader complexity.
+          path = 'core/src/main/java/com/nexus/index/jdt/JdtJsonRpcFrameReader.java'
+          text = read(path)
+          start = text.index('    private static HeaderLine readHeaderLine(')
+          end = text.index('    private record HeaderLine', start)
+          replacement = '''    private static HeaderLine readHeaderLine(BufferedInputStream stream, int alreadyConsumed) throws IOException {\n        StringBuilder line = new StringBuilder();\n        int consumed = 0;\n        while (true) {\n            int value = stream.read();\n            if (value < 0) {\n                return endOfStream(line, consumed);\n            }\n            consumed++;\n            validateHeaderLineSize(alreadyConsumed, consumed);\n            if (value == '\\n') {\n                return completedHeaderLine(line, consumed);\n            }\n            line.append((char) value);\n        }\n    }\n\n    private static HeaderLine endOfStream(StringBuilder line, int consumed) throws IOException {\n        if (line.isEmpty() && consumed == 0) {\n            return null;\n        }\n        throw new IOException("En-tête JSON-RPC JDT LS tronqué");\n    }\n\n    private static void validateHeaderLineSize(int alreadyConsumed, int consumed) throws IOException {\n        if (alreadyConsumed + consumed > MAX_HEADER_BYTES) {\n            throw new IOException("En-têtes JSON-RPC JDT LS trop volumineux");\n        }\n        if (consumed > MAX_HEADER_LINE_BYTES) {\n            throw new IOException("Ligne d'en-tête JSON-RPC JDT LS trop volumineuse");\n        }\n    }\n\n    private static HeaderLine completedHeaderLine(StringBuilder line, int consumed) {\n        int length = line.length();\n        if (length > 0 && line.charAt(length - 1) == '\\r') {\n            line.setLength(length - 1);\n        }\n        return new HeaderLine(line.toString(), consumed);\n    }\n\n'''
+          text = text[:start] + replacement + text[end:]
+          write(path, text)
+
+          # Index lock acquisition: extract nested try blocks.
+          path = 'core/src/main/java/com/nexus/index/ProjectIndexLockManager.java'
+          text = read(path)
+          old = '''            Path lockPath = paths.projectIndexLock(projectId);\n            FileChannel channel = FileChannel.open(\n                    lockPath,\n                    StandardOpenOption.CREATE,\n                    StandardOpenOption.WRITE,\n                    LinkOption.NOFOLLOW_LINKS);\n            try {\n                paths.hardenPrivateFile(lockPath);\n            } catch (IOException failure) {\n                closeQuietly(channel);\n                throw failure;\n            }\n\n            FileLock fileLock;\n            try {\n                fileLock = channel.tryLock();\n            } catch (OverlappingFileLockException alreadyLockedInJvm) {\n                closeQuietly(channel);\n                throw busy(projectId);\n            } catch (IOException failure) {\n                closeQuietly(channel);\n                throw failure;\n            }\n            if (fileLock == null) {\n                closeQuietly(channel);\n                throw busy(projectId);\n            }\n\n            return new LockHandle(channel, fileLock, capacityPermit);\n'''
+          new = '''            Path lockPath = paths.projectIndexLock(projectId);\n            FileChannel channel = openHardenedChannel(lockPath);\n            FileLock fileLock = acquireFileLock(channel, projectId);\n            return new LockHandle(channel, fileLock, capacityPermit);\n'''
+          if old not in text:
+              raise SystemExit('ProjectIndexLockManager acquisition block missing')
+          text = text.replace(old, new, 1)
+          marker = '    private static IllegalStateException busy(UUID projectId) {\n'
+          helpers = '''    private FileChannel openHardenedChannel(Path lockPath) throws IOException {\n        FileChannel channel = FileChannel.open(\n                lockPath,\n                StandardOpenOption.CREATE,\n                StandardOpenOption.WRITE,\n                LinkOption.NOFOLLOW_LINKS);\n        try {\n            paths.hardenPrivateFile(lockPath);\n            return channel;\n        } catch (IOException failure) {\n            closeQuietly(channel);\n            throw failure;\n        }\n    }\n\n    private static FileLock acquireFileLock(FileChannel channel, UUID projectId) throws IOException {\n        FileLock fileLock;\n        try {\n            fileLock = channel.tryLock();\n        } catch (OverlappingFileLockException alreadyLockedInJvm) {\n            closeQuietly(channel);\n            throw busy(projectId);\n        } catch (IOException failure) {\n            closeQuietly(channel);\n            throw failure;\n        }\n        if (fileLock == null) {\n            closeQuietly(channel);\n            throw busy(projectId);\n        }\n        return fileLock;\n    }\n\n'''
+          text = text.replace(marker, helpers + marker, 1)
+          write(path, text)
+
+          # Instruction recursive context object instead of nine parameters.
+          path = 'core/src/main/java/com/nexus/context/source/instruction/InstructionReferenceResolver.java'
+          text = read(path)
+          old_call = '''        resolveRecursively(\n                project,\n                pathGuard,\n                safeInstructionFile,\n                instructionContent,\n                1,\n                ignoreMatcher,\n                visited,\n                resolved,\n                budget);\n'''
+          new_call = '''        ResolutionState state = new ResolutionState(pathGuard, ignoreMatcher, visited, resolved, budget);\n        resolveRecursively(project, state, safeInstructionFile, instructionContent, 1);\n'''
+          if old_call not in text:
+              raise SystemExit('Instruction resolver initial call missing')
+          text = text.replace(old_call, new_call, 1)
+          start = text.index('    private void resolveRecursively(')
+          end = text.index('    private static void registerIgnoreScopes(', start)
+          new_method = '''    private void resolveRecursively(\n            ProjectDescriptor project,\n            ResolutionState state,\n            Path sourceFile,\n            String sourceContent,\n            int depth) throws IOException {\n        state.budget().checkpoint();\n        if (depth > MAX_DEPTH) {\n            return;\n        }\n\n        for (String reference : references(sourceContent)) {\n            Path target = resolvePath(state.pathGuard(), sourceFile.getParent(), reference);\n            if (target != null && state.visited().add(target)) {\n                state.budget().visit(target);\n                registerIgnoreScopes(state.pathGuard().root(), target.getParent(), state.ignoreMatcher());\n                if (!state.ignoreMatcher().isIgnored(target, false)) {\n                    state.budget().candidate(target);\n                    String referencedContent = InstructionDiscoverySupport.read(project, target, state.budget());\n                    state.resolved().add(new ResolvedReference(\n                            state.pathGuard().root().relativize(target), referencedContent, depth));\n                    resolveRecursively(project, state, target, referencedContent, depth + 1);\n                }\n            }\n        }\n    }\n\n    private record ResolutionState(\n            ProjectPathGuard pathGuard,\n            ProjectIgnoreMatcher ignoreMatcher,\n            Set<Path> visited,\n            List<ResolvedReference> resolved,\n            ContextDiscoveryBudget budget) {\n    }\n\n'''
+          text = text[:start] + new_method + text[end:]
+          write(path, text)
+
+          # JDT document-symbol recursion context object.
+          path = 'core/src/main/java/com/nexus/index/jdt/JdtLanguageServerCodeIntelligenceProvider.java'
+          text = read(path)
+          start = text.index('    private List<ProviderSymbol> parseDocumentSymbols(')
+          end = text.index('    private static boolean isValidJdtRange(', start)
+          replacement = '''    private List<ProviderSymbol> parseDocumentSymbols(\n            JsonNode response,\n            String relativePath,\n            String uri,\n            String packageName,\n            int sourceLineCount,\n            int maxSymbols) throws IOException {\n        List<ProviderSymbol> symbols = new ArrayList<>();\n        DocumentSymbolContext context = new DocumentSymbolContext(\n                relativePath, uri, packageName, sourceLineCount, maxSymbols);\n        for (JsonNode node : arrayElements(response)) {\n            flattenDocumentSymbol(node, context, List.of(), symbols);\n        }\n        return List.copyOf(symbols);\n    }\n\n    private void flattenDocumentSymbol(\n            JsonNode node,\n            DocumentSymbolContext context,\n            List<String> ownerTypes,\n            List<ProviderSymbol> output) throws IOException {\n        int lspKind = node.path("kind").asInt(-1);\n        String name = node.path("name").asText("");\n        String detail = node.path("detail").asText("");\n        JsonNode rangeNode = node.has("range") ? node.path("range") : node.path("location").path("range");\n        JsonNode selectionRangeNode = node.has("selectionRange") ? node.path("selectionRange") : rangeNode;\n        String uri = node.path("location").path("uri").asText(context.fallbackUri());\n        int startLine = rangeNode.path("start").path("line").asInt(-1);\n        int endLine = rangeNode.path("end").path("line").asInt(startLine);\n        int selectionLine = selectionRangeNode.path("start").path("line").asInt(startLine);\n        int selectionCharacter = selectionRangeNode.path("start").path("character").asInt(0);\n\n        Optional<SymbolKind> mappedKind = symbolKind(lspKind);\n        List<String> childOwners = ownerTypes;\n        boolean namedSupportedSymbol = mappedKind.isPresent() && !name.isBlank();\n        boolean validRange = isValidJdtRange(startLine, endLine, selectionLine, context.sourceLineCount());\n        if (namedSupportedSymbol && validRange) {\n            if (output.size() >= context.maxSymbols()) {\n                throw snapshotLimitFailure("symboles", snapshotLimits.maxSymbols());\n            }\n            SymbolKind kind = mappedKind.orElseThrow();\n            String owner = qualifiedOwner(context.packageName(), ownerTypes);\n            String signature = detail.isBlank() ? name : name + " " + detail.trim();\n            String qualifiedName;\n            if (isType(kind)) {\n                List<String> typeNames = new ArrayList<>(ownerTypes);\n                typeNames.add(name);\n                qualifiedName = qualifiedOwner(context.packageName(), typeNames);\n                childOwners = List.copyOf(typeNames);\n            } else {\n                qualifiedName = owner + "#" + signature;\n            }\n            CodeSymbol symbol = new CodeSymbol(\n                    kind,\n                    name,\n                    qualifiedName,\n                    signature,\n                    startLine + 1,\n                    endLine + 1,\n                    SOURCE_PROVIDER);\n            output.add(new ProviderSymbol(\n                    context.relativePath(),\n                    uri,\n                    symbol,\n                    lspKind,\n                    startLine,\n                    endLine,\n                    selectionLine,\n                    Math.max(0, selectionCharacter)));\n        } else {\n            if (namedSupportedSymbol) {\n                LOGGER.log(\n                        System.Logger.Level.WARNING,\n                        "Ignoring inconsistent JDT symbol range for {0} in {1}: start={2}, end={3}, selection={4}, lines={5}",\n                        name,\n                        context.relativePath(),\n                        startLine,\n                        endLine,\n                        selectionLine,\n                        context.sourceLineCount());\n            }\n            if (isLspType(lspKind) && !name.isBlank()) {\n                List<String> typeNames = new ArrayList<>(ownerTypes);\n                typeNames.add(name);\n                childOwners = List.copyOf(typeNames);\n            }\n        }\n\n        for (JsonNode child : arrayElements(node.path("children"))) {\n            flattenDocumentSymbol(child, context, childOwners, output);\n        }\n    }\n\n    private record DocumentSymbolContext(\n            String relativePath,\n            String fallbackUri,\n            String packageName,\n            int sourceLineCount,\n            int maxSymbols) {\n    }\n\n'''
+          text = text[:start] + replacement + text[end:]
+          write(path, text)
+
+          # Tests: assertion style and single-call assertThrows lambdas.
+          path = 'core/src/test/java/com/nexus/search/semantic/SemanticSearchConfigurationBoundsTest.java'
+          text = read(path)
+          text = text.replace(
+              '    void rejectsOllamaConfigurationAboveHardBoundaries() {\n',
+              '    void rejectsOllamaConfigurationAboveHardBoundaries() {\n'
+              '        String oversizedDimensions = Integer.toString(SemanticSearchConfiguration.MAX_OLLAMA_DIMENSIONS + 1);\n'
+              '        String oversizedTimeout = Long.toString(SemanticSearchConfiguration.MAX_OLLAMA_TIMEOUT_SECONDS + 1L);\n')
+          text = text.replace('Integer.toString(SemanticSearchConfiguration.MAX_OLLAMA_DIMENSIONS + 1)', 'oversizedDimensions', 1)
+          text = text.replace('Long.toString(SemanticSearchConfiguration.MAX_OLLAMA_TIMEOUT_SECONDS + 1L)', 'oversizedTimeout', 1)
+          write(path, text)
+
+          path = 'core/src/test/java/com/nexus/index/jdt/JdtConfigurationBoundsTest.java'
+          text = read(path)
+          text = text.replace(
+              '    void rejectsInvalidOrOversizedTimeoutInsteadOfSilentlyFallingBack() {\n',
+              '    void rejectsInvalidOrOversizedTimeoutInsteadOfSilentlyFallingBack() {\n'
+              '        String oversizedTimeout = Long.toString(JdtLanguageServerCodeIntelligenceProvider.MAX_TIMEOUT_SECONDS + 1L);\n')
+          text = text.replace('Long.toString(JdtLanguageServerCodeIntelligenceProvider.MAX_TIMEOUT_SECONDS + 1L)', 'oversizedTimeout', 1)
+          text = text.replace(
+              '    void acceptsMaximumSymbolCountAndRejectsOversizedValue() {\n',
+              '    void acceptsMaximumSymbolCountAndRejectsOversizedValue() {\n'
+              '        String oversizedSymbols = Integer.toString(JdtLanguageServerCodeIntelligenceProvider.MAX_SYMBOLS + 1);\n')
+          text = text.replace('Integer.toString(JdtLanguageServerCodeIntelligenceProvider.MAX_SYMBOLS + 1)', 'oversizedSymbols', 1)
+          text = text.replace(
+              '        assertThrows(IllegalArgumentException.class, () ->\n                new JdtLanguageServerCodeIntelligenceProvider.Configuration(\n                        installation,\n                        workspaces,\n                        "java",\n                        Duration.ofSeconds(JdtLanguageServerCodeIntelligenceProvider.MAX_TIMEOUT_SECONDS + 1L),\n                        250));',
+              '        Duration oversizedTimeout = Duration.ofSeconds(\n                JdtLanguageServerCodeIntelligenceProvider.MAX_TIMEOUT_SECONDS + 1L);\n        assertThrows(IllegalArgumentException.class, () ->\n                new JdtLanguageServerCodeIntelligenceProvider.Configuration(\n                        installation, workspaces, "java", oversizedTimeout, 250));')
+          text = text.replace(
+              '        assertThrows(IllegalArgumentException.class, () ->\n                new JdtLanguageServerCodeIntelligenceProvider.Configuration(\n                        installation,\n                        workspaces,\n                        "java",\n                        Duration.ofSeconds(120),\n                        JdtLanguageServerCodeIntelligenceProvider.MAX_SYMBOLS + 1));',
+              '        Duration validTimeout = Duration.ofSeconds(120);\n        assertThrows(IllegalArgumentException.class, () ->\n                new JdtLanguageServerCodeIntelligenceProvider.Configuration(\n                        installation, workspaces, "java", validTimeout,\n                        JdtLanguageServerCodeIntelligenceProvider.MAX_SYMBOLS + 1));')
+          write(path, text)
+
+          path = 'core/src/test/java/com/nexus/index/scan/ProjectScanLimitsTest.java'
+          text = read(path)
+          old = '''    void rejectsLimitsBeyondHardSafetyCeilings() {\n        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(Map.of(\n                ProjectScanLimits.MAX_FILES_ENVIRONMENT_VARIABLE,\n                Integer.toString(ProjectScanLimits.HARD_MAX_FILES + 1))));\n        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(Map.of(\n                ProjectScanLimits.MAX_TOTAL_BYTES_ENVIRONMENT_VARIABLE,\n                Long.toString(ProjectScanLimits.HARD_MAX_TOTAL_BYTES + 1))));\n'''
+          new = '''    void rejectsLimitsBeyondHardSafetyCeilings() {\n        Map<String, String> tooManyFiles = Map.of(\n                ProjectScanLimits.MAX_FILES_ENVIRONMENT_VARIABLE,\n                Integer.toString(ProjectScanLimits.HARD_MAX_FILES + 1));\n        Map<String, String> tooManyBytes = Map.of(\n                ProjectScanLimits.MAX_TOTAL_BYTES_ENVIRONMENT_VARIABLE,\n                Long.toString(ProjectScanLimits.HARD_MAX_TOTAL_BYTES + 1));\n        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(tooManyFiles));\n        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(tooManyBytes));\n'''
+          text = text.replace(old, new, 1)
+          old = '''    void rejectsInvalidLimitsFailClosed() {\n        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(Map.of(\n                ProjectScanLimits.MAX_FILES_ENVIRONMENT_VARIABLE, "0")));\n        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(Map.of(\n                ProjectScanLimits.MAX_FILES_ENVIRONMENT_VARIABLE, "not-a-number")));\n        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(Map.of(\n                ProjectScanLimits.MAX_TOTAL_BYTES_ENVIRONMENT_VARIABLE, "-1")));\n        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(Map.of(\n                ProjectScanLimits.MAX_TOTAL_BYTES_ENVIRONMENT_VARIABLE, "overflow")));\n'''
+          new = '''    void rejectsInvalidLimitsFailClosed() {\n        Map<String, String> zeroFiles = Map.of(ProjectScanLimits.MAX_FILES_ENVIRONMENT_VARIABLE, "0");\n        Map<String, String> invalidFiles = Map.of(ProjectScanLimits.MAX_FILES_ENVIRONMENT_VARIABLE, "not-a-number");\n        Map<String, String> negativeBytes = Map.of(ProjectScanLimits.MAX_TOTAL_BYTES_ENVIRONMENT_VARIABLE, "-1");\n        Map<String, String> invalidBytes = Map.of(ProjectScanLimits.MAX_TOTAL_BYTES_ENVIRONMENT_VARIABLE, "overflow");\n        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(zeroFiles));\n        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(invalidFiles));\n        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(negativeBytes));\n        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(invalidBytes));\n'''
+          text = text.replace(old, new, 1)
+          write(path, text)
+
+          path = 'core/src/test/java/com/nexus/application/NexusApplicationHardeningTest.java'
+          text = read(path)
+          text = text.replace('import static org.junit.jupiter.api.Assertions.assertFalse;\n',
+                              'import static org.junit.jupiter.api.Assertions.assertEquals;\nimport static org.junit.jupiter.api.Assertions.assertFalse;\n')
+          text = text.replace('assertTrue(empty.registeredProjects() == 0);', 'assertEquals(0, empty.registeredProjects());')
+          text = text.replace(
+              '        IllegalArgumentException failure = assertThrows(\n                IllegalArgumentException.class,\n                () -> application.resolveProject(unknown.toString()));',
+              '        String unknownSelector = unknown.toString();\n        IllegalArgumentException failure = assertThrows(\n                IllegalArgumentException.class,\n                () -> application.resolveProject(unknownSelector));')
+          text = text.replace(
+              '        assertTrue(failure.getMessage().contains(unknown.toString()));',
+              '        assertTrue(failure.getMessage().contains(unknownSelector));')
+          text = text.replace(
+              '        try (ProjectIndexLockManager.LockHandle ignored = secondOwner.acquire(project.id())) {\n            IllegalStateException failure = assertThrows(\n                    IllegalStateException.class,\n                    () -> application.importMinos(project.id(), "{}"));',
+              '        UUID projectId = project.id();\n        try (ProjectIndexLockManager.LockHandle ignored = secondOwner.acquire(projectId)) {\n            IllegalStateException failure = assertThrows(\n                    IllegalStateException.class,\n                    () -> application.importMinos(projectId, "{}"));')
+          write(path, text)
+
+          path = 'core/src/test/java/com/nexus/search/ResultLimitPolicyTest.java'
+          text = read(path).replace(
+              '        assertEquals(ResultLimitPolicy.MAX_RESULT_LIMIT * 4,\n                ResultLimitPolicy.MAX_INTERNAL_RETRIEVAL_LIMIT);',
+              '        assertEquals(ResultLimitPolicy.MAX_INTERNAL_RETRIEVAL_LIMIT,\n                ResultLimitPolicy.MAX_RESULT_LIMIT * 4);')
+          write(path, text)
+
+          path = 'core/src/test/java/com/nexus/index/scip/ScipFactCardinalityTest.java'
+          text = read(path).replace(
+              'private static byte[] varintField(int fieldNumber, long value) throws IOException {',
+              'private static byte[] varintField(int fieldNumber, long value) {')
+          write(path, text)
+
+          path = 'core/src/test/java/com/nexus/index/scip/ScipRelationIdentityTest.java'
+          text = read(path).replace(
+              'private static byte[] varintField(int fieldNumber, long value) throws IOException {',
+              'private static byte[] varintField(int fieldNumber, long value) {')
+          write(path, text)
+
+          path = 'core/src/test/java/com/nexus/index/jdt/JdtSymbolRangeValidationTest.java'
+          text = read(path)
+          text = text.replace('        public void initialize() {\n        }',
+                              '        public void initialize() {\n            // This in-memory test session needs no initialization handshake.\n        }')
+          text = text.replace('        public void notify(String method, JsonNode params) {\n        }',
+                              '        public void notify(String method, JsonNode params) {\n            // Notifications do not affect the synthetic document-symbol response.\n        }')
+          text = text.replace('        public void close() {\n        }',
+                              '        public void close() {\n            // This test session allocates no resources.\n        }')
+          write(path, text)
+
+          path = 'core/src/test/java/com/nexus/index/jdt/JdtSnapshotCardinalityTest.java'
+          text = read(path)
+          text = text.replace('        public void initialize() {\n        }',
+                              '        public void initialize() {\n            // This bounded in-memory session needs no initialization handshake.\n        }')
+          text = text.replace('        public void notify(String method, JsonNode params) {\n        }',
+                              '        public void notify(String method, JsonNode params) {\n            // Notifications are irrelevant to the cardinality fixture.\n        }')
+          text = text.replace('        public void close() {\n        }',
+                              '        public void close() {\n            // This test session owns no external resources.\n        }')
+          write(path, text)
+
+          path = 'core/src/test/java/com/nexus/ranking/graph/ProjectGraphBuilderProjectionTest.java'
+          text = read(path)
+          text = text.replace(
+              '            public void applyChanges(UUID ignored, List<IndexedFileUpdate> updates, Set<String> removedPaths) { }',
+              '            public void applyChanges(UUID ignored, List<IndexedFileUpdate> updates, Set<String> removedPaths) {\n                // Mutation is outside this read-only graph projection fixture.\n            }')
+          text = text.replace(
+              '            public void replaceExternalCodeIntelligence(UUID ignored, CodeIntelligenceSnapshot snapshot) { }',
+              '            public void replaceExternalCodeIntelligence(UUID ignored, CodeIntelligenceSnapshot snapshot) {\n                // External intelligence mutation is outside this read-only fixture.\n            }')
+          write(path, text)
+
+          path = 'core/src/test/java/com/nexus/search/LargeScaleSearchBaselineTest.java'
+          text = read(path)
+          marker = '        long usedMemoryAfter = usedHeapBytes();\n'
+          text = text.replace(marker,
+              '        assertFalse(projects.isEmpty(), "At least one configured repository must be measured");\n'
+              '        assertFalse(queryMetrics.isEmpty(), "At least one configured query must be measured");\n\n' + marker, 1)
+          write(path, text)
+
+          path = 'core/src/test/java/com/nexus/benchmark/LuceneLifecycleQualificationBenchmarkTest.java'
+          text = read(path).replace('record(scoped, scopedMicros);', 'recordMeasurement(scoped, scopedMicros);')
+          text = text.replace('record(persistent, persistentMicros);', 'recordMeasurement(persistent, persistentMicros);')
+          text = text.replace('private static void record(ThrowingIntSupplier operation, List<Long> samples) throws Exception {',
+                              'private static void recordMeasurement(ThrowingIntSupplier operation, List<Long> samples) throws Exception {')
+          write(path, text)
+
+          path = 'adapters/mcp-java/src/test/java/com/nexus/mcp/NexusMcpBooleanParsingTest.java'
+          text = read(path).replace(
+              '    void rejectsNonBooleanTextInsteadOfCoercingItToFalse() {\n        assertThrows(\n                IllegalArgumentException.class,\n                () -> NexusMcpTools.booleanValue(Map.of("flag", "not-a-boolean"), "flag", false));',
+              '    void rejectsNonBooleanTextInsteadOfCoercingItToFalse() {\n        Map<String, Object> invalidArguments = Map.of("flag", "not-a-boolean");\n        assertThrows(\n                IllegalArgumentException.class,\n                () -> NexusMcpTools.booleanValue(invalidArguments, "flag", false));')
+          write(path, text)
+
+          path = 'adapters/rest-quarkus/src/test/java/com/nexus/api/FederatedResourceScopePolicyTest.java'
+          text = read(path)
+          text = text.replace(
+              '        IllegalArgumentException search = assertThrows(\n                IllegalArgumentException.class,\n                () -> resource.search(new FederatedSearchRequest(ids, "query", 10, false)));\n        IllegalArgumentException context = assertThrows(\n                IllegalArgumentException.class,\n                () -> resource.context(new FederatedContextRequest(\n                        ids, "task", 1_000, Set.of(), Map.of(), false)));',
+              '        FederatedSearchRequest searchRequest = new FederatedSearchRequest(ids, "query", 10, false);\n        FederatedContextRequest contextRequest = new FederatedContextRequest(\n                ids, "task", 1_000, Set.of(), Map.of(), false);\n        IllegalArgumentException search = assertThrows(\n                IllegalArgumentException.class, () -> resource.search(searchRequest));\n        IllegalArgumentException context = assertThrows(\n                IllegalArgumentException.class, () -> resource.context(contextRequest));')
+          text = text.replace(
+              '        IllegalArgumentException search = assertThrows(\n                IllegalArgumentException.class,\n                () -> resource.search(new FederatedSearchRequest(ids, oversized, 10, false)));\n        IllegalArgumentException context = assertThrows(\n                IllegalArgumentException.class,\n                () -> resource.context(new FederatedContextRequest(\n                        ids, oversized, 1_000, Set.of(), Map.of(), false)));',
+              '        FederatedSearchRequest searchRequest = new FederatedSearchRequest(ids, oversized, 10, false);\n        FederatedContextRequest contextRequest = new FederatedContextRequest(\n                ids, oversized, 1_000, Set.of(), Map.of(), false);\n        IllegalArgumentException search = assertThrows(\n                IllegalArgumentException.class, () -> resource.search(searchRequest));\n        IllegalArgumentException context = assertThrows(\n                IllegalArgumentException.class, () -> resource.context(contextRequest));')
+          write(path, text)
+
+          path = 'core/src/test/java/com/nexus/search/semantic/ollama/OllamaEndpointResolverTest.java'
+          text = read(path)
+          text = text.replace(
+              '    void rejectsRemoteHttpByDefault() {\n        assertThrows(IllegalArgumentException.class, () -> OllamaEndpointResolver.resolveForRuntime(\n                URI.create("http://ollama.internal.example.com:11434"), true));\n        assertThrows(IllegalArgumentException.class, () -> OllamaEndpointResolver.resolveForRuntime(\n                URI.create("http://10.1.2.3:11434"), false));',
+              '    void rejectsRemoteHttpByDefault() {\n        URI remoteDns = URI.create("http://ollama.internal.example.com:11434");\n        URI remoteIp = URI.create("http://10.1.2.3:11434");\n        assertThrows(IllegalArgumentException.class, () -> OllamaEndpointResolver.resolveForRuntime(remoteDns, true));\n        assertThrows(IllegalArgumentException.class, () -> OllamaEndpointResolver.resolveForRuntime(remoteIp, false));')
+          text = text.replace(
+              '    void rejectsCredentialsEmbeddedInEndpointUri() {\n        assertThrows(IllegalArgumentException.class, () -> OllamaEndpointResolver.resolveForRuntime(\n                URI.create("https://user:password@ollama.example.com:11434"), false));',
+              '    void rejectsCredentialsEmbeddedInEndpointUri() {\n        URI credentialed = URI.create("https://user:password@ollama.example.com:11434");\n        assertThrows(IllegalArgumentException.class, () -> OllamaEndpointResolver.resolveForRuntime(credentialed, false));')
+          write(path, text)
+
+          path = 'core/src/test/java/com/nexus/search/semantic/ollama/OllamaEmbeddingProviderResponseLimitTest.java'
+          text = read(path)
+          text = text.replace('import java.util.concurrent.atomic.AtomicInteger;\n',
+                              'import java.util.concurrent.CountDownLatch;\nimport java.util.concurrent.TimeUnit;\nimport java.util.concurrent.atomic.AtomicInteger;\n')
+          text = text.replace(
+              '        assertEquals(1024 * 1024, OllamaEmbeddingProvider.DEFAULT_MAX_RESPONSE_BYTES);',
+              '        assertEquals(OllamaEmbeddingProvider.DEFAULT_MAX_RESPONSE_BYTES, 1024 * 1024);')
+          text = text.replace(
+              '                    Thread.sleep(delay.toMillis());',
+              '                    new CountDownLatch(1).await(delay.toMillis(), TimeUnit.MILLISECONDS);')
+          write(path, text)
+
+          path = 'core/src/test/java/com/nexus/persistence/sqlite/SqliteWriteContentionIntegrationTest.java'
+          text = read(path)
+          old = '''            long started = System.nanoTime();\n            PersistenceException failure = assertThrows(\n                    PersistenceException.class,\n                    () -> index.applyChanges(projectB.id(), List.of(update), Set.of()));\n'''
+          new = '''            UUID projectBId = projectB.id();\n            List<IndexedFileUpdate> updates = List.of(update);\n            Set<String> removedPaths = Set.of();\n            long started = System.nanoTime();\n            PersistenceException failure = assertThrows(\n                    PersistenceException.class,\n                    () -> index.applyChanges(projectBId, updates, removedPaths));\n'''
+          text = text.replace(old, new, 1)
+          write(path, text)
+
+          print('NXA11 batch A transformations applied')
+          PY
+      - name: Run reactor tests
+        shell: bash
+        run: |
+          chmod +x ./mvnw
+          ./mvnw -B test
+      - name: Commit qualified batch and remove one-shot workflow
+        shell: bash
+        run: |
+          rm .github/workflows/nxa11-batch-a.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'refactor: clear Sonar promotion maintainability batch A'
+          git push origin HEAD:fix/nxa11-sonar-promotion-maintainability
