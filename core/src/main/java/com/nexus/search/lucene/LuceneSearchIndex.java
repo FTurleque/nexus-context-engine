@@ -21,6 +21,7 @@ import org.apache.lucene.index.Term;
 import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
+import org.apache.lucene.queryparser.classic.QueryParserBase;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.IndexSearcher;
@@ -170,13 +171,13 @@ public final class LuceneSearchIndex implements SearchIndex {
         try {
             List<String> analyzedTerms = analyzeUniqueTerms(query, analyzer);
             if (analyzedTerms.size() < 2) {
-                return parser.parse(QueryParser.escape(query.trim()));
+                return parser.parse(QueryParserBase.escape(query.trim()));
             }
 
             BooleanQuery.Builder coordinated = new BooleanQuery.Builder();
             for (String term : analyzedTerms) {
                 coordinated.add(
-                        parser.parse(QueryParser.escape(term)),
+                        parser.parse(QueryParserBase.escape(term)),
                         BooleanClause.Occur.SHOULD);
             }
             coordinated.setMinimumNumberShouldMatch(2);

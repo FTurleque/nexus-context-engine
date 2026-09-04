@@ -44,9 +44,7 @@ public final class SearchService {
         String normalizedQuery = QueryPolicy.normalize(query);
         ResultLimitPolicy.validate(limit);
 
-        int retrievalLimit = Math.min(
-                ResultLimitPolicy.MAX_RESULT_LIMIT,
-                Math.max(20, limit * 3));
+        int retrievalLimit = Math.clamp((long) limit * 3, 20, ResultLimitPolicy.MAX_RESULT_LIMIT);
         List<SearchCandidate> rawCandidates = new ArrayList<>();
         for (SearchStrategy strategy : strategies) {
             rawCandidates.addAll(strategy.search(project, normalizedQuery, retrievalLimit));
