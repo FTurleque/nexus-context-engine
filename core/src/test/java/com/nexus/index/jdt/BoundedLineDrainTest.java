@@ -2,6 +2,7 @@ package com.nexus.index.jdt;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class BoundedLineDrainTest {
 
     @Test
-    void truncatesOneHugeLineAndContinuesDrainingFollowingLines() throws Exception {
+    void truncatesOneHugeLineAndContinuesDrainingFollowingLines() throws IOException {
         int maxLineChars = 128;
         String input = "x".repeat(1_000_000) + "\nnext diagnostic\n";
         List<String> lines = new ArrayList<>();
@@ -26,7 +27,7 @@ class BoundedLineDrainTest {
     }
 
     @Test
-    void emitsFinalLineWithoutTrailingNewline() throws Exception {
+    void emitsFinalLineWithoutTrailingNewline() throws IOException {
         List<String> lines = new ArrayList<>();
 
         BoundedLineDrain.drain(new StringReader("last diagnostic"), 128, lines::add);
