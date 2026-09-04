@@ -41,10 +41,7 @@ public final class SearchService {
             int limit,
             boolean explain) throws IOException {
         Objects.requireNonNull(project, "project");
-        Objects.requireNonNull(query, "query");
-        if (query.isBlank()) {
-            throw new IllegalArgumentException("query must not be blank");
-        }
+        String normalizedQuery = QueryPolicy.normalize(query);
         ResultLimitPolicy.validate(limit);
 
         int retrievalLimit = Math.min(
@@ -52,13 +49,13 @@ public final class SearchService {
                 Math.max(20, limit * 3));
         List<SearchCandidate> rawCandidates = new ArrayList<>();
         for (SearchStrategy strategy : strategies) {
-            rawCandidates.addAll(strategy.search(project, query, retrievalLimit));
+            rawCandidates.addAll(strategy.search(project, normalizedQuery, retrievalLimit));
         }
 
         List<SearchCandidate> enriched = candidateMerger.merge(rawCandidates);
         for (CandidateEnricher enricher : enrichers) {
             enriched = enricher.enrich(project, enriched);
         }
-        return ranker.rank(new RankingRequest(query, limit, explain), enriched);
+        return ranker.rank(new RankingRequest(normalizedQuery, limit, explain), enriched);
     }
 }
