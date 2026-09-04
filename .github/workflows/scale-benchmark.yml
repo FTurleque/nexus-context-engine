@@ -105,16 +105,25 @@ jobs:
           fi
 
           cp target/scale-benchmark.json "$CANDIDATE_REPORT"
-          git checkout --force "$BASE_SHA"
-          chmod +x ./mvnw
-          ./mvnw -B -pl core clean \
-            -Dtest=ScaleRegressionBenchmarkTest \
-            -Djunit.jupiter.execution.timeout.test.method.default=20m \
-            -Dnexus.scale.benchmark.enabled=true \
-            -Dnexus.scale.benchmark.profile=${{ steps.profile.outputs.value }} \
-            -Dnexus.scale.benchmark.output="$BASE_REPORT" \
-            test
-          git checkout --force "$HEAD_SHA"
+          BASE_WORKTREE="$RUNNER_TEMP/nexus-scale-base"
+          rm -rf "$BASE_WORKTREE"
+          git worktree add --detach "$BASE_WORKTREE" "$BASE_SHA"
+          cleanup_base_worktree() {
+            git worktree remove --force "$BASE_WORKTREE" >/dev/null 2>&1 || true
+          }
+          trap cleanup_base_worktree EXIT
+          (
+            cd "$BASE_WORKTREE"
+            chmod +x ./mvnw
+            ./mvnw -B -pl core clean \
+              -Dtest=ScaleRegressionBenchmarkTest \
+              -Djunit.jupiter.execution.timeout.test.method.default=20m \
+              -Dnexus.scale.benchmark.enabled=true \
+              -Dnexus.scale.benchmark.profile=${{ steps.profile.outputs.value }} \
+              -Dnexus.scale.benchmark.output="$BASE_REPORT" \
+              test
+          )
+          test -s "$BASE_REPORT"
           mkdir -p target
           cp "$CANDIDATE_REPORT" target/scale-benchmark.json
           cp "$BASE_REPORT" target/scale-benchmark-base.json
