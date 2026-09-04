@@ -9,6 +9,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BudgetedContextSelectorUnicodeTest {
@@ -33,7 +34,7 @@ class BudgetedContextSelectorUnicodeTest {
         assertEquals(1, result.items().size());
         String selected = result.items().getFirst().content();
         assertTrue(result.items().getFirst().truncated());
-        assertFalse(selected.equals(content));
+        assertNotEquals(content, selected);
         assertWellFormedUtf16(selected);
     }
 

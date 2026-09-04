@@ -37,7 +37,7 @@ class ProjectIndexingBatchingTest {
         for (int index = 0; index < 5; index++) {
             Files.writeString(
                     projectRoot.resolve("doc-%d.md".formatted(index)),
-                    "document-%d-%s\n".formatted(index, "x".repeat(20)));
+                    "document-%d-%s%n".formatted(index, "x".repeat(20)));
         }
 
         NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("nexus-home"));
