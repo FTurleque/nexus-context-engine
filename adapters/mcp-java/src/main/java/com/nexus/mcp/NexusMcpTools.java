@@ -30,6 +30,7 @@ import java.util.stream.Collectors;
 
 final class NexusMcpTools {
 
+    private static final String REQUESTED_SOURCES_ARGUMENT = "requestedSources";
     private static final int DEFAULT_LIMIT = ResultLimitPolicy.DEFAULT_RESULT_LIMIT;
     private static final int DEFAULT_TOKEN_BUDGET = ContextBudgetPolicy.DEFAULT_CONTEXT_TOKEN_BUDGET;
 
@@ -164,7 +165,7 @@ final class NexusMcpTools {
                                 "project", stringProperty("UUID ou nom unique du projet NEXUS"),
                                 "query", stringProperty("Tâche ou demande de contexte"),
                                 "tokenBudget", integerProperty("Budget maximal, 2000 par défaut", ContextBudgetPolicy.MAX_CONTEXT_TOKEN_BUDGET),
-                                "requestedSources", arrayOfStringsProperty("Sources optionnelles NEXUS"),
+                                REQUESTED_SOURCES_ARGUMENT, arrayOfStringsProperty("Sources optionnelles NEXUS"),
                                 "constraints", objectProperty("Contraintes clé/valeur optionnelles")),
                         List.of("project", "query")),
                 arguments -> {
@@ -175,7 +176,7 @@ final class NexusMcpTools {
                             positiveInteger(
                                     arguments, "tokenBudget", DEFAULT_TOKEN_BUDGET,
                                     ContextBudgetPolicy.MAX_CONTEXT_TOKEN_BUDGET),
-                            requestedSources(arguments.get("requestedSources")),
+                            requestedSources(arguments.get(REQUESTED_SOURCES_ARGUMENT)),
                             stringMap(arguments.get("constraints")),
                             forceExplain);
                     return context(operation);
@@ -194,7 +195,7 @@ final class NexusMcpTools {
                                 "projects", arrayOfStringsProperty("UUID ou noms uniques des projets NEXUS"),
                                 "query", stringProperty("Tâche ou demande de contexte"),
                                 "tokenBudget", integerProperty("Budget global maximal, 2000 par défaut", ContextBudgetPolicy.MAX_CONTEXT_TOKEN_BUDGET),
-                                "requestedSources", arrayOfStringsProperty("Sources optionnelles NEXUS"),
+                                REQUESTED_SOURCES_ARGUMENT, arrayOfStringsProperty("Sources optionnelles NEXUS"),
                                 "constraints", objectProperty("Contraintes clé/valeur optionnelles")),
                         List.of("projects", "query")),
                 arguments -> {
@@ -205,7 +206,7 @@ final class NexusMcpTools {
                             positiveInteger(
                                     arguments, "tokenBudget", DEFAULT_TOKEN_BUDGET,
                                     ContextBudgetPolicy.MAX_CONTEXT_TOKEN_BUDGET),
-                            requestedSources(arguments.get("requestedSources")),
+                            requestedSources(arguments.get(REQUESTED_SOURCES_ARGUMENT)),
                             stringMap(arguments.get("constraints")),
                             forceExplain);
                     return federatedContext(operation);

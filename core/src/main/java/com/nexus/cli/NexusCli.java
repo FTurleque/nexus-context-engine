@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
 import java.nio.file.Path;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -24,13 +25,15 @@ import java.util.UUID;
 
 public final class NexusCli {
 
+    private static final String CONTEXT_COMMAND = "context";
+
     static final int EXIT_SUCCESS = 0;
     static final int EXIT_RUNTIME_ERROR = 1;
     static final int EXIT_USAGE_ERROR = 2;
 
     private static final Set<String> COMMANDS = Set.of(
             "project", "index", "minos-import", "search", "search-federated",
-            "context", "context-federated", "inspect");
+            CONTEXT_COMMAND, "context-federated", "inspect");
 
     private NexusCli() {
     }
@@ -61,7 +64,7 @@ public final class NexusCli {
         }
     }
 
-    private static void run(String[] args, InputStream input, CliRenderer renderer) throws Exception {
+    private static void run(String[] args, InputStream input, CliRenderer renderer) throws IOException, SQLException {
         if (args.length == 0 || "--help".equals(args[0]) || "help".equals(args[0])) {
             renderer.renderUsage();
             return;
@@ -81,7 +84,7 @@ public final class NexusCli {
             case "minos-import" -> handleMinosImport(args, input, application, renderer);
             case "search" -> handleSearch(args, application, renderer);
             case "search-federated" -> handleFederatedSearch(args, application, renderer);
-            case "context" -> handleContext(args, application, renderer);
+            case CONTEXT_COMMAND -> handleContext(args, application, renderer);
             case "context-federated" -> handleFederatedContext(args, application, renderer);
             case "inspect" -> handleInspect(args, application, renderer);
             default -> throw new IllegalStateException("Commande validée mais non routée : " + args[0]);
@@ -89,7 +92,7 @@ public final class NexusCli {
     }
 
     private static void handleProject(String[] args, NexusApplication application, CliRenderer renderer)
-            throws Exception {
+            throws IOException {
         if (args.length < 2) {
             throw new IllegalArgumentException("Commande attendue : project add|list");
         }
@@ -112,7 +115,7 @@ public final class NexusCli {
     }
 
     private static void handleIndex(String[] args, NexusApplication application, CliRenderer renderer)
-            throws Exception {
+            throws IOException {
         if (args.length < 2 || args.length > 4) {
             throw new IllegalArgumentException(
                     "Usage : nexus index <id-ou-nom> [--rebuild] [--deep-java] [--json]");
@@ -135,7 +138,7 @@ public final class NexusCli {
             String[] args,
             InputStream input,
             NexusApplication application,
-            CliRenderer renderer) throws Exception {
+            CliRenderer renderer) throws IOException {
         if (args.length != 2) {
             throw new IllegalArgumentException("Usage : nexus minos-import <id-ou-nom> < export-minos.json [--json]");
         }
@@ -157,7 +160,7 @@ public final class NexusCli {
     }
 
     private static void handleSearch(String[] args, NexusApplication application, CliRenderer renderer)
-            throws Exception {
+            throws IOException {
         if (args.length < 3) {
             throw new IllegalArgumentException(
                     "Usage : nexus search <id-ou-nom> <requête> [--limit N] [--explain] [--json]");
@@ -174,7 +177,7 @@ public final class NexusCli {
     private static void handleFederatedSearch(
             String[] args,
             NexusApplication application,
-            CliRenderer renderer) throws Exception {
+            CliRenderer renderer) throws IOException {
         if (args.length < 3) {
             throw new IllegalArgumentException(
                     "Usage : nexus search-federated <projet1,projet2,...> <requête> [--limit N] [--explain] [--json]");
@@ -189,13 +192,13 @@ public final class NexusCli {
     }
 
     private static void handleContext(String[] args, NexusApplication application, CliRenderer renderer)
-            throws Exception {
+            throws IOException {
         if (args.length < 3) {
             throw new IllegalArgumentException(
                     "Usage : nexus context <id-ou-nom> <requête> [--budget N] [--explain] [--json]");
         }
         ProjectDescriptor project = application.resolveProject(args[1]);
-        ParsedContext parsed = parseContext(args, 2, "context");
+        ParsedContext parsed = parseContext(args, 2, CONTEXT_COMMAND);
         NexusApplication.ContextOperation operation = application.context(
                 project.id(), parsed.query(), parsed.budget(), Set.of(), Map.of(), parsed.explain());
         renderer.renderContext(
@@ -205,7 +208,7 @@ public final class NexusCli {
     private static void handleFederatedContext(
             String[] args,
             NexusApplication application,
-            CliRenderer renderer) throws Exception {
+            CliRenderer renderer) throws IOException {
         if (args.length < 3) {
             throw new IllegalArgumentException(
                     "Usage : nexus context-federated <projet1,projet2,...> <requête> [--budget N] [--explain] [--json]");
@@ -219,7 +222,7 @@ public final class NexusCli {
     }
 
     private static void handleInspect(String[] args, NexusApplication application, CliRenderer renderer)
-            throws Exception {
+            throws IOException {
         if (args.length != 2) {
             throw new IllegalArgumentException("Usage : nexus inspect <id-ou-nom> [--json]");
         }

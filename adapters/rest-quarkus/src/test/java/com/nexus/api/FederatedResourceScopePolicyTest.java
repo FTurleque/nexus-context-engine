@@ -23,13 +23,13 @@ class FederatedResourceScopePolicyTest {
         FederatedResource resource = new FederatedResource();
         List<UUID> ids = uniqueIds(101);
 
+        FederatedSearchRequest searchRequest = new FederatedSearchRequest(ids, "query", 10, false);
+        FederatedContextRequest contextRequest = new FederatedContextRequest(
+                ids, "task", 1_000, Set.of(), Map.of(), false);
         IllegalArgumentException search = assertThrows(
-                IllegalArgumentException.class,
-                () -> resource.search(new FederatedSearchRequest(ids, "query", 10, false)));
+                IllegalArgumentException.class, () -> resource.search(searchRequest));
         IllegalArgumentException context = assertThrows(
-                IllegalArgumentException.class,
-                () -> resource.context(new FederatedContextRequest(
-                        ids, "task", 1_000, Set.of(), Map.of(), false)));
+                IllegalArgumentException.class, () -> resource.context(contextRequest));
 
         assertEquals(FederatedScopePolicy.TOO_MANY_PROJECTS_MESSAGE, search.getMessage());
         assertEquals(FederatedScopePolicy.TOO_MANY_PROJECTS_MESSAGE, context.getMessage());
@@ -41,13 +41,13 @@ class FederatedResourceScopePolicyTest {
         List<UUID> ids = uniqueIds(1);
         String oversized = "é".repeat(QueryPolicy.MAX_QUERY_UTF8_BYTES / 2 + 1);
 
+        FederatedSearchRequest searchRequest = new FederatedSearchRequest(ids, oversized, 10, false);
+        FederatedContextRequest contextRequest = new FederatedContextRequest(
+                ids, oversized, 1_000, Set.of(), Map.of(), false);
         IllegalArgumentException search = assertThrows(
-                IllegalArgumentException.class,
-                () -> resource.search(new FederatedSearchRequest(ids, oversized, 10, false)));
+                IllegalArgumentException.class, () -> resource.search(searchRequest));
         IllegalArgumentException context = assertThrows(
-                IllegalArgumentException.class,
-                () -> resource.context(new FederatedContextRequest(
-                        ids, oversized, 1_000, Set.of(), Map.of(), false)));
+                IllegalArgumentException.class, () -> resource.context(contextRequest));
 
         assertTrue(search.getMessage().contains("octets UTF-8"));
         assertTrue(context.getMessage().contains("octets UTF-8"));

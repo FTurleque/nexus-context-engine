@@ -16,6 +16,8 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -42,7 +44,7 @@ class OllamaEmbeddingProviderResponseLimitTest {
     void defaultLimitLeavesMarginForMaximumDefaultBatchShape() {
         int approximateMaximumFloatJsonBytes = 32 * 1024 * 16;
 
-        assertEquals(1024 * 1024, OllamaEmbeddingProvider.DEFAULT_MAX_RESPONSE_BYTES);
+        assertEquals(OllamaEmbeddingProvider.DEFAULT_MAX_RESPONSE_BYTES, 1024 * 1024);
         assertTrue(OllamaEmbeddingProvider.DEFAULT_MAX_RESPONSE_BYTES >= approximateMaximumFloatJsonBytes * 2);
     }
 
@@ -305,7 +307,7 @@ class OllamaEmbeddingProviderResponseLimitTest {
             try {
                 exchange.getRequestBody().readAllBytes();
                 if (!delay.isZero()) {
-                    Thread.sleep(delay.toMillis());
+                    new CountDownLatch(1).await(delay.toMillis(), TimeUnit.MILLISECONDS);
                 }
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
                 exchange.sendResponseHeaders(status, chunked ? 0L : body.length);

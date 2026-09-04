@@ -60,6 +60,7 @@ class JdtSymbolRangeValidationTest {
 
         @Override
         public void initialize() {
+            // This in-memory test session needs no initialization handshake.
         }
 
         @Override
@@ -83,10 +84,12 @@ class JdtSymbolRangeValidationTest {
 
         @Override
         public void notify(String method, JsonNode params) {
+            // Notifications do not affect the synthetic document-symbol response.
         }
 
         @Override
         public void close() {
+            // This test session allocates no resources.
         }
     }
 }

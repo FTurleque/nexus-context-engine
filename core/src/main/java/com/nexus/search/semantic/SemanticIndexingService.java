@@ -202,7 +202,7 @@ public final class SemanticIndexingService {
      * reste toujours une chaîne Unicode valide.
      */
     private static int safePrefixEnd(String value, int maxChars) {
-        int end = Math.min(value.length(), Math.max(0, maxChars));
+        int end = Math.clamp(maxChars, 0, value.length());
         if (end > 0
                 && end < value.length()
                 && Character.isHighSurrogate(value.charAt(end - 1))

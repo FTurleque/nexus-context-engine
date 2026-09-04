@@ -119,6 +119,7 @@ class JdtSnapshotCardinalityTest {
 
         @Override
         public void initialize() {
+            // This bounded in-memory session needs no initialization handshake.
         }
 
         @Override
@@ -145,10 +146,12 @@ class JdtSnapshotCardinalityTest {
 
         @Override
         public void notify(String method, JsonNode params) {
+            // Notifications are irrelevant to the cardinality fixture.
         }
 
         @Override
         public void close() {
+            // This test session owns no external resources.
         }
     }
 }

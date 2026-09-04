@@ -43,56 +43,44 @@ final class InstructionReferenceResolver {
         List<ResolvedReference> resolved = new ArrayList<>();
         Set<Path> visited = new LinkedHashSet<>();
         visited.add(safeInstructionFile);
-        resolveRecursively(
-                project,
-                pathGuard,
-                safeInstructionFile,
-                instructionContent,
-                1,
-                ignoreMatcher,
-                visited,
-                resolved,
-                budget);
+        ResolutionState state = new ResolutionState(pathGuard, ignoreMatcher, visited, resolved, budget);
+        resolveRecursively(project, state, safeInstructionFile, instructionContent, 1);
         return List.copyOf(resolved);
     }
 
     private void resolveRecursively(
             ProjectDescriptor project,
-            ProjectPathGuard pathGuard,
+            ResolutionState state,
             Path sourceFile,
             String sourceContent,
-            int depth,
-            ProjectIgnoreMatcher ignoreMatcher,
-            Set<Path> visited,
-            List<ResolvedReference> resolved,
-            ContextDiscoveryBudget budget) throws IOException {
-        budget.checkpoint();
+            int depth) throws IOException {
+        state.budget().checkpoint();
         if (depth > MAX_DEPTH) {
             return;
         }
 
         for (String reference : references(sourceContent)) {
-            Path target = resolvePath(pathGuard, sourceFile.getParent(), reference);
-            if (target != null && visited.add(target)) {
-                budget.visit(target);
-                registerIgnoreScopes(pathGuard.root(), target.getParent(), ignoreMatcher);
-                if (!ignoreMatcher.isIgnored(target, false)) {
-                    budget.candidate(target);
-                    String referencedContent = InstructionDiscoverySupport.read(project, target, budget);
-                    resolved.add(new ResolvedReference(pathGuard.root().relativize(target), referencedContent, depth));
-                    resolveRecursively(
-                            project,
-                            pathGuard,
-                            target,
-                            referencedContent,
-                            depth + 1,
-                            ignoreMatcher,
-                            visited,
-                            resolved,
-                            budget);
+            Path target = resolvePath(state.pathGuard(), sourceFile.getParent(), reference);
+            if (target != null && state.visited().add(target)) {
+                state.budget().visit(target);
+                registerIgnoreScopes(state.pathGuard().root(), target.getParent(), state.ignoreMatcher());
+                if (!state.ignoreMatcher().isIgnored(target, false)) {
+                    state.budget().candidate(target);
+                    String referencedContent = InstructionDiscoverySupport.read(project, target, state.budget());
+                    state.resolved().add(new ResolvedReference(
+                            state.pathGuard().root().relativize(target), referencedContent, depth));
+                    resolveRecursively(project, state, target, referencedContent, depth + 1);
                 }
             }
         }
+    }
+
+    private record ResolutionState(
+            ProjectPathGuard pathGuard,
+            ProjectIgnoreMatcher ignoreMatcher,
+            Set<Path> visited,
+            List<ResolvedReference> resolved,
+            ContextDiscoveryBudget budget) {
     }
 
     private static void registerIgnoreScopes(

@@ -16,6 +16,8 @@ import java.util.UUID;
  */
 public record NexusPaths(Path home) {
 
+    private static final String PROJECT_ID_ARGUMENT = "projectId";
+
     public static final String HOME_PROPERTY = "nexus.home";
     public static final String HOME_ENVIRONMENT_VARIABLE = "NEXUS_HOME";
 
@@ -98,17 +100,17 @@ public record NexusPaths(Path home) {
     }
 
     public Path projectIndexLock(UUID projectId) {
-        Objects.requireNonNull(projectId, "projectId");
+        Objects.requireNonNull(projectId, PROJECT_ID_ARGUMENT);
         return locksDirectory().resolve(projectId + ".index.lock");
     }
 
     public Path projectLuceneIndex(UUID projectId) {
-        Objects.requireNonNull(projectId, "projectId");
+        Objects.requireNonNull(projectId, PROJECT_ID_ARGUMENT);
         return indexesDirectory().resolve(projectId.toString()).resolve("lucene");
     }
 
     public Path projectSemanticLuceneIndex(UUID projectId) {
-        Objects.requireNonNull(projectId, "projectId");
+        Objects.requireNonNull(projectId, PROJECT_ID_ARGUMENT);
         return indexesDirectory().resolve(projectId.toString()).resolve("semantic-lucene");
     }
 

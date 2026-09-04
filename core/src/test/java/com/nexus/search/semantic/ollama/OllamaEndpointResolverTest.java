@@ -38,10 +38,10 @@ class OllamaEndpointResolverTest {
 
     @Test
     void rejectsRemoteHttpByDefault() {
-        assertThrows(IllegalArgumentException.class, () -> OllamaEndpointResolver.resolveForRuntime(
-                URI.create("http://ollama.internal.example.com:11434"), true));
-        assertThrows(IllegalArgumentException.class, () -> OllamaEndpointResolver.resolveForRuntime(
-                URI.create("http://10.1.2.3:11434"), false));
+        URI remoteDns = URI.create("http://ollama.internal.example.com:11434");
+        URI remoteIp = URI.create("http://10.1.2.3:11434");
+        assertThrows(IllegalArgumentException.class, () -> OllamaEndpointResolver.resolveForRuntime(remoteDns, true));
+        assertThrows(IllegalArgumentException.class, () -> OllamaEndpointResolver.resolveForRuntime(remoteIp, false));
     }
 
     @Test
@@ -67,7 +67,7 @@ class OllamaEndpointResolverTest {
 
     @Test
     void rejectsCredentialsEmbeddedInEndpointUri() {
-        assertThrows(IllegalArgumentException.class, () -> OllamaEndpointResolver.resolveForRuntime(
-                URI.create("https://user:password@ollama.example.com:11434"), false));
+        URI credentialed = URI.create("https://user:password@ollama.example.com:11434");
+        assertThrows(IllegalArgumentException.class, () -> OllamaEndpointResolver.resolveForRuntime(credentialed, false));
     }
 }

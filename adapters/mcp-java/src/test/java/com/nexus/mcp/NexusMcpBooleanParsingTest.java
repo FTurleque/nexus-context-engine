@@ -26,8 +26,9 @@ class NexusMcpBooleanParsingTest {
 
     @Test
     void rejectsNonBooleanTextInsteadOfCoercingItToFalse() {
+        Map<String, Object> invalidArguments = Map.of("flag", "not-a-boolean");
         assertThrows(
                 IllegalArgumentException.class,
-                () -> NexusMcpTools.booleanValue(Map.of("flag", "not-a-boolean"), "flag", false));
+                () -> NexusMcpTools.booleanValue(invalidArguments, "flag", false));
     }
 }

@@ -25,6 +25,8 @@ class SemanticSearchConfigurationBoundsTest {
 
     @Test
     void rejectsOllamaConfigurationAboveHardBoundaries() {
+        String oversizedDimensions = Integer.toString(SemanticSearchConfiguration.MAX_OLLAMA_DIMENSIONS + 1);
+        String oversizedTimeout = Long.toString(SemanticSearchConfiguration.MAX_OLLAMA_TIMEOUT_SECONDS + 1L);
         assertThrows(IllegalArgumentException.class, () -> SemanticSearchConfiguration.boundedPositiveInt(
                 SemanticSearchConfiguration.OLLAMA_DIMENSIONS_ENV,
                 Integer.toString(SemanticSearchConfiguration.MAX_OLLAMA_DIMENSIONS + 1),

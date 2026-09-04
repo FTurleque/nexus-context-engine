@@ -420,35 +420,25 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
             int sourceLineCount,
             int maxSymbols) throws IOException {
         List<ProviderSymbol> symbols = new ArrayList<>();
+        DocumentSymbolContext context = new DocumentSymbolContext(
+                relativePath, uri, packageName, sourceLineCount, maxSymbols);
         for (JsonNode node : arrayElements(response)) {
-            flattenDocumentSymbol(
-                    node,
-                    relativePath,
-                    uri,
-                    packageName,
-                    sourceLineCount,
-                    List.of(),
-                    symbols,
-                    maxSymbols);
+            flattenDocumentSymbol(node, context, List.of(), symbols);
         }
         return List.copyOf(symbols);
     }
 
     private void flattenDocumentSymbol(
             JsonNode node,
-            String relativePath,
-            String fallbackUri,
-            String packageName,
-            int sourceLineCount,
+            DocumentSymbolContext context,
             List<String> ownerTypes,
-            List<ProviderSymbol> output,
-            int maxSymbols) throws IOException {
+            List<ProviderSymbol> output) throws IOException {
         int lspKind = node.path("kind").asInt(-1);
         String name = node.path("name").asText("");
         String detail = node.path("detail").asText("");
         JsonNode rangeNode = node.has("range") ? node.path("range") : node.path("location").path("range");
         JsonNode selectionRangeNode = node.has("selectionRange") ? node.path("selectionRange") : rangeNode;
-        String uri = node.path("location").path("uri").asText(fallbackUri);
+        String uri = node.path("location").path("uri").asText(context.fallbackUri());
         int startLine = rangeNode.path("start").path("line").asInt(-1);
         int endLine = rangeNode.path("end").path("line").asInt(startLine);
         int selectionLine = selectionRangeNode.path("start").path("line").asInt(startLine);
@@ -457,19 +447,19 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
         Optional<SymbolKind> mappedKind = symbolKind(lspKind);
         List<String> childOwners = ownerTypes;
         boolean namedSupportedSymbol = mappedKind.isPresent() && !name.isBlank();
-        boolean validRange = isValidJdtRange(startLine, endLine, selectionLine, sourceLineCount);
+        boolean validRange = isValidJdtRange(startLine, endLine, selectionLine, context.sourceLineCount());
         if (namedSupportedSymbol && validRange) {
-            if (output.size() >= maxSymbols) {
+            if (output.size() >= context.maxSymbols()) {
                 throw snapshotLimitFailure("symboles", snapshotLimits.maxSymbols());
             }
             SymbolKind kind = mappedKind.orElseThrow();
-            String owner = qualifiedOwner(packageName, ownerTypes);
+            String owner = qualifiedOwner(context.packageName(), ownerTypes);
             String signature = detail.isBlank() ? name : name + " " + detail.trim();
             String qualifiedName;
             if (isType(kind)) {
                 List<String> typeNames = new ArrayList<>(ownerTypes);
                 typeNames.add(name);
-                qualifiedName = qualifiedOwner(packageName, typeNames);
+                qualifiedName = qualifiedOwner(context.packageName(), typeNames);
                 childOwners = List.copyOf(typeNames);
             } else {
                 qualifiedName = owner + "#" + signature;
@@ -483,7 +473,7 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
                     endLine + 1,
                     SOURCE_PROVIDER);
             output.add(new ProviderSymbol(
-                    relativePath,
+                    context.relativePath(),
                     uri,
                     symbol,
                     lspKind,
@@ -497,11 +487,11 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
                         System.Logger.Level.WARNING,
                         "Ignoring inconsistent JDT symbol range for {0} in {1}: start={2}, end={3}, selection={4}, lines={5}",
                         name,
-                        relativePath,
+                        context.relativePath(),
                         startLine,
                         endLine,
                         selectionLine,
-                        sourceLineCount);
+                        context.sourceLineCount());
             }
             if (isLspType(lspKind) && !name.isBlank()) {
                 List<String> typeNames = new ArrayList<>(ownerTypes);
@@ -511,16 +501,16 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
         }
 
         for (JsonNode child : arrayElements(node.path("children"))) {
-            flattenDocumentSymbol(
-                    child,
-                    relativePath,
-                    fallbackUri,
-                    packageName,
-                    sourceLineCount,
-                    childOwners,
-                    output,
-                    maxSymbols);
+            flattenDocumentSymbol(child, context, childOwners, output);
         }
+    }
+
+    private record DocumentSymbolContext(
+            String relativePath,
+            String fallbackUri,
+            String packageName,
+            int sourceLineCount,
+            int maxSymbols) {
     }
 
     private static boolean isValidJdtRange(

@@ -28,7 +28,7 @@ public final class SensitiveContentRedactor {
                     + "secret[_-]?access[_-]?key|password|passwd|secret)(?:[_.-][A-Za-z0-9]+)*";
 
     private static final Pattern STRUCTURED_TOKEN = Pattern.compile(
-            "\\b(?:gh[pousr]_[A-Za-z0-9]{20,255}+|github_pat_[A-Za-z0-9_]{20,255}+|(?:AKIA|ASIA)[0-9A-Z]{16})\\b");
+            "\\b(?:gh[pousr]_[A-Za-z0-9]{20,255}+|github_pat_\\w{20,255}+|(?:AKIA|ASIA)[0-9A-Z]{16})\\b");
     private static final Pattern JWT = Pattern.compile(
             "\\beyJ[A-Za-z0-9_-]{10," + MAX_SECRET_CHARS + "}+\\."
                     + "[A-Za-z0-9_-]{10," + MAX_SECRET_CHARS + "}+\\."
@@ -104,11 +104,21 @@ public final class SensitiveContentRedactor {
         }
     }
 
+    private static String matchedQuote(Matcher matcher) {
+        if (matcher.group(2) != null) {
+            return "\"";
+        }
+        if (matcher.group(3) != null) {
+            return "'";
+        }
+        return "";
+    }
+
     private static String replaceSecretAssignments(String content) {
         Matcher matcher = SECRET_ASSIGNMENT.matcher(content);
         StringBuilder output = new StringBuilder(content.length());
         while (matcher.find()) {
-            String quote = matcher.group(2) != null ? "\"" : matcher.group(3) != null ? "'" : "";
+            String quote = matchedQuote(matcher);
             String replacement = matcher.group(1) + quote + REDACTED + quote;
             matcher.appendReplacement(output, Matcher.quoteReplacement(replacement));
         }

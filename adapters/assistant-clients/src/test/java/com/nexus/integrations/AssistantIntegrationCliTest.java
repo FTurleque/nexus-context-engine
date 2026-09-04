@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
+import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 
@@ -106,13 +106,9 @@ class AssistantIntegrationCliTest {
     }
 
     private static String invokeMain(String... args) {
-        PrintStream previous = System.out;
         ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        try (PrintStream replacement = new PrintStream(captured, true, StandardCharsets.UTF_8)) {
-            System.setOut(replacement);
-            AssistantIntegrationGenerator.main(args);
-        } finally {
-            System.setOut(previous);
+        try (PrintWriter output = new PrintWriter(captured, true, StandardCharsets.UTF_8)) {
+            AssistantIntegrationGenerator.run(args, output);
         }
         return captured.toString(StandardCharsets.UTF_8).trim();
     }

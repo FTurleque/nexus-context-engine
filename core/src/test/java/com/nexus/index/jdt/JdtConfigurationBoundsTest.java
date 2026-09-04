@@ -34,6 +34,7 @@ class JdtConfigurationBoundsTest {
 
     @Test
     void rejectsInvalidOrOversizedTimeoutInsteadOfSilentlyFallingBack() {
+        String oversizedTimeout = Long.toString(JdtLanguageServerCodeIntelligenceProvider.MAX_TIMEOUT_SECONDS + 1L);
         assertThrows(IllegalArgumentException.class, () ->
                 JdtLanguageServerCodeIntelligenceProvider.parseBoundedPositiveLong(
                         JdtLanguageServerCodeIntelligenceProvider.TIMEOUT_ENVIRONMENT_VARIABLE,
@@ -50,6 +51,7 @@ class JdtConfigurationBoundsTest {
 
     @Test
     void acceptsMaximumSymbolCountAndRejectsOversizedValue() {
+        String oversizedSymbols = Integer.toString(JdtLanguageServerCodeIntelligenceProvider.MAX_SYMBOLS + 1);
         assertEquals(
                 JdtLanguageServerCodeIntelligenceProvider.MAX_SYMBOLS,
                 JdtLanguageServerCodeIntelligenceProvider.parseBoundedPositiveInt(
@@ -70,19 +72,15 @@ class JdtConfigurationBoundsTest {
         Path installation = temporaryDirectory.resolve("jdtls");
         Path workspaces = temporaryDirectory.resolve("workspaces");
 
+        Duration oversizedTimeout = Duration.ofSeconds(
+                JdtLanguageServerCodeIntelligenceProvider.MAX_TIMEOUT_SECONDS + 1L);
         assertThrows(IllegalArgumentException.class, () ->
                 new JdtLanguageServerCodeIntelligenceProvider.Configuration(
-                        installation,
-                        workspaces,
-                        "java",
-                        Duration.ofSeconds(JdtLanguageServerCodeIntelligenceProvider.MAX_TIMEOUT_SECONDS + 1L),
-                        250));
+                        installation, workspaces, "java", oversizedTimeout, 250));
+        Duration validTimeout = Duration.ofSeconds(120);
         assertThrows(IllegalArgumentException.class, () ->
                 new JdtLanguageServerCodeIntelligenceProvider.Configuration(
-                        installation,
-                        workspaces,
-                        "java",
-                        Duration.ofSeconds(120),
+                        installation, workspaces, "java", validTimeout,
                         JdtLanguageServerCodeIntelligenceProvider.MAX_SYMBOLS + 1));
     }
 }

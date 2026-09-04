@@ -83,27 +83,39 @@ final class JdtJsonRpcFrameReader {
         while (true) {
             int value = stream.read();
             if (value < 0) {
-                if (line.isEmpty() && consumed == 0) {
-                    return null;
-                }
-                throw new IOException("En-tête JSON-RPC JDT LS tronqué");
+                return endOfStream(line, consumed);
             }
             consumed++;
-            if (alreadyConsumed + consumed > MAX_HEADER_BYTES) {
-                throw new IOException("En-têtes JSON-RPC JDT LS trop volumineux");
-            }
-            if (consumed > MAX_HEADER_LINE_BYTES) {
-                throw new IOException("Ligne d'en-tête JSON-RPC JDT LS trop volumineuse");
-            }
+            validateHeaderLineSize(alreadyConsumed, consumed);
             if (value == '\n') {
-                int length = line.length();
-                if (length > 0 && line.charAt(length - 1) == '\r') {
-                    line.setLength(length - 1);
-                }
-                return new HeaderLine(line.toString(), consumed);
+                return completedHeaderLine(line, consumed);
             }
             line.append((char) value);
         }
+    }
+
+    private static HeaderLine endOfStream(StringBuilder line, int consumed) throws IOException {
+        if (line.isEmpty() && consumed == 0) {
+            return null;
+        }
+        throw new IOException("En-tête JSON-RPC JDT LS tronqué");
+    }
+
+    private static void validateHeaderLineSize(int alreadyConsumed, int consumed) throws IOException {
+        if (alreadyConsumed + consumed > MAX_HEADER_BYTES) {
+            throw new IOException("En-têtes JSON-RPC JDT LS trop volumineux");
+        }
+        if (consumed > MAX_HEADER_LINE_BYTES) {
+            throw new IOException("Ligne d'en-tête JSON-RPC JDT LS trop volumineuse");
+        }
+    }
+
+    private static HeaderLine completedHeaderLine(StringBuilder line, int consumed) {
+        int length = line.length();
+        if (length > 0 && line.charAt(length - 1) == '\r') {
+            line.setLength(length - 1);
+        }
+        return new HeaderLine(line.toString(), consumed);
     }
 
     private record HeaderLine(String value, int consumedBytes) {

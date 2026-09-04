@@ -41,12 +41,14 @@ class ProjectScanLimitsTest {
 
     @Test
     void rejectsLimitsBeyondHardSafetyCeilings() {
-        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(Map.of(
+        Map<String, String> tooManyFiles = Map.of(
                 ProjectScanLimits.MAX_FILES_ENVIRONMENT_VARIABLE,
-                Integer.toString(ProjectScanLimits.HARD_MAX_FILES + 1))));
-        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(Map.of(
+                Integer.toString(ProjectScanLimits.HARD_MAX_FILES + 1));
+        Map<String, String> tooManyBytes = Map.of(
                 ProjectScanLimits.MAX_TOTAL_BYTES_ENVIRONMENT_VARIABLE,
-                Long.toString(ProjectScanLimits.HARD_MAX_TOTAL_BYTES + 1))));
+                Long.toString(ProjectScanLimits.HARD_MAX_TOTAL_BYTES + 1));
+        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(tooManyFiles));
+        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(tooManyBytes));
 
         assertThrows(IllegalArgumentException.class, () ->
                 new ProjectScanLimits(ProjectScanLimits.HARD_MAX_FILES + 1, 1));
@@ -56,13 +58,13 @@ class ProjectScanLimitsTest {
 
     @Test
     void rejectsInvalidLimitsFailClosed() {
-        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(Map.of(
-                ProjectScanLimits.MAX_FILES_ENVIRONMENT_VARIABLE, "0")));
-        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(Map.of(
-                ProjectScanLimits.MAX_FILES_ENVIRONMENT_VARIABLE, "not-a-number")));
-        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(Map.of(
-                ProjectScanLimits.MAX_TOTAL_BYTES_ENVIRONMENT_VARIABLE, "-1")));
-        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(Map.of(
-                ProjectScanLimits.MAX_TOTAL_BYTES_ENVIRONMENT_VARIABLE, "overflow")));
+        Map<String, String> zeroFiles = Map.of(ProjectScanLimits.MAX_FILES_ENVIRONMENT_VARIABLE, "0");
+        Map<String, String> invalidFiles = Map.of(ProjectScanLimits.MAX_FILES_ENVIRONMENT_VARIABLE, "not-a-number");
+        Map<String, String> negativeBytes = Map.of(ProjectScanLimits.MAX_TOTAL_BYTES_ENVIRONMENT_VARIABLE, "-1");
+        Map<String, String> invalidBytes = Map.of(ProjectScanLimits.MAX_TOTAL_BYTES_ENVIRONMENT_VARIABLE, "overflow");
+        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(zeroFiles));
+        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(invalidFiles));
+        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(negativeBytes));
+        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(invalidBytes));
     }
 }
