@@ -56,7 +56,6 @@ jobs:
 
           git_path = Path('core/src/main/java/com/nexus/context/source/git/LocalGitContextSourceProvider.java')
           git_source = git_path.read_text(encoding='utf-8')
-          git_source = git_source.replace('import java.time.Instant;\n', '', 1)
           old_timestamp = '                        Instant.ofEpochSecond(commit.getCommitTime()),\n'
           new_timestamp = '''                        Objects.requireNonNull(\n                                commit.getCommitterIdent(),\n                                "Git commit without committer identity")\n                                .getWhenAsInstant(),\n'''
           if old_timestamp not in git_source:
