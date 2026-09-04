@@ -124,6 +124,22 @@ class ContextFragmentFactoryRangeValidationTest {
         assertTrue(fragments.getFirst().content().contains("four"));
     }
 
+    @Test
+    void rejectsNewlineDenseSourceBeforeUnboundedLineObjectMaterialization() throws Exception {
+        Path source = temporaryDirectory.resolve("Dense.java");
+        Files.writeString(source, "x\n".repeat(ContextFragmentFactory.MAX_MATERIALIZED_SOURCE_LINES + 1));
+
+        ContextFragmentFactory.MaterializationResult result = factory().materialize(
+                project(),
+                "dense",
+                List.of(candidate(source, symbol(1, 1))),
+                1_000);
+
+        assertTrue(result.fragments().isEmpty());
+        assertEquals(1, result.diagnostics().size());
+        assertTrue(result.diagnostics().getFirst().contains("Trop de lignes à matérialiser"));
+    }
+
     private ContextFragmentFactory factory() {
         return new ContextFragmentFactory(text -> text.length());
     }

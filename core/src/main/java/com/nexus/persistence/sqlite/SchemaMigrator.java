@@ -31,6 +31,7 @@ final class SchemaMigrator {
     static void migrate(Connection connection) throws SQLException, IOException {
         boolean initialAutoCommit = connection.getAutoCommit();
         connection.setAutoCommit(false);
+        Throwable pendingFailure = null;
         try {
             ensureMigrationTable(connection);
             Map<Integer, String> appliedHashes = readAppliedHashes(connection);
@@ -44,10 +45,11 @@ final class SchemaMigrator {
             }
             connection.commit();
         } catch (SQLException | IOException | RuntimeException exception) {
-            connection.rollback();
+            pendingFailure = exception;
+            rollbackPreserving(connection, exception);
             throw exception;
         } finally {
-            connection.setAutoCommit(initialAutoCommit);
+            restoreAutoCommitPreserving(connection, initialAutoCommit, pendingFailure);
         }
     }
 
@@ -214,6 +216,29 @@ final class SchemaMigrator {
             statements.add(current.toString().trim());
         }
         return statements;
+    }
+
+    private static void rollbackPreserving(Connection connection, Throwable primaryFailure) {
+        try {
+            connection.rollback();
+        } catch (SQLException | RuntimeException rollbackFailure) {
+            primaryFailure.addSuppressed(rollbackFailure);
+        }
+    }
+
+    private static void restoreAutoCommitPreserving(
+            Connection connection,
+            boolean initialAutoCommit,
+            Throwable primaryFailure) throws SQLException {
+        try {
+            connection.setAutoCommit(initialAutoCommit);
+        } catch (SQLException | RuntimeException restoreFailure) {
+            if (primaryFailure != null) {
+                primaryFailure.addSuppressed(restoreFailure);
+                return;
+            }
+            throw restoreFailure;
+        }
     }
 
     private record Migration(int version, String resource) {
