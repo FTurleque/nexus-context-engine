@@ -82,6 +82,36 @@ jobs:
               raise SystemExit(f'expected 3 remaining CLI generic throws declarations, found {count}')
           text = text.replace(old, 'renderer) throws IOException {')
           path.write_text(text, encoding='utf-8')
+
+          # Keep CLI stdout semantics while making the channel injectable for tests.
+          path = Path('adapters/assistant-clients/src/main/java/com/nexus/integrations/AssistantIntegrationGenerator.java')
+          text = path.read_text(encoding='utf-8')
+          field = '''    private static final PrintWriter STANDARD_OUTPUT = new PrintWriter(\n            new FileOutputStream(FileDescriptor.out), true, Charset.defaultCharset());\n'''
+          if text.count(field) != 1:
+              raise SystemExit('AssistantIntegrationGenerator: expected STANDARD_OUTPUT field')
+          text = text.replace(field, '', 1)
+          signature = '    public static void main(String[] args) {\n'
+          replacement = '''    public static void main(String[] args) {\n        run(args, standardOutput());\n    }\n\n    static void run(String[] args, PrintWriter output) {\n'''
+          if text.count(signature) != 1:
+              raise SystemExit('AssistantIntegrationGenerator: expected main signature')
+          text = text.replace(signature, replacement, 1)
+          text = text.replace('STANDARD_OUTPUT.println(', 'output.println(')
+          marker = '    private String render(String profile, CommandSpec commandSpec, String format) {\n'
+          helper = '''    private static PrintWriter standardOutput() {\n        return new PrintWriter(\n                new FileOutputStream(FileDescriptor.out), true, Charset.defaultCharset());\n    }\n\n'''
+          if text.count(marker) != 1:
+              raise SystemExit('AssistantIntegrationGenerator: render marker missing')
+          text = text.replace(marker, helper + marker, 1)
+          path.write_text(text, encoding='utf-8')
+
+          path = Path('adapters/assistant-clients/src/test/java/com/nexus/integrations/AssistantIntegrationCliTest.java')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('import java.io.PrintStream;\n', 'import java.io.PrintWriter;\n')
+          old = '''    private static String invokeMain(String... args) {\n        PrintStream previous = System.out;\n        ByteArrayOutputStream captured = new ByteArrayOutputStream();\n        try (PrintStream replacement = new PrintStream(captured, true, StandardCharsets.UTF_8)) {\n            System.setOut(replacement);\n            AssistantIntegrationGenerator.main(args);\n        } finally {\n            System.setOut(previous);\n        }\n        return captured.toString(StandardCharsets.UTF_8).trim();\n    }\n'''
+          new = '''    private static String invokeMain(String... args) {\n        ByteArrayOutputStream captured = new ByteArrayOutputStream();\n        try (PrintWriter output = new PrintWriter(captured, true, StandardCharsets.UTF_8)) {\n            AssistantIntegrationGenerator.run(args, output);\n        }\n        return captured.toString(StandardCharsets.UTF_8).trim();\n    }\n'''
+          if text.count(old) != 1:
+              raise SystemExit('AssistantIntegrationCliTest: invokeMain helper mismatch')
+          text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
           PY
       - name: Run reactor tests
         shell: bash
