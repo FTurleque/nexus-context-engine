@@ -1,12 +1,14 @@
 package com.nexus.persistence.sqlite;
 
 import com.nexus.config.NexusPaths;
-import org.sqlite.SQLiteConfig;
+import org.sqlite.SQLiteConnection;
 
 import java.io.IOException;
 import java.nio.file.Path;
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Objects;
 
 public final class SqliteDatabase {
@@ -42,10 +44,24 @@ public final class SqliteDatabase {
     }
 
     public Connection openConnection() throws SQLException {
-        SQLiteConfig config = new SQLiteConfig();
-        config.enforceForeignKeys(true);
-        config.setBusyTimeout(busyTimeoutMillis);
-        return config.createConnection("jdbc:sqlite:" + databaseFile);
+        Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databaseFile);
+        try {
+            try (Statement statement = connection.createStatement()) {
+                statement.execute("PRAGMA foreign_keys = ON");
+            }
+            if (!(connection instanceof SQLiteConnection sqliteConnection)) {
+                throw new SQLException("Unexpected JDBC connection type for SQLite database");
+            }
+            sqliteConnection.setBusyTimeout(busyTimeoutMillis);
+            return connection;
+        } catch (SQLException | RuntimeException failure) {
+            try {
+                connection.close();
+            } catch (SQLException closeFailure) {
+                failure.addSuppressed(closeFailure);
+            }
+            throw failure;
+        }
     }
 
     <T> T writeTransaction(String operation, SqlTransaction<T> transaction) throws SQLException {
