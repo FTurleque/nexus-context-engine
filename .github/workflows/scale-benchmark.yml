@@ -20,6 +20,7 @@ on:
       - 'core/src/test/java/com/nexus/benchmark/**'
       - 'core/pom.xml'
       - 'scripts/measure-scale-regression.ps1'
+      - 'config/scale-benchmark-protocol'
       - 'docs/developer/scale-regression-benchmark.md'
       - 'docs/developer/scale-regression-results.md'
       - '.github/workflows/scale-benchmark.yml'
@@ -91,20 +92,38 @@ jobs:
           set -euo pipefail
           HEAD_SHA="${{ github.event.pull_request.head.sha }}"
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          PROTOCOL_FILE="config/scale-benchmark-protocol"
           CANDIDATE_REPORT="$RUNNER_TEMP/scale-benchmark-candidate.json"
           BASE_REPORT="$RUNNER_TEMP/scale-benchmark-base.json"
 
+          test -s "$PROTOCOL_FILE"
+          HEAD_PROTOCOL="$(tr -d '\r\n[:space:]' < "$PROTOCOL_FILE")"
+          BASE_PROTOCOL="$(git show "$BASE_SHA:$PROTOCOL_FILE" 2>/dev/null | tr -d '\r\n[:space:]' || true)"
+          if [[ -z "$BASE_PROTOCOL" || "$BASE_PROTOCOL" != "$HEAD_PROTOCOL" ]]; then
+            echo "::notice::Skipping relative SQLite population comparison: base/head benchmark protocols are not compatible (base='${BASE_PROTOCOL:-absent}', head='$HEAD_PROTOCOL'). Candidate absolute and latency budgets remain enforced."
+            exit 0
+          fi
+
           cp target/scale-benchmark.json "$CANDIDATE_REPORT"
-          git checkout --force "$BASE_SHA"
-          chmod +x ./mvnw
-          ./mvnw -B -pl core clean \
-            -Dtest=ScaleRegressionBenchmarkTest \
-            -Djunit.jupiter.execution.timeout.test.method.default=20m \
-            -Dnexus.scale.benchmark.enabled=true \
-            -Dnexus.scale.benchmark.profile=${{ steps.profile.outputs.value }} \
-            -Dnexus.scale.benchmark.output="$BASE_REPORT" \
-            test
-          git checkout --force "$HEAD_SHA"
+          BASE_WORKTREE="$RUNNER_TEMP/nexus-scale-base"
+          rm -rf "$BASE_WORKTREE"
+          git worktree add --detach "$BASE_WORKTREE" "$BASE_SHA"
+          cleanup_base_worktree() {
+            git worktree remove --force "$BASE_WORKTREE" >/dev/null 2>&1 || true
+          }
+          trap cleanup_base_worktree EXIT
+          (
+            cd "$BASE_WORKTREE"
+            chmod +x ./mvnw
+            ./mvnw -B -pl core clean \
+              -Dtest=ScaleRegressionBenchmarkTest \
+              -Djunit.jupiter.execution.timeout.test.method.default=20m \
+              -Dnexus.scale.benchmark.enabled=true \
+              -Dnexus.scale.benchmark.profile=${{ steps.profile.outputs.value }} \
+              -Dnexus.scale.benchmark.output="$BASE_REPORT" \
+              test
+          )
+          test -s "$BASE_REPORT"
           mkdir -p target
           cp "$CANDIDATE_REPORT" target/scale-benchmark.json
           cp "$BASE_REPORT" target/scale-benchmark-base.json
@@ -145,9 +164,8 @@ jobs:
               1_000_000: {'exact': 2000, 'contains': 1200, 'miss': 1200, 'relation': 800},
           }
           # SQLite bulk population is dominated by hosted-runner storage throughput.
-          # Keep a broad fail-safe ceiling, but on PRs detect code regressions by
-          # comparing candidate and base on the same runner instead of treating
-          # host I/O variance as a source regression.
+          # Keep a broad fail-safe ceiling, but on comparable PRs detect code
+          # regressions by comparing candidate and base on the same runner.
           population_safety_ceiling = {
               10_000: 1_400,
               100_000: 5_000,
