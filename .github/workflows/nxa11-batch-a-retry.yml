@@ -36,6 +36,9 @@ jobs:
           block = source[start:end]
           lines = []
           for line in block.splitlines():
+              if line == '':
+                  lines.append('')
+                  continue
               if not line.startswith('          '):
                   raise SystemExit(f'unexpected embedded-script indentation: {line!r}')
               lines.append(line[10:])
