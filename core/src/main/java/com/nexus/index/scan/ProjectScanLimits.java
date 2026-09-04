@@ -22,12 +22,18 @@ public record ProjectScanLimits(int maxFiles, long maxTotalBytes) {
     public static final int DEFAULT_MAX_FILES = 100_000;
     public static final long DEFAULT_MAX_TOTAL_BYTES = 2L * 1024L * 1024L * 1024L;
 
+    /** Hard safety ceilings: environment configuration may tighten limits, never disable them. */
+    public static final int HARD_MAX_FILES = 1_000_000;
+    public static final long HARD_MAX_TOTAL_BYTES = 16L * 1024L * 1024L * 1024L;
+
     public ProjectScanLimits {
-        if (maxFiles <= 0) {
-            throw new IllegalArgumentException("maxFiles must be greater than zero");
+        if (maxFiles <= 0 || maxFiles > HARD_MAX_FILES) {
+            throw new IllegalArgumentException(
+                    "maxFiles must be between 1 and " + HARD_MAX_FILES);
         }
-        if (maxTotalBytes <= 0) {
-            throw new IllegalArgumentException("maxTotalBytes must be greater than zero");
+        if (maxTotalBytes <= 0 || maxTotalBytes > HARD_MAX_TOTAL_BYTES) {
+            throw new IllegalArgumentException(
+                    "maxTotalBytes must be between 1 and " + HARD_MAX_TOTAL_BYTES);
         }
     }
 
@@ -45,40 +51,43 @@ public record ProjectScanLimits(int maxFiles, long maxTotalBytes) {
                 positiveInt(
                         environment.get(MAX_FILES_ENVIRONMENT_VARIABLE),
                         MAX_FILES_ENVIRONMENT_VARIABLE,
-                        DEFAULT_MAX_FILES),
+                        DEFAULT_MAX_FILES,
+                        HARD_MAX_FILES),
                 positiveLong(
                         environment.get(MAX_TOTAL_BYTES_ENVIRONMENT_VARIABLE),
                         MAX_TOTAL_BYTES_ENVIRONMENT_VARIABLE,
-                        DEFAULT_MAX_TOTAL_BYTES));
+                        DEFAULT_MAX_TOTAL_BYTES,
+                        HARD_MAX_TOTAL_BYTES));
     }
 
-    private static int positiveInt(String configured, String name, int defaultValue) {
+    private static int positiveInt(String configured, String name, int defaultValue, int maximum) {
         if (configured == null || configured.isBlank()) {
             return defaultValue;
         }
         try {
             int value = Integer.parseInt(configured.trim());
-            if (value <= 0) {
-                throw new IllegalArgumentException(name + " doit être strictement positif");
+            if (value <= 0 || value > maximum) {
+                throw new IllegalArgumentException(name + " doit être compris entre 1 et " + maximum);
             }
             return value;
         } catch (NumberFormatException exception) {
-            throw new IllegalArgumentException(name + " doit être un entier positif", exception);
+            throw new IllegalArgumentException(name + " doit être un entier compris entre 1 et " + maximum, exception);
         }
     }
 
-    private static long positiveLong(String configured, String name, long defaultValue) {
+    private static long positiveLong(String configured, String name, long defaultValue, long maximum) {
         if (configured == null || configured.isBlank()) {
             return defaultValue;
         }
         try {
             long value = Long.parseLong(configured.trim());
-            if (value <= 0) {
-                throw new IllegalArgumentException(name + " doit être strictement positif");
+            if (value <= 0 || value > maximum) {
+                throw new IllegalArgumentException(name + " doit être compris entre 1 et " + maximum + " octets");
             }
             return value;
         } catch (NumberFormatException exception) {
-            throw new IllegalArgumentException(name + " doit être un entier positif en octets", exception);
+            throw new IllegalArgumentException(
+                    name + " doit être un entier compris entre 1 et " + maximum + " octets", exception);
         }
     }
 }
