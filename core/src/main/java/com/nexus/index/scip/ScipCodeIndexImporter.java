@@ -20,8 +20,10 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -38,7 +40,13 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
     public static final int MAX_RELATION_FACTS = 500_000;
     public static final int MAX_TOTAL_FACTS = MAX_SYMBOL_FACTS + MAX_RELATION_FACTS;
 
+    static final int MAX_PARSED_DOCUMENTS = 100_000;
+    static final int MAX_PARSED_OCCURRENCES = 500_000;
+    static final int MAX_PARSED_SYMBOL_INFOS = 500_000;
+    static final int MAX_PARSED_RELATIONSHIPS = 500_000;
+
     private static final int ROLE_DEFINITION = 0x1;
+    private static final int MAX_LEGACY_RANGE_VALUES = 4;
     private static final double SCIP_CONFIDENCE = 1.0d;
 
     private final String indexFileName;
@@ -47,6 +55,7 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
     private final int maxSymbolFacts;
     private final int maxRelationFacts;
     private final int maxTotalFacts;
+    private final ParseLimits parseLimits;
 
     public ScipCodeIndexImporter() {
         this(
@@ -79,6 +88,24 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
             int maxSymbolFacts,
             int maxRelationFacts,
             int maxTotalFacts) {
+        this(
+                indexFileName,
+                maxIndexBytes,
+                maxMessageBytes,
+                maxSymbolFacts,
+                maxRelationFacts,
+                maxTotalFacts,
+                ParseLimits.defaults());
+    }
+
+    ScipCodeIndexImporter(
+            String indexFileName,
+            long maxIndexBytes,
+            int maxMessageBytes,
+            int maxSymbolFacts,
+            int maxRelationFacts,
+            int maxTotalFacts,
+            ParseLimits parseLimits) {
         this.indexFileName = Objects.requireNonNull(indexFileName, "indexFileName");
         if (indexFileName.isBlank()) {
             throw new IllegalArgumentException("indexFileName ne doit pas être vide");
@@ -103,6 +130,7 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
         this.maxSymbolFacts = maxSymbolFacts;
         this.maxRelationFacts = maxRelationFacts;
         this.maxTotalFacts = maxTotalFacts;
+        this.parseLimits = Objects.requireNonNull(parseLimits, "parseLimits");
     }
 
     @Override
@@ -113,7 +141,6 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
     @Override
     public Optional<CodeIntelligenceSnapshot> importIndex(Path projectRoot) throws IOException {
         ProjectPathGuard pathGuard = new ProjectPathGuard(projectRoot);
-        Path root = pathGuard.root();
         Path indexCandidate = pathGuard.resolve(Path.of(indexFileName));
         Path indexFile;
         try {
@@ -128,6 +155,8 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
         List<IndexedSymbol> symbols = new ArrayList<>();
         List<IndexedRelation> relations = new ArrayList<>();
         Set<String> relationKeys = new LinkedHashSet<>();
+        Map<String, Integer> sourceLineCounts = new HashMap<>();
+        ParseBudget parseBudget = new ParseBudget(parseLimits);
 
         try (InputStream input = new BufferedInputStream(
                 SafeFileIO.newInputStreamNoFollow(indexFile, maxIndexBytes))) {
@@ -140,10 +169,13 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
                 int fieldNumber = tag >>> 3;
                 int wireType = tag & 0x7;
                 if (fieldNumber == 2 && wireType == WireType.LENGTH_DELIMITED) {
+                    // Charge the document before allocating its length-delimited byte array.
+                    parseBudget.document();
                     byte[] documentPayload = readLengthDelimited(input, maxMessageBytes);
                     importDocument(
                             pathGuard,
-                            parseDocument(documentPayload, maxMessageBytes),
+                            parseDocument(documentPayload, maxMessageBytes, parseBudget),
+                            sourceLineCounts,
                             symbols,
                             relations,
                             relationKeys,
@@ -162,6 +194,7 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
     private static void importDocument(
             ProjectPathGuard pathGuard,
             ScipDocument document,
+            Map<String, Integer> sourceLineCounts,
             List<IndexedSymbol> symbols,
             List<IndexedRelation> relations,
             Set<String> relationKeys,
@@ -172,12 +205,21 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
         if (relativePath == null) {
             return;
         }
-        int sourceLineCount = canonicalLineCount(pathGuard, relativePath);
+        int sourceLineCount = canonicalLineCount(pathGuard, relativePath, sourceLineCounts);
+
+        // Index definitions once. The previous per-symbol linear scan made a dense
+        // document O(symbols * occurrences).
+        Map<String, ScipOccurrence> definitions = new HashMap<>();
+        for (ScipOccurrence occurrence : document.occurrences()) {
+            if (!occurrence.symbol().isBlank() && occurrence.range() != null && isDefinition(occurrence.roles())) {
+                definitions.putIfAbsent(occurrence.symbol(), occurrence);
+            }
+        }
 
         for (ScipSymbolInformation symbolInformation : document.symbols()) {
-            ScipOccurrence definition = findDefinition(document.occurrences(), symbolInformation.symbol());
+            ScipOccurrence definition = definitions.get(symbolInformation.symbol());
             SymbolKind symbolKind = mapKind(symbolInformation.kind());
-            if (definition != null && definition.range() != null && symbolKind != null) {
+            if (definition != null && symbolKind != null) {
                 SourceRange validatedRange = validateDefinitionRange(
                         relativePath,
                         definition.range(),
@@ -290,14 +332,23 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
         return range;
     }
 
-    private static int canonicalLineCount(ProjectPathGuard pathGuard, String relativePath) throws IOException {
+    private static int canonicalLineCount(
+            ProjectPathGuard pathGuard,
+            String relativePath,
+            Map<String, Integer> sourceLineCounts) throws IOException {
+        Integer cached = sourceLineCounts.get(relativePath);
+        if (cached != null) {
+            return cached;
+        }
         Path source = pathGuard.requireRegularFile(pathGuard.resolve(Path.of(relativePath)));
         long lineCount = SafeFileIO.readStringNoFollow(source).lines().count();
         if (lineCount > Integer.MAX_VALUE) {
             throw new IOException("Source file contains too many lines to validate SCIP symbol ranges: "
                     + relativePath);
         }
-        return (int) lineCount;
+        int result = (int) lineCount;
+        sourceLineCounts.put(relativePath, result);
+        return result;
     }
 
     private static void addRelation(
@@ -352,15 +403,6 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
         }
     }
 
-    private static ScipOccurrence findDefinition(List<ScipOccurrence> occurrences, String symbol) {
-        for (ScipOccurrence occurrence : occurrences) {
-            if (symbol.equals(occurrence.symbol()) && isDefinition(occurrence.roles())) {
-                return occurrence;
-            }
-        }
-        return null;
-    }
-
     private static boolean isDefinition(int roles) {
         return (roles & ROLE_DEFINITION) != 0;
     }
@@ -411,7 +453,10 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
         };
     }
 
-    private static ScipDocument parseDocument(byte[] payload, int maxMessageBytes) throws IOException {
+    private static ScipDocument parseDocument(
+            byte[] payload,
+            int maxMessageBytes,
+            ParseBudget parseBudget) throws IOException {
         ProtoReader reader = new ProtoReader(payload, maxMessageBytes);
         String relativePath = "";
         List<ScipOccurrence> occurrences = new ArrayList<>();
@@ -423,8 +468,15 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
             int wireType = tag & 0x7;
             switch (fieldNumber) {
                 case 1 -> relativePath = reader.readString(wireType);
-                case 2 -> occurrences.add(parseOccurrence(reader.readMessage(wireType)));
-                case 3 -> symbols.add(parseSymbolInformation(reader.readMessage(wireType)));
+                case 2 -> {
+                    // Charge before allocating/copying the nested message.
+                    parseBudget.occurrence();
+                    occurrences.add(parseOccurrence(reader.readMessage(wireType)));
+                }
+                case 3 -> {
+                    parseBudget.symbolInfo();
+                    symbols.add(parseSymbolInformation(reader.readMessage(wireType), parseBudget));
+                }
                 default -> reader.skipField(wireType);
             }
         }
@@ -432,7 +484,7 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
     }
 
     private static ScipOccurrence parseOccurrence(ProtoReader reader) throws IOException {
-        List<Integer> legacyRange = new ArrayList<>();
+        List<Integer> legacyRange = new ArrayList<>(MAX_LEGACY_RANGE_VALUES);
         String symbol = "";
         int roles = 0;
         SourceRange typedRange = null;
@@ -444,9 +496,15 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
             switch (fieldNumber) {
                 case 1 -> {
                     if (wireType == WireType.VARINT) {
+                        if (legacyRange.size() >= MAX_LEGACY_RANGE_VALUES) {
+                            throw new IOException("Plage legacy SCIP contient plus de "
+                                    + MAX_LEGACY_RANGE_VALUES + " entiers");
+                        }
                         legacyRange.add(reader.readInt32(wireType));
                     } else if (wireType == WireType.LENGTH_DELIMITED) {
-                        legacyRange.addAll(reader.readPackedInt32(wireType));
+                        legacyRange.addAll(reader.readPackedInt32(
+                                wireType,
+                                MAX_LEGACY_RANGE_VALUES - legacyRange.size()));
                     } else {
                         reader.skipField(wireType);
                     }
@@ -463,7 +521,9 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
         return new ScipOccurrence(symbol, roles, range);
     }
 
-    private static ScipSymbolInformation parseSymbolInformation(ProtoReader reader) throws IOException {
+    private static ScipSymbolInformation parseSymbolInformation(
+            ProtoReader reader,
+            ParseBudget parseBudget) throws IOException {
         String symbol = "";
         int kind = 0;
         String displayName = "";
@@ -476,7 +536,11 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
             int wireType = tag & 0x7;
             switch (fieldNumber) {
                 case 1 -> symbol = reader.readString(wireType);
-                case 4 -> relationships.add(parseRelationship(reader.readMessage(wireType)));
+                case 4 -> {
+                    // Charge before allocating/copying the nested relationship message.
+                    parseBudget.relationship();
+                    relationships.add(parseRelationship(reader.readMessage(wireType)));
+                }
                 case 5 -> kind = reader.readInt32(wireType);
                 case 6 -> displayName = reader.readString(wireType);
                 case 7 -> signature = parseSignature(reader.readMessage(wireType));
@@ -649,6 +713,61 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
         return (int) value;
     }
 
+    record ParseLimits(
+            int maxDocuments,
+            int maxOccurrences,
+            int maxSymbolInfos,
+            int maxRelationships) {
+        ParseLimits {
+            if (maxDocuments <= 0 || maxOccurrences <= 0 || maxSymbolInfos <= 0 || maxRelationships <= 0) {
+                throw new IllegalArgumentException("Les limites de parsing SCIP doivent être strictement positives");
+            }
+        }
+
+        static ParseLimits defaults() {
+            return new ParseLimits(
+                    MAX_PARSED_DOCUMENTS,
+                    MAX_PARSED_OCCURRENCES,
+                    MAX_PARSED_SYMBOL_INFOS,
+                    MAX_PARSED_RELATIONSHIPS);
+        }
+    }
+
+    private static final class ParseBudget {
+        private final ParseLimits limits;
+        private int documents;
+        private int occurrences;
+        private int symbolInfos;
+        private int relationships;
+
+        private ParseBudget(ParseLimits limits) {
+            this.limits = limits;
+        }
+
+        private void document() throws IOException {
+            documents = increment(documents, limits.maxDocuments(), "documents SCIP");
+        }
+
+        private void occurrence() throws IOException {
+            occurrences = increment(occurrences, limits.maxOccurrences(), "occurrences SCIP");
+        }
+
+        private void symbolInfo() throws IOException {
+            symbolInfos = increment(symbolInfos, limits.maxSymbolInfos(), "symbol infos SCIP");
+        }
+
+        private void relationship() throws IOException {
+            relationships = increment(relationships, limits.maxRelationships(), "relationships SCIP");
+        }
+
+        private static int increment(int current, int maximum, String label) throws IOException {
+            if (current >= maximum) {
+                throw new IOException("SCIP dépasse la limite de " + maximum + " " + label);
+            }
+            return current + 1;
+        }
+    }
+
     private record ScipDocument(
             String relativePath,
             List<ScipOccurrence> occurrences,
@@ -737,10 +856,14 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
             return new ProtoReader(payload, maxMessageBytes);
         }
 
-        private List<Integer> readPackedInt32(int wireType) throws IOException {
+        private List<Integer> readPackedInt32(int wireType, int maxValues) throws IOException {
             ProtoReader packed = readMessage(wireType);
-            List<Integer> values = new ArrayList<>();
+            List<Integer> values = new ArrayList<>(Math.min(MAX_LEGACY_RANGE_VALUES, Math.max(0, maxValues)));
             while (packed.hasRemaining()) {
+                if (values.size() >= maxValues) {
+                    throw new IOException("Plage legacy SCIP contient plus de "
+                            + MAX_LEGACY_RANGE_VALUES + " entiers");
+                }
                 values.add(checkedInt(packed.readVarint(), "entier Protobuf compacté"));
             }
             return values;
