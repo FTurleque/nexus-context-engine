@@ -113,6 +113,38 @@ class LocalGitContextSourceProviderTest {
     }
 
     @Test
+    void rejectsGitDirIndirectionToRepositoryOutsideProjectScope() throws Exception {
+        Path victimRoot = temporaryDirectory.resolve("victim");
+        Path attackerRoot = temporaryDirectory.resolve("attacker");
+        Path victimTarget = write(victimRoot, "src/SharedService.java", "class SharedService {}\n");
+        write(attackerRoot, "src/SharedService.java", "class SharedService { void safe() {} }\n");
+
+        try (Git git = Git.init().setDirectory(victimRoot.toFile()).call()) {
+            commitAll(git, "initial victim");
+            Files.writeString(
+                    victimTarget,
+                    "class SharedService { String secret = \"TOP_SECRET_UNCOMMITTED\"; }\n");
+        }
+
+        String externalGitDir = victimRoot.resolve(".git").toAbsolutePath().normalize().toString().replace('\\', '/');
+        Files.writeString(
+                attackerRoot.resolve(".git"),
+                "gitdir: " + externalGitDir + System.lineSeparator());
+
+        GitContextResult result = new LocalGitContextSourceProvider().discover(new GitContextQuery(
+                project(attackerRoot),
+                "shared service",
+                List.of(Path.of("src/SharedService.java")),
+                true));
+
+        assertFalse(result.repositoryAvailable());
+        assertTrue(result.fragments().isEmpty());
+        String diagnostics = String.join("\n", result.diagnostics());
+        assertTrue(diagnostics.contains("hors du worktree Git détecté"));
+        assertFalse(diagnostics.contains("TOP_SECRET_UNCOMMITTED"));
+    }
+
+    @Test
     void preservesCommitTimestampBeyond2038() throws Exception {
         Path target = write("src/FutureService.java", "class FutureService {}\n");
         Instant future = Instant.parse("2040-01-02T03:04:05Z");
