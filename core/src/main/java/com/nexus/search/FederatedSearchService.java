@@ -89,9 +89,10 @@ public final class FederatedSearchService {
         if (limit >= MAX_LOCAL_RETRIEVAL / LOCAL_OVERFETCH_FACTOR) {
             return MAX_LOCAL_RETRIEVAL;
         }
-        return Math.min(
-                MAX_LOCAL_RETRIEVAL,
-                Math.max(MIN_LOCAL_RETRIEVAL, limit * LOCAL_OVERFETCH_FACTOR));
+        return Math.clamp(
+                (long) limit * LOCAL_OVERFETCH_FACTOR,
+                MIN_LOCAL_RETRIEVAL,
+                MAX_LOCAL_RETRIEVAL);
     }
 
     private record OrderedFederatedHit(
