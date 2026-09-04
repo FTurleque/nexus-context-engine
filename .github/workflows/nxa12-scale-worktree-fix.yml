@@ -25,13 +25,47 @@ jobs:
 
           path = Path('.github/workflows/scale-benchmark.yml')
           text = path.read_text(encoding='utf-8')
-          old = '''          cp target/scale-benchmark.json "$CANDIDATE_REPORT"\n          git checkout --force "$BASE_SHA"\n          chmod +x ./mvnw\n          ./mvnw -B -pl core clean \\\n            -Dtest=ScaleRegressionBenchmarkTest \\\n            -Djunit.jupiter.execution.timeout.test.method.default=20m \\\n            -Dnexus.scale.benchmark.enabled=true \\\n            -Dnexus.scale.benchmark.profile=${{ steps.profile.outputs.value }} \\\n            -Dnexus.scale.benchmark.output="$BASE_REPORT" \\\n            test\n          git checkout --force "$HEAD_SHA"\n          mkdir -p target\n          cp "$CANDIDATE_REPORT" target/scale-benchmark.json\n          cp "$BASE_REPORT" target/scale-benchmark-base.json\n'''
-          new = '''          cp target/scale-benchmark.json "$CANDIDATE_REPORT"\n          BASE_WORKTREE="$RUNNER_TEMP/nexus-scale-base"\n          rm -rf "$BASE_WORKTREE"\n          git worktree add --detach "$BASE_WORKTREE" "$BASE_SHA"\n          cleanup_base_worktree() {\n            git worktree remove --force "$BASE_WORKTREE" >/dev/null 2>&1 || true\n          }\n          trap cleanup_base_worktree EXIT\n          (\n            cd "$BASE_WORKTREE"\n            chmod +x ./mvnw\n            ./mvnw -B -pl core clean \\\n              -Dtest=ScaleRegressionBenchmarkTest \\\n              -Djunit.jupiter.execution.timeout.test.method.default=20m \\\n              -Dnexus.scale.benchmark.enabled=true \\\n              -Dnexus.scale.benchmark.profile=${{ steps.profile.outputs.value }} \\\n              -Dnexus.scale.benchmark.output="$BASE_REPORT" \\\n              test\n          )\n          test -s "$BASE_REPORT"\n          mkdir -p target\n          cp "$CANDIDATE_REPORT" target/scale-benchmark.json\n          cp "$BASE_REPORT" target/scale-benchmark-base.json\n'''
-          if text.count(old) != 1:
-              raise SystemExit(f'expected exactly one baseline block, found {text.count(old)}')
-          text = text.replace(old, new, 1)
+          start_marker = '          cp target/scale-benchmark.json "$CANDIDATE_REPORT"\n'
+          end_marker = '          cp "$BASE_REPORT" target/scale-benchmark-base.json\n'
+          start = text.find(start_marker)
+          if start < 0:
+              raise SystemExit('candidate-report baseline block start not found')
+          end = text.find(end_marker, start)
+          if end < 0:
+              raise SystemExit('candidate-report baseline block end not found')
+          end += len(end_marker)
+
+          profile_expression = '$' + '{{ steps.profile.outputs.value }}'
+          new = (
+              '          cp target/scale-benchmark.json "$CANDIDATE_REPORT"\n'
+              '          BASE_WORKTREE="$RUNNER_TEMP/nexus-scale-base"\n'
+              '          rm -rf "$BASE_WORKTREE"\n'
+              '          git worktree add --detach "$BASE_WORKTREE" "$BASE_SHA"\n'
+              '          cleanup_base_worktree() {\n'
+              '            git worktree remove --force "$BASE_WORKTREE" >/dev/null 2>&1 || true\n'
+              '          }\n'
+              '          trap cleanup_base_worktree EXIT\n'
+              '          (\n'
+              '            cd "$BASE_WORKTREE"\n'
+              '            chmod +x ./mvnw\n'
+              '            ./mvnw -B -pl core clean \\\n'
+              '              -Dtest=ScaleRegressionBenchmarkTest \\\n'
+              '              -Djunit.jupiter.execution.timeout.test.method.default=20m \\\n'
+              '              -Dnexus.scale.benchmark.enabled=true \\\n'
+              f'              -Dnexus.scale.benchmark.profile={profile_expression} \\\n'
+              '              -Dnexus.scale.benchmark.output="$BASE_REPORT" \\\n'
+              '              test\n'
+              '          )\n'
+              '          test -s "$BASE_REPORT"\n'
+              '          mkdir -p target\n'
+              '          cp "$CANDIDATE_REPORT" target/scale-benchmark.json\n'
+              '          cp "$BASE_REPORT" target/scale-benchmark-base.json\n'
+          )
+          text = text[:start] + new + text[end:]
           if 'git checkout --force "$BASE_SHA"' in text or 'git checkout --force "$HEAD_SHA"' in text:
               raise SystemExit('in-place checkout remains in scale workflow')
+          if profile_expression not in text:
+              raise SystemExit('profile expression was not preserved literally')
           path.write_text(text, encoding='utf-8')
           PY
       - name: Validate and commit
@@ -39,6 +73,7 @@ jobs:
         run: |
           grep -F 'git worktree add --detach "$BASE_WORKTREE" "$BASE_SHA"' .github/workflows/scale-benchmark.yml
           grep -F 'test -s "$BASE_REPORT"' .github/workflows/scale-benchmark.yml
+          grep -F '${{ steps.profile.outputs.value }}' .github/workflows/scale-benchmark.yml
           rm .github/workflows/nxa12-scale-worktree-fix.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
