@@ -1,0 +1,108 @@
+name: NXA10 one-shot Sonar blocker fix
+
+on:
+  push:
+    branches:
+      - fix/nxa10-sonar-promotion-blockers
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: fix/nxa10-sonar-promotion-blockers
+
+      - name: Set up Java 21
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Apply exact NXA10 source and regression-test patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          sqlite_path = Path('core/src/main/java/com/nexus/persistence/sqlite/SqliteDatabase.java')
+          sqlite = sqlite_path.read_text(encoding='utf-8')
+          sqlite = sqlite.replace(
+              'import com.nexus.config.NexusPaths;\n\n',
+              'import com.nexus.config.NexusPaths;\nimport org.sqlite.SQLiteConfig;\n\n',
+              1)
+          sqlite = sqlite.replace('import java.sql.DriverManager;\n', '', 1)
+          sqlite = sqlite.replace('import java.sql.Statement;\n', '', 1)
+
+          old_open = '''    public Connection openConnection() throws SQLException {\n        Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databaseFile);\n        try (Statement statement = connection.createStatement()) {\n            statement.execute("PRAGMA foreign_keys = ON");\n            statement.execute("PRAGMA busy_timeout = " + busyTimeoutMillis);\n        } catch (SQLException exception) {\n            connection.close();\n            throw exception;\n        }\n        return connection;\n    }\n'''
+          new_open = '''    public Connection openConnection() throws SQLException {\n        SQLiteConfig config = new SQLiteConfig();\n        config.enforceForeignKeys(true);\n        config.setBusyTimeout(busyTimeoutMillis);\n        return config.createConnection("jdbc:sqlite:" + databaseFile);\n    }\n'''
+          if old_open not in sqlite:
+              raise SystemExit('SqliteDatabase.openConnection source assertion failed')
+          sqlite = sqlite.replace(old_open, new_open, 1)
+
+          old_tx = '''    private <T> T executeTransactionAttempt(SqlTransaction<T> transaction) throws SQLException {\n        Connection connection = openConnection();\n        boolean committed = false;\n        Throwable pendingFailure = null;\n        try {\n            connection.setAutoCommit(false);\n            T result = transaction.execute(connection);\n            connection.commit();\n            committed = true;\n            return result;\n        } catch (SQLException | RuntimeException failure) {\n            pendingFailure = failure;\n            rollbackPreserving(connection, failure);\n            throw failure;\n        } finally {\n            try {\n                connection.close();\n            } catch (SQLException closeFailure) {\n                if (pendingFailure != null) {\n                    pendingFailure.addSuppressed(closeFailure);\n                } else if (committed) {\n                    // Une transaction déjà commitée ne doit jamais être rejouée à\n                    // cause d'un échec de fermeture : cela violerait l'exactly-once.\n                    LOGGER.log(\n                            System.Logger.Level.WARNING,\n                            "Connexion SQLite non fermée proprement après commit; transaction non rejouée",\n                            closeFailure);\n                } else {\n                    throw closeFailure;\n                }\n            }\n        }\n    }\n'''
+          new_tx = '''    private <T> T executeTransactionAttempt(SqlTransaction<T> transaction) throws SQLException {\n        Connection connection = openConnection();\n        boolean committed = false;\n        Throwable pendingFailure = null;\n        try {\n            connection.setAutoCommit(false);\n            T result = transaction.execute(connection);\n            connection.commit();\n            committed = true;\n            return result;\n        } catch (SQLException | RuntimeException failure) {\n            pendingFailure = failure;\n            rollbackPreserving(connection, failure);\n            throw failure;\n        } finally {\n            closePreserving(connection, pendingFailure, committed);\n        }\n    }\n\n    static void closePreserving(\n            Connection connection,\n            Throwable pendingFailure,\n            boolean committed) {\n        try {\n            connection.close();\n        } catch (SQLException closeFailure) {\n            if (pendingFailure != null) {\n                pendingFailure.addSuppressed(closeFailure);\n                return;\n            }\n            if (committed) {\n                // Une transaction déjà commitée ne doit jamais être rejouée à\n                // cause d'un échec de fermeture : cela violerait l'exactly-once.\n                LOGGER.log(\n                        System.Logger.Level.WARNING,\n                        "Connexion SQLite non fermée proprement après commit; transaction non rejouée",\n                        closeFailure);\n                return;\n            }\n            // Un Error ou autre échec non capturé est déjà en train de remonter.\n            // Ne jamais le masquer par une erreur secondaire de fermeture.\n            LOGGER.log(\n                    System.Logger.Level.ERROR,\n                    "Connexion SQLite non fermée proprement; échec principal préservé",\n                    closeFailure);\n        }\n    }\n'''
+          if old_tx not in sqlite:
+              raise SystemExit('SqliteDatabase transaction source assertion failed')
+          sqlite = sqlite.replace(old_tx, new_tx, 1)
+          sqlite_path.write_text(sqlite, encoding='utf-8')
+
+          git_path = Path('core/src/main/java/com/nexus/context/source/git/LocalGitContextSourceProvider.java')
+          git_source = git_path.read_text(encoding='utf-8')
+          git_source = git_source.replace('import java.time.Instant;\n', '', 1)
+          old_timestamp = '                        Instant.ofEpochSecond(commit.getCommitTime()),\n'
+          new_timestamp = '''                        Objects.requireNonNull(\n                                commit.getCommitterIdent(),\n                                "Git commit without committer identity")\n                                .getWhenAsInstant(),\n'''
+          if old_timestamp not in git_source:
+              raise SystemExit('LocalGit timestamp source assertion failed')
+          git_source = git_source.replace(old_timestamp, new_timestamp, 1)
+          git_path.write_text(git_source, encoding='utf-8')
+
+          sqlite_test = Path('core/src/test/java/com/nexus/persistence/sqlite/SqliteDatabaseHardeningTest.java')
+          sqlite_test.write_text('''package com.nexus.persistence.sqlite;\n\nimport com.nexus.config.NexusPaths;\nimport org.junit.jupiter.api.Test;\nimport org.junit.jupiter.api.io.TempDir;\n\nimport java.lang.reflect.Proxy;\nimport java.nio.file.Path;\nimport java.sql.Connection;\nimport java.sql.ResultSet;\nimport java.sql.SQLException;\nimport java.sql.Statement;\n\nimport static org.junit.jupiter.api.Assertions.assertDoesNotThrow;\nimport static org.junit.jupiter.api.Assertions.assertEquals;\nimport static org.junit.jupiter.api.Assertions.assertSame;\n\nclass SqliteDatabaseHardeningTest {\n\n    @TempDir\n    Path temporaryDirectory;\n\n    @Test\n    void appliesBusyTimeoutAndForeignKeysThroughTypedConfiguration() throws Exception {\n        int expectedBusyTimeout = 1_234;\n        SqliteDatabase database = new SqliteDatabase(\n                new NexusPaths(temporaryDirectory.resolve("nexus-home")),\n                expectedBusyTimeout,\n                SqliteWriteRetryPolicy.defaults());\n\n        try (Connection connection = database.openConnection()) {\n            try (Statement statement = connection.createStatement();\n                 ResultSet result = statement.executeQuery("PRAGMA busy_timeout")) {\n                result.next();\n                assertEquals(expectedBusyTimeout, result.getInt(1));\n            }\n            try (Statement statement = connection.createStatement();\n                 ResultSet result = statement.executeQuery("PRAGMA foreign_keys")) {\n                result.next();\n                assertEquals(1, result.getInt(1));\n            }\n        }\n    }\n\n    @Test\n    void suppressesCloseFailureOnPrimaryFailure() {\n        SQLException primaryFailure = new SQLException("primary");\n        SQLException closeFailure = new SQLException("close");\n        Connection connection = connectionFailingOnClose(closeFailure);\n\n        assertDoesNotThrow(() -> SqliteDatabase.closePreserving(connection, primaryFailure, false));\n\n        assertEquals(1, primaryFailure.getSuppressed().length);\n        assertSame(closeFailure, primaryFailure.getSuppressed()[0]);\n    }\n\n    @Test\n    void neverEscapesCloseFailureAfterCommit() {\n        Connection connection = connectionFailingOnClose(new SQLException("close"));\n\n        assertDoesNotThrow(() -> SqliteDatabase.closePreserving(connection, null, true));\n    }\n\n    private static Connection connectionFailingOnClose(SQLException closeFailure) {\n        return (Connection) Proxy.newProxyInstance(\n                Connection.class.getClassLoader(),\n                new Class<?>[] {Connection.class},\n                (proxy, method, arguments) -> {\n                    if ("close".equals(method.getName())) {\n                        throw closeFailure;\n                    }\n                    throw new UnsupportedOperationException(method.getName());\n                });\n    }\n}\n''', encoding='utf-8')
+
+          local_git_test_path = Path('core/src/test/java/com/nexus/context/source/git/LocalGitContextSourceProviderTest.java')
+          local_git_test = local_git_test_path.read_text(encoding='utf-8')
+          local_git_test = local_git_test.replace(
+              'import org.eclipse.jgit.api.Git;\n',
+              'import org.eclipse.jgit.api.Git;\nimport org.eclipse.jgit.lib.PersonIdent;\n',
+              1)
+          local_git_test = local_git_test.replace(
+              'import java.nio.file.Path;\n',
+              'import java.nio.file.Path;\nimport java.time.Instant;\nimport java.time.ZoneId;\n',
+              1)
+          marker = '''    @Test\n    void truncatesLargeTargetDiffDeterministically() throws Exception {\n'''
+          future_test = '''    @Test\n    void preservesCommitTimestampBeyond2038() throws Exception {\n        Path target = write("src/FutureService.java", "class FutureService {}\\n");\n        Instant future = Instant.parse("2040-01-02T03:04:05Z");\n\n        try (Git git = Git.init().setDirectory(temporaryDirectory.toFile()).call()) {\n            commitAll(git, "initial future timestamp fixture");\n            Files.writeString(target, "class FutureService { void changed() {} }\\n");\n            PersonIdent identity = new PersonIdent(\n                    "NEXUS Test",\n                    "nexus@example.test",\n                    future,\n                    ZoneId.of("UTC"));\n            git.add().addFilepattern(".").call();\n            git.commit()\n                    .setMessage("future timestamp commit")\n                    .setAuthor(identity)\n                    .setCommitter(identity)\n                    .call();\n        }\n\n        GitContextResult result = new LocalGitContextSourceProvider().discover(new GitContextQuery(\n                project(),\n                "future service",\n                List.of(Path.of("src/FutureService.java")),\n                true));\n\n        String combined = result.fragments().stream()\n                .map(ContextFragment::content)\n                .reduce("", (left, right) -> left + "\\n" + right);\n        assertTrue(combined.contains(future.toString()));\n    }\n\n'''
+          if marker not in local_git_test:
+              raise SystemExit('LocalGit test insertion assertion failed')
+          local_git_test = local_git_test.replace(marker, future_test + marker, 1)
+          local_git_test_path.write_text(local_git_test, encoding='utf-8')
+          PY
+
+      - name: Run focused regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./mvnw -pl core -Dtest=SqliteDatabaseHardeningTest,LocalGitContextSourceProviderTest test
+
+      - name: Commit final patch without temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/nxa10-one-shot-sonar-fix.yml
+          git config user.name 'FTurleque'
+          git config user.email '57303912+FTurleque@users.noreply.github.com'
+          git add core/src/main/java/com/nexus/persistence/sqlite/SqliteDatabase.java \
+                  core/src/main/java/com/nexus/context/source/git/LocalGitContextSourceProvider.java \
+                  core/src/test/java/com/nexus/persistence/sqlite/SqliteDatabaseHardeningTest.java \
+                  core/src/test/java/com/nexus/context/source/git/LocalGitContextSourceProviderTest.java \
+                  .github/workflows/nxa10-one-shot-sonar-fix.yml
+          git diff --cached --check
+          git commit -m 'fix: clear Sonar promotion security and reliability blockers'
+          git push origin HEAD:fix/nxa10-sonar-promotion-blockers
