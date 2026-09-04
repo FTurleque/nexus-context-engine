@@ -23,6 +23,8 @@ public final class AssistantIntegrationGenerator {
 
     public static final String SERVER_NAME = "nexus";
     public static final String NATIVE_ACCESS_ARGUMENT = "--enable-native-access=ALL-UNNAMED";
+    private static final PrintWriter STANDARD_OUTPUT = new PrintWriter(
+            new FileOutputStream(FileDescriptor.out), true, Charset.defaultCharset());
 
     private final ObjectMapper objectMapper;
 
@@ -31,7 +33,7 @@ public final class AssistantIntegrationGenerator {
     }
 
     public static void main(String[] args) {
-        run(args, standardOutput());
+        run(args, STANDARD_OUTPUT);
     }
 
     static void run(String[] args, PrintWriter output) {
@@ -69,11 +71,6 @@ public final class AssistantIntegrationGenerator {
         }
 
         output.println(generator.render(profile, commandSpec, format));
-    }
-
-    private static PrintWriter standardOutput() {
-        return new PrintWriter(
-                new FileOutputStream(FileDescriptor.out), true, Charset.defaultCharset());
     }
 
     private String render(String profile, CommandSpec commandSpec, String format) {
