@@ -6,6 +6,7 @@ import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;
 import com.nexus.search.CandidateType;
 import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.lib.PersonIdent;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -14,6 +15,8 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -107,6 +110,39 @@ class LocalGitContextSourceProviderTest {
         assertTrue(combined.contains("localChange"));
         assertFalse(combined.contains("frontend/App.ts"));
         assertFalse(combined.contains("backend/order-app/src/OrderService.java"));
+    }
+
+    @Test
+    void preservesCommitTimestampBeyond2038() throws Exception {
+        Path target = write("src/FutureService.java", "class FutureService {}\n");
+        Instant future = Instant.parse("2040-01-02T03:04:05Z");
+
+        try (Git git = Git.init().setDirectory(temporaryDirectory.toFile()).call()) {
+            commitAll(git, "initial future timestamp fixture");
+            Files.writeString(target, "class FutureService { void changed() {} }\n");
+            PersonIdent identity = new PersonIdent(
+                    "NEXUS Test",
+                    "nexus@example.test",
+                    future,
+                    ZoneId.of("UTC"));
+            git.add().addFilepattern(".").call();
+            git.commit()
+                    .setMessage("future timestamp commit")
+                    .setAuthor(identity)
+                    .setCommitter(identity)
+                    .call();
+        }
+
+        GitContextResult result = new LocalGitContextSourceProvider().discover(new GitContextQuery(
+                project(),
+                "future service",
+                List.of(Path.of("src/FutureService.java")),
+                true));
+
+        String combined = result.fragments().stream()
+                .map(ContextFragment::content)
+                .reduce("", (left, right) -> left + "\n" + right);
+        assertTrue(combined.contains(future.toString()));
     }
 
     @Test
