@@ -1,0 +1,56 @@
+name: NXA11 bounded stdout qualification
+
+on:
+  push:
+    branches:
+      - fix/nxa11-sonar-promotion-maintainability
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: fix/nxa11-sonar-promotion-maintainability
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Bound stdout resource to main lifecycle
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('adapters/assistant-clients/src/main/java/com/nexus/integrations/AssistantIntegrationGenerator.java')
+          text = path.read_text(encoding='utf-8')
+          field = '''    private static final PrintWriter STANDARD_OUTPUT = new PrintWriter(\n            new FileOutputStream(FileDescriptor.out), true, Charset.defaultCharset());\n'''
+          if text.count(field) != 1:
+              raise SystemExit('expected process-scoped stdout field')
+          text = text.replace(field, '', 1)
+          old = '''    public static void main(String[] args) {\n        run(args, STANDARD_OUTPUT);\n    }\n'''
+          new = '''    public static void main(String[] args) {\n        try (PrintWriter output = new PrintWriter(\n                new FileOutputStream(FileDescriptor.out), true, Charset.defaultCharset())) {\n            run(args, output);\n        }\n    }\n'''
+          if text.count(old) != 1:
+              raise SystemExit('expected current main implementation')
+          text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+      - name: Run affected reactor tests
+        shell: bash
+        run: |
+          chmod +x ./mvnw
+          ./mvnw -B -pl adapters/assistant-clients -am test
+      - name: Commit qualified fix and remove one-shot workflow
+        shell: bash
+        run: |
+          rm .github/workflows/nxa11-stdout-close-qualification.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix: bound assistant stdout resource to main lifecycle'
+          git push origin HEAD:fix/nxa11-sonar-promotion-maintainability
