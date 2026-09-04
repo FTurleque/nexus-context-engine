@@ -28,6 +28,33 @@ class ProjectScanLimitsTest {
     }
 
     @Test
+    void acceptsHardLimitBoundaries() {
+        ProjectScanLimits limits = ProjectScanLimits.from(Map.of(
+                ProjectScanLimits.MAX_FILES_ENVIRONMENT_VARIABLE,
+                Integer.toString(ProjectScanLimits.HARD_MAX_FILES),
+                ProjectScanLimits.MAX_TOTAL_BYTES_ENVIRONMENT_VARIABLE,
+                Long.toString(ProjectScanLimits.HARD_MAX_TOTAL_BYTES)));
+
+        assertEquals(ProjectScanLimits.HARD_MAX_FILES, limits.maxFiles());
+        assertEquals(ProjectScanLimits.HARD_MAX_TOTAL_BYTES, limits.maxTotalBytes());
+    }
+
+    @Test
+    void rejectsLimitsBeyondHardSafetyCeilings() {
+        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(Map.of(
+                ProjectScanLimits.MAX_FILES_ENVIRONMENT_VARIABLE,
+                Integer.toString(ProjectScanLimits.HARD_MAX_FILES + 1))));
+        assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(Map.of(
+                ProjectScanLimits.MAX_TOTAL_BYTES_ENVIRONMENT_VARIABLE,
+                Long.toString(ProjectScanLimits.HARD_MAX_TOTAL_BYTES + 1))));
+
+        assertThrows(IllegalArgumentException.class, () ->
+                new ProjectScanLimits(ProjectScanLimits.HARD_MAX_FILES + 1, 1));
+        assertThrows(IllegalArgumentException.class, () ->
+                new ProjectScanLimits(1, ProjectScanLimits.HARD_MAX_TOTAL_BYTES + 1));
+    }
+
+    @Test
     void rejectsInvalidLimitsFailClosed() {
         assertThrows(IllegalArgumentException.class, () -> ProjectScanLimits.from(Map.of(
                 ProjectScanLimits.MAX_FILES_ENVIRONMENT_VARIABLE, "0")));
