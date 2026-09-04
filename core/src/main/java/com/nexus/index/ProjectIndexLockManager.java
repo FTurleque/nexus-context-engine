@@ -51,6 +51,7 @@ public final class ProjectIndexLockManager {
         }
 
         IndexingCapacityGate.Permit capacityPermit = IndexingCapacityGate.acquireShared();
+        boolean permitTransferred = false;
         try {
             Path locksDirectory = paths.locksDirectory();
             paths.ensurePrivateDirectory(locksDirectory);
@@ -58,10 +59,13 @@ public final class ProjectIndexLockManager {
             Path lockPath = paths.projectIndexLock(projectId);
             FileChannel channel = openHardenedChannel(lockPath);
             FileLock fileLock = acquireFileLock(channel, projectId);
-            return new LockHandle(channel, fileLock, capacityPermit);
-        } catch (IOException | RuntimeException | Error failure) {
-            capacityPermit.close();
-            throw failure;
+            LockHandle handle = new LockHandle(channel, fileLock, capacityPermit);
+            permitTransferred = true;
+            return handle;
+        } finally {
+            if (!permitTransferred) {
+                capacityPermit.close();
+            }
         }
     }
 

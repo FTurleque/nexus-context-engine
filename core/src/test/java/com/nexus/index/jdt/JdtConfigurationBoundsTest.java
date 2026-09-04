@@ -44,7 +44,7 @@ class JdtConfigurationBoundsTest {
         assertThrows(IllegalArgumentException.class, () ->
                 JdtLanguageServerCodeIntelligenceProvider.parseBoundedPositiveLong(
                         JdtLanguageServerCodeIntelligenceProvider.TIMEOUT_ENVIRONMENT_VARIABLE,
-                        Long.toString(JdtLanguageServerCodeIntelligenceProvider.MAX_TIMEOUT_SECONDS + 1L),
+                        oversizedTimeout,
                         120L,
                         JdtLanguageServerCodeIntelligenceProvider.MAX_TIMEOUT_SECONDS));
     }
@@ -62,7 +62,7 @@ class JdtConfigurationBoundsTest {
         assertThrows(IllegalArgumentException.class, () ->
                 JdtLanguageServerCodeIntelligenceProvider.parseBoundedPositiveInt(
                         JdtLanguageServerCodeIntelligenceProvider.MAX_SYMBOLS_ENVIRONMENT_VARIABLE,
-                        Integer.toString(JdtLanguageServerCodeIntelligenceProvider.MAX_SYMBOLS + 1),
+                        oversizedSymbols,
                         250,
                         JdtLanguageServerCodeIntelligenceProvider.MAX_SYMBOLS));
     }

@@ -26,6 +26,7 @@ import java.util.UUID;
 public final class NexusCli {
 
     private static final String CONTEXT_COMMAND = "context";
+    private static final String FEDERATED_CONTEXT_COMMAND = "context-federated";
 
     static final int EXIT_SUCCESS = 0;
     static final int EXIT_RUNTIME_ERROR = 1;
@@ -33,7 +34,7 @@ public final class NexusCli {
 
     private static final Set<String> COMMANDS = Set.of(
             "project", "index", "minos-import", "search", "search-federated",
-            CONTEXT_COMMAND, "context-federated", "inspect");
+            CONTEXT_COMMAND, FEDERATED_CONTEXT_COMMAND, "inspect");
 
     private NexusCli() {
     }
@@ -85,7 +86,7 @@ public final class NexusCli {
             case "search" -> handleSearch(args, application, renderer);
             case "search-federated" -> handleFederatedSearch(args, application, renderer);
             case CONTEXT_COMMAND -> handleContext(args, application, renderer);
-            case "context-federated" -> handleFederatedContext(args, application, renderer);
+            case FEDERATED_CONTEXT_COMMAND -> handleFederatedContext(args, application, renderer);
             case "inspect" -> handleInspect(args, application, renderer);
             default -> throw new IllegalStateException("Commande validée mais non routée : " + args[0]);
         }
@@ -214,7 +215,7 @@ public final class NexusCli {
                     "Usage : nexus context-federated <projet1,projet2,...> <requête> [--budget N] [--explain] [--json]");
         }
         List<UUID> projectIds = resolveProjectScope(application, args[1]);
-        ParsedContext parsed = parseContext(args, 2, "context-federated");
+        ParsedContext parsed = parseContext(args, 2, FEDERATED_CONTEXT_COMMAND);
         NexusApplication.FederatedContextOperation operation = application.contextAcrossProjects(
                 projectIds, parsed.query(), parsed.budget(), Set.of(), Map.of(), parsed.explain());
         renderer.renderFederatedContext(
