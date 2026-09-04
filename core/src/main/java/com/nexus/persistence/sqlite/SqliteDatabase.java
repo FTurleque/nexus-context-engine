@@ -1,6 +1,7 @@
 package com.nexus.persistence.sqlite;
 
 import com.nexus.config.NexusPaths;
+import org.sqlite.SQLiteConnection;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -44,14 +45,23 @@ public final class SqliteDatabase {
 
     public Connection openConnection() throws SQLException {
         Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databaseFile);
-        try (Statement statement = connection.createStatement()) {
-            statement.execute("PRAGMA foreign_keys = ON");
-            statement.execute("PRAGMA busy_timeout = " + busyTimeoutMillis);
-        } catch (SQLException exception) {
-            connection.close();
-            throw exception;
+        try {
+            try (Statement statement = connection.createStatement()) {
+                statement.execute("PRAGMA foreign_keys = ON");
+            }
+            if (!(connection instanceof SQLiteConnection sqliteConnection)) {
+                throw new SQLException("Unexpected JDBC connection type for SQLite database");
+            }
+            sqliteConnection.setBusyTimeout(busyTimeoutMillis);
+            return connection;
+        } catch (SQLException | RuntimeException failure) {
+            try {
+                connection.close();
+            } catch (SQLException closeFailure) {
+                failure.addSuppressed(closeFailure);
+            }
+            throw failure;
         }
-        return connection;
     }
 
     <T> T writeTransaction(String operation, SqlTransaction<T> transaction) throws SQLException {
@@ -98,22 +108,36 @@ public final class SqliteDatabase {
             rollbackPreserving(connection, failure);
             throw failure;
         } finally {
-            try {
-                connection.close();
-            } catch (SQLException closeFailure) {
-                if (pendingFailure != null) {
-                    pendingFailure.addSuppressed(closeFailure);
-                } else if (committed) {
-                    // Une transaction déjà commitée ne doit jamais être rejouée à
-                    // cause d'un échec de fermeture : cela violerait l'exactly-once.
-                    LOGGER.log(
-                            System.Logger.Level.WARNING,
-                            "Connexion SQLite non fermée proprement après commit; transaction non rejouée",
-                            closeFailure);
-                } else {
-                    throw closeFailure;
-                }
+            closePreserving(connection, pendingFailure, committed);
+        }
+    }
+
+    static void closePreserving(
+            Connection connection,
+            Throwable pendingFailure,
+            boolean committed) {
+        try {
+            connection.close();
+        } catch (SQLException closeFailure) {
+            if (pendingFailure != null) {
+                pendingFailure.addSuppressed(closeFailure);
+                return;
             }
+            if (committed) {
+                // Une transaction déjà commitée ne doit jamais être rejouée à
+                // cause d'un échec de fermeture : cela violerait l'exactly-once.
+                LOGGER.log(
+                        System.Logger.Level.WARNING,
+                        "Connexion SQLite non fermée proprement après commit; transaction non rejouée",
+                        closeFailure);
+                return;
+            }
+            // Un Error ou autre échec non capturé est déjà en train de remonter.
+            // Ne jamais le masquer par une erreur secondaire de fermeture.
+            LOGGER.log(
+                    System.Logger.Level.ERROR,
+                    "Connexion SQLite non fermée proprement; échec principal préservé",
+                    closeFailure);
         }
     }
 

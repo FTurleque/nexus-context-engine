@@ -111,7 +111,10 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
                         .toList();
                 CommitSummary summary = new CommitSummary(
                         commit.getId().abbreviate(8).name(),
-                        Instant.ofEpochSecond(commit.getCommitTime()),
+                        Objects.requireNonNull(
+                                commit.getCommitterIdent(),
+                                "Git commit without committer identity")
+                                .getWhenAsInstant(),
                         commit.getShortMessage(),
                         changedProjectPaths);
                 related.add(summary);

@@ -44,6 +44,12 @@ Rapport :
 target/scale-benchmark.json
 ```
 
+Pour une pull request, le workflow conserve aussi le rapport SQLite du commit de base :
+
+```text
+target/scale-benchmark-base.json
+```
+
 Le test JUnit est opt-in. Le workflow possède un timeout de job de 45 minutes et impose aussi un timeout JUnit de 20 minutes au test afin qu'une anomalie du scénario concurrent ne puisse pas bloquer indéfiniment la qualification.
 
 ## Profils
@@ -174,6 +180,8 @@ Chaque rapport inclut :
 
 Les latences GitHub-hosted runners sont des mesures de régression, pas un benchmark matériel absolu. Une décision d'architecture doit comparer plusieurs runs du même protocole et tenir compte de l'environnement enregistré.
 
+La population SQLite est particulièrement sensible au débit et à la contention du stockage du runner. Pour une pull request, le workflow mesure donc le commit candidat puis **le commit de base sur le même runner**, avec le même profil. Le gate compare les populations SQLite candidat/base dans ce même environnement ; cela évite de transformer une variation du stockage GitHub-hosted en fausse régression applicative.
+
 ## Budgets de régression
 
 Deux runs full de calibration sur le même head ont servi à fixer les budgets. Le workflow les applique désormais comme **gate**.
@@ -190,8 +198,18 @@ Deux runs full de calibration sur le même head ont servi à fixer les budgets. 
 Autres budgets SQLite :
 
 - 100 fichiers ciblés : <= 30 ms p95 ;
-- population : <= 0,7 s / 2,5 s / 10 s / 20 s selon le palier ;
+- population sur PR : le candidat ne doit pas dépasser le maximum entre `base × 1,20` et `base + jitter`, avec des jitters de 0,2 s / 0,5 s / 1,5 s / 3 s selon le palier ;
+- plafond de sûreté population, y compris hors PR : 1,4 s / 5 s / 20 s / 40 s selon le palier ;
 - base 1M : <= 650 MiB.
+
+La comparaison relative ne remplace pas le plafond absolu : une dérive commune extrême du candidat et de la base reste donc bloquée. Les budgets p95 de requête restent strictement absolus.
+
+Calibration NXA10 du gate relatif, sur un même runner et en alternance base/candidat à 100k :
+
+- base : 1832 ms puis 1826 ms ;
+- candidat : 1892 ms puis 1878 ms.
+
+Cette calibration a confirmé un écart applicatif d'environ 3 %, alors que des exécutions isolées sur des runners hébergés différents avaient varié jusqu'à ~3,4 s. Le gate relatif vise précisément à séparer ces deux effets.
 
 ### Fédération
 
@@ -213,7 +231,7 @@ Indexation des 100 projets synthétiques : <= 6 s.
 - durée full : <= 180 s ;
 - aucune erreur de lecture concurrente sous DELETE ou WAL.
 
-Les budgets sont volontairement au-dessus des maxima de calibration pour absorber le bruit des runners, tout en détectant une régression algorithmique matérielle.
+Les budgets sont volontairement au-dessus des maxima de calibration pour absorber le bruit des runners, tout en détectant une régression algorithmique matérielle. Pour la population SQLite, cette marge est désormais combinée à une comparaison base/candidat sur le même runner.
 
 ## Décision FTS5 / trigram
 
