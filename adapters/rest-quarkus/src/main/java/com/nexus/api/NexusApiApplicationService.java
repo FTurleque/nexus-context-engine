@@ -11,6 +11,7 @@ import com.nexus.ranking.RankedCandidate;
 import com.nexus.search.CandidateType;
 import com.nexus.search.FederatedSearchHit;
 import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.io.IOException;
@@ -141,9 +142,18 @@ public class NexusApiApplicationService {
         return application.readiness();
     }
 
+    @PreDestroy
+    void closeApplication() {
+        try {
+            application.close();
+        } catch (IOException exception) {
+            throw new IllegalStateException("Impossible de fermer les ressources NEXUS REST", exception);
+        }
+    }
+
     private static NexusApplication initializeApplication() {
         try {
-            return NexusApplication.create(NexusPaths.fromEnvironment());
+            return NexusApplication.createLongLived(NexusPaths.fromEnvironment());
         } catch (SQLException | IOException exception) {
             throw new IllegalStateException("Impossible d'initialiser NEXUS pour l'adaptateur REST", exception);
         }

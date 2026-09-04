@@ -45,7 +45,39 @@ class NexusRestSecurityTest {
     }
 
     @Test
-    void scopesLoopbackForwardToDockerAndKeepsRemoteHttpsModesExplicit() {
+    void dockerLoopbackForwardRequiresRuntimeAndExplicitLoopbackDeclaration() {
+        String previousRuntime = System.getProperty(NexusRestSecurity.RUNTIME_PROPERTY);
+        String previousForward = System.getProperty(NexusRestSecurity.DOCKER_HOST_FORWARD_ADDRESS_PROPERTY);
+        try {
+            System.clearProperty(NexusRestSecurity.RUNTIME_PROPERTY);
+            System.clearProperty(NexusRestSecurity.DOCKER_HOST_FORWARD_ADDRESS_PROPERTY);
+            assertFalse(NexusRestSecurity.isDockerLoopbackForward("loopback-forward"));
+
+            System.setProperty(NexusRestSecurity.RUNTIME_PROPERTY, "docker");
+            assertFalse(NexusRestSecurity.isDockerLoopbackForward("loopback-forward"),
+                    "Docker without an explicit host-forward declaration must fail closed");
+
+            System.setProperty(NexusRestSecurity.DOCKER_HOST_FORWARD_ADDRESS_PROPERTY, "127.0.0.1");
+            assertTrue(NexusRestSecurity.isDockerLoopbackForward("loopback-forward"));
+
+            System.setProperty(NexusRestSecurity.DOCKER_HOST_FORWARD_ADDRESS_PROPERTY, "localhost");
+            assertTrue(NexusRestSecurity.isDockerLoopbackForward("loopback-forward"));
+
+            System.setProperty(NexusRestSecurity.DOCKER_HOST_FORWARD_ADDRESS_PROPERTY, "0.0.0.0");
+            assertFalse(NexusRestSecurity.isDockerLoopbackForward("loopback-forward"));
+
+            System.setProperty(NexusRestSecurity.DOCKER_HOST_FORWARD_ADDRESS_PROPERTY, "127.0.0.1");
+            System.setProperty(NexusRestSecurity.RUNTIME_PROPERTY, "native");
+            assertFalse(NexusRestSecurity.isDockerLoopbackForward("loopback-forward"));
+            assertFalse(NexusRestSecurity.isDockerLoopbackForward("direct-https"));
+        } finally {
+            restoreProperty(NexusRestSecurity.RUNTIME_PROPERTY, previousRuntime);
+            restoreProperty(NexusRestSecurity.DOCKER_HOST_FORWARD_ADDRESS_PROPERTY, previousForward);
+        }
+    }
+
+    @Test
+    void keepsRemoteHttpsModesExplicit() {
         assertTrue(NexusRestSecurity.isSupportedRemoteExposureMode("loopback-forward"));
         assertTrue(NexusRestSecurity.isSupportedRemoteExposureMode("reverse-proxy-https"));
         assertTrue(NexusRestSecurity.isSupportedRemoteExposureMode("direct-https"));
@@ -55,23 +87,6 @@ class NexusRestSecurityTest {
         assertTrue(NexusRestSecurity.isSecureNonLoopbackExposureMode("reverse-proxy-https"));
         assertTrue(NexusRestSecurity.isSecureNonLoopbackExposureMode("direct-https"));
         assertFalse(NexusRestSecurity.isSecureNonLoopbackExposureMode("plain-http"));
-
-        String previous = System.getProperty(NexusRestSecurity.RUNTIME_PROPERTY);
-        try {
-            System.clearProperty(NexusRestSecurity.RUNTIME_PROPERTY);
-            assertFalse(NexusRestSecurity.isDockerLoopbackForward("loopback-forward"));
-            System.setProperty(NexusRestSecurity.RUNTIME_PROPERTY, "native");
-            assertFalse(NexusRestSecurity.isDockerLoopbackForward("loopback-forward"));
-            System.setProperty(NexusRestSecurity.RUNTIME_PROPERTY, "docker");
-            assertTrue(NexusRestSecurity.isDockerLoopbackForward("loopback-forward"));
-            assertFalse(NexusRestSecurity.isDockerLoopbackForward("direct-https"));
-        } finally {
-            if (previous == null) {
-                System.clearProperty(NexusRestSecurity.RUNTIME_PROPERTY);
-            } else {
-                System.setProperty(NexusRestSecurity.RUNTIME_PROPERTY, previous);
-            }
-        }
     }
 
     @Test
@@ -86,11 +101,15 @@ class NexusRestSecurityTest {
             assertThrows(IllegalArgumentException.class,
                     () -> NexusRestProjectRootPolicy.requireAllowed(outside));
         } finally {
-            if (previous == null) {
-                System.clearProperty(NexusRestProjectRootPolicy.ROOTS_PROPERTY);
-            } else {
-                System.setProperty(NexusRestProjectRootPolicy.ROOTS_PROPERTY, previous);
-            }
+            restoreProperty(NexusRestProjectRootPolicy.ROOTS_PROPERTY, previous);
+        }
+    }
+
+    private static void restoreProperty(String name, String value) {
+        if (value == null) {
+            System.clearProperty(name);
+        } else {
+            System.setProperty(name, value);
         }
     }
 }

@@ -1,0 +1,124 @@
+name: Filesystem Semantics Qualification
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - 'core/src/main/java/com/nexus/config/NexusPaths.java'
+      - 'core/src/main/java/com/nexus/index/ProjectIndexLockManager.java'
+      - 'core/src/main/java/com/nexus/security/ProjectPathGuard.java'
+      - 'core/src/main/java/com/nexus/security/SafeFileIO.java'
+      - 'core/src/test/java/com/nexus/index/ProjectIndexLockManagerTest.java'
+      - 'core/src/test/java/com/nexus/index/ProjectIndexLockProbe.java'
+      - 'core/src/test/java/com/nexus/security/FilesystemSemanticsQualificationTest.java'
+      - 'core/src/test/java/com/nexus/security/SafeFileIOTest.java'
+      - 'docs/developer/filesystem-support.md'
+      - 'docs/developer/current-limitations.md'
+      - 'docs/adr/0047-borner-le-support-filesystem-aux-filesystems-locaux-qualifies.md'
+      - '.github/workflows/filesystem-semantics-qualification.yml'
+  push:
+    branches:
+      - develop
+    paths:
+      - 'core/src/main/java/com/nexus/config/NexusPaths.java'
+      - 'core/src/main/java/com/nexus/index/ProjectIndexLockManager.java'
+      - 'core/src/main/java/com/nexus/security/ProjectPathGuard.java'
+      - 'core/src/main/java/com/nexus/security/SafeFileIO.java'
+      - 'core/src/test/java/com/nexus/index/ProjectIndexLockManagerTest.java'
+      - 'core/src/test/java/com/nexus/index/ProjectIndexLockProbe.java'
+      - 'core/src/test/java/com/nexus/security/FilesystemSemanticsQualificationTest.java'
+      - 'core/src/test/java/com/nexus/security/SafeFileIOTest.java'
+      - 'docs/developer/filesystem-support.md'
+      - 'docs/developer/current-limitations.md'
+      - 'docs/adr/0047-borner-le-support-filesystem-aux-filesystems-locaux-qualifies.md'
+      - '.github/workflows/filesystem-semantics-qualification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    name: Local filesystem semantics (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux
+          - os: windows-latest
+            label: windows
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Java 21
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Record environment (Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p core/target
+          {
+            echo "runner.os=${RUNNER_OS}"
+            echo "runner.arch=${RUNNER_ARCH}"
+            uname -a
+            df -T . || true
+            java -version 2>&1
+          } > core/target/filesystem-qualification-environment.txt
+
+      - name: Record environment (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path core/target | Out-Null
+          @(
+            "runner.os=$env:RUNNER_OS",
+            "runner.arch=$env:RUNNER_ARCH",
+            "os=$([System.Environment]::OSVersion.VersionString)",
+            "filesystem=$((Get-Volume -DriveLetter ((Get-Location).Drive.Name) -ErrorAction SilentlyContinue).FileSystem)",
+            "java=$(& java -version 2>&1 | Out-String)"
+          ) | Set-Content -LiteralPath core/target/filesystem-qualification-environment.txt
+
+      - name: Run filesystem qualification (Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          chmod +x ./mvnw
+          ./mvnw -B -pl core \
+            -Dtest=ProjectIndexLockManagerTest,SafeFileIOTest,FilesystemSemanticsQualificationTest \
+            -Djunit.jupiter.execution.timeout.test.method.default=2m \
+            test
+
+      - name: Run filesystem qualification (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & .\mvnw.cmd -B -pl core `
+            '-Dtest=ProjectIndexLockManagerTest,SafeFileIOTest,FilesystemSemanticsQualificationTest' `
+            '-Djunit.jupiter.execution.timeout.test.method.default=2m' `
+            test
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Retain qualification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nexus-filesystem-semantics-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}-${{ matrix.label }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            core/target/filesystem-qualification-environment.txt
+            core/target/surefire-reports/**

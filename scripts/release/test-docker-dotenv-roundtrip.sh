@@ -80,3 +80,53 @@ if value != expected_config_value:
         f'Actual model:   {value!r}')
 print('NEXUS Docker Compose dotenv literal serialization PASS')
 PY
+
+# The official Compose template must use one deployment source of truth for both
+# the Docker host bind and the declaration consumed by the in-container guard.
+# This is what makes the default safe and makes an explicit remote bind visible
+# to NEXUS instead of pretending it is a loopback-forward deployment.
+compose_template="$repo/packaging/docker/docker-compose.yml.template"
+rest_token='6df1462d571a6925e3bc3934ee10c6c55a965116fb47e2bc4db77ac7a5d69d34'
+NEXUS_REST_API_TOKEN="$rest_token" \
+  docker compose -f "$compose_template" config --format json > "$root/compose-default.json"
+NEXUS_REST_API_TOKEN="$rest_token" NEXUS_DOCKER_BIND_ADDRESS='0.0.0.0' \
+  docker compose -f "$compose_template" config --format json > "$root/compose-remote.json"
+
+python3 - "$root" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+def load(name):
+    return json.loads((root / name).read_text(encoding='utf-8'))['services']['nexus']
+
+def host_ip(service):
+    ports = service.get('ports', [])
+    if len(ports) != 1:
+        raise SystemExit(f'Expected exactly one REST port mapping, got {ports!r}')
+    port = ports[0]
+    if isinstance(port, dict):
+        return port.get('host_ip')
+    # Older Compose canonical JSON can keep the compact string form.
+    return str(port).split(':', 1)[0]
+
+def declared_forward(service):
+    environment = service.get('environment', {})
+    if isinstance(environment, list):
+        values = dict(item.split('=', 1) for item in environment if '=' in item)
+        return values.get('NEXUS_DOCKER_HOST_FORWARD_ADDRESS')
+    return environment.get('NEXUS_DOCKER_HOST_FORWARD_ADDRESS')
+
+def check(service, expected):
+    actual_bind = host_ip(service)
+    actual_declared = declared_forward(service)
+    if actual_bind != expected or actual_declared != expected:
+        raise SystemExit(
+            'Docker loopback-forward Compose contract diverged: '
+            f'expected bind/declaration={expected!r}, bind={actual_bind!r}, declaration={actual_declared!r}')
+
+check(load('compose-default.json'), '127.0.0.1')
+check(load('compose-remote.json'), '0.0.0.0')
+print('NEXUS Docker Compose host-forward declaration PASS')
+PY

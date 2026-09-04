@@ -1,5 +1,8 @@
 package com.nexus.api;
 
+import com.nexus.context.ContextBudgetPolicy;
+import com.nexus.search.QueryPolicy;
+import com.nexus.search.ResultLimitPolicy;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import org.junit.jupiter.api.Test;
@@ -7,15 +10,15 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
-import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.blankOrNullString;
 
 @QuarkusTest
 class NexusResourceTest {
@@ -120,6 +123,43 @@ class NexusResourceTest {
 
         given()
                 .contentType(ContentType.JSON)
+                .body(Map.of(
+                        "query", "OrderService",
+                        "tokenBudget", 200,
+                        "constraints", Map.of("language", "java")))
+                .when()
+                .post("/api/v1/projects/{projectId}/context", projectId)
+                .then()
+                .statusCode(400)
+                .body("error", equalTo("bad_request"))
+                .body("message", containsString("constraints are not supported"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body(Map.of(
+                        "projectIds", List.of(projectId),
+                        "query", "OrderService",
+                        "limit", ResultLimitPolicy.MAX_RESULT_LIMIT + 1))
+                .when()
+                .post("/api/v1/federated/search")
+                .then()
+                .statusCode(400)
+                .body("error", equalTo("bad_request"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body(Map.of(
+                        "projectIds", List.of(projectId),
+                        "query", "OrderService",
+                        "tokenBudget", ContextBudgetPolicy.MAX_CONTEXT_TOKEN_BUDGET + 1))
+                .when()
+                .post("/api/v1/federated/context")
+                .then()
+                .statusCode(400)
+                .body("error", equalTo("bad_request"));
+
+        given()
+                .contentType(ContentType.JSON)
                 .body(Map.of("query", " "))
                 .when()
                 .post("/api/v1/projects/{projectId}/search", projectId)
@@ -127,18 +167,30 @@ class NexusResourceTest {
                 .statusCode(400)
                 .body("error", equalTo("bad_request"));
 
+        String oversizedUtf8 = "é".repeat(QueryPolicy.MAX_QUERY_UTF8_BYTES / 2 + 1);
         given()
+                .contentType(ContentType.JSON)
+                .body(Map.of("query", oversizedUtf8, "limit", 1))
                 .when()
-                .get("/q/health/ready")
+                .post("/api/v1/projects/{projectId}/search", projectId)
                 .then()
-                .statusCode(200)
-                .body("status", equalTo("UP"));
+                .statusCode(400)
+                .body("error", equalTo("bad_request"))
+                .body("message", containsString("octets UTF-8"));
 
         given()
+                .contentType(ContentType.JSON)
+                .body(Map.of("query", oversizedUtf8, "tokenBudget", 100))
                 .when()
-                .get("/q/metrics")
+                .post("/api/v1/projects/{projectId}/context", projectId)
                 .then()
-                .statusCode(200)
-                .body(not(blankOrNullString()));
+                .statusCode(400)
+                .body("error", equalTo("bad_request"))
+                .body("message", containsString("octets UTF-8"));
+
+        // Health et métriques vivent désormais uniquement sur l'interface de management
+        // loopback dédiée ; ils ne doivent plus être publiés par le listener applicatif.
+        given().when().get("/q/health/ready").then().statusCode(404);
+        given().when().get("/q/metrics").then().statusCode(404);
     }
 }

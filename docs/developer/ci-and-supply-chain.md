@@ -1,234 +1,158 @@
 # CI, couverture et supply-chain
 
-Ce document décrit les gates de qualité et de sécurité applicables à NEXUS 0.2.0 après la consolidation post-audit de l'issue #48 / PR #49.
+Ce document décrit le contrat courant de qualification et de publication de NEXUS 0.2.0 après les campagnes **NXA3 + NXA4 + NXA7**. Le code et les workflows versionnés restent l'autorité exécutable.
 
-## Objectifs
+## Branches et exact-head
 
-La CI doit empêcher l'intégration silencieuse de régressions de :
+`develop` est la branche d'intégration. `main` est la branche de release. Une promotion vers `main` n'est autorisée qu'après qualification du **HEAD exact** candidat.
 
-1. build, tests ou distribution sur les plateformes supportées ;
-2. couverture du cœur ;
-3. vulnérabilités du reactor Maven ;
-4. sécurité de l'image Docker ;
-5. inventaire de conformité (licence, notices tierces, SBOM) ;
-6. comportement Windows/Docker de l'installateur et des launchers ;
-7. passage à l'échelle sur SQLite, graphe et contexte fédéré.
+NEXUS CI et CodeQL checkoutent explicitement `github.event.pull_request.head.sha` sur pull request. CodeQL vérifie ensuite que `git rev-parse HEAD` correspond au SHA attendu.
 
-Les workflows GitHub Actions utilisent des **SHA de commit immuables** pour les Actions contrôlées par le dépôt. Les commentaires de version (`# vX.Y.Z`) sont informatifs ; le SHA est l'autorité exécutée.
+La protection GitHub de `develop` est un contrôle de gouvernance distinct. Le contrat attendu est documenté dans [`branch-governance.md`](branch-governance.md). Tant que `develop` retourne `protected=false`, #130 reste ouvert.
+
+Tant que ce contrôle repository-admin n'est pas actif, les workflows versionnés conservent une défense en profondeur sur les pushes directs `develop` : NEXUS CI, CodeQL et OSV écoutent directement la branche ; les gates Docker, benchmarks et Windows sont réutilisés par des callers dédiés avec leurs filtres de chemins.
 
 ## NEXUS CI
 
-`.github/workflows/ci.yml` qualifie les pull requests vers `main` et les pushes configurés :
+`.github/workflows/ci.yml` qualifie `develop` et `main` :
 
-- **Windows gate** : Java 24, script de qualification locale ;
-- **Linux reactor Maven build** : Java 21, reactor complet, distribution autonome et artefacts de conformité.
+- Windows : Java 24 et qualification locale ;
+- Linux : Java 21, **Maven 3.9.16**, reactor complet, tests, distribution, JaCoCo, SBOM et notices ;
+- vérification explicite des ancres d'intégrité Maven/JDT LS ;
+- vérification des contrats documentaires machine-vérifiables **avant** le reactor.
 
-Le reactor porte le gate JaCoCo, les tests unitaires/intégration et les contrôles Maven. Les surfaces REST et MCP sont couvertes par les modules du reactor.
+Le gate documentaire contrôle notamment les invariants NXA4 :
 
-### Couverture JaCoCo
+- listener management `127.0.0.1:9000` séparé du listener API ;
+- politique Ollama distante et opt-in HTTP ;
+- redaction de secrets + profil `content-v2` ;
+- JDT LS : 16 MiB / 64 KiB / 8 KiB / 256 messages ;
+- maximum 8 tâches externes actives ;
+- Lucene : 128 termes analysés uniques ;
+- stockage POSIX : 0700/0600 ;
+- `constraints` non supportées rejetées ;
+- installateur JDT LS vérifié contre l'ancre repository-pinned ;
+- noms de providers et colonne `script_sha256` de la documentation de schéma.
 
-Le gate de couverture s'applique au module `core`.
-
-| Compteur | Baseline historique qualifiée | Minimum bloquant |
-|---|---:|---:|
-| lignes | 77,07 % | 70 % |
-| branches | 58,46 % | 50 % |
-
-Les seuils sont des planchers de non-régression. Ils ne doivent pas être abaissés pour contourner un défaut de tests.
-
-Le rapport XML est produit dans `core/target/site/jacoco/jacoco.xml`.
-
-## Vulnérabilités — OSV-Scanner
-
-`.github/workflows/osv-scanner.yml` combine désormais deux protections complémentaires.
-
-### Delta PR
-
-Sur une pull request vers `main`, le workflow réutilisable OSV compare la base et le changement et bloque l'introduction d'une **nouvelle vulnérabilité**.
-
-### SBOM agrégé du reactor
-
-Le workflow construit en plus le reactor Maven avec Java 21 et génère :
-
-```text
-target/sbom/bom.json
-```
-
-Le SBOM CycloneDX agrégé est vérifié comme non trivial, copié sous `nexus.cdx.json`, publié temporairement comme artefact puis scanné par OSV avec `fail-on-vuln: true`.
-
-Cette étape est l'autorité pour la couverture complète du reactor et de ses dépendances transitives matérialisées dans le SBOM. Elle remplace l'ancienne formulation « scan courant non bloquant » qui ne correspond plus à la politique active.
-
-## CodeQL
-
-`.github/workflows/codeql.yml` analyse Java/Kotlin avec CodeQL et les queries `security-extended` selon les événements configurés dans le workflow.
-
-Un finding CodeQL doit être trié avant merge lorsqu'il est exposé comme bloquant. Les suppressions doivent être explicites et justifiées.
-
-## Scale Benchmark
-
-`.github/workflows/scale-benchmark.yml` exécute un benchmark hermétique sur trois axes :
-
-- SQLite/recherches et concurrence ;
-- projections et voisinages de graphe ;
-- coût de travail du contexte fédéré.
-
-Le profil automatique de PR utilise la taille `ci`; le profil `full` reste disponible en déclenchement manuel lorsque nécessaire.
-
-Le gate produit et vérifie :
-
-```text
-target/scale-benchmark.json
-target/graph-scale-benchmark.json
-target/federated-budget-scale-benchmark.json
-```
-
-Les budgets sont des garde-fous de régression. Un outlier d'infrastructure peut justifier un rerun exact-head documenté, mais ne justifie pas d'assouplir le budget sans analyse.
+Les actions GitHub contrôlées par le dépôt sont référencées par SHA immuable.
 
 ## Windows Installer
 
-`.github/workflows/windows-installer.yml` qualifie l'artefact Windows self-contained :
+`.github/workflows/windows-installer.yml` est un gate exact-head de packaging et de comportement Windows. Ses filtres PR couvrent les sources qui peuvent modifier le payload distribué :
 
-- échappement des configurations `.cmd` générées ;
-- construction de la distribution Windows ;
-- construction d'un setup smoke isolé ;
-- installation, exécution et désinstallation smoke ;
-- construction du setup production ;
-- vérification et conservation des artefacts.
+- `core/src/**` ;
+- `adapters/**` ;
+- POM, wrapper Maven et configuration `.mvn/**` ;
+- scripts/distribution/packaging Windows.
 
-Le smoke valide le **profil réellement installé** : REST reste optionnel dans le profil natif recommandé. Les launchers portables complets sont qualifiés au niveau de la distribution, sans forcer l'installation d'un composant optionnel.
+Une modification Java ordinaire ne peut donc plus contourner le smoke du ZIP self-contained et de l'installateur Windows avant intégration dans `develop`.
 
-## Docker Distribution
+NXA7 a également durci le bootstrap `mvnw.cmd` après qu'un runner Windows a reçu un HTTP 403 via `Invoke-WebRequest` sur Maven Central. Le wrapper :
 
-`.github/workflows/docker-distribution.yml` qualifie la parité et la supply-chain conteneur.
+1. conserve Maven **3.9.16** comme version de bootstrap ;
+2. préfère `curl.exe` avec suivi des redirections et retries ;
+3. bascule vers Windows PowerShell avec un User-Agent explicite si `curl.exe` est absent ou échoue ;
+4. refuse toujours l'archive si son SHA-512 ne correspond pas à l'ancre versionnée dans `config/tool-integrity.properties` ;
+5. n'extrait Maven qu'après cette vérification.
 
-### Runtime
+La résilience réseau ne modifie donc pas la racine de confiance du bootstrap.
 
-Le job principal vérifie :
+## CodeQL, OSV et SonarCloud
 
-- round-trip littéral de la configuration dotenv/Compose ;
-- build de l'image exacte ;
-- smoke CLI ;
-- smoke MCP STDIO ;
-- smoke REST sur port hôte personnalisé ;
-- fallback de payload installé.
+- CodeQL : Java/Kotlin `security-extended`, contrat exact-head ;
+- OSV : delta PR + scan bloquant du SBOM CycloneDX agrégé ;
+- reusable workflow OSV épinglé au SHA qui échoue fermé lorsqu'un scan est incomplet ;
+- SonarCloud : Quality Gate externe sur les changements de PR.
 
-### Vulnérabilités et SBOM image
+Un check externe n'apparaît pas nécessairement dans la liste des workflows GitHub Actions ; la qualification finale d'une PR doit donc regarder les **check-runs du commit**, pas seulement les workflow runs.
 
-Trivy produit :
+## Benchmarks
+
+`scale-benchmark.yml` couvre :
+
+- SQLite ;
+- graphe ;
+- fédération ;
+- découverte native filesystem sous `ContextDiscoveryLimits`.
+
+Le benchmark natif crée un corpus hermétique de 1 000 skills et vérifie frontière exacte, compteurs, déterminisme et durée. Voir [`native-context-discovery-limits.md`](native-context-discovery-limits.md).
+
+`scanner-corpus-benchmark.yml` qualifie séparément le comportement/performance du scanner sur son corpus dédié. Les tests du reactor couvrent en plus l'explosion de répertoires vides et le batching mémoire des index dérivés ; voir [`indexing-corpus-limits.md`](indexing-corpus-limits.md).
+
+La borne Lucene de 128 termes est couverte par un test de non-régression du reactor plutôt que par une baisse de seuil benchmark.
+
+## Docker Distribution : construire une fois
+
+`.github/workflows/docker-distribution.yml` ne publie rien dans GHCR. Il construit l'image une seule fois et exécute sur cette image les smokes CLI/MCP/REST, Trivy, SBOM et gates de vulnérabilités.
+
+Les images de base builder/runtime sont épinglées par digest. Les Dockerfiles n'exécutent **aucun `apt-get`** après ces bases :
+
+- le builder utilise directement le Maven déjà fourni par l'image Maven épinglée ;
+- le runtime n'installe pas `curl`/`wget` uniquement pour le healthcheck ;
+- `/usr/local/bin/nexus-healthcheck` utilise le support TCP de Bash contre le listener management local.
+
+Le contenu OS de ces couches dépend donc des digests de base, et non de l'état courant d'un miroir APT au moment de la build.
+
+Le smoke REST respecte la séparation NXA4 :
+
+- health sondé **dans le conteneur** par `/usr/local/bin/nexus-healthcheck` sur `127.0.0.1:9000/q/health/live` ;
+- endpoint métier vérifié séparément via le port applicatif publié ;
+- le port management n'est pas exposé à l'hôte uniquement pour satisfaire la CI.
+
+Le template Compose réutilise le même probe embarqué : il ne tente plus de lire `/q/health/live` sur le listener applicatif.
+
+Pour une release, Docker Distribution exporte ensuite l'image qualifiée avec son SHA-256 d'archive, son ID Docker et le SHA Git. Le job de publication vérifie ce handoff et **ne reconstruit jamais l'image**.
+
+## Publication GHCR
+
+`.github/workflows/release.yml` est déclenché par un tag `vX.Y.Z` sur le HEAD exact de `main`.
+
+Le préflight GHCR :
+
+- autorise un tag réellement absent ;
+- échoue sur auth/réseau/timeout/serveur ou réponse ambiguë ;
+- autorise une reprise idempotente si le tag existant correspond à l'image qualifiée ;
+- échoue définitivement si un tag immuable contient un autre contenu ;
+- exige que tags version et SHA convergent sur le même digest.
+
+Les attestations de provenance et SBOM portent sur le digest publié. `latest` n'est déplacé qu'après succès des références immuables.
+
+## Ancres d'intégrité
+
+`config/tool-integrity.properties` contient les ancres indépendantes :
+
+- Maven 3.9.16 : SHA-512 ;
+- Eclipse JDT LS 1.60.0-202606262232 : SHA-256.
+
+Sur Unix, `mvnw` télécharge Maven puis vérifie l'ancre avant extraction. Sur Windows, `mvnw.cmd` applique le même contrat quel que soit le client HTTP utilisé (`curl.exe` ou fallback PowerShell).
+
+`scripts/install-jdtls.ps1` télécharge l'archive JDT LS puis la compare à **l'ancre versionnée dans le repository** ; il ne prend pas sa décision de confiance sur un checksum téléchargé depuis le même origin.
+
+`scripts/release/test-tool-integrity-anchors.sh` est exécuté par NEXUS CI. Une montée de version doit modifier version + hash dans la même revue.
+
+## SQLite
+
+Les migrations sont forward-only et protégées par checksum `script_sha256`. Depuis V005, `symbols` impose :
 
 ```text
-target/trivy-image-vulnerabilities.json
-target/nexus-image.cdx.json
+start_line >= 1
+end_line >= start_line
 ```
 
-Le workflow bloque ensuite les vulnérabilités **HIGH ou CRITICAL corrigibles** avec `ignore-unfixed: true` et `exit-code: 1`.
-
-Les preuves de sécurité image sont conservées en artefacts CI.
-
-### Publication et attestations
-
-Sur un push vers `main`, après succès du job Docker :
-
-1. l'image exacte est reconstruite ;
-2. le gate Trivy est rejoué sur l'image de publication ;
-3. un SBOM CycloneDX de publication est généré ;
-4. les tags versionné et `latest` sont poussés vers GHCR ;
-5. le digest réellement publié est résolu ;
-6. une attestation de provenance est publiée pour ce digest ;
-7. une attestation SBOM est publiée pour ce même digest.
-
-Les attestations portent donc sur le sujet publié, pas seulement sur un tag mutable.
-
-## Politique de licences tierces
-
-La compatibilité juridique ne doit pas être déduite d'une simple recherche de chaîne dans un nom de licence.
-
-La politique automatisée de NEXUS est :
-
-- chaque dépendance compile/runtime distribuée doit fournir une information de licence exploitable ;
-- `license-maven-plugin` s'exécute avec `failOnMissing=true` ;
-- les modules `io.github.fturleque` et dépendances de test ne sont pas comptés comme composants tiers distribués ;
-- toute dépendance sous conditions inhabituelles exige une revue explicite ;
-- aucune exception ne doit être créée en désactivant silencieusement la génération de notices.
-
-## SBOM et notices tierces
-
-Le reactor génère :
-
-```text
-target/sbom/bom.json
-target/licenses/THIRD_PARTY_NOTICES.txt
-```
-
-L'archive autonome contient :
-
-```text
-LICENSE
-THIRD_PARTY_NOTICES.txt
-SBOM.cdx.json
-```
-
-La qualification Windows compare les artefacts embarqués aux outputs générés afin d'éviter une distribution avec un inventaire obsolète.
-
-Le job Linux conserve les preuves de conformité prévues par le workflow. L'image Docker possède en parallèle son propre SBOM et ses propres preuves Trivy.
+V004 invalide les index historiques incompatibles avant V005. Les tests couvrent base fraîche, upgrade V004, conservation des données valides, idempotence et rejet d'INSERT SQL invalide.
 
 ## Dependabot
 
-`.github/dependabot.yml` surveille chaque semaine :
-
-- Maven ;
-- GitHub Actions ;
-- Docker sous `packaging/docker`.
-
-Les PR Dependabot passent par les mêmes gates déclenchés par leur diff. Une mise à jour d'Action doit conserver un pin sur un SHA immuable.
+`.github/dependabot.yml` cible explicitement `develop` pour Maven, GitHub Actions et Docker. Une exception urgente vers `main` doit être explicite, revue et qualifiée ; elle n'est jamais le chemin par défaut.
 
 ## Politique d'échec
 
-Un gate rouge n'est jamais interprété comme PASS sans preuve contraire exécutable.
+Un résultat rouge ou ambigu n'est pas un PASS :
 
-- Maven/tests/JaCoCo : corriger le code ou les tests ;
-- OSV : mettre à jour/remplacer la dépendance ou traiter explicitement le risque ;
-- CodeQL : corriger ou justifier la suppression ;
-- Trivy image : corriger les vulnérabilités HIGH/CRITICAL corrigibles ;
-- SBOM/notices absents : échec de conformité ;
-- Windows Installer/Docker/Scale : analyser le log exact avant rerun ;
-- rerun : uniquement lorsqu'une cause transitoire est démontrée et toujours sur le même HEAD qualifié.
-
-## SonarCloud
-
-Aucun workflow, configuration ou status SonarCloud actif n'est actuellement défini dans la baseline du dépôt. **SonarCloud n'est donc pas un gate exécutable actuel.**
-
-Une documentation historique qui le liste comme gate obligatoire doit être considérée obsolète tant qu'un workflow/status concret n'est pas ajouté et qualifié.
-
-## Protection de `main`
-
-Le ruleset de `main` est géré dans GitHub et n'est pas versionné dans le repository. Il impose notamment le passage par pull request pour les modifications normales de `main`.
-
-La source de vérité des gates exécutés reste la combinaison :
-
-- workflows présents dans `.github/workflows` ;
-- événements/path filters qui s'appliquent au diff ;
-- checks réellement associés au HEAD de la PR ;
-- règles de protection GitHub actives.
-
-Une PR documentaire ne doit pas inventer un gate absent ; elle doit attendre tous les checks réellement déclenchés pour son HEAD.
-
-## Qualification post-audit de référence
-
-PR #49 :
-
-```text
-QUALIFIED_HEAD=4f04c1ad3ff5b41aa9d1892ade57ad62b90a43f9
-MERGE_SHA=c1ff9ef03ef33097c0d51154e02c30109b0a46f1
-```
-
-Résultats :
-
-- NEXUS CI `31314135008` — PASS ;
-- Windows Installer `31314134983` — PASS ;
-- Docker Distribution `31314134994` — PASS ;
-- Scale Benchmark `31314135000` — PASS ;
-- CodeQL `31314134977` — PASS ;
-- OSV-Scanner `31314135231` — PASS.
-
-La qualification finale d'une future PR doit toujours être rattachée à son propre HEAD exact.
+- tests/JaCoCo : corriger code ou test ;
+- CodeQL/OSV/Trivy/SonarCloud : traiter le finding/gate ;
+- contrat documentaire divergent : corriger doc ou source de vérité, jamais supprimer le contrôle sans justification ;
+- artefact/hash/digest incohérent : échec ;
+- registry ambiguë : échec ;
+- benchmark hors budget : analyser le run exact-head ;
+- tag immuable divergent : échec définitif, jamais d'écrasement automatique.

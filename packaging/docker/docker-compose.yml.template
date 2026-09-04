@@ -16,10 +16,15 @@ services:
       NEXUS_REST_PORT: "${NEXUS_DOCKER_CONTAINER_PORT:-8080}"
       NEXUS_REST_ALLOWED_PROJECT_ROOTS: "/workspace"
       NEXUS_REST_EXPOSURE_MODE: "${NEXUS_REST_EXPOSURE_MODE:-loopback-forward}"
+      # Contractual declaration of the Docker host forward. It deliberately comes from the exact
+      # same deployment variable as the published port below, so the official Compose path cannot
+      # claim loopback-forward while publishing on a remote address.
+      NEXUS_DOCKER_HOST_FORWARD_ADDRESS: "${NEXUS_DOCKER_BIND_ADDRESS:-127.0.0.1}"
       NEXUS_MAX_FILE_SIZE_BYTES: "${NEXUS_MAX_FILE_SIZE_BYTES:-8388608}"
       NEXUS_MAX_SCIP_INDEX_BYTES: "${NEXUS_MAX_SCIP_INDEX_BYTES:-268435456}"
       NEXUS_MAX_SCIP_MESSAGE_BYTES: "${NEXUS_MAX_SCIP_MESSAGE_BYTES:-16777216}"
       NEXUS_CODE_INTELLIGENCE_TIMEOUT_SECONDS: "${NEXUS_CODE_INTELLIGENCE_TIMEOUT_SECONDS:-180}"
+      NEXUS_MAX_CONCURRENT_INDEXING: "${NEXUS_MAX_CONCURRENT_INDEXING:-2}"
       NEXUS_SEMANTIC_PROVIDER: "${NEXUS_SEMANTIC_PROVIDER:-}"
       NEXUS_OLLAMA_BASE_URL: "${NEXUS_OLLAMA_BASE_URL:-}"
       NEXUS_OLLAMA_EMBEDDING_MODEL: "${NEXUS_OLLAMA_EMBEDDING_MODEL:-}"
@@ -38,7 +43,9 @@ services:
       - "${NEXUS_HOME_BIND:-./nexus-data}:/data/nexus"
       - "${NEXUS_REPOSITORY_BIND:-./workspace}:/workspace:ro"
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail --silent -H 'Authorization: Bearer ${NEXUS_REST_API_TOKEN}' http://127.0.0.1:${NEXUS_DOCKER_CONTAINER_PORT:-8080}/q/health/live >/dev/null || exit 1"]
+      # Health/metrics live on the separate loopback-only management listener inside the container.
+      # The probe is bundled in the image and requires no curl/wget package.
+      test: ["CMD", "/usr/local/bin/nexus-healthcheck"]
       interval: 10s
       timeout: 5s
       retries: 6

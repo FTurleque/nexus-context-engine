@@ -4,6 +4,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
+import java.io.FileDescriptor;
+import java.io.FileOutputStream;
+import java.io.PrintWriter;
+import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -18,6 +22,7 @@ import java.util.Objects;
 public final class AssistantIntegrationGenerator {
 
     public static final String SERVER_NAME = "nexus";
+    public static final String NATIVE_ACCESS_ARGUMENT = "--enable-native-access=ALL-UNNAMED";
 
     private final ObjectMapper objectMapper;
 
@@ -26,8 +31,15 @@ public final class AssistantIntegrationGenerator {
     }
 
     public static void main(String[] args) {
+        try (PrintWriter output = new PrintWriter(
+                new FileOutputStream(FileDescriptor.out), true, Charset.defaultCharset())) {
+            run(args, output);
+        }
+    }
+
+    static void run(String[] args, PrintWriter output) {
         if (args.length < 2) {
-            System.out.println(usage());
+            output.println(usage());
             return;
         }
 
@@ -39,7 +51,7 @@ public final class AssistantIntegrationGenerator {
         if (!"native".equals(args[1]) && !"docker".equals(args[1])) {
             Path runner = Path.of(args[1]);
             String format = args.length >= 3 ? args[2] : "command";
-            System.out.println(generator.render(profile, generator.legacyJava(runner), format));
+            output.println(generator.render(profile, generator.legacyJava(runner), format));
             return;
         }
 
@@ -59,7 +71,7 @@ public final class AssistantIntegrationGenerator {
             format = args.length >= 4 ? args[3] : "command";
         }
 
-        System.out.println(generator.render(profile, commandSpec, format));
+        output.println(generator.render(profile, commandSpec, format));
     }
 
     private String render(String profile, CommandSpec commandSpec, String format) {
@@ -81,7 +93,9 @@ public final class AssistantIntegrationGenerator {
     }
 
     public CommandSpec nativeMcp(Path javaExecutable, Path runner) {
-        return new CommandSpec(normalize(javaExecutable), List.of("-jar", normalize(runner)));
+        return new CommandSpec(
+                normalize(javaExecutable),
+                List.of(NATIVE_ACCESS_ARGUMENT, "-jar", normalize(runner)));
     }
 
     public CommandSpec dockerMcp(String containerName) {
@@ -91,7 +105,7 @@ public final class AssistantIntegrationGenerator {
         }
         return new CommandSpec("docker", List.of(
                 "exec", "-i", container,
-                "java", "-jar", "/opt/nexus/lib/nexus-mcp.jar"));
+                "java", NATIVE_ACCESS_ARGUMENT, "-jar", "/opt/nexus/lib/nexus-mcp.jar"));
     }
 
     public String copilotCliCommand(Path runner) {
@@ -171,7 +185,7 @@ public final class AssistantIntegrationGenerator {
     }
 
     private CommandSpec legacyJava(Path runner) {
-        return new CommandSpec("java", List.of("-jar", normalize(runner)));
+        return new CommandSpec("java", List.of(NATIVE_ACCESS_ARGUMENT, "-jar", normalize(runner)));
     }
 
     private static Map<String, Object> stdioServer(CommandSpec commandSpec) {
@@ -280,6 +294,7 @@ public final class AssistantIntegrationGenerator {
 
                 Le mode native permet de viser explicitement le Java embarqué NEXUS.
                 Le mode docker utilise docker exec -i et conserve MCP en STDIO.
+                Les commandes MCP Java générées appliquent automatiquement le contrat native-access qualifié.
                 La forme command vise uniquement le sous-ensemble d'arguments portable cmd.exe/PowerShell ;
                 utilisez JSON/TOML pour les chemins contenant %, !, $, backtick ou guillemets.
                 Le générateur n'écrit aucun fichier et ne modifie aucune configuration utilisateur.

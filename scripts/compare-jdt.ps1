@@ -104,25 +104,25 @@ function Measure-Quality {
 $queries = @(
     [pscustomobject]@{
         Query = "JdtLanguageServerCodeIntelligenceProvider"
-        Relevant = @("src/main/java/com/nexus/index/jdt/JdtLanguageServerCodeIntelligenceProvider.java")
+        Relevant = @("core/src/main/java/com/nexus/index/jdt/JdtLanguageServerCodeIntelligenceProvider.java")
     },
     [pscustomobject]@{
         Query = "CodeIntelligenceProvider analyze"
-        Relevant = @("src/main/java/com/nexus/index/CodeIntelligenceProvider.java")
+        Relevant = @("core/src/main/java/com/nexus/index/CodeIntelligenceProvider.java")
     },
     [pscustomobject]@{
         Query = "ProjectIndexingService deep Java"
-        Relevant = @("src/main/java/com/nexus/index/ProjectIndexingService.java")
+        Relevant = @("core/src/main/java/com/nexus/index/ProjectIndexingService.java")
     },
     [pscustomobject]@{
         Query = "replaceExternalCodeIntelligence"
-        Relevant = @("src/main/java/com/nexus/persistence/sqlite/SqliteIndexRepository.java")
+        Relevant = @("core/src/main/java/com/nexus/persistence/sqlite/SqliteIndexRepository.java")
     },
     [pscustomobject]@{
         Query = "GraphCandidateEnricher ProjectGraphBuilder"
         Relevant = @(
-            "src/main/java/com/nexus/ranking/graph/GraphCandidateEnricher.java",
-            "src/main/java/com/nexus/ranking/graph/ProjectGraphBuilder.java"
+            "core/src/main/java/com/nexus/ranking/graph/GraphCandidateEnricher.java",
+            "core/src/main/java/com/nexus/ranking/graph/ProjectGraphBuilder.java"
         )
     }
 )

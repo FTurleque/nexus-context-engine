@@ -25,7 +25,7 @@ class AssistantIntegrationGeneratorTest {
         String command = generator.copilotCliCommand(runner);
         assertTrue(command.startsWith("copilot mcp add nexus"));
         assertTrue(command.contains("--tools \"*\""));
-        assertTrue(command.contains("-- java -jar \""));
+        assertTrue(command.contains("-- java --enable-native-access=ALL-UNNAMED -jar \""));
         assertTrue(command.contains(runner.toAbsolutePath().normalize().toString()));
     }
 
@@ -36,8 +36,9 @@ class AssistantIntegrationGeneratorTest {
         JsonNode server = root.path("mcpServers").path("nexus");
         assertEquals("stdio", server.path("type").asText());
         assertEquals("java", server.path("command").asText());
-        assertEquals("-jar", server.path("args").get(0).asText());
-        assertEquals(runner.toAbsolutePath().normalize().toString(), server.path("args").get(1).asText());
+        assertEquals(AssistantIntegrationGenerator.NATIVE_ACCESS_ARGUMENT, server.path("args").get(0).asText());
+        assertEquals("-jar", server.path("args").get(1).asText());
+        assertEquals(runner.toAbsolutePath().normalize().toString(), server.path("args").get(2).asText());
         assertEquals("*", server.path("tools").get(0).asText());
         assertTrue(server.path("env").isObject());
         assertEquals(0, server.path("env").size());
@@ -52,7 +53,8 @@ class AssistantIntegrationGeneratorTest {
         JsonNode server = root.path("servers").path("nexus");
         assertEquals("stdio", server.path("type").asText());
         assertEquals("java", server.path("command").asText());
-        assertEquals(runner.toAbsolutePath().normalize().toString(), server.path("args").get(1).asText());
+        assertEquals(AssistantIntegrationGenerator.NATIVE_ACCESS_ARGUMENT, server.path("args").get(0).asText());
+        assertEquals(runner.toAbsolutePath().normalize().toString(), server.path("args").get(2).asText());
     }
 
     @Test
@@ -62,10 +64,12 @@ class AssistantIntegrationGeneratorTest {
         JsonNode server = root.path("mcpServers").path("nexus");
         assertEquals("stdio", server.path("type").asText());
         assertEquals("java", server.path("command").asText());
-        assertEquals(runner.toAbsolutePath().normalize().toString(), server.path("args").get(1).asText());
+        assertEquals(AssistantIntegrationGenerator.NATIVE_ACCESS_ARGUMENT, server.path("args").get(0).asText());
+        assertEquals(runner.toAbsolutePath().normalize().toString(), server.path("args").get(2).asText());
         assertTrue(generator.claudeProjectCommand(runner).startsWith("claude mcp add --scope project nexus --"));
         assertTrue(generator.claudeUserCommand(runner).startsWith("claude mcp add --scope user nexus --"));
-        assertTrue(generator.claudeProjectCommand(runner).contains("-- java -jar \""));
+        assertTrue(generator.claudeProjectCommand(runner)
+                .contains("-- java --enable-native-access=ALL-UNNAMED -jar \""));
     }
 
     @Test
@@ -75,8 +79,9 @@ class AssistantIntegrationGeneratorTest {
         AssistantIntegrationGenerator.CommandSpec spec = generator.nativeMcp(java, runner);
         JsonNode server = objectMapper.readTree(generator.genericMcpJson(spec)).path("mcpServers").path("nexus");
         assertEquals(java.toAbsolutePath().normalize().toString(), server.path("command").asText());
-        assertEquals("-jar", server.path("args").get(0).asText());
-        assertEquals(runner.toAbsolutePath().normalize().toString(), server.path("args").get(1).asText());
+        assertEquals(AssistantIntegrationGenerator.NATIVE_ACCESS_ARGUMENT, server.path("args").get(0).asText());
+        assertEquals("-jar", server.path("args").get(1).asText());
+        assertEquals(runner.toAbsolutePath().normalize().toString(), server.path("args").get(2).asText());
     }
 
     @Test
@@ -89,8 +94,11 @@ class AssistantIntegrationGeneratorTest {
         assertEquals("-i", server.path("args").get(1).asText());
         assertEquals("nexus-custom", server.path("args").get(2).asText());
         assertEquals("java", server.path("args").get(3).asText());
-        assertEquals("/opt/nexus/lib/nexus-mcp.jar", server.path("args").get(5).asText());
-        assertTrue(generator.copilotCliCommand(spec).contains("-- docker exec -i nexus-custom"));
+        assertEquals(AssistantIntegrationGenerator.NATIVE_ACCESS_ARGUMENT, server.path("args").get(4).asText());
+        assertEquals("-jar", server.path("args").get(5).asText());
+        assertEquals("/opt/nexus/lib/nexus-mcp.jar", server.path("args").get(6).asText());
+        assertTrue(generator.copilotCliCommand(spec).contains(
+                "-- docker exec -i nexus-custom java --enable-native-access=ALL-UNNAMED -jar"));
         assertTrue(generator.claudeUserCommand(spec).startsWith("claude mcp add --scope user nexus --"));
     }
 
@@ -110,6 +118,7 @@ class AssistantIntegrationGeneratorTest {
         String command = generator.claudeUserCommand(spec);
         assertTrue(command.startsWith("claude mcp add --scope user nexus --"));
         assertTrue(command.contains(java.toAbsolutePath().normalize().toString()));
+        assertTrue(command.contains(AssistantIntegrationGenerator.NATIVE_ACCESS_ARGUMENT));
         assertTrue(command.contains(runner.toAbsolutePath().normalize().toString()));
     }
 
@@ -121,7 +130,7 @@ class AssistantIntegrationGeneratorTest {
         String toml = generator.codexDesktopToml(spec);
         assertTrue(toml.contains("[mcp_servers.nexus]"));
         assertTrue(toml.contains("command = \""));
-        assertTrue(toml.contains("args = [\"-jar\""));
+        assertTrue(toml.contains("args = [\"--enable-native-access=ALL-UNNAMED\", \"-jar\""));
         assertTrue(toml.contains("nexus-mcp.jar"));
     }
 
@@ -130,6 +139,7 @@ class AssistantIntegrationGeneratorTest {
         AssistantIntegrationGenerator.CommandSpec spec = generator.dockerMcp("nexus");
         String command = generator.codexCommand(spec);
         assertTrue(command.startsWith("codex mcp add nexus -- docker exec -i nexus"));
+        assertTrue(command.contains(AssistantIntegrationGenerator.NATIVE_ACCESS_ARGUMENT));
         assertTrue(command.endsWith("/opt/nexus/lib/nexus-mcp.jar"));
     }
 }

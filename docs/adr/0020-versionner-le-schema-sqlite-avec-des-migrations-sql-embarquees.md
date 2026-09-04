@@ -28,10 +28,10 @@ Le schéma SQLite de NEXUS évoluera avec le registre de projets, les fichiers i
 
 **Option retenue : utiliser des scripts SQL versionnés embarqués et un migrateur minimal, transactionnel et strictement limité à l'application ordonnée de migrations.**
 
-Les migrations sont placées dans :
+Les migrations sont placées dans le module core :
 
 ```text
-src/main/resources/db/migration/
+core/src/main/resources/db/migration/
 ```
 
 avec un nommage :

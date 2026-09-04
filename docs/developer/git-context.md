@@ -1,519 +1,93 @@
 # Contexte Git local
 
-Ce chapitre décrit l'implémentation de l'Itération 7 : utiliser l'historique Git local comme **signal de pertinence** et comme **source de contexte bornée**, sans transformer NEXUS en client Git généraliste.
+NEXUS utilise Git local comme signal de pertinence et source de contexte **read-only, sans réseau et bornée**.
 
-> L'Itération 7 a été validée localement le 20 juillet 2026 par `mvn clean install` puis par le self-smoke à 13 étapes.
+## Principes
 
-## 1. Objectif
+Le provider n'effectue ni fetch, pull, push, checkout ni création de commit. Il travaille uniquement sur le repository local déjà présent et sur les chemins cibles remontés par la recherche.
 
-Le contexte Git répond à deux besoins différents :
+## Bornes structurelles
 
-```text
-Recherche
-→ quels fichiers récemment actifs méritent un léger bonus ?
-
-ContextBundle
-→ quels éléments historiques expliquent les fichiers déjà sélectionnés ?
-```
-
-Ces deux responsabilités ne doivent pas être confondues.
-
-## 2. Principes de sécurité
-
-Le contexte Git est :
-
-- local uniquement ;
-- en lecture seule ;
-- sans appel réseau ;
-- sans `fetch` ;
-- sans `pull` ;
-- sans `push` ;
-- sans `checkout` ;
-- sans création de commit ;
-- limité au périmètre du projet enregistré dans NEXUS.
-
-JGit est utilisé comme bibliothèque d'accès au repository local déjà présent sur le disque.
-
-## 3. Architecture
-
-```mermaid
-flowchart LR
-    Q[Requête utilisateur] --> SEARCH[SearchService]
-
-    SEARCH --> LEX[Lucene / symboles]
-    LEX --> GRAPH[GraphCandidateEnricher]
-    GRAPH --> RECENCY[GitRecencyCandidateEnricher]
-    RECENCY --> RANK[DeterministicContextRanker]
-
-    RANK --> TARGETS[Chemins candidats]
-    TARGETS --> GIT[LocalGitContextSourceProvider]
-
-    GIT --> COMMITS[Commits récents liés]
-    GIT --> HISTORY[Historique court]
-    GIT --> DIFF[Diff local ciblé]
-    GIT --> COCHANGE[Co-changements]
-
-    COMMITS --> GITBUDGET[Budget Git]
-    HISTORY --> GITBUDGET
-    DIFF --> GITBUDGET
-    COCHANGE --> GITBUDGET
-
-    GITBUDGET --> BUNDLE[ContextBundle]
-```
-
-## 4. Contrats principaux
-
-```mermaid
-classDiagram
-    class CandidateEnricher {
-        <<interface>>
-        +enrich(ProjectDescriptor, List~SearchCandidate~) List~SearchCandidate~
-    }
-
-    class GraphCandidateEnricher
-    class GitRecencyCandidateEnricher
-
-    class GitContextSourceProvider {
-        <<interface>>
-        +id() String
-        +discover(GitContextQuery) GitContextResult
-    }
-
-    class LocalGitContextSourceProvider
-    class GitContextQuery
-    class GitContextResult
-    class DefaultContextBuilder
-
-    CandidateEnricher <|.. GraphCandidateEnricher
-    CandidateEnricher <|.. GitRecencyCandidateEnricher
-    GitContextSourceProvider <|.. LocalGitContextSourceProvider
-    DefaultContextBuilder --> GitContextSourceProvider
-```
-
-## 5. Chaîne d'enrichissement du ranking
-
-`SearchService` ne dépend plus d'un seul enrichisseur structurel.
+`LocalGitContextSourceProvider` impose notamment :
 
 ```text
-SearchStrategy[]
-    ↓
-CandidateMerger
-    ↓
-CandidateEnricher[]
-    ├── GraphCandidateEnricher
-    └── GitRecencyCandidateEnricher
-    ↓
-ContextRanker
+commits récents                 50
+chemins cibles d'historique      5
+commits par chemin               5
+co-changements                   8
+chemins modifiés / commit     2000
+chemins modifiés cumulés     10000
+patch rendu / zone            6000 caractères
 ```
 
-Cette généralisation évite de coder une dépendance JGit directement dans `SearchService`.
+Le provider consomme aussi le `ContextDiscoveryBudget` partagé avec les autres sources natives.
 
-Les anciens constructeurs restent disponibles : un consommateur qui ne branche pas `GitRecencyCandidateEnricher` conserve le comportement historique.
+## Cache des runtimes longue durée
 
-## 6. Signal `gitRecencyScore`
+REST et MCP utilisent `NexusApplication.createLongLived(...)`. Cette composition enveloppe le provider Git local dans `PersistentGitContextSourceProvider`, un cache **mémoire uniquement** limité à 16 résultats en LRU.
 
-`GitRecencyCandidateEnricher` inspecte au maximum les 50 commits locaux les plus récents.
+La CLI et les usages one-shot continuent d'utiliser `NexusApplication.create(...)` et `LocalGitContextSourceProvider` sans cache persistant entre requêtes.
 
-Pour chaque candidat déjà connu :
-
-1. NEXUS calcule son chemin relatif au projet ;
-2. ce chemin est converti en chemin relatif au repository Git ;
-3. les commits récents sont parcourus ;
-4. si un commit touche le fichier, un score de récence est associé ;
-5. le meilleur score observé est conservé.
-
-Le signal normalisé est :
+Avant chaque hit, le cache recalcule un fingerprint borné :
 
 ```text
-gitRecencyScore ∈ [0, 1]
+worktree réel
+HEAD exact
+status des chemins cibles
+SHA-256 du diff staged ciblé
+SHA-256 du diff unstaged ciblé
 ```
 
-Le bonus par défaut est :
+Toute variation provoque un miss puis un recalcul via `LocalGitContextSourceProvider`. Cela couvre notamment commit/rebase, index, working tree, rename et isolation des worktrees liés.
 
-```text
-gitRecencyContribution = gitRecencyScore × 0,05
-```
+La validation du fingerprint consomme elle aussi le `ContextDiscoveryBudget` via des visites et checkpoints ; le cache n'introduit donc aucun chemin de découverte hors budget. Un résultat `repositoryAvailable=false` n'est jamais conservé afin de retenter automatiquement une indisponibilité transitoire.
 
-Configuration :
+Aucun fichier de cache, schéma SQLite, watcher filesystem ou thread de maintenance n'est ajouté. Voir ADR-0046.
 
-```java
-new DeterministicContextRanker(0.05d);
-```
+## Diff local avant allocation
 
-Désactivation :
+Les patches working-tree sont filtrés aux chemins cibles puis écrits dans `BoundedOutput`, un `OutputStream` à capacité fixe. Le sink cesse de retenir des octets après sa capacité ; NEXUS ne rend donc pas d'abord le patch entier dans un `ByteArrayOutputStream` extensible avant de le tronquer.
 
-```java
-new DeterministicContextRanker(0.0d);
-```
-
-La valeur acceptée est bornée entre `0.0` et `0.20`.
-
-Un candidat sans signal Git conserve exactement son score historique.
-
-## 7. Explication du ranking
-
-Avec `--explain` :
-
-```text
-récence Git locale: 1.000 -> +0.050
-```
-
-La composante JSON est :
-
-```json
-{
-  "gitRecencyScore": 0.05
-}
-```
-
-La valeur exposée dans `scoreComponents` est la contribution pondérée, comme pour les autres signaux.
-
-## 8. Contexte Git construit
-
-`LocalGitContextSourceProvider` reçoit uniquement les chemins déjà remontés par la recherche.
-
-Il peut produire quatre fragments virtuels de type `GIT`.
-
-### 8.1 Commits récents liés
-
-```text
-.nexus/git/recent-commits.md
-```
-
-Contenu :
-
-- SHA court ;
-- date du commit ;
-- message ;
-- principaux fichiers du projet touchés.
-
-Seuls les commits touchant au moins un chemin cible sont conservés.
-
-### 8.2 Historique court
-
-```text
-.nexus/git/file-history.md
-```
-
-Bornes :
-
-- maximum 5 chemins cibles ;
-- maximum 5 commits par chemin.
-
-### 8.3 Diff local pertinent
-
-```text
-.nexus/git/working-tree-diff.md
-```
-
-Le fragment peut contenir :
-
-```text
-Patch non indexé
-→ working tree vs index
-
-Patch indexé
-→ index vs HEAD
-
-Résumé de statut
-→ ajouté / modifié / changé dans l'index / supprimé / manquant / non suivi
-```
-
-Les patches sont produits par JGit uniquement pour les chemins candidats.
-
-Chaque zone de patch est bornée à :
-
-```text
-6 000 caractères
-```
-
-Au-delà :
+Après conversion UTF-8, le texte reste limité à 6 000 caractères et reçoit :
 
 ```text
 ... [diff Git tronqué par NEXUS]
 ```
 
-Le `BudgetedContextSelector` applique ensuite le budget de tokens normal du `ContextBundle`.
+si la sortie a dépassé l'une des bornes.
 
-Un fichier local modifié mais sans rapport avec les candidats ne peut pas apparaître dans le patch ou le résumé.
+## Fragments
 
-### 8.4 Co-changements
+Le provider peut créer :
 
 ```text
+.nexus/git/recent-commits.md
+.nexus/git/file-history.md
+.nexus/git/working-tree-diff.md
 .nexus/git/co-changes.md
 ```
 
-NEXUS observe les commits récents touchant les chemins cibles et compte les autres fichiers du **même projet NEXUS** modifiés dans les mêmes commits.
+Un fichier non ciblé n'est pas injecté dans le patch/statut. Dans un monorepo, les chemins hors racine du projet NEXUS sont exclus du contexte projet.
 
-Maximum :
+## Budget final
 
-```text
-8 relations de co-changement
-```
+Le contexte Git n'est activé que lorsque le budget global le permet et reçoit un sous-budget final. Ce sous-budget de tokens est distinct du budget de **travail de découverte**, qui reste obligatoire avant sélection.
 
-Un fichier n'est compté qu'une fois par commit, même lorsqu'un même commit touche plusieurs chemins cibles.
+## Preuves
 
-Une relation de co-changement est un signal historique, pas une preuve de dépendance métier.
+`LocalGitContextSourceProviderTest` couvre :
 
-## 9. Support des monorepos
+- commits/historique/co-changements ciblés ;
+- monorepo et exclusion hors projet ;
+- dégradation hors Git ;
+- diff massif réellement tronqué ;
+- sink fixe qui ne retient jamais plus d'octets que sa capacité.
 
-NEXUS distingue :
+`PersistentGitContextSourceProviderTest` couvre :
 
-```text
-racine du repository Git
-racine du projet enregistré dans NEXUS
-```
+- hit sur état Git stable ;
+- invalidation working tree, index et HEAD ;
+- éviction LRU et capacité stricte ;
+- absence de cache pour un repository indisponible.
 
-Exemple :
-
-```text
-monorepo/
-├── .git/
-├── backend/
-│   └── nexus-project-root/
-└── frontend/
-```
-
-Si le projet NEXUS est :
-
-```text
-monorepo/backend/nexus-project-root
-```
-
-les chemins JGit sont préfixés par :
-
-```text
-backend/nexus-project-root/
-```
-
-NEXUS convertit automatiquement :
-
-```text
-backend/nexus-project-root/src/OrderService.java
-→ src/OrderService.java
-```
-
-Cette conversion est appliquée :
-
-- au bonus de récence ;
-- aux commits liés ;
-- à l'historique ;
-- aux patches locaux ;
-- aux co-changements.
-
-Les fichiers et co-changements situés hors du sous-projet, par exemple `frontend/App.ts`, sont exclus du contexte du projet backend.
-
-## 10. Budget Git
-
-Ordre de sélection :
-
-```text
-1. instructions natives
-2. skills
-3. contexte Git
-4. contexte de tâche
-```
-
-Pour les budgets inférieurs à 500 tokens :
-
-```text
-gitEnabled = false
-gitBudget = 0
-```
-
-Cela protège les scénarios très contraints comme le self-smoke à 180 tokens.
-
-À partir de 500 tokens :
-
-```text
-gitBudget = min(
-    budget restant,
-    500,
-    max(64, budget total × 15 %)
-)
-```
-
-Exemples :
-
-```text
-budget total 500   → Git max 75
-budget total 1200  → Git max 180
-budget total 2000  → Git max 300
-budget total 5000  → Git max 500
-```
-
-Les fragments Git peuvent être tronqués par le sélecteur générique si nécessaire.
-
-## 11. Métadonnées du ContextBundle
-
-En mode JSON explicable :
-
-```text
-gitProvider
-gitEnabled
-gitRepositoryAvailable
-gitDiagnostics
-gitCommitsInspected
-gitRelatedCommits
-gitCoChangeLinks
-gitBudget
-gitSelectedItems
-gitSelectedTokens
-```
-
-Exemple :
-
-```json
-{
-  "gitProvider": "local-git",
-  "gitEnabled": true,
-  "gitRepositoryAvailable": true,
-  "gitCommitsInspected": 50,
-  "gitRelatedCommits": 4,
-  "gitCoChangeLinks": 6,
-  "gitBudget": 240,
-  "gitSelectedItems": 2,
-  "gitSelectedTokens": 218
-}
-```
-
-## 12. Repository non Git
-
-Si le projet n'est pas dans un repository Git :
-
-```text
-recherche
-→ candidats inchangés
-
-ContextBundle
-→ aucun item GIT
-→ diagnostic explicable
-→ aucune erreur fonctionnelle
-```
-
-NEXUS reste pleinement utilisable sans Git.
-
-## 13. Limites initiales
-
-- 50 commits récents maximum ;
-- premier parent uniquement pour les commits de merge ;
-- commit racine non utilisé pour le calcul différentiel initial ;
-- pas de suivi exhaustif des renommages sur toute l'histoire ;
-- patches locaux bornés à 6 000 caractères par zone ;
-- co-changements bornés et non persistés ;
-- aucun cache Git dédié dans cette itération ;
-- la recherche et le `ContextBuilder` lisent chacun Git à la demande dans le chemin CLI initial.
-
-Ces limites sont intentionnelles. Une optimisation ou une persistance supplémentaire devra être justifiée par des mesures.
-
-## 14. Tests
-
-### `GitRecencyCandidateEnricherTest`
-
-Vérifie :
-
-- bonus sur un fichier récemment modifié ;
-- absence de bonus hors repository Git ;
-- résolution correcte des chemins d'un sous-projet dans un monorepo.
-
-### `LocalGitContextSourceProviderTest`
-
-Vérifie :
-
-- commits liés uniquement ;
-- historique ciblé ;
-- patch local réel limité au chemin cible ;
-- exclusion des patches non ciblés ;
-- co-changements ;
-- confinement à un sous-projet de monorepo ;
-- dégradation propre hors Git.
-
-### `DeterministicContextRankerGitTest`
-
-Vérifie :
-
-- contribution `gitRecencyScore` ;
-- explication ;
-- poids configurable ;
-- retour exact au score historique avec poids `0`.
-
-### `DefaultContextBuilderIntegrationTest`
-
-Vérifie :
-
-- provider Git non appelé sous 500 tokens ;
-- `gitEnabled = false` pour le petit budget ;
-- activation du provider lorsque le budget le permet ;
-- présence d'un item `GIT` ;
-- respect du budget global.
-
-## 15. Self-smoke de l'Itération 7
-
-Le self-smoke passe à 13 étapes.
-
-La requête dédiée est :
-
-```text
-DefaultContextBuilder git context budget recent changes
-```
-
-Le scénario vérifie :
-
-```text
-gitEnabled = true
-gitRepositoryAvailable = true
-gitRelatedCommits > 0
-gitSelectedItems > 0
-au moins un ContextItem.type == GIT
-estimatedTokens <= tokenBudget
-```
-
-Le scénario strict à 180 tokens vérifie en parallèle :
-
-```text
-gitEnabled = false
-```
-
-## 16. Validation locale du 20 juillet 2026
-
-Build :
-
-- 106 fichiers source compilés avec Java 21 ;
-- 20 fichiers de test compilés ;
-- 35 tests exécutés ;
-- 0 échec, 0 erreur, 0 ignoré ;
-- `mean precision@3 = 0,4444` ;
-- `mean recall@3 = 1,0000` ;
-- JAR bibliothèque et JAR CLI autonome générés et installés ;
-- `BUILD SUCCESS`.
-
-Self-smoke :
-
-- 181 fichiers indexés ;
-- 548 symboles ;
-- 1 034 relations ;
-- indexation complète : 1 347 ms ;
-- indexation incrémentale : 270 ms avec 0 fichier modifié et 0 supprimé ;
-- recherche `ProjectIndexingService` : fichier principal classé premier avec contribution `gitRecencyScore` ;
-- recherche explicable : 3 603 ms ;
-- contexte strict : 5 items, 174/180 tokens, 782 ms, `gitEnabled = false` ;
-- contexte multi-source : 11 items, 1 192/1 200 tokens, 882 ms ;
-- contexte avec skill : 1 194/1 200 tokens, 939 ms ;
-- contexte Git dédié : 1 597/1 600 tokens, 874 ms ;
-- `gitRepositoryAvailable = true` ;
-- 50 commits inspectés ;
-- 24 commits liés ;
-- 2 fragments Git sélectionnés ;
-- 128 tokens Git sélectionnés pour un budget Git de 240 tokens ;
-- réduction du contexte candidat strict : environ 99,2 % ;
-- résultat : `SELF-SMOKE SUCCESS`.
-
-Le critère de sortie de l'Itération 7 est validé pour le périmètre actuel : le contexte Git enrichit le ranking et le `ContextBundle` sans dépasser le budget global et sans rendre Git obligatoire.
-
-Point de surveillance non bloquant : la recherche explicable a mesuré 3 603 ms avec l'inspection de 50 commits. Une optimisation par cache ou persistance Git ne doit être envisagée qu'après benchmark sur plusieurs tailles de repositories.
-
-## 17. Décision d'architecture
-
-Voir :
-
-- ADR-0035 — intégrer le contexte Git local comme source bornée et explicable.
+`GitContextCacheQualificationBenchmarkTest` couvre Linux et Windows sur plusieurs repositories ainsi que HEAD/index/working-tree/rename/rebase/worktrees liés. Les benchmarks et tests exact-head restent l'autorité de qualification.

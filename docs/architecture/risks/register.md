@@ -1,116 +1,101 @@
 # Registre des risques — NEXUS Context Engine
 
-Ce registre complète la Section 11 de l'arc42. Il décrit les risques **courants** ; les risques historiques clôturés restent référencés avec leur preuve.
+Ce registre décrit les risques **courants**. Les documents d'itération conservent les preuves historiques ; ici, la qualification applicable est toujours celle du SHA exact concerné.
 
-## Risques prioritaires
+## Risques actifs
 
-### R1 — Scale SQLite lexical (WATCH ITEM)
+### Scale SQLite lexical
 
-- **Statut** : surveillance.
-- **Risque** : les recherches `%substring%` peuvent se dégrader sur de très grands corpus.
-- **Mitigation** : workflow Scale Benchmark et optimisations locales bornées avant toute introduction de FTS5/trigram/autre moteur.
-- **Déclencheur** : dégradation matérielle et reproductible sur corpus représentatif.
+Les recherches substring peuvent se dégrader sur des corpus plus grands. Mitigation : Scale Benchmark et optimisations locales avant tout FTS/trigram/autre moteur.
 
-### R4 — `FileLock` sur filesystem réseau (NON SUPPORTÉ SANS QUALIFICATION)
+### Filesystem local hostile
 
-- **Statut** : suivi par issue #52.
-- **Mitigation actuelle** : `NEXUS_HOME` local pour la garantie inter-processus ; mutex JVM + `FileLock` OS par projet.
-- **Extension de support** : nécessite une matrice SMB/NFS et des tests de race/lock dédiés.
+`ProjectPathGuard`, `SafeFileIO`, confinement SCIP/skills et budgets réduisent la surface, sans constituer un sandbox absolu contre un acteur local capable de muter l'arborescence pendant l'opération.
 
-### R5 — Provider externe non coopératif (WATCH ITEM)
+### `FileLock` réseau
 
-- **Statut** : issue #51.
-- **Risque** : un worker Java tiers qui ignore définitivement l'interruption peut survivre comme daemon après timeout.
-- **Mitigation actuelle** : wall-clock borné via `ExternalTaskRunner`.
-- **Isolation processus** : uniquement si un cas réel reproductible le justifie.
+La garantie inter-processus vise `NEXUS_HOME` sur filesystem local. SMB/NFS exigeraient une qualification dédiée.
 
-### R13 — Intelligence externe obsolète (CLÔTURÉ)
+### Provider externe non coopératif
 
-- **Mitigation** : changement SOURCE/TEST ⇒ invalidation des snapshots externes persistés concernés.
-- **Preuve** : PR #24 puis non-régressions qualifiées par PR #49.
+Les tâches sont bornées en wall-clock et à **8 workers réellement actifs maximum**. Un provider qui ignore l'interruption peut continuer jusqu'à sa terminaison réelle ; une isolation processus généralisée plus forte reste conditionnée à un cas reproductible.
 
-### R14 — Index sémantique incompatible (CLÔTURÉ)
+### Recovery sémantique
 
-- **Mitigation** : manifeste de provenance Lucene ; mismatch/absence ⇒ rebuild ; recherche stale refusée avant embedding de requête.
-- **Preuve** : PR #24, toujours couverte dans la baseline post-audit.
+L'indisponibilité d'un provider ou une corruption physique Lucene nécessite encore des procédures opérationnelles spécifiques selon le scénario. SQLite reste l'autorité. Le profil `content-v2` garantit en revanche qu'un ancien index sémantique incompatible est reconstruit plutôt que réutilisé silencieusement.
 
-### R15 — Supply-chain / obligations tierces (CLÔTURÉ ET RENFORCÉ)
+### Gouvernance `develop`
 
-- **Mitigations** :
-  - JaCoCo core 70 % lignes / 50 % branches ;
-  - CodeQL Java/Kotlin `security-extended` ;
-  - OSV delta PR + scan bloquant du SBOM CycloneDX agrégé du reactor ;
-  - Dependabot Maven, GitHub Actions et Docker ;
-  - Actions contrôlées épinglées à des SHA immuables ;
-  - notices tierces avec `failOnMissing=true` ;
-  - SBOM distribué ;
-  - Docker Distribution avec Trivy, SBOM image et blocage des HIGH/CRITICAL corrigibles ;
-  - attestations de provenance et de SBOM sur les images publiées depuis `main`.
-- **Preuve technique actuelle** : PR #49 exact-head qualifiée.
+Le contrat est versionné mais l'état GitHub doit être effectif : PR obligatoire, checks retenus, suppression/force-push interdits et exceptions administratives limitées. Tant que `develop` retourne `protected=false`, ce risque reste ouvert (#130).
 
-### R16 — Nouvelle dépendance à licence inhabituelle (WATCH ITEM)
+## Risques fortement mitigés par NXA3
 
-- **Statut** : issue #55.
-- **Mitigation** : inventaire automatisé + revue juridique explicite des nouvelles licences ou modalités de redistribution inhabituelles.
+### REST distant
 
-### R17 — Snapshot d'indexation publié après mutation concurrente (CLÔTURÉ)
+Mitigation : token robuste + roots + mode explicite + listener TLS effectif ; reverse proxy avec forwarding et trusted proxies bornés.
 
-- **Mitigation** : revalidation du snapshot canonique avant publication ; mutation détectée ⇒ échec fail-closed.
-- **Preuve** : issue #48 / PR #49.
+### SCIP / skills / customisations hors racine
 
-### R18 — Exposition REST distante insuffisamment contrainte (CLÔTURÉ)
+Mitigation : `ProjectPathGuard`, refus traversal/symlink final/symlink d'ancêtre et tests ciblés.
 
-- **Mitigation** : token robuste, allowlist de racines, mode d'exposition explicite, modes HTTPS requis ; `loopback-forward` limité au runtime Docker publié sur loopback.
-- **Preuve** : issue #48 / PR #49.
+### Découverte native pathologique
 
-### R19 — Coût de graphe/contexte fédéré non borné (CLÔTURÉ)
+Mitigation : budget partagé visites/candidats/octets/deadline avant sélection + benchmark filesystem de 1 000 skills.
 
-- **Mitigation** : projections SQL bornées pour le graphe et budget de travail distinct pour le contexte fédéré.
-- **Preuve** : issue #48 / PR #49 + Scale Benchmark.
+### Portée fédérée surdimensionnée
 
-### R20 — Recovery sémantique opérationnel incomplet (WATCH ITEM)
+Mitigation : maximum 100 projets uniques appliqué avant résolution/readiness dans les surfaces concernées.
 
-- **Statut** : issue #54.
-- **Risque** : indisponibilité Ollama ou corruption physique Lucene nécessitant diagnostics/recovery explicites.
+### Diff Git massif
 
-## Matrice de priorisation
+Mitigation : chemins/historique capés et sink de patch à capacité fixe, qualifié par test massif.
 
-```mermaid
-quadrantChart
-    title Risques NEXUS — Probabilité vs Impact
-    x-axis Faible --> Élevé
-    y-axis Faible --> Élevé
-    quadrant-1 À surveiller
-    quadrant-2 Risques majeurs
-    quadrant-3 Acceptés / mitigés
-    quadrant-4 À adresser en priorité
-    R1-Scale SQLite: [0.5, 0.5]
-    R4-FileLock réseau: [0.5, 0.9]
-    R5-Provider non coopératif: [0.4, 0.5]
-    R16-Licence nouvelle dépendance: [0.3, 0.7]
-    R20-Recovery sémantique: [0.4, 0.5]
-```
+### Supply-chain outils
 
-## Preuves récentes
+Mitigation : Maven 3.9.16 contrôlé par SHA-512 versionné et JDT LS fixe contrôlé par SHA-256 ; test exécuté dans NEXUS CI.
 
-PR #49 :
+### Publication Docker divergente
 
-```text
-QUALIFIED_HEAD=4f04c1ad3ff5b41aa9d1892ade57ad62b90a43f9
-MERGE_SHA=c1ff9ef03ef33097c0d51154e02c30109b0a46f1
-```
+Mitigation : build unique, gates sur cette image, handoff hash/ID, publication sans rebuild.
 
-NEXUS CI, Scale Benchmark, Windows Installer, Docker Distribution, CodeQL et OSV-Scanner : PASS.
+### GHCR ambigu/partiel
 
-PR #61 :
+Mitigation : preflight fail-closed ; reprise idempotente uniquement pour contenu identique ; tags version/SHA immuables.
 
-```text
-QUALIFIED_HEAD=ba91be044a600d2396e0939fc154848dc47f6310
-MERGE_SHA=660ca9f07a23950d2a5284605531524372331bc5
-```
+### Données SQLite incompatibles
 
-NEXUS CI, CodeQL et OSV-Scanner : PASS.
+Mitigation : V004 invalide les anciens index aux plages impossibles ; V005 impose les `CHECK` de `CodeSymbol`.
 
-## Procédure de mise à jour
+## Risques fortement mitigés par NXA4
 
-Mettre à jour ce registre après chaque intégration majeure, clôture de risque, changement de frontière de support ou nouvelle dette opérationnelle significative.
+### Management REST exposé avec l'API métier
+
+Mitigation : health/metrics sont retirés du listener applicatif et servis sur le listener management loopback `127.0.0.1:9000`. Le smoke Docker valide le management depuis l'intérieur du conteneur sans publier ce port.
+
+### JDT LS défectueux ou hostile
+
+Mitigation : `JdtJsonRpcFrameReader` borne messages à 16 MiB, headers à 64 KiB, lignes à 8 KiB et backlog à 256 messages. Framing invalide/tronqué ou saturation provoquent un échec fermé.
+
+### Requête Lucene à très forte cardinalité
+
+Mitigation : maximum 128 termes analysés uniques avant expansion sur les cinq champs de recherche, avec test de non-régression.
+
+### Fuite accidentelle de secrets vers embeddings ou contexte
+
+Mitigation : exclusions scanner sensibles + `SensitiveContentRedactor` avant embeddings et fragments retournés. La redaction cible les formats à forte confiance et conserve les séparateurs de lignes des blocs multilignes.
+
+### Transport Ollama distant non sécurisé
+
+Mitigation : HTTPS distant obligatoire par défaut ; HTTP distant uniquement avec `NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA=true` ; credentials/userinfo intégrés à l'URI refusés.
+
+### Permissions de stockage local trop larges
+
+Mitigation : `NEXUS_HOME`, `indexes`, `locks` en `0700` et SQLite en `0600` sur POSIX ; chemins persistants symboliques concernés refusés. Les ACL Windows natives ne sont pas remplacées destructivement.
+
+### Dérive documentaire
+
+Mitigation : documentation courante réconciliée et `test-operational-doc-contracts.sh` exécuté par NEXUS CI. Les contrats machine-vérifiables couvrent désormais aussi les invariants NXA4.
+
+## Mise à jour
+
+Mettre à jour ce registre après changement de frontière de support, nouveau risque majeur ou clôture matérialisée par code + preuve + documentation + qualification exact-head.

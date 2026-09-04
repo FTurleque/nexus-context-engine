@@ -1,120 +1,101 @@
 # Recherche multi-repository et passage à l'échelle
 
-Ce document conserve la baseline validée de l'Itération 16 et décrit les améliorations Phase 6 implémentées au-dessus de cette base.
+Les documents `iteration-*` conservent les baselines historiques. Ce fichier décrit le contrat courant après NXA3 + NXA4.
 
-## Baseline historique validée
+## Portée fédérée
+
+Toutes les surfaces partagent une limite maximale de **100 projets uniques**.
 
 ```text
-repositories               7
-fichiers                    2 104
-symboles                    10 878
-relations                   10 087
-index Lucene cumulé         5 121 497 octets
-indexation complète         8 818 ms
-incrémental sans changement 762 ms
-recherche fédérée p50       133 ms
-recherche fédérée p95       304 ms
-contexte p50                48 ms
-contexte p95                206 ms
-precision@3                 0,4583
-recall@3                    0,8958
-hit@3                       1,0000
-MRR@3                       1,0000
+sélecteurs
+  ↓
+normalisation / déduplication stable
+  ↓
+FederatedScopePolicy <= 100 uniques
+  ↓
+résolution + READY
+  ↓
+SearchService / ContextBuilder par projet
 ```
 
-Résultats détaillés :
+La cardinalité est appliquée avant les lookups/readiness afin qu'un scope surdimensionné échoue sans résoudre 101 projets.
 
-- [`iteration-16-baseline-results.md`](iteration-16-baseline-results.md) ;
-- [`iteration-16-extended-portfolio-results.md`](iteration-16-extended-portfolio-results.md) ;
-- [`large-scale-baseline-runbook.md`](large-scale-baseline-runbook.md).
+## Recherche fédérée
 
-Cette baseline ne doit pas être réécrite avec des chiffres Phase 6 tant qu'une nouvelle campagne mesurée n'a pas été exécutée.
-
-## Architecture fédérée Phase 6
+Pour une portée valide :
 
 ```text
-projectIds explicites et READY
-       ↓
-NexusApplication.searchAcrossProjects
-       ↓
-FederatedSearchService
-       ├─ SearchService(A, localOverfetch)
-       ├─ SearchService(B, localOverfetch)
-       └─ SearchService(C, localOverfetch)
-       ↓
+SearchService(A, localOverfetch)
+SearchService(B, localOverfetch)
+...
+  ↓
 tri global déterministe
-       ↓
+  ↓
 diversification (projectId,path)
-       ↓
+  ↓
 top-K global
 ```
 
-Le pool local est désormais supérieur au top-K final, borné de 20 à 500 avec facteur 4. Le défaut F01 où FILE/SYMBOL d'un même chemin pouvaient vider le résultat après diversification est couvert par un test de régression.
+Le pool local est borné et la limite publique des résultats est commune à CLI/REST/MCP via `ResultLimitPolicy`.
 
-## Scale symboles/usages
+## Requêtes Lucene à forte cardinalité
 
-Phase 6 remplace les scans applicatifs par des opérations repository bornées :
+`LuceneSearchIndex` analyse les termes uniques de la requête puis s'arrête à :
 
 ```text
-searchSymbols(projectId, query, limit)
-searchRelations(projectId, symbol, limit)
+MAX_ANALYZED_QUERY_TERMS = 128
 ```
 
-SQLite préfiltre avant matérialisation. Le fuzzy Levenshtein reste en Java, mais uniquement sur un pool borné.
+La limite opérationnelle est donc de **128 termes analysés uniques** avant expansion multi-champs. Le `MultiFieldQueryParser` développe ensuite ces termes sur cinq champs ; cette borne conserve une marge sous la limite Lucene par défaut de 1 024 clauses imbriquées, en incluant la coordination externe.
+
+Un test de non-régression utilise une requête de 1 500 termes et vérifie qu'elle ne déclenche pas `TooManyClauses`.
+
+## SQLite et symboles
+
+Les recherches symbole/relation filtrent côté repository avant matérialisation. V005 impose également :
+
+```text
+start_line >= 1
+end_line >= start_line
+```
 
 ## Graphe
 
-V002 introduit une génération monotone de l'index canonique par projet. `ProjectGraphBuilder` conserve une vue dérivée en mémoire tant que cette génération ne change pas.
+Les projections/voisinages sont bornés en nœuds/arêtes et le benchmark vérifie le coût à grande échelle. Les caches dérivés restent invalidés par la génération canonique.
 
-Conséquence : le graphe n'est plus reconstruit à chaque recherche et l'enrichisseur charge seulement les fichiers voisins nécessaires.
+## Contexte fédéré
 
-## Surfaces publiques
+`FederatedContextService` combine :
 
-La fédération n'est plus limitée à la façade interne :
-
-```text
-CLI  search-federated
-REST POST /api/v1/federated/search
-MCP  search_across_projects
-```
-
-Les trois surfaces délèguent à `NexusApplication` et appliquent le même gate READY.
-
-## Contexte multi-projet
-
-Phase 6 livre également `FederatedContextService` :
-
-- portée explicite ;
-- budget global ;
+- budget final global ;
+- budget de travail préparatoire ;
 - provenance ;
-- fairness round-robin ;
-- déduplication de contenu ;
-- métriques de starvation ;
-- instructions/skills/Git projet-locaux.
+- fair floor / round-robin / refill ;
+- déduplication ;
+- sources natives projet-locales.
 
-Surfaces : CLI `context-federated`, REST `/api/v1/federated/context`, MCP `build_context_across_projects` et `explain_context_across_projects`.
+Le budget de découverte natif de chaque construction est partagé entre instructions, skills, customisations et Git avant le budget final de tokens.
 
-## Décision moteurs externes
+Les limites REST de résultats et de budget contexte fédérés sont alignées sur les politiques centrales ; le REST ne peut pas demander un plafond supérieur au cœur.
 
-Les optimisations Phase 6 suivent le principe « améliorer le moteur local avant d'ajouter une infrastructure ». Aucun Zoekt, OpenGrok, OpenSearch, index distant, index distribué ou parallélisme fédéré n'est ajouté automatiquement.
+## Providers externes et scale
 
-Réexaminer un moteur externe seulement si une campagne reproductible démontre malgré les requêtes bornées et le cache graphe :
+Les providers/importers externes utilisent `ExternalTaskRunner` avec timeout et maximum **8 workers réellement actifs**. Un provider qui ignore l'interruption conserve sa place de capacité jusqu'à sa terminaison réelle.
 
-- p95 non acceptable ;
-- mémoire/disque non acceptable ;
-- reconstruction trop coûteuse ;
-- volume de symboles au-delà des capacités locales ;
-- besoin réel d'un index partagé/distant ;
-- gain de pertinence mesuré impossible avec Lucene/SQLite.
+JDT LS borne en plus son framing à 16 MiB par message, 64 KiB de headers cumulés, 8 KiB par ligne et 256 messages en attente.
 
-Le lifecycle Lucene partagé reste lui aussi un watch item jusqu'à preuve de gain.
+## Scale Benchmark courant
 
-## Qualification Phase 6
+`.github/workflows/scale-benchmark.yml` qualifie :
 
-Le runner historique I16 reste utile pour comparer la baseline. Le gate d'intégration Phase 6 est :
+- SQLite jusqu'aux tiers configurés ;
+- portefeuille jusqu'à 100 projets ;
+- graphe ;
+- budget fédéré ;
+- découverte native filesystem avec 1 000 skills.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
-```
+Les rapports sont des preuves du SHA qui les a produits, pas des garanties intemporelles.
 
-Une campagne de performance post-Phase 6 peut ensuite rejouer les corpus I16 pour mesurer le gain réel des requêtes ciblées et du cache de graphe sans falsifier la baseline historique.
+## Moteurs externes
+
+Zoekt/OpenGrok/OpenSearch, FTS supplémentaire, vector DB, cache Git persistant ou lifecycle Lucene partagé ne sont introduits qu'après mesure reproductible démontrant un besoin réel.

@@ -92,6 +92,58 @@ docker run --rm -i nexus-context-engine:0.2.0 mcp
 docker run --rm nexus-context-engine:0.2.0 assistant generic docker nexus json
 ```
 
+CLI et MCP ne dépendent pas du contrat de publication REST.
+
+### `docker run` REST en loopback
+
+Un lancement REST manuel en mode `loopback-forward` doit déclarer **explicitement** l'adresse de publication hôte. L'image ne fournit volontairement aucune valeur par défaut pour cette déclaration : le conteneur ne peut pas savoir quelle adresse le daemon Docker a réellement utilisée pour `-p`.
+
+Exemple sûr :
+
+```bash
+TOKEN="$(openssl rand -hex 32)"
+docker run --rm \
+  -e NEXUS_REST_API_TOKEN="$TOKEN" \
+  -e NEXUS_DOCKER_HOST_FORWARD_ADDRESS=127.0.0.1 \
+  -p 127.0.0.1:8080:8080 \
+  nexus-context-engine:0.2.0 rest
+```
+
+Les deux valeurs doivent décrire le même déploiement :
+
+```text
+NEXUS_DOCKER_HOST_FORWARD_ADDRESS=127.0.0.1
+-p 127.0.0.1:8080:8080
+```
+
+Ces lancements sont volontairement refusés :
+
+```text
+# déclaration absente
+docker run ... -p 127.0.0.1:8080:8080 nexus-context-engine:0.2.0 rest
+
+# déclaration distante déguisée en loopback-forward
+NEXUS_DOCKER_HOST_FORWARD_ADDRESS=0.0.0.0
+-p 0.0.0.0:8080:8080
+NEXUS_REST_EXPOSURE_MODE=loopback-forward
+```
+
+Attention : `docker run -p 8080:8080 ...` publie généralement sur toutes les interfaces hôte. Il ne doit donc pas être utilisé en `loopback-forward`.
+
+### Exposition distante volontaire
+
+Une exposition distante ne doit pas être présentée comme `loopback-forward`. Elle doit utiliser un mode prévu pour une topologie HTTPS, par exemple `reverse-proxy-https`, avec un reverse proxy TLS de confiance devant NEXUS, un token fort et une allowlist de racines projet.
+
+Exemple de variables NEXUS pour cette topologie :
+
+```text
+NEXUS_REST_EXPOSURE_MODE=reverse-proxy-https
+NEXUS_REST_API_TOKEN=<au moins 32 octets aléatoires>
+NEXUS_REST_ALLOWED_PROJECT_ROOTS=/workspace
+```
+
+Le mode d'exposition exprime le contrat de déploiement ; il ne configure pas à lui seul le certificat ou le reverse proxy.
+
 ## Construire localement
 
 ```powershell
@@ -112,7 +164,7 @@ Smoke :
   -HostPort 18080
 ```
 
-Le test vérifie CLI, MCP STDIO et REST sur un port hôte personnalisé.
+Le test vérifie CLI, MCP STDIO, REST loopback positif, l'absence de déclaration de forward et le refus d'un forward distant déclaré en `loopback-forward`.
 
 ## Persistance
 
@@ -168,6 +220,23 @@ Le port hôte est celui à changer en priorité.
 
 Le wizard Windows vérifie le **port hôte externe** demandé avant installation. S'il est occupé, il sélectionne automatiquement le premier port TCP libre suivant. Le port interne du conteneur n'est pas sondé sur Windows.
 
+### Contrat `loopback-forward`
+
+À l'intérieur du conteneur, NEXUS écoute volontairement sur `0.0.0.0:8080`. Cette adresse interne ne prouve rien sur l'adresse utilisée par le daemon Docker côté hôte.
+
+Le Compose officiel ferme cette ambiguïté avec une déclaration explicite transmise au conteneur :
+
+```text
+NEXUS_DOCKER_BIND_ADDRESS
+        │
+        ├── ports: <bind>:<host-port>:<container-port>
+        └── NEXUS_DOCKER_HOST_FORWARD_ADDRESS=<bind>
+```
+
+Le défaut officiel reste `127.0.0.1`. Si `NEXUS_DOCKER_BIND_ADDRESS=0.0.0.0` est configuré tout en conservant `NEXUS_REST_EXPOSURE_MODE=loopback-forward`, NEXUS refuse de démarrer.
+
+Le `.env` généré par le wizard conserve **une seule source de vérité**, `NEXUS_DOCKER_BIND_ADDRESS`. Le Compose dérive lui-même `NEXUS_DOCKER_HOST_FORWARD_ADDRESS`; l'utilisateur n'a pas deux adresses indépendantes à synchroniser.
+
 ## REST et token
 
 À l'intérieur de Docker, Quarkus écoute sur `0.0.0.0` pour pouvoir être publié. La politique de sécurité NEXUS exige donc un `NEXUS_REST_API_TOKEN`.
@@ -185,6 +254,26 @@ Vous pouvez générer un token robuste avec, par exemple :
 ```bash
 openssl rand -hex 32
 ```
+
+## Threat model du forward Docker
+
+NEXUS **peut vérifier** depuis le conteneur :
+
+- `NEXUS_RUNTIME=docker` ;
+- le mode d'exposition déclaré ;
+- la présence et la robustesse du Bearer token ;
+- l'allowlist de racines ;
+- la déclaration `NEXUS_DOCKER_HOST_FORWARD_ADDRESS` ;
+- que cette déclaration est une adresse loopback en mode `loopback-forward`.
+
+NEXUS **ne peut pas introspecter de manière fiable** depuis le conteneur l'adresse de publication réellement choisie par le daemon Docker. Le processus ne peut donc pas prouver cryptographiquement qu'un opérateur manuel n'a pas menti, par exemple en combinant :
+
+```text
+NEXUS_DOCKER_HOST_FORWARD_ADDRESS=127.0.0.1
+-p 0.0.0.0:8080:8080
+```
+
+Le packaging officiel élimine ce mauvais état en utilisant la **même variable** pour le bind Docker et la déclaration transmise au guard. Un lancement manuel qui fournit volontairement une fausse déclaration sort du contrat vérifiable par le processus ; l'administrateur doit garder `-p` et `NEXUS_DOCKER_HOST_FORWARD_ADDRESS` cohérents.
 
 ## MCP Docker
 
@@ -240,6 +329,8 @@ L'assistant Windows génère :
 <install>\nexus-docker-up.cmd
 <install>\nexus-docker-down.cmd
 ```
+
+Le wizard limite la publication Docker à loopback. Le `.env` généré fixe `NEXUS_REST_EXPOSURE_MODE=loopback-forward`; le Compose dérive la déclaration de forward de `NEXUS_DOCKER_BIND_ADDRESS` et la transmet au conteneur.
 
 ## Sémantique / Ollama
 
@@ -304,7 +395,7 @@ Le workflow :
 .github/workflows/docker-distribution.yml
 ```
 
-construit et smoke l'image sur les PR concernées. Sur `main`, il publie :
+construit et smoke l'image sur les PR concernées. Il vérifie aussi que le Compose par défaut publie sur `127.0.0.1`, que la déclaration interne correspond au bind, et qu'un Compose explicitement distant en `loopback-forward` est rejeté. Sur `main`, il publie :
 
 ```text
 ghcr.io/fturleque/nexus-context-engine:<version>

@@ -1,16 +1,26 @@
 name: Scale Benchmark
 
 on:
+  workflow_call:
+    inputs:
+      profile:
+        description: Benchmark profile
+        required: false
+        default: ci
+        type: string
   pull_request:
     branches:
+      - develop
       - main
     paths:
-      - 'src/main/java/com/nexus/persistence/sqlite/**'
-      - 'src/main/java/com/nexus/search/**'
-      - 'src/main/java/com/nexus/ranking/graph/**'
-      - 'src/main/java/com/nexus/context/**'
-      - 'src/test/java/com/nexus/benchmark/**'
+      - 'core/src/main/java/com/nexus/persistence/sqlite/**'
+      - 'core/src/main/java/com/nexus/search/**'
+      - 'core/src/main/java/com/nexus/ranking/graph/**'
+      - 'core/src/main/java/com/nexus/context/**'
+      - 'core/src/test/java/com/nexus/benchmark/**'
+      - 'core/pom.xml'
       - 'scripts/measure-scale-regression.ps1'
+      - 'config/scale-benchmark-protocol'
       - 'docs/developer/scale-regression-benchmark.md'
       - 'docs/developer/scale-regression-results.md'
       - '.github/workflows/scale-benchmark.yml'
@@ -41,7 +51,7 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Java 21
-        uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4.9.0
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
           distribution: temurin
           java-version: '21'
@@ -50,25 +60,73 @@ jobs:
         id: profile
         shell: bash
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "value=${{ inputs.profile }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "value=ci" >> "$GITHUB_OUTPUT"
+          REQUESTED="${{ inputs.profile }}"
+          if [[ -z "$REQUESTED" ]]; then
+            REQUESTED=ci
           fi
+          if [[ "$REQUESTED" != "ci" && "$REQUESTED" != "full" ]]; then
+            echo "::error::Unsupported benchmark profile: $REQUESTED"
+            exit 1
+          fi
+          echo "value=$REQUESTED" >> "$GITHUB_OUTPUT"
 
       - name: Run hermetic scale benchmark
         shell: bash
         run: |
           chmod +x ./mvnw
           ./mvnw -B -pl core \
-            -Dtest=ScaleRegressionBenchmarkTest,GraphScaleRegressionBenchmarkTest,FederatedContextBudgetScaleBenchmarkTest \
+            -Dtest=ScaleRegressionBenchmarkTest,GraphScaleRegressionBenchmarkTest,FederatedContextBudgetScaleBenchmarkTest,NativeContextDiscoveryBudgetBenchmarkTest \
             -Djunit.jupiter.execution.timeout.test.method.default=20m \
             -Dnexus.scale.benchmark.enabled=true \
             -Dnexus.scale.benchmark.profile=${{ steps.profile.outputs.value }} \
             -Dnexus.scale.benchmark.output=target/scale-benchmark.json \
             -Dnexus.graph.scale.benchmark.output=target/graph-scale-benchmark.json \
             -Dnexus.federated.scale.benchmark.output=target/federated-budget-scale-benchmark.json \
+            -Dnexus.native.discovery.scale.benchmark.output=target/native-discovery-scale-benchmark.json \
             test
+
+      - name: Benchmark PR base SQLite population on the same runner
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          PROTOCOL_FILE="config/scale-benchmark-protocol"
+          CANDIDATE_REPORT="$RUNNER_TEMP/scale-benchmark-candidate.json"
+          BASE_REPORT="$RUNNER_TEMP/scale-benchmark-base.json"
+
+          test -s "$PROTOCOL_FILE"
+          HEAD_PROTOCOL="$(tr -d '\r\n[:space:]' < "$PROTOCOL_FILE")"
+          BASE_PROTOCOL="$(git show "$BASE_SHA:$PROTOCOL_FILE" 2>/dev/null | tr -d '\r\n[:space:]' || true)"
+          if [[ -z "$BASE_PROTOCOL" || "$BASE_PROTOCOL" != "$HEAD_PROTOCOL" ]]; then
+            echo "::notice::Skipping relative SQLite population comparison: base/head benchmark protocols are not compatible (base='${BASE_PROTOCOL:-absent}', head='$HEAD_PROTOCOL'). Candidate absolute and latency budgets remain enforced."
+            exit 0
+          fi
+
+          cp target/scale-benchmark.json "$CANDIDATE_REPORT"
+          BASE_WORKTREE="$RUNNER_TEMP/nexus-scale-base"
+          rm -rf "$BASE_WORKTREE"
+          git worktree add --detach "$BASE_WORKTREE" "$BASE_SHA"
+          cleanup_base_worktree() {
+            git worktree remove --force "$BASE_WORKTREE" >/dev/null 2>&1 || true
+          }
+          trap cleanup_base_worktree EXIT
+          (
+            cd "$BASE_WORKTREE"
+            chmod +x ./mvnw
+            ./mvnw -B -pl core clean \
+              -Dtest=ScaleRegressionBenchmarkTest \
+              -Djunit.jupiter.execution.timeout.test.method.default=20m \
+              -Dnexus.scale.benchmark.enabled=true \
+              -Dnexus.scale.benchmark.profile=${{ steps.profile.outputs.value }} \
+              -Dnexus.scale.benchmark.output="$BASE_REPORT" \
+              test
+          )
+          test -s "$BASE_REPORT"
+          mkdir -p target
+          cp "$CANDIDATE_REPORT" target/scale-benchmark.json
+          cp "$BASE_REPORT" target/scale-benchmark-base.json
 
       - name: Verify report and regression budgets
         shell: bash
@@ -76,6 +134,7 @@ jobs:
           test -s target/scale-benchmark.json
           test -s target/graph-scale-benchmark.json
           test -s target/federated-budget-scale-benchmark.json
+          test -s target/native-discovery-scale-benchmark.json
           python3 - <<'PY'
           import json
           from pathlib import Path
@@ -83,6 +142,9 @@ jobs:
           report = json.loads(Path('target/scale-benchmark.json').read_text())
           graph = json.loads(Path('target/graph-scale-benchmark.json').read_text())
           federated = json.loads(Path('target/federated-budget-scale-benchmark.json').read_text())
+          native = json.loads(Path('target/native-discovery-scale-benchmark.json').read_text())
+          baseline_path = Path('target/scale-benchmark-base.json')
+          baseline = json.loads(baseline_path.read_text()) if baseline_path.exists() else None
           profile = report['profile']
           assert profile in ('ci', 'full')
           assert graph['profile'] == profile
@@ -91,16 +153,30 @@ jobs:
           assert report['semanticRecovery']['documents'] > 0
 
           sqlite = {tier['symbols']: tier for tier in report['sqliteTiers']}
+          baseline_sqlite = ({tier['symbols']: tier for tier in baseline['sqliteTiers']}
+                             if baseline is not None else {})
           portfolio = {tier['projects']: tier for tier in report['portfolio']['tiers']}
 
-          # Budgets calibrated from full GitHub-hosted runner executions. They are
-          # intentionally above observed maxima to absorb runner noise while still
-          # detecting material algorithmic regressions.
           sqlite_budgets = {
-              10_000:  {'exact': 50,   'contains': 30,   'miss': 30,   'relation': 25,  'population': 700},
-              100_000: {'exact': 250,  'contains': 150,  'miss': 150,  'relation': 100, 'population': 2500},
-              500_000: {'exact': 1000, 'contains': 600,  'miss': 600,  'relation': 400, 'population': 10000},
-              1_000_000: {'exact': 2000, 'contains': 1200, 'miss': 1200, 'relation': 800, 'population': 20000},
+              10_000:  {'exact': 50,   'contains': 30,   'miss': 30,   'relation': 25},
+              100_000: {'exact': 250,  'contains': 150,  'miss': 150,  'relation': 100},
+              500_000: {'exact': 1000, 'contains': 600,  'miss': 600,  'relation': 400},
+              1_000_000: {'exact': 2000, 'contains': 1200, 'miss': 1200, 'relation': 800},
+          }
+          # SQLite bulk population is dominated by hosted-runner storage throughput.
+          # Keep a broad fail-safe ceiling, but on comparable PRs detect code
+          # regressions by comparing candidate and base on the same runner.
+          population_safety_ceiling = {
+              10_000: 1_400,
+              100_000: 5_000,
+              500_000: 20_000,
+              1_000_000: 40_000,
+          }
+          population_jitter_ms = {
+              10_000: 200,
+              100_000: 500,
+              500_000: 1_500,
+              1_000_000: 3_000,
           }
 
           for symbols, tier in sqlite.items():
@@ -110,7 +186,27 @@ jobs:
               assert tier['symbolMissingWorstCase']['p95Ms'] <= budget['miss'], (symbols, 'miss', tier['symbolMissingWorstCase']['p95Ms'])
               assert tier['relationContains']['p95Ms'] <= budget['relation'], (symbols, 'relation', tier['relationContains']['p95Ms'])
               assert tier['targeted100Files']['p95Ms'] <= 30, (symbols, 'targeted-files', tier['targeted100Files']['p95Ms'])
-              assert tier['populationMs'] <= budget['population'], (symbols, 'population', tier['populationMs'])
+
+              population = tier['populationMs']
+              ceiling = population_safety_ceiling[symbols]
+              assert population <= ceiling, (symbols, 'population-safety', population, ceiling)
+              if symbols in baseline_sqlite:
+                  baseline_population = baseline_sqlite[symbols]['populationMs']
+                  relative_ceiling = max(
+                      int(baseline_population * 1.20),
+                      baseline_population + population_jitter_ms[symbols])
+                  assert population <= relative_ceiling, (
+                      symbols,
+                      'population-relative',
+                      population,
+                      baseline_population,
+                      relative_ceiling)
+                  print(
+                      'sqlite-population-relative=',
+                      symbols,
+                      'candidate=', population,
+                      'base=', baseline_population,
+                      'allowed=', relative_ceiling)
 
           if 1_000_000 in sqlite:
               assert sqlite[1_000_000]['databaseBytes'] <= 650 * 1024 * 1024, sqlite[1_000_000]['databaseBytes']
@@ -137,9 +233,6 @@ jobs:
           assert graph['heapDeltaBytes'] <= 256 * 1024 * 1024, graph['heapDeltaBytes']
           assert graph['databaseBytes'] <= 900 * 1024 * 1024, graph['databaseBytes']
 
-          # P1-04: at the real public ceiling, 100 projects share one bounded
-          # global work budget. Local preparation may overfetch by at most 3x
-          # globally; it must never devolve into projects × global budget.
           assert federated['projects'] == 100, federated['projects']
           assert federated['globalBudget'] == 200_000, federated['globalBudget']
           assert federated['candidateBudgetTotal'] == 600_000, federated['candidateBudgetTotal']
@@ -148,6 +241,13 @@ jobs:
           assert federated['selectedTokens'] <= 200_000, federated['selectedTokens']
           assert federated['deterministic'] is True
           assert federated['durationMs'] <= 5_000, federated['durationMs']
+
+          assert native['skills'] == 1_000, native
+          assert native['visitedEntries'] == 2_001, native
+          assert native['candidateResources'] == 1_000, native
+          assert native['cumulativeBytes'] > 0, native
+          assert native['deterministic'] is True, native
+          assert native['durationMs'] <= native['maxDurationMs'] <= 10_000, native
 
           if profile == 'full':
               assert report['portfolio']['totalFullIndexMs'] <= 6000, report['portfolio']['totalFullIndexMs']
@@ -170,6 +270,9 @@ jobs:
           print('federated-projects=', federated['projects'])
           print('federated-global-budget=', federated['globalBudget'])
           print('federated-work-budget=', federated['candidateBudgetTotal'])
+          print('native-skills=', native['skills'])
+          print('native-visited=', native['visitedEntries'])
+          print('native-duration-ms=', native['durationMs'])
           print('total-duration-ms=', report['totalDurationMs'])
           print('all-regression-budgets=PASS')
           PY
@@ -183,5 +286,7 @@ jobs:
           if-no-files-found: error
           path: |
             target/scale-benchmark.json
+            target/scale-benchmark-base.json
             target/graph-scale-benchmark.json
             target/federated-budget-scale-benchmark.json
+            target/native-discovery-scale-benchmark.json

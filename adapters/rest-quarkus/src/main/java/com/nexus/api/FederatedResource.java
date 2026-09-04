@@ -4,6 +4,10 @@ import com.nexus.api.ApiModels.FederatedContextRequest;
 import com.nexus.api.ApiModels.FederatedContextResponse;
 import com.nexus.api.ApiModels.FederatedSearchRequest;
 import com.nexus.api.ApiModels.FederatedSearchResponse;
+import com.nexus.context.ContextBudgetPolicy;
+import com.nexus.project.FederatedScopePolicy;
+import com.nexus.search.QueryPolicy;
+import com.nexus.search.ResultLimitPolicy;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
@@ -22,9 +26,8 @@ import java.util.UUID;
 @Consumes(MediaType.APPLICATION_JSON)
 public class FederatedResource {
 
-    private static final int DEFAULT_SEARCH_LIMIT = 10;
-    private static final int DEFAULT_TOKEN_BUDGET =
-            com.nexus.context.ContextBudgetPolicy.DEFAULT_CONTEXT_TOKEN_BUDGET;
+    private static final int DEFAULT_SEARCH_LIMIT = ResultLimitPolicy.DEFAULT_RESULT_LIMIT;
+    private static final int DEFAULT_TOKEN_BUDGET = ContextBudgetPolicy.DEFAULT_CONTEXT_TOKEN_BUDGET;
 
     @Inject
     NexusApiApplicationService service;
@@ -34,8 +37,8 @@ public class FederatedResource {
     public FederatedSearchResponse search(FederatedSearchRequest request) throws IOException {
         requireRequest(request);
         List<UUID> projectIds = requireProjects(request.projectIds());
-        String query = requireNonBlank(request.query(), "query est obligatoire");
-        int limit = positiveOrDefault(request.limit(), DEFAULT_SEARCH_LIMIT, "limit");
+        String query = QueryPolicy.normalize(request.query());
+        int limit = request.limit() == null ? DEFAULT_SEARCH_LIMIT : ResultLimitPolicy.validate(request.limit());
         boolean explain = Boolean.TRUE.equals(request.explain());
         return ApiMapper.federatedSearch(service.searchAcrossProjects(projectIds, query, limit, explain));
     }
@@ -45,8 +48,10 @@ public class FederatedResource {
     public FederatedContextResponse context(FederatedContextRequest request) {
         requireRequest(request);
         List<UUID> projectIds = requireProjects(request.projectIds());
-        String query = requireNonBlank(request.query(), "query est obligatoire");
-        int tokenBudget = positiveOrDefault(request.tokenBudget(), DEFAULT_TOKEN_BUDGET, "tokenBudget");
+        String query = QueryPolicy.normalize(request.query());
+        int tokenBudget = request.tokenBudget() == null
+                ? DEFAULT_TOKEN_BUDGET
+                : ContextBudgetPolicy.validate(request.tokenBudget());
         Set<String> requestedSources = request.requestedSources() == null ? Set.of() : request.requestedSources();
         Map<String, String> constraints = request.constraints() == null ? Map.of() : request.constraints();
         boolean explain = Boolean.TRUE.equals(request.explain());
@@ -61,24 +66,6 @@ public class FederatedResource {
     }
 
     private static List<UUID> requireProjects(List<UUID> projectIds) {
-        if (projectIds == null || projectIds.isEmpty()) {
-            throw new IllegalArgumentException("projectIds doit contenir au moins un projet");
-        }
-        return projectIds.stream().distinct().toList();
-    }
-
-    private static String requireNonBlank(String value, String message) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(message);
-        }
-        return value.trim();
-    }
-
-    private static int positiveOrDefault(Integer value, int defaultValue, String field) {
-        int resolved = value == null ? defaultValue : value;
-        if (resolved <= 0) {
-            throw new IllegalArgumentException(field + " doit être strictement positif");
-        }
-        return resolved;
+        return FederatedScopePolicy.normalizeProjectIds(projectIds);
     }
 }

@@ -1,0 +1,229 @@
+name: Lucene Lifecycle Qualification
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - 'core/src/main/java/com/nexus/search/lucene/**'
+      - 'core/src/main/java/com/nexus/search/semantic/lucene/**'
+      - 'core/src/main/java/com/nexus/application/NexusApplication.java'
+      - 'adapters/rest-quarkus/src/main/java/com/nexus/api/NexusApiApplicationService.java'
+      - 'adapters/mcp-java/src/main/java/com/nexus/mcp/NexusMcpServer.java'
+      - 'core/src/test/java/com/nexus/benchmark/LuceneLifecycleQualificationBenchmarkTest.java'
+      - 'core/src/test/java/com/nexus/application/NexusApplicationLongLivedLifecycleTest.java'
+      - 'docs/developer/lucene-lifecycle-qualification.md'
+      - 'docs/adr/0045-conserver-les-writers-operation-scoped-et-mettre-en-cache-les-readers-lucene.md'
+      - '.github/workflows/lucene-lifecycle-benchmark.yml'
+  push:
+    branches:
+      - develop
+    paths:
+      - 'core/src/main/java/com/nexus/search/lucene/**'
+      - 'core/src/main/java/com/nexus/search/semantic/lucene/**'
+      - 'core/src/main/java/com/nexus/application/NexusApplication.java'
+      - 'adapters/rest-quarkus/src/main/java/com/nexus/api/NexusApiApplicationService.java'
+      - 'adapters/mcp-java/src/main/java/com/nexus/mcp/NexusMcpServer.java'
+      - 'core/src/test/java/com/nexus/benchmark/LuceneLifecycleQualificationBenchmarkTest.java'
+      - 'core/src/test/java/com/nexus/application/NexusApplicationLongLivedLifecycleTest.java'
+      - 'docs/developer/lucene-lifecycle-qualification.md'
+      - 'docs/adr/0045-conserver-les-writers-operation-scoped-et-mettre-en-cache-les-readers-lucene.md'
+      - '.github/workflows/lucene-lifecycle-benchmark.yml'
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Benchmark profile
+        required: true
+        default: full
+        type: choice
+        options:
+          - ci
+          - full
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: ABBA lifecycle benchmark (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux
+          - os: windows-latest
+            label: windows
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Java 21
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Resolve benchmark profile
+        id: profile
+        shell: bash
+        run: |
+          REQUESTED="${{ inputs.profile }}"
+          if [[ -z "$REQUESTED" ]]; then
+            REQUESTED=ci
+          fi
+          if [[ "$REQUESTED" != "ci" && "$REQUESTED" != "full" ]]; then
+            echo "::error::Unsupported benchmark profile: $REQUESTED"
+            exit 1
+          fi
+          echo "value=$REQUESTED" >> "$GITHUB_OUTPUT"
+
+      - name: Run hermetic lifecycle benchmark (Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          chmod +x ./mvnw
+          ./mvnw -B -pl core \
+            -Dtest=LuceneLifecycleQualificationBenchmarkTest \
+            -Djunit.jupiter.execution.timeout.test.method.default=20m \
+            -Dnexus.scale.benchmark.enabled=true \
+            -Dnexus.scale.benchmark.profile=${{ steps.profile.outputs.value }} \
+            -Dnexus.lucene.lifecycle.benchmark.output=target/lucene-lifecycle-benchmark.json \
+            test
+
+      - name: Run hermetic lifecycle benchmark (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & .\mvnw.cmd -B -pl core `
+            '-Dtest=LuceneLifecycleQualificationBenchmarkTest' `
+            '-Djunit.jupiter.execution.timeout.test.method.default=20m' `
+            '-Dnexus.scale.benchmark.enabled=true' `
+            '-Dnexus.scale.benchmark.profile=${{ steps.profile.outputs.value }}' `
+            '-Dnexus.lucene.lifecycle.benchmark.output=target/lucene-lifecycle-benchmark.json' `
+            test
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Verify qualification report (Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          test -s target/lucene-lifecycle-benchmark.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path('target/lucene-lifecycle-benchmark.json').read_text())
+          assert report['profile'] in ('ci', 'full')
+          assert report['protocol']['ordering'] == 'ABBA'
+          assert report['lexical']['documents'] > 0
+          assert report['semantic']['documents'] > 0
+
+          for domain in ('lexical', 'semantic'):
+              for operation in ('search', 'microWrite'):
+                  metrics = report[domain][operation]
+                  for mode in ('operationScoped', 'persistentPrototype'):
+                      sample = metrics[mode]
+                      assert sample['samples'] >= 20, (domain, operation, mode, sample)
+                      assert sample['p50Micros'] > 0, (domain, operation, mode, sample)
+                      assert sample['p95Micros'] >= sample['p50Micros'], (domain, operation, mode, sample)
+
+          recovery = report['recovery']
+          assert recovery['lexical'] is True, recovery
+          assert recovery['semantic'] is True, recovery
+          assert recovery['scenario'] == 'persistent_writer_rollback_then_production_rebuild'
+
+          resources = report['resources']
+          assert resources['operationScopedSteadyOpenDirectories'] == 0
+          assert resources['operationScopedSteadyOpenReaders'] == 0
+          assert resources['operationScopedSteadyOpenWriters'] == 0
+          assert resources['persistentPrototypeSteadyOpenDirectories'] == 4
+          assert resources['persistentPrototypeSteadyOpenReaders'] == 2
+          assert resources['persistentPrototypeSteadyOpenWriters'] == 2
+
+          decision = report['decision']
+          assert decision['recommendation'] in (
+              'retain_operation_scoped_lifecycle',
+              'candidate_requires_repeated_linux_windows_qualification_and_adr_before_production_change')
+
+          print('profile=', report['profile'])
+          print('lexical-search-p95-improvement=', report['lexical']['search']['p95ImprovementRatio'])
+          print('semantic-search-p95-improvement=', report['semantic']['search']['p95ImprovementRatio'])
+          print('lexical-write-p95-regression=', report['lexical']['microWrite']['p95RegressionRatio'])
+          print('semantic-write-p95-regression=', report['semantic']['microWrite']['p95RegressionRatio'])
+          print('retained-heap-delta-bytes=', resources['approximateRetainedHeapDeltaBytes'])
+          print('persistent-lifecycle-candidate=', decision['persistentLifecycleCandidate'])
+          print('recommendation=', decision['recommendation'])
+          print('lucene-lifecycle-qualification=PASS')
+          PY
+
+      - name: Verify qualification report (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'target/lucene-lifecycle-benchmark.json'
+          if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -eq 0) {
+            throw "Qualification report missing or empty: $path"
+          }
+          $report = Get-Content -Raw -LiteralPath $path | ConvertFrom-Json
+          if ($report.profile -notin @('ci', 'full')) { throw "Unexpected profile: $($report.profile)" }
+          if ($report.protocol.ordering -ne 'ABBA') { throw "Unexpected ordering: $($report.protocol.ordering)" }
+          if ($report.lexical.documents -le 0 -or $report.semantic.documents -le 0) { throw 'Representative corpora are empty' }
+
+          foreach ($domain in @('lexical', 'semantic')) {
+            foreach ($operation in @('search', 'microWrite')) {
+              $metrics = $report.$domain.$operation
+              foreach ($mode in @('operationScoped', 'persistentPrototype')) {
+                $sample = $metrics.$mode
+                if ($sample.samples -lt 20) { throw "$domain/$operation/$mode has too few samples" }
+                if ($sample.p50Micros -le 0 -or $sample.p95Micros -lt $sample.p50Micros) {
+                  throw "$domain/$operation/$mode has invalid latency metrics"
+                }
+              }
+            }
+          }
+
+          if (-not $report.recovery.lexical -or -not $report.recovery.semantic) { throw 'Recovery qualification failed' }
+          if ($report.recovery.scenario -ne 'persistent_writer_rollback_then_production_rebuild') { throw 'Unexpected recovery scenario' }
+          if ($report.resources.operationScopedSteadyOpenDirectories -ne 0 -or
+              $report.resources.operationScopedSteadyOpenReaders -ne 0 -or
+              $report.resources.operationScopedSteadyOpenWriters -ne 0) {
+            throw 'Operation-scoped resource contract changed'
+          }
+          if ($report.resources.persistentPrototypeSteadyOpenDirectories -ne 4 -or
+              $report.resources.persistentPrototypeSteadyOpenReaders -ne 2 -or
+              $report.resources.persistentPrototypeSteadyOpenWriters -ne 2) {
+            throw 'Persistent prototype resource contract changed'
+          }
+
+          $recommendations = @(
+            'retain_operation_scoped_lifecycle',
+            'candidate_requires_repeated_linux_windows_qualification_and_adr_before_production_change')
+          if ($report.decision.recommendation -notin $recommendations) { throw "Unexpected recommendation: $($report.decision.recommendation)" }
+
+          Write-Host "profile=$($report.profile)"
+          Write-Host "lexical-search-p95-improvement=$($report.lexical.search.p95ImprovementRatio)"
+          Write-Host "semantic-search-p95-improvement=$($report.semantic.search.p95ImprovementRatio)"
+          Write-Host "lexical-write-p95-regression=$($report.lexical.microWrite.p95RegressionRatio)"
+          Write-Host "semantic-write-p95-regression=$($report.semantic.microWrite.p95RegressionRatio)"
+          Write-Host "retained-heap-delta-bytes=$($report.resources.approximateRetainedHeapDeltaBytes)"
+          Write-Host "persistent-lifecycle-candidate=$($report.decision.persistentLifecycleCandidate)"
+          Write-Host "recommendation=$($report.decision.recommendation)"
+          Write-Host 'lucene-lifecycle-qualification=PASS'
+
+      - name: Retain qualification report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nexus-lucene-lifecycle-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}-${{ matrix.label }}-${{ steps.profile.outputs.value }}
+          retention-days: 90
+          if-no-files-found: error
+          path: target/lucene-lifecycle-benchmark.json

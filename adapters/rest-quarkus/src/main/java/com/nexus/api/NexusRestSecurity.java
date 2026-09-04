@@ -14,10 +14,14 @@ final class NexusRestSecurity {
 
     static final String TOKEN_ENVIRONMENT_VARIABLE = "NEXUS_REST_API_TOKEN";
     static final String TOKEN_PROPERTY = "nexus.rest.api-token";
+    static final String LOCAL_HARDENING_ENVIRONMENT_VARIABLE = "NEXUS_REST_HARDEN_LOCAL";
+    static final String LOCAL_HARDENING_PROPERTY = "nexus.rest.harden-local";
     static final String EXPOSURE_MODE_ENVIRONMENT_VARIABLE = "NEXUS_REST_EXPOSURE_MODE";
     static final String EXPOSURE_MODE_PROPERTY = "nexus.rest.exposure-mode";
     static final String RUNTIME_ENVIRONMENT_VARIABLE = "NEXUS_RUNTIME";
     static final String RUNTIME_PROPERTY = "nexus.runtime";
+    static final String DOCKER_HOST_FORWARD_ADDRESS_ENVIRONMENT_VARIABLE = "NEXUS_DOCKER_HOST_FORWARD_ADDRESS";
+    static final String DOCKER_HOST_FORWARD_ADDRESS_PROPERTY = "nexus.docker.host-forward-address";
     static final int MIN_REMOTE_TOKEN_BYTES = 32;
     static final double MIN_REMOTE_TOKEN_ESTIMATED_ENTROPY_BITS = 96.0d;
 
@@ -43,6 +47,21 @@ final class NexusRestSecurity {
         return Optional.of(token.trim());
     }
 
+    static boolean isLocalHardeningRequired() {
+        Optional<String> configured = configuredValue(
+                LOCAL_HARDENING_PROPERTY,
+                LOCAL_HARDENING_ENVIRONMENT_VARIABLE);
+        if (configured.isEmpty()) {
+            return false;
+        }
+        return switch (configured.get().toLowerCase(Locale.ROOT)) {
+            case "true" -> true;
+            case "false" -> false;
+            default -> throw new IllegalStateException(
+                    LOCAL_HARDENING_ENVIRONMENT_VARIABLE + " doit valoir true ou false");
+        };
+    }
+
     static Optional<String> configuredExposureMode() {
         return configuredValue(EXPOSURE_MODE_PROPERTY, EXPOSURE_MODE_ENVIRONMENT_VARIABLE)
                 .map(value -> value.toLowerCase(Locale.ROOT));
@@ -51,6 +70,12 @@ final class NexusRestSecurity {
     static Optional<String> configuredRuntime() {
         return configuredValue(RUNTIME_PROPERTY, RUNTIME_ENVIRONMENT_VARIABLE)
                 .map(value -> value.toLowerCase(Locale.ROOT));
+    }
+
+    static Optional<String> configuredDockerHostForwardAddress() {
+        return configuredValue(
+                DOCKER_HOST_FORWARD_ADDRESS_PROPERTY,
+                DOCKER_HOST_FORWARD_ADDRESS_ENVIRONMENT_VARIABLE);
     }
 
     private static Optional<String> configuredValue(String property, String environmentVariable) {
@@ -68,14 +93,28 @@ final class NexusRestSecurity {
         return mode != null && EXPOSURE_MODES.contains(mode.trim().toLowerCase(Locale.ROOT));
     }
 
+    static boolean isLoopbackForwardMode(String mode) {
+        return mode != null && "loopback-forward".equals(mode.trim().toLowerCase(Locale.ROOT));
+    }
+
     static boolean isSecureNonLoopbackExposureMode(String mode) {
         return mode != null && NON_LOOPBACK_EXPOSURE_MODES.contains(mode.trim().toLowerCase(Locale.ROOT));
     }
 
+    /**
+     * Validates the declared Docker forwarding contract.
+     *
+     * <p>NEXUS cannot introspect the Docker daemon's actual published host address from inside the
+     * container. Therefore loopback-forward is accepted only when the deployment explicitly
+     * declares the host forward address and that declaration is loopback. Official Compose wiring
+     * derives this declaration from the exact same bind-address variable used by the port mapping.</p>
+     */
     static boolean isDockerLoopbackForward(String mode) {
-        return mode != null
-                && "loopback-forward".equals(mode.trim().toLowerCase(Locale.ROOT))
-                && configuredRuntime().filter("docker"::equals).isPresent();
+        return isLoopbackForwardMode(mode)
+                && configuredRuntime().filter("docker"::equals).isPresent()
+                && configuredDockerHostForwardAddress()
+                        .filter(NexusRestSecurity::isLoopbackHost)
+                        .isPresent();
     }
 
     static boolean isStrongRemoteToken(String token) {

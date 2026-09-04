@@ -177,9 +177,16 @@ try {
     if (-not (Test-Path -LiteralPath $thirdPartyNotices -PathType Leaf) -or (Get-Item -LiteralPath $thirdPartyNotices).Length -eq 0) {
         throw "Notices tierces absentes ou vides : $thirdPartyNotices"
     }
-    $jacocoReport = Join-Path $repoRoot "core\target\site\jacoco\jacoco.xml"
-    if (-not (Test-Path -LiteralPath $jacocoReport -PathType Leaf) -or (Get-Item -LiteralPath $jacocoReport).Length -eq 0) {
-        throw "Rapport JaCoCo absent ou vide : $jacocoReport"
+    $jacocoReports = @(
+        (Join-Path $repoRoot "core\target\site\jacoco\jacoco.xml"),
+        (Join-Path $repoRoot "adapters\rest-quarkus\target\site\jacoco\jacoco.xml"),
+        (Join-Path $repoRoot "adapters\mcp-java\target\site\jacoco\jacoco.xml"),
+        (Join-Path $repoRoot "adapters\assistant-clients\target\site\jacoco\jacoco.xml")
+    )
+    foreach ($jacocoReport in $jacocoReports) {
+        if (-not (Test-Path -LiteralPath $jacocoReport -PathType Leaf) -or (Get-Item -LiteralPath $jacocoReport).Length -eq 0) {
+            throw "Rapport JaCoCo absent ou vide : $jacocoReport"
+        }
     }
 
     Write-Host "[8/9] Archive installable et artefacts de conformite"
@@ -260,7 +267,9 @@ try {
     Write-Host "Archive : $distributionZip"
     Write-Host "SBOM : $sbom"
     Write-Host "Third-party notices : $thirdPartyNotices"
-    Write-Host "JaCoCo report : $jacocoReport"
+    foreach ($jacocoReport in $jacocoReports) {
+        Write-Host "JaCoCo report : $jacocoReport"
+    }
 }
 finally {
     $env:PATH = $previousPath

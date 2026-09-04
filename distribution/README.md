@@ -22,9 +22,21 @@ THIRD_PARTY_NOTICES.txt
 SBOM.cdx.json
 ```
 
+## Contrat JVM runtime
+
+Les distributions supportées appliquent le flag qualifié :
+
+```text
+--enable-native-access=ALL-UNNAMED
+```
+
+Il correspond au classpath non modulaire actuel et supprime le warning de native access observé sur les chemins SQLite/FFM qualifiés Java 21/Linux et Java 24/Windows.
+
+`jdk.incubator.vector` **n'est pas activé par défaut** : la comparaison same-runner ABBA n'a pas démontré de bénéfice robuste suffisant pour imposer un module incubateur. Le warning Lucene Vector API reste donc advisory.
+
 ## Windows natif
 
-Le payload x64 embarque un runtime Java `jpackage`. Aucun Java système n'est requis après installation.
+Le payload x64 embarque un runtime Java `jpackage`. Aucun Java système n'est requis après installation. Le launcher `nexus.exe` et les launchers Java secondaires partagent le contrat native-access ci-dessus.
 
 Surfaces :
 
@@ -48,10 +60,12 @@ mcp
 assistant
 ```
 
+L'image fixe `JDK_JAVA_OPTIONS=--enable-native-access=ALL-UNNAMED`, de sorte que les commandes Java directes via `docker exec` conservent le même contrat que l'entrypoint.
+
 MCP reste en STDIO et ne possède pas de port réseau :
 
 ```text
-docker exec -i <container> java -jar /opt/nexus/lib/nexus-mcp.jar
+docker exec -i <container> java --enable-native-access=ALL-UNNAMED -jar /opt/nexus/lib/nexus-mcp.jar
 ```
 
 REST utilise un port configurable. Le Compose généré mappe par défaut :
@@ -104,6 +118,8 @@ Le runtime MCP peut être :
 
 - natif, via le `java.exe` embarqué ;
 - Docker, via `docker exec -i`.
+
+Les commandes Java MCP générées par NEXUS incluent le contrat native-access qualifié.
 
 ### Copilot CLI
 

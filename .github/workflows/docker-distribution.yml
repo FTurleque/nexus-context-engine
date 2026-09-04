@@ -1,18 +1,37 @@
 name: Docker Distribution
 
 on:
+  workflow_call:
+    inputs:
+      export_qualified_image:
+        description: Export the exact qualified image for a release caller
+        required: false
+        type: boolean
+        default: false
+    outputs:
+      qualified_image_sha256:
+        description: SHA-256 of the exported docker-save archive
+        value: ${{ jobs.docker.outputs.qualified_image_sha256 }}
+      qualified_image_id:
+        description: Docker image config digest of the qualified image
+        value: ${{ jobs.docker.outputs.qualified_image_id }}
   pull_request:
-    branches: [main]
+    branches: [develop, main]
     paths:
       - 'packaging/docker/**'
       - 'scripts/release/build-docker-image.ps1'
       - 'scripts/release/test-docker-runtime.ps1'
       - 'scripts/release/test-docker-dotenv-roundtrip.sh'
+      - 'scripts/release/validate-release-tag.sh'
+      - 'scripts/release/test-release-tag-policy.sh'
+      - 'scripts/release/ghcr-immutable-preflight.sh'
+      - 'scripts/release/test-ghcr-immutable-preflight.sh'
       - 'src/**'
       - 'core/**'
       - 'adapters/**'
       - 'pom.xml'
       - '.github/workflows/docker-distribution.yml'
+      - '.github/workflows/release.yml'
   push:
     branches: [main]
     paths:
@@ -20,11 +39,16 @@ on:
       - 'scripts/release/build-docker-image.ps1'
       - 'scripts/release/test-docker-runtime.ps1'
       - 'scripts/release/test-docker-dotenv-roundtrip.sh'
+      - 'scripts/release/validate-release-tag.sh'
+      - 'scripts/release/test-release-tag-policy.sh'
+      - 'scripts/release/ghcr-immutable-preflight.sh'
+      - 'scripts/release/test-ghcr-immutable-preflight.sh'
       - 'src/**'
       - 'core/**'
       - 'adapters/**'
       - 'pom.xml'
       - '.github/workflows/docker-distribution.yml'
+      - '.github/workflows/release.yml'
   workflow_dispatch:
 
 permissions:
@@ -35,6 +59,9 @@ jobs:
     name: Docker CLI MCP REST parity and supply chain
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    outputs:
+      qualified_image_sha256: ${{ steps.export_image.outputs.sha256 }}
+      qualified_image_id: ${{ steps.export_image.outputs.image_id }}
     env:
       NEXUS_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
     steps:
@@ -43,6 +70,18 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ env.NEXUS_HEAD_SHA }}
+
+      - name: Qualify release policy scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x \
+            scripts/release/validate-release-tag.sh \
+            scripts/release/test-release-tag-policy.sh \
+            scripts/release/ghcr-immutable-preflight.sh \
+            scripts/release/test-ghcr-immutable-preflight.sh
+          scripts/release/test-release-tag-policy.sh
+          scripts/release/test-ghcr-immutable-preflight.sh
 
       - name: Read project version
         id: version
@@ -63,7 +102,7 @@ jobs:
           chmod +x scripts/release/test-docker-dotenv-roundtrip.sh
           scripts/release/test-docker-dotenv-roundtrip.sh
 
-      - name: Build Docker image
+      - name: Build Docker image once
         shell: bash
         run: docker build --pull --file packaging/docker/Dockerfile --tag nexus-context-engine:${NEXUS_HEAD_SHA} .
 
@@ -91,16 +130,63 @@ jobs:
         env:
           NEXUS_REST_API_TOKEN: 6df1462d571a6925e3bc3934ee10c6c55a965116fb47e2bc4db77ac7a5d69d34
         run: |
-          CID="$(docker run -d -e NEXUS_REST_API_TOKEN="$NEXUS_REST_API_TOKEN" -p 127.0.0.1:18080:8080 nexus-context-engine:${NEXUS_HEAD_SHA} rest)"
+          CID="$(docker run -d \
+            -e NEXUS_REST_API_TOKEN="$NEXUS_REST_API_TOKEN" \
+            -e NEXUS_DOCKER_HOST_FORWARD_ADDRESS=127.0.0.1 \
+            -p 127.0.0.1:18080:8080 \
+            nexus-context-engine:${NEXUS_HEAD_SHA} rest)"
           trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
           for attempt in $(seq 1 30); do
-            if curl --fail --silent -H "Authorization: Bearer $NEXUS_REST_API_TOKEN" http://127.0.0.1:18080/q/health/live | grep -q 'UP'; then
+            if docker exec "$CID" /usr/local/bin/nexus-healthcheck; then
+              curl --fail --silent \
+                -H "Authorization: Bearer $NEXUS_REST_API_TOKEN" \
+                http://127.0.0.1:18080/api/v1/projects >/dev/null
               exit 0
             fi
             sleep 1
           done
           docker logs "$CID"
           exit 1
+
+      - name: Reject remote Compose loopback-forward
+        shell: bash
+        env:
+          NEXUS_REST_API_TOKEN: 6df1462d571a6925e3bc3934ee10c6c55a965116fb47e2bc4db77ac7a5d69d34
+        run: |
+          set -euo pipefail
+          export NEXUS_DOCKER_IMAGE="nexus-context-engine:${NEXUS_HEAD_SHA}"
+          export NEXUS_DOCKER_CONTAINER="nexus-negative-${NEXUS_HEAD_SHA:0:12}"
+          export NEXUS_DOCKER_BIND_ADDRESS="0.0.0.0"
+          export NEXUS_DOCKER_HOST_PORT="18081"
+          export NEXUS_DOCKER_RESTART_POLICY="no"
+          export NEXUS_REST_EXPOSURE_MODE="loopback-forward"
+          COMPOSE_FILE="packaging/docker/docker-compose.yml.template"
+
+          cleanup() {
+            docker compose -f "$COMPOSE_FILE" down --remove-orphans >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker compose -f "$COMPOSE_FILE" up -d --no-build --pull never nexus
+          CID="$(docker compose -f "$COMPOSE_FILE" ps -a -q nexus)"
+          test -n "$CID"
+
+          for attempt in $(seq 1 30); do
+            if [ "$(docker inspect -f '{{.State.Running}}' "$CID")" = "false" ]; then
+              break
+            fi
+            sleep 1
+          done
+
+          if [ "$(docker inspect -f '{{.State.Running}}' "$CID")" != "false" ]; then
+            docker logs "$CID"
+            echo 'Remote loopback-forward container unexpectedly remained running' >&2
+            exit 1
+          fi
+          EXIT_CODE="$(docker inspect -f '{{.State.ExitCode}}' "$CID")"
+          test "$EXIT_CODE" -ne 0
+          docker logs "$CID" 2>&1 | tee /tmp/nexus-remote-loopback-forward.log
+          grep -q 'NEXUS_DOCKER_HOST_FORWARD_ADDRESS' /tmp/nexus-remote-loopback-forward.log
 
       - name: Smoke installed-payload fallback image
         shell: bash
@@ -119,6 +205,7 @@ jobs:
 
           cp packaging/docker/Dockerfile.runtime "$STAGE/docker/Dockerfile.runtime"
           cp packaging/docker/nexus-container-entrypoint.sh "$STAGE/docker/nexus-container-entrypoint.sh"
+          cp packaging/docker/nexus-container-healthcheck.sh "$STAGE/docker/nexus-container-healthcheck.sh"
 
           FALLBACK_IMAGE="nexus-context-engine:fallback-${NEXUS_HEAD_SHA}"
           docker build --pull --file "$STAGE/docker/Dockerfile.runtime" --tag "$FALLBACK_IMAGE" "$STAGE"
@@ -157,7 +244,7 @@ jobs:
 
       - name: Retain image security evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: nexus-container-security-${{ env.NEXUS_HEAD_SHA }}
           path: |
@@ -178,96 +265,40 @@ jobs:
           skip-setup-trivy: true
           exit-code: '1'
 
-  publish:
-    name: Publish and attest exact main image
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-    needs: docker
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-      attestations: write
-    env:
-      NEXUS_HEAD_SHA: ${{ github.sha }}
-    steps:
-      - name: Checkout exact main head
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          ref: ${{ env.NEXUS_HEAD_SHA }}
-
-      - name: Read project version
-        id: version
+      - name: Export exact qualified image
+        if: ${{ inputs.export_qualified_image == true }}
+        id: export_image
         shell: bash
-        run: |
-          VERSION="$(python3 - <<'PY'
-          import xml.etree.ElementTree as ET
-          root = ET.parse('pom.xml').getroot()
-          ns = {'m': 'http://maven.apache.org/POM/4.0.0'}
-          print(root.find('m:version', ns).text)
-          PY
-          )"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: Rebuild exact image for publication
-        shell: bash
-        run: docker build --pull --file packaging/docker/Dockerfile --tag nexus-context-engine:${NEXUS_HEAD_SHA} .
-
-      - name: Block fixable HIGH or CRITICAL vulnerabilities on publish image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: nexus-context-engine:${{ env.NEXUS_HEAD_SHA }}
-          scan-type: image
-          format: table
-          vuln-type: os,library
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: '1'
-
-      - name: Generate publish image CycloneDX SBOM
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: nexus-context-engine:${{ env.NEXUS_HEAD_SHA }}
-          scan-type: image
-          format: cyclonedx
-          output: nexus-image.cdx.json
-          skip-setup-trivy: true
-          exit-code: '0'
-
-      - name: Publish versioned GHCR image
-        id: publish
-        shell: bash
-        env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          echo "$GHCR_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          IMAGE="ghcr.io/fturleque/nexus-context-engine"
-          VERSION="${{ steps.version.outputs.version }}"
-          docker tag nexus-context-engine:${NEXUS_HEAD_SHA} "$IMAGE:$VERSION"
-          docker tag nexus-context-engine:${NEXUS_HEAD_SHA} "$IMAGE:latest"
-          docker push "$IMAGE:$VERSION"
-          docker push "$IMAGE:latest"
-          docker pull "$IMAGE:$VERSION" >/dev/null
-          REPO_DIGEST="$(docker image inspect "$IMAGE:$VERSION" --format '{{index .RepoDigests 0}}')"
-          DIGEST="${REPO_DIGEST#*@}"
-          test -n "$DIGEST"
-          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
-          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          mkdir -p target/qualified-image
+          IMAGE_REF="nexus-context-engine:${NEXUS_HEAD_SHA}"
+          IMAGE_ID="$(docker image inspect "$IMAGE_REF" --format '{{.Id}}')"
+          if [[ ! "$IMAGE_ID" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Invalid qualified image id: $IMAGE_ID"
+            exit 1
+          fi
+          docker save "$IMAGE_REF" --output target/qualified-image/nexus-qualified-image.tar
+          TAR_SHA256="$(sha256sum target/qualified-image/nexus-qualified-image.tar | awk '{print $1}')"
+          if [[ ! "$TAR_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Invalid qualified archive hash: $TAR_SHA256"
+            exit 1
+          fi
+          cat > target/qualified-image/metadata.txt <<EOF
+          head_sha=$NEXUS_HEAD_SHA
+          image_ref=$IMAGE_REF
+          image_id=$IMAGE_ID
+          tar_sha256=$TAR_SHA256
+          EOF
+          echo "sha256=$TAR_SHA256" >> "$GITHUB_OUTPUT"
+          echo "image_id=$IMAGE_ID" >> "$GITHUB_OUTPUT"
 
-      - name: Attest container build provenance
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+      - name: Retain exact qualified image for release
+        if: ${{ inputs.export_qualified_image == true }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          subject-name: ${{ steps.publish.outputs.image }}
-          subject-digest: ${{ steps.publish.outputs.digest }}
-          push-to-registry: true
-
-      - name: Attest container SBOM
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-name: ${{ steps.publish.outputs.image }}
-          subject-digest: ${{ steps.publish.outputs.digest }}
-          sbom-path: nexus-image.cdx.json
-          push-to-registry: true
+          name: nexus-qualified-image-${{ env.NEXUS_HEAD_SHA }}
+          path: target/qualified-image/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7

@@ -7,128 +7,73 @@ L'adaptateur MCP expose NEXUS aux assistants compatibles Model Context Protocol 
 ```text
 module      adapters/mcp-java
 Java        21
-MCP SDK     2.0.0
+MCP SDK     2.0.1
 transport   STDIO
 version     NEXUS 0.2.0
 ```
 
-Le MCP SDK et Jackson sont gouvernés par le parent Maven Phase 6. Le conflit de versions Jackson précédemment traité manuellement est désormais couvert par la gestion centrale des dépendances.
+Le BOM MCP et Jackson sont gouvernés par le parent Maven. Le SDK MCP 2.0.1 apporte notamment en amont des lectures HTTP/STDIO bornées ; NEXUS supporte ici le transport local STDIO.
 
 ## Architecture
 
 ```text
 Client MCP
-   ↓ JSON-RPC / STDIO
+  ↓ JSON-RPC / STDIO
 NexusMcpServer
-   ↓
+  ↓
 NexusMcpTools
-   ↓
+  ↓
 NexusApplication
-   ├─ SearchService
-   ├─ FederatedSearchService
-   ├─ DefaultContextBuilder
-   └─ FederatedContextService
 ```
 
-CLI, REST et MCP partagent donc les mêmes gates READY, providers, ranking et opt-ins.
+`stdout` reste réservé au framing JSON-RPC ; les diagnostics utilisent `stderr`.
 
-## Transport STDIO
+## Tools
 
-`stdout` reste réservé au transport JSON-RPC. Aucun log applicatif ne doit y être écrit. Les diagnostics utilisent `stderr` ou le mécanisme compatible du SDK.
-
-## Tools mono-projet
-
-### `list_projects`
-
-Liste les projets enregistrés et leur état.
-
-### `search_code`
-
-Arguments : `project`, `query`, `limit` optionnel, `explain` optionnel.
-
-Le projet doit être READY.
-
-### `find_symbol`
-
-Arguments : `project`, `query`, `limit` optionnel.
-
-Phase 6 utilise une recherche repository/SQLite bornée au lieu d'un scan applicatif de tous les symboles.
-
-### `find_usages`
-
-Arguments : `project`, `symbol`, `limit` optionnel.
-
-Les relations source/cible sont filtrées côté repository avec une limite stricte.
-
-### `build_context`
-
-Arguments : `project`, `query`, `tokenBudget`, `requestedSources`, `constraints`.
-
-### `explain_context`
-
-Même contrat que `build_context`, avec explicabilité forcée.
-
-## Tools fédérés — Phase 6
-
-### `search_across_projects`
-
-Arguments :
+Mono-projet :
 
 ```text
-projects  tableau non vide d'UUID ou noms uniques
-query     requête
-limit     optionnel, 10 par défaut
-explain   optionnel
+list_projects
+search_code
+find_symbol
+find_usages
+build_context
+explain_context
 ```
 
-Retourne le top-K global après sur-récupération locale et diversification `(projectId,path)`. Chaque hit conserve son projet d'origine.
-
-### `build_context_across_projects`
-
-Arguments :
+Fédérés :
 
 ```text
-projects
-query
-tokenBudget      2000 par défaut
-requestedSources optionnel
-constraints      optionnel
+search_across_projects
+build_context_across_projects
+explain_context_across_projects
 ```
 
-Construit un `FederatedContextBundle` avec budget global, provenance, fairness round-robin et déduplication inter-projet.
+Les trois surfaces CLI/REST/MCP délèguent aux mêmes politiques applicatives.
 
-### `explain_context_across_projects`
+## Portée fédérée
 
-Même contrat avec explicabilité forcée.
+`projects` est une liste non vide de sélecteurs. Le contrat commun impose au maximum **100 projets uniques** (UUID canoniques).
 
-Les instructions, Skills et données Git restent calculés dans leur projet d'origine avant fusion.
+L'ordre de validation est volontaire :
 
-## Format des réponses
+1. normaliser/valider les sélecteurs UUID explicites ;
+2. appliquer la limite de cardinalité canonique ;
+3. seulement ensuite résoudre les projets et vérifier `READY`.
 
-Chaque tool retourne un contenu texte MCP contenant un JSON sérialisé. Les erreurs sont retournées avec `isError=true` et :
+Ainsi, un scope de 101 UUID uniques inexistants produit l'erreur de portée maximale avant une erreur de projet absent. Les doublons ne consomment qu'une place canonique et l'ordre d'insertion stable est préservé.
 
-```json
-{
-  "error": "nexus_tool_error",
-  "message": "..."
-}
-```
+## Contextes
 
-## Sémantique
+`build_context` utilise `DefaultContextBuilder`, y compris le budget partagé de découverte native. Les tools fédérés utilisent `FederatedContextService` avec provenance, budget global, fairness, déduplication et travail préparatoire borné.
 
-MCP utilise `SemanticSearchConfiguration.fromEnvironment()` via `NexusApplication`. Aucune capacité sémantique spécifique au protocole n'existe.
+Instructions, skills et Git restent projet-locaux avant fusion.
 
-Activation explicite :
+## Erreurs
 
-```text
-NEXUS_SEMANTIC_PROVIDER=ollama
-```
+Les erreurs tools sont structurées avec `isError=true` et un payload JSON stable ; les erreurs de portée/readiness proviennent de la façade commune au lieu d'une politique MCP parallèle.
 
-Sans cette variable, aucun provider d'embeddings n'est créé.
-
-## Build
-
-Le module est dans le reactor :
+## Build et qualification
 
 ```powershell
 .\mvnw.cmd clean install
@@ -140,34 +85,8 @@ Runner :
 adapters/mcp-java/target/nexus-mcp-java-0.2.0-runner.jar
 ```
 
-Lancement manuel :
-
-```powershell
-java -jar .\adapters\mcp-java\target\nexus-mcp-java-0.2.0-runner.jar
-```
-
-## Parité
-
-La parité repose maintenant sur une seule façade :
-
-```text
-CLI  ─┐
-REST ─┼──> NexusApplication ──> services NEXUS
-MCP  ─┘
-```
-
-Il n'existe plus de second composition root CLI à réconcilier.
-
-## Qualification
-
-Le runner historique I12 reste utile pour le transport STDIO. Le gate intégral Phase 6 est :
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\validate-phase-6.ps1
-```
-
-Le reactor construit/teste MCP avec le même exact-head que le core et REST.
+Le test d'intégration STDIO exerce le vrai processus enfant ; JaCoCo récupère explicitement sa couverture. NEXUS CI et Docker Distribution qualifient également le runner MCP sur l'exact head.
 
 ## Hors périmètre
 
-Un transport MCP distant n'est pas ajouté automatiquement. STDIO reste le chemin local minimal ; Streamable HTTP ne sera étudié qu'en présence d'un besoin concret et d'un modèle d'exposition/sécurité explicite.
+Aucun transport MCP distant n'est activé par défaut. Toute exposition réseau future devra avoir un modèle de sécurité explicite.

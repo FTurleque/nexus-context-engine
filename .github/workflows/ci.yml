@@ -1,8 +1,10 @@
 name: NEXUS CI
 
 on:
+  workflow_call:
   pull_request:
     branches:
+      - develop
       - main
   push:
     branches:
@@ -25,7 +27,7 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Java 24
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
           distribution: temurin
           java-version: '24'
@@ -49,10 +51,22 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Java 21
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
           distribution: temurin
           java-version: '21'
+
+      - name: Verify repository-pinned tool integrity anchors
+        shell: bash
+        run: |
+          chmod +x scripts/release/test-tool-integrity-anchors.sh
+          scripts/release/test-tool-integrity-anchors.sh
+
+      - name: Verify operational documentation contracts
+        shell: bash
+        run: |
+          chmod +x scripts/release/test-operational-doc-contracts.sh
+          scripts/release/test-operational-doc-contracts.sh
 
       - name: Run Maven reactor
         run: |
@@ -60,19 +74,103 @@ jobs:
           ./mvnw -B clean install
 
       - name: Run packaged Linux distribution
+        shell: bash
         run: |
-          unzip -q target/distribution/nexus-context-engine-0.2.0.zip -d target/linux-distribution-smoke
-          test -x target/linux-distribution-smoke/nexus-context-engine-0.2.0/bin/nexus
-          test -s target/linux-distribution-smoke/nexus-context-engine-0.2.0/LICENSE
-          test -s target/linux-distribution-smoke/nexus-context-engine-0.2.0/THIRD_PARTY_NOTICES.txt
-          test -s target/linux-distribution-smoke/nexus-context-engine-0.2.0/SBOM.cdx.json
-          target/linux-distribution-smoke/nexus-context-engine-0.2.0/bin/nexus --version --json | grep -Eq '"version"[[:space:]]*:[[:space:]]*"0\.2\.0"'
+          set -euo pipefail
 
-      - name: Verify compliance artifacts
+          ZIP="target/distribution/nexus-context-engine-0.2.0.zip"
+          SMOKE_DIR="target/linux-distribution-smoke"
+          ROOT="$SMOKE_DIR/nexus-context-engine-0.2.0"
+          LAUNCHER="$ROOT/bin/nexus"
+
+          if [[ ! -s "$ZIP" ]]; then
+            echo "::error::Linux distribution archive is missing or empty: $ZIP"
+            exit 1
+          fi
+
+          rm -rf "$SMOKE_DIR"
+          unzip -q "$ZIP" -d "$SMOKE_DIR"
+
+          echo "Linux distribution archive entries:"
+          unzip -Z -1 "$ZIP" | sed -n '1,80p'
+
+          echo "Launcher metadata:"
+          ls -l "$LAUNCHER" || true
+          stat "$LAUNCHER" || true
+
+          if [[ ! -x "$LAUNCHER" ]]; then
+            echo "::error::Linux launcher is missing or not executable: $LAUNCHER"
+            exit 1
+          fi
+
+          for required in LICENSE THIRD_PARTY_NOTICES.txt SBOM.cdx.json; do
+            file="$ROOT/$required"
+            if [[ ! -s "$file" ]]; then
+              echo "::error::Required distribution file is missing or empty: $file"
+              exit 1
+            fi
+            printf '%s bytes\t%s\n' "$(wc -c < "$file")" "$file"
+          done
+
+          VERSION_JSON="$($LAUNCHER --version --json)" || {
+            status=$?
+            echo "::error::Packaged Linux launcher failed with exit code $status"
+            exit "$status"
+          }
+          printf 'Packaged launcher output: %s\n' "$VERSION_JSON"
+
+          if ! printf '%s\n' "$VERSION_JSON" | grep -Eq '"version"[[:space:]]*:[[:space:]]*"0\.2\.0"'; then
+            echo "::error::Packaged Linux launcher did not report version 0.2.0"
+            exit 1
+          fi
+
+      - name: Verify compliance and coverage artifacts
+        shell: bash
         run: |
+          set -euo pipefail
           test -s target/sbom/bom.json
           test -s target/licenses/THIRD_PARTY_NOTICES.txt
-          test -s core/target/site/jacoco/jacoco.xml
+          for report in \
+            core/target/site/jacoco/jacoco.xml \
+            adapters/rest-quarkus/target/site/jacoco/jacoco.xml \
+            adapters/mcp-java/target/site/jacoco/jacoco.xml \
+            adapters/assistant-clients/target/site/jacoco/jacoco.xml; do
+            test -s "$report"
+          done
+
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          reports = {
+              'core': Path('core/target/site/jacoco/jacoco.xml'),
+              'rest': Path('adapters/rest-quarkus/target/site/jacoco/jacoco.xml'),
+              'mcp': Path('adapters/mcp-java/target/site/jacoco/jacoco.xml'),
+              'assistant': Path('adapters/assistant-clients/target/site/jacoco/jacoco.xml'),
+          }
+
+          for name, path in reports.items():
+              root = ET.parse(path).getroot()
+              counters = {counter.attrib['type']: counter.attrib for counter in root.findall('counter')}
+              for counter_name in ('LINE', 'BRANCH'):
+                  counter = counters[counter_name]
+                  missed = int(counter['missed'])
+                  covered = int(counter['covered'])
+                  total = missed + covered
+                  ratio = covered / total if total else 1.0
+                  print(f'jacoco-{name}-{counter_name.lower()}={ratio:.6f} ({covered}/{total})')
+          PY
+
+      - name: Retain Linux smoke diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nexus-linux-smoke-diagnostics-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            target/distribution/nexus-context-engine-0.2.0.zip
+            target/linux-distribution-smoke/**
 
       - name: Retain SBOM, notices and coverage evidence
         if: always()
@@ -86,3 +184,9 @@ jobs:
             target/licenses/THIRD_PARTY_NOTICES.txt
             core/target/site/jacoco/jacoco.xml
             core/target/site/jacoco/index.html
+            adapters/rest-quarkus/target/site/jacoco/jacoco.xml
+            adapters/rest-quarkus/target/site/jacoco/index.html
+            adapters/mcp-java/target/site/jacoco/jacoco.xml
+            adapters/mcp-java/target/site/jacoco/index.html
+            adapters/assistant-clients/target/site/jacoco/jacoco.xml
+            adapters/assistant-clients/target/site/jacoco/index.html

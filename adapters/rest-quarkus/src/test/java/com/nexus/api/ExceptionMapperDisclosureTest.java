@@ -1,0 +1,91 @@
+package com.nexus.api;
+
+import com.nexus.index.IndexingCapacityExceededException;
+import com.nexus.search.QueryPolicy;
+import jakarta.ws.rs.core.Response;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+
+class ExceptionMapperDisclosureTest {
+
+    private static final String UNSUPPORTED_CONSTRAINTS =
+            "constraints are not supported yet; omit the field or provide an empty object";
+
+    @Test
+    void ioMapperDoesNotExposeInternalExceptionMessage() {
+        String internal = "C:\\private\\workspace\\secret.txt";
+
+        try (Response response = new IOExceptionMapper().toResponse(new IOException(internal))) {
+            ApiModels.ErrorResponse entity = (ApiModels.ErrorResponse) response.getEntity();
+            assertEquals(500, response.getStatus());
+            assertEquals("io_error", entity.error());
+            assertFalse(entity.message().contains(internal));
+        }
+    }
+
+    @Test
+    void invalidArgumentMapperDoesNotExposeInternalValidationMessage() {
+        String internal = "/srv/internal/project/path";
+
+        try (Response response = new IllegalArgumentExceptionMapper()
+                .toResponse(new IllegalArgumentException(internal))) {
+            ApiModels.ErrorResponse entity = (ApiModels.ErrorResponse) response.getEntity();
+            assertEquals(400, response.getStatus());
+            assertEquals("bad_request", entity.error());
+            assertFalse(entity.message().contains(internal));
+        }
+    }
+
+    @Test
+    void invalidArgumentMapperPreservesAllowlistedPublicValidationMessage() {
+        try (Response response = new IllegalArgumentExceptionMapper()
+                .toResponse(new IllegalArgumentException(UNSUPPORTED_CONSTRAINTS))) {
+            ApiModels.ErrorResponse entity = (ApiModels.ErrorResponse) response.getEntity();
+            assertEquals(400, response.getStatus());
+            assertEquals("bad_request", entity.error());
+            assertEquals(UNSUPPORTED_CONSTRAINTS, entity.message());
+        }
+    }
+
+    @Test
+    void invalidArgumentMapperPreservesBoundedOversizedQueryMessage() {
+        String message = "La requête dépasse la limite de " + QueryPolicy.MAX_QUERY_UTF8_BYTES
+                + " octets UTF-8 (taille mesurée ou minimale 16386 octets)";
+
+        try (Response response = new IllegalArgumentExceptionMapper()
+                .toResponse(new IllegalArgumentException(message))) {
+            ApiModels.ErrorResponse entity = (ApiModels.ErrorResponse) response.getEntity();
+            assertEquals(400, response.getStatus());
+            assertEquals("bad_request", entity.error());
+            assertEquals(message, entity.message());
+        }
+    }
+
+    @Test
+    void invalidArgumentMapperRejectsForgedOversizedQueryMessage() {
+        String forged = "La requête dépasse la limite de " + QueryPolicy.MAX_QUERY_UTF8_BYTES
+                + " octets UTF-8 (taille mesurée ou minimale 16386 octets) /srv/private";
+
+        try (Response response = new IllegalArgumentExceptionMapper()
+                .toResponse(new IllegalArgumentException(forged))) {
+            ApiModels.ErrorResponse entity = (ApiModels.ErrorResponse) response.getEntity();
+            assertEquals(400, response.getStatus());
+            assertEquals("Requête invalide", entity.message());
+        }
+    }
+
+    @Test
+    void indexingCapacityMapsToRetryableServiceUnavailable() {
+        try (Response response = new IndexingCapacityExceededExceptionMapper()
+                .toResponse(new IndexingCapacityExceededException(2))) {
+            ApiModels.ErrorResponse entity = (ApiModels.ErrorResponse) response.getEntity();
+            assertEquals(503, response.getStatus());
+            assertEquals("1", response.getHeaderString("Retry-After"));
+            assertEquals("indexing_busy", entity.error());
+        }
+    }
+}

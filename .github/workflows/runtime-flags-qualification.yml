@@ -1,0 +1,260 @@
+name: Runtime Flags Qualification
+
+on:
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - '.github/workflows/runtime-flags-qualification.yml'
+      - 'pom.xml'
+      - 'core/src/main/java/com/nexus/persistence/sqlite/**'
+      - 'core/src/main/java/com/nexus/search/**'
+      - 'core/src/test/java/com/nexus/benchmark/**'
+      - 'core/pom.xml'
+      - 'distribution/bin/**'
+      - 'packaging/docker/**'
+      - 'adapters/mcp-java/**'
+      - 'adapters/rest-quarkus/**'
+      - 'adapters/assistant-clients/**'
+      - 'mvnw.cmd'
+      - 'scripts/release/test-tool-integrity-anchors.sh'
+      - 'docs/developer/runtime-flags-qualification.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  warning-contract-linux:
+    name: Linux Java 21 native-access contract (${{ matrix.profile }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [control, adopted]
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      - name: Set up Java 21
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Detect Vector API availability
+        id: flags
+        shell: bash
+        run: |
+          set -euo pipefail
+          vector=false
+          if java --list-modules | grep -q '^jdk.incubator.vector@'; then
+            vector=true
+          fi
+          echo "vector=$vector" >> "$GITHUB_OUTPUT"
+      - name: Run focused SQLite/Lucene contract
+        shell: bash
+        env:
+          QUALIFICATION_PROFILE: ${{ matrix.profile }}
+          VECTOR_AVAILABLE: ${{ steps.flags.outputs.vector }}
+        run: |
+          set -euo pipefail
+          mkdir -p target/runtime-flags
+          unset JDK_JAVA_OPTIONS || true
+          chmod +x ./mvnw
+          extra=()
+          if [[ "$QUALIFICATION_PROFILE" == control ]]; then
+            # Disable only the project-level adopted option. This proves the
+            # regression contract still observes the underlying runtime warning.
+            extra+=('-Dnexus.runtime.nativeAccessArg=')
+          fi
+          ./mvnw -B -pl core \
+            "${extra[@]}" \
+            -Dtest=SearchServiceIntegrationTest,LuceneSearchIndexTest \
+            test 2>&1 | tee "target/runtime-flags/linux-java21-${QUALIFICATION_PROFILE}.log"
+          log="target/runtime-flags/linux-java21-${QUALIFICATION_PROFILE}.log"
+          if [[ "$QUALIFICATION_PROFILE" == control ]]; then
+            grep -q -- 'Use --enable-native-access=ALL-UNNAMED' "$log"
+          else
+            if grep -q -- 'Use --enable-native-access=ALL-UNNAMED' "$log"; then
+              echo '::error::Native-access warning remains under the adopted default contract'
+              exit 1
+            fi
+          fi
+          if [[ "$VECTOR_AVAILABLE" == true ]]; then
+            # Vector remains intentionally non-adopted; its advisory warning is
+            # expected in both control and production-default profiles.
+            grep -q -- 'vector incubator module is not readable' "$log"
+          fi
+      - name: Retain Linux warning evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: runtime-flags-linux-java21-${{ matrix.profile }}-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          retention-days: 90
+          if-no-files-found: error
+          path: target/runtime-flags/*.log
+
+  warning-contract-windows:
+    name: Windows Java 24 native-access contract (${{ matrix.profile }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [control, adopted]
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      - name: Set up Java 24
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: temurin
+          java-version: '24'
+      - name: Detect Vector API availability
+        id: flags
+        shell: pwsh
+        run: |
+          $modules = & java --list-modules | Out-String
+          $vector = $modules -match '(?m)^jdk\.incubator\.vector@'
+          "vector=$($vector.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+      - name: Run focused SQLite/Lucene contract
+        shell: pwsh
+        env:
+          QUALIFICATION_PROFILE: ${{ matrix.profile }}
+          VECTOR_AVAILABLE: ${{ steps.flags.outputs.vector }}
+        run: |
+          New-Item -ItemType Directory -Force -Path target/runtime-flags | Out-Null
+          Remove-Item Env:JDK_JAVA_OPTIONS -ErrorAction SilentlyContinue
+          $extra = @()
+          if ($env:QUALIFICATION_PROFILE -eq 'control') {
+            $extra += '-Dnexus.runtime.nativeAccessArg='
+          }
+          $log = "target/runtime-flags/windows-java24-$($env:QUALIFICATION_PROFILE).log"
+          & .\mvnw.cmd -B -pl core @extra `
+            '-Dtest=SearchServiceIntegrationTest,LuceneSearchIndexTest' `
+            test 2>&1 | Tee-Object -FilePath $log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $content = Get-Content -Raw -LiteralPath $log
+          if ($env:QUALIFICATION_PROFILE -eq 'control') {
+            if ($content -notmatch 'Use --enable-native-access=ALL-UNNAMED') {
+              throw 'Control profile did not reproduce the native-access warning'
+            }
+          } elseif ($content -match 'Use --enable-native-access=ALL-UNNAMED') {
+            throw 'Native-access warning remains under the adopted default contract'
+          }
+          if ($env:VECTOR_AVAILABLE -eq 'true' -and $content -notmatch 'vector incubator module is not readable') {
+            throw 'Expected advisory Vector API warning was not observed while Vector remains non-adopted'
+          }
+      - name: Retain Windows warning evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: runtime-flags-windows-java24-${{ matrix.profile }}-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          retention-days: 90
+          if-no-files-found: error
+          path: target/runtime-flags/*.log
+
+  scale-comparison:
+    name: Linux Java 21 production-default / Vector API ABBA comparison
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      - name: Set up Java 21
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Run adopted-default/vector-enabled ABBA on one runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./mvnw
+          mkdir -p target/runtime-flags
+          java --list-modules | grep -q '^jdk.incubator.vector@'
+
+          run_profile() {
+            label="$1"
+            flags="$2"
+            out="target/runtime-flags/$label"
+            mkdir -p "$out"
+            if [[ -n "$flags" ]]; then
+              export JDK_JAVA_OPTIONS="$flags"
+            else
+              unset JDK_JAVA_OPTIONS || true
+            fi
+            ./mvnw -B -pl core \
+              -Dtest=ScaleRegressionBenchmarkTest,GraphScaleRegressionBenchmarkTest,FederatedContextBudgetScaleBenchmarkTest,NativeContextDiscoveryBudgetBenchmarkTest \
+              -Djunit.jupiter.execution.timeout.test.method.default=20m \
+              -Dnexus.scale.benchmark.enabled=true \
+              -Dnexus.scale.benchmark.profile=ci \
+              -Dnexus.scale.benchmark.output="$out/scale.json" \
+              -Dnexus.graph.scale.benchmark.output="$out/graph.json" \
+              -Dnexus.federated.scale.benchmark.output="$out/federated.json" \
+              -Dnexus.native.discovery.scale.benchmark.output="$out/native.json" \
+              test 2>&1 | tee "$out/run.log"
+          }
+
+          vector='--add-modules=jdk.incubator.vector'
+          run_profile adopted-a ''
+          run_profile vector-a "$vector"
+          run_profile vector-b "$vector"
+          run_profile adopted-b ''
+
+          python3 - <<'PY'
+          import json
+          import statistics
+          from pathlib import Path
+
+          labels = ('adopted-a', 'vector-a', 'vector-b', 'adopted-b')
+          reports = {}
+          for label in labels:
+              root = Path('target/runtime-flags') / label
+              scale = json.loads((root / 'scale.json').read_text())
+              graph = json.loads((root / 'graph.json').read_text())
+              native = json.loads((root / 'native.json').read_text())
+              federated = json.loads((root / 'federated.json').read_text())
+              assert scale['profile'] == 'ci'
+              assert scale['sqliteTiers'][-1]['symbols'] == 100_000
+              assert scale['semanticRecovery']['documents'] == 5_000
+              assert graph['symbols'] == 100_000 and graph['relations'] == 100_000
+              assert native['skills'] == 1_000 and native['visitedEntries'] == 2_001
+              assert federated['projects'] == 100 and federated['globalBudget'] == 200_000
+              reports[label] = {
+                  'totalMs': scale['totalDurationMs'],
+                  'graphP95Ms': graph['p95Ms'],
+                  'nativeMs': native['durationMs'],
+                  'federatedMs': federated['durationMs'],
+              }
+
+          adopted_runs = [reports['adopted-a'], reports['adopted-b']]
+          vector_runs = [reports['vector-a'], reports['vector-b']]
+          summary = {
+              'order': list(labels),
+              'runs': reports,
+              'adoptedMedianTotalMs': statistics.median(x['totalMs'] for x in adopted_runs),
+              'vectorMedianTotalMs': statistics.median(x['totalMs'] for x in vector_runs),
+              'adoptedMedianGraphP95Ms': statistics.median(x['graphP95Ms'] for x in adopted_runs),
+              'vectorMedianGraphP95Ms': statistics.median(x['graphP95Ms'] for x in vector_runs),
+          }
+          summary['vectorTotalRatio'] = summary['vectorMedianTotalMs'] / summary['adoptedMedianTotalMs']
+          summary['vectorGraphP95Ratio'] = summary['vectorMedianGraphP95Ms'] / summary['adoptedMedianGraphP95Ms']
+          Path('target/runtime-flags/summary.json').write_text(json.dumps(summary, indent=2) + '\n')
+          print(json.dumps(summary, indent=2))
+          PY
+      - name: Retain same-runner benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: runtime-flags-vector-abba-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          retention-days: 90
+          if-no-files-found: error
+          path: target/runtime-flags/**

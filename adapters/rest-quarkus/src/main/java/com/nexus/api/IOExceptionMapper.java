@@ -15,12 +15,7 @@ public class IOExceptionMapper implements ExceptionMapper<IOException> {
     public Response toResponse(IOException exception) {
         return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                 .type(MediaType.APPLICATION_JSON)
-                .entity(new ErrorResponse("io_error", safeMessage(exception)))
+                .entity(new ErrorResponse("io_error", "Une erreur interne d'entrée/sortie s'est produite"))
                 .build();
-    }
-
-    private static String safeMessage(Exception exception) {
-        String message = exception.getMessage();
-        return message == null || message.isBlank() ? exception.getClass().getSimpleName() : message;
     }
 }

@@ -8,6 +8,7 @@ import com.nexus.context.ContextItem;
 import com.nexus.context.FederatedContextItem;
 import com.nexus.index.IndexedSymbol;
 import com.nexus.index.SymbolRelation;
+import com.nexus.project.FederatedScopePolicy;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.ranking.RankedCandidate;
 import com.nexus.search.CandidateType;
@@ -29,6 +30,7 @@ import java.util.stream.Collectors;
 
 final class NexusMcpTools {
 
+    private static final String REQUESTED_SOURCES_ARGUMENT = "requestedSources";
     private static final int DEFAULT_LIMIT = ResultLimitPolicy.DEFAULT_RESULT_LIMIT;
     private static final int DEFAULT_TOKEN_BUDGET = ContextBudgetPolicy.DEFAULT_CONTEXT_TOKEN_BUDGET;
 
@@ -163,7 +165,7 @@ final class NexusMcpTools {
                                 "project", stringProperty("UUID ou nom unique du projet NEXUS"),
                                 "query", stringProperty("Tâche ou demande de contexte"),
                                 "tokenBudget", integerProperty("Budget maximal, 2000 par défaut", ContextBudgetPolicy.MAX_CONTEXT_TOKEN_BUDGET),
-                                "requestedSources", arrayOfStringsProperty("Sources optionnelles NEXUS"),
+                                REQUESTED_SOURCES_ARGUMENT, arrayOfStringsProperty("Sources optionnelles NEXUS"),
                                 "constraints", objectProperty("Contraintes clé/valeur optionnelles")),
                         List.of("project", "query")),
                 arguments -> {
@@ -174,7 +176,7 @@ final class NexusMcpTools {
                             positiveInteger(
                                     arguments, "tokenBudget", DEFAULT_TOKEN_BUDGET,
                                     ContextBudgetPolicy.MAX_CONTEXT_TOKEN_BUDGET),
-                            requestedSources(arguments.get("requestedSources")),
+                            requestedSources(arguments.get(REQUESTED_SOURCES_ARGUMENT)),
                             stringMap(arguments.get("constraints")),
                             forceExplain);
                     return context(operation);
@@ -193,7 +195,7 @@ final class NexusMcpTools {
                                 "projects", arrayOfStringsProperty("UUID ou noms uniques des projets NEXUS"),
                                 "query", stringProperty("Tâche ou demande de contexte"),
                                 "tokenBudget", integerProperty("Budget global maximal, 2000 par défaut", ContextBudgetPolicy.MAX_CONTEXT_TOKEN_BUDGET),
-                                "requestedSources", arrayOfStringsProperty("Sources optionnelles NEXUS"),
+                                REQUESTED_SOURCES_ARGUMENT, arrayOfStringsProperty("Sources optionnelles NEXUS"),
                                 "constraints", objectProperty("Contraintes clé/valeur optionnelles")),
                         List.of("projects", "query")),
                 arguments -> {
@@ -204,7 +206,7 @@ final class NexusMcpTools {
                             positiveInteger(
                                     arguments, "tokenBudget", DEFAULT_TOKEN_BUDGET,
                                     ContextBudgetPolicy.MAX_CONTEXT_TOKEN_BUDGET),
-                            requestedSources(arguments.get("requestedSources")),
+                            requestedSources(arguments.get(REQUESTED_SOURCES_ARGUMENT)),
                             stringMap(arguments.get("constraints")),
                             forceExplain);
                     return federatedContext(operation);
@@ -235,13 +237,13 @@ final class NexusMcpTools {
         try {
             String json = objectMapper.writeValueAsString(value);
             return McpSchema.CallToolResult.builder()
-                    .content(List.of(new McpSchema.TextContent(json)))
+                    .content(List.of(McpSchema.TextContent.builder(json).build()))
                     .isError(error)
                     .build();
         } catch (JsonProcessingException exception) {
             return McpSchema.CallToolResult.builder()
-                    .content(List.of(new McpSchema.TextContent(
-                            "{\"error\":\"serialization_error\",\"message\":\"Impossible de sérialiser la réponse NEXUS\"}")))
+                    .content(List.of(McpSchema.TextContent.builder(
+                            "{\"error\":\"serialization_error\",\"message\":\"Impossible de sérialiser la réponse NEXUS\"}").build()))
                     .isError(true)
                     .build();
         }
@@ -256,11 +258,22 @@ final class NexusMcpTools {
         if (!(value instanceof List<?> values) || values.isEmpty()) {
             throw new IllegalArgumentException("projects doit être un tableau non vide");
         }
+
+        Map<String, String> uniqueSelectors = new LinkedHashMap<>();
+        for (Object rawSelector : values) {
+            String selector = String.valueOf(rawSelector).trim();
+            uniqueSelectors.putIfAbsent(selector.toLowerCase(Locale.ROOT), selector);
+        }
+        List<String> selectors = List.copyOf(uniqueSelectors.values());
+
+        FederatedScopePolicy.validateExplicitUuidSelectors(selectors);
+
         List<ProjectDescriptor> projects = new ArrayList<>();
         Set<UUID> seen = new java.util.LinkedHashSet<>();
-        for (Object selector : values) {
-            ProjectDescriptor project = application.resolveProject(String.valueOf(selector));
+        for (String selector : selectors) {
+            ProjectDescriptor project = application.resolveProject(selector);
             if (seen.add(project.id())) {
+                FederatedScopePolicy.validateUniqueCount(seen.size());
                 projects.add(project);
             }
         }
@@ -467,9 +480,20 @@ final class NexusMcpTools {
         }
     }
 
-    private static boolean booleanValue(Map<String, Object> arguments, String name, boolean defaultValue) {
+    static boolean booleanValue(Map<String, Object> arguments, String name, boolean defaultValue) {
         Object value = arguments.get(name);
-        return value == null ? defaultValue : Boolean.parseBoolean(value.toString());
+        if (value == null) {
+            return defaultValue;
+        }
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        String normalized = value.toString().trim().toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case "true" -> true;
+            case "false" -> false;
+            default -> throw new IllegalArgumentException(name + " doit être un booléen true ou false");
+        };
     }
 
     private static Set<CandidateType> requestedSources(Object value) {
@@ -505,13 +529,18 @@ final class NexusMcpTools {
         return Map.copyOf(result);
     }
 
-    private static String safeMessage(Exception exception) {
-        Throwable current = exception;
-        while (current.getCause() != null && current.getMessage() == null) {
-            current = current.getCause();
+    static String safeMessage(Exception exception) {
+        Objects.requireNonNull(exception, "exception");
+        if (exception instanceof IllegalArgumentException) {
+            String message = exception.getMessage();
+            return message == null || message.isBlank()
+                    ? "Requête MCP NEXUS invalide"
+                    : message;
         }
-        String message = current.getMessage();
-        return message == null || message.isBlank() ? current.getClass().getSimpleName() : message;
+        if (exception instanceof IllegalStateException) {
+            return "Opération NEXUS indisponible dans l'état courant";
+        }
+        return "Erreur interne NEXUS";
     }
 
     @FunctionalInterface

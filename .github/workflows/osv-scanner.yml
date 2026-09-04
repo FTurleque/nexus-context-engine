@@ -1,11 +1,14 @@
 name: OSV-Scanner
 
 on:
+  workflow_call:
   pull_request:
     branches:
+      - develop
       - main
   push:
     branches:
+      - develop
       - main
   schedule:
     - cron: '31 4 * * 1'
@@ -20,7 +23,7 @@ jobs:
   scan-pr:
     name: OSV new-vulnerability delta gate
     if: ${{ github.event_name == 'pull_request' }}
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@9fd1bcce27f67e3bd819a0a7620e332803dc43bc # v2.3.8
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@8e5cf47b818121e8b405931c82126c2630b0b20d # fail closed on incomplete scans
     permissions:
       actions: read
       contents: read
@@ -38,7 +41,7 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Java 21
-        uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4.9.0
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
           distribution: temurin
           java-version: '21'
@@ -72,7 +75,7 @@ jobs:
   scan-sbom:
     name: OSV aggregate SBOM vulnerability gate
     needs: build-sbom
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@9fd1bcce27f67e3bd819a0a7620e332803dc43bc # v2.3.8
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@8e5cf47b818121e8b405931c82126c2630b0b20d # fail closed on incomplete scans
     permissions:
       actions: read
       contents: read
