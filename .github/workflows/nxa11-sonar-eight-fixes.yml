@@ -1,0 +1,123 @@
+name: NXA11 exact Sonar issue qualification
+
+on:
+  push:
+    branches:
+      - fix/nxa11-sonar-promotion-maintainability
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: fix/nxa11-sonar-promotion-maintainability
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Apply exact Sonar fixes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path_name, old, new):
+              path = Path(path_name)
+              text = path.read_text(encoding='utf-8')
+              if text.count(old) != 1:
+                  raise SystemExit(f'{path_name}: expected one match for {old!r}, found {text.count(old)}')
+              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # S1192: centralize the federated context command token.
+          path = Path('core/src/main/java/com/nexus/cli/NexusCli.java')
+          text = path.read_text(encoding='utf-8')
+          anchor = '    private static final String CONTEXT_COMMAND = "context";\n'
+          if text.count(anchor) != 1:
+              raise SystemExit('NexusCli context constant anchor mismatch')
+          text = text.replace(
+              anchor,
+              anchor + '    private static final String FEDERATED_CONTEXT_COMMAND = "context-federated";\n',
+              1)
+          if text.count('"context-federated"') != 4:
+              raise SystemExit(f'NexusCli expected 4 context-federated literals including new constant, found {text.count(chr(34) + "context-federated" + chr(34))}')
+          # Preserve the literal only in the constant declaration; replace the three command-token uses.
+          text = text.replace('CONTEXT_COMMAND, "context-federated", "inspect"',
+                              'CONTEXT_COMMAND, FEDERATED_CONTEXT_COMMAND, "inspect"')
+          text = text.replace('case "context-federated" -> handleFederatedContext',
+                              'case FEDERATED_CONTEXT_COMMAND -> handleFederatedContext')
+          text = text.replace('parseContext(args, 2, "context-federated")',
+                              'parseContext(args, 2, FEDERATED_CONTEXT_COMMAND)')
+          if text.count('"context-federated"') != 1:
+              raise SystemExit('NexusCli federated context literal was not fully centralized')
+          path.write_text(text, encoding='utf-8')
+
+          # S1181: release the capacity permit for any abrupt exit through finally,
+          # without catching Error.
+          replace_once(
+              'core/src/main/java/com/nexus/index/ProjectIndexLockManager.java',
+              '''        IndexingCapacityGate.Permit capacityPermit = IndexingCapacityGate.acquireShared();\n        try {\n            Path locksDirectory = paths.locksDirectory();\n            paths.ensurePrivateDirectory(locksDirectory);\n\n            Path lockPath = paths.projectIndexLock(projectId);\n            FileChannel channel = openHardenedChannel(lockPath);\n            FileLock fileLock = acquireFileLock(channel, projectId);\n            return new LockHandle(channel, fileLock, capacityPermit);\n        } catch (IOException | RuntimeException | Error failure) {\n            capacityPermit.close();\n            throw failure;\n        }\n''',
+              '''        IndexingCapacityGate.Permit capacityPermit = IndexingCapacityGate.acquireShared();\n        boolean permitTransferred = false;\n        try {\n            Path locksDirectory = paths.locksDirectory();\n            paths.ensurePrivateDirectory(locksDirectory);\n\n            Path lockPath = paths.projectIndexLock(projectId);\n            FileChannel channel = openHardenedChannel(lockPath);\n            FileLock fileLock = acquireFileLock(channel, projectId);\n            LockHandle handle = new LockHandle(channel, fileLock, capacityPermit);\n            permitTransferred = true;\n            return handle;\n        } finally {\n            if (!permitTransferred) {\n                capacityPermit.close();\n            }\n        }\n''')
+
+          # S2184: clamp the int before subtracting so retryNumber - 1 cannot overflow.
+          replace_once(
+              'core/src/main/java/com/nexus/persistence/sqlite/SqliteWriteRetryPolicy.java',
+              '        long multiplier = 1L << Math.clamp(retryNumber - 1, 0, 30);\n',
+              '        int shift = Math.clamp(retryNumber, 1, 31) - 1;\n        long multiplier = 1L << shift;\n')
+
+          # S1481 + S5778: use the precomputed oversized strings so each assertThrows
+          # lambda has only the call under test.
+          path = Path('core/src/test/java/com/nexus/index/jdt/JdtConfigurationBoundsTest.java')
+          text = path.read_text(encoding='utf-8')
+          old_timeout = '                        Long.toString(JdtLanguageServerCodeIntelligenceProvider.MAX_TIMEOUT_SECONDS + 1L),\n'
+          if text.count(old_timeout) != 1:
+              raise SystemExit('JDT oversized timeout literal mismatch')
+          text = text.replace(old_timeout, '                        oversizedTimeout,\n', 1)
+          old_symbols = '                        Integer.toString(JdtLanguageServerCodeIntelligenceProvider.MAX_SYMBOLS + 1),\n'
+          if text.count(old_symbols) != 1:
+              raise SystemExit('JDT oversized symbols literal mismatch')
+          text = text.replace(old_symbols, '                        oversizedSymbols,\n', 1)
+          path.write_text(text, encoding='utf-8')
+
+          path = Path('core/src/test/java/com/nexus/search/semantic/SemanticSearchConfigurationBoundsTest.java')
+          text = path.read_text(encoding='utf-8')
+          old_dimensions = '                Integer.toString(SemanticSearchConfiguration.MAX_OLLAMA_DIMENSIONS + 1),\n'
+          if text.count(old_dimensions) != 1:
+              raise SystemExit('semantic oversized dimensions literal mismatch')
+          text = text.replace(old_dimensions, '                oversizedDimensions,\n', 1)
+          old_timeout = '                Long.toString(SemanticSearchConfiguration.MAX_OLLAMA_TIMEOUT_SECONDS + 1L),\n'
+          if text.count(old_timeout) != 1:
+              raise SystemExit('semantic oversized timeout literal mismatch')
+          text = text.replace(old_timeout, '                oversizedTimeout,\n', 1)
+          path.write_text(text, encoding='utf-8')
+
+          # S3776: split document-symbol parsing, materialization and invalid-range
+          # owner propagation into focused helpers.
+          path = Path('core/src/main/java/com/nexus/index/jdt/JdtLanguageServerCodeIntelligenceProvider.java')
+          text = path.read_text(encoding='utf-8')
+          start = text.index('    private void flattenDocumentSymbol(\n')
+          end = text.index('    private record DocumentSymbolContext(', start)
+          replacement = '''    private void flattenDocumentSymbol(\n            JsonNode node,\n            DocumentSymbolContext context,\n            List<String> ownerTypes,\n            List<ProviderSymbol> output) throws IOException {\n        ParsedDocumentSymbol parsed = parseDocumentSymbol(node, context);\n        SymbolRange range = parsed.range();\n        boolean namedSupportedSymbol = parsed.mappedKind().isPresent() && !parsed.name().isBlank();\n        boolean validRange = isValidJdtRange(\n                range.startLine(),\n                range.endLine(),\n                range.selectionLine(),\n                context.sourceLineCount());\n\n        List<String> childOwners = namedSupportedSymbol && validRange\n                ? appendDocumentSymbol(parsed, context, ownerTypes, output)\n                : ownersForSkippedDocumentSymbol(parsed, context, ownerTypes, namedSupportedSymbol);\n\n        for (JsonNode child : arrayElements(node.path("children"))) {\n            flattenDocumentSymbol(child, context, childOwners, output);\n        }\n    }\n\n    private static ParsedDocumentSymbol parseDocumentSymbol(\n            JsonNode node,\n            DocumentSymbolContext context) {\n        int lspKind = node.path("kind").asInt(-1);\n        String name = node.path("name").asText("");\n        String detail = node.path("detail").asText("");\n        JsonNode rangeNode = node.has("range") ? node.path("range") : node.path("location").path("range");\n        JsonNode selectionRangeNode = node.has("selectionRange") ? node.path("selectionRange") : rangeNode;\n        String uri = node.path("location").path("uri").asText(context.fallbackUri());\n        int startLine = rangeNode.path("start").path("line").asInt(-1);\n        int endLine = rangeNode.path("end").path("line").asInt(startLine);\n        int selectionLine = selectionRangeNode.path("start").path("line").asInt(startLine);\n        int selectionCharacter = selectionRangeNode.path("start").path("character").asInt(0);\n        return new ParsedDocumentSymbol(\n                lspKind,\n                name,\n                detail,\n                uri,\n                new SymbolRange(startLine, endLine, selectionLine, selectionCharacter),\n                symbolKind(lspKind));\n    }\n\n    private List<String> appendDocumentSymbol(\n            ParsedDocumentSymbol parsed,\n            DocumentSymbolContext context,\n            List<String> ownerTypes,\n            List<ProviderSymbol> output) throws IOException {\n        if (output.size() >= context.maxSymbols()) {\n            throw snapshotLimitFailure("symboles", snapshotLimits.maxSymbols());\n        }\n\n        SymbolKind kind = parsed.mappedKind().orElseThrow();\n        String signature = parsed.detail().isBlank()\n                ? parsed.name()\n                : parsed.name() + " " + parsed.detail().trim();\n        List<String> childOwners = ownerTypes;\n        String qualifiedName;\n        if (isType(kind)) {\n            List<String> typeNames = appendOwner(ownerTypes, parsed.name());\n            qualifiedName = qualifiedOwner(context.packageName(), typeNames);\n            childOwners = typeNames;\n        } else {\n            qualifiedName = qualifiedOwner(context.packageName(), ownerTypes) + "#" + signature;\n        }\n\n        SymbolRange range = parsed.range();\n        CodeSymbol symbol = new CodeSymbol(\n                kind,\n                parsed.name(),\n                qualifiedName,\n                signature,\n                range.startLine() + 1,\n                range.endLine() + 1,\n                SOURCE_PROVIDER);\n        output.add(new ProviderSymbol(\n                context.relativePath(),\n                parsed.uri(),\n                symbol,\n                parsed.lspKind(),\n                range.startLine(),\n                range.endLine(),\n                range.selectionLine(),\n                Math.max(0, range.selectionCharacter())));\n        return childOwners;\n    }\n\n    private static List<String> ownersForSkippedDocumentSymbol(\n            ParsedDocumentSymbol parsed,\n            DocumentSymbolContext context,\n            List<String> ownerTypes,\n            boolean namedSupportedSymbol) {\n        SymbolRange range = parsed.range();\n        if (namedSupportedSymbol) {\n            LOGGER.log(\n                    System.Logger.Level.WARNING,\n                    "Ignoring inconsistent JDT symbol range for {0} in {1}: start={2}, end={3}, selection={4}, lines={5}",\n                    parsed.name(),\n                    context.relativePath(),\n                    range.startLine(),\n                    range.endLine(),\n                    range.selectionLine(),\n                    context.sourceLineCount());\n        }\n        if (isLspType(parsed.lspKind()) && !parsed.name().isBlank()) {\n            return appendOwner(ownerTypes, parsed.name());\n        }\n        return ownerTypes;\n    }\n\n    private static List<String> appendOwner(List<String> ownerTypes, String name) {\n        List<String> typeNames = new ArrayList<>(ownerTypes);\n        typeNames.add(name);\n        return List.copyOf(typeNames);\n    }\n\n    private record SymbolRange(\n            int startLine,\n            int endLine,\n            int selectionLine,\n            int selectionCharacter) {\n    }\n\n    private record ParsedDocumentSymbol(\n            int lspKind,\n            String name,\n            String detail,\n            String uri,\n            SymbolRange range,\n            Optional<SymbolKind> mappedKind) {\n    }\n\n'''
+          text = text[:start] + replacement + text[end:]
+          path.write_text(text, encoding='utf-8')
+          PY
+      - name: Run full Maven reactor
+        shell: bash
+        run: |
+          chmod +x ./mvnw
+          ./mvnw -B test
+      - name: Commit qualified fixes and remove one-shot workflow
+        shell: bash
+        run: |
+          rm .github/workflows/nxa11-sonar-eight-fixes.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix: clear exact NXA11 Sonar findings'
+          git push origin HEAD:fix/nxa11-sonar-promotion-maintainability
