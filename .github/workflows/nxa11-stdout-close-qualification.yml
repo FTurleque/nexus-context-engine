@@ -27,6 +27,7 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+
           path = Path('adapters/assistant-clients/src/main/java/com/nexus/integrations/AssistantIntegrationGenerator.java')
           text = path.read_text(encoding='utf-8')
           field = '''    private static final PrintWriter STANDARD_OUTPUT = new PrintWriter(\n            new FileOutputStream(FileDescriptor.out), true, Charset.defaultCharset());\n'''
@@ -38,6 +39,30 @@ jobs:
           if text.count(old) != 1:
               raise SystemExit('expected current main implementation')
           text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+
+          path = Path('adapters/assistant-clients/src/test/java/com/nexus/integrations/AssistantIntegrationCliTest.java')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('import java.io.PrintWriter;\n', 'import java.io.PrintWriter;\nimport java.io.Writer;\n')
+          text = text.replace(
+              '() -> AssistantIntegrationGenerator.main(new String[]{"generic", "native", "java"})',
+              '() -> invokeWithoutOutput("generic", "native", "java")')
+          text = text.replace(
+              '() -> AssistantIntegrationGenerator.main(new String[]{"generic", "docker"})',
+              '() -> invokeWithoutOutput("generic", "docker")')
+          text = text.replace(
+              '() -> AssistantIntegrationGenerator.main(new String[]{"unknown", "docker", "nexus"})',
+              '() -> invokeWithoutOutput("unknown", "docker", "nexus")')
+          text = text.replace(
+              '() -> AssistantIntegrationGenerator.main(new String[]{"generic", "docker", "   "})',
+              '() -> invokeWithoutOutput("generic", "docker", "   ")')
+          marker = '    private static String invokeMain(String... args) {\n'
+          helper = '''    private static void invokeWithoutOutput(String... args) {\n        try (PrintWriter output = new PrintWriter(Writer.nullWriter())) {\n            AssistantIntegrationGenerator.run(args, output);\n        }\n    }\n\n'''
+          if text.count(marker) != 1:
+              raise SystemExit('invokeMain marker missing')
+          text = text.replace(marker, helper + marker, 1)
+          if text.count('AssistantIntegrationGenerator.main(') != 0:
+              raise SystemExit('direct main invocation remains in CLI test')
           path.write_text(text, encoding='utf-8')
           PY
       - name: Run affected reactor tests
