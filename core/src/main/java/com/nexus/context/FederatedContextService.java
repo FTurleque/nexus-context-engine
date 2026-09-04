@@ -27,6 +27,8 @@ public final class FederatedContextService {
     /**
      * Alias de compatibilité. La politique canonique est définie exclusivement
      * par {@link FederatedScopePolicy#MAX_PROJECTS}.
+     *
+     * @deprecated utiliser {@link FederatedScopePolicy#MAX_PROJECTS}.
      */
     @Deprecated(forRemoval = false)
     public static final int MAX_FEDERATED_PROJECTS = FederatedScopePolicy.MAX_PROJECTS;
