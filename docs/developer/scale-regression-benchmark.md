@@ -38,13 +38,19 @@ Workflow GitHub :
 .github/workflows/scale-benchmark.yml
 ```
 
+Version de protocole utilisée pour décider si une comparaison relative base/candidat est homogène :
+
+```text
+config/scale-benchmark-protocol
+```
+
 Rapport :
 
 ```text
 target/scale-benchmark.json
 ```
 
-Pour une pull request, le workflow conserve aussi le rapport SQLite du commit de base :
+Pour une pull request dont le commit de base déclare **la même version de protocole**, le workflow conserve aussi le rapport SQLite du commit de base :
 
 ```text
 target/scale-benchmark-base.json
@@ -180,7 +186,11 @@ Chaque rapport inclut :
 
 Les latences GitHub-hosted runners sont des mesures de régression, pas un benchmark matériel absolu. Une décision d'architecture doit comparer plusieurs runs du même protocole et tenir compte de l'environnement enregistré.
 
-La population SQLite est particulièrement sensible au débit et à la contention du stockage du runner. Pour une pull request, le workflow mesure donc le commit candidat puis **le commit de base sur le même runner**, avec le même profil. Le gate compare les populations SQLite candidat/base dans ce même environnement ; cela évite de transformer une variation du stockage GitHub-hosted en fausse régression applicative.
+La population SQLite est particulièrement sensible au débit et à la contention du stockage du runner. Pour une pull request, le workflow compare donc le candidat au commit de base **sur le même runner uniquement lorsque les deux commits déclarent la même valeur dans `config/scale-benchmark-protocol`**. Cette version explicite signifie que le harness, la composition de production qu'il mesure et les hypothèses de calibration sont jugés comparables.
+
+Si le marqueur est absent sur la base ou si sa version diffère, la comparaison relative est volontairement ignorée et le workflow l'annonce explicitement. Le candidat reste néanmoins soumis à tous les plafonds absolus de population, aux budgets p95 SQLite, aux budgets graph/fédération/native, aux limites de taille et aux limites mémoire. Une promotion historique ne peut donc pas être rejetée sur une comparaison de protocoles hétérogènes, sans pour autant désactiver les garde-fous de performance.
+
+Toute modification qui rend les mesures de population non comparables avec la génération précédente doit incrémenter `config/scale-benchmark-protocol` dans le même changement.
 
 ## Budgets de régression
 
@@ -198,18 +208,18 @@ Deux runs full de calibration sur le même head ont servi à fixer les budgets. 
 Autres budgets SQLite :
 
 - 100 fichiers ciblés : <= 30 ms p95 ;
-- population sur PR : le candidat ne doit pas dépasser le maximum entre `base × 1,20` et `base + jitter`, avec des jitters de 0,2 s / 0,5 s / 1,5 s / 3 s selon le palier ;
-- plafond de sûreté population, y compris hors PR : 1,4 s / 5 s / 20 s / 40 s selon le palier ;
+- population sur PR **à protocole identique** : le candidat ne doit pas dépasser le maximum entre `base × 1,20` et `base + jitter`, avec des jitters de 0,2 s / 0,5 s / 1,5 s / 3 s selon le palier ;
+- plafond de sûreté population, y compris lorsque la base n'est pas comparable : 1,4 s / 5 s / 20 s / 40 s selon le palier ;
 - base 1M : <= 650 MiB.
 
-La comparaison relative ne remplace pas le plafond absolu : une dérive commune extrême du candidat et de la base reste donc bloquée. Les budgets p95 de requête restent strictement absolus.
+La comparaison relative ne remplace pas le plafond absolu : une dérive extrême du candidat reste donc bloquée même sans baseline relative comparable. Les budgets p95 de requête restent strictement absolus.
 
 Calibration NXA10 du gate relatif, sur un même runner et en alternance base/candidat à 100k :
 
 - base : 1832 ms puis 1826 ms ;
 - candidat : 1892 ms puis 1878 ms.
 
-Cette calibration a confirmé un écart applicatif d'environ 3 %, alors que des exécutions isolées sur des runners hébergés différents avaient varié jusqu'à ~3,4 s. Le gate relatif vise précisément à séparer ces deux effets.
+Cette calibration a confirmé un écart applicatif d'environ 3 %, alors que des exécutions isolées sur des runners hébergés différents avaient varié jusqu'à ~3,4 s. Le gate relatif vise précisément à séparer ces deux effets. NXA12 ajoute la condition de compatibilité de protocole afin que ce même mécanisme ne compare pas deux générations historiques matériellement différentes du système mesuré.
 
 ### Fédération
 
@@ -231,7 +241,7 @@ Indexation des 100 projets synthétiques : <= 6 s.
 - durée full : <= 180 s ;
 - aucune erreur de lecture concurrente sous DELETE ou WAL.
 
-Les budgets sont volontairement au-dessus des maxima de calibration pour absorber le bruit des runners, tout en détectant une régression algorithmique matérielle. Pour la population SQLite, cette marge est désormais combinée à une comparaison base/candidat sur le même runner.
+Les budgets sont volontairement au-dessus des maxima de calibration pour absorber le bruit des runners, tout en détectant une régression algorithmique matérielle. Pour la population SQLite, cette marge est combinée à une comparaison base/candidat sur le même runner lorsque le protocole est identique.
 
 ## Décision FTS5 / trigram
 
