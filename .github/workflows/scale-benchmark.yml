@@ -84,6 +84,31 @@ jobs:
             -Dnexus.native.discovery.scale.benchmark.output=target/native-discovery-scale-benchmark.json \
             test
 
+      - name: Benchmark PR base SQLite population on the same runner
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          CANDIDATE_REPORT="$RUNNER_TEMP/scale-benchmark-candidate.json"
+          BASE_REPORT="$RUNNER_TEMP/scale-benchmark-base.json"
+
+          cp target/scale-benchmark.json "$CANDIDATE_REPORT"
+          git checkout --force "$BASE_SHA"
+          chmod +x ./mvnw
+          ./mvnw -B -pl core clean \
+            -Dtest=ScaleRegressionBenchmarkTest \
+            -Djunit.jupiter.execution.timeout.test.method.default=20m \
+            -Dnexus.scale.benchmark.enabled=true \
+            -Dnexus.scale.benchmark.profile=${{ steps.profile.outputs.value }} \
+            -Dnexus.scale.benchmark.output="$BASE_REPORT" \
+            test
+          git checkout --force "$HEAD_SHA"
+          mkdir -p target
+          cp "$CANDIDATE_REPORT" target/scale-benchmark.json
+          cp "$BASE_REPORT" target/scale-benchmark-base.json
+
       - name: Verify report and regression budgets
         shell: bash
         run: |
@@ -99,6 +124,8 @@ jobs:
           graph = json.loads(Path('target/graph-scale-benchmark.json').read_text())
           federated = json.loads(Path('target/federated-budget-scale-benchmark.json').read_text())
           native = json.loads(Path('target/native-discovery-scale-benchmark.json').read_text())
+          baseline_path = Path('target/scale-benchmark-base.json')
+          baseline = json.loads(baseline_path.read_text()) if baseline_path.exists() else None
           profile = report['profile']
           assert profile in ('ci', 'full')
           assert graph['profile'] == profile
@@ -107,13 +134,31 @@ jobs:
           assert report['semanticRecovery']['documents'] > 0
 
           sqlite = {tier['symbols']: tier for tier in report['sqliteTiers']}
+          baseline_sqlite = ({tier['symbols']: tier for tier in baseline['sqliteTiers']}
+                             if baseline is not None else {})
           portfolio = {tier['projects']: tier for tier in report['portfolio']['tiers']}
 
           sqlite_budgets = {
-              10_000:  {'exact': 50,   'contains': 30,   'miss': 30,   'relation': 25,  'population': 700},
-              100_000: {'exact': 250,  'contains': 150,  'miss': 150,  'relation': 100, 'population': 2500},
-              500_000: {'exact': 1000, 'contains': 600,  'miss': 600,  'relation': 400, 'population': 10000},
-              1_000_000: {'exact': 2000, 'contains': 1200, 'miss': 1200, 'relation': 800, 'population': 20000},
+              10_000:  {'exact': 50,   'contains': 30,   'miss': 30,   'relation': 25},
+              100_000: {'exact': 250,  'contains': 150,  'miss': 150,  'relation': 100},
+              500_000: {'exact': 1000, 'contains': 600,  'miss': 600,  'relation': 400},
+              1_000_000: {'exact': 2000, 'contains': 1200, 'miss': 1200, 'relation': 800},
+          }
+          # SQLite bulk population is dominated by hosted-runner storage throughput.
+          # Keep a broad fail-safe ceiling, but on PRs detect code regressions by
+          # comparing candidate and base on the same runner instead of treating
+          # host I/O variance as a source regression.
+          population_safety_ceiling = {
+              10_000: 1_400,
+              100_000: 5_000,
+              500_000: 20_000,
+              1_000_000: 40_000,
+          }
+          population_jitter_ms = {
+              10_000: 200,
+              100_000: 500,
+              500_000: 1_500,
+              1_000_000: 3_000,
           }
 
           for symbols, tier in sqlite.items():
@@ -123,7 +168,27 @@ jobs:
               assert tier['symbolMissingWorstCase']['p95Ms'] <= budget['miss'], (symbols, 'miss', tier['symbolMissingWorstCase']['p95Ms'])
               assert tier['relationContains']['p95Ms'] <= budget['relation'], (symbols, 'relation', tier['relationContains']['p95Ms'])
               assert tier['targeted100Files']['p95Ms'] <= 30, (symbols, 'targeted-files', tier['targeted100Files']['p95Ms'])
-              assert tier['populationMs'] <= budget['population'], (symbols, 'population', tier['populationMs'])
+
+              population = tier['populationMs']
+              ceiling = population_safety_ceiling[symbols]
+              assert population <= ceiling, (symbols, 'population-safety', population, ceiling)
+              if symbols in baseline_sqlite:
+                  baseline_population = baseline_sqlite[symbols]['populationMs']
+                  relative_ceiling = max(
+                      int(baseline_population * 1.20),
+                      baseline_population + population_jitter_ms[symbols])
+                  assert population <= relative_ceiling, (
+                      symbols,
+                      'population-relative',
+                      population,
+                      baseline_population,
+                      relative_ceiling)
+                  print(
+                      'sqlite-population-relative=',
+                      symbols,
+                      'candidate=', population,
+                      'base=', baseline_population,
+                      'allowed=', relative_ceiling)
 
           if 1_000_000 in sqlite:
               assert sqlite[1_000_000]['databaseBytes'] <= 650 * 1024 * 1024, sqlite[1_000_000]['databaseBytes']
@@ -203,6 +268,7 @@ jobs:
           if-no-files-found: error
           path: |
             target/scale-benchmark.json
+            target/scale-benchmark-base.json
             target/graph-scale-benchmark.json
             target/federated-budget-scale-benchmark.json
             target/native-discovery-scale-benchmark.json
