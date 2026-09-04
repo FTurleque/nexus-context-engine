@@ -40,6 +40,24 @@ class ScipParseBudgetTest {
     }
 
     @Test
+    void rejectsSymbolInfoNPlusOneBeforeNestedMessageAllocation() throws Exception {
+        Path root = Files.createDirectories(temporaryDirectory.resolve("symbol-infos"));
+        String relativePath = "src/App.java";
+        writeSource(root, relativePath);
+
+        byte[] document = message(
+                stringField(1, relativePath),
+                messageField(3, message(stringField(1, "symbol-1"))),
+                messageField(3, message(stringField(1, "symbol-2"))),
+                messageField(3, message(stringField(1, "symbol-3"))));
+        Files.write(root.resolve("index.scip"), messageField(2, document));
+
+        IOException failure = assertThrows(IOException.class, () ->
+                importer(new ScipCodeIndexImporter.ParseLimits(10, 10, 2, 10)).importIndex(root));
+        assertTrue(failure.getMessage().contains("2 symbol infos SCIP"), failure.getMessage());
+    }
+
+    @Test
     void rejectsRelationshipNPlusOneBeforeNestedMessageAllocation() throws Exception {
         Path root = Files.createDirectories(temporaryDirectory.resolve("relationships"));
         String relativePath = "src/App.java";
