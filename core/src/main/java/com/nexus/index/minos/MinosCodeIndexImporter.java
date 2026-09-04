@@ -62,6 +62,9 @@ public final class MinosCodeIndexImporter {
      * Compatibilité autonome. La façade NexusApplication utilise la surcharge
      * avec fichiers canoniques. Cette surcharge est conservée mais sa découverte
      * physique respecte désormais les limites de {@link ProjectScanner}.
+     *
+     * @deprecated utiliser {@link #importPayload(Path, Set, String)} avec la liste
+     *             canonique des fichiers déjà indexés par NEXUS.
      */
     @Deprecated(forRemoval = false)
     public CodeIntelligenceSnapshot importPayload(Path projectRoot, String payload) throws IOException {
