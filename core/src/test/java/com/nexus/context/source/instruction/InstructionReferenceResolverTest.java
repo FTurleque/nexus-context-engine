@@ -52,6 +52,28 @@ class InstructionReferenceResolverTest {
     }
 
     @Test
+    void scansNewlineDenseInstructionsWithoutBuildingALineArray() throws Exception {
+        Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("dense-project"));
+        write(projectRoot, "docs/allowed.md", "ALLOWED");
+        write(projectRoot, "docs/hidden.md", "HIDDEN");
+        String content = "\n".repeat(100_000)
+                + "Read @docs/allowed.md\r\n"
+                + "```text\r\n"
+                + "Ignore fenced @docs/hidden.md\r\n"
+                + "```\r\n";
+        Path agents = write(projectRoot, "AGENTS.md", content);
+
+        var references = new InstructionReferenceResolver().resolve(
+                project(projectRoot, "dense-references"),
+                agents);
+
+        assertEquals(1, references.size());
+        assertEquals(
+                "docs/allowed.md",
+                references.getFirst().relativePath().toString().replace('\\', '/'));
+    }
+
+    @Test
     void refusesReferencesThatReachOutsideThroughSymbolicLinks() throws Exception {
         Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("symlink-project"));
         Path outside = temporaryDirectory.resolve("symlink-secret.md");

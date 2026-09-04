@@ -143,21 +143,59 @@ final class InstructionReferenceResolver {
         }
     }
 
-    private static List<String> references(String content) {
+    /**
+     * Scans line boundaries in-place instead of {@code String.split("\\R")}. This keeps
+     * temporary memory proportional to the number of discovered references rather than
+     * to the number of lines in a potentially newline-dense instruction file.
+     */
+    static List<String> references(String content) {
         List<String> references = new ArrayList<>();
+        Matcher matcher = REFERENCE.matcher(content);
         boolean fenced = false;
-        for (String line : content.split("\\R", -1)) {
-            String trimmed = line.trim();
-            if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
+        int lineStart = 0;
+        int length = content.length();
+
+        for (int index = 0; index <= length; index++) {
+            boolean endOfContent = index == length;
+            char character = endOfContent ? '\0' : content.charAt(index);
+            if (!endOfContent && character != '\n' && character != '\r') {
+                continue;
+            }
+
+            int lineEnd = index;
+            int trimmedStart = lineStart;
+            while (trimmedStart < lineEnd && Character.isWhitespace(content.charAt(trimmedStart))) {
+                trimmedStart++;
+            }
+
+            if (startsFence(content, trimmedStart, lineEnd)) {
                 fenced = !fenced;
-            } else if (!fenced) {
-                Matcher matcher = REFERENCE.matcher(line);
+            } else if (!fenced && lineStart < lineEnd) {
+                matcher.region(lineStart, lineEnd);
                 while (matcher.find()) {
                     references.add(matcher.group(1));
                 }
             }
+
+            if (!endOfContent
+                    && character == '\r'
+                    && index + 1 < length
+                    && content.charAt(index + 1) == '\n') {
+                index++;
+            }
+            lineStart = index + 1;
         }
         return List.copyOf(references);
+    }
+
+    private static boolean startsFence(String content, int start, int end) {
+        if (end - start < 3) {
+            return false;
+        }
+        char marker = content.charAt(start);
+        return (marker == '`' || marker == '~')
+                && content.charAt(start + 1) == marker
+                && content.charAt(start + 2) == marker;
     }
 
     record ResolvedReference(Path relativePath, String content, int depth) {
