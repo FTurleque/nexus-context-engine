@@ -143,7 +143,8 @@ final class SqliteWriteRetryPolicy {
     private Duration backoffForRetry(int retryNumber) {
         long initialMillis = initialBackoff.toMillis();
         long maximumMillis = maxBackoff.toMillis();
-        long multiplier = 1L << Math.min(30, Math.max(0, retryNumber - 1));
+        int shift = Math.clamp(retryNumber, 1, 31) - 1;
+        long multiplier = 1L << shift;
         long candidate;
         try {
             candidate = Math.multiplyExact(initialMillis, multiplier);

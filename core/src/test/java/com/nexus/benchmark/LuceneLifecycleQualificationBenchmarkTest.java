@@ -299,17 +299,17 @@ class LuceneLifecycleQualificationBenchmarkTest {
         List<Long> scopedMicros = new ArrayList<>(SAMPLE_ROUNDS * 2);
         List<Long> persistentMicros = new ArrayList<>(SAMPLE_ROUNDS * 2);
         for (int round = 0; round < SAMPLE_ROUNDS; round++) {
-            record(scoped, scopedMicros);
-            record(persistent, persistentMicros);
-            record(persistent, persistentMicros);
-            record(scoped, scopedMicros);
+            recordMeasurement(scoped, scopedMicros);
+            recordMeasurement(persistent, persistentMicros);
+            recordMeasurement(persistent, persistentMicros);
+            recordMeasurement(scoped, scopedMicros);
         }
         return new LifecycleMeasurements(
                 Measurement.fromMicros(scopedMicros),
                 Measurement.fromMicros(persistentMicros));
     }
 
-    private static void record(ThrowingIntSupplier operation, List<Long> samples) throws Exception {
+    private static void recordMeasurement(ThrowingIntSupplier operation, List<Long> samples) throws Exception {
         long started = System.nanoTime();
         int result = operation.get();
         samples.add(elapsedMicros(started));

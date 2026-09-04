@@ -41,6 +41,7 @@ import java.util.UUID;
  */
 public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
 
+    private static final String PROVENANCE_ARGUMENT = "provenance";
     private static final String PATH_FIELD = "path";
     private static final String CATEGORY_FIELD = "category";
     private static final String EXCERPT_FIELD = "excerpt";
@@ -65,7 +66,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
     @Override
     public boolean isCompatible(UUID projectId, SemanticIndexProvenance provenance) throws IOException {
         Objects.requireNonNull(projectId, "projectId");
-        Objects.requireNonNull(provenance, "provenance");
+        Objects.requireNonNull(provenance, PROVENANCE_ARGUMENT);
         Path indexPath = paths.projectSemanticLuceneIndex(projectId);
         if (!Files.exists(indexPath, LinkOption.NOFOLLOW_LINKS)) {
             return false;
@@ -91,7 +92,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
             UUID projectId,
             SemanticIndexProvenance provenance,
             List<SemanticVectorDocument> documents) throws IOException {
-        rebuildInternal(projectId, Objects.requireNonNull(provenance, "provenance"), documents);
+        rebuildInternal(projectId, Objects.requireNonNull(provenance, PROVENANCE_ARGUMENT), documents);
     }
 
     private void rebuildInternal(
@@ -131,7 +132,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
             Set<String> removedRelativePaths) throws IOException {
         applyChangesInternal(
                 projectId,
-                Objects.requireNonNull(provenance, "provenance"),
+                Objects.requireNonNull(provenance, PROVENANCE_ARGUMENT),
                 documents,
                 removedRelativePaths);
     }
@@ -273,6 +274,6 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
     }
 
     private static double clamp(double value) {
-        return Math.max(0.0d, Math.min(1.0d, value));
+        return Math.clamp(value, 0.0d, 1.0d);
     }
 }

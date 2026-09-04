@@ -27,6 +27,8 @@ import java.util.TreeMap;
 
 final class CliRenderer {
 
+    private static final String ESTIMATED_TOKENS_FIELD = "estimatedTokens";
+
     private final PrintStream out;
     private final PrintStream err;
     private final boolean json;
@@ -194,7 +196,7 @@ final class CliRenderer {
             payload.put("query", query);
             payload.put("durationMs", durationMs);
             payload.put("tokenBudget", bundle.tokenBudget());
-            payload.put("estimatedTokens", bundle.estimatedTokens());
+            payload.put(ESTIMATED_TOKENS_FIELD, bundle.estimatedTokens());
             payload.put("items", bundle.items().stream().map(item -> contextItemMap(item, explain)).toList());
             payload.put("excluded", explain ? bundle.excluded() : List.of());
             payload.put("metadata", new TreeMap<>(bundle.metadata()));
@@ -227,7 +229,7 @@ final class CliRenderer {
             payload.put("query", query);
             payload.put("durationMs", durationMs);
             payload.put("tokenBudget", bundle.tokenBudget());
-            payload.put("estimatedTokens", bundle.estimatedTokens());
+            payload.put(ESTIMATED_TOKENS_FIELD, bundle.estimatedTokens());
             payload.put("items", items);
             payload.put("excluded", explain ? bundle.excluded() : List.of());
             payload.put("metadata", new TreeMap<>(bundle.metadata()));
@@ -359,7 +361,7 @@ final class CliRenderer {
         itemMap.put("score", item.score());
         itemMap.put("scoreComponents", new TreeMap<>(item.scoreComponents()));
         itemMap.put("reasons", explain ? item.reasons() : List.of());
-        itemMap.put("estimatedTokens", item.estimatedTokens());
+        itemMap.put(ESTIMATED_TOKENS_FIELD, item.estimatedTokens());
         itemMap.put("truncated", item.truncated());
         return itemMap;
     }

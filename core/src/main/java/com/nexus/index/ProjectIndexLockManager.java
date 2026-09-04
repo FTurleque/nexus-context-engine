@@ -51,43 +51,55 @@ public final class ProjectIndexLockManager {
         }
 
         IndexingCapacityGate.Permit capacityPermit = IndexingCapacityGate.acquireShared();
+        boolean permitTransferred = false;
         try {
             Path locksDirectory = paths.locksDirectory();
             paths.ensurePrivateDirectory(locksDirectory);
 
             Path lockPath = paths.projectIndexLock(projectId);
-            FileChannel channel = FileChannel.open(
-                    lockPath,
-                    StandardOpenOption.CREATE,
-                    StandardOpenOption.WRITE,
-                    LinkOption.NOFOLLOW_LINKS);
-            try {
-                paths.hardenPrivateFile(lockPath);
-            } catch (IOException failure) {
-                closeQuietly(channel);
-                throw failure;
+            FileChannel channel = openHardenedChannel(lockPath);
+            FileLock fileLock = acquireFileLock(channel, projectId);
+            LockHandle handle = new LockHandle(channel, fileLock, capacityPermit);
+            permitTransferred = true;
+            return handle;
+        } finally {
+            if (!permitTransferred) {
+                capacityPermit.close();
             }
+        }
+    }
 
-            FileLock fileLock;
-            try {
-                fileLock = channel.tryLock();
-            } catch (OverlappingFileLockException alreadyLockedInJvm) {
-                closeQuietly(channel);
-                throw busy(projectId);
-            } catch (IOException failure) {
-                closeQuietly(channel);
-                throw failure;
-            }
-            if (fileLock == null) {
-                closeQuietly(channel);
-                throw busy(projectId);
-            }
-
-            return new LockHandle(channel, fileLock, capacityPermit);
-        } catch (IOException | RuntimeException | Error failure) {
-            capacityPermit.close();
+    private FileChannel openHardenedChannel(Path lockPath) throws IOException {
+        FileChannel channel = FileChannel.open(
+                lockPath,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.WRITE,
+                LinkOption.NOFOLLOW_LINKS);
+        try {
+            paths.hardenPrivateFile(lockPath);
+            return channel;
+        } catch (IOException failure) {
+            closeQuietly(channel);
             throw failure;
         }
+    }
+
+    private static FileLock acquireFileLock(FileChannel channel, UUID projectId) throws IOException {
+        FileLock fileLock;
+        try {
+            fileLock = channel.tryLock();
+        } catch (OverlappingFileLockException alreadyLockedInJvm) {
+            closeQuietly(channel);
+            throw busy(projectId);
+        } catch (IOException failure) {
+            closeQuietly(channel);
+            throw failure;
+        }
+        if (fileLock == null) {
+            closeQuietly(channel);
+            throw busy(projectId);
+        }
+        return fileLock;
     }
 
     private static IllegalStateException busy(UUID projectId) {

@@ -170,6 +170,9 @@ class LargeScaleSearchBaselineTest {
             queryMetrics.add(metrics);
         }
 
+        assertFalse(projects.isEmpty(), "At least one configured repository must be measured");
+        assertFalse(queryMetrics.isEmpty(), "At least one configured query must be measured");
+
         long usedMemoryAfter = usedHeapBytes();
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("generatedAt", Instant.now().toString());

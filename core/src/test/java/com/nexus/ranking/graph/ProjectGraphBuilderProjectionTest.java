@@ -49,10 +49,14 @@ class ProjectGraphBuilderProjectionTest {
             }
 
             @Override
-            public void applyChanges(UUID ignored, List<IndexedFileUpdate> updates, Set<String> removedPaths) { }
+            public void applyChanges(UUID ignored, List<IndexedFileUpdate> updates, Set<String> removedPaths) {
+                // Mutation is outside this read-only graph projection fixture.
+            }
 
             @Override
-            public void replaceExternalCodeIntelligence(UUID ignored, CodeIntelligenceSnapshot snapshot) { }
+            public void replaceExternalCodeIntelligence(UUID ignored, CodeIntelligenceSnapshot snapshot) {
+                // External intelligence mutation is outside this read-only fixture.
+            }
 
             @Override
             public IndexStatistics statistics(UUID ignored) { return new IndexStatistics(0, 0, 0); }

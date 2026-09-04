@@ -191,10 +191,13 @@ class SqliteWriteContentionIntegrationTest {
             assertEquals(projectB.id(), projects.findById(projectB.id()).orElseThrow().id(),
                     "Une lecture concurrente doit rester disponible pendant le writer");
 
+            UUID projectBId = projectB.id();
+            List<IndexedFileUpdate> updates = List.of(update);
+            Set<String> removedPaths = Set.of();
             long started = System.nanoTime();
             PersistenceException failure = assertThrows(
                     PersistenceException.class,
-                    () -> index.applyChanges(projectB.id(), List.of(update), Set.of()));
+                    () -> index.applyChanges(projectBId, updates, removedPaths));
             long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
 
             SQLiteException sqliteFailure = sqliteFailure(failure);

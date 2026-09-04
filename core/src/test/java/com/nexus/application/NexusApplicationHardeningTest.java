@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -34,7 +35,7 @@ class NexusApplicationHardeningTest {
         assertTrue(empty.operational());
         assertFalse(empty.allProjectsReady());
         assertFalse(empty.degraded());
-        assertTrue(empty.registeredProjects() == 0);
+        assertEquals(0, empty.registeredProjects());
 
         Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("project"));
         application.registerProject(projectRoot, "demo");
@@ -87,11 +88,12 @@ class NexusApplicationHardeningTest {
                 SemanticSearchConfiguration.disabled());
         UUID unknown = UUID.randomUUID();
 
+        String unknownSelector = unknown.toString();
         IllegalArgumentException failure = assertThrows(
                 IllegalArgumentException.class,
-                () -> application.resolveProject(unknown.toString()));
+                () -> application.resolveProject(unknownSelector));
 
-        assertTrue(failure.getMessage().contains(unknown.toString()));
+        assertTrue(failure.getMessage().contains(unknownSelector));
         assertTrue(failure.getMessage().contains("Projet NEXUS introuvable"));
     }
 
@@ -105,10 +107,11 @@ class NexusApplicationHardeningTest {
         application.index(project.id(), false, false);
 
         ProjectIndexLockManager secondOwner = ProjectIndexLockManager.fileBacked(paths);
-        try (ProjectIndexLockManager.LockHandle ignored = secondOwner.acquire(project.id())) {
+        UUID projectId = project.id();
+        try (ProjectIndexLockManager.LockHandle ignored = secondOwner.acquire(projectId)) {
             IllegalStateException failure = assertThrows(
                     IllegalStateException.class,
-                    () -> application.importMinos(project.id(), "{}"));
+                    () -> application.importMinos(projectId, "{}"));
             assertTrue(failure.getMessage().contains("mutation d'index"));
         }
     }

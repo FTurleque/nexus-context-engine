@@ -4,7 +4,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
+import java.io.PrintWriter;
+import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 
@@ -75,12 +76,12 @@ class AssistantIntegrationCliTest {
     void mainRejectsIncompleteExplicitModes() {
         IllegalArgumentException nativeFailure = assertThrows(
                 IllegalArgumentException.class,
-                () -> AssistantIntegrationGenerator.main(new String[]{"generic", "native", "java"}));
+                () -> invokeWithoutOutput("generic", "native", "java"));
         assertTrue(nativeFailure.getMessage().contains("mode native"), nativeFailure.getMessage());
 
         IllegalArgumentException dockerFailure = assertThrows(
                 IllegalArgumentException.class,
-                () -> AssistantIntegrationGenerator.main(new String[]{"generic", "docker"}));
+                () -> invokeWithoutOutput("generic", "docker"));
         assertTrue(dockerFailure.getMessage().contains("mode docker"), dockerFailure.getMessage());
     }
 
@@ -88,12 +89,12 @@ class AssistantIntegrationCliTest {
     void mainRejectsUnknownProfilesAndEmptyDockerContainerNames() {
         IllegalArgumentException profileFailure = assertThrows(
                 IllegalArgumentException.class,
-                () -> AssistantIntegrationGenerator.main(new String[]{"unknown", "docker", "nexus"}));
+                () -> invokeWithoutOutput("unknown", "docker", "nexus"));
         assertTrue(profileFailure.getMessage().contains("Profil inconnu"), profileFailure.getMessage());
 
         IllegalArgumentException containerFailure = assertThrows(
                 IllegalArgumentException.class,
-                () -> AssistantIntegrationGenerator.main(new String[]{"generic", "docker", "   "}));
+                () -> invokeWithoutOutput("generic", "docker", "   "));
         assertTrue(containerFailure.getMessage().contains("containerName"), containerFailure.getMessage());
     }
 
@@ -105,14 +106,16 @@ class AssistantIntegrationCliTest {
         assertTrue(failure.getMessage().contains("command ne peut pas être vide"), failure.getMessage());
     }
 
+    private static void invokeWithoutOutput(String... args) {
+        try (PrintWriter output = new PrintWriter(Writer.nullWriter())) {
+            AssistantIntegrationGenerator.run(args, output);
+        }
+    }
+
     private static String invokeMain(String... args) {
-        PrintStream previous = System.out;
         ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        try (PrintStream replacement = new PrintStream(captured, true, StandardCharsets.UTF_8)) {
-            System.setOut(replacement);
-            AssistantIntegrationGenerator.main(args);
-        } finally {
-            System.setOut(previous);
+        try (PrintWriter output = new PrintWriter(captured, true, StandardCharsets.UTF_8)) {
+            AssistantIntegrationGenerator.run(args, output);
         }
         return captured.toString(StandardCharsets.UTF_8).trim();
     }

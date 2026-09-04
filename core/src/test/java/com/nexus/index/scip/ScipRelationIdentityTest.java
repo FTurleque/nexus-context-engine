@@ -77,7 +77,7 @@ class ScipRelationIdentityTest {
         return output.toByteArray();
     }
 
-    private static byte[] varintField(int fieldNumber, long value) throws IOException {
+    private static byte[] varintField(int fieldNumber, long value) {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         writeVarint(output, (long) fieldNumber << 3);
         writeVarint(output, value);

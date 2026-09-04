@@ -4,6 +4,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
+import java.io.FileDescriptor;
+import java.io.FileOutputStream;
+import java.io.PrintWriter;
+import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -27,8 +31,15 @@ public final class AssistantIntegrationGenerator {
     }
 
     public static void main(String[] args) {
+        try (PrintWriter output = new PrintWriter(
+                new FileOutputStream(FileDescriptor.out), true, Charset.defaultCharset())) {
+            run(args, output);
+        }
+    }
+
+    static void run(String[] args, PrintWriter output) {
         if (args.length < 2) {
-            System.out.println(usage());
+            output.println(usage());
             return;
         }
 
@@ -40,7 +51,7 @@ public final class AssistantIntegrationGenerator {
         if (!"native".equals(args[1]) && !"docker".equals(args[1])) {
             Path runner = Path.of(args[1]);
             String format = args.length >= 3 ? args[2] : "command";
-            System.out.println(generator.render(profile, generator.legacyJava(runner), format));
+            output.println(generator.render(profile, generator.legacyJava(runner), format));
             return;
         }
 
@@ -60,7 +71,7 @@ public final class AssistantIntegrationGenerator {
             format = args.length >= 4 ? args[3] : "command";
         }
 
-        System.out.println(generator.render(profile, commandSpec, format));
+        output.println(generator.render(profile, commandSpec, format));
     }
 
     private String render(String profile, CommandSpec commandSpec, String format) {

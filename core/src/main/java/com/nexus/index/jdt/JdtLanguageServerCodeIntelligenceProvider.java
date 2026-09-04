@@ -420,107 +420,154 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
             int sourceLineCount,
             int maxSymbols) throws IOException {
         List<ProviderSymbol> symbols = new ArrayList<>();
+        DocumentSymbolContext context = new DocumentSymbolContext(
+                relativePath, uri, packageName, sourceLineCount, maxSymbols);
         for (JsonNode node : arrayElements(response)) {
-            flattenDocumentSymbol(
-                    node,
-                    relativePath,
-                    uri,
-                    packageName,
-                    sourceLineCount,
-                    List.of(),
-                    symbols,
-                    maxSymbols);
+            flattenDocumentSymbol(node, context, List.of(), symbols);
         }
         return List.copyOf(symbols);
     }
 
     private void flattenDocumentSymbol(
             JsonNode node,
-            String relativePath,
-            String fallbackUri,
-            String packageName,
-            int sourceLineCount,
+            DocumentSymbolContext context,
             List<String> ownerTypes,
-            List<ProviderSymbol> output,
-            int maxSymbols) throws IOException {
+            List<ProviderSymbol> output) throws IOException {
+        ParsedDocumentSymbol parsed = parseDocumentSymbol(node, context);
+        SymbolRange range = parsed.range();
+        boolean namedSupportedSymbol = parsed.mappedKind().isPresent() && !parsed.name().isBlank();
+        boolean validRange = isValidJdtRange(
+                range.startLine(),
+                range.endLine(),
+                range.selectionLine(),
+                context.sourceLineCount());
+
+        List<String> childOwners = namedSupportedSymbol && validRange
+                ? appendDocumentSymbol(parsed, context, ownerTypes, output)
+                : ownersForSkippedDocumentSymbol(parsed, context, ownerTypes, namedSupportedSymbol);
+
+        for (JsonNode child : arrayElements(node.path("children"))) {
+            flattenDocumentSymbol(child, context, childOwners, output);
+        }
+    }
+
+    private static ParsedDocumentSymbol parseDocumentSymbol(
+            JsonNode node,
+            DocumentSymbolContext context) {
         int lspKind = node.path("kind").asInt(-1);
         String name = node.path("name").asText("");
         String detail = node.path("detail").asText("");
         JsonNode rangeNode = node.has("range") ? node.path("range") : node.path("location").path("range");
         JsonNode selectionRangeNode = node.has("selectionRange") ? node.path("selectionRange") : rangeNode;
-        String uri = node.path("location").path("uri").asText(fallbackUri);
+        String uri = node.path("location").path("uri").asText(context.fallbackUri());
         int startLine = rangeNode.path("start").path("line").asInt(-1);
         int endLine = rangeNode.path("end").path("line").asInt(startLine);
         int selectionLine = selectionRangeNode.path("start").path("line").asInt(startLine);
         int selectionCharacter = selectionRangeNode.path("start").path("character").asInt(0);
+        return new ParsedDocumentSymbol(
+                lspKind,
+                name,
+                detail,
+                uri,
+                new SymbolRange(startLine, endLine, selectionLine, selectionCharacter),
+                symbolKind(lspKind));
+    }
 
-        Optional<SymbolKind> mappedKind = symbolKind(lspKind);
+    private List<String> appendDocumentSymbol(
+            ParsedDocumentSymbol parsed,
+            DocumentSymbolContext context,
+            List<String> ownerTypes,
+            List<ProviderSymbol> output) throws IOException {
+        if (output.size() >= context.maxSymbols()) {
+            throw snapshotLimitFailure("symboles", snapshotLimits.maxSymbols());
+        }
+
+        SymbolKind kind = parsed.mappedKind().orElseThrow();
+        String signature = parsed.detail().isBlank()
+                ? parsed.name()
+                : parsed.name() + " " + parsed.detail().trim();
         List<String> childOwners = ownerTypes;
-        boolean namedSupportedSymbol = mappedKind.isPresent() && !name.isBlank();
-        boolean validRange = isValidJdtRange(startLine, endLine, selectionLine, sourceLineCount);
-        if (namedSupportedSymbol && validRange) {
-            if (output.size() >= maxSymbols) {
-                throw snapshotLimitFailure("symboles", snapshotLimits.maxSymbols());
-            }
-            SymbolKind kind = mappedKind.orElseThrow();
-            String owner = qualifiedOwner(packageName, ownerTypes);
-            String signature = detail.isBlank() ? name : name + " " + detail.trim();
-            String qualifiedName;
-            if (isType(kind)) {
-                List<String> typeNames = new ArrayList<>(ownerTypes);
-                typeNames.add(name);
-                qualifiedName = qualifiedOwner(packageName, typeNames);
-                childOwners = List.copyOf(typeNames);
-            } else {
-                qualifiedName = owner + "#" + signature;
-            }
-            CodeSymbol symbol = new CodeSymbol(
-                    kind,
-                    name,
-                    qualifiedName,
-                    signature,
-                    startLine + 1,
-                    endLine + 1,
-                    SOURCE_PROVIDER);
-            output.add(new ProviderSymbol(
-                    relativePath,
-                    uri,
-                    symbol,
-                    lspKind,
-                    startLine,
-                    endLine,
-                    selectionLine,
-                    Math.max(0, selectionCharacter)));
+        String qualifiedName;
+        if (isType(kind)) {
+            List<String> typeNames = appendOwner(ownerTypes, parsed.name());
+            qualifiedName = qualifiedOwner(context.packageName(), typeNames);
+            childOwners = typeNames;
         } else {
-            if (namedSupportedSymbol) {
-                LOGGER.log(
-                        System.Logger.Level.WARNING,
-                        "Ignoring inconsistent JDT symbol range for {0} in {1}: start={2}, end={3}, selection={4}, lines={5}",
-                        name,
-                        relativePath,
-                        startLine,
-                        endLine,
-                        selectionLine,
-                        sourceLineCount);
-            }
-            if (isLspType(lspKind) && !name.isBlank()) {
-                List<String> typeNames = new ArrayList<>(ownerTypes);
-                typeNames.add(name);
-                childOwners = List.copyOf(typeNames);
-            }
+            qualifiedName = qualifiedOwner(context.packageName(), ownerTypes) + "#" + signature;
         }
 
-        for (JsonNode child : arrayElements(node.path("children"))) {
-            flattenDocumentSymbol(
-                    child,
-                    relativePath,
-                    fallbackUri,
-                    packageName,
-                    sourceLineCount,
-                    childOwners,
-                    output,
-                    maxSymbols);
+        SymbolRange range = parsed.range();
+        CodeSymbol symbol = new CodeSymbol(
+                kind,
+                parsed.name(),
+                qualifiedName,
+                signature,
+                range.startLine() + 1,
+                range.endLine() + 1,
+                SOURCE_PROVIDER);
+        output.add(new ProviderSymbol(
+                context.relativePath(),
+                parsed.uri(),
+                symbol,
+                parsed.lspKind(),
+                range.startLine(),
+                range.endLine(),
+                range.selectionLine(),
+                Math.max(0, range.selectionCharacter())));
+        return childOwners;
+    }
+
+    private static List<String> ownersForSkippedDocumentSymbol(
+            ParsedDocumentSymbol parsed,
+            DocumentSymbolContext context,
+            List<String> ownerTypes,
+            boolean namedSupportedSymbol) {
+        SymbolRange range = parsed.range();
+        if (namedSupportedSymbol) {
+            LOGGER.log(
+                    System.Logger.Level.WARNING,
+                    "Ignoring inconsistent JDT symbol range for {0} in {1}: start={2}, end={3}, selection={4}, lines={5}",
+                    parsed.name(),
+                    context.relativePath(),
+                    range.startLine(),
+                    range.endLine(),
+                    range.selectionLine(),
+                    context.sourceLineCount());
         }
+        if (isLspType(parsed.lspKind()) && !parsed.name().isBlank()) {
+            return appendOwner(ownerTypes, parsed.name());
+        }
+        return ownerTypes;
+    }
+
+    private static List<String> appendOwner(List<String> ownerTypes, String name) {
+        List<String> typeNames = new ArrayList<>(ownerTypes);
+        typeNames.add(name);
+        return List.copyOf(typeNames);
+    }
+
+    private record SymbolRange(
+            int startLine,
+            int endLine,
+            int selectionLine,
+            int selectionCharacter) {
+    }
+
+    private record ParsedDocumentSymbol(
+            int lspKind,
+            String name,
+            String detail,
+            String uri,
+            SymbolRange range,
+            Optional<SymbolKind> mappedKind) {
+    }
+
+    private record DocumentSymbolContext(
+            String relativePath,
+            String fallbackUri,
+            String packageName,
+            int sourceLineCount,
+            int maxSymbols) {
     }
 
     private static boolean isValidJdtRange(

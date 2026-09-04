@@ -17,8 +17,8 @@ class ResultLimitPolicyTest {
 
     @Test
     void internalRetrievalAllowsOnlyBoundedOverfetch() {
-        assertEquals(ResultLimitPolicy.MAX_RESULT_LIMIT * 4,
-                ResultLimitPolicy.MAX_INTERNAL_RETRIEVAL_LIMIT);
+        assertEquals(ResultLimitPolicy.MAX_INTERNAL_RETRIEVAL_LIMIT,
+                ResultLimitPolicy.MAX_RESULT_LIMIT * 4);
         assertEquals(ResultLimitPolicy.MAX_INTERNAL_RETRIEVAL_LIMIT,
                 ResultLimitPolicy.validateInternalRetrieval(ResultLimitPolicy.MAX_INTERNAL_RETRIEVAL_LIMIT));
         assertThrows(IllegalArgumentException.class,

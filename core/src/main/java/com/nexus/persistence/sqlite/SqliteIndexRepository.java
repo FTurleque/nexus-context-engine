@@ -39,6 +39,8 @@ import java.util.stream.Collectors;
 public final class SqliteIndexRepository implements IndexRepository {
 
     private static final String EMBEDDED_SOURCE_PROVIDER = CodeSymbol.DEFAULT_SOURCE_PROVIDER;
+    private static final String QUALIFIED_NAME_COLUMN = "qualified_name";
+    private static final String RELATIVE_PATH_COLUMN = "relative_path";
     private static final int EXTERNAL_BATCH_SIZE = 1_000;
     private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
 
@@ -124,7 +126,7 @@ public final class SqliteIndexRepository implements IndexRepository {
             try (ResultSet resultSet = statement.executeQuery()) {
                 Map<String, String> owners = new LinkedHashMap<>();
                 while (resultSet.next()) {
-                    owners.put(resultSet.getString("qualified_name"), resultSet.getString("relative_path"));
+                    owners.put(resultSet.getString(QUALIFIED_NAME_COLUMN), resultSet.getString(RELATIVE_PATH_COLUMN));
                 }
                 return Map.copyOf(owners);
             }
@@ -479,7 +481,7 @@ public final class SqliteIndexRepository implements IndexRepository {
                 IndexedFile file = new IndexedFile(
                         resultSet.getLong("id"),
                         UUID.fromString(resultSet.getString("project_id")),
-                        resultSet.getString("relative_path"),
+                        resultSet.getString(RELATIVE_PATH_COLUMN),
                         resultSet.getString("language"),
                         resultSet.getLong("size_bytes"),
                         resultSet.getString("content_hash"),
@@ -497,11 +499,11 @@ public final class SqliteIndexRepository implements IndexRepository {
             List<IndexedSymbol> symbols = new ArrayList<>();
             while (resultSet.next()) {
                 symbols.add(new IndexedSymbol(
-                        resultSet.getString("relative_path"),
+                        resultSet.getString(RELATIVE_PATH_COLUMN),
                         new CodeSymbol(
                                 SymbolKind.valueOf(resultSet.getString("kind")),
                                 resultSet.getString("name"),
-                                resultSet.getString("qualified_name"),
+                                resultSet.getString(QUALIFIED_NAME_COLUMN),
                                 resultSet.getString("signature"),
                                 resultSet.getInt("start_line"),
                                 resultSet.getInt("end_line"),
@@ -551,7 +553,7 @@ public final class SqliteIndexRepository implements IndexRepository {
             try (ResultSet resultSet = statement.executeQuery()) {
                 Map<String, String> owners = new LinkedHashMap<>();
                 while (resultSet.next()) {
-                    owners.put(resultSet.getString("qualified_name"), resultSet.getString("relative_path"));
+                    owners.put(resultSet.getString(QUALIFIED_NAME_COLUMN), resultSet.getString(RELATIVE_PATH_COLUMN));
                 }
                 return Map.copyOf(owners);
             }
@@ -787,7 +789,7 @@ public final class SqliteIndexRepository implements IndexRepository {
                 List<IndexedRelation> relations = new ArrayList<>();
                 while (resultSet.next()) {
                     relations.add(new IndexedRelation(
-                            resultSet.getString("relative_path"),
+                            resultSet.getString(RELATIVE_PATH_COLUMN),
                             new SymbolRelation(
                                     RelationKind.valueOf(resultSet.getString("kind")),
                                     resultSet.getString("source_ref"),
@@ -825,7 +827,7 @@ public final class SqliteIndexRepository implements IndexRepository {
             try (ResultSet resultSet = statement.executeQuery()) {
                 Map<String, Long> fileIds = new LinkedHashMap<>();
                 while (resultSet.next()) {
-                    fileIds.put(resultSet.getString("relative_path"), resultSet.getLong("id"));
+                    fileIds.put(resultSet.getString(RELATIVE_PATH_COLUMN), resultSet.getLong("id"));
                 }
                 return fileIds;
             }
