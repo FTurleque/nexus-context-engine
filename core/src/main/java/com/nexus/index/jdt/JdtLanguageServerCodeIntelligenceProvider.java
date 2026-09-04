@@ -69,6 +69,8 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
     private static final long DEFAULT_TIMEOUT_SECONDS = 120L;
     static final int MAX_SYMBOLS = 10_000;
     static final long MAX_TIMEOUT_SECONDS = 3_600L;
+    static final int MAX_SNAPSHOT_SYMBOLS = 100_000;
+    static final int MAX_SNAPSHOT_RELATIONS = 500_000;
     private static final double JDT_CONFIDENCE = 1.0d;
     private static final Pattern PACKAGE_PATTERN = Pattern.compile(
             "(?m)^\\s*package\\s+([A-Za-z_$][\\w$]*(?:\\.[A-Za-z_$][\\w$]*)*)\\s*;");
@@ -83,18 +85,28 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
     private final Configuration configuration;
     private final SessionFactory sessionFactory;
     private final ObjectMapper objectMapper;
+    private final SnapshotLimits snapshotLimits;
 
     public JdtLanguageServerCodeIntelligenceProvider(Configuration configuration) {
-        this(configuration, StdioSession::open, new ObjectMapper());
+        this(configuration, StdioSession::open, new ObjectMapper(), SnapshotLimits.defaults());
     }
 
     JdtLanguageServerCodeIntelligenceProvider(
             Configuration configuration,
             SessionFactory sessionFactory,
             ObjectMapper objectMapper) {
+        this(configuration, sessionFactory, objectMapper, SnapshotLimits.defaults());
+    }
+
+    JdtLanguageServerCodeIntelligenceProvider(
+            Configuration configuration,
+            SessionFactory sessionFactory,
+            ObjectMapper objectMapper,
+            SnapshotLimits snapshotLimits) {
         this.configuration = Objects.requireNonNull(configuration, "configuration");
         this.sessionFactory = Objects.requireNonNull(sessionFactory, "sessionFactory");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        this.snapshotLimits = Objects.requireNonNull(snapshotLimits, "snapshotLimits");
     }
 
     public static Optional<JdtLanguageServerCodeIntelligenceProvider> fromEnvironment(NexusPaths paths) {
@@ -151,6 +163,11 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
         try (Session session = sessionFactory.open(configuration, root)) {
             session.initialize();
             for (ScannedFile file : javaFiles) {
+                int remainingSymbols = snapshotLimits.maxSymbols() - indexedSymbols.size();
+                if (remainingSymbols <= 0) {
+                    throw snapshotLimitFailure("symboles", snapshotLimits.maxSymbols());
+                }
+
                 String content = SafeFileIO.readStringNoFollow(file.absolutePath());
                 String uri = file.absolutePath().toUri().toString();
                 session.notify("textDocument/didOpen", didOpenParams(uri, content));
@@ -161,7 +178,8 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
                         file.relativePath(),
                         uri,
                         packageName(content),
-                        countSourceLines(content));
+                        countSourceLines(content),
+                        remainingSymbols);
                 symbolsByPath.put(file.relativePath(), fileSymbols);
                 fileSymbols.stream()
                         .map(symbol -> new IndexedSymbol(symbol.relativePath(), symbol.symbol()))
@@ -343,13 +361,23 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
             String relativePath,
             RelationKind kind,
             String source,
-            String target) {
+            String target) throws IOException {
         if (source == null || target == null || source.isBlank() || target.isBlank() || source.equals(target)) {
             return;
         }
-        SymbolRelation relation = new SymbolRelation(kind, source, target, JDT_CONFIDENCE, SOURCE_PROVIDER);
         String key = relativePath + "|" + kind + "|" + source + "|" + target;
-        relations.putIfAbsent(key, new IndexedRelation(relativePath, relation));
+        if (relations.containsKey(key)) {
+            return;
+        }
+        if (relations.size() >= snapshotLimits.maxRelations()) {
+            throw snapshotLimitFailure("relations", snapshotLimits.maxRelations());
+        }
+        SymbolRelation relation = new SymbolRelation(kind, source, target, JDT_CONFIDENCE, SOURCE_PROVIDER);
+        relations.put(key, new IndexedRelation(relativePath, relation));
+    }
+
+    private static IOException snapshotLimitFailure(String kind, int maximum) {
+        return new IOException("JDT LS dépasse la limite de snapshot de " + maximum + " " + kind);
     }
 
     private ObjectNode positionParams(ProviderSymbol symbol) {
@@ -389,10 +417,19 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
             String relativePath,
             String uri,
             String packageName,
-            int sourceLineCount) {
+            int sourceLineCount,
+            int maxSymbols) throws IOException {
         List<ProviderSymbol> symbols = new ArrayList<>();
         for (JsonNode node : arrayElements(response)) {
-            flattenDocumentSymbol(node, relativePath, uri, packageName, sourceLineCount, List.of(), symbols);
+            flattenDocumentSymbol(
+                    node,
+                    relativePath,
+                    uri,
+                    packageName,
+                    sourceLineCount,
+                    List.of(),
+                    symbols,
+                    maxSymbols);
         }
         return List.copyOf(symbols);
     }
@@ -404,7 +441,8 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
             String packageName,
             int sourceLineCount,
             List<String> ownerTypes,
-            List<ProviderSymbol> output) {
+            List<ProviderSymbol> output,
+            int maxSymbols) throws IOException {
         int lspKind = node.path("kind").asInt(-1);
         String name = node.path("name").asText("");
         String detail = node.path("detail").asText("");
@@ -421,6 +459,9 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
         boolean namedSupportedSymbol = mappedKind.isPresent() && !name.isBlank();
         boolean validRange = isValidJdtRange(startLine, endLine, selectionLine, sourceLineCount);
         if (namedSupportedSymbol && validRange) {
+            if (output.size() >= maxSymbols) {
+                throw snapshotLimitFailure("symboles", snapshotLimits.maxSymbols());
+            }
             SymbolKind kind = mappedKind.orElseThrow();
             String owner = qualifiedOwner(packageName, ownerTypes);
             String signature = detail.isBlank() ? name : name + " " + detail.trim();
@@ -477,7 +518,8 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
                     packageName,
                     sourceLineCount,
                     childOwners,
-                    output);
+                    output,
+                    maxSymbols);
         }
     }
 
@@ -663,6 +705,23 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
                     name + " doit être compris entre 1 et " + maximum + " (reçu " + parsed + ")");
         }
         return parsed;
+    }
+
+    record SnapshotLimits(int maxSymbols, int maxRelations) {
+        SnapshotLimits {
+            if (maxSymbols <= 0 || maxSymbols > MAX_SNAPSHOT_SYMBOLS) {
+                throw new IllegalArgumentException(
+                        "maxSymbols snapshot doit être compris entre 1 et " + MAX_SNAPSHOT_SYMBOLS);
+            }
+            if (maxRelations <= 0 || maxRelations > MAX_SNAPSHOT_RELATIONS) {
+                throw new IllegalArgumentException(
+                        "maxRelations snapshot doit être compris entre 1 et " + MAX_SNAPSHOT_RELATIONS);
+            }
+        }
+
+        static SnapshotLimits defaults() {
+            return new SnapshotLimits(MAX_SNAPSHOT_SYMBOLS, MAX_SNAPSHOT_RELATIONS);
+        }
     }
 
     public record Configuration(
