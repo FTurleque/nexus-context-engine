@@ -432,11 +432,14 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
         return targets;
     }
 
-    private static String projectPrefix(Repository repository, Path projectRoot) {
-        Path workTree = repository.getWorkTree().toPath().toAbsolutePath().normalize();
-        Path root = projectRoot.toAbsolutePath().normalize();
+    private static String projectPrefix(Repository repository, Path projectRoot) throws IOException {
+        if (repository.isBare()) {
+            throw new IOException("Le contexte Git nécessite un worktree local");
+        }
+        Path workTree = repository.getWorkTree().toPath().toRealPath();
+        Path root = projectRoot.toRealPath();
         if (!root.startsWith(workTree)) {
-            return "";
+            throw new IOException("La racine projet est hors du worktree Git détecté");
         }
         return workTree.relativize(root).toString().replace('\\', '/');
     }
