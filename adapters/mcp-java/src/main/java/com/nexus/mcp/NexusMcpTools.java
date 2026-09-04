@@ -528,13 +528,18 @@ final class NexusMcpTools {
         return Map.copyOf(result);
     }
 
-    private static String safeMessage(Exception exception) {
-        Throwable current = exception;
-        while (current.getCause() != null && current.getMessage() == null) {
-            current = current.getCause();
+    static String safeMessage(Exception exception) {
+        Objects.requireNonNull(exception, "exception");
+        if (exception instanceof IllegalArgumentException) {
+            String message = exception.getMessage();
+            return message == null || message.isBlank()
+                    ? "Requête MCP NEXUS invalide"
+                    : message;
         }
-        String message = current.getMessage();
-        return message == null || message.isBlank() ? current.getClass().getSimpleName() : message;
+        if (exception instanceof IllegalStateException) {
+            return "Opération NEXUS indisponible dans l'état courant";
+        }
+        return "Erreur interne NEXUS";
     }
 
     @FunctionalInterface
