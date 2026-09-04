@@ -1,0 +1,72 @@
+name: NXA11 Sonar cleanup batch A retry
+
+on:
+  push:
+    branches:
+      - fix/nxa11-sonar-promotion-maintainability
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: fix/nxa11-sonar-promotion-maintainability
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Replay batch A transformations
+        shell: bash
+        run: |
+          git show b9749e7951b44eaf76799caf8dbc60ff396f93a7:.github/workflows/nxa11-batch-a.yml > "$RUNNER_TEMP/nxa11-original.yml"
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('/home/runner/work/_temp/nxa11-original.yml').read_text(encoding='utf-8')
+          start_marker = "          from pathlib import Path\n"
+          end_marker = "\n          PY\n"
+          start = source.index(start_marker)
+          end = source.index(end_marker, start)
+          block = source[start:end]
+          lines = []
+          for line in block.splitlines():
+              if not line.startswith('          '):
+                  raise SystemExit(f'unexpected embedded-script indentation: {line!r}')
+              lines.append(line[10:])
+          Path('/tmp/nxa11-apply.py').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+          PY
+          python3 /tmp/nxa11-apply.py
+      - name: Narrow remaining CLI checked exceptions
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('core/src/main/java/com/nexus/cli/NexusCli.java')
+          text = path.read_text(encoding='utf-8')
+          old = 'renderer) throws Exception {'
+          count = text.count(old)
+          if count != 3:
+              raise SystemExit(f'expected 3 remaining CLI generic throws declarations, found {count}')
+          text = text.replace(old, 'renderer) throws IOException {')
+          path.write_text(text, encoding='utf-8')
+          PY
+      - name: Run reactor tests
+        shell: bash
+        run: |
+          chmod +x ./mvnw
+          ./mvnw -B test
+      - name: Commit qualified batch and remove one-shot workflow
+        shell: bash
+        run: |
+          rm .github/workflows/nxa11-batch-a-retry.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'refactor: clear Sonar promotion maintainability batch A'
+          git push origin HEAD:fix/nxa11-sonar-promotion-maintainability
