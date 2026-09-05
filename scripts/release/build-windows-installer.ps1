@@ -135,7 +135,6 @@ foreach ($requiredHardeningFragment in @(
 }
 foreach ($requiredFallbackFragment in @(
     'Dockerfile.runtime',
-    'nexus-container-healthcheck.sh',
     '"%DOCKER_EXE%" pull "%NEXUS_DOCKER_IMAGE%"',
     '"%DOCKER_EXE%" build --pull --file',
     ':nexus_image_ready'
