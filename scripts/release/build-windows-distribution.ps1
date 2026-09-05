@@ -42,6 +42,8 @@ try {
     $ErrorActionPreference = 'Continue'
     $versionOutput = ((& $java -version 2>&1) | Out-String)
     $versionExit = $LASTEXITCODE
+    $propertyOutput = @(& $java '-XshowSettings:properties' '-version' 2>&1 | ForEach-Object { $_.ToString() })
+    $propertyExit = $LASTEXITCODE
 }
 finally { $ErrorActionPreference = $previousPreference }
 if ($versionExit -ne 0 -or $versionOutput -notmatch 'version "(\d+)') {
@@ -49,6 +51,19 @@ if ($versionExit -ne 0 -or $versionOutput -notmatch 'version "(\d+)') {
 }
 $javaMajor = [int]$Matches[1]
 if ($javaMajor -lt 21) { throw "NEXUS Windows packaging requires JDK 21 or newer; found Java $javaMajor." }
+if ($propertyExit -ne 0) {
+    throw 'Unable to inspect the exact JAVA_HOME runtime version.'
+}
+$javaRuntimeVersion = $null
+foreach ($line in $propertyOutput) {
+    if ($line -match '^\s*java\.runtime\.version\s*=\s*(.+?)\s*$') {
+        $javaRuntimeVersion = $Matches[1]
+        break
+    }
+}
+if ([string]::IsNullOrWhiteSpace($javaRuntimeVersion)) {
+    throw 'JAVA_HOME did not expose java.runtime.version.'
+}
 $nativeAccessArgument = '--enable-native-access=ALL-UNNAMED'
 
 Push-Location $repo
@@ -203,6 +218,22 @@ docker exec -i "%NEXUS_DOCKER_CONTAINER%" java --enable-native-access=ALL-UNNAME
 exit /b %ERRORLEVEL%
 '@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus-docker.cmd') -Encoding ascii
 
+$signer = Join-Path $PSScriptRoot 'sign-windows-artifact.ps1'
+if (-not (Test-Path -LiteralPath $signer -PathType Leaf)) {
+    throw "Windows signing helper missing: $signer"
+}
+& $signer -Path (Join-Path $distribution 'app\nexus.exe')
+
+$sbomAugmenter = Join-Path $PSScriptRoot 'augment-windows-sbom.ps1'
+if (-not (Test-Path -LiteralPath $sbomAugmenter -PathType Leaf)) {
+    throw "Windows SBOM helper missing: $sbomAugmenter"
+}
+& $sbomAugmenter `
+    -DistributionRoot $distribution `
+    -SbomPath (Join-Path $distribution 'SBOM.cdx.json') `
+    -ProjectVersion $Version `
+    -JavaVersion $javaRuntimeVersion
+
 $smokeHome = Join-Path $OutputRoot '.distribution-smoke-home'
 Remove-Item -LiteralPath $smokeHome -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $smokeHome | Out-Null
@@ -238,6 +269,7 @@ Write-Host 'NEXUS Windows self-contained distribution SUCCESS' -ForegroundColor 
 Write-Host "Distribution : $distribution"
 Write-Host "ZIP          : $zip"
 Write-Host "SHA-256      : $hash"
-Write-Host "Bundled Java : $javaMajor"
+Write-Host "Bundled Java : $javaRuntimeVersion"
+Write-Host 'SBOM         : Maven dependencies + signed/runtime file inventory'
 Write-Host 'Surfaces     : CLI + MCP STDIO + REST + assistant integrations + Docker launchers'
 Write-Output $distribution
