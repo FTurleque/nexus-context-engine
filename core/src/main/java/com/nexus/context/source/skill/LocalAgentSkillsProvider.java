@@ -39,7 +39,9 @@ public final class LocalAgentSkillsProvider implements SkillSourceProvider {
     public SkillProviderResult discover(SkillSourceQuery query) throws IOException {
         ProjectPathGuard pathGuard = new ProjectPathGuard(query.project().rootPath());
         Path projectRoot = pathGuard.root();
-        ProjectIgnoreMatcher ignoreMatcher = new ProjectIgnoreMatcher(projectRoot);
+        ProjectIgnoreMatcher ignoreMatcher = new ProjectIgnoreMatcher(
+                projectRoot,
+                query.discoveryBudget()::bytes);
         List<SkillDescriptor> skills = new ArrayList<>();
         List<String> diagnostics = new ArrayList<>();
 
