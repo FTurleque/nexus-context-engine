@@ -127,7 +127,12 @@ foreach ($requiredHardeningFragment in @(
     'function CmdEnvEscape(Value: String): String;',
     'function DotEnvQuoted(Value: String): String;',
     'function IsLoopbackRestHost(Value: String): Boolean;',
-    'NEXUS_REST_EXPOSURE_MODE=loopback-forward'
+    'function VerifyFileSha256(FilePath: String; ExpectedSha256: String): Boolean;',
+    'NEXUS_REST_EXPOSURE_MODE=loopback-forward',
+    'https://desktop.docker.com/win/main/amd64/236216/Docker%20Desktop%20Installer.exe',
+    '820438e75c16e44b393079154bea7d27958a15845c23a635b1a1f6f586b2ed44',
+    'https://github.com/ollama/ollama/releases/download/v0.33.3/OllamaSetup.exe',
+    '32cdcb1da477bc7fffbf1c1cdeeb99b1db003af094db56dd3c156abd04d34f8e'
 )) {
     if ($iss.IndexOf($requiredHardeningFragment, [StringComparison]::Ordinal) -lt 0) {
         throw "Generated installer source is missing hardening fragment: $requiredHardeningFragment"
@@ -168,7 +173,7 @@ try {
     Write-Host "Setup   : $setup"
     Write-Host "SHA-256 : $hash"
     Write-Host 'Wizard  : Native / Docker / Both + runtime/integration customization'
-    Write-Host 'Security: loopback-only wizard REST + hardened cmd/.env generation + optional/required Authenticode'
+    Write-Host 'Security: loopback-only wizard REST + hardened cmd/.env + pinned/hash-verified prerequisites + optional/required Authenticode'
     Write-Host 'Docker  : canonical distribution payload + strict engine detection + registry pull/local fallback'
     Write-Output $setup
 }
