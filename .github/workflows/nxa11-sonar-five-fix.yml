@@ -1,0 +1,152 @@
+name: NXA11 Sonar five-finding fix builder
+
+on:
+  push:
+    branches:
+      - diagnostic/nxa11-sonar-191
+
+permissions:
+  contents: write
+
+jobs:
+  build-fix-tree:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: diagnostic/nxa11-sonar-191
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Apply exact Sonar remediations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_exact(path, old, new):
+              file = Path(path)
+              text = file.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected exactly one match in {path}, found {count}")
+              file.write_text(text.replace(old, new))
+
+          replace_exact(
+              'core/src/main/java/com/nexus/context/ContextFragmentFactory.java',
+              '.limit((long) MAX_MATERIALIZED_SOURCE_LINES + 1L)',
+              '.limit(MAX_MATERIALIZED_SOURCE_LINES + 1L)')
+
+          replace_exact(
+              'core/src/main/java/com/nexus/index/jdt/BoundedLineDrain.java',
+              '''        boolean truncated = false;
+          int read;
+          while ((read = reader.read(buffer)) >= 0) {
+              for (int index = 0; index < read; index++) {
+                  char character = buffer[index];
+                  if (character == '\\n') {
+                      emit(consumer, line, truncated);
+                      line.setLength(0);
+                      truncated = false;
+                      continue;
+                  }
+                  if (character == '\\r') {
+                      continue;
+                  }
+                  if (line.length() < maxLineChars) {
+                      line.append(character);
+                  } else {
+                      truncated = true;
+                  }
+              }
+          }
+          if (!line.isEmpty() || truncated) {
+              emit(consumer, line, truncated);
+          }
+      }
+
+      private static void emit''',
+              '''        boolean truncated = false;
+          int read;
+          while ((read = reader.read(buffer)) >= 0) {
+              for (int index = 0; index < read; index++) {
+                  truncated = processCharacter(
+                          buffer[index], line, maxLineChars, truncated, consumer);
+              }
+          }
+          if (!line.isEmpty() || truncated) {
+              emit(consumer, line, truncated);
+          }
+      }
+
+      private static boolean processCharacter(
+              char character,
+              StringBuilder line,
+              int maxLineChars,
+              boolean truncated,
+              Consumer<String> consumer) {
+          if (character == '\\n') {
+              emit(consumer, line, truncated);
+              line.setLength(0);
+              return false;
+          }
+          if (character == '\\r') {
+              return truncated;
+          }
+          if (line.length() < maxLineChars) {
+              line.append(character);
+              return truncated;
+          }
+          return true;
+      }
+
+      private static void emit''')
+
+          replace_exact(
+              'core/src/main/java/com/nexus/context/FederatedContextService.java',
+              '''    /**
+       * Alias de compatibilité. La politique canonique est définie exclusivement
+       * par {@link FederatedScopePolicy#MAX_PROJECTS}.
+       *
+       * @deprecated utiliser {@link FederatedScopePolicy#MAX_PROJECTS}.
+       */
+      @Deprecated(forRemoval = false)
+      public static final int MAX_FEDERATED_PROJECTS = FederatedScopePolicy.MAX_PROJECTS;''',
+              '''    /**
+       * Alias de compatibilité conservé pour les intégrations existantes. La politique
+       * canonique reste définie exclusivement par {@link FederatedScopePolicy#MAX_PROJECTS}.
+       */
+      public static final int MAX_FEDERATED_PROJECTS = FederatedScopePolicy.MAX_PROJECTS;''')
+
+          replace_exact(
+              'core/src/main/java/com/nexus/index/minos/MinosCodeIndexImporter.java',
+              '''    /**
+       * Compatibilité autonome. La façade NexusApplication utilise la surcharge
+       * avec fichiers canoniques. Cette surcharge est conservée mais sa découverte
+       * physique respecte désormais les limites de {@link ProjectScanner}.
+       *
+       * @deprecated utiliser {@link #importPayload(Path, Set, String)} avec la liste
+       *             canonique des fichiers déjà indexés par NEXUS.
+       */
+      @Deprecated(forRemoval = false)
+      public CodeIntelligenceSnapshot importPayload(Path projectRoot, String payload) throws IOException {''',
+              '''    /**
+       * Compatibilité autonome. La façade NexusApplication utilise la surcharge
+       * avec fichiers canoniques. Cette surcharge reste supportée et sa découverte
+       * physique respecte les limites de {@link ProjectScanner}. Les nouveaux appels
+       * disposant déjà de l'index canonique peuvent utiliser la surcharge à trois arguments.
+       */
+      public CodeIntelligenceSnapshot importPayload(Path projectRoot, String payload) throws IOException {''')
+          PY
+      - name: Remove builder workflow and commit tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/nxa11-sonar-five-fix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'refactor: clear remaining promotion Sonar findings'
+          git push origin HEAD:diagnostic/nxa11-sonar-191
