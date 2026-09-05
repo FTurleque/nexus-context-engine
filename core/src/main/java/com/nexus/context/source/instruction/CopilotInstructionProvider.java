@@ -13,6 +13,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.regex.Pattern;
 
 /**
  * Provider des instructions repository-wide et path-specific de GitHub Copilot.
@@ -21,6 +22,7 @@ public final class CopilotInstructionProvider implements ContextSourceProvider {
 
     private static final String PROVIDER_ID = "github-copilot";
     private static final Path REPOSITORY_INSTRUCTIONS = Path.of(".github", "copilot-instructions.md");
+    private static final Pattern LINE_SEPARATOR = Pattern.compile("\\R");
     private final InstructionDescriptorFactory descriptorFactory = new InstructionDescriptorFactory();
 
     @Override
@@ -87,7 +89,7 @@ public final class CopilotInstructionProvider implements ContextSourceProvider {
     }
 
     private static List<String> parseApplyTo(String content) {
-        String[] lines = content.split("\\R", -1);
+        String[] lines = LINE_SEPARATOR.split(content, -1);
         if (lines.length == 0 || !lines[0].trim().equals("---")) {
             return List.of();
         }

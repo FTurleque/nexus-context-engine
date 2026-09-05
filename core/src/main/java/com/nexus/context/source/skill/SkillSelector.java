@@ -7,6 +7,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Sélection déterministe de skills à partir de leur nom et de leur description.
@@ -15,6 +16,10 @@ public final class SkillSelector {
 
     private static final double MIN_SCORE = 0.22d;
     private static final int MAX_SELECTED_SKILLS = 3;
+    private static final Pattern DELIMITERS = Pattern.compile("[^\\p{L}\\p{N}-]+");
+    private static final Pattern TERM_SEPARATOR = Pattern.compile("[^\\p{L}\\p{N}]+");
+    private static final Pattern COMBINING_MARKS = Pattern.compile("\\p{M}+");
+    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
     private static final Set<String> STOP_WORDS = Set.of(
             "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "in", "is", "it",
             "of", "on", "or", "that", "the", "this", "to", "use", "when", "with",
@@ -124,7 +129,7 @@ public final class SkillSelector {
         if (needle.isBlank()) {
             return false;
         }
-        String normalizedHaystack = " " + haystack.replaceAll("[^\\p{L}\\p{N}-]+", " ") + " ";
+        String normalizedHaystack = " " + DELIMITERS.matcher(haystack).replaceAll(" ") + " ";
         return normalizedHaystack.contains(" " + needle + " ");
     }
 
@@ -136,7 +141,7 @@ public final class SkillSelector {
 
     private static Set<String> terms(String text) {
         Set<String> result = new LinkedHashSet<>();
-        for (String term : text.split("[^\\p{L}\\p{N}]+")) {
+        for (String term : TERM_SEPARATOR.split(text)) {
             if (!term.isBlank() && term.length() >= 2 && !STOP_WORDS.contains(term)) {
                 result.add(term);
             }
@@ -146,8 +151,8 @@ public final class SkillSelector {
 
     private static String normalize(String value) {
         String decomposed = Normalizer.normalize(value.toLowerCase(Locale.ROOT), Normalizer.Form.NFD);
-        return decomposed.replaceAll("\\p{M}+", "")
-                .replaceAll("\\s+", " ")
+        return WHITESPACE.matcher(COMBINING_MARKS.matcher(decomposed).replaceAll(""))
+                .replaceAll(" ")
                 .trim();
     }
 

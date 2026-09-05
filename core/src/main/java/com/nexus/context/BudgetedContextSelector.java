@@ -8,6 +8,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Applique une sélection gloutonne déterministe sous budget.
@@ -16,6 +17,7 @@ public final class BudgetedContextSelector {
 
     private static final int MIN_USEFUL_FRAGMENT_TOKENS = 24;
     private static final String TRUNCATION_MARKER = "... [fragment tronqué par NEXUS]";
+    private static final Pattern LINE_SEPARATOR = Pattern.compile("\\R");
 
     private final TokenEstimator tokenEstimator;
 
@@ -118,7 +120,7 @@ public final class BudgetedContextSelector {
     }
 
     private TruncatedContent truncate(String content, int budget) {
-        String[] lines = content.split("\\R", -1);
+        String[] lines = LINE_SEPARATOR.split(content, -1);
         StringBuilder builder = new StringBuilder();
         int includedLines = 0;
 
@@ -167,7 +169,7 @@ public final class BudgetedContextSelector {
         if (best.isBlank()) {
             return new TruncatedContent("", 0, 0);
         }
-        int sourceLines = Math.max(1, best.split("\\R", -1).length - 1);
+        int sourceLines = Math.max(1, LINE_SEPARATOR.split(best, -1).length - 1);
         return new TruncatedContent(best, tokenEstimator.estimate(best), sourceLines);
     }
 
