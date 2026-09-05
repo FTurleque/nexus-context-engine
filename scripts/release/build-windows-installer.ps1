@@ -163,6 +163,13 @@ try {
     if (-not (Test-Path -LiteralPath $setup -PathType Leaf)) {
         throw "NEXUS setup executable was not produced: $setup"
     }
+
+    $signer = Join-Path $PSScriptRoot 'sign-windows-artifact.ps1'
+    if (-not (Test-Path -LiteralPath $signer -PathType Leaf)) {
+        throw "Windows signing helper missing: $signer"
+    }
+    & $signer -Path $setup
+
     $hash = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
     "$hash  $([IO.Path]::GetFileName($setup))" | Set-Content -LiteralPath $checksum -Encoding ascii
 
@@ -171,7 +178,7 @@ try {
     Write-Host "Setup   : $setup"
     Write-Host "SHA-256 : $hash"
     Write-Host 'Wizard  : Native / Docker / Both + runtime/integration customization'
-    Write-Host 'Security: loopback-only wizard REST + hardened cmd/.env generation'
+    Write-Host 'Security: loopback-only wizard REST + hardened cmd/.env generation + optional/required Authenticode'
     Write-Host 'Docker  : strict engine detection + registry pull with local runtime-image fallback'
     Write-Output $setup
 }
