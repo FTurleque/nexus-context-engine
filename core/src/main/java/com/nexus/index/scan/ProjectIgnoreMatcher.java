@@ -10,6 +10,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -157,7 +158,14 @@ public final class ProjectIgnoreMatcher {
         }
 
         Path safeIgnoreFile = pathGuard.requireRegularFile(ignoreFile);
-        long declaredSize = Files.size(safeIgnoreFile);
+        BasicFileAttributes attributes = Files.readAttributes(
+                safeIgnoreFile,
+                BasicFileAttributes.class,
+                LinkOption.NOFOLLOW_LINKS);
+        if (!attributes.isRegularFile()) {
+            throw new IOException("Fichier d'ignore devenu non régulier avant lecture : " + safeIgnoreFile);
+        }
+        long declaredSize = attributes.size();
         if (declaredSize > maxIgnoreFileBytes) {
             throw new IOException(
                     "Fichier d'ignore trop volumineux : " + safeIgnoreFile
