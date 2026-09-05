@@ -45,7 +45,7 @@ public class NexusApiApplicationService {
 
     public List<ProjectDescriptor> listProjects() {
         return application.listProjects().stream()
-                .filter(project -> NexusRestProjectRootPolicy.isAllowed(project.rootPath()))
+                .filter(project -> NexusRestProjectRootPolicy.isAllowedPersisted(project.rootPath()))
                 .toList();
     }
 
@@ -169,7 +169,7 @@ public class NexusApiApplicationService {
     private ProjectDescriptor requireAllowedProject(UUID projectId) {
         ProjectDescriptor project = application.getProject(projectId);
         try {
-            NexusRestProjectRootPolicy.requireAllowed(project.rootPath());
+            NexusRestProjectRootPolicy.requireAllowedPersisted(project.rootPath());
             return project;
         } catch (IOException exception) {
             throw new IllegalArgumentException(
