@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -100,6 +101,28 @@ class NexusRestSecurityTest {
             assertEquals(child.toRealPath(), NexusRestProjectRootPolicy.requireAllowed(child));
             assertThrows(IllegalArgumentException.class,
                     () -> NexusRestProjectRootPolicy.requireAllowed(outside));
+        } finally {
+            restoreProperty(NexusRestProjectRootPolicy.ROOTS_PROPERTY, previous);
+        }
+    }
+
+    @Test
+    void persistedProjectAuthorizationPreservesLocalModeButFailsClosedWithAllowlist() throws Exception {
+        Path allowed = Files.createDirectories(tempDir.resolve("persisted-allowed"));
+        Path child = Files.createDirectories(allowed.resolve("project"));
+        Path outside = Files.createDirectories(tempDir.resolve("persisted-outside"));
+        Path missing = tempDir.resolve("temporarily-missing-project");
+        String previous = System.getProperty(NexusRestProjectRootPolicy.ROOTS_PROPERTY);
+        try {
+            System.clearProperty(NexusRestProjectRootPolicy.ROOTS_PROPERTY);
+            assertDoesNotThrow(() -> NexusRestProjectRootPolicy.requireAllowedPersisted(missing));
+            assertTrue(NexusRestProjectRootPolicy.isAllowedPersisted(missing));
+
+            System.setProperty(NexusRestProjectRootPolicy.ROOTS_PROPERTY, allowed.toString());
+            assertDoesNotThrow(() -> NexusRestProjectRootPolicy.requireAllowedPersisted(child));
+            assertThrows(IllegalArgumentException.class,
+                    () -> NexusRestProjectRootPolicy.requireAllowedPersisted(outside));
+            assertFalse(NexusRestProjectRootPolicy.isAllowedPersisted(missing));
         } finally {
             restoreProperty(NexusRestProjectRootPolicy.ROOTS_PROPERTY, previous);
         }

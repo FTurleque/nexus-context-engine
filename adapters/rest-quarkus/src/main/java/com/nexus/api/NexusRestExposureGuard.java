@@ -14,10 +14,14 @@ import java.util.List;
 public class NexusRestExposureGuard {
 
     @ConfigProperty(name = "quarkus.http.host", defaultValue = "127.0.0.1")
-    String host;
+    String host = "127.0.0.1";
+
+    @ConfigProperty(name = "quarkus.management.host", defaultValue = "127.0.0.1")
+    String managementHost = "127.0.0.1";
 
     @PostConstruct
     void validateExposure() {
+        validateManagementExposure();
         if (NexusRestSecurity.isLoopbackHost(host)) {
             validateHardenedLoopback();
             return;
@@ -45,6 +49,15 @@ public class NexusRestExposureGuard {
         }
 
         NexusRestTransportPolicy.validateSecureNonLoopbackExposure(exposureMode);
+    }
+
+    private void validateManagementExposure() {
+        if (!NexusRestSecurity.isLoopbackHost(managementHost)) {
+            throw new IllegalStateException(
+                    "Le listener Quarkus management doit rester strictement loopback. "
+                            + "Configurez quarkus.management.host=127.0.0.1 ou ::1; "
+                            + "les endpoints health/metrics ne doivent pas être publiés sur le réseau.");
+        }
     }
 
     private static void validateHardenedLoopback() {
