@@ -11,7 +11,9 @@ import java.util.Optional;
  *
  * <p>Une configuration absente conserve le mode local historique. En revanche,
  * {@link NexusRestExposureGuard} exige une allowlist non vide dès que le serveur
- * écoute hors loopback. Les chemins sont canonicalisés avant comparaison.</p>
+ * écoute hors loopback. Les chemins sont canonicalisés avant comparaison.
+ * La politique est réévaluée à chaque opération REST afin qu'un projet persisté
+ * ne conserve jamais un accès devenu interdit après un changement de configuration.</p>
  */
 final class NexusRestProjectRootPolicy {
 
@@ -45,11 +47,44 @@ final class NexusRestProjectRootPolicy {
         return List.copyOf(roots);
     }
 
+    /**
+     * Politique d'admission d'un nouveau projet. La racine est toujours
+     * canonicalisée, même en mode local sans allowlist.
+     */
     static Path requireAllowed(Path requestedRoot) throws IOException {
         Path canonical = requestedRoot.toAbsolutePath().normalize().toRealPath();
-        List<Path> configuredRoots = configuredRoots();
+        requireContainedWhenConfigured(canonical, configuredRoots());
+        return canonical;
+    }
+
+    /**
+     * Politique d'autorisation d'un projet déjà persisté. Sans allowlist, le mode
+     * local historique est conservé et aucune nouvelle exigence d'existence du
+     * chemin n'est introduite. Dès qu'une allowlist est configurée, la racine doit
+     * encore exister, être canonicalisable et rester contenue dans l'allowlist.
+     */
+    static void requireAllowedPersisted(Path projectRoot) throws IOException {
+        List<Path> roots = configuredRoots();
+        if (roots.isEmpty()) {
+            return;
+        }
+        Path canonical = projectRoot.toAbsolutePath().normalize().toRealPath();
+        requireContainedWhenConfigured(canonical, roots);
+    }
+
+    /** Variante de filtrage utilisée par la liste REST des projets persistés. */
+    static boolean isAllowedPersisted(Path projectRoot) {
+        try {
+            requireAllowedPersisted(projectRoot);
+            return true;
+        } catch (IOException | IllegalArgumentException denied) {
+            return false;
+        }
+    }
+
+    private static void requireContainedWhenConfigured(Path canonical, List<Path> configuredRoots) {
         if (configuredRoots.isEmpty()) {
-            return canonical;
+            return;
         }
         Optional<Path> match = configuredRoots.stream()
                 .filter(canonical::startsWith)
@@ -58,6 +93,5 @@ final class NexusRestProjectRootPolicy {
             throw new IllegalArgumentException(
                     "Le projet REST " + canonical + " est hors des racines autorisées " + configuredRoots);
         }
-        return canonical;
     }
 }
