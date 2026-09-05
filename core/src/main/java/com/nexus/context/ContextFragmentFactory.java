@@ -18,6 +18,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Transforme les candidats classés en fragments de source concrets.
@@ -43,6 +44,7 @@ public final class ContextFragmentFactory {
     private static final int QUERY_WINDOW_LINES = 5;
     private static final int MAX_QUERY_WINDOWS = 4;
     private static final int FALLBACK_HEAD_LINES = 40;
+    private static final Pattern QUERY_TERM_SEPARATOR = Pattern.compile("[^\\p{L}\\p{N}_$#.]+");
     static final int MAX_MATERIALIZED_SOURCE_LINES = 100_000;
 
     private final TokenEstimator tokenEstimator;
@@ -235,7 +237,7 @@ public final class ContextFragmentFactory {
 
     private static Set<String> queryTerms(String query) {
         Set<String> terms = new LinkedHashSet<>();
-        for (String term : query.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{N}_$#.]+")) {
+        for (String term : QUERY_TERM_SEPARATOR.split(query.toLowerCase(Locale.ROOT))) {
             if (term.length() >= 2) {
                 terms.add(term);
             }

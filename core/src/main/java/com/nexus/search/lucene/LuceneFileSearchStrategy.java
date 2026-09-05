@@ -15,8 +15,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 public final class LuceneFileSearchStrategy implements SearchStrategy {
+
+    private static final Pattern TERM_SEPARATOR = Pattern.compile("[^\\p{L}\\p{N}_$#.]+");
 
     private final SearchIndex searchIndex;
 
@@ -68,7 +71,7 @@ public final class LuceneFileSearchStrategy implements SearchStrategy {
 
     private static double pathScore(String relativePath, String query) {
         String normalizedPath = relativePath.toLowerCase();
-        String[] terms = query.toLowerCase().split("[^\\p{L}\\p{N}_$#.]+");
+        String[] terms = TERM_SEPARATOR.split(query.toLowerCase());
         int total = 0;
         int matches = 0;
         for (String term : terms) {
