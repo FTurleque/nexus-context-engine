@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 /** Provider d'embeddings Ollama explicitement opt-in. */
 public final class OllamaEmbeddingProvider implements EmbeddingProvider {
@@ -37,6 +38,7 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
 
     private static final int RESPONSE_BUFFER_SIZE = 16 * 1024;
     private static final int MAX_INTERNAL_RESPONSE_BYTES = 16 * 1024 * 1024;
+    private static final Pattern TRAILING_SLASHES = Pattern.compile("/+$");
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
@@ -112,7 +114,7 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
         }
         this.dimensions = dimensions;
         this.maxResponseBytes = maxResponseBytes;
-        String normalizedBase = baseUri.toString().replaceAll("/+$", "");
+        String normalizedBase = TRAILING_SLASHES.matcher(baseUri.toString()).replaceAll("");
         this.embedEndpoint = URI.create(normalizedBase + "/api/embed");
     }
 
