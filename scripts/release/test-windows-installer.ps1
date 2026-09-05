@@ -34,7 +34,7 @@ if (-not (Test-Path -LiteralPath $installerTemplate -PathType Leaf)) {
 $installerSource = [IO.File]::ReadAllText($installerTemplate, [Text.Encoding]::UTF8)
 Assert-TextContains -Text $installerSource -Needle 'DockerPrereqPage' -Description 'Docker prerequisite wizard page'
 Assert-TextContains -Text $installerSource -Needle 'DownloadTemporaryFile(' -Description 'runtime Docker Desktop download'
-Assert-TextContains -Text $installerSource -Needle 'https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe' -Description 'official Docker Desktop x64 URL'
+Assert-TextContains -Text $installerSource -Needle 'https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe' -Description 'template Docker Desktop x64 URL hardening anchor'
 Assert-TextContains -Text $installerSource -Needle 'Get-AuthenticodeSignature' -Description 'Authenticode verification'
 Assert-TextContains -Text $installerSource -Needle 'CN=Docker Inc' -Description 'Docker Inc signer constraint'
 Assert-TextContains -Text $installerSource -Needle 'install --user --backend=wsl-2 --quiet' -Description 'per-user WSL 2 Docker Desktop install command'
@@ -53,6 +53,7 @@ $hardenedSource = Protect-NexusInstallerSource -Source $installerSource
 Assert-TextContains -Text $hardenedSource -Needle 'function CmdEnvEscape(Value: String): String;' -Description 'cmd percent escaping helper'
 Assert-TextContains -Text $hardenedSource -Needle 'function DotEnvQuoted(Value: String): String;' -Description 'Compose dotenv quoting helper'
 Assert-TextContains -Text $hardenedSource -Needle 'function IsLoopbackRestHost(Value: String): Boolean;' -Description 'wizard loopback-only REST policy'
+Assert-TextContains -Text $hardenedSource -Needle 'function VerifyFileSha256(FilePath: String; ExpectedSha256: String): Boolean;' -Description 'external prerequisite SHA-256 verifier'
 Assert-TextContains -Text $hardenedSource -Needle 'CmdEnvEscape(RuntimePage.Values[0])' -Description 'NEXUS_HOME batch escaping'
 Assert-TextContains -Text $hardenedSource -Needle 'DotEnvQuoted(DockerPath(RuntimePage.Values[0]))' -Description 'Docker home path dotenv quoting'
 Assert-TextContains -Text $hardenedSource -Needle 'NEXUS_REST_EXPOSURE_MODE=loopback-forward' -Description 'explicit Docker REST exposure mode'
@@ -60,7 +61,39 @@ if ($hardenedSource.IndexOf("'set `"NEXUS_HOME=' + RuntimePage.Values[0]", [Stri
     throw 'Generated installer source still writes raw NEXUS_HOME into batch configuration.'
 }
 
-Write-Host '[contract] template carries Docker runtime logic; build applies only security hardening'
+Write-Host '[contract] external prerequisite provenance is immutable and fail-closed'
+$dockerPinnedUrl = 'https://desktop.docker.com/win/main/amd64/236216/Docker%20Desktop%20Installer.exe'
+$dockerSha256 = '820438e75c16e44b393079154bea7d27958a15845c23a635b1a1f6f586b2ed44'
+$ollamaPinnedUrl = 'https://github.com/ollama/ollama/releases/download/v0.33.3/OllamaSetup.exe'
+$ollamaSha256 = '32cdcb1da477bc7fffbf1c1cdeeb99b1db003af094db56dd3c156abd04d34f8e'
+Assert-TextContains -Text $hardenedSource -Needle $dockerPinnedUrl -Description 'qualified Docker Desktop 4.86.0 build 236216 URL'
+Assert-TextContains -Text $hardenedSource -Needle $dockerSha256 -Description 'qualified Docker Desktop 4.86.0 SHA-256'
+Assert-TextContains -Text $hardenedSource -Needle $ollamaPinnedUrl -Description 'qualified Ollama v0.33.3 release URL'
+Assert-TextContains -Text $hardenedSource -Needle $ollamaSha256 -Description 'qualified Ollama v0.33.3 SHA-256'
+if ($hardenedSource.IndexOf('https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe', [StringComparison]::Ordinal) -ge 0) {
+    throw 'Generated installer source must not retain the mutable Docker Desktop latest URL.'
+}
+if ($hardenedSource.IndexOf('https://ollama.com/download/OllamaSetup.exe', [StringComparison]::Ordinal) -ge 0) {
+    throw 'Generated installer source must not retain the mutable Ollama latest URL.'
+}
+
+$dockerHashIdx = $hardenedSource.IndexOf("VerifyFileSha256(InstallerPath, '$dockerSha256')", [StringComparison]::Ordinal)
+$dockerVerifyIdx = $hardenedSource.IndexOf('VerifyDockerDesktopInstaller(InstallerPath)', [StringComparison]::Ordinal)
+$dockerExecIdx = $hardenedSource.IndexOf("Exec(InstallerPath, 'install --user --backend=wsl-2 --quiet'", [StringComparison]::Ordinal)
+if ($dockerHashIdx -lt 0 -or $dockerVerifyIdx -lt 0 -or $dockerExecIdx -lt 0 -or
+    $dockerHashIdx -gt $dockerVerifyIdx -or $dockerVerifyIdx -gt $dockerExecIdx) {
+    throw 'Docker Desktop must be SHA-256 verified, then Authenticode verified, BEFORE execution.'
+}
+
+$ollamaHashIdx = $hardenedSource.IndexOf("VerifyFileSha256(InstallerPath, '$ollamaSha256')", [StringComparison]::Ordinal)
+$ollamaVerifyIdx = $hardenedSource.IndexOf('VerifyOllamaInstaller(InstallerPath)', [StringComparison]::Ordinal)
+$ollamaExecIdx = $hardenedSource.IndexOf("Exec(InstallerPath, '/S'", [StringComparison]::Ordinal)
+if ($ollamaHashIdx -lt 0 -or $ollamaVerifyIdx -lt 0 -or $ollamaExecIdx -lt 0 -or
+    $ollamaHashIdx -gt $ollamaVerifyIdx -or $ollamaVerifyIdx -gt $ollamaExecIdx) {
+    throw 'Ollama must be SHA-256 verified, then Authenticode verified, BEFORE execution.'
+}
+
+Write-Host '[contract] template carries Docker runtime logic; build applies deterministic security/provenance hardening'
 Assert-TextContains -Text $installerSource -Needle 'function DockerEngineReady(): Boolean;' -Description 'strict Docker engine detection lives in the template'
 Assert-TextContains -Text $installerSource -Needle 'Source: "{#NexusSourceDir}\docker\*"' -Description 'full Docker payload staged from the template'
 Assert-TextContains -Text $installerSource -Needle ':nexus_image_ready' -Description 'local-image/pull/build fallback lives in the template'
@@ -69,15 +102,8 @@ $installerBuilder = Join-Path $repo 'scripts\release\build-windows-installer.ps1
 $builderSource = Get-Content -Raw -LiteralPath $installerBuilder
 Assert-TextContains -Text $builderSource -Needle 'Protect-NexusInstallerSource' -Description 'deterministic generated-source hardening hook'
 Assert-TextContains -Text $builderSource -Needle 'missing strict Docker engine readiness detection' -Description 'build-time integrity guard for Docker detector drift'
-
-Write-Host '[contract] Ollama auto-install is Authenticode-verified (fail-closed)'
-Assert-TextContains -Text $installerSource -Needle 'function VerifyOllamaInstaller' -Description 'Ollama installer Authenticode verifier'
-Assert-TextContains -Text $installerSource -Needle 'CN=Ollama Inc' -Description 'Ollama Inc signer constraint'
-$ollamaVerifyIdx = $installerSource.IndexOf('VerifyOllamaInstaller(InstallerPath)', [StringComparison]::Ordinal)
-$ollamaExecIdx = $installerSource.IndexOf("Exec(InstallerPath, '/S'", [StringComparison]::Ordinal)
-if ($ollamaVerifyIdx -lt 0 -or $ollamaExecIdx -lt 0 -or $ollamaVerifyIdx -gt $ollamaExecIdx) {
-    throw 'Ollama installer must be Authenticode-verified BEFORE it is executed (fail-closed ordering).'
-}
+Assert-TextContains -Text $builderSource -Needle $dockerSha256 -Description 'build-time integrity guard for qualified Docker SHA-256'
+Assert-TextContains -Text $builderSource -Needle $ollamaSha256 -Description 'build-time integrity guard for qualified Ollama SHA-256'
 
 Write-Host '[contract] REST Bearer token uses a CSPRNG, not Random()'
 Assert-TextContains -Text $installerSource -Needle 'BCryptGenRandom' -Description 'REST token generated via Windows CSPRNG'
@@ -220,5 +246,5 @@ if (-not (Test-Path -LiteralPath $sentinel -PathType Leaf)) {
     throw 'NEXUS_HOME user data was deleted by uninstall.'
 }
 
-Write-Host 'NEXUS Windows installer hardened source + install/CLI/MCP/Claude/Codex payload/uninstall smoke PASS' -ForegroundColor Green
+Write-Host 'NEXUS Windows installer hardened source + pinned prerequisite provenance + install/CLI/MCP/Claude/Codex payload/uninstall smoke PASS' -ForegroundColor Green
 Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue

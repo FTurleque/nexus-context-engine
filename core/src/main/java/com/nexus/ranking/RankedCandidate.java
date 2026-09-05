@@ -16,6 +16,17 @@ public record RankedCandidate(
         Objects.requireNonNull(candidate, "candidate");
         Objects.requireNonNull(components, "components");
         Objects.requireNonNull(reasons, "reasons");
+        if (!Double.isFinite(score)) {
+            throw new IllegalArgumentException("score must be finite: " + score);
+        }
+        components.forEach((component, value) -> {
+            Objects.requireNonNull(component, "component name");
+            Objects.requireNonNull(value, "component value");
+            if (!Double.isFinite(value)) {
+                throw new IllegalArgumentException(
+                        "Ranking component '" + component + "' must be finite: " + value);
+            }
+        });
         components = Map.copyOf(components);
         reasons = List.copyOf(reasons);
     }

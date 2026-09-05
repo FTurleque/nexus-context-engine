@@ -34,7 +34,7 @@ final class InstructionDiscoverySupport {
             ContextDiscoveryBudget budget) throws IOException {
         ProjectPathGuard pathGuard = new ProjectPathGuard(project.rootPath());
         Path root = pathGuard.root();
-        ProjectIgnoreMatcher ignoreMatcher = new ProjectIgnoreMatcher(root);
+        ProjectIgnoreMatcher ignoreMatcher = new ProjectIgnoreMatcher(root, budget::bytes);
         Set<String> normalizedNames = names.stream()
                 .map(name -> name.toLowerCase(Locale.ROOT))
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
@@ -103,7 +103,7 @@ final class InstructionDiscoverySupport {
             return List.of();
         }
 
-        ProjectIgnoreMatcher ignoreMatcher = new ProjectIgnoreMatcher(root);
+        ProjectIgnoreMatcher ignoreMatcher = new ProjectIgnoreMatcher(root, budget::bytes);
         registerParentScopes(root, directory.getParent(), ignoreMatcher);
         if (!directory.equals(root) && ignoreMatcher.isIgnored(directory, true)) {
             return List.of();

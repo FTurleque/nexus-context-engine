@@ -240,5 +240,89 @@ end;
 '@
     $Source = Replace-ExactlyOnce $Source $nativeCommandTail $nativeCommandTailReplacement 'native assistant CLI runtime option'
 
+    $hashHelperAnchor = @'
+function PowerShellSingleQuote(Value: String): String;
+begin
+  Result := Value;
+  StringChangeEx(Result, '''', '''''', True);
+end;
+'@
+    $hashHelperReplacement = $hashHelperAnchor + @'
+
+function VerifyFileSha256(FilePath: String; ExpectedSha256: String): Boolean;
+var
+  PowerShellPath: String;
+  Script: String;
+  Parameters: String;
+  ResultCode: Integer;
+begin
+  Result := False;
+  PowerShellPath := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+  if not FileExists(PowerShellPath) then exit;
+  Script :=
+    '$actual=(Get-FileHash -LiteralPath ''' + PowerShellSingleQuote(FilePath) + ''' -Algorithm SHA256).Hash.ToLowerInvariant(); ' +
+    'if ($actual -eq ''' + Lowercase(ExpectedSha256) + ''') { exit 0 } else { exit 1 }';
+  Parameters := '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' + Script + '"';
+  Result := Exec(PowerShellPath, Parameters, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+end;
+'@
+    $Source = Replace-ExactlyOnce $Source $hashHelperAnchor $hashHelperReplacement 'external installer SHA-256 verifier'
+
+    $dockerDownloadAnchor = @'
+    DownloadedSize := DownloadTemporaryFile(
+      'https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe',
+      'NEXUS-Docker-Desktop-Installer.exe', '', nil);
+'@
+    $dockerDownloadReplacement = @'
+    DownloadedSize := DownloadTemporaryFile(
+      'https://desktop.docker.com/win/main/amd64/236216/Docker%20Desktop%20Installer.exe',
+      'NEXUS-Docker-Desktop-Installer.exe', '', nil);
+'@
+    $Source = Replace-ExactlyOnce $Source $dockerDownloadAnchor $dockerDownloadReplacement 'pinned Docker Desktop 4.86.0 download'
+
+    $dockerFileAnchor = @'
+  if not FileExists(InstallerPath) then
+  begin
+    Result := 'Le téléchargement Docker Desktop n''a pas produit le fichier attendu.';
+    exit;
+  end;
+'@
+    $dockerFileReplacement = $dockerFileAnchor + @'
+  if not VerifyFileSha256(InstallerPath, '820438e75c16e44b393079154bea7d27958a15845c23a635b1a1f6f586b2ed44') then
+  begin
+    Result := 'Le SHA-256 de Docker Desktop ne correspond pas à la version NEXUS qualifiée 4.86.0. Installation annulée.';
+    exit;
+  end;
+'@
+    $Source = Replace-ExactlyOnce $Source $dockerFileAnchor $dockerFileReplacement 'Docker Desktop qualified SHA-256 gate'
+
+    $ollamaDownloadAnchor = @'
+    DownloadedSize := DownloadTemporaryFile(
+      'https://ollama.com/download/OllamaSetup.exe',
+      'NEXUS-Ollama-Installer.exe', '', nil);
+'@
+    $ollamaDownloadReplacement = @'
+    DownloadedSize := DownloadTemporaryFile(
+      'https://github.com/ollama/ollama/releases/download/v0.33.3/OllamaSetup.exe',
+      'NEXUS-Ollama-Installer.exe', '', nil);
+'@
+    $Source = Replace-ExactlyOnce $Source $ollamaDownloadAnchor $ollamaDownloadReplacement 'pinned Ollama v0.33.3 download'
+
+    $ollamaFileAnchor = @'
+  if not FileExists(InstallerPath) then
+  begin
+    Result := 'Le téléchargement Ollama n''a pas produit le fichier attendu.';
+    exit;
+  end;
+'@
+    $ollamaFileReplacement = $ollamaFileAnchor + @'
+  if not VerifyFileSha256(InstallerPath, '32cdcb1da477bc7fffbf1c1cdeeb99b1db003af094db56dd3c156abd04d34f8e') then
+  begin
+    Result := 'Le SHA-256 du programme d''installation Ollama ne correspond pas à la version NEXUS qualifiée v0.33.3. Installation annulée.';
+    exit;
+  end;
+'@
+    $Source = Replace-ExactlyOnce $Source $ollamaFileAnchor $ollamaFileReplacement 'Ollama qualified SHA-256 gate'
+
     return $Source
 }
