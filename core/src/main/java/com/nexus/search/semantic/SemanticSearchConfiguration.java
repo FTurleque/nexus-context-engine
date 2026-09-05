@@ -91,6 +91,7 @@ public final class SemanticSearchConfiguration {
                 configuredBaseUri,
                 dockerRuntime,
                 allowInsecureRemote);
+        boolean runtimeLoopbackRewrite = dockerRuntime && !baseUri.equals(configuredBaseUri);
         String model = environment(OLLAMA_MODEL_ENV, OllamaEmbeddingProvider.DEFAULT_MODEL);
         int dimensions = boundedPositiveInt(
                 OLLAMA_DIMENSIONS_ENV,
@@ -109,7 +110,8 @@ public final class SemanticSearchConfiguration {
                 baseUri,
                 model,
                 dimensions,
-                Duration.ofSeconds(timeoutSeconds));
+                Duration.ofSeconds(timeoutSeconds),
+                allowInsecureRemote || runtimeLoopbackRewrite);
         return enabled(ollama, weight);
     }
 
