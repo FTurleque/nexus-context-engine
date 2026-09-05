@@ -27,7 +27,7 @@ if ([string]$bom.bomFormat -ne 'CycloneDX') {
 }
 
 $components = [Collections.Generic.List[object]]::new()
-if ($null -ne $bom.components) {
+if ($bom.PSObject.Properties.Name -contains 'components') {
     foreach ($component in @($bom.components)) {
         $components.Add($component)
     }
@@ -51,6 +51,7 @@ $components.Add([ordered]@{
 
 $sbomRelative = [IO.Path]::GetRelativePath($root, $sbom).Replace('\', '/')
 $files = Get-ChildItem -LiteralPath $root -Recurse -File | Sort-Object FullName
+$inventoriedFiles = 0
 foreach ($file in $files) {
     $relative = [IO.Path]::GetRelativePath($root, $file.FullName).Replace('\', '/')
     if ($relative -eq $sbomRelative) {
@@ -69,14 +70,25 @@ foreach ($file in $files) {
             @{ name = 'nexus.windows.sizeBytes'; value = [string]$file.Length }
         )
     })
+    $inventoriedFiles++
 }
-$bom.components = @($components)
+if ($bom.PSObject.Properties.Name -contains 'components') {
+    $bom.components = @($components)
+}
+else {
+    $bom | Add-Member -MemberType NoteProperty -Name components -Value @($components)
+}
 
-if ($null -eq $bom.metadata) {
-    $bom | Add-Member -MemberType NoteProperty -Name metadata -Value ([pscustomobject]@{})
+if (-not ($bom.PSObject.Properties.Name -contains 'metadata') -or $null -eq $bom.metadata) {
+    if ($bom.PSObject.Properties.Name -contains 'metadata') {
+        $bom.metadata = [pscustomobject]@{}
+    }
+    else {
+        $bom | Add-Member -MemberType NoteProperty -Name metadata -Value ([pscustomobject]@{})
+    }
 }
 $properties = [Collections.Generic.List[object]]::new()
-if ($null -ne $bom.metadata.properties) {
+if ($bom.metadata.PSObject.Properties.Name -contains 'properties') {
     foreach ($property in @($bom.metadata.properties)) {
         $properties.Add($property)
     }
@@ -84,7 +96,7 @@ if ($null -ne $bom.metadata.properties) {
 $properties.Add(@{ name = 'nexus.sbom.profile'; value = 'windows-self-contained-v1' })
 $properties.Add(@{ name = 'nexus.project.version'; value = $ProjectVersion })
 $properties.Add(@{ name = 'nexus.runtime.java.version'; value = $JavaVersion })
-$properties.Add(@{ name = 'nexus.runtime.inventory.files'; value = [string]($files.Count - 1) })
+$properties.Add(@{ name = 'nexus.runtime.inventory.files'; value = [string]$inventoriedFiles })
 if ($bom.metadata.PSObject.Properties.Name -contains 'properties') {
     $bom.metadata.properties = @($properties)
 }
@@ -102,4 +114,4 @@ if (@($roundTrip.components).Count -lt $components.Count) {
 if (-not (@($roundTrip.metadata.properties) | Where-Object { $_.name -eq 'nexus.sbom.profile' -and $_.value -eq 'windows-self-contained-v1' })) {
     throw 'Windows SBOM profile marker missing after serialization.'
 }
-Write-Host "Windows CycloneDX SBOM augmented: components=$(@($roundTrip.components).Count) files=$($files.Count - 1) java=$JavaVersion" -ForegroundColor Green
+Write-Host "Windows CycloneDX SBOM augmented: components=$(@($roundTrip.components).Count) files=$inventoriedFiles java=$JavaVersion" -ForegroundColor Green
