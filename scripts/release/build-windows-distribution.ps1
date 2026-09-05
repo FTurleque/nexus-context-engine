@@ -85,12 +85,17 @@ $restRoot = Join-Path $repo 'adapters\rest-quarkus\target\quarkus-app'
 foreach ($artifact in @($cliJar, $mcpJar, $assistantJar, (Join-Path $restRoot 'quarkus-run.jar'))) {
     if (-not (Test-Path -LiteralPath $artifact -PathType Leaf)) { throw "Required NEXUS runtime artifact not found: $artifact" }
 }
+$dockerPayloadSources = @(
+    (Join-Path $repo 'packaging\docker\docker-compose.yml.template'),
+    (Join-Path $repo 'packaging\docker\Dockerfile.runtime'),
+    (Join-Path $repo 'packaging\docker\nexus-container-entrypoint.sh'),
+    (Join-Path $repo 'packaging\docker\nexus-container-healthcheck.sh')
+)
 foreach ($evidence in @(
     (Join-Path $repo 'LICENSE'),
     (Join-Path $repo 'target\licenses\THIRD_PARTY_NOTICES.txt'),
-    (Join-Path $repo 'target\sbom\bom.json'),
-    (Join-Path $repo 'packaging\docker\docker-compose.yml.template')
-)) {
+    (Join-Path $repo 'target\sbom\bom.json')
+) + $dockerPayloadSources) {
     if (-not (Test-Path -LiteralPath $evidence -PathType Leaf)) { throw "Required distribution evidence not found: $evidence" }
 }
 
@@ -158,7 +163,9 @@ Copy-Item -LiteralPath $cliJar -Destination (Join-Path $distribution 'lib\nexus-
 Copy-Item -LiteralPath $mcpJar -Destination (Join-Path $distribution 'lib\nexus-mcp.jar')
 Copy-Item -LiteralPath $assistantJar -Destination (Join-Path $distribution 'lib\nexus-assistant-clients.jar')
 Copy-Item -Path (Join-Path $restRoot '*') -Destination (Join-Path $distribution 'rest') -Recurse
-Copy-Item -LiteralPath (Join-Path $repo 'packaging\docker\docker-compose.yml.template') -Destination (Join-Path $distribution 'docker\docker-compose.yml.template')
+foreach ($dockerPayload in $dockerPayloadSources) {
+    Copy-Item -LiteralPath $dockerPayload -Destination (Join-Path $distribution ('docker\' + [IO.Path]::GetFileName($dockerPayload)))
+}
 Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination (Join-Path $distribution 'LICENSE')
 Copy-Item -LiteralPath (Join-Path $repo 'target\licenses\THIRD_PARTY_NOTICES.txt') -Destination (Join-Path $distribution 'THIRD_PARTY_NOTICES.txt')
 Copy-Item -LiteralPath (Join-Path $repo 'target\sbom\bom.json') -Destination (Join-Path $distribution 'SBOM.cdx.json')
@@ -271,5 +278,6 @@ Write-Host "ZIP          : $zip"
 Write-Host "SHA-256      : $hash"
 Write-Host "Bundled Java : $javaRuntimeVersion"
 Write-Host 'SBOM         : Maven dependencies + signed/runtime file inventory'
+Write-Host 'Docker       : compose + runtime Dockerfile + entrypoint + healthcheck are canonical payload'
 Write-Host 'Surfaces     : CLI + MCP STDIO + REST + assistant integrations + Docker launchers'
 Write-Output $distribution
