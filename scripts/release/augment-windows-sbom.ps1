@@ -51,7 +51,7 @@ if ([string]$bom.bomFormat -ne 'CycloneDX') {
 }
 
 $components = [Collections.Generic.List[object]]::new()
-if ($bom.PSObject.Properties.Name -contains 'components') {
+if ($null -ne $bom.PSObject.Properties['components']) {
     foreach ($component in @($bom.components)) {
         $components.Add($component)
     }
@@ -95,15 +95,15 @@ foreach ($file in $files) {
     })
     $inventoriedFiles++
 }
-if ($bom.PSObject.Properties.Name -contains 'components') {
+if ($null -ne $bom.PSObject.Properties['components']) {
     $bom.components = @($components)
 }
 else {
     $bom | Add-Member -MemberType NoteProperty -Name components -Value @($components)
 }
 
-if (-not ($bom.PSObject.Properties.Name -contains 'metadata') -or $null -eq $bom.metadata) {
-    if ($bom.PSObject.Properties.Name -contains 'metadata') {
+if ($null -eq $bom.PSObject.Properties['metadata'] -or $null -eq $bom.metadata) {
+    if ($null -ne $bom.PSObject.Properties['metadata']) {
         $bom.metadata = [pscustomobject]@{}
     }
     else {
@@ -111,7 +111,7 @@ if (-not ($bom.PSObject.Properties.Name -contains 'metadata') -or $null -eq $bom
     }
 }
 $properties = [Collections.Generic.List[object]]::new()
-if ($bom.metadata.PSObject.Properties.Name -contains 'properties') {
+if ($null -ne $bom.metadata.PSObject.Properties['properties']) {
     foreach ($property in @($bom.metadata.properties)) {
         $properties.Add($property)
     }
@@ -120,7 +120,7 @@ $properties.Add(@{ name = 'nexus.sbom.profile'; value = 'windows-self-contained-
 $properties.Add(@{ name = 'nexus.project.version'; value = $ProjectVersion })
 $properties.Add(@{ name = 'nexus.runtime.java.version'; value = $JavaVersion })
 $properties.Add(@{ name = 'nexus.runtime.inventory.files'; value = [string]$inventoriedFiles })
-if ($bom.metadata.PSObject.Properties.Name -contains 'properties') {
+if ($null -ne $bom.metadata.PSObject.Properties['properties']) {
     $bom.metadata.properties = @($properties)
 }
 else {
