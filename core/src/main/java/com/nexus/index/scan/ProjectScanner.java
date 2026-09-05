@@ -76,12 +76,17 @@ public final class ProjectScanner {
     public ProjectScanResult scanWithDiagnostics(Path projectRoot) throws IOException {
         ProjectPathGuard pathGuard = new ProjectPathGuard(projectRoot);
         Path root = pathGuard.root();
-        ProjectIgnoreMatcher ignoreMatcher = new ProjectIgnoreMatcher(root);
         List<ScannedFile> files = new ArrayList<>();
         List<String> diagnostics = new ArrayList<>();
         int[] skippedFiles = {0};
         int[] visitedEntries = {0};
-        long[] indexedBytes = {0L};
+        long[] consumedBytes = {0L};
+        ProjectIgnoreMatcher ignoreMatcher = new ProjectIgnoreMatcher(
+                root,
+                (ignoreFile, bytes) -> consumeByteBudget(
+                        consumedBytes,
+                        bytes,
+                        "octets de scan (fichiers d'ignore)"));
 
         Files.walkFileTree(root, new SimpleFileVisitor<>() {
             @Override
@@ -141,15 +146,7 @@ public final class ProjectScanner {
                     return FileVisitResult.CONTINUE;
                 }
 
-                if (size > scanLimits.maxTotalBytes() - indexedBytes[0]) {
-                    long attempted = indexedBytes[0] > Long.MAX_VALUE - size
-                            ? Long.MAX_VALUE
-                            : indexedBytes[0] + size;
-                    throw new IOException("Corpus d'indexation trop volumineux : "
-                            + attempted + " octets indexables > limite "
-                            + scanLimits.maxTotalBytes() + " octets");
-                }
-                indexedBytes[0] += size;
+                consumeByteBudget(consumedBytes, size, "octets indexables");
 
                 files.add(new ScannedFile(
                         safeFile,
@@ -175,6 +172,21 @@ public final class ProjectScanner {
             throw new IOException("Corpus d'indexation trop volumineux : "
                     + visitedEntries[0] + " entrées visitées > limite " + scanLimits.maxFiles());
         }
+    }
+
+    private void consumeByteBudget(long[] consumedBytes, long bytes, String label) throws IOException {
+        if (bytes < 0L) {
+            throw new IllegalArgumentException("bytes must be positive or zero");
+        }
+        if (bytes > scanLimits.maxTotalBytes() - consumedBytes[0]) {
+            long attempted = consumedBytes[0] > Long.MAX_VALUE - bytes
+                    ? Long.MAX_VALUE
+                    : consumedBytes[0] + bytes;
+            throw new IOException("Corpus d'indexation trop volumineux : "
+                    + attempted + " " + label + " > limite "
+                    + scanLimits.maxTotalBytes() + " octets");
+        }
+        consumedBytes[0] += bytes;
     }
 
     private static boolean isSupportedTextSource(Path file) {
