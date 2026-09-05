@@ -31,6 +31,11 @@ class NexusApiApplicationServiceAuthorizationTest {
         Path deniedRoot = Files.createDirectories(temporaryDirectory.resolve("previously-allowed"));
         Path nexusHome = temporaryDirectory.resolve("nexus-home");
 
+        // The REST adapter's Quarkus test class loader does not service-load the
+        // transitive SQLite JDBC driver for this direct core-fixture construction.
+        // Load it explicitly without changing the adapter's production dependency graph.
+        Class.forName("org.sqlite.JDBC");
+
         String previousRoots = System.getProperty(NexusRestProjectRootPolicy.ROOTS_PROPERTY);
         NexusApplication application = NexusApplication.createLongLived(
                 new NexusPaths(nexusHome),
