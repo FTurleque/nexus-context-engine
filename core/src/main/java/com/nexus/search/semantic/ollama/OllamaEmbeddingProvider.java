@@ -52,11 +52,30 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
         this(DEFAULT_BASE_URI, DEFAULT_MODEL, DEFAULT_DIMENSIONS, DEFAULT_TIMEOUT);
     }
 
+    /**
+     * Construit un provider en appliquant la politique sûre par défaut : HTTP est
+     * accepté uniquement pour une adresse de bouclage et les credentials dans
+     * l'URI sont refusés.
+     */
     public OllamaEmbeddingProvider(
             URI baseUri,
             String model,
             int dimensions,
             Duration timeout) {
+        this(baseUri, model, dimensions, timeout, false);
+    }
+
+    /**
+     * Variante explicite pour les déploiements qui ont volontairement autorisé
+     * un endpoint HTTP distant. L'opt-in reste porté par l'appelant et toutes les
+     * autres validations d'URI restent actives.
+     */
+    public OllamaEmbeddingProvider(
+            URI baseUri,
+            String model,
+            int dimensions,
+            Duration timeout,
+            boolean allowInsecureRemoteEndpoint) {
         this(
                 HttpClient.newBuilder()
                         .connectTimeout(Objects.requireNonNull(timeout, "timeout"))
@@ -66,7 +85,8 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
                 model,
                 dimensions,
                 timeout,
-                DEFAULT_MAX_RESPONSE_BYTES);
+                DEFAULT_MAX_RESPONSE_BYTES,
+                allowInsecureRemoteEndpoint);
     }
 
     OllamaEmbeddingProvider(
@@ -83,7 +103,8 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
                 model,
                 dimensions,
                 timeout,
-                DEFAULT_MAX_RESPONSE_BYTES);
+                DEFAULT_MAX_RESPONSE_BYTES,
+                false);
     }
 
     OllamaEmbeddingProvider(
@@ -94,9 +115,30 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
             int dimensions,
             Duration timeout,
             int maxResponseBytes) {
+        this(
+                httpClient,
+                objectMapper,
+                baseUri,
+                model,
+                dimensions,
+                timeout,
+                maxResponseBytes,
+                false);
+    }
+
+    OllamaEmbeddingProvider(
+            HttpClient httpClient,
+            ObjectMapper objectMapper,
+            URI baseUri,
+            String model,
+            int dimensions,
+            Duration timeout,
+            int maxResponseBytes,
+            boolean allowInsecureRemoteEndpoint) {
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
         Objects.requireNonNull(baseUri, "baseUri");
+        OllamaEndpointResolver.validateEndpoint(baseUri, allowInsecureRemoteEndpoint);
         this.model = Objects.requireNonNull(model, "model").trim();
         this.timeout = Objects.requireNonNull(timeout, "timeout");
         if (this.model.isBlank()) {
