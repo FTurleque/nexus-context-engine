@@ -2,6 +2,17 @@ name: Windows Installer
 
 on:
   workflow_call:
+    inputs:
+      require_authenticode:
+        description: Require a configured Authenticode identity and signed Windows release artifacts
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      NEXUS_WINDOWS_SIGNING_PFX_BASE64:
+        required: false
+      NEXUS_WINDOWS_SIGNING_PFX_PASSWORD:
+        required: false
   pull_request:
     branches:
       - develop
@@ -19,6 +30,12 @@ on:
       - 'mvnw.cmd'
       - '.github/workflows/windows-installer.yml'
   workflow_dispatch:
+    inputs:
+      require_authenticode:
+        description: Require repository signing secrets for this manual qualification
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -28,18 +45,47 @@ jobs:
     name: Windows self-contained installer
     runs-on: windows-latest
     timeout-minutes: 45
+    env:
+      NEXUS_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      NEXUS_WINDOWS_REQUIRE_AUTHENTICODE: ${{ inputs.require_authenticode && 'true' || 'false' }}
+      NEXUS_WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.NEXUS_WINDOWS_SIGNING_PFX_BASE64 }}
+      NEXUS_WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.NEXUS_WINDOWS_SIGNING_PFX_PASSWORD }}
     steps:
       - name: Checkout exact head
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ env.NEXUS_HEAD_SHA }}
 
-      - name: Set up Java 21
+      - name: Set up pinned Java 21 runtime source
         uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '21.0.12+101.0.LTS'
+
+      - name: Prepare optional or required Authenticode identity
+        shell: powershell
+        run: |
+          $required = $env:NEXUS_WINDOWS_REQUIRE_AUTHENTICODE -eq 'true'
+          if ([string]::IsNullOrWhiteSpace($env:NEXUS_WINDOWS_SIGNING_PFX_BASE64)) {
+            if ($required) {
+              throw 'Release qualification requires NEXUS_WINDOWS_SIGNING_PFX_BASE64.'
+            }
+            Write-Host 'No Authenticode secret configured; PR/manual non-release qualification remains unsigned.' -ForegroundColor DarkYellow
+            exit 0
+          }
+          if ([string]::IsNullOrEmpty($env:NEXUS_WINDOWS_SIGNING_PFX_PASSWORD)) {
+            throw 'NEXUS_WINDOWS_SIGNING_PFX_PASSWORD is required when the PFX secret is configured.'
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP 'nexus-windows-signing.pfx'
+          try {
+            $bytes = [Convert]::FromBase64String($env:NEXUS_WINDOWS_SIGNING_PFX_BASE64)
+          }
+          catch {
+            throw 'NEXUS_WINDOWS_SIGNING_PFX_BASE64 is not valid base64.'
+          }
+          [IO.File]::WriteAllBytes($pfx, $bytes)
+          "NEXUS_WINDOWS_SIGNING_PFX=$pfx" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Qualify generated cmd configuration escaping
         shell: powershell
@@ -47,12 +93,18 @@ jobs:
           Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
           .\scripts\release\test-windows-config-escaping.ps1
 
+      - name: Qualify Windows SBOM augmentation on Windows PowerShell
+        shell: powershell
+        run: |
+          Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+          .\scripts\release\test-windows-sbom-augmentation.ps1
+
       - name: Build self-contained Windows distribution
         shell: powershell
         run: |
           Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
           # Functional tests are qualified independently by NEXUS CI on this exact SHA.
-          # This workflow is responsible for Windows packaging and installer smokes.
+          # This workflow is responsible for Windows packaging, signing, SBOM and installer smokes.
           .\scripts\release\build-windows-distribution.ps1 -SkipTests
 
       - name: Build isolated smoke installer
@@ -74,7 +126,7 @@ jobs:
           if (-not (Test-Path -LiteralPath $setup -PathType Leaf)) { throw "Production setup missing: $setup" }
           if (-not (Test-Path -LiteralPath "$setup.sha256" -PathType Leaf)) { throw "Production setup checksum missing" }
 
-      - name: Verify release artifacts
+      - name: Verify release artifacts signing and runtime SBOM
         shell: powershell
         run: |
           $version = ([xml](Get-Content -Raw pom.xml)).project.version
@@ -87,17 +139,44 @@ jobs:
           $expanded = Join-Path $root 'ci-zip-smoke'
           Remove-Item -LiteralPath $expanded -Recurse -Force -ErrorAction SilentlyContinue
           Expand-Archive -LiteralPath $zip -DestinationPath $expanded
-          $launcher = Get-ChildItem -LiteralPath $expanded -Recurse -Filter nexus.cmd -File | Select-Object -First 1
-          if ($null -eq $launcher) { throw 'Portable ZIP launcher missing' }
-          $json = & $launcher.FullName --version --json | Out-String
+          $launcher = Get-ChildItem -LiteralPath $expanded -Recurse -Filter nexus.exe -File | Select-Object -First 1
+          $cmdLauncher = Get-ChildItem -LiteralPath $expanded -Recurse -Filter nexus.cmd -File | Select-Object -First 1
+          $sbom = Get-ChildItem -LiteralPath $expanded -Recurse -Filter SBOM.cdx.json -File | Select-Object -First 1
+          if ($null -eq $launcher -or $null -eq $cmdLauncher -or $null -eq $sbom) {
+            throw 'Portable ZIP is missing launcher or SBOM evidence.'
+          }
+          $json = & $cmdLauncher.FullName --version --json | Out-String
           if ($LASTEXITCODE -ne 0) { throw 'Portable ZIP CLI smoke failed' }
           if (($json | ConvertFrom-Json).version -ne $version) { throw 'Portable ZIP version mismatch' }
+
+          $bom = Get-Content -LiteralPath $sbom.FullName -Raw | ConvertFrom-Json
+          $profile = @($bom.metadata.properties) | Where-Object { $_.name -eq 'nexus.sbom.profile' } | Select-Object -First 1
+          if ($null -eq $profile -or $profile.value -ne 'windows-self-contained-v1') {
+            throw 'Windows SBOM is missing the self-contained runtime profile.'
+          }
+          $runtime = @($bom.components) | Where-Object { $_.name -eq 'Eclipse Temurin JRE' } | Select-Object -First 1
+          if ($null -eq $runtime -or [string]::IsNullOrWhiteSpace([string]$runtime.version)) {
+            throw 'Windows SBOM is missing the bundled Eclipse Temurin runtime component.'
+          }
+          $runtimeFiles = @($bom.components) | Where-Object { $_.type -eq 'file' -and $_.name -like 'app/runtime/*' }
+          if ($runtimeFiles.Count -lt 10) {
+            throw "Windows SBOM runtime inventory is unexpectedly incomplete: $($runtimeFiles.Count) file component(s)."
+          }
+
+          if ($env:NEXUS_WINDOWS_REQUIRE_AUTHENTICODE -eq 'true') {
+            foreach ($signedFile in @($launcher.FullName, $setup)) {
+              $signature = Get-AuthenticodeSignature -LiteralPath $signedFile
+              if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+                throw "Required Authenticode signature invalid for $signedFile`: $($signature.Status)"
+              }
+            }
+          }
 
       - name: Retain Windows release artifacts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: nexus-windows-release-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          name: nexus-windows-release-${{ env.NEXUS_HEAD_SHA }}
           retention-days: 90
           if-no-files-found: error
           path: |
@@ -105,3 +184,79 @@ jobs:
             target/dist/nexus-context-engine-*-windows-x64.zip.sha256
             target/dist/NEXUS-*-windows-x64-setup.exe
             target/dist/NEXUS-*-windows-x64-setup.exe.sha256
+
+      - name: Remove ephemeral signing material
+        if: always()
+        shell: powershell
+        run: |
+          if ($env:NEXUS_WINDOWS_SIGNING_PFX -and (Test-Path -LiteralPath $env:NEXUS_WINDOWS_SIGNING_PFX)) {
+            Remove-Item -LiteralPath $env:NEXUS_WINDOWS_SIGNING_PFX -Force
+          }
+
+  windows-security:
+    name: Windows payload SBOM and vulnerability gate
+    needs: windows-installer
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXUS_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Download exact qualified Windows payload
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: nexus-windows-release-${{ env.NEXUS_HEAD_SHA }}
+          path: target/windows-release
+
+      - name: Expand exact portable distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="$(find target/windows-release -type f -name 'nexus-context-engine-*-windows-x64.zip' -print -quit)"
+          test -n "$ZIP"
+          mkdir -p target/windows-rootfs target/windows-security
+          unzip -q "$ZIP" -d target/windows-rootfs
+          PACKAGED_SBOM="$(find target/windows-rootfs -type f -name SBOM.cdx.json -print -quit)"
+          test -s "$PACKAGED_SBOM"
+          cp "$PACKAGED_SBOM" target/windows-security/nexus-windows-packaged.cdx.json
+
+      - name: Generate full Trivy Windows payload vulnerability report
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: target/windows-rootfs
+          format: json
+          output: target/windows-security/trivy-windows-vulnerabilities.json
+          vuln-type: os,library
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          exit-code: '0'
+
+      - name: Generate Trivy CycloneDX SBOM from final Windows payload
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: target/windows-rootfs
+          format: cyclonedx
+          output: target/windows-security/nexus-windows-trivy.cdx.json
+          skip-setup-trivy: true
+          exit-code: '0'
+
+      - name: Block fixable HIGH or CRITICAL Windows payload vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: target/windows-rootfs
+          format: table
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          skip-setup-trivy: true
+          exit-code: '1'
+
+      - name: Retain Windows security evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nexus-windows-security-${{ env.NEXUS_HEAD_SHA }}
+          retention-days: 90
+          if-no-files-found: error
+          path: target/windows-security/

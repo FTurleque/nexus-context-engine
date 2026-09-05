@@ -42,6 +42,8 @@ try {
     $ErrorActionPreference = 'Continue'
     $versionOutput = ((& $java -version 2>&1) | Out-String)
     $versionExit = $LASTEXITCODE
+    $propertyOutput = @(& $java '-XshowSettings:properties' '-version' 2>&1 | ForEach-Object { $_.ToString() })
+    $propertyExit = $LASTEXITCODE
 }
 finally { $ErrorActionPreference = $previousPreference }
 if ($versionExit -ne 0 -or $versionOutput -notmatch 'version "(\d+)') {
@@ -49,6 +51,19 @@ if ($versionExit -ne 0 -or $versionOutput -notmatch 'version "(\d+)') {
 }
 $javaMajor = [int]$Matches[1]
 if ($javaMajor -lt 21) { throw "NEXUS Windows packaging requires JDK 21 or newer; found Java $javaMajor." }
+if ($propertyExit -ne 0) {
+    throw 'Unable to inspect the exact JAVA_HOME runtime version.'
+}
+$javaRuntimeVersion = $null
+foreach ($line in $propertyOutput) {
+    if ($line -match '^\s*java\.runtime\.version\s*=\s*(.+?)\s*$') {
+        $javaRuntimeVersion = $Matches[1]
+        break
+    }
+}
+if ([string]::IsNullOrWhiteSpace($javaRuntimeVersion)) {
+    throw 'JAVA_HOME did not expose java.runtime.version.'
+}
 $nativeAccessArgument = '--enable-native-access=ALL-UNNAMED'
 
 Push-Location $repo
@@ -70,12 +85,17 @@ $restRoot = Join-Path $repo 'adapters\rest-quarkus\target\quarkus-app'
 foreach ($artifact in @($cliJar, $mcpJar, $assistantJar, (Join-Path $restRoot 'quarkus-run.jar'))) {
     if (-not (Test-Path -LiteralPath $artifact -PathType Leaf)) { throw "Required NEXUS runtime artifact not found: $artifact" }
 }
+$dockerPayloadSources = @(
+    (Join-Path $repo 'packaging\docker\docker-compose.yml.template'),
+    (Join-Path $repo 'packaging\docker\Dockerfile.runtime'),
+    (Join-Path $repo 'packaging\docker\nexus-container-entrypoint.sh'),
+    (Join-Path $repo 'packaging\docker\nexus-container-healthcheck.sh')
+)
 foreach ($evidence in @(
     (Join-Path $repo 'LICENSE'),
     (Join-Path $repo 'target\licenses\THIRD_PARTY_NOTICES.txt'),
-    (Join-Path $repo 'target\sbom\bom.json'),
-    (Join-Path $repo 'packaging\docker\docker-compose.yml.template')
-)) {
+    (Join-Path $repo 'target\sbom\bom.json')
+) + $dockerPayloadSources) {
     if (-not (Test-Path -LiteralPath $evidence -PathType Leaf)) { throw "Required distribution evidence not found: $evidence" }
 }
 
@@ -92,6 +112,77 @@ function Get-JdepsModules([string]$Artifact) {
     $line = $output | Where-Object { $_ -match '^[A-Za-z0-9_.]+(?:,[A-Za-z0-9_.]+)*$' } | Select-Object -Last 1
     if ([string]::IsNullOrWhiteSpace($line)) { return @() }
     return @($line -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+}
+
+function New-PortableZip {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourceDirectory,
+        [Parameter(Mandatory = $true)][string]$DestinationPath,
+        [Parameter(Mandatory = $true)][string]$RootEntryName
+    )
+
+    Add-Type -AssemblyName System.IO.Compression
+    $source = [IO.Path]::GetFullPath($SourceDirectory).TrimEnd([char[]]@('\', '/'))
+    $destination = [IO.Path]::GetFullPath($DestinationPath)
+    $files = @(Get-ChildItem -LiteralPath $source -Recurse -File | Sort-Object FullName)
+    if ($files.Count -eq 0) {
+        throw "Cannot create an empty Windows distribution ZIP from $source"
+    }
+
+    $output = [IO.File]::Open($destination, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    try {
+        $archive = [IO.Compression.ZipArchive]::new($output, [IO.Compression.ZipArchiveMode]::Create, $false)
+        try {
+            foreach ($file in $files) {
+                $relative = $file.FullName.Substring($source.Length).TrimStart([char[]]@('\', '/')).Replace('\', '/')
+                if ([string]::IsNullOrWhiteSpace($relative) -or $relative.Contains('\')) {
+                    throw "Invalid portable ZIP relative path: $relative"
+                }
+                $entryName = "$RootEntryName/$relative"
+                $entry = $archive.CreateEntry($entryName, [IO.Compression.CompressionLevel]::Optimal)
+                $input = [IO.File]::OpenRead($file.FullName)
+                $entryStream = $entry.Open()
+                try {
+                    $input.CopyTo($entryStream)
+                }
+                finally {
+                    $entryStream.Dispose()
+                    $input.Dispose()
+                }
+            }
+        }
+        finally {
+            $archive.Dispose()
+        }
+    }
+    finally {
+        $output.Dispose()
+    }
+
+    # Fail locally if a future change reintroduces Windows separators in ZIP
+    # entry names. PKZIP uses '/' independently of the producer OS.
+    $inputZip = [IO.File]::OpenRead($destination)
+    try {
+        $archive = [IO.Compression.ZipArchive]::new($inputZip, [IO.Compression.ZipArchiveMode]::Read, $false)
+        try {
+            $entries = @($archive.Entries)
+            if ($entries.Count -eq 0) {
+                throw "Portable ZIP contains no entries: $destination"
+            }
+            $expectedPrefix = "$RootEntryName/"
+            foreach ($entry in $entries) {
+                if ($entry.FullName.Contains('\') -or -not $entry.FullName.StartsWith($expectedPrefix, [StringComparison]::Ordinal)) {
+                    throw "Non-portable ZIP entry detected: $($entry.FullName)"
+                }
+            }
+        }
+        finally {
+            $archive.Dispose()
+        }
+    }
+    finally {
+        $inputZip.Dispose()
+    }
 }
 
 $modules = @('java.se', 'jdk.crypto.ec', 'jdk.unsupported')
@@ -143,7 +234,9 @@ Copy-Item -LiteralPath $cliJar -Destination (Join-Path $distribution 'lib\nexus-
 Copy-Item -LiteralPath $mcpJar -Destination (Join-Path $distribution 'lib\nexus-mcp.jar')
 Copy-Item -LiteralPath $assistantJar -Destination (Join-Path $distribution 'lib\nexus-assistant-clients.jar')
 Copy-Item -Path (Join-Path $restRoot '*') -Destination (Join-Path $distribution 'rest') -Recurse
-Copy-Item -LiteralPath (Join-Path $repo 'packaging\docker\docker-compose.yml.template') -Destination (Join-Path $distribution 'docker\docker-compose.yml.template')
+foreach ($dockerPayload in $dockerPayloadSources) {
+    Copy-Item -LiteralPath $dockerPayload -Destination (Join-Path $distribution ('docker\' + [IO.Path]::GetFileName($dockerPayload)))
+}
 Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination (Join-Path $distribution 'LICENSE')
 Copy-Item -LiteralPath (Join-Path $repo 'target\licenses\THIRD_PARTY_NOTICES.txt') -Destination (Join-Path $distribution 'THIRD_PARTY_NOTICES.txt')
 Copy-Item -LiteralPath (Join-Path $repo 'target\sbom\bom.json') -Destination (Join-Path $distribution 'SBOM.cdx.json')
@@ -203,6 +296,22 @@ docker exec -i "%NEXUS_DOCKER_CONTAINER%" java --enable-native-access=ALL-UNNAME
 exit /b %ERRORLEVEL%
 '@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus-docker.cmd') -Encoding ascii
 
+$signer = Join-Path $PSScriptRoot 'sign-windows-artifact.ps1'
+if (-not (Test-Path -LiteralPath $signer -PathType Leaf)) {
+    throw "Windows signing helper missing: $signer"
+}
+& $signer -Path (Join-Path $distribution 'app\nexus.exe')
+
+$sbomAugmenter = Join-Path $PSScriptRoot 'augment-windows-sbom.ps1'
+if (-not (Test-Path -LiteralPath $sbomAugmenter -PathType Leaf)) {
+    throw "Windows SBOM helper missing: $sbomAugmenter"
+}
+& $sbomAugmenter `
+    -DistributionRoot $distribution `
+    -SbomPath (Join-Path $distribution 'SBOM.cdx.json') `
+    -ProjectVersion $Version `
+    -JavaVersion $javaRuntimeVersion
+
 $smokeHome = Join-Path $OutputRoot '.distribution-smoke-home'
 Remove-Item -LiteralPath $smokeHome -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $smokeHome | Out-Null
@@ -229,7 +338,7 @@ foreach ($requiredModule in @('java.base', 'java.sql', 'java.net.http', 'jdk.uns
     }
 }
 
-Compress-Archive -Path $distribution -DestinationPath $zip -CompressionLevel Optimal
+New-PortableZip -SourceDirectory $distribution -DestinationPath $zip -RootEntryName $distributionName
 $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
 "$hash  $([IO.Path]::GetFileName($zip))" | Set-Content -LiteralPath $checksum -Encoding ascii
 
@@ -238,6 +347,8 @@ Write-Host 'NEXUS Windows self-contained distribution SUCCESS' -ForegroundColor 
 Write-Host "Distribution : $distribution"
 Write-Host "ZIP          : $zip"
 Write-Host "SHA-256      : $hash"
-Write-Host "Bundled Java : $javaMajor"
+Write-Host "Bundled Java : $javaRuntimeVersion"
+Write-Host 'SBOM         : Maven dependencies + signed/runtime file inventory'
+Write-Host 'Docker       : compose + runtime Dockerfile + entrypoint + healthcheck are canonical payload'
 Write-Host 'Surfaces     : CLI + MCP STDIO + REST + assistant integrations + Docker launchers'
 Write-Output $distribution
