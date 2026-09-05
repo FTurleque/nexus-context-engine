@@ -11,7 +11,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -122,11 +121,9 @@ final class SchemaMigrator {
     private static void applyMigration(Connection connection, Migration migration, String scriptHash)
             throws SQLException, IOException {
         String sql = readResource(migration.resource());
-        for (String statementSql : splitStatements(sql)) {
-            if (!statementSql.isBlank()) {
-                try (Statement statement = connection.createStatement()) {
-                    statement.execute(statementSql);
-                }
+        for (String statementSql : SqlScriptSplitter.split(sql)) {
+            try (Statement statement = connection.createStatement()) {
+                statement.execute(statementSql);
             }
         }
 
@@ -166,56 +163,6 @@ final class SchemaMigrator {
             }
             return new String(input.readAllBytes(), StandardCharsets.UTF_8);
         }
-    }
-
-    private static List<String> splitStatements(String script) {
-        List<String> statements = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
-        boolean singleQuoted = false;
-        boolean doubleQuoted = false;
-        boolean lineComment = false;
-
-        for (int index = 0; index < script.length(); index++) {
-            char character = script.charAt(index);
-            char next = index + 1 < script.length() ? script.charAt(index + 1) : '\0';
-
-            if (lineComment) {
-                if (character == '\n') {
-                    lineComment = false;
-                    current.append(character);
-                }
-                continue;
-            }
-
-            if (!singleQuoted && !doubleQuoted && character == '-' && next == '-') {
-                lineComment = true;
-                index++;
-                continue;
-            }
-
-            if (character == '\'' && !doubleQuoted) {
-                if (singleQuoted && next == '\'') {
-                    current.append(character).append(next);
-                    index++;
-                    continue;
-                }
-                singleQuoted = !singleQuoted;
-            } else if (character == '"' && !singleQuoted) {
-                doubleQuoted = !doubleQuoted;
-            }
-
-            if (character == ';' && !singleQuoted && !doubleQuoted) {
-                statements.add(current.toString().trim());
-                current.setLength(0);
-            } else {
-                current.append(character);
-            }
-        }
-
-        if (!current.toString().isBlank()) {
-            statements.add(current.toString().trim());
-        }
-        return statements;
     }
 
     private static void rollbackPreserving(Connection connection, Throwable primaryFailure) {
