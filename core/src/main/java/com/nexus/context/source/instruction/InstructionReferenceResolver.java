@@ -39,7 +39,7 @@ final class InstructionReferenceResolver {
         ProjectPathGuard pathGuard = new ProjectPathGuard(project.rootPath());
         Path root = pathGuard.root();
         Path safeInstructionFile = pathGuard.requireRegularFile(instructionFile);
-        ProjectIgnoreMatcher ignoreMatcher = new ProjectIgnoreMatcher(root);
+        ProjectIgnoreMatcher ignoreMatcher = new ProjectIgnoreMatcher(root, budget::bytes);
         List<ResolvedReference> resolved = new ArrayList<>();
         Set<Path> visited = new LinkedHashSet<>();
         visited.add(safeInstructionFile);
