@@ -48,19 +48,19 @@ class ProjectIgnoreMatcherBudgetTest {
     }
 
     @Test
-    void rejectsCumulativeIgnoreBytesAcrossNestedDirectories() throws Exception {
+    void rejectsCumulativeIgnoreBytesAcrossIgnoreFiles() throws Exception {
         Path root = Files.createDirectory(temporaryDirectory.resolve("cumulative-limit"));
-        Path nested = Files.createDirectory(root.resolve("nested"));
-        Files.writeString(root.resolve(".gitignore"), "#1234\n"); // 6 bytes
-        Files.writeString(nested.resolve(".gitignore"), "#5678\n"); // 6 bytes
+        Files.writeString(root.resolve(".gitignore"), "#1234\n"); // 6 UTF-8 bytes
+        Files.writeString(root.resolve(".nexusignore"), "#5678\n"); // 6 UTF-8 bytes
         AtomicLong charged = new AtomicLong();
 
-        ProjectIgnoreMatcher matcher = new ProjectIgnoreMatcher(
-                root,
-                16L,
-                10L,
-                (file, bytes) -> charged.addAndGet(bytes));
-        IOException failure = assertThrows(IOException.class, () -> matcher.registerDirectory(nested));
+        IOException failure = assertThrows(
+                IOException.class,
+                () -> new ProjectIgnoreMatcher(
+                        root,
+                        16L,
+                        10L,
+                        (file, bytes) -> charged.addAndGet(bytes)));
 
         assertEquals(6L, charged.get());
         assertTrue(failure.getMessage().contains("12 octets > limite 10 octets"), failure.getMessage());
