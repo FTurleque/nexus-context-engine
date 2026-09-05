@@ -1,20 +1,20 @@
-# Bases épinglées par digest (tag lisible conservé) : aucune installation APT
-# réseau n'est exécutée ensuite, donc le contenu OS dépend uniquement de ces digests.
+# Bases épinglées par digest (tag lisible conservé). Le builder et le runtime
+# sont immuables ; aucune installation de paquet réseau n'est exécutée après le FROM runtime.
 ARG MAVEN_IMAGE=maven:3.9.11-eclipse-temurin-21@sha256:6fdc855a6ed81d288ca7ca37ac6ff5e9308b612485c0801d70b25a858c83d237
-ARG RUNTIME_IMAGE=eclipse-temurin:21.0.12_8-jre-jammy@sha256:eebd356ad7358b7094758e5787a6726f332917cfd56feab6457c56dab895cdbf
+ARG RUNTIME_IMAGE=eclipse-temurin:21.0.12_8-jre-ubi10-minimal@sha256:c7feea7f2dce5cf29e0ffa94e386b0a12ab44c029ad66bcb59eacc4da572ccf4
 
 FROM ${MAVEN_IMAGE} AS build
 WORKDIR /workspace
 COPY . .
 # Utilise le Maven déjà contenu dans l'image builder épinglée afin d'éviter
-# d'installer unzip via un dépôt APT mutable pendant la build Docker.
+# d'installer un outil système pendant la build Docker.
 RUN mvn -B -DskipTests package
 
 FROM ${RUNTIME_IMAGE} AS runtime
 USER root
-RUN groupadd --system --gid 10001 nexus \
-    && useradd --system --uid 10001 --gid 10001 --home-dir /data/nexus --shell /usr/sbin/nologin nexus \
-    && mkdir -p /opt/nexus/lib /opt/nexus/rest /data/nexus /workspace \
+# Un UID/GID numérique évite d'installer shadow-utils dans l'image minimale tout
+# en conservant un runtime strictement non-root.
+RUN mkdir -p /opt/nexus/lib /opt/nexus/rest /data/nexus /workspace \
     && chown -R 10001:10001 /opt/nexus /data/nexus /workspace
 
 COPY --from=build /workspace/target/nexus-context-engine-*-cli.jar /opt/nexus/lib/nexus-cli.jar
