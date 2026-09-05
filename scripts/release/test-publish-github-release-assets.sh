@@ -177,7 +177,7 @@ expect_failure() {
 }
 
 # First publication must stay draft until every asset has been uploaded and verified.
-"$SCRIPT" "$TAG" "$asset_dir/nexus-windows.zip" "$asset_dir/nexus-setup.exe"
+bash "$SCRIPT" "$TAG" "$asset_dir/nexus-windows.zip" "$asset_dir/nexus-setup.exe"
 release_dir="$FAKE_GH_STATE/releases/$TAG"
 [[ "$(cat "$release_dir/draft")" == "false" ]] || fail "release was not published after successful verification"
 cmp -s "$asset_dir/nexus-windows.zip" "$release_dir/assets/nexus-windows.zip" || fail "ZIP bytes differ after publication"
@@ -188,7 +188,7 @@ grep -Fq "release edit $TAG --draft=false" "$FAKE_GH_LOG" || fail "release was n
 # Re-running against an already published, byte-identical release must be read-only and idempotent.
 upload_count_before="$(grep -c '^release upload ' "$FAKE_GH_LOG" || true)"
 edit_count_before="$(grep -c '^release edit ' "$FAKE_GH_LOG" || true)"
-"$SCRIPT" "$TAG" "$asset_dir/nexus-windows.zip" "$asset_dir/nexus-setup.exe"
+bash "$SCRIPT" "$TAG" "$asset_dir/nexus-windows.zip" "$asset_dir/nexus-setup.exe"
 upload_count_after="$(grep -c '^release upload ' "$FAKE_GH_LOG" || true)"
 edit_count_after="$(grep -c '^release edit ' "$FAKE_GH_LOG" || true)"
 [[ "$upload_count_after" == "$upload_count_before" ]] || fail "published release was mutated during idempotent resume"
@@ -196,19 +196,19 @@ edit_count_after="$(grep -c '^release edit ' "$FAKE_GH_LOG" || true)"
 
 # A published release missing an expected asset must fail closed instead of being mutated.
 rm "$release_dir/assets/nexus-setup.exe"
-expect_failure 75 "$SCRIPT" "$TAG" "$asset_dir/nexus-windows.zip" "$asset_dir/nexus-setup.exe"
+expect_failure 75 bash "$SCRIPT" "$TAG" "$asset_dir/nexus-windows.zip" "$asset_dir/nexus-setup.exe"
 [[ ! -e "$release_dir/assets/nexus-setup.exe" ]] || fail "missing public asset was unexpectedly uploaded"
 cp "$asset_dir/nexus-setup.exe" "$release_dir/assets/nexus-setup.exe"
 
 # Existing public assets are immutable: byte divergence must be rejected.
 printf 'tampered\n' > "$release_dir/assets/nexus-windows.zip"
-expect_failure 73 "$SCRIPT" "$TAG" "$asset_dir/nexus-windows.zip" "$asset_dir/nexus-setup.exe"
+expect_failure 73 bash "$SCRIPT" "$TAG" "$asset_dir/nexus-windows.zip" "$asset_dir/nexus-setup.exe"
 cp "$asset_dir/nexus-windows.zip" "$release_dir/assets/nexus-windows.zip"
 
 # Local assets must have unique basenames so GitHub Release names cannot collide.
 mkdir -p "$TEMP/duplicate-a" "$TEMP/duplicate-b"
 printf 'a\n' > "$TEMP/duplicate-a/duplicate.bin"
 printf 'b\n' > "$TEMP/duplicate-b/duplicate.bin"
-expect_failure 65 "$SCRIPT" "$TAG" "$TEMP/duplicate-a/duplicate.bin" "$TEMP/duplicate-b/duplicate.bin"
+expect_failure 65 bash "$SCRIPT" "$TAG" "$TEMP/duplicate-a/duplicate.bin" "$TEMP/duplicate-b/duplicate.bin"
 
 echo "GitHub Release asset publication qualification passed."
