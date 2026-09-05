@@ -8,6 +8,7 @@ import com.nexus.search.CandidateType;
 import com.nexus.search.SearchCandidate;
 import com.nexus.search.SearchSignals;
 import com.nexus.search.SearchStrategy;
+import com.nexus.security.SensitiveContentRedactor;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -119,7 +120,8 @@ public final class SemanticSearchStrategy implements SearchStrategy {
 
         final float[] queryVector;
         try {
-            queryVector = Objects.requireNonNull(embeddingProvider.embed(query), "embedding vector");
+            String embeddingQuery = SensitiveContentRedactor.redact(query);
+            queryVector = Objects.requireNonNull(embeddingProvider.embed(embeddingQuery), "embedding vector");
         } catch (EmbeddingProviderUnavailableException exception) {
             return degradedProvider(project, exception);
         }
