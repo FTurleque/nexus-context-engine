@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Fusionne les fragments qui se chevauchent ou sont directement adjacents dans
@@ -17,6 +18,8 @@ import java.util.Set;
  * les raisons et les symboles descriptifs sont dédupliqués et fusionnés.
  */
 public final class FragmentMerger {
+
+    private static final Pattern LINE_SEPARATOR = Pattern.compile("\\R");
 
     public List<ContextFragment> merge(List<ContextFragment> fragments) {
         Objects.requireNonNull(fragments, "fragments");
@@ -76,7 +79,7 @@ public final class FragmentMerger {
         if (right.endLine() <= left.endLine()) {
             return left.content();
         }
-        String[] rightLines = right.content().split("\\R", -1);
+        String[] rightLines = LINE_SEPARATOR.split(right.content(), -1);
         int overlappingLines = Math.max(0, left.endLine() - right.startLine() + 1);
         int start = Math.min(overlappingLines, rightLines.length);
         if (start >= rightLines.length) {

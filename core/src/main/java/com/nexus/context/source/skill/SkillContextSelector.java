@@ -10,11 +10,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 /**
  * Applique le budget dédié aux skills sans jamais tronquer leurs instructions.
  */
 public final class SkillContextSelector {
+
+    private static final Pattern LINE_BREAK = Pattern.compile("\\R");
 
     private final TokenEstimator tokenEstimator;
 
@@ -60,7 +63,7 @@ public final class SkillContextSelector {
                     activated.descriptor().definitionPath(),
                     null,
                     1,
-                    Math.max(1, activated.content().split("\\R", -1).length),
+                    Math.max(1, LINE_BREAK.split(activated.content(), -1).length),
                     activated.content(),
                     activated.score(),
                     components,

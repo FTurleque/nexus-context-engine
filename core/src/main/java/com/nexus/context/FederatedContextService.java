@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * Construit un contexte fédéré sans faire fuiter les customisations natives
@@ -25,13 +26,13 @@ import java.util.UUID;
 public final class FederatedContextService {
 
     /**
-     * Alias de compatibilité. La politique canonique est définie exclusivement
-     * par {@link FederatedScopePolicy#MAX_PROJECTS}.
+     * Alias de compatibilité conservé pour les intégrations existantes. La politique
+     * canonique reste définie exclusivement par {@link FederatedScopePolicy#MAX_PROJECTS}.
      */
-    @Deprecated(forRemoval = false)
     public static final int MAX_FEDERATED_PROJECTS = FederatedScopePolicy.MAX_PROJECTS;
 
     static final int LOCAL_OVERFETCH_FACTOR = 3;
+    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 
     private final ContextBuilder contextBuilder;
 
@@ -220,7 +221,7 @@ public final class FederatedContextService {
     }
 
     private static String normalize(String content) {
-        return content.replaceAll("\\s+", " ").trim();
+        return WHITESPACE.matcher(content).replaceAll(" ").trim();
     }
 
     private record ContentKey(CandidateType type, String content) {

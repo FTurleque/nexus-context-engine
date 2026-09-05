@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * Construit l'index vectoriel dérivé uniquement lorsqu'un provider d'embeddings
@@ -21,6 +22,7 @@ public final class SemanticIndexingService {
     public static final int DEFAULT_EXCERPT_CHARS = 320;
     public static final int DEFAULT_BATCH_SIZE = 32;
     private static final int CONTENT_PROFILE_VERSION = 2;
+    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 
     private final EmbeddingProvider embeddingProvider;
     private final SemanticSearchIndex semanticSearchIndex;
@@ -187,8 +189,8 @@ public final class SemanticIndexingService {
     }
 
     private static String excerpt(SearchDocument document) {
-        String normalized = SensitiveContentRedactor.redact(document.content())
-                .replaceAll("\\s+", " ")
+        String normalized = WHITESPACE.matcher(SensitiveContentRedactor.redact(document.content()))
+                .replaceAll(" ")
                 .trim();
         if (normalized.isEmpty()) {
             return document.relativePath();

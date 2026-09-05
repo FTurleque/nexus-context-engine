@@ -19,7 +19,6 @@ import com.nexus.index.scan.ProjectScanner;
 import com.nexus.security.SafeFileIO;
 
 import java.io.BufferedInputStream;
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -886,6 +885,7 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
 
         private static final String JSON_RPC_VERSION = "2.0";
         private static final int STDERR_TAIL_SIZE = 50;
+        private static final int MAX_STDERR_LINE_CHARS = 4 * 1024;
 
         private final Configuration configuration;
         private final Path projectRoot;
@@ -1192,19 +1192,20 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
         }
 
         private void drainStderr() {
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    synchronized (stderrTail) {
-                        if (stderrTail.size() >= STDERR_TAIL_SIZE) {
-                            stderrTail.removeFirst();
-                        }
-                        stderrTail.addLast(line);
-                    }
-                }
+            try (InputStreamReader reader = new InputStreamReader(
+                    process.getErrorStream(), StandardCharsets.UTF_8)) {
+                BoundedLineDrain.drain(reader, MAX_STDERR_LINE_CHARS, this::recordStderrLine);
             } catch (IOException ignored) {
                 // Le processus ferme naturellement stderr à l'arrêt.
+            }
+        }
+
+        private void recordStderrLine(String line) {
+            synchronized (stderrTail) {
+                if (stderrTail.size() >= STDERR_TAIL_SIZE) {
+                    stderrTail.removeFirst();
+                }
+                stderrTail.addLast(line);
             }
         }
 

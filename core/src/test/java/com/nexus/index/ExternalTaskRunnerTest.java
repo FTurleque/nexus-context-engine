@@ -23,14 +23,7 @@ class ExternalTaskRunnerTest {
         long startedAt = System.nanoTime();
 
         IOException failure = assertThrows(IOException.class, () -> runner.run("stubborn-provider", () -> {
-            long stopAt = System.nanoTime() + Duration.ofMillis(1_500).toNanos();
-            while (System.nanoTime() < stopAt) {
-                try {
-                    Thread.sleep(10L);
-                } catch (InterruptedException ignored) {
-                    // Simule une intégration tierce qui n'honore pas l'interruption.
-                }
-            }
+            NonCooperativeTaskSupport.ignoreInterruptsFor(Duration.ofMillis(1_500));
             return "too-late";
         }));
 

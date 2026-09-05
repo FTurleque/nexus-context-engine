@@ -75,15 +75,37 @@ public record NexusPaths(Path home) {
         }
     }
 
+    /**
+     * Prépare un fichier persistant privé avant qu'un composant natif ou JDBC ne l'ouvre.
+     *
+     * <p>Le parent est d'abord validé sans suivre de lien symbolique. Le fichier est ensuite créé
+     * atomiquement lorsqu'il est absent, puis revalidé avec {@link LinkOption#NOFOLLOW_LINKS}.
+     * Un lien symbolique préexistant est donc refusé avant qu'un consommateur puisse suivre sa
+     * cible.</p>
+     */
+    public void ensurePrivateFile(Path file) throws IOException {
+        Path normalized = requireInsideHome(file);
+        Path parent = normalized.getParent();
+        if (parent == null) {
+            throw new IOException("Parent du fichier NEXUS introuvable : " + normalized);
+        }
+        ensurePrivateDirectory(parent);
+        if (!Files.exists(normalized, LinkOption.NOFOLLOW_LINKS)) {
+            try {
+                Files.createFile(normalized);
+            } catch (FileAlreadyExistsException ignored) {
+                // Une création concurrente est acceptable uniquement si la revalidation
+                // NOFOLLOW_LINKS ci-dessous confirme qu'il s'agit bien d'un fichier réel.
+            }
+        }
+        validateRegularFile(normalized);
+        applyPosixPermissions(normalized, PRIVATE_FILE_PERMISSIONS);
+    }
+
     /** Rend un fichier persistant privé lorsque le système de fichiers expose les permissions POSIX. */
     public void hardenPrivateFile(Path file) throws IOException {
         Path normalized = requireInsideHome(file);
-        if (Files.isSymbolicLink(normalized)) {
-            throw new IOException("Refus d'un fichier NEXUS symbolique : " + normalized);
-        }
-        if (!Files.isRegularFile(normalized, LinkOption.NOFOLLOW_LINKS)) {
-            throw new IOException("Fichier NEXUS régulier attendu : " + normalized);
-        }
+        validateRegularFile(normalized);
         applyPosixPermissions(normalized, PRIVATE_FILE_PERMISSIONS);
     }
 
@@ -142,6 +164,15 @@ public record NexusPaths(Path home) {
         }
         if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) {
             throw new IOException("Répertoire NEXUS attendu : " + directory);
+        }
+    }
+
+    private static void validateRegularFile(Path file) throws IOException {
+        if (Files.isSymbolicLink(file)) {
+            throw new IOException("Refus d'un fichier NEXUS symbolique : " + file);
+        }
+        if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IOException("Fichier NEXUS régulier attendu : " + file);
         }
     }
 

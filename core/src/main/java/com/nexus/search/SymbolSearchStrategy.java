@@ -15,6 +15,7 @@ import java.util.Objects;
 
 public final class SymbolSearchStrategy implements SearchStrategy {
 
+    private static final String KEY_SEPARATOR = "\u0000";
     private static final double MIN_FUZZY_SCORE = 0.62d;
     private static final int MIN_CANDIDATE_POOL = 100;
     private static final int MAX_CANDIDATE_POOL = 2_000;
@@ -30,9 +31,7 @@ public final class SymbolSearchStrategy implements SearchStrategy {
     public List<SearchCandidate> search(ProjectDescriptor project, String query, int limit) {
         List<String> terms = SearchText.terms(query);
         String normalizedQuery = query.toLowerCase(Locale.ROOT).trim();
-        int candidatePoolLimit = Math.min(
-                MAX_CANDIDATE_POOL,
-                Math.max(MIN_CANDIDATE_POOL, limit * 20));
+        int candidatePoolLimit = Math.clamp((long) limit * 20, MIN_CANDIDATE_POOL, MAX_CANDIDATE_POOL);
 
         Map<String, IndexedSymbol> symbolPool = new LinkedHashMap<>();
         collect(symbolPool, indexRepository.searchSymbols(project.id(), normalizedQuery, candidatePoolLimit));
@@ -81,8 +80,9 @@ public final class SymbolSearchStrategy implements SearchStrategy {
     private static void collect(Map<String, IndexedSymbol> target, List<IndexedSymbol> symbols) {
         for (IndexedSymbol indexed : symbols) {
             CodeSymbol symbol = indexed.symbol();
-            String key = indexed.relativePath() + "\u0000" + symbol.kind() + "\u0000"
-                    + symbol.qualifiedName() + "\u0000" + symbol.startLine() + "\u0000" + symbol.sourceProvider();
+            String key = indexed.relativePath() + KEY_SEPARATOR + symbol.kind() + KEY_SEPARATOR
+                    + symbol.qualifiedName() + KEY_SEPARATOR + symbol.startLine() + KEY_SEPARATOR
+                    + symbol.sourceProvider();
             target.putIfAbsent(key, indexed);
         }
     }

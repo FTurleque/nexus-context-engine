@@ -21,7 +21,7 @@ public record SemanticIndexProvenance(
     private static final String CANONICAL_FINGERPRINT = PREFIX + "canonicalFingerprint";
     private static final String PROVIDER_ID = PREFIX + "providerId";
     private static final String MODEL_ID = PREFIX + "modelId";
-    private static final String DIMENSIONS = PREFIX + "dimensions";
+    private static final String DIMENSIONS_KEY = PREFIX + "dimensions";
     private static final String CONTENT_PROFILE = PREFIX + "contentProfile";
     private static final String SCHEMA_VERSION = PREFIX + "schemaVersion";
 
@@ -66,7 +66,7 @@ public record SemanticIndexProvenance(
         data.put(CANONICAL_FINGERPRINT, canonicalFingerprint);
         data.put(PROVIDER_ID, providerId);
         data.put(MODEL_ID, modelId);
-        data.put(DIMENSIONS, Integer.toString(dimensions));
+        data.put(DIMENSIONS_KEY, Integer.toString(dimensions));
         data.put(CONTENT_PROFILE, contentProfile);
         data.put(SCHEMA_VERSION, Integer.toString(schemaVersion));
         return Map.copyOf(data);
@@ -77,7 +77,7 @@ public record SemanticIndexProvenance(
         return canonicalFingerprint.equals(commitData.get(CANONICAL_FINGERPRINT))
                 && providerId.equals(commitData.get(PROVIDER_ID))
                 && modelId.equals(commitData.get(MODEL_ID))
-                && Integer.toString(dimensions).equals(commitData.get(DIMENSIONS))
+                && Integer.toString(dimensions).equals(commitData.get(DIMENSIONS_KEY))
                 && contentProfile.equals(commitData.get(CONTENT_PROFILE))
                 && Integer.toString(schemaVersion).equals(commitData.get(SCHEMA_VERSION));
     }

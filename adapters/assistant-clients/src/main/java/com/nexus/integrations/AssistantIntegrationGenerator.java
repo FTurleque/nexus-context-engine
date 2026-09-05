@@ -23,6 +23,7 @@ public final class AssistantIntegrationGenerator {
 
     public static final String SERVER_NAME = "nexus";
     public static final String NATIVE_ACCESS_ARGUMENT = "--enable-native-access=ALL-UNNAMED";
+    private static final String MCP_SERVERS_FIELD = "mcpServers";
 
     private final ObjectMapper objectMapper;
 
@@ -124,7 +125,7 @@ public final class AssistantIntegrationGenerator {
         Map<String, Object> server = stdioServer(commandSpec);
         server.put("env", Map.of());
         server.put("tools", List.of("*"));
-        return json(Map.of("mcpServers", Map.of(SERVER_NAME, server)));
+        return json(Map.of(MCP_SERVERS_FIELD, Map.of(SERVER_NAME, server)));
     }
 
     public String copilotJetBrainsJson(Path runner) {
@@ -158,7 +159,7 @@ public final class AssistantIntegrationGenerator {
     public String claudeProjectJson(CommandSpec commandSpec) {
         Map<String, Object> server = stdioServer(commandSpec);
         server.put("env", Map.of());
-        return json(Map.of("mcpServers", Map.of(SERVER_NAME, server)));
+        return json(Map.of(MCP_SERVERS_FIELD, Map.of(SERVER_NAME, server)));
     }
 
     public String codexCommand(CommandSpec commandSpec) {
@@ -181,7 +182,7 @@ public final class AssistantIntegrationGenerator {
     }
 
     public String genericMcpJson(CommandSpec commandSpec) {
-        return json(Map.of("mcpServers", Map.of(SERVER_NAME, stdioServer(commandSpec))));
+        return json(Map.of(MCP_SERVERS_FIELD, Map.of(SERVER_NAME, stdioServer(commandSpec))));
     }
 
     private CommandSpec legacyJava(Path runner) {

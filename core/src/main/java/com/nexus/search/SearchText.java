@@ -3,14 +3,17 @@ package com.nexus.search;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 final class SearchText {
+
+    private static final Pattern TERM_SEPARATOR = Pattern.compile("[^\\p{L}\\p{N}_$#.]+");
 
     private SearchText() {
     }
 
     static List<String> terms(String query) {
-        return Arrays.stream(query.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{N}_$#.]+"))
+        return Arrays.stream(TERM_SEPARATOR.split(query.toLowerCase(Locale.ROOT)))
                 .filter(term -> !term.isBlank())
                 .distinct()
                 .toList();

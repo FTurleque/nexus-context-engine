@@ -18,6 +18,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Transforme les candidats classés en fragments de source concrets.
@@ -43,6 +44,8 @@ public final class ContextFragmentFactory {
     private static final int QUERY_WINDOW_LINES = 5;
     private static final int MAX_QUERY_WINDOWS = 4;
     private static final int FALLBACK_HEAD_LINES = 40;
+    private static final Pattern QUERY_TERM_SEPARATOR = Pattern.compile("[^\\p{L}\\p{N}_$#.]+");
+    static final int MAX_MATERIALIZED_SOURCE_LINES = 100_000;
 
     private final TokenEstimator tokenEstimator;
 
@@ -85,7 +88,7 @@ public final class ContextFragmentFactory {
                 Path absolutePath = requireReadableCandidate(pathGuard, candidatePath);
                 Path relativePath = pathGuard.root().relativize(absolutePath);
                 String content = SensitiveContentRedactor.redact(SafeFileIO.readStringNoFollow(absolutePath));
-                List<String> lines = content.lines().toList();
+                List<String> lines = materializeLines(content, relativePath);
                 int sourceLineCount = lines.size();
                 List<RankedCandidate> symbolCandidates = entry.getValue().stream()
                         .filter(candidate -> candidate.candidate().symbol() != null)
@@ -127,6 +130,17 @@ public final class ContextFragmentFactory {
         return "Candidat de contexte exclu sans lecture : "
                 + candidatePath.toString().replace('\\', '/')
                 + " (" + reason + ")";
+    }
+
+    private static List<String> materializeLines(String content, Path relativePath) throws IOException {
+        List<String> lines = content.lines()
+                .limit(MAX_MATERIALIZED_SOURCE_LINES + 1L)
+                .toList();
+        if (lines.size() > MAX_MATERIALIZED_SOURCE_LINES) {
+            throw new IOException("Trop de lignes à matérialiser pour " + relativePath
+                    + " : limite " + MAX_MATERIALIZED_SOURCE_LINES);
+        }
+        return lines;
     }
 
     private static ContextFragment symbolFragment(
@@ -223,7 +237,7 @@ public final class ContextFragmentFactory {
 
     private static Set<String> queryTerms(String query) {
         Set<String> terms = new LinkedHashSet<>();
-        for (String term : query.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{N}_$#.]+")) {
+        for (String term : QUERY_TERM_SEPARATOR.split(query.toLowerCase(Locale.ROOT))) {
             if (term.length() >= 2) {
                 terms.add(term);
             }

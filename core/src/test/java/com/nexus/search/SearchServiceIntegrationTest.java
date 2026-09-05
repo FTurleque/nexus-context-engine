@@ -25,6 +25,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SearchServiceIntegrationTest {
@@ -107,7 +108,7 @@ class SearchServiceIntegrationTest {
 
         List<RankedCandidate> fuzzy = service.search(project, "DocumntRepository", 5, true);
         assertFalse(fuzzy.isEmpty());
-        assertTrue(fuzzy.getFirst().candidate().symbol() != null);
+        assertNotNull(fuzzy.getFirst().candidate().symbol());
         assertEquals("DocumentRepository", fuzzy.getFirst().candidate().symbol().name());
         assertTrue(fuzzy.getFirst().candidate().signals().getOrDefault(SearchSignals.SYMBOL_FUZZY, 0.0d) >= 0.62d);
     }

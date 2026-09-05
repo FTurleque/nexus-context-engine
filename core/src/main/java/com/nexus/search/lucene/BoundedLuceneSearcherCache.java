@@ -26,6 +26,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  */
 public final class BoundedLuceneSearcherCache implements AutoCloseable {
 
+    private static final String PROJECT_ID_ARGUMENT = "projectId";
+
     private final int capacity;
     private final Map<UUID, ProjectSearcher> searchers = new ConcurrentHashMap<>();
     private final Object lifecycleMonitor = new Object();
@@ -47,7 +49,7 @@ public final class BoundedLuceneSearcherCache implements AutoCloseable {
             UUID projectId,
             Path indexPath,
             SearchOperation<T> operation) throws IOException {
-        Objects.requireNonNull(projectId, "projectId");
+        Objects.requireNonNull(projectId, PROJECT_ID_ARGUMENT);
         Objects.requireNonNull(indexPath, "indexPath");
         Objects.requireNonNull(operation, "operation");
         ensureOpen();
@@ -64,7 +66,7 @@ public final class BoundedLuceneSearcherCache implements AutoCloseable {
 
     /** Rafraîchit un reader déjà chaud après un commit local. */
     public void refreshIfCached(UUID projectId) throws IOException {
-        Objects.requireNonNull(projectId, "projectId");
+        Objects.requireNonNull(projectId, PROJECT_ID_ARGUMENT);
         ensureOpen();
         ProjectSearcher searcher = searchers.get(projectId);
         if (searcher != null) {
@@ -77,7 +79,7 @@ public final class BoundedLuceneSearcherCache implements AutoCloseable {
      * locales déjà entrées dans leur section de lecture.
      */
     public void invalidate(UUID projectId) throws IOException {
-        Objects.requireNonNull(projectId, "projectId");
+        Objects.requireNonNull(projectId, PROJECT_ID_ARGUMENT);
         ProjectSearcher removed;
         synchronized (lifecycleMonitor) {
             removed = searchers.remove(projectId);
