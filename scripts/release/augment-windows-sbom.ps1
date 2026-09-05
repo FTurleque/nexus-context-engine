@@ -9,7 +9,30 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$root = [IO.Path]::GetFullPath($DistributionRoot).TrimEnd('\')
+function Get-NexusRelativePath {
+    param(
+        [Parameter(Mandatory = $true)][string]$BaseRoot,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    # Windows Installer runs under Windows PowerShell 5.1 / .NET Framework on
+    # hosted runners. System.IO.Path.GetRelativePath is a .NET Core API and is
+    # therefore intentionally avoided here.
+    $base = [IO.Path]::GetFullPath($BaseRoot).TrimEnd([char[]]@('\', '/'))
+    $candidate = [IO.Path]::GetFullPath($Path)
+    if ($candidate.Equals($base, [StringComparison]::OrdinalIgnoreCase)) {
+        return ''
+    }
+
+    $prefix = $base + [IO.Path]::DirectorySeparatorChar
+    if (-not $candidate.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Path escapes Windows distribution root: $candidate"
+    }
+
+    return $candidate.Substring($prefix.Length).Replace('\', '/')
+}
+
+$root = [IO.Path]::GetFullPath($DistributionRoot).TrimEnd([char[]]@('\', '/'))
 $sbom = [IO.Path]::GetFullPath($SbomPath)
 if (-not (Test-Path -LiteralPath $root -PathType Container)) {
     throw "Windows distribution root not found: $root"
@@ -17,8 +40,9 @@ if (-not (Test-Path -LiteralPath $root -PathType Container)) {
 if (-not (Test-Path -LiteralPath $sbom -PathType Leaf)) {
     throw "Base Maven SBOM not found: $sbom"
 }
-if (-not $sbom.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase)) {
-    throw 'The Windows SBOM must be located inside the distribution root.'
+$sbomRelative = Get-NexusRelativePath -BaseRoot $root -Path $sbom
+if ([string]::IsNullOrWhiteSpace($sbomRelative)) {
+    throw 'The Windows SBOM must be a file inside the distribution root.'
 }
 
 $bom = Get-Content -LiteralPath $sbom -Raw | ConvertFrom-Json
@@ -49,11 +73,10 @@ $components.Add([ordered]@{
     )
 })
 
-$sbomRelative = [IO.Path]::GetRelativePath($root, $sbom).Replace('\', '/')
 $files = Get-ChildItem -LiteralPath $root -Recurse -File | Sort-Object FullName
 $inventoriedFiles = 0
 foreach ($file in $files) {
-    $relative = [IO.Path]::GetRelativePath($root, $file.FullName).Replace('\', '/')
+    $relative = Get-NexusRelativePath -BaseRoot $root -Path $file.FullName
     if ($relative -eq $sbomRelative) {
         continue
     }
