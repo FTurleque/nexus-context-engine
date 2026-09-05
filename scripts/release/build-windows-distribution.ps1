@@ -114,6 +114,77 @@ function Get-JdepsModules([string]$Artifact) {
     return @($line -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 }
 
+function New-PortableZip {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourceDirectory,
+        [Parameter(Mandatory = $true)][string]$DestinationPath,
+        [Parameter(Mandatory = $true)][string]$RootEntryName
+    )
+
+    Add-Type -AssemblyName System.IO.Compression
+    $source = [IO.Path]::GetFullPath($SourceDirectory).TrimEnd([char[]]@('\', '/'))
+    $destination = [IO.Path]::GetFullPath($DestinationPath)
+    $files = @(Get-ChildItem -LiteralPath $source -Recurse -File | Sort-Object FullName)
+    if ($files.Count -eq 0) {
+        throw "Cannot create an empty Windows distribution ZIP from $source"
+    }
+
+    $output = [IO.File]::Open($destination, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    try {
+        $archive = [IO.Compression.ZipArchive]::new($output, [IO.Compression.ZipArchiveMode]::Create, $false)
+        try {
+            foreach ($file in $files) {
+                $relative = $file.FullName.Substring($source.Length).TrimStart([char[]]@('\', '/')).Replace('\', '/')
+                if ([string]::IsNullOrWhiteSpace($relative) -or $relative.Contains('\')) {
+                    throw "Invalid portable ZIP relative path: $relative"
+                }
+                $entryName = "$RootEntryName/$relative"
+                $entry = $archive.CreateEntry($entryName, [IO.Compression.CompressionLevel]::Optimal)
+                $input = [IO.File]::OpenRead($file.FullName)
+                $entryStream = $entry.Open()
+                try {
+                    $input.CopyTo($entryStream)
+                }
+                finally {
+                    $entryStream.Dispose()
+                    $input.Dispose()
+                }
+            }
+        }
+        finally {
+            $archive.Dispose()
+        }
+    }
+    finally {
+        $output.Dispose()
+    }
+
+    # Fail locally if a future change reintroduces Windows separators in ZIP
+    # entry names. PKZIP uses '/' independently of the producer OS.
+    $inputZip = [IO.File]::OpenRead($destination)
+    try {
+        $archive = [IO.Compression.ZipArchive]::new($inputZip, [IO.Compression.ZipArchiveMode]::Read, $false)
+        try {
+            $entries = @($archive.Entries)
+            if ($entries.Count -eq 0) {
+                throw "Portable ZIP contains no entries: $destination"
+            }
+            $expectedPrefix = "$RootEntryName/"
+            foreach ($entry in $entries) {
+                if ($entry.FullName.Contains('\') -or -not $entry.FullName.StartsWith($expectedPrefix, [StringComparison]::Ordinal)) {
+                    throw "Non-portable ZIP entry detected: $($entry.FullName)"
+                }
+            }
+        }
+        finally {
+            $archive.Dispose()
+        }
+    }
+    finally {
+        $inputZip.Dispose()
+    }
+}
+
 $modules = @('java.se', 'jdk.crypto.ec', 'jdk.unsupported')
 foreach ($artifact in @($cliJar, $mcpJar, $assistantJar)) { $modules += Get-JdepsModules $artifact }
 $modules = @($modules | Sort-Object -Unique)
@@ -267,7 +338,7 @@ foreach ($requiredModule in @('java.base', 'java.sql', 'java.net.http', 'jdk.uns
     }
 }
 
-Compress-Archive -Path $distribution -DestinationPath $zip -CompressionLevel Optimal
+New-PortableZip -SourceDirectory $distribution -DestinationPath $zip -RootEntryName $distributionName
 $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
 "$hash  $([IO.Path]::GetFileName($zip))" | Set-Content -LiteralPath $checksum -Encoding ascii
 
