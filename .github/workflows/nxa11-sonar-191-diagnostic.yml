@@ -1,0 +1,67 @@
+name: NXA11 Sonar PR191 diagnostic
+
+on:
+  push:
+    branches:
+      - diagnostic/nxa11-sonar-191
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: diagnostic/nxa11-sonar-191
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Query SonarCloud PR issues
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --get \
+            'https://sonarcloud.io/api/issues/search' \
+            --data-urlencode 'projects=FTurleque_nexus' \
+            --data-urlencode 'pullRequest=191' \
+            --data-urlencode 'statuses=OPEN,CONFIRMED' \
+            --data-urlencode 'ps=100' \
+            > "$RUNNER_TEMP/sonar-issues.json"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          payload = json.loads(Path(os.environ['RUNNER_TEMP'], 'sonar-issues.json').read_text())
+          issues = payload.get('issues', [])
+          print(f"SONAR_ISSUE_COUNT={len(issues)}")
+          for issue in issues:
+              component = issue.get('component', '')
+              path = component.split(':', 1)[-1] if ':' in component else component
+              impacts = ','.join(
+                  f"{impact.get('softwareQuality')}:{impact.get('severity')}"
+                  for impact in issue.get('impacts', []))
+              print('---')
+              print('key=', issue.get('key'))
+              print('rule=', issue.get('rule'))
+              print('type=', issue.get('type'))
+              print('severity=', issue.get('severity'))
+              print('cleanCodeAttribute=', issue.get('cleanCodeAttribute'))
+              print('impacts=', impacts)
+              print('path=', path)
+              print('line=', issue.get('line'))
+              print('message=', issue.get('message'))
+          PY
+      - name: Remove diagnostic workflow
+        if: always()
+        shell: bash
+        run: |
+          rm .github/workflows/nxa11-sonar-191-diagnostic.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m 'ci: remove NXA11 PR191 Sonar diagnostic'
+            git push origin HEAD:diagnostic/nxa11-sonar-191
+          fi
