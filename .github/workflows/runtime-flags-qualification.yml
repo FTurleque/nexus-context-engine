@@ -1,6 +1,7 @@
 name: Runtime Flags Qualification
 
 on:
+  workflow_call:
   pull_request:
     branches:
       - develop

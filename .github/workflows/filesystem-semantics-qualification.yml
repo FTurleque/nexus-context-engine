@@ -1,6 +1,7 @@
 name: Filesystem Semantics Qualification
 
 on:
+  workflow_call:
   pull_request:
     branches:
       - develop
