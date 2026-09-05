@@ -30,26 +30,34 @@ final class BoundedLineDrain {
         int read;
         while ((read = reader.read(buffer)) >= 0) {
             for (int index = 0; index < read; index++) {
-                char character = buffer[index];
-                if (character == '\n') {
-                    emit(consumer, line, truncated);
-                    line.setLength(0);
-                    truncated = false;
-                    continue;
-                }
-                if (character == '\r') {
-                    continue;
-                }
-                if (line.length() < maxLineChars) {
-                    line.append(character);
-                } else {
-                    truncated = true;
-                }
+                truncated = processCharacter(
+                        buffer[index], line, maxLineChars, truncated, consumer);
             }
         }
         if (!line.isEmpty() || truncated) {
             emit(consumer, line, truncated);
         }
+    }
+
+    private static boolean processCharacter(
+            char character,
+            StringBuilder line,
+            int maxLineChars,
+            boolean truncated,
+            Consumer<String> consumer) {
+        if (character == '\n') {
+            emit(consumer, line, truncated);
+            line.setLength(0);
+            return false;
+        }
+        if (character == '\r') {
+            return truncated;
+        }
+        if (line.length() < maxLineChars) {
+            line.append(character);
+            return truncated;
+        }
+        return true;
     }
 
     private static void emit(Consumer<String> consumer, StringBuilder line, boolean truncated) {

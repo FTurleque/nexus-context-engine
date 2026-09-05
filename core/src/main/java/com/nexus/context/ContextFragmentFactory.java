@@ -134,7 +134,7 @@ public final class ContextFragmentFactory {
 
     private static List<String> materializeLines(String content, Path relativePath) throws IOException {
         List<String> lines = content.lines()
-                .limit((long) MAX_MATERIALIZED_SOURCE_LINES + 1L)
+                .limit(MAX_MATERIALIZED_SOURCE_LINES + 1L)
                 .toList();
         if (lines.size() > MAX_MATERIALIZED_SOURCE_LINES) {
             throw new IOException("Trop de lignes à matérialiser pour " + relativePath

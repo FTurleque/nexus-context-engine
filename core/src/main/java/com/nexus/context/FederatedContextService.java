@@ -26,12 +26,9 @@ import java.util.regex.Pattern;
 public final class FederatedContextService {
 
     /**
-     * Alias de compatibilité. La politique canonique est définie exclusivement
-     * par {@link FederatedScopePolicy#MAX_PROJECTS}.
-     *
-     * @deprecated utiliser {@link FederatedScopePolicy#MAX_PROJECTS}.
+     * Alias de compatibilité conservé pour les intégrations existantes. La politique
+     * canonique reste définie exclusivement par {@link FederatedScopePolicy#MAX_PROJECTS}.
      */
-    @Deprecated(forRemoval = false)
     public static final int MAX_FEDERATED_PROJECTS = FederatedScopePolicy.MAX_PROJECTS;
 
     static final int LOCAL_OVERFETCH_FACTOR = 3;
