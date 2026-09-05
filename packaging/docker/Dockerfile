@@ -1,7 +1,7 @@
 # Bases épinglées par digest (tag lisible conservé) : aucune installation APT
 # réseau n'est exécutée ensuite, donc le contenu OS dépend uniquement de ces digests.
 ARG MAVEN_IMAGE=maven:3.9.11-eclipse-temurin-21@sha256:6fdc855a6ed81d288ca7ca37ac6ff5e9308b612485c0801d70b25a858c83d237
-ARG RUNTIME_IMAGE=eclipse-temurin:21-jre-jammy@sha256:3097cbbebb7d490494a98aed2301f284b38f79eba158eef098c6fc8c8af11c23
+ARG RUNTIME_IMAGE=eclipse-temurin:21.0.12_8-jre-jammy@sha256:eebd356ad7358b7094758e5787a6726f332917cfd56feab6457c56dab895cdbf
 
 FROM ${MAVEN_IMAGE} AS build
 WORKDIR /workspace
