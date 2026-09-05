@@ -89,6 +89,45 @@ jobs:
     permissions:
       contents: read
 
+  runtime-flags:
+    name: Runtime flags release gate
+    needs: validate-release
+    uses: ./.github/workflows/runtime-flags-qualification.yml
+    permissions:
+      contents: read
+
+  filesystem-semantics:
+    name: Filesystem semantics release gate
+    needs: validate-release
+    uses: ./.github/workflows/filesystem-semantics-qualification.yml
+    permissions:
+      contents: read
+
+  smb-filesystem:
+    name: SMB filesystem release gate
+    needs: validate-release
+    uses: ./.github/workflows/smb-filesystem-qualification.yml
+    permissions:
+      contents: read
+
+  git-context-cache:
+    name: Full Git context cache release gate
+    needs: validate-release
+    uses: ./.github/workflows/git-context-cache-qualification.yml
+    with:
+      profile: full
+    permissions:
+      contents: read
+
+  lucene-lifecycle:
+    name: Full Lucene lifecycle release gate
+    needs: validate-release
+    uses: ./.github/workflows/lucene-lifecycle-benchmark.yml
+    with:
+      profile: full
+    permissions:
+      contents: read
+
   codeql:
     name: CodeQL release gate
     needs: validate-release
@@ -116,6 +155,11 @@ jobs:
       - docker-distribution
       - scale-benchmark
       - scanner-corpus-benchmark
+      - runtime-flags
+      - filesystem-semantics
+      - smb-filesystem
+      - git-context-cache
+      - lucene-lifecycle
       - codeql
       - osv
     runs-on: ubuntu-latest
