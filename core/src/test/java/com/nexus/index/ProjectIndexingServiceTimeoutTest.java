@@ -16,6 +16,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.SQLException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
@@ -30,7 +31,7 @@ class ProjectIndexingServiceTimeoutTest {
     Path temporaryDirectory;
 
     @Test
-    void boundsCodeIndexImportersAndMarksTheProjectFailed() throws Exception {
+    void boundsCodeIndexImportersAndMarksTheProjectFailed() throws IOException, SQLException {
         Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("project"));
         Files.writeString(projectRoot.resolve("App.java"), "class App {}\n");
 
@@ -48,14 +49,7 @@ class ProjectIndexingServiceTimeoutTest {
 
             @Override
             public Optional<CodeIntelligenceSnapshot> importIndex(Path root) {
-                long stopAt = System.nanoTime() + Duration.ofSeconds(2).toNanos();
-                while (System.nanoTime() < stopAt) {
-                    try {
-                        Thread.sleep(10L);
-                    } catch (InterruptedException ignored) {
-                        // Simule une intégration qui ignore l'interruption.
-                    }
-                }
+                NonCooperativeTaskSupport.ignoreInterruptsFor(Duration.ofSeconds(2));
                 return Optional.empty();
             }
         };

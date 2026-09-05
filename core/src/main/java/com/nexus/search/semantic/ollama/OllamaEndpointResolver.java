@@ -4,6 +4,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 /**
  * Résout et valide l'endpoint Ollama en fonction du runtime d'exécution.
@@ -20,6 +21,7 @@ public final class OllamaEndpointResolver {
 
     /** Hôte spécial Docker Desktop qui pointe vers la machine hôte depuis un conteneur. */
     public static final String DOCKER_HOST_GATEWAY = "host.docker.internal";
+    private static final Pattern IPV4_SEPARATOR = Pattern.compile("\\.");
 
     private OllamaEndpointResolver() {
     }
@@ -106,7 +108,7 @@ public final class OllamaEndpointResolver {
     }
 
     private static boolean isIpv4(String value) {
-        String[] parts = value.split("\\.", -1);
+        String[] parts = IPV4_SEPARATOR.split(value, -1);
         if (parts.length != 4) {
             return false;
         }
