@@ -93,6 +93,12 @@ jobs:
           Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
           .\scripts\release\test-windows-config-escaping.ps1
 
+      - name: Qualify Windows SBOM augmentation on Windows PowerShell
+        shell: powershell
+        run: |
+          Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+          .\scripts\release\test-windows-sbom-augmentation.ps1
+
       - name: Build self-contained Windows distribution
         shell: powershell
         run: |
