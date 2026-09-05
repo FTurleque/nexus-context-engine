@@ -49,6 +49,15 @@ nexus-assistant-clients.cmd  génération d'intégrations assistants
 
 `NEXUS_HOME` est stocké hors des fichiers applicatifs et est conservé à la désinstallation.
 
+### Prérequis externes auto-installés
+
+Les prérequis téléchargés par le wizard sont traités comme des artefacts de qualification, pas comme des URLs `latest` :
+
+- Docker Desktop : version qualifiée `4.86.0`, build Windows `236216`, URL versionnée et SHA-256 exact `820438e75c16e44b393079154bea7d27958a15845c23a635b1a1f6f586b2ed44` ;
+- Ollama : version qualifiée `v0.33.3`, release GitHub versionnée et SHA-256 exact `32cdcb1da477bc7fffbf1c1cdeeb99b1db003af094db56dd3c156abd04d34f8e` pour `OllamaSetup.exe`.
+
+Le setup refuse l'exécution si le SHA-256 ne correspond pas. Après cette vérification de contenu, Authenticode reste obligatoire (`Docker Inc` / `Ollama Inc.`). L'ordre est donc **SHA-256 → Authenticode → exécution**. Une même release NEXUS ne peut plus installer silencieusement une future version différente via une URL mutable.
+
 ## Docker
 
 La distribution Docker expose :
@@ -100,7 +109,7 @@ URL par défaut :
 http://127.0.0.1:11434
 ```
 
-Le setup peut **installer automatiquement Ollama** lorsque la sémantique est activée, qu'aucun Ollama n'est détecté et que l'installation automatique est choisie ; le binaire officiel est alors téléchargé depuis `ollama.com` et **sa signature Authenticode (CN=Ollama Inc.) est vérifiée avant exécution** (fail-closed). Sinon le setup se limite à configurer la connexion. Ollama n'est jamais téléchargé si la sémantique est désactivée ni réinstallé s'il est déjà présent.
+Le setup peut **installer automatiquement Ollama** lorsque la sémantique est activée, qu'aucun Ollama n'est détecté et que l'installation automatique est choisie. Il télécharge alors l'artefact Windows **v0.33.3 versionné**, vérifie son **SHA-256 exact**, puis vérifie **sa signature Authenticode (CN=Ollama Inc.) avant exécution** ; toute divergence annule l'installation (fail-closed). Sinon le setup se limite à configurer la connexion. Ollama n'est jamais téléchargé si la sémantique est désactivée ni réinstallé s'il est déjà présent.
 
 ## Intégrations assistants
 
