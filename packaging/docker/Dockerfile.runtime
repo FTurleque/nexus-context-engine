@@ -1,6 +1,6 @@
 # Base épinglée par digest (tag lisible conservé). Aucun apt-get n'est exécuté :
 # le contenu OS du runtime dépend donc uniquement de ce digest immuable.
-ARG RUNTIME_IMAGE=eclipse-temurin:21-jre-jammy@sha256:3097cbbebb7d490494a98aed2301f284b38f79eba158eef098c6fc8c8af11c23
+ARG RUNTIME_IMAGE=eclipse-temurin:21.0.12_8-jre-jammy@sha256:eebd356ad7358b7094758e5787a6726f332917cfd56feab6457c56dab895cdbf
 FROM ${RUNTIME_IMAGE}
 
 USER root
@@ -23,7 +23,7 @@ RUN sed -i 's/\r$//' /usr/local/bin/nexus-entrypoint /usr/local/bin/nexus-health
 # the host address chosen by the Docker daemon for -p/--publish. Official Compose injects the
 # declaration from NEXUS_DOCKER_BIND_ADDRESS; manual REST runs must declare it explicitly.
 # Keep the same native-access contract as the source-build Dockerfile so release handoff images
-# and direct `docker exec ... java` integrations behave identically.
+# and direct `docker exec ... java` MCP/CLI integrations behave identically.
 ENV JDK_JAVA_OPTIONS=--enable-native-access=ALL-UNNAMED \
     NEXUS_HOME=/data/nexus \
     NEXUS_MODE=rest \
