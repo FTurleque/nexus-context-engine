@@ -59,7 +59,7 @@ final class InstructionReferenceResolver {
             return;
         }
 
-        for (String reference : references(sourceContent)) {
+        visitReferences(sourceContent, reference -> {
             Path target = resolvePath(state.pathGuard(), sourceFile.getParent(), reference);
             if (target != null && state.visited().add(target)) {
                 state.budget().visit(target);
@@ -72,7 +72,7 @@ final class InstructionReferenceResolver {
                     resolveRecursively(project, state, target, referencedContent, depth + 1);
                 }
             }
-        }
+        });
     }
 
     private record ResolutionState(
@@ -132,12 +132,11 @@ final class InstructionReferenceResolver {
     }
 
     /**
-     * Scans line boundaries in-place instead of {@code String.split("\\R")}. This keeps
-     * temporary memory proportional to the number of discovered references rather than
-     * to the number of lines in a potentially newline-dense instruction file.
+     * Visite les références au fil du scan sans matérialiser une liste intermédiaire.
+     * La mémoire temporaire reste ainsi indépendante du nombre de références présentes
+     * dans un fichier borné en octets mais potentiellement très dense en objets logiques.
      */
-    static List<String> references(String content) {
-        List<String> references = new ArrayList<>();
+    private static void visitReferences(String content, ReferenceVisitor visitor) throws IOException {
         Matcher matcher = REFERENCE.matcher(content);
         boolean fenced = false;
         int lineStart = 0;
@@ -161,7 +160,7 @@ final class InstructionReferenceResolver {
             } else if (!fenced && lineStart < lineEnd) {
                 matcher.region(lineStart, lineEnd);
                 while (matcher.find()) {
-                    references.add(matcher.group(1));
+                    visitor.visit(matcher.group(1));
                 }
             }
 
@@ -173,7 +172,6 @@ final class InstructionReferenceResolver {
             }
             lineStart = index + 1;
         }
-        return List.copyOf(references);
     }
 
     private static boolean startsFence(String content, int start, int end) {
@@ -184,6 +182,11 @@ final class InstructionReferenceResolver {
         return (marker == '`' || marker == '~')
                 && content.charAt(start + 1) == marker
                 && content.charAt(start + 2) == marker;
+    }
+
+    @FunctionalInterface
+    private interface ReferenceVisitor {
+        void visit(String reference) throws IOException;
     }
 
     record ResolvedReference(Path relativePath, String content, int depth) {

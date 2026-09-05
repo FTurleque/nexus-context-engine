@@ -37,6 +37,7 @@ public final class SqliteDatabase {
         }
         paths.ensurePrivateStorage();
         this.databaseFile = paths.databaseFile();
+        paths.ensurePrivateFile(databaseFile);
         this.busyTimeoutMillis = busyTimeoutMillis;
         this.writeRetryPolicy = Objects.requireNonNull(writeRetryPolicy, "writeRetryPolicy");
         migrateWithRetry();
@@ -177,7 +178,6 @@ public final class SqliteDatabase {
     }
 
     private static final class MigrationIOException extends RuntimeException {
-
         private final IOException ioFailure;
 
         private MigrationIOException(IOException ioFailure) {

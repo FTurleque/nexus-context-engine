@@ -12,6 +12,7 @@ import com.nexus.index.IndexedSymbol;
 import com.nexus.index.RelationKind;
 import com.nexus.index.SymbolKind;
 import com.nexus.index.SymbolRelation;
+import com.nexus.index.scan.ProjectScanner;
 import com.nexus.security.ProjectPathGuard;
 import com.nexus.security.SafeFileIO;
 
@@ -21,7 +22,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -37,9 +37,9 @@ import java.util.Set;
  * Adaptateur Java 21 pour l'export JSON versionné produit par MINOS.
  *
  * <p>Le chemin applicatif doit fournir la liste canonique des fichiers déjà
- * indexés par NEXUS. L'ancienne surcharge à deux arguments est conservée pour
- * les outils/tests autonomes mais réalise alors explicitement la découverte
- * physique historique.</p>
+ * indexés par NEXUS. L'ancienne surcharge à deux arguments reste disponible pour
+ * les outils/tests autonomes mais route désormais sa découverte par le scanner
+ * projet borné de NEXUS.</p>
  *
  * <p>Le document est parsé en streaming : NEXUS ne matérialise jamais l'arbre
  * JSON complet en mémoire. Les faits symboles/relations sont lus et validés un
@@ -60,11 +60,20 @@ public final class MinosCodeIndexImporter {
 
     /**
      * Compatibilité autonome. La façade NexusApplication utilise la surcharge
-     * avec fichiers canoniques et n'effectue donc pas ce walk physique.
+     * avec fichiers canoniques. Cette surcharge est conservée mais sa découverte
+     * physique respecte désormais les limites de {@link ProjectScanner}.
+     *
+     * @deprecated utiliser {@link #importPayload(Path, Set, String)} avec la liste
+     *             canonique des fichiers déjà indexés par NEXUS.
      */
+    @Deprecated(forRemoval = false)
     public CodeIntelligenceSnapshot importPayload(Path projectRoot, String payload) throws IOException {
         Path root = Objects.requireNonNull(projectRoot, "projectRoot").toRealPath();
-        return importPayload(root, safeProjectFiles(root), payload);
+        Set<String> scannedProjectFiles = new LinkedHashSet<>();
+        for (var scannedFile : new ProjectScanner().scan(root)) {
+            scannedProjectFiles.add(scannedFile.relativePath());
+        }
+        return importPayload(root, scannedProjectFiles, payload);
     }
 
     public CodeIntelligenceSnapshot importPayload(
@@ -458,33 +467,6 @@ public final class MinosCodeIndexImporter {
             safe.add(normalized);
         }
         return Set.copyOf(safe);
-    }
-
-    private static Set<String> safeProjectFiles(Path root) throws IOException {
-        Set<String> safeFiles = new LinkedHashSet<>();
-        try (var paths = Files.walk(root)) {
-            var iterator = paths.iterator();
-            while (iterator.hasNext()) {
-                Path candidate = iterator.next();
-                if (!Files.isRegularFile(candidate)) {
-                    continue;
-                }
-                Path canonical;
-                try {
-                    canonical = candidate.toRealPath();
-                } catch (IOException exception) {
-                    continue;
-                }
-                if (!canonical.startsWith(root)) {
-                    continue;
-                }
-                Path relative = root.relativize(candidate.normalize());
-                if (relative.getNameCount() > 0) {
-                    safeFiles.add(relative.toString().replace('\\', '/'));
-                }
-            }
-        }
-        return Set.copyOf(safeFiles);
     }
 
     private static String safeRelativePath(Set<String> safeProjectFiles, String exportedPath) {
