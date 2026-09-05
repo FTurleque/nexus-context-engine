@@ -11,7 +11,9 @@ import java.util.Optional;
  *
  * <p>Une configuration absente conserve le mode local historique. En revanche,
  * {@link NexusRestExposureGuard} exige une allowlist non vide dès que le serveur
- * écoute hors loopback. Les chemins sont canonicalisés avant comparaison.</p>
+ * écoute hors loopback. Les chemins sont canonicalisés avant comparaison.
+ * La politique est réévaluée à chaque opération REST afin qu'un projet persisté
+ * ne conserve jamais un accès devenu interdit après un changement de configuration.</p>
  */
 final class NexusRestProjectRootPolicy {
 
@@ -59,5 +61,20 @@ final class NexusRestProjectRootPolicy {
                     "Le projet REST " + canonical + " est hors des racines autorisées " + configuredRoots);
         }
         return canonical;
+    }
+
+    /**
+     * Variante de filtrage utilisée pour les projets déjà persistés. Une racine
+     * disparue ou devenue hors allowlist est simplement masquée de la liste REST;
+     * une configuration d'allowlist invalide reste en revanche fail-closed via
+     * {@link IllegalStateException}.
+     */
+    static boolean isAllowed(Path projectRoot) {
+        try {
+            requireAllowed(projectRoot);
+            return true;
+        } catch (IOException | IllegalArgumentException denied) {
+            return false;
+        }
     }
 }
