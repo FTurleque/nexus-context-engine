@@ -34,7 +34,7 @@ if ($bom.PSObject.Properties.Name -contains 'components') {
 }
 
 $encodedJavaVersion = [Uri]::EscapeDataString($JavaVersion)
-$runtimeBomRef = "pkg:generic/eclipse-temurin-jre@$encodedJavaVersion?arch=x86_64&os=windows"
+$runtimeBomRef = "pkg:generic/eclipse-temurin-jre@${encodedJavaVersion}?arch=x86_64&os=windows"
 $components.Add([ordered]@{
     type = 'framework'
     'bom-ref' = $runtimeBomRef
