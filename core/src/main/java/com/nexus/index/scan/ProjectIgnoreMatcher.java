@@ -157,8 +157,21 @@ public final class ProjectIgnoreMatcher {
         }
 
         Path safeIgnoreFile = pathGuard.requireRegularFile(ignoreFile);
-        byte[] content = SafeFileIO.readBytesNoFollow(safeIgnoreFile, maxIgnoreFileBytes);
-        consumeIgnoreBytes(safeIgnoreFile, content.length);
+        long declaredSize = Files.size(safeIgnoreFile);
+        if (declaredSize > maxIgnoreFileBytes) {
+            throw new IOException(
+                    "Fichier d'ignore trop volumineux : " + safeIgnoreFile
+                            + " (maximum " + maxIgnoreFileBytes + " octets)");
+        }
+
+        // Réserve le budget avant ouverture : un budget global volontairement
+        // petit ne doit jamais permettre jusqu'à 1 MiB d'I/O avant son rejet.
+        // La lecture est ensuite bornée à la taille observée ; si le fichier
+        // grandit entre les deux opérations, SafeFileIO échoue au premier octet
+        // supplémentaire au lieu de sous-compter silencieusement la mutation.
+        consumeIgnoreBytes(safeIgnoreFile, declaredSize);
+        long readLimit = Math.max(1L, declaredSize);
+        byte[] content = SafeFileIO.readBytesNoFollow(safeIgnoreFile, readLimit);
 
         IgnoreNode node = new IgnoreNode();
         try (InputStream input = new ByteArrayInputStream(content)) {
