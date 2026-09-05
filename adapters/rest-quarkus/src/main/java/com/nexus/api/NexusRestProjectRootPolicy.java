@@ -47,11 +47,44 @@ final class NexusRestProjectRootPolicy {
         return List.copyOf(roots);
     }
 
+    /**
+     * Politique d'admission d'un nouveau projet. La racine est toujours
+     * canonicalisée, même en mode local sans allowlist.
+     */
     static Path requireAllowed(Path requestedRoot) throws IOException {
         Path canonical = requestedRoot.toAbsolutePath().normalize().toRealPath();
-        List<Path> configuredRoots = configuredRoots();
+        requireContainedWhenConfigured(canonical, configuredRoots());
+        return canonical;
+    }
+
+    /**
+     * Politique d'autorisation d'un projet déjà persisté. Sans allowlist, le mode
+     * local historique est conservé et aucune nouvelle exigence d'existence du
+     * chemin n'est introduite. Dès qu'une allowlist est configurée, la racine doit
+     * encore exister, être canonicalisable et rester contenue dans l'allowlist.
+     */
+    static void requireAllowedPersisted(Path projectRoot) throws IOException {
+        List<Path> roots = configuredRoots();
+        if (roots.isEmpty()) {
+            return;
+        }
+        Path canonical = projectRoot.toAbsolutePath().normalize().toRealPath();
+        requireContainedWhenConfigured(canonical, roots);
+    }
+
+    /** Variante de filtrage utilisée par la liste REST des projets persistés. */
+    static boolean isAllowedPersisted(Path projectRoot) {
+        try {
+            requireAllowedPersisted(projectRoot);
+            return true;
+        } catch (IOException | IllegalArgumentException denied) {
+            return false;
+        }
+    }
+
+    private static void requireContainedWhenConfigured(Path canonical, List<Path> configuredRoots) {
         if (configuredRoots.isEmpty()) {
-            return canonical;
+            return;
         }
         Optional<Path> match = configuredRoots.stream()
                 .filter(canonical::startsWith)
@@ -59,22 +92,6 @@ final class NexusRestProjectRootPolicy {
         if (match.isEmpty()) {
             throw new IllegalArgumentException(
                     "Le projet REST " + canonical + " est hors des racines autorisées " + configuredRoots);
-        }
-        return canonical;
-    }
-
-    /**
-     * Variante de filtrage utilisée pour les projets déjà persistés. Une racine
-     * disparue ou devenue hors allowlist est simplement masquée de la liste REST;
-     * une configuration d'allowlist invalide reste en revanche fail-closed via
-     * {@link IllegalStateException}.
-     */
-    static boolean isAllowed(Path projectRoot) {
-        try {
-            requireAllowed(projectRoot);
-            return true;
-        } catch (IOException | IllegalArgumentException denied) {
-            return false;
         }
     }
 }
