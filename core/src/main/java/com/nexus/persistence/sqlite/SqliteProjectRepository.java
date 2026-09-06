@@ -31,7 +31,13 @@ public final class SqliteProjectRepository implements ProjectRepository {
     public ProjectDescriptor save(ProjectDescriptor project) {
         try {
             return database.writeTransaction("save project " + project.id(), connection -> {
-                upsertProject(connection, project);
+                int affectedRows = upsertProject(connection, project);
+                if (affectedRows == 0) {
+                    return findByRootPath(connection, project.rootPath())
+                            .orElseThrow(() -> new SQLException(
+                                    "Projet concurrent introuvable après conflit root_path : "
+                                            + project.rootPath()));
+                }
                 replaceValues(connection, "project_languages", "language", project.id(), project.languages());
                 replaceValues(connection, "project_technologies", "technology", project.id(), project.technologies());
                 return project;
@@ -82,7 +88,21 @@ public final class SqliteProjectRepository implements ProjectRepository {
         }
     }
 
-    private static void upsertProject(Connection connection, ProjectDescriptor project) throws SQLException {
+    private static Optional<ProjectDescriptor> findByRootPath(Connection connection, Path rootPath)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT * FROM projects WHERE root_path = ?")) {
+            statement.setString(1, rootPath.toAbsolutePath().normalize().toString());
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) {
+                    return Optional.empty();
+                }
+                return Optional.of(mapProject(connection, resultSet));
+            }
+        }
+    }
+
+    private static int upsertProject(Connection connection, ProjectDescriptor project) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO projects(id, name, root_path, source_type, last_indexed_at, index_status)
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -92,6 +112,7 @@ public final class SqliteProjectRepository implements ProjectRepository {
                     source_type = excluded.source_type,
                     last_indexed_at = excluded.last_indexed_at,
                     index_status = excluded.index_status
+                ON CONFLICT(root_path) DO NOTHING
                 """)) {
             statement.setString(1, project.id().toString());
             statement.setString(2, project.name());
@@ -103,7 +124,7 @@ public final class SqliteProjectRepository implements ProjectRepository {
                 statement.setString(5, project.lastIndexedAt().toString());
             }
             statement.setString(6, project.indexStatus().name());
-            statement.executeUpdate();
+            return statement.executeUpdate();
         }
     }
 
