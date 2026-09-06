@@ -34,11 +34,21 @@ if [ ! -x "${MAVEN_HOME}/bin/mvn" ]; then
     exit 1
   fi
 
-  if ! command -v unzip >/dev/null 2>&1; then
-    echo "unzip est requis pour initialiser Maven Wrapper." >&2
+  if command -v unzip >/dev/null 2>&1; then
+    unzip -q -o "${ARCHIVE}" -d "${WRAPPER_HOME}"
+  elif command -v jar >/dev/null 2>&1; then
+    # Les images JDK/Maven minimales n'embarquent pas toujours unzip. Le tool
+    # standard du JDK sait extraire le ZIP déjà vérifié, sans installer de
+    # paquet système supplémentaire dans les builds hermétiques.
+    (
+      cd "${WRAPPER_HOME}"
+      jar xf "${ARCHIVE}"
+    )
+  else
+    echo "unzip ou jar (JDK) est requis pour initialiser Maven Wrapper." >&2
+    rm -f "${ARCHIVE}"
     exit 1
   fi
-  unzip -q -o "${ARCHIVE}" -d "${WRAPPER_HOME}"
   rm -f "${ARCHIVE}"
 fi
 
