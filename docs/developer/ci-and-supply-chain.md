@@ -8,7 +8,7 @@ Ce document décrit le contrat courant de qualification et de publication de NEX
 
 NEXUS CI et CodeQL checkoutent explicitement `github.event.pull_request.head.sha` sur pull request. CodeQL vérifie ensuite que `git rev-parse HEAD` correspond au SHA attendu.
 
-Le ruleset GitHub actif `Protect main & develop` protège effectivement `develop` et `main`, exige le passage par pull request, interdit suppression/non-fast-forward et impose les sept checks permanents approuvés. NXA3-14 / #130 est satisfait. `strict_required_status_checks_policy=false` reste un hardening repository-admin : les checks qualifient le HEAD de PR, mais GitHub n'impose pas encore une remise à jour avec la base immédiatement avant merge.
+Le ruleset GitHub actif `Protect main & develop` protège effectivement `develop` et `main`, exige le passage par pull request, interdit suppression/non-fast-forward et impose les sept checks permanents approuvés. NXA3-14 / #130 est satisfait. `strict_required_status_checks_policy=false` et l'absence d'approbation obligatoire restent des hardenings repository-admin suivis dans #202 : les checks qualifient le HEAD de PR, mais GitHub n'impose pas encore une remise à jour avec la base immédiatement avant merge ni une approbation humaine minimale.
 
 Les workflows versionnés conservent en plus une défense en profondeur sur les pushes directs `develop` : NEXUS CI, CodeQL et OSV écoutent directement la branche ; les gates Docker, benchmarks et Windows sont réutilisés par des callers dédiés avec leurs filtres de chemins.
 
@@ -20,6 +20,10 @@ Les workflows versionnés conservent en plus une défense en profondeur sur les 
 - Linux : Java 21, **Maven 3.9.16**, reactor complet, tests, distribution, JaCoCo, SBOM et notices ;
 - vérification explicite des ancres d'intégrité Maven/JDT LS ;
 - vérification des contrats documentaires machine-vérifiables **avant** le reactor.
+
+Le profil Maven `ci-strict-specified-tests` s'active automatiquement lorsque `CI=true`. Il force alors `surefire.failIfNoSpecifiedTests=true` : toute commande CI ciblée avec `-Dtest=...` échoue si le sélecteur ne correspond à aucun test. Hors CI, la valeur reste `false` afin de préserver les scripts développeur historiques qui sélectionnent un test `core` depuis le reactor multi-module.
+
+JaCoCo est un gate du lifecycle `verify`, pas seulement un rapport : chaque bundle de code doit conserver au moins **65 % de lignes** et **55 % de branches** couvertes. Ces seuils ont été placés sous la baseline du dernier CI vert afin de bloquer les régressions significatives sans transformer l'ajout du gate en hausse artificielle immédiate de couverture.
 
 Le gate documentaire contrôle notamment les invariants NXA4 :
 
@@ -53,9 +57,11 @@ NXA7 a également durci le bootstrap `mvnw.cmd` après qu'un runner Windows a re
 2. préfère `curl.exe` avec suivi des redirections et retries ;
 3. bascule vers Windows PowerShell avec un User-Agent explicite si `curl.exe` est absent ou échoue ;
 4. refuse toujours l'archive si son SHA-512 ne correspond pas à l'ancre versionnée dans `config/tool-integrity.properties` ;
-5. n'extrait Maven qu'après cette vérification.
+5. conserve cette archive vérifiée comme ancre locale ;
+6. compare l'arbre Maven extrait, fichier par fichier, à l'archive vérifiée **avant chaque réutilisation** ;
+7. reconstruit automatiquement l'arbre extrait si une mutation ou un fichier inattendu est détecté.
 
-La résilience réseau ne modifie donc pas la racine de confiance du bootstrap.
+La résilience réseau ne modifie donc pas la racine de confiance du bootstrap et une compromission du cache extrait n'est plus silencieusement réutilisée.
 
 ## CodeQL, OSV et SonarCloud
 
@@ -87,7 +93,7 @@ La borne Lucene de 128 termes est couverte par un test de non-régression du rea
 
 Les images de base builder/runtime sont épinglées par digest. Les Dockerfiles n'exécutent **aucun `apt-get`** après ces bases :
 
-- le builder utilise le wrapper repository-pinned `./mvnw`, donc Maven **3.9.16** après vérification de l'ancre SHA-512 versionnée ;
+- le builder utilise le wrapper repository-pinned `./mvnw`, donc Maven **3.9.16** après vérification de l'ancre SHA-512 versionnée et de l'arbre extrait ;
 - le runtime n'installe pas `curl`/`wget` uniquement pour le healthcheck ;
 - `/usr/local/bin/nexus-healthcheck` utilise le support TCP de Bash contre le listener management local.
 
@@ -124,11 +130,11 @@ Les attestations de provenance et SBOM portent sur le digest publié. `latest` n
 - Maven 3.9.16 : SHA-512 ;
 - Eclipse JDT LS 1.60.0-202606262232 : SHA-256.
 
-Sur Unix, `mvnw` télécharge Maven puis vérifie l'ancre avant extraction. Sur Windows, `mvnw.cmd` applique le même contrat quel que soit le client HTTP utilisé (`curl.exe` ou fallback PowerShell).
+Sur Unix et Windows, les wrappers Maven conservent l'archive dont le checksum correspond à l'ancre versionnée. `scripts/release/ToolArchiveVerifier.java`, lancé en mode source Java avant Maven, exige ensuite que l'installation extraite soit une projection exacte de cette archive : contenu identique, aucun symlink et aucun fichier supplémentaire. Un écart reconstruit le cache extrait depuis l'archive vérifiée.
 
-`scripts/install-jdtls.ps1` télécharge l'archive JDT LS puis la compare à **l'ancre versionnée dans le repository** ; il ne prend pas sa décision de confiance sur un checksum téléchargé depuis le même origin.
+`scripts/install-jdtls.ps1` conserve l'archive JDT LS sous le cache NEXUS, la re-hashe contre **l'ancre versionnée dans le repository**, puis reconstruit un staging propre à chaque invocation avant de remplacer l'installation existante. Un simple dossier `plugins/` préexistant n'est donc plus une preuve d'intégrité.
 
-`scripts/release/test-tool-integrity-anchors.sh` est exécuté par NEXUS CI. Une montée de version doit modifier version + hash dans la même revue.
+`scripts/release/test-tool-integrity-anchors.sh` est exécuté par NEXUS CI. Il vérifie les ancres et altère volontairement un cache extrait synthétique afin de confirmer que mutations et fichiers inattendus sont rejetés. Une montée de version doit modifier version + hash dans la même revue.
 
 ## SQLite
 
