@@ -14,11 +14,12 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Authentification Bearer légère adaptée au mode local-first de NEXUS.
+ * Authentification Bearer légère de NEXUS.
  *
- * <p>Sur loopback sans token configuré, le comportement historique reste
- * inchangé. Dès qu'un token est configuré — et il est obligatoire pour une
- * écoute non-loopback — toutes les ressources REST JAX-RS l'exigent.</p>
+ * <p>Le garde d'exposition valide au démarrage qu'un token robuste est présent
+ * sur loopback et hors loopback, sauf opt-out local explicite via
+ * {@code NEXUS_REST_TRUST_LOCAL=true}. Dès qu'un token est configuré, toutes
+ * les ressources REST JAX-RS l'exigent.</p>
  */
 @Provider
 @Priority(Priorities.AUTHENTICATION)

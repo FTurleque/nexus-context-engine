@@ -1,9 +1,10 @@
 package com.nexus.search;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 final class SearchText {
 
@@ -13,14 +14,31 @@ final class SearchText {
     }
 
     static List<String> terms(String query) {
-        return Arrays.stream(TERM_SEPARATOR.split(query.toLowerCase(Locale.ROOT)))
-                .filter(term -> !term.isBlank())
+        return normalizedTerms(query)
                 .distinct()
                 .toList();
     }
 
+    static List<String> boundedTerms(String query, int maxTerms, int maxTermChars) {
+        if (maxTerms <= 0) {
+            throw new IllegalArgumentException("maxTerms must be greater than zero");
+        }
+        if (maxTermChars <= 0) {
+            throw new IllegalArgumentException("maxTermChars must be greater than zero");
+        }
+        return normalizedTerms(query)
+                .map(term -> term.length() <= maxTermChars ? term : term.substring(0, maxTermChars))
+                .distinct()
+                .limit(maxTerms)
+                .toList();
+    }
+
     static double pathScore(String relativePath, String query) {
-        List<String> terms = terms(query);
+        return pathScore(relativePath, terms(query));
+    }
+
+    static double pathScore(String relativePath, List<String> terms) {
+        Objects.requireNonNull(terms, "terms");
         if (terms.isEmpty()) {
             return 0.0d;
         }
@@ -44,6 +62,12 @@ final class SearchText {
 
     static double clamp(double value) {
         return Math.max(0.0d, Math.min(1.0d, value));
+    }
+
+    private static Stream<String> normalizedTerms(String query) {
+        Objects.requireNonNull(query, "query");
+        return TERM_SEPARATOR.splitAsStream(query.toLowerCase(Locale.ROOT))
+                .filter(term -> !term.isBlank());
     }
 
     private static int levenshtein(String left, String right) {

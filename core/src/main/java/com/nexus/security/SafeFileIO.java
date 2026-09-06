@@ -10,28 +10,32 @@ import java.nio.channels.Channels;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
+import java.nio.file.SecureDirectoryStream;
 import java.nio.file.StandardOpenOption;
 import java.util.Objects;
 import java.util.Set;
 
 /**
- * Primitives de lecture qui refusent de suivre un lien symbolique sur le
- * composant final au moment exact de l'ouverture du fichier.
+ * Primitives de lecture qui refusent de suivre les liens symboliques au moment
+ * de l'ouverture du fichier.
  *
- * <p>Ces primitives complètent {@link ProjectPathGuard}. Le guard vérifie la
- * frontière et les composants du chemin ; {@code SafeFileIO} réduit la fenêtre
- * TOCTOU entre cette validation et l'ouverture effective du fichier. Tous les
- * flux publics sont également bornés par la politique de taille projet.</p>
+ * <p>Lorsque le provider de fichiers expose {@link SecureDirectoryStream}, le
+ * chemin complet est traversé relativement à des descripteurs de répertoire
+ * ouverts. Une substitution concurrente d'un composant intermédiaire ne peut
+ * donc plus rediriger l'ouverture vers un autre arbre. Les plateformes ne
+ * fournissant pas cette primitive conservent un fallback renforcé qui vérifie
+ * chaque composant immédiatement avant l'ouverture finale avec
+ * {@link LinkOption#NOFOLLOW_LINKS}.</p>
  *
- * <p>La borne s'applique à tous les octets physiquement traversés par le flux,
- * qu'ils soient retournés via une lecture ou ignorés via {@link InputStream#skip(long)}.
- * Les opérations composées de {@link InputStream} ({@code readNBytes},
- * {@code readAllBytes}, etc.) héritent ainsi du même budget sans voie de
- * contournement par saut.</p>
+ * <p>Tous les flux publics sont également bornés par la politique de taille
+ * projet. La borne s'applique à tous les octets physiquement traversés par le
+ * flux, qu'ils soient retournés via une lecture ou ignorés via
+ * {@link InputStream#skip(long)}.</p>
  */
 public final class SafeFileIO {
 
@@ -48,10 +52,11 @@ public final class SafeFileIO {
     }
 
     public static InputStream newInputStreamNoFollow(Path file, long maxBytes) throws IOException {
+        Objects.requireNonNull(file, "file");
         if (maxBytes <= 0) {
             throw new IllegalArgumentException("maxBytes must be greater than zero");
         }
-        SeekableByteChannel channel = Files.newByteChannel(file, READ_NOFOLLOW);
+        SeekableByteChannel channel = openReadNoFollow(file);
         return new BoundedInputStream(Channels.newInputStream(channel), file, maxBytes);
     }
 
@@ -88,6 +93,56 @@ public final class SafeFileIO {
 
     public static String readStringNoFollow(Path file, long maxBytes) throws IOException {
         return new String(readBytesNoFollow(file, maxBytes), StandardCharsets.UTF_8);
+    }
+
+    private static SeekableByteChannel openReadNoFollow(Path file) throws IOException {
+        Path absolute = file.toAbsolutePath().normalize();
+        Path root = absolute.getRoot();
+        if (root != null) {
+            try (DirectoryStream<Path> rootStream = Files.newDirectoryStream(root)) {
+                if (rootStream instanceof SecureDirectoryStream<?> secureRaw) {
+                    @SuppressWarnings("unchecked")
+                    SecureDirectoryStream<Path> secureRoot = (SecureDirectoryStream<Path>) secureRaw;
+                    Path relative = root.relativize(absolute);
+                    if (relative.getNameCount() == 0) {
+                        throw new IOException("Le chemin ne désigne pas un fichier : " + file);
+                    }
+                    return openSecurely(secureRoot, relative, 0);
+                }
+            }
+        }
+
+        rejectSymbolicLinkComponents(absolute);
+        return Files.newByteChannel(absolute, READ_NOFOLLOW);
+    }
+
+    private static SeekableByteChannel openSecurely(
+            SecureDirectoryStream<Path> directory,
+            Path relative,
+            int componentIndex) throws IOException {
+        Path component = relative.getName(componentIndex);
+        if (componentIndex == relative.getNameCount() - 1) {
+            return directory.newByteChannel(component, READ_NOFOLLOW);
+        }
+        try (SecureDirectoryStream<Path> child = directory.newDirectoryStream(
+                component,
+                LinkOption.NOFOLLOW_LINKS)) {
+            return openSecurely(child, relative, componentIndex + 1);
+        }
+    }
+
+    private static void rejectSymbolicLinkComponents(Path absolute) throws IOException {
+        Path root = absolute.getRoot();
+        if (root == null) {
+            throw new IOException("Chemin sans racine de système de fichiers : " + absolute);
+        }
+        Path current = root;
+        for (Path component : root.relativize(absolute)) {
+            current = current.resolve(component);
+            if (Files.isSymbolicLink(current)) {
+                throw new IOException("Lien symbolique interdit pendant la lecture : " + current);
+            }
+        }
     }
 
     private static final class BoundedInputStream extends FilterInputStream {

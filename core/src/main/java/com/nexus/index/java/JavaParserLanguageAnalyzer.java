@@ -11,6 +11,7 @@ import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
+import com.nexus.index.AnalysisLimits;
 import com.nexus.index.AnalysisResult;
 import com.nexus.index.CodeSymbol;
 import com.nexus.index.LanguageAnalyzer;
@@ -31,6 +32,16 @@ public final class JavaParserLanguageAnalyzer implements LanguageAnalyzer {
     private static final ParserConfiguration.LanguageLevel LANGUAGE_LEVEL =
             ParserConfiguration.LanguageLevel.JAVA_21;
 
+    private final AnalysisLimits limits;
+
+    public JavaParserLanguageAnalyzer() {
+        this(AnalysisLimits.defaults());
+    }
+
+    public JavaParserLanguageAnalyzer(AnalysisLimits limits) {
+        this.limits = Objects.requireNonNull(limits, "limits");
+    }
+
     @Override
     public boolean supports(Path file) {
         return file.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".java");
@@ -45,8 +56,8 @@ public final class JavaParserLanguageAnalyzer implements LanguageAnalyzer {
     public AnalysisResult analyze(Path projectRoot, Path file, String source) throws IOException {
         Objects.requireNonNull(source, "source");
         // JavaParser n'est pas partagé entre indexations concurrentes : conserver une instance
-        // locale évite un état parseur partagé, tandis que les parcours AST ci-dessous ciblent
-        // directement les catégories utiles au lieu d'énumérer tous les Node du fichier.
+        // locale évite un état parseur partagé. Les faits sont collectés avec des parcours bornés
+        // afin qu'un fichier synthétique dense ne puisse pas matérialiser des listes sans limite.
         JavaParser parser = new JavaParser(new ParserConfiguration().setLanguageLevel(LANGUAGE_LEVEL));
         var parseResult = parser.parse(source);
         if (!parseResult.isSuccessful()) {
@@ -61,40 +72,52 @@ public final class JavaParserLanguageAnalyzer implements LanguageAnalyzer {
                 .orElse("");
 
         List<CodeSymbol> symbols = new ArrayList<>();
-        for (TypeDeclaration<?> type : unit.findAll(TypeDeclaration.class)) {
-            type.getRange().ifPresent(range -> symbols.add(new CodeSymbol(
-                    symbolKind(type),
-                    type.getNameAsString(),
-                    qualifiedOwner(packageName, type),
-                    type.getNameAsString(),
-                    range.begin.line,
-                    range.end.line)));
+        try {
+            unit.walk(TypeDeclaration.class, type -> type.getRange().ifPresent(range -> {
+                requireSymbolCapacity(file, symbols);
+                symbols.add(new CodeSymbol(
+                        symbolKind(type),
+                        type.getNameAsString(),
+                        qualifiedOwner(packageName, type),
+                        type.getNameAsString(),
+                        range.begin.line,
+                        range.end.line));
+            }));
+
+            unit.walk(MethodDeclaration.class, method -> method.getRange().ifPresent(range -> {
+                requireSymbolCapacity(file, symbols);
+                String qualifiedName = qualifiedOwner(packageName, method)
+                        + "#" + method.getSignature().asString();
+                symbols.add(new CodeSymbol(
+                        SymbolKind.METHOD,
+                        method.getNameAsString(),
+                        qualifiedName,
+                        method.getSignature().asString(),
+                        range.begin.line,
+                        range.end.line));
+            }));
+
+            unit.walk(ConstructorDeclaration.class, constructor -> constructor.getRange().ifPresent(range -> {
+                requireSymbolCapacity(file, symbols);
+                String qualifiedName = qualifiedOwner(packageName, constructor)
+                        + "#" + constructor.getSignature().asString();
+                symbols.add(new CodeSymbol(
+                        SymbolKind.CONSTRUCTOR,
+                        constructor.getNameAsString(),
+                        qualifiedName,
+                        constructor.getSignature().asString(),
+                        range.begin.line,
+                        range.end.line));
+            }));
+        } catch (AnalysisLimitExceededException exceeded) {
+            throw new IOException(exceeded.getMessage(), exceeded);
         }
 
-        for (MethodDeclaration method : unit.findAll(MethodDeclaration.class)) {
-            String qualifiedName = qualifiedOwner(packageName, method)
-                    + "#" + method.getSignature().asString();
-            method.getRange().ifPresent(range -> symbols.add(new CodeSymbol(
-                    SymbolKind.METHOD,
-                    method.getNameAsString(),
-                    qualifiedName,
-                    method.getSignature().asString(),
-                    range.begin.line,
-                    range.end.line)));
+        if (unit.getImports().size() > limits.maxRelationsPerFile()) {
+            throw new IOException(
+                    "Analyse Java refusée pour " + file + " : plus de "
+                            + limits.maxRelationsPerFile() + " relations par fichier");
         }
-
-        for (ConstructorDeclaration constructor : unit.findAll(ConstructorDeclaration.class)) {
-            String qualifiedName = qualifiedOwner(packageName, constructor)
-                    + "#" + constructor.getSignature().asString();
-            constructor.getRange().ifPresent(range -> symbols.add(new CodeSymbol(
-                    SymbolKind.CONSTRUCTOR,
-                    constructor.getNameAsString(),
-                    qualifiedName,
-                    constructor.getSignature().asString(),
-                    range.begin.line,
-                    range.end.line)));
-        }
-
         String relationSource = projectRoot.relativize(file).toString().replace('\\', '/');
         List<SymbolRelation> relations = unit.getImports().stream()
                 .map(importDeclaration -> new SymbolRelation(
@@ -104,6 +127,14 @@ public final class JavaParserLanguageAnalyzer implements LanguageAnalyzer {
                 .toList();
 
         return new AnalysisResult(file, "java", symbols, relations);
+    }
+
+    private void requireSymbolCapacity(Path file, List<CodeSymbol> symbols) {
+        if (symbols.size() >= limits.maxSymbolsPerFile()) {
+            throw new AnalysisLimitExceededException(
+                    "Analyse Java refusée pour " + file + " : plus de "
+                            + limits.maxSymbolsPerFile() + " symboles par fichier");
+        }
     }
 
     private static SymbolKind symbolKind(TypeDeclaration<?> type) {
@@ -137,5 +168,11 @@ public final class JavaParserLanguageAnalyzer implements LanguageAnalyzer {
 
     private static String qualify(String packageName, String name) {
         return packageName.isBlank() ? name : packageName + "." + name;
+    }
+
+    private static final class AnalysisLimitExceededException extends RuntimeException {
+        private AnalysisLimitExceededException(String message) {
+            super(message);
+        }
     }
 }

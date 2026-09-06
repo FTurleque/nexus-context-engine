@@ -12,6 +12,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -89,6 +90,29 @@ class GitRecencyCandidateEnricherTest {
         assertEquals(1, enriched.size());
         assertTrue(enriched.getFirst().signals().containsKey(SearchSignals.LEXICAL));
         assertFalse(enriched.getFirst().signals().containsKey(SearchSignals.GIT_RECENCY));
+    }
+
+    @Test
+    void failsOpenWhenCandidatePathBudgetIsExceeded() throws Exception {
+        write(temporaryDirectory, "src/Service.java", "class Service {}\n");
+        try (Git git = Git.init().setDirectory(temporaryDirectory.toFile()).call()) {
+            commitAll(git, "initial");
+        }
+
+        List<SearchCandidate> candidates = new ArrayList<>();
+        for (int index = 0; index <= GitRecencyCandidateEnricher.MAX_CANDIDATE_PATHS; index++) {
+            candidates.add(candidate(
+                    "candidate-" + index,
+                    temporaryDirectory.resolve("generated/Candidate" + index + ".java")));
+        }
+
+        List<SearchCandidate> enriched = new GitRecencyCandidateEnricher().enrich(
+                project(temporaryDirectory),
+                candidates);
+
+        assertEquals(candidates, enriched);
+        assertTrue(enriched.stream().noneMatch(candidate ->
+                candidate.signals().containsKey(SearchSignals.GIT_RECENCY)));
     }
 
     private static Path write(Path root, String relativePath, String content) throws Exception {

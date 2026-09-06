@@ -1,6 +1,6 @@
 # Limites actuelles et dette de consolidation
 
-Ce registre décrit l'état courant après les campagnes **NXA3 + NXA4** et les remédiations de l'audit `develop` du 2 septembre 2026. Les anciens numéros de PR/runs ne constituent pas une preuve permanente ; la preuve de qualification est toujours le run attaché au HEAD exact concerné.
+Ce registre décrit l'état courant après les campagnes **NXA3 + NXA4** et les remédiations des audits `develop` des 2 et 6 septembre 2026. Les anciens numéros de PR/runs ne constituent pas une preuve permanente ; la preuve de qualification est toujours le run attaché au HEAD exact concerné.
 
 ## Invariants techniques désormais couverts
 
@@ -8,12 +8,14 @@ Ce registre décrit l'état courant après les campagnes **NXA3 + NXA4** et les 
 
 - `ProjectPathGuard` protège les lectures sensibles sous la racine canonique ;
 - traversal, symlink final et symlink d'ancêtre sont refusés sur les chemins durcis ;
+- `SafeFileIO` traverse les composants par `SecureDirectoryStream` lorsque le filesystem le supporte, puis ouvre le fichier final en `NOFOLLOW_LINKS` ; le fallback portable revérifie chaque composant immédiatement avant l'ouverture finale ;
 - SCIP relit ses sources canoniques via la même frontière et vérifie ses bounds protobuf sans overflow arithmétique ;
 - skills/customisations projet utilisent la frontière commune ;
 - la découverte native partage `ContextDiscoveryLimits` avant sélection de tokens ;
 - le scanner exclut davantage de répertoires/fichiers sensibles (`.ssh`, `.aws`, `.gnupg`, `.kube`, credentials, keystores, etc.) ;
 - `NEXUS_MAX_INDEX_FILES` conserve son nom historique mais borne toutes les entrées non racine rencontrées par le walk, y compris les répertoires et entrées ensuite ignorées ;
 - les rebuilds d'index dérivés ne conservent plus le corpus source complet en heap : les documents sont flushés par batches bornés à 128 fichiers / 16 MiB ;
+- l'analyse Java locale refuse plus de **20 000 symboles** ou **10 000 relations d'import** par fichier avant matérialisation des collections de faits ;
 - `NEXUS_HOME`, `indexes` et `locks` sont forcés à `0700` sur POSIX ; le fichier SQLite est forcé à `0600` ;
 - les chemins persistants NEXUS durcis concernés sont refusés lorsqu'ils sont symboliques ;
 - la sémantique du lock projet est qualifiée avec **deux JVM distinctes** sur Linux et Windows locaux ;
@@ -23,7 +25,7 @@ Sur Windows/filesystems sans vue POSIX, NEXUS conserve les ACL natives au lieu d
 
 Le contrat de support courant reste volontairement borné aux filesystems locaux qualifiés Linux/Windows. Une fixture **SMB 3.1.1 loopback Windows** est désormais qualifiée comme preuve ciblée (round-trip UNC + lock inter-JVM), mais SMB/CIFS général, NFS, volumes distribués/synchronisés et montages à sémantique spéciale restent non supportés faute de qualification multi-client, panne/reconnexion et stockage complet SQLite/Lucene. Voir [`filesystem-support.md`](filesystem-support.md) et ADR-0047.
 
-Limite résiduelle : les primitives Java portables ne sont pas un sandbox absolu contre un acteur local capable de muter agressivement ancêtres, hard-links ou points de montage pendant l'opération.
+Limite résiduelle : sur les providers Java ne fournissant pas `SecureDirectoryStream`, les primitives portables réduisent fortement mais ne suppriment pas mathématiquement toute fenêtre TOCTOU contre un acteur local capable de muter agressivement les ancêtres, hard-links ou points de montage pendant l'opération.
 
 ### Git local
 
@@ -31,6 +33,7 @@ Limite résiduelle : les primitives Java portables ne sont pas un sandbox absolu
 - les statuts sont filtrés aux cibles ;
 - les diffs utilisent un sink à capacité fixe et sont tronqués déterministiquement ;
 - un test de diff massif empêche le retour à un buffer extensible non borné ;
+- l'enrichisseur de récence de recherche ne scanne plus les diffs complets : il filtre Git aux chemins candidats, refuse plus de 512 chemins candidats et borne les entrées modifiées par commit/cumul avant de dégrader fail-open vers les candidats non enrichis ;
 - les runtimes longue durée REST/MCP utilisent un cache mémoire LRU borné à 16 résultats, validé par HEAD/status/diffs avant chaque hit ;
 - la CLI et les usages one-shot conservent le recalcul operation-scoped.
 
@@ -42,6 +45,7 @@ Limite résiduelle : les primitives Java portables ne sont pas un sandbox absolu
 - le travail préparatoire du contexte fédéré est borné indépendamment du budget final ;
 - les limites publiques REST utilisent les politiques centrales de résultats et de budget contexte ;
 - une requête Lucene analysée est bornée à **128 termes uniques** avant expansion sur les cinq champs de recherche ;
+- la recherche fuzzy de symboles réutilise une seule projection bornée à **8 termes** de **128 caractères maximum** pour la collecte, le scoring exact/fuzzy et le score de chemin ;
 - REST/MCP conservent des readers/searchers Lucene bornés entre requêtes, avec writers toujours operation-scoped afin de préserver les verrous inter-processus.
 
 Le champ `constraints` existe encore dans certains contrats DTO/records pour compatibilité, mais aucune sémantique n'est implémentée : une map non vide est rejetée explicitement.
@@ -51,6 +55,7 @@ Le champ `constraints` existe encore dans certains contrats DTO/records pour com
 - JDT LS reste opt-in ;
 - les tâches externes sont bornées en temps et à **8 workers actifs maximum** à l'échelle JVM ;
 - le framing JDT LS borne message (16 MiB), headers (64 KiB), ligne de header (8 KiB) et queue entrante (256) ;
+- le subprocess JDT LS reçoit une allowlist d'environnement minimale (runtime, chemins utilisateur/temp et outils de build usuels) ; tokens NEXUS/CI/cloud, `JAVA_TOOL_OPTIONS`, `JDK_JAVA_OPTIONS` et sockets d'agents ne sont pas hérités ;
 - saturation ou framing invalide déclenchent un échec fermé et l'arrêt de la session concernée.
 
 Limite résiduelle : un provider tiers peut ignorer l'interruption ; NEXUS borne alors l'accumulation de workers, conserve les slots occupés jusqu'à la terminaison réelle et rejette explicitement les nouvelles tâches à saturation, mais ne revendique pas une isolation processus absolue. Une isolation plus forte exige de déplacer le provider concerné hors JVM ; elle reste un chantier architectural conditionné par un provider réel démontrant ce mode d'échec.
@@ -74,7 +79,10 @@ La libération du verrou inter-processus ne transforme plus une mutation déjà 
 - health/metrics sont isolés sur le listener de management `127.0.0.1:9000` ;
 - `/q/*` n'est pas servi par le listener applicatif ;
 - hors loopback, le démarrage échoue fermé si transport sécurisé effectif, token généré par CSPRNG conforme au gate structurel ou allowlist de racines ne sont pas démontrés ;
-- sur loopback, `NEXUS_REST_HARDEN_LOCAL=true` permet d'exiger explicitement le même gate de token et une allowlist de racines avant démarrage, sans casser le mode local-first historique par défaut.
+- sur loopback, un token robuste est désormais requis par défaut ; l'ancien mode local sans authentification n'est disponible qu'avec l'opt-out explicite `NEXUS_REST_TRUST_LOCAL=true` ;
+- `NEXUS_REST_HARDEN_LOCAL=true` exige en plus une allowlist de racines et prend priorité sur `NEXUS_REST_TRUST_LOCAL` ;
+- le profil de test Quarkus déclare explicitement `nexus.rest.trust-local=true`, de sorte que les tests fonctionnels non liés à l'authentification ne dépendent pas d'une exception implicite du runtime ;
+- l'installateur Windows génère un token CSPRNG lorsque REST natif est sélectionné sans token fourni, puis réutilise la même valeur pour Docker dans un déploiement combiné.
 
 Le gate structurel du token vérifie longueur et diversité de caractères pour éliminer des valeurs manifestement faibles ; il ne mesure pas l'entropie cryptographique et ne remplace pas une génération CSPRNG.
 

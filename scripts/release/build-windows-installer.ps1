@@ -79,7 +79,12 @@ $hardener = Join-Path $PSScriptRoot 'harden-windows-installer-source.ps1'
 if (-not (Test-Path -LiteralPath $hardener -PathType Leaf)) {
     throw "NEXUS installer hardening helper not found: $hardener"
 }
+$restAuthHardener = Join-Path $PSScriptRoot 'harden-windows-rest-auth-source.ps1'
+if (-not (Test-Path -LiteralPath $restAuthHardener -PathType Leaf)) {
+    throw "NEXUS REST installer authentication helper not found: $restAuthHardener"
+}
 . $hardener
+. $restAuthHardener
 
 $work = Join-Path $OutputRoot '.installer'
 $installerOutput = if ($Smoke) { Join-Path $OutputRoot '.smoke' } else { $OutputRoot }
@@ -112,9 +117,10 @@ if ($iss -match '@@[A-Z0-9_]+@@') {
 }
 
 # The source template remains human-readable; all values crossing into cmd.exe or
-# Docker Compose are hardened deterministically here before compilation. The helper
-# is exact-anchor based and fails closed if the template drifts.
+# Docker Compose are hardened deterministically here before compilation. Helpers
+# are exact-anchor based and fail closed if the template drifts.
 $iss = Protect-NexusInstallerSource -Source $iss
+$iss = Protect-NexusNativeRestAuthSource -Source $iss
 
 # Integrity guards on the generated source of truth.
 if ($iss.IndexOf('function DockerEngineReady(): Boolean;', [StringComparison]::Ordinal) -lt 0) {
@@ -128,6 +134,8 @@ foreach ($requiredHardeningFragment in @(
     'function DotEnvQuoted(Value: String): String;',
     'function IsLoopbackRestHost(Value: String): Boolean;',
     'function VerifyFileSha256(FilePath: String; ExpectedSha256: String): Boolean;',
+    'NativeToken := GenerateLocalToken();',
+    'RuntimePage.Values[3] := NativeToken;',
     'NEXUS_REST_EXPOSURE_MODE=loopback-forward',
     'https://desktop.docker.com/win/main/amd64/236216/Docker%20Desktop%20Installer.exe',
     '820438e75c16e44b393079154bea7d27958a15845c23a635b1a1f6f586b2ed44',
@@ -173,7 +181,7 @@ try {
     Write-Host "Setup   : $setup"
     Write-Host "SHA-256 : $hash"
     Write-Host 'Wizard  : Native / Docker / Both + runtime/integration customization'
-    Write-Host 'Security: loopback-only wizard REST + hardened cmd/.env + pinned/hash-verified prerequisites + optional/required Authenticode'
+    Write-Host 'Security: authenticated loopback REST + hardened cmd/.env + pinned/hash-verified prerequisites + optional/required Authenticode'
     Write-Host 'Docker  : canonical distribution payload + strict engine detection + registry pull/local fallback'
     Write-Output $setup
 }

@@ -106,6 +106,21 @@ class SafeFileIOTest {
         assertThrows(IOException.class, () -> SafeFileIO.readStringNoFollow(link));
     }
 
+    @Test
+    void refusesASymbolicLinkInAnIntermediatePathComponent() throws Exception {
+        Path outside = temporaryDirectory.resolve("outside");
+        Files.createDirectories(outside);
+        Files.writeString(outside.resolve("secret.txt"), "secret");
+        Path safe = temporaryDirectory.resolve("safe");
+        Files.createDirectories(safe);
+        Path redirect = safe.resolve("redirect");
+
+        Assumptions.assumeTrue(createSymbolicLink(redirect, outside),
+                "Les liens symboliques ne sont pas disponibles dans cet environnement");
+
+        assertThrows(IOException.class, () -> SafeFileIO.readStringNoFollow(redirect.resolve("secret.txt")));
+    }
+
     private static boolean createSymbolicLink(Path link, Path target) {
         try {
             Files.createSymbolicLink(link, target.toAbsolutePath());

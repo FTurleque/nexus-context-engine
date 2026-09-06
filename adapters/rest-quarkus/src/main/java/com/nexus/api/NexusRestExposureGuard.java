@@ -19,11 +19,14 @@ public class NexusRestExposureGuard {
     @ConfigProperty(name = "quarkus.management.host", defaultValue = "127.0.0.1")
     String managementHost = "127.0.0.1";
 
+    @ConfigProperty(name = NexusRestSecurity.LOCAL_TRUST_PROPERTY, defaultValue = "false")
+    boolean localTrust;
+
     @PostConstruct
     void validateExposure() {
         validateManagementExposure();
         if (NexusRestSecurity.isLoopbackHost(host)) {
-            validateHardenedLoopback();
+            validateLoopback();
             return;
         }
 
@@ -60,16 +63,29 @@ public class NexusRestExposureGuard {
         }
     }
 
-    private static void validateHardenedLoopback() {
-        if (!NexusRestSecurity.isLocalHardeningRequired()) {
+    private void validateLoopback() {
+        if (NexusRestSecurity.isLocalHardeningRequired()) {
+            requireRemoteTokenPolicy(
+                    NexusRestSecurity.LOCAL_HARDENING_ENVIRONMENT_VARIABLE
+                            + "=true exige une authentification locale. Configurez ");
+            requireProjectRoots(
+                    NexusRestSecurity.LOCAL_HARDENING_ENVIRONMENT_VARIABLE
+                            + "=true exige une allowlist de projets via ");
             return;
         }
-        requireRemoteTokenPolicy(
-                NexusRestSecurity.LOCAL_HARDENING_ENVIRONMENT_VARIABLE
-                        + "=true exige une authentification locale. Configurez ");
-        requireProjectRoots(
-                NexusRestSecurity.LOCAL_HARDENING_ENVIRONMENT_VARIABLE
-                        + "=true exige une allowlist de projets via ");
+
+        if (localTrust || NexusRestSecurity.isLocalTrustExplicitlyEnabled()) {
+            return;
+        }
+
+        if (NexusRestSecurity.configuredToken().isEmpty()) {
+            throw new IllegalStateException(
+                    "Une écoute REST loopback exige désormais un Bearer token par défaut. Configurez "
+                            + NexusRestSecurity.TOKEN_ENVIRONMENT_VARIABLE
+                            + ". Pour conserver explicitement le mode local sans authentification, utilisez "
+                            + NexusRestSecurity.LOCAL_TRUST_ENVIRONMENT_VARIABLE + "=true.");
+        }
+        requireRemoteTokenPolicy("Une écoute REST loopback exige un Bearer token robuste. Configurez ");
     }
 
     private static String requireRemoteTokenPolicy(String prefix) {
