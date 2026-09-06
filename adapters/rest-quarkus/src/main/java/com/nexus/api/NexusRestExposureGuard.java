@@ -27,7 +27,7 @@ public class NexusRestExposureGuard {
             return;
         }
 
-        requireStrongToken("NEXUS REST refuse une écoute hors loopback sans authentification. Configurez ");
+        requireRemoteTokenPolicy("NEXUS REST refuse une écoute hors loopback sans authentification. Configurez ");
         requireProjectRoots("Une écoute REST hors loopback exige ");
 
         String exposureMode = NexusRestSecurity.configuredExposureMode()
@@ -64,7 +64,7 @@ public class NexusRestExposureGuard {
         if (!NexusRestSecurity.isLocalHardeningRequired()) {
             return;
         }
-        requireStrongToken(
+        requireRemoteTokenPolicy(
                 NexusRestSecurity.LOCAL_HARDENING_ENVIRONMENT_VARIABLE
                         + "=true exige une authentification locale. Configurez ");
         requireProjectRoots(
@@ -72,17 +72,17 @@ public class NexusRestExposureGuard {
                         + "=true exige une allowlist de projets via ");
     }
 
-    private static String requireStrongToken(String prefix) {
+    private static String requireRemoteTokenPolicy(String prefix) {
         String token = NexusRestSecurity.configuredToken()
                 .orElseThrow(() -> new IllegalStateException(
                         prefix + NexusRestSecurity.TOKEN_ENVIRONMENT_VARIABLE + "."));
-        if (!NexusRestSecurity.isStrongRemoteToken(token)) {
+        if (!NexusRestSecurity.meetsRemoteTokenPolicy(token)) {
             throw new IllegalStateException(
                     NexusRestSecurity.TOKEN_ENVIRONMENT_VARIABLE + " doit contenir au moins "
                             + NexusRestSecurity.MIN_REMOTE_TOKEN_BYTES
-                            + " octets et présenter une entropie estimée d'au moins "
-                            + (int) NexusRestSecurity.MIN_REMOTE_TOKEN_ESTIMATED_ENTROPY_BITS
-                            + " bits");
+                            + " octets et satisfaire le seuil minimal de diversité de caractères ("
+                            + (int) NexusRestSecurity.MIN_REMOTE_TOKEN_CHARACTER_DIVERSITY_SCORE
+                            + "). Utilisez un token généré par un CSPRNG ; ce contrôle structurel ne prouve pas l'aléa.");
         }
         return token;
     }
