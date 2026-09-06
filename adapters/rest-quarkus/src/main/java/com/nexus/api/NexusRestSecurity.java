@@ -23,7 +23,7 @@ final class NexusRestSecurity {
     static final String DOCKER_HOST_FORWARD_ADDRESS_ENVIRONMENT_VARIABLE = "NEXUS_DOCKER_HOST_FORWARD_ADDRESS";
     static final String DOCKER_HOST_FORWARD_ADDRESS_PROPERTY = "nexus.docker.host-forward-address";
     static final int MIN_REMOTE_TOKEN_BYTES = 32;
-    static final double MIN_REMOTE_TOKEN_ESTIMATED_ENTROPY_BITS = 96.0d;
+    static final double MIN_REMOTE_TOKEN_CHARACTER_DIVERSITY_SCORE = 96.0d;
 
     private static final Set<String> EXPOSURE_MODES = Set.of(
             "loopback-forward",
@@ -117,16 +117,23 @@ final class NexusRestSecurity {
                         .isPresent();
     }
 
-    static boolean isStrongRemoteToken(String token) {
+    /**
+     * Applies the structural admission policy for a remotely exposed REST bearer token.
+     *
+     * <p>The diversity score deliberately rejects obviously weak repeated values, but it is not a
+     * cryptographic entropy estimate and cannot prove that a static token was generated randomly.
+     * Deployments must therefore generate {@link #TOKEN_ENVIRONMENT_VARIABLE} with a CSPRNG.</p>
+     */
+    static boolean meetsRemoteTokenPolicy(String token) {
         if (token == null) {
             return false;
         }
         byte[] bytes = token.getBytes(StandardCharsets.UTF_8);
         return bytes.length >= MIN_REMOTE_TOKEN_BYTES
-                && estimatedShannonEntropyBits(bytes) >= MIN_REMOTE_TOKEN_ESTIMATED_ENTROPY_BITS;
+                && characterDiversityScore(bytes) >= MIN_REMOTE_TOKEN_CHARACTER_DIVERSITY_SCORE;
     }
 
-    private static double estimatedShannonEntropyBits(byte[] bytes) {
+    private static double characterDiversityScore(byte[] bytes) {
         if (bytes.length == 0) {
             return 0.0d;
         }
@@ -134,12 +141,12 @@ final class NexusRestSecurity {
         for (byte value : bytes) {
             frequencies.merge(value, 1, Integer::sum);
         }
-        double bitsPerByte = 0.0d;
+        double scorePerByte = 0.0d;
         for (int count : frequencies.values()) {
             double probability = (double) count / bytes.length;
-            bitsPerByte -= probability * (Math.log(probability) / Math.log(2.0d));
+            scorePerByte -= probability * (Math.log(probability) / Math.log(2.0d));
         }
-        return bitsPerByte * bytes.length;
+        return scorePerByte * bytes.length;
     }
 
     static boolean isLoopbackHost(String host) {
