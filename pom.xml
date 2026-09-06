@@ -35,6 +35,7 @@
         <nexus.runtime.nativeAccessArg>--enable-native-access=ALL-UNNAMED</nexus.runtime.nativeAccessArg>
         <nexus.coverage.line.minimum>0.65</nexus.coverage.line.minimum>
         <nexus.coverage.branch.minimum>0.55</nexus.coverage.branch.minimum>
+        <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
 
         <javaparser.version>3.28.2</javaparser.version>
         <sqlite-jdbc.version>3.53.4.0</sqlite-jdbc.version>
@@ -147,8 +148,8 @@
                     <version>${maven.surefire-plugin.version}</version>
                     <configuration>
                         <!-- Historical reactor-wide developer scripts may select a core-only
-                             test name. Targeted CI commands must override this to true. -->
-                        <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+                             test name. CI overrides this property to fail closed. -->
+                        <failIfNoSpecifiedTests>${surefire.failIfNoSpecifiedTests}</failIfNoSpecifiedTests>
                         <argLine>@{argLine} ${nexus.runtime.nativeAccessArg}</argLine>
                     </configuration>
                 </plugin>
@@ -308,4 +309,19 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>ci-strict-specified-tests</id>
+            <activation>
+                <property>
+                    <name>env.CI</name>
+                    <value>true</value>
+                </property>
+            </activation>
+            <properties>
+                <surefire.failIfNoSpecifiedTests>true</surefire.failIfNoSpecifiedTests>
+            </properties>
+        </profile>
+    </profiles>
 </project>
