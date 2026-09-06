@@ -72,18 +72,13 @@ Le Scale Benchmark couvre :
 
 La recherche lexicale contient en plus un test de non-régression sur les requêtes à forte cardinalité afin d'éviter un dépassement du budget de clauses Lucene.
 
+## Gouvernance effective
+
+NXA3-14 / #130 est satisfait : le ruleset GitHub actif protège `develop`, exige le passage par pull request, interdit force-push/suppression et impose les sept checks permanents approuvés. Toute modification repository-admin doit être suivie d'une revalidation API.
+
+Le seul hardening résiduel identifié lors de l'audit du 6 septembre 2026 est `strict_required_status_checks_policy=false` : GitHub n'impose pas encore que la PR soit remise à jour avec la base immédiatement avant merge. Ce réglage est externe au code versionné.
+
 ## Travail restant
-
-### Gouvernance — NXA3-14 / #130
-
-Le principal contrôle non réalisable par un commit reste la protection effective de `develop` dans GitHub :
-
-- PR obligatoire ;
-- checks requis selon la politique approuvée ;
-- force-push et suppression interdits ;
-- exceptions administratives limitées et traçables.
-
-Tant que l'API GitHub indique `protected=false`, ce point reste **ouvert**.
 
 ### Watch items
 
@@ -94,7 +89,8 @@ Les améliorations suivantes restent conditionnées à une preuve reproductible 
 - filesystem réseau/hostile ;
 - cache Git persistant ;
 - recovery sémantique renforcé selon les scénarios de corruption/provider indisponible ;
-- moteur de recherche substring alternatif.
+- moteur de recherche substring alternatif ;
+- activation repository-admin du mode strict « branch up to date before merge » si ce durcissement est retenu.
 
 ## Références
 
