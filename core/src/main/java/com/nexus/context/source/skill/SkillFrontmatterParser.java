@@ -1,5 +1,6 @@
 package com.nexus.context.source.skill;
 
+import com.nexus.context.source.ContextDiscoveryBudget;
 import com.nexus.security.SafeFileIO;
 import org.snakeyaml.engine.v2.api.Load;
 import org.snakeyaml.engine.v2.api.LoadSettings;
@@ -32,7 +33,14 @@ final class SkillFrontmatterParser {
             .build());
 
     SkillFrontmatter parse(Path skillFile) throws IOException {
-        String frontmatter = readFrontmatter(skillFile);
+        return parseFrontmatter(skillFile, readFrontmatter(skillFile, null));
+    }
+
+    SkillFrontmatter parse(Path skillFile, ContextDiscoveryBudget budget) throws IOException {
+        return parseFrontmatter(skillFile, readFrontmatter(skillFile, budget));
+    }
+
+    private SkillFrontmatter parseFrontmatter(Path skillFile, String frontmatter) {
         Object loaded;
         try {
             loaded = yaml.loadFromString(frontmatter);
@@ -63,14 +71,19 @@ final class SkillFrontmatterParser {
                 allowedTools(values.get("allowed-tools")));
     }
 
-    private static String readFrontmatter(Path skillFile) throws IOException {
-        // The discovery phase charges at most MAX_DISCOVERY_BYTES for metadata. The reader must
-        // enforce the same physical-byte bound so BufferedReader.readLine() cannot materialize an
-        // arbitrarily large line before the character-level frontmatter guard runs.
-        try (BufferedReader reader = SafeFileIO.newBufferedReaderNoFollow(
-                skillFile,
-                StandardCharsets.UTF_8,
-                MAX_DISCOVERY_BYTES)) {
+    private static String readFrontmatter(Path skillFile, ContextDiscoveryBudget budget) throws IOException {
+        // The frontmatter parser keeps its own physical-byte ceiling. When it is
+        // called from native discovery, the same bytes are additionally charged
+        // against the shared cumulative budget while they are physically read.
+        try (BufferedReader reader = budget == null
+                ? SafeFileIO.newBufferedReaderNoFollow(
+                        skillFile,
+                        StandardCharsets.UTF_8,
+                        MAX_DISCOVERY_BYTES)
+                : budget.newBufferedReaderNoFollow(
+                        skillFile,
+                        StandardCharsets.UTF_8,
+                        MAX_DISCOVERY_BYTES)) {
             String firstLine = reader.readLine();
             if (!"---".equals(firstLine)) {
                 throw new IllegalArgumentException("SKILL.md doit commencer par un frontmatter YAML : " + skillFile);
