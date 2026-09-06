@@ -62,7 +62,7 @@ La résilience réseau ne modifie donc pas la racine de confiance du bootstrap.
 - CodeQL : Java/Kotlin `security-extended`, contrat exact-head ;
 - OSV : delta PR + scan bloquant du SBOM CycloneDX agrégé ;
 - reusable workflow OSV épinglé au SHA qui échoue fermé lorsqu'un scan est incomplet ;
-- SonarCloud : Quality Gate externe sur les changements de PR.
+- SonarQube Cloud : GitHub App en Automatic Analysis, avec Quality Gate externe sur les changements de PR.
 
 Un check externe n'apparaît pas nécessairement dans la liste des workflows GitHub Actions ; la qualification finale d'une PR doit donc regarder les **check-runs du commit**, pas seulement les workflow runs.
 
@@ -87,7 +87,7 @@ La borne Lucene de 128 termes est couverte par un test de non-régression du rea
 
 Les images de base builder/runtime sont épinglées par digest. Les Dockerfiles n'exécutent **aucun `apt-get`** après ces bases :
 
-- le builder utilise directement le Maven déjà fourni par l'image Maven épinglée ;
+- le builder utilise le wrapper repository-pinned `./mvnw`, donc Maven **3.9.16** après vérification de l'ancre SHA-512 versionnée ;
 - le runtime n'installe pas `curl`/`wget` uniquement pour le healthcheck ;
 - `/usr/local/bin/nexus-healthcheck` utilise le support TCP de Bash contre le listener management local.
 
