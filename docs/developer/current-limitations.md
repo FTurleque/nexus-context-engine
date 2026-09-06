@@ -73,8 +73,10 @@ La libération du verrou inter-processus ne transforme plus une mutation déjà 
 - listener applicatif par défaut : `127.0.0.1:8080` ;
 - health/metrics sont isolés sur le listener de management `127.0.0.1:9000` ;
 - `/q/*` n'est pas servi par le listener applicatif ;
-- hors loopback, le démarrage échoue fermé si transport sécurisé effectif, token robuste ou allowlist de racines ne sont pas démontrés ;
-- sur loopback, `NEXUS_REST_HARDEN_LOCAL=true` permet d'exiger explicitement le même token robuste et une allowlist de racines avant démarrage, sans casser le mode local-first historique par défaut.
+- hors loopback, le démarrage échoue fermé si transport sécurisé effectif, token généré par CSPRNG conforme au gate structurel ou allowlist de racines ne sont pas démontrés ;
+- sur loopback, `NEXUS_REST_HARDEN_LOCAL=true` permet d'exiger explicitement le même gate de token et une allowlist de racines avant démarrage, sans casser le mode local-first historique par défaut.
+
+Le gate structurel du token vérifie longueur et diversité de caractères pour éliminer des valeurs manifestement faibles ; il ne mesure pas l'entropie cryptographique et ne remplace pas une génération CSPRNG.
 
 Le listener de management est volontairement loopback-only et ne doit pas être publié par un reverse proxy. Le runtime Docker et Compose sondent ce listener via le probe embarqué `/usr/local/bin/nexus-healthcheck`, sans exposer le port management.
 
@@ -104,13 +106,15 @@ La redaction conservatrice réduit les fuites accidentelles mais ne remplace pas
 - les contrats documentaires courants sont vérifiés automatiquement par NEXUS CI ;
 - les changements de frontière filesystem déclenchent une qualification locale dédiée Linux/Windows ;
 - la preuve SMB sélectionnée dispose d'un gate Windows séparé qui crée un vrai partage SMB, impose l'usage UNC et conserve les informations protocole/configuration ;
-- tant que `develop` reste techniquement pushable, NEXUS CI, CodeQL et OSV couvrent aussi les pushes directs ; Docker Distribution, Scale Benchmark, Scanner Corpus Benchmark et Windows Installer sont réutilisés par des callers `Develop Push ...` avec leurs filtres de chemins respectifs.
+- NEXUS CI, CodeQL et OSV couvrent aussi les pushes directs sur `develop` en défense en profondeur ; Docker Distribution, Scale Benchmark, Scanner Corpus Benchmark et Windows Installer sont réutilisés par des callers `Develop Push ...` avec leurs filtres de chemins respectifs.
 
-## Contrôle de gouvernance encore externe au code
+## Contrôle de gouvernance externe au code
 
 La protection GitHub de `develop` est un état repository-admin, pas un fichier versionné. Le contrat attendu est décrit dans [`branch-governance.md`](branch-governance.md).
 
-Tant que GitHub retourne `protected=false` pour `develop`, NXA3-14 / #130 reste ouvert : une poussée directe peut encore **entrer avant** toute qualification, même si les gates applicables s'exécutent désormais ensuite en défense en profondeur. Ce point ne peut pas être clôturé par une modification de code ou de workflow ; il exige le ruleset GitHub effectif.
+NXA3-14 / #130 est satisfait : le ruleset actif `Protect main & develop` protège `develop`, exige les pull requests, interdit suppression/non-fast-forward et impose les sept checks permanents approuvés. Après toute modification repository-admin, cet état doit être revalidé par API.
+
+Hardening résiduel : `strict_required_status_checks_policy=false`. Les checks requis qualifient le HEAD de PR, mais GitHub n'impose pas actuellement une remise à jour avec la base immédiatement avant merge. Ce paramètre ne peut pas être modifié par un commit de code/workflow.
 
 ## Watch items
 
@@ -118,7 +122,8 @@ Les sujets suivants ne doivent pas être changés sans mesure ou scénario repro
 
 - isolation processus plus forte d'un provider réellement non coopératif (#51) ;
 - extension de support vers un filesystem réseau/distribué précis : elle exige désormais de dépasser la preuve SMB loopback et de qualifier le protocole/configuration réellement visé, idéalement multi-client avec injection de panne ;
-- nouveau moteur FTS/trigram pour les recherches substring.
+- nouveau moteur FTS/trigram pour les recherches substring ;
+- activation repository-admin du mode strict « branch up to date before merge ».
 
 Le watch item légal #55 reste un gate conditionnel pour toute dépendance ou modalité de redistribution inhabituelle ; il ne déclenche aucune modification tant qu'un candidat concret n'existe pas.
 

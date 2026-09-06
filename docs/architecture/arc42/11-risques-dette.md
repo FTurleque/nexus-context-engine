@@ -17,7 +17,7 @@ Probabilité : F faible, M moyenne, E élevée. Impact : F faible, M moyen, E é
 | R14 | index sémantique incompatible | M | E | profil `content-v2` + rebuild/garde |
 | R15 | supply-chain incomplète | M | E | clôturé/renforcé : CodeQL, OSV, Trivy, SBOM, hashes |
 | R17 | snapshot publié après mutation | M | E | clôturé par revalidation canonique |
-| R18 | REST distant/management insuffisamment sécurisé | M | E | TLS effectif + auth + roots + proxy borné + management loopback séparé |
+| R18 | REST distant/management insuffisamment sécurisé | M | E | TLS effectif + token CSPRNG conforme au gate structurel + roots + proxy borné + management loopback séparé |
 | R19 | travail graphe/fédération non borné | M | E | clôturé : projections + budget de travail + fail-fast 100 projets |
 | R20 | recovery sémantique | M | M | watch item |
 | R21 | cache Git persistant | M | M | non adopté sans mesure |
@@ -25,12 +25,13 @@ Probabilité : F faible, M moyenne, E élevée. Impact : F faible, M moyen, E é
 | R23 | découverte native pathologique | M | E | clôturé : `ContextDiscoveryLimits` + benchmark 1 000 skills |
 | R24 | diff Git massif | M | M | clôturé : sink fixe + caps + test massif |
 | R25 | dérive documentation opérationnelle | M | E | mitigé : contrats doc NXA3+NXA4 exécutés dans NEXUS CI |
-| R26 | `develop` non protégé côté GitHub | M | E | **ouvert gouvernance** : appliquer ruleset/branch protection |
+| R26 | `develop` non protégé côté GitHub | F | E | **clôturé** : ruleset actif `Protect main & develop`, NXA3-14 / #130 satisfait |
 | R27 | JDT LS hostile/défectueux provoque allocation/backlog non borné | F | E | framing 16 MiB/64 KiB/8 KiB + queue 256 + fail-closed |
 | R28 | requête Lucene à forte cardinalité dépasse le budget de clauses | F | M | cap 128 termes analysés + test de non-régression |
 | R29 | fuite accidentelle de secrets vers embeddings/contexte | M | E | exclusions sensibles + redaction forte confiance + profil `content-v2` |
 | R30 | endpoint Ollama distant en HTTP / credentials URI | M | E | HTTPS distant par défaut, HTTP distant opt-in, userinfo refusé |
 | R31 | stockage NEXUS lisible trop largement sur POSIX | F | E | répertoires 0700, SQLite 0600, symlinks persistants refusés |
+| R32 | PR mergée sans remise à jour avec la base | F | M | hardening repository-admin : `strict_required_status_checks_policy=false` |
 
 ## Frontières de support
 
@@ -50,7 +51,7 @@ Les tâches externes sont bornées en temps et en concurrence. Un provider qui i
 
 ### REST
 
-Loopback est le défaut. Les modes distants exigent TLS backend effectif ; `reverse-proxy-https` exige également une frontière proxy bornée. Health/metrics restent sur le listener management loopback `127.0.0.1:9000` et ne doivent pas être publiés avec l'API métier.
+Loopback est le défaut. Les modes distants exigent un token généré par CSPRNG et conforme au gate structurel, ainsi qu'un TLS backend effectif ; `reverse-proxy-https` exige également une frontière proxy bornée. Le gate structurel de token ne prétend pas mesurer l'entropie cryptographique. Health/metrics restent sur le listener management loopback `127.0.0.1:9000` et ne doivent pas être publiés avec l'API métier.
 
 ### Sémantique
 
@@ -62,10 +63,10 @@ Le build vérifie les outils fixes par hashes versionnés. L'image Docker qualif
 
 ### Gouvernance
 
-Les workflows ne suffisent pas si `develop` accepte encore des pushes directs. NXA3-14 / #130 reste ouvert tant que l'API GitHub ne confirme pas la protection requise.
+Le ruleset actif protège `develop` et `main`, impose les pull requests, interdit suppression/non-fast-forward et exige les sept checks permanents approuvés. NXA3-14 / #130 est satisfait. Le seul résiduel identifié ici est le mode strict de synchronisation avec la base, actuellement désactivé et modifiable uniquement par repository-admin.
 
 ## Dette / choix conditionnés
 
-Restent conditionnés à une preuve : moteur FTS/trigram supplémentaire, index distribué, vector DB, cache Git persistant, lifecycle Lucene partagé, isolation processus plus forte des providers externes.
+Restent conditionnés à une preuve : moteur FTS/trigram supplémentaire, index distribué, vector DB, cache Git persistant, lifecycle Lucene partagé, isolation processus plus forte des providers externes. Le mode strict « branch up to date before merge » relève d'une décision de gouvernance repository-admin, pas d'une preuve de performance.
 
 La preuve de qualification n'est pas un numéro de PR historique : utiliser les checks attachés au SHA exact concerné.

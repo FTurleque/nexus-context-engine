@@ -36,12 +36,13 @@ class NexusRestSecurityTest {
     }
 
     @Test
-    void requiresLengthAndEntropyForRemoteTokens() {
-        assertFalse(NexusRestSecurity.isStrongRemoteToken("short"));
-        assertFalse(NexusRestSecurity.isStrongRemoteToken("a".repeat(64)));
-        assertFalse(NexusRestSecurity.isStrongRemoteToken("ab".repeat(32)));
-        assertTrue(NexusRestSecurity.isStrongRemoteToken("0123456789abcdef0123456789abcdef"));
-        assertTrue(NexusRestSecurity.isStrongRemoteToken(
+    void enforcesLengthAndCharacterDiversityWithoutClaimingCryptographicEntropy() {
+        assertFalse(NexusRestSecurity.meetsRemoteTokenPolicy("short"));
+        assertFalse(NexusRestSecurity.meetsRemoteTokenPolicy("a".repeat(64)));
+        assertFalse(NexusRestSecurity.meetsRemoteTokenPolicy("ab".repeat(32)));
+        assertTrue(NexusRestSecurity.meetsRemoteTokenPolicy("0123456789abcdef0123456789abcdef"),
+                "The structural gate may accept predictable text; deployment guidance must require CSPRNG generation");
+        assertTrue(NexusRestSecurity.meetsRemoteTokenPolicy(
                 "6df1462d571a6925e3bc3934ee10c6c55a965116fb47e2bc4db77ac7a5d69d34"));
     }
 

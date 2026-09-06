@@ -159,7 +159,9 @@ Le profil sémantique est `content-v2`, ce qui rend un index historique incompat
 
 ## REST
 
-`NexusRestExposureGuard` et `NexusRestTransportPolicy` valident une exposition API non-loopback : token robuste, roots autorisées et transport effectif.
+`NexusRestExposureGuard` et `NexusRestTransportPolicy` valident une exposition API non-loopback : token généré par CSPRNG et conforme au gate structurel, roots autorisées et transport effectif.
+
+Le gate de token rejette les valeurs trop courtes ou à diversité de caractères manifestement insuffisante, mais ne prétend pas mesurer l'entropie cryptographique d'une chaîne statique.
 
 Quarkus possède deux listeners distincts :
 
@@ -182,4 +184,4 @@ Docker Distribution construit une image unique, exécute smokes/Trivy/SBOM puis 
 
 ## Gouvernance
 
-La configuration GitHub de `develop` doit imposer le contrat de [`branch-governance.md`](branch-governance.md). Ce contrôle repository-admin n'est pas remplacé par les workflows versionnés ; #130 reste ouvert tant que `protected=false`.
+Le ruleset GitHub actif `Protect main & develop` satisfait NXA3-14 / #130 pour `develop` : pull request obligatoire, suppression/non-fast-forward interdits et sept checks permanents requis. Le hardening repository-admin résiduel est `strict_required_status_checks_policy=false`, qui n'impose pas encore une remise à jour avec la base immédiatement avant merge. Voir [`branch-governance.md`](branch-governance.md).

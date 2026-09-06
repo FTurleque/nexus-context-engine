@@ -8,9 +8,9 @@ Ce document décrit le contrat courant de qualification et de publication de NEX
 
 NEXUS CI et CodeQL checkoutent explicitement `github.event.pull_request.head.sha` sur pull request. CodeQL vérifie ensuite que `git rev-parse HEAD` correspond au SHA attendu.
 
-La protection GitHub de `develop` est un contrôle de gouvernance distinct. Le contrat attendu est documenté dans [`branch-governance.md`](branch-governance.md). Tant que `develop` retourne `protected=false`, #130 reste ouvert.
+Le ruleset GitHub actif `Protect main & develop` protège effectivement `develop` et `main`, exige le passage par pull request, interdit suppression/non-fast-forward et impose les sept checks permanents approuvés. NXA3-14 / #130 est satisfait. `strict_required_status_checks_policy=false` reste un hardening repository-admin : les checks qualifient le HEAD de PR, mais GitHub n'impose pas encore une remise à jour avec la base immédiatement avant merge.
 
-Tant que ce contrôle repository-admin n'est pas actif, les workflows versionnés conservent une défense en profondeur sur les pushes directs `develop` : NEXUS CI, CodeQL et OSV écoutent directement la branche ; les gates Docker, benchmarks et Windows sont réutilisés par des callers dédiés avec leurs filtres de chemins.
+Les workflows versionnés conservent en plus une défense en profondeur sur les pushes directs `develop` : NEXUS CI, CodeQL et OSV écoutent directement la branche ; les gates Docker, benchmarks et Windows sont réutilisés par des callers dédiés avec leurs filtres de chemins.
 
 ## NEXUS CI
 
