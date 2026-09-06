@@ -116,7 +116,7 @@ public final class LocalAgentSkillsProvider implements SkillSourceProvider {
                 }
 
                 try {
-                    SkillFrontmatter frontmatter = parser.parse(safeFile);
+                    SkillFrontmatter frontmatter = parser.parse(safeFile, budget);
                     Path absoluteSkillRoot = safeFile.getParent();
                     Path relativeSkillRoot = projectRoot.relativize(absoluteSkillRoot);
                     Path relativeDefinition = projectRoot.relativize(safeFile);
