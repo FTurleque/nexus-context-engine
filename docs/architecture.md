@@ -27,7 +27,7 @@ en recherche classée ou en contexte minimal, pertinent, explicable et borné.
 11. Une seule mutation d'index par projet est active sur un `NEXUS_HOME` local ; snapshot revalidé avant `READY`.
 12. Le graphe, Git, la fédération et la découverte native sont bornés en travail, pas seulement en résultat final.
 13. Une requête Lucene analysée est bornée à 128 termes uniques avant expansion multi-champs.
-14. Une exposition REST hors loopback est fail-closed sans authentification, roots et transport TLS effectif conformes.
+14. Une exposition REST hors loopback est fail-closed sans authentification, token CSPRNG conforme au gate structurel, roots et transport TLS effectif conformes.
 15. Health/metrics ne sont pas servis par le listener applicatif : le management Quarkus reste sur `127.0.0.1:9000` par défaut.
 16. La recherche sémantique reste opt-in ; Ollama distant exige HTTPS sauf opt-in administratif explicite pour HTTP.
 17. Les secrets à forte confiance sont redigés avant embeddings et avant restitution des fragments de contexte.
@@ -130,11 +130,13 @@ Listener management séparé :
 
 Hors loopback :
 
-- token robuste ;
+- token généré par CSPRNG et conforme au gate structurel NEXUS ;
 - `NEXUS_REST_ALLOWED_PROJECT_ROOTS` non vide ;
 - `direct-https` : listener Quarkus TLS effectif et HTTP clair désactivé ;
 - `reverse-proxy-https` : mêmes garanties TLS backend + forwarding activé + trusted proxies bornés ;
 - `loopback-forward` : uniquement runtime Docker avec publication hôte loopback.
+
+Le gate de token impose longueur et diversité minimales pour rejeter les chaînes manifestement faibles. Il ne constitue pas une estimation d'entropie cryptographique et ne remplace jamais la génération CSPRNG.
 
 Le listener de management ne doit pas être publié par le reverse proxy.
 
@@ -148,6 +150,6 @@ Les tags version/SHA sont immuables. Le préflight GHCR échoue fermé sur les e
 
 ## Gouvernance
 
-`develop` doit être protégé par la configuration GitHub décrite dans [`developer/branch-governance.md`](developer/branch-governance.md). Tant que l'API retourne `protected=false`, ce contrôle de gouvernance reste non satisfait même si le code et la CI sont corrects.
+Le ruleset GitHub actif `Protect main & develop` protège `develop` et `main`, impose le passage par pull request, interdit suppression/non-fast-forward et exige les sept checks permanents approuvés. NXA3-14 / #130 est satisfait. Le hardening repository-admin résiduel est `strict_required_status_checks_policy=false`, qui n'impose pas encore une remise à jour de la PR avec sa base immédiatement avant merge. Voir [`developer/branch-governance.md`](developer/branch-governance.md).
 
 Voir aussi [`developer/architecture-implementation.md`](developer/architecture-implementation.md), [`developer/ci-and-supply-chain.md`](developer/ci-and-supply-chain.md), [`developer/current-limitations.md`](developer/current-limitations.md) et [`roadmap.md`](roadmap.md).
