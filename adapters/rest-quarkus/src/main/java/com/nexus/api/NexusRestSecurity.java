@@ -16,6 +16,8 @@ final class NexusRestSecurity {
     static final String TOKEN_PROPERTY = "nexus.rest.api-token";
     static final String LOCAL_HARDENING_ENVIRONMENT_VARIABLE = "NEXUS_REST_HARDEN_LOCAL";
     static final String LOCAL_HARDENING_PROPERTY = "nexus.rest.harden-local";
+    static final String LOCAL_TRUST_ENVIRONMENT_VARIABLE = "NEXUS_REST_TRUST_LOCAL";
+    static final String LOCAL_TRUST_PROPERTY = "nexus.rest.trust-local";
     static final String EXPOSURE_MODE_ENVIRONMENT_VARIABLE = "NEXUS_REST_EXPOSURE_MODE";
     static final String EXPOSURE_MODE_PROPERTY = "nexus.rest.exposure-mode";
     static final String RUNTIME_ENVIRONMENT_VARIABLE = "NEXUS_RUNTIME";
@@ -48,18 +50,15 @@ final class NexusRestSecurity {
     }
 
     static boolean isLocalHardeningRequired() {
-        Optional<String> configured = configuredValue(
+        return configuredBoolean(
                 LOCAL_HARDENING_PROPERTY,
-                LOCAL_HARDENING_ENVIRONMENT_VARIABLE);
-        if (configured.isEmpty()) {
-            return false;
-        }
-        return switch (configured.get().toLowerCase(Locale.ROOT)) {
-            case "true" -> true;
-            case "false" -> false;
-            default -> throw new IllegalStateException(
-                    LOCAL_HARDENING_ENVIRONMENT_VARIABLE + " doit valoir true ou false");
-        };
+                LOCAL_HARDENING_ENVIRONMENT_VARIABLE).orElse(false);
+    }
+
+    static boolean isLocalTrustExplicitlyEnabled() {
+        return configuredBoolean(
+                LOCAL_TRUST_PROPERTY,
+                LOCAL_TRUST_ENVIRONMENT_VARIABLE).orElse(false);
     }
 
     static Optional<String> configuredExposureMode() {
@@ -76,6 +75,18 @@ final class NexusRestSecurity {
         return configuredValue(
                 DOCKER_HOST_FORWARD_ADDRESS_PROPERTY,
                 DOCKER_HOST_FORWARD_ADDRESS_ENVIRONMENT_VARIABLE);
+    }
+
+    private static Optional<Boolean> configuredBoolean(String property, String environmentVariable) {
+        Optional<String> configured = configuredValue(property, environmentVariable);
+        if (configured.isEmpty()) {
+            return Optional.empty();
+        }
+        return switch (configured.get().toLowerCase(Locale.ROOT)) {
+            case "true" -> Optional.of(true);
+            case "false" -> Optional.of(false);
+            default -> throw new IllegalStateException(environmentVariable + " doit valoir true ou false");
+        };
     }
 
     private static Optional<String> configuredValue(String property, String environmentVariable) {
