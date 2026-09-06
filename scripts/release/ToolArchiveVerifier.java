@@ -150,12 +150,12 @@ public final class ToolArchiveVerifier {
         byte[] expectedBuffer = new byte[16 * 1024];
         byte[] actualBuffer = new byte[16 * 1024];
         while (true) {
-            int expectedRead = expected.read(expectedBuffer);
-            int actualRead = actual.read(actualBuffer);
+            int expectedRead = expected.readNBytes(expectedBuffer, 0, expectedBuffer.length);
+            int actualRead = actual.readNBytes(actualBuffer, 0, actualBuffer.length);
             if (expectedRead != actualRead) {
                 throw new IOException("Extracted tool file differs from pinned archive: " + target);
             }
-            if (expectedRead < 0) {
+            if (expectedRead == 0) {
                 return;
             }
             for (int index = 0; index < expectedRead; index++) {
