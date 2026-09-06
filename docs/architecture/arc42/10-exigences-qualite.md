@@ -84,7 +84,7 @@ Une map `constraints` non vide doit être rejetée explicitement tant qu'aucune 
 
 ### QS-15 — Sécurité REST distante et management
 
-Une écoute API hors loopback est refusée si auth, allowlist de racines ou transport effectif sont insuffisants.
+Une écoute API hors loopback est refusée si auth, allowlist de racines ou transport effectif sont insuffisants. Le bearer token doit être généré par CSPRNG et satisfaire le gate structurel NEXUS ; ce gate rejette les chaînes manifestement faibles sans prétendre mesurer leur entropie cryptographique.
 
 Health/metrics doivent rester sur le listener management `127.0.0.1:9000`; `/q/*` doit retourner 404 sur le listener applicatif. Le reverse proxy métier ne doit pas publier le listener management.
 
@@ -111,7 +111,7 @@ Les secrets à forte confiance sont redigés avant embeddings et fragments de co
 
 ### QS-19 — Gouvernance `develop`
 
-Le code et les workflows ne peuvent pas remplacer le ruleset GitHub. Tant que l'API indique `protected=false`, une poussée directe reste possible et #130 demeure ouvert.
+Le ruleset GitHub actif `Protect main & develop` satisfait NXA3-14 / #130 : pull request obligatoire, suppression/non-fast-forward interdits et sept checks permanents requis. Le code et les workflows restent une défense en profondeur mais ne remplacent pas ce contrôle repository-admin. `strict_required_status_checks_policy=false` est le hardening résiduel : la remise à jour de la PR avec sa base n'est pas encore imposée avant merge.
 
 ## 10.3 Watch items qualité
 
@@ -120,9 +120,10 @@ Le code et les workflows ne peuvent pas remplacer le ruleset GitHub. Tant que l'
 - #52 filesystem hostile/réseau ;
 - #53 cache Git persistant ;
 - #54 recovery sémantique/Ollama/Lucene physique ;
-- #55 revue juridique des dépendances inhabituelles.
+- #55 revue juridique des dépendances inhabituelles ;
+- mode repository-admin strict « branch up to date before merge ».
 
-Ces sujets ne justifient pas un changement d'architecture sans benchmark, fixture ou incident démontrant le besoin.
+Ces sujets ne justifient pas un changement d'architecture sans benchmark, fixture ou incident démontrant le besoin, à l'exception des réglages de gouvernance explicitement décidés par la politique du dépôt.
 
 ## 10.4 Baselines et preuve
 
