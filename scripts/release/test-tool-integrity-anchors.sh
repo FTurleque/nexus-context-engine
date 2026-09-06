@@ -36,6 +36,12 @@ grep -q 'System.Security.Cryptography.SHA512' "$ROOT/mvnw.cmd"
 grep -q 'ComputeHash' "$ROOT/mvnw.cmd"
 grep -q 'tool-integrity.properties' "$ROOT/mvnw.cmd"
 
+# Unix bootstrap must remain usable in minimal JDK/Maven images where unzip is
+# absent: use unzip when present, otherwise the standard JDK jar tool.
+grep -q 'command -v unzip' "$ROOT/mvnw"
+grep -q 'command -v jar' "$ROOT/mvnw"
+grep -q 'jar xf "${ARCHIVE}"' "$ROOT/mvnw"
+
 # Windows bootstrap resilience must not regress to a single HTTP client: curl is
 # preferred, then PowerShell is a fallback, and verification happens afterwards.
 grep -q 'WHERE curl.exe' "$ROOT/mvnw.cmd"
