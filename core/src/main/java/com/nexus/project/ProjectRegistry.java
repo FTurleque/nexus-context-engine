@@ -29,7 +29,7 @@ public final class ProjectRegistry {
             return existing;
         }
 
-        ProjectDescriptor candidate = new ProjectDescriptor(
+        return repository.save(new ProjectDescriptor(
                 UUID.randomUUID(),
                 resolveName(canonicalRoot, requestedName),
                 canonicalRoot,
@@ -37,18 +37,7 @@ public final class ProjectRegistry {
                 Set.of(),
                 Set.of(),
                 null,
-                IndexStatus.NOT_INDEXED);
-        try {
-            return repository.save(candidate);
-        } catch (RuntimeException registrationFailure) {
-            // Deux processus peuvent observer simultanément l'absence de la racine
-            // puis tenter l'INSERT. SQLite protège root_path par UNIQUE : si un
-            // concurrent a gagné la course, l'objectif idempotent de register() est
-            // déjà satisfait. On relit donc la racine canonique avant de propager
-            // l'échec ; tout autre échec de persistance reste inchangé.
-            return repository.findByRootPath(canonicalRoot)
-                    .orElseThrow(() -> registrationFailure);
-        }
+                IndexStatus.NOT_INDEXED));
     }
 
     public List<ProjectDescriptor> list() {
