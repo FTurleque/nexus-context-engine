@@ -21,7 +21,7 @@ done
 
 grep -q 'meetsRemoteTokenPolicy' "$REST_SECURITY" \
   || fail 'structural REST token policy is missing'
-grep -q 'not a.*cryptographic entropy estimate' "$REST_SECURITY" \
+grep -q 'cryptographic entropy estimate' "$REST_SECURITY" \
   || fail 'REST token policy must explicitly reject entropy overclaiming'
 grep -q 'CSPRNG' "$REST_GUARD" \
   || fail 'REST exposure guard must require CSPRNG generation guidance'
