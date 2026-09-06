@@ -4,10 +4,8 @@ import com.nexus.context.source.ContextDiscoveryBudget;
 import com.nexus.context.source.ContextDiscoveryLimits;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.security.ProjectPathGuard;
-import com.nexus.security.SafeFileIO;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -42,8 +40,7 @@ public final class SkillLoader {
                 continue;
             }
 
-            budget.bytes(definition, Files.size(definition));
-            String content = SafeFileIO.readStringNoFollow(definition);
+            String content = budget.readUtf8NoFollow(definition);
             List<String> reasons = new ArrayList<>(match.reasons());
             reasons.add("SKILL.md complet chargé après sélection des métadonnées");
             if (!match.skill().resources().isEmpty()) {
