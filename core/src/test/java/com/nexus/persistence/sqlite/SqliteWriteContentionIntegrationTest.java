@@ -46,7 +46,7 @@ class SqliteWriteContentionIntegrationTest {
     Path tempDir;
 
     @Test
-    void projectRegistrationRecoversFromShortRealCrossProjectContentionAndConstraintIsNotRetried()
+    void projectRegistrationRecoversFromShortRealCrossProjectContentionAndDuplicateRootIsIdempotentWithoutRetry()
             throws Exception {
         AtomicReference<CountDownLatch> releaseOnRetry = new AtomicReference<>();
         SqliteWriteRetryPolicy policy = releasingPolicy(releaseOnRetry);
@@ -72,21 +72,56 @@ class SqliteWriteContentionIntegrationTest {
             assertEquals(1L, database.writeRetryCount(),
                     "La contention courte doit provoquer exactement un retry de transaction complète");
 
-            long retriesBeforeConstraint = database.writeRetryCount();
-            ProjectDescriptor conflictingRoot = project("conflicting-root", projectB.rootPath());
-            PersistenceException constraint = assertThrows(
-                    PersistenceException.class,
-                    () -> projects.save(conflictingRoot));
-            SQLiteException sqliteConstraint = sqliteFailure(constraint);
-            assertNotNull(sqliteConstraint);
-            assertTrue(sqliteConstraint.getResultCode() != SQLiteErrorCode.SQLITE_BUSY
-                    && sqliteConstraint.getResultCode() != SQLiteErrorCode.SQLITE_LOCKED);
-            assertEquals(retriesBeforeConstraint, database.writeRetryCount(),
-                    "Une violation de contrainte ne doit jamais consommer un retry de contention");
+            long retriesBeforeDuplicateRoot = database.writeRetryCount();
+            ProjectDescriptor duplicateRoot = project("duplicate-root", projectB.rootPath());
+            ProjectDescriptor persisted = projects.save(duplicateRoot);
+
+            assertEquals(projectB.id(), persisted.id(),
+                    "Un nouvel UUID sur un root_path déjà enregistré doit retourner le projet persistant");
+            assertEquals(projectB.name(), persisted.name());
+            assertEquals(projectB.rootPath(), persisted.rootPath());
+            assertTrue(projects.findById(duplicateRoot.id()).isEmpty(),
+                    "Le candidat perdant ne doit créer aucune seconde ligne projet");
+            assertEquals(retriesBeforeDuplicateRoot, database.writeRetryCount(),
+                    "Le conflit root_path idempotent ne doit pas consommer un retry de contention");
         } finally {
             release.countDown();
             executor.shutdownNow();
         }
+    }
+
+    @Test
+    void conflictingExistingProjectMoveStillFailsWithoutContentionRetry() {
+        NexusPaths paths = new NexusPaths(tempDir.resolve("project-constraint"));
+        SqliteDatabase database = new SqliteDatabase(paths);
+        SqliteProjectRepository projects = new SqliteProjectRepository(database);
+        ProjectDescriptor projectA = project("project-a", tempDir.resolve("constraint-a"));
+        ProjectDescriptor projectB = project("project-b", tempDir.resolve("constraint-b"));
+        projects.save(projectA);
+        projects.save(projectB);
+
+        long retriesBeforeConstraint = database.writeRetryCount();
+        ProjectDescriptor conflictingMove = new ProjectDescriptor(
+                projectA.id(),
+                projectA.name(),
+                projectB.rootPath(),
+                projectA.sourceType(),
+                projectA.languages(),
+                projectA.technologies(),
+                projectA.lastIndexedAt(),
+                projectA.indexStatus());
+
+        PersistenceException constraint = assertThrows(
+                PersistenceException.class,
+                () -> projects.save(conflictingMove));
+        SQLiteException sqliteConstraint = sqliteFailure(constraint);
+        assertNotNull(sqliteConstraint);
+        assertTrue(sqliteConstraint.getResultCode() != SQLiteErrorCode.SQLITE_BUSY
+                && sqliteConstraint.getResultCode() != SQLiteErrorCode.SQLITE_LOCKED);
+        assertEquals(retriesBeforeConstraint, database.writeRetryCount(),
+                "Une vraie violation de contrainte ne doit jamais consommer un retry de contention");
+        assertEquals(projectA.rootPath(), projects.findById(projectA.id()).orElseThrow().rootPath());
+        assertEquals(projectB.rootPath(), projects.findById(projectB.id()).orElseThrow().rootPath());
     }
 
     @Test
