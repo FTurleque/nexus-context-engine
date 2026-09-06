@@ -91,7 +91,7 @@ class SqliteWriteContentionIntegrationTest {
     }
 
     @Test
-    void conflictingExistingProjectMoveStillFailsWithoutContentionRetry() {
+    void conflictingExistingProjectMoveStillFailsWithoutContentionRetry() throws Exception {
         NexusPaths paths = new NexusPaths(tempDir.resolve("project-constraint"));
         SqliteDatabase database = new SqliteDatabase(paths);
         SqliteProjectRepository projects = new SqliteProjectRepository(database);
