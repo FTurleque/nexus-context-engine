@@ -50,6 +50,15 @@ if [ ! -x "${MAVEN_HOME}/bin/mvn" ]; then
     exit 1
   fi
   rm -f "${ARCHIVE}"
+
+  if [ ! -f "${MAVEN_HOME}/bin/mvn" ]; then
+    echo "L'archive Maven vérifiée n'a pas produit le launcher attendu : ${MAVEN_HOME}/bin/mvn" >&2
+    exit 1
+  fi
+  # `jar xf` ne restaure pas les bits POSIX stockés dans le ZIP. Réappliquer
+  # explicitement le bit d'exécution rend le bootstrap identique avec les deux
+  # extracteurs sans élargir les permissions des autres fichiers Maven.
+  chmod +x "${MAVEN_HOME}/bin/mvn"
 fi
 
 exec "${MAVEN_HOME}/bin/mvn" "$@"
