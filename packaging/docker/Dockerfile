@@ -6,9 +6,11 @@ ARG RUNTIME_IMAGE=eclipse-temurin:21.0.12_8-jre-ubi10-minimal@sha256:c7feea7f2dc
 FROM ${MAVEN_IMAGE} AS build
 WORKDIR /workspace
 COPY . .
-# Utilise le Maven déjà contenu dans l'image builder épinglée afin d'éviter
-# d'installer un outil système pendant la build Docker.
-RUN mvn -B -DskipTests package
+# La base builder reste épinglée par digest, mais le build lui-même passe par le
+# wrapper repository-pinned afin d'utiliser exactement Maven 3.9.16 et de vérifier
+# son archive contre l'ancre SHA-512 versionnée avant extraction.
+RUN chmod +x ./mvnw \
+    && ./mvnw -B -DskipTests package
 
 FROM ${RUNTIME_IMAGE} AS runtime
 USER root
