@@ -38,8 +38,7 @@ public record CodeSymbol(
         if (endLine < startLine) {
             throw new IllegalArgumentException("endLine doit être supérieur ou égal à startLine");
         }
-        CodeIntelligenceMetadataPolicy.validateSymbol(
-                new SymbolMetadataView(kind, name, qualifiedName, signature, startLine, endLine, sourceProvider));
+        CodeIntelligenceMetadataPolicy.validateSymbolFields(name, qualifiedName, signature, sourceProvider);
     }
 
     public static boolean isStructurallyValidRange(int startLine, int endLine) {
@@ -50,26 +49,5 @@ public record CodeSymbol(
         return lineCount >= 0
                 && isStructurallyValidRange(startLine, endLine)
                 && endLine <= lineCount;
-    }
-
-    /**
-     * Lightweight adapter used only while the compact record constructor is still
-     * assigning its components. It avoids constructing a second CodeSymbol.
-     */
-    private record SymbolMetadataView(
-            SymbolKind kind,
-            String name,
-            String qualifiedName,
-            String signature,
-            int startLine,
-            int endLine,
-            String sourceProvider) implements SymbolMetadata {
-    }
-
-    private interface SymbolMetadata {
-        String name();
-        String qualifiedName();
-        String signature();
-        String sourceProvider();
     }
 }
