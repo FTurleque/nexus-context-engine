@@ -153,7 +153,36 @@ Cette baseline justifie toujours :
 - pas de promotion automatique du sémantique en moteur principal ;
 - optimisation mesurée avant toute complexification supplémentaire.
 
-Phase 6 implémente le batching, mais une nouvelle mesure locale est nécessaire avant de déclarer le coût réduit de manière chiffrée.
+Phase 6 implémente le batching. Les mesures historiques restent une référence de décision, pas une preuve suffisante de la qualité d'un runtime/modèle futur.
+
+## Qualification réelle périodique
+
+`.github/workflows/semantic-search-qualification.yml` qualifie le chemin complet **runtime Ollama → modèle réel → embeddings → index Lucene sémantique → ranking**. Ce workflow n'est pas exécuté sur chaque PR afin de ne pas imposer le téléchargement d'un runtime lourd et du modèle aux changements ordinaires ; il est déclenchable manuellement et planifié périodiquement.
+
+Contrat courant :
+
+```text
+Ollama runtime   0.33.3 Linux amd64
+modèle           qwen3-embedding:0.6b
+dimensions       1024
+endpoint         127.0.0.1:11434 uniquement
+corpus           checkout exact du SHA qualifié
+benchmark        RealSemanticSearchBenchmarkTest
+```
+
+L'archive Ollama est téléchargée depuis la release officielle mais **n'est jamais crue sur parole** : son SHA-256 attendu est stocké indépendamment dans `config/tool-integrity.properties` et vérifié avant extraction.
+
+Le rapport doit démontrer :
+
+- modèle et endpoint attendus ;
+- au moins les six requêtes de référence ;
+- index sémantique non vide ;
+- `recall@3 >= 0,25` ;
+- `hit@3 >= 0,33` ;
+- `MRR@3 >= 0,20` ;
+- aucune baisse supérieure à `0,10` face au baseline lexical sur recall/hit/MRR.
+
+Ces floors sont des garde-fous de régression, pas des objectifs à optimiser artificiellement. Un échec doit conduire à analyser runtime, modèle, corpus, pipeline ou ranking ; il ne doit pas être résolu en abaissant automatiquement les seuils. Le rapport JSON, la version Ollama, la liste des modèles et les logs sont conservés comme artefacts pendant 90 jours.
 
 ## Correctness
 
