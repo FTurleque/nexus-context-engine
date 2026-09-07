@@ -1,6 +1,15 @@
 name: Semantic Search Real Qualification
 
 on:
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - '.github/workflows/semantic-search-qualification.yml'
+      - 'config/tool-integrity.properties'
+      - 'core/src/main/java/com/nexus/search/semantic/**'
+      - 'core/src/test/java/com/nexus/search/semantic/RealSemanticSearchBenchmarkTest.java'
   workflow_dispatch:
   schedule:
     - cron: '17 3 3 * *'
@@ -14,8 +23,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
+      NEXUS_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       OLLAMA_VERSION: '0.33.3'
       OLLAMA_MODEL: 'qwen3-embedding:0.6b'
+      OLLAMA_MODEL_ID_PREFIX: 'ac6da0dfba84'
       OLLAMA_ARCHIVE: target/semantic-real/ollama-linux-amd64.tar.zst
       SEMANTIC_REPORT: target/semantic-real/benchmark.json
     steps:
@@ -23,7 +34,17 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: ${{ github.sha }}
+          ref: ${{ env.NEXUS_HEAD_SHA }}
+
+      - name: Verify exact checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          if [[ "$actual" != "$NEXUS_HEAD_SHA" ]]; then
+            echo "::error::Semantic qualification checkout mismatch: expected=$NEXUS_HEAD_SHA actual=$actual"
+            exit 1
+          fi
 
       - name: Set up Java 21
         uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
@@ -73,6 +94,11 @@ jobs:
           fi
           OLLAMA_HOST=127.0.0.1:11434 ollama pull "$OLLAMA_MODEL"
           OLLAMA_HOST=127.0.0.1:11434 ollama list | tee target/semantic-real/ollama-models.txt
+          actual_model_id="$(awk -v model="$OLLAMA_MODEL" '$1 == model { print $2 }' target/semantic-real/ollama-models.txt)"
+          if [[ "$actual_model_id" != "$OLLAMA_MODEL_ID_PREFIX" ]]; then
+            echo "::error::Unexpected Ollama model manifest prefix: expected=$OLLAMA_MODEL_ID_PREFIX actual=$actual_model_id"
+            exit 1
+          fi
 
       - name: Run real semantic benchmark
         shell: bash
@@ -83,7 +109,7 @@ jobs:
             -Dtest=RealSemanticSearchBenchmarkTest \
             -Dnexus.semantic.realBenchmark.enabled=true \
             -Dnexus.semantic.realBenchmark.root="$GITHUB_WORKSPACE" \
-            -Dnexus.semantic.realBenchmark.commit="$GITHUB_SHA" \
+            -Dnexus.semantic.realBenchmark.commit="$NEXUS_HEAD_SHA" \
             -Dnexus.semantic.realBenchmark.output="$GITHUB_WORKSPACE/$SEMANTIC_REPORT" \
             -Dnexus.semantic.ollama.baseUri=http://127.0.0.1:11434 \
             -Dnexus.semantic.ollama.model="$OLLAMA_MODEL" \
@@ -103,6 +129,9 @@ jobs:
 
           report = json.loads(Path(os.environ['SEMANTIC_REPORT']).read_text())
           expected_model = f"ollama/{os.environ['OLLAMA_MODEL']}"
+          if report.get('snapshotCommit') != os.environ['NEXUS_HEAD_SHA']:
+              raise SystemExit(
+                  f"unexpected snapshotCommit: {report.get('snapshotCommit')} != {os.environ['NEXUS_HEAD_SHA']}")
           if report.get('modelId') != expected_model:
               raise SystemExit(f"unexpected modelId: {report.get('modelId')} != {expected_model}")
           if report.get('localEndpoint') is not True:
@@ -154,7 +183,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: semantic-real-${{ github.sha }}
+          name: semantic-real-${{ env.NEXUS_HEAD_SHA }}
           retention-days: 90
           if-no-files-found: error
           path: |
