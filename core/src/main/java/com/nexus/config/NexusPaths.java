@@ -5,8 +5,17 @@ import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.AclEntry;
+import java.nio.file.attribute.AclEntryPermission;
+import java.nio.file.attribute.AclEntryType;
+import java.nio.file.attribute.AclFileAttributeView;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -16,6 +25,7 @@ import java.util.UUID;
  */
 public record NexusPaths(Path home) {
 
+    private static final System.Logger LOGGER = System.getLogger(NexusPaths.class.getName());
     private static final String PROJECT_ID_ARGUMENT = "projectId";
 
     public static final String HOME_PROPERTY = "nexus.home";
@@ -25,6 +35,14 @@ public record NexusPaths(Path home) {
             PosixFilePermissions.fromString("rwx------");
     private static final Set<PosixFilePermission> PRIVATE_FILE_PERMISSIONS =
             PosixFilePermissions.fromString("rw-------");
+    private static final Set<AclEntryPermission> SENSITIVE_ACL_PERMISSIONS = Set.of(
+            AclEntryPermission.READ_DATA,
+            AclEntryPermission.WRITE_DATA,
+            AclEntryPermission.APPEND_DATA,
+            AclEntryPermission.DELETE,
+            AclEntryPermission.DELETE_CHILD,
+            AclEntryPermission.WRITE_ACL,
+            AclEntryPermission.WRITE_OWNER);
 
     public NexusPaths {
         Objects.requireNonNull(home, "home");
@@ -47,12 +65,15 @@ public record NexusPaths(Path home) {
      *
      * <p>Sur les systèmes sans vue POSIX (notamment Windows), NEXUS conserve les ACL natives
      * héritées du profil utilisateur au lieu de les remplacer de manière destructive. Le home est
-     * toujours refusé lorsqu'il est lui-même un lien symbolique.</p>
+     * toujours refusé lorsqu'il est lui-même un lien symbolique. Lorsqu'une vue ACL est disponible,
+     * NEXUS signale en plus les principaux inattendus disposant d'un accès aux données afin qu'un
+     * {@code NEXUS_HOME} personnalisé ne paraisse pas privé alors qu'il hérite d'ACL trop larges.</p>
      */
     public void ensurePrivateStorage() throws IOException {
         ensurePrivateDirectory(home);
         ensurePrivateDirectory(indexesDirectory());
         ensurePrivateDirectory(locksDirectory());
+        warnIfAclMayBeShared(home);
     }
 
     /**
@@ -191,5 +212,59 @@ public record NexusPaths(Path home) {
             // Windows et certains filesystems ne fournissent pas de vue POSIX. On ne remplace
             // pas leurs ACL natives : une réécriture naïve pourrait retirer SYSTEM/Administrators.
         }
+    }
+
+    private static void warnIfAclMayBeShared(Path directory) {
+        AclFileAttributeView view = Files.getFileAttributeView(
+                directory,
+                AclFileAttributeView.class,
+                LinkOption.NOFOLLOW_LINKS);
+        if (view == null) {
+            return;
+        }
+
+        try {
+            String currentUser = System.getProperty("user.name", "");
+            List<String> unexpectedPrincipals = new ArrayList<>();
+            for (AclEntry entry : view.getAcl()) {
+                if (entry.type() != AclEntryType.ALLOW
+                        || Collections.disjoint(entry.permissions(), SENSITIVE_ACL_PERMISSIONS)) {
+                    continue;
+                }
+                String principal = entry.principal().getName();
+                if (!isTrustedStoragePrincipal(principal, currentUser)) {
+                    unexpectedPrincipals.add(principal);
+                }
+            }
+
+            if (!unexpectedPrincipals.isEmpty()) {
+                String principals = String.join(", ", new LinkedHashSet<>(unexpectedPrincipals));
+                LOGGER.log(
+                        System.Logger.Level.WARNING,
+                        "NEXUS_HOME peut être accessible à d'autres comptes ({0}) : vérifiez les ACL de {1}",
+                        principals,
+                        directory);
+            }
+        } catch (IOException | SecurityException inspectionFailure) {
+            LOGGER.log(
+                    System.Logger.Level.DEBUG,
+                    "Impossible d'inspecter les ACL de NEXUS_HOME " + directory,
+                    inspectionFailure);
+        }
+    }
+
+    static boolean isTrustedStoragePrincipal(String principalName, String currentUserName) {
+        if (principalName == null || principalName.isBlank()) {
+            return false;
+        }
+        String principal = principalName.trim().toUpperCase(Locale.ROOT);
+        String currentUser = currentUserName == null ? "" : currentUserName.trim().toUpperCase(Locale.ROOT);
+        if (!currentUser.isEmpty()
+                && (principal.equals(currentUser) || principal.endsWith("\\" + currentUser))) {
+            return true;
+        }
+        return principal.equals("NT AUTHORITY\\SYSTEM")
+                || principal.equals("CREATOR OWNER")
+                || principal.endsWith("\\ADMINISTRATORS");
     }
 }
