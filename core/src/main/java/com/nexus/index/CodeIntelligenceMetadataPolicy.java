@@ -35,13 +35,17 @@ public final class CodeIntelligenceMetadataPolicy {
         requireUtf8Bound("symbol.name", name, MAX_SYMBOL_NAME_UTF8_BYTES);
         requireUtf8Bound("symbol.qualifiedName", qualifiedName, MAX_QUALIFIED_NAME_UTF8_BYTES);
         requireUtf8Bound("symbol.signature", signature, MAX_SIGNATURE_UTF8_BYTES);
-        requireUtf8Bound("symbol.sourceProvider", sourceProvider, MAX_SOURCE_PROVIDER_UTF8_BYTES);
+        validateSourceProvider(sourceProvider);
     }
 
     static void validateRelationFields(String source, String target, String sourceProvider) {
         requireUtf8Bound("relation.source", source, MAX_RELATION_REFERENCE_UTF8_BYTES);
         requireUtf8Bound("relation.target", target, MAX_RELATION_REFERENCE_UTF8_BYTES);
-        requireUtf8Bound("relation.sourceProvider", sourceProvider, MAX_SOURCE_PROVIDER_UTF8_BYTES);
+        validateSourceProvider(sourceProvider);
+    }
+
+    static void validateSourceProvider(String sourceProvider) {
+        requireUtf8Bound("sourceProvider", sourceProvider, MAX_SOURCE_PROVIDER_UTF8_BYTES);
     }
 
     static void validateRelativePath(String relativePath) {
