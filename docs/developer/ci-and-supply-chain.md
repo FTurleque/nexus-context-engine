@@ -8,7 +8,9 @@ Ce document décrit le contrat courant de qualification et de publication de NEX
 
 NEXUS CI et CodeQL checkoutent explicitement `github.event.pull_request.head.sha` sur pull request. CodeQL vérifie ensuite que `git rev-parse HEAD` correspond au SHA attendu.
 
-Le ruleset GitHub actif `Protect main & develop` protège effectivement `develop` et `main`, exige le passage par pull request, interdit suppression/non-fast-forward et impose les sept checks permanents approuvés. NXA3-14 / #130 est satisfait. `strict_required_status_checks_policy=false` et l'absence d'approbation obligatoire restent des hardenings repository-admin suivis dans #202 : les checks qualifient le HEAD de PR, mais GitHub n'impose pas encore une remise à jour avec la base immédiatement avant merge ni une approbation humaine minimale.
+Le ruleset GitHub actif `Protect main & develop` protège effectivement `develop` et `main`, exige le passage par pull request, interdit suppression/non-fast-forward et impose les checks permanents approuvés. NXA3-14 / #130 est satisfait.
+
+NEXUS est actuellement maintenu par **un seul mainteneur**. La politique de merge repose donc sur la PR, le SHA candidat et les gates automatisés ; elle n'exige ni seconde approbation humaine ni resynchronisation stricte de la branche avec sa base juste avant merge. Les audits ne doivent pas traiter ces absences comme des hardenings tant que le modèle de maintenance n'est pas explicitement modifié.
 
 Les workflows versionnés conservent en plus une défense en profondeur sur les pushes directs `develop` : NEXUS CI, CodeQL et OSV écoutent directement la branche ; les gates Docker, benchmarks et Windows sont réutilisés par des callers dédiés avec leurs filtres de chemins.
 
@@ -18,25 +20,29 @@ Les workflows versionnés conservent en plus une défense en profondeur sur les 
 
 - Windows : Java 24 et qualification locale ;
 - Linux : Java 21, **Maven 3.9.16**, reactor complet, tests, distribution, JaCoCo, SBOM et notices ;
-- vérification explicite des ancres d'intégrité Maven/JDT LS ;
+- vérification explicite des ancres d'intégrité Maven/JDT LS et des autres outils de qualification versionnés ;
 - vérification des contrats documentaires machine-vérifiables **avant** le reactor.
 
 Le profil Maven `ci-strict-specified-tests` s'active automatiquement lorsque `CI=true`. Il force alors `surefire.failIfNoSpecifiedTests=true` : toute commande CI ciblée avec `-Dtest=...` échoue si le sélecteur ne correspond à aucun test. Hors CI, la valeur reste `false` afin de préserver les scripts développeur historiques qui sélectionnent un test `core` depuis le reactor multi-module.
 
-JaCoCo est un gate du lifecycle `verify`, pas seulement un rapport : chaque bundle de code doit conserver au moins **65 % de lignes** et **55 % de branches** couvertes. Ces seuils ont été placés sous la baseline du dernier CI vert afin de bloquer les régressions significatives sans transformer l'ajout du gate en hausse artificielle immédiate de couverture.
+JaCoCo est un gate du lifecycle `verify`, pas seulement un rapport : chaque bundle de code doit conserver les seuils de lignes et de branches versionnés dans les POM. Les seuils sont placés sous la baseline courante afin de bloquer les régressions significatives sans transformer l'ajout du gate en hausse artificielle immédiate de couverture.
 
-Le gate documentaire contrôle notamment les invariants NXA4 :
+Le gate documentaire contrôle notamment :
 
 - listener management `127.0.0.1:9000` séparé du listener API ;
 - politique Ollama distante et opt-in HTTP ;
 - redaction de secrets + profil `content-v2` ;
-- JDT LS : 16 MiB / 64 KiB / 8 KiB / 256 messages ;
-- maximum 8 tâches externes actives ;
+- JDT LS : confiance racine exacte + framing 16 MiB / 64 KiB / 8 KiB / 256 messages ;
+- maximum 8 tâches externes actives et circuit-breaker linéarisé ;
+- métadonnées Code Intelligence bornées avant canonicalisation ;
 - Lucene : 128 termes analysés uniques ;
-- stockage POSIX : 0700/0600 ;
+- stockage POSIX : 0700/0600 et mode ACL fail-closed optionnel ;
+- revalidation filesystem du fallback `SafeFileIO` ;
 - `constraints` non supportées rejetées ;
 - installateur JDT LS vérifié contre l'ancre repository-pinned ;
-- noms de providers et colonne `script_sha256` de la documentation de schéma.
+- qualification sémantique réelle disponible avec runtime Ollama épinglé ;
+- non-adoption mesurée du Vector API dans les launchers de production ;
+- politique de maintenance solo documentée.
 
 Les actions GitHub contrôlées par le dépôt sont référencées par SHA immuable.
 
@@ -87,6 +93,27 @@ Le benchmark natif crée un corpus hermétique de 1 000 skills et vérifie front
 
 La borne Lucene de 128 termes est couverte par un test de non-régression du reactor plutôt que par une baisse de seuil benchmark.
 
+### Qualification sémantique réelle
+
+`.github/workflows/semantic-search-qualification.yml` est volontairement séparé des PR ordinaires parce qu'il télécharge un runtime Ollama et un modèle d'embeddings. Il s'exécute manuellement et selon une planification périodique.
+
+Le workflow :
+
+1. checkout le SHA planifié/demandé ;
+2. télécharge Ollama **0.33.3** depuis sa release officielle ;
+3. vérifie l'archive Linux amd64 contre le SHA-256 versionné dans `config/tool-integrity.properties` ;
+4. démarre Ollama uniquement sur `127.0.0.1:11434` ;
+5. utilise `qwen3-embedding:0.6b` en 1024 dimensions ;
+6. exécute `RealSemanticSearchBenchmarkTest` sur le snapshot NEXUS exact ;
+7. exige un index sémantique non vide et des floors de recall/hit/MRR, ainsi qu'une absence de régression supérieure à 0,10 face au baseline ;
+8. conserve versions, logs et rapport JSON comme artefacts pendant 90 jours.
+
+Ce gate est une sentinelle de qualité réelle, pas une dépendance nécessaire au fonctionnement lexical ni un téléchargement imposé à chaque PR.
+
+### Vector API
+
+`runtime-flags-qualification.yml` conserve la comparaison ABBA same-runner entre le contrat de production et `--add-modules=jdk.incubator.vector`. La mesure historique a montré un léger gain global mais une légère régression du p95 graphe ; le module incubateur reste donc **non adopté par défaut**. Le contrat final d'audit interdit son ajout silencieux dans les launchers de production sans nouvelle décision mesurée.
+
 ## Docker Distribution : construire une fois
 
 `.github/workflows/docker-distribution.yml` ne publie rien dans GHCR. Il construit l'image une seule fois et exécute sur cette image les smokes CLI/MCP/REST, Trivy, SBOM et gates de vulnérabilités.
@@ -128,13 +155,14 @@ Les attestations de provenance et SBOM portent sur le digest publié. `latest` n
 `config/tool-integrity.properties` contient les ancres indépendantes :
 
 - Maven 3.9.16 : SHA-512 ;
-- Eclipse JDT LS 1.60.0-202606262232 : SHA-256.
+- Eclipse JDT LS 1.60.0-202606262232 : SHA-256 ;
+- Ollama 0.33.3 Linux amd64, utilisé uniquement par la qualification sémantique réelle : SHA-256.
 
 Sur Unix et Windows, les wrappers Maven conservent l'archive dont le checksum correspond à l'ancre versionnée. `scripts/release/ToolArchiveVerifier.java`, lancé en mode source Java avant Maven, exige ensuite que l'installation extraite soit une projection exacte de cette archive : contenu identique, aucun symlink et aucun fichier supplémentaire. Un écart reconstruit le cache extrait depuis l'archive vérifiée.
 
 `scripts/install-jdtls.ps1` conserve l'archive JDT LS sous le cache NEXUS, la re-hashe contre **l'ancre versionnée dans le repository**, puis reconstruit un staging propre à chaque invocation avant de remplacer l'installation existante. Un simple dossier `plugins/` préexistant n'est donc plus une preuve d'intégrité.
 
-`scripts/release/test-tool-integrity-anchors.sh` est exécuté par NEXUS CI. Il vérifie les ancres et altère volontairement un cache extrait synthétique afin de confirmer que mutations et fichiers inattendus sont rejetés. Une montée de version doit modifier version + hash dans la même revue.
+`scripts/release/test-tool-integrity-anchors.sh` est exécuté par NEXUS CI. Il vérifie la présence/formulation des ancres et altère volontairement un cache extrait synthétique afin de confirmer que mutations et fichiers inattendus sont rejetés. Une montée de version doit modifier version + hash dans la même revue.
 
 ## SQLite
 
@@ -149,7 +177,7 @@ V004 invalide les index historiques incompatibles avant V005. Les tests couvrent
 
 ## Dependabot
 
-`.github/dependabot.yml` cible explicitement `develop` pour Maven, GitHub Actions et Docker. Une exception urgente vers `main` doit être explicite, revue et qualifiée ; elle n'est jamais le chemin par défaut.
+`.github/dependabot.yml` cible explicitement `develop` pour Maven, GitHub Actions et Docker. Une exception urgente vers `main` doit être explicite et qualifiée ; elle n'est jamais le chemin par défaut.
 
 ## Politique d'échec
 
@@ -161,4 +189,5 @@ Un résultat rouge ou ambigu n'est pas un PASS :
 - artefact/hash/digest incohérent : échec ;
 - registry ambiguë : échec ;
 - benchmark hors budget : analyser le run exact-head ;
+- qualification sémantique réelle sous les floors : analyser modèle/runtime/ranking avant de modifier les seuils ;
 - tag immuable divergent : échec définitif, jamais d'écrasement automatique.
