@@ -17,7 +17,7 @@ public record CodeIntelligenceSnapshot(
         if (sourceProvider.isBlank()) {
             throw new IllegalArgumentException("sourceProvider ne doit pas être vide");
         }
-        CodeIntelligenceMetadataPolicy.validateRelationFields("provider", "provider", sourceProvider);
+        CodeIntelligenceMetadataPolicy.validateSourceProvider(sourceProvider);
 
         // Validate resource ceilings before canonicalization allocates duplicate maps.
         CodeIntelligenceMetadataPolicy.validateSnapshotInput(symbols, relations);
