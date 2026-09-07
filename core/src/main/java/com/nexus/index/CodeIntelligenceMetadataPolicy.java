@@ -27,19 +27,21 @@ public final class CodeIntelligenceMetadataPolicy {
     private CodeIntelligenceMetadataPolicy() {
     }
 
-    static void validateSymbol(CodeSymbol symbol) {
-        Objects.requireNonNull(symbol, "symbol");
-        requireUtf8Bound("symbol.name", symbol.name(), MAX_SYMBOL_NAME_UTF8_BYTES);
-        requireUtf8Bound("symbol.qualifiedName", symbol.qualifiedName(), MAX_QUALIFIED_NAME_UTF8_BYTES);
-        requireUtf8Bound("symbol.signature", symbol.signature(), MAX_SIGNATURE_UTF8_BYTES);
-        requireUtf8Bound("symbol.sourceProvider", symbol.sourceProvider(), MAX_SOURCE_PROVIDER_UTF8_BYTES);
+    static void validateSymbolFields(
+            String name,
+            String qualifiedName,
+            String signature,
+            String sourceProvider) {
+        requireUtf8Bound("symbol.name", name, MAX_SYMBOL_NAME_UTF8_BYTES);
+        requireUtf8Bound("symbol.qualifiedName", qualifiedName, MAX_QUALIFIED_NAME_UTF8_BYTES);
+        requireUtf8Bound("symbol.signature", signature, MAX_SIGNATURE_UTF8_BYTES);
+        requireUtf8Bound("symbol.sourceProvider", sourceProvider, MAX_SOURCE_PROVIDER_UTF8_BYTES);
     }
 
-    static void validateRelation(SymbolRelation relation) {
-        Objects.requireNonNull(relation, "relation");
-        requireUtf8Bound("relation.source", relation.source(), MAX_RELATION_REFERENCE_UTF8_BYTES);
-        requireUtf8Bound("relation.target", relation.target(), MAX_RELATION_REFERENCE_UTF8_BYTES);
-        requireUtf8Bound("relation.sourceProvider", relation.sourceProvider(), MAX_SOURCE_PROVIDER_UTF8_BYTES);
+    static void validateRelationFields(String source, String target, String sourceProvider) {
+        requireUtf8Bound("relation.source", source, MAX_RELATION_REFERENCE_UTF8_BYTES);
+        requireUtf8Bound("relation.target", target, MAX_RELATION_REFERENCE_UTF8_BYTES);
+        requireUtf8Bound("relation.sourceProvider", sourceProvider, MAX_SOURCE_PROVIDER_UTF8_BYTES);
     }
 
     static void validateRelativePath(String relativePath) {
