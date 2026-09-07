@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -41,5 +42,17 @@ class NexusPathsTest {
         }
 
         assertThrows(IOException.class, () -> paths.ensurePrivateDirectory(paths.projectLuceneIndex(projectId)));
+    }
+
+    @Test
+    void classifiesExpectedAndBroadWindowsAclPrincipals() {
+        assertTrue(NexusPaths.isTrustedStoragePrincipal("WORKSTATION\\alice", "alice"));
+        assertTrue(NexusPaths.isTrustedStoragePrincipal("NT AUTHORITY\\SYSTEM", "alice"));
+        assertTrue(NexusPaths.isTrustedStoragePrincipal("BUILTIN\\Administrators", "alice"));
+        assertTrue(NexusPaths.isTrustedStoragePrincipal("CREATOR OWNER", "alice"));
+
+        assertFalse(NexusPaths.isTrustedStoragePrincipal("Everyone", "alice"));
+        assertFalse(NexusPaths.isTrustedStoragePrincipal("NT AUTHORITY\\Authenticated Users", "alice"));
+        assertFalse(NexusPaths.isTrustedStoragePrincipal("BUILTIN\\Users", "alice"));
     }
 }
