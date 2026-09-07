@@ -3,9 +3,9 @@ package com.nexus.index;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.Semaphore;
@@ -23,9 +23,10 @@ import java.util.concurrent.atomic.AtomicLong;
  * lieu d'épuiser progressivement la JVM.</p>
  *
  * <p>Un circuit-breaker est maintenu par nom de tâche : lorsqu'un worker a dépassé son timeout et
- * reste vivant, NEXUS refuse de relancer la même intégration jusqu'à sa terminaison réelle. Cela
- * empêche un provider non coopératif de consommer plusieurs permits globaux par relances répétées.
- * {@link #status()} expose l'occupation et le nombre de workers timeoutés pour la supervision.</p>
+ * reste vivant, NEXUS refuse de relancer la même intégration jusqu'à la terminaison de tous ses
+ * workers timeoutés. Le suivi est effectué par worker afin que deux timeouts concurrents du même
+ * provider ne puissent pas s'écraser mutuellement. {@link #status()} expose l'occupation et le
+ * nombre de workers timeoutés pour la supervision.</p>
  */
 public final class ExternalTaskRunner {
 
@@ -33,7 +34,7 @@ public final class ExternalTaskRunner {
     static final Duration MAX_TIMEOUT = Duration.ofHours(1);
     private static final Semaphore CAPACITY = new Semaphore(MAX_CONCURRENT_TASKS);
     private static final AtomicLong THREAD_SEQUENCE = new AtomicLong();
-    private static final ConcurrentMap<String, Thread> TIMED_OUT_TASKS = new ConcurrentHashMap<>();
+    private static final Set<TimedOutTask> TIMED_OUT_TASKS = ConcurrentHashMap.newKeySet();
 
     private final Duration timeout;
 
@@ -51,20 +52,21 @@ public final class ExternalTaskRunner {
 
     public static Status status() {
         pruneCompletedTimedOutTasks();
-        return new Status(
-                MAX_CONCURRENT_TASKS - CAPACITY.availablePermits(),
-                TIMED_OUT_TASKS.size());
+        int timedOutTasks = TIMED_OUT_TASKS.size();
+        int activeTasks = Math.max(
+                timedOutTasks,
+                MAX_CONCURRENT_TASKS - CAPACITY.availablePermits());
+        return new Status(activeTasks, timedOutTasks);
     }
 
     public <T> T run(String taskName, Callable<T> task) throws IOException {
         Objects.requireNonNull(taskName, "taskName");
         Objects.requireNonNull(task, "task");
 
-        Thread timedOutWorker = liveTimedOutWorker(taskName);
-        if (timedOutWorker != null) {
+        if (hasLiveTimedOutWorker(taskName)) {
             throw new IOException(
                     "Circuit-breaker ouvert pour la tâche externe " + taskName
-                            + " : le worker précédent a dépassé son timeout et n'est pas encore terminé");
+                            + " : un worker précédent a dépassé son timeout et n'est pas encore terminé");
         }
 
         if (!CAPACITY.tryAcquire()) {
@@ -88,17 +90,13 @@ public final class ExternalTaskRunner {
         try {
             return result.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (TimeoutException timeoutFailure) {
-            TIMED_OUT_TASKS.put(taskName, worker);
-            worker.interrupt();
-            if (!worker.isAlive()) {
-                TIMED_OUT_TASKS.remove(taskName, worker);
-            }
+            quarantine(taskName, worker);
             throw new IOException(
                     "La tâche externe " + taskName + " a dépassé le timeout global de "
                             + timeout.toMillis() + " ms",
                     timeoutFailure);
         } catch (InterruptedException interrupted) {
-            worker.interrupt();
+            quarantine(taskName, worker);
             Thread.currentThread().interrupt();
             throw new IOException("La tâche externe " + taskName + " a été interrompue", interrupted);
         } catch (ExecutionException executionFailure) {
@@ -116,33 +114,45 @@ public final class ExternalTaskRunner {
         }
     }
 
-    private static Thread liveTimedOutWorker(String taskName) {
-        Thread worker = TIMED_OUT_TASKS.get(taskName);
-        if (worker == null) {
-            return null;
-        }
+    private static void quarantine(String taskName, Thread worker) {
+        TimedOutTask timedOutTask = new TimedOutTask(taskName, worker);
+        TIMED_OUT_TASKS.add(timedOutTask);
+        worker.interrupt();
         if (!worker.isAlive()) {
-            TIMED_OUT_TASKS.remove(taskName, worker);
-            return null;
+            TIMED_OUT_TASKS.remove(timedOutTask);
         }
-        return worker;
+    }
+
+    private static boolean hasLiveTimedOutWorker(String taskName) {
+        boolean live = false;
+        for (TimedOutTask timedOutTask : TIMED_OUT_TASKS) {
+            if (!timedOutTask.worker().isAlive()) {
+                TIMED_OUT_TASKS.remove(timedOutTask);
+            } else if (timedOutTask.taskName().equals(taskName)) {
+                live = true;
+            }
+        }
+        return live;
     }
 
     private static void pruneCompletedTimedOutTasks() {
-        TIMED_OUT_TASKS.forEach((taskName, worker) -> {
-            if (!worker.isAlive()) {
-                TIMED_OUT_TASKS.remove(taskName, worker);
+        for (TimedOutTask timedOutTask : TIMED_OUT_TASKS) {
+            if (!timedOutTask.worker().isAlive()) {
+                TIMED_OUT_TASKS.remove(timedOutTask);
             }
-        });
+        }
     }
 
     private static void execute(String taskName, FutureTask<?> task) {
         try {
             task.run();
         } finally {
-            TIMED_OUT_TASKS.remove(taskName, Thread.currentThread());
+            TIMED_OUT_TASKS.remove(new TimedOutTask(taskName, Thread.currentThread()));
             CAPACITY.release();
         }
+    }
+
+    private record TimedOutTask(String taskName, Thread worker) {
     }
 
     public record Status(int activeTasks, int timedOutTasks) {
@@ -150,7 +160,7 @@ public final class ExternalTaskRunner {
             if (activeTasks < 0 || activeTasks > MAX_CONCURRENT_TASKS) {
                 throw new IllegalArgumentException("activeTasks out of range: " + activeTasks);
             }
-            if (timedOutTasks < 0 || timedOutTasks > activeTasks) {
+            if (timedOutTasks < 0 || timedOutTasks > MAX_CONCURRENT_TASKS) {
                 throw new IllegalArgumentException("timedOutTasks out of range: " + timedOutTasks);
             }
         }
