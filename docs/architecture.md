@@ -22,7 +22,7 @@ en recherche classée ou en contexte minimal, pertinent, explicable et borné.
 6. `ProjectPathGuard` protège les lectures sensibles, y compris SCIP, instructions, skills et customisations projet.
 7. La découverte native partage `ContextDiscoveryLimits`/`ContextDiscoveryBudget` avant sélection de tokens : visites, candidats, octets et deadline.
 8. Les providers/importers externes sont optionnels, bornés en temps et en concurrence ; au plus 8 tâches externes restent réellement actives simultanément à l'échelle JVM.
-9. Le transport JSON-RPC JDT LS borne messages, headers, lignes et backlog avant allocation/accumulation.
+9. Le transport JSON-RPC JDT LS borne messages, headers, lignes et backlog avant allocation/accumulation ; son démarrage exige une racine canonique explicitement approuvée.
 10. Ranking, limites et budgets restent déterministes/explicables.
 11. Une seule mutation d'index par projet est active sur un `NEXUS_HOME` local ; snapshot revalidé avant `READY`.
 12. Le graphe, Git, la fédération et la découverte native sont bornés en travail, pas seulement en résultat final.
@@ -32,9 +32,12 @@ en recherche classée ou en contexte minimal, pertinent, explicable et borné.
 16. La recherche sémantique reste opt-in ; Ollama distant exige HTTPS sauf opt-in administratif explicite pour HTTP.
 17. Les secrets à forte confiance sont redigés avant embeddings et avant restitution des fragments de contexte.
 18. Le profil sémantique `content-v2` invalide/reconstruit les anciens vecteurs incompatibles.
-19. `NEXUS_HOME`/SQLite sont durcis en permissions privées sur POSIX ; les ACL Windows natives ne sont pas remplacées destructivement.
-20. Les outils téléchargés à version fixe sont contrôlés par des ancres d'intégrité versionnées.
-21. Une image release est construite une fois, qualifiée puis publiée sans rebuild.
+19. `NEXUS_HOME`/SQLite sont durcis en permissions privées sur POSIX ; les ACL Windows natives ne sont pas remplacées destructivement et peuvent être exigées fail-closed via `NEXUS_REQUIRE_PRIVATE_STORAGE=true`.
+20. Lorsque `SecureDirectoryStream` n'est pas disponible, `SafeFileIO` capture et revalide chemin réel + identité filesystem autour de l'ouverture finale afin de détecter les substitutions visibles.
+21. Les snapshots Code Intelligence sont bornés en champs UTF-8, cardinalité et volume cumulé avant canonicalisation.
+22. Les outils téléchargés à version fixe sont contrôlés par des ancres d'intégrité versionnées ; le runtime Ollama du benchmark réel suit la même politique.
+23. Une image release est construite une fois, qualifiée puis publiée sans rebuild.
+24. `jdk.incubator.vector` n'est pas activé en production tant qu'une nouvelle qualification same-runner ne démontre pas un bénéfice robuste sans régression critique.
 
 ## Composition
 
@@ -60,7 +63,7 @@ analyses embarquées / enrichissements optionnels
 SQLite canonique + génération/fingerprint
   │
   ├─ SCIP borné et confiné
-  ├─ JDT LS opt-in, framing borné, timeout + SHA-256 versionné
+  ├─ JDT LS opt-in, confiance explicite, framing borné, timeout + SHA-256 versionné
   └─ MINOS explicite
   ↓
 Lucene lexical dérivé
@@ -95,6 +98,8 @@ Les contenus à forte probabilité de secret sont redigés avant les embeddings 
 
 Ollama HTTP est accepté sans opt-in uniquement sur loopback. Une URI distante doit utiliser HTTPS ; HTTP distant exige `NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA=true`. Les credentials intégrés à l'URI sont refusés.
 
+La qualité du chemin sémantique réel est qualifiée périodiquement/manuellement avec un runtime Ollama épinglé et vérifié par SHA-256, `qwen3-embedding:0.6b`, le vrai corpus NEXUS et des seuils explicites de qualité/non-régression. Ce workflow reste séparé des PR ordinaires en raison du coût du runtime et du modèle.
+
 ## Code Intelligence externe
 
 JDT LS reste un processus opt-in. Son framing entrant applique :
@@ -106,11 +111,15 @@ header line   <= 8 KiB
 pending queue <= 256 messages
 ```
 
-Les tâches externes utilisent un budget de concurrence global de 8 workers actifs. Une intégration qui ignore l'interruption ne peut donc pas faire croître indéfiniment le nombre de threads NEXUS.
+Avant son démarrage, la racine canonique exacte doit appartenir à `NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS`. Les snapshots de Code Intelligence convergent ensuite vers une politique commune : **100 000 symboles**, **250 000 relations** et **64 MiB de métadonnées UTF-8 cumulées** maximum, en plus des bornes de champs.
+
+Les tâches externes utilisent un budget de concurrence global de 8 workers actifs et un circuit-breaker linéarisé contre la race timeout/start. La composition de production courante n'exécute pas de provider Java tiers arbitraire : JDT LS est déjà un subprocess et SCIP est importé. Une isolation processus générique n'est donc pas ajoutée sans provider concret démontrant un comportement non coopératif.
 
 ## Persistance locale
 
 `NEXUS_HOME`, `indexes` et `locks` sont rendus privés sur POSIX (`0700`) et SQLite en `0600`. Les chemins persistants durcis refusent les symlinks concernés. Sur Windows, NEXUS conserve les ACL natives au lieu d'appliquer des permissions POSIX fictives.
+
+Par défaut, une ACL sensible accordée à un principal inattendu produit un diagnostic. Avec `NEXUS_REQUIRE_PRIVATE_STORAGE=true`, NEXUS échoue fermé si une ACL inattendue est détectée, si l'inspection échoue ou si le filesystem n'expose ni vue POSIX ni ACL permettant de démontrer la confidentialité.
 
 ## Sécurité REST
 
@@ -142,7 +151,7 @@ Le listener de management ne doit pas être publié par le reverse proxy.
 
 ## Supply-chain et release
 
-Les gates exact-head comprennent NEXUS CI, CodeQL, OSV, Docker Distribution, Scale Benchmark, Scanner Corpus Benchmark et Windows Installer selon leur périmètre ; SonarCloud fournit en plus le Quality Gate de PR.
+Les gates exact-head comprennent NEXUS CI, CodeQL, OSV, Docker Distribution, Scale Benchmark, Scanner Corpus Benchmark et Windows Installer selon leur périmètre ; SonarCloud fournit en plus le Quality Gate de PR. La qualification sémantique réelle Ollama est périodique/manuelle et conserve ses propres preuves.
 
 Docker Distribution construit et qualifie une image unique. La release charge l'artefact qualifié, vérifie hash/ID et publie ce contenu exact.
 
@@ -150,6 +159,8 @@ Les tags version/SHA sont immuables. Le préflight GHCR échoue fermé sur les e
 
 ## Gouvernance
 
-Le ruleset GitHub actif `Protect main & develop` protège `develop` et `main`, impose le passage par pull request, interdit suppression/non-fast-forward et exige les sept checks permanents approuvés. NXA3-14 / #130 est satisfait. Le hardening repository-admin résiduel est `strict_required_status_checks_policy=false`, qui n'impose pas encore une remise à jour de la PR avec sa base immédiatement avant merge. Voir [`developer/branch-governance.md`](developer/branch-governance.md).
+Le ruleset GitHub actif `Protect main & develop` protège `develop` et `main`, impose le passage par pull request, interdit suppression/non-fast-forward et exige les checks permanents approuvés. NXA3-14 / #130 est satisfait.
+
+NEXUS est actuellement maintenu par **une seule personne**. L'absence d'une approbation humaine distincte du mainteneur et l'absence de resynchronisation stricte de la PR avec sa base ne constituent pas des findings sous ce modèle. La barrière de merge repose sur le HEAD candidat, les checks automatisés applicables, la PR obligatoire et les protections de branche. Voir [`developer/branch-governance.md`](developer/branch-governance.md).
 
 Voir aussi [`developer/architecture-implementation.md`](developer/architecture-implementation.md), [`developer/ci-and-supply-chain.md`](developer/ci-and-supply-chain.md), [`developer/current-limitations.md`](developer/current-limitations.md) et [`roadmap.md`](roadmap.md).
