@@ -76,19 +76,20 @@ class SchemaMigratorSymbolRangeUpgradeTest {
         SqliteDatabase upgraded = new SqliteDatabase(paths);
         SqliteIndexRepository repository = new SqliteIndexRepository(upgraded);
 
-        assertProjectState(upgraded, projectId, "READY", "2026-01-01T00:00:00Z", 11, 1, 1, 1);
+        assertProjectState(upgraded, projectId, "NOT_INDEXED", null, 12, 1, 1, 1);
         List<IndexedSymbol> symbols = repository.findSymbols(projectId);
         assertEquals(1, symbols.size());
         assertEquals(4, symbols.getFirst().symbol().startLine());
         assertEquals(12, symbols.getFirst().symbol().endLine());
         assertMigrationApplied(upgraded, 5, "db/migration/V005__enforce_symbol_range_constraints.sql");
+        assertMigrationApplied(upgraded, 6, "db/migration/V006__invalidate_unredacted_lexical_indexes.sql");
         assertDirectSymbolInsertRejected(databaseFile, 202, -1, -1);
 
         try (Connection connection = upgraded.openConnection()) {
             connection.setAutoCommit(true);
             assertDoesNotThrow(() -> SchemaMigrator.migrate(connection));
         }
-        assertMigrationCount(upgraded, 5L);
+        assertMigrationCount(upgraded, 6L);
     }
 
     @Test
@@ -105,13 +106,14 @@ class SchemaMigratorSymbolRangeUpgradeTest {
         SqliteDatabase upgraded = new SqliteDatabase(paths);
         SqliteIndexRepository repository = new SqliteIndexRepository(upgraded);
 
-        assertProjectState(upgraded, invalidProject, "NOT_INDEXED", null, 6, 0, 0, 0);
-        assertProjectState(upgraded, validProject, "READY", "2026-01-01T00:00:00Z", 11, 1, 1, 1);
+        assertProjectState(upgraded, invalidProject, "NOT_INDEXED", null, 7, 0, 0, 0);
+        assertProjectState(upgraded, validProject, "NOT_INDEXED", null, 12, 1, 1, 1);
         assertTrue(repository.findSymbols(invalidProject).isEmpty(),
                 "la lecture domaine ne doit jamais reconstruire un ancien CodeSymbol invalide");
         assertEquals(1, repository.findSymbols(validProject).size());
         assertMigrationApplied(upgraded, 4, "db/migration/V004__invalidate_invalid_symbol_ranges.sql");
         assertMigrationApplied(upgraded, 5, "db/migration/V005__enforce_symbol_range_constraints.sql");
+        assertMigrationApplied(upgraded, 6, "db/migration/V006__invalidate_unredacted_lexical_indexes.sql");
     }
 
     private static void bootstrapMainCompatibleDatabase(Path databaseFile) throws Exception {

@@ -6,6 +6,7 @@ import com.nexus.index.FileCategory;
 import com.nexus.search.LexicalSearchHit;
 import com.nexus.search.SearchDocument;
 import com.nexus.search.SearchIndex;
+import com.nexus.security.SensitiveContentRedactor;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
@@ -221,6 +222,7 @@ public final class LuceneSearchIndex implements SearchIndex {
     }
 
     private static Document toLuceneDocument(UUID projectId, SearchDocument source) {
+        String safeContent = SensitiveContentRedactor.redact(source.content());
         Document document = new Document();
         document.add(new StringField(
                 FIELD_DOCUMENT_KEY,
@@ -231,10 +233,10 @@ public final class LuceneSearchIndex implements SearchIndex {
         document.add(new TextField(FIELD_PATH_TEXT, source.relativePath(), Field.Store.NO));
         document.add(new StringField(FIELD_LANGUAGE, source.language(), Field.Store.YES));
         document.add(new StringField(FIELD_CATEGORY, source.category().name(), Field.Store.YES));
-        document.add(new TextField(FIELD_CONTENT, source.content(), Field.Store.NO));
+        document.add(new TextField(FIELD_CONTENT, safeContent, Field.Store.NO));
         document.add(new TextField(
                 FIELD_CODE_TERMS,
-                identifierSearchText(source.relativePath()) + " " + identifierSearchText(source.content()),
+                identifierSearchText(source.relativePath()) + " " + identifierSearchText(safeContent),
                 Field.Store.NO));
 
         for (CodeSymbol symbol : source.symbols()) {
