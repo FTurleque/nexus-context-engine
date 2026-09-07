@@ -1,5 +1,6 @@
 package com.nexus.index.java;
 
+import com.nexus.index.AnalysisLimits;
 import com.nexus.index.AnalysisResult;
 import com.nexus.index.RelationKind;
 import com.nexus.index.SymbolKind;
@@ -80,5 +81,38 @@ class JavaParserLanguageAnalyzerTest {
         JavaParserLanguageAnalyzer analyzer = new JavaParserLanguageAnalyzer();
 
         assertThrows(IOException.class, () -> analyzer.analyze(tempDir, source));
+    }
+
+    @Test
+    void rejectsSymbolCardinalityAboveConfiguredLimit() throws IOException {
+        Path source = tempDir.resolve("DenseSymbols.java");
+        Files.writeString(source, """
+                package demo;
+                class DenseSymbols {
+                    void first() {}
+                    void second() {}
+                }
+                """);
+        JavaParserLanguageAnalyzer analyzer = new JavaParserLanguageAnalyzer(new AnalysisLimits(2, 10));
+
+        IOException failure = assertThrows(IOException.class, () -> analyzer.analyze(tempDir, source));
+
+        assertTrue(failure.getMessage().contains("plus de 2 symboles"));
+    }
+
+    @Test
+    void rejectsRelationCardinalityAboveConfiguredLimit() throws IOException {
+        Path source = tempDir.resolve("DenseImports.java");
+        Files.writeString(source, """
+                package demo;
+                import java.util.List;
+                import java.util.Map;
+                class DenseImports {}
+                """);
+        JavaParserLanguageAnalyzer analyzer = new JavaParserLanguageAnalyzer(new AnalysisLimits(10, 1));
+
+        IOException failure = assertThrows(IOException.class, () -> analyzer.analyze(tempDir, source));
+
+        assertTrue(failure.getMessage().contains("plus de 1 relations"));
     }
 }

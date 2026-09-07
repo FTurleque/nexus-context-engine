@@ -65,6 +65,18 @@ class LuceneSearchIndexTest {
     }
 
     @Test
+    void redactsSensitiveContentBeforeBuildingInvertedTerms() throws Exception {
+        LuceneSearchIndex index = new LuceneSearchIndex(new NexusPaths(temporaryDirectory.resolve("redacted-home")));
+        UUID projectId = UUID.randomUUID();
+        index.rebuild(projectId, List.of(document(
+                "secret.md",
+                "password=\"uniquesecretvalue2026\"; searchableMarker remains visible")));
+
+        assertTrue(index.search(projectId, "uniquesecretvalue2026", 10).isEmpty());
+        assertEquals(1, index.search(projectId, "searchableMarker", 10).size());
+    }
+
+    @Test
     void boundsHighCardinalityQueriesInsteadOfTriggeringTooManyClauses() throws Exception {
         LuceneSearchIndex index = new LuceneSearchIndex(new NexusPaths(temporaryDirectory.resolve("bounded-home")));
         UUID projectId = UUID.randomUUID();

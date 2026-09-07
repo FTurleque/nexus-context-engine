@@ -26,6 +26,7 @@ on:
       - 'scripts/release/test-release-tag-policy.sh'
       - 'scripts/release/ghcr-immutable-preflight.sh'
       - 'scripts/release/test-ghcr-immutable-preflight.sh'
+      - 'scripts/release/publish-github-release-assets.sh'
       - 'src/**'
       - 'core/**'
       - 'adapters/**'
@@ -43,6 +44,7 @@ on:
       - 'scripts/release/test-release-tag-policy.sh'
       - 'scripts/release/ghcr-immutable-preflight.sh'
       - 'scripts/release/test-ghcr-immutable-preflight.sh'
+      - 'scripts/release/publish-github-release-assets.sh'
       - 'src/**'
       - 'core/**'
       - 'adapters/**'
@@ -79,7 +81,9 @@ jobs:
             scripts/release/validate-release-tag.sh \
             scripts/release/test-release-tag-policy.sh \
             scripts/release/ghcr-immutable-preflight.sh \
-            scripts/release/test-ghcr-immutable-preflight.sh
+            scripts/release/test-ghcr-immutable-preflight.sh \
+            scripts/release/publish-github-release-assets.sh
+          bash -n scripts/release/publish-github-release-assets.sh
           scripts/release/test-release-tag-policy.sh
           scripts/release/test-ghcr-immutable-preflight.sh
 
@@ -253,14 +257,14 @@ jobs:
           if-no-files-found: warn
           retention-days: 90
 
-      - name: Block fixable HIGH or CRITICAL image vulnerabilities
+      - name: Block fixable MEDIUM HIGH or CRITICAL image vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: nexus-context-engine:${{ env.NEXUS_HEAD_SHA }}
           scan-type: image
           format: table
           vuln-type: os,library
-          severity: HIGH,CRITICAL
+          severity: MEDIUM,HIGH,CRITICAL
           ignore-unfixed: true
           skip-setup-trivy: true
           exit-code: '1'

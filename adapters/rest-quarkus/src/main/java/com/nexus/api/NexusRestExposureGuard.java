@@ -14,16 +14,23 @@ import java.util.List;
 public class NexusRestExposureGuard {
 
     @ConfigProperty(name = "quarkus.http.host", defaultValue = "127.0.0.1")
-    String host;
+    String host = "127.0.0.1";
+
+    @ConfigProperty(name = "quarkus.management.host", defaultValue = "127.0.0.1")
+    String managementHost = "127.0.0.1";
+
+    @ConfigProperty(name = NexusRestSecurity.LOCAL_TRUST_PROPERTY, defaultValue = "false")
+    boolean localTrust;
 
     @PostConstruct
     void validateExposure() {
+        validateManagementExposure();
         if (NexusRestSecurity.isLoopbackHost(host)) {
-            validateHardenedLoopback();
+            validateLoopback();
             return;
         }
 
-        requireStrongToken("NEXUS REST refuse une écoute hors loopback sans authentification. Configurez ");
+        requireRemoteTokenPolicy("NEXUS REST refuse une écoute hors loopback sans authentification. Configurez ");
         requireProjectRoots("Une écoute REST hors loopback exige ");
 
         String exposureMode = NexusRestSecurity.configuredExposureMode()
@@ -47,29 +54,51 @@ public class NexusRestExposureGuard {
         NexusRestTransportPolicy.validateSecureNonLoopbackExposure(exposureMode);
     }
 
-    private static void validateHardenedLoopback() {
-        if (!NexusRestSecurity.isLocalHardeningRequired()) {
-            return;
+    private void validateManagementExposure() {
+        if (!NexusRestSecurity.isLoopbackHost(managementHost)) {
+            throw new IllegalStateException(
+                    "Le listener Quarkus management doit rester strictement loopback. "
+                            + "Configurez quarkus.management.host=127.0.0.1 ou ::1; "
+                            + "les endpoints health/metrics ne doivent pas être publiés sur le réseau.");
         }
-        requireStrongToken(
-                NexusRestSecurity.LOCAL_HARDENING_ENVIRONMENT_VARIABLE
-                        + "=true exige une authentification locale. Configurez ");
-        requireProjectRoots(
-                NexusRestSecurity.LOCAL_HARDENING_ENVIRONMENT_VARIABLE
-                        + "=true exige une allowlist de projets via ");
     }
 
-    private static String requireStrongToken(String prefix) {
+    private void validateLoopback() {
+        if (NexusRestSecurity.isLocalHardeningRequired()) {
+            requireRemoteTokenPolicy(
+                    NexusRestSecurity.LOCAL_HARDENING_ENVIRONMENT_VARIABLE
+                            + "=true exige une authentification locale. Configurez ");
+            requireProjectRoots(
+                    NexusRestSecurity.LOCAL_HARDENING_ENVIRONMENT_VARIABLE
+                            + "=true exige une allowlist de projets via ");
+            return;
+        }
+
+        if (localTrust || NexusRestSecurity.isLocalTrustExplicitlyEnabled()) {
+            return;
+        }
+
+        if (NexusRestSecurity.configuredToken().isEmpty()) {
+            throw new IllegalStateException(
+                    "Une écoute REST loopback exige désormais un Bearer token par défaut. Configurez "
+                            + NexusRestSecurity.TOKEN_ENVIRONMENT_VARIABLE
+                            + ". Pour conserver explicitement le mode local sans authentification, utilisez "
+                            + NexusRestSecurity.LOCAL_TRUST_ENVIRONMENT_VARIABLE + "=true.");
+        }
+        requireRemoteTokenPolicy("Une écoute REST loopback exige un Bearer token robuste. Configurez ");
+    }
+
+    private static String requireRemoteTokenPolicy(String prefix) {
         String token = NexusRestSecurity.configuredToken()
                 .orElseThrow(() -> new IllegalStateException(
                         prefix + NexusRestSecurity.TOKEN_ENVIRONMENT_VARIABLE + "."));
-        if (!NexusRestSecurity.isStrongRemoteToken(token)) {
+        if (!NexusRestSecurity.meetsRemoteTokenPolicy(token)) {
             throw new IllegalStateException(
                     NexusRestSecurity.TOKEN_ENVIRONMENT_VARIABLE + " doit contenir au moins "
                             + NexusRestSecurity.MIN_REMOTE_TOKEN_BYTES
-                            + " octets et présenter une entropie estimée d'au moins "
-                            + (int) NexusRestSecurity.MIN_REMOTE_TOKEN_ESTIMATED_ENTROPY_BITS
-                            + " bits");
+                            + " octets et satisfaire le seuil minimal de diversité de caractères ("
+                            + (int) NexusRestSecurity.MIN_REMOTE_TOKEN_CHARACTER_DIVERSITY_SCORE
+                            + "). Utilisez un token généré par un CSPRNG ; ce contrôle structurel ne prouve pas l'aléa.");
         }
         return token;
     }

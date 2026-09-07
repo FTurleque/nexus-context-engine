@@ -2,3 +2,12 @@
 upload PDF	src/main/java/demo/pdf/PdfUploadService.java;src/main/java/demo/storage/DocumentRepository.java
 DocumentRepository	src/main/java/demo/storage/DocumentRepository.java
 health controller	src/main/java/demo/web/UnrelatedController.java
+validate bearer token expiration	src/main/java/demo/security/JwtTokenValidator.java
+JwtTokenValidator	src/main/java/demo/security/JwtTokenValidator.java
+checkout order payment	src/main/java/demo/order/OrderCheckoutService.java;src/main/java/demo/payment/PaymentGatewayClient.java
+reserve stock warehouse	src/main/java/demo/inventory/InventoryReservationService.java
+capture payment retry timeout	src/main/java/demo/payment/PaymentGatewayClient.java
+update profile avatar	src/main/java/demo/profile/UserProfileController.java
+persist audit security event	src/main/java/demo/audit/AuditEventRepository.java
+evict expired cache entries	src/main/java/demo/cache/CacheEvictionJob.java
+remote bearer token rotation TLS	docs/security.md

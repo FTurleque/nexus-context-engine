@@ -13,6 +13,7 @@ import com.nexus.search.FederatedSearchHit;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -31,13 +32,21 @@ public class NexusApiApplicationService {
     private final MeterRegistry meterRegistry;
     private final NexusApplication application;
 
+    @Inject
     public NexusApiApplicationService(MeterRegistry meterRegistry) {
+        this(meterRegistry, initializeApplication());
+    }
+
+    /** Package-private seam used by focused adapter tests with an isolated NEXUS_HOME. */
+    NexusApiApplicationService(MeterRegistry meterRegistry, NexusApplication application) {
         this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry");
-        this.application = initializeApplication();
+        this.application = Objects.requireNonNull(application, "application");
     }
 
     public List<ProjectDescriptor> listProjects() {
-        return application.listProjects();
+        return application.listProjects().stream()
+                .filter(project -> NexusRestProjectRootPolicy.isAllowedPersisted(project.rootPath()))
+                .toList();
     }
 
     public ProjectDescriptor registerProject(java.nio.file.Path rootPath, String name) throws IOException {
@@ -46,10 +55,11 @@ public class NexusApiApplicationService {
     }
 
     public ProjectDescriptor getProject(UUID projectId) {
-        return application.getProject(projectId);
+        return requireAllowedProject(projectId);
     }
 
     public IndexOperation index(UUID projectId, boolean rebuild, boolean deepJava) throws IOException {
+        requireAllowedProject(projectId);
         long startedAt = System.nanoTime();
         operationCounter("index");
         try {
@@ -62,10 +72,12 @@ public class NexusApiApplicationService {
     }
 
     public IndexStatistics inspect(UUID projectId) {
+        requireAllowedProject(projectId);
         return application.inspect(projectId);
     }
 
     public SearchOperation search(UUID projectId, String query, int limit, boolean explain) throws IOException {
+        requireAllowedProject(projectId);
         long startedAt = System.nanoTime();
         operationCounter("search");
         try {
@@ -83,6 +95,7 @@ public class NexusApiApplicationService {
             String query,
             int limit,
             boolean explain) throws IOException {
+        requireAllowedProjects(projectIds);
         long startedAt = System.nanoTime();
         operationCounter("search_federated");
         try {
@@ -103,6 +116,7 @@ public class NexusApiApplicationService {
             Set<String> requestedSources,
             Map<String, String> constraints,
             boolean explain) {
+        requireAllowedProject(projectId);
         long startedAt = System.nanoTime();
         operationCounter("context");
         try {
@@ -124,6 +138,7 @@ public class NexusApiApplicationService {
             Set<String> requestedSources,
             Map<String, String> constraints,
             boolean explain) {
+        requireAllowedProjects(projectIds);
         long startedAt = System.nanoTime();
         operationCounter("context_federated");
         try {
@@ -148,6 +163,26 @@ public class NexusApiApplicationService {
             application.close();
         } catch (IOException exception) {
             throw new IllegalStateException("Impossible de fermer les ressources NEXUS REST", exception);
+        }
+    }
+
+    private ProjectDescriptor requireAllowedProject(UUID projectId) {
+        ProjectDescriptor project = application.getProject(projectId);
+        try {
+            NexusRestProjectRootPolicy.requireAllowedPersisted(project.rootPath());
+            return project;
+        } catch (IOException exception) {
+            throw new IllegalArgumentException(
+                    "Le projet REST " + project.id()
+                            + " n'est plus accessible depuis les racines actuellement autorisées",
+                    exception);
+        }
+    }
+
+    private void requireAllowedProjects(List<UUID> projectIds) {
+        Objects.requireNonNull(projectIds, "projectIds");
+        for (UUID projectId : projectIds) {
+            requireAllowedProject(projectId);
         }
     }
 

@@ -93,10 +93,16 @@ Loopback est le défaut sûr. Le contrat distant ne s'applique pas à un listene
 
 Elle exige simultanément :
 
-- `NEXUS_REST_API_TOKEN` robuste ;
+- `NEXUS_REST_API_TOKEN` généré par un CSPRNG et conforme au gate structurel NEXUS ;
 - `NEXUS_REST_ALLOWED_PROJECT_ROOTS` non vide ;
 - un `NEXUS_REST_EXPOSURE_MODE` supporté ;
 - un transport Quarkus effectif compatible avec ce mode.
+
+Le gate de token exige au moins 32 octets et rejette les chaînes dont la diversité de caractères est manifestement insuffisante. Cette heuristique est uniquement un filtre structurel : elle **ne mesure pas l'entropie cryptographique** et ne peut pas prouver qu'une chaîne statique est imprévisible. Le secret doit donc être généré par une source cryptographiquement sûre, par exemple :
+
+```bash
+openssl rand -hex 32
+```
 
 Le listener de management doit rester non publié. Sa valeur par défaut NEXUS est `127.0.0.1:9000`.
 

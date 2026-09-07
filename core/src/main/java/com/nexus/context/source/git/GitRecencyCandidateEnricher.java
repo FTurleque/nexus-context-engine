@@ -12,6 +12,7 @@ import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
+import org.eclipse.jgit.treewalk.filter.PathFilterGroup;
 import org.eclipse.jgit.util.io.DisabledOutputStream;
 
 import java.io.IOException;
@@ -24,11 +25,15 @@ import java.util.Map;
 
 /**
  * Ajoute un faible signal de récence Git aux candidats déjà découverts.
- * Le provider est strictement local et en lecture seule.
+ * Le provider est strictement local, en lecture seule et son coût est borné
+ * par les seuls chemins candidats au lieu de scanner les diffs complets.
  */
 public final class GitRecencyCandidateEnricher implements CandidateEnricher {
 
     static final int MAX_COMMITS = 50;
+    static final int MAX_CANDIDATE_PATHS = 512;
+    static final int MAX_CHANGED_PATHS_PER_COMMIT = 1_024;
+    static final int MAX_CUMULATIVE_CHANGED_PATHS = 4_096;
 
     @Override
     public List<SearchCandidate> enrich(ProjectDescriptor project, List<SearchCandidate> candidates) throws IOException {
@@ -43,7 +48,7 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
                 candidatesByProjectPath.putIfAbsent(relativePath, candidate);
             }
         }
-        if (candidatesByProjectPath.isEmpty()) {
+        if (candidatesByProjectPath.isEmpty() || candidatesByProjectPath.size() > MAX_CANDIDATE_PATHS) {
             return candidates;
         }
 
@@ -53,23 +58,36 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
              RevWalk revWalk = new RevWalk(repository);
              DiffFormatter diffFormatter = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
             diffFormatter.setRepository(repository);
-            diffFormatter.setDetectRenames(true);
+            // La détection de renommage inspecte potentiellement de nombreux blobs sans bénéfice
+            // pour ce signal : une modification du chemin courant reste visible comme ADD/DELETE.
+            diffFormatter.setDetectRenames(false);
 
             String projectPrefix = projectPrefix(repository, project.rootPath());
             Map<String, String> projectPathByGitPath = new HashMap<>();
             for (String projectPath : candidatesByProjectPath.keySet()) {
                 projectPathByGitPath.put(toGitPath(projectPrefix, projectPath), projectPath);
             }
+            diffFormatter.setPathFilter(PathFilterGroup.createFromStrings(projectPathByGitPath.keySet()));
 
             int position = 0;
+            int cumulativeChangedPaths = 0;
             for (RevCommit commit : git.log().setMaxCount(MAX_COMMITS).call()) {
                 if (commit.getParentCount() == 0) {
                     position++;
                     continue;
                 }
                 RevCommit parent = revWalk.parseCommit(commit.getParent(0).getId());
+                List<DiffEntry> entries = diffFormatter.scan(parent.getTree(), commit.getTree());
+                if (entries.size() > MAX_CHANGED_PATHS_PER_COMMIT) {
+                    return candidates;
+                }
+                cumulativeChangedPaths += entries.size();
+                if (cumulativeChangedPaths > MAX_CUMULATIVE_CHANGED_PATHS) {
+                    return candidates;
+                }
+
                 double score = recencyScore(position++);
-                for (DiffEntry entry : diffFormatter.scan(parent.getTree(), commit.getTree())) {
+                for (DiffEntry entry : entries) {
                     addScore(recency, projectPathByGitPath, entry.getOldPath(), score);
                     addScore(recency, projectPathByGitPath, entry.getNewPath(), score);
                 }
@@ -77,6 +95,8 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
         } catch (RepositoryNotFoundException exception) {
             return candidates;
         } catch (Exception exception) {
+            // La récence Git est un signal optionnel : tout incident ou dépassement implicite
+            // reste fail-open pour ne jamais rendre la recherche principale indisponible.
             return candidates;
         }
 

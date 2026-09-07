@@ -1,0 +1,37 @@
+name: GitHub Release Asset Qualification
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - 'scripts/release/publish-github-release-assets.sh'
+      - 'scripts/release/test-publish-github-release-assets.sh'
+      - '.github/workflows/release-assets-qualification.yml'
+  push:
+    branches:
+      - develop
+    paths:
+      - 'scripts/release/publish-github-release-assets.sh'
+      - 'scripts/release/test-publish-github-release-assets.sh'
+      - '.github/workflows/release-assets-qualification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    name: Atomic immutable release asset publication
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Qualify GitHub Release publication state machine
+        shell: bash
+        run: bash scripts/release/test-publish-github-release-assets.sh

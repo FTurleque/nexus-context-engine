@@ -8,8 +8,12 @@ final class ScipIndexLimits {
 
     static final long DEFAULT_MAX_INDEX_BYTES = 256L * 1024L * 1024L;
     static final int DEFAULT_MAX_MESSAGE_BYTES = 16 * 1024 * 1024;
-    static final long MAX_CONFIGURABLE_INDEX_BYTES = 1024L * 1024L * 1024L;
-    static final int MAX_CONFIGURABLE_MESSAGE_BYTES = 64 * 1024 * 1024;
+
+    // These are security ceilings, not tuning defaults. Environment variables may
+    // lower them for constrained runtimes but can no longer enlarge the parser's
+    // maximum attack surface beyond the qualified production envelope.
+    static final long MAX_CONFIGURABLE_INDEX_BYTES = DEFAULT_MAX_INDEX_BYTES;
+    static final int MAX_CONFIGURABLE_MESSAGE_BYTES = DEFAULT_MAX_MESSAGE_BYTES;
 
     private ScipIndexLimits() {
     }

@@ -19,7 +19,8 @@ public final class SymbolSearchStrategy implements SearchStrategy {
     private static final double MIN_FUZZY_SCORE = 0.62d;
     private static final int MIN_CANDIDATE_POOL = 100;
     private static final int MAX_CANDIDATE_POOL = 2_000;
-    private static final int MAX_QUERY_TERMS = 8;
+    static final int MAX_QUERY_TERMS = 8;
+    static final int MAX_QUERY_TERM_CHARS = 128;
 
     private final IndexRepository indexRepository;
 
@@ -29,14 +30,13 @@ public final class SymbolSearchStrategy implements SearchStrategy {
 
     @Override
     public List<SearchCandidate> search(ProjectDescriptor project, String query, int limit) {
-        List<String> terms = SearchText.terms(query);
+        List<String> terms = SearchText.boundedTerms(query, MAX_QUERY_TERMS, MAX_QUERY_TERM_CHARS);
         String normalizedQuery = query.toLowerCase(Locale.ROOT).trim();
         int candidatePoolLimit = Math.clamp((long) limit * 20, MIN_CANDIDATE_POOL, MAX_CANDIDATE_POOL);
 
         Map<String, IndexedSymbol> symbolPool = new LinkedHashMap<>();
         collect(symbolPool, indexRepository.searchSymbols(project.id(), normalizedQuery, candidatePoolLimit));
         terms.stream()
-                .limit(MAX_QUERY_TERMS)
                 .filter(term -> !term.equals(normalizedQuery))
                 .forEach(term -> collect(
                         symbolPool,
@@ -57,7 +57,7 @@ public final class SymbolSearchStrategy implements SearchStrategy {
             Map<String, Double> signals = new LinkedHashMap<>();
             signals.put(SearchSignals.SYMBOL_EXACT, exactScore);
             signals.put(SearchSignals.SYMBOL_FUZZY, fuzzyScore);
-            signals.put(SearchSignals.PATH, SearchText.pathScore(indexedSymbol.relativePath(), query));
+            signals.put(SearchSignals.PATH, SearchText.pathScore(indexedSymbol.relativePath(), terms));
 
             candidates.add(new SearchCandidate(
                     "symbol:" + indexedSymbol.relativePath() + ":" + symbol.qualifiedName(),

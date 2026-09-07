@@ -10,16 +10,21 @@ if ($env:OS -ne 'Windows_NT') {
 
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $hardener = Join-Path $PSScriptRoot 'harden-windows-installer-source.ps1'
+$restAuthHardener = Join-Path $PSScriptRoot 'harden-windows-rest-auth-source.ps1'
 $template = Join-Path $repo 'packaging\windows\nexus-installer.iss.template'
 . $hardener
+. $restAuthHardener
 $hardened = Protect-NexusInstallerSource -Source ([IO.File]::ReadAllText($template))
+$hardened = Protect-NexusNativeRestAuthSource -Source $hardened
 
 foreach ($required in @(
     'function CmdEnvEscape(Value: String): String;',
     "StringChangeEx(Result, '%', '%%', True);",
     'function ContainsUnsafeConfigChars(Value: String): Boolean;',
     'function IsValidDockerImageReference(Value: String): Boolean;',
-    'CmdEnvEscape(RuntimePage.Values[3])',
+    'CmdEnvEscape(NativeToken)',
+    'NativeToken := GenerateLocalToken();',
+    'RuntimePage.Values[3] := NativeToken;',
     'DotEnvQuoted(DockerToken)',
     'NEXUS_REST_EXPOSURE_MODE=loopback-forward',
     '# NEXUS_DOCKER_HOST_FORWARD_ADDRESS is derived by Compose from NEXUS_DOCKER_BIND_ADDRESS',
@@ -31,6 +36,12 @@ foreach ($required in @(
     if ($hardened.IndexOf($required, [StringComparison]::Ordinal) -lt 0) {
         throw "Generated installer hardening contract missing: $required"
     }
+}
+
+if ($hardened.IndexOf(
+        'set "NEXUS_REST_API_TOKEN='' + CmdEnvEscape(RuntimePage.Values[3]) + ''"',
+        [StringComparison]::Ordinal) -ge 0) {
+    throw 'Native REST configuration still writes a blank user token directly.'
 }
 
 # Execute the same cmd.exe representation emitted by CmdEnvEscape. Start cmd.exe
@@ -69,7 +80,7 @@ try {
         throw "cmd.exe escaping round-trip mismatch.`nExpected: $expected`nActual:   $actual"
     }
 
-    Write-Host 'NEXUS Windows cmd configuration escaping and Docker forward/native-access contract PASS' -ForegroundColor Green
+    Write-Host 'NEXUS Windows cmd escaping, REST auth, Docker forward and native-access contract PASS' -ForegroundColor Green
 }
 finally {
     Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue

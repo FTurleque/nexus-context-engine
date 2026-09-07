@@ -110,4 +110,4 @@ ou :
 4. Ne pas abaisser un budget/seuil pour masquer une régression.
 5. Toute décision structurante durable implique un ADR lorsque le changement dépasse un simple durcissement d'implémentation.
 
-La protection effective de `develop` reste une configuration GitHub externe au code et doit être vérifiée par API après modification. Tant que `protected=false`, #130 reste ouvert.
+La protection effective de `develop` reste une configuration GitHub externe au code et doit être vérifiée par API après modification. Au 6 septembre 2026, le ruleset `Protect main & develop` est actif et #130 est satisfait ; `strict_required_status_checks_policy=false` reste un hardening repository-admin distinct.

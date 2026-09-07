@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
@@ -70,8 +71,8 @@ public final class LuceneFileSearchStrategy implements SearchStrategy {
     }
 
     private static double pathScore(String relativePath, String query) {
-        String normalizedPath = relativePath.toLowerCase();
-        String[] terms = TERM_SEPARATOR.split(query.toLowerCase());
+        String normalizedPath = relativePath.toLowerCase(Locale.ROOT);
+        String[] terms = TERM_SEPARATOR.split(query.toLowerCase(Locale.ROOT));
         int total = 0;
         int matches = 0;
         for (String term : terms) {

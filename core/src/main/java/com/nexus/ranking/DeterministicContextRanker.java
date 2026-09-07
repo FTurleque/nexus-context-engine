@@ -35,11 +35,15 @@ public final class DeterministicContextRanker implements ContextRanker {
     }
 
     public DeterministicContextRanker(double gitRecencyWeight, double semanticWeight) {
-        if (gitRecencyWeight < 0.0d || gitRecencyWeight > 0.20d) {
-            throw new IllegalArgumentException("gitRecencyWeight must be between 0.0 and 0.20");
+        if (!Double.isFinite(gitRecencyWeight)
+                || gitRecencyWeight < 0.0d
+                || gitRecencyWeight > 0.20d) {
+            throw new IllegalArgumentException("gitRecencyWeight must be finite and between 0.0 and 0.20");
         }
-        if (semanticWeight < 0.0d || semanticWeight > 1.0d) {
-            throw new IllegalArgumentException("semanticWeight must be between 0.0 and 1.0");
+        if (!Double.isFinite(semanticWeight)
+                || semanticWeight < 0.0d
+                || semanticWeight > 1.0d) {
+            throw new IllegalArgumentException("semanticWeight must be finite and between 0.0 and 1.0");
         }
         this.gitRecencyWeight = gitRecencyWeight;
         this.semanticWeight = semanticWeight;

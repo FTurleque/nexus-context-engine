@@ -10,15 +10,22 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.PipedInputStream;
+import java.io.PipedOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JdtLanguageServerCodeIntelligenceProviderTest {
@@ -120,6 +127,50 @@ class JdtLanguageServerCodeIntelligenceProviderTest {
         assertThrows(IOException.class, () -> configuration.workspaceFor(home.resolve("project")));
     }
 
+    @Test
+    void usesDedicatedShutdownTimeoutInsteadOfOperationalTimeout() throws Exception {
+        JdtLanguageServerCodeIntelligenceProvider.Configuration configuration =
+                new JdtLanguageServerCodeIntelligenceProvider.Configuration(
+                        temporaryDirectory.resolve("jdtls-shutdown"),
+                        temporaryDirectory.resolve("workspaces-shutdown"),
+                        "java",
+                        Duration.ofSeconds(30),
+                        20);
+        HangingProcess process = new HangingProcess();
+        JdtLanguageServerCodeIntelligenceProvider.StdioSession session =
+                new JdtLanguageServerCodeIntelligenceProvider.StdioSession(
+                        configuration,
+                        temporaryDirectory,
+                        process);
+
+        assertEquals(
+                Duration.ofSeconds(1),
+                JdtLanguageServerCodeIntelligenceProvider.StdioSession.shutdownTimeout(configuration.timeout()));
+        assertTimeoutPreemptively(Duration.ofSeconds(2), session::close);
+        assertTrue(process.destroyed);
+    }
+
+    @Test
+    void skipsGracefulShutdownAfterAnOperationalTimeout() throws Exception {
+        JdtLanguageServerCodeIntelligenceProvider.Configuration configuration =
+                new JdtLanguageServerCodeIntelligenceProvider.Configuration(
+                        temporaryDirectory.resolve("jdtls-timeout"),
+                        temporaryDirectory.resolve("workspaces-timeout"),
+                        "java",
+                        Duration.ofSeconds(1),
+                        20);
+        HangingProcess process = new HangingProcess();
+        JdtLanguageServerCodeIntelligenceProvider.StdioSession session =
+                new JdtLanguageServerCodeIntelligenceProvider.StdioSession(
+                        configuration,
+                        temporaryDirectory,
+                        process);
+
+        assertThrows(IOException.class, () -> session.request("test/neverReplies", JSON.createObjectNode()));
+        assertTimeoutPreemptively(Duration.ofMillis(500), session::close);
+        assertTrue(process.destroyed);
+    }
+
     private JdtLanguageServerCodeIntelligenceProvider.Configuration configuration() {
         return new JdtLanguageServerCodeIntelligenceProvider.Configuration(
                 temporaryDirectory.resolve("jdtls"),
@@ -134,6 +185,85 @@ class JdtLanguageServerCodeIntelligenceProviderTest {
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);
         return file;
+    }
+
+    private static final class HangingProcess extends Process {
+
+        private final ByteArrayOutputStream stdin = new ByteArrayOutputStream();
+        private final PipedInputStream stdout = new PipedInputStream();
+        private final PipedOutputStream stdoutWriter;
+        private final PipedInputStream stderr = new PipedInputStream();
+        private final PipedOutputStream stderrWriter;
+        private volatile boolean alive = true;
+        private volatile boolean destroyed;
+
+        private HangingProcess() throws IOException {
+            stdoutWriter = new PipedOutputStream(stdout);
+            stderrWriter = new PipedOutputStream(stderr);
+        }
+
+        @Override
+        public OutputStream getOutputStream() {
+            return stdin;
+        }
+
+        @Override
+        public InputStream getInputStream() {
+            return stdout;
+        }
+
+        @Override
+        public InputStream getErrorStream() {
+            return stderr;
+        }
+
+        @Override
+        public int waitFor() throws InterruptedException {
+            while (alive) {
+                Thread.sleep(10L);
+            }
+            return 0;
+        }
+
+        @Override
+        public boolean waitFor(long timeout, TimeUnit unit) {
+            return !alive;
+        }
+
+        @Override
+        public int exitValue() {
+            if (alive) {
+                throw new IllegalThreadStateException("process is still alive");
+            }
+            return 0;
+        }
+
+        @Override
+        public void destroy() {
+            destroyed = true;
+            alive = false;
+            closeQuietly(stdoutWriter);
+            closeQuietly(stderrWriter);
+        }
+
+        @Override
+        public Process destroyForcibly() {
+            destroy();
+            return this;
+        }
+
+        @Override
+        public boolean isAlive() {
+            return alive;
+        }
+
+        private static void closeQuietly(OutputStream output) {
+            try {
+                output.close();
+            } catch (IOException ignored) {
+                // Best effort in fake process teardown.
+            }
+        }
     }
 
     private static final class FakeSession implements JdtLanguageServerCodeIntelligenceProvider.Session {

@@ -49,29 +49,19 @@ foreach ($required in @(
     'lib\nexus-mcp.jar',
     'lib\nexus-assistant-clients.jar',
     'rest\quarkus-run.jar',
-    'docker\docker-compose.yml.template'
+    'docker\docker-compose.yml.template',
+    'docker\Dockerfile.runtime',
+    'docker\nexus-container-entrypoint.sh',
+    'docker\nexus-container-healthcheck.sh'
 )) {
     if (-not (Test-Path -LiteralPath (Join-Path $DistributionRoot $required) -PathType Leaf)) {
         throw "Invalid NEXUS Windows distribution; missing $required"
     }
 }
 
-# The installer must be able to build the Docker runtime locally when the configured
-# registry image is unavailable/private. Stage the runtime-only Dockerfile and entrypoint
-# directly into the distribution consumed by Inno Setup.
-$dockerPayloadRoot = Join-Path $DistributionRoot 'docker'
-New-Item -ItemType Directory -Force -Path $dockerPayloadRoot | Out-Null
-$dockerRuntimePayload = @(
-    @{ Source = (Join-Path $repo 'packaging\docker\docker-compose.yml.template'); Destination = (Join-Path $dockerPayloadRoot 'docker-compose.yml.template') },
-    @{ Source = (Join-Path $repo 'packaging\docker\Dockerfile.runtime'); Destination = (Join-Path $dockerPayloadRoot 'Dockerfile.runtime') },
-    @{ Source = (Join-Path $repo 'packaging\docker\nexus-container-entrypoint.sh'); Destination = (Join-Path $dockerPayloadRoot 'nexus-container-entrypoint.sh') }
-)
-foreach ($item in $dockerRuntimePayload) {
-    if (-not (Test-Path -LiteralPath $item.Source -PathType Leaf)) {
-        throw "Required Docker fallback payload missing: $($item.Source)"
-    }
-    Copy-Item -LiteralPath $item.Source -Destination $item.Destination -Force
-}
+# The installer consumes the exact canonical Docker fallback already included in the
+# self-contained distribution. It must never mutate that payload after its SBOM and
+# portable ZIP have been generated, otherwise installer and ZIP provenance diverge.
 
 if ([string]::IsNullOrWhiteSpace($IsccPath)) {
     $ensure = Join-Path $PSScriptRoot 'ensure-inno-setup.ps1'
@@ -89,7 +79,12 @@ $hardener = Join-Path $PSScriptRoot 'harden-windows-installer-source.ps1'
 if (-not (Test-Path -LiteralPath $hardener -PathType Leaf)) {
     throw "NEXUS installer hardening helper not found: $hardener"
 }
+$restAuthHardener = Join-Path $PSScriptRoot 'harden-windows-rest-auth-source.ps1'
+if (-not (Test-Path -LiteralPath $restAuthHardener -PathType Leaf)) {
+    throw "NEXUS REST installer authentication helper not found: $restAuthHardener"
+}
 . $hardener
+. $restAuthHardener
 
 $work = Join-Path $OutputRoot '.installer'
 $installerOutput = if ($Smoke) { Join-Path $OutputRoot '.smoke' } else { $OutputRoot }
@@ -122,9 +117,10 @@ if ($iss -match '@@[A-Z0-9_]+@@') {
 }
 
 # The source template remains human-readable; all values crossing into cmd.exe or
-# Docker Compose are hardened deterministically here before compilation. The helper
-# is exact-anchor based and fails closed if the template drifts.
+# Docker Compose are hardened deterministically here before compilation. Helpers
+# are exact-anchor based and fail closed if the template drifts.
 $iss = Protect-NexusInstallerSource -Source $iss
+$iss = Protect-NexusNativeRestAuthSource -Source $iss
 
 # Integrity guards on the generated source of truth.
 if ($iss.IndexOf('function DockerEngineReady(): Boolean;', [StringComparison]::Ordinal) -lt 0) {
@@ -137,7 +133,14 @@ foreach ($requiredHardeningFragment in @(
     'function CmdEnvEscape(Value: String): String;',
     'function DotEnvQuoted(Value: String): String;',
     'function IsLoopbackRestHost(Value: String): Boolean;',
-    'NEXUS_REST_EXPOSURE_MODE=loopback-forward'
+    'function VerifyFileSha256(FilePath: String; ExpectedSha256: String): Boolean;',
+    'NativeToken := GenerateLocalToken();',
+    'RuntimePage.Values[3] := NativeToken;',
+    'NEXUS_REST_EXPOSURE_MODE=loopback-forward',
+    'https://desktop.docker.com/win/main/amd64/236216/Docker%20Desktop%20Installer.exe',
+    '820438e75c16e44b393079154bea7d27958a15845c23a635b1a1f6f586b2ed44',
+    'https://github.com/ollama/ollama/releases/download/v0.33.3/OllamaSetup.exe',
+    '32cdcb1da477bc7fffbf1c1cdeeb99b1db003af094db56dd3c156abd04d34f8e'
 )) {
     if ($iss.IndexOf($requiredHardeningFragment, [StringComparison]::Ordinal) -lt 0) {
         throw "Generated installer source is missing hardening fragment: $requiredHardeningFragment"
@@ -163,6 +166,13 @@ try {
     if (-not (Test-Path -LiteralPath $setup -PathType Leaf)) {
         throw "NEXUS setup executable was not produced: $setup"
     }
+
+    $signer = Join-Path $PSScriptRoot 'sign-windows-artifact.ps1'
+    if (-not (Test-Path -LiteralPath $signer -PathType Leaf)) {
+        throw "Windows signing helper missing: $signer"
+    }
+    & $signer -Path $setup
+
     $hash = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
     "$hash  $([IO.Path]::GetFileName($setup))" | Set-Content -LiteralPath $checksum -Encoding ascii
 
@@ -171,8 +181,8 @@ try {
     Write-Host "Setup   : $setup"
     Write-Host "SHA-256 : $hash"
     Write-Host 'Wizard  : Native / Docker / Both + runtime/integration customization'
-    Write-Host 'Security: loopback-only wizard REST + hardened cmd/.env generation'
-    Write-Host 'Docker  : strict engine detection + registry pull with local runtime-image fallback'
+    Write-Host 'Security: authenticated loopback REST + hardened cmd/.env + pinned/hash-verified prerequisites + optional/required Authenticode'
+    Write-Host 'Docker  : canonical distribution payload + strict engine detection + registry pull/local fallback'
     Write-Output $setup
 }
 finally {

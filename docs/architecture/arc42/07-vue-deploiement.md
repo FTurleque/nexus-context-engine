@@ -47,7 +47,7 @@ Health et métriques sont servis uniquement par le listener de management sépar
 
 `/q/*` n'est pas servi par le listener applicatif. Un reverse proxy métier ne doit pas publier le listener de management.
 
-Une exposition API non-loopback exige auth, roots et transport sécurisé effectif.
+Une exposition API non-loopback exige auth, roots et transport sécurisé effectif. Le token doit être généré par CSPRNG et satisfaire le gate structurel NEXUS ; ce gate rejette les valeurs manifestement faibles sans prétendre mesurer leur entropie cryptographique.
 
 ### `direct-https`
 
@@ -108,4 +108,4 @@ Le préflight GHCR est fail-closed. Tags version et SHA sont immuables ; un retr
 
 `develop` est la branche d'intégration et `main` la branche de release. Les gates applicables qualifient le SHA exact.
 
-La protection de `develop` doit être configurée dans GitHub selon le contrat versionné. Tant que l'API retourne `protected=false`, #130 reste ouvert.
+Le ruleset GitHub actif `Protect main & develop` protège les deux branches, impose les pull requests, interdit suppression/non-fast-forward et exige les sept checks permanents approuvés. NXA3-14 / #130 est satisfait. `strict_required_status_checks_policy=false` reste un hardening repository-admin distinct.

@@ -106,6 +106,15 @@
                             <dataFile>${project.build.directory}/jacoco-merged.exec</dataFile>
                         </configuration>
                     </execution>
+                    <!-- Override the inherited common gate's data source. MCP exercises
+                         important server paths in a child JVM, so its authoritative
+                         coverage data is the merged execution file prepared above. -->
+                    <execution>
+                        <id>jacoco-check</id>
+                        <configuration>
+                            <dataFile>${project.build.directory}/jacoco-merged.exec</dataFile>
+                        </configuration>
+                    </execution>
                     <execution>
                         <id>jacoco-check-mcp</id>
                         <phase>verify</phase>

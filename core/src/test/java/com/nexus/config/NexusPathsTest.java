@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -41,5 +42,20 @@ class NexusPathsTest {
         }
 
         assertThrows(IOException.class, () -> paths.ensurePrivateDirectory(paths.projectLuceneIndex(projectId)));
+    }
+
+    @Test
+    void classifiesOnlyExactExpectedWindowsAclPrincipals() {
+        assertTrue(NexusPaths.isTrustedStoragePrincipal("WORKSTATION\\alice", "WORKSTATION\\alice"));
+        assertTrue(NexusPaths.isTrustedStoragePrincipal("NT AUTHORITY\\SYSTEM", "WORKSTATION\\alice"));
+        assertTrue(NexusPaths.isTrustedStoragePrincipal("BUILTIN\\Administrators", "WORKSTATION\\alice"));
+        assertTrue(NexusPaths.isTrustedStoragePrincipal("CREATOR OWNER", "WORKSTATION\\alice"));
+
+        assertFalse(NexusPaths.isTrustedStoragePrincipal("DOMAIN\\alice", "WORKSTATION\\alice"));
+        assertFalse(NexusPaths.isTrustedStoragePrincipal("CONTOSO\\Administrators", "WORKSTATION\\alice"));
+        assertFalse(NexusPaths.isTrustedStoragePrincipal("Everyone", "WORKSTATION\\alice"));
+        assertFalse(NexusPaths.isTrustedStoragePrincipal(
+                "NT AUTHORITY\\Authenticated Users", "WORKSTATION\\alice"));
+        assertFalse(NexusPaths.isTrustedStoragePrincipal("BUILTIN\\Users", "WORKSTATION\\alice"));
     }
 }

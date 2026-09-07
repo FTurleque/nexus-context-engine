@@ -7,5 +7,6 @@ public record IndexedSymbol(String relativePath, CodeSymbol symbol) {
     public IndexedSymbol {
         Objects.requireNonNull(relativePath, "relativePath");
         Objects.requireNonNull(symbol, "symbol");
+        CodeIntelligenceMetadataPolicy.validateRelativePath(relativePath);
     }
 }

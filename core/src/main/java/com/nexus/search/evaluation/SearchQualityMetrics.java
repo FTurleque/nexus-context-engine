@@ -25,6 +25,60 @@ public final class SearchQualityMetrics {
         return (double) relevant / relevantIds.size();
     }
 
+    public static double reciprocalRank(List<String> rankedIds, Set<String> relevantIds) {
+        Objects.requireNonNull(rankedIds, "rankedIds");
+        Objects.requireNonNull(relevantIds, "relevantIds");
+        if (relevantIds.isEmpty()) {
+            return 1.0d;
+        }
+        Set<String> unique = new HashSet<>();
+        int rank = 0;
+        for (String id : rankedIds) {
+            if (!unique.add(id)) {
+                continue;
+            }
+            rank++;
+            if (relevantIds.contains(id)) {
+                return 1.0d / rank;
+            }
+        }
+        return 0.0d;
+    }
+
+    public static double ndcgAtK(List<String> rankedIds, Set<String> relevantIds, int k) {
+        validate(rankedIds, relevantIds, k);
+        if (relevantIds.isEmpty()) {
+            return 1.0d;
+        }
+
+        Set<String> unique = new HashSet<>();
+        double dcg = 0.0d;
+        int rank = 0;
+        for (String id : rankedIds) {
+            if (!unique.add(id)) {
+                continue;
+            }
+            rank++;
+            if (rank > k) {
+                break;
+            }
+            if (relevantIds.contains(id)) {
+                dcg += discount(rank);
+            }
+        }
+
+        int idealRelevant = Math.min(k, relevantIds.size());
+        double idealDcg = 0.0d;
+        for (int idealRank = 1; idealRank <= idealRelevant; idealRank++) {
+            idealDcg += discount(idealRank);
+        }
+        return idealDcg == 0.0d ? 1.0d : dcg / idealDcg;
+    }
+
+    private static double discount(int rank) {
+        return 1.0d / (Math.log(rank + 1.0d) / Math.log(2.0d));
+    }
+
     private static int relevantInTopK(List<String> rankedIds, Set<String> relevantIds, int k) {
         Set<String> unique = new HashSet<>();
         int matches = 0;

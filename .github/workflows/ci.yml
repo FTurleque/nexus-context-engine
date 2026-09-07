@@ -68,6 +68,12 @@ jobs:
           chmod +x scripts/release/test-operational-doc-contracts.sh
           scripts/release/test-operational-doc-contracts.sh
 
+      - name: Verify final audit contracts
+        shell: bash
+        run: |
+          chmod +x scripts/release/test-final-audit-contracts.sh
+          scripts/release/test-final-audit-contracts.sh
+
       - name: Run Maven reactor
         run: |
           chmod +x ./mvnw

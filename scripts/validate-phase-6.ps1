@@ -116,7 +116,7 @@ try {
 
     Write-Host "[2/9] Maven Wrapper reproductible"
     Invoke-Native -Command (Join-Path $repoRoot "mvnw.cmd") -Arguments @("--version")
-    $wrapperMavenBin = Join-Path $env:USERPROFILE ".m2\wrapper\dists\nexus\apache-maven-3.9.11\apache-maven-3.9.11\bin"
+    $wrapperMavenBin = Join-Path $env:USERPROFILE ".m2\wrapper\dists\nexus\apache-maven-3.9.16\apache-maven-3.9.16\bin"
     if (Test-Path -LiteralPath $wrapperMavenBin -PathType Container) {
         $env:PATH = "$wrapperMavenBin;$env:PATH"
     }

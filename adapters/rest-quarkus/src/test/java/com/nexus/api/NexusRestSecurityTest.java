@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -35,12 +36,13 @@ class NexusRestSecurityTest {
     }
 
     @Test
-    void requiresLengthAndEntropyForRemoteTokens() {
-        assertFalse(NexusRestSecurity.isStrongRemoteToken("short"));
-        assertFalse(NexusRestSecurity.isStrongRemoteToken("a".repeat(64)));
-        assertFalse(NexusRestSecurity.isStrongRemoteToken("ab".repeat(32)));
-        assertTrue(NexusRestSecurity.isStrongRemoteToken("0123456789abcdef0123456789abcdef"));
-        assertTrue(NexusRestSecurity.isStrongRemoteToken(
+    void enforcesLengthAndCharacterDiversityWithoutClaimingCryptographicEntropy() {
+        assertFalse(NexusRestSecurity.meetsRemoteTokenPolicy("short"));
+        assertFalse(NexusRestSecurity.meetsRemoteTokenPolicy("a".repeat(64)));
+        assertFalse(NexusRestSecurity.meetsRemoteTokenPolicy("ab".repeat(32)));
+        assertTrue(NexusRestSecurity.meetsRemoteTokenPolicy("0123456789abcdef0123456789abcdef"),
+                "The structural gate may accept predictable text; deployment guidance must require CSPRNG generation");
+        assertTrue(NexusRestSecurity.meetsRemoteTokenPolicy(
                 "6df1462d571a6925e3bc3934ee10c6c55a965116fb47e2bc4db77ac7a5d69d34"));
     }
 
@@ -100,6 +102,28 @@ class NexusRestSecurityTest {
             assertEquals(child.toRealPath(), NexusRestProjectRootPolicy.requireAllowed(child));
             assertThrows(IllegalArgumentException.class,
                     () -> NexusRestProjectRootPolicy.requireAllowed(outside));
+        } finally {
+            restoreProperty(NexusRestProjectRootPolicy.ROOTS_PROPERTY, previous);
+        }
+    }
+
+    @Test
+    void persistedProjectAuthorizationPreservesLocalModeButFailsClosedWithAllowlist() throws Exception {
+        Path allowed = Files.createDirectories(tempDir.resolve("persisted-allowed"));
+        Path child = Files.createDirectories(allowed.resolve("project"));
+        Path outside = Files.createDirectories(tempDir.resolve("persisted-outside"));
+        Path missing = tempDir.resolve("temporarily-missing-project");
+        String previous = System.getProperty(NexusRestProjectRootPolicy.ROOTS_PROPERTY);
+        try {
+            System.clearProperty(NexusRestProjectRootPolicy.ROOTS_PROPERTY);
+            assertDoesNotThrow(() -> NexusRestProjectRootPolicy.requireAllowedPersisted(missing));
+            assertTrue(NexusRestProjectRootPolicy.isAllowedPersisted(missing));
+
+            System.setProperty(NexusRestProjectRootPolicy.ROOTS_PROPERTY, allowed.toString());
+            assertDoesNotThrow(() -> NexusRestProjectRootPolicy.requireAllowedPersisted(child));
+            assertThrows(IllegalArgumentException.class,
+                    () -> NexusRestProjectRootPolicy.requireAllowedPersisted(outside));
+            assertFalse(NexusRestProjectRootPolicy.isAllowedPersisted(missing));
         } finally {
             restoreProperty(NexusRestProjectRootPolicy.ROOTS_PROPERTY, previous);
         }

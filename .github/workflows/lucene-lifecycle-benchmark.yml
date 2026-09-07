@@ -1,6 +1,13 @@
 name: Lucene Lifecycle Qualification
 
 on:
+  workflow_call:
+    inputs:
+      profile:
+        description: Benchmark profile
+        required: false
+        default: ci
+        type: string
   pull_request:
     branches:
       - develop

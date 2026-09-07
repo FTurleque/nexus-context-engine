@@ -1,15 +1,21 @@
 package com.nexus.context.source;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ContextDiscoveryLimitsTest {
+
+    @TempDir
+    Path temporaryDirectory;
 
     @Test
     void acceptsExactBoundariesAndRejectsNPlusOne() {
@@ -28,6 +34,26 @@ class ContextDiscoveryLimitsTest {
         assertDoesNotThrow(() -> bytes.bytes(Path.of("a"), 4));
         assertDoesNotThrow(() -> bytes.bytes(Path.of("b"), 6));
         assertThrows(ContextDiscoveryLimitExceededException.class, () -> bytes.bytes(Path.of("c"), 1));
+    }
+
+    @Test
+    void chargesExactlyTheBytesPhysicallyRead() throws Exception {
+        Path file = temporaryDirectory.resolve("instruction.md");
+        Files.writeString(file, "abcd");
+        ContextDiscoveryBudget budget = new ContextDiscoveryLimits(10, 10, 4, 10_000).newBudget();
+
+        assertEquals("abcd", budget.readUtf8NoFollow(file));
+        assertEquals(4L, budget.snapshot().cumulativeBytes());
+    }
+
+    @Test
+    void rejectsContentThatExceedsTheRemainingBudgetAtReadTime() throws Exception {
+        Path file = temporaryDirectory.resolve("growing-instruction.md");
+        Files.writeString(file, "abcde");
+        ContextDiscoveryBudget budget = new ContextDiscoveryLimits(10, 10, 4, 10_000).newBudget();
+
+        assertThrows(ContextDiscoveryLimitExceededException.class, () -> budget.readUtf8NoFollow(file));
+        assertTrue(budget.snapshot().cumulativeBytes() <= 4L);
     }
 
     @Test

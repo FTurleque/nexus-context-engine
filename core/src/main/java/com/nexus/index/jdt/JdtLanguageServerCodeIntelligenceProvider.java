@@ -881,11 +881,12 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
     private record LocationRef(String relativePath, int lineZeroBased, int character) {
     }
 
-    private static final class StdioSession implements Session {
+    static final class StdioSession implements Session {
 
         private static final String JSON_RPC_VERSION = "2.0";
         private static final int STDERR_TAIL_SIZE = 50;
         private static final int MAX_STDERR_LINE_CHARS = 4 * 1024;
+        private static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(1);
 
         private final Configuration configuration;
         private final Path projectRoot;
@@ -898,8 +899,9 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
         private final Deque<String> stderrTail;
         private final Object writeLock;
         private volatile boolean serviceReady;
+        private volatile boolean timedOut;
 
-        private StdioSession(
+        StdioSession(
                 Configuration configuration,
                 Path projectRoot,
                 Process process) {
@@ -989,6 +991,10 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
 
         @Override
         public JsonNode request(String method, JsonNode params) throws IOException {
+            return request(method, params, configuration.timeout());
+        }
+
+        private JsonNode request(String method, JsonNode params, Duration timeout) throws IOException {
             long id = nextRequestId.getAndIncrement();
             ObjectNode message = mapper.createObjectNode();
             message.put("jsonrpc", JSON_RPC_VERSION);
@@ -998,7 +1004,7 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
                 message.set("params", params);
             }
             writeMessage(message);
-            return awaitResponse(id);
+            return awaitResponse(id, timeout);
         }
 
         @Override
@@ -1015,12 +1021,15 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
         @Override
         public void close() {
             try {
-                if (process.isAlive()) {
+                if (process.isAlive() && !timedOut) {
                     try {
-                        request("shutdown", NullNode.instance);
+                        request("shutdown", NullNode.instance, shutdownTimeout(configuration.timeout()));
                     } catch (IOException ignored) {
-                        // Le processus peut déjà être en train de se terminer.
+                        // Le processus peut déjà être en train de se terminer. Un shutdown
+                        // bloqué ne consomme jamais le timeout opérationnel complet.
                     }
+                }
+                if (process.isAlive()) {
                     try {
                         notify("exit", NullNode.instance);
                     } catch (IOException ignored) {
@@ -1040,10 +1049,17 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
             }
         }
 
-        private JsonNode awaitResponse(long expectedId) throws IOException {
-            long deadline = System.nanoTime() + configuration.timeout().toNanos();
+        static Duration shutdownTimeout(Duration operationTimeout) {
+            Objects.requireNonNull(operationTimeout, "operationTimeout");
+            return operationTimeout.compareTo(SHUTDOWN_TIMEOUT) <= 0
+                    ? operationTimeout
+                    : SHUTDOWN_TIMEOUT;
+        }
+
+        private JsonNode awaitResponse(long expectedId, Duration timeout) throws IOException {
+            long deadline = System.nanoTime() + timeout.toNanos();
             while (true) {
-                JsonNode message = nextMessage(deadline);
+                JsonNode message = nextMessage(deadline, timeout);
                 observeNotification(message);
                 if (isServerRequest(message)) {
                     respondToServerRequest(message);
@@ -1064,9 +1080,10 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
             if (serviceReady) {
                 return;
             }
-            long deadline = System.nanoTime() + configuration.timeout().toNanos();
+            Duration timeout = configuration.timeout();
+            long deadline = System.nanoTime() + timeout.toNanos();
             while (!serviceReady) {
-                JsonNode message = nextMessage(deadline);
+                JsonNode message = nextMessage(deadline, timeout);
                 observeNotification(message);
                 if (isServerRequest(message)) {
                     respondToServerRequest(message);
@@ -1074,15 +1091,15 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
             }
         }
 
-        private JsonNode nextMessage(long deadline) throws IOException {
+        private JsonNode nextMessage(long deadline, Duration timeout) throws IOException {
             long remainingNanos = deadline - System.nanoTime();
             if (remainingNanos <= 0L) {
-                throw timeoutFailure();
+                throw timeoutFailure(timeout);
             }
             try {
                 Inbound inbound = inbox.poll(remainingNanos, TimeUnit.NANOSECONDS);
                 if (inbound == null) {
-                    throw timeoutFailure();
+                    throw timeoutFailure(timeout);
                 }
                 if (inbound.failure() != null) {
                     throw new IOException("Connexion JDT LS interrompue. " + stderrSummary(), inbound.failure());
@@ -1094,9 +1111,10 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
             }
         }
 
-        private IOException timeoutFailure() {
+        private IOException timeoutFailure(Duration timeout) {
+            timedOut = true;
             return new IOException(
-                    "Délai JDT LS dépassé après " + configuration.timeout().toSeconds() + " s. " + stderrSummary());
+                    "Délai JDT LS dépassé après " + timeout.toSeconds() + " s. " + stderrSummary());
         }
 
         private void observeNotification(JsonNode message) {

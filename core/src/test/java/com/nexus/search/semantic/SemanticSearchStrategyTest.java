@@ -19,8 +19,10 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SemanticSearchStrategyTest {
 
@@ -54,6 +56,35 @@ class SemanticSearchStrategyTest {
         assertEquals(CandidateType.DOCUMENTATION, candidate.type());
         assertEquals(temporaryDirectory.resolve("docs/architecture.md"), candidate.path());
         assertEquals(0.92d, candidate.signals().get(SearchSignals.SEMANTIC), 0.000001d);
+    }
+
+    @Test
+    void redactsSensitiveValuesBeforeEmbeddingTheQuery() throws Exception {
+        AtomicReference<String> embeddedText = new AtomicReference<>();
+        EmbeddingProvider provider = new EmbeddingProvider() {
+            @Override
+            public String modelId() {
+                return "remote-fixture";
+            }
+
+            @Override
+            public int dimensions() {
+                return 3;
+            }
+
+            @Override
+            public float[] embed(String text) {
+                embeddedText.set(text);
+                return new float[]{1.0f, 0.0f, 0.0f};
+            }
+        };
+        SemanticSearchStrategy strategy = new SemanticSearchStrategy(provider, index(3, List.of()));
+        String secret = "ghp_abcdefghijklmnopqrstuvwxyz123456";
+
+        strategy.search(project(), "debug authentication token=" + secret, 5);
+
+        assertFalse(embeddedText.get().contains(secret));
+        assertTrue(embeddedText.get().contains("[REDACTED]"));
     }
 
     @Test

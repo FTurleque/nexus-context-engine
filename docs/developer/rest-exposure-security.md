@@ -1,12 +1,28 @@
 # REST exposure security contract
 
-NEXUS treats every REST listener outside loopback as a privileged deployment boundary. A remote listener is accepted only when authentication, project-root confinement and transport security are all proven by effective configuration.
+NEXUS treats every REST listener as a privileged deployment boundary. A remote listener is accepted only when authentication, project-root confinement and transport security are all proven by effective configuration.
 
 ## Loopback
 
-`quarkus.http.host=127.0.0.1`, `localhost` or another loopback address remains the default development posture. The remote-exposure transport checks do not apply to a loopback-only listener.
+`quarkus.http.host=127.0.0.1`, `localhost` or another loopback address remains the default network posture. The remote-exposure transport checks do not apply to a loopback-only listener, but loopback is no longer treated as an implicit authentication boundary.
 
-For workstations where other local processes must not inherit the full REST trust boundary, enable the opt-in hardened local posture:
+By default, startup therefore requires a strong Bearer token even on loopback:
+
+```text
+NEXUS_REST_API_TOKEN=<strong random token>
+```
+
+The token must contain at least 32 UTF-8 bytes and satisfy the structural character-diversity threshold enforced by NEXUS. This gate rejects obviously weak repeated values but does not prove cryptographic entropy; generate the token with a CSPRNG.
+
+For a deliberately trusted single-user workstation, the historical unauthenticated loopback mode remains available only through an explicit declaration:
+
+```text
+NEXUS_REST_TRUST_LOCAL=true
+```
+
+`NEXUS_REST_TRUST_LOCAL` accepts only `true` or `false`. When it is absent or `false`, a missing local token is a startup error. If a token is configured, the REST authentication filter still enforces it even when local trust is enabled.
+
+For workstations where local authentication must also constrain the filesystem administration boundary, enable the hardened local posture:
 
 ```text
 NEXUS_REST_HARDEN_LOCAL=true
@@ -16,16 +32,16 @@ NEXUS_REST_ALLOWED_PROJECT_ROOTS=<explicit allowed roots>
 
 When `NEXUS_REST_HARDEN_LOCAL=true`, startup fails closed unless both conditions are satisfied:
 
-- a Bearer token meeting the same minimum strength contract as remote exposure (at least 32 UTF-8 bytes and at least 96 bits of estimated entropy);
+- a Bearer token meeting the same minimum strength contract as remote exposure;
 - a non-empty canonical project-root allowlist.
 
-The configured token is then enforced by the REST authentication filter on every JAX-RS resource. The allowlist constrains project registration/indexing even though the listener remains loopback-only. `NEXUS_REST_HARDEN_LOCAL` accepts only `true` or `false`; an invalid value is a startup error.
-
-The default remains `false` for backward compatibility with the local-first deployment model.
+`NEXUS_REST_HARDEN_LOCAL=true` takes precedence over `NEXUS_REST_TRUST_LOCAL=true`: hardened mode can never disable authentication or root confinement.
 
 ## Docker loopback forward
 
 `NEXUS_REST_EXPOSURE_MODE=loopback-forward` is reserved for the Docker runtime. It additionally requires `NEXUS_RUNTIME=docker` and an explicit `NEXUS_DOCKER_HOST_FORWARD_ADDRESS` that resolves to loopback. The official Compose wiring must derive this declaration from the same bind address used for Docker port publication.
+
+The official Docker/installer path generates a local REST token when one is not supplied, so the authenticated loopback default remains usable without weakening the runtime contract.
 
 ## Direct HTTPS
 
@@ -52,4 +68,4 @@ This prevents arbitrary direct clients from being treated as trusted forwarding 
 
 The exposure mode is an operator intent, not proof of transport security. NEXUS therefore validates effective Quarkus settings before accepting a non-loopback listener. A missing certificate, an enabled plaintext HTTP listener, or an unbounded proxy trust configuration is a startup error rather than a warning.
 
-The hardened local profile follows the same fail-closed principle without changing the default local-first behavior: operators who need a stricter workstation boundary can make local authentication and root confinement mandatory and verifiable at startup.
+Loopback itself is likewise not proof that every local process is trusted. Authentication is now the default local boundary; unauthenticated local access requires the explicit `NEXUS_REST_TRUST_LOCAL=true` opt-out, while `NEXUS_REST_HARDEN_LOCAL=true` adds canonical project-root confinement.

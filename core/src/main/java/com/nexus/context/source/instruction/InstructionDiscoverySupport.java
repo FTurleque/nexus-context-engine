@@ -5,7 +5,6 @@ import com.nexus.context.source.ContextDiscoveryLimits;
 import com.nexus.index.scan.ProjectIgnoreMatcher;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.security.ProjectPathGuard;
-import com.nexus.security.SafeFileIO;
 
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
@@ -34,7 +33,7 @@ final class InstructionDiscoverySupport {
             ContextDiscoveryBudget budget) throws IOException {
         ProjectPathGuard pathGuard = new ProjectPathGuard(project.rootPath());
         Path root = pathGuard.root();
-        ProjectIgnoreMatcher ignoreMatcher = new ProjectIgnoreMatcher(root);
+        ProjectIgnoreMatcher ignoreMatcher = new ProjectIgnoreMatcher(root, budget::bytes);
         Set<String> normalizedNames = names.stream()
                 .map(name -> name.toLowerCase(Locale.ROOT))
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
@@ -103,7 +102,7 @@ final class InstructionDiscoverySupport {
             return List.of();
         }
 
-        ProjectIgnoreMatcher ignoreMatcher = new ProjectIgnoreMatcher(root);
+        ProjectIgnoreMatcher ignoreMatcher = new ProjectIgnoreMatcher(root, budget::bytes);
         registerParentScopes(root, directory.getParent(), ignoreMatcher);
         if (!directory.equals(root) && ignoreMatcher.isIgnored(directory, true)) {
             return List.of();
@@ -161,8 +160,7 @@ final class InstructionDiscoverySupport {
             ContextDiscoveryBudget budget) throws IOException {
         ProjectPathGuard pathGuard = new ProjectPathGuard(project.rootPath());
         Path safeFile = pathGuard.requireRegularFile(file);
-        budget.bytes(safeFile, Files.size(safeFile));
-        return SafeFileIO.readStringNoFollow(safeFile);
+        return budget.readUtf8NoFollow(safeFile);
     }
 
     static Path relative(ProjectDescriptor project, Path absolutePath) throws IOException {

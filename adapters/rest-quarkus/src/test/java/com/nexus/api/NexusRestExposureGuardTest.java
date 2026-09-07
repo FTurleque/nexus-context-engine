@@ -27,6 +27,7 @@ class NexusRestExposureGuardTest {
     @BeforeEach
     void configureRemotePrerequisites() throws Exception {
         rememberAndSet(NexusRestSecurity.LOCAL_HARDENING_PROPERTY, "false");
+        rememberAndSet(NexusRestSecurity.LOCAL_TRUST_PROPERTY, "false");
         rememberAndSet(NexusRestSecurity.TOKEN_PROPERTY, STRONG_TOKEN);
         rememberAndSet(
                 NexusRestProjectRootPolicy.ROOTS_PROPERTY,
@@ -45,9 +46,22 @@ class NexusRestExposureGuardTest {
     }
 
     @Test
-    void keepsHistoricalLoopbackPostureWhenLocalHardeningIsDisabled() {
+    void loopbackRequiresAuthenticationByDefault() {
         rememberAndClear(NexusRestSecurity.TOKEN_PROPERTY);
         rememberAndClear(NexusRestProjectRootPolicy.ROOTS_PROPERTY);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, this::validateLoopbackRestHost);
+
+        assertTrue(error.getMessage().contains(NexusRestSecurity.TOKEN_ENVIRONMENT_VARIABLE));
+        assertTrue(error.getMessage().contains(NexusRestSecurity.LOCAL_TRUST_ENVIRONMENT_VARIABLE));
+    }
+
+    @Test
+    void explicitLocalTrustPreservesUnauthenticatedLoopbackMode() {
+        rememberAndSet(NexusRestSecurity.LOCAL_TRUST_PROPERTY, "true");
+        rememberAndClear(NexusRestSecurity.TOKEN_PROPERTY);
+        rememberAndClear(NexusRestProjectRootPolicy.ROOTS_PROPERTY);
+
         assertDoesNotThrow(this::validateLoopbackRestHost);
     }
 
@@ -55,6 +69,15 @@ class NexusRestExposureGuardTest {
     void hardenedLoopbackAcceptsStrongTokenAndProjectRootAllowlist() {
         rememberAndSet(NexusRestSecurity.LOCAL_HARDENING_PROPERTY, "true");
         assertDoesNotThrow(this::validateLoopbackRestHost);
+    }
+
+    @Test
+    void hardenedLoopbackTakesPrecedenceOverExplicitLocalTrust() {
+        rememberAndSet(NexusRestSecurity.LOCAL_HARDENING_PROPERTY, "true");
+        rememberAndSet(NexusRestSecurity.LOCAL_TRUST_PROPERTY, "true");
+        rememberAndClear(NexusRestSecurity.TOKEN_PROPERTY);
+
+        assertThrows(IllegalStateException.class, this::validateLoopbackRestHost);
     }
 
     @Test
@@ -82,6 +105,13 @@ class NexusRestExposureGuardTest {
         rememberAndSet(NexusRestSecurity.LOCAL_HARDENING_PROPERTY, "sometimes");
         IllegalStateException error = assertThrows(IllegalStateException.class, this::validateLoopbackRestHost);
         assertTrue(error.getMessage().contains(NexusRestSecurity.LOCAL_HARDENING_ENVIRONMENT_VARIABLE));
+    }
+
+    @Test
+    void localTrustRejectsInvalidBooleanConfiguration() {
+        rememberAndSet(NexusRestSecurity.LOCAL_TRUST_PROPERTY, "sometimes");
+        IllegalStateException error = assertThrows(IllegalStateException.class, this::validateLoopbackRestHost);
+        assertTrue(error.getMessage().contains(NexusRestSecurity.LOCAL_TRUST_ENVIRONMENT_VARIABLE));
     }
 
     @Test

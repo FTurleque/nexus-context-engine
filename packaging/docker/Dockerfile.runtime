@@ -1,12 +1,10 @@
-# Base épinglée par digest (tag lisible conservé). Aucun apt-get n'est exécuté :
-# le contenu OS du runtime dépend donc uniquement de ce digest immuable.
-ARG RUNTIME_IMAGE=eclipse-temurin:21-jre-jammy@sha256:3097cbbebb7d490494a98aed2301f284b38f79eba158eef098c6fc8c8af11c23
+# Base runtime épinglée par digest. UBI 10 minimal réduit la surface OS tout en
+# conservant Java 21.0.12+8 ; aucun paquet réseau n'est ajouté à l'image finale.
+ARG RUNTIME_IMAGE=eclipse-temurin:21.0.12_8-jre-ubi10-minimal@sha256:c7feea7f2dce5cf29e0ffa94e386b0a12ab44c029ad66bcb59eacc4da572ccf4
 FROM ${RUNTIME_IMAGE}
 
 USER root
-RUN groupadd --system --gid 10001 nexus \
-    && useradd --system --uid 10001 --gid 10001 --home-dir /data/nexus --shell /usr/sbin/nologin nexus \
-    && mkdir -p /opt/nexus/lib /opt/nexus/rest /data/nexus /workspace \
+RUN mkdir -p /opt/nexus/lib /opt/nexus/rest /data/nexus /workspace \
     && chown -R 10001:10001 /opt/nexus /data/nexus /workspace
 
 COPY --chown=10001:10001 lib/nexus-cli.jar /opt/nexus/lib/nexus-cli.jar
@@ -23,7 +21,7 @@ RUN sed -i 's/\r$//' /usr/local/bin/nexus-entrypoint /usr/local/bin/nexus-health
 # the host address chosen by the Docker daemon for -p/--publish. Official Compose injects the
 # declaration from NEXUS_DOCKER_BIND_ADDRESS; manual REST runs must declare it explicitly.
 # Keep the same native-access contract as the source-build Dockerfile so release handoff images
-# and direct `docker exec ... java` integrations behave identically.
+# and direct `docker exec ... java` MCP/CLI integrations behave identically.
 ENV JDK_JAVA_OPTIONS=--enable-native-access=ALL-UNNAMED \
     NEXUS_HOME=/data/nexus \
     NEXUS_MODE=rest \

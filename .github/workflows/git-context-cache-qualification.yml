@@ -1,6 +1,13 @@
 name: Git Context Cache Qualification
 
 on:
+  workflow_call:
+    inputs:
+      profile:
+        description: Benchmark profile
+        required: false
+        default: ci
+        type: string
   pull_request:
     branches:
       - develop
@@ -52,7 +59,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     env:
-      BENCHMARK_PROFILE: ${{ github.event_name == 'workflow_dispatch' && inputs.profile || 'ci' }}
+      BENCHMARK_PROFILE: ${{ inputs.profile || 'ci' }}
     steps:
       - name: Checkout exact head
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0

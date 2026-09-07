@@ -36,15 +36,10 @@ final class SkillDefinitionDiscoverySupport {
             return null;
         }
 
-        long chargedBytes;
-        try {
-            chargedBytes = Math.min(Files.size(safeFile), SkillFrontmatterParser.MAX_DISCOVERY_BYTES);
-        } catch (IOException unreadable) {
-            diagnostics.add(relativePath + " ignoré : " + unreadable.getMessage());
-            return null;
-        }
+        // The physical bytes are charged by SkillFrontmatterParser while it reads
+        // through the shared discovery budget. Charging Files.size() here would
+        // reintroduce a TOCTOU window and would also double-count the same content.
         budget.candidate(safeFile);
-        budget.bytes(safeFile, chargedBytes);
         return safeFile;
     }
 

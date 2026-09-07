@@ -43,6 +43,7 @@ if (root / "src").exists():
 for path in (
     "core/src/main/java/com/nexus/application/NexusApplication.java",
     "core/src/main/resources/db/migration/V005__enforce_symbol_range_constraints.sql",
+    "core/src/main/resources/db/migration/V006__invalidate_unredacted_lexical_indexes.sql",
     "core/src/test/java/com/nexus/application/NexusApplicationSemanticConfigurationTest.java",
 ):
     if not (root / path).is_file():
@@ -53,9 +54,10 @@ for stale in ("<sourceDirectory>", "<testSourceDirectory>", "../src/main", "../s
         raise SystemExit(f"core layout drift: core/pom.xml still contains {stale!r}")
 
 migrations = sorted((root / "core/src/main/resources/db/migration").glob("V*.sql"))
-if not migrations or migrations[-1].name != "V005__enforce_symbol_range_constraints.sql":
+if not migrations or migrations[-1].name != "V006__invalidate_unredacted_lexical_indexes.sql":
     raise SystemExit(f"schema contract drift: latest migration is {migrations[-1].name if migrations else 'none'}")
 require("docs/developer/release-and-recovery.md", "V005__enforce_symbol_range_constraints.sql")
+require("docs/developer/release-and-recovery.md", "V006__invalidate_unredacted_lexical_indexes.sql")
 for path in (
     "README.md",
     "docs/architecture.md",
@@ -176,9 +178,16 @@ for path in (
 ):
     require(path, "content-v2")
 
+# NXA4 + audit follow-up: lexical content is redacted before Lucene tokenization.
+lucene = "core/src/main/java/com/nexus/search/lucene/LuceneSearchIndex.java"
+require(lucene, "SensitiveContentRedactor.redact(source.content())")
+require("docs/developer/release-and-recovery.md", "anciens segments Lucene")
+
 # NXA4: external work/JDT framing bounds.
 external_runner = "core/src/main/java/com/nexus/index/ExternalTaskRunner.java"
 require(external_runner, "MAX_CONCURRENT_TASKS = 8")
+require(external_runner, "Circuit-breaker ouvert")
+require("docs/developer/release-and-recovery.md", "ExternalTaskRunner.status()")
 for path in (
     "docs/architecture/arc42/06-vue-execution.md",
     "docs/architecture/arc42/10-exigences-qualite.md",
@@ -215,7 +224,6 @@ require("docs/developer/jdt-language-server.md", "ancre versionnée dans le repo
 forbid("docs/developer/jdt-language-server.md", "télécharge le checksum SHA-256 publié")
 
 # NXA4: Lucene high-cardinality query cap.
-lucene = "core/src/main/java/com/nexus/search/lucene/LuceneSearchIndex.java"
 require(lucene, "MAX_ANALYZED_QUERY_TERMS = 128")
 for path in (
     "README.md",
@@ -234,6 +242,7 @@ for path in (
 nexus_paths = "core/src/main/java/com/nexus/config/NexusPaths.java"
 require(nexus_paths, 'PosixFilePermissions.fromString("rwx------")')
 require(nexus_paths, 'PosixFilePermissions.fromString("rw-------")')
+require(nexus_paths, "AclFileAttributeView")
 for path in (
     "README.md",
     "docs/architecture.md",

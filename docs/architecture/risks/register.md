@@ -24,15 +24,19 @@ Les tâches sont bornées en wall-clock et à **8 workers réellement actifs max
 
 L'indisponibilité d'un provider ou une corruption physique Lucene nécessite encore des procédures opérationnelles spécifiques selon le scénario. SQLite reste l'autorité. Le profil `content-v2` garantit en revanche qu'un ancien index sémantique incompatible est reconstruit plutôt que réutilisé silencieusement.
 
-### Gouvernance `develop`
+### Gouvernance — branche à jour avant merge
 
-Le contrat est versionné mais l'état GitHub doit être effectif : PR obligatoire, checks retenus, suppression/force-push interdits et exceptions administratives limitées. Tant que `develop` retourne `protected=false`, ce risque reste ouvert (#130).
+Le ruleset GitHub `Protect main & develop` est actif et protège effectivement `develop`. Le résiduel de hardening est `strict_required_status_checks_policy=false` : les checks requis qualifient le HEAD de PR mais GitHub n'impose pas actuellement une remise à jour avec la base immédiatement avant merge. Ce point est une configuration repository-admin, pas un défaut du code versionné.
 
 ## Risques fortement mitigés par NXA3
 
+### Gouvernance `develop`
+
+NXA3-14 / #130 est satisfait : le ruleset actif cible `refs/heads/develop`, impose le passage par pull request, interdit suppression et non-fast-forward/force-push, limite le bypass administrateur au flux pull request et exige les sept checks permanents approuvés. L'état effectif doit être revalidé par API après toute modification repository-admin.
+
 ### REST distant
 
-Mitigation : token robuste + roots + mode explicite + listener TLS effectif ; reverse proxy avec forwarding et trusted proxies bornés.
+Mitigation : token généré par CSPRNG et soumis au gate structurel NEXUS + roots + mode explicite + listener TLS effectif ; reverse proxy avec forwarding et trusted proxies bornés. Le gate de longueur/diversité rejette les valeurs manifestement faibles mais ne prétend pas mesurer l'entropie cryptographique d'une chaîne statique.
 
 ### SCIP / skills / customisations hors racine
 

@@ -7,5 +7,6 @@ public record IndexedRelation(String relativePath, SymbolRelation relation) {
     public IndexedRelation {
         Objects.requireNonNull(relativePath, "relativePath");
         Objects.requireNonNull(relation, "relation");
+        CodeIntelligenceMetadataPolicy.validateRelativePath(relativePath);
     }
 }

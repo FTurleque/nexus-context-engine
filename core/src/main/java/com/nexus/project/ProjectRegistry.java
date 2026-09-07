@@ -24,16 +24,20 @@ public final class ProjectRegistry {
         }
         Path canonicalRoot = normalizedRoot.toRealPath();
 
-        return repository.findByRootPath(canonicalRoot)
-                .orElseGet(() -> repository.save(new ProjectDescriptor(
-                        UUID.randomUUID(),
-                        resolveName(canonicalRoot, requestedName),
-                        canonicalRoot,
-                        ProjectSourceType.LOCAL,
-                        Set.of(),
-                        Set.of(),
-                        null,
-                        IndexStatus.NOT_INDEXED)));
+        ProjectDescriptor existing = repository.findByRootPath(canonicalRoot).orElse(null);
+        if (existing != null) {
+            return existing;
+        }
+
+        return repository.save(new ProjectDescriptor(
+                UUID.randomUUID(),
+                resolveName(canonicalRoot, requestedName),
+                canonicalRoot,
+                ProjectSourceType.LOCAL,
+                Set.of(),
+                Set.of(),
+                null,
+                IndexStatus.NOT_INDEXED));
     }
 
     public List<ProjectDescriptor> list() {

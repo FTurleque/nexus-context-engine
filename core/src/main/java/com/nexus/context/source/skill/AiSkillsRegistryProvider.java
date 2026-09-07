@@ -1,5 +1,6 @@
 package com.nexus.context.source.skill;
 
+import com.nexus.context.source.ContextDiscoveryLimitExceededException;
 import com.nexus.security.ProjectPathGuard;
 
 import java.io.IOException;
@@ -81,7 +82,7 @@ public final class AiSkillsRegistryProvider implements SkillSourceProvider {
                 }
 
                 try {
-                    SkillFrontmatter frontmatter = parser.parse(safeFile);
+                    SkillFrontmatter frontmatter = parser.parse(safeFile, query.discoveryBudget());
                     Path absoluteSkillRoot = safeFile.getParent();
                     Path relativeSkillRoot = projectRoot.relativize(absoluteSkillRoot);
                     Path relativeDefinition = projectRoot.relativize(safeFile);
@@ -102,6 +103,8 @@ public final class AiSkillsRegistryProvider implements SkillSourceProvider {
                                     "Agent Skill découvert dans AI Skills Registry",
                                     "découverte progressive : frontmatter uniquement",
                                     "priorité registre inférieure aux skills locaux du projet")));
+                } catch (ContextDiscoveryLimitExceededException limitExceeded) {
+                    throw limitExceeded;
                 } catch (IllegalArgumentException | IOException exception) {
                     diagnostics.add(repositoryPath(projectRoot.relativize(file))
                             + " ignoré : " + exception.getMessage());

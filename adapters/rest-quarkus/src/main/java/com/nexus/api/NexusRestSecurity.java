@@ -16,6 +16,8 @@ final class NexusRestSecurity {
     static final String TOKEN_PROPERTY = "nexus.rest.api-token";
     static final String LOCAL_HARDENING_ENVIRONMENT_VARIABLE = "NEXUS_REST_HARDEN_LOCAL";
     static final String LOCAL_HARDENING_PROPERTY = "nexus.rest.harden-local";
+    static final String LOCAL_TRUST_ENVIRONMENT_VARIABLE = "NEXUS_REST_TRUST_LOCAL";
+    static final String LOCAL_TRUST_PROPERTY = "nexus.rest.trust-local";
     static final String EXPOSURE_MODE_ENVIRONMENT_VARIABLE = "NEXUS_REST_EXPOSURE_MODE";
     static final String EXPOSURE_MODE_PROPERTY = "nexus.rest.exposure-mode";
     static final String RUNTIME_ENVIRONMENT_VARIABLE = "NEXUS_RUNTIME";
@@ -23,7 +25,7 @@ final class NexusRestSecurity {
     static final String DOCKER_HOST_FORWARD_ADDRESS_ENVIRONMENT_VARIABLE = "NEXUS_DOCKER_HOST_FORWARD_ADDRESS";
     static final String DOCKER_HOST_FORWARD_ADDRESS_PROPERTY = "nexus.docker.host-forward-address";
     static final int MIN_REMOTE_TOKEN_BYTES = 32;
-    static final double MIN_REMOTE_TOKEN_ESTIMATED_ENTROPY_BITS = 96.0d;
+    static final double MIN_REMOTE_TOKEN_CHARACTER_DIVERSITY_SCORE = 96.0d;
 
     private static final Set<String> EXPOSURE_MODES = Set.of(
             "loopback-forward",
@@ -48,18 +50,15 @@ final class NexusRestSecurity {
     }
 
     static boolean isLocalHardeningRequired() {
-        Optional<String> configured = configuredValue(
+        return configuredBoolean(
                 LOCAL_HARDENING_PROPERTY,
-                LOCAL_HARDENING_ENVIRONMENT_VARIABLE);
-        if (configured.isEmpty()) {
-            return false;
-        }
-        return switch (configured.get().toLowerCase(Locale.ROOT)) {
-            case "true" -> true;
-            case "false" -> false;
-            default -> throw new IllegalStateException(
-                    LOCAL_HARDENING_ENVIRONMENT_VARIABLE + " doit valoir true ou false");
-        };
+                LOCAL_HARDENING_ENVIRONMENT_VARIABLE).orElse(false);
+    }
+
+    static boolean isLocalTrustExplicitlyEnabled() {
+        return configuredBoolean(
+                LOCAL_TRUST_PROPERTY,
+                LOCAL_TRUST_ENVIRONMENT_VARIABLE).orElse(false);
     }
 
     static Optional<String> configuredExposureMode() {
@@ -76,6 +75,18 @@ final class NexusRestSecurity {
         return configuredValue(
                 DOCKER_HOST_FORWARD_ADDRESS_PROPERTY,
                 DOCKER_HOST_FORWARD_ADDRESS_ENVIRONMENT_VARIABLE);
+    }
+
+    private static Optional<Boolean> configuredBoolean(String property, String environmentVariable) {
+        Optional<String> configured = configuredValue(property, environmentVariable);
+        if (configured.isEmpty()) {
+            return Optional.empty();
+        }
+        return switch (configured.get().toLowerCase(Locale.ROOT)) {
+            case "true" -> Optional.of(true);
+            case "false" -> Optional.of(false);
+            default -> throw new IllegalStateException(environmentVariable + " doit valoir true ou false");
+        };
     }
 
     private static Optional<String> configuredValue(String property, String environmentVariable) {
@@ -117,16 +128,23 @@ final class NexusRestSecurity {
                         .isPresent();
     }
 
-    static boolean isStrongRemoteToken(String token) {
+    /**
+     * Applies the structural admission policy for a remotely exposed REST bearer token.
+     *
+     * <p>The diversity score deliberately rejects obviously weak repeated values, but it is not a
+     * cryptographic entropy estimate and cannot prove that a static token was generated randomly.
+     * Deployments must therefore generate {@link #TOKEN_ENVIRONMENT_VARIABLE} with a CSPRNG.</p>
+     */
+    static boolean meetsRemoteTokenPolicy(String token) {
         if (token == null) {
             return false;
         }
         byte[] bytes = token.getBytes(StandardCharsets.UTF_8);
         return bytes.length >= MIN_REMOTE_TOKEN_BYTES
-                && estimatedShannonEntropyBits(bytes) >= MIN_REMOTE_TOKEN_ESTIMATED_ENTROPY_BITS;
+                && characterDiversityScore(bytes) >= MIN_REMOTE_TOKEN_CHARACTER_DIVERSITY_SCORE;
     }
 
-    private static double estimatedShannonEntropyBits(byte[] bytes) {
+    private static double characterDiversityScore(byte[] bytes) {
         if (bytes.length == 0) {
             return 0.0d;
         }
@@ -134,12 +152,12 @@ final class NexusRestSecurity {
         for (byte value : bytes) {
             frequencies.merge(value, 1, Integer::sum);
         }
-        double bitsPerByte = 0.0d;
+        double scorePerByte = 0.0d;
         for (int count : frequencies.values()) {
             double probability = (double) count / bytes.length;
-            bitsPerByte -= probability * (Math.log(probability) / Math.log(2.0d));
+            scorePerByte -= probability * (Math.log(probability) / Math.log(2.0d));
         }
-        return bitsPerByte * bytes.length;
+        return scorePerByte * bytes.length;
     }
 
     static boolean isLoopbackHost(String host) {

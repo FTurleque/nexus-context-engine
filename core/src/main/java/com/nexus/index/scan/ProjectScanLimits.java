@@ -11,8 +11,8 @@ import java.util.Objects;
  * répertoires et entrées ensuite ignorées. Le coût de traversée reste ainsi borné face à
  * un repository contenant des millions de petits fichiers, de répertoires vides ou une
  * arborescence artificiellement profonde. {@code maxTotalBytes} borne le volume cumulé
- * des sources supportées et sûres qui entrent effectivement dans le pipeline de
- * hash/analyse.</p>
+ * effectivement lu/traité par le scan pour les fichiers d'ignore et les sources supportées
+ * et sûres qui entrent dans le pipeline de hash/analyse.</p>
  */
 public record ProjectScanLimits(int maxFiles, long maxTotalBytes) {
 

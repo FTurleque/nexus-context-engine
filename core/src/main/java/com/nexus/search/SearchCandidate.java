@@ -20,6 +20,14 @@ public record SearchCandidate(
         Objects.requireNonNull(path, "path");
         Objects.requireNonNull(excerpt, "excerpt");
         Objects.requireNonNull(signals, "signals");
+        signals.forEach((signal, value) -> {
+            Objects.requireNonNull(signal, "signal name");
+            Objects.requireNonNull(value, "signal value");
+            if (!Double.isFinite(value)) {
+                throw new IllegalArgumentException(
+                        "Search signal '" + signal + "' must be finite: " + value);
+            }
+        });
         signals = Map.copyOf(signals);
     }
 }
