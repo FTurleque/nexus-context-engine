@@ -100,12 +100,21 @@ grep -q 'startLock.lock()' "$EXTERNAL_RUNNER" \
 grep -q 'timeoutLock.lock()' "$EXTERNAL_RUNNER" \
   || fail 'timeout quarantine must participate in the circuit lock'
 
-# Real semantic quality is intentionally too expensive for every PR, but a pinned
-# monthly/manual Ollama qualification must remain available and retain evidence.
+# Real semantic quality is expensive, so it runs on semantic-surface PRs plus a
+# periodic/manual cadence. Every run must qualify the exact head with pinned runtime
+# and a stable expected model manifest prefix.
 SEMANTIC_WORKFLOW=".github/workflows/semantic-search-qualification.yml"
 test -f "$SEMANTIC_WORKFLOW" || fail 'real semantic qualification workflow is missing'
+grep -q '^  pull_request:$' "$SEMANTIC_WORKFLOW" \
+  || fail 'semantic changes must trigger real qualification on pull request'
+grep -q 'NEXUS_HEAD_SHA:' "$SEMANTIC_WORKFLOW" \
+  || fail 'semantic qualification must resolve an exact head SHA'
+grep -q 'Verify exact checkout' "$SEMANTIC_WORKFLOW" \
+  || fail 'semantic qualification must verify its exact checkout'
 grep -q "OLLAMA_VERSION: '0.33.3'" "$SEMANTIC_WORKFLOW" \
   || fail 'real semantic qualification must use the repository-pinned Ollama version'
+grep -q "OLLAMA_MODEL_ID_PREFIX: 'ac6da0dfba84'" "$SEMANTIC_WORKFLOW" \
+  || fail 'real semantic qualification must lock the expected model manifest prefix'
 grep -q 'RealSemanticSearchBenchmarkTest' "$SEMANTIC_WORKFLOW" \
   || fail 'real semantic qualification must execute the real retrieval benchmark'
 grep -q 'Enforce semantic quality floor' "$SEMANTIC_WORKFLOW" \
