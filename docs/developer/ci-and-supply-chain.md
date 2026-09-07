@@ -40,7 +40,7 @@ Le gate documentaire contrôle notamment :
 - revalidation filesystem du fallback `SafeFileIO` ;
 - `constraints` non supportées rejetées ;
 - installateur JDT LS vérifié contre l'ancre repository-pinned ;
-- qualification sémantique réelle disponible avec runtime Ollama épinglé ;
+- qualification sémantique réelle exact-head disponible avec runtime Ollama épinglé ;
 - non-adoption mesurée du Vector API dans les launchers de production ;
 - politique de maintenance solo documentée.
 
@@ -95,20 +95,24 @@ La borne Lucene de 128 termes est couverte par un test de non-régression du rea
 
 ### Qualification sémantique réelle
 
-`.github/workflows/semantic-search-qualification.yml` est volontairement séparé des PR ordinaires parce qu'il télécharge un runtime Ollama et un modèle d'embeddings. Il s'exécute manuellement et selon une planification périodique.
+`.github/workflows/semantic-search-qualification.yml` n'est pas exécuté sur chaque PR. Il est déclenché :
+
+- sur une PR vers `develop`/`main` uniquement lorsque le workflow, l'ancre d'intégrité ou le code/test sémantique concerné change ;
+- manuellement ;
+- selon une planification périodique.
 
 Le workflow :
 
-1. checkout le SHA planifié/demandé ;
+1. résout `NEXUS_HEAD_SHA` vers le **HEAD exact de la PR** ou le SHA exact du run hors PR, checkout ce SHA puis vérifie `git rev-parse HEAD` ;
 2. télécharge Ollama **0.33.3** depuis sa release officielle ;
 3. vérifie l'archive Linux amd64 contre le SHA-256 versionné dans `config/tool-integrity.properties` ;
 4. démarre Ollama uniquement sur `127.0.0.1:11434` ;
-5. utilise `qwen3-embedding:0.6b` en 1024 dimensions ;
-6. exécute `RealSemanticSearchBenchmarkTest` sur le snapshot NEXUS exact ;
+5. pull `qwen3-embedding:0.6b` et vérifie que son ID de manifest attendu commence par **`ac6da0dfba84`** ;
+6. exécute `RealSemanticSearchBenchmarkTest` sur le snapshot NEXUS exact et exige que le rapport référence `NEXUS_HEAD_SHA` ;
 7. exige un index sémantique non vide et des floors de recall/hit/MRR, ainsi qu'une absence de régression supérieure à 0,10 face au baseline ;
 8. conserve versions, logs et rapport JSON comme artefacts pendant 90 jours.
 
-Ce gate est une sentinelle de qualité réelle, pas une dépendance nécessaire au fonctionnement lexical ni un téléchargement imposé à chaque PR.
+Ce gate est une sentinelle de qualité réelle et un gate ciblé des changements sémantiques, pas une dépendance nécessaire au fonctionnement lexical ni un téléchargement imposé aux PR sans rapport avec cette surface.
 
 ### Vector API
 
@@ -189,5 +193,5 @@ Un résultat rouge ou ambigu n'est pas un PASS :
 - artefact/hash/digest incohérent : échec ;
 - registry ambiguë : échec ;
 - benchmark hors budget : analyser le run exact-head ;
-- qualification sémantique réelle sous les floors : analyser modèle/runtime/ranking avant de modifier les seuils ;
+- qualification sémantique réelle sous les floors ou manifest modèle divergent : analyser modèle/runtime/ranking avant de modifier les seuils ;
 - tag immuable divergent : échec définitif, jamais d'écrasement automatique.
