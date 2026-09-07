@@ -27,5 +27,6 @@ public record SymbolRelation(
         if (sourceProvider.isBlank()) {
             throw new IllegalArgumentException("sourceProvider ne doit pas être vide");
         }
+        CodeIntelligenceMetadataPolicy.validateRelationFields(source, target, sourceProvider);
     }
 }
