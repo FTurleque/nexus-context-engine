@@ -11,6 +11,7 @@ $evaluationHome = Join-Path $repoRoot "target\nexus-jdt-evaluation-home"
 $resultsDirectory = Join-Path $repoRoot "target\jdt-evaluation"
 $summaryPath = Join-Path $resultsDirectory "summary.json"
 $previousNexusHome = $env:NEXUS_HOME
+$previousTrustedJdtRoots = $env:NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS
 $locationPushed = $false
 $script:cliJar = $null
 
@@ -138,9 +139,15 @@ try {
         throw "NEXUS_JDTLS_HOME pointe vers un chemin introuvable : $env:NEXUS_JDTLS_HOME"
     }
 
+    # Le benchmark travaille volontairement sur le repository NEXUS lui-même.
+    # Déclarer cette racine exacte comme fiable rend le trust boundary explicite
+    # et qualifie le même chemin fail-closed que la production.
+    $env:NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS = $repoRoot
+
     Write-Host "=== NEXUS JDT LS evaluation ==="
     Write-Host "Repository : $repoRoot"
     Write-Host "JDT LS : $env:NEXUS_JDTLS_HOME"
+    Write-Host "Trusted root : $env:NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS"
     Write-Host
 
     Write-Host "[1/7] Construction du JAR CLI"
@@ -178,6 +185,7 @@ try {
         generatedAt = (Get-Date).ToString("o")
         projectName = $ProjectName
         jdtLsHome = $env:NEXUS_JDTLS_HOME
+        trustedProjectRoot = $env:NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS
         k = $K
         baseline = [ordered]@{
             provider = "embedded+importers"
@@ -223,6 +231,7 @@ try {
 }
 finally {
     $env:NEXUS_HOME = $previousNexusHome
+    $env:NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS = $previousTrustedJdtRoots
     if ($locationPushed) {
         Pop-Location
     }
