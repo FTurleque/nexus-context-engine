@@ -133,13 +133,28 @@ public final class SemanticIndexingService {
         if (documents.isEmpty()) {
             return List.of();
         }
+
         List<SemanticVectorDocument> vectors = new ArrayList<>(documents.size());
-        for (int start = 0; start < documents.size(); start += batchSize) {
-            int end = Math.min(documents.size(), start + batchSize);
-            List<SearchDocument> batch = documents.subList(start, end);
-            List<String> texts = batch.stream().map(this::embeddingText).toList();
+        int documentIndex = 0;
+        while (documentIndex < documents.size()) {
+            List<SearchDocument> batch = new ArrayList<>(Math.min(batchSize, documents.size() - documentIndex));
+            List<String> texts = new ArrayList<>(batch.size());
+            int batchChars = 0;
+
+            while (documentIndex < documents.size() && batch.size() < batchSize) {
+                SearchDocument document = documents.get(documentIndex);
+                String text = embeddingText(document);
+                if (!batch.isEmpty() && text.length() > maxEmbeddingChars - batchChars) {
+                    break;
+                }
+                batch.add(document);
+                texts.add(text);
+                batchChars += text.length();
+                documentIndex++;
+            }
+
             List<float[]> embedded = Objects.requireNonNull(
-                    embeddingProvider.embedAll(texts),
+                    embeddingProvider.embedAll(List.copyOf(texts)),
                     "embedding vectors");
             if (embedded.size() != batch.size()) {
                 throw new IOException(
