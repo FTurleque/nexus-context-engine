@@ -45,14 +45,17 @@ class NexusPathsTest {
     }
 
     @Test
-    void classifiesExpectedAndBroadWindowsAclPrincipals() {
-        assertTrue(NexusPaths.isTrustedStoragePrincipal("WORKSTATION\\alice", "alice"));
-        assertTrue(NexusPaths.isTrustedStoragePrincipal("NT AUTHORITY\\SYSTEM", "alice"));
-        assertTrue(NexusPaths.isTrustedStoragePrincipal("BUILTIN\\Administrators", "alice"));
-        assertTrue(NexusPaths.isTrustedStoragePrincipal("CREATOR OWNER", "alice"));
+    void classifiesOnlyExactExpectedWindowsAclPrincipals() {
+        assertTrue(NexusPaths.isTrustedStoragePrincipal("WORKSTATION\\alice", "WORKSTATION\\alice"));
+        assertTrue(NexusPaths.isTrustedStoragePrincipal("NT AUTHORITY\\SYSTEM", "WORKSTATION\\alice"));
+        assertTrue(NexusPaths.isTrustedStoragePrincipal("BUILTIN\\Administrators", "WORKSTATION\\alice"));
+        assertTrue(NexusPaths.isTrustedStoragePrincipal("CREATOR OWNER", "WORKSTATION\\alice"));
 
-        assertFalse(NexusPaths.isTrustedStoragePrincipal("Everyone", "alice"));
-        assertFalse(NexusPaths.isTrustedStoragePrincipal("NT AUTHORITY\\Authenticated Users", "alice"));
-        assertFalse(NexusPaths.isTrustedStoragePrincipal("BUILTIN\\Users", "alice"));
+        assertFalse(NexusPaths.isTrustedStoragePrincipal("DOMAIN\\alice", "WORKSTATION\\alice"));
+        assertFalse(NexusPaths.isTrustedStoragePrincipal("CONTOSO\\Administrators", "WORKSTATION\\alice"));
+        assertFalse(NexusPaths.isTrustedStoragePrincipal("Everyone", "WORKSTATION\\alice"));
+        assertFalse(NexusPaths.isTrustedStoragePrincipal(
+                "NT AUTHORITY\\Authenticated Users", "WORKSTATION\\alice"));
+        assertFalse(NexusPaths.isTrustedStoragePrincipal("BUILTIN\\Users", "WORKSTATION\\alice"));
     }
 }
