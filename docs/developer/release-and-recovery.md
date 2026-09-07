@@ -49,7 +49,7 @@ Voir [`immutable-release-publishing.md`](immutable-release-publishing.md).
 
 SQLite reste l'autorité canonique. Les migrations sont forward-only, enregistrées dans `schema_migrations` et protégées par `script_sha256`.
 
-Les migrations de plage de symboles sont :
+Les migrations de durcissement récentes sont :
 
 - `V004__invalidate_invalid_symbol_ranges.sql` : invalide les index historiques contenant des plages que le domaine Java ne peut plus représenter et force un rebuild déterministe ;
 - `V005__enforce_symbol_range_constraints.sql` : reconstruit `symbols` et impose :
@@ -59,7 +59,9 @@ start_line >= 1
 end_line >= start_line
 ```
 
-Une base V004 valide est migrée vers V005 en conservant ses données/index. Un `INSERT` SQL direct invalide est rejeté. Réexécuter le migrateur sur une base V005 est idempotent.
+- `V006__invalidate_unredacted_lexical_indexes.sql` : invalide une fois les projets existants et incrémente leur génération afin que la prochaine indexation effectue un rebuild complet. Ce rebuild supprime les anciens segments Lucene qui avaient tokenisé le contenu brut avant que la redaction des secrets ne soit appliquée au pipeline lexical.
+
+Une base V004 valide est migrée vers V005 en conservant ses données/index. V006 conserve également SQLite mais marque les projets `NOT_INDEXED` pour reconstruire les index dérivés avec la représentation redacted. Un `INSERT` SQL direct invalide est rejeté. Réexécuter le migrateur sur une base déjà migrée est idempotent.
 
 ### Permissions de `NEXUS_HOME`
 
@@ -72,7 +74,7 @@ NEXUS_HOME/locks/    0700 sur POSIX
 NEXUS_HOME/nexus.db  0600 sur POSIX
 ```
 
-Les chemins persistants durcis concernés sont refusés lorsqu'ils sont symboliques. Sur Windows ou filesystem sans vue POSIX, NEXUS conserve les ACL natives au lieu de les remplacer destructivement.
+Les chemins persistants durcis concernés sont refusés lorsqu'ils sont symboliques. Sur Windows ou filesystem sans vue POSIX, NEXUS conserve les ACL natives au lieu de les remplacer destructivement. Lorsqu'une vue ACL Windows est disponible, NEXUS inspecte `NEXUS_HOME` et émet un warning si des principaux inattendus disposent de permissions permettant de lire ou modifier les données persistantes.
 
 Un backup/restauration doit conserver les protections adaptées au système cible. Ne pas déduire de `0700/0600` qu'une ACL Windows doit être remplacée par un équivalent artisanal.
 
@@ -105,7 +107,7 @@ Une mutation d'index par projet est protégée par :
 
 La garantie cible un `NEXUS_HOME` sur filesystem local. Les mêmes garanties ne sont pas revendiquées sur filesystem réseau.
 
-Les tâches providers/importers sont bornées en temps et à **8 workers réellement actifs maximum**. La capacité n'est rendue que lorsque le worker se termine effectivement. Un provider ignorant l'interruption peut donc vivre plus longtemps que l'appelant, mais il ne peut pas provoquer une croissance non bornée du nombre de workers NEXUS.
+Les tâches providers/importers sont bornées en temps et à **8 workers réellement actifs maximum**. La capacité n'est rendue que lorsque le worker se termine effectivement. Un provider ignorant l'interruption peut donc vivre plus longtemps que l'appelant, mais il ne peut pas provoquer une croissance non bornée du nombre de workers NEXUS. Après timeout ou interruption, un circuit-breaker par nom de tâche bloque les nouvelles relances de cette intégration tant que ses workers timeoutés restent vivants. `ExternalTaskRunner.status()` expose le nombre de tâches actives et de workers timeoutés pour la supervision.
 
 ## Recovery Docker
 
@@ -124,7 +126,7 @@ Listener applicatif par défaut : `127.0.0.1:8080`.
 
 Health/metrics sont servis sur le listener management séparé `127.0.0.1:9000`. `/q/*` ne doit pas être disponible sur le listener applicatif ni publié par le reverse proxy métier.
 
-Loopback reste autorisé localement sans token par défaut. Une écoute API hors loopback exige transport réellement sécurisé, token robuste et allowlist de racines. `direct-https` doit correspondre à un listener TLS effectif ; `reverse-proxy-https` doit respecter la frontière proxy/backend. `loopback-forward` reste limité à une publication Docker hôte sur loopback.
+Une écoute REST loopback exige un Bearer token robuste par défaut. L'ancien mode local sans authentification n'est disponible que par opt-out explicite `NEXUS_REST_TRUST_LOCAL=true`; `NEXUS_REST_HARDEN_LOCAL=true` reste prioritaire et impose token + allowlist. Une écoute API hors loopback exige transport réellement sécurisé, token robuste et allowlist de racines. `direct-https` doit correspondre à un listener TLS effectif ; `reverse-proxy-https` doit respecter la frontière proxy/backend. `loopback-forward` reste limité à une publication Docker hôte sur loopback.
 
 Contourner les gardes REST ou exposer le listener management n'est jamais une procédure de recovery valide.
 
