@@ -64,16 +64,15 @@ public record NexusPaths(Path home) {
      * Crée les répertoires persistants NEXUS et les rend privés sur les systèmes POSIX.
      *
      * <p>Sur les systèmes sans vue POSIX (notamment Windows), NEXUS conserve les ACL natives
-     * héritées du profil utilisateur au lieu de les remplacer de manière destructive. Le home est
-     * toujours refusé lorsqu'il est lui-même un lien symbolique. Lorsqu'une vue ACL est disponible,
-     * NEXUS signale en plus les principaux inattendus disposant d'un accès aux données afin qu'un
-     * {@code NEXUS_HOME} personnalisé ne paraisse pas privé alors qu'il hérite d'ACL trop larges.</p>
+     * héritées du profil utilisateur au lieu de les remplacer de manière destructive. Chaque
+     * chemin sensible effectivement créé ou durci est inspecté lorsqu'une vue ACL est disponible,
+     * de sorte qu'une ACL explicite plus large sur un enfant ne puisse pas être masquée par une
+     * vérification limitée au seul {@code NEXUS_HOME}.</p>
      */
     public void ensurePrivateStorage() throws IOException {
         ensurePrivateDirectory(home);
         ensurePrivateDirectory(indexesDirectory());
         ensurePrivateDirectory(locksDirectory());
-        warnIfAclMayBeShared(home);
     }
 
     /**
@@ -93,6 +92,7 @@ public record NexusPaths(Path home) {
         for (Path segment : home.relativize(normalized)) {
             current = current.resolve(segment);
             ensurePrivateChildDirectory(current);
+            warnIfAclMayBeShared(current);
         }
     }
 
@@ -121,6 +121,7 @@ public record NexusPaths(Path home) {
         }
         validateRegularFile(normalized);
         applyPosixPermissions(normalized, PRIVATE_FILE_PERMISSIONS);
+        warnIfAclMayBeShared(normalized);
     }
 
     /** Rend un fichier persistant privé lorsque le système de fichiers expose les permissions POSIX. */
@@ -128,6 +129,7 @@ public record NexusPaths(Path home) {
         Path normalized = requireInsideHome(file);
         validateRegularFile(normalized);
         applyPosixPermissions(normalized, PRIVATE_FILE_PERMISSIONS);
+        warnIfAclMayBeShared(normalized);
     }
 
     public Path databaseFile() {
@@ -164,6 +166,7 @@ public record NexusPaths(Path home) {
         Files.createDirectories(home);
         validateDirectory(home);
         applyPosixPermissions(home, PRIVATE_DIRECTORY_PERMISSIONS);
+        warnIfAclMayBeShared(home);
     }
 
     private static void ensurePrivateChildDirectory(Path directory) throws IOException {
@@ -214,9 +217,9 @@ public record NexusPaths(Path home) {
         }
     }
 
-    private static void warnIfAclMayBeShared(Path directory) {
+    private static void warnIfAclMayBeShared(Path path) {
         AclFileAttributeView view = Files.getFileAttributeView(
-                directory,
+                path,
                 AclFileAttributeView.class,
                 LinkOption.NOFOLLOW_LINKS);
         if (view == null) {
@@ -224,7 +227,7 @@ public record NexusPaths(Path home) {
         }
 
         try {
-            String currentUser = System.getProperty("user.name", "");
+            String currentUser = canonicalCurrentUserPrincipal(path);
             List<String> unexpectedPrincipals = new ArrayList<>();
             for (AclEntry entry : view.getAcl()) {
                 if (entry.type() != AclEntryType.ALLOW
@@ -241,30 +244,53 @@ public record NexusPaths(Path home) {
                 String principals = String.join(", ", new LinkedHashSet<>(unexpectedPrincipals));
                 LOGGER.log(
                         System.Logger.Level.WARNING,
-                        "NEXUS_HOME peut être accessible à d'autres comptes ({0}) : vérifiez les ACL de {1}",
+                        "Le stockage NEXUS peut être accessible à d'autres comptes ({0}) : vérifiez les ACL de {1}",
                         principals,
-                        directory);
+                        path);
             }
         } catch (IOException | SecurityException inspectionFailure) {
             LOGGER.log(
                     System.Logger.Level.DEBUG,
-                    "Impossible d'inspecter les ACL de NEXUS_HOME " + directory,
+                    "Impossible d'inspecter les ACL du stockage NEXUS " + path,
                     inspectionFailure);
         }
     }
 
-    static boolean isTrustedStoragePrincipal(String principalName, String currentUserName) {
+    private static String canonicalCurrentUserPrincipal(Path path) {
+        String currentUser = System.getProperty("user.name", "").trim();
+        if (currentUser.isEmpty()) {
+            return "";
+        }
+        try {
+            return path.getFileSystem()
+                    .getUserPrincipalLookupService()
+                    .lookupPrincipalByName(currentUser)
+                    .getName();
+        } catch (IOException | SecurityException lookupFailure) {
+            // Fallback fail-safe: keep inspecting with the raw user name. This may
+            // produce a warning for DOMAIN\\user instead of silently skipping the
+            // whole ACL inspection, which is the safer failure mode.
+            LOGGER.log(
+                    System.Logger.Level.DEBUG,
+                    "Impossible de canoniser le principal utilisateur courant " + currentUser,
+                    lookupFailure);
+            return currentUser;
+        }
+    }
+
+    static boolean isTrustedStoragePrincipal(String principalName, String currentUserPrincipalName) {
         if (principalName == null || principalName.isBlank()) {
             return false;
         }
         String principal = principalName.trim().toUpperCase(Locale.ROOT);
-        String currentUser = currentUserName == null ? "" : currentUserName.trim().toUpperCase(Locale.ROOT);
-        if (!currentUser.isEmpty()
-                && (principal.equals(currentUser) || principal.endsWith("\\" + currentUser))) {
+        String currentUser = currentUserPrincipalName == null
+                ? ""
+                : currentUserPrincipalName.trim().toUpperCase(Locale.ROOT);
+        if (!currentUser.isEmpty() && principal.equals(currentUser)) {
             return true;
         }
         return principal.equals("NT AUTHORITY\\SYSTEM")
                 || principal.equals("CREATOR OWNER")
-                || principal.endsWith("\\ADMINISTRATORS");
+                || principal.equals("BUILTIN\\ADMINISTRATORS");
     }
 }

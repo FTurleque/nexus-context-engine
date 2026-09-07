@@ -45,22 +45,41 @@ NEXUS ne télécharge donc pas un checksum de confiance depuis le même origin q
 ## Configuration
 
 ```text
-NEXUS_JDTLS_HOME             racine JDT LS contenant plugins/ et config_<os>/
-NEXUS_JDTLS_JAVA             java par défaut
-NEXUS_JDTLS_TIMEOUT_SECONDS  120 par défaut, maximum 3600
-NEXUS_JDTLS_MAX_SYMBOLS      250 par défaut, maximum 10000
+NEXUS_JDTLS_HOME                   racine JDT LS contenant plugins/ et config_<os>/
+NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS liste de racines projet explicitement approuvées
+NEXUS_JDTLS_JAVA                   java par défaut
+NEXUS_JDTLS_TIMEOUT_SECONDS        120 par défaut, maximum 3600
+NEXUS_JDTLS_MAX_SYMBOLS            250 par défaut, maximum 10000
 ```
 
 Les deux bornes numériques sont **fail-closed** lorsque JDT LS est configuré : une valeur non entière, nulle, négative ou supérieure au maximum provoque une erreur de configuration explicite au lieu de revenir silencieusement à la valeur par défaut. Seule une valeur absente ou vide utilise le défaut.
 
-Activation :
+## Frontière de confiance du workspace
+
+JDT LS peut importer les métadonnées Maven/Gradle du workspace. NEXUS considère donc `--deep-java` comme une frontière d'exécution sur un repository qui doit être explicitement approuvé.
+
+Avant de démarrer le subprocess, `ProcessBuilder` exige que le working directory canonique exact soit présent dans `NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS`. La variable utilise le séparateur de chemins de la plateforme (`;` sous Windows, `:` sous Unix). Une racine parente ne fait pas confiance implicitement à ses descendants.
+
+Exemple PowerShell :
+
+```powershell
+$env:NEXUS_JDTLS_HOME = 'C:\tools\jdtls'
+$env:NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS = (Resolve-Path 'C:\src\mon-projet').Path
+nexus index mon-projet --deep-java
+```
+
+Sans allowlist, avec une racine absente/invalide ou si le projet n'est pas exactement approuvé, NEXUS échoue **avant** `Process.start()`. L'allowlist de confiance n'est elle-même pas transmise au subprocess JDT LS.
+
+Cette politique vaut pour toutes les surfaces qui déclenchent l'indexation profonde, y compris REST. L'authentification REST autorise l'appel ; elle ne remplace pas l'approbation locale du repository pour l'exécution JDT.
+
+## Activation
 
 ```powershell
 nexus index mon-projet --deep-java
 nexus index mon-projet --rebuild --deep-java
 ```
 
-Sans `NEXUS_JDTLS_HOME`, une demande `--deep-java` échoue explicitement.
+Sans `NEXUS_JDTLS_HOME`, une demande `--deep-java` échoue explicitement. Sans `NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS` correspondant à la racine canonique du projet, le lancement JDT échoue également explicitement.
 
 ## Cycle de vie du snapshot
 
@@ -91,7 +110,9 @@ Les intégrations externes passent par `ExternalTaskRunner` :
 - interruption du worker au timeout ;
 - maximum **8 tâches externes réellement actives** à l'échelle JVM ;
 - capacité rendue seulement lorsque le worker termine réellement ;
-- saturation rejetée explicitement au lieu de créer des threads non bornés.
+- saturation rejetée explicitement au lieu de créer des threads non bornés ;
+- breaker par provider ouvert tant qu'un worker timeouté reste vivant ;
+- ouverture du breaker et démarrage d'un nouveau worker linéarisés afin d'éviter une relance après une vérification devenue obsolète.
 
 Le provider JDT ajoute ses propres bornes administratives : **3600 secondes maximum** pour `NEXUS_JDTLS_TIMEOUT_SECONDS` et **10000 symboles maximum** pour `NEXUS_JDTLS_MAX_SYMBOLS`.
 
@@ -105,7 +126,7 @@ Chaque projet utilise un workspace dédié sous :
 NEXUS_HOME/jdtls-workspaces/<identifiant-du-projet>
 ```
 
-Le provider est read-only. Une requête `workspace/applyEdit` reçue du serveur est refusée.
+Le provider LSP refuse `workspace/applyEdit`. Cette propriété protège la surface de protocole NEXUS mais **ne transforme pas un build Maven/Gradle non fiable en code sûr** ; c'est précisément le rôle de `NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS`.
 
 Le processus JDT LS est arrêté après l'analyse profonde ; un daemon persistant n'est pas adopté sans justification mesurée.
 
@@ -129,10 +150,12 @@ Les faits compatibles sont normalisés vers `CodeSymbol` et les relations NEXUS 
 
 Le contrat courant est couvert notamment par :
 
+- tests de l'allowlist de racines JDT et de la comparaison canonique exacte ;
 - tests du framing `JdtJsonRpcFrameReader` ;
 - tests du provider JDT et de son cycle de vie ;
 - tests fail-closed des bornes `NEXUS_JDTLS_TIMEOUT_SECONDS` / `NEXUS_JDTLS_MAX_SYMBOLS` ;
 - tests de `ExternalTaskRunner` ;
+- benchmark `scripts/compare-jdt.ps1`, qui approuve explicitement la racine NEXUS pendant la qualification ;
 - vérification de l'ancre JDT LS par `scripts/release/test-tool-integrity-anchors.sh` dans NEXUS CI.
 
 Voir aussi [`code-intelligence.md`](code-intelligence.md), [`ci-and-supply-chain.md`](ci-and-supply-chain.md) et [`current-limitations.md`](current-limitations.md).

@@ -72,18 +72,22 @@ java -jar .\target\nexus-context-engine-0.2.0-cli.jar index mon-app
 java -jar .\target\nexus-context-engine-0.2.0-cli.jar index mon-app --rebuild
 ```
 
-JDT LS reste explicite :
+JDT LS reste explicite et exige désormais une racine projet approuvée avant tout démarrage du subprocess :
 
 ```powershell
 $env:NEXUS_JDTLS_HOME = 'C:\tools\jdtls'
+$env:NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS = (Resolve-Path 'N:\workspace-dev\mon-app').Path
 java -jar .\target\nexus-context-engine-0.2.0-cli.jar index mon-app --deep-java
 ```
+
+`NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS` compare les chemins réels exacts (`;` sous Windows, `:` sous Unix). Ne placez dans cette allowlist que des repositories dont vous acceptez l'import des métadonnées Maven/Gradle.
 
 Hardening Phase 6 :
 
 - une seule indexation active par projet/processus ;
 - `NEXUS_MAX_FILE_SIZE_BYTES` limite les fichiers avant hash/lecture ;
 - `NEXUS_CODE_INTELLIGENCE_TIMEOUT_SECONDS` limite les providers externes ;
+- `NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS` ferme l'analyse JDT sur les repositories non approuvés ;
 - exclusions/providers sont visibles dans les diagnostics d'indexation.
 
 ## MINOS
@@ -95,7 +99,7 @@ Get-Content -Raw .\minos-export.json |
     java -jar .\target\nexus-context-engine-0.2.0-cli.jar minos-import mon-app --json
 ```
 
-Le payload reste borné à 128 MiB. Les chemins sont validés contre les fichiers canoniques déjà indexés.
+Le payload reste borné à 128 MiB. Les chemins sont validés contre les fichiers canoniques déjà indexés et les métadonnées décodées sont soumises aux plafonds communs de Code Intelligence avant canonicalisation.
 
 ## Recherche mono-projet
 

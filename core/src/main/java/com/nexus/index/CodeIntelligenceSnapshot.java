@@ -17,6 +17,10 @@ public record CodeIntelligenceSnapshot(
         if (sourceProvider.isBlank()) {
             throw new IllegalArgumentException("sourceProvider ne doit pas être vide");
         }
+        CodeIntelligenceMetadataPolicy.validateSourceProvider(sourceProvider);
+
+        // Validate resource ceilings before canonicalization allocates duplicate maps.
+        CodeIntelligenceMetadataPolicy.validateSnapshotInput(symbols, relations);
 
         Map<ExternalSymbolIdentity, IndexedSymbol> canonicalSymbols = new LinkedHashMap<>();
         for (IndexedSymbol indexedSymbol : symbols) {

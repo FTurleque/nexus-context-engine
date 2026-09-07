@@ -1,6 +1,6 @@
 # Limites actuelles et dette de consolidation
 
-Ce registre décrit l'état courant après les campagnes **NXA3 + NXA4** et les remédiations des audits `develop` des 2 et 6 septembre 2026. Les anciens numéros de PR/runs ne constituent pas une preuve permanente ; la preuve de qualification est toujours le run attaché au HEAD exact concerné.
+Ce registre décrit l'état courant après les campagnes **NXA3 + NXA4** et les remédiations des audits `develop` des 2, 6 et 7 septembre 2026. Les anciens numéros de PR/runs ne constituent pas une preuve permanente ; la preuve de qualification est toujours le run attaché au HEAD exact concerné.
 
 ## Invariants techniques désormais couverts
 
@@ -18,10 +18,12 @@ Ce registre décrit l'état courant après les campagnes **NXA3 + NXA4** et les 
 - l'analyse Java locale refuse plus de **20 000 symboles** ou **10 000 relations d'import** par fichier avant matérialisation des collections de faits ;
 - `NEXUS_HOME`, `indexes` et `locks` sont forcés à `0700` sur POSIX ; le fichier SQLite est forcé à `0600` ;
 - les chemins persistants NEXUS durcis concernés sont refusés lorsqu'ils sont symboliques ;
+- sur les filesystems exposant une vue ACL, chaque répertoire/fichier sensible créé ou durci est inspecté, pas seulement la racine `NEXUS_HOME` ;
+- le principal utilisateur courant est résolu via le `UserPrincipalLookupService` lorsque possible et les principaux Windows privilégiés sont comparés exactement (`NT AUTHORITY\SYSTEM`, `BUILTIN\Administrators`, `CREATOR OWNER`) au lieu d'utiliser des suffixes ambigus ;
 - la sémantique du lock projet est qualifiée avec **deux JVM distinctes** sur Linux et Windows locaux ;
 - la mutation déterministe validation→ouverture où le fichier final devient un symlink échoue fermée via `SafeFileIO`.
 
-Sur Windows/filesystems sans vue POSIX, NEXUS conserve les ACL natives au lieu de les réécrire naïvement.
+Sur Windows/filesystems sans vue POSIX, NEXUS conserve les ACL natives au lieu de les réécrire naïvement. L'inspection ACL reste un mécanisme de diagnostic : NEXUS avertit lorsqu'un principal inattendu dispose de droits sensibles mais ne réécrit pas automatiquement une ACL Windows, afin de ne pas retirer par erreur SYSTEM/Administrators ou casser une politique d'entreprise.
 
 Le contrat de support courant reste volontairement borné aux filesystems locaux qualifiés Linux/Windows. Une fixture **SMB 3.1.1 loopback Windows** est désormais qualifiée comme preuve ciblée (round-trip UNC + lock inter-JVM), mais SMB/CIFS général, NFS, volumes distribués/synchronisés et montages à sémantique spéciale restent non supportés faute de qualification multi-client, panne/reconnexion et stockage complet SQLite/Lucene. Voir [`filesystem-support.md`](filesystem-support.md) et ADR-0047.
 
@@ -53,12 +55,20 @@ Le champ `constraints` existe encore dans certains contrats DTO/records pour com
 ### Code Intelligence externe
 
 - JDT LS reste opt-in ;
+- `--deep-java` exige désormais que la racine canonique exacte du repository figure dans `NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS` avant le démarrage du subprocess ; une racine parente n'approuve pas implicitement ses descendants ;
+- cette frontière de confiance est distincte de l'authentification REST : un appel REST autorisé ne peut pas forcer JDT LS à démarrer sur un repository qui n'est pas localement approuvé ;
 - les tâches externes sont bornées en temps et à **8 workers actifs maximum** à l'échelle JVM ;
+- l'ouverture du circuit-breaker et la validation+démarrage d'un nouveau worker sont linéarisées par provider afin d'éliminer la fenêtre check-then-start après timeout ;
 - le framing JDT LS borne message (16 MiB), headers (64 KiB), ligne de header (8 KiB) et queue entrante (256) ;
-- le subprocess JDT LS reçoit une allowlist d'environnement minimale (runtime, chemins utilisateur/temp et outils de build usuels) ; tokens NEXUS/CI/cloud, `JAVA_TOOL_OPTIONS`, `JDK_JAVA_OPTIONS` et sockets d'agents ne sont pas hérités ;
-- saturation ou framing invalide déclenchent un échec fermé et l'arrêt de la session concernée.
+- le subprocess JDT LS reçoit une allowlist d'environnement minimale (runtime, chemins utilisateur/temp et outils de build usuels) ; tokens NEXUS/CI/cloud, `JAVA_TOOL_OPTIONS`, `JDK_JAVA_OPTIONS`, sockets d'agents et allowlist de confiance JDT ne sont pas hérités ;
+- saturation ou framing invalide déclenchent un échec fermé et l'arrêt de la session concernée ;
+- `CodeIntelligenceMetadataPolicy` borne les chemins, noms, qualified names, signatures, références et providers en octets UTF-8 ;
+- un snapshot est refusé au-delà de **100 000 symboles**, **250 000 relations** ou **64 MiB de métadonnées UTF-8 cumulées**, et ces bornes sont contrôlées avant la canonicalisation/déduplication secondaire ;
+- `index.scip` reste borné à **256 MiB** et un message protobuf à **16 MiB** ; les variables `NEXUS_MAX_SCIP_INDEX_BYTES` / `NEXUS_MAX_SCIP_MESSAGE_BYTES` peuvent uniquement réduire ces ceilings, plus les agrandir.
 
 Limite résiduelle : un provider tiers peut ignorer l'interruption ; NEXUS borne alors l'accumulation de workers, conserve les slots occupés jusqu'à la terminaison réelle et rejette explicitement les nouvelles tâches à saturation, mais ne revendique pas une isolation processus absolue. Une isolation plus forte exige de déplacer le provider concerné hors JVM ; elle reste un chantier architectural conditionné par un provider réel démontrant ce mode d'échec.
+
+La politique de confiance JDT réduit explicitement la surface d'exécution sur dépôt non fiable, mais elle n'est pas une sandbox. Une racine déclarée fiable reste exécutée avec les droits du compte NEXUS ; seuls des repositories effectivement approuvés doivent donc être ajoutés à `NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS`.
 
 ### SQLite et verrous d'indexation
 
@@ -106,6 +116,7 @@ La redaction conservatrice réduit les fuites accidentelles mais ne remplace pas
 - exact-head explicite pour NEXUS CI/CodeQL ;
 - OSV, CodeQL, Trivy et SBOM actifs ;
 - Maven/JDT LS vérifiés contre des ancres versionnées indépendantes ;
+- le gate `test-final-audit-contracts.sh` verrouille maintenant aussi la confiance JDT, les plafonds de métadonnées décodées, les ceilings SCIP non extensibles, le matching ACL exact et la linéarisation du circuit-breaker ;
 - le gate Windows Installer couvre désormais `core/src/**`, `adapters/**`, les POM et le wrapper Maven ;
 - les images Docker builder/runtime sont épinglées par digest et les Dockerfiles n'exécutent plus de `apt-get` dépendant de l'état courant d'un miroir ;
 - image Docker construite une fois, qualifiée puis publiée sans rebuild ;
@@ -122,7 +133,7 @@ La protection GitHub de `develop` est un état repository-admin, pas un fichier 
 
 NXA3-14 / #130 est satisfait : le ruleset actif `Protect main & develop` protège `develop`, exige les pull requests, interdit suppression/non-fast-forward et impose les sept checks permanents approuvés. Après toute modification repository-admin, cet état doit être revalidé par API.
 
-Hardening résiduel : `strict_required_status_checks_policy=false`. Les checks requis qualifient le HEAD de PR, mais GitHub n'impose pas actuellement une remise à jour avec la base immédiatement avant merge. Ce paramètre ne peut pas être modifié par un commit de code/workflow.
+Hardening résiduel : `strict_required_status_checks_policy=false`. Les checks requis qualifient le HEAD de PR, mais GitHub n'impose pas actuellement une remise à jour avec la base immédiatement avant merge. Le repository demande également actuellement zéro approbation obligatoire. Ces réglages sont suivis par les issues #199/#202 et ne peuvent pas être modifiés par un commit de code/workflow ni par le connecteur GitHub disponible pour cette campagne.
 
 ## Watch items
 
@@ -131,7 +142,7 @@ Les sujets suivants ne doivent pas être changés sans mesure ou scénario repro
 - isolation processus plus forte d'un provider réellement non coopératif (#51) ;
 - extension de support vers un filesystem réseau/distribué précis : elle exige désormais de dépasser la preuve SMB loopback et de qualifier le protocole/configuration réellement visé, idéalement multi-client avec injection de panne ;
 - nouveau moteur FTS/trigram pour les recherches substring ;
-- activation repository-admin du mode strict « branch up to date before merge ».
+- activation repository-admin du mode strict « branch up to date before merge » et d'au moins une approbation obligatoire (#199/#202).
 
 Le watch item légal #55 reste un gate conditionnel pour toute dépendance ou modalité de redistribution inhabituelle ; il ne déclenche aucune modification tant qu'un candidat concret n'existe pas.
 

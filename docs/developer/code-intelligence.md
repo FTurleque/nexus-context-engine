@@ -20,6 +20,24 @@ MINOS
 
 Les résultats convergent vers `CodeIntelligenceSnapshot` et conservent leur provenance.
 
+## Limites communes de métadonnées décodées
+
+Les limites de transport ne suffisent pas à borner l'amplification heap après décodage JSON/Protobuf. La frontière domaine applique donc `CodeIntelligenceMetadataPolicy` à **tous** les providers/importers :
+
+```text
+relativePath                         <= 8 KiB UTF-8
+symbol.name                          <= 4 KiB UTF-8
+symbol.qualifiedName                 <= 16 KiB UTF-8
+symbol.signature                     <= 32 KiB UTF-8
+relation.source / relation.target    <= 16 KiB UTF-8
+sourceProvider                       <= 256 octets UTF-8
+snapshot symboles                    <= 100000
+snapshot relations                   <= 250000
+métadonnées UTF-8 cumulées/snapshot  <= 64 MiB
+```
+
+La cardinalité et le budget décodé sont vérifiés **avant** que `CodeIntelligenceSnapshot` construise ses maps de canonicalisation/déduplication. Une entrée externe pathologique échoue ainsi avant l'allocation des collections secondaires.
+
 ## JavaParser — baseline embarquée
 
 `JavaParserLanguageAnalyzer` fournit sans installation externe : classes, interfaces, records, enums, annotations, méthodes/constructeurs, signatures, positions et imports.
@@ -36,29 +54,34 @@ sourceProvider = javaparser
 
 Les sources référencées par SCIP sont relues via `ProjectPathGuard`. Traversal, symlink final/ancêtre, source absente et plages incohérentes sont traités fail-closed. Le parseur protobuf utilise des vérifications de bornes résistantes aux overflows avant toute lecture.
 
-Les limites par défaut sont :
+Les plafonds de transport sont désormais des **ceilings de sécurité non extensibles** :
 
 ```text
-index.scip                  <= 256 MiB
-message protobuf            <= 16 MiB
-faits symbole matérialisés  <= 500000
-faits relation matérialisés <= 500000
-faits totaux matérialisés   <= 1000000
+index.scip       <= 256 MiB
+message protobuf <= 16 MiB
 ```
 
-Les deux limites de transport peuvent être configurées dans leurs plafonds supportés via `NEXUS_MAX_SCIP_INDEX_BYTES` et `NEXUS_MAX_SCIP_MESSAGE_BYTES`. Les plafonds de faits sont des garde-fous du modèle en mémoire : l'import s'arrête avant d'ajouter le fait `N+1`, au lieu de laisser la taille du protobuf se transformer en cardinalité d'objets non bornée.
+`NEXUS_MAX_SCIP_INDEX_BYTES` et `NEXUS_MAX_SCIP_MESSAGE_BYTES` peuvent uniquement **réduire** ces plafonds pour un runtime plus contraint. Une configuration supérieure est rejetée au lieu d'agrandir la surface d'allocation qualifiée.
+
+Le parseur conserve en plus ses garde-fous internes de cardinalité pendant le décodage, puis la frontière domaine commune impose les plafonds de snapshot et de métadonnées ci-dessus avant canonicalisation.
 
 Le mapping reste conservateur : un kind sans équivalent fiable n'est pas inventé.
 
-## JDT Language Server — analyse profonde opt-in
+## JDT Language Server — analyse profonde opt-in et projet explicitement approuvé
 
-`JdtLanguageServerCodeIntelligenceProvider` n'est exécuté qu'avec :
+`JdtLanguageServerCodeIntelligenceProvider` n'est exécuté qu'avec une indexation profonde explicite **et** une racine de projet approuvée :
 
 ```powershell
+$env:NEXUS_JDTLS_HOME = 'C:\tools\jdtls'
+$env:NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS = 'C:\src\mon-projet'
 nexus index mon-projet --deep-java
 ```
 
-Il fournit références, implémentations, hiérarchies de types et d'appels. Le transport JSON-RPC/LSP est borné : messages 16 MiB, headers 64 KiB, lignes de header 8 KiB et file entrante 256 messages maximum.
+Sur Windows, plusieurs racines sont séparées par `;` ; sur Unix par `:` (`File.pathSeparator`). Les entrées sont résolues en chemins réels et la comparaison est exacte : approuver un parent n'approuve pas implicitement tous ses descendants.
+
+Cette frontière est obligatoire parce que JDT LS peut importer les métadonnées Maven/Gradle du workspace. Sans `NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS`, ou si la racine canonique du projet n'y figure pas, le subprocess échoue fermé **avant son démarrage**. La variable de confiance n'est pas transmise au processus enfant car elle ne fait pas partie de l'allowlist d'environnement JDT.
+
+JDT LS fournit références, implémentations, hiérarchies de types et d'appels. Le transport JSON-RPC/LSP est borné : messages 16 MiB, headers 64 KiB, lignes de header 8 KiB et file entrante 256 messages maximum.
 
 Les tâches externes sont en plus bornées en temps et en concurrence globale (8 workers actifs maximum). La configuration JDT conserve elle-même un plafond de **3600 secondes** et **10000 symboles** et rejette les valeurs numériques invalides ou hors borne au lieu de revenir silencieusement au défaut. Voir [`jdt-language-server.md`](jdt-language-server.md).
 
@@ -86,6 +109,7 @@ Invariants :
 - racine canonique identique ;
 - payload <= 128 MiB ;
 - chemins relatifs validés ;
+- limites communes de champs/cardinalité/métadonnées appliquées au snapshot ;
 - mapping conservateur ;
 - `sourceProvider=minos` ;
 - aucun type `com.minos` dans NEXUS ;
@@ -125,8 +149,9 @@ CLI, REST et MCP ne doivent pas perdre cette provenance.
 Les protections couvrent notamment :
 
 - JavaParser et ranges ;
-- SCIP absent/présent, confinement, bounds protobuf et cardinalité globale des faits ;
-- JDT LS opt-in, framing borné, queue bornée, timeout et configuration fail-closed ;
+- SCIP absent/présent, confinement, bounds protobuf, plafonds de transport non extensibles et cardinalité ;
+- limites communes des champs et du budget de métadonnées décodées ;
+- JDT LS opt-in, racines projet explicitement approuvées, framing borné, queue bornée, timeout et configuration fail-closed ;
 - contrat/replay MINOS ;
 - provenance/déduplication ;
 - recherche symbolique ciblée et graphe borné ;

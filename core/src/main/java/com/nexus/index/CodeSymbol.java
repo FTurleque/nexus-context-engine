@@ -38,6 +38,7 @@ public record CodeSymbol(
         if (endLine < startLine) {
             throw new IllegalArgumentException("endLine doit être supérieur ou égal à startLine");
         }
+        CodeIntelligenceMetadataPolicy.validateSymbolFields(name, qualifiedName, signature, sourceProvider);
     }
 
     public static boolean isStructurallyValidRange(int startLine, int endLine) {
