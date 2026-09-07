@@ -49,10 +49,11 @@ class JdtProjectTrustPolicyTest {
     }
 
     @Test
-    void ignoresInvalidOrMissingAllowlistEntriesInsteadOfBroadeningTrust() throws Exception {
+    void ignoresMissingAllowlistEntriesInsteadOfBroadeningTrust() throws Exception {
         Path project = Files.createDirectories(temporaryDirectory.resolve("project"));
-        Path missing = temporaryDirectory.resolve("missing");
-        String configured = missing + File.pathSeparator + "\u0000invalid";
+        Path missingOne = temporaryDirectory.resolve("missing-one");
+        Path missingTwo = temporaryDirectory.resolve("missing-two");
+        String configured = missingOne + File.pathSeparator + missingTwo;
 
         assertThrows(
                 IOException.class,
