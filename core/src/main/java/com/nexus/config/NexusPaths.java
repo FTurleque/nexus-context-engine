@@ -256,15 +256,26 @@ public record NexusPaths(Path home) {
         }
     }
 
-    private static String canonicalCurrentUserPrincipal(Path path) throws IOException {
+    private static String canonicalCurrentUserPrincipal(Path path) {
         String currentUser = System.getProperty("user.name", "").trim();
         if (currentUser.isEmpty()) {
             return "";
         }
-        return path.getFileSystem()
-                .getUserPrincipalLookupService()
-                .lookupPrincipalByName(currentUser)
-                .getName();
+        try {
+            return path.getFileSystem()
+                    .getUserPrincipalLookupService()
+                    .lookupPrincipalByName(currentUser)
+                    .getName();
+        } catch (IOException | SecurityException lookupFailure) {
+            // Fallback fail-safe: keep inspecting with the raw user name. This may
+            // produce a warning for DOMAIN\\user instead of silently skipping the
+            // whole ACL inspection, which is the safer failure mode.
+            LOGGER.log(
+                    System.Logger.Level.DEBUG,
+                    "Impossible de canoniser le principal utilisateur courant " + currentUser,
+                    lookupFailure);
+            return currentUser;
+        }
     }
 
     static boolean isTrustedStoragePrincipal(String principalName, String currentUserPrincipalName) {
