@@ -60,19 +60,33 @@ grep -q 'MAX_CONFIGURABLE_MESSAGE_BYTES = DEFAULT_MAX_MESSAGE_BYTES' "$SCIP_LIMI
 grep -q 'métadonnées UTF-8 cumulées/snapshot' docs/developer/code-intelligence.md \
   || fail 'decoded metadata ceiling must remain documented'
 
-# Post-audit 2026-09-07: Windows ACL inspection covers every sensitive path and
-# principal matching must not fall back to suffix-based DOMAIN\\user heuristics.
+# Post-audit 2026-09-07: Windows ACL inspection covers every sensitive path,
+# principal matching is exact, and operators can require fail-closed privacy.
 NEXUS_PATHS="core/src/main/java/com/nexus/config/NexusPaths.java"
 grep -q 'canonicalCurrentUserPrincipal' "$NEXUS_PATHS" \
   || fail 'Windows ACL inspection must resolve the current principal canonically'
 grep -q 'principal.equals("BUILTIN\\\\ADMINISTRATORS")' "$NEXUS_PATHS" \
   || fail 'Windows built-in Administrators principal must be matched exactly'
+grep -q 'NEXUS_REQUIRE_PRIVATE_STORAGE' "$NEXUS_PATHS" \
+  || fail 'private storage fail-closed opt-in is missing'
+grep -q 'enforceAclPrivacy' "$NEXUS_PATHS" \
+  || fail 'private storage ACL enforcement must remain centralized'
 if grep -q 'endsWith("\\\\ADMINISTRATORS")' "$NEXUS_PATHS"; then
   fail 'suffix-based Administrators trust must not return'
 fi
 if grep -q 'endsWith("\\\\" + currentUser)' "$NEXUS_PATHS"; then
   fail 'suffix-based current-user ACL trust must not return'
 fi
+
+# On filesystems without SecureDirectoryStream, fallback path identity is captured
+# before open and revalidated after open so visible component replacement fails closed.
+SAFE_FILE_IO="core/src/main/java/com/nexus/security/SafeFileIO.java"
+grep -q 'captureFallbackPathSnapshot' "$SAFE_FILE_IO" \
+  || fail 'fallback filesystem identity snapshot is missing'
+grep -q 'revalidateFallbackPathSnapshot' "$SAFE_FILE_IO" \
+  || fail 'fallback filesystem identity must be revalidated after open'
+grep -q 'attributes.fileKey()' "$SAFE_FILE_IO" \
+  || fail 'fallback filesystem revalidation must use provider identity when available'
 
 # Post-audit 2026-09-07: the provider circuit breaker check/start transition is
 # linearized against timeout quarantine; the historical stale-check race must not return.
@@ -85,6 +99,29 @@ grep -q 'startLock.lock()' "$EXTERNAL_RUNNER" \
   || fail 'external provider start must participate in the circuit lock'
 grep -q 'timeoutLock.lock()' "$EXTERNAL_RUNNER" \
   || fail 'timeout quarantine must participate in the circuit lock'
+
+# Real semantic quality is intentionally too expensive for every PR, but a pinned
+# monthly/manual Ollama qualification must remain available and retain evidence.
+SEMANTIC_WORKFLOW=".github/workflows/semantic-search-qualification.yml"
+test -f "$SEMANTIC_WORKFLOW" || fail 'real semantic qualification workflow is missing'
+grep -q "OLLAMA_VERSION: '0.33.3'" "$SEMANTIC_WORKFLOW" \
+  || fail 'real semantic qualification must use the repository-pinned Ollama version'
+grep -q 'RealSemanticSearchBenchmarkTest' "$SEMANTIC_WORKFLOW" \
+  || fail 'real semantic qualification must execute the real retrieval benchmark'
+grep -q 'Enforce semantic quality floor' "$SEMANTIC_WORKFLOW" \
+  || fail 'real semantic qualification must enforce a regression floor'
+grep -Eq '^ollama\.0\.33\.3\.linux-amd64\.sha256=[0-9a-f]{64}$' config/tool-integrity.properties \
+  || fail 'Ollama qualification checksum anchor is missing'
+
+# Vector API remains a measured non-adoption decision. It must not silently enter
+# production launchers until a new same-runner qualification changes that decision.
+grep -q -- '--add-modules=jdk.incubator.vector' docs/developer/runtime-flags-qualification.md \
+  || fail 'Vector API comparison contract must remain documented'
+grep -q "n'est pas activé par défaut" docs/developer/runtime-flags-qualification.md \
+  || fail 'Vector API non-adoption decision must remain explicit'
+if grep -q -- '--add-modules=jdk.incubator.vector' distribution/bin/nexus distribution/bin/nexus.cmd; then
+  fail 'Vector API must not be enabled in production launchers without a new measured decision'
+fi
 
 governance_docs=(
   docs/roadmap.md
@@ -104,10 +141,15 @@ for path in "${governance_docs[@]}"; do
   if grep -Eq 'protected=false|#130 (reste|demeure).*(ouvert|non satisfait)|NXA3-14.*reste.*ouvert' "$path"; then
     fail "stale develop governance state remains in $path"
   fi
+  if grep -Eq '#199|#202|required_approving_review_count|strict_required_status_checks_policy=false' "$path"; then
+    fail "obsolete solo-maintainer governance finding remains in $path"
+  fi
 done
 
-grep -q 'strict_required_status_checks_policy=false' docs/developer/branch-governance.md \
-  || fail 'branch governance must expose the remaining strict-mode hardening'
+grep -q 'un seul mainteneur' docs/developer/branch-governance.md \
+  || fail 'branch governance must document the current solo-maintainer model'
+grep -q 'ne doivent donc pas remonter' docs/developer/branch-governance.md \
+  || fail 'branch governance must prevent obsolete approval findings from resurfacing'
 grep -q 'NXA3-14 / #130 est satisfait' docs/architecture/risks/register.md \
   || fail 'risk register must record the effective develop protection state'
 
