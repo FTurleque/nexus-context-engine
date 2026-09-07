@@ -40,7 +40,7 @@ La stratégie de branche est explicite : les changements sont intégrés et qual
 
 `ProjectPathGuard` protège les lectures sensibles sous la racine canonique et refuse traversal, symlink final et symlink d'ancêtre. Les sources SCIP, skills et customisations durcies passent par cette frontière.
 
-`NEXUS_MAX_FILE_SIZE_BYTES` vaut 8 MiB par défaut et possède un plafond dur de **256 MiB**. Les artefacts SCIP sont bornés séparément : 256 MiB par défaut / **1 GiB maximum** pour l'index complet, 16 MiB par défaut / **64 MiB maximum** par message Protobuf.
+`NEXUS_MAX_FILE_SIZE_BYTES` vaut 8 MiB par défaut et possède un plafond dur de **256 MiB**. Les artefacts SCIP sont bornés séparément à **256 MiB maximum pour l'index complet** et **16 MiB maximum par message Protobuf**. `NEXUS_MAX_SCIP_INDEX_BYTES` et `NEXUS_MAX_SCIP_MESSAGE_BYTES` peuvent uniquement réduire ces plafonds, jamais les augmenter.
 
 La découverte native partage un budget avant sélection de tokens :
 
@@ -53,7 +53,7 @@ NEXUS_CONTEXT_DISCOVERY_MAX_MILLIS
 
 Les défauts sont respectivement 100000 entrées, 5000 candidats, 32 MiB et 15 s. Un dépassement est fail-closed.
 
-Sur POSIX, `NEXUS_HOME`, `indexes` et `locks` sont rendus privés (`0700`) et le fichier SQLite est durci en `0600`. Les chemins persistants NEXUS sont créés et revalidés composant par composant avec `NOFOLLOW_LINKS` : un symlink enfant précréé sous `indexes`, `locks` ou `jdtls-workspaces` est refusé. Sur Windows/filesystems sans vue POSIX, les ACL natives ne sont pas réécrites destructivement.
+Sur POSIX, `NEXUS_HOME`, `indexes` et `locks` sont rendus privés (`0700`) et le fichier SQLite est durci en `0600`. Les chemins persistants NEXUS sont créés et revalidés composant par composant avec `NOFOLLOW_LINKS` : un symlink enfant précréé sous `indexes`, `locks` ou `jdtls-workspaces` est refusé. Sur Windows/filesystems sans vue POSIX, les ACL natives ne sont pas réécrites destructivement ; chaque chemin sensible créé/durci est néanmoins inspecté lorsqu'une vue ACL existe, avec comparaison exacte du principal utilisateur et des principaux Windows attendus.
 
 ### Recherche et fédération
 
@@ -67,9 +67,13 @@ La recherche Lucene borne une requête analysée à **128 termes uniques** avant
 
 Le framing JDT LS est borné avant allocation : message 16 MiB, headers 64 KiB, ligne de header 8 KiB et file entrante 256 messages maximum. Les URI JDT externes non `file:` sont ignorées plutôt que converties en chemins locaux.
 
-Les tâches externes sont limitées à **8 workers réellement actifs** à l'échelle JVM et leur timeout global est plafonné à **3 600 s**. Les mutations d'index file-backed disposent en plus d'un budget global non bloquant : `NEXUS_MAX_CONCURRENT_INDEXING` vaut **2** par défaut, accepte de 1 à 16 et rejette explicitement la surcharge au lieu d'empiler un travail sans borne.
+L'analyse `--deep-java` est une frontière de confiance explicite : JDT LS ne démarre que si la racine canonique exacte du repository figure dans `NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS`. Une racine parente n'approuve pas implicitement ses descendants. Cette allowlist est locale à NEXUS et n'est pas transmise au subprocess.
 
-L'import MINOS conserve une limite de transport de **128 MiB**, mais le JSON est traité en streaming : l'arbre complet n'est pas matérialisé, les symboles et relations sont validés un par un, et chaque catégorie est limitée à **500 000 faits**. La CLI lit stdin sous la même borne sans conserver un `byte[]` complet du payload en parallèle.
+Les tâches externes sont limitées à **8 workers réellement actifs** à l'échelle JVM et leur timeout global est plafonné à **3 600 s**. Le circuit-breaker par provider linéarise désormais validation+démarrage et ouverture après timeout afin qu'une vérification devenue obsolète ne puisse pas lancer un nouveau worker. Les mutations d'index file-backed disposent en plus d'un budget global non bloquant : `NEXUS_MAX_CONCURRENT_INDEXING` vaut **2** par défaut, accepte de 1 à 16 et rejette explicitement la surcharge au lieu d'empiler un travail sans borne.
+
+Toutes les sources de Code Intelligence convergent vers une politique commune de métadonnées décodées : champs UTF-8 bornés, **100 000 symboles**, **250 000 relations** et **64 MiB de métadonnées UTF-8 cumulées** maximum par snapshot avant canonicalisation/déduplication secondaire.
+
+L'import MINOS conserve une limite de transport de **128 MiB** et le JSON est traité en streaming : l'arbre complet n'est pas matérialisé. Le parseur conserve ses limites internes de faits, puis le snapshot est soumis aux plafonds communs ci-dessus. La CLI lit stdin sous la même borne sans conserver un `byte[]` complet du payload en parallèle.
 
 ### REST et observabilité
 
@@ -150,6 +154,8 @@ inspect
 --version
 ```
 
+Pour `--deep-java`, configurez `NEXUS_JDTLS_HOME` **et** la racine canonique approuvée dans `NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS`.
+
 ## Distribution
 
 `clean install` produit notamment :
@@ -198,6 +204,7 @@ NEXUS_MAX_SCIP_MESSAGE_BYTES
 NEXUS_CODE_INTELLIGENCE_TIMEOUT_SECONDS
 NEXUS_MAX_CONCURRENT_INDEXING
 NEXUS_JDTLS_HOME
+NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS
 NEXUS_CONTEXT_DISCOVERY_MAX_VISITED_ENTRIES
 NEXUS_CONTEXT_DISCOVERY_MAX_CANDIDATES
 NEXUS_CONTEXT_DISCOVERY_MAX_BYTES
