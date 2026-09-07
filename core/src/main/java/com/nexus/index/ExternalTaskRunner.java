@@ -12,6 +12,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Exécute les intégrations externes dans des workers daemon bornés en temps et en concurrence.
@@ -24,17 +25,21 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>Un circuit-breaker est maintenu par nom de tâche : lorsqu'un worker a dépassé son timeout et
  * reste vivant, NEXUS refuse de relancer la même intégration jusqu'à la terminaison de tous ses
- * workers timeoutés. Le suivi est effectué par worker afin que deux timeouts concurrents du même
- * provider ne puissent pas s'écraser mutuellement. {@link #status()} expose l'occupation et le
- * nombre de workers timeoutés pour la supervision.</p>
+ * workers timeoutés. L'ouverture du breaker et la validation+démarrage d'un nouveau worker sont
+ * linéarisés par des verrous read/write strippés : un worker démarre soit avant l'ouverture du
+ * breaker, soit après sa fermeture, mais jamais après une vérification devenue obsolète. Le suivi
+ * reste effectué par worker afin que deux timeouts concurrents du même provider ne puissent pas
+ * s'écraser mutuellement. {@link #status()} expose l'occupation et le nombre de workers timeoutés.</p>
  */
 public final class ExternalTaskRunner {
 
     static final int MAX_CONCURRENT_TASKS = 8;
     static final Duration MAX_TIMEOUT = Duration.ofHours(1);
+    private static final int CIRCUIT_LOCK_STRIPES = 128;
     private static final Semaphore CAPACITY = new Semaphore(MAX_CONCURRENT_TASKS);
     private static final AtomicLong THREAD_SEQUENCE = new AtomicLong();
     private static final Set<TimedOutTask> TIMED_OUT_TASKS = ConcurrentHashMap.newKeySet();
+    private static final ReentrantReadWriteLock[] CIRCUIT_LOCKS = createCircuitLocks();
 
     private final Duration timeout;
 
@@ -62,17 +67,8 @@ public final class ExternalTaskRunner {
     public <T> T run(String taskName, Callable<T> task) throws IOException {
         Objects.requireNonNull(taskName, "taskName");
         Objects.requireNonNull(task, "task");
-
-        if (hasLiveTimedOutWorker(taskName)) {
-            throw new IOException(
-                    "Circuit-breaker ouvert pour la tâche externe " + taskName
-                            + " : un worker précédent a dépassé son timeout et n'est pas encore terminé");
-        }
-
-        if (!CAPACITY.tryAcquire()) {
-            throw new IOException(
-                    "Capacité des tâches externes saturée (maximum " + MAX_CONCURRENT_TASKS
-                            + " tâches simultanées) ; réessayez après la fin des providers actifs");
+        if (taskName.isBlank()) {
+            throw new IllegalArgumentException("taskName must not be blank");
         }
 
         FutureTask<T> result = new FutureTask<>(task);
@@ -80,11 +76,29 @@ public final class ExternalTaskRunner {
                 .daemon(true)
                 .name("nexus-external-" + THREAD_SEQUENCE.incrementAndGet())
                 .unstarted(() -> execute(taskName, result));
+
+        ReentrantReadWriteLock.ReadLock startLock = circuitLock(taskName).readLock();
+        startLock.lock();
         try {
-            worker.start();
-        } catch (RuntimeException | Error startupFailure) {
-            CAPACITY.release();
-            throw startupFailure;
+            pruneCompletedTimedOutTasks();
+            if (hasLiveTimedOutWorker(taskName)) {
+                throw new IOException(
+                        "Circuit-breaker ouvert pour la tâche externe " + taskName
+                                + " : un worker précédent a dépassé son timeout et n'est pas encore terminé");
+            }
+            if (!CAPACITY.tryAcquire()) {
+                throw new IOException(
+                        "Capacité des tâches externes saturée (maximum " + MAX_CONCURRENT_TASKS
+                                + " tâches simultanées) ; réessayez après la fin des providers actifs");
+            }
+            try {
+                worker.start();
+            } catch (RuntimeException | Error startupFailure) {
+                CAPACITY.release();
+                throw startupFailure;
+            }
+        } finally {
+            startLock.unlock();
         }
 
         try {
@@ -115,16 +129,21 @@ public final class ExternalTaskRunner {
     }
 
     private static void quarantine(String taskName, Thread worker) {
-        TimedOutTask timedOutTask = new TimedOutTask(taskName, worker);
-        TIMED_OUT_TASKS.add(timedOutTask);
-        worker.interrupt();
-        if (!worker.isAlive()) {
-            TIMED_OUT_TASKS.remove(timedOutTask);
+        ReentrantReadWriteLock.WriteLock timeoutLock = circuitLock(taskName).writeLock();
+        timeoutLock.lock();
+        try {
+            TimedOutTask timedOutTask = new TimedOutTask(taskName, worker);
+            TIMED_OUT_TASKS.add(timedOutTask);
+            worker.interrupt();
+            if (!worker.isAlive()) {
+                TIMED_OUT_TASKS.remove(timedOutTask);
+            }
+        } finally {
+            timeoutLock.unlock();
         }
     }
 
     private static boolean hasLiveTimedOutWorker(String taskName) {
-        pruneCompletedTimedOutTasks();
         for (TimedOutTask timedOutTask : TIMED_OUT_TASKS) {
             if (timedOutTask.worker().isAlive() && timedOutTask.taskName().equals(taskName)) {
                 return true;
@@ -141,9 +160,28 @@ public final class ExternalTaskRunner {
         try {
             task.run();
         } finally {
-            TIMED_OUT_TASKS.remove(new TimedOutTask(taskName, Thread.currentThread()));
-            CAPACITY.release();
+            ReentrantReadWriteLock.WriteLock completionLock = circuitLock(taskName).writeLock();
+            completionLock.lock();
+            try {
+                TIMED_OUT_TASKS.remove(new TimedOutTask(taskName, Thread.currentThread()));
+            } finally {
+                completionLock.unlock();
+                CAPACITY.release();
+            }
         }
+    }
+
+    private static ReentrantReadWriteLock circuitLock(String taskName) {
+        int index = Math.floorMod(taskName.hashCode(), CIRCUIT_LOCK_STRIPES);
+        return CIRCUIT_LOCKS[index];
+    }
+
+    private static ReentrantReadWriteLock[] createCircuitLocks() {
+        ReentrantReadWriteLock[] locks = new ReentrantReadWriteLock[CIRCUIT_LOCK_STRIPES];
+        for (int index = 0; index < locks.length; index++) {
+            locks[index] = new ReentrantReadWriteLock();
+        }
+        return locks;
     }
 
     private record TimedOutTask(String taskName, Thread worker) {
