@@ -1,5 +1,6 @@
 package com.nexus.context;
 
+import com.nexus.security.SensitiveContentRedactor;
 import com.nexus.token.TokenEstimator;
 
 import java.util.ArrayList;
@@ -34,35 +35,46 @@ public final class BudgetedContextSelector {
             throw new IllegalArgumentException("tokenBudget must be greater than zero");
         }
 
-        List<ContextFragment> sorted = fragments.stream()
+        // Redact before token estimation/truncation so secrets never consume artificial
+        // budget and every accounting value describes the content that can actually leave
+        // the selector. ContextBundle keeps a second redaction barrier at the API boundary.
+        List<PreparedFragment> sorted = fragments.stream()
+                .map(fragment -> new PreparedFragment(
+                        fragment,
+                        SensitiveContentRedactor.redact(fragment.content())))
                 .sorted(Comparator
-                        .comparingDouble(ContextFragment::score).reversed()
-                        .thenComparing(fragment -> fragment.path().toString())
-                        .thenComparingInt(ContextFragment::startLine)
-                        .thenComparingInt(ContextFragment::endLine))
+                        .comparingDouble((PreparedFragment prepared) -> prepared.fragment().score()).reversed()
+                        .thenComparing(prepared -> prepared.fragment().path().toString())
+                        .thenComparingInt(prepared -> prepared.fragment().startLine())
+                        .thenComparingInt(prepared -> prepared.fragment().endLine()))
                 .toList();
 
-        int availableTokens = sorted.stream()
-                .mapToInt(fragment -> tokenEstimator.estimate(fragment.content()))
-                .sum();
+        int availableTokens = 0;
+        for (PreparedFragment prepared : sorted) {
+            availableTokens = saturatedAdd(
+                    availableTokens,
+                    tokenEstimator.estimate(prepared.content()));
+        }
         int maxPerItemTokens = Math.max(MIN_USEFUL_FRAGMENT_TOKENS, tokenBudget / 2);
         int remaining = tokenBudget;
         int truncatedItems = 0;
         List<ContextItem> selected = new ArrayList<>();
         List<String> excluded = new ArrayList<>();
 
-        for (ContextFragment fragment : sorted) {
-            int fullTokens = tokenEstimator.estimate(fragment.content());
+        for (PreparedFragment prepared : sorted) {
+            ContextFragment fragment = prepared.fragment();
+            String safeContent = prepared.content();
+            int fullTokens = tokenEstimator.estimate(safeContent);
             int allowed = Math.min(remaining, maxPerItemTokens);
 
             if (fullTokens <= allowed) {
-                selected.add(toItem(fragment, fragment.content(), fragment.endLine(), fullTokens, false, explain));
+                selected.add(toItem(fragment, safeContent, fragment.endLine(), fullTokens, false, explain));
                 remaining -= fullTokens;
                 continue;
             }
 
             if (allowed >= MIN_USEFUL_FRAGMENT_TOKENS) {
-                TruncatedContent truncated = truncate(fragment.content(), allowed);
+                TruncatedContent truncated = truncate(safeContent, allowed);
                 if (!truncated.content().isBlank() && truncated.estimatedTokens() <= remaining) {
                     int endLine = Math.min(
                             fragment.endLine(),
@@ -173,6 +185,11 @@ public final class BudgetedContextSelector {
         return new TruncatedContent(best, tokenEstimator.estimate(best), sourceLines);
     }
 
+    private static int saturatedAdd(int left, int right) {
+        long total = (long) left + right;
+        return total >= Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) total;
+    }
+
     private static String exclusion(ContextFragment fragment, int requiredTokens, int remainingTokens) {
         return "%s:%d-%d exclu : %d tokens estimés requis, %d disponibles"
                 .formatted(
@@ -181,6 +198,9 @@ public final class BudgetedContextSelector {
                         fragment.endLine(),
                         requiredTokens,
                         remainingTokens);
+    }
+
+    private record PreparedFragment(ContextFragment fragment, String content) {
     }
 
     private record TruncatedContent(String content, int estimatedTokens, int sourceLines) {
