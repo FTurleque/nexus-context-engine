@@ -80,6 +80,25 @@ class SemanticIndexingServiceTest {
     }
 
     @Test
+    void capsTheCompleteEmbeddingTextEvenWhenMetadataExceedsTheLimit() throws Exception {
+        CapturingSemanticIndex index = new CapturingSemanticIndex(3);
+        CapturingBatchProvider provider = new CapturingBatchProvider();
+        int maxEmbeddingChars = 64;
+        SemanticIndexingService service = new SemanticIndexingService(
+                provider,
+                index,
+                maxEmbeddingChars,
+                32);
+
+        service.rebuild(UUID.randomUUID(), List.of(
+                document("docs/" + "very-long-path-".repeat(10) + ".md", "content")));
+
+        assertEquals(List.of(1), provider.batchSizes());
+        assertEquals(List.of(maxEmbeddingChars), provider.batchCharacterCounts());
+        assertEquals(1, index.rebuilt.size());
+    }
+
+    @Test
     void stillBatchesSmallEmbeddingInputsUpToTheDocumentCountLimit() throws Exception {
         CapturingSemanticIndex index = new CapturingSemanticIndex(3);
         CapturingBatchProvider provider = new CapturingBatchProvider();
