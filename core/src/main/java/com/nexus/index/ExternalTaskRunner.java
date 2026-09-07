@@ -124,23 +124,17 @@ public final class ExternalTaskRunner {
     }
 
     private static boolean hasLiveTimedOutWorker(String taskName) {
-        boolean live = false;
+        pruneCompletedTimedOutTasks();
         for (TimedOutTask timedOutTask : TIMED_OUT_TASKS) {
-            if (!timedOutTask.worker().isAlive()) {
-                TIMED_OUT_TASKS.remove(timedOutTask);
-            } else if (timedOutTask.taskName().equals(taskName)) {
-                live = true;
+            if (timedOutTask.worker().isAlive() && timedOutTask.taskName().equals(taskName)) {
+                return true;
             }
         }
-        return live;
+        return false;
     }
 
     private static void pruneCompletedTimedOutTasks() {
-        for (TimedOutTask timedOutTask : TIMED_OUT_TASKS) {
-            if (!timedOutTask.worker().isAlive()) {
-                TIMED_OUT_TASKS.remove(timedOutTask);
-            }
-        }
+        TIMED_OUT_TASKS.removeIf(timedOutTask -> !timedOutTask.worker().isAlive());
     }
 
     private static void execute(String taskName, FutureTask<?> task) {
