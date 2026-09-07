@@ -137,8 +137,9 @@ public final class SemanticIndexingService {
         List<SemanticVectorDocument> vectors = new ArrayList<>(documents.size());
         int documentIndex = 0;
         while (documentIndex < documents.size()) {
-            List<SearchDocument> batch = new ArrayList<>(Math.min(batchSize, documents.size() - documentIndex));
-            List<String> texts = new ArrayList<>(batch.size());
+            int batchCapacity = Math.min(batchSize, documents.size() - documentIndex);
+            List<SearchDocument> batch = new ArrayList<>(batchCapacity);
+            List<String> texts = new ArrayList<>(batchCapacity);
             int batchChars = 0;
 
             while (documentIndex < documents.size() && batch.size() < batchSize) {
@@ -200,7 +201,8 @@ public final class SemanticIndexingService {
             String content = SensitiveContentRedactor.redact(document.content());
             text.append(content, 0, safePrefixEnd(content, remaining));
         }
-        return text.toString();
+        String candidate = text.toString();
+        return candidate.substring(0, safePrefixEnd(candidate, maxEmbeddingChars));
     }
 
     private static String excerpt(SearchDocument document) {
