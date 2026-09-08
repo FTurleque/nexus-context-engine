@@ -16,6 +16,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FederatedContextDiscoveryBudgetTest {
 
@@ -50,7 +51,14 @@ class FederatedContextDiscoveryBudgetTest {
         assertEquals(2, observedBudgets.size());
         assertSame(observedBudgets.get(0), observedBudgets.get(1));
         assertEquals(observedBudgets.get(0).limits(), bundle.metadata().get("nativeDiscoveryLimits"));
-        assertEquals(observedBudgets.get(0).snapshot(), bundle.metadata().get("nativeDiscoveryWork"));
+
+        ContextDiscoveryBudget.Snapshot recorded =
+                (ContextDiscoveryBudget.Snapshot) bundle.metadata().get("nativeDiscoveryWork");
+        ContextDiscoveryBudget.Snapshot current = observedBudgets.get(0).snapshot();
+        assertEquals(recorded.visitedEntries(), current.visitedEntries());
+        assertEquals(recorded.candidateResources(), current.candidateResources());
+        assertEquals(recorded.cumulativeBytes(), current.cumulativeBytes());
+        assertTrue(current.elapsedMillis() >= recorded.elapsedMillis());
     }
 
     private static ProjectDescriptor project(String name, Path path) {
