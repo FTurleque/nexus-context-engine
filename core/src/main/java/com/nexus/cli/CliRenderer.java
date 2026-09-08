@@ -14,6 +14,7 @@ import com.nexus.index.IndexingReport;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.ranking.RankedCandidate;
 import com.nexus.search.FederatedSearchHit;
+import com.nexus.security.PublicProjectPathPolicy;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -438,11 +439,7 @@ final class CliRenderer {
     }
 
     private static String relativePath(ProjectDescriptor project, Path path) {
-        Path root = project.rootPath().toAbsolutePath().normalize();
-        Path normalized = path.toAbsolutePath().normalize();
-        return normalized.startsWith(root)
-                ? repositoryPath(root.relativize(normalized))
-                : repositoryPath(path);
+        return PublicProjectPathPolicy.expose(project.rootPath(), path);
     }
 
     private static String repositoryPath(Path path) {
