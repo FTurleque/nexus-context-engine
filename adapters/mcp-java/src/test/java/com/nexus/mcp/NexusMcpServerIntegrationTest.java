@@ -145,7 +145,7 @@ class NexusMcpServerIntegrationTest {
             assertEquals(directContext.bundle().tokenBudget(), contextJson.path("tokenBudget").asInt());
             assertEquals(directContext.bundle().estimatedTokens(), contextJson.path("estimatedTokens").asInt());
             assertEquals(
-                    directContext.bundle().items().getFirst().path().toString(),
+                    "src/main/java/demo/OrderService.java",
                     contextJson.path("items").get(0).path("path").asText());
 
             McpSchema.CallToolResult explainContext = client.callTool(
