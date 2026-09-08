@@ -166,8 +166,20 @@ public final class DefaultContextBuilder implements ContextBuilder {
     public ContextBundle build(
             ContextRequest request,
             ContextMaterializationBudget materializationBudget) {
+        return build(
+                request,
+                materializationBudget,
+                ContextDiscoveryLimits.fromEnvironment().newBudget());
+    }
+
+    @Override
+    public ContextBundle build(
+            ContextRequest request,
+            ContextMaterializationBudget materializationBudget,
+            ContextDiscoveryBudget discoveryBudget) {
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(materializationBudget, "materializationBudget");
+        Objects.requireNonNull(discoveryBudget, "discoveryBudget");
         ProjectDescriptor project = projectRepository.findById(request.projectId())
                 .orElseThrow(() -> new ContextBuildingException(
                         "Projet introuvable : " + request.projectId()));
@@ -177,7 +189,6 @@ public final class DefaultContextBuilder implements ContextBuilder {
         }
 
         try {
-            ContextDiscoveryBudget discoveryBudget = ContextDiscoveryLimits.fromEnvironment().newBudget();
             int retrievalLimit = retrievalLimit(request.tokenBudget());
             List<RankedCandidate> ranked = searchService.search(
                     project,

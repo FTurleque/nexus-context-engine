@@ -14,11 +14,11 @@ import com.nexus.ranking.RankedCandidate;
 import com.nexus.search.CandidateType;
 import com.nexus.search.FederatedSearchHit;
 import com.nexus.search.ResultLimitPolicy;
+import com.nexus.security.PublicProjectPathPolicy;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.spec.McpSchema;
 
 import java.math.BigDecimal;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,6 +34,8 @@ final class NexusMcpTools {
     private static final String REQUESTED_SOURCES_ARGUMENT = "requestedSources";
     private static final int DEFAULT_LIMIT = ResultLimitPolicy.DEFAULT_RESULT_LIMIT;
     private static final int DEFAULT_TOKEN_BUDGET = ContextBudgetPolicy.DEFAULT_CONTEXT_TOKEN_BUDGET;
+    private static final int MAX_PROJECT_SELECTORS = FederatedScopePolicy.MAX_PROJECTS * 2;
+    private static final int MAX_REQUESTED_SOURCES = CandidateType.values().length;
 
     private final NexusApplication application;
     private final ObjectMapper objectMapper;
@@ -92,7 +94,9 @@ final class NexusMcpTools {
                 "Recherche fédérée NEXUS sur une portée explicite de projets READY, avec diversification globale par chemin.",
                 objectSchema(
                         Map.of(
-                                "projects", arrayOfStringsProperty("UUID ou noms uniques des projets NEXUS"),
+                                "projects", arrayOfStringsProperty(
+                                        "UUID ou noms uniques des projets NEXUS",
+                                        MAX_PROJECT_SELECTORS),
                                 "query", stringProperty("Requête de recherche"),
                                 "limit", integerProperty("Top-K global, 10 par défaut", ResultLimitPolicy.MAX_RESULT_LIMIT),
                                 "explain", booleanProperty("Inclure les explications de ranking")),
@@ -166,7 +170,9 @@ final class NexusMcpTools {
                                 "project", stringProperty("UUID ou nom unique du projet NEXUS"),
                                 "query", stringProperty("Tâche ou demande de contexte"),
                                 "tokenBudget", integerProperty("Budget maximal, 2000 par défaut", ContextBudgetPolicy.MAX_CONTEXT_TOKEN_BUDGET),
-                                REQUESTED_SOURCES_ARGUMENT, arrayOfStringsProperty("Sources optionnelles NEXUS"),
+                                REQUESTED_SOURCES_ARGUMENT, arrayOfStringsProperty(
+                                        "Sources optionnelles NEXUS",
+                                        MAX_REQUESTED_SOURCES),
                                 "constraints", objectProperty("Contraintes clé/valeur optionnelles")),
                         List.of("project", "query")),
                 arguments -> {
@@ -193,10 +199,14 @@ final class NexusMcpTools {
                         : "Construit un contexte fédéré avec budget global, provenance projet et sources natives isolées par projet.",
                 objectSchema(
                         Map.of(
-                                "projects", arrayOfStringsProperty("UUID ou noms uniques des projets NEXUS"),
+                                "projects", arrayOfStringsProperty(
+                                        "UUID ou noms uniques des projets NEXUS",
+                                        MAX_PROJECT_SELECTORS),
                                 "query", stringProperty("Tâche ou demande de contexte"),
                                 "tokenBudget", integerProperty("Budget global maximal, 2000 par défaut", ContextBudgetPolicy.MAX_CONTEXT_TOKEN_BUDGET),
-                                REQUESTED_SOURCES_ARGUMENT, arrayOfStringsProperty("Sources optionnelles NEXUS"),
+                                REQUESTED_SOURCES_ARGUMENT, arrayOfStringsProperty(
+                                        "Sources optionnelles NEXUS",
+                                        MAX_REQUESTED_SOURCES),
                                 "constraints", objectProperty("Contraintes clé/valeur optionnelles")),
                         List.of("projects", "query")),
                 arguments -> {
@@ -259,10 +269,17 @@ final class NexusMcpTools {
         if (!(value instanceof List<?> values) || values.isEmpty()) {
             throw new IllegalArgumentException("projects doit être un tableau non vide");
         }
+        if (values.size() > MAX_PROJECT_SELECTORS) {
+            throw new IllegalArgumentException(
+                    "projects doit contenir au plus " + MAX_PROJECT_SELECTORS + " sélecteurs");
+        }
 
         Map<String, String> uniqueSelectors = new LinkedHashMap<>();
         for (Object rawSelector : values) {
-            String selector = String.valueOf(rawSelector).trim();
+            if (!(rawSelector instanceof String rawString) || rawString.isBlank()) {
+                throw new IllegalArgumentException("projects doit contenir uniquement des chaînes non vides");
+            }
+            String selector = rawString.trim();
             uniqueSelectors.putIfAbsent(selector.toLowerCase(Locale.ROOT), selector);
         }
         List<String> selectors = List.copyOf(uniqueSelectors.values());
@@ -338,11 +355,8 @@ final class NexusMcpTools {
         return result;
     }
 
-    private static String relativePath(ProjectDescriptor project, Path path) {
-        Path root = project.rootPath().toAbsolutePath().normalize();
-        Path normalized = path.toAbsolutePath().normalize();
-        Path exposed = normalized.startsWith(root) ? root.relativize(normalized) : path.normalize();
-        return exposed.toString().replace('\\', '/');
+    private static String relativePath(ProjectDescriptor project, java.nio.file.Path path) {
+        return PublicProjectPathPolicy.expose(project.rootPath(), path);
     }
 
     private Map<String, Object> indexedSymbol(IndexedSymbol indexed) {
@@ -378,7 +392,9 @@ final class NexusMcpTools {
         result.put("durationMs", operation.durationMs());
         result.put("tokenBudget", operation.bundle().tokenBudget());
         result.put("estimatedTokens", operation.bundle().estimatedTokens());
-        result.put("items", operation.bundle().items().stream().map(this::contextItem).toList());
+        result.put("items", operation.bundle().items().stream()
+                .map(item -> contextItem(operation.project(), item))
+                .toList());
         result.put("excluded", operation.bundle().excluded());
         result.put("metadata", operation.bundle().metadata());
         return result;
@@ -401,13 +417,13 @@ final class NexusMcpTools {
     private Map<String, Object> federatedContextItem(FederatedContextItem federated) {
         return Map.of(
                 "project", project(federated.project()),
-                "item", contextItem(federated.item()));
+                "item", contextItem(federated.project(), federated.item()));
     }
 
-    private Map<String, Object> contextItem(ContextItem item) {
+    private Map<String, Object> contextItem(ProjectDescriptor project, ContextItem item) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("type", item.type().name());
-        result.put("path", item.path().toString());
+        result.put("path", relativePath(project, item.path()));
         result.put("symbol", item.symbol());
         result.put("startLine", item.startLine());
         result.put("endLine", item.endLine());
@@ -447,8 +463,12 @@ final class NexusMcpTools {
         return Map.of("type", "boolean", "description", description);
     }
 
-    private static Map<String, Object> arrayOfStringsProperty(String description) {
-        return Map.of("type", "array", "items", Map.of("type", "string"), "description", description);
+    private static Map<String, Object> arrayOfStringsProperty(String description, int maxItems) {
+        return Map.of(
+                "type", "array",
+                "items", Map.of("type", "string"),
+                "maxItems", maxItems,
+                "description", description);
     }
 
     private static Map<String, Object> objectProperty(String description) {
@@ -512,9 +532,18 @@ final class NexusMcpTools {
         if (!(value instanceof List<?> values)) {
             throw new IllegalArgumentException("requestedSources doit être un tableau");
         }
+        if (values.size() > MAX_REQUESTED_SOURCES) {
+            throw new IllegalArgumentException(
+                    "requestedSources doit contenir au plus " + MAX_REQUESTED_SOURCES + " éléments");
+        }
         return values.stream()
-                .map(Object::toString)
-                .map(String::trim)
+                .map(item -> {
+                    if (!(item instanceof String stringValue)) {
+                        throw new IllegalArgumentException(
+                                "requestedSources doit contenir uniquement des chaînes");
+                    }
+                    return stringValue.trim();
+                })
                 .filter(item -> !item.isBlank())
                 .map(item -> {
                     try {
