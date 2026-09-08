@@ -125,8 +125,7 @@ class NexusMcpServerIntegrationTest {
             assertFalse(Boolean.TRUE.equals(searchResult.isError()));
             JsonNode searchJson = json(searchResult);
             assertEquals(
-                    projectRoot.relativize(directSearch.results().getFirst().candidate().path())
-                            .toString().replace('\\', '/'),
+                    "src/main/java/demo/OrderService.java",
                     searchJson.path("results").get(0).path("path").asText());
             assertFalse(searchJson.path("project").has("rootPath"));
             assertEquals(
