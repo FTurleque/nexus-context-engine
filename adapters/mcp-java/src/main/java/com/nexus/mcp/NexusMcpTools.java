@@ -34,6 +34,7 @@ final class NexusMcpTools {
     private static final String REQUESTED_SOURCES_ARGUMENT = "requestedSources";
     private static final int DEFAULT_LIMIT = ResultLimitPolicy.DEFAULT_RESULT_LIMIT;
     private static final int DEFAULT_TOKEN_BUDGET = ContextBudgetPolicy.DEFAULT_CONTEXT_TOKEN_BUDGET;
+    private static final int MAX_PROJECT_SELECTORS = FederatedScopePolicy.MAX_PROJECTS * 2;
     private static final int MAX_REQUESTED_SOURCES = CandidateType.values().length;
 
     private final NexusApplication application;
@@ -95,7 +96,7 @@ final class NexusMcpTools {
                         Map.of(
                                 "projects", arrayOfStringsProperty(
                                         "UUID ou noms uniques des projets NEXUS",
-                                        FederatedScopePolicy.MAX_PROJECTS),
+                                        MAX_PROJECT_SELECTORS),
                                 "query", stringProperty("Requête de recherche"),
                                 "limit", integerProperty("Top-K global, 10 par défaut", ResultLimitPolicy.MAX_RESULT_LIMIT),
                                 "explain", booleanProperty("Inclure les explications de ranking")),
@@ -200,7 +201,7 @@ final class NexusMcpTools {
                         Map.of(
                                 "projects", arrayOfStringsProperty(
                                         "UUID ou noms uniques des projets NEXUS",
-                                        FederatedScopePolicy.MAX_PROJECTS),
+                                        MAX_PROJECT_SELECTORS),
                                 "query", stringProperty("Tâche ou demande de contexte"),
                                 "tokenBudget", integerProperty("Budget global maximal, 2000 par défaut", ContextBudgetPolicy.MAX_CONTEXT_TOKEN_BUDGET),
                                 REQUESTED_SOURCES_ARGUMENT, arrayOfStringsProperty(
@@ -268,9 +269,9 @@ final class NexusMcpTools {
         if (!(value instanceof List<?> values) || values.isEmpty()) {
             throw new IllegalArgumentException("projects doit être un tableau non vide");
         }
-        if (values.size() > FederatedScopePolicy.MAX_PROJECTS) {
+        if (values.size() > MAX_PROJECT_SELECTORS) {
             throw new IllegalArgumentException(
-                    "projects doit contenir au plus " + FederatedScopePolicy.MAX_PROJECTS + " éléments");
+                    "projects doit contenir au plus " + MAX_PROJECT_SELECTORS + " sélecteurs");
         }
 
         Map<String, String> uniqueSelectors = new LinkedHashMap<>();
