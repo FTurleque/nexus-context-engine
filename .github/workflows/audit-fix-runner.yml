@@ -35,10 +35,21 @@ jobs:
           start = workflow.index(marker) + len(marker)
           end = workflow.index("\n          PY", start)
           lines = workflow[start:end].splitlines()
-          script = "\n".join(
-              line[10:] if line.startswith("          ") else line
-              for line in lines
-          )
+
+          normalized = []
+          inside_triple = False
+          for line in lines:
+              contains_triple = "'''" in line
+              if inside_triple and not contains_triple:
+                  normalized.append(line)
+                  continue
+
+              adjusted = line[10:] if line.startswith("          ") else line
+              normalized.append(adjusted)
+              if adjusted.count("'''") % 2 == 1:
+                  inside_triple = not inside_triple
+
+          script = "\n".join(normalized)
           exec(compile(script, 'audit-fix-autopatch.py', 'exec'), {'__name__': '__main__'})
           PY
 
