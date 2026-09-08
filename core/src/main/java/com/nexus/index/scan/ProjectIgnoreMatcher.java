@@ -180,12 +180,23 @@ public final class ProjectIgnoreMatcher {
         consumeIgnoreBytes(safeIgnoreFile, declaredSize);
         long readLimit = Math.max(1L, declaredSize);
         byte[] content = SafeFileIO.readBytesNoFollow(safeIgnoreFile, readLimit);
+        long additionalObservedBytes = additionalObservedBytes(declaredSize, content.length);
+        if (additionalObservedBytes > 0L) {
+            consumeIgnoreBytes(safeIgnoreFile, additionalObservedBytes);
+        }
 
         IgnoreNode node = new IgnoreNode();
         try (InputStream input = new ByteArrayInputStream(content)) {
             node.parse(input);
         }
         scopes.add(new ScopedIgnoreNode(directory, node));
+    }
+
+    static long additionalObservedBytes(long declaredSize, long actualBytes) {
+        if (declaredSize < 0L || actualBytes < 0L) {
+            throw new IllegalArgumentException("ignore file sizes must be non-negative");
+        }
+        return Math.max(0L, actualBytes - declaredSize);
     }
 
     private void consumeIgnoreBytes(Path file, long bytes) throws IOException {

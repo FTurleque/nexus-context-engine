@@ -159,7 +159,15 @@ public final class DefaultContextBuilder implements ContextBuilder {
 
     @Override
     public ContextBundle build(ContextRequest request) {
+        return build(request, ContextMaterializationLimits.fromEnvironment().newBudget());
+    }
+
+    @Override
+    public ContextBundle build(
+            ContextRequest request,
+            ContextMaterializationBudget materializationBudget) {
         Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(materializationBudget, "materializationBudget");
         ProjectDescriptor project = projectRepository.findById(request.projectId())
                 .orElseThrow(() -> new ContextBuildingException(
                         "Projet introuvable : " + request.projectId()));
@@ -196,11 +204,13 @@ public final class DefaultContextBuilder implements ContextBuilder {
                     targetPaths,
                     discoveryBudget);
 
-            List<ContextFragment> taskFragments = fragmentFactory.create(
+            ContextFragmentFactory.MaterializationResult taskMaterialization = fragmentFactory.materialize(
                     project,
                     request.query(),
                     filtered,
-                    request.tokenBudget());
+                    request.tokenBudget(),
+                    materializationBudget);
+            List<ContextFragment> taskFragments = taskMaterialization.fragments();
             Set<Path> nativePaths = nativeDiscovery.sources().stream()
                     .map(ContextSourceDescriptor::path)
                     .map(Path::normalize)
@@ -284,6 +294,9 @@ public final class DefaultContextBuilder implements ContextBuilder {
             Map<String, Object> boundedMetadata = new LinkedHashMap<>(metadata);
             boundedMetadata.put("nativeDiscoveryLimits", discoveryBudget.limits());
             boundedMetadata.put("nativeDiscoveryWork", discoveryBudget.snapshot());
+            boundedMetadata.put("taskMaterializationLimits", materializationBudget.limits());
+            boundedMetadata.put("taskMaterializationWork", materializationBudget.snapshot());
+            boundedMetadata.put("taskMaterializationDiagnostics", taskMaterialization.diagnostics());
             return new ContextBundle(
                     combined.items(),
                     request.tokenBudget(),

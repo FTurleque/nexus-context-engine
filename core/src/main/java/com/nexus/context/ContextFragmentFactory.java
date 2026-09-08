@@ -58,7 +58,26 @@ public final class ContextFragmentFactory {
             String query,
             List<RankedCandidate> rankedCandidates,
             int tokenBudget) throws IOException {
-        return materialize(project, query, rankedCandidates, tokenBudget).fragments();
+        return create(
+                project,
+                query,
+                rankedCandidates,
+                tokenBudget,
+                ContextMaterializationLimits.fromEnvironment().newBudget());
+    }
+
+    public List<ContextFragment> create(
+            ProjectDescriptor project,
+            String query,
+            List<RankedCandidate> rankedCandidates,
+            int tokenBudget,
+            ContextMaterializationBudget materializationBudget) throws IOException {
+        return materialize(
+                project,
+                query,
+                rankedCandidates,
+                tokenBudget,
+                materializationBudget).fragments();
     }
 
     MaterializationResult materialize(
@@ -66,9 +85,24 @@ public final class ContextFragmentFactory {
             String query,
             List<RankedCandidate> rankedCandidates,
             int tokenBudget) throws IOException {
+        return materialize(
+                project,
+                query,
+                rankedCandidates,
+                tokenBudget,
+                ContextMaterializationLimits.fromEnvironment().newBudget());
+    }
+
+    MaterializationResult materialize(
+            ProjectDescriptor project,
+            String query,
+            List<RankedCandidate> rankedCandidates,
+            int tokenBudget,
+            ContextMaterializationBudget materializationBudget) throws IOException {
         Objects.requireNonNull(project, "project");
         Objects.requireNonNull(query, "query");
         Objects.requireNonNull(rankedCandidates, "rankedCandidates");
+        Objects.requireNonNull(materializationBudget, "materializationBudget");
         if (tokenBudget <= 0) {
             throw new IllegalArgumentException("tokenBudget must be greater than zero");
         }
@@ -87,7 +121,7 @@ public final class ContextFragmentFactory {
             try {
                 Path absolutePath = requireReadableCandidate(pathGuard, candidatePath);
                 Path relativePath = pathGuard.root().relativize(absolutePath);
-                String content = SensitiveContentRedactor.redact(SafeFileIO.readStringNoFollow(absolutePath));
+                String content = SensitiveContentRedactor.redact(materializationBudget.readUtf8NoFollow(absolutePath));
                 List<String> lines = materializeLines(content, relativePath);
                 int sourceLineCount = lines.size();
                 List<RankedCandidate> symbolCandidates = entry.getValue().stream()
@@ -106,6 +140,11 @@ public final class ContextFragmentFactory {
 
                 RankedCandidate fileCandidate = entry.getValue().getFirst();
                 fragments.addAll(fileFragments(relativePath, lines, query, fileCandidate, tokenBudget));
+            } catch (ContextMaterializationLimitExceededException exception) {
+                String diagnostic = materializationDiagnostic(candidatePath, exception);
+                diagnostics.add(diagnostic);
+                LOGGER.log(System.Logger.Level.WARNING, diagnostic);
+                break;
             } catch (IOException exception) {
                 String diagnostic = materializationDiagnostic(candidatePath, exception);
                 diagnostics.add(diagnostic);
