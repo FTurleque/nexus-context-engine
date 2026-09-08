@@ -21,8 +21,8 @@ import com.nexus.index.IndexingReport;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.ranking.RankedCandidate;
 import com.nexus.search.FederatedSearchHit;
+import com.nexus.security.PublicProjectPathPolicy;
 
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -111,7 +111,7 @@ final class ApiMapper {
 
     static FederatedContextResponse federatedContext(NexusApiApplicationService.FederatedContextOperation operation) {
         List<FederatedContextItemResponse> items = operation.bundle().items().stream()
-                .map(item -> federatedContextItem(item))
+                .map(ApiMapper::federatedContextItem)
                 .toList();
         return new FederatedContextResponse(
                 operation.projects().stream().map(ApiMapper::project).toList(),
@@ -172,18 +172,7 @@ final class ApiMapper {
                 item.truncated());
     }
 
-    private static String relativePath(ProjectDescriptor project, Path path) {
-        Path normalized = path.normalize();
-        if (normalized.isAbsolute()) {
-            Path root = project.rootPath().toAbsolutePath().normalize();
-            if (normalized.startsWith(root)) {
-                normalized = root.relativize(normalized);
-            }
-        }
-        return normalize(normalized);
-    }
-
-    private static String normalize(Path path) {
-        return path.toString().replace('\\', '/');
+    private static String relativePath(ProjectDescriptor project, java.nio.file.Path path) {
+        return PublicProjectPathPolicy.expose(project.rootPath(), path);
     }
 }
