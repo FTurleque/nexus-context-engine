@@ -13,7 +13,7 @@ import java.util.stream.Stream;
 final class EquinoxLauncherSelector {
 
     private static final Pattern LAUNCHER_PATTERN = Pattern.compile(
-            "^org\.eclipse\.equinox\.launcher_(\d+)\.(\d+)\.(\d+)(?:\.(.*))?\.jar$");
+            "^org[.]eclipse[.]equinox[.]launcher_([0-9]+)[.]([0-9]+)[.]([0-9]+)(?:[.](.*))?[.]jar$");
 
     private EquinoxLauncherSelector() {
     }
