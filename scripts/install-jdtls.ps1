@@ -27,6 +27,31 @@ function Assert-NativeSuccess {
     }
 }
 
+function Get-LatestEquinoxLauncher {
+    param([Parameter(Mandatory = $true)][string]$PluginsDirectory)
+
+    $versions = foreach ($candidate in Get-ChildItem -LiteralPath $PluginsDirectory -Filter "org.eclipse.equinox.launcher_*.jar" -File) {
+        if ($candidate.Name -match '^org\.eclipse\.equinox\.launcher_(\d+)\.(\d+)\.(\d+)(?:\.(.*))?\.jar$') {
+            [PSCustomObject]@{
+                File = $candidate
+                Major = [Int64]$Matches[1]
+                Minor = [Int64]$Matches[2]
+                Micro = [Int64]$Matches[3]
+                Qualifier = if ($null -eq $Matches[4]) { "" } else { $Matches[4] }
+            }
+        }
+    }
+
+    $selected = $versions |
+        Sort-Object -Property `
+            @{ Expression = 'Major'; Descending = $true }, `
+            @{ Expression = 'Minor'; Descending = $true }, `
+            @{ Expression = 'Micro'; Descending = $true }, `
+            @{ Expression = 'Qualifier'; Descending = $true } |
+        Select-Object -First 1
+    return if ($null -eq $selected) { $null } else { $selected.File }
+}
+
 function Get-PinnedHash {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -76,9 +101,7 @@ function Install-VerifiedArchive {
         throw "Installation JDT LS invalide : le repertoire plugins est absent de $Destination"
     }
 
-    $launcher = Get-ChildItem -LiteralPath $pluginsDirectory -Filter "org.eclipse.equinox.launcher_*.jar" -File |
-        Sort-Object Name -Descending |
-        Select-Object -First 1
+    $launcher = Get-LatestEquinoxLauncher -PluginsDirectory $pluginsDirectory
     if ($null -eq $launcher) {
         throw "Installation JDT LS invalide : launcher Equinox introuvable."
     }
@@ -138,9 +161,7 @@ try {
     Move-Item -LiteralPath $stagingDirectory -Destination $installDirectory
 
     $finalPluginsDirectory = Join-Path $installDirectory "plugins"
-    $finalLauncher = Get-ChildItem -LiteralPath $finalPluginsDirectory -Filter "org.eclipse.equinox.launcher_*.jar" -File |
-        Sort-Object Name -Descending |
-        Select-Object -First 1
+    $finalLauncher = Get-LatestEquinoxLauncher -PluginsDirectory $finalPluginsDirectory
     if ($null -eq $finalLauncher) {
         throw "Installation JDT LS invalide apres remplacement : launcher Equinox introuvable."
     }

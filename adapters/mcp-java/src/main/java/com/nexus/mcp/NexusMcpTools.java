@@ -18,6 +18,7 @@ import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.spec.McpSchema;
 
 import java.math.BigDecimal;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -287,7 +288,9 @@ final class NexusMcpTools {
         result.put("limit", operation.limit());
         result.put("explain", operation.explain());
         result.put("durationMs", operation.durationMs());
-        result.put("results", operation.results().stream().map(this::rankedCandidate).toList());
+        result.put("results", operation.results().stream()
+                .map(candidate -> rankedCandidate(operation.project(), candidate))
+                .toList());
         return result;
     }
 
@@ -305,14 +308,13 @@ final class NexusMcpTools {
     private Map<String, Object> federatedSearchHit(FederatedSearchHit hit) {
         return Map.of(
                 "project", project(hit.project()),
-                "result", rankedCandidate(hit.rankedCandidate()));
+                "result", rankedCandidate(hit.project(), hit.rankedCandidate()));
     }
 
     private Map<String, Object> project(ProjectDescriptor project) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("id", project.id().toString());
         result.put("name", project.name());
-        result.put("rootPath", project.rootPath().toString());
         result.put("sourceType", project.sourceType().name());
         result.put("languages", project.languages());
         result.put("technologies", project.technologies());
@@ -321,11 +323,11 @@ final class NexusMcpTools {
         return result;
     }
 
-    private Map<String, Object> rankedCandidate(RankedCandidate ranked) {
+    private Map<String, Object> rankedCandidate(ProjectDescriptor project, RankedCandidate ranked) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("id", ranked.candidate().id());
         result.put("type", ranked.candidate().type().name());
-        result.put("path", ranked.candidate().path().toString());
+        result.put("path", relativePath(project, ranked.candidate().path()));
         result.put("excerpt", ranked.candidate().excerpt());
         result.put("score", ranked.score());
         result.put("scoreComponents", ranked.components());
@@ -334,6 +336,13 @@ final class NexusMcpTools {
             result.put("symbol", symbol(ranked.candidate().symbol()));
         }
         return result;
+    }
+
+    private static String relativePath(ProjectDescriptor project, Path path) {
+        Path root = project.rootPath().toAbsolutePath().normalize();
+        Path normalized = path.toAbsolutePath().normalize();
+        Path exposed = normalized.startsWith(root) ? root.relativize(normalized) : path.normalize();
+        return exposed.toString().replace('\\', '/');
     }
 
     private Map<String, Object> indexedSymbol(IndexedSymbol indexed) {

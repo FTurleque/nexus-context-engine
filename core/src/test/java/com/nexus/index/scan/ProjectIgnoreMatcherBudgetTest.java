@@ -36,6 +36,13 @@ class ProjectIgnoreMatcherBudgetTest {
     }
 
     @Test
+    void accountsForBytesObservedAfterAZeroByteDeclaration() {
+        assertEquals(1L, ProjectIgnoreMatcher.additionalObservedBytes(0L, 1L));
+        assertEquals(0L, ProjectIgnoreMatcher.additionalObservedBytes(1L, 1L));
+        assertEquals(0L, ProjectIgnoreMatcher.additionalObservedBytes(2L, 1L));
+    }
+
+    @Test
     void rejectsSingleIgnoreFileBeyondPhysicalLimitBeforeParsing() throws Exception {
         Path root = Files.createDirectory(temporaryDirectory.resolve("single-limit"));
         Files.writeString(root.resolve(".gitignore"), "12345");

@@ -110,7 +110,9 @@ class NexusMcpServerIntegrationTest {
             McpSchema.CallToolResult projectList = client.callTool(
                     McpSchema.CallToolRequest.builder("list_projects").arguments(Map.of()).build());
             assertFalse(Boolean.TRUE.equals(projectList.isError()));
-            assertEquals(1, json(projectList).size());
+            JsonNode projectListJson = json(projectList);
+            assertEquals(1, projectListJson.size());
+            assertFalse(projectListJson.get(0).has("rootPath"));
 
             McpSchema.CallToolResult searchResult = client.callTool(
                     McpSchema.CallToolRequest.builder("search_code")
@@ -123,8 +125,10 @@ class NexusMcpServerIntegrationTest {
             assertFalse(Boolean.TRUE.equals(searchResult.isError()));
             JsonNode searchJson = json(searchResult);
             assertEquals(
-                    directSearch.results().getFirst().candidate().path().toString(),
+                    projectRoot.relativize(directSearch.results().getFirst().candidate().path())
+                            .toString().replace('\\', '/'),
                     searchJson.path("results").get(0).path("path").asText());
+            assertFalse(searchJson.path("project").has("rootPath"));
             assertEquals(
                     directSearch.results().getFirst().score(),
                     searchJson.path("results").get(0).path("score").asDouble(),

@@ -804,11 +804,7 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
                 throw new IOException("Répertoire plugins JDT LS introuvable : " + plugins);
             }
             try (var files = Files.list(plugins)) {
-                return files
-                        .filter(Files::isRegularFile)
-                        .filter(path -> path.getFileName().toString().startsWith("org.eclipse.equinox.launcher_"))
-                        .filter(path -> path.getFileName().toString().endsWith(".jar"))
-                        .max(Comparator.comparing(path -> path.getFileName().toString()))
+                return EquinoxLauncherSelector.latest(files)
                         .orElseThrow(() -> new IOException("Launcher Equinox JDT LS introuvable dans " + plugins));
             }
         }

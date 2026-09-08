@@ -17,6 +17,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -154,6 +155,36 @@ class FederatedContextServiceTest {
         assertThrows(IllegalArgumentException.class, () ->
                 new FederatedContextService(builder).build(
                         tooMany, "task", 1_000, Set.of(), Map.of(), false));
+    }
+
+    @Test
+    void sharesOnePhysicalMaterializationBudgetAcrossEveryFederatedProject() {
+        ProjectDescriptor first = project("budget-first", root.resolve("budget-first"));
+        ProjectDescriptor second = project("budget-second", root.resolve("budget-second"));
+        List<ContextMaterializationBudget> observedBudgets = new ArrayList<>();
+
+        ContextBuilder builder = new ContextBuilder() {
+            @Override
+            public ContextBundle build(ContextRequest request) {
+                throw new AssertionError("FederatedContextService must use the shared-budget overload");
+            }
+
+            @Override
+            public ContextBundle build(
+                    ContextRequest request,
+                    ContextMaterializationBudget materializationBudget) {
+                observedBudgets.add(materializationBudget);
+                return new ContextBundle(List.of(), request.tokenBudget(), 0, List.of(), Map.of());
+            }
+        };
+
+        FederatedContextBundle bundle = new FederatedContextService(builder).build(
+                List.of(first, second), "task", 200, Set.of(), Map.of(), false);
+
+        assertEquals(2, observedBudgets.size());
+        assertSame(observedBudgets.get(0), observedBudgets.get(1));
+        assertEquals(observedBudgets.get(0).limits(), bundle.metadata().get("taskMaterializationLimits"));
+        assertEquals(observedBudgets.get(0).snapshot(), bundle.metadata().get("taskMaterializationWork"));
     }
 
     private static ContextBundle withinBudget(int tokenBudget, List<ContextItem> candidates) {

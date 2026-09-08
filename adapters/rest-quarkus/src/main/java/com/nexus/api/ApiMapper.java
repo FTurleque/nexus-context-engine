@@ -35,7 +35,7 @@ final class ApiMapper {
         return new ProjectResponse(
                 project.id(),
                 project.name(),
-                normalize(project.rootPath()),
+                null,
                 project.sourceType().name(),
                 project.languages(),
                 project.technologies(),

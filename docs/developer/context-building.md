@@ -113,3 +113,8 @@ Validation :
 - benchmark fédéré : 100 projets et budget de travail global.
 
 Les mêmes contrats métier sont réutilisés par CLI, REST et MCP.
+
+
+## Budget physique de matérialisation
+
+Les fichiers candidats du contexte de tâche partagent désormais un budget d’I/O physique par requête. `NEXUS_MAX_CONTEXT_MATERIALIZATION_BYTES` vaut **64 MiB** par défaut, avec un plafond de sécurité de **512 MiB**. En contexte fédéré, une seule instance du budget est partagée par tous les projets : augmenter le nombre de projets ne multiplie donc plus la quantité maximale de sources matérialisables.
