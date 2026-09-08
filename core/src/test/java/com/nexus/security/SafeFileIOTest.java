@@ -7,7 +7,9 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -119,6 +121,34 @@ class SafeFileIOTest {
                 "Les liens symboliques ne sont pas disponibles dans cet environnement");
 
         assertThrows(IOException.class, () -> SafeFileIO.readStringNoFollow(redirect.resolve("secret.txt")));
+    }
+
+    @Test
+    void fallbackSnapshotDetectsFileReplacementWhenFilesystemProvidesStableIdentity() throws Exception {
+        Path file = temporaryDirectory.resolve("replace-me.txt");
+        Files.writeString(file, "original");
+        Object originalKey = Files.readAttributes(
+                file,
+                BasicFileAttributes.class,
+                LinkOption.NOFOLLOW_LINKS).fileKey();
+        Assumptions.assumeTrue(originalKey != null,
+                "Le filesystem ne fournit pas de fileKey stable pour cette qualification");
+
+        SafeFileIO.FallbackPathSnapshot snapshot = SafeFileIO.captureFallbackPathSnapshot(file);
+        Files.delete(file);
+        Files.writeString(file, "replacement");
+        Object replacementKey = Files.readAttributes(
+                file,
+                BasicFileAttributes.class,
+                LinkOption.NOFOLLOW_LINKS).fileKey();
+        Assumptions.assumeTrue(replacementKey != null && !originalKey.equals(replacementKey),
+                "Le filesystem a réutilisé la même identité pour le fichier remplacé");
+
+        IOException failure = assertThrows(
+                IOException.class,
+                () -> SafeFileIO.revalidateFallbackPathSnapshot(snapshot));
+
+        assertTrue(failure.getMessage().contains("Identité filesystem modifiée"));
     }
 
     private static boolean createSymbolicLink(Path link, Path target) {

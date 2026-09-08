@@ -121,7 +121,9 @@ public final class SemanticSearchStrategy implements SearchStrategy {
         final float[] queryVector;
         try {
             String embeddingQuery = SensitiveContentRedactor.redact(query);
-            queryVector = Objects.requireNonNull(embeddingProvider.embed(embeddingQuery), "embedding vector");
+            queryVector = Objects.requireNonNull(
+                    embeddingProvider.embedQuery(embeddingQuery),
+                    "embedding vector");
         } catch (EmbeddingProviderUnavailableException exception) {
             return degradedProvider(project, exception);
         }

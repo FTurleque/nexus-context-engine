@@ -153,7 +153,41 @@ Cette baseline justifie toujours :
 - pas de promotion automatique du sémantique en moteur principal ;
 - optimisation mesurée avant toute complexification supplémentaire.
 
-Phase 6 implémente le batching, mais une nouvelle mesure locale est nécessaire avant de déclarer le coût réduit de manière chiffrée.
+Phase 6 implémente le batching. Les mesures historiques restent une référence de décision, pas une preuve suffisante de la qualité d'un runtime/modèle futur.
+
+## Qualification réelle exact-head
+
+`.github/workflows/semantic-search-qualification.yml` qualifie le chemin complet **runtime Ollama → modèle réel → embeddings → index Lucene sémantique → ranking**.
+
+Le workflow n'est pas exécuté sur les PR sans rapport avec le sémantique. Il est déclenché sur une PR vers `develop`/`main` lorsque le workflow, l'ancre Ollama ou le code/test sémantique ciblé change ; il reste également déclenchable manuellement et planifié périodiquement.
+
+Contrat courant :
+
+```text
+Ollama runtime      0.33.3 Linux amd64
+modèle              qwen3-embedding:0.6b
+manifest ID attendu ac6da0dfba84
+dimensions          1024
+endpoint            127.0.0.1:11434 uniquement
+corpus              checkout exact de NEXUS_HEAD_SHA
+benchmark           RealSemanticSearchBenchmarkTest
+```
+
+Sur pull request, `NEXUS_HEAD_SHA` vaut explicitement `github.event.pull_request.head.sha` et le workflow vérifie `git rev-parse HEAD` après checkout. Hors PR, il vaut le SHA exact de l'événement. Le rapport final doit réémettre ce même SHA ; un merge ref GitHub ne peut donc pas être pris silencieusement pour la preuve du HEAD candidat.
+
+L'archive Ollama est téléchargée depuis la release officielle mais **n'est jamais crue sur parole** : son SHA-256 attendu est stocké indépendamment dans `config/tool-integrity.properties` et vérifié avant extraction. Après pull, `ollama list` doit en plus exposer l'ID de manifest attendu `ac6da0dfba84` pour le modèle ; une mutation du tag fait échouer le gate au lieu de changer silencieusement le corpus d'embeddings.
+
+Le rapport doit démontrer :
+
+- SHA exact, modèle et endpoint attendus ;
+- au moins les six requêtes de référence ;
+- index sémantique non vide ;
+- `recall@3 >= 0,25` ;
+- `hit@3 >= 0,33` ;
+- `MRR@3 >= 0,20` ;
+- aucune baisse supérieure à `0,10` face au baseline lexical sur recall/hit/MRR.
+
+Ces floors sont des garde-fous de régression, pas des objectifs à optimiser artificiellement. Un échec doit conduire à analyser runtime, modèle, corpus, pipeline ou ranking ; il ne doit pas être résolu en abaissant automatiquement les seuils. Le rapport JSON, la version Ollama, la liste des modèles et les logs sont conservés comme artefacts pendant 90 jours.
 
 ## Correctness
 

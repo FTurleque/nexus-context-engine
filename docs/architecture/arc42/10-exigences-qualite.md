@@ -19,7 +19,9 @@ Deux appels identiques sans mutation du repository doivent produire les mêmes c
 
 ### QS-02 — Confinement filesystem et stockage
 
-Un chemin sortant de la racine ou passant par un symlink sur une frontière durcie ne doit pas provoquer une lecture externe. Sur POSIX, le stockage NEXUS doit rester privé (`0700` répertoires, `0600` SQLite). Sur Windows, les ACL natives ne doivent pas être remplacées destructivement.
+Un chemin sortant de la racine ou passant par un symlink sur une frontière durcie ne doit pas provoquer une lecture externe. Sur POSIX, le stockage NEXUS doit rester privé (`0700` répertoires, `0600` SQLite). Sur Windows, les ACL natives ne doivent pas être remplacées destructivement ; `NEXUS_REQUIRE_PRIVATE_STORAGE=true` permet d'exiger un échec fermé si la confidentialité ne peut pas être démontrée.
+
+Lorsque `SecureDirectoryStream` est absent, le fallback `SafeFileIO` doit capturer puis revalider chemin réel et identité filesystem autour de l'ouverture finale. Une substitution visible doit fermer le channel et échouer avant toute lecture.
 
 ### QS-03 — Exclusion mutuelle inter-processus
 
@@ -37,9 +39,9 @@ CLI, ZIP autonome et distribution Windows doivent démarrer sans checkout Maven 
 
 Une dépendance externe lente ne doit pas bloquer indéfiniment l'appelant. `ExternalTaskRunner` borne le wall-clock et limite à **8 tâches externes réellement actives** à l'échelle JVM. Un provider explicitement demandé qui échoue fait échouer l'indexation et place le projet en `FAILED` ; il n'est pas silencieusement transformé en résultat `READY` dégradé.
 
-Le cas d'un provider ignorant durablement l'interruption reste le watch item #51 pour une isolation processus plus forte.
+La composition de production courante n'exécute pas de provider Java tiers arbitraire : SCIP est importé et JDT LS est déjà un subprocess. Une isolation processus générique supplémentaire ne devient une exigence que si un futur provider in-process démontre de façon reproductible qu'il ignore durablement l'interruption.
 
-### QS-07 — Framing JDT LS hostile/défectueux
+### QS-07 — Framing et confiance JDT LS
 
 Avant allocation/accumulation, NEXUS doit imposer :
 
@@ -50,11 +52,13 @@ header line   <= 8 KiB
 pending queue <= 256 messages
 ```
 
-Framing invalide/tronqué ou queue saturée ⇒ échec fermé de la session.
+Framing invalide/tronqué ou queue saturée ⇒ échec fermé de la session. Avant `Process.start()`, la racine canonique exacte doit être explicitement présente dans `NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS`.
 
 ### QS-08 — Qualité et scale de recherche
 
 Les optimisations doivent être justifiées par benchmark. Une requête Lucene à forte cardinalité est limitée à **128 termes analysés uniques** avant expansion multi-champs afin de ne pas dépasser le budget de clauses.
+
+Le Vector API n'est pas activé par défaut : la mesure ABBA same-runner historique n'a pas montré un gain robuste et univoque. Toute adoption nécessite une nouvelle preuve sans régression des chemins critiques.
 
 ### QS-09 — Ajout d'un provider
 
@@ -62,7 +66,7 @@ Un nouveau provider doit rester optionnel, borné, sans couplage imposé aux pro
 
 ### QS-10 — Recovery canonique
 
-SQLite reste l'autorité. Un état persistant non-READY impose le chemin de reconstruction prévu ; Lucene reste reconstructible. La corruption physique Lucene/Ollama indisponible reste suivie par #54.
+SQLite reste l'autorité. Un état persistant non-READY impose le chemin de reconstruction prévu ; Lucene reste reconstructible. Le recovery sémantique corrompu dispose d'une procédure rebuild/quarantaine et l'indisponibilité transitoire du provider dégrade la lecture de façon sûre.
 
 ### QS-11 — Fédération bornée et fail-fast
 
@@ -88,47 +92,54 @@ Une écoute API hors loopback est refusée si auth, allowlist de racines ou tran
 
 Health/metrics doivent rester sur le listener management `127.0.0.1:9000`; `/q/*` doit retourner 404 sur le listener applicatif. Le reverse proxy métier ne doit pas publier le listener management.
 
-### QS-16 — Transport sémantique et secrets
+### QS-16 — Transport sémantique, secrets et qualité réelle
 
 Un endpoint Ollama distant doit utiliser HTTPS par défaut. HTTP distant exige `NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA=true`; une URI contenant des credentials est refusée.
 
 Les secrets à forte confiance sont redigés avant embeddings et fragments de contexte. Le profil `content-v2` force la reconstruction d'un ancien index sémantique incompatible.
 
+Une qualification périodique/manuelle doit exécuter `RealSemanticSearchBenchmarkTest` avec un runtime Ollama fixe vérifié par SHA-256, le modèle `qwen3-embedding:0.6b`, un endpoint loopback et des seuils de qualité/non-régression. Le rapport doit être conservé comme artefact.
+
 ### QS-17 — Supply-chain reactor
 
-- JaCoCo core < 70 % lignes ou < 50 % branches ⇒ échec ;
+- JaCoCo sous les seuils versionnés dans le POM ⇒ échec ;
 - vulnérabilité nouvelle en PR ⇒ OSV delta en échec ;
 - vulnérabilité dans le SBOM CycloneDX agrégé ⇒ OSV gate en échec ;
 - dépendance distribuée sans licence exploitable ⇒ échec ;
 - Action contrôlée non épinglée à un SHA ⇒ non conforme ;
-- dérive d'un contrat documentaire machine-vérifiable ⇒ NEXUS CI en échec.
+- dérive d'un contrat documentaire machine-vérifiable ⇒ NEXUS CI en échec ;
+- Maven/JDT LS et les outils de qualification téléchargés à version fixe doivent correspondre à leurs ancres d'intégrité repository-pinned.
 
 ### QS-18 — Supply-chain image Docker
 
-- vulnérabilité HIGH/CRITICAL corrigible ⇒ gate Trivy en échec ;
+- vulnérabilité conforme au seuil bloquant versionné du workflow Trivy ⇒ gate en échec ;
 - image publiée depuis `main` ⇒ SBOM et provenance attestés sur le digest publié ;
 - l'image publiée est l'image exacte déjà qualifiée, sans rebuild dans `release.yml`.
 
 ### QS-19 — Gouvernance `develop`
 
-Le ruleset GitHub actif `Protect main & develop` satisfait NXA3-14 / #130 : pull request obligatoire, suppression/non-fast-forward interdits et sept checks permanents requis. Le code et les workflows restent une défense en profondeur mais ne remplacent pas ce contrôle repository-admin. `strict_required_status_checks_policy=false` est le hardening résiduel : la remise à jour de la PR avec sa base n'est pas encore imposée avant merge.
+Le ruleset GitHub actif `Protect main & develop` satisfait NXA3-14 / #130 : pull request obligatoire, suppression/non-fast-forward interdits et checks permanents requis. Le code et les workflows restent une défense en profondeur mais ne remplacent pas ce contrôle repository-admin.
+
+NEXUS est actuellement un projet à **un seul mainteneur**. La qualité de merge est donc portée par la PR, le SHA candidat et les gates automatisés ; aucune seconde approbation humaine ni resynchronisation stricte avec la base n'est exigée par la politique courante. Ces absences ne doivent pas être remontées comme findings tant que le modèle de maintenance n'est pas explicitement modifié.
+
+### QS-20 — Métadonnées Code Intelligence bornées
+
+Tous les providers/importers doivent converger vers les plafonds communs : champs UTF-8 bornés, **100 000 symboles**, **250 000 relations**, **64 MiB de métadonnées UTF-8 cumulées** maximum par snapshot avant canonicalisation/déduplication.
 
 ## 10.3 Watch items qualité
 
-- #50 lifecycle Lucene persistant ;
-- #51 isolation plus forte d'un provider externe réellement non coopératif ;
-- #52 filesystem hostile/réseau ;
-- #53 cache Git persistant ;
-- #54 recovery sémantique/Ollama/Lucene physique ;
-- #55 revue juridique des dépendances inhabituelles ;
-- mode repository-admin strict « branch up to date before merge ».
+- isolation processus plus forte uniquement pour un provider in-process concret et reproductiblement non coopératif ;
+- extension vers un filesystem réseau/distribué précis après qualification de ses vraies sémantiques ;
+- moteur FTS/trigram uniquement si les besoins substring et les benchmarks le justifient ;
+- revue juridique des dépendances inhabituelles ;
+- réévaluation du Vector API uniquement après nouvelle mesure same-runner probante.
 
-Ces sujets ne justifient pas un changement d'architecture sans benchmark, fixture ou incident démontrant le besoin, à l'exception des réglages de gouvernance explicitement décidés par la politique du dépôt.
+Ces sujets ne justifient pas un changement d'architecture sans benchmark, fixture ou incident démontrant le besoin.
 
 ## 10.4 Baselines et preuve
 
 Les métriques historiques restent utiles pour comparer les régressions (par exemple hit@3, MRR@3, temps d'indexation et latences). Elles sont conservées dans les documents d'itération/benchmark dédiés.
 
-**Elles ne constituent pas une preuve de qualification de l'état courant.** Pour un merge, une release ou une promotion, utiliser uniquement les checks attachés au **SHA exact** concerné.
+**Elles ne constituent pas une preuve de qualification de l'état courant.** Pour un merge, une release ou une promotion, utiliser uniquement les checks attachés au **SHA exact** concerné. Pour le sémantique réel, utiliser en plus le dernier rapport du workflow dédié correspondant à la version/runtime qualifiés.
 
 Voir également [`../quality/scenarios.md`](../quality/scenarios.md), [`../../developer/current-limitations.md`](../../developer/current-limitations.md) et [`../../developer/ci-and-supply-chain.md`](../../developer/ci-and-supply-chain.md).

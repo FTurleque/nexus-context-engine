@@ -39,6 +39,10 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
     private static final int RESPONSE_BUFFER_SIZE = 16 * 1024;
     private static final int MAX_INTERNAL_RESPONSE_BYTES = 16 * 1024 * 1024;
     private static final Pattern TRAILING_SLASHES = Pattern.compile("/+$");
+    private static final Pattern QWEN3_EMBEDDING_MODEL =
+            Pattern.compile("(?i)(?:^|/)qwen3-embedding(?::|$)");
+    private static final String QWEN3_RETRIEVAL_INSTRUCTION =
+            "Given a software repository search query, retrieve the most relevant source code or documentation passage that answers the query";
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
@@ -173,6 +177,18 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
     @Override
     public float[] embed(String text) throws IOException {
         return embedAll(List.of(text)).getFirst();
+    }
+
+    @Override
+    public float[] embedQuery(String query) throws IOException {
+        Objects.requireNonNull(query, "query");
+        if (query.isBlank()) {
+            throw new IllegalArgumentException("embedding query must not be blank");
+        }
+        if (!QWEN3_EMBEDDING_MODEL.matcher(model).find()) {
+            return embed(query);
+        }
+        return embed("Instruct: " + QWEN3_RETRIEVAL_INSTRUCTION + "\nQuery:" + query);
     }
 
     @Override

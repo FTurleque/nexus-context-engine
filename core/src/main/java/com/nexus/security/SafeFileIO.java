@@ -17,6 +17,9 @@ import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.SecureDirectoryStream;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -28,9 +31,11 @@ import java.util.Set;
  * chemin complet est traversé relativement à des descripteurs de répertoire
  * ouverts. Une substitution concurrente d'un composant intermédiaire ne peut
  * donc plus rediriger l'ouverture vers un autre arbre. Les plateformes ne
- * fournissant pas cette primitive conservent un fallback renforcé qui vérifie
- * chaque composant immédiatement avant l'ouverture finale avec
- * {@link LinkOption#NOFOLLOW_LINKS}.</p>
+ * fournissant pas cette primitive conservent un fallback renforcé : tous les
+ * composants sont vérifiés immédiatement avant l'ouverture, leur chemin réel et
+ * leur identité filesystem sont capturés, puis revalidés après l'ouverture. Une
+ * substitution concurrente visible pendant cette fenêtre ferme donc le channel
+ * et échoue avant toute lecture.</p>
  *
  * <p>Tous les flux publics sont également bornés par la politique de taille
  * projet. La borne s'applique à tous les octets physiquement traversés par le
@@ -112,8 +117,19 @@ public final class SafeFileIO {
             }
         }
 
-        rejectSymbolicLinkComponents(absolute);
-        return Files.newByteChannel(absolute, READ_NOFOLLOW);
+        FallbackPathSnapshot snapshot = captureFallbackPathSnapshot(absolute);
+        SeekableByteChannel channel = Files.newByteChannel(absolute, READ_NOFOLLOW);
+        try {
+            revalidateFallbackPathSnapshot(snapshot);
+            return channel;
+        } catch (IOException validationFailure) {
+            try {
+                channel.close();
+            } catch (IOException closeFailure) {
+                validationFailure.addSuppressed(closeFailure);
+            }
+            throw validationFailure;
+        }
     }
 
     private static SeekableByteChannel openSecurely(
@@ -131,18 +147,101 @@ public final class SafeFileIO {
         }
     }
 
-    private static void rejectSymbolicLinkComponents(Path absolute) throws IOException {
+    static FallbackPathSnapshot captureFallbackPathSnapshot(Path file) throws IOException {
+        Path absolute = Objects.requireNonNull(file, "file").toAbsolutePath().normalize();
         Path root = absolute.getRoot();
         if (root == null) {
             throw new IOException("Chemin sans racine de système de fichiers : " + absolute);
         }
+
+        Path relative = root.relativize(absolute);
+        if (relative.getNameCount() == 0) {
+            throw new IOException("Le chemin ne désigne pas un fichier : " + absolute);
+        }
+
+        List<ComponentIdentity> identities = new ArrayList<>(relative.getNameCount());
         Path current = root;
-        for (Path component : root.relativize(absolute)) {
-            current = current.resolve(component);
+        for (int index = 0; index < relative.getNameCount(); index++) {
+            current = current.resolve(relative.getName(index));
             if (Files.isSymbolicLink(current)) {
                 throw new IOException("Lien symbolique interdit pendant la lecture : " + current);
             }
+
+            BasicFileAttributes attributes = Files.readAttributes(
+                    current,
+                    BasicFileAttributes.class,
+                    LinkOption.NOFOLLOW_LINKS);
+            boolean finalComponent = index == relative.getNameCount() - 1;
+            if (!finalComponent && !attributes.isDirectory()) {
+                throw new IOException("Composant de chemin non répertoire pendant la lecture : " + current);
+            }
+            if (finalComponent && !attributes.isRegularFile()) {
+                throw new IOException("Fichier régulier attendu pendant la lecture : " + current);
+            }
+
+            identities.add(new ComponentIdentity(
+                    current,
+                    current.toRealPath(LinkOption.NOFOLLOW_LINKS),
+                    attributes.fileKey(),
+                    attributes.isDirectory(),
+                    attributes.isRegularFile()));
         }
+        return new FallbackPathSnapshot(absolute, List.copyOf(identities));
+    }
+
+    static void revalidateFallbackPathSnapshot(FallbackPathSnapshot snapshot) throws IOException {
+        Objects.requireNonNull(snapshot, "snapshot");
+        for (ComponentIdentity identity : snapshot.components()) {
+            Path path = identity.path();
+            if (Files.isSymbolicLink(path)) {
+                throw new IOException("Lien symbolique apparu pendant l'ouverture : " + path);
+            }
+
+            BasicFileAttributes attributes = Files.readAttributes(
+                    path,
+                    BasicFileAttributes.class,
+                    LinkOption.NOFOLLOW_LINKS);
+            if (identity.directory() != attributes.isDirectory()
+                    || identity.regularFile() != attributes.isRegularFile()) {
+                throw new IOException("Type de composant modifié pendant l'ouverture : " + path);
+            }
+
+            Path realPath = path.toRealPath(LinkOption.NOFOLLOW_LINKS);
+            if (!identity.realPath().equals(realPath)) {
+                throw new IOException("Chemin réel modifié pendant l'ouverture : " + path);
+            }
+
+            Object previousFileKey = identity.fileKey();
+            if (previousFileKey != null && !previousFileKey.equals(attributes.fileKey())) {
+                throw new IOException("Identité filesystem modifiée pendant l'ouverture : " + path);
+            }
+        }
+    }
+
+    static final class FallbackPathSnapshot {
+        private final Path file;
+        private final List<ComponentIdentity> components;
+
+        private FallbackPathSnapshot(Path file, List<ComponentIdentity> components) {
+            this.file = Objects.requireNonNull(file, "file");
+            this.components = List.copyOf(Objects.requireNonNull(components, "components"));
+        }
+
+        Path file() {
+            return file;
+        }
+
+        private List<ComponentIdentity> components() {
+            return components;
+        }
+    }
+
+    private record ComponentIdentity(
+            Path path,
+            Path realPath,
+            Object fileKey,
+            boolean directory,
+            boolean regularFile) {
     }
 
     private static final class BoundedInputStream extends FilterInputStream {

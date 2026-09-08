@@ -58,6 +58,66 @@ class SemanticIndexingServiceTest {
     }
 
     @Test
+    void boundsEachProviderBatchByAggregateEmbeddingCharacters() throws Exception {
+        CapturingSemanticIndex index = new CapturingSemanticIndex(3);
+        CapturingBatchProvider provider = new CapturingBatchProvider();
+        int maxEmbeddingChars = 120;
+        SemanticIndexingService service = new SemanticIndexingService(
+                provider,
+                index,
+                maxEmbeddingChars,
+                32);
+
+        service.rebuild(UUID.randomUUID(), List.of(
+                document("docs/a.md", "a".repeat(100)),
+                document("docs/b.md", "b".repeat(100)),
+                document("docs/c.md", "c".repeat(100))));
+
+        assertEquals(List.of(1, 1, 1), provider.batchSizes());
+        assertTrue(provider.batchCharacterCounts().stream()
+                .allMatch(characterCount -> characterCount <= maxEmbeddingChars));
+        assertEquals(3, index.rebuilt.size());
+    }
+
+    @Test
+    void capsTheCompleteEmbeddingTextEvenWhenMetadataExceedsTheLimit() throws Exception {
+        CapturingSemanticIndex index = new CapturingSemanticIndex(3);
+        CapturingBatchProvider provider = new CapturingBatchProvider();
+        int maxEmbeddingChars = 64;
+        SemanticIndexingService service = new SemanticIndexingService(
+                provider,
+                index,
+                maxEmbeddingChars,
+                32);
+
+        service.rebuild(UUID.randomUUID(), List.of(
+                document("docs/" + "very-long-path-".repeat(10) + ".md", "content")));
+
+        assertEquals(List.of(1), provider.batchSizes());
+        assertEquals(List.of(maxEmbeddingChars), provider.batchCharacterCounts());
+        assertEquals(1, index.rebuilt.size());
+    }
+
+    @Test
+    void stillBatchesSmallEmbeddingInputsUpToTheDocumentCountLimit() throws Exception {
+        CapturingSemanticIndex index = new CapturingSemanticIndex(3);
+        CapturingBatchProvider provider = new CapturingBatchProvider();
+        SemanticIndexingService service = new SemanticIndexingService(
+                provider,
+                index,
+                1_000,
+                2);
+
+        service.rebuild(UUID.randomUUID(), List.of(
+                document("a.md", "a"),
+                document("b.md", "b"),
+                document("c.md", "c")));
+
+        assertEquals(List.of(2, 1), provider.batchSizes());
+        assertEquals(3, index.rebuilt.size());
+    }
+
+    @Test
     void doesNotSplitSurrogatePairsAtEmbeddingOrExcerptBoundaries() throws Exception {
         CapturingSemanticIndex index = new CapturingSemanticIndex(3);
         String[] embeddedText = {null};
@@ -114,6 +174,44 @@ class SemanticIndexingServiceTest {
 
     private static SearchDocument document(String path, String content) {
         return new SearchDocument(path, "markdown", FileCategory.DOCUMENTATION, content, List.of());
+    }
+
+    private static final class CapturingBatchProvider implements EmbeddingProvider {
+
+        private final List<Integer> batchSizes = new ArrayList<>();
+        private final List<Integer> batchCharacterCounts = new ArrayList<>();
+
+        @Override
+        public String modelId() {
+            return "test/batch-model";
+        }
+
+        @Override
+        public int dimensions() {
+            return 3;
+        }
+
+        @Override
+        public float[] embed(String text) {
+            return new float[]{1.0f, 0.0f, 0.0f};
+        }
+
+        @Override
+        public List<float[]> embedAll(List<String> texts) {
+            batchSizes.add(texts.size());
+            batchCharacterCounts.add(texts.stream().mapToInt(String::length).sum());
+            return texts.stream()
+                    .map(text -> new float[]{1.0f, 0.0f, 0.0f})
+                    .toList();
+        }
+
+        private List<Integer> batchSizes() {
+            return List.copyOf(batchSizes);
+        }
+
+        private List<Integer> batchCharacterCounts() {
+            return List.copyOf(batchCharacterCounts);
+        }
     }
 
     private static final class CapturingSemanticIndex implements SemanticSearchIndex {

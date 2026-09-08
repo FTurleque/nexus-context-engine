@@ -28,6 +28,7 @@ fi
 
 grep -Eq '^maven\.3\.9\.16\.sha512=[0-9a-f]{128}$' "$INTEGRITY"
 grep -Eq '^jdtls\.1\.60\.0-202606262232\.sha256=[0-9a-f]{64}$' "$INTEGRITY"
+grep -Eq '^ollama\.0\.33\.3\.linux-amd64\.sha256=[0-9a-f]{64}$' "$INTEGRITY"
 grep -q 'MAVEN_VERSION="3.9.16"' "$ROOT/mvnw"
 grep -q 'MAVEN_VERSION=3.9.16' "$ROOT/mvnw.cmd"
 

@@ -16,7 +16,7 @@ Java        runtime >=21 / release 21
 Maven       3.9.16 via wrapper vérifié par SHA-512 versionné
 ```
 
-La stratégie de branche est explicite : les changements sont intégrés et qualifiés sur `develop`, puis promus vers `main` pour les releases. La protection effective de `develop` est un contrôle GitHub de gouvernance distinct du code versionné.
+La stratégie de branche est explicite : les changements sont intégrés et qualifiés sur `develop`, puis promus vers `main` pour les releases. La protection effective de `develop` est un contrôle GitHub de gouvernance distinct du code versionné. NEXUS est actuellement maintenu par un seul mainteneur ; la qualité de merge repose sur les PR et gates automatisés exact-head plutôt que sur une seconde approbation humaine artificielle.
 
 ## Capacités
 
@@ -40,6 +40,8 @@ La stratégie de branche est explicite : les changements sont intégrés et qual
 
 `ProjectPathGuard` protège les lectures sensibles sous la racine canonique et refuse traversal, symlink final et symlink d'ancêtre. Les sources SCIP, skills et customisations durcies passent par cette frontière.
 
+`SafeFileIO` utilise `SecureDirectoryStream` lorsque le filesystem le supporte. Le fallback portable capture le chemin réel, le type et l'identité filesystem de chaque composant avant l'ouverture finale puis les revalide immédiatement après l'ouverture `NOFOLLOW_LINKS`, afin de détecter les substitutions visibles sans prétendre sandboxer un filesystem local hostile.
+
 `NEXUS_MAX_FILE_SIZE_BYTES` vaut 8 MiB par défaut et possède un plafond dur de **256 MiB**. Les artefacts SCIP sont bornés séparément à **256 MiB maximum pour l'index complet** et **16 MiB maximum par message Protobuf**. `NEXUS_MAX_SCIP_INDEX_BYTES` et `NEXUS_MAX_SCIP_MESSAGE_BYTES` peuvent uniquement réduire ces plafonds, jamais les augmenter.
 
 La découverte native partage un budget avant sélection de tokens :
@@ -53,7 +55,7 @@ NEXUS_CONTEXT_DISCOVERY_MAX_MILLIS
 
 Les défauts sont respectivement 100000 entrées, 5000 candidats, 32 MiB et 15 s. Un dépassement est fail-closed.
 
-Sur POSIX, `NEXUS_HOME`, `indexes` et `locks` sont rendus privés (`0700`) et le fichier SQLite est durci en `0600`. Les chemins persistants NEXUS sont créés et revalidés composant par composant avec `NOFOLLOW_LINKS` : un symlink enfant précréé sous `indexes`, `locks` ou `jdtls-workspaces` est refusé. Sur Windows/filesystems sans vue POSIX, les ACL natives ne sont pas réécrites destructivement ; chaque chemin sensible créé/durci est néanmoins inspecté lorsqu'une vue ACL existe, avec comparaison exacte du principal utilisateur et des principaux Windows attendus.
+Sur POSIX, `NEXUS_HOME`, `indexes` et `locks` sont rendus privés (`0700`) et le fichier SQLite est durci en `0600`. Les chemins persistants NEXUS sont créés et revalidés composant par composant avec `NOFOLLOW_LINKS` : un symlink enfant précréé sous `indexes`, `locks` ou `jdtls-workspaces` est refusé. Sur Windows/filesystems sans vue POSIX, les ACL natives ne sont pas réécrites destructivement ; chaque chemin sensible créé/durci est inspecté lorsqu'une vue ACL existe, avec comparaison exacte du principal utilisateur et des principaux Windows attendus. `NEXUS_REQUIRE_PRIVATE_STORAGE=true` transforme une ACL sensible inattendue, un échec d'inspection ou l'impossibilité de démontrer la confidentialité via POSIX/ACL en échec fermé.
 
 ### Recherche et fédération
 
@@ -63,13 +65,15 @@ Les limites REST fédérées réutilisent les politiques centrales de résultats
 
 La recherche Lucene borne une requête analysée à **128 termes uniques** avant expansion sur les cinq champs de recherche pour rester sous le budget de clauses du moteur.
 
+Le Vector API reste volontairement absent des launchers de production : la qualification ABBA same-runner n'a pas démontré un bénéfice suffisamment robuste sans régression du p95 graphe. Toute adoption future exige une nouvelle mesure probante.
+
 ### Code Intelligence externe et indexation
 
 Le framing JDT LS est borné avant allocation : message 16 MiB, headers 64 KiB, ligne de header 8 KiB et file entrante 256 messages maximum. Les URI JDT externes non `file:` sont ignorées plutôt que converties en chemins locaux.
 
 L'analyse `--deep-java` est une frontière de confiance explicite : JDT LS ne démarre que si la racine canonique exacte du repository figure dans `NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS`. Une racine parente n'approuve pas implicitement ses descendants. Cette allowlist est locale à NEXUS et n'est pas transmise au subprocess.
 
-Les tâches externes sont limitées à **8 workers réellement actifs** à l'échelle JVM et leur timeout global est plafonné à **3 600 s**. Le circuit-breaker par provider linéarise désormais validation+démarrage et ouverture après timeout afin qu'une vérification devenue obsolète ne puisse pas lancer un nouveau worker. Les mutations d'index file-backed disposent en plus d'un budget global non bloquant : `NEXUS_MAX_CONCURRENT_INDEXING` vaut **2** par défaut, accepte de 1 à 16 et rejette explicitement la surcharge au lieu d'empiler un travail sans borne.
+Les tâches externes sont limitées à **8 workers réellement actifs** à l'échelle JVM et leur timeout global est plafonné à **3 600 s**. Le circuit-breaker par provider linéarise validation+démarrage et ouverture après timeout afin qu'une vérification devenue obsolète ne puisse pas lancer un nouveau worker. Les mutations d'index file-backed disposent en plus d'un budget global non bloquant : `NEXUS_MAX_CONCURRENT_INDEXING` vaut **2** par défaut, accepte de 1 à 16 et rejette explicitement la surcharge au lieu d'empiler un travail sans borne.
 
 Toutes les sources de Code Intelligence convergent vers une politique commune de métadonnées décodées : champs UTF-8 bornés, **100 000 symboles**, **250 000 relations** et **64 MiB de métadonnées UTF-8 cumulées** maximum par snapshot avant canonicalisation/déduplication secondaire.
 
@@ -101,6 +105,8 @@ Les credentials intégrés dans `NEXUS_OLLAMA_BASE_URL` sont refusés. Les secre
 
 La configuration Ollama est bornée à **1 024 dimensions** et **600 s** de timeout maximum afin qu'une variable d'environnement ne puisse pas neutraliser les protections de ressources.
 
+Une qualification réelle périodique/manuelle télécharge Ollama **0.33.3**, vérifie son archive Linux amd64 contre un SHA-256 versionné, lance `qwen3-embedding:0.6b` uniquement sur loopback, exécute `RealSemanticSearchBenchmarkTest`, impose des seuils de qualité/non-régression et conserve le rapport comme preuve.
+
 ### SQLite
 
 SQLite reste l'autorité canonique. Depuis V005, `symbols` impose aussi au niveau base :
@@ -126,7 +132,7 @@ Sous Linux/macOS :
 sh ./mvnw clean install
 ```
 
-Le wrapper utilise **Maven 3.9.16**. Son archive est vérifiée contre une ancre SHA-512 stockée dans `config/tool-integrity.properties`. JDT LS utilise de la même façon une ancre SHA-256 versionnée.
+Le wrapper utilise **Maven 3.9.16**. Son archive est vérifiée contre une ancre SHA-512 stockée dans `config/tool-integrity.properties`. JDT LS utilise de la même façon une ancre SHA-256 versionnée. Le runtime Ollama utilisé par la qualification réelle possède également une ancre SHA-256 repository-pinned.
 
 Pour l'installateur Windows, tout `ISCC.exe` réutilisé doit correspondre à la version Inno Setup épinglée et présenter une signature Authenticode valide de l'éditeur attendu ; sinon le bootstrap versionné est utilisé puis requalifié.
 
@@ -182,7 +188,8 @@ Les gates comprennent :
 - **Scanner Corpus Benchmark** ;
 - **CodeQL** exact-head ;
 - **OSV-Scanner** : delta PR + SBOM agrégé ;
-- **SonarCloud** : Quality Gate sur les changements de PR.
+- **SonarCloud** : Quality Gate sur les changements de PR ;
+- **Semantic Search Real Qualification** : périodique/manuelle, Ollama réel épinglé + benchmark de qualité.
 
 Les Actions contrôlées sont épinglées par SHA immuable.
 
@@ -198,6 +205,7 @@ Les tags version et SHA sont immuables. Le préflight GHCR échoue fermé sur le
 
 ```text
 NEXUS_HOME
+NEXUS_REQUIRE_PRIVATE_STORAGE
 NEXUS_MAX_FILE_SIZE_BYTES
 NEXUS_MAX_SCIP_INDEX_BYTES
 NEXUS_MAX_SCIP_MESSAGE_BYTES
