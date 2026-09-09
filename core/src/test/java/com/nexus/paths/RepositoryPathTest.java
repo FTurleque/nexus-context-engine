@@ -21,32 +21,24 @@ class RepositoryPathTest {
             assertEquals(root.resolve(backslash), new RepositoryPath("a\\b.java").resolve(root));
             assertEquals(" space /é:foo\\bar ", RepositoryPath.fromPath(Path.of(" space ", "é:foo\\bar ")).value());
         } else {
-            assertThrows(IllegalArgumentException.class, () -> resolveInvalid(root, "a\\b.java"));
-            assertThrows(IllegalArgumentException.class, () -> resolveInvalid(root, "C:secret"));
+            RepositoryPath literalBackslash = new RepositoryPath("a\\b.java");
+            RepositoryPath driveRelative = new RepositoryPath("C:secret");
+            assertThrows(IllegalArgumentException.class, () -> literalBackslash.resolve(root));
+            assertThrows(IllegalArgumentException.class, () -> driveRelative.resolve(root));
         }
-        assertEquals("", RepositoryPath.encode(Path.of("")));
-        assertThrows(IllegalArgumentException.class, () -> encodeInvalid(Path.of("")));
-        assertThrows(IllegalArgumentException.class, () -> encodeInvalid(root));
+        Path emptyPath = Path.of("");
+        assertEquals("", RepositoryPath.encode(emptyPath));
+        assertThrows(IllegalArgumentException.class, () -> RepositoryPath.fromPath(emptyPath));
+        assertThrows(IllegalArgumentException.class, () -> RepositoryPath.fromPath(root));
     }
 
     @Test void refusesInvalidProviderSyntaxWithoutRepair() {
         for (String invalid : List.of("", "/etc/file", "../file", "a/../file", "./a", "a/./b",
                 "a//b", "a/", "C:/Users/secret", "D:\\secret", "C:secret", "\\\\server\\share", "a\0b")) {
-            assertThrows(IllegalArgumentException.class, () -> parseInvalidProvider(invalid), invalid);
+            assertThrows(IllegalArgumentException.class, () -> RepositoryPath.fromProvider(invalid), invalid);
         }
         assertEquals("a\\b.java", RepositoryPath.fromProvider("a\\b.java").value());
         assertEquals("a/b.java", RepositoryPath.fromProvider("a/b.java").value());
     }
 
-    private static Path resolveInvalid(Path root, String value) {
-        return new RepositoryPath(value).resolve(root);
-    }
-
-    private static String encodeInvalid(Path value) {
-        return RepositoryPath.fromPath(value).value();
-    }
-
-    private static RepositoryPath parseInvalidProvider(String value) {
-        return RepositoryPath.fromProvider(value);
-    }
 }
