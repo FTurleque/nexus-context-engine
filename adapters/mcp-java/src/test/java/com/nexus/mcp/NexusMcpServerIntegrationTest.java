@@ -55,8 +55,8 @@ class NexusMcpServerIntegrationTest {
 
     @Test
     void exposesTheSameSearchAndContextResultsThroughARealMcpStdioClient() throws Exception {
-        Path nexusHome = temporaryDirectory.resolve("nexus-home");
-        Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("project"));
+        Path nexusHome = temporaryDirectory.resolve("Build Secret");
+        Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("Alice Smith"));
         Path source = projectRoot.resolve("src/main/java/demo/OrderService.java");
         Files.createDirectories(source.getParent());
         Files.writeString(source, """
@@ -238,6 +238,21 @@ class NexusMcpServerIntegrationTest {
             assertFalse(Boolean.TRUE.equals(duplicateScope.isError()));
             assertEquals(1, json(duplicateScope).path("projects").size());
 
+
+            for (String sensitive : List.of("/tmp/Build Secret/cache/file.txt", "C:\\Users\\Alice Smith\\Nexus Project\\src\\App.java",
+                    "\\\\server\\Private Share\\Nexus Project\\file.java", "file:///home/alice/My%20Project/src/App.java")) {
+                var rejected = client.callTool(McpSchema.CallToolRequest.builder("search_code")
+                        .arguments(Map.of("project", sensitive, "query", "x")).build());
+                assertTrue(Boolean.TRUE.equals(rejected.isError()));
+                String payload = new ObjectMapper().writeValueAsString(rejected);
+                for (String secret : List.of("Build Secret", "Alice Smith", "Private Share", "My%20Project", "cache", "file.java")) {
+                    assertFalse(payload.contains(secret), payload);
+                }
+            }
+            var unexpected = client.callTool(McpSchema.CallToolRequest.builder("search_code")
+                    .arguments(Map.of("project", project.id().toString(), "query", "x", "unexpected", true)).build());
+            assertTrue(Boolean.TRUE.equals(unexpected.isError()));
+
             Path secondRoot = Files.createDirectory(temporaryDirectory.resolve("second-project"));
             Path secondSource = Files.writeString(secondRoot.resolve("OrderService.java"), "class OrderService {}");
             var second = application.registerProject(secondRoot, "second-project");
@@ -261,6 +276,8 @@ class NexusMcpServerIntegrationTest {
                 // aussi l'arbre décodé évite de dépendre du nombre d'échappements JSON.
                 String decoded = json(missing).toString();
                 for (Path hidden : List.of(projectRoot, secondRoot, nexusHome)) {
+                    assertFalse(decoded.contains("Alice Smith"), decoded);
+                    assertFalse(decoded.contains("Build Secret"), decoded);
                     assertFalse(decoded.contains(hidden.toString().replace("\\", "\\\\")), decoded);
                     assertFalse(decoded.contains(hidden.toString().replace('\\', '/')), decoded);
                 }

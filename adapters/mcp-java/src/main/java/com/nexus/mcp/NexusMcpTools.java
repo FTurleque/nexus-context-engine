@@ -234,7 +234,13 @@ final class NexusMcpTools {
                 .tool(tool)
                 .callHandler((exchange, request) -> {
                     try {
-                        return textResult(handler.handle(request.arguments()), false);
+                        Map<String, Object> arguments = request.arguments();
+                        if (arguments == null) arguments = Map.of();
+                        if (schema.get("properties") instanceof Map<?, ?> properties
+                                && !properties.keySet().containsAll(arguments.keySet())) {
+                            throw new IllegalArgumentException("Propriété JSON inconnue");
+                        }
+                        return textResult(handler.handle(arguments), false);
                     } catch (Exception exception) {
                         return textResult(Map.of(
                                 "error", "nexus_tool_error",
@@ -244,7 +250,7 @@ final class NexusMcpTools {
                 .build();
     }
 
-    private McpSchema.CallToolResult textResult(Object value, boolean error) {
+    McpSchema.CallToolResult textResult(Object value, boolean error) {
         try {
             String json = objectMapper.writeValueAsString(value);
             return McpSchema.CallToolResult.builder()
@@ -384,7 +390,7 @@ final class NexusMcpTools {
                 "sourceProvider", relation.sourceProvider());
     }
 
-    private Map<String, Object> context(NexusApplication.ContextOperation operation) {
+    Map<String, Object> context(NexusApplication.ContextOperation operation) {
         var bundle = com.nexus.security.PublicContextPolicy.expose(operation.project(), operation.bundle(), operation.query());
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("project", project(operation.project()));

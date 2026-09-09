@@ -134,3 +134,13 @@ Les contextes REST/MCP/CLI projettent les chemins en repository-relative et
 filtrent les diagnostics/métadonnées internes à la frontière de sortie. Les
 requêtes client sont conservées séparément. La redaction des skills précède
 estimation et sélection ; les compteurs décrivent le contenu effectivement fourni.
+
+
+## Identité repository et upgrade V007
+
+Le contrat unique `RepositoryPath` encode les composants filesystem sans remplacer
+les backslashes POSIX. `a\b.java` et `a/b.java` sont deux identités distinctes sur
+POSIX. La résolution sur un autre filesystem refuse les composants qui y seraient
+réinterprétés. V007 invalide les anciens index et impose une reconstruction ; le
+fingerprint `nexus-repository-path-v2` invalide également les dérivés sémantiques
+restés désactivés pendant l'upgrade. Voir [ADR-0049](../adr/0049-identite-repository-par-composants-et-diagnostics-publics.md).
