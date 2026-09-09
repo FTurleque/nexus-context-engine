@@ -53,6 +53,37 @@ function Get-JavaMajorVersion {
     return [int]$Matches['version']
 }
 
+function Select-MavenCommand {
+    param([Parameter(Mandatory = $true)][string]$RepositoryRoot)
+
+    $wrapper = Join-Path $RepositoryRoot "mvnw.cmd"
+    if (Test-Path -LiteralPath $wrapper -PathType Leaf) {
+        try {
+            & $wrapper --version 2>&1 | Out-Host
+            if ($LASTEXITCODE -eq 0) {
+                return $wrapper
+            }
+            Write-Warning "Le Maven Wrapper est indisponible (code $LASTEXITCODE). Utilisation de Maven installe sur le runner."
+        }
+        catch {
+            Write-Warning "Le Maven Wrapper n'a pas pu telecharger Maven : $($_.Exception.Message). Utilisation de Maven installe sur le runner."
+        }
+    }
+
+    foreach ($candidate in @("mvn.cmd", "mvn")) {
+        $installed = Get-Command $candidate -ErrorAction SilentlyContinue
+        if ($null -ne $installed -and -not [string]::IsNullOrWhiteSpace($installed.Source)) {
+            Write-Host "Maven systeme selectionne : $($installed.Source)"
+            & $installed.Source --version 2>&1 | Out-Host
+            if ($LASTEXITCODE -eq 0) {
+                return $installed.Source
+            }
+        }
+    }
+
+    throw "Impossible d'executer Maven : le wrapper et Maven systeme sont indisponibles."
+}
+
 function Assert-Sha256File {
     param([Parameter(Mandatory = $true)][string]$Artifact)
 
@@ -114,15 +145,15 @@ try {
     Write-Host $javaVersion
     Write-Host "Maven compiler release : $compilerRelease"
 
-    Write-Host "[2/9] Maven Wrapper reproductible"
-    Invoke-Native -Command (Join-Path $repoRoot "mvnw.cmd") -Arguments @("--version")
+    Write-Host "[2/9] Maven reproductible avec fallback runner"
     $wrapperMavenBin = Join-Path $env:USERPROFILE ".m2\wrapper\dists\nexus\apache-maven-3.9.16\apache-maven-3.9.16\bin"
     if (Test-Path -LiteralPath $wrapperMavenBin -PathType Container) {
         $env:PATH = "$wrapperMavenBin;$env:PATH"
     }
+    $mavenCommand = Select-MavenCommand -RepositoryRoot $repoRoot
 
     Write-Host "[3/9] Reactor complet : clean install"
-    Invoke-Native -Command (Join-Path $repoRoot "mvnw.cmd") -Arguments @("clean", "install")
+    Invoke-Native -Command $mavenCommand -Arguments @("clean", "install")
 
     Write-Host "[4/9] Self-smoke historique obligatoire"
     & (Join-Path $repoRoot "scripts\self-smoke.ps1")

@@ -1,5 +1,7 @@
 package com.nexus.cli;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -446,7 +448,7 @@ final class CliRenderer {
     }
 
     private static String repositoryPath(Path path) {
-        return path.toString().replace('\\', '/');
+        return RepositoryPath.encode(path);
     }
 
     private static String human(Object value) {

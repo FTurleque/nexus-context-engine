@@ -60,6 +60,7 @@ end_line >= start_line
 ```
 
 - `V006__invalidate_unredacted_lexical_indexes.sql` : invalide une fois les projets existants et incrémente leur génération afin que la prochaine indexation effectue un rebuild complet. Ce rebuild supprime les anciens segments Lucene qui avaient tokenisé le contenu brut avant que la redaction des secrets ne soit appliquée au pipeline lexical.
+- V007__invalidate_legacy_repository_paths.sql : invalide les index persistants qui utilisaient l ancienne representation ambigue des chemins, incremente la generation des projets et force un rebuild avec l identite par composants. La migration ne tente pas de deviner si une ancienne valeur a/b.java designait un chemin separe ou un nom POSIX contenant un backslash.
 
 Une base V004 valide est migrée vers V005 en conservant ses données/index. V006 conserve également SQLite mais marque les projets `NOT_INDEXED` pour reconstruire les index dérivés avec la représentation redacted. Un `INSERT` SQL direct invalide est rejeté. Réexécuter le migrateur sur une base déjà migrée est idempotent.
 
