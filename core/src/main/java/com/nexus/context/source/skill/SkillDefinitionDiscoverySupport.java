@@ -1,5 +1,7 @@
 package com.nexus.context.source.skill;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.nexus.context.source.ContextDiscoveryBudget;
 import com.nexus.security.ProjectPathGuard;
 
@@ -44,6 +46,6 @@ final class SkillDefinitionDiscoverySupport {
     }
 
     static String repositoryPath(Path path) {
-        return path.toString().replace('\\', '/');
+        return RepositoryPath.encode(path);
     }
 }

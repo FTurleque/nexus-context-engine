@@ -1,5 +1,7 @@
 package com.nexus.index.minos;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -82,9 +84,37 @@ public final class MinosCodeIndexImporter {
         Set<String> safeProjectFiles = canonicalIndexedFiles(indexedProjectFiles);
         String documentPayload = Objects.requireNonNull(payload, "payload");
         requireTransportSize(documentPayload);
+        requireUnambiguousPathFormat(safeProjectFiles, documentPayload);
 
         try (JsonParser parser = objectMapper.createParser(documentPayload)) {
             return parseDocument(root, pathGuard, safeProjectFiles, parser);
+        }
+    }
+
+    /**
+     * Le producteur MINOS historique v1 remplaçait les backslashes POSIX.
+     * Avec de tels composants dans le corpus, aucune inférence n'est sûre.
+     * Vérifier le format avant de lire le moindre fichier source, même lorsque
+     * la déclaration apparaît après les faits dans le JSON.
+     */
+    private void requireUnambiguousPathFormat(Set<String> files, String payload) throws IOException {
+        if (files.stream().noneMatch(path -> path.indexOf('\\') >= 0)) return;
+        try (JsonParser parser = objectMapper.createParser(payload)) {
+            if (parser.nextToken() != JsonToken.START_OBJECT) throw new IOException("Invalid MINOS export");
+            String encoding = null;
+            while (parser.nextToken() != JsonToken.END_OBJECT) {
+                if (parser.currentToken() != JsonToken.FIELD_NAME) throw new IOException("Invalid MINOS export");
+                String field = parser.currentName();
+                JsonToken token = parser.nextToken();
+                if ("repositoryPathFormat".equals(field)) {
+                    encoding = requiredParserText(parser, token, field);
+                } else {
+                    parser.skipChildren();
+                }
+            }
+            if (!"repository-components-v2".equals(encoding)) {
+                throw new IOException("MINOS export requires repositoryPathFormat=repository-components-v2 for this corpus; regenerate with a component-preserving producer");
+            }
         }
     }
 
@@ -321,7 +351,7 @@ public final class MinosCodeIndexImporter {
         if (kind == null) {
             return null;
         }
-        String relativePath = safeRelativePath(safeProjectFiles, requiredText(node, "filePath"));
+        String relativePath = safeRelativePath(safeProjectFiles, node.path("filePath").isTextual() ? node.path("filePath").textValue() : null);
         if (relativePath == null) {
             return null;
         }
@@ -365,7 +395,7 @@ public final class MinosCodeIndexImporter {
         if (kind == null) {
             return null;
         }
-        String relativePath = safeRelativePath(safeProjectFiles, requiredText(node, "filePath"));
+        String relativePath = safeRelativePath(safeProjectFiles, node.path("filePath").isTextual() ? node.path("filePath").textValue() : null);
         if (relativePath == null) {
             return null;
         }
@@ -385,7 +415,7 @@ public final class MinosCodeIndexImporter {
         if (cached != null) {
             return cached;
         }
-        Path source = pathGuard.requireRegularFile(pathGuard.resolve(Path.of(relativePath)));
+        Path source = pathGuard.requireRegularFile(pathGuard.resolve(new RepositoryPath(relativePath)));
         int lineCount = countLines(SafeFileIO.readStringNoFollow(source));
         sourceLineCounts.put(relativePath, lineCount);
         return lineCount;
@@ -457,11 +487,11 @@ public final class MinosCodeIndexImporter {
             if (value == null || value.isBlank()) {
                 throw new IOException("NEXUS canonical indexed file path must not be blank");
             }
-            String normalized = safeRelativePathSyntax(value);
-            if (normalized == null) {
-                throw new IOException("NEXUS canonical indexed file path is invalid: " + value);
+            try {
+                safe.add(new RepositoryPath(value).value());
+            } catch (IllegalArgumentException invalid) {
+                throw new IOException("NEXUS canonical indexed file path is invalid", invalid);
             }
-            safe.add(normalized);
         }
         return Set.copyOf(safe);
     }
@@ -473,21 +503,8 @@ public final class MinosCodeIndexImporter {
 
     private static String safeRelativePathSyntax(String exportedPath) {
         try {
-            Path raw = Path.of(exportedPath);
-            if (raw.isAbsolute()) {
-                return null;
-            }
-            for (Path segment : raw) {
-                if ("..".equals(segment.toString())) {
-                    return null;
-                }
-            }
-            Path normalized = raw.normalize();
-            if (normalized.getNameCount() == 0 || normalized.startsWith("..")) {
-                return null;
-            }
-            return normalized.toString().replace('\\', '/');
-        } catch (InvalidPathException exception) {
+            return RepositoryPath.fromProvider(exportedPath).value();
+        } catch (IllegalArgumentException | NullPointerException exception) {
             return null;
         }
     }

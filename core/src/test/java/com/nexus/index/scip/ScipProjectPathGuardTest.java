@@ -20,6 +20,35 @@ class ScipProjectPathGuardTest {
     @TempDir
     Path temporaryDirectory;
 
+
+    @Test
+    void mapsPosixBackslashWithoutReadingTheSlashAlias() throws Exception {
+        Assumptions.assumeTrue(temporaryDirectory.getFileSystem().getSeparator().equals("/"));
+        Path root = Files.createDirectory(temporaryDirectory.resolve("identity"));
+        Files.createDirectory(root.resolve("a"));
+        Files.writeString(root.resolve("a\\b.java"), "one\ntwo\nclass Backslash {}");
+        Files.writeString(root.resolve("a/b.java"), "class Slash {}");
+        writeIndex(root, "a\\b.java", 2, 2);
+        var importer = new ScipCodeIndexImporter();
+        var snapshot = importer.importIndex(root, java.util.Set.of("a\\b.java", "a/b.java")).orElseThrow();
+        assertEquals("a\\b.java", snapshot.symbols().getFirst().relativePath());
+        assertEquals(3, snapshot.symbols().getFirst().symbol().startLine());
+        assertEquals(0, importer.importIndex(root, java.util.Set.of("a/b.java")).orElseThrow().symbols().size());
+        writeIndex(root, "a/b.java", 0, 0);
+        assertEquals("a/b.java", importer.importIndex(root).orElseThrow().symbols().getFirst().relativePath());
+    }
+
+    @Test
+    void rejectsProviderSyntaxAndUnknownFilesRatherThanRepairingThem() throws Exception {
+        Path root = Files.createDirectory(temporaryDirectory.resolve("invalid"));
+        Files.writeString(root.resolve("Fixture.java"), "class Fixture {}");
+        for (String path : java.util.List.of("/Fixture.java", "C:/Fixture.java", "../Fixture.java", "a/../Fixture.java",
+                "./Fixture.java", "a//Fixture.java", "missing.java", "\\\\server\\share\\Fixture.java")) {
+            writeIndex(root, path, 0, 0);
+            assertThrows(IOException.class, () -> new ScipCodeIndexImporter().importIndex(root), path);
+        }
+    }
+
     @Test
     void acceptsCanonicalNestedSource() throws Exception {
         Path root = Files.createDirectory(temporaryDirectory.resolve("valid-project"));

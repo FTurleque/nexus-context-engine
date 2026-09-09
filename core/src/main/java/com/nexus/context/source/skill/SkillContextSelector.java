@@ -1,5 +1,7 @@
 package com.nexus.context.source.skill;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.nexus.context.ContextItem;
 import com.nexus.context.ContextSelectionResult;
 import com.nexus.search.CandidateType;
@@ -88,6 +90,6 @@ public final class SkillContextSelector {
     }
 
     private static String repositoryPath(java.nio.file.Path path) {
-        return path.toString().replace('\\', '/');
+        return RepositoryPath.encode(path);
     }
 }

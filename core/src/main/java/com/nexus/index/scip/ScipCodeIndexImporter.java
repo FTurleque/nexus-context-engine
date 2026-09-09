@@ -1,5 +1,7 @@
 package com.nexus.index.scip;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.nexus.index.CodeIndexImporter;
 import com.nexus.index.CodeIntelligenceSnapshot;
 import com.nexus.index.CodeSymbol;
@@ -140,6 +142,11 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
 
     @Override
     public Optional<CodeIntelligenceSnapshot> importIndex(Path projectRoot) throws IOException {
+        return importIndex(projectRoot, null);
+    }
+
+    @Override
+    public Optional<CodeIntelligenceSnapshot> importIndex(Path projectRoot, Set<String> scannedPaths) throws IOException {
         ProjectPathGuard pathGuard = new ProjectPathGuard(projectRoot);
         Path indexCandidate = pathGuard.resolve(Path.of(indexFileName));
         Path indexFile;
@@ -175,6 +182,7 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
                     importDocument(
                             pathGuard,
                             parseDocument(documentPayload, maxMessageBytes, parseBudget),
+                            scannedPaths,
                             sourceLineCounts,
                             symbols,
                             relations,
@@ -194,6 +202,7 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
     private static void importDocument(
             ProjectPathGuard pathGuard,
             ScipDocument document,
+            Set<String> scannedPaths,
             Map<String, Integer> sourceLineCounts,
             List<IndexedSymbol> symbols,
             List<IndexedRelation> relations,
@@ -202,7 +211,7 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
             int maxRelationFacts,
             int maxTotalFacts) throws IOException {
         String relativePath = normalizeRelativePath(pathGuard, document.relativePath());
-        if (relativePath == null) {
+        if (scannedPaths != null && !scannedPaths.contains(relativePath)) {
             return;
         }
         int sourceLineCount = canonicalLineCount(pathGuard, relativePath, sourceLineCounts);
@@ -340,7 +349,7 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
         if (cached != null) {
             return cached;
         }
-        Path source = pathGuard.requireRegularFile(pathGuard.resolve(Path.of(relativePath)));
+        Path source = pathGuard.requireRegularFile(pathGuard.resolve(new RepositoryPath(relativePath)));
         long lineCount = SafeFileIO.readStringNoFollow(source).lines().count();
         if (lineCount > Integer.MAX_VALUE) {
             throw new IOException("Source file contains too many lines to validate SCIP symbol ranges: "
@@ -408,11 +417,13 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
     }
 
     private static String normalizeRelativePath(ProjectPathGuard pathGuard, String relativePath) throws IOException {
-        if (relativePath == null || relativePath.isBlank()) {
-            return null;
+        try {
+            var path = RepositoryPath.fromProvider(relativePath);
+            pathGuard.resolve(path);
+            return path.value();
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            throw new IOException("Invalid SCIP repository path", exception);
         }
-        Path resolved = pathGuard.resolve(Path.of(relativePath));
-        return pathGuard.root().relativize(resolved).toString().replace('\\', '/');
     }
 
     private static String symbolName(ScipSymbolInformation symbolInformation) {

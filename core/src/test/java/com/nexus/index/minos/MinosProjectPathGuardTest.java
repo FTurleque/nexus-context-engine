@@ -22,6 +22,32 @@ class MinosProjectPathGuardTest {
     @TempDir
     Path temporaryDirectory;
 
+
+    @Test
+    void mapsPosixBackslashUsingExactScannedIdentity() throws Exception {
+        Assumptions.assumeTrue(temporaryDirectory.getFileSystem().getSeparator().equals("/"));
+        Path root = Files.createDirectory(temporaryDirectory.resolve("identity"));
+        Files.createDirectory(root.resolve("a"));
+        Files.writeString(root.resolve("a\\b.ts"), "one\ntwo\nthree");
+        Files.writeString(root.resolve("a/b.ts"), "one");
+        var both = Set.of("a\\b.ts", "a/b.ts");
+        assertThrows(IOException.class, () -> importSymbol(root, both, "a/b.ts", 1, 1, false));
+        var backslash = importSymbol(root, both, "a\\b.ts", 3, 3);
+        assertEquals("a\\b.ts", backslash.symbols().getFirst().relativePath());
+        assertEquals("a/b.ts", importSymbol(root, both, "a/b.ts", 1, 1).symbols().getFirst().relativePath());
+        assertEquals(0, importSymbol(root, Set.of("a/b.ts"), "a\\b.ts", 3, 3).symbols().size());
+    }
+
+    @Test
+    void excludesInvalidOrUnknownProviderPaths() throws Exception {
+        Path root = Files.createDirectory(temporaryDirectory.resolve("invalid"));
+        Files.writeString(root.resolve("Safe.ts"), "one");
+        for (String path : java.util.List.of("unknown.ts", "/Safe.ts", "C:/Safe.ts", "../Safe.ts", "a/../Safe.ts",
+                "./Safe.ts", "a//Safe.ts", "\\\\server\\share\\Safe.ts")) {
+            assertEquals(0, importSymbol(root, Set.of("Safe.ts"), path, 1, 1).symbols().size(), path);
+        }
+    }
+
     @Test
     void acceptsCanonicalAllowlistedSource() throws Exception {
         Path root = Files.createDirectory(temporaryDirectory.resolve("valid-project"));
@@ -98,6 +124,11 @@ class MinosProjectPathGuardTest {
             String relativePath,
             int startLine,
             int endLine) throws Exception {
+        return importSymbol(root, indexedProjectFiles, relativePath, startLine, endLine, true);
+    }
+
+    private static CodeIntelligenceSnapshot importSymbol(Path root, Set<String> indexedProjectFiles,
+            String relativePath, int startLine, int endLine, boolean componentFormat) throws Exception {
         Path canonicalRoot = root.toRealPath();
         ObjectNode document = JSON.createObjectNode();
         document.put("contractVersion", "1");
@@ -112,6 +143,8 @@ class MinosProjectPathGuardTest {
         symbol.put("name", "Fixture");
         symbol.put("qualifiedName", "demo.Fixture");
         document.putArray("relations");
+        // Déclaration après les faits : le préflight doit la vérifier avant toute lecture source.
+        if (componentFormat) document.put("repositoryPathFormat", "repository-components-v2");
 
         return new MinosCodeIndexImporter().importPayload(
                 canonicalRoot,

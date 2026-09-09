@@ -1,5 +1,7 @@
 package com.nexus.search.lucene;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.nexus.index.FileCategory;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.search.CandidateType;
@@ -48,7 +50,7 @@ public final class LuceneFileSearchStrategy implements SearchStrategy {
             candidates.add(new SearchCandidate(
                     "file:" + hit.relativePath(),
                     candidateType(hit.category()),
-                    project.rootPath().resolve(hit.relativePath()),
+                    new RepositoryPath(hit.relativePath()).resolve(project.rootPath()),
                     null,
                     hit.relativePath(),
                     signals));

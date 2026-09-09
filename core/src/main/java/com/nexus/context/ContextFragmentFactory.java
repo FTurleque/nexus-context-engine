@@ -162,13 +162,11 @@ public final class ContextFragmentFactory {
     }
 
     private static String materializationDiagnostic(Path root, Path candidatePath, IOException exception) {
-        String reason = exception.getMessage();
-        if (reason == null || reason.isBlank()) {
-            reason = exception.getClass().getSimpleName();
-        }
-        return new com.nexus.security.PublicDiagnosticPolicy(List.of(root)).text("Candidat de contexte exclu sans lecture : "
-                + candidatePath.toString().replace('\\', '/')
-                + " (" + reason + ")");
+        return new com.nexus.security.PublicDiagnosticPolicy(List.of(root)).render(
+                new com.nexus.security.PublicDiagnosticPolicy.Diagnostic(
+                        "CONTEXT_READ_REFUSED", "Candidat de contexte exclu sans lecture : "
+                                + new com.nexus.security.PublicDiagnosticPolicy(List.of(root)).text(exception.getMessage()),
+                        candidatePath, exception.getClass().getSimpleName()), root);
     }
 
     private static List<String> materializeLines(String content, Path relativePath) throws IOException {

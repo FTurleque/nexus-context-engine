@@ -1,5 +1,7 @@
 package com.nexus.security;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.nexus.context.ContextBundle;
 import com.nexus.context.ContextItem;
 import com.nexus.context.FederatedContextBundle;
@@ -42,7 +44,8 @@ public final class PublicContextPolicy {
 
     private static ContextItem item(ProjectDescriptor project, ContextItem item) {
         var diagnostics = new PublicDiagnosticPolicy(List.of(project.rootPath()));
-        return new ContextItem(item.type(), Path.of(PublicProjectPathPolicy.expose(project.rootPath(), item.path())),
+        return new ContextItem(item.type(), new RepositoryPath(PublicProjectPathPolicy.expose(project.rootPath(), item.path()))
+                .toPath(project.rootPath().getFileSystem()),
                 diagnostics.text(item.symbol()), item.startLine(), item.endLine(),
                 SensitiveContentRedactor.redact(item.content()), item.score(), item.scoreComponents(),
                 diagnostics.texts(item.reasons()), item.estimatedTokens(), item.truncated());

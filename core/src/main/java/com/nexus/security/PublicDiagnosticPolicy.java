@@ -15,8 +15,10 @@ import java.util.regex.Pattern;
  * Les objets inconnus sont refusés, jamais sérialisés via leur toString().
  */
 public final class PublicDiagnosticPolicy {
+    // Aucun délimiteur ne permet de terminer sûrement un chemin dans du texte libre.
+    // Dès détection d'un chemin inconnu, masquer le message complet évite les suffixes.
     private static final Pattern ABSOLUTE = Pattern.compile(
-            "(?<![\\p{L}\\p{N}_.:/\\\\])(?:[A-Za-z]:[/\\\\]|\\\\\\\\|/)[^\\s\"'<>|,;()\\[\\]{}]*");
+            "(?<![\\p{L}\\p{N}_./\\\\])(?:[A-Za-z]:[/\\\\]|\\\\\\\\|/)");
     private static final int MAX_DEPTH = 16;
     private static final int MAX_VALUES = 100_000;
     private static final int MAX_TEXT = 1_048_576;
@@ -25,11 +27,15 @@ public final class PublicDiagnosticPolicy {
 
     public PublicDiagnosticPolicy(List<Path> projectRoots) {
         roots = projectRoots.stream().map(root -> {
-            String normalized = root.toAbsolutePath().normalize().toString().replace('\\', '/');
-            String expression = Pattern.quote(normalized).replace("/", "\\E[/\\\\]\\Q");
-            int flags = normalized.matches("^[A-Za-z]:.*") || normalized.startsWith("//")
-                    ? Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE : 0;
-            return Pattern.compile("(?<![\\p{L}\\p{N}_])" + expression + "(?=[/\\\\]|$|[\\s\"')])[/\\\\]?", flags);
+            boolean windows = root.getFileSystem().getSeparator().equals("\\");
+            String normalized = root.toAbsolutePath().normalize().toString();
+            if (windows) normalized = normalized.replace('\\', '/');
+            String expression = windows ? Pattern.quote(normalized).replace("/", "\\E[/\\\\]\\Q")
+                    : Pattern.quote(normalized);
+            int flags = windows ? Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE : 0;
+            String separator = windows ? "[/\\\\]" : "/";
+            return Pattern.compile("(?<![\\p{L}\\p{N}_])" + expression
+                    + "(?=" + separator + "|$)" + separator + "?", flags);
         }).toList();
     }
 
@@ -40,9 +46,25 @@ public final class PublicDiagnosticPolicy {
     public String text(String value) {
         if (value == null) return null;
         if (value.length() > MAX_TEXT) throw new IllegalStateException("Diagnostic public trop volumineux");
-        String result = FILE_URI.matcher(value).replaceAll("[INTERNAL_PATH]");
+        if (FILE_URI.matcher(value).find()) return "[INTERNAL_PATH]";
+        String result = value;
         for (Pattern root : roots) result = root.matcher(result).replaceAll(Matcher.quoteReplacement("./"));
-        return SensitiveContentRedactor.redact(ABSOLUTE.matcher(result).replaceAll("[INTERNAL_PATH]"));
+        if (ABSOLUTE.matcher(result).find() || result.contains("/../") || result.contains("\\..\\")) return "[INTERNAL_PATH]";
+        return SensitiveContentRedactor.redact(result);
+    }
+
+    /** Les causes libres restent internes ; seuls code, catégorie et chemin validé sortent. */
+    public record Diagnostic(String code, String message, Path repositoryPath, String causeCategory) { }
+
+    public String render(Diagnostic diagnostic, Path projectRoot) {
+        String path;
+        try {
+            path = PublicProjectPathPolicy.expose(projectRoot, diagnostic.repositoryPath());
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            path = "[INTERNAL_PATH]";
+        }
+        return text(diagnostic.code()) + ": " + text(diagnostic.message()) + " : " + path
+                + " (" + text(diagnostic.causeCategory()) + ")";
     }
 
     public List<String> texts(List<String> values) {

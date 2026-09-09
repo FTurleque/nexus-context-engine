@@ -1,5 +1,7 @@
 package com.nexus.search;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.nexus.index.CodeSymbol;
 import com.nexus.index.FileCategory;
 
@@ -14,7 +16,7 @@ public record SearchDocument(
         List<CodeSymbol> symbols) {
 
     public SearchDocument {
-        Objects.requireNonNull(relativePath, "relativePath");
+        new RepositoryPath(relativePath);
         Objects.requireNonNull(language, "language");
         Objects.requireNonNull(category, "category");
         Objects.requireNonNull(content, "content");

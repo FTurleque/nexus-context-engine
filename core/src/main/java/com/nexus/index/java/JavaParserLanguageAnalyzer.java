@@ -1,5 +1,7 @@
 package com.nexus.index.java;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.ast.CompilationUnit;
@@ -118,7 +120,7 @@ public final class JavaParserLanguageAnalyzer implements LanguageAnalyzer {
                     "Analyse Java refusée pour " + file + " : plus de "
                             + limits.maxRelationsPerFile() + " relations par fichier");
         }
-        String relationSource = projectRoot.relativize(file).toString().replace('\\', '/');
+        String relationSource = RepositoryPath.encode(projectRoot.relativize(file));
         List<SymbolRelation> relations = unit.getImports().stream()
                 .map(importDeclaration -> new SymbolRelation(
                         RelationKind.IMPORTS,

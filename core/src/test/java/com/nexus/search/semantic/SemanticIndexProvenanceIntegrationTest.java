@@ -31,6 +31,42 @@ class SemanticIndexProvenanceIntegrationTest {
     @TempDir
     Path temporaryDirectory;
 
+
+    @Test
+    void legacyPathFingerprintCannotReactivateSemanticIndexAfterLexicalOnlyRebuild() throws Exception {
+        Path root = Files.createDirectory(temporaryDirectory.resolve("legacy-path-project"));
+        Files.writeString(root.resolve("App.java"), "class App {}\n");
+        var paths = new NexusPaths(temporaryDirectory.resolve("legacy-path-home"));
+        var database = new SqliteDatabase(paths);
+        var projects = new SqliteProjectRepository(database);
+        var files = new SqliteIndexRepository(database);
+        var project = new ProjectRegistry(projects).register(root, "legacy");
+        service(paths, projects, files, null).index(project.id());
+        // Reproduire exactement l'ancien hash sur un corpus ordinaire : aucun
+        // backslash n'est nécessaire pour rendre le changement de format effectif.
+        var digest = java.security.MessageDigest.getInstance("SHA-256");
+        for (var file : files.findFiles(project.id()).values().stream()
+                .sorted(java.util.Comparator.comparing(com.nexus.index.IndexedFile::relativePath)).toList()) {
+            for (String value : List.of(file.relativePath(), file.contentHash(), file.language(), file.category().name())) {
+                digest.update(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                digest.update((byte) 0);
+            }
+            digest.update((byte) '\n');
+        }
+        String legacy = java.util.HexFormat.of().formatHex(digest.digest());
+        var model = new TestEmbeddingProvider("same-model", 3);
+        var semantic = new LuceneSemanticSearchIndex(paths, 3);
+        semantic.rebuild(project.id(), SemanticIndexProvenance.current(legacy, model), List.of());
+        String current = fingerprint(files, project);
+        assertFalse(legacy.equals(current));
+        assertFalse(semantic.isCompatible(project.id(), SemanticIndexProvenance.current(current, model)));
+        assertTrue(new SemanticSearchStrategy(model, semantic, files).search(project, "App", 5).isEmpty());
+        assertEquals(0, model.embeddings);
+        service(paths, projects, files, new SemanticIndexingService(model, semantic)).index(project.id());
+        assertTrue(model.embeddings > 0);
+        assertTrue(semantic.isCompatible(project.id(), SemanticIndexProvenance.current(current, model)));
+    }
+
     @Test
     void rebuildsWheneverPersistedSemanticProvenanceIsIncompatible() throws Exception {
         Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("project"));

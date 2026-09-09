@@ -42,7 +42,7 @@ final class SearchText {
         if (terms.isEmpty()) {
             return 0.0d;
         }
-        String normalizedPath = relativePath.toLowerCase(Locale.ROOT).replace('\\', '/');
+        String normalizedPath = relativePath.toLowerCase(Locale.ROOT);
         long matches = terms.stream().filter(normalizedPath::contains).count();
         return clamp((double) matches / terms.size());
     }

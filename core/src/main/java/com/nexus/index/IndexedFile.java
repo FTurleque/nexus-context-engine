@@ -1,5 +1,7 @@
 package com.nexus.index;
 
+import com.nexus.paths.RepositoryPath;
+
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
@@ -17,7 +19,7 @@ public record IndexedFile(
 
     public IndexedFile {
         Objects.requireNonNull(projectId, "projectId");
-        Objects.requireNonNull(relativePath, "relativePath");
+        new RepositoryPath(relativePath);
         Objects.requireNonNull(language, "language");
         Objects.requireNonNull(contentHash, "contentHash");
         Objects.requireNonNull(modifiedAt, "modifiedAt");
