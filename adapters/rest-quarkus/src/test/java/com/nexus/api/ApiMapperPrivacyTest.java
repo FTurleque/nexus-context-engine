@@ -17,6 +17,9 @@ class ApiMapperPrivacyTest {
 
     @Test
     void completeRestPayloadsHideRootsAfterIndexedFilesDisappear() throws Exception {
+        // Le classloader de test Quarkus ne charge pas toujours automatiquement
+        // le driver JDBC transitif lors de la construction directe du core.
+        Class.forName("org.sqlite.JDBC");
         try (var app = com.nexus.application.NexusApplication.create(
                 new com.nexus.config.NexusPaths(temporary.resolve("home")))) {
             var first = app.registerProject(java.nio.file.Files.createDirectory(temporary.resolve("first")), "first");
