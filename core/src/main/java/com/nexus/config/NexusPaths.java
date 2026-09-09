@@ -265,26 +265,10 @@ public record NexusPaths(Path home) {
         enforceAclPrivacy(path, unexpectedPrincipals, requirePrivateStorage);
     }
 
-    static boolean requirePrivateStorage() {
-        String configured = System.getProperty(REQUIRE_PRIVATE_STORAGE_PROPERTY);
-        if (configured == null || configured.isBlank()) {
-            configured = System.getenv(REQUIRE_PRIVATE_STORAGE_ENVIRONMENT_VARIABLE);
-        }
-        if (configured == null || configured.isBlank()) {
-            return false;
-        }
-        String normalized = configured.trim();
-        if ("true".equalsIgnoreCase(normalized)) {
-            return true;
-        }
-        if ("false".equalsIgnoreCase(normalized)) {
-            return false;
-        }
-        throw new IllegalStateException(
-                REQUIRE_PRIVATE_STORAGE_ENVIRONMENT_VARIABLE
-                        + " doit valoir true ou false (valeur reçue : " + normalized + ")");
+    public static boolean requirePrivateStorage() {
+        return SecurityPolicy.booleanSetting(
+                REQUIRE_PRIVATE_STORAGE_PROPERTY, REQUIRE_PRIVATE_STORAGE_ENVIRONMENT_VARIABLE);
     }
-
     static List<String> unexpectedStoragePrincipals(
             List<AclEntry> entries,
             String currentUserPrincipalName) {

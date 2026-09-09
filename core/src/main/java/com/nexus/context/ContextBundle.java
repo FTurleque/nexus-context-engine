@@ -20,7 +20,7 @@ public record ContextBundle(
         items = items.stream()
                 .map(ContextBundle::redact)
                 .toList();
-        excluded = List.copyOf(excluded);
+        excluded = com.nexus.security.PublicDiagnosticPolicy.internal().texts(excluded);
         metadata = Map.copyOf(metadata);
         if (tokenBudget <= 0) {
             throw new IllegalArgumentException("tokenBudget must be greater than zero");
@@ -33,9 +33,6 @@ public record ContextBundle(
     private static ContextItem redact(ContextItem item) {
         ContextItem nonNull = Objects.requireNonNull(item, "item");
         String redactedContent = SensitiveContentRedactor.redact(nonNull.content());
-        if (redactedContent.equals(nonNull.content())) {
-            return nonNull;
-        }
         return new ContextItem(
                 nonNull.type(),
                 nonNull.path(),
@@ -45,7 +42,7 @@ public record ContextBundle(
                 redactedContent,
                 nonNull.score(),
                 nonNull.scoreComponents(),
-                nonNull.reasons(),
+                com.nexus.security.PublicDiagnosticPolicy.internal().texts(nonNull.reasons()),
                 nonNull.estimatedTokens(),
                 nonNull.truncated());
     }

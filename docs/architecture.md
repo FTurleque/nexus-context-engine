@@ -164,3 +164,20 @@ Le ruleset GitHub actif `Protect main & develop` protège `develop` et `main`, i
 NEXUS est actuellement maintenu par **une seule personne**. L'absence d'une approbation humaine distincte du mainteneur et l'absence de resynchronisation stricte de la PR avec sa base ne constituent pas des findings sous ce modèle. La barrière de merge repose sur le HEAD candidat, les checks automatisés applicables, la PR obligatoire et les protections de branche. Voir [`developer/branch-governance.md`](developer/branch-governance.md).
 
 Voir aussi [`developer/architecture-implementation.md`](developer/architecture-implementation.md), [`developer/ci-and-supply-chain.md`](developer/ci-and-supply-chain.md), [`developer/current-limitations.md`](developer/current-limitations.md) et [`roadmap.md`](roadmap.md).
+
+## Contrat de hardening du 9 septembre 2026
+
+Voir [ADR-0048](adr/0048-distinguer-traversee-stricte-et-compatibilite-filesystem.md)
+pour la distinction entre traversée strict et compatibility. Le fallback sans
+`SecureDirectoryStream` est best-effort : la revalidation ne détecte pas un ABA
+restauré. `NEXUS_REQUIRE_STRICT_PATH_IO=true` le refuse avant ouverture du fichier.
+REST HTTPS distant et REST loopback hardened exigent ce flag ainsi que
+`NEXUS_REQUIRE_PRIVATE_STORAGE=true`. Le mode Docker `loopback-forward` reste local
+selon sa déclaration opérateur. Windows/UNC local conserve la compatibilité.
+`READY` atteste la génération indexée revalidée, sans snapshot atomique du
+filesystem vivant. Les mutations détectées restent refusées.
+
+Les contextes REST/MCP/CLI projettent les chemins en repository-relative et
+filtrent les diagnostics/métadonnées internes à la frontière de sortie. Les
+requêtes client sont conservées séparément. La redaction des skills précède
+estimation et sélection ; les compteurs décrivent le contenu effectivement fourni.

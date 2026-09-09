@@ -1,5 +1,7 @@
 package com.nexus.security;
 
+import com.nexus.config.SecurityPolicy;
+
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.FilterInputStream;
@@ -35,7 +37,10 @@ import java.util.Set;
  * composants sont vérifiés immédiatement avant l'ouverture, leur chemin réel et
  * leur identité filesystem sont capturés, puis revalidés après l'ouverture. Une
  * substitution concurrente visible pendant cette fenêtre ferme donc le channel
- * et échoue avant toute lecture.</p>
+ * et échoue avant toute lecture. Ce fallback de compatibilité reste best-effort :
+ * une substitution ABA restaurée avant revalidation peut échapper au contrôle.
+ * Le mode strict refuse ce fallback avant toute ouverture du fichier ; il exige
+ * le support effectif de SecureDirectoryStream, sans dépendance native ajoutée.</p>
  *
  * <p>Tous les flux publics sont également bornés par la politique de taille
  * projet. La borne s'applique à tous les octets physiquement traversés par le
@@ -101,11 +106,19 @@ public final class SafeFileIO {
     }
 
     private static SeekableByteChannel openReadNoFollow(Path file) throws IOException {
+        return openReadNoFollow(file, SecurityPolicy.requireStrictPathIo(), false,
+                path -> Files.newByteChannel(path, READ_NOFOLLOW));
+    }
+
+    // Seam de package réservée aux tests : aucune configuration de production ne
+    // permet de forcer le fallback ou de remplacer l'ouverture.
+    static SeekableByteChannel openReadNoFollow(
+            Path file, boolean strict, boolean forceFallback, ChannelOpener opener) throws IOException {
         Path absolute = file.toAbsolutePath().normalize();
         Path root = absolute.getRoot();
         if (root != null) {
             try (DirectoryStream<Path> rootStream = Files.newDirectoryStream(root)) {
-                if (rootStream instanceof SecureDirectoryStream<?> secureRaw) {
+                if (!forceFallback && rootStream instanceof SecureDirectoryStream<?> secureRaw) {
                     @SuppressWarnings("unchecked")
                     SecureDirectoryStream<Path> secureRoot = (SecureDirectoryStream<Path>) secureRaw;
                     Path relative = root.relativize(absolute);
@@ -117,8 +130,11 @@ public final class SafeFileIO {
             }
         }
 
+        if (strict) {
+            throw new IOException("Traversée atomique indisponible : SecureDirectoryStream requis en mode strict");
+        }
         FallbackPathSnapshot snapshot = captureFallbackPathSnapshot(absolute);
-        SeekableByteChannel channel = Files.newByteChannel(absolute, READ_NOFOLLOW);
+        SeekableByteChannel channel = opener.open(absolute);
         try {
             revalidateFallbackPathSnapshot(snapshot);
             return channel;
@@ -130,6 +146,11 @@ public final class SafeFileIO {
             }
             throw validationFailure;
         }
+    }
+
+    @FunctionalInterface
+    interface ChannelOpener {
+        SeekableByteChannel open(Path path) throws IOException;
     }
 
     private static SeekableByteChannel openSecurely(

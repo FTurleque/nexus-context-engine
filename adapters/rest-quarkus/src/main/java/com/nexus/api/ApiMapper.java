@@ -56,7 +56,7 @@ final class ApiMapper {
                         report.changedFiles(),
                         report.removedFiles(),
                         report.skippedFiles(),
-                        report.diagnostics(),
+                        new com.nexus.security.PublicDiagnosticPolicy(List.of(operation.project().rootPath())).texts(report.diagnostics()),
                         report.fullSearchRebuild(),
                         report.duration().toMillis(),
                         statistics(report.statistics())));
@@ -94,7 +94,8 @@ final class ApiMapper {
     }
 
     static ContextResponse context(NexusApiApplicationService.ContextOperation operation) {
-        List<ContextItemResponse> items = operation.bundle().items().stream()
+        var bundle = com.nexus.security.PublicContextPolicy.expose(operation.project(), operation.bundle(), operation.query());
+        List<ContextItemResponse> items = bundle.items().stream()
                 .map(item -> contextItem(operation.project(), item))
                 .toList();
         return new ContextResponse(
@@ -102,15 +103,16 @@ final class ApiMapper {
                 operation.query(),
                 operation.explain(),
                 operation.durationMs(),
-                operation.bundle().tokenBudget(),
-                operation.bundle().estimatedTokens(),
+                bundle.tokenBudget(),
+                bundle.estimatedTokens(),
                 items,
-                operation.bundle().excluded(),
-                operation.bundle().metadata());
+                bundle.excluded(),
+                bundle.metadata());
     }
 
     static FederatedContextResponse federatedContext(NexusApiApplicationService.FederatedContextOperation operation) {
-        List<FederatedContextItemResponse> items = operation.bundle().items().stream()
+        var bundle = com.nexus.security.PublicContextPolicy.expose(operation.projects(), operation.bundle(), operation.query());
+        List<FederatedContextItemResponse> items = bundle.items().stream()
                 .map(ApiMapper::federatedContextItem)
                 .toList();
         return new FederatedContextResponse(
@@ -118,11 +120,11 @@ final class ApiMapper {
                 operation.query(),
                 operation.explain(),
                 operation.durationMs(),
-                operation.bundle().tokenBudget(),
-                operation.bundle().estimatedTokens(),
+                bundle.tokenBudget(),
+                bundle.estimatedTokens(),
                 items,
-                operation.bundle().excluded(),
-                operation.bundle().metadata());
+                bundle.excluded(),
+                bundle.metadata());
     }
 
     private static SearchResultResponse searchResult(
@@ -137,7 +139,7 @@ final class ApiMapper {
                 relativePath(project, ranked.candidate().path()),
                 symbol == null ? null : symbol(symbol),
                 ranked.components(),
-                ranked.reasons());
+                new com.nexus.security.PublicDiagnosticPolicy(List.of(project.rootPath())).texts(ranked.reasons()));
     }
 
     private static SymbolResponse symbol(CodeSymbol symbol) {

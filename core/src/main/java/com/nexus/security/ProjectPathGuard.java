@@ -93,7 +93,7 @@ public final class ProjectPathGuard {
     public String repositoryPath(Path candidate) {
         Path absolute = candidate.toAbsolutePath().normalize();
         if (!absolute.startsWith(root)) {
-            return absolute.toString().replace('\\', '/');
+            return "[INTERNAL_PATH]";
         }
         return root.relativize(absolute).toString().replace('\\', '/');
     }
