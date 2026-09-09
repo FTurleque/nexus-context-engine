@@ -55,6 +55,7 @@ public final class MinosCodeIndexImporter {
     public static final int MAX_RELATION_FACTS = 500_000;
 
     private static final String CONTRACT_VERSION = "1";
+    private static final String FILE_PATH = "filePath";
     private static final String PRODUCER = "MINOS";
     private static final int READER_BUFFER_CHARS = 16 * 1024;
 
@@ -351,7 +352,7 @@ public final class MinosCodeIndexImporter {
         if (kind == null) {
             return null;
         }
-        String relativePath = safeRelativePath(safeProjectFiles, node.path("filePath").isTextual() ? node.path("filePath").textValue() : null);
+        String relativePath = safeRelativePath(safeProjectFiles, node.path(FILE_PATH).isTextual() ? node.path(FILE_PATH).textValue() : null);
         if (relativePath == null) {
             return null;
         }
@@ -395,7 +396,7 @@ public final class MinosCodeIndexImporter {
         if (kind == null) {
             return null;
         }
-        String relativePath = safeRelativePath(safeProjectFiles, node.path("filePath").isTextual() ? node.path("filePath").textValue() : null);
+        String relativePath = safeRelativePath(safeProjectFiles, node.path(FILE_PATH).isTextual() ? node.path(FILE_PATH).textValue() : null);
         if (relativePath == null) {
             return null;
         }

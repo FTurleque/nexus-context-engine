@@ -17,6 +17,7 @@ import java.util.regex.Pattern;
 public final class PublicDiagnosticPolicy {
     // Aucun délimiteur ne permet de terminer sûrement un chemin dans du texte libre.
     // Dès détection d'un chemin inconnu, masquer le message complet évite les suffixes.
+    private static final String INTERNAL_PATH = "[INTERNAL_PATH]";
     private static final Pattern ABSOLUTE = Pattern.compile(
             "(?<![\\p{L}\\p{N}_./\\\\])(?:[A-Za-z]:[/\\\\]|\\\\\\\\|/)");
     private static final int MAX_DEPTH = 16;
@@ -46,10 +47,10 @@ public final class PublicDiagnosticPolicy {
     public String text(String value) {
         if (value == null) return null;
         if (value.length() > MAX_TEXT) throw new IllegalStateException("Diagnostic public trop volumineux");
-        if (FILE_URI.matcher(value).find()) return "[INTERNAL_PATH]";
+        if (FILE_URI.matcher(value).find()) return INTERNAL_PATH;
         String result = value;
         for (Pattern root : roots) result = root.matcher(result).replaceAll(Matcher.quoteReplacement("./"));
-        if (ABSOLUTE.matcher(result).find() || result.contains("/../") || result.contains("\\..\\")) return "[INTERNAL_PATH]";
+        if (ABSOLUTE.matcher(result).find() || result.contains("/../") || result.contains("\\..\\")) return INTERNAL_PATH;
         return SensitiveContentRedactor.redact(result);
     }
 
@@ -61,7 +62,7 @@ public final class PublicDiagnosticPolicy {
         try {
             path = PublicProjectPathPolicy.expose(projectRoot, diagnostic.repositoryPath());
         } catch (IllegalArgumentException | IllegalStateException exception) {
-            path = "[INTERNAL_PATH]";
+            path = INTERNAL_PATH;
         }
         return text(diagnostic.code()) + ": " + text(diagnostic.message()) + " : " + path
                 + " (" + text(diagnostic.causeCategory()) + ")";

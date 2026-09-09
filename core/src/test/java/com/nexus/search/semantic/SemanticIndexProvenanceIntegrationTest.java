@@ -58,7 +58,7 @@ class SemanticIndexProvenanceIntegrationTest {
         var semantic = new LuceneSemanticSearchIndex(paths, 3);
         semantic.rebuild(project.id(), SemanticIndexProvenance.current(legacy, model), List.of());
         String current = fingerprint(files, project);
-        assertFalse(legacy.equals(current));
+        assertNotEquals(legacy, current);
         assertFalse(semantic.isCompatible(project.id(), SemanticIndexProvenance.current(current, model)));
         assertTrue(new SemanticSearchStrategy(model, semantic, files).search(project, "App", 5).isEmpty());
         assertEquals(0, model.embeddings);

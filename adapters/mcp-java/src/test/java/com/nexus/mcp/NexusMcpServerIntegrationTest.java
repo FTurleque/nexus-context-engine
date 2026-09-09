@@ -243,7 +243,7 @@ class NexusMcpServerIntegrationTest {
                     "\\\\server\\Private Share\\Nexus Project\\file.java", "file:///home/alice/My%20Project/src/App.java")) {
                 var rejected = client.callTool(McpSchema.CallToolRequest.builder("search_code")
                         .arguments(Map.of("project", sensitive, "query", "x")).build());
-                assertTrue(Boolean.TRUE.equals(rejected.isError()));
+                assertEquals(Boolean.TRUE, rejected.isError());
                 String payload = new ObjectMapper().writeValueAsString(rejected);
                 for (String secret : List.of("Build Secret", "Alice Smith", "Private Share", "My%20Project", "cache", "file.java")) {
                     assertFalse(payload.contains(secret), payload);
@@ -251,7 +251,7 @@ class NexusMcpServerIntegrationTest {
             }
             var unexpected = client.callTool(McpSchema.CallToolRequest.builder("search_code")
                     .arguments(Map.of("project", project.id().toString(), "query", "x", "unexpected", true)).build());
-            assertTrue(Boolean.TRUE.equals(unexpected.isError()));
+            assertEquals(Boolean.TRUE, unexpected.isError());
 
             Path secondRoot = Files.createDirectory(temporaryDirectory.resolve("second-project"));
             Path secondSource = Files.writeString(secondRoot.resolve("OrderService.java"), "class OrderService {}");

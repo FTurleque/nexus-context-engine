@@ -6,7 +6,6 @@ import com.nexus.project.IndexStatus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.*;
-import java.sql.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class SchemaMigratorRepositoryPathUpgradeTest {

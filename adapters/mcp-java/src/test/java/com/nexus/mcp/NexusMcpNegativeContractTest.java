@@ -44,7 +44,7 @@ class NexusMcpNegativeContractTest {
             assertPublicError(call(tools, "build_context", Map.of("project", "ready", "query", "x",
                     "constraints", Map.of("unsupported", "value"))));
             var empty = call(tools, "search_code", Map.of("project", "ready", "query", "absent", "limit", 1));
-            assertFalse(Boolean.TRUE.equals(empty.isError()));
+            assertNotEquals(Boolean.TRUE, empty.isError());
             assertEquals(0, body(empty).path("results").size());
         }
     }
@@ -76,14 +76,14 @@ class NexusMcpNegativeContractTest {
             var operation = new NexusApplication.ContextOperation(project, "query", true, 0, bundle);
             var envelope = tools.textResult(tools.context(operation), false);
             String payload = json.writeValueAsString(envelope);
-            assertFalse(Boolean.TRUE.equals(envelope.isError()));
+            assertNotEquals(Boolean.TRUE, envelope.isError());
             for (String secret : List.of("alice", "Alice", "Build Secret", "Private", "cache", "file.java", "file:", "12345678")) {
                 assertFalse(payload.contains(secret), payload);
             }
             assertTrue(payload.contains("src/App.java"));
             var unknown = new com.nexus.context.ContextBundle(List.of(), 100, 0, List.of(), Map.of("future", new Object()));
-            assertThrows(IllegalStateException.class, () -> tools.context(
-                    new NexusApplication.ContextOperation(project, "query", true, 0, unknown)));
+            var unknownOperation = new NexusApplication.ContextOperation(project, "query", true, 0, unknown);
+            assertThrows(IllegalStateException.class, () -> tools.context(unknownOperation));
         }
     }
 
@@ -115,7 +115,7 @@ class NexusMcpNegativeContractTest {
     }
 
     private void assertPublicError(McpSchema.CallToolResult result) throws Exception {
-        assertTrue(Boolean.TRUE.equals(result.isError()));
+        assertEquals(Boolean.TRUE, result.isError());
         var body = body(result);
         assertEquals("nexus_tool_error", body.path("error").asText());
         assertFalse(body.path("message").asText().isBlank());
