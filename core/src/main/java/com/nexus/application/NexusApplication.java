@@ -468,10 +468,7 @@ public final class NexusApplication implements AutoCloseable {
 
     private ProjectDescriptor requireReadyProject(UUID projectId) {
         ProjectDescriptor project = getProject(projectId);
-        if (project.indexStatus() != IndexStatus.READY) {
-            throw new IllegalStateException(
-                    "Le projet " + project.name() + " n'est pas READY (état " + project.indexStatus() + ")");
-        }
+        com.nexus.project.ProjectReadiness.requireReady(project);
         return project;
     }
 

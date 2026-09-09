@@ -23,6 +23,28 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CliRendererTerminalSanitizationTest {
 
+    @Test
+    void allCliRepresentationsProtectInternalRootsDiagnosticsAndErrors() throws Exception {
+        var project = new ProjectDescriptor(UUID.randomUUID(), "project", root,
+                ProjectSourceType.LOCAL, Set.of(), Set.of(), null, IndexStatus.READY);
+        for (boolean json : List.of(false, true)) {
+            var bytes = new ByteArrayOutputStream();
+            try (var output = new PrintStream(bytes, true, StandardCharsets.UTF_8)) {
+                var renderer = new CliRenderer(output, output, json);
+                renderer.renderProject(project);
+                renderer.renderError("Absent " + root.resolve("cache") + " password=12345678", 1);
+                var bundle = new ContextBundle(List.of(), 100, 0, List.of(),
+                        Map.of("nested", List.of(Map.of("diagnostics", root.resolve("file").toString()))));
+                renderer.renderContext(project, "needle", true, 0, bundle);
+            }
+            String payload = bytes.toString(StandardCharsets.UTF_8);
+            assertFalse(payload.contains(root.toString().replace("\\", "\\\\")), payload);
+            assertFalse(payload.contains(root.toString()), payload);
+            assertFalse(payload.contains(root.toString().replace('\\', '/')), payload);
+            assertFalse(payload.contains("12345678"), payload);
+        }
+    }
+
     @TempDir
     Path root;
 

@@ -238,6 +238,34 @@ class NexusMcpServerIntegrationTest {
             assertFalse(Boolean.TRUE.equals(duplicateScope.isError()));
             assertEquals(1, json(duplicateScope).path("projects").size());
 
+            Path secondRoot = Files.createDirectory(temporaryDirectory.resolve("second-project"));
+            Path secondSource = Files.writeString(secondRoot.resolve("OrderService.java"), "class OrderService {}");
+            var second = application.registerProject(secondRoot, "second-project");
+            application.index(second.id(), true, false);
+            Files.delete(source);
+            Files.delete(secondSource);
+            for (String tool : List.of("explain_context", "explain_context_across_projects")) {
+                Map<String, Object> arguments = new java.util.LinkedHashMap<>();
+                arguments.put("query", "OrderService");
+                arguments.put("tokenBudget", 500);
+                if (tool.endsWith("across_projects")) {
+                    arguments.put("projects", List.of(project.id().toString(), second.id().toString()));
+                } else {
+                    arguments.put("project", project.id().toString());
+                }
+                var missing = client.callTool(McpSchema.CallToolRequest.builder(tool).arguments(arguments).build());
+                assertFalse(Boolean.TRUE.equals(missing.isError()));
+                String completePayload = new ObjectMapper().writeValueAsString(missing);
+                assertFalse(completePayload.contains("first-project" + java.io.File.separator));
+                // Le résultat MCP contient lui-même du JSON dans TextContent : inspecter
+                // aussi l'arbre décodé évite de dépendre du nombre d'échappements JSON.
+                String decoded = json(missing).toString();
+                for (Path hidden : List.of(projectRoot, secondRoot, nexusHome)) {
+                    assertFalse(decoded.contains(hidden.toString().replace("\\", "\\\\")), decoded);
+                    assertFalse(decoded.contains(hidden.toString().replace('\\', '/')), decoded);
+                }
+            }
+
             if (childCoverage != null) {
                 dumpChildCoverage(childCoverage);
             }

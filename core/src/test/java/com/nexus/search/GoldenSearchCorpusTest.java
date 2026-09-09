@@ -77,7 +77,7 @@ class GoldenSearchCorpusTest {
         double ndcgSum = 0.0d;
 
         for (GoldenQuery goldenQuery : corpus) {
-            List<RankedCandidate> results = service.search(project, goldenQuery.query(), 20, false);
+            List<RankedCandidate> results = service.search(projectRepository.findById(project.id()).orElseThrow(), goldenQuery.query(), 20, false);
             List<String> rankedPaths = distinctPaths(project, results);
             precisionSum += SearchQualityMetrics.precisionAtK(rankedPaths, goldenQuery.relevantPaths(), K);
             recallSum += SearchQualityMetrics.recallAtK(rankedPaths, goldenQuery.relevantPaths(), K);

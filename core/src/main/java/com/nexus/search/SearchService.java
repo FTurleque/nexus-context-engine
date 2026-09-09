@@ -43,6 +43,7 @@ public final class SearchService {
         Objects.requireNonNull(project, "project");
         String normalizedQuery = QueryPolicy.normalize(query);
         ResultLimitPolicy.validate(limit);
+        com.nexus.project.ProjectReadiness.requireReady(project);
 
         int retrievalLimit = Math.clamp((long) limit * 3, 20, ResultLimitPolicy.MAX_RESULT_LIMIT);
         List<SearchCandidate> rawCandidates = new ArrayList<>();

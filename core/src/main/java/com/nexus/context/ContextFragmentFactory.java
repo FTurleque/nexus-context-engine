@@ -141,12 +141,12 @@ public final class ContextFragmentFactory {
                 RankedCandidate fileCandidate = entry.getValue().getFirst();
                 fragments.addAll(fileFragments(relativePath, lines, query, fileCandidate, tokenBudget));
             } catch (ContextMaterializationLimitExceededException exception) {
-                String diagnostic = materializationDiagnostic(candidatePath, exception);
+                String diagnostic = materializationDiagnostic(project.rootPath(), candidatePath, exception);
                 diagnostics.add(diagnostic);
                 LOGGER.log(System.Logger.Level.WARNING, diagnostic);
                 break;
             } catch (IOException exception) {
-                String diagnostic = materializationDiagnostic(candidatePath, exception);
+                String diagnostic = materializationDiagnostic(project.rootPath(), candidatePath, exception);
                 diagnostics.add(diagnostic);
                 LOGGER.log(System.Logger.Level.WARNING, diagnostic);
             }
@@ -161,14 +161,14 @@ public final class ContextFragmentFactory {
         return pathGuard.requireRegularFile(contained);
     }
 
-    private static String materializationDiagnostic(Path candidatePath, IOException exception) {
+    private static String materializationDiagnostic(Path root, Path candidatePath, IOException exception) {
         String reason = exception.getMessage();
         if (reason == null || reason.isBlank()) {
             reason = exception.getClass().getSimpleName();
         }
-        return "Candidat de contexte exclu sans lecture : "
+        return new com.nexus.security.PublicDiagnosticPolicy(List.of(root)).text("Candidat de contexte exclu sans lecture : "
                 + candidatePath.toString().replace('\\', '/')
-                + " (" + reason + ")";
+                + " (" + reason + ")");
     }
 
     private static List<String> materializeLines(String content, Path relativePath) throws IOException {

@@ -345,10 +345,10 @@ final class NexusMcpTools {
         result.put("id", ranked.candidate().id());
         result.put("type", ranked.candidate().type().name());
         result.put("path", relativePath(project, ranked.candidate().path()));
-        result.put("excerpt", ranked.candidate().excerpt());
+        result.put("excerpt", com.nexus.security.SensitiveContentRedactor.redact(ranked.candidate().excerpt()));
         result.put("score", ranked.score());
         result.put("scoreComponents", ranked.components());
-        result.put("reasons", ranked.reasons());
+        result.put("reasons", new com.nexus.security.PublicDiagnosticPolicy(List.of(project.rootPath())).texts(ranked.reasons()));
         if (ranked.candidate().symbol() != null) {
             result.put("symbol", symbol(ranked.candidate().symbol()));
         }
@@ -385,32 +385,34 @@ final class NexusMcpTools {
     }
 
     private Map<String, Object> context(NexusApplication.ContextOperation operation) {
+        var bundle = com.nexus.security.PublicContextPolicy.expose(operation.project(), operation.bundle(), operation.query());
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("project", project(operation.project()));
         result.put("query", operation.query());
         result.put("explain", operation.explain());
         result.put("durationMs", operation.durationMs());
-        result.put("tokenBudget", operation.bundle().tokenBudget());
-        result.put("estimatedTokens", operation.bundle().estimatedTokens());
-        result.put("items", operation.bundle().items().stream()
+        result.put("tokenBudget", bundle.tokenBudget());
+        result.put("estimatedTokens", bundle.estimatedTokens());
+        result.put("items", bundle.items().stream()
                 .map(item -> contextItem(operation.project(), item))
                 .toList());
-        result.put("excluded", operation.bundle().excluded());
-        result.put("metadata", operation.bundle().metadata());
+        result.put("excluded", bundle.excluded());
+        result.put("metadata", bundle.metadata());
         return result;
     }
 
     private Map<String, Object> federatedContext(NexusApplication.FederatedContextOperation operation) {
+        var bundle = com.nexus.security.PublicContextPolicy.expose(operation.projects(), operation.bundle(), operation.query());
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("projects", operation.projects().stream().map(this::project).toList());
         result.put("query", operation.query());
         result.put("explain", operation.explain());
         result.put("durationMs", operation.durationMs());
-        result.put("tokenBudget", operation.bundle().tokenBudget());
-        result.put("estimatedTokens", operation.bundle().estimatedTokens());
-        result.put("items", operation.bundle().items().stream().map(this::federatedContextItem).toList());
-        result.put("excluded", operation.bundle().excluded());
-        result.put("metadata", operation.bundle().metadata());
+        result.put("tokenBudget", bundle.tokenBudget());
+        result.put("estimatedTokens", bundle.estimatedTokens());
+        result.put("items", bundle.items().stream().map(this::federatedContextItem).toList());
+        result.put("excluded", bundle.excluded());
+        result.put("metadata", bundle.metadata());
         return result;
     }
 
@@ -573,7 +575,7 @@ final class NexusMcpTools {
             String message = exception.getMessage();
             return message == null || message.isBlank()
                     ? "Requête MCP NEXUS invalide"
-                    : message;
+                    : com.nexus.security.PublicDiagnosticPolicy.internal().text(message);
         }
         if (exception instanceof IllegalStateException) {
             return "Opération NEXUS indisponible dans l'état courant";

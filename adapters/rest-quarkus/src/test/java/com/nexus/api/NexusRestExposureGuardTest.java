@@ -16,6 +16,25 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NexusRestExposureGuardTest {
 
+    @Test
+    void hardenedExposureRequiresPrivateStorageAndStrictTraversal() {
+        for (String mode : java.util.List.of("direct-https", "reverse-proxy-https", "local")) {
+            configureReverseProxyHttpsTransport("127.0.0.1");
+            rememberAndSet(NexusRestSecurity.EXPOSURE_MODE_PROPERTY, mode);
+            rememberAndSet(NexusRestSecurity.LOCAL_HARDENING_PROPERTY, "true");
+            rememberAndSet(com.nexus.config.NexusPaths.REQUIRE_PRIVATE_STORAGE_PROPERTY, "false");
+            var error = assertThrows(IllegalStateException.class,
+                    () -> { if (mode.equals("local")) validateLoopbackRestHost(); else validateWildcardRestHost(); });
+            assertTrue(error.getMessage().contains("NEXUS_REQUIRE_PRIVATE_STORAGE"));
+            rememberAndSet(com.nexus.config.NexusPaths.REQUIRE_PRIVATE_STORAGE_PROPERTY, "true");
+            rememberAndSet(com.nexus.config.SecurityPolicy.STRICT_PATH_IO_PROPERTY, "false");
+            error = assertThrows(IllegalStateException.class,
+                    () -> { if (mode.equals("local")) validateLoopbackRestHost(); else validateWildcardRestHost(); });
+            assertTrue(error.getMessage().contains("NEXUS_REQUIRE_STRICT_PATH_IO"));
+            rememberAndSet(com.nexus.config.SecurityPolicy.STRICT_PATH_IO_PROPERTY, "true");
+        }
+    }
+
     private static final String STRONG_TOKEN =
             "6df1462d571a6925e3bc3934ee10c6c55a965116fb47e2bc4db77ac7a5d69d34";
 
@@ -27,6 +46,8 @@ class NexusRestExposureGuardTest {
     @BeforeEach
     void configureRemotePrerequisites() throws Exception {
         rememberAndSet(NexusRestSecurity.LOCAL_HARDENING_PROPERTY, "false");
+        rememberAndSet(com.nexus.config.NexusPaths.REQUIRE_PRIVATE_STORAGE_PROPERTY, "true");
+        rememberAndSet(com.nexus.config.SecurityPolicy.STRICT_PATH_IO_PROPERTY, "true");
         rememberAndSet(NexusRestSecurity.LOCAL_TRUST_PROPERTY, "false");
         rememberAndSet(NexusRestSecurity.TOKEN_PROPERTY, STRONG_TOKEN);
         rememberAndSet(

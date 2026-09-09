@@ -183,11 +183,11 @@ public final class DefaultContextBuilder implements ContextBuilder {
         ProjectDescriptor project = projectRepository.findById(request.projectId())
                 .orElseThrow(() -> new ContextBuildingException(
                         "Projet introuvable : " + request.projectId()));
-        if (project.indexStatus() != IndexStatus.READY) {
-            throw new ContextBuildingException(
-                    "Le projet doit être indexé avant de construire un contexte : " + project.name());
+        try {
+            com.nexus.project.ProjectReadiness.requireReady(project);
+        } catch (IllegalStateException unavailable) {
+            throw new ContextBuildingException("Le projet doit être indexé avant de construire un contexte", unavailable);
         }
-
         try {
             int retrievalLimit = retrievalLimit(request.tokenBudget());
             List<RankedCandidate> ranked = searchService.search(
@@ -308,11 +308,16 @@ public final class DefaultContextBuilder implements ContextBuilder {
             boundedMetadata.put("taskMaterializationLimits", materializationBudget.limits());
             boundedMetadata.put("taskMaterializationWork", materializationBudget.snapshot());
             boundedMetadata.put("taskMaterializationDiagnostics", taskMaterialization.diagnostics());
+            var publicDiagnostics = new com.nexus.security.PublicDiagnosticPolicy(List.of(project.rootPath()));
+            // La requête client n'est pas un diagnostic produit par NEXUS.
+            boundedMetadata.remove("query");
+            boundedMetadata = new LinkedHashMap<>(publicDiagnostics.metadata(boundedMetadata));
+            boundedMetadata.put("query", request.query());
             return new ContextBundle(
                     combined.items(),
                     request.tokenBudget(),
                     combined.selectedEstimatedTokens(),
-                    request.explain() ? combined.excluded() : List.of(),
+                    request.explain() ? publicDiagnostics.texts(combined.excluded()) : List.of(),
                     Map.copyOf(boundedMetadata));
         } catch (IOException exception) {
             throw new ContextBuildingException(
@@ -382,9 +387,11 @@ public final class DefaultContextBuilder implements ContextBuilder {
             return contextSelector.select(fragments, budget, explain);
         }
 
-        int available = fragments.stream()
-                .mapToInt(fragment -> tokenEstimator.estimate(fragment.content()))
-                .sum();
+        int available = 0;
+        for (ContextFragment fragment : fragments) {
+            available = (int) Math.min(Integer.MAX_VALUE, (long) available
+                    + tokenEstimator.estimate(com.nexus.security.SensitiveContentRedactor.redact(fragment.content())));
+        }
         List<String> excluded = explain
                 ? fragments.stream()
                     .map(fragment -> fragment.path() + " exclu : budget épuisé pour " + category)
@@ -403,7 +410,7 @@ public final class DefaultContextBuilder implements ContextBuilder {
         for (ContextSelectionResult selection : selections) {
             items.addAll(selection.items());
             excluded.addAll(selection.excluded());
-            availableTokens += selection.availableEstimatedTokens();
+            availableTokens = (int) Math.min(Integer.MAX_VALUE, (long) availableTokens + selection.availableEstimatedTokens());
             selectedTokens += selection.selectedEstimatedTokens();
             truncatedItems += selection.truncatedItems();
         }

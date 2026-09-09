@@ -76,7 +76,7 @@ class FederatedSearchServiceIntegrationTest {
         FederatedSearchService federatedSearchService = new FederatedSearchService(searchService);
 
         List<FederatedSearchHit> results = federatedSearchService.search(
-                List.of(projectA, projectB),
+                List.of(projectRegistry.get(projectA.id()), projectRegistry.get(projectB.id())),
                 "reconcileInvoice",
                 10,
                 true);
@@ -95,7 +95,7 @@ class FederatedSearchServiceIntegrationTest {
         assertEquals(results.size(), projectPaths.size());
 
         List<FederatedSearchHit> projectAOnly = federatedSearchService.search(
-                List.of(projectA),
+                List.of(projectRegistry.get(projectA.id())),
                 "reconcileInvoice",
                 10,
                 false);
@@ -103,7 +103,7 @@ class FederatedSearchServiceIntegrationTest {
         assertTrue(projectAOnly.stream().allMatch(hit -> hit.project().id().equals(projectA.id())));
 
         List<FederatedSearchHit> deduplicatedScope = federatedSearchService.search(
-                List.of(projectA, projectA),
+                List.of(projectRegistry.get(projectA.id()), projectRegistry.get(projectA.id())),
                 "reconcileInvoice",
                 10,
                 false);

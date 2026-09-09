@@ -143,7 +143,7 @@ class FederatedGoldenSearchCorpusTest {
         double ndcgSum = 0.0d;
         for (GoldenQuery goldenQuery : corpus) {
             List<FederatedSearchHit> results = federatedSearchService.search(
-                    List.of(projectA, projectB, projectC),
+                    List.of(projectRegistry.get(projectA.id()), projectRegistry.get(projectB.id()), projectRegistry.get(projectC.id())),
                     goldenQuery.query(),
                     20,
                     false);
