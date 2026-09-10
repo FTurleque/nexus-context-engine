@@ -97,23 +97,24 @@ jobs:
             -Dnexus.scale.benchmark.output=target/scale-benchmark-sqlite-full.json \
             test
 
-      - name: Benchmark PR base SQLite population on the same runner
+      - name: Benchmark PR base SQLite storage on the same runner
         if: github.event_name == 'pull_request'
         shell: bash
         run: |
           set -euo pipefail
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
           PROTOCOL_FILE="config/scale-benchmark-protocol"
           CANDIDATE_REPORT="$RUNNER_TEMP/scale-benchmark-candidate.json"
           BASE_REPORT="$RUNNER_TEMP/scale-benchmark-base.json"
+          POPULATION_COMPARABLE=false
 
           test -s "$PROTOCOL_FILE"
           HEAD_PROTOCOL="$(tr -d '\r\n[:space:]' < "$PROTOCOL_FILE")"
           BASE_PROTOCOL="$(git show "$BASE_SHA:$PROTOCOL_FILE" 2>/dev/null | tr -d '\r\n[:space:]' || true)"
-          if [[ -z "$BASE_PROTOCOL" || "$BASE_PROTOCOL" != "$HEAD_PROTOCOL" ]]; then
-            echo "::notice::Skipping relative SQLite population comparison: base/head benchmark protocols are not compatible (base='${BASE_PROTOCOL:-absent}', head='$HEAD_PROTOCOL'). Candidate absolute and latency budgets remain enforced."
-            exit 0
+          if [[ -n "$BASE_PROTOCOL" && "$BASE_PROTOCOL" == "$HEAD_PROTOCOL" ]]; then
+            POPULATION_COMPARABLE=true
+          else
+            echo "::notice::Base/head benchmark protocols differ (base='${BASE_PROTOCOL:-absent}', head='$HEAD_PROTOCOL'). Relative population comparison is skipped, but the base 1M storage footprint is still measured on this runner."
           fi
 
           cp target/scale-benchmark.json "$CANDIDATE_REPORT"
@@ -131,7 +132,7 @@ jobs:
               -Dtest=ScaleRegressionBenchmarkTest \
               -Djunit.jupiter.execution.timeout.test.method.default=20m \
               -Dnexus.scale.benchmark.enabled=true \
-              -Dnexus.scale.benchmark.profile=${{ steps.profile.outputs.value }} \
+              -Dnexus.scale.benchmark.profile=full \
               -Dnexus.scale.benchmark.output="$BASE_REPORT" \
               test
           )
@@ -139,6 +140,9 @@ jobs:
           mkdir -p target
           cp "$CANDIDATE_REPORT" target/scale-benchmark.json
           cp "$BASE_REPORT" target/scale-benchmark-base.json
+          if [[ "$POPULATION_COMPARABLE" == "true" ]]; then
+            touch target/scale-benchmark-base-population-comparable
+          fi
 
       - name: Verify report and regression budgets
         shell: bash
@@ -149,6 +153,7 @@ jobs:
           test -s target/native-discovery-scale-benchmark.json
           if [[ "${{ github.event_name }}" == "pull_request" && "${{ steps.profile.outputs.value }}" == "ci" ]]; then
             test -s target/scale-benchmark-sqlite-full.json
+            test -s target/scale-benchmark-base.json
           fi
           python3 - <<'PY'
           import json
@@ -162,6 +167,7 @@ jobs:
           sqlite_report = json.loads(sqlite_full_path.read_text()) if sqlite_full_path.exists() else report
           baseline_path = Path('target/scale-benchmark-base.json')
           baseline = json.loads(baseline_path.read_text()) if baseline_path.exists() else None
+          population_comparable = Path('target/scale-benchmark-base-population-comparable').exists()
           profile = report['profile']
           assert profile in ('ci', 'full')
           assert graph['profile'] == profile
@@ -205,7 +211,7 @@ jobs:
               population = tier['populationMs']
               ceiling = population_safety_ceiling[symbols]
               assert population <= ceiling, (symbols, 'population-safety', population, ceiling)
-              if symbols in baseline_sqlite:
+              if population_comparable and symbols in baseline_sqlite:
                   baseline_population = baseline_sqlite[symbols]['populationMs']
                   relative_ceiling = max(
                       int(baseline_population * 1.20),
@@ -226,7 +232,17 @@ jobs:
           if sqlite_full_path.exists():
               assert set(sqlite) == {10_000, 100_000, 500_000, 1_000_000}, sorted(sqlite)
           if 1_000_000 in sqlite:
-              assert sqlite[1_000_000]['databaseBytes'] <= 650 * 1024 * 1024, sqlite[1_000_000]['databaseBytes']
+              assert 1_000_000 in baseline_sqlite, 'PR scale runs must measure the 1M base storage footprint'
+              candidate_bytes = sqlite[1_000_000]['databaseBytes']
+              baseline_bytes = baseline_sqlite[1_000_000]['databaseBytes']
+              storage_ceiling = int(baseline_bytes * 1.20)
+              assert candidate_bytes <= storage_ceiling, (
+                  'database-storage-relative', candidate_bytes, baseline_bytes, storage_ceiling)
+              print(
+                  'sqlite-storage-relative=',
+                  'candidate=', candidate_bytes,
+                  'base=', baseline_bytes,
+                  'allowed=', storage_ceiling)
 
           portfolio_budgets = {
               10: {'search': 120, 'context': 160},
