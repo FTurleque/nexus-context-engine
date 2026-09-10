@@ -26,7 +26,7 @@ class SqliteIndexedSubstringSearchTest {
     Path temporaryDirectory;
 
     @Test
-    void embeddedSqliteQualifiesFts5TrigramSupport() throws Exception {
+    void embeddedSqliteQualifiesFts5TrigramAndContentlessDeleteSupport() throws Exception {
         SqliteDatabase database = database("qualification");
         try (Connection connection = database.openConnection();
              Statement statement = connection.createStatement()) {
@@ -36,8 +36,8 @@ class SqliteIndexedSubstringSearchTest {
                 version = resultSet.getString(1);
             }
             assertTrue(
-                    versionAtLeast(version, 3, 34, 0),
-                    () -> "FTS5 trigram requires SQLite >= 3.34.0, embedded version is " + version);
+                    versionAtLeast(version, 3, 43, 0),
+                    () -> "FTS5 contentless_delete requires SQLite >= 3.43.0, embedded version is " + version);
 
             try (ResultSet resultSet = statement.executeQuery(
                     "SELECT sqlite_compileoption_used('ENABLE_FTS5')")) {
@@ -47,19 +47,34 @@ class SqliteIndexedSubstringSearchTest {
 
             statement.execute("""
                     CREATE VIRTUAL TABLE temp.nexus_fts5_trigram_probe
-                    USING fts5(value, tokenize='trigram')
+                    USING fts5(
+                        value,
+                        tokenize='trigram',
+                        content='',
+                        contentless_delete=1,
+                        detail='none'
+                    )
                     """);
             statement.executeUpdate("""
-                    INSERT INTO nexus_fts5_trigram_probe(value)
-                    VALUES ('AlphaNeedleOmega')
+                    INSERT INTO nexus_fts5_trigram_probe(rowid, value)
+                    VALUES (1, 'AlphaNeedleOmega')
                     """);
             try (ResultSet resultSet = statement.executeQuery("""
                     SELECT COUNT(*)
                     FROM nexus_fts5_trigram_probe
-                    WHERE nexus_fts5_trigram_probe MATCH '"needle"'
+                    WHERE nexus_fts5_trigram_probe MATCH '"nee" AND "eed" AND "edl" AND "dle"'
                     """)) {
                 assertTrue(resultSet.next());
                 assertEquals(1, resultSet.getInt(1));
+            }
+            statement.executeUpdate("DELETE FROM nexus_fts5_trigram_probe WHERE rowid = 1");
+            try (ResultSet resultSet = statement.executeQuery("""
+                    SELECT COUNT(*)
+                    FROM nexus_fts5_trigram_probe
+                    WHERE nexus_fts5_trigram_probe MATCH '"nee"'
+                    """)) {
+                assertTrue(resultSet.next());
+                assertEquals(0, resultSet.getInt(1));
             }
         }
     }
@@ -82,8 +97,8 @@ class SqliteIndexedSubstringSearchTest {
 
             assertEquals(0L, pendingCount(connection, "symbol_search_pending"));
             assertEquals(0L, pendingCount(connection, "relation_search_pending"));
-            assertVirtualIndexPlan(connection, "symbol_search_fts", "ScaleNeedle", projectId);
-            assertVirtualIndexPlan(connection, "relation_search_fts", "TargetNeedle", projectId);
+            assertVirtualIndexPlan(connection, "symbol_search_fts", "ScaleNeedle");
+            assertVirtualIndexPlan(connection, "relation_search_fts", "TargetNeedle");
             assertFuzzyIndexPlan(connection);
         }
 
@@ -127,27 +142,23 @@ class SqliteIndexedSubstringSearchTest {
     }
 
     @Test
-    void hundredCanonicalRowsAreBulkFlushedBeforeGenerationBoundary() throws Exception {
+    void fiveThousandCanonicalRowsAreBulkFlushedBeforeGenerationBoundary() throws Exception {
         SqliteDatabase database = database("batch-flush");
         UUID projectId = UUID.randomUUID();
         try (Connection connection = database.openConnection()) {
             long fileId = insertProjectFile(connection, projectId);
-            for (int index = 0; index < 100; index++) {
+            for (int index = 0; index < 5_000; index++) {
                 String name = "BatchNeedle" + index;
                 insertSymbol(connection, fileId, name, "demo." + name);
             }
             assertEquals(0L, pendingCount(connection, "symbol_search_pending"));
-            try (PreparedStatement statement = connection.prepareStatement("""
+            try (ResultSet resultSet = connection.createStatement().executeQuery("""
                     SELECT COUNT(*)
                     FROM symbol_search_fts
-                    WHERE symbol_search_fts MATCH '"BatchNeedle"'
-                      AND project_id = ?
+                    WHERE symbol_search_fts MATCH '"bat" AND "atc" AND "tch"'
                     """)) {
-                statement.setString(1, projectId.toString());
-                try (ResultSet resultSet = statement.executeQuery()) {
-                    assertTrue(resultSet.next());
-                    assertEquals(100L, resultSet.getLong(1));
-                }
+                assertTrue(resultSet.next());
+                assertEquals(5_000L, resultSet.getLong(1));
             }
         }
     }
@@ -266,26 +277,24 @@ class SqliteIndexedSubstringSearchTest {
     private static void assertVirtualIndexPlan(
             Connection connection,
             String table,
-            String query,
-            UUID projectId) throws Exception {
+            String query) throws Exception {
         String sql = switch (table) {
             case "symbol_search_fts" -> """
                     EXPLAIN QUERY PLAN
                     SELECT rowid
                     FROM symbol_search_fts
-                    WHERE symbol_search_fts MATCH ? AND project_id = ?
+                    WHERE symbol_search_fts MATCH ?
                     """;
             case "relation_search_fts" -> """
                     EXPLAIN QUERY PLAN
                     SELECT rowid
                     FROM relation_search_fts
-                    WHERE relation_search_fts MATCH ? AND project_id = ?
+                    WHERE relation_search_fts MATCH ?
                     """;
             default -> throw new IllegalArgumentException("Unsupported FTS table: " + table);
         };
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, '"' + query.toLowerCase(Locale.ROOT) + '"');
-            statement.setString(2, projectId.toString());
+            statement.setString(1, trigramQuery(query));
             try (ResultSet resultSet = statement.executeQuery()) {
                 boolean usesVirtualIndex = false;
                 while (resultSet.next()) {
@@ -297,6 +306,20 @@ class SqliteIndexedSubstringSearchTest {
         }
     }
 
+    private static String trigramQuery(String value) {
+        String normalized = value.toLowerCase(Locale.ROOT);
+        int[] codePoints = normalized.codePoints().toArray();
+        StringBuilder query = new StringBuilder();
+        for (int index = 0; index <= codePoints.length - 3; index++) {
+            if (!query.isEmpty()) {
+                query.append(" AND ");
+            }
+            String trigram = new String(codePoints, index, 3).replace("\"", "\"\"");
+            query.append('\"').append(trigram).append('\"');
+        }
+        return query.toString();
+    }
+
     private static void assertFuzzyIndexPlan(Connection connection) throws Exception {
         try (PreparedStatement statement = connection.prepareStatement("""
                 EXPLAIN QUERY PLAN
@@ -304,6 +327,8 @@ class SqliteIndexedSubstringSearchTest {
                 FROM symbols INDEXED BY idx_symbols_fuzzy_prefilter
                 WHERE SUBSTR(LOWER(name), 1, 1) = ?
                   AND LENGTH(name) BETWEEN ? AND ?
+                ORDER BY qualified_name
+                LIMIT 20
                 """)) {
             statement.setString(1, "a");
             statement.setInt(2, 5);
