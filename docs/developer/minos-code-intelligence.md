@@ -63,7 +63,7 @@ Pour chaque `filePath` :
 
 - chemin relatif obligatoire ;
 - `..` refusé ;
-- normalisation obligatoire ;
+- parsing strict du format à séparateurs `/`, sans réécriture des composants ;
 - présence dans une allow-list canonique ;
 - aucune ouverture arbitraire d'un chemin fourni par le JSON.
 
@@ -121,3 +121,15 @@ Replay réel : 11 symboles, 6 relations, symbole `GreetingPort` retrouvé avec p
 La Phase 6 ne modifie pas le contrat JSON MINOS ; elle modifie uniquement l'utilisation de l'état canonique NEXUS et le gate READY. NXA6 ne modifie pas non plus ce contrat : il borne davantage la consommation mémoire et le nombre de faits.
 
 Décision historique : [ADR-0044](../adr/0044-consommer-minos-via-un-contrat-json-local-versionne.md).
+
+
+### Exports historiques et composants POSIX contenant un backslash
+
+L'exporteur MINOS v1 historique remplaçait le backslash par `/`. Si le corpus
+canonique contient un backslash, NEXUS refuse un export sans déclaration top-level
+`"repositoryPathFormat": "repository-components-v2"` **avant toute lecture source**.
+Le producteur doit réellement encoder les composants physiques avant d'émettre
+cette déclaration ; ajouter un champ à un ancien export ambigu ne le répare pas.
+Les corpus sans backslash restent compatibles avec le contrat v1 historique.
+Cette vérification est indépendante de l'ordre des champs JSON et reste bornée
+par les limites de transport/parsing. Voir ADR-0049.

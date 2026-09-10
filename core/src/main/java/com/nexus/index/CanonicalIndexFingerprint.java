@@ -51,7 +51,9 @@ public final class CanonicalIndexFingerprint {
 
     private static MessageDigest sha256() {
         try {
-            return MessageDigest.getInstance("SHA-256");
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            digest.update("nexus-repository-path-v2\0".getBytes(StandardCharsets.UTF_8));
+            return digest;
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 indisponible", exception);
         }

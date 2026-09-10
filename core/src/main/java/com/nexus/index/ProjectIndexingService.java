@@ -338,7 +338,7 @@ public final class ProjectIndexingService {
             }
 
             refreshImportedCodeIntelligence(
-                    projectId, project.rootPath(), diagnostics, providerDurationsMs);
+                    projectId, project.rootPath(), scannedPaths, diagnostics, providerDurationsMs);
             if (includeCodeIntelligenceProviders) {
                 refreshActiveCodeIntelligence(
                         projectId, project.rootPath(), diagnostics, providerDurationsMs);
@@ -427,13 +427,14 @@ public final class ProjectIndexingService {
     private void refreshImportedCodeIntelligence(
             UUID projectId,
             java.nio.file.Path projectRoot,
+            Set<String> scannedPaths,
             List<String> diagnostics,
             Map<String, Long> providerDurationsMs) throws IOException {
         for (CodeIndexImporter importer : codeIndexImporters) {
             long startedAt = System.nanoTime();
             CodeIntelligenceSnapshot snapshot = externalTaskRunner.run(
                     "importer " + importer.sourceProvider(),
-                    () -> importer.importIndex(projectRoot)
+                    () -> importer.importIndex(projectRoot, scannedPaths)
                             .orElseGet(() -> CodeIntelligenceSnapshot.empty(importer.sourceProvider())));
             validateSnapshotProvider(importer.sourceProvider(), snapshot);
             indexRepository.replaceExternalCodeIntelligence(projectId, snapshot);

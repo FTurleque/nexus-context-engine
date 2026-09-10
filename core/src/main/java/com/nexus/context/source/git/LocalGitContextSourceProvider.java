@@ -1,5 +1,7 @@
 package com.nexus.context.source.git;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.nexus.context.ContextFragment;
 import com.nexus.context.source.ContextDiscoveryLimitExceededException;
 import com.nexus.search.CandidateType;
@@ -424,7 +426,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
     private static Set<String> normalizedTargets(List<Path> paths) {
         Set<String> targets = new LinkedHashSet<>();
         for (Path path : paths) {
-            String normalized = path.normalize().toString().replace('\\', '/');
+            String normalized = RepositoryPath.encode(path.normalize());
             if (!normalized.isBlank() && !normalized.startsWith("../")) {
                 targets.add(normalized);
             }
@@ -441,7 +443,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
         if (!root.startsWith(workTree)) {
             throw new IOException("La racine projet est hors du worktree Git détecté");
         }
-        return workTree.relativize(root).toString().replace('\\', '/');
+        return RepositoryPath.encode(workTree.relativize(root));
     }
 
     private static String toGitPath(String projectPrefix, String projectPath) {

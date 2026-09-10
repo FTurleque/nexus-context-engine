@@ -1,5 +1,7 @@
 package com.nexus.context.source.skill;
 
+import com.nexus.paths.RepositoryPath;
+
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -157,6 +159,6 @@ public final class SkillSelector {
     }
 
     private static String repositoryPath(java.nio.file.Path path) {
-        return path.toString().replace('\\', '/');
+        return RepositoryPath.encode(path);
     }
 }

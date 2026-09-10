@@ -15,6 +15,25 @@ class ApiMapperPrivacyTest {
 
     @org.junit.jupiter.api.io.TempDir Path temporary;
 
+
+    @Test
+    void serializesCompleteRestResponseWithoutWhitespacePathSuffixes() throws Exception {
+        var project = new ProjectDescriptor(UUID.randomUUID(), "test", temporary,
+                ProjectSourceType.LOCAL, Set.of(), Set.of(), null, IndexStatus.READY);
+        var diagnostics = java.util.List.of("/home/alice/My Project/src/App.java", "/tmp/Build Secret/cache/file.txt",
+                "/var/lib/nexus/private data/index", "C:\\Users\\Alice Smith\\Nexus Project\\src\\App.java",
+                "D:\\Private Build\\cache\\data.bin", "\\\\server\\Private Share\\Nexus Project\\file.java",
+                "file:///home/alice/My%20Project/src/App.java", "file:///C:/Users/Alice%20Smith/Nexus/file.java");
+        var bundle = new com.nexus.context.ContextBundle(java.util.List.of(), 50, 0, diagnostics,
+                java.util.Map.of("providerDiagnostics", java.util.List.of(java.util.Map.of("cause", diagnostics))));
+        var response = ApiMapper.context(new NexusApiApplicationService.ContextOperation(project, "query", true, 0, bundle));
+        String payload = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(response);
+        for (String secret : java.util.List.of("alice", "Alice", "Build Secret", "Private", "cache", "file.java", "file:", "data/index")) {
+            org.junit.jupiter.api.Assertions.assertFalse(payload.contains(secret), payload);
+        }
+        org.junit.jupiter.api.Assertions.assertTrue(payload.contains("[INTERNAL_PATH]"));
+    }
+
     @Test
     void completeRestPayloadsHideRootsAfterIndexedFilesDisappear() throws Exception {
         // Le classloader de test Quarkus ne charge pas toujours automatiquement

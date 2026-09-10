@@ -1,5 +1,7 @@
 package com.nexus.context.source.skill;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;
@@ -21,6 +23,20 @@ class LocalAgentSkillsProviderTest {
 
     @TempDir
     Path temporaryDirectory;
+
+
+    @Test
+    void resourceInventoryKeepsBothPosixIdentities() throws Exception {
+        Assumptions.assumeTrue(temporaryDirectory.getFileSystem().getSeparator().equals("/"));
+        write(temporaryDirectory, ".agents/skills/identity/SKILL.md",
+                "---\nname: identity\ndescription: Test path identity\n---\nbody");
+        write(temporaryDirectory, ".agents/skills/identity/references/a\\b.md", "BACKSLASH");
+        write(temporaryDirectory, ".agents/skills/identity/references/a/b.md", "SLASH");
+        var result = new LocalAgentSkillsProvider().discover(new SkillSourceQuery(project(temporaryDirectory, "identity"), true));
+        var resources = result.skills().getFirst().resources();
+        assertEquals(2, resources.size());
+        assertEquals(2, resources.stream().map(r -> RepositoryPath.encode(r.path())).distinct().count());
+    }
 
     @Test
     void discoversOnlyValidSkillsAndInventoriesResourcesWithoutLoadingTheirContent() throws Exception {

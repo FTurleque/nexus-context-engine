@@ -1,5 +1,7 @@
 package com.nexus.index.jdt;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -670,11 +672,12 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
             if (!"file".equalsIgnoreCase(parsedUri.getScheme())) {
                 return null;
             }
-            Path absolutePath = Path.of(parsedUri).toAbsolutePath().normalize();
-            if (!absolutePath.startsWith(projectRoot)) {
+            Path absolutePath = Path.of(parsedUri);
+            if (!absolutePath.isAbsolute() || !absolutePath.equals(absolutePath.normalize())
+                    || !absolutePath.startsWith(projectRoot)) {
                 return null;
             }
-            String relativePath = projectRoot.relativize(absolutePath).toString().replace('\\', '/');
+            String relativePath = RepositoryPath.encode(projectRoot.relativize(absolutePath));
             int line = range.path("start").path("line").asInt(-1);
             int character = range.path("start").path("character").asInt(0);
             if (line < 0) {

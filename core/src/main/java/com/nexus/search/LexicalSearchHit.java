@@ -1,5 +1,7 @@
 package com.nexus.search;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.nexus.index.FileCategory;
 
 import java.util.Objects;
@@ -11,7 +13,7 @@ public record LexicalSearchHit(
         double score) {
 
     public LexicalSearchHit {
-        Objects.requireNonNull(relativePath, "relativePath");
+        new RepositoryPath(relativePath);
         Objects.requireNonNull(language, "language");
         Objects.requireNonNull(category, "category");
         if (score < 0.0d) {

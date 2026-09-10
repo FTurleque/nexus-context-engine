@@ -1,5 +1,7 @@
 package com.nexus.index;
 
+import com.nexus.paths.RepositoryPath;
+
 import java.util.List;
 import java.util.Objects;
 
@@ -50,6 +52,7 @@ public final class CodeIntelligenceMetadataPolicy {
 
     static void validateRelativePath(String relativePath) {
         requireUtf8Bound("relativePath", relativePath, MAX_RELATIVE_PATH_UTF8_BYTES);
+        new RepositoryPath(relativePath);
     }
 
     static void validateSnapshotInput(List<IndexedSymbol> symbols, List<IndexedRelation> relations) {

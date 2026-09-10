@@ -1,5 +1,7 @@
 package com.nexus.index.scan;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.nexus.security.ProjectPathGuard;
 import com.nexus.security.SafeFileIO;
 import org.eclipse.jgit.ignore.IgnoreNode;
@@ -249,7 +251,7 @@ public final class ProjectIgnoreMatcher {
     }
 
     private static String toGitPath(Path path) {
-        return path.toString().replace('\\', '/');
+        return RepositoryPath.encode(path);
     }
 
     @FunctionalInterface

@@ -1,5 +1,7 @@
 package com.nexus.context.source.git;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.nexus.context.source.ContextDiscoveryBudget;
 import com.nexus.context.source.ContextDiscoveryLimitExceededException;
 import org.eclipse.jgit.api.Git;
@@ -280,6 +282,6 @@ public final class PersistentGitContextSourceProvider implements GitContextSourc
     }
 
     private static String gitPath(Path path) {
-        return path.normalize().toString().replace('\\', '/');
+        return RepositoryPath.encode(path.normalize());
     }
 }

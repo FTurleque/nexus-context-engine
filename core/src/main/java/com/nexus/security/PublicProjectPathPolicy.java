@@ -1,5 +1,7 @@
 package com.nexus.security;
 
+import com.nexus.paths.RepositoryPath;
+
 import java.nio.file.Path;
 import java.util.Objects;
 
@@ -41,14 +43,7 @@ public final class PublicProjectPathPolicy {
             }
             relative = root.relativize(resolved);
         }
-        String publicPath = relative.toString().replace('\\', '/');
-        // Un chemin provenant d'un autre OS ne doit pas devenir absolu ou
-        // traversant lors de la normalisation des séparateurs de sortie.
-        if (publicPath.startsWith("/") || publicPath.matches("^[A-Za-z]:.*")
-                || java.util.Arrays.asList(publicPath.split("/")).contains("..")) {
-            throw outsideProject();
-        }
-        return publicPath;
+        return RepositoryPath.encode(relative);
     }
 
     private static IllegalStateException outsideProject() {

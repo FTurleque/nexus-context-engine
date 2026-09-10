@@ -1,5 +1,7 @@
 package com.nexus.index;
 
+import com.nexus.paths.RepositoryPath;
+
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Objects;
@@ -16,7 +18,7 @@ public record ScannedFile(
 
     public ScannedFile {
         Objects.requireNonNull(absolutePath, "absolutePath");
-        Objects.requireNonNull(relativePath, "relativePath");
+        new RepositoryPath(relativePath);
         Objects.requireNonNull(language, "language");
         Objects.requireNonNull(contentHash, "contentHash");
         Objects.requireNonNull(modifiedAt, "modifiedAt");

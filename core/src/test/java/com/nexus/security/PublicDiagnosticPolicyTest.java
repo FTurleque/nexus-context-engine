@@ -10,6 +10,46 @@ import static org.junit.jupiter.api.Assertions.*;
 class PublicDiagnosticPolicyTest {
     @TempDir Path root;
 
+
+
+    @Test
+    void knownRootPrefixMustNotExposeSiblingWithWhitespaceOrTraversal() {
+        var policy = new PublicDiagnosticPolicy(List.of(root));
+        assertEquals("[INTERNAL_PATH]", policy.text(root + " Secret/cache/file.txt"));
+        if (root.getFileSystem().getSeparator().equals("/")) {
+            assertEquals("[INTERNAL_PATH]", policy.text(root + "\\Secret/cache/file.txt"));
+        }
+        assertEquals("[INTERNAL_PATH]", policy.text(root + "/../private/file.txt"));
+        assertEquals("[INTERNAL_PATH]", policy.text("failure:/tmp/Build Secret/cache"));
+    }
+
+    @Test
+    void hidesEntireUnknownPathsIncludingWhitespaceAndEveryPunctuationBoundary() {
+        var policy = PublicDiagnosticPolicy.internal();
+        for (String path : List.of("/home/alice/My Project/src/App.java", "/tmp/Build Secret/cache/file.txt",
+                "/var/lib/nexus/private data/index", "C:\\Users\\Alice Smith\\Nexus Project\\src\\App.java",
+                "D:\\Private Build\\cache\\data.bin", "\\\\server\\Private Share\\Nexus Project\\file.java",
+                "file:///home/alice/My%20Project/src/App.java", "file:///C:/Users/Alice%20Smith/Nexus/file.java",
+                "/tmp/Build (Secret)/cache", "/tmp/Build,Secret/cache", "/tmp/Build' Secret/cache")) {
+            for (String wrapper : List.of("(%s)", "[%s]", "\"%s\"", "'%s'", "%s:", "%s,", "%s;", "failed: %s")) {
+                assertEquals("[INTERNAL_PATH]", policy.text(wrapper.formatted(path)), wrapper.formatted(path));
+            }
+        }
+        assertEquals("src/My Project/App.java", policy.text("src/My Project/App.java"));
+        assertEquals("a\\b.java", policy.text("a\\b.java"));
+    }
+
+    @Test
+    void structuredDiagnosticSeparatesRepositoryPathFromInternalCause() {
+        var policy = new PublicDiagnosticPolicy(List.of(root));
+        String safe = policy.render(new PublicDiagnosticPolicy.Diagnostic("READ_REFUSED", "Lecture refusée",
+                root.resolve("src/App.java"), "IO"), root);
+        assertTrue(safe.contains("src/App.java"));
+        assertFalse(safe.contains(root.toString()));
+        assertTrue(policy.render(new PublicDiagnosticPolicy.Diagnostic("READ_REFUSED", "Lecture refusée",
+                root.resolveSibling("private"), "IO"), root).contains("[INTERNAL_PATH]"));
+    }
+
     @Test
     void projectsBothSeparatorsAndRedactsForeignPathsAndSecretsRecursively() {
         var policy = new PublicDiagnosticPolicy(List.of(root));

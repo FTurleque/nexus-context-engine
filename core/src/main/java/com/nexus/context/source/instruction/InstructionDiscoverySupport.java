@@ -1,5 +1,7 @@
 package com.nexus.context.source.instruction;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.nexus.context.source.ContextDiscoveryBudget;
 import com.nexus.context.source.ContextDiscoveryLimits;
 import com.nexus.index.scan.ProjectIgnoreMatcher;
@@ -183,7 +185,7 @@ final class InstructionDiscoverySupport {
     }
 
     static String repositoryPath(Path path) {
-        return path.toString().replace('\\', '/');
+        return RepositoryPath.encode(path);
     }
 
     private static void registerParentScopes(
