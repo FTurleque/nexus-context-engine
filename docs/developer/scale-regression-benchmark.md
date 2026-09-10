@@ -1,6 +1,6 @@
 # Benchmark de régression scale
 
-Ce benchmark complète les portfolios réels de l'Itération 16 avec un corpus **synthétique, hermétique et reproductible** destiné aux limites suivies par l'issue #23.
+Ce benchmark complète les portfolios réels de l'Itération 16 avec un corpus **synthétique, hermétique et reproductible** destiné aux limites suivies historiquement par l'issue #23 et à la qualification de la recherche SQLite indexée suivie par #216.
 
 Il ne remplace pas les baselines réelles I16 : il mesure spécifiquement les courbes qui ne peuvent pas être extrapolées de manière fiable depuis ~10k symboles et sept repositories.
 
@@ -71,7 +71,7 @@ Profil court pour diagnostic rapide :
 
 ### `full`
 
-Profil de décision/régression #23 :
+Profil de décision/régression #23/#216 :
 
 - SQLite : 10k, 100k, 500k et 1M symboles/relations ;
 - portfolio : 10, 25, 50 et 100 projets ;
@@ -104,13 +104,24 @@ Pour chaque palier, le harness mesure :
 
 - symbole exact : `BenchSymbol00000010` ;
 - substring avec résultats : `ScaleNeedle` ;
-- substring absent, pire cas de scan : `DefinitelyAbsentScaleToken` ;
+- substring absent : `DefinitelyAbsentScaleToken` ;
 - relation substring : `TargetNeedle` ;
 - chargement ciblé de 100 chemins via `findFiles(projectId, paths)`.
 
-Les requêtes de production `searchSymbols` / `searchRelations` utilisent actuellement `LOWER(...) LIKE '%...%'`. Les index B-tree existants restent utiles pour d'autres accès mais ne suppriment pas le coût du pire cas substring.
+Depuis la migration V008, `searchSymbols` et `searchRelations` n'exécutent plus `LOWER(...) LIKE '%...%'` sur la table canonique pour les requêtes de trois points de code Unicode ou plus. Deux tables FTS5 dérivées utilisent le tokenizer `trigram` :
 
-Le benchmark enregistre population, p50/p95/mean/max et taille SQLite pour objectiver la pente 10k → 1M.
+```text
+symbol_search_fts
+relation_search_fts
+```
+
+Elles sont backfillées pendant la migration puis maintenues par triggers `INSERT` / `UPDATE` / `DELETE`. Le préfiltre fuzzy des symboles utilise en parallèle `idx_symbols_fuzzy_prefilter`. `SqliteIndexedSubstringSearchTest` qualifie la version SQLite embarquée, `ENABLE_FTS5`, le tokenizer trigram et le plan `VIRTUAL TABLE INDEX`.
+
+Les requêtes de un ou deux points de code conservent volontairement le fallback `LIKE` afin de préserver la sémantique `contains`; un trigram ne peut pas indexer ces sous-chaînes. Ce cas très court est donc la limite résiduelle explicitement documentée.
+
+Le benchmark enregistre population, p50/p95/mean/max et taille SQLite pour objectiver à la fois le gain de lecture et le coût d'écriture/stockage des index dérivés sur la pente 10k → 1M.
+
+L'adoption FTS5/trigram modifie matériellement la composition de la base et le coût de population. Le marqueur `config/scale-benchmark-protocol` passe donc à **3** : les résultats du protocole 2 ne doivent pas servir de baseline relative au candidat protocole 3. Les plafonds absolus restent appliqués.
 
 ## DELETE vs WAL
 
@@ -194,7 +205,7 @@ Toute modification qui rend les mesures de population non comparables avec la g�
 
 ## Budgets de régression
 
-Deux runs full de calibration sur le même head ont servi à fixer les budgets. Le workflow les applique désormais comme **gate**.
+Les budgets historiques restent les plafonds absolus tant que la calibration du protocole 3 ne démontre pas qu'un plafond de stockage ou de population doit être ajusté explicitement. Ils ne sont pas relâchés préventivement pour l'introduction du trigram.
 
 ### SQLite p95
 
@@ -224,7 +235,7 @@ Cette calibration a confirmé un écart applicatif d'environ 3 %, alors que des 
 ### Fédération
 
 | Projets | Search p95 | Context p95 |
-|---:|---:|---:|
+|---:|---:|
 | 10 | 120 ms | 160 ms |
 | 25 | 160 ms | 260 ms |
 | 50 | 250 ms | 450 ms |
@@ -245,25 +256,26 @@ Les budgets sont volontairement au-dessus des maxima de calibration pour absorbe
 
 ## Décision FTS5 / trigram
 
-**Aucun FTS5, trigram ni nouveau moteur n'est ajouté par #23.**
+Les mesures historiques du protocole 2 avaient matérialisé une pente linéaire : à 1M, les recherches exactes/substring approchaient les plafonds interactifs alors que les index B-tree ne pouvaient pas accélérer un motif à wildcard initial. L'audit du 10 septembre 2026 a donc transformé ce watch item en chantier #216.
 
-Mesures :
+**Décision #216 : adopter FTS5/trigram comme index secondaire local et dérivé pour les recherches substring >= 3 caractères.**
 
-- corpus réel I16 proche de 10k symboles : p95 SQLite synthétique de l'ordre de 5–22 ms ;
-- 100k : p95 <= ~135 ms sur les deux calibrations ;
+La décision reste bornée :
+
+1. SQLite demeure la source canonique ; les tables FTS sont reconstructibles ;
+2. aucun moteur externe ni service réseau n'est ajouté ;
+3. la sémantique exact/contains/fuzzy et l'ordre déterministe restent du ressort du repository/ranking existant ;
+4. les recherches très courtes gardent le fallback compatible ;
+5. le coût write amplification / stockage doit rester sous les plafonds absolus du workflow `Scale Benchmark` ;
+6. une évolution de la version SQLite doit continuer à passer la qualification FTS5/trigram dédiée.
+
+Les chiffres du protocole 2 ci-dessous sont conservés uniquement comme historique pré-FTS et ne constituent plus une baseline relative homogène :
+
 - 500k : exact ~675 ms, substring ~374 ms ;
 - 1M : exact ~1,34–1,37 s, substring ~0,75–0,81 s ;
 - portfolio 100 : search p95 <= 222 ms, contexte p95 <= 538 ms.
 
-Ces chiffres matérialisent la limite de l'approche substring mais ne montrent pas de SLO violé sur les corpus cibles actuels. Ajouter maintenant FTS/trigram créerait migrations, index secondaires et recovery supplémentaires sans bénéfice nécessaire démontré.
-
-Déclencheurs de réexamen :
-
-1. corpus utilisateur courant >= 500k symboles et latence interactive insuffisante ;
-2. 1M exact > 2 s p95 ou substring > 1,2 s p95 ;
-3. portfolio 100 > 400 ms p95 search ou > 800 ms contexte ;
-4. SLO utilisateur réel plus strict que cette baseline ;
-5. optimisation SQL plus simple insuffisante.
+Le premier run `full` protocole 3 attaché à la PR d'adoption devient la preuve de qualification de la nouvelle composition. Les résultats chiffrés consolidés doivent être reportés dans [`scale-regression-results.md`](scale-regression-results.md) après qualification.
 
 ## Baseline réelle historique à conserver
 
