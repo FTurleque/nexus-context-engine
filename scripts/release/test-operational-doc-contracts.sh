@@ -45,6 +45,7 @@ for path in (
     "core/src/main/resources/db/migration/V005__enforce_symbol_range_constraints.sql",
     "core/src/main/resources/db/migration/V006__invalidate_unredacted_lexical_indexes.sql",
     "core/src/main/resources/db/migration/V007__invalidate_legacy_repository_paths.sql",
+    "core/src/main/resources/db/migration/V008__indexed_substring_search.sql",
     "core/src/test/java/com/nexus/application/NexusApplicationSemanticConfigurationTest.java",
 ):
     if not (root / path).is_file():
@@ -55,11 +56,12 @@ for stale in ("<sourceDirectory>", "<testSourceDirectory>", "../src/main", "../s
         raise SystemExit(f"core layout drift: core/pom.xml still contains {stale!r}")
 
 migrations = sorted((root / "core/src/main/resources/db/migration").glob("V*.sql"))
-if not migrations or migrations[-1].name != "V007__invalidate_legacy_repository_paths.sql":
+if not migrations or migrations[-1].name != "V008__indexed_substring_search.sql":
     raise SystemExit(f"schema contract drift: latest migration is {migrations[-1].name if migrations else 'none'}")
 require("docs/developer/release-and-recovery.md", "V005__enforce_symbol_range_constraints.sql")
 require("docs/developer/release-and-recovery.md", "V006__invalidate_unredacted_lexical_indexes.sql")
 require("docs/developer/release-and-recovery.md", "V007__invalidate_legacy_repository_paths.sql")
+require("docs/developer/release-and-recovery.md", "V008__indexed_substring_search.sql")
 for path in (
     "README.md",
     "docs/architecture.md",
