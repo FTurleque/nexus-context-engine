@@ -13,8 +13,10 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -60,12 +62,22 @@ public final class SqliteProjectRepository implements ProjectRepository {
 
     @Override
     public List<ProjectDescriptor> findAll() {
-        try (Connection connection = database.openConnection();
-             PreparedStatement statement = connection.prepareStatement("SELECT * FROM projects ORDER BY name, root_path");
-             ResultSet resultSet = statement.executeQuery()) {
-            List<ProjectDescriptor> projects = new ArrayList<>();
-            while (resultSet.next()) {
-                projects.add(mapProject(connection, resultSet));
+        try (Connection connection = database.openConnection()) {
+            List<ProjectRow> rows = loadProjectRows(connection);
+            if (rows.isEmpty()) {
+                return List.of();
+            }
+
+            Map<UUID, Set<String>> languages = loadAllValues(
+                    connection, "project_languages", "language");
+            Map<UUID, Set<String>> technologies = loadAllValues(
+                    connection, "project_technologies", "technology");
+
+            List<ProjectDescriptor> projects = new ArrayList<>(rows.size());
+            for (ProjectRow row : rows) {
+                projects.add(row.toDescriptor(
+                        languages.getOrDefault(row.id(), Set.of()),
+                        technologies.getOrDefault(row.id(), Set.of())));
             }
             return List.copyOf(projects);
         } catch (SQLException exception) {
@@ -153,15 +165,31 @@ public final class SqliteProjectRepository implements ProjectRepository {
     }
 
     private static ProjectDescriptor mapProject(Connection connection, ResultSet resultSet) throws SQLException {
-        UUID projectId = UUID.fromString(resultSet.getString("id"));
+        ProjectRow row = projectRow(resultSet);
+        return row.toDescriptor(
+                loadValues(connection, "project_languages", "language", row.id()),
+                loadValues(connection, "project_technologies", "technology", row.id()));
+    }
+
+    private static List<ProjectRow> loadProjectRows(Connection connection) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT * FROM projects ORDER BY name, root_path");
+             ResultSet resultSet = statement.executeQuery()) {
+            List<ProjectRow> rows = new ArrayList<>();
+            while (resultSet.next()) {
+                rows.add(projectRow(resultSet));
+            }
+            return List.copyOf(rows);
+        }
+    }
+
+    private static ProjectRow projectRow(ResultSet resultSet) throws SQLException {
         String indexedAt = resultSet.getString("last_indexed_at");
-        return new ProjectDescriptor(
-                projectId,
+        return new ProjectRow(
+                UUID.fromString(resultSet.getString("id")),
                 resultSet.getString("name"),
                 Path.of(resultSet.getString("root_path")),
                 ProjectSourceType.valueOf(resultSet.getString("source_type")),
-                loadValues(connection, "project_languages", "language", projectId),
-                loadValues(connection, "project_technologies", "technology", projectId),
                 indexedAt == null ? null : Instant.parse(indexedAt),
                 IndexStatus.valueOf(resultSet.getString("index_status")));
     }
@@ -181,6 +209,47 @@ public final class SqliteProjectRepository implements ProjectRepository {
                 }
                 return Set.copyOf(values);
             }
+        }
+    }
+
+    private static Map<UUID, Set<String>> loadAllValues(
+            Connection connection,
+            String table,
+            String valueColumn) throws SQLException {
+        String sql = "SELECT project_id, " + valueColumn + " FROM " + table
+                + " ORDER BY project_id, " + valueColumn;
+        try (PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+            Map<UUID, LinkedHashSet<String>> mutable = new LinkedHashMap<>();
+            while (resultSet.next()) {
+                UUID projectId = UUID.fromString(resultSet.getString("project_id"));
+                mutable.computeIfAbsent(projectId, ignored -> new LinkedHashSet<>())
+                        .add(resultSet.getString(valueColumn));
+            }
+            Map<UUID, Set<String>> immutable = new LinkedHashMap<>();
+            mutable.forEach((projectId, values) -> immutable.put(projectId, Set.copyOf(values)));
+            return Map.copyOf(immutable);
+        }
+    }
+
+    private record ProjectRow(
+            UUID id,
+            String name,
+            Path rootPath,
+            ProjectSourceType sourceType,
+            Instant lastIndexedAt,
+            IndexStatus indexStatus) {
+
+        ProjectDescriptor toDescriptor(Set<String> languages, Set<String> technologies) {
+            return new ProjectDescriptor(
+                    id,
+                    name,
+                    rootPath,
+                    sourceType,
+                    languages,
+                    technologies,
+                    lastIndexedAt,
+                    indexStatus);
         }
     }
 }
