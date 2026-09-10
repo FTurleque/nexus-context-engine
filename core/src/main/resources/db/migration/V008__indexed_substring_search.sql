@@ -182,19 +182,23 @@ BEGIN
         insert_text = NULL;
 END;
 
--- Keep a generation row for every project created after V002 so all generation
--- bumps take the UPDATE path. This leaves one canonical projection-flush trigger
--- instead of duplicating the same body for INSERT and UPDATE generation events.
+-- A previous replay of V008 may have installed the project-row helper. Keep
+-- generation-row creation lazy, as it was before V008, so project fixtures and
+-- callers may still seed an explicit initial generation without a PK conflict.
 DROP TRIGGER IF EXISTS project_index_generation_row_ai;
-CREATE TRIGGER project_index_generation_row_ai
-AFTER INSERT ON projects
-BEGIN
-    INSERT OR IGNORE INTO project_index_generations(project_id, generation)
-    VALUES (NEW.id, 0);
-END;
 
--- A previous replay of V008 may have installed the now-obsolete INSERT flush.
+-- Route an INSERT generation event through the single UPDATE flush trigger.
+-- This preserves the historical UPSERT path used by SqliteIndexRepository while
+-- avoiding a duplicated projection-flush body (and works with recursive_triggers
+-- disabled because the INSERT and UPDATE triggers are distinct).
 DROP TRIGGER IF EXISTS search_projection_flush_generation_ai;
+CREATE TRIGGER search_projection_flush_generation_ai
+AFTER INSERT ON project_index_generations
+BEGIN
+    UPDATE project_index_generations
+    SET generation = generation
+    WHERE project_id = NEW.project_id;
+END;
 
 DROP TRIGGER IF EXISTS search_projection_flush_generation_au;
 CREATE TRIGGER search_projection_flush_generation_au
