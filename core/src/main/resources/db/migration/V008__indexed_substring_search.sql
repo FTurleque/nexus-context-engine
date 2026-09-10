@@ -9,9 +9,10 @@
 -- FTS5 is a derived, contentless projection. detail=none removes positional
 -- information and columnsize=0 avoids the per-row docsize shadow table. The
 -- canonical values remain in symbols / symbol_relations. Canonical mutations
--- are staged in small ordinary tables. Batches of 5 000 are flushed with
--- INSERT ... SELECT; the project generation bump flushes the residual batch in
--- the same transaction.
+-- are staged in small ordinary tables. Insert rowids crossing a 5 000-row
+-- boundary opportunistically flush one bounded batch; the project generation
+-- bump flushes every residual row in the same transaction. The rowid boundary
+-- is only a batching optimization, never a correctness boundary.
 --
 -- Because a contentless FTS table cannot infer the old tokens on DELETE, each
 -- pending row keeps the original indexed text when a delete is required and
@@ -60,7 +61,7 @@ BEGIN
       AND entity_id IN (
           SELECT entity_id FROM symbol_search_pending ORDER BY entity_id LIMIT 5000
       )
-      AND (SELECT COUNT(*) FROM symbol_search_pending) >= 5000;
+      AND (NEW.id % 5000) = 0;
 
     INSERT INTO symbol_search_fts(rowid, search_text)
     SELECT entity_id, insert_text
@@ -69,13 +70,13 @@ BEGIN
       AND entity_id IN (
           SELECT entity_id FROM symbol_search_pending ORDER BY entity_id LIMIT 5000
       )
-      AND (SELECT COUNT(*) FROM symbol_search_pending) >= 5000
+      AND (NEW.id % 5000) = 0
     ORDER BY entity_id;
 
     DELETE FROM symbol_search_pending
     WHERE entity_id IN (
         SELECT entity_id FROM symbol_search_pending ORDER BY entity_id LIMIT 5000
-    ) AND (SELECT COUNT(*) FROM symbol_search_pending) >= 5000;
+    ) AND (NEW.id % 5000) = 0;
 END;
 
 DROP TRIGGER IF EXISTS symbols_search_pending_au;
@@ -139,7 +140,7 @@ BEGIN
       AND entity_id IN (
           SELECT entity_id FROM relation_search_pending ORDER BY entity_id LIMIT 5000
       )
-      AND (SELECT COUNT(*) FROM relation_search_pending) >= 5000;
+      AND (NEW.id % 5000) = 0;
 
     INSERT INTO relation_search_fts(rowid, search_text)
     SELECT entity_id, insert_text
@@ -148,13 +149,13 @@ BEGIN
       AND entity_id IN (
           SELECT entity_id FROM relation_search_pending ORDER BY entity_id LIMIT 5000
       )
-      AND (SELECT COUNT(*) FROM relation_search_pending) >= 5000
+      AND (NEW.id % 5000) = 0
     ORDER BY entity_id;
 
     DELETE FROM relation_search_pending
     WHERE entity_id IN (
         SELECT entity_id FROM relation_search_pending ORDER BY entity_id LIMIT 5000
-    ) AND (SELECT COUNT(*) FROM relation_search_pending) >= 5000;
+    ) AND (NEW.id % 5000) = 0;
 END;
 
 DROP TRIGGER IF EXISTS relations_search_pending_au;
