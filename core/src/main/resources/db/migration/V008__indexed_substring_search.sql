@@ -22,7 +22,7 @@
 -- Derived structures are rebuilt deterministically when V008 is replayed.
 
 CREATE INDEX IF NOT EXISTS idx_symbols_fuzzy_prefilter
-    ON symbols(SUBSTR(LOWER(name), 1, 1), qualified_name, LENGTH(name));
+    ON symbols(SUBSTR(LOWER(name), 1, 1), LENGTH(name));
 
 CREATE VIRTUAL TABLE IF NOT EXISTS symbol_search_fts USING fts5(
     search_text,
