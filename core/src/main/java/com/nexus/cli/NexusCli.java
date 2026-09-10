@@ -78,17 +78,18 @@ public final class NexusCli {
             throw new IllegalArgumentException("Commande inconnue : " + args[0]);
         }
 
-        NexusApplication application = NexusApplication.create(NexusPaths.fromEnvironment());
-        switch (args[0]) {
-            case "project" -> handleProject(args, application, renderer);
-            case "index" -> handleIndex(args, application, renderer);
-            case "minos-import" -> handleMinosImport(args, input, application, renderer);
-            case "search" -> handleSearch(args, application, renderer);
-            case "search-federated" -> handleFederatedSearch(args, application, renderer);
-            case CONTEXT_COMMAND -> handleContext(args, application, renderer);
-            case FEDERATED_CONTEXT_COMMAND -> handleFederatedContext(args, application, renderer);
-            case "inspect" -> handleInspect(args, application, renderer);
-            default -> throw new IllegalStateException("Commande validée mais non routée : " + args[0]);
+        try (NexusApplication application = NexusApplication.create(NexusPaths.fromEnvironment())) {
+            switch (args[0]) {
+                case "project" -> handleProject(args, application, renderer);
+                case "index" -> handleIndex(args, application, renderer);
+                case "minos-import" -> handleMinosImport(args, input, application, renderer);
+                case "search" -> handleSearch(args, application, renderer);
+                case "search-federated" -> handleFederatedSearch(args, application, renderer);
+                case CONTEXT_COMMAND -> handleContext(args, application, renderer);
+                case FEDERATED_CONTEXT_COMMAND -> handleFederatedContext(args, application, renderer);
+                case "inspect" -> handleInspect(args, application, renderer);
+                default -> throw new IllegalStateException("Commande validée mais non routée : " + args[0]);
+            }
         }
     }
 
