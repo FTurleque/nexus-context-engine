@@ -156,11 +156,12 @@ class SqliteIndexedSubstringSearchTest {
                 insertSymbol(connection, fileId, name, "demo." + name);
             }
             assertEquals(0L, pendingCount(connection, "symbol_search_pending"));
-            try (ResultSet resultSet = connection.createStatement().executeQuery("""
-                    SELECT COUNT(*)
-                    FROM symbol_search_fts
-                    WHERE symbol_search_fts MATCH '"bat" AND "atc" AND "tch"'
-                    """)) {
+            try (Statement queryStatement = connection.createStatement();
+                 ResultSet resultSet = queryStatement.executeQuery("""
+                         SELECT COUNT(*)
+                         FROM symbol_search_fts
+                         WHERE symbol_search_fts MATCH '"bat" AND "atc" AND "tch"'
+                         """)) {
                 assertTrue(resultSet.next());
                 assertEquals(5_000L, resultSet.getLong(1));
             }
