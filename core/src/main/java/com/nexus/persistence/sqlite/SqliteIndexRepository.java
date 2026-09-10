@@ -208,31 +208,64 @@ public final class SqliteIndexRepository implements IndexRepository {
             if (candidateCount == 0L) {
                 return List.of();
             }
-            String indexName = candidateCount <= FUZZY_SMALL_CANDIDATE_THRESHOLD
-                    ? "idx_symbols_fuzzy_prefilter"
-                    : "idx_symbols_qualified_name";
-            String sql = """
+            if (candidateCount <= FUZZY_SMALL_CANDIDATE_THRESHOLD) {
+                try (PreparedStatement statement = connection.prepareStatement("""
+                        SELECT f.relative_path, s.kind, s.name, s.qualified_name,
+                               s.signature, s.start_line, s.end_line, s.source_provider
+                        FROM symbols s INDEXED BY idx_symbols_fuzzy_prefilter
+                        JOIN indexed_files f ON f.id = s.file_id
+                        WHERE f.project_id = ?
+                          AND SUBSTR(LOWER(s.name), 1, 1) = ?
+                          AND LENGTH(s.name) BETWEEN ? AND ?
+                        ORDER BY s.qualified_name, f.relative_path, s.start_line, s.source_provider
+                        LIMIT ?
+                        """)) {
+                    return bindAndReadFuzzyCandidates(
+                            statement,
+                            projectId,
+                            firstCharacter,
+                            minimumLength,
+                            maximumLength,
+                            limit);
+                }
+            }
+            try (PreparedStatement statement = connection.prepareStatement("""
                     SELECT f.relative_path, s.kind, s.name, s.qualified_name,
                            s.signature, s.start_line, s.end_line, s.source_provider
-                    FROM symbols s INDEXED BY %s
+                    FROM symbols s INDEXED BY idx_symbols_qualified_name
                     JOIN indexed_files f ON f.id = s.file_id
                     WHERE f.project_id = ?
                       AND SUBSTR(LOWER(s.name), 1, 1) = ?
                       AND LENGTH(s.name) BETWEEN ? AND ?
                     ORDER BY s.qualified_name, f.relative_path, s.start_line, s.source_provider
                     LIMIT ?
-                    """.formatted(indexName);
-            try (PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setString(1, projectId.toString());
-                statement.setString(2, firstCharacter);
-                statement.setInt(3, minimumLength);
-                statement.setInt(4, maximumLength);
-                statement.setInt(5, limit);
-                return readSymbols(statement);
+                    """)) {
+                return bindAndReadFuzzyCandidates(
+                        statement,
+                        projectId,
+                        firstCharacter,
+                        minimumLength,
+                        maximumLength,
+                        limit);
             }
         } catch (SQLException exception) {
             throw persistence("Impossible de rechercher les candidats fuzzy du projet " + projectId, exception);
         }
+    }
+
+    private static List<IndexedSymbol> bindAndReadFuzzyCandidates(
+            PreparedStatement statement,
+            UUID projectId,
+            String firstCharacter,
+            int minimumLength,
+            int maximumLength,
+            int limit) throws SQLException {
+        statement.setString(1, projectId.toString());
+        statement.setString(2, firstCharacter);
+        statement.setInt(3, minimumLength);
+        statement.setInt(4, maximumLength);
+        statement.setInt(5, limit);
+        return readSymbols(statement);
     }
 
     private static long countFuzzyCandidates(
