@@ -25,6 +25,7 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -43,6 +44,7 @@ public final class SqliteIndexRepository implements IndexRepository {
     private static final String RELATIVE_PATH_COLUMN = "relative_path";
     private static final int EXTERNAL_BATCH_SIZE = 1_000;
     private static final int TRIGRAM_MIN_CODE_POINTS = 3;
+    private static final long FUZZY_SMALL_CANDIDATE_THRESHOLD = 10_000L;
     private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
 
     private final SqliteDatabase database;
@@ -148,41 +150,25 @@ public final class SqliteIndexRepository implements IndexRepository {
             return searchSymbolsWithLike(projectId, normalized, limit);
         }
 
+        List<IndexedSymbol> trigramCandidates = searchSymbolsWithTrigram(projectId, normalized, limit);
+        List<IndexedSymbol> fuzzyCandidates = searchFuzzySymbols(projectId, normalized, limit);
+        return mergeSymbolCandidates(normalized, trigramCandidates, fuzzyCandidates, limit);
+    }
+
+    private List<IndexedSymbol> searchSymbolsWithTrigram(UUID projectId, String normalized, int limit) {
         String contains = "%" + escapeLike(normalized) + "%";
         String prefix = escapeLike(normalized) + "%";
-        String firstCharacter = firstCodePoint(normalized);
-        int queryLength = normalized.codePointCount(0, normalized.length());
         try (Connection connection = database.openConnection();
              PreparedStatement statement = connection.prepareStatement("""
-                     WITH fuzzy_ids(id) AS (
-                         SELECT s.id
-                         FROM symbols s INDEXED BY idx_symbols_fuzzy_prefilter
-                         JOIN indexed_files f ON f.id = s.file_id
-                         WHERE f.project_id = ?
-                           AND SUBSTR(LOWER(s.name), 1, 1) = ?
-                           AND LENGTH(s.name) BETWEEN ? AND ?
-                         ORDER BY s.qualified_name, f.relative_path, s.start_line, s.source_provider
-                         LIMIT ?
-                     ),
-                     candidate_ids(id) AS (
-                         SELECT search.rowid
-                         FROM symbol_search_fts search
-                         WHERE symbol_search_fts MATCH ?
-                         UNION
-                         SELECT id FROM fuzzy_ids
-                     )
                      SELECT f.relative_path, s.kind, s.name, s.qualified_name,
                             s.signature, s.start_line, s.end_line, s.source_provider
-                     FROM candidate_ids candidate
-                     JOIN symbols s ON s.id = candidate.id
+                     FROM symbol_search_fts search
+                     JOIN symbols s ON s.id = search.rowid
                      JOIN indexed_files f ON f.id = s.file_id
-                     WHERE f.project_id = ?
-                       AND (
-                           LOWER(s.name) LIKE ? ESCAPE '\\'
-                           OR LOWER(s.qualified_name) LIKE ? ESCAPE '\\'
-                           OR (SUBSTR(LOWER(s.name), 1, 1) = ?
-                               AND ABS(LENGTH(s.name) - ?) <= 3)
-                       )
+                     WHERE symbol_search_fts MATCH ?
+                       AND f.project_id = ?
+                       AND (LOWER(s.name) LIKE ? ESCAPE '\\'
+                            OR LOWER(s.qualified_name) LIKE ? ESCAPE '\\')
                      ORDER BY
                          CASE
                              WHEN LOWER(s.name) = ? THEN 0
@@ -193,25 +179,116 @@ public final class SqliteIndexRepository implements IndexRepository {
                          s.qualified_name, f.relative_path, s.start_line, s.source_provider
                      LIMIT ?
                      """)) {
-            statement.setString(1, projectId.toString());
-            statement.setString(2, firstCharacter);
-            statement.setInt(3, Math.max(0, queryLength - 3));
-            statement.setInt(4, queryLength + 3);
-            statement.setInt(5, limit);
-            statement.setString(6, ftsTrigramQuery(normalized));
-            statement.setString(7, projectId.toString());
-            statement.setString(8, contains);
-            statement.setString(9, contains);
-            statement.setString(10, firstCharacter);
-            statement.setInt(11, queryLength);
-            statement.setString(12, normalized);
-            statement.setString(13, normalized);
-            statement.setString(14, prefix);
-            statement.setInt(15, limit);
+            statement.setString(1, ftsTrigramQuery(normalized));
+            statement.setString(2, projectId.toString());
+            statement.setString(3, contains);
+            statement.setString(4, contains);
+            statement.setString(5, normalized);
+            statement.setString(6, normalized);
+            statement.setString(7, prefix);
+            statement.setInt(8, limit);
             return readSymbols(statement);
         } catch (SQLException exception) {
-            throw persistence("Impossible de rechercher les symboles du projet " + projectId, exception);
+            throw persistence("Impossible de rechercher les symboles trigram du projet " + projectId, exception);
         }
+    }
+
+    private List<IndexedSymbol> searchFuzzySymbols(UUID projectId, String normalized, int limit) {
+        String firstCharacter = firstCodePoint(normalized);
+        int queryLength = normalized.codePointCount(0, normalized.length());
+        int minimumLength = Math.max(0, queryLength - 3);
+        int maximumLength = queryLength + 3;
+        try (Connection connection = database.openConnection()) {
+            long candidateCount = countFuzzyCandidates(
+                    connection,
+                    projectId,
+                    firstCharacter,
+                    minimumLength,
+                    maximumLength);
+            if (candidateCount == 0L) {
+                return List.of();
+            }
+            String indexName = candidateCount <= FUZZY_SMALL_CANDIDATE_THRESHOLD
+                    ? "idx_symbols_fuzzy_prefilter"
+                    : "idx_symbols_qualified_name";
+            String sql = """
+                    SELECT f.relative_path, s.kind, s.name, s.qualified_name,
+                           s.signature, s.start_line, s.end_line, s.source_provider
+                    FROM symbols s INDEXED BY %s
+                    JOIN indexed_files f ON f.id = s.file_id
+                    WHERE f.project_id = ?
+                      AND SUBSTR(LOWER(s.name), 1, 1) = ?
+                      AND LENGTH(s.name) BETWEEN ? AND ?
+                    ORDER BY s.qualified_name, f.relative_path, s.start_line, s.source_provider
+                    LIMIT ?
+                    """.formatted(indexName);
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setString(1, projectId.toString());
+                statement.setString(2, firstCharacter);
+                statement.setInt(3, minimumLength);
+                statement.setInt(4, maximumLength);
+                statement.setInt(5, limit);
+                return readSymbols(statement);
+            }
+        } catch (SQLException exception) {
+            throw persistence("Impossible de rechercher les candidats fuzzy du projet " + projectId, exception);
+        }
+    }
+
+    private static long countFuzzyCandidates(
+            Connection connection,
+            UUID projectId,
+            String firstCharacter,
+            int minimumLength,
+            int maximumLength) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT COUNT(*)
+                FROM symbols s INDEXED BY idx_symbols_fuzzy_prefilter
+                JOIN indexed_files f ON f.id = s.file_id
+                WHERE f.project_id = ?
+                  AND SUBSTR(LOWER(s.name), 1, 1) = ?
+                  AND LENGTH(s.name) BETWEEN ? AND ?
+                """)) {
+            statement.setString(1, projectId.toString());
+            statement.setString(2, firstCharacter);
+            statement.setInt(3, minimumLength);
+            statement.setInt(4, maximumLength);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() ? resultSet.getLong(1) : 0L;
+            }
+        }
+    }
+
+    private static List<IndexedSymbol> mergeSymbolCandidates(
+            String normalized,
+            List<IndexedSymbol> trigramCandidates,
+            List<IndexedSymbol> fuzzyCandidates,
+            int limit) {
+        LinkedHashSet<IndexedSymbol> unique = new LinkedHashSet<>(trigramCandidates);
+        unique.addAll(fuzzyCandidates);
+        Comparator<IndexedSymbol> ordering = Comparator
+                .comparingInt((IndexedSymbol symbol) -> symbolSearchRank(symbol, normalized))
+                .thenComparing(symbol -> symbol.symbol().qualifiedName())
+                .thenComparing(IndexedSymbol::relativePath)
+                .thenComparingInt(symbol -> symbol.symbol().startLine())
+                .thenComparing(symbol -> symbol.symbol().sourceProvider());
+        return unique.stream().sorted(ordering).limit(limit).toList();
+    }
+
+    private static int symbolSearchRank(IndexedSymbol indexedSymbol, String normalized) {
+        CodeSymbol symbol = indexedSymbol.symbol();
+        String name = symbol.name().toLowerCase(Locale.ROOT);
+        String qualifiedName = symbol.qualifiedName().toLowerCase(Locale.ROOT);
+        if (name.equals(normalized)) {
+            return 0;
+        }
+        if (qualifiedName.equals(normalized)) {
+            return 1;
+        }
+        if (name.startsWith(normalized)) {
+            return 2;
+        }
+        return 3;
     }
 
     private List<IndexedSymbol> searchSymbolsWithLike(UUID projectId, String normalized, int limit) {
