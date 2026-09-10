@@ -88,6 +88,29 @@ grep -q 'revalidateFallbackPathSnapshot' "$SAFE_FILE_IO" \
 grep -q 'attributes.fileKey()' "$SAFE_FILE_IO" \
   || fail 'fallback filesystem revalidation must use provider identity when available'
 
+# Post-audit 2026-09-10: task-context materialization must be bounded by physical
+# operations and elapsed time in addition to cumulative bytes. A corpus of empty
+# files must never bypass the work budget.
+MATERIALIZATION_LIMITS="core/src/main/java/com/nexus/context/ContextMaterializationLimits.java"
+MATERIALIZATION_BUDGET="core/src/main/java/com/nexus/context/ContextMaterializationBudget.java"
+for needle in \
+  'NEXUS_MAX_CONTEXT_MATERIALIZATION_BYTES' \
+  'NEXUS_MAX_CONTEXT_MATERIALIZATION_FILES' \
+  'NEXUS_MAX_CONTEXT_MATERIALIZATION_MILLIS' \
+  'DEFAULT_MAX_OPENED_FILES = 10_000' \
+  'DEFAULT_MAX_DURATION_MILLIS = 30_000L'; do
+  grep -q --fixed-strings "$needle" "$MATERIALIZATION_LIMITS" \
+    || fail "context materialization hardening contract drift: missing $needle"
+done
+grep -q 'consumeOpen(path)' "$MATERIALIZATION_BUDGET" \
+  || fail 'context materialization must charge every physical file-open attempt'
+grep -q 'checkpoint(path)' "$MATERIALIZATION_BUDGET" \
+  || fail 'context materialization must enforce an elapsed-time deadline'
+grep -q 'NEXUS_MAX_CONTEXT_MATERIALIZATION_FILES' docs/developer/context-building.md \
+  || fail 'materialization file-open ceiling must remain documented'
+grep -q 'NEXUS_MAX_CONTEXT_MATERIALIZATION_MILLIS' docs/developer/context-building.md \
+  || fail 'materialization deadline must remain documented'
+
 # Post-audit 2026-09-07: the provider circuit breaker check/start transition is
 # linearized against timeout quarantine; the historical stale-check race must not return.
 EXTERNAL_RUNNER="core/src/main/java/com/nexus/index/ExternalTaskRunner.java"
