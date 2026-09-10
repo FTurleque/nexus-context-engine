@@ -78,7 +78,9 @@ symbol_search_fts
 relation_search_fts
 ```
 
-Les projections sont **contentless**, utilisent `detail=none` et `contentless_delete=1`, et ne dupliquent pas les textes canoniques. Elles conservent uniquement les posting lists nécessaires à la découverte de candidats. Les mutations `symbols` et `symbol_relations` sont placées par triggers dans `symbol_search_pending` / `relation_search_pending`; les lots de 5 000 sont projetés avec `INSERT ... SELECT`, puis le bump de `project_index_generations` vide le reliquat dans la même transaction.
+Les projections sont **contentless**, utilisent `detail=none` et `columnsize=0`. Elles ne dupliquent donc ni le contenu canonique, ni les positions, ni la table FTS `docsize`; elles conservent uniquement les posting lists nécessaires à la découverte de candidats. Les valeurs de référence restent dans `symbols` et `symbol_relations`.
+
+Les mutations canoniques sont placées par triggers dans `symbol_search_pending` / `relation_search_pending`. Chaque entrée pending mémorise le texte ancien lorsqu'une suppression de tokens est nécessaire et le dernier texte lorsqu'une insertion est nécessaire. Les suppressions sont appliquées avec la commande FTS5 spéciale `delete`, puis les insertions sont projetées par `INSERT ... SELECT`. Les lots de 5 000 sont vidés pendant les insertions et le bump de `project_index_generations` vide le reliquat dans la même transaction.
 
 Le repository transforme une requête en intersection de trigrams de trois points de code. Comme `detail=none` ne conserve pas les positions, les candidats FTS sont ensuite revalidés contre les valeurs canoniques avec la sémantique `contains`. Cette étape élimine les faux positifs possibles d'une simple intersection de trigrams sans réintroduire un scan complet de la table.
 
@@ -88,17 +90,17 @@ Les requêtes de un ou deux points de code gardent volontairement le fallback `L
 
 `SqliteIndexedSubstringSearchTest` qualifie explicitement :
 
-- SQLite embarqué >= 3.43 ;
+- SQLite embarqué >= 3.34 ;
 - `ENABLE_FTS5` ;
 - tokenizer `trigram` ;
-- `contentless_delete=1` ;
-- suppression d'une ligne contentless ;
+- projection `content=''`, `detail=none`, `columnsize=0` ;
+- commande FTS5 `delete` avec l'ancien texte ;
 - plan `VIRTUAL TABLE INDEX` ;
 - flush de génération ;
 - flush bulk à 5 000 lignes ;
 - fallback des requêtes très courtes.
 
-V008 est replay-safe pour le scénario de recovery où une ancienne table `schema_migrations` sans `script_sha256` est reconstruite puis le migrateur rejoué. Les FTS sont dérivés : un replay les reconstruit depuis les tables canoniques.
+V008 est replay-safe pour le scénario de recovery où une ancienne table `schema_migrations` sans `script_sha256` est reconstruite puis le migrateur rejoué. Les FTS sont dérivés : un replay commence par `delete-all` puis les reconstruit depuis les tables canoniques.
 
 ## Protocole 3
 
