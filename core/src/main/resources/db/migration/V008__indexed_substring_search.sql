@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS symbol_search_pending (
     insert_text TEXT,
     needs_delete INTEGER NOT NULL CHECK (needs_delete IN (0, 1))
 );
-DELETE FROM symbol_search_pending;
+DELETE FROM symbol_search_pending WHERE entity_id IS NOT NULL;
 
 DROP TRIGGER IF EXISTS symbols_search_pending_ai;
 CREATE TRIGGER symbols_search_pending_ai
@@ -121,7 +121,7 @@ CREATE TABLE IF NOT EXISTS relation_search_pending (
     insert_text TEXT,
     needs_delete INTEGER NOT NULL CHECK (needs_delete IN (0, 1))
 );
-DELETE FROM relation_search_pending;
+DELETE FROM relation_search_pending WHERE entity_id IS NOT NULL;
 
 DROP TRIGGER IF EXISTS relations_search_pending_ai;
 CREATE TRIGGER relations_search_pending_ai
@@ -182,32 +182,19 @@ BEGIN
         insert_text = NULL;
 END;
 
-DROP TRIGGER IF EXISTS search_projection_flush_generation_ai;
-CREATE TRIGGER search_projection_flush_generation_ai
-AFTER INSERT ON project_index_generations
+-- Keep a generation row for every project created after V002 so all generation
+-- bumps take the UPDATE path. This leaves one canonical projection-flush trigger
+-- instead of duplicating the same body for INSERT and UPDATE generation events.
+DROP TRIGGER IF EXISTS project_index_generation_row_ai;
+CREATE TRIGGER project_index_generation_row_ai
+AFTER INSERT ON projects
 BEGIN
-    INSERT INTO symbol_search_fts(symbol_search_fts, rowid, search_text)
-    SELECT 'delete', entity_id, delete_text
-    FROM symbol_search_pending
-    WHERE needs_delete = 1;
-    INSERT INTO symbol_search_fts(rowid, search_text)
-    SELECT entity_id, insert_text
-    FROM symbol_search_pending
-    WHERE insert_text IS NOT NULL
-    ORDER BY entity_id;
-    DELETE FROM symbol_search_pending;
-
-    INSERT INTO relation_search_fts(relation_search_fts, rowid, search_text)
-    SELECT 'delete', entity_id, delete_text
-    FROM relation_search_pending
-    WHERE needs_delete = 1;
-    INSERT INTO relation_search_fts(rowid, search_text)
-    SELECT entity_id, insert_text
-    FROM relation_search_pending
-    WHERE insert_text IS NOT NULL
-    ORDER BY entity_id;
-    DELETE FROM relation_search_pending;
+    INSERT OR IGNORE INTO project_index_generations(project_id, generation)
+    VALUES (NEW.id, 0);
 END;
+
+-- A previous replay of V008 may have installed the now-obsolete INSERT flush.
+DROP TRIGGER IF EXISTS search_projection_flush_generation_ai;
 
 DROP TRIGGER IF EXISTS search_projection_flush_generation_au;
 CREATE TRIGGER search_projection_flush_generation_au
@@ -222,7 +209,7 @@ BEGIN
     FROM symbol_search_pending
     WHERE insert_text IS NOT NULL
     ORDER BY entity_id;
-    DELETE FROM symbol_search_pending;
+    DELETE FROM symbol_search_pending WHERE entity_id IS NOT NULL;
 
     INSERT INTO relation_search_fts(relation_search_fts, rowid, search_text)
     SELECT 'delete', entity_id, delete_text
@@ -233,5 +220,5 @@ BEGIN
     FROM relation_search_pending
     WHERE insert_text IS NOT NULL
     ORDER BY entity_id;
-    DELETE FROM relation_search_pending;
+    DELETE FROM relation_search_pending WHERE entity_id IS NOT NULL;
 END;
