@@ -26,7 +26,7 @@ class SqliteIndexedSubstringSearchTest {
     Path temporaryDirectory;
 
     @Test
-    void embeddedSqliteQualifiesFts5TrigramAndContentlessDeleteSupport() throws Exception {
+    void embeddedSqliteQualifiesCompactFts5TrigramSupport() throws Exception {
         SqliteDatabase database = database("qualification");
         try (Connection connection = database.openConnection();
              Statement statement = connection.createStatement()) {
@@ -36,8 +36,8 @@ class SqliteIndexedSubstringSearchTest {
                 version = resultSet.getString(1);
             }
             assertTrue(
-                    versionAtLeast(version, 3, 43, 0),
-                    () -> "FTS5 contentless_delete requires SQLite >= 3.43.0, embedded version is " + version);
+                    versionAtLeast(version, 3, 34, 0),
+                    () -> "FTS5 trigram requires SQLite >= 3.34.0, embedded version is " + version);
 
             try (ResultSet resultSet = statement.executeQuery(
                     "SELECT sqlite_compileoption_used('ENABLE_FTS5')")) {
@@ -51,8 +51,8 @@ class SqliteIndexedSubstringSearchTest {
                         value,
                         tokenize='trigram',
                         content='',
-                        contentless_delete=1,
-                        detail='none'
+                        detail='none',
+                        columnsize=0
                     )
                     """);
             statement.executeUpdate("""
@@ -67,7 +67,11 @@ class SqliteIndexedSubstringSearchTest {
                 assertTrue(resultSet.next());
                 assertEquals(1, resultSet.getInt(1));
             }
-            statement.executeUpdate("DELETE FROM nexus_fts5_trigram_probe WHERE rowid = 1");
+            statement.executeUpdate("""
+                    INSERT INTO nexus_fts5_trigram_probe(
+                        nexus_fts5_trigram_probe, rowid, value)
+                    VALUES ('delete', 1, 'AlphaNeedleOmega')
+                    """);
             try (ResultSet resultSet = statement.executeQuery("""
                     SELECT COUNT(*)
                     FROM nexus_fts5_trigram_probe
