@@ -42,6 +42,7 @@ public final class SqliteIndexRepository implements IndexRepository {
     private static final String QUALIFIED_NAME_COLUMN = "qualified_name";
     private static final String RELATIVE_PATH_COLUMN = "relative_path";
     private static final int EXTERNAL_BATCH_SIZE = 1_000;
+    private static final int TRIGRAM_MIN_CODE_POINTS = 3;
     private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
 
     private final SqliteDatabase database;
@@ -143,9 +144,66 @@ public final class SqliteIndexRepository implements IndexRepository {
         }
         ResultLimitPolicy.validateInternalRetrieval(limit);
         String normalized = query.trim().toLowerCase(Locale.ROOT);
+        if (!usesTrigramIndex(normalized)) {
+            return searchSymbolsWithLike(projectId, normalized, limit);
+        }
+
+        String prefix = escapeLike(normalized) + "%";
+        String firstCharacter = firstCodePoint(normalized);
+        int queryLength = normalized.codePointCount(0, normalized.length());
+        try (Connection connection = database.openConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     WITH candidate_ids(id) AS (
+                         SELECT search.rowid
+                         FROM symbol_search_fts search
+                         WHERE symbol_search_fts MATCH ?
+                           AND search.project_id = ?
+                         UNION
+                         SELECT s.id
+                         FROM symbols s INDEXED BY idx_symbols_fuzzy_prefilter
+                         JOIN indexed_files f ON f.id = s.file_id
+                         WHERE f.project_id = ?
+                           AND SUBSTR(LOWER(s.name), 1, 1) = ?
+                           AND LENGTH(s.name) BETWEEN ? AND ?
+                     )
+                     SELECT f.relative_path, s.kind, s.name, s.qualified_name,
+                            s.signature, s.start_line, s.end_line, s.source_provider
+                     FROM candidate_ids candidate
+                     JOIN symbols s ON s.id = candidate.id
+                     JOIN indexed_files f ON f.id = s.file_id
+                     WHERE f.project_id = ?
+                     ORDER BY
+                         CASE
+                             WHEN LOWER(s.name) = ? THEN 0
+                             WHEN LOWER(s.qualified_name) = ? THEN 1
+                             WHEN LOWER(s.name) LIKE ? ESCAPE '\\' THEN 2
+                             ELSE 3
+                         END,
+                         s.qualified_name, f.relative_path, s.start_line, s.source_provider
+                     LIMIT ?
+                     """)) {
+            statement.setString(1, ftsPhrase(normalized));
+            statement.setString(2, projectId.toString());
+            statement.setString(3, projectId.toString());
+            statement.setString(4, firstCharacter);
+            statement.setInt(5, Math.max(0, queryLength - 3));
+            statement.setInt(6, queryLength + 3);
+            statement.setString(7, projectId.toString());
+            statement.setString(8, normalized);
+            statement.setString(9, normalized);
+            statement.setString(10, prefix);
+            statement.setInt(11, limit);
+            return readSymbols(statement);
+        } catch (SQLException exception) {
+            throw persistence("Impossible de rechercher les symboles du projet " + projectId, exception);
+        }
+    }
+
+    private List<IndexedSymbol> searchSymbolsWithLike(UUID projectId, String normalized, int limit) {
         String contains = "%" + escapeLike(normalized) + "%";
         String prefix = escapeLike(normalized) + "%";
-        String firstCharacter = normalized.substring(0, 1);
+        String firstCharacter = firstCodePoint(normalized);
+        int queryLength = normalized.codePointCount(0, normalized.length());
         try (Connection connection = database.openConnection();
              PreparedStatement statement = connection.prepareStatement("""
                      SELECT f.relative_path, s.kind, s.name, s.qualified_name,
@@ -173,7 +231,7 @@ public final class SqliteIndexRepository implements IndexRepository {
             statement.setString(2, contains);
             statement.setString(3, contains);
             statement.setString(4, firstCharacter);
-            statement.setInt(5, normalized.length());
+            statement.setInt(5, queryLength);
             statement.setString(6, normalized);
             statement.setString(7, normalized);
             statement.setString(8, prefix);
@@ -373,6 +431,29 @@ public final class SqliteIndexRepository implements IndexRepository {
         }
         ResultLimitPolicy.validate(limit);
         String normalized = symbol.trim().toLowerCase(Locale.ROOT);
+        if (!usesTrigramIndex(normalized)) {
+            return searchRelationsWithLike(projectId, normalized, limit);
+        }
+        try (Connection connection = database.openConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT r.kind, r.source_ref, r.target_ref, r.confidence, r.source_provider
+                     FROM relation_search_fts search
+                     JOIN symbol_relations r ON r.id = search.rowid
+                     WHERE relation_search_fts MATCH ?
+                       AND search.project_id = ?
+                     ORDER BY r.kind, r.source_ref, r.target_ref, r.source_provider
+                     LIMIT ?
+                     """)) {
+            statement.setString(1, ftsPhrase(normalized));
+            statement.setString(2, projectId.toString());
+            statement.setInt(3, limit);
+            return readRelations(statement);
+        } catch (SQLException exception) {
+            throw persistence("Impossible de rechercher les relations du projet " + projectId, exception);
+        }
+    }
+
+    private List<SymbolRelation> searchRelationsWithLike(UUID projectId, String normalized, int limit) {
         String contains = "%" + escapeLike(normalized) + "%";
         try (Connection connection = database.openConnection();
              PreparedStatement statement = connection.prepareStatement("""
@@ -935,6 +1016,18 @@ public final class SqliteIndexRepository implements IndexRepository {
                 return resultSet.next() ? resultSet.getLong(1) : 0L;
             }
         }
+    }
+
+    private static boolean usesTrigramIndex(String normalized) {
+        return normalized.codePointCount(0, normalized.length()) >= TRIGRAM_MIN_CODE_POINTS;
+    }
+
+    private static String firstCodePoint(String value) {
+        return value.substring(0, value.offsetByCodePoints(0, 1));
+    }
+
+    private static String ftsPhrase(String value) {
+        return "\"" + value.replace("\"", "\"\"") + "\"";
     }
 
     private static String escapeLike(String value) {
