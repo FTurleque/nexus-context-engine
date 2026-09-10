@@ -146,8 +146,8 @@ class SqliteIndexedSubstringSearchTest {
     }
 
     @Test
-    void fiveThousandCanonicalRowsAreBulkFlushedBeforeGenerationBoundary() throws Exception {
-        SqliteDatabase database = database("batch-flush");
+    void canonicalRowsStayStagedUntilGenerationBoundary() throws Exception {
+        SqliteDatabase database = database("generation-flush");
         UUID projectId = UUID.randomUUID();
         try (Connection connection = database.openConnection()) {
             long fileId = insertProjectFile(connection, projectId);
@@ -155,16 +155,14 @@ class SqliteIndexedSubstringSearchTest {
                 String name = "BatchNeedle" + index;
                 insertSymbol(connection, fileId, name, "demo." + name);
             }
+
+            assertEquals(5_000L, pendingCount(connection, "symbol_search_pending"));
+            assertEquals(0L, matchingCount(connection, "symbol_search_fts", "\"bat\" AND \"atc\" AND \"tch\""));
+
+            bumpGeneration(connection, projectId);
+
             assertEquals(0L, pendingCount(connection, "symbol_search_pending"));
-            try (Statement queryStatement = connection.createStatement();
-                 ResultSet resultSet = queryStatement.executeQuery("""
-                         SELECT COUNT(*)
-                         FROM symbol_search_fts
-                         WHERE symbol_search_fts MATCH '"bat" AND "atc" AND "tch"'
-                         """)) {
-                assertTrue(resultSet.next());
-                assertEquals(5_000L, resultSet.getLong(1));
-            }
+            assertEquals(5_000L, matchingCount(connection, "symbol_search_fts", "\"bat\" AND \"atc\" AND \"tch\""));
         }
     }
 
@@ -276,6 +274,21 @@ class SqliteIndexedSubstringSearchTest {
              ResultSet resultSet = statement.executeQuery(sql)) {
             assertTrue(resultSet.next());
             return resultSet.getLong(1);
+        }
+    }
+
+    private static long matchingCount(Connection connection, String table, String query) throws Exception {
+        String sql = switch (table) {
+            case "symbol_search_fts" -> "SELECT COUNT(*) FROM symbol_search_fts WHERE symbol_search_fts MATCH ?";
+            case "relation_search_fts" -> "SELECT COUNT(*) FROM relation_search_fts WHERE relation_search_fts MATCH ?";
+            default -> throw new IllegalArgumentException("Unsupported FTS table: " + table);
+        };
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, query);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                assertTrue(resultSet.next());
+                return resultSet.getLong(1);
+            }
         }
     }
 

@@ -9,10 +9,10 @@
 -- FTS5 is a derived, contentless projection. detail=none removes positional
 -- information and columnsize=0 avoids the per-row docsize shadow table. The
 -- canonical values remain in symbols / symbol_relations. INSERT mutations stage
--- only entity ids; indexed text is read once from canonical rows when a batch is
--- flushed. UPDATE/DELETE mutations retain only the first pre-change text needed
--- by the FTS5 delete command. This avoids duplicating every inserted search text
--- in ordinary pending tables while preserving transactional generation flushes.
+-- only entity ids. UPDATE/DELETE mutations retain only the first pre-change text
+-- required by the FTS5 delete command. Projection work is deliberately deferred
+-- to the project-generation barrier so one indexing transaction produces one
+-- bulk FTS update instead of repeatedly rebuilding intermediate batches.
 --
 -- The migration is replay-safe for the legacy checksum-table recovery test.
 -- Derived structures are rebuilt deterministically when V008 is replayed.
@@ -58,39 +58,6 @@ AFTER INSERT ON symbols
 BEGIN
     INSERT OR IGNORE INTO symbol_search_pending(entity_id, delete_text)
     VALUES (NEW.id, NULL);
-
-    INSERT INTO symbol_search_fts(symbol_search_fts, rowid, search_text)
-    SELECT 'delete', entity_id, delete_text
-    FROM symbol_search_pending
-    WHERE delete_text IS NOT NULL
-      AND entity_id IN (
-          SELECT entity_id
-          FROM symbol_search_pending
-          ORDER BY entity_id
-          LIMIT 5000
-      )
-      AND (NEW.id % 5000) = 0;
-
-    INSERT INTO symbol_search_fts(rowid, search_text)
-    SELECT s.id, s.name || char(10) || s.qualified_name
-    FROM symbols s
-    JOIN (
-        SELECT entity_id
-        FROM symbol_search_pending
-        ORDER BY entity_id
-        LIMIT 5000
-    ) pending ON pending.entity_id = s.id
-    WHERE (NEW.id % 5000) = 0
-    ORDER BY s.id;
-
-    DELETE FROM symbol_search_pending
-    WHERE entity_id IN (
-        SELECT entity_id
-        FROM symbol_search_pending
-        ORDER BY entity_id
-        LIMIT 5000
-    )
-      AND (NEW.id % 5000) = 0;
 END;
 
 CREATE TRIGGER symbols_search_pending_au
@@ -130,39 +97,6 @@ AFTER INSERT ON symbol_relations
 BEGIN
     INSERT OR IGNORE INTO relation_search_pending(entity_id, delete_text)
     VALUES (NEW.id, NULL);
-
-    INSERT INTO relation_search_fts(relation_search_fts, rowid, search_text)
-    SELECT 'delete', entity_id, delete_text
-    FROM relation_search_pending
-    WHERE delete_text IS NOT NULL
-      AND entity_id IN (
-          SELECT entity_id
-          FROM relation_search_pending
-          ORDER BY entity_id
-          LIMIT 5000
-      )
-      AND (NEW.id % 5000) = 0;
-
-    INSERT INTO relation_search_fts(rowid, search_text)
-    SELECT r.id, r.source_ref || char(10) || r.target_ref
-    FROM symbol_relations r
-    JOIN (
-        SELECT entity_id
-        FROM relation_search_pending
-        ORDER BY entity_id
-        LIMIT 5000
-    ) pending ON pending.entity_id = r.id
-    WHERE (NEW.id % 5000) = 0
-    ORDER BY r.id;
-
-    DELETE FROM relation_search_pending
-    WHERE entity_id IN (
-        SELECT entity_id
-        FROM relation_search_pending
-        ORDER BY entity_id
-        LIMIT 5000
-    )
-      AND (NEW.id % 5000) = 0;
 END;
 
 CREATE TRIGGER relations_search_pending_au

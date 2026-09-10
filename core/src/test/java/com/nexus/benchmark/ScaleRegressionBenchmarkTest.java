@@ -480,6 +480,16 @@ class ScaleRegressionBenchmarkTest {
                         connection.commit();
                     }
                 }
+
+                try (PreparedStatement generation = connection.prepareStatement("""
+                        UPDATE project_index_generations
+                        SET generation = generation + 1
+                        WHERE project_id = ?
+                        """)) {
+                    generation.setString(1, projectId.toString());
+                    generation.executeUpdate();
+                }
+                connection.commit();
             } catch (SQLException failure) {
                 connection.rollback();
                 throw failure;
