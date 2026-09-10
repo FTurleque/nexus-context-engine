@@ -183,26 +183,41 @@ BEGIN
 END;
 
 -- A previous replay of V008 may have installed the project-row helper. Keep
--- generation-row creation lazy, as it was before V008, so project fixtures and
--- callers may still seed an explicit initial generation without a PK conflict.
+-- generation-row creation lazy, as it was before V008, so callers may still
+-- seed an explicit initial generation without a primary-key conflict.
 DROP TRIGGER IF EXISTS project_index_generation_row_ai;
 
--- Route an INSERT generation event through the single UPDATE flush trigger.
--- This preserves the historical UPSERT path used by SqliteIndexRepository while
--- avoiding a duplicated projection-flush body (and works with recursive_triggers
--- disabled because the INSERT and UPDATE triggers are distinct).
+-- Both first-generation INSERTs and subsequent generation UPDATEs advance one
+-- derived signal row. The signal exists only to route both events through one
+-- projection-flush body without duplicating that body or changing canonical
+-- generation values.
+CREATE TABLE IF NOT EXISTS search_projection_flush_signal (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    sequence INTEGER NOT NULL
+);
+INSERT OR IGNORE INTO search_projection_flush_signal(id, sequence) VALUES (1, 0);
+
 DROP TRIGGER IF EXISTS search_projection_flush_generation_ai;
 CREATE TRIGGER search_projection_flush_generation_ai
 AFTER INSERT ON project_index_generations
 BEGIN
-    UPDATE project_index_generations
-    SET generation = generation
-    WHERE project_id = NEW.project_id;
+    UPDATE search_projection_flush_signal
+    SET sequence = sequence + 1
+    WHERE id = 1;
 END;
 
 DROP TRIGGER IF EXISTS search_projection_flush_generation_au;
 CREATE TRIGGER search_projection_flush_generation_au
 AFTER UPDATE OF generation ON project_index_generations
+BEGIN
+    UPDATE search_projection_flush_signal
+    SET sequence = sequence + 1
+    WHERE id = 1;
+END;
+
+DROP TRIGGER IF EXISTS search_projection_flush_signal_au;
+CREATE TRIGGER search_projection_flush_signal_au
+AFTER UPDATE OF sequence ON search_projection_flush_signal
 BEGIN
     INSERT INTO symbol_search_fts(symbol_search_fts, rowid, search_text)
     SELECT 'delete', entity_id, delete_text
