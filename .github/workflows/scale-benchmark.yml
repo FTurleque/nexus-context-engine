@@ -62,7 +62,11 @@ jobs:
         run: |
           REQUESTED="${{ inputs.profile }}"
           if [[ -z "$REQUESTED" ]]; then
-            REQUESTED=ci
+            if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+              REQUESTED=full
+            else
+              REQUESTED=ci
+            fi
           fi
           if [[ "$REQUESTED" != "ci" && "$REQUESTED" != "full" ]]; then
             echo "::error::Unsupported benchmark profile: $REQUESTED"
