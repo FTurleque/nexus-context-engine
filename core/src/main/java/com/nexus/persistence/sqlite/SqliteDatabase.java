@@ -49,6 +49,10 @@ public final class SqliteDatabase {
         try {
             try (Statement statement = connection.createStatement()) {
                 statement.execute("PRAGMA foreign_keys = ON");
+                // Trigger-heavy indexing otherwise creates temporary disk I/O for
+                // each canonical row. Keep transient SQL work in memory; the main
+                // database journal and synchronous durability remain unchanged.
+                statement.execute("PRAGMA temp_store = MEMORY");
             }
             if (!(connection instanceof SQLiteConnection sqliteConnection)) {
                 throw new SQLException("Unexpected JDBC connection type for SQLite database");

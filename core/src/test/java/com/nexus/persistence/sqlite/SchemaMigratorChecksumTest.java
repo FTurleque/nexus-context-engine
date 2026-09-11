@@ -5,8 +5,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 
@@ -101,10 +103,21 @@ class SchemaMigratorChecksumTest {
 
     @Test
     void legacyTableWithoutHashColumnIsUpgradedAdditively() throws Exception {
-        // Simule une base réellement ancienne : table sans la colonne script_sha256.
-        try (Connection connection = database.openConnection();
+        // Une vraie base V002, sans objets introduits par les migrations suivantes.
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite::memory:");
              Statement statement = connection.createStatement()) {
-            statement.executeUpdate("DROP TABLE schema_migrations");
+            statement.execute("PRAGMA foreign_keys = ON");
+            for (String resource : new String[] {
+                    "db/migration/V001__initial_schema.sql",
+                    "db/migration/V002__index_generation.sql"}) {
+                try (var input = getClass().getClassLoader().getResourceAsStream(resource)) {
+                    assertNotNull(input, resource);
+                    String sql = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+                    for (String migrationStatement : SqlScriptSplitter.split(sql)) {
+                        statement.execute(migrationStatement);
+                    }
+                }
+            }
             statement.executeUpdate("""
                     CREATE TABLE schema_migrations (
                         version INTEGER PRIMARY KEY,
@@ -116,9 +129,15 @@ class SchemaMigratorChecksumTest {
                     "INSERT INTO schema_migrations(version, script_name, applied_at) "
                             + "VALUES (1, 'db/migration/V001__initial_schema.sql', '2020-01-01T00:00:00Z'),"
                             + "       (2, 'db/migration/V002__index_generation.sql', '2020-01-01T00:00:00Z')");
-        }
-        try (Connection connection = database.openConnection()) {
             // La colonne est ajoutée additivement puis backfillée : aucune erreur.
+            assertDoesNotThrow(() -> SchemaMigrator.migrate(connection));
+            try (ResultSet rows = statement.executeQuery(
+                    "SELECT script_sha256 FROM schema_migrations WHERE version IN (1, 2) ORDER BY version")) {
+                for (int version = 1; version <= 2; version++) {
+                    assertTrue(rows.next());
+                    assertEquals(64, rows.getString(1).length());
+                }
+            }
             assertDoesNotThrow(() -> SchemaMigrator.migrate(connection));
         }
     }

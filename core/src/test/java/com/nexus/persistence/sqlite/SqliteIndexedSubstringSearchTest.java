@@ -167,6 +167,38 @@ class SqliteIndexedSubstringSearchTest {
     }
 
     @Test
+    void rollbackRestoresCanonicalRowsAndFlushedProjection() throws Exception {
+        SqliteDatabase database = database("projection-rollback");
+        UUID projectId = UUID.randomUUID();
+        try (Connection connection = database.openConnection();
+             Statement statement = connection.createStatement()) {
+            long fileId = insertProjectFile(connection, projectId);
+            insertSymbol(connection, fileId, "OriginalNeedle", "demo.OriginalNeedle");
+            bumpGeneration(connection, projectId);
+
+            connection.setAutoCommit(false);
+            statement.executeUpdate("UPDATE symbols SET name = 'ReplacementToken', "
+                    + "qualified_name = 'demo.ReplacementToken'");
+            bumpGeneration(connection, projectId);
+            assertEquals(1L, matchingCount(connection, "symbol_search_fts", "\"rep\""));
+            assertEquals(0L, matchingCount(connection, "symbol_search_fts", "\"ori\""));
+            connection.rollback();
+        }
+
+        // Une nouvelle connexion vérifie l'état réellement conservé sur disque.
+        try (Connection connection = database.openConnection();
+             Statement statement = connection.createStatement()) {
+            assertEquals(0L, pendingCount(connection, "symbol_search_pending"));
+            assertEquals(1L, matchingCount(connection, "symbol_search_fts", "\"ori\""));
+            assertEquals(0L, matchingCount(connection, "symbol_search_fts", "\"rep\""));
+            try (ResultSet row = statement.executeQuery("SELECT name FROM symbols")) {
+                assertTrue(row.next());
+                assertEquals("OriginalNeedle", row.getString(1));
+            }
+        }
+    }
+
+    @Test
     void twoCharacterQueriesKeepCompatibilityFallback() throws Exception {
         SqliteDatabase database = database("short-query");
         UUID projectId = UUID.randomUUID();
