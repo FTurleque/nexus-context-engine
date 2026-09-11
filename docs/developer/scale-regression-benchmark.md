@@ -80,7 +80,7 @@ relation_search_fts
 
 Les projections sont **contentless**, utilisent `detail=none` et `columnsize=0`. Elles ne dupliquent donc ni le contenu canonique, ni les positions, ni la table FTS `docsize`; elles conservent uniquement les posting lists nécessaires à la découverte de candidats. Les valeurs de référence restent dans `symbols` et `symbol_relations`.
 
-Les mutations canoniques sont placées par triggers dans `symbol_search_pending` / `relation_search_pending`. Chaque entrée pending mémorise le texte ancien lorsqu'une suppression de tokens est nécessaire et le dernier texte lorsqu'une insertion est nécessaire. Les suppressions sont appliquées avec la commande FTS5 spéciale `delete`, puis les insertions sont projetées par `INSERT ... SELECT`. Les lots de 5 000 sont vidés pendant les insertions et le bump de `project_index_generations` vide le reliquat dans la même transaction.
+Les mutations canoniques sont placées par triggers dans `symbol_search_pending` / `relation_search_pending`. Chaque entrée pending mémorise le texte ancien lorsqu'une suppression de tokens est nécessaire et le dernier texte lorsqu'une insertion est nécessaire. Les suppressions sont appliquées avec la commande FTS5 spéciale `delete`, puis les insertions sont projetées par `INSERT ... SELECT`. Le repository regroupe les écritures canoniques par lots SQL bornés de 128 lignes ; les lots de 5 000 du benchmark marquent des commits intermédiaires, et le bump de `project_index_generations` vide le reliquat dans la même transaction.
 
 Le repository transforme une requête en intersection de trigrams de trois points de code. Comme `detail=none` ne conserve pas les positions, les candidats FTS sont ensuite revalidés contre les valeurs canoniques avec la sémantique `contains`. Cette étape élimine les faux positifs possibles d'une simple intersection de trigrams sans réintroduire un scan complet de la table.
 
@@ -97,14 +97,14 @@ Les requêtes de un ou deux points de code gardent volontairement le fallback `L
 - commande FTS5 `delete` avec l'ancien texte ;
 - plan `VIRTUAL TABLE INDEX` ;
 - flush de génération ;
-- flush bulk à 5 000 lignes ;
+- lots SQL bornés à 128 lignes et commits de fixture à 5 000 lignes ;
 - fallback des requêtes très courtes.
 
-V008 est replay-safe pour le scénario de recovery où une ancienne table `schema_migrations` sans `script_sha256` est reconstruite puis le migrateur rejoué. Les FTS sont dérivés : un replay commence par `delete-all` puis les reconstruit depuis les tables canoniques.
+Le scénario de recovery vérifie qu'une ancienne table `schema_migrations` sans `script_sha256` est complétée additivement avant la reprise du migrateur. Les FTS sont dérivés : une reconstruction commence par `delete-all` puis les reconstruit depuis les tables canoniques.
 
-## Protocole 3
+## Protocole 4
 
-L'adoption FTS5/trigram modifie la composition de la base et son coût de population. `config/scale-benchmark-protocol` vaut donc **3**. Une mesure protocole 2 ne doit pas être utilisée comme baseline relative homogène du protocole 3.
+Le regroupement des écritures canoniques en lots SQL bornés complète l'adoption FTS5/trigram. `config/scale-benchmark-protocol` vaut donc **4**. Une mesure protocole 3 ou antérieure ne doit pas être utilisée comme baseline relative homogène du protocole 4.
 
 Les budgets absolus historiques ne sont **pas** relâchés par l'adoption FTS.
 

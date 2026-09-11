@@ -103,6 +103,7 @@ Le numéro est un identifiant stable. Le nom de fichier utilise des minuscules, 
 | [ADR-0046](0046-mettre-en-cache-le-contexte-git-dans-les-runtimes-longue-duree.md) | Mettre en cache le contexte Git dans les runtimes longue durée | Accepté |
 | [ADR-0047](0047-borner-le-support-filesystem-aux-filesystems-locaux-qualifies.md) | Borner le support filesystem aux filesystems locaux qualifiés | Accepté |
 | [ADR-0050](0050-conserver-les-temporaires-sqlite-en-memoire.md) | Conserver les temporaires SQLite en mémoire | Accepté |
+| [ADR-0051](0051-borner-les-lots-d-ecriture-sqlite.md) | Borner les lots d'écriture SQLite | Accepté |
 
 ## Modèle
 

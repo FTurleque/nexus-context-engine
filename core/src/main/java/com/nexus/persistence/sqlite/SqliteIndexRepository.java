@@ -42,7 +42,6 @@ public final class SqliteIndexRepository implements IndexRepository {
     private static final String EMBEDDED_SOURCE_PROVIDER = CodeSymbol.DEFAULT_SOURCE_PROVIDER;
     private static final String QUALIFIED_NAME_COLUMN = "qualified_name";
     private static final String RELATIVE_PATH_COLUMN = "relative_path";
-    private static final int EXTERNAL_BATCH_SIZE = 1_000;
     private static final int TRIGRAM_MIN_CODE_POINTS = 3;
     private static final long FUZZY_SMALL_CANDIDATE_THRESHOLD = 10_000L;
     private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
@@ -894,24 +893,12 @@ public final class SqliteIndexRepository implements IndexRepository {
         if (symbols.isEmpty()) {
             return;
         }
-        try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT INTO symbols(
-                    file_id, kind, name, qualified_name, signature,
-                    start_line, end_line, source_provider)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """)) {
+        try (var statement = new SqliteBatchInsert(connection, SqliteBatchInsert.Table.SYMBOLS)) {
             for (CodeSymbol symbol : symbols) {
-                statement.setLong(1, fileId);
-                statement.setString(2, symbol.kind().name());
-                statement.setString(3, symbol.name());
-                statement.setString(4, symbol.qualifiedName());
-                statement.setString(5, symbol.signature());
-                statement.setInt(6, symbol.startLine());
-                statement.setInt(7, symbol.endLine());
-                statement.setString(8, symbol.sourceProvider());
-                statement.addBatch();
+                statement.add(fileId, symbol.kind().name(), symbol.name(), symbol.qualifiedName(),
+                        symbol.signature(), symbol.startLine(), symbol.endLine(), symbol.sourceProvider());
             }
-            statement.executeBatch();
+            statement.flush();
         }
     }
 
@@ -923,22 +910,12 @@ public final class SqliteIndexRepository implements IndexRepository {
         if (relations.isEmpty()) {
             return;
         }
-        try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT INTO symbol_relations(
-                    project_id, file_id, kind, source_ref, target_ref, confidence, source_provider)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """)) {
+        try (var statement = new SqliteBatchInsert(connection, SqliteBatchInsert.Table.RELATIONS)) {
             for (SymbolRelation relation : relations) {
-                statement.setString(1, projectId.toString());
-                statement.setLong(2, fileId);
-                statement.setString(3, relation.kind().name());
-                statement.setString(4, relation.source());
-                statement.setString(5, relation.target());
-                statement.setDouble(6, relation.confidence());
-                statement.setString(7, relation.sourceProvider());
-                statement.addBatch();
+                statement.add(projectId.toString(), fileId, relation.kind().name(), relation.source(),
+                        relation.target(), relation.confidence(), relation.sourceProvider());
             }
-            statement.executeBatch();
+            statement.flush();
         }
     }
 
@@ -1052,38 +1029,17 @@ public final class SqliteIndexRepository implements IndexRepository {
         if (symbols.isEmpty()) {
             return;
         }
-        try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT INTO symbols(
-                    file_id, kind, name, qualified_name, signature,
-                    start_line, end_line, source_provider)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """)) {
-            int pending = 0;
+        try (var statement = new SqliteBatchInsert(connection, SqliteBatchInsert.Table.SYMBOLS)) {
             for (IndexedSymbol indexedSymbol : symbols) {
                 Long fileId = fileIds.get(indexedSymbol.relativePath());
                 if (fileId == null) {
                     continue;
                 }
                 CodeSymbol symbol = indexedSymbol.symbol();
-                statement.setLong(1, fileId);
-                statement.setString(2, symbol.kind().name());
-                statement.setString(3, symbol.name());
-                statement.setString(4, symbol.qualifiedName());
-                statement.setString(5, symbol.signature());
-                statement.setInt(6, symbol.startLine());
-                statement.setInt(7, symbol.endLine());
-                statement.setString(8, symbol.sourceProvider());
-                statement.addBatch();
-                pending++;
-                if (pending >= EXTERNAL_BATCH_SIZE) {
-                    statement.executeBatch();
-                    statement.clearBatch();
-                    pending = 0;
-                }
+                statement.add(fileId, symbol.kind().name(), symbol.name(), symbol.qualifiedName(),
+                        symbol.signature(), symbol.startLine(), symbol.endLine(), symbol.sourceProvider());
             }
-            if (pending > 0) {
-                statement.executeBatch();
-            }
+            statement.flush();
         }
     }
 
@@ -1095,36 +1051,17 @@ public final class SqliteIndexRepository implements IndexRepository {
         if (relations.isEmpty()) {
             return;
         }
-        try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT INTO symbol_relations(
-                    project_id, file_id, kind, source_ref, target_ref, confidence, source_provider)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """)) {
-            int pending = 0;
+        try (var statement = new SqliteBatchInsert(connection, SqliteBatchInsert.Table.RELATIONS)) {
             for (IndexedRelation indexedRelation : relations) {
                 Long fileId = fileIds.get(indexedRelation.relativePath());
                 if (fileId == null) {
                     continue;
                 }
                 SymbolRelation relation = indexedRelation.relation();
-                statement.setString(1, projectId.toString());
-                statement.setLong(2, fileId);
-                statement.setString(3, relation.kind().name());
-                statement.setString(4, relation.source());
-                statement.setString(5, relation.target());
-                statement.setDouble(6, relation.confidence());
-                statement.setString(7, relation.sourceProvider());
-                statement.addBatch();
-                pending++;
-                if (pending >= EXTERNAL_BATCH_SIZE) {
-                    statement.executeBatch();
-                    statement.clearBatch();
-                    pending = 0;
-                }
+                statement.add(projectId.toString(), fileId, relation.kind().name(), relation.source(),
+                        relation.target(), relation.confidence(), relation.sourceProvider());
             }
-            if (pending > 0) {
-                statement.executeBatch();
-            }
+            statement.flush();
         }
     }
 

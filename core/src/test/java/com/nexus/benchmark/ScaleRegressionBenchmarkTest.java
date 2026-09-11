@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.nexus.application.NexusApplication;
 import com.nexus.config.NexusPaths;
 import com.nexus.index.FileCategory;
+import com.nexus.persistence.sqlite.SqliteBatchInsert;
 import com.nexus.persistence.sqlite.SqliteDatabase;
 import com.nexus.persistence.sqlite.SqliteIndexRepository;
 import com.nexus.project.ProjectDescriptor;
@@ -421,62 +422,44 @@ class ScaleRegressionBenchmarkTest {
                     }
                 }
 
-                try (PreparedStatement symbols = connection.prepareStatement("""
-                        INSERT INTO symbols(
-                            file_id, kind, name, qualified_name, signature,
-                            start_line, end_line, source_provider)
-                        VALUES (?, 'CLASS', ?, ?, ?, 1, 2, 'javaparser')
-                        """)) {
+                try (var symbols = new SqliteBatchInsert(connection, SqliteBatchInsert.Table.SYMBOLS)) {
                     for (int symbol = 0; symbol < symbolCount; symbol++) {
                         long fileId = fileIds.get(symbol % fileIds.size());
                         String name = symbol % 10_000 == 0
                                 ? String.format(Locale.ROOT, "ScaleNeedle%08d", symbol)
                                 : String.format(Locale.ROOT, "BenchSymbol%08d", symbol);
                         String qualified = "bench.generated." + name;
-                        symbols.setLong(1, fileId);
-                        symbols.setString(2, name);
-                        symbols.setString(3, qualified);
-                        symbols.setString(4, "class " + name);
-                        symbols.addBatch();
+                        symbols.add(fileId, "CLASS", name, qualified, "class " + name, 1, 2, "javaparser");
                         if ((symbol + 1) % BATCH_SIZE == 0) {
-                            symbols.executeBatch();
+                            symbols.flush();
                         }
                         if ((symbol + 1) % 50_000 == 0) {
-                            symbols.executeBatch();
+                            symbols.flush();
                             connection.commit();
                         }
                     }
-                    symbols.executeBatch();
+                    symbols.flush();
                     connection.commit();
                 }
 
                 if (relationCount > 0) {
-                    try (PreparedStatement relations = connection.prepareStatement("""
-                            INSERT INTO symbol_relations(
-                                project_id, file_id, kind, source_ref, target_ref,
-                                confidence, source_provider)
-                            VALUES (?, ?, 'USES', ?, ?, 1.0, 'javaparser')
-                            """)) {
+                    try (var relations = new SqliteBatchInsert(connection, SqliteBatchInsert.Table.RELATIONS)) {
                         for (int relation = 0; relation < relationCount; relation++) {
                             long fileId = fileIds.get(relation % fileIds.size());
                             String source = "bench.generated.BenchSymbol" + String.format(Locale.ROOT, "%08d", relation);
                             String target = relation % 10_000 == 0
                                     ? "bench.target.TargetNeedle" + relation
                                     : "bench.target.Target" + relation;
-                            relations.setString(1, projectId.toString());
-                            relations.setLong(2, fileId);
-                            relations.setString(3, source);
-                            relations.setString(4, target);
-                            relations.addBatch();
+                            relations.add(projectId.toString(), fileId, "USES", source, target, 1.0, "javaparser");
                             if ((relation + 1) % BATCH_SIZE == 0) {
-                                relations.executeBatch();
+                                relations.flush();
                             }
                             if ((relation + 1) % 50_000 == 0) {
-                                relations.executeBatch();
+                                relations.flush();
                                 connection.commit();
                             }
                         }
-                        relations.executeBatch();
+                        relations.flush();
                         connection.commit();
                     }
                 }

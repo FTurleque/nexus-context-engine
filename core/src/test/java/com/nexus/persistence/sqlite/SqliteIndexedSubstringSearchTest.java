@@ -150,11 +150,13 @@ class SqliteIndexedSubstringSearchTest {
         SqliteDatabase database = database("generation-flush");
         UUID projectId = UUID.randomUUID();
         try (Connection connection = database.openConnection()) {
+            connection.setAutoCommit(false);
             long fileId = insertProjectFile(connection, projectId);
             for (int index = 0; index < 5_000; index++) {
                 String name = "BatchNeedle" + index;
                 insertSymbol(connection, fileId, name, "demo." + name);
             }
+            connection.commit();
 
             assertEquals(5_000L, pendingCount(connection, "symbol_search_pending"));
             assertEquals(0L, matchingCount(connection, "symbol_search_fts", "\"bat\" AND \"atc\" AND \"tch\""));
