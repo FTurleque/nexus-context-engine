@@ -85,23 +85,36 @@ jobs:
             -Dnexus.native.discovery.scale.benchmark.output=target/native-discovery-scale-benchmark.json \
             test
 
-      - name: Benchmark PR base SQLite population on the same runner
+      - name: Run full SQLite scale curve for pull request
+        if: github.event_name == 'pull_request' && steps.profile.outputs.value == 'ci'
+        shell: bash
+        run: |
+          ./mvnw -B -pl core \
+            -Dtest=ScaleRegressionBenchmarkTest \
+            -Djunit.jupiter.execution.timeout.test.method.default=20m \
+            -Dnexus.scale.benchmark.enabled=true \
+            -Dnexus.scale.benchmark.profile=full \
+            -Dnexus.scale.benchmark.output=target/scale-benchmark-sqlite-full.json \
+            test
+
+      - name: Benchmark PR base SQLite storage on the same runner
         if: github.event_name == 'pull_request'
         shell: bash
         run: |
           set -euo pipefail
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
           PROTOCOL_FILE="config/scale-benchmark-protocol"
           CANDIDATE_REPORT="$RUNNER_TEMP/scale-benchmark-candidate.json"
           BASE_REPORT="$RUNNER_TEMP/scale-benchmark-base.json"
+          POPULATION_COMPARABLE=false
 
           test -s "$PROTOCOL_FILE"
           HEAD_PROTOCOL="$(tr -d '\r\n[:space:]' < "$PROTOCOL_FILE")"
           BASE_PROTOCOL="$(git show "$BASE_SHA:$PROTOCOL_FILE" 2>/dev/null | tr -d '\r\n[:space:]' || true)"
-          if [[ -z "$BASE_PROTOCOL" || "$BASE_PROTOCOL" != "$HEAD_PROTOCOL" ]]; then
-            echo "::notice::Skipping relative SQLite population comparison: base/head benchmark protocols are not compatible (base='${BASE_PROTOCOL:-absent}', head='$HEAD_PROTOCOL'). Candidate absolute and latency budgets remain enforced."
-            exit 0
+          if [[ -n "$BASE_PROTOCOL" && "$BASE_PROTOCOL" == "$HEAD_PROTOCOL" ]]; then
+            POPULATION_COMPARABLE=true
+          else
+            echo "::notice::Base/head benchmark protocols differ (base='${BASE_PROTOCOL:-absent}', head='$HEAD_PROTOCOL'). Relative population comparison is skipped, but the base 1M storage footprint is still measured on this runner."
           fi
 
           cp target/scale-benchmark.json "$CANDIDATE_REPORT"
@@ -119,7 +132,7 @@ jobs:
               -Dtest=ScaleRegressionBenchmarkTest \
               -Djunit.jupiter.execution.timeout.test.method.default=20m \
               -Dnexus.scale.benchmark.enabled=true \
-              -Dnexus.scale.benchmark.profile=${{ steps.profile.outputs.value }} \
+              -Dnexus.scale.benchmark.profile=full \
               -Dnexus.scale.benchmark.output="$BASE_REPORT" \
               test
           )
@@ -127,6 +140,9 @@ jobs:
           mkdir -p target
           cp "$CANDIDATE_REPORT" target/scale-benchmark.json
           cp "$BASE_REPORT" target/scale-benchmark-base.json
+          if [[ "$POPULATION_COMPARABLE" == "true" ]]; then
+            touch target/scale-benchmark-base-population-comparable
+          fi
 
       - name: Verify report and regression budgets
         shell: bash
@@ -135,6 +151,10 @@ jobs:
           test -s target/graph-scale-benchmark.json
           test -s target/federated-budget-scale-benchmark.json
           test -s target/native-discovery-scale-benchmark.json
+          if [[ "${{ github.event_name }}" == "pull_request" && "${{ steps.profile.outputs.value }}" == "ci" ]]; then
+            test -s target/scale-benchmark-sqlite-full.json
+            test -s target/scale-benchmark-base.json
+          fi
           python3 - <<'PY'
           import json
           from pathlib import Path
@@ -143,16 +163,20 @@ jobs:
           graph = json.loads(Path('target/graph-scale-benchmark.json').read_text())
           federated = json.loads(Path('target/federated-budget-scale-benchmark.json').read_text())
           native = json.loads(Path('target/native-discovery-scale-benchmark.json').read_text())
+          sqlite_full_path = Path('target/scale-benchmark-sqlite-full.json')
+          sqlite_report = json.loads(sqlite_full_path.read_text()) if sqlite_full_path.exists() else report
           baseline_path = Path('target/scale-benchmark-base.json')
           baseline = json.loads(baseline_path.read_text()) if baseline_path.exists() else None
+          population_comparable = Path('target/scale-benchmark-base-population-comparable').exists()
           profile = report['profile']
           assert profile in ('ci', 'full')
           assert graph['profile'] == profile
           assert report['sqliteTiers']
+          assert sqlite_report['sqliteTiers']
           assert report['portfolio']['tiers']
           assert report['semanticRecovery']['documents'] > 0
 
-          sqlite = {tier['symbols']: tier for tier in report['sqliteTiers']}
+          sqlite = {tier['symbols']: tier for tier in sqlite_report['sqliteTiers']}
           baseline_sqlite = ({tier['symbols']: tier for tier in baseline['sqliteTiers']}
                              if baseline is not None else {})
           portfolio = {tier['projects']: tier for tier in report['portfolio']['tiers']}
@@ -163,9 +187,6 @@ jobs:
               500_000: {'exact': 1000, 'contains': 600,  'miss': 600,  'relation': 400},
               1_000_000: {'exact': 2000, 'contains': 1200, 'miss': 1200, 'relation': 800},
           }
-          # SQLite bulk population is dominated by hosted-runner storage throughput.
-          # Keep a broad fail-safe ceiling, but on comparable PRs detect code
-          # regressions by comparing candidate and base on the same runner.
           population_safety_ceiling = {
               10_000: 1_400,
               100_000: 5_000,
@@ -190,7 +211,7 @@ jobs:
               population = tier['populationMs']
               ceiling = population_safety_ceiling[symbols]
               assert population <= ceiling, (symbols, 'population-safety', population, ceiling)
-              if symbols in baseline_sqlite:
+              if population_comparable and symbols in baseline_sqlite:
                   baseline_population = baseline_sqlite[symbols]['populationMs']
                   relative_ceiling = max(
                       int(baseline_population * 1.20),
@@ -208,8 +229,20 @@ jobs:
                       'base=', baseline_population,
                       'allowed=', relative_ceiling)
 
+          if sqlite_full_path.exists():
+              assert set(sqlite) == {10_000, 100_000, 500_000, 1_000_000}, sorted(sqlite)
           if 1_000_000 in sqlite:
-              assert sqlite[1_000_000]['databaseBytes'] <= 650 * 1024 * 1024, sqlite[1_000_000]['databaseBytes']
+              assert 1_000_000 in baseline_sqlite, 'PR scale runs must measure the 1M base storage footprint'
+              candidate_bytes = sqlite[1_000_000]['databaseBytes']
+              baseline_bytes = baseline_sqlite[1_000_000]['databaseBytes']
+              storage_ceiling = int(baseline_bytes * 1.20)
+              assert candidate_bytes <= storage_ceiling, (
+                  'database-storage-relative', candidate_bytes, baseline_bytes, storage_ceiling)
+              print(
+                  'sqlite-storage-relative=',
+                  'candidate=', candidate_bytes,
+                  'base=', baseline_bytes,
+                  'allowed=', storage_ceiling)
 
           portfolio_budgets = {
               10: {'search': 120, 'context': 160},
@@ -261,7 +294,8 @@ jobs:
           assert report['usedHeapDeltaBytes'] <= 256 * 1024 * 1024, report['usedHeapDeltaBytes']
 
           print('profile=', profile)
-          print('sqlite-max=', report['sqliteTiers'][-1]['symbols'])
+          print('sqlite-profile=', sqlite_report['profile'])
+          print('sqlite-max=', sqlite_report['sqliteTiers'][-1]['symbols'])
           print('portfolio-max=', report['portfolio']['maximumProjects'])
           print('semantic-documents=', report['semanticRecovery']['documents'])
           print('graph-symbols=', graph['symbols'])
@@ -286,6 +320,7 @@ jobs:
           if-no-files-found: error
           path: |
             target/scale-benchmark.json
+            target/scale-benchmark-sqlite-full.json
             target/scale-benchmark-base.json
             target/graph-scale-benchmark.json
             target/federated-budget-scale-benchmark.json

@@ -63,6 +63,7 @@ class SqliteGraphNeighborhoodProjectionTest {
         SqliteDatabase database = new SqliteDatabase(new NexusPaths(tempDir.resolve("high-cardinality-home")));
         UUID projectId = UUID.randomUUID();
         try (Connection connection = database.openConnection()) {
+            connection.setAutoCommit(false);
             insertProject(connection, projectId);
             long seed = insertFile(connection, projectId, "src/Seed.java");
             long target = insertFile(connection, projectId, "src/Target.java");
@@ -78,6 +79,7 @@ class SqliteGraphNeighborhoodProjectionTest {
             insertImport(connection, projectId, seed, "src/Seed.java", "demo.Target.Inner.Deep");
             insertImport(connection, projectId, importer, "src/Importer.java", "demo.Seed");
             insertImport(connection, projectId, unrelated, "src/StructuralNoise.java", "noise.Type19999");
+            connection.commit();
         }
 
         SqliteIndexRepository repository = new SqliteIndexRepository(database);

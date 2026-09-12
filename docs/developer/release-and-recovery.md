@@ -49,7 +49,7 @@ Voir [`immutable-release-publishing.md`](immutable-release-publishing.md).
 
 SQLite reste l'autorité canonique. Les migrations sont forward-only, enregistrées dans `schema_migrations` et protégées par `script_sha256`.
 
-Les migrations de durcissement récentes sont :
+Les migrations de durcissement et de performance récentes sont :
 
 - `V004__invalidate_invalid_symbol_ranges.sql` : invalide les index historiques contenant des plages que le domaine Java ne peut plus représenter et force un rebuild déterministe ;
 - `V005__enforce_symbol_range_constraints.sql` : reconstruit `symbols` et impose :
@@ -60,9 +60,12 @@ end_line >= start_line
 ```
 
 - `V006__invalidate_unredacted_lexical_indexes.sql` : invalide une fois les projets existants et incrémente leur génération afin que la prochaine indexation effectue un rebuild complet. Ce rebuild supprime les anciens segments Lucene qui avaient tokenisé le contenu brut avant que la redaction des secrets ne soit appliquée au pipeline lexical.
-- V007__invalidate_legacy_repository_paths.sql : invalide les index persistants qui utilisaient l ancienne representation ambigue des chemins, incremente la generation des projets et force un rebuild avec l identite par composants. La migration ne tente pas de deviner si une ancienne valeur a/b.java designait un chemin separe ou un nom POSIX contenant un backslash.
+- `V007__invalidate_legacy_repository_paths.sql` : invalide les index persistants qui utilisaient l'ancienne représentation ambiguë des chemins, incrémente la génération des projets et force un rebuild avec l'identité par composants. La migration ne tente pas de deviner si une ancienne valeur `a/b.java` désignait un chemin séparé ou un nom POSIX contenant un backslash.
+- `V008__indexed_substring_search.sql` : construit les index dérivés FTS5/trigram `symbol_search_fts` et `relation_search_fts`, backfill les faits canoniques existants et installe des triggers `INSERT` / `UPDATE` / `DELETE` pour maintenir ces projections. Elle ajoute également `idx_symbols_fuzzy_prefilter` pour le préfiltrage fuzzy.
 
-Une base V004 valide est migrée vers V005 en conservant ses données/index. V006 conserve également SQLite mais marque les projets `NOT_INDEXED` pour reconstruire les index dérivés avec la représentation redacted. Un `INSERT` SQL direct invalide est rejeté. Réexécuter le migrateur sur une base déjà migrée est idempotent.
+Une base V004 valide est migrée vers V005 en conservant ses données/index. V006 conserve également SQLite mais marque les projets `NOT_INDEXED` pour reconstruire les index dérivés avec la représentation redacted. V008 ne remplace pas les tables canoniques `symbols` et `symbol_relations` : ses tables FTS sont reconstructibles à partir d'elles. Un `INSERT` SQL direct invalide est rejeté. Réexécuter le migrateur sur une base déjà migrée est idempotent.
+
+Si un index FTS V008 est physiquement corrompu, la procédure sûre consiste à restaurer SQLite depuis une sauvegarde cohérente ou à reconstruire l'état dérivé via une migration/recovery contrôlé ; ne jamais considérer les tables FTS comme l'autorité à sauvegarder indépendamment des tables canoniques.
 
 ### Permissions de `NEXUS_HOME`
 

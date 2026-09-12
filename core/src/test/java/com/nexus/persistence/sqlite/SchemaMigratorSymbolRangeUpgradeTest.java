@@ -83,13 +83,14 @@ class SchemaMigratorSymbolRangeUpgradeTest {
         assertTrue(symbols.isEmpty(), "V007 supprime aussi les faits aux plages valides mais aux chemins ambigus");
         assertMigrationApplied(upgraded, 5, "db/migration/V005__enforce_symbol_range_constraints.sql");
         assertMigrationApplied(upgraded, 6, "db/migration/V006__invalidate_unredacted_lexical_indexes.sql");
+        assertMigrationApplied(upgraded, 8, "db/migration/V008__indexed_substring_search.sql");
         assertDirectSymbolInsertRejected(databaseFile, 202, -1, -1);
 
         try (Connection connection = upgraded.openConnection()) {
             connection.setAutoCommit(true);
             assertDoesNotThrow(() -> SchemaMigrator.migrate(connection));
         }
-        assertMigrationCount(upgraded, 7L);
+        assertMigrationCount(upgraded, 8L);
     }
 
     @Test
@@ -116,6 +117,7 @@ class SchemaMigratorSymbolRangeUpgradeTest {
         assertMigrationApplied(upgraded, 4, "db/migration/V004__invalidate_invalid_symbol_ranges.sql");
         assertMigrationApplied(upgraded, 5, "db/migration/V005__enforce_symbol_range_constraints.sql");
         assertMigrationApplied(upgraded, 6, "db/migration/V006__invalidate_unredacted_lexical_indexes.sql");
+        assertMigrationApplied(upgraded, 8, "db/migration/V008__indexed_substring_search.sql");
     }
 
     private static void verifyV005BeforeCurrentUpgrade(Path databaseFile, int startLine, int endLine) throws Exception {
