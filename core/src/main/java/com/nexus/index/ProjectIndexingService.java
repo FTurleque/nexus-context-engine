@@ -338,17 +338,18 @@ public final class ProjectIndexingService {
             }
 
             refreshImportedCodeIntelligence(
-                    projectId, project.rootPath(), diagnostics, providerDurationsMs);
+                    projectId, project.rootPath(), scannedPaths, diagnostics, providerDurationsMs);
             if (includeCodeIntelligenceProviders) {
                 refreshActiveCodeIntelligence(
                         projectId, project.rootPath(), diagnostics, providerDurationsMs);
             }
 
-            // Une modification externe peut survenir après le scan initial ou pendant
-            // l'exécution d'un provider. On ne publie jamais READY si le repository
-            // canonique n'est plus exactement celui dont le fingerprint a servi à
-            // construire SQLite/Lucene. L'état FAILED force un rebuild complet au
-            // prochain passage et rend les dérivés partiels inaccessibles entre-temps.
+            // Le scan final détecte les mutations observables par rapport au fingerprint
+            // ayant servi à construire les index. FAILED interdit l'accès aux dérivés
+            // partiels et force leur reconstruction. Sans snapshot filesystem, ni ce
+            // scan ni save(READY) ne sont atomiques face aux écritures externes : une
+            // mutation après le scan reste possible. READY atteste la génération
+            // indexée, pas l'immuabilité du repository vivant.
             ProjectScanResult finalScan = scanner.scanWithDiagnostics(project.rootPath());
             String finalFingerprint = CanonicalIndexFingerprint.fromScannedFiles(finalScan.files());
             if (!canonicalFingerprint.equals(finalFingerprint)) {
@@ -426,13 +427,14 @@ public final class ProjectIndexingService {
     private void refreshImportedCodeIntelligence(
             UUID projectId,
             java.nio.file.Path projectRoot,
+            Set<String> scannedPaths,
             List<String> diagnostics,
             Map<String, Long> providerDurationsMs) throws IOException {
         for (CodeIndexImporter importer : codeIndexImporters) {
             long startedAt = System.nanoTime();
             CodeIntelligenceSnapshot snapshot = externalTaskRunner.run(
                     "importer " + importer.sourceProvider(),
-                    () -> importer.importIndex(projectRoot)
+                    () -> importer.importIndex(projectRoot, scannedPaths)
                             .orElseGet(() -> CodeIntelligenceSnapshot.empty(importer.sourceProvider())));
             validateSnapshotProvider(importer.sourceProvider(), snapshot);
             indexRepository.replaceExternalCodeIntelligence(projectId, snapshot);

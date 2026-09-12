@@ -35,6 +35,22 @@ class JdtLanguageServerCodeIntelligenceProviderTest {
     @TempDir
     Path temporaryDirectory;
 
+
+    @Test
+    void fileUrisKeepPosixBackslashAndSlashSymbolsDistinct() throws Exception {
+        Assumptions.assumeTrue(temporaryDirectory.getFileSystem().getSeparator().equals("/"));
+        Path root = Files.createDirectory(temporaryDirectory.resolve("identity"));
+        Path backslash = write(root, "a\\b.java", "package demo;\nabstract class Base {\n abstract void run();\n}\n");
+        Path slash = write(root, "a/b.java", "package demo;\nclass Impl extends Base {\n public void run() {}\n}\n");
+        var session = new FakeSession(backslash.toUri().toString(), slash.toUri().toString());
+        var provider = new JdtLanguageServerCodeIntelligenceProvider(configuration(), (ignored, project) -> session, JSON);
+        var snapshot = provider.analyze(root);
+        assertEquals(java.util.Set.of("a\\b.java", "a/b.java"), snapshot.symbols().stream()
+                .map(com.nexus.index.IndexedSymbol::relativePath).collect(java.util.stream.Collectors.toSet()));
+        assertEquals(4, snapshot.symbols().size());
+        assertTrue(snapshot.relations().stream().allMatch(r -> java.util.Set.of("a\\b.java", "a/b.java").contains(r.relativePath())));
+    }
+
     @Test
     void normalizesReferencesImplementationsTypeHierarchyAndCallHierarchy() throws Exception {
         Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("project"));

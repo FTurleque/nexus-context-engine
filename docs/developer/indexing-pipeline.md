@@ -1,10 +1,10 @@
 # Pipeline d'indexation locale
 
-Ce chapitre décrit l'Itération 1 telle qu'elle est implémentée et validée.
+Ce chapitre décrit le pipeline d'indexation actuellement implémenté et validé.
 
 ## 1. Objectif
 
-Transformer un repository Java local en deux représentations complémentaires :
+Transformer un repository local multi-langage en deux représentations complémentaires :
 
 ```text
 SQLite
@@ -14,7 +14,7 @@ Lucene
 → index de recherche dérivé et reconstructible
 ```
 
-L'indexation doit rester locale, incrémentale, idempotente et capable de propager les suppressions.
+L'indexation reste locale, incrémentale, idempotente et capable de propager les suppressions.
 
 ## 2. Séquence complète
 
@@ -27,7 +27,7 @@ sequenceDiagram
     participant Scanner as ProjectScanner
     participant Ignore as ProjectIgnoreMatcher
     participant Hash as FileHasher
-    participant AST as JavaParserLanguageAnalyzer
+    participant Analyzer as LanguageAnalyzer(s)
     participant SQLite as IndexRepository / SQLite
     participant Lucene as SearchIndex / Lucene
 
@@ -43,8 +43,8 @@ sequenceDiagram
     Scanner-->>SVC: ScannedFile[]
 
     loop fichier nouveau ou modifié
-        SVC->>AST: analyze(projectRoot, file)
-        AST-->>SVC: AnalysisResult
+        SVC->>Analyzer: analyze(projectRoot, file) si un analyseur structurel le supporte
+        Analyzer-->>SVC: AnalysisResult
     end
 
     SVC->>SQLite: applyChanges(updates, removedPaths)
@@ -77,7 +77,7 @@ ProjectDescriptor
 └── indexStatus
 ```
 
-La racine réelle du projet est normalisée afin d'éviter d'enregistrer deux fois le même repository via des chemins équivalents.
+La racine réelle du projet est canonisée avec `toRealPath()` afin d'éviter d'enregistrer deux fois le même repository via des chemins équivalents.
 
 ## 4. `NEXUS_HOME`
 
@@ -113,14 +113,29 @@ Toujours utiliser `NexusPaths` pour résoudre ces emplacements.
 
 `ProjectScanner.scan(Path projectRoot)` :
 
-1. normalise la racine en chemin absolu ;
+1. construit un `ProjectPathGuard` sur la racine réelle ;
 2. initialise `ProjectIgnoreMatcher` ;
-3. parcourt l'arbre avec `Files.walkFileTree` ;
-4. ignore les sous-arbres exclus ;
-5. ne conserve actuellement que les fichiers `.java` ;
-6. calcule SHA-256 ;
-7. classe le fichier `SOURCE` ou `TEST` ;
-8. trie le résultat par chemin relatif.
+3. parcourt l'arbre avec `Files.walkFileTree` sans suivre les liens symboliques ;
+4. applique les règles d'exclusion avant matérialisation ;
+5. ne conserve que les langages texte déclarés par `SourceLanguage` ;
+6. applique les limites globales de nombre d'entrées, volume total et taille par fichier ;
+7. calcule SHA-256 sur les fichiers retenus ;
+8. classe chaque fichier dans une `FileCategory` ;
+9. trie le résultat par chemin repository canonique.
+
+Les langages texte actuellement reconnus sont :
+
+```text
+JAVA        .java
+MARKDOWN    .md
+KOTLIN      .kt .kts
+TYPESCRIPT  .ts .tsx
+JAVASCRIPT  .js .jsx .mjs .cjs
+PYTHON      .py
+SQL         .sql
+```
+
+La présence d'un langage dans `SourceLanguage` garantit le scan, l'indexation lexicale et la construction de contexte à partir du contenu. Elle ne garantit pas une analyse structurelle embarquée pour ce langage.
 
 Chaque `ScannedFile` contient notamment :
 
@@ -137,19 +152,22 @@ category
 
 ### Catégories
 
-`FileCategory` définit :
+`FileCategory` définit actuellement :
 
 ```text
 SOURCE
 TEST
 RESOURCE
 DOCUMENTATION
+INSTRUCTION
+AGENT_PROFILE
+SKILL
 OTHER
 ```
 
-Le scanner MVP ne conserve actuellement que les sources Java ; les autres catégories préparent l'extension future.
+Le scanner reconnaît notamment les tests usuels Java/Kotlin/Python/JavaScript/TypeScript, les fichiers Markdown de documentation, les instructions IA (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, instructions Copilot), les profils agents et les répertoires de skills.
 
-## 6. Règles d'exclusion
+## 6. Règles d'exclusion et sécurité filesystem
 
 `ProjectIgnoreMatcher` réutilise JGit pour la sémantique des patterns.
 
@@ -178,7 +196,7 @@ La négation est supportée :
 !important.generated.java
 ```
 
-NEXUS évite ainsi de maintenir un parseur d'ignore partiellement compatible avec Git.
+Les liens symboliques et entrées non régulières sont refusés pour les fichiers indexables. Les chemins retenus sont revalidés par `ProjectPathGuard` avant hash et lecture.
 
 ## 7. Détection incrémentale par SHA-256
 
@@ -187,7 +205,7 @@ Pour chaque chemin fonctionnel `(projectId, relativePath)` :
 ```text
 nouveau hash == ancien hash
 → inchangé
-→ pas de parsing AST
+→ pas de nouvelle analyse structurelle
 
 nouveau hash != ancien hash
 → modifié
@@ -205,9 +223,11 @@ Le self-smoke valide qu'une seconde indexation sans modification retourne :
 0 supprimé
 ```
 
-## 8. Analyse Java
+Un projet en cours d'indexation passe par `INDEXING`. Une défaillance positionne le projet en `FAILED`; un état non `READY` impose ensuite une reconstruction cohérente avant que recherche et contexte ne soient servis.
 
-`JavaParserLanguageAnalyzer` implémente exactement le contrat :
+## 8. Analyse structurelle embarquée
+
+Le contrat commun reste :
 
 ```java
 public interface LanguageAnalyzer {
@@ -216,9 +236,12 @@ public interface LanguageAnalyzer {
 }
 ```
 
-Le parser est configuré explicitement au niveau Java 21.
+Les analyseurs embarqués actuellement composés par `NexusApplication` sont :
 
-Cette configuration a été ajoutée après qu'un self-smoke réel a révélé que le niveau par défaut refusait les text blocks présents dans NEXUS.
+- `JavaParserLanguageAnalyzer` pour Java ;
+- `MarkdownLanguageAnalyzer` pour Markdown.
+
+JavaParser est configuré explicitement au niveau Java 21. Les autres langages reconnus par `SourceLanguage` restent indexés lexicalement et peuvent recevoir une intelligence structurelle externe, notamment via SCIP. L'analyse Java profonde par JDT Language Server est un provider optionnel distinct et n'est activée que par configuration explicite.
 
 ### UML du modèle d'analyse
 
@@ -231,6 +254,7 @@ classDiagram
     }
 
     class JavaParserLanguageAnalyzer
+    class MarkdownLanguageAnalyzer
 
     class AnalysisResult {
         +List~CodeSymbol~ symbols
@@ -253,224 +277,9 @@ classDiagram
     }
 
     LanguageAnalyzer <|.. JavaParserLanguageAnalyzer
+    LanguageAnalyzer <|.. MarkdownLanguageAnalyzer
     JavaParserLanguageAnalyzer --> AnalysisResult
+    MarkdownLanguageAnalyzer --> AnalysisResult
     AnalysisResult --> CodeSymbol
     AnalysisResult --> SymbolRelation
 ```
-
-Les bornes `startLine` / `endLine` sont ensuite utilisées par l'Itération 3 pour extraire des fragments ciblés.
-
-## 9. Persistance SQLite
-
-### Diagramme entité-relation
-
-```mermaid
-erDiagram
-    PROJECTS ||--o{ PROJECT_LANGUAGES : has
-    PROJECTS ||--o{ PROJECT_TECHNOLOGIES : has
-    PROJECTS ||--o{ INDEXED_FILES : contains
-    INDEXED_FILES ||--o{ SYMBOLS : defines
-    PROJECTS ||--o{ SYMBOL_RELATIONS : owns
-    INDEXED_FILES ||--o{ SYMBOL_RELATIONS : contributes
-
-    PROJECTS {
-        string id PK
-        string name
-        string root_path UK
-        string source_type
-        string last_indexed_at
-        string index_status
-    }
-
-    INDEXED_FILES {
-        long id PK
-        string project_id FK
-        string relative_path
-        string language
-        long size_bytes
-        string content_hash
-        string modified_at
-        int estimated_tokens
-        string category
-    }
-
-    SYMBOLS {
-        long id PK
-        long file_id FK
-        string kind
-        string name
-        string qualified_name
-        string signature
-        int start_line
-        int end_line
-        string source_provider
-    }
-
-    SYMBOL_RELATIONS {
-        long id PK
-        string project_id FK
-        long file_id FK
-        string kind
-        string source_ref
-        string target_ref
-        double confidence
-        string source_provider
-    }
-```
-
-La contrainte importante est :
-
-```text
-UNIQUE(project_id, relative_path)
-```
-
-Les IDs numériques de fichiers/symboles restent techniques et locaux à SQLite.
-
-## 10. Transactions de mise à jour
-
-`SqliteIndexRepository.applyChanges` effectue dans une transaction :
-
-1. suppression des fichiers disparus ;
-2. upsert des fichiers modifiés ;
-3. suppression des anciennes analyses du fichier ;
-4. insertion des nouveaux symboles ;
-5. insertion des nouvelles relations ;
-6. commit.
-
-Une erreur SQL entraîne un rollback.
-
-Les clés étrangères avec `ON DELETE CASCADE` nettoient les symboles liés aux fichiers supprimés.
-
-## 11. Migrations
-
-`SchemaMigrator` maintient la table :
-
-```text
-schema_migrations
-├── version
-├── script_name
-└── applied_at
-```
-
-Migration actuelle :
-
-```text
-core/src/main/resources/db/migration/V001__initial_schema.sql
-```
-
-Au démarrage de la base :
-
-1. créer `schema_migrations` si nécessaire ;
-2. lire les versions appliquées ;
-3. exécuter les scripts manquants dans l'ordre ;
-4. enregistrer la version ;
-5. commit ou rollback global en cas d'erreur.
-
-Pour ajouter `V002` :
-
-- créer un nouveau script ;
-- l'enregistrer dans la liste ordonnée du migrateur ;
-- ne pas modifier rétroactivement `V001` pour une base existante.
-
-## 12. Index Lucene
-
-`LuceneSearchIndex` implémente `SearchIndex`.
-
-Un document Lucene représente actuellement un fichier Java indexé.
-
-Champs principaux :
-
-```text
-document_key
-project_id
-path
-path_text
-language
-category
-content
-symbol_exact
-symbol_name
-qualified_name_exact
-qualified_name
-symbol_kind
-```
-
-Clé stable :
-
-```text
-projectId + ":" + relativePath
-```
-
-Les mises à jour utilisent `updateDocument`.
-
-## 13. Synchronisation SQLite → Lucene
-
-```mermaid
-flowchart LR
-    SRC[Repository] --> PIPE[ProjectIndexingService]
-    PIPE --> SQL[(SQLite canonique)]
-    PIPE --> LUC[(Lucene dérivé)]
-    SQL -. permet la reconstruction .-> LUC
-```
-
-SQLite contient l'état structurel durable.
-
-Lucene est optimisé pour la recherche et peut être supprimé/reconstruit.
-
-La commande :
-
-```powershell
-mvn -q exec:java "-Dexec.args=index my-project --rebuild"
-```
-
-force une reconstruction complète de l'index de recherche.
-
-## 14. Cycle d'état
-
-```mermaid
-stateDiagram-v2
-    [*] --> NOT_INDEXED
-    NOT_INDEXED --> INDEXING : index()
-    READY --> INDEXING : réindexation
-    FAILED --> INDEXING : nouvelle tentative
-    INDEXING --> READY : succès
-    INDEXING --> FAILED : erreur
-```
-
-`DefaultContextBuilder` exige ensuite l'état `READY` avant de construire un contexte.
-
-## 15. Reproduire l'indexation
-
-```powershell
-$env:NEXUS_HOME = "$PWD\target\manual-nexus-home"
-
-mvn -q exec:java "-Dexec.args=project add . local-demo"
-mvn -q exec:java "-Dexec.args=index local-demo"
-mvn -q exec:java "-Dexec.args=inspect local-demo"
-mvn -q exec:java "-Dexec.args=index local-demo"
-```
-
-La dernière commande doit signaler zéro modification si le repository est inchangé.
-
-Validation automatique :
-
-```powershell
-.\scripts\self-smoke.ps1 -KeepData
-```
-
-## 16. Tests qui protègent le pipeline
-
-Les tests couvrent :
-
-- syntaxe Java 21 et text blocks ;
-- scanner ;
-- `.gitignore` / `.nexusignore` ;
-- négation de patterns ;
-- registre idempotent ;
-- indexation initiale ;
-- deuxième indexation sans changement ;
-- modification ;
-- suppression ;
-- cohérence du nombre de documents Lucene.
-
-Toute évolution du scanner ou de la persistance doit conserver ces invariants.

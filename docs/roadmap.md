@@ -61,6 +61,19 @@ NXA4 complète cette baseline avec :
 - checks de bounds SCIP résistants aux overflows ;
 - parcours JavaParser limité aux catégories AST nécessaires.
 
+## Hardening post-audit du 7 septembre 2026
+
+La campagne de consolidation ajoute :
+
+- confiance explicite de la racine JDT LS avant démarrage ;
+- plafonds communs de métadonnées Code Intelligence ;
+- inspection ACL Windows sur tous les chemins sensibles ;
+- mode optionnel `NEXUS_REQUIRE_PRIVATE_STORAGE=true` pour échouer fermé lorsque la confidentialité du stockage ne peut pas être démontrée ;
+- revalidation de l'identité filesystem avant/après ouverture dans le fallback `SafeFileIO` lorsque `SecureDirectoryStream` n'est pas disponible ;
+- circuit-breaker provider linéarisé contre les races timeout/start ;
+- qualification sémantique réelle Ollama mensuelle/manuelle avec runtime épinglé par SHA-256 et seuils de non-régression ;
+- contrat explicite de non-adoption de `jdk.incubator.vector` tant qu'une nouvelle mesure same-runner ne démontre pas un bénéfice robuste.
+
 ## Qualification de scale
 
 Le Scale Benchmark couvre :
@@ -74,9 +87,9 @@ La recherche lexicale contient en plus un test de non-régression sur les requê
 
 ## Gouvernance effective
 
-NXA3-14 / #130 est satisfait : le ruleset GitHub actif protège `develop`, exige le passage par pull request, interdit force-push/suppression et impose les sept checks permanents approuvés. Toute modification repository-admin doit être suivie d'une revalidation API.
+NXA3-14 / #130 est satisfait : le ruleset GitHub actif protège `develop`, exige le passage par pull request, interdit force-push/suppression et impose les checks permanents approuvés. Toute modification repository-admin doit être suivie d'une revalidation API.
 
-Le seul hardening résiduel identifié lors de l'audit du 6 septembre 2026 est `strict_required_status_checks_policy=false` : GitHub n'impose pas encore que la PR soit remise à jour avec la base immédiatement avant merge. Ce réglage est externe au code versionné.
+Le modèle de maintenance courant est **solo**. L'absence de revue humaine distincte du mainteneur et l'absence d'obligation de resynchroniser une PR avec sa base juste avant merge sont des choix explicites de ce modèle, pas des hardenings à poursuivre. Les audits doivent se concentrer sur les protections réellement applicables : exact-head, checks automatisés, PR obligatoire, interdiction des force-pushes/suppressions et qualification des artefacts.
 
 ## Travail restant
 
@@ -84,13 +97,10 @@ Le seul hardening résiduel identifié lors de l'audit du 6 septembre 2026 est `
 
 Les améliorations suivantes restent conditionnées à une preuve reproductible :
 
-- lifecycle Lucene persistant/partagé ;
-- isolation processus plus forte d'un provider réellement non coopératif ;
-- filesystem réseau/hostile ;
-- cache Git persistant ;
-- recovery sémantique renforcé selon les scénarios de corruption/provider indisponible ;
-- moteur de recherche substring alternatif ;
-- activation repository-admin du mode strict « branch up to date before merge » si ce durcissement est retenu.
+- isolation processus plus forte uniquement si un provider réellement non coopératif est introduit et démontre ce mode d'échec ;
+- extension du support à un filesystem réseau/distribué précis au-delà de la qualification SMB loopback actuelle ;
+- moteur de recherche substring alternatif si les besoins réels dépassent les stratégies actuelles ;
+- réévaluation du Vector API uniquement si le workload devient significativement plus vectoriel ou si une API non incubateur apporte un gain net.
 
 ## Références
 

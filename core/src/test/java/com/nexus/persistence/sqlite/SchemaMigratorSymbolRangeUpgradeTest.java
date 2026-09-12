@@ -73,23 +73,24 @@ class SchemaMigratorSymbolRangeUpgradeTest {
         seedProject(databaseFile, projectId, 202, 4, 12, 11);
         applyV004(databaseFile);
 
+        // Vérifier les garanties historiques V005 avant l'invalidation V007.
+        verifyV005BeforeCurrentUpgrade(databaseFile, 4, 12);
         SqliteDatabase upgraded = new SqliteDatabase(paths);
         SqliteIndexRepository repository = new SqliteIndexRepository(upgraded);
 
-        assertProjectState(upgraded, projectId, "NOT_INDEXED", null, 12, 1, 1, 1);
+        assertProjectState(upgraded, projectId, "NOT_INDEXED", null, 13, 0, 0, 0);
         List<IndexedSymbol> symbols = repository.findSymbols(projectId);
-        assertEquals(1, symbols.size());
-        assertEquals(4, symbols.getFirst().symbol().startLine());
-        assertEquals(12, symbols.getFirst().symbol().endLine());
+        assertTrue(symbols.isEmpty(), "V007 supprime aussi les faits aux plages valides mais aux chemins ambigus");
         assertMigrationApplied(upgraded, 5, "db/migration/V005__enforce_symbol_range_constraints.sql");
         assertMigrationApplied(upgraded, 6, "db/migration/V006__invalidate_unredacted_lexical_indexes.sql");
+        assertMigrationApplied(upgraded, 8, "db/migration/V008__indexed_substring_search.sql");
         assertDirectSymbolInsertRejected(databaseFile, 202, -1, -1);
 
         try (Connection connection = upgraded.openConnection()) {
             connection.setAutoCommit(true);
             assertDoesNotThrow(() -> SchemaMigrator.migrate(connection));
         }
-        assertMigrationCount(upgraded, 6L);
+        assertMigrationCount(upgraded, 8L);
     }
 
     @Test
@@ -103,17 +104,36 @@ class SchemaMigratorSymbolRangeUpgradeTest {
         seedProject(databaseFile, invalidProject, 301, -1, -1, 5);
         seedProject(databaseFile, validProject, 302, 3, 7, 11);
 
+        // Vérifier les garanties historiques V005 avant l'invalidation V007.
+        verifyV005BeforeCurrentUpgrade(databaseFile, 3, 7);
         SqliteDatabase upgraded = new SqliteDatabase(paths);
         SqliteIndexRepository repository = new SqliteIndexRepository(upgraded);
 
-        assertProjectState(upgraded, invalidProject, "NOT_INDEXED", null, 7, 0, 0, 0);
-        assertProjectState(upgraded, validProject, "NOT_INDEXED", null, 12, 1, 1, 1);
+        assertProjectState(upgraded, invalidProject, "NOT_INDEXED", null, 8, 0, 0, 0);
+        assertProjectState(upgraded, validProject, "NOT_INDEXED", null, 13, 0, 0, 0);
         assertTrue(repository.findSymbols(invalidProject).isEmpty(),
                 "la lecture domaine ne doit jamais reconstruire un ancien CodeSymbol invalide");
-        assertEquals(1, repository.findSymbols(validProject).size());
+        assertTrue(repository.findSymbols(validProject).isEmpty());
         assertMigrationApplied(upgraded, 4, "db/migration/V004__invalidate_invalid_symbol_ranges.sql");
         assertMigrationApplied(upgraded, 5, "db/migration/V005__enforce_symbol_range_constraints.sql");
         assertMigrationApplied(upgraded, 6, "db/migration/V006__invalidate_unredacted_lexical_indexes.sql");
+        assertMigrationApplied(upgraded, 8, "db/migration/V008__indexed_substring_search.sql");
+    }
+
+    private static void verifyV005BeforeCurrentUpgrade(Path databaseFile, int startLine, int endLine) throws Exception {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databaseFile);
+             Statement statement = connection.createStatement()) {
+            statement.execute("PRAGMA foreign_keys = ON");
+            // Exécuter V004 si elle ne l'était pas déjà ; son invalidation est idempotente.
+            executeMigrationResource(statement, "db/migration/V004__invalidate_invalid_symbol_ranges.sql");
+            executeMigrationResource(statement, "db/migration/V005__enforce_symbol_range_constraints.sql");
+            try (ResultSet rows = statement.executeQuery("SELECT start_line, end_line FROM symbols")) {
+                assertTrue(rows.next(), "V005 préserve les symboles aux plages valides");
+                assertEquals(startLine, rows.getInt(1));
+                assertEquals(endLine, rows.getInt(2));
+                assertFalse(rows.next(), "Les symboles invalides sont supprimés avant V005");
+            }
+        }
     }
 
     private static void bootstrapMainCompatibleDatabase(Path databaseFile) throws Exception {

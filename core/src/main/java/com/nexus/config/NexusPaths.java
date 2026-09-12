@@ -9,6 +9,7 @@ import java.nio.file.attribute.AclEntry;
 import java.nio.file.attribute.AclEntryPermission;
 import java.nio.file.attribute.AclEntryType;
 import java.nio.file.attribute.AclFileAttributeView;
+import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
@@ -30,6 +31,8 @@ public record NexusPaths(Path home) {
 
     public static final String HOME_PROPERTY = "nexus.home";
     public static final String HOME_ENVIRONMENT_VARIABLE = "NEXUS_HOME";
+    public static final String REQUIRE_PRIVATE_STORAGE_PROPERTY = "nexus.requirePrivateStorage";
+    public static final String REQUIRE_PRIVATE_STORAGE_ENVIRONMENT_VARIABLE = "NEXUS_REQUIRE_PRIVATE_STORAGE";
 
     private static final Set<PosixFilePermission> PRIVATE_DIRECTORY_PERMISSIONS =
             PosixFilePermissions.fromString("rwx------");
@@ -67,7 +70,10 @@ public record NexusPaths(Path home) {
      * héritées du profil utilisateur au lieu de les remplacer de manière destructive. Chaque
      * chemin sensible effectivement créé ou durci est inspecté lorsqu'une vue ACL est disponible,
      * de sorte qu'une ACL explicite plus large sur un enfant ne puisse pas être masquée par une
-     * vérification limitée au seul {@code NEXUS_HOME}.</p>
+     * vérification limitée au seul {@code NEXUS_HOME}. Lorsque
+     * {@code NEXUS_REQUIRE_PRIVATE_STORAGE=true}, une ACL sensible accordée à un principal
+     * inattendu — ou l'impossibilité de démontrer la confidentialité via POSIX/ACL — devient un
+     * échec fermé au lieu d'un simple diagnostic.</p>
      */
     public void ensurePrivateStorage() throws IOException {
         ensurePrivateDirectory(home);
@@ -92,7 +98,7 @@ public record NexusPaths(Path home) {
         for (Path segment : home.relativize(normalized)) {
             current = current.resolve(segment);
             ensurePrivateChildDirectory(current);
-            warnIfAclMayBeShared(current);
+            verifyAclPrivacy(current);
         }
     }
 
@@ -121,7 +127,7 @@ public record NexusPaths(Path home) {
         }
         validateRegularFile(normalized);
         applyPosixPermissions(normalized, PRIVATE_FILE_PERMISSIONS);
-        warnIfAclMayBeShared(normalized);
+        verifyAclPrivacy(normalized);
     }
 
     /** Rend un fichier persistant privé lorsque le système de fichiers expose les permissions POSIX. */
@@ -129,7 +135,7 @@ public record NexusPaths(Path home) {
         Path normalized = requireInsideHome(file);
         validateRegularFile(normalized);
         applyPosixPermissions(normalized, PRIVATE_FILE_PERMISSIONS);
-        warnIfAclMayBeShared(normalized);
+        verifyAclPrivacy(normalized);
     }
 
     public Path databaseFile() {
@@ -166,7 +172,7 @@ public record NexusPaths(Path home) {
         Files.createDirectories(home);
         validateDirectory(home);
         applyPosixPermissions(home, PRIVATE_DIRECTORY_PERMISSIONS);
-        warnIfAclMayBeShared(home);
+        verifyAclPrivacy(home);
     }
 
     private static void ensurePrivateChildDirectory(Path directory) throws IOException {
@@ -217,43 +223,89 @@ public record NexusPaths(Path home) {
         }
     }
 
-    private static void warnIfAclMayBeShared(Path path) {
+    private static void verifyAclPrivacy(Path path) throws IOException {
+        boolean requirePrivateStorage = requirePrivateStorage();
         AclFileAttributeView view = Files.getFileAttributeView(
                 path,
                 AclFileAttributeView.class,
                 LinkOption.NOFOLLOW_LINKS);
         if (view == null) {
+            if (requirePrivateStorage
+                    && Files.getFileAttributeView(
+                            path,
+                            PosixFileAttributeView.class,
+                            LinkOption.NOFOLLOW_LINKS) == null) {
+                throw new IOException(
+                        "Impossible de démontrer la confidentialité du stockage NEXUS pour " + path
+                                + " : aucune vue POSIX ni ACL n'est disponible alors que "
+                                + REQUIRE_PRIVATE_STORAGE_ENVIRONMENT_VARIABLE + "=true");
+            }
             return;
         }
 
+        List<AclEntry> acl;
         try {
-            String currentUser = canonicalCurrentUserPrincipal(path);
-            List<String> unexpectedPrincipals = new ArrayList<>();
-            for (AclEntry entry : view.getAcl()) {
-                if (entry.type() != AclEntryType.ALLOW
-                        || Collections.disjoint(entry.permissions(), SENSITIVE_ACL_PERMISSIONS)) {
-                    continue;
-                }
-                String principal = entry.principal().getName();
-                if (!isTrustedStoragePrincipal(principal, currentUser)) {
-                    unexpectedPrincipals.add(principal);
-                }
-            }
-
-            if (!unexpectedPrincipals.isEmpty()) {
-                String principals = String.join(", ", new LinkedHashSet<>(unexpectedPrincipals));
-                LOGGER.log(
-                        System.Logger.Level.WARNING,
-                        "Le stockage NEXUS peut être accessible à d'autres comptes ({0}) : vérifiez les ACL de {1}",
-                        principals,
-                        path);
-            }
+            acl = view.getAcl();
         } catch (IOException | SecurityException inspectionFailure) {
+            if (requirePrivateStorage) {
+                throw new IOException(
+                        "Impossible d'inspecter les ACL du stockage NEXUS " + path
+                                + " alors que " + REQUIRE_PRIVATE_STORAGE_ENVIRONMENT_VARIABLE + "=true",
+                        inspectionFailure);
+            }
             LOGGER.log(
                     System.Logger.Level.DEBUG,
                     "Impossible d'inspecter les ACL du stockage NEXUS " + path,
                     inspectionFailure);
+            return;
         }
+
+        String currentUser = canonicalCurrentUserPrincipal(path);
+        List<String> unexpectedPrincipals = unexpectedStoragePrincipals(acl, currentUser);
+        enforceAclPrivacy(path, unexpectedPrincipals, requirePrivateStorage);
+    }
+
+    public static boolean requirePrivateStorage() {
+        return SecurityPolicy.booleanSetting(
+                REQUIRE_PRIVATE_STORAGE_PROPERTY, REQUIRE_PRIVATE_STORAGE_ENVIRONMENT_VARIABLE);
+    }
+    static List<String> unexpectedStoragePrincipals(
+            List<AclEntry> entries,
+            String currentUserPrincipalName) {
+        Objects.requireNonNull(entries, "entries");
+        LinkedHashSet<String> unexpected = new LinkedHashSet<>();
+        for (AclEntry entry : entries) {
+            if (entry.type() != AclEntryType.ALLOW
+                    || Collections.disjoint(entry.permissions(), SENSITIVE_ACL_PERMISSIONS)) {
+                continue;
+            }
+            String principal = entry.principal().getName();
+            if (!isTrustedStoragePrincipal(principal, currentUserPrincipalName)) {
+                unexpected.add(principal);
+            }
+        }
+        return List.copyOf(unexpected);
+    }
+
+    static void enforceAclPrivacy(
+            Path path,
+            List<String> unexpectedPrincipals,
+            boolean requirePrivateStorage) throws IOException {
+        Objects.requireNonNull(path, "path");
+        Objects.requireNonNull(unexpectedPrincipals, "unexpectedPrincipals");
+        if (unexpectedPrincipals.isEmpty()) {
+            return;
+        }
+
+        String principals = String.join(", ", unexpectedPrincipals);
+        String message = "Le stockage NEXUS peut être accessible à d'autres comptes ("
+                + principals + ") : vérifiez les ACL de " + path;
+        if (requirePrivateStorage) {
+            throw new IOException(
+                    message + " ; accès refusé car "
+                            + REQUIRE_PRIVATE_STORAGE_ENVIRONMENT_VARIABLE + "=true");
+        }
+        LOGGER.log(System.Logger.Level.WARNING, message);
     }
 
     private static String canonicalCurrentUserPrincipal(Path path) {

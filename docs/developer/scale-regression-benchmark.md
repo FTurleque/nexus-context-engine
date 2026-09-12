@@ -1,281 +1,141 @@
 # Benchmark de régression scale
 
-Ce benchmark complète les portfolios réels de l'Itération 16 avec un corpus **synthétique, hermétique et reproductible** destiné aux limites suivies par l'issue #23.
+Ce benchmark complète les portfolios réels de l'Itération 16 avec un corpus **synthétique, hermétique et reproductible**. Il couvre les limites historiques de #23 et la qualification de la recherche SQLite indexée de #216. Il ne remplace pas les baselines réelles I16.
 
-Il ne remplace pas les baselines réelles I16 : il mesure spécifiquement les courbes qui ne peuvent pas être extrapolées de manière fiable depuis ~10k symboles et sept repositories.
+## Harness et rapports
 
-Les résultats de calibration et décisions sont conservés dans [`scale-regression-results.md`](scale-regression-results.md).
-
-## Objectifs
-
-Le protocole mesure :
-
-1. les requêtes SQLite ciblées et substring à 10k, 100k, 500k et 1M symboles/relations ;
-2. la recherche et la construction de contexte fédérées à 10, 25, 50 et 100 projets ;
-3. les lectures SQLite concurrentes avec des transactions d'écriture, en journal `DELETE` puis `WAL` ;
-4. le coût d'un rebuild sémantique et d'un recovery après incompatibilité de provenance sans dépendre d'Ollama ;
-5. les tailles de base/index, la mémoire JVM observée et les p50/p95.
-
-Le benchmark ne contacte aucun repository distant et aucun service externe.
-
-## Implémentation
-
-Harness :
+Harness principal :
 
 ```text
 core/src/test/java/com/nexus/benchmark/ScaleRegressionBenchmarkTest.java
 ```
 
-Runner Windows :
-
-```text
-scripts/measure-scale-regression.ps1
-```
-
-Workflow GitHub :
+Workflow :
 
 ```text
 .github/workflows/scale-benchmark.yml
 ```
 
-Version de protocole utilisée pour décider si une comparaison relative base/candidat est homogène :
+Version du protocole :
 
 ```text
 config/scale-benchmark-protocol
 ```
 
-Rapport :
+Le rapport général est écrit dans `target/scale-benchmark.json`. Sur une pull request scale-sensitive exécutée avec le profil général `ci`, le workflow lance en plus `ScaleRegressionBenchmarkTest` avec le profil `full` et conserve `target/scale-benchmark-sqlite-full.json` comme preuve dédiée de la courbe SQLite 10k / 100k / 500k / 1M. Le reste des gates graph, fédération, concurrence et sémantique reste sur le profil PR `ci`; une qualification `full` globale reste disponible par déclenchement explicite.
 
-```text
-target/scale-benchmark.json
-```
+Cette séparation évite qu'un changement SQLite soit confondu avec une dérive indépendante du graphe à 1M, tout en imposant réellement les quatre paliers demandés par #216.
 
-Pour une pull request dont le commit de base déclare **la même version de protocole**, le workflow conserve aussi le rapport SQLite du commit de base :
+Pour une pull request dont la base déclare **la même version de protocole**, le workflow peut aussi conserver `target/scale-benchmark-base.json` et comparer la population base/candidat sur le même runner. Si le protocole diffère, cette comparaison relative est ignorée, mais tous les plafonds absolus du candidat restent obligatoires.
 
-```text
-target/scale-benchmark-base.json
-```
-
-Le test JUnit est opt-in. Le workflow possède un timeout de job de 45 minutes et impose aussi un timeout JUnit de 20 minutes au test afin qu'une anomalie du scénario concurrent ne puisse pas bloquer indéfiniment la qualification.
+Le job possède un timeout de 45 minutes et les tests scale un timeout JUnit de 20 minutes.
 
 ## Profils
 
 ### `ci`
 
-Profil court pour diagnostic rapide :
+Profil général des pull requests :
 
-- SQLite : 10k et 100k symboles/relations ;
+- SQLite général : 10k et 100k ;
 - portfolio : 10 et 25 projets ;
 - concurrence : 25k symboles par projet ;
-- sémantique : 5k documents.
+- sémantique : 5k documents ;
+- graphe : 100k symboles/relations.
+
+En complément, une PR scale-sensitive exécute la courbe SQLite dédiée en `full` : 10k, 100k, 500k et 1M symboles/relations.
 
 ### `full`
 
-Profil de décision/régression #23 :
+Profil global de décision/régression :
 
-- SQLite : 10k, 100k, 500k et 1M symboles/relations ;
+- SQLite : 10k, 100k, 500k et 1M ;
 - portfolio : 10, 25, 50 et 100 projets ;
 - concurrence : 100k symboles par projet ;
-- sémantique : 20k documents.
+- sémantique : 20k documents ;
+- graphe : 1M symboles/relations.
 
-Les PR qui modifient le harness ou les zones de scale déclenchent le profil `full`. Le workflow peut aussi être déclenché manuellement avec le profil choisi.
-
-## Exécution locale Windows
-
-Depuis la racine :
+Exécution locale Windows :
 
 ```powershell
 .\scripts\measure-scale-regression.ps1 -Profile full
 ```
 
-Pour un diagnostic rapide :
+## Qualification SQLite #216
 
-```powershell
-.\scripts\measure-scale-regression.ps1 -Profile ci
-```
-
-Le benchmark utilise un `NEXUS_HOME` et des repositories synthétiques temporaires JUnit. Il ne modifie pas les projets enregistrés de l'utilisateur.
-
-## SQLite
-
-### Requêtes mesurées
-
-Pour chaque palier, le harness mesure :
+Pour chaque palier, `ScaleRegressionBenchmarkTest` mesure :
 
 - symbole exact : `BenchSymbol00000010` ;
-- substring avec résultats : `ScaleNeedle` ;
-- substring absent, pire cas de scan : `DefinitelyAbsentScaleToken` ;
+- substring présent : `ScaleNeedle` ;
+- substring absent : `DefinitelyAbsentScaleToken` ;
 - relation substring : `TargetNeedle` ;
-- chargement ciblé de 100 chemins via `findFiles(projectId, paths)`.
+- chargement ciblé de 100 chemins via `findFiles(projectId, paths)` ;
+- population et taille des fichiers SQLite.
 
-Les requêtes de production `searchSymbols` / `searchRelations` utilisent actuellement `LOWER(...) LIKE '%...%'`. Les index B-tree existants restent utiles pour d'autres accès mais ne suppriment pas le coût du pire cas substring.
+Depuis V008, les recherches de trois points de code Unicode ou plus passent par deux projections dérivées FTS5/trigram :
 
-Le benchmark enregistre population, p50/p95/mean/max et taille SQLite pour objectiver la pente 10k → 1M.
+```text
+symbol_search_fts
+relation_search_fts
+```
 
-## DELETE vs WAL
+Les projections sont **contentless**, utilisent `detail=none` et `columnsize=0`. Elles ne dupliquent donc ni le contenu canonique, ni les positions, ni la table FTS `docsize`; elles conservent uniquement les posting lists nécessaires à la découverte de candidats. Les valeurs de référence restent dans `symbols` et `symbol_relations`.
 
-La production ne force actuellement aucun `journal_mode`; SQLite utilise donc son mode par défaut, généralement `DELETE`.
+Les mutations canoniques sont placées par triggers dans `symbol_search_pending` / `relation_search_pending`. Chaque entrée pending mémorise le premier texte ancien lorsqu'une suppression de tokens est nécessaire ; le texte à insérer est relu depuis les tables canoniques au flush. Les suppressions sont appliquées avec la commande FTS5 spéciale `delete`, puis les insertions sont projetées par `INSERT ... SELECT`. Le repository regroupe les écritures canoniques par lots SQL bornés de 128 lignes. Le benchmark vide le lot SQL résiduel toutes les 5 000 lignes et commit toutes les 50 000 lignes ; la projection FTS est mise à jour au bump de `project_index_generations`.
 
-Le benchmark **ne change pas la configuration de production**. Il crée deux bases isolées :
+Le repository transforme une requête en intersection de trigrams de trois points de code. Comme `detail=none` ne conserve pas les positions, les candidats FTS sont ensuite revalidés contre les valeurs canoniques avec la sémantique `contains`. Cette étape élimine les faux positifs possibles d'une simple intersection de trigrams sans réintroduire un scan complet de la table.
 
-- `DELETE` ;
-- `WAL`.
+Le préfiltre fuzzy reste compatible avec la sémantique historique (premier caractère + longueur ±3), mais son jeu de candidats est borné **avant** son union avec les candidats FTS. `idx_symbols_fuzzy_prefilter` est ordonné pour permettre cette sélection déterministe sans matérialiser toute une famille de noms à forte cardinalité.
 
-Dans chacune :
+Les requêtes de un ou deux points de code gardent volontairement le fallback `LIKE`, car un trigram ne peut pas indexer ces chaînes.
 
-- un projet reçoit 40 transactions d'écriture ;
-- un autre projet subit simultanément des recherches substring absentes ;
-- toute erreur de lecture fait échouer le benchmark ;
-- p95 lecture, durée totale writer et taille des fichiers SQLite sont enregistrés.
+`SqliteIndexedSubstringSearchTest` qualifie explicitement :
 
-Règle de décision :
+- SQLite embarqué >= 3.34 ;
+- `ENABLE_FTS5` ;
+- tokenizer `trigram` ;
+- projection `content=''`, `detail=none`, `columnsize=0` ;
+- commande FTS5 `delete` avec l'ancien texte ;
+- plan `VIRTUAL TABLE INDEX` ;
+- flush de génération ;
+- maintien de 5 000 lignes en attente jusqu'au flush de génération ;
+- fallback des requêtes très courtes.
 
-> ne proposer WAL que si plusieurs exécutions comparables montrent au moins **25 % d'amélioration du p95 lecteur**, sans régression significative writer/recovery.
+Le scénario de recovery vérifie qu'une ancienne table `schema_migrations` sans `script_sha256` est complétée additivement avant la reprise du migrateur. Les FTS sont dérivés : une reconstruction commence par `delete-all` puis les reconstruit depuis les tables canoniques.
 
-Calibration #23 : amélioration reader p95 de **30,4 %** au premier run, mais seulement **0,3 %** au second. Le gain writer est important dans les deux runs, mais le critère lecteur n'est pas répétable.
+## Protocole 4
 
-**Décision : le mode de production reste inchangé ; WAL n'est pas adopté.**
+Le regroupement des écritures canoniques en lots SQL bornés complète l'adoption FTS5/trigram. `config/scale-benchmark-protocol` vaut donc **4**. Une mesure protocole 3 ou antérieure ne doit pas être utilisée comme baseline relative homogène du protocole 4.
 
-## Portfolio fédéré
+Les plafonds absolus de latence et de population restent inchangés. Le stockage est comparé à la base de la PR sur le même runner.
 
-Chaque projet synthétique contient :
+### Budgets SQLite p95
 
-- une classe Java `SharedScaleNeedleService` ;
-- un document Markdown associé.
-
-Le benchmark indexe jusqu'à 100 projets avec la composition réelle `NexusApplication`, puis mesure :
-
-- `searchAcrossProjects` ;
-- `contextAcrossProjects` ;
-- p50/p95 ;
-- nombre de résultats et nombre de projets représentés.
-
-Le protocole complète le palier réel I16 à sept repositories sans le remplacer.
-
-## Rebuild sémantique / recovery
-
-Le benchmark utilise un `EmbeddingProvider` déterministe local de 32 dimensions. Aucun Ollama n'est nécessaire.
-
-Scénario :
-
-1. rebuild avec fingerprint synthétique v1 ;
-2. vérification de compatibilité ;
-3. fingerprint v2 déclaré incompatible ;
-4. rebuild complet de recovery ;
-5. vérification de compatibilité v2.
-
-Sont enregistrés :
-
-- nombre de documents ;
-- dimensions et batch size ;
-- durée du rebuild initial ;
-- durée du rebuild de recovery ;
-- taille de l'index sémantique ;
-- nombre total de vecteurs générés.
-
-## Environnement et comparaison
-
-Chaque rapport inclut :
-
-- version/vendor Java ;
-- OS et architecture ;
-- nombre de processeurs disponibles ;
-- heap maximal ;
-- heap observé avant/après ;
-- durée totale.
-
-Les latences GitHub-hosted runners sont des mesures de régression, pas un benchmark matériel absolu. Une décision d'architecture doit comparer plusieurs runs du même protocole et tenir compte de l'environnement enregistré.
-
-La population SQLite est particulièrement sensible au débit et à la contention du stockage du runner. Pour une pull request, le workflow compare donc le candidat au commit de base **sur le même runner uniquement lorsque les deux commits déclarent la même valeur dans `config/scale-benchmark-protocol`**. Cette version explicite signifie que le harness, la composition de production qu'il mesure et les hypothèses de calibration sont jugés comparables.
-
-Si le marqueur est absent sur la base ou si sa version diffère, la comparaison relative est volontairement ignorée et le workflow l'annonce explicitement. Le candidat reste néanmoins soumis à tous les plafonds absolus de population, aux budgets p95 SQLite, aux budgets graph/fédération/native, aux limites de taille et aux limites mémoire. Une promotion historique ne peut donc pas être rejetée sur une comparaison de protocoles hétérogènes, sans pour autant désactiver les garde-fous de performance.
-
-Toute modification qui rend les mesures de population non comparables avec la génération précédente doit incrémenter `config/scale-benchmark-protocol` dans le même changement.
-
-## Budgets de régression
-
-Deux runs full de calibration sur le même head ont servi à fixer les budgets. Le workflow les applique désormais comme **gate**.
-
-### SQLite p95
-
-| Palier | Exact | Contains | Miss worst-case | Relation |
+| Palier | Exact | Contains | Miss | Relation |
 |---:|---:|---:|---:|---:|
 | 10k | 50 ms | 30 ms | 30 ms | 25 ms |
 | 100k | 250 ms | 150 ms | 150 ms | 100 ms |
 | 500k | 1 000 ms | 600 ms | 600 ms | 400 ms |
 | 1M | 2 000 ms | 1 200 ms | 1 200 ms | 800 ms |
 
-Autres budgets SQLite :
+Autres plafonds SQLite :
 
-- 100 fichiers ciblés : <= 30 ms p95 ;
-- population sur PR **à protocole identique** : le candidat ne doit pas dépasser le maximum entre `base × 1,20` et `base + jitter`, avec des jitters de 0,2 s / 0,5 s / 1,5 s / 3 s selon le palier ;
-- plafond de sûreté population, y compris lorsque la base n'est pas comparable : 1,4 s / 5 s / 20 s / 40 s selon le palier ;
-- base 1M : <= 650 MiB.
+- lookup de 100 fichiers : <= 30 ms p95 ;
+- population : <= 1,4 s / 5 s / 20 s / 40 s aux paliers 10k / 100k / 500k / 1M ;
+- base à 1M : taille candidat <= taille de la base de la PR × 1,20, mesurées sur le même runner ;
+- lorsque base et candidat partagent le même protocole, population candidat <= `max(base × 1,20, base + jitter)` avec jitters 0,2 / 0,5 / 1,5 / 3 s.
 
-La comparaison relative ne remplace pas le plafond absolu : une dérive extrême du candidat reste donc bloquée même sans baseline relative comparable. Les budgets p95 de requête restent strictement absolus.
+Le gate dédié PR exige exactement les quatre paliers SQLite dans `scale-benchmark-sqlite-full.json`.
 
-Calibration NXA10 du gate relatif, sur un même runner et en alternance base/candidat à 100k :
+## Autres scénarios scale
 
-- base : 1832 ms puis 1826 ms ;
-- candidat : 1892 ms puis 1878 ms.
+Le benchmark général conserve les scénarios #23 : recherche/contexte fédérés, comparaison DELETE/WAL, recovery sémantique déterministe et mesure de graphe. Le mode SQLite de production n'est pas changé : WAL n'est adopté que si des mesures répétées montrent un gain reader p95 >=25 % sans régression writer/recovery.
 
-Cette calibration a confirmé un écart applicatif d'environ 3 %, alors que des exécutions isolées sur des runners hébergés différents avaient varié jusqu'à ~3,4 s. Le gate relatif vise précisément à séparer ces deux effets. NXA12 ajoute la condition de compatibilité de protocole afin que ce même mécanisme ne compare pas deux générations historiques matériellement différentes du système mesuré.
+Les budgets graph/fédération/sémantique restent ceux du workflow. Une anomalie d'un de ces domaines doit être traitée dans son chantier propre et ne doit pas être masquée par une modification des plafonds SQLite.
 
-### Fédération
+## Décision #216
 
-| Projets | Search p95 | Context p95 |
-|---:|---:|---:|
-| 10 | 120 ms | 160 ms |
-| 25 | 160 ms | 260 ms |
-| 50 | 250 ms | 450 ms |
-| 100 | 400 ms | 800 ms |
+FTS5/trigram est retenu comme index secondaire **local, dérivé et reconstructible** pour les recherches substring >=3 caractères. SQLite (`symbols`, `symbol_relations`) reste l'autorité canonique. Aucun moteur externe ni service réseau n'est ajouté.
 
-Indexation des 100 projets synthétiques : <= 6 s.
+La qualification de #216 n'est acquise que si le HEAD exact passe le reactor Linux/Windows, les tests de migration/replay, CodeQL/OSV/SonarCloud et la courbe SQLite 10k→1M avec les plafonds absolus ci-dessus.
 
-### Sémantique / ressources
-
-- rebuild initial 20k : <= 12 s ;
-- recovery incompatible 20k : <= 12 s ;
-- index sémantique : <= 8 MiB ;
-- delta heap observé fin de run : <= 256 MiB ;
-- durée full : <= 180 s ;
-- aucune erreur de lecture concurrente sous DELETE ou WAL.
-
-Les budgets sont volontairement au-dessus des maxima de calibration pour absorber le bruit des runners, tout en détectant une régression algorithmique matérielle. Pour la population SQLite, cette marge est combinée à une comparaison base/candidat sur le même runner lorsque le protocole est identique.
-
-## Décision FTS5 / trigram
-
-**Aucun FTS5, trigram ni nouveau moteur n'est ajouté par #23.**
-
-Mesures :
-
-- corpus réel I16 proche de 10k symboles : p95 SQLite synthétique de l'ordre de 5–22 ms ;
-- 100k : p95 <= ~135 ms sur les deux calibrations ;
-- 500k : exact ~675 ms, substring ~374 ms ;
-- 1M : exact ~1,34–1,37 s, substring ~0,75–0,81 s ;
-- portfolio 100 : search p95 <= 222 ms, contexte p95 <= 538 ms.
-
-Ces chiffres matérialisent la limite de l'approche substring mais ne montrent pas de SLO violé sur les corpus cibles actuels. Ajouter maintenant FTS/trigram créerait migrations, index secondaires et recovery supplémentaires sans bénéfice nécessaire démontré.
-
-Déclencheurs de réexamen :
-
-1. corpus utilisateur courant >= 500k symboles et latence interactive insuffisante ;
-2. 1M exact > 2 s p95 ou substring > 1,2 s p95 ;
-3. portfolio 100 > 400 ms p95 search ou > 800 ms contexte ;
-4. SLO utilisateur réel plus strict que cette baseline ;
-5. optimisation SQL plus simple insuffisante.
-
-## Baseline réelle historique à conserver
-
-Le corpus hermétique I16 de sept repositories reste la référence fonctionnelle réelle :
-
-- 2 104 fichiers ;
-- 10 878 symboles ;
-- 10 087 relations ;
-- indexation complète cumulée : 8 818 ms ;
-- recherche fédérée p50/p95 : 133/304 ms ;
-- contexte p50/p95 : 48/206 ms ;
-- hit@3 : 1,0 ;
-- MRR@3 : 1,0.
-
-Voir [`iteration-16-extended-portfolio-results.md`](iteration-16-extended-portfolio-results.md) et [`scale-regression-results.md`](scale-regression-results.md).
+Les résultats historiques du protocole 2 restent disponibles dans [`scale-regression-results.md`](scale-regression-results.md) comme référence pré-FTS, et non comme baseline relative homogène.

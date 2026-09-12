@@ -1,5 +1,7 @@
 package com.nexus.search.semantic;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.nexus.index.CanonicalIndexFingerprint;
 import com.nexus.index.FileCategory;
 import com.nexus.index.IndexRepository;
@@ -121,7 +123,9 @@ public final class SemanticSearchStrategy implements SearchStrategy {
         final float[] queryVector;
         try {
             String embeddingQuery = SensitiveContentRedactor.redact(query);
-            queryVector = Objects.requireNonNull(embeddingProvider.embed(embeddingQuery), "embedding vector");
+            queryVector = Objects.requireNonNull(
+                    embeddingProvider.embedQuery(embeddingQuery),
+                    "embedding vector");
         } catch (EmbeddingProviderUnavailableException exception) {
             return degradedProvider(project, exception);
         }
@@ -148,7 +152,7 @@ public final class SemanticSearchStrategy implements SearchStrategy {
             candidates.add(new SearchCandidate(
                     "file:" + hit.relativePath(),
                     candidateType(hit.category()),
-                    project.rootPath().resolve(hit.relativePath()),
+                    new RepositoryPath(hit.relativePath()).resolve(project.rootPath()),
                     null,
                     hit.excerpt(),
                     signals));

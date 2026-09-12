@@ -6,7 +6,10 @@ L'import MINOS combine deux frontières indépendantes avant de matérialiser un
 
 La surcharge utilisée par l'application reçoit l'ensemble des chemins relatifs déjà reconnus par l'index NEXUS. Un symbole ou une relation MINOS n'est accepté que si son `filePath` appartient à cet ensemble après validation syntaxique stricte :
 
-- chemin relatif uniquement ;
+- chemin relatif à séparateurs `/` uniquement (contrat `filePath`), sans retirer les espaces des composants ;
+- backslash POSIX conservé littéralement, jamais transformé en `/` ;
+- aucun composant vide ou `.` ;
+- formes absolues drive/UNC refusées ;
 - aucun segment `..` ;
 - aucune normalisation permettant de masquer une traversée ;
 - aucune entrée absente de l'allowlist canonique.
@@ -39,3 +42,15 @@ La qualification couvre :
 - validation existante des plages nulles, inversées, hors fichier et à la dernière ligne.
 
 Les tests de symlink sont conditionnés aux capacités de la plateforme ; la qualification Linux fournit la couverture effective des liens symboliques, tandis que Windows conserve la compilation et les autres invariants filesystem supportés par le runner.
+
+
+### Exports historiques et composants POSIX contenant un backslash
+
+L'exporteur MINOS v1 historique remplaçait le backslash par `/`. Si le corpus
+canonique contient un backslash, NEXUS refuse un export sans déclaration top-level
+`"repositoryPathFormat": "repository-components-v2"` **avant toute lecture source**.
+Le producteur doit réellement encoder les composants physiques avant d'émettre
+cette déclaration ; ajouter un champ à un ancien export ambigu ne le répare pas.
+Les corpus sans backslash restent compatibles avec le contrat v1 historique.
+Cette vérification est indépendante de l'ordre des champs JSON et reste bornée
+par les limites de transport/parsing. Voir ADR-0049.

@@ -17,8 +17,10 @@ public record FederatedContextBundle(
         Objects.requireNonNull(excluded, "excluded");
         Objects.requireNonNull(metadata, "metadata");
         items = List.copyOf(items);
-        excluded = List.copyOf(excluded);
-        metadata = Map.copyOf(metadata);
+        var diagnostics = new com.nexus.security.PublicDiagnosticPolicy(
+                items.stream().map(item -> item.project().rootPath()).distinct().toList());
+        excluded = diagnostics.texts(excluded);
+        metadata = diagnostics.metadata(metadata);
         if (tokenBudget <= 0) {
             throw new IllegalArgumentException("tokenBudget must be greater than zero");
         }

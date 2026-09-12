@@ -32,6 +32,18 @@ public interface EmbeddingProvider {
     float[] embed(String text) throws IOException;
 
     /**
+     * Produit le vecteur d'une requête de recherche.
+     *
+     * <p>Le fallback reste volontairement identique à {@link #embed(String)} afin
+     * de préserver les providers existants. Les modèles instruction-aware peuvent
+     * surcharger cette méthode sans modifier la représentation des documents déjà
+     * indexés.</p>
+     */
+    default float[] embedQuery(String query) throws IOException {
+        return embed(query);
+    }
+
+    /**
      * Produit plusieurs vecteurs en un appel logique. L'implémentation par
      * défaut reste séquentielle pour préserver tous les providers existants ;
      * les transports capables de batcher peuvent surcharger cette méthode.

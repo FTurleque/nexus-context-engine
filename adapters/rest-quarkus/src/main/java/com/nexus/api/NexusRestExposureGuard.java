@@ -52,6 +52,7 @@ public class NexusRestExposureGuard {
         }
 
         NexusRestTransportPolicy.validateSecureNonLoopbackExposure(exposureMode);
+        com.nexus.config.SecurityPolicy.requireHardenedStorageAndTraversal();
     }
 
     private void validateManagementExposure() {
@@ -71,6 +72,7 @@ public class NexusRestExposureGuard {
             requireProjectRoots(
                     NexusRestSecurity.LOCAL_HARDENING_ENVIRONMENT_VARIABLE
                             + "=true exige une allowlist de projets via ");
+            com.nexus.config.SecurityPolicy.requireHardenedStorageAndTraversal();
             return;
         }
 

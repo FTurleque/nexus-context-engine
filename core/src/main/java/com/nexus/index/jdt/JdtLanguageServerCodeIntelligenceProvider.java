@@ -1,5 +1,7 @@
 package com.nexus.index.jdt;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -670,11 +672,12 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
             if (!"file".equalsIgnoreCase(parsedUri.getScheme())) {
                 return null;
             }
-            Path absolutePath = Path.of(parsedUri).toAbsolutePath().normalize();
-            if (!absolutePath.startsWith(projectRoot)) {
+            Path absolutePath = Path.of(parsedUri);
+            if (!absolutePath.isAbsolute() || !absolutePath.equals(absolutePath.normalize())
+                    || !absolutePath.startsWith(projectRoot)) {
                 return null;
             }
-            String relativePath = projectRoot.relativize(absolutePath).toString().replace('\\', '/');
+            String relativePath = RepositoryPath.encode(projectRoot.relativize(absolutePath));
             int line = range.path("start").path("line").asInt(-1);
             int character = range.path("start").path("character").asInt(0);
             if (line < 0) {
@@ -804,11 +807,7 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
                 throw new IOException("Répertoire plugins JDT LS introuvable : " + plugins);
             }
             try (var files = Files.list(plugins)) {
-                return files
-                        .filter(Files::isRegularFile)
-                        .filter(path -> path.getFileName().toString().startsWith("org.eclipse.equinox.launcher_"))
-                        .filter(path -> path.getFileName().toString().endsWith(".jar"))
-                        .max(Comparator.comparing(path -> path.getFileName().toString()))
+                return EquinoxLauncherSelector.latest(files)
                         .orElseThrow(() -> new IOException("Launcher Equinox JDT LS introuvable dans " + plugins));
             }
         }

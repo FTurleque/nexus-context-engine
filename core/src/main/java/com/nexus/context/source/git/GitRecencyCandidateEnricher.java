@@ -1,5 +1,7 @@
 package com.nexus.context.source.git;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.search.CandidateEnricher;
 import com.nexus.search.SearchCandidate;
@@ -159,7 +161,7 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
         if (!root.startsWith(workTree)) {
             return "";
         }
-        return workTree.relativize(root).toString().replace('\\', '/');
+        return RepositoryPath.encode(workTree.relativize(root));
     }
 
     private static String toGitPath(String projectPrefix, String projectPath) {
@@ -172,6 +174,6 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
         if (!absolute.startsWith(root)) {
             return null;
         }
-        return root.relativize(absolute).toString().replace('\\', '/');
+        return RepositoryPath.encode(root.relativize(absolute));
     }
 }

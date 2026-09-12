@@ -1,5 +1,7 @@
 package com.nexus.context;
 
+import com.nexus.context.source.ContextDiscoveryBudget;
+import com.nexus.context.source.ContextDiscoveryLimits;
 import com.nexus.project.FederatedScopePolicy;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.search.CandidateType;
@@ -59,6 +61,10 @@ public final class FederatedContextService {
             throw new IllegalArgumentException(
                     "tokenBudget must be at least the number of projects in the federated scope");
         }
+        ContextMaterializationBudget materializationBudget =
+                ContextMaterializationLimits.fromEnvironment().newBudget();
+        ContextDiscoveryBudget discoveryBudget =
+                ContextDiscoveryLimits.fromEnvironment().newBudget();
 
         int baseBudget = tokenBudget / scope.size();
         int remainder = tokenBudget % scope.size();
@@ -73,13 +79,16 @@ public final class FederatedContextService {
             ProjectDescriptor project = scope.get(index);
             int fairAllocation = baseBudget + (index < remainder ? 1 : 0);
             int candidateBudget = Math.min(tokenBudget, fairAllocation * LOCAL_OVERFETCH_FACTOR);
-            ContextBundle local = contextBuilder.build(new ContextRequest(
-                    project.id(),
-                    query,
-                    candidateBudget,
-                    requestedSources,
-                    constraints,
-                    explain));
+            ContextBundle local = contextBuilder.build(
+                    new ContextRequest(
+                            project.id(),
+                            query,
+                            candidateBudget,
+                            requestedSources,
+                            constraints,
+                            explain),
+                    materializationBudget,
+                    discoveryBudget);
             List<FederatedContextItem> items = local.items().stream()
                     .map(item -> new FederatedContextItem(project, item))
                     .toList();
@@ -189,6 +198,10 @@ public final class FederatedContextService {
         metadata.put("crossProjectDeduplicatedItems", crossProjectDuplicates[0]);
         metadata.put("mergePolicy", "fair-floor-bounded-overfetch-global-refill");
         metadata.put("nativeSourceScope", "project-local");
+        metadata.put("nativeDiscoveryLimits", discoveryBudget.limits());
+        metadata.put("nativeDiscoveryWork", discoveryBudget.snapshot());
+        metadata.put("taskMaterializationLimits", materializationBudget.limits());
+        metadata.put("taskMaterializationWork", materializationBudget.snapshot());
 
         return new FederatedContextBundle(
                 selected,

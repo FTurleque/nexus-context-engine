@@ -133,13 +133,29 @@ public final class SemanticIndexingService {
         if (documents.isEmpty()) {
             return List.of();
         }
+
         List<SemanticVectorDocument> vectors = new ArrayList<>(documents.size());
-        for (int start = 0; start < documents.size(); start += batchSize) {
-            int end = Math.min(documents.size(), start + batchSize);
-            List<SearchDocument> batch = documents.subList(start, end);
-            List<String> texts = batch.stream().map(this::embeddingText).toList();
+        int documentIndex = 0;
+        while (documentIndex < documents.size()) {
+            int batchCapacity = Math.min(batchSize, documents.size() - documentIndex);
+            List<SearchDocument> batch = new ArrayList<>(batchCapacity);
+            List<String> texts = new ArrayList<>(batchCapacity);
+            int batchChars = 0;
+
+            while (documentIndex < documents.size() && batch.size() < batchSize) {
+                SearchDocument document = documents.get(documentIndex);
+                String text = embeddingText(document);
+                if (!batch.isEmpty() && text.length() > maxEmbeddingChars - batchChars) {
+                    break;
+                }
+                batch.add(document);
+                texts.add(text);
+                batchChars += text.length();
+                documentIndex++;
+            }
+
             List<float[]> embedded = Objects.requireNonNull(
-                    embeddingProvider.embedAll(texts),
+                    embeddingProvider.embedAll(List.copyOf(texts)),
                     "embedding vectors");
             if (embedded.size() != batch.size()) {
                 throw new IOException(
@@ -185,7 +201,8 @@ public final class SemanticIndexingService {
             String content = SensitiveContentRedactor.redact(document.content());
             text.append(content, 0, safePrefixEnd(content, remaining));
         }
-        return text.toString();
+        String candidate = text.toString();
+        return candidate.substring(0, safePrefixEnd(candidate, maxEmbeddingChars));
     }
 
     private static String excerpt(SearchDocument document) {

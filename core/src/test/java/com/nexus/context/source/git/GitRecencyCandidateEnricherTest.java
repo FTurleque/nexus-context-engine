@@ -27,6 +27,23 @@ class GitRecencyCandidateEnricherTest {
     @TempDir
     Path temporaryDirectory;
 
+
+    @Test
+    void recencyKeepsPosixBackslashAndSlashCandidatesSeparate() throws Exception {
+        org.junit.jupiter.api.Assumptions.assumeTrue(temporaryDirectory.getFileSystem().getSeparator().equals("/"));
+        Path backslash = write(temporaryDirectory, "a\\b.java", "class Backslash {}\n");
+        Path slash = write(temporaryDirectory, "a/b.java", "class Slash {}\n");
+        try (Git git = Git.init().setDirectory(temporaryDirectory.toFile()).call()) {
+            commitAll(git, "initial");
+            Files.writeString(backslash, "class Backslash { void changed() {} }\n");
+            commitAll(git, "backslash only");
+        }
+        var enriched = new GitRecencyCandidateEnricher().enrich(project(temporaryDirectory),
+                List.of(candidate("backslash", backslash), candidate("slash", slash)));
+        assertEquals(1.0, enriched.getFirst().signals().get(SearchSignals.GIT_RECENCY));
+        assertFalse(enriched.getLast().signals().containsKey(SearchSignals.GIT_RECENCY));
+    }
+
     @Test
     void addsRecencyOnlyToCandidatesTouchedByRecentCommits() throws Exception {
         Path oldFile = write(temporaryDirectory, "src/OldService.java", "class OldService {}\n");

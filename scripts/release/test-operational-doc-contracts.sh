@@ -3,6 +3,7 @@ set -euo pipefail
 
 python3 - <<'PY'
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 root = Path.cwd()
 
@@ -22,6 +23,21 @@ def require(path: str, needle: str) -> None:
 def forbid(path: str, needle: str) -> None:
     if needle in text(path):
         raise SystemExit(f"obsolete documentation contract: {path} still contains {needle!r}")
+
+
+# Keep operational documentation aligned with the dependency actually used by Maven.
+pom = ET.parse(root / "pom.xml").getroot()
+quarkus_version = next(
+    (
+        element.text.strip()
+        for element in pom.iter()
+        if element.tag.rsplit("}", 1)[-1] == "quarkus.platform.version"
+        and element.text
+    ),
+    None,
+)
+if not quarkus_version:
+    raise SystemExit("version contract drift: pom.xml does not declare quarkus.platform.version")
 
 
 # Toolchain / NXA3 baseline
@@ -44,6 +60,8 @@ for path in (
     "core/src/main/java/com/nexus/application/NexusApplication.java",
     "core/src/main/resources/db/migration/V005__enforce_symbol_range_constraints.sql",
     "core/src/main/resources/db/migration/V006__invalidate_unredacted_lexical_indexes.sql",
+    "core/src/main/resources/db/migration/V007__invalidate_legacy_repository_paths.sql",
+    "core/src/main/resources/db/migration/V008__indexed_substring_search.sql",
     "core/src/test/java/com/nexus/application/NexusApplicationSemanticConfigurationTest.java",
 ):
     if not (root / path).is_file():
@@ -54,10 +72,12 @@ for stale in ("<sourceDirectory>", "<testSourceDirectory>", "../src/main", "../s
         raise SystemExit(f"core layout drift: core/pom.xml still contains {stale!r}")
 
 migrations = sorted((root / "core/src/main/resources/db/migration").glob("V*.sql"))
-if not migrations or migrations[-1].name != "V006__invalidate_unredacted_lexical_indexes.sql":
+if not migrations or migrations[-1].name != "V008__indexed_substring_search.sql":
     raise SystemExit(f"schema contract drift: latest migration is {migrations[-1].name if migrations else 'none'}")
 require("docs/developer/release-and-recovery.md", "V005__enforce_symbol_range_constraints.sql")
 require("docs/developer/release-and-recovery.md", "V006__invalidate_unredacted_lexical_indexes.sql")
+require("docs/developer/release-and-recovery.md", "V007__invalidate_legacy_repository_paths.sql")
+require("docs/developer/release-and-recovery.md", "V008__indexed_substring_search.sql")
 for path in (
     "README.md",
     "docs/architecture.md",
@@ -98,7 +118,9 @@ require("docs/developer/ci-and-supply-chain.md", "`develop` est la branche d'int
 require("docs/developer/branch-governance.md", "force pushes")
 require("docs/developer/native-context-discovery-limits.md", "NativeContextDiscoveryBudgetBenchmarkTest")
 
-require("docs/developer/rest-api.md", "Quarkus     3.39.1")
+require("docs/developer/README.md", f"Quarkus      {quarkus_version}")
+require("docs/developer/architecture-implementation.md", f"Quarkus est en {quarkus_version}")
+require("docs/developer/rest-api.md", f"Quarkus     {quarkus_version}")
 require("docs/developer/rest-api.md", "quarkus.http.insecure-requests")
 require("docs/developer/rest-api.md", "trusted-proxies")
 require("docs/developer/mcp.md", "MCP SDK     2.0.1")

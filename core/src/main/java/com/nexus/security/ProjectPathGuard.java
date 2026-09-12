@@ -1,5 +1,7 @@
 package com.nexus.security;
 
+import com.nexus.paths.RepositoryPath;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -40,6 +42,15 @@ public final class ProjectPathGuard {
             throw new IOException("Chemin absolu interdit dans le repository : " + relativePath);
         }
         return requireContained(root.resolve(relativePath).normalize());
+    }
+
+    /** Décode une identité NEXUS sans appliquer les séparateurs de l'OS source. */
+    public Path resolve(RepositoryPath relativePath) throws IOException {
+        try {
+            return resolve(relativePath.toPath(root.getFileSystem()));
+        } catch (IllegalArgumentException exception) {
+            throw new IOException("Invalid repository path", exception);
+        }
     }
 
     /**
@@ -93,9 +104,9 @@ public final class ProjectPathGuard {
     public String repositoryPath(Path candidate) {
         Path absolute = candidate.toAbsolutePath().normalize();
         if (!absolute.startsWith(root)) {
-            return absolute.toString().replace('\\', '/');
+            return "[INTERNAL_PATH]";
         }
-        return root.relativize(absolute).toString().replace('\\', '/');
+        return RepositoryPath.encode(root.relativize(absolute));
     }
 
     private Path requireContained(Path candidate) throws IOException {

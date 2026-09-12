@@ -110,6 +110,21 @@ Validation :
 - tests fédérés application/CLI : cardinalité avant résolution ;
 - tests REST : limites centrales + rejet de `constraints` ;
 - tests `SensitiveContentRedactor` et fragments : secrets non exposés et lignes préservées ;
-- benchmark fédéré : 100 projets et budget de travail global.
+- benchmark fédéré : 100 projets et budget de travail global ;
+- `ContextMaterializationBudgetTest` : limites d'octets, d'ouvertures physiques et de durée.
 
 Les mêmes contrats métier sont réutilisés par CLI, REST et MCP.
+
+## Budget physique de matérialisation
+
+Les fichiers candidats du contexte de tâche partagent un budget d'I/O physique par requête. Trois dimensions sont bornées indépendamment :
+
+```text
+NEXUS_MAX_CONTEXT_MATERIALIZATION_BYTES   64 MiB par défaut   512 MiB maximum
+NEXUS_MAX_CONTEXT_MATERIALIZATION_FILES   10000 par défaut    100000 maximum
+NEXUS_MAX_CONTEXT_MATERIALIZATION_MILLIS  30000 par défaut    300000 maximum
+```
+
+Le plafond de fichiers est consommé avant chaque ouverture physique, y compris pour un fichier vide. La deadline est contrôlée avant l'ouverture et pendant la lecture par blocs ; elle borne donc le travail cumulé et empêche qu'un grand nombre de petits fichiers échappe au seul budget d'octets.
+
+En contexte fédéré, une seule instance de `ContextMaterializationBudget` est partagée par tous les projets : augmenter le nombre de projets ne multiplie ni le volume maximal lu, ni le nombre maximal d'ouvertures, ni la durée de matérialisation autorisée.

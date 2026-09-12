@@ -1,5 +1,7 @@
 package com.nexus.search;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.nexus.index.CodeSymbol;
 import com.nexus.index.IndexRepository;
 import com.nexus.index.IndexedSymbol;
@@ -62,7 +64,7 @@ public final class SymbolSearchStrategy implements SearchStrategy {
             candidates.add(new SearchCandidate(
                     "symbol:" + indexedSymbol.relativePath() + ":" + symbol.qualifiedName(),
                     CandidateType.SYMBOL,
-                    project.rootPath().resolve(indexedSymbol.relativePath()),
+                    new RepositoryPath(indexedSymbol.relativePath()).resolve(project.rootPath()),
                     symbol,
                     symbol.signature(),
                     signals));

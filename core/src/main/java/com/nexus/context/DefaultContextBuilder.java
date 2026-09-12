@@ -1,5 +1,7 @@
 package com.nexus.context;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.nexus.context.source.ContextDiscoveryBudget;
 import com.nexus.context.source.ContextDiscoveryLimits;
 import com.nexus.context.source.ContextSourceDescriptor;
@@ -159,17 +161,36 @@ public final class DefaultContextBuilder implements ContextBuilder {
 
     @Override
     public ContextBundle build(ContextRequest request) {
+        return build(request, ContextMaterializationLimits.fromEnvironment().newBudget());
+    }
+
+    @Override
+    public ContextBundle build(
+            ContextRequest request,
+            ContextMaterializationBudget materializationBudget) {
+        return build(
+                request,
+                materializationBudget,
+                ContextDiscoveryLimits.fromEnvironment().newBudget());
+    }
+
+    @Override
+    public ContextBundle build(
+            ContextRequest request,
+            ContextMaterializationBudget materializationBudget,
+            ContextDiscoveryBudget discoveryBudget) {
         Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(materializationBudget, "materializationBudget");
+        Objects.requireNonNull(discoveryBudget, "discoveryBudget");
         ProjectDescriptor project = projectRepository.findById(request.projectId())
                 .orElseThrow(() -> new ContextBuildingException(
                         "Projet introuvable : " + request.projectId()));
-        if (project.indexStatus() != IndexStatus.READY) {
-            throw new ContextBuildingException(
-                    "Le projet doit être indexé avant de construire un contexte : " + project.name());
-        }
-
         try {
-            ContextDiscoveryBudget discoveryBudget = ContextDiscoveryLimits.fromEnvironment().newBudget();
+            com.nexus.project.ProjectReadiness.requireReady(project);
+        } catch (IllegalStateException unavailable) {
+            throw new ContextBuildingException("Le projet doit être indexé avant de construire un contexte", unavailable);
+        }
+        try {
             int retrievalLimit = retrievalLimit(request.tokenBudget());
             List<RankedCandidate> ranked = searchService.search(
                     project,
@@ -196,11 +217,13 @@ public final class DefaultContextBuilder implements ContextBuilder {
                     targetPaths,
                     discoveryBudget);
 
-            List<ContextFragment> taskFragments = fragmentFactory.create(
+            ContextFragmentFactory.MaterializationResult taskMaterialization = fragmentFactory.materialize(
                     project,
                     request.query(),
                     filtered,
-                    request.tokenBudget());
+                    request.tokenBudget(),
+                    materializationBudget);
+            List<ContextFragment> taskFragments = taskMaterialization.fragments();
             Set<Path> nativePaths = nativeDiscovery.sources().stream()
                     .map(ContextSourceDescriptor::path)
                     .map(Path::normalize)
@@ -284,11 +307,19 @@ public final class DefaultContextBuilder implements ContextBuilder {
             Map<String, Object> boundedMetadata = new LinkedHashMap<>(metadata);
             boundedMetadata.put("nativeDiscoveryLimits", discoveryBudget.limits());
             boundedMetadata.put("nativeDiscoveryWork", discoveryBudget.snapshot());
+            boundedMetadata.put("taskMaterializationLimits", materializationBudget.limits());
+            boundedMetadata.put("taskMaterializationWork", materializationBudget.snapshot());
+            boundedMetadata.put("taskMaterializationDiagnostics", taskMaterialization.diagnostics());
+            var publicDiagnostics = new com.nexus.security.PublicDiagnosticPolicy(List.of(project.rootPath()));
+            // La requête client n'est pas un diagnostic produit par NEXUS.
+            boundedMetadata.remove("query");
+            boundedMetadata = new LinkedHashMap<>(publicDiagnostics.metadata(boundedMetadata));
+            boundedMetadata.put("query", request.query());
             return new ContextBundle(
                     combined.items(),
                     request.tokenBudget(),
                     combined.selectedEstimatedTokens(),
-                    request.explain() ? combined.excluded() : List.of(),
+                    request.explain() ? publicDiagnostics.texts(combined.excluded()) : List.of(),
                     Map.copyOf(boundedMetadata));
         } catch (IOException exception) {
             throw new ContextBuildingException(
@@ -358,9 +389,11 @@ public final class DefaultContextBuilder implements ContextBuilder {
             return contextSelector.select(fragments, budget, explain);
         }
 
-        int available = fragments.stream()
-                .mapToInt(fragment -> tokenEstimator.estimate(fragment.content()))
-                .sum();
+        int available = 0;
+        for (ContextFragment fragment : fragments) {
+            available = (int) Math.min(Integer.MAX_VALUE, (long) available
+                    + tokenEstimator.estimate(com.nexus.security.SensitiveContentRedactor.redact(fragment.content())));
+        }
         List<String> excluded = explain
                 ? fragments.stream()
                     .map(fragment -> fragment.path() + " exclu : budget épuisé pour " + category)
@@ -379,7 +412,7 @@ public final class DefaultContextBuilder implements ContextBuilder {
         for (ContextSelectionResult selection : selections) {
             items.addAll(selection.items());
             excluded.addAll(selection.excluded());
-            availableTokens += selection.availableEstimatedTokens();
+            availableTokens = (int) Math.min(Integer.MAX_VALUE, (long) availableTokens + selection.availableEstimatedTokens());
             selectedTokens += selection.selectedEstimatedTokens();
             truncatedItems += selection.truncatedItems();
         }
@@ -548,7 +581,7 @@ public final class DefaultContextBuilder implements ContextBuilder {
     }
 
     private static String repositoryPath(Path path) {
-        return path.toString().replace('\\', '/');
+        return RepositoryPath.encode(path);
     }
 
     private static double reductionRatio(int availableTokens, int selectedTokens) {

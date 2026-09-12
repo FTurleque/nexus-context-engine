@@ -52,6 +52,11 @@ Un test de non-régression utilise une requête de 1 500 termes et vérifie qu'e
 
 ## SQLite et symboles
 
+Les connexions utilisent `temp_store=MEMORY` pour éviter le coût des temporaires
+sur disque pendant les insertions avec triggers. Le journal canonique et la
+durabilité restent inchangés. La mémoire temporaire native dépend du travail SQL
+et n'est pas comptée par le gate de heap Java ; voir [ADR-0050](../adr/0050-conserver-les-temporaires-sqlite-en-memoire.md).
+
 Les recherches symbole/relation filtrent côté repository avant matérialisation. V005 impose également :
 
 ```text

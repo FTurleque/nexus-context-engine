@@ -1,5 +1,7 @@
 package com.nexus.index.scan;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.nexus.index.FileCategory;
 import com.nexus.index.FileHasher;
 import com.nexus.index.ScannedFile;
@@ -282,6 +284,6 @@ public final class ProjectScanner {
     }
 
     private static String toRepositoryPath(Path path) {
-        return path.toString().replace('\\', '/');
+        return RepositoryPath.encode(path);
     }
 }

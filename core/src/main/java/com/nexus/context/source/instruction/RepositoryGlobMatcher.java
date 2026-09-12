@@ -23,7 +23,7 @@ final class RepositoryGlobMatcher {
     }
 
     private static String toRegex(String glob) {
-        String normalized = glob.trim().replace('\\', '/');
+        String normalized = glob.trim();
         StringBuilder regex = new StringBuilder("^");
         for (int index = 0; index < normalized.length(); index++) {
             char current = normalized.charAt(index);
@@ -43,7 +43,7 @@ final class RepositoryGlobMatcher {
                 }
             } else if (current == '?') {
                 regex.append("[^/]");
-            } else if (".()[]{}+$^|".indexOf(current) >= 0) {
+            } else if ("\\.()[]{}+$^|".indexOf(current) >= 0) {
                 regex.append('\\').append(current);
             } else {
                 regex.append(current);

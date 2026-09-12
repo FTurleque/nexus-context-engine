@@ -1,5 +1,7 @@
 package com.nexus.ranking.graph;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.nexus.index.FileCategory;
 import com.nexus.index.IndexRepository;
 import com.nexus.index.IndexedFile;
@@ -100,7 +102,7 @@ public final class GraphCandidateEnricher implements CandidateEnricher {
         SearchCandidate graphCandidate = new SearchCandidate(
                 id,
                 indexedFile.category() == FileCategory.TEST ? CandidateType.TEST : CandidateType.FILE,
-                project.rootPath().resolve(relativePath),
+                new RepositoryPath(relativePath).resolve(project.rootPath()),
                 null,
                 relativePath,
                 Map.of(SearchSignals.GRAPH, Math.min(1.0d, graphScore)));
@@ -108,7 +110,7 @@ public final class GraphCandidateEnricher implements CandidateEnricher {
     }
 
     private static String relativePath(ProjectDescriptor project, SearchCandidate candidate) {
-        return project.rootPath().relativize(candidate.path()).toString().replace('\\', '/');
+        return RepositoryPath.encode(project.rootPath().relativize(candidate.path()));
     }
 
     private static double directScore(SearchCandidate candidate) {

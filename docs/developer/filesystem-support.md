@@ -107,3 +107,30 @@ Pour un changement touchant `NexusPaths`, `ProjectIndexLockManager`, `ProjectPat
 - `FilesystemSemanticsQualificationTest` — confinement et mutation de chemin.
 - `SmbFilesystemQualificationTest` — preuve SMB 3.1.1 loopback sélectionnée.
 - `SafeFileIOTest` — ouverture `NOFOLLOW_LINKS` et lecture bornée.
+
+## Contrat de hardening du 9 septembre 2026
+
+Voir [ADR-0048](../adr/0048-distinguer-traversee-stricte-et-compatibilite-filesystem.md)
+pour la distinction entre traversée strict et compatibility. Le fallback sans
+`SecureDirectoryStream` est best-effort : la revalidation ne détecte pas un ABA
+restauré. `NEXUS_REQUIRE_STRICT_PATH_IO=true` le refuse avant ouverture du fichier.
+REST HTTPS distant et REST loopback hardened exigent ce flag ainsi que
+`NEXUS_REQUIRE_PRIVATE_STORAGE=true`. Le mode Docker `loopback-forward` reste local
+selon sa déclaration opérateur. Windows/UNC local conserve la compatibilité.
+`READY` atteste la génération indexée revalidée, sans snapshot atomique du
+filesystem vivant. Les mutations détectées restent refusées.
+
+Les contextes REST/MCP/CLI projettent les chemins en repository-relative et
+filtrent les diagnostics/métadonnées internes à la frontière de sortie. Les
+requêtes client sont conservées séparément. La redaction des skills précède
+estimation et sélection ; les compteurs décrivent le contenu effectivement fourni.
+
+
+## Identité repository et upgrade V007
+
+Le contrat unique `RepositoryPath` encode les composants filesystem sans remplacer
+les backslashes POSIX. `a\b.java` et `a/b.java` sont deux identités distinctes sur
+POSIX. La résolution sur un autre filesystem refuse les composants qui y seraient
+réinterprétés. V007 invalide les anciens index et impose une reconstruction ; le
+fingerprint `nexus-repository-path-v2` invalide également les dérivés sémantiques
+restés désactivés pendant l'upgrade. Voir [ADR-0049](../adr/0049-identite-repository-par-composants-et-diagnostics-publics.md).

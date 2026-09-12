@@ -1,5 +1,7 @@
 package com.nexus.context.source.instruction;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.nexus.context.source.ContextDiscoveryBudget;
 import com.nexus.context.source.ContextDiscoveryLimits;
 import com.nexus.index.scan.ProjectIgnoreMatcher;
@@ -105,7 +107,7 @@ final class InstructionReferenceResolver {
 
         Path raw;
         try {
-            raw = Path.of(reference);
+            raw = RepositoryPath.fromProvider(reference).toPath(pathGuard.root().getFileSystem());
         } catch (RuntimeException invalidPath) {
             return null;
         }

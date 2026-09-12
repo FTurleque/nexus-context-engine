@@ -13,7 +13,7 @@ NEXUS est local-first et peut être consommé via :
 
 `NEXUS_HOME` contient SQLite canonique, index dérivés et locks. La garantie `FileLock` vise un filesystem local.
 
-Sur POSIX, NEXUS durcit `NEXUS_HOME`, `indexes` et `locks` en `0700` et SQLite en `0600`. Sur Windows/filesystems sans vue POSIX, les ACL natives sont conservées plutôt que remplacées destructivement.
+Sur POSIX, NEXUS durcit `NEXUS_HOME`, `indexes` et `locks` en `0700` et SQLite en `0600`. Sur Windows/filesystems sans vue POSIX, les ACL natives sont conservées plutôt que remplacées destructivement. `NEXUS_REQUIRE_PRIVATE_STORAGE=true` permet d'exiger un stockage démontré privé et d'échouer fermé sur ACL sensible inattendue ou inspection impossible.
 
 ## 7.2 Frontières locales
 
@@ -78,9 +78,13 @@ NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA=true
 
 Les credentials intégrés dans `NEXUS_OLLAMA_BASE_URL` sont refusés. En Docker, une URL de bouclage peut être adaptée vers `host.docker.internal` après validation de cette politique.
 
+La qualification réelle sémantique utilise périodiquement/manuellement un runtime Ollama `0.33.3` téléchargé depuis la release officielle, vérifié contre un SHA-256 versionné dans le repository, puis exécute le benchmark réel `qwen3-embedding:0.6b` avec seuils de qualité/non-régression.
+
 ## 7.5 JDT Language Server
 
 JDT LS communique en STDIO local. Le framing entrant est borné : message 16 MiB, headers 64 KiB, ligne 8 KiB et backlog 256 messages. Les tâches externes sont limitées à 8 workers actifs simultanément à l'échelle JVM.
+
+Avant démarrage du subprocess, la racine canonique exacte du repository doit appartenir à `NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS`.
 
 Le workspace JDT par projet vit sous :
 
@@ -98,14 +102,20 @@ SQLite est l'autorité à sauvegarder. Lucene lexical/sémantique peut être rec
 
 Le profil sémantique `content-v2` rend les anciens vecteurs incompatibles : une indexation reconstruit l'index sémantique concerné plutôt que de réutiliser silencieusement des embeddings pré-hardening.
 
+Sur les filesystems sans `SecureDirectoryStream`, `SafeFileIO` capture chemin réel et identité filesystem de chaque composant avant ouverture puis les revalide immédiatement après. Cette défense détecte les substitutions visibles sans prétendre sandboxer un filesystem local hostile.
+
 ## 7.8 Distribution et release
 
 Le reactor produit CLI, ZIP, SBOM/notices et distributions Windows. Docker Distribution construit une image unique et qualifie cette image. Une release taggée sur `main` récupère l'artefact exact qualifié et le publie sans rebuild.
 
 Le préflight GHCR est fail-closed. Tags version et SHA sont immuables ; un retry est idempotent uniquement pour le même contenu.
 
+`jdk.incubator.vector` reste absent des launchers de production : la qualification ABBA same-runner n'a pas démontré de bénéfice suffisamment robuste pour justifier l'adoption d'un module incubateur.
+
 ## 7.9 CI et gouvernance
 
 `develop` est la branche d'intégration et `main` la branche de release. Les gates applicables qualifient le SHA exact.
 
-Le ruleset GitHub actif `Protect main & develop` protège les deux branches, impose les pull requests, interdit suppression/non-fast-forward et exige les sept checks permanents approuvés. NXA3-14 / #130 est satisfait. `strict_required_status_checks_policy=false` reste un hardening repository-admin distinct.
+Le ruleset GitHub actif `Protect main & develop` protège les deux branches, impose les pull requests, interdit suppression/non-fast-forward et exige les checks permanents approuvés. NXA3-14 / #130 est satisfait.
+
+NEXUS est actuellement maintenu par **une seule personne**. La politique n'exige pas de seconde approbation humaine ni de resynchronisation stricte avec la base juste avant merge ; ces absences ne sont pas des findings dans le modèle solo courant. Toute évolution de ce modèle doit être décidée explicitement avant de modifier les règles GitHub.

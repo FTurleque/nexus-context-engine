@@ -87,8 +87,8 @@ class SearchServiceIntegrationTest {
                 new GraphCandidateEnricher(indexRepository),
                 new DeterministicContextRanker());
 
-        List<RankedCandidate> first = service.search(project, "upload PDF", 10, true);
-        List<RankedCandidate> second = service.search(project, "upload PDF", 10, true);
+        List<RankedCandidate> first = service.search(projectRepository.findById(project.id()).orElseThrow(), "upload PDF", 10, true);
+        List<RankedCandidate> second = service.search(projectRepository.findById(project.id()).orElseThrow(), "upload PDF", 10, true);
 
         assertFalse(first.isEmpty());
         assertTrue(first.getFirst().candidate().path().endsWith("PdfUploadService.java"));
@@ -106,7 +106,7 @@ class SearchServiceIntegrationTest {
         assertTrue(repositoryCandidate.candidate().signals().getOrDefault(SearchSignals.GRAPH, 0.0d) > 0.0d);
         assertTrue(repositoryCandidate.reasons().stream().anyMatch(reason -> reason.contains("graphe")));
 
-        List<RankedCandidate> fuzzy = service.search(project, "DocumntRepository", 5, true);
+        List<RankedCandidate> fuzzy = service.search(projectRepository.findById(project.id()).orElseThrow(), "DocumntRepository", 5, true);
         assertFalse(fuzzy.isEmpty());
         assertNotNull(fuzzy.getFirst().candidate().symbol());
         assertEquals("DocumentRepository", fuzzy.getFirst().candidate().symbol().name());

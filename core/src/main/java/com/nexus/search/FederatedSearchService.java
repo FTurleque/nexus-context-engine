@@ -48,6 +48,7 @@ public final class FederatedSearchService {
         List<ProjectDescriptor> scope = FederatedScopePolicy.normalizeProjects(projects);
         String normalizedQuery = QueryPolicy.normalize(query);
         int validatedLimit = ResultLimitPolicy.validate(limit);
+        scope.forEach(com.nexus.project.ProjectReadiness::requireReady);
 
         int localLimit = localRetrievalLimit(validatedLimit);
         List<OrderedFederatedHit> candidates = new ArrayList<>();

@@ -10,29 +10,27 @@ Les recherches substring peuvent se dégrader sur des corpus plus grands. Mitiga
 
 ### Filesystem local hostile
 
-`ProjectPathGuard`, `SafeFileIO`, confinement SCIP/skills et budgets réduisent la surface, sans constituer un sandbox absolu contre un acteur local capable de muter l'arborescence pendant l'opération.
+`ProjectPathGuard` et `SafeFileIO` réduisent fortement la surface : `SecureDirectoryStream` est utilisé lorsqu'il existe ; sinon le fallback capture puis revalide chemin réel et identité filesystem autour de l'ouverture finale. Cette défense ne constitue pas un sandbox absolu contre un acteur local capable d'effectuer un échange/rétablissement extrêmement rapide, de manipuler des hard-links ou d'exploiter une sémantique de montage particulière.
 
 ### `FileLock` réseau
 
-La garantie inter-processus vise `NEXUS_HOME` sur filesystem local. SMB/NFS exigeraient une qualification dédiée.
+La garantie inter-processus vise `NEXUS_HOME` sur filesystem local. Une fixture SMB 3.1.1 loopback Windows qualifie un cas ciblé ; SMB/NFS/distribué général exige une qualification dédiée du protocole et de la panne visés.
 
-### Provider externe non coopératif
+### Provider externe non coopératif — conditionnel
 
-Les tâches sont bornées en wall-clock et à **8 workers réellement actifs maximum**. Un provider qui ignore l'interruption peut continuer jusqu'à sa terminaison réelle ; une isolation processus généralisée plus forte reste conditionnée à un cas reproductible.
+La composition de production courante n'exécute pas de provider Java tiers arbitraire : SCIP est importé et JDT LS s'exécute déjà dans un subprocess. `ExternalTaskRunner` borne néanmoins toute intégration in-process à **8 workers réellement actifs maximum**, conserve le slot jusqu'à terminaison et ouvre un circuit-breaker après timeout. Une isolation processus générique n'est justifiée que si un provider concret démontre un comportement non coopératif reproductible ; ce n'est pas un défaut actif du runtime actuel.
 
 ### Recovery sémantique
 
-L'indisponibilité d'un provider ou une corruption physique Lucene nécessite encore des procédures opérationnelles spécifiques selon le scénario. SQLite reste l'autorité. Le profil `content-v2` garantit en revanche qu'un ancien index sémantique incompatible est reconstruit plutôt que réutilisé silencieusement.
-
-### Gouvernance — branche à jour avant merge
-
-Le ruleset GitHub `Protect main & develop` est actif et protège effectivement `develop`. Le résiduel de hardening est `strict_required_status_checks_policy=false` : les checks requis qualifient le HEAD de PR mais GitHub n'impose pas actuellement une remise à jour avec la base immédiatement avant merge. Ce point est une configuration repository-admin, pas un défaut du code versionné.
+SQLite reste l'autorité et un index Lucene sémantique corrompu dispose d'une procédure de rebuild/quarantaine. L'indisponibilité transitoire d'Ollama dégrade la lecture de façon sûre. La qualité du pipeline réel est désormais surveillée par une qualification Ollama périodique/manuelle avec runtime vérifié par SHA-256 et seuils de non-régression.
 
 ## Risques fortement mitigés par NXA3
 
 ### Gouvernance `develop`
 
-NXA3-14 / #130 est satisfait : le ruleset actif cible `refs/heads/develop`, impose le passage par pull request, interdit suppression et non-fast-forward/force-push, limite le bypass administrateur au flux pull request et exige les sept checks permanents approuvés. L'état effectif doit être revalidé par API après toute modification repository-admin.
+NXA3-14 / #130 est satisfait : le ruleset actif cible `refs/heads/develop`, impose le passage par pull request, interdit suppression et non-fast-forward/force-push, limite le bypass administrateur au flux pull request et exige les checks permanents approuvés. L'état effectif doit être revalidé par API après toute modification repository-admin.
+
+NEXUS est actuellement maintenu par **une seule personne**. Une seconde approbation humaine et une resynchronisation stricte de branche avant merge ne font pas partie de la politique du projet et ne sont donc pas des risques ouverts. La protection applicable repose sur la PR obligatoire, le HEAD candidat, les checks automatisés et les protections contre suppression/force-push.
 
 ### REST distant
 
@@ -56,7 +54,7 @@ Mitigation : chemins/historique capés et sink de patch à capacité fixe, quali
 
 ### Supply-chain outils
 
-Mitigation : Maven 3.9.16 contrôlé par SHA-512 versionné et JDT LS fixe contrôlé par SHA-256 ; test exécuté dans NEXUS CI.
+Mitigation : Maven 3.9.16 contrôlé par SHA-512 versionné, JDT LS fixe contrôlé par SHA-256 et runtime Ollama du benchmark réel contrôlé par SHA-256 ; contrats vérifiés dans NEXUS CI avant les usages concernés.
 
 ### Publication Docker divergente
 
@@ -70,15 +68,19 @@ Mitigation : preflight fail-closed ; reprise idempotente uniquement pour contenu
 
 Mitigation : V004 invalide les anciens index aux plages impossibles ; V005 impose les `CHECK` de `CodeSymbol`.
 
-## Risques fortement mitigés par NXA4
+## Risques fortement mitigés par NXA4 et remédiations post-audit
 
 ### Management REST exposé avec l'API métier
 
 Mitigation : health/metrics sont retirés du listener applicatif et servis sur le listener management loopback `127.0.0.1:9000`. Le smoke Docker valide le management depuis l'intérieur du conteneur sans publier ce port.
 
-### JDT LS défectueux ou hostile
+### JDT LS défectueux, hostile ou lancé sur dépôt non approuvé
 
-Mitigation : `JdtJsonRpcFrameReader` borne messages à 16 MiB, headers à 64 KiB, lignes à 8 KiB et backlog à 256 messages. Framing invalide/tronqué ou saturation provoquent un échec fermé.
+Mitigation : `JdtJsonRpcFrameReader` borne messages à 16 MiB, headers à 64 KiB, lignes à 8 KiB et backlog à 256 messages. Framing invalide/tronqué ou saturation provoquent un échec fermé. La racine canonique exacte du projet doit en plus appartenir à `NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS` immédiatement avant `Process.start()`.
+
+### Amplification des métadonnées Code Intelligence
+
+Mitigation : politique commune de taille UTF-8 et plafonds de **100 000 symboles**, **250 000 relations** et **64 MiB de métadonnées cumulées** avant canonicalisation/déduplication.
 
 ### Requête Lucene à très forte cardinalité
 
@@ -94,11 +96,15 @@ Mitigation : HTTPS distant obligatoire par défaut ; HTTP distant uniquement ave
 
 ### Permissions de stockage local trop larges
 
-Mitigation : `NEXUS_HOME`, `indexes`, `locks` en `0700` et SQLite en `0600` sur POSIX ; chemins persistants symboliques concernés refusés. Les ACL Windows natives ne sont pas remplacées destructivement.
+Mitigation : `NEXUS_HOME`, `indexes`, `locks` en `0700` et SQLite en `0600` sur POSIX ; chemins persistants symboliques concernés refusés. Les ACL Windows natives ne sont pas remplacées destructivement. `NEXUS_REQUIRE_PRIVATE_STORAGE=true` permet aux environnements sensibles d'échouer fermé lorsqu'une ACL inattendue existe, que son inspection échoue ou qu'aucune vue POSIX/ACL ne permet de démontrer la confidentialité.
+
+### Dérive des flags Vector API
+
+Mitigation : la qualification ABBA same-runner a montré un bénéfice global trop faible et non univoque, avec légère régression du p95 graphe. `jdk.incubator.vector` reste donc non activé par défaut et le contrat CI empêche son ajout silencieux aux launchers sans nouvelle décision mesurée.
 
 ### Dérive documentaire
 
-Mitigation : documentation courante réconciliée et `test-operational-doc-contracts.sh` exécuté par NEXUS CI. Les contrats machine-vérifiables couvrent désormais aussi les invariants NXA4.
+Mitigation : documentation courante réconciliée et `test-operational-doc-contracts.sh` / `test-final-audit-contracts.sh` exécutés par NEXUS CI. Les contrats machine-vérifiables couvrent les invariants de sécurité, la politique solo et les décisions de performance mesurées.
 
 ## Mise à jour
 

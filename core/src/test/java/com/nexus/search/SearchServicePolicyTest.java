@@ -16,6 +16,20 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class SearchServicePolicyTest {
 
+    @Test
+    void refusesEveryNonReadyStateBeforeInvokingAnyStrategy() {
+        for (IndexStatus state : List.of(IndexStatus.NOT_INDEXED, IndexStatus.INDEXING, IndexStatus.FAILED)) {
+            ProjectDescriptor ready = project();
+            ProjectDescriptor unavailable = new ProjectDescriptor(UUID.randomUUID(), ready.name(), ready.rootPath(),
+                    ready.sourceType(), ready.languages(), ready.technologies(), null, state);
+            assertThrows(IllegalStateException.class,
+                    () -> service().search(unavailable, "needle", 10, false));
+            assertThrows(IllegalStateException.class,
+                    () -> new FederatedSearchService(service()).search(
+                            List.of(ready, unavailable), "needle", 10, false));
+        }
+    }
+
     @TempDir
     Path temporaryDirectory;
 

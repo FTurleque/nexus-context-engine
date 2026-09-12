@@ -1,5 +1,7 @@
 package com.nexus.context.source;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.security.ProjectPathGuard;
 
@@ -142,6 +144,6 @@ public final class NativeProjectCustomizationDetector {
     }
 
     private static String repositoryPath(Path path) {
-        return path.toString().replace('\\', '/');
+        return RepositoryPath.encode(path);
     }
 }

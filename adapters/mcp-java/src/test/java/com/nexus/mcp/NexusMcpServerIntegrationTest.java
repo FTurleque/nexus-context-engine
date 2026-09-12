@@ -55,8 +55,8 @@ class NexusMcpServerIntegrationTest {
 
     @Test
     void exposesTheSameSearchAndContextResultsThroughARealMcpStdioClient() throws Exception {
-        Path nexusHome = temporaryDirectory.resolve("nexus-home");
-        Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("project"));
+        Path nexusHome = temporaryDirectory.resolve("Build Secret");
+        Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("Alice Smith"));
         Path source = projectRoot.resolve("src/main/java/demo/OrderService.java");
         Files.createDirectories(source.getParent());
         Files.writeString(source, """
@@ -110,7 +110,9 @@ class NexusMcpServerIntegrationTest {
             McpSchema.CallToolResult projectList = client.callTool(
                     McpSchema.CallToolRequest.builder("list_projects").arguments(Map.of()).build());
             assertFalse(Boolean.TRUE.equals(projectList.isError()));
-            assertEquals(1, json(projectList).size());
+            JsonNode projectListJson = json(projectList);
+            assertEquals(1, projectListJson.size());
+            assertFalse(projectListJson.get(0).has("rootPath"));
 
             McpSchema.CallToolResult searchResult = client.callTool(
                     McpSchema.CallToolRequest.builder("search_code")
@@ -123,8 +125,9 @@ class NexusMcpServerIntegrationTest {
             assertFalse(Boolean.TRUE.equals(searchResult.isError()));
             JsonNode searchJson = json(searchResult);
             assertEquals(
-                    directSearch.results().getFirst().candidate().path().toString(),
+                    "src/main/java/demo/OrderService.java",
                     searchJson.path("results").get(0).path("path").asText());
+            assertFalse(searchJson.path("project").has("rootPath"));
             assertEquals(
                     directSearch.results().getFirst().score(),
                     searchJson.path("results").get(0).path("score").asDouble(),
@@ -142,7 +145,7 @@ class NexusMcpServerIntegrationTest {
             assertEquals(directContext.bundle().tokenBudget(), contextJson.path("tokenBudget").asInt());
             assertEquals(directContext.bundle().estimatedTokens(), contextJson.path("estimatedTokens").asInt());
             assertEquals(
-                    directContext.bundle().items().getFirst().path().toString(),
+                    "src/main/java/demo/OrderService.java",
                     contextJson.path("items").get(0).path("path").asText());
 
             McpSchema.CallToolResult explainContext = client.callTool(
@@ -234,6 +237,51 @@ class NexusMcpServerIntegrationTest {
                             .build());
             assertFalse(Boolean.TRUE.equals(duplicateScope.isError()));
             assertEquals(1, json(duplicateScope).path("projects").size());
+
+
+            for (String sensitive : List.of("/tmp/Build Secret/cache/file.txt", "C:\\Users\\Alice Smith\\Nexus Project\\src\\App.java",
+                    "\\\\server\\Private Share\\Nexus Project\\file.java", "file:///home/alice/My%20Project/src/App.java")) {
+                var rejected = client.callTool(McpSchema.CallToolRequest.builder("search_code")
+                        .arguments(Map.of("project", sensitive, "query", "x")).build());
+                assertEquals(Boolean.TRUE, rejected.isError());
+                String payload = new ObjectMapper().writeValueAsString(rejected);
+                for (String secret : List.of("Build Secret", "Alice Smith", "Private Share", "My%20Project", "cache", "file.java")) {
+                    assertFalse(payload.contains(secret), payload);
+                }
+            }
+            var unexpected = client.callTool(McpSchema.CallToolRequest.builder("search_code")
+                    .arguments(Map.of("project", project.id().toString(), "query", "x", "unexpected", true)).build());
+            assertEquals(Boolean.TRUE, unexpected.isError());
+
+            Path secondRoot = Files.createDirectory(temporaryDirectory.resolve("second-project"));
+            Path secondSource = Files.writeString(secondRoot.resolve("OrderService.java"), "class OrderService {}");
+            var second = application.registerProject(secondRoot, "second-project");
+            application.index(second.id(), true, false);
+            Files.delete(source);
+            Files.delete(secondSource);
+            for (String tool : List.of("explain_context", "explain_context_across_projects")) {
+                Map<String, Object> arguments = new java.util.LinkedHashMap<>();
+                arguments.put("query", "OrderService");
+                arguments.put("tokenBudget", 500);
+                if (tool.endsWith("across_projects")) {
+                    arguments.put("projects", List.of(project.id().toString(), second.id().toString()));
+                } else {
+                    arguments.put("project", project.id().toString());
+                }
+                var missing = client.callTool(McpSchema.CallToolRequest.builder(tool).arguments(arguments).build());
+                assertFalse(Boolean.TRUE.equals(missing.isError()));
+                String completePayload = new ObjectMapper().writeValueAsString(missing);
+                assertFalse(completePayload.contains("first-project" + java.io.File.separator));
+                // Le résultat MCP contient lui-même du JSON dans TextContent : inspecter
+                // aussi l'arbre décodé évite de dépendre du nombre d'échappements JSON.
+                String decoded = json(missing).toString();
+                for (Path hidden : List.of(projectRoot, secondRoot, nexusHome)) {
+                    assertFalse(decoded.contains("Alice Smith"), decoded);
+                    assertFalse(decoded.contains("Build Secret"), decoded);
+                    assertFalse(decoded.contains(hidden.toString().replace("\\", "\\\\")), decoded);
+                    assertFalse(decoded.contains(hidden.toString().replace('\\', '/')), decoded);
+                }
+            }
 
             if (childCoverage != null) {
                 dumpChildCoverage(childCoverage);

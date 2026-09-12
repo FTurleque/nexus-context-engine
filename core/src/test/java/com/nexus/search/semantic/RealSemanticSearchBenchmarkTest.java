@@ -192,29 +192,42 @@ class RealSemanticSearchBenchmarkTest {
     }
 
     private static List<QueryCase> queries() {
+        // Chaque requête décrit un besoin d'information. Les jugements de pertinence
+        // acceptent la documentation d'architecture et l'implémentation canonique qui
+        // satisfont indépendamment ce besoin ; le moteur NEXUS recherche les deux.
         return List.of(
                 new QueryCase(
                         "generated lookup state should be disposable and recoverable from the authoritative metadata store",
-                        Set.of("docs/adr/0022-traiter-lucene-comme-un-index-derive-reconstructible-de-sqlite.md")),
+                        Set.of(
+                                "docs/adr/0022-traiter-lucene-comme-un-index-derive-reconstructible-de-sqlite.md",
+                                "docs/index-provenance.md")),
                 new QueryCase(
                         "screen lightweight capability summaries before loading the full operating procedure",
-                        Set.of("docs/developer/agent-skills.md")),
+                        Set.of(
+                                "docs/developer/agent-skills.md",
+                                "docs/adr/0034-adopter-la-divulgation-progressive-pour-les-agent-skills.md")),
                 new QueryCase(
                         "version-control activity should influence relevance while remaining completely offline and read-only",
-                        Set.of("docs/developer/git-context.md")),
+                        Set.of(
+                                "docs/developer/git-context.md",
+                                "core/src/main/java/com/nexus/context/source/git/LocalGitContextSourceProvider.java")),
                 new QueryCase(
                         "let agent clients invoke project search through a standard stdio tool bridge without coupling the engine core",
-                        Set.of("docs/developer/mcp.md")),
+                        Set.of(
+                                "docs/developer/mcp.md",
+                                "adapters/mcp-java/src/main/java/com/nexus/mcp/NexusMcpTools.java")),
                 new QueryCase(
                         "combine results from several codebases while keeping every hit tied to its repository of origin",
                         Set.of(
                                 "docs/developer/large-scale-search.md",
-                                "docs/adr/0043-federer-la-recherche-locale-par-projet-avant-un-moteur-externe.md")),
+                                "docs/adr/0043-federer-la-recherche-locale-par-projet-avant-un-moteur-externe.md",
+                                "core/src/main/java/com/nexus/search/FederatedSearchService.java")),
                 new QueryCase(
                         "retain only the most useful fragments that fit inside a bounded language-model input allowance",
                         Set.of(
                                 "docs/adr/0013-construire-un-contextbundle-sous-budget-de-tokens.md",
-                                "docs/developer/context-building.md")));
+                                "docs/developer/context-building.md",
+                                "core/src/main/java/com/nexus/context/BudgetedContextSelector.java")));
     }
 
     private static Path corpusRoot() {

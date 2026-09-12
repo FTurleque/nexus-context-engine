@@ -21,6 +21,20 @@ class InstructionReferenceResolverTest {
     @TempDir
     Path temporaryDirectory;
 
+
+    @Test
+    void referencesKeepBothPosixIdentitiesAndContents() throws Exception {
+        org.junit.jupiter.api.Assumptions.assumeTrue(temporaryDirectory.getFileSystem().getSeparator().equals("/"));
+        Path agents = write(temporaryDirectory, "AGENTS.md", "Read @a\\b.md and @a/b.md");
+        write(temporaryDirectory, "a\\b.md", "BACKSLASH");
+        write(temporaryDirectory, "a/b.md", "SLASH");
+        var references = new InstructionReferenceResolver().resolve(project(temporaryDirectory, "identity"), agents);
+        assertEquals(2, references.size());
+        var byPath = references.stream().collect(java.util.stream.Collectors.toMap(
+                ref -> InstructionDiscoverySupport.repositoryPath(ref.relativePath()), ref -> ref.content()));
+        assertEquals(java.util.Map.of("a\\b.md", "BACKSLASH", "a/b.md", "SLASH"), byPath);
+    }
+
     @Test
     void keepsReferencesInsideRepositoryStopsCyclesAndRespectsNestedIgnoreRules() throws Exception {
         Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("project"));

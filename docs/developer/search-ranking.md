@@ -48,11 +48,30 @@ Le lifecycle Lucene par opération est conservé tant qu'un benchmark de runtime
 - seuil fuzzy : 0.62 ;
 - pool candidat : min 100, max 2 000.
 
+Depuis V008, les recherches substring de **trois points de code Unicode ou plus** passent par `symbol_search_fts`, un index FTS5 utilisant le tokenizer `trigram`. Le pool SQL est l'union de :
+
+- candidats `name` / `qualified_name` issus du trigram index ;
+- candidats fuzzy préfiltrés par `idx_symbols_fuzzy_prefilter` sur première lettre normalisée et longueur.
+
+Le `LIKE` de classement (`prefix`) ne s'applique plus qu'au petit ensemble candidat déjà sélectionné. Les requêtes de un ou deux points de code conservent le chemin `LIKE` historique pour compatibilité : elles restent bornées en résultats, mais constituent volontairement le seul cas de substring pouvant encore nécessiter un scan. Le tokenizer trigram ne peut pas indexer une sous-chaîne plus courte sans ajouter un second index n-gram beaucoup plus coûteux.
+
+`symbol_search_fts` est un index **dérivé**. V008 backfill les symboles existants et des triggers `INSERT` / `UPDATE` / `DELETE` le gardent synchronisé avec la table canonique `symbols`. Sa reconstruction reste donc déterministe à partir de SQLite canonique.
+
+Une recherche de symboles réutilise la même connexion SQLite pour le pool trigram
+et le pool fuzzy. La connexion est fermée à la fin de l'opération ; cela évite une
+seconde ouverture et un second chargement du schéma pour chaque projet d'une
+recherche ou d'un contexte fédéré. Les filtres, limites et règles de classement
+restent identiques.
+
+Le runtime SQLite embarqué est qualifié par `SqliteIndexedSubstringSearchTest` : SQLite >= 3.34.0, `ENABLE_FTS5`, création effective d'un tokenizer `trigram`, plan `VIRTUAL TABLE INDEX` et synchronisation des triggers. La dépendance Xerial courante est définie au POM parent ; toute évolution de cette baseline doit conserver ce test vert.
+
 `NexusApplication.findSymbols` utilise directement cette API bornée.
 
 ## Usages bornés
 
-`findUsages` délègue à `IndexRepository.searchRelations(projectId, symbol, limit)`. SQLite filtre source ou cible avant matérialisation et V002 indexe les deux endpoints relationnels.
+`findUsages` délègue à `IndexRepository.searchRelations(projectId, symbol, limit)`. Depuis V008, les recherches source/cible de trois points de code ou plus passent par `relation_search_fts`, également en FTS5 trigram, au lieu de `LOWER(...) LIKE '%...%'` sur toute la table. L'index dérivé est backfillé à la migration et maintenu par triggers. Les requêtes de un ou deux points de code gardent le fallback de compatibilité décrit ci-dessus.
+
+Les index B-tree de V002/V003 restent utilisés pour les parcours exacts du graphe et les projections `project/kind/source/target`; FTS5 ne les remplace pas.
 
 ## Graphe dérivé par génération
 

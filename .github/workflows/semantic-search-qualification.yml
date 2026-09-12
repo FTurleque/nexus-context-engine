@@ -1,0 +1,194 @@
+name: Semantic Search Real Qualification
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - '.github/workflows/semantic-search-qualification.yml'
+      - 'config/tool-integrity.properties'
+      - 'core/src/main/java/com/nexus/search/semantic/**'
+      - 'core/src/test/java/com/nexus/search/semantic/RealSemanticSearchBenchmarkTest.java'
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 3 * *'
+
+permissions:
+  contents: read
+
+jobs:
+  real-ollama:
+    name: Real Ollama semantic retrieval
+    runs-on: ubuntu-latest
+    # Full-repository real-model qualification is CPU-bound on GitHub-hosted runners.
+    # Per-request Ollama timeouts remain independently bounded below at 120 seconds.
+    timeout-minutes: 120
+    env:
+      NEXUS_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      OLLAMA_VERSION: '0.33.3'
+      OLLAMA_MODEL: 'qwen3-embedding:0.6b'
+      OLLAMA_MODEL_ID_PREFIX: 'ac6da0dfba84'
+      OLLAMA_ARCHIVE: target/semantic-real/ollama-linux-amd64.tar.zst
+      SEMANTIC_REPORT: target/semantic-real/benchmark.json
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ env.NEXUS_HEAD_SHA }}
+
+      - name: Verify exact checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          if [[ "$actual" != "$NEXUS_HEAD_SHA" ]]; then
+            echo "::error::Semantic qualification checkout mismatch: expected=$NEXUS_HEAD_SHA actual=$actual"
+            exit 1
+          fi
+
+      - name: Set up Java 21
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Download and verify pinned Ollama runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/semantic-real
+          key="ollama.${OLLAMA_VERSION}.linux-amd64.sha256"
+          expected="$(awk -F= -v key="$key" '$1 == key { print $2 }' config/tool-integrity.properties)"
+          if [[ ! "$expected" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Missing or invalid repository-pinned Ollama SHA-256 for $key"
+            exit 1
+          fi
+          curl --fail --location --retry 4 --retry-all-errors \
+            --output "$OLLAMA_ARCHIVE" \
+            "https://github.com/ollama/ollama/releases/download/v${OLLAMA_VERSION}/ollama-linux-amd64.tar.zst"
+          chmod +x scripts/release/verify-pinned-checksum.sh
+          scripts/release/verify-pinned-checksum.sh sha256 "$expected" "$OLLAMA_ARCHIVE"
+          sudo tar --zstd -xf "$OLLAMA_ARCHIVE" -C /usr
+          command -v ollama
+          ollama --version | tee target/semantic-real/ollama-version.txt
+
+      - name: Start Ollama and pull embedding model
+        shell: bash
+        run: |
+          set -euo pipefail
+          OLLAMA_HOST=127.0.0.1:11434 nohup ollama serve > target/semantic-real/ollama.log 2>&1 &
+          echo "$!" > target/semantic-real/ollama.pid
+          ready=false
+          for attempt in $(seq 1 90); do
+            if curl --fail --silent --show-error http://127.0.0.1:11434/api/version \
+              > target/semantic-real/ollama-api-version.json; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          if [[ "$ready" != true ]]; then
+            echo '::error::Ollama did not become ready'
+            cat target/semantic-real/ollama.log || true
+            exit 1
+          fi
+          OLLAMA_HOST=127.0.0.1:11434 ollama pull "$OLLAMA_MODEL"
+          OLLAMA_HOST=127.0.0.1:11434 ollama list | tee target/semantic-real/ollama-models.txt
+          actual_model_id="$(awk -v model="$OLLAMA_MODEL" '$1 == model { print $2 }' target/semantic-real/ollama-models.txt)"
+          if [[ "$actual_model_id" != "$OLLAMA_MODEL_ID_PREFIX" ]]; then
+            echo "::error::Unexpected Ollama model manifest prefix: expected=$OLLAMA_MODEL_ID_PREFIX actual=$actual_model_id"
+            exit 1
+          fi
+
+      - name: Run real semantic benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./mvnw
+          ./mvnw -B -pl core \
+            -Dtest=RealSemanticSearchBenchmarkTest \
+            -Dnexus.semantic.realBenchmark.enabled=true \
+            -Dnexus.semantic.realBenchmark.root="$GITHUB_WORKSPACE" \
+            -Dnexus.semantic.realBenchmark.commit="$NEXUS_HEAD_SHA" \
+            -Dnexus.semantic.realBenchmark.output="$GITHUB_WORKSPACE/$SEMANTIC_REPORT" \
+            -Dnexus.semantic.ollama.baseUri=http://127.0.0.1:11434 \
+            -Dnexus.semantic.ollama.model="$OLLAMA_MODEL" \
+            -Dnexus.semantic.ollama.dimensions=1024 \
+            -Dnexus.semantic.ollama.timeoutSeconds=120 \
+            test
+
+      - name: Enforce semantic quality floor
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import math
+          import os
+          from pathlib import Path
+
+          report = json.loads(Path(os.environ['SEMANTIC_REPORT']).read_text())
+          expected_model = f"ollama/{os.environ['OLLAMA_MODEL']}"
+          if report.get('snapshotCommit') != os.environ['NEXUS_HEAD_SHA']:
+              raise SystemExit(
+                  f"unexpected snapshotCommit: {report.get('snapshotCommit')} != {os.environ['NEXUS_HEAD_SHA']}")
+          if report.get('modelId') != expected_model:
+              raise SystemExit(f"unexpected modelId: {report.get('modelId')} != {expected_model}")
+          if report.get('localEndpoint') is not True:
+              raise SystemExit('semantic qualification must use a loopback Ollama endpoint')
+          if int(report.get('queries', 0)) < 6:
+              raise SystemExit(f"semantic corpus unexpectedly small: queries={report.get('queries')}")
+
+          baseline = report['baseline']
+          semantic = report['semantic']
+          if int(semantic.get('semanticIndexBytes', 0)) <= 0:
+              raise SystemExit('semantic Lucene index is empty')
+
+          floors = {
+              'recallAt3': 0.25,
+              'hitAt3': 0.33,
+              'mrrAt3': 0.20,
+          }
+          for metric, floor in floors.items():
+              value = float(semantic[metric])
+              if not math.isfinite(value) or value < floor:
+                  raise SystemExit(f"semantic {metric} below floor: {value} < {floor}")
+
+          for metric in ('recallAt3', 'hitAt3', 'mrrAt3'):
+              baseline_value = float(baseline[metric])
+              semantic_value = float(semantic[metric])
+              if semantic_value + 0.10 < baseline_value:
+                  raise SystemExit(
+                      f"semantic {metric} regressed by more than 0.10: "
+                      f"baseline={baseline_value} semantic={semantic_value}")
+
+          print(json.dumps({
+              'modelId': report['modelId'],
+              'snapshotCommit': report['snapshotCommit'],
+              'baseline': baseline,
+              'semantic': semantic,
+              'delta': report['delta'],
+          }, indent=2))
+          PY
+
+      - name: Stop Ollama
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f target/semantic-real/ollama.pid ]]; then
+            kill "$(cat target/semantic-real/ollama.pid)" 2>/dev/null || true
+          fi
+
+      - name: Retain semantic qualification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: semantic-real-${{ env.NEXUS_HEAD_SHA }}
+          retention-days: 90
+          if-no-files-found: error
+          path: |
+            target/semantic-real/*.json
+            target/semantic-real/*.txt
+            target/semantic-real/*.log

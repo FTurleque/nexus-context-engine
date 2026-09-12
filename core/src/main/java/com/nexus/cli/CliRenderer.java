@@ -1,5 +1,7 @@
 package com.nexus.cli;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -14,6 +16,7 @@ import com.nexus.index.IndexingReport;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.ranking.RankedCandidate;
 import com.nexus.search.FederatedSearchHit;
+import com.nexus.security.PublicProjectPathPolicy;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -76,7 +79,7 @@ final class CliRenderer {
             reportMap.put("changedFiles", report.changedFiles());
             reportMap.put("removedFiles", report.removedFiles());
             reportMap.put("skippedFiles", report.skippedFiles());
-            reportMap.put("diagnostics", report.diagnostics());
+            reportMap.put("diagnostics", new com.nexus.security.PublicDiagnosticPolicy(List.of(project.rootPath())).texts(report.diagnostics()));
             reportMap.put("fullSearchRebuild", report.fullSearchRebuild());
             reportMap.put("durationMs", report.duration().toMillis());
             reportMap.put("statistics", statisticsMap(report.statistics()));
@@ -89,7 +92,7 @@ final class CliRenderer {
 
         out.printf(
                 "Projet %s : %d scannés, %d modifiés, %d supprimés, %d ignorés, %d fichiers / %d symboles / %d relations, %d ms%s%n",
-                project.name(),
+                human(project.name()),
                 report.scannedFiles(),
                 report.changedFiles(),
                 report.removedFiles(),
@@ -99,7 +102,7 @@ final class CliRenderer {
                 report.statistics().relations(),
                 report.duration().toMillis(),
                 report.fullSearchRebuild() ? " (reconstruction complète)" : "");
-        report.diagnostics().forEach(diagnostic -> out.println("  - " + diagnostic));
+        new com.nexus.security.PublicDiagnosticPolicy(List.of(project.rootPath())).texts(report.diagnostics()).forEach(diagnostic -> out.println("  - " + human(diagnostic)));
     }
 
     void renderMinosImport(ProjectDescriptor project, CodeIntelligenceSnapshot snapshot) throws IOException {
@@ -115,7 +118,7 @@ final class CliRenderer {
         }
         out.printf(
                 "MINOS importé pour %s : %d symbole(s), %d relation(s)%n",
-                project.name(), snapshot.symbols().size(), snapshot.relations().size());
+                human(project.name()), snapshot.symbols().size(), snapshot.relations().size());
     }
 
     void renderSearch(
@@ -167,7 +170,7 @@ final class CliRenderer {
             writeJson(out, payload);
             return;
         }
-        out.printf("Recherche fédérée '%s' : %d résultat(s), %d ms%n", query, results.size(), durationMs);
+        out.printf("Recherche fédérée '%s' : %d résultat(s), %d ms%n", human(query), results.size(), durationMs);
         for (int index = 0; index < results.size(); index++) {
             FederatedSearchHit hit = results.get(index);
             RankedCandidate ranked = hit.rankedCandidate();
@@ -176,9 +179,10 @@ final class CliRenderer {
                     ? relativePath
                     : relativePath + "#" + ranked.candidate().symbol().signature();
             out.printf("%2d. %.4f %-6s [%s] %s%n",
-                    index + 1, ranked.score(), ranked.candidate().type(), hit.project().name(), target);
+                    index + 1, ranked.score(), ranked.candidate().type(),
+                    human(hit.project().name()), human(target));
             if (explain) {
-                ranked.reasons().forEach(reason -> out.println("    - " + reason));
+                new com.nexus.security.PublicDiagnosticPolicy(List.of(hit.project().rootPath())).texts(ranked.reasons()).forEach(reason -> out.println("    - " + human(reason)));
             }
         }
     }
@@ -189,6 +193,7 @@ final class CliRenderer {
             boolean explain,
             long durationMs,
             ContextBundle bundle) throws IOException {
+        bundle = com.nexus.security.PublicContextPolicy.expose(project, bundle, query);
         if (json) {
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("command", "context");
@@ -216,6 +221,7 @@ final class CliRenderer {
             boolean explain,
             long durationMs,
             FederatedContextBundle bundle) throws IOException {
+        bundle = com.nexus.security.PublicContextPolicy.expose(projects, bundle, query);
         if (json) {
             List<Map<String, Object>> items = new ArrayList<>();
             for (FederatedContextItem federated : bundle.items()) {
@@ -238,7 +244,7 @@ final class CliRenderer {
         }
         out.printf(
                 "Contexte fédéré '%s' : %d item(s), %d/%d tokens estimés, %d ms%n",
-                query, bundle.items().size(), bundle.estimatedTokens(), bundle.tokenBudget(), durationMs);
+                human(query), bundle.items().size(), bundle.estimatedTokens(), bundle.tokenBudget(), durationMs);
         for (int index = 0; index < bundle.items().size(); index++) {
             FederatedContextItem federated = bundle.items().get(index);
             printContextItem(index + 1, federated.project().name(), federated.item(), explain);
@@ -291,15 +297,16 @@ final class CliRenderer {
     }
 
     void renderError(String message, int exitCode) {
+        message = com.nexus.security.PublicDiagnosticPolicy.internal().text(message);
         if (json) {
             try {
                 writeJson(err, Map.of("error", true, "exitCode", exitCode, "message", message));
             } catch (IOException serializationFailure) {
-                err.println("Erreur NEXUS : " + message);
+                err.println("Erreur NEXUS : " + human(message));
             }
             return;
         }
-        err.println("Erreur NEXUS : " + message);
+        err.println("Erreur NEXUS : " + human(message));
     }
 
     private List<Map<String, Object>> rankedResults(
@@ -325,7 +332,7 @@ final class CliRenderer {
         result.put("path", relativePath(project, ranked.candidate().path()));
         result.put("symbol", symbolMap(ranked.candidate().symbol()));
         result.put("scoreComponents", new TreeMap<>(ranked.components()));
-        result.put("reasons", explain ? ranked.reasons() : List.of());
+        result.put("reasons", explain ? new com.nexus.security.PublicDiagnosticPolicy(List.of(project.rootPath())).texts(ranked.reasons()) : List.of());
         return result;
     }
 
@@ -335,7 +342,7 @@ final class CliRenderer {
             boolean explain,
             long durationMs,
             List<RankedCandidate> results) {
-        out.printf("Recherche '%s' : %d résultat(s), %d ms%n", query, results.size(), durationMs);
+        out.printf("Recherche '%s' : %d résultat(s), %d ms%n", human(query), results.size(), durationMs);
         for (int index = 0; index < results.size(); index++) {
             RankedCandidate ranked = results.get(index);
             String relativePath = relativePath(project, ranked.candidate().path());
@@ -343,9 +350,9 @@ final class CliRenderer {
                     ? relativePath
                     : relativePath + "#" + ranked.candidate().symbol().signature();
             out.printf("%2d. %.4f %-6s %s%n",
-                    index + 1, ranked.score(), ranked.candidate().type(), target);
+                    index + 1, ranked.score(), ranked.candidate().type(), human(target));
             if (explain) {
-                ranked.reasons().forEach(reason -> out.println("    - " + reason));
+                new com.nexus.security.PublicDiagnosticPolicy(List.of(project.rootPath())).texts(ranked.reasons()).forEach(reason -> out.println("    - " + human(reason)));
             }
         }
     }
@@ -368,21 +375,23 @@ final class CliRenderer {
 
     private void printContextHeader(String query, long durationMs, int count, int estimatedTokens, int tokenBudget) {
         out.printf("Contexte '%s' : %d item(s), %d/%d tokens estimés, %d ms%n",
-                query, count, estimatedTokens, tokenBudget, durationMs);
+                human(query), count, estimatedTokens, tokenBudget, durationMs);
     }
 
     private void printContextItem(int rank, String projectName, ContextItem item, boolean explain) {
-        String target = item.symbol() == null ? item.path().toString() : item.path() + "#" + item.symbol();
-        String projectPrefix = projectName == null ? "" : "[" + projectName + "] ";
+        String target = human(item.symbol() == null
+                ? item.path().toString()
+                : item.path() + "#" + item.symbol());
+        String projectPrefix = projectName == null ? "" : "[" + human(projectName) + "] ";
         out.printf("%n[%d] %.4f %-6s %s%s:%d-%d (%d tokens)%s%n",
                 rank, item.score(), item.type(), projectPrefix, target,
                 item.startLine(), item.endLine(), item.estimatedTokens(),
                 item.truncated() ? " [TRONQUÉ]" : "");
         if (explain) {
-            item.reasons().forEach(reason -> out.println("    - " + reason));
+            item.reasons().forEach(reason -> out.println("    - " + human(reason)));
         }
         out.println("-----");
-        out.println(item.content());
+        out.println(human(item.content()));
         out.println("-----");
     }
 
@@ -391,10 +400,10 @@ final class CliRenderer {
             return;
         }
         out.println();
-        out.println("Métadonnées : " + metadata);
+        out.println("Métadonnées : " + human(metadata));
         if (!excluded.isEmpty()) {
             out.println("Exclusions :");
-            excluded.forEach(exclusion -> out.println("  - " + exclusion));
+            excluded.forEach(exclusion -> out.println("  - " + human(exclusion)));
         }
     }
 
@@ -402,7 +411,7 @@ final class CliRenderer {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("id", project.id().toString());
         map.put("name", project.name());
-        map.put("rootPath", repositoryPath(project.rootPath()));
+        map.put("rootPath", null);
         map.put("sourceType", project.sourceType().name());
         map.put("languages", project.languages().stream().sorted().toList());
         map.put("technologies", project.technologies().stream().sorted().toList());
@@ -431,19 +440,19 @@ final class CliRenderer {
 
     private void printProject(ProjectDescriptor project) {
         out.printf("%s\t%s\t%s\t%s%n",
-                project.id(), project.name(), project.indexStatus(), project.rootPath());
+                project.id(), human(project.name()), project.indexStatus(), "[repository]");
     }
 
     private static String relativePath(ProjectDescriptor project, Path path) {
-        Path root = project.rootPath().toAbsolutePath().normalize();
-        Path normalized = path.toAbsolutePath().normalize();
-        return normalized.startsWith(root)
-                ? repositoryPath(root.relativize(normalized))
-                : repositoryPath(path);
+        return PublicProjectPathPolicy.expose(project.rootPath(), path);
     }
 
     private static String repositoryPath(Path path) {
-        return path.toString().replace('\\', '/');
+        return RepositoryPath.encode(path);
+    }
+
+    private static String human(Object value) {
+        return TerminalTextSanitizer.sanitize(String.valueOf(value));
     }
 
     private void writeJson(PrintStream stream, Object value) throws IOException {

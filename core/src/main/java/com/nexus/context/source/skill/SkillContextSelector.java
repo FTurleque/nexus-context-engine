@@ -1,5 +1,7 @@
 package com.nexus.context.source.skill;
 
+import com.nexus.paths.RepositoryPath;
+
 import com.nexus.context.ContextItem;
 import com.nexus.context.ContextSelectionResult;
 import com.nexus.search.CandidateType;
@@ -29,9 +31,13 @@ public final class SkillContextSelector {
             List<ActivatedSkill> activatedSkills,
             int budget,
             boolean explain) {
-        int availableTokens = activatedSkills.stream()
-                .mapToInt(skill -> tokenEstimator.estimate(skill.content()))
-                .sum();
+        List<String> contents = activatedSkills.stream()
+                .map(skill -> com.nexus.security.SensitiveContentRedactor.redact(skill.content())).toList();
+        int availableTokens = 0;
+        for (String content : contents) {
+            availableTokens = (int) Math.min(Integer.MAX_VALUE,
+                    (long) availableTokens + tokenEstimator.estimate(content));
+        }
         if (activatedSkills.isEmpty()) {
             return new ContextSelectionResult(List.of(), List.of(), 0, 0, 0);
         }
@@ -40,8 +46,10 @@ public final class SkillContextSelector {
         List<String> excluded = new ArrayList<>();
         int selectedTokens = 0;
 
-        for (ActivatedSkill activated : activatedSkills) {
-            int estimatedTokens = tokenEstimator.estimate(activated.content());
+        for (int index = 0; index < activatedSkills.size(); index++) {
+            ActivatedSkill activated = activatedSkills.get(index);
+            String content = contents.get(index);
+            int estimatedTokens = tokenEstimator.estimate(content);
             int remaining = Math.max(0, budget - selectedTokens);
             if (estimatedTokens > remaining) {
                 if (explain) {
@@ -63,8 +71,8 @@ public final class SkillContextSelector {
                     activated.descriptor().definitionPath(),
                     null,
                     1,
-                    Math.max(1, LINE_BREAK.split(activated.content(), -1).length),
-                    activated.content(),
+                    Math.max(1, LINE_BREAK.split(content, -1).length),
+                    content,
                     activated.score(),
                     components,
                     reasons,
@@ -82,6 +90,6 @@ public final class SkillContextSelector {
     }
 
     private static String repositoryPath(java.nio.file.Path path) {
-        return path.toString().replace('\\', '/');
+        return RepositoryPath.encode(path);
     }
 }
