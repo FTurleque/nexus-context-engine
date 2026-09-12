@@ -149,16 +149,22 @@ public final class SqliteIndexRepository implements IndexRepository {
             return searchSymbolsWithLike(projectId, normalized, limit);
         }
 
-        List<IndexedSymbol> trigramCandidates = searchSymbolsWithTrigram(projectId, normalized, limit);
-        List<IndexedSymbol> fuzzyCandidates = searchFuzzySymbols(projectId, normalized, limit);
-        return mergeSymbolCandidates(normalized, trigramCandidates, fuzzyCandidates, limit);
+        // Both candidate queries belong to the same retrieval operation. Reuse
+        // its connection so the fuzzy query does not reopen and reload SQLite's schema.
+        try (Connection connection = database.openConnection()) {
+            List<IndexedSymbol> trigramCandidates = searchSymbolsWithTrigram(connection, projectId, normalized, limit);
+            List<IndexedSymbol> fuzzyCandidates = searchFuzzySymbols(connection, projectId, normalized, limit);
+            return mergeSymbolCandidates(normalized, trigramCandidates, fuzzyCandidates, limit);
+        } catch (SQLException exception) {
+            throw persistence("Impossible de rechercher les symboles du projet " + projectId, exception);
+        }
     }
 
-    private List<IndexedSymbol> searchSymbolsWithTrigram(UUID projectId, String normalized, int limit) {
+    private static List<IndexedSymbol> searchSymbolsWithTrigram(
+            Connection connection, UUID projectId, String normalized, int limit) throws SQLException {
         String contains = "%" + escapeLike(normalized) + "%";
         String prefix = escapeLike(normalized) + "%";
-        try (Connection connection = database.openConnection();
-             PreparedStatement statement = connection.prepareStatement("""
+        try (PreparedStatement statement = connection.prepareStatement("""
                      SELECT f.relative_path, s.kind, s.name, s.qualified_name,
                             s.signature, s.start_line, s.end_line, s.source_provider
                      FROM symbol_search_fts search
@@ -187,51 +193,29 @@ public final class SqliteIndexRepository implements IndexRepository {
             statement.setString(7, prefix);
             statement.setInt(8, limit);
             return readSymbols(statement);
-        } catch (SQLException exception) {
-            throw persistence("Impossible de rechercher les symboles trigram du projet " + projectId, exception);
         }
     }
 
-    private List<IndexedSymbol> searchFuzzySymbols(UUID projectId, String normalized, int limit) {
+    private static List<IndexedSymbol> searchFuzzySymbols(
+            Connection connection, UUID projectId, String normalized, int limit) throws SQLException {
         String firstCharacter = firstCodePoint(normalized);
         int queryLength = normalized.codePointCount(0, normalized.length());
         int minimumLength = Math.max(0, queryLength - 3);
         int maximumLength = queryLength + 3;
-        try (Connection connection = database.openConnection()) {
-            long candidateCount = countFuzzyCandidates(
-                    connection,
-                    projectId,
-                    firstCharacter,
-                    minimumLength,
-                    maximumLength);
-            if (candidateCount == 0L) {
-                return List.of();
-            }
-            if (candidateCount <= FUZZY_SMALL_CANDIDATE_THRESHOLD) {
-                try (PreparedStatement statement = connection.prepareStatement("""
-                        SELECT f.relative_path, s.kind, s.name, s.qualified_name,
-                               s.signature, s.start_line, s.end_line, s.source_provider
-                        FROM symbols s INDEXED BY idx_symbols_fuzzy_prefilter
-                        JOIN indexed_files f ON f.id = s.file_id
-                        WHERE f.project_id = ?
-                          AND SUBSTR(LOWER(s.name), 1, 1) = ?
-                          AND LENGTH(s.name) BETWEEN ? AND ?
-                        ORDER BY s.qualified_name, f.relative_path, s.start_line, s.source_provider
-                        LIMIT ?
-                        """)) {
-                    return bindAndReadFuzzyCandidates(
-                            statement,
-                            projectId,
-                            firstCharacter,
-                            minimumLength,
-                            maximumLength,
-                            limit);
-                }
-            }
+        long candidateCount = countFuzzyCandidates(
+                connection,
+                projectId,
+                firstCharacter,
+                minimumLength,
+                maximumLength);
+        if (candidateCount == 0L) {
+            return List.of();
+        }
+        if (candidateCount <= FUZZY_SMALL_CANDIDATE_THRESHOLD) {
             try (PreparedStatement statement = connection.prepareStatement("""
                     SELECT f.relative_path, s.kind, s.name, s.qualified_name,
                            s.signature, s.start_line, s.end_line, s.source_provider
-                    FROM symbols s INDEXED BY idx_symbols_qualified_name
+                    FROM symbols s INDEXED BY idx_symbols_fuzzy_prefilter
                     JOIN indexed_files f ON f.id = s.file_id
                     WHERE f.project_id = ?
                       AND SUBSTR(LOWER(s.name), 1, 1) = ?
@@ -247,8 +231,25 @@ public final class SqliteIndexRepository implements IndexRepository {
                         maximumLength,
                         limit);
             }
-        } catch (SQLException exception) {
-            throw persistence("Impossible de rechercher les candidats fuzzy du projet " + projectId, exception);
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT f.relative_path, s.kind, s.name, s.qualified_name,
+                       s.signature, s.start_line, s.end_line, s.source_provider
+                FROM symbols s INDEXED BY idx_symbols_qualified_name
+                JOIN indexed_files f ON f.id = s.file_id
+                WHERE f.project_id = ?
+                  AND SUBSTR(LOWER(s.name), 1, 1) = ?
+                  AND LENGTH(s.name) BETWEEN ? AND ?
+                ORDER BY s.qualified_name, f.relative_path, s.start_line, s.source_provider
+                LIMIT ?
+                """)) {
+            return bindAndReadFuzzyCandidates(
+                    statement,
+                    projectId,
+                    firstCharacter,
+                    minimumLength,
+                    maximumLength,
+                    limit);
         }
     }
 

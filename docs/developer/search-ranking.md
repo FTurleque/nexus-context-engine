@@ -57,6 +57,12 @@ Le `LIKE` de classement (`prefix`) ne s'applique plus qu'au petit ensemble candi
 
 `symbol_search_fts` est un index **dérivé**. V008 backfill les symboles existants et des triggers `INSERT` / `UPDATE` / `DELETE` le gardent synchronisé avec la table canonique `symbols`. Sa reconstruction reste donc déterministe à partir de SQLite canonique.
 
+Une recherche de symboles réutilise la même connexion SQLite pour le pool trigram
+et le pool fuzzy. La connexion est fermée à la fin de l'opération ; cela évite une
+seconde ouverture et un second chargement du schéma pour chaque projet d'une
+recherche ou d'un contexte fédéré. Les filtres, limites et règles de classement
+restent identiques.
+
 Le runtime SQLite embarqué est qualifié par `SqliteIndexedSubstringSearchTest` : SQLite >= 3.34.0, `ENABLE_FTS5`, création effective d'un tokenizer `trigram`, plan `VIRTUAL TABLE INDEX` et synchronisation des triggers. La dépendance Xerial courante est définie au POM parent ; toute évolution de cette baseline doit conserver ce test vert.
 
 `NexusApplication.findSymbols` utilise directement cette API bornée.

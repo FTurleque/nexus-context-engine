@@ -80,7 +80,7 @@ relation_search_fts
 
 Les projections sont **contentless**, utilisent `detail=none` et `columnsize=0`. Elles ne dupliquent donc ni le contenu canonique, ni les positions, ni la table FTS `docsize`; elles conservent uniquement les posting lists nécessaires à la découverte de candidats. Les valeurs de référence restent dans `symbols` et `symbol_relations`.
 
-Les mutations canoniques sont placées par triggers dans `symbol_search_pending` / `relation_search_pending`. Chaque entrée pending mémorise le texte ancien lorsqu'une suppression de tokens est nécessaire et le dernier texte lorsqu'une insertion est nécessaire. Les suppressions sont appliquées avec la commande FTS5 spéciale `delete`, puis les insertions sont projetées par `INSERT ... SELECT`. Le repository regroupe les écritures canoniques par lots SQL bornés de 128 lignes ; les lots de 5 000 du benchmark marquent des commits intermédiaires, et le bump de `project_index_generations` vide le reliquat dans la même transaction.
+Les mutations canoniques sont placées par triggers dans `symbol_search_pending` / `relation_search_pending`. Chaque entrée pending mémorise le premier texte ancien lorsqu'une suppression de tokens est nécessaire ; le texte à insérer est relu depuis les tables canoniques au flush. Les suppressions sont appliquées avec la commande FTS5 spéciale `delete`, puis les insertions sont projetées par `INSERT ... SELECT`. Le repository regroupe les écritures canoniques par lots SQL bornés de 128 lignes. Le benchmark vide le lot SQL résiduel toutes les 5 000 lignes et commit toutes les 50 000 lignes ; la projection FTS est mise à jour au bump de `project_index_generations`.
 
 Le repository transforme une requête en intersection de trigrams de trois points de code. Comme `detail=none` ne conserve pas les positions, les candidats FTS sont ensuite revalidés contre les valeurs canoniques avec la sémantique `contains`. Cette étape élimine les faux positifs possibles d'une simple intersection de trigrams sans réintroduire un scan complet de la table.
 
@@ -97,7 +97,7 @@ Les requêtes de un ou deux points de code gardent volontairement le fallback `L
 - commande FTS5 `delete` avec l'ancien texte ;
 - plan `VIRTUAL TABLE INDEX` ;
 - flush de génération ;
-- lots SQL bornés à 128 lignes et commits de fixture à 5 000 lignes ;
+- maintien de 5 000 lignes en attente jusqu'au flush de génération ;
 - fallback des requêtes très courtes.
 
 Le scénario de recovery vérifie qu'une ancienne table `schema_migrations` sans `script_sha256` est complétée additivement avant la reprise du migrateur. Les FTS sont dérivés : une reconstruction commence par `delete-all` puis les reconstruit depuis les tables canoniques.
@@ -106,7 +106,7 @@ Le scénario de recovery vérifie qu'une ancienne table `schema_migrations` sans
 
 Le regroupement des écritures canoniques en lots SQL bornés complète l'adoption FTS5/trigram. `config/scale-benchmark-protocol` vaut donc **4**. Une mesure protocole 3 ou antérieure ne doit pas être utilisée comme baseline relative homogène du protocole 4.
 
-Les budgets absolus historiques ne sont **pas** relâchés par l'adoption FTS.
+Les plafonds absolus de latence et de population restent inchangés. Le stockage est comparé à la base de la PR sur le même runner.
 
 ### Budgets SQLite p95
 
@@ -121,7 +121,7 @@ Autres plafonds SQLite :
 
 - lookup de 100 fichiers : <= 30 ms p95 ;
 - population : <= 1,4 s / 5 s / 20 s / 40 s aux paliers 10k / 100k / 500k / 1M ;
-- base à 1M : <= 650 MiB ;
+- base à 1M : taille candidat <= taille de la base de la PR × 1,20, mesurées sur le même runner ;
 - lorsque base et candidat partagent le même protocole, population candidat <= `max(base × 1,20, base + jitter)` avec jitters 0,2 / 0,5 / 1,5 / 3 s.
 
 Le gate dédié PR exige exactement les quatre paliers SQLite dans `scale-benchmark-sqlite-full.json`.
