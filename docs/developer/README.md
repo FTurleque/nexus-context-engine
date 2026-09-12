@@ -14,7 +14,7 @@ Java         >=21, release 21
 Maven        3.9.16 via wrapper vérifié
 integration  develop
 release      main
-Quarkus      3.39.1
+Quarkus      3.39.2
 MCP SDK      2.0.1
 ```
 

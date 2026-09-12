@@ -7,7 +7,7 @@ L'adaptateur Quarkus expose `NexusApplication` sans introduire Quarkus dans le c
 ```text
 module      adapters/rest-quarkus
 Java        21
-Quarkus     3.39.1
+Quarkus     3.39.2
 version     NEXUS 0.2.0
 ```
 

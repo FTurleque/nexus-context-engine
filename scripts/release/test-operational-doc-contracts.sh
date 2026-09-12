@@ -3,6 +3,7 @@ set -euo pipefail
 
 python3 - <<'PY'
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 root = Path.cwd()
 
@@ -22,6 +23,21 @@ def require(path: str, needle: str) -> None:
 def forbid(path: str, needle: str) -> None:
     if needle in text(path):
         raise SystemExit(f"obsolete documentation contract: {path} still contains {needle!r}")
+
+
+# Keep operational documentation aligned with the dependency actually used by Maven.
+pom = ET.parse(root / "pom.xml").getroot()
+quarkus_version = next(
+    (
+        element.text.strip()
+        for element in pom.iter()
+        if element.tag.rsplit("}", 1)[-1] == "quarkus.platform.version"
+        and element.text
+    ),
+    None,
+)
+if not quarkus_version:
+    raise SystemExit("version contract drift: pom.xml does not declare quarkus.platform.version")
 
 
 # Toolchain / NXA3 baseline
@@ -102,7 +118,9 @@ require("docs/developer/ci-and-supply-chain.md", "`develop` est la branche d'int
 require("docs/developer/branch-governance.md", "force pushes")
 require("docs/developer/native-context-discovery-limits.md", "NativeContextDiscoveryBudgetBenchmarkTest")
 
-require("docs/developer/rest-api.md", "Quarkus     3.39.1")
+require("docs/developer/README.md", f"Quarkus      {quarkus_version}")
+require("docs/developer/architecture-implementation.md", f"Quarkus est en {quarkus_version}")
+require("docs/developer/rest-api.md", f"Quarkus     {quarkus_version}")
 require("docs/developer/rest-api.md", "quarkus.http.insecure-requests")
 require("docs/developer/rest-api.md", "trusted-proxies")
 require("docs/developer/mcp.md", "MCP SDK     2.0.1")

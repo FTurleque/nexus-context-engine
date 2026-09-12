@@ -26,7 +26,7 @@ nexus-context-engine/
 
 Le module `core` possède physiquement son layout Maven standard. Aucun `src/` applicatif n'existe à la racine et `core/pom.xml` ne redirige plus `sourceDirectory`, `testSourceDirectory`, resources ou test-resources vers le parent. Les artefacts publics et la distribution restent publiés sous les emplacements historiques de `target/` pour compatibilité.
 
-Le parent gouverne Java 21, BOM/plugins, JaCoCo, SBOM et dépendances communes. Quarkus est en 3.39.1 et le SDK MCP en 2.0.1.
+Le parent gouverne Java 21, BOM/plugins, JaCoCo, SBOM et dépendances communes. Quarkus est en 3.39.2 et le SDK MCP en 2.0.1.
 
 ## Composition root
 
