@@ -15,8 +15,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.concurrent.locks.StampedLock;
 
 /**
  * Verrou inter-processus des mutations et lectures d'index par projet.
@@ -36,7 +35,7 @@ public final class ProjectIndexLockManager {
     private static final boolean WINDOWS = System.getProperty("os.name", "")
             .toLowerCase(Locale.ROOT)
             .contains("win");
-    private static final ConcurrentMap<String, ReentrantReadWriteLock> PROCESS_LOCKS =
+    private static final ConcurrentMap<String, StampedLock> PROCESS_LOCKS =
             new ConcurrentHashMap<>();
     private static final ConcurrentMap<String, SharedReadLock> SHARED_READ_LOCKS =
             new ConcurrentHashMap<>();
@@ -68,8 +67,9 @@ public final class ProjectIndexLockManager {
 
         IndexingCapacityGate.Permit capacityPermit = IndexingCapacityGate.acquireShared();
         boolean permitTransferred = false;
-        ReentrantReadWriteLock processLock = processLock(projectId);
-        if (!processLock.writeLock().tryLock()) {
+        StampedLock processLock = processLock(projectId);
+        long processStamp = processLock.tryWriteLock();
+        if (processStamp == 0L) {
             capacityPermit.close();
             throw busy(projectId);
         }
@@ -81,7 +81,7 @@ public final class ProjectIndexLockManager {
             Path lockPath = paths.projectIndexLock(projectId);
             FileChannel channel = openHardenedChannel(lockPath);
             FileLock fileLock = acquireFileLock(channel, projectId, false);
-            LockHandle handle = new LockHandle(channel, fileLock, capacityPermit, processLock.writeLock());
+            LockHandle handle = new LockHandle(channel, fileLock, capacityPermit, processLock, processStamp);
             permitTransferred = true;
             processLockTransferred = true;
             return handle;
@@ -90,7 +90,7 @@ public final class ProjectIndexLockManager {
                 capacityPermit.close();
             }
             if (!processLockTransferred) {
-                processLock.writeLock().unlock();
+                processLock.unlockWrite(processStamp);
             }
         }
     }
@@ -101,21 +101,21 @@ public final class ProjectIndexLockManager {
         if (paths == null) {
             return LockHandle.noop();
         }
-        Lock readLock = processLock(projectId).readLock();
-        readLock.lock();
+        StampedLock processLock = processLock(projectId);
+        long processStamp = processLock.readLock();
         try {
             Path locksDirectory = paths.locksDirectory();
             paths.ensurePrivateDirectory(locksDirectory);
             Path lockPath = paths.projectIndexLock(projectId);
             SharedReadLock sharedReadLock = acquireSharedReadLock(lockPath, projectId);
-            return new LockHandle(sharedReadLock, readLock);
+            return new LockHandle(sharedReadLock, processLock, processStamp);
         } catch (IOException failure) {
-            readLock.unlock();
+            processLock.unlockRead(processStamp);
             throw new IllegalStateException(
                     "Impossible d'acquérir le verrou de lecture du projet " + projectId,
                     failure);
         } catch (RuntimeException failure) {
-            readLock.unlock();
+            processLock.unlockRead(processStamp);
             throw failure;
         }
     }
@@ -147,10 +147,10 @@ public final class ProjectIndexLockManager {
         }
     }
 
-    private ReentrantReadWriteLock processLock(UUID projectId) {
+    private StampedLock processLock(UUID projectId) {
         Path lockPath = paths.projectIndexLock(projectId).toAbsolutePath().normalize();
         String key = lockKey(lockPath);
-        return PROCESS_LOCKS.computeIfAbsent(key, ignored -> new ReentrantReadWriteLock(true));
+        return PROCESS_LOCKS.computeIfAbsent(key, ignored -> new StampedLock());
     }
 
     private static String lockKey(Path lockPath) {
@@ -236,12 +236,13 @@ public final class ProjectIndexLockManager {
 
     public static final class LockHandle implements AutoCloseable {
 
-        private static final LockHandle NOOP = new LockHandle(null, null, null, null);
+        private static final LockHandle NOOP = new LockHandle(null, null, null, null, 0L);
 
         private final FileChannel channel;
         private final FileLock fileLock;
         private final IndexingCapacityGate.Permit capacityPermit;
-        private final Lock processLock;
+        private final StampedLock processLock;
+        private final long processStamp;
         private final SharedReadLock sharedReadLock;
         private boolean closed;
 
@@ -249,26 +250,30 @@ public final class ProjectIndexLockManager {
                 FileChannel channel,
                 FileLock fileLock,
                 IndexingCapacityGate.Permit capacityPermit,
-                Lock processLock) {
-            this(channel, fileLock, capacityPermit, processLock, null);
+                StampedLock processLock,
+                long processStamp) {
+            this(channel, fileLock, capacityPermit, processLock, processStamp, null);
         }
 
         private LockHandle(
                 SharedReadLock sharedReadLock,
-                Lock processLock) {
-            this(null, null, null, processLock, sharedReadLock);
+                StampedLock processLock,
+                long processStamp) {
+            this(null, null, null, processLock, processStamp, sharedReadLock);
         }
 
         private LockHandle(
                 FileChannel channel,
                 FileLock fileLock,
                 IndexingCapacityGate.Permit capacityPermit,
-                Lock processLock,
+                StampedLock processLock,
+                long processStamp,
                 SharedReadLock sharedReadLock) {
             this.channel = channel;
             this.fileLock = fileLock;
             this.capacityPermit = capacityPermit;
             this.processLock = processLock;
+            this.processStamp = processStamp;
             this.sharedReadLock = sharedReadLock;
         }
 
@@ -291,7 +296,7 @@ public final class ProjectIndexLockManager {
             } finally {
                 try {
                     if (processLock != null) {
-                        processLock.unlock();
+                        processLock.unlock(processStamp);
                     }
                 } finally {
                     if (capacityPermit != null) {

@@ -81,6 +81,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Façade applicative indépendante des adaptateurs clients.
@@ -533,14 +537,31 @@ public final class NexusApplication implements AutoCloseable {
         // concurrentes demandent des portées qui se recouvrent différemment.
         List<UUID> lockOrder = projectIds.stream().sorted().toList();
         List<ProjectIndexLockManager.LockHandle> locks = new ArrayList<>(lockOrder.size());
-        try {
-            for (UUID projectId : lockOrder) {
-                locks.add(projectIndexLockManager.acquireRead(projectId));
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<CompletableFuture<ProjectIndexLockManager.LockHandle>> acquisitions = lockOrder.stream()
+                    .map(projectId -> CompletableFuture.supplyAsync(
+                            () -> projectIndexLockManager.acquireRead(projectId), executor))
+                    .toList();
+            RuntimeException firstFailure = null;
+            for (CompletableFuture<ProjectIndexLockManager.LockHandle> acquisition : acquisitions) {
+                try {
+                    locks.add(acquisition.join());
+                } catch (CompletionException failure) {
+                    RuntimeException current = failure.getCause() instanceof RuntimeException runtime
+                            ? runtime
+                            : new IllegalStateException("Impossible d'acquérir les verrous de lecture fédérés", failure);
+                    if (firstFailure == null) {
+                        firstFailure = current;
+                    } else {
+                        firstFailure.addSuppressed(current);
+                    }
+                }
+            }
+            if (firstFailure != null) {
+                closeReadLocks(locks);
+                throw firstFailure;
             }
             return locks;
-        } catch (RuntimeException failure) {
-            closeReadLocks(locks);
-            throw failure;
         }
     }
 
