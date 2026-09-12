@@ -41,6 +41,24 @@ class ProjectIndexLockManagerTest {
     }
 
     @Test
+    void allowsConcurrentReadersButExcludesWriters() throws Exception {
+        NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("read-home"));
+        ProjectIndexLockManager manager = ProjectIndexLockManager.fileBacked(paths);
+        UUID projectId = UUID.randomUUID();
+
+        try (ProjectIndexLockManager.LockHandle first = manager.acquireRead(projectId);
+             ProjectIndexLockManager.LockHandle second = manager.acquireRead(projectId)) {
+            assertThrows(IllegalStateException.class, () -> manager.acquire(projectId));
+        }
+
+        assertDoesNotThrow(() -> {
+            try (ProjectIndexLockManager.LockHandle ignored = manager.acquire(projectId)) {
+                // Les deux lectures ont bien libéré le verrou partagé.
+            }
+        });
+    }
+
+    @Test
     void enforcesTheLockAcrossDistinctJvmProcessesAndReleasesIt() throws Exception {
         NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("cross-process-home"));
         ProjectIndexLockManager manager = ProjectIndexLockManager.fileBacked(paths);

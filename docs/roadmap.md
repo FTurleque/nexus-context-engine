@@ -56,7 +56,7 @@ NXA4 complète cette baseline avec :
 - credentials intégrés dans l'URI Ollama refusés ;
 - redaction conservatrice des secrets avant embeddings et avant restitution des fragments de contexte ;
 - exclusions scanner étendues pour les fichiers/répertoires sensibles ;
-- profil sémantique `content-v2` pour reconstruire les vecteurs historiques incompatibles ;
+- profil sémantique `content-v3` pour reconstruire les vecteurs historiques incompatibles ;
 - `NEXUS_HOME`/SQLite privés sur POSIX (`0700` répertoires, `0600` fichier) et refus des chemins persistants symboliques concernés ;
 - checks de bounds SCIP résistants aux overflows ;
 - parcours JavaParser limité aux catégories AST nécessaires.

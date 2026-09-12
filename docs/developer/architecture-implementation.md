@@ -51,7 +51,7 @@ CLI, REST et MCP délèguent à cette façade.
 
 ## Indexation et persistance
 
-`ProjectIndexingService` orchestre mutex JVM + `FileLock`, scan borné, fingerprint canonique, analyses, SQLite, index dérivés, revalidation puis `READY`.
+`ProjectIndexingService` orchestre mutex JVM + `FileLock`, scan borné, fingerprint canonique, analyses, SQLite, index dérivés, revalidation puis `READY`. Les lectures de la façade prennent le verrou partagé du projet pendant toute leur exécution afin de ne pas traverser un rebuild.
 
 Une erreur de provider/importer ou une mutation canonique détectée pendant l'opération fait passer le projet à `FAILED` avant propagation de l'échec. Un provider explicitement demandé ne produit pas un succès dégradé silencieux.
 
@@ -162,7 +162,7 @@ Les limites REST fédérées réutilisent `ResultLimitPolicy` et `ContextBudgetP
 
 Les blocs privés multilignes conservent leurs séparateurs de lignes après redaction afin de ne pas déplacer les ranges source.
 
-Le profil sémantique est `content-v2`, ce qui rend un index historique incompatible et force sa reconstruction.
+Le profil sémantique est `content-v3`, ce qui rend un index historique incompatible et force sa reconstruction.
 
 ## Ollama
 
@@ -181,7 +181,7 @@ Le profil sémantique est `content-v2`, ce qui rend un index historique incompat
 
 ## Git local
 
-`LocalGitContextSourceProvider` borne commits récents, chemins, historique, co-changements et patches cibles. Le patch working-tree est écrit dans `BoundedOutput`, sink à capacité fixe, avant conversion/troncature à 6 000 caractères.
+`LocalGitContextSourceProvider` borne commits récents, chemins, historique, co-changements et patches cibles. Les arbres de commits sont parcourus incrémentalement sous budget avant collecte. Le patch working-tree est écrit dans `BoundedOutput`, sink à capacité fixe, avant conversion/troncature à 6 000 caractères.
 
 ## REST
 

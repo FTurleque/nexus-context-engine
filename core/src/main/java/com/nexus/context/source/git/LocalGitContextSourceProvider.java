@@ -16,8 +16,9 @@ import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
+import org.eclipse.jgit.treewalk.TreeWalk;
+import org.eclipse.jgit.treewalk.filter.TreeFilter;
 import org.eclipse.jgit.treewalk.filter.PathFilterGroup;
-import org.eclipse.jgit.util.io.DisabledOutputStream;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -73,11 +74,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
 
         try (Repository repository = openRepository(query.project().rootPath());
              Git git = new Git(repository);
-             RevWalk revWalk = new RevWalk(repository);
-             DiffFormatter historyDiffFormatter = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
-            historyDiffFormatter.setRepository(repository);
-            historyDiffFormatter.setDetectRenames(true);
-
+             RevWalk revWalk = new RevWalk(repository)) {
             String projectPrefix = projectPrefix(repository, query.project().rootPath());
             Map<String, String> projectPathByGitTarget = new LinkedHashMap<>();
             for (String projectTarget : projectTargets) {
@@ -94,7 +91,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
                 }
 
                 RevCommit parent = revWalk.parseCommit(commit.getParent(0).getId());
-                Set<String> changedGitPaths = changedPaths(historyDiffFormatter, parent, commit, query);
+                Set<String> changedGitPaths = changedPaths(repository, parent, commit, query);
                 cumulativeChangedPaths += changedGitPaths.size();
                 if (cumulativeChangedPaths > MAX_CUMULATIVE_CHANGED_PATHS) {
                     throw new ContextDiscoveryLimitExceededException(
@@ -177,26 +174,44 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
     }
 
     private static Set<String> changedPaths(
-            DiffFormatter formatter,
+            Repository repository,
             RevCommit parent,
             RevCommit commit,
             GitContextQuery query) throws IOException {
         Set<String> changed = new LinkedHashSet<>();
-        for (DiffEntry entry : formatter.scan(parent.getTree(), commit.getTree())) {
-            query.discoveryBudget().visit(GIT_HISTORY_WORK);
-            if (!DiffEntry.DEV_NULL.equals(entry.getOldPath())) {
-                changed.add(entry.getOldPath());
-            }
-            if (!DiffEntry.DEV_NULL.equals(entry.getNewPath())) {
-                changed.add(entry.getNewPath());
-            }
-            if (changed.size() > MAX_CHANGED_PATHS_PER_COMMIT) {
-                throw new ContextDiscoveryLimitExceededException(
-                        "Budget Git dépassé: un commit contient plus de "
-                                + MAX_CHANGED_PATHS_PER_COMMIT + " chemins modifiés");
+        try (TreeWalk walk = new TreeWalk(repository)) {
+            walk.addTree(parent.getTree());
+            walk.addTree(commit.getTree());
+            walk.setRecursive(true);
+            walk.setFilter(TreeFilter.ANY_DIFF);
+            while (walk.next()) {
+                query.discoveryBudget().visit(GIT_HISTORY_WORK);
+                changed.add(walk.getPathString());
+                if (changed.size() > MAX_CHANGED_PATHS_PER_COMMIT) {
+                    throw new ContextDiscoveryLimitExceededException(
+                            "Budget Git dépassé: un commit contient plus de "
+                                    + MAX_CHANGED_PATHS_PER_COMMIT + " chemins modifiés");
+                }
             }
         }
         return changed;
+    }
+
+    /**
+     * Compatibilité binaire pour les qualifications internes historiques ; le
+     * formatter n'est volontairement plus utilisé afin de conserver le parcours
+     * incrémental borné ci-dessus.
+     */
+    @SuppressWarnings("unused")
+    private static Set<String> changedPaths(
+            DiffFormatter ignoredFormatter,
+            RevCommit parent,
+            RevCommit commit,
+            GitContextQuery query) throws IOException {
+        Objects.requireNonNull(ignoredFormatter, "ignoredFormatter");
+        try (Repository repository = openRepository(query.project().rootPath())) {
+            return changedPaths(repository, parent, commit, query);
+        }
     }
 
     private static Status targetStatus(Git git, Set<String> gitTargets) throws GitAPIException {

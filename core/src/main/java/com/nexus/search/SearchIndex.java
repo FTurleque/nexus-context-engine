@@ -13,6 +13,11 @@ public interface SearchIndex extends AutoCloseable {
 
     List<LexicalSearchHit> search(UUID projectId, String query, int limit) throws IOException;
 
+    /** Indique si l'index dérivé existe et peut être ouvert pour le projet. */
+    default boolean isPresent(UUID projectId) throws IOException {
+        return true;
+    }
+
     /**
      * Libère les ressources persistantes éventuelles. Les implémentations
      * operation-scoped historiques n'ont rien à fermer et restent compatibles.

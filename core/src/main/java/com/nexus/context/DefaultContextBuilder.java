@@ -198,7 +198,7 @@ public final class DefaultContextBuilder implements ContextBuilder {
                     retrievalLimit,
                     request.explain());
             List<RankedCandidate> filtered = filterRequestedSources(request, ranked);
-            List<Path> targetPaths = targetPaths(project, ranked);
+            List<Path> targetPaths = targetPaths(project, filtered);
 
             ContextSourceDiscoveryResult nativeDiscovery = discoverNativeSources(
                     request,
