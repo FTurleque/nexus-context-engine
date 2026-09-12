@@ -55,6 +55,62 @@ public final class SqliteProjectRepository implements ProjectRepository {
     }
 
     @Override
+    public List<ProjectDescriptor> findByIds(List<UUID> projectIds) {
+        List<UUID> ids = projectIds.stream().distinct().toList();
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        try (Connection connection = database.openConnection()) {
+            // Un même snapshot pour les descripteurs et leurs métadonnées.
+            connection.setAutoCommit(false);
+            Map<UUID, ProjectDescriptor> found = new LinkedHashMap<>();
+            for (int offset = 0; offset < ids.size(); offset += 500) {
+                List<UUID> batch = ids.subList(offset, Math.min(offset + 500, ids.size()));
+                String placeholders = String.join(",", java.util.Collections.nCopies(batch.size(), "?"));
+                List<ProjectRow> rows = new ArrayList<>();
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "SELECT * FROM projects WHERE id IN (" + placeholders + ")")) {
+                    bindProjectIds(statement, batch);
+                    try (ResultSet results = statement.executeQuery()) {
+                        while (results.next()) {
+                            rows.add(projectRow(results));
+                        }
+                    }
+                }
+                Map<UUID, Set<String>> languages;
+                Map<UUID, Set<String>> technologies;
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "SELECT project_id, language AS value FROM project_languages WHERE project_id IN ("
+                                + placeholders + ") ORDER BY project_id, language")) {
+                    bindProjectIds(statement, batch);
+                    languages = loadAllValues(statement);
+                }
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "SELECT project_id, technology AS value FROM project_technologies WHERE project_id IN ("
+                                + placeholders + ") ORDER BY project_id, technology")) {
+                    bindProjectIds(statement, batch);
+                    technologies = loadAllValues(statement);
+                }
+                for (ProjectRow row : rows) {
+                    found.put(row.id(), row.toDescriptor(
+                            languages.getOrDefault(row.id(), Set.of()),
+                            technologies.getOrDefault(row.id(), Set.of())));
+                }
+            }
+            connection.commit();
+            return ids.stream().map(found::get).filter(java.util.Objects::nonNull).toList();
+        } catch (SQLException exception) {
+            throw new PersistenceException("Impossible de lire les projets demandés", exception);
+        }
+    }
+
+    private static void bindProjectIds(PreparedStatement statement, List<UUID> ids) throws SQLException {
+        for (int index = 0; index < ids.size(); index++) {
+            statement.setString(index + 1, ids.get(index).toString());
+        }
+    }
+
+    @Override
     public Optional<ProjectDescriptor> findByRootPath(Path rootPath) {
         String normalizedPath = rootPath.toAbsolutePath().normalize().toString();
         return findOne("SELECT * FROM projects WHERE root_path = ?", normalizedPath);

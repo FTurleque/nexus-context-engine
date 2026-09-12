@@ -26,7 +26,7 @@ Le rapport général est écrit dans `target/scale-benchmark.json`. Sur une pull
 
 Cette séparation évite qu'un changement SQLite soit confondu avec une dérive indépendante du graphe à 1M, tout en imposant réellement les quatre paliers demandés par #216.
 
-Pour une pull request dont la base déclare **la même version de protocole**, le workflow peut aussi conserver `target/scale-benchmark-base.json` et comparer la population base/candidat sur le même runner. Si le protocole diffère, cette comparaison relative est ignorée, mais tous les plafonds absolus du candidat restent obligatoires.
+Le workflow conserve `target/scale-benchmark-base.json` et compare la population base/candidat sur le même runner avec **le même harness candidat**. Ce harness est copié dans le worktree de base, sans modifier son code de production. La compatibilité est admise pour une même version et pour la transition 4 → 5 : cette transition conserve donc le gate relatif. Pour une base antérieure incompatible, le stockage reste comparé et les plafonds absolus du candidat restent obligatoires.
 
 Le job possède un timeout de 45 minutes et les tests scale un timeout JUnit de 20 minutes.
 
@@ -102,11 +102,18 @@ Les requêtes de un ou deux points de code gardent volontairement le fallback `L
 
 Le scénario de recovery vérifie qu'une ancienne table `schema_migrations` sans `script_sha256` est complétée additivement avant la reprise du migrateur. Les FTS sont dérivés : une reconstruction commence par `delete-all` puis les reconstruit depuis les tables canoniques.
 
-## Protocole 4
+## Protocole 5
 
-Le regroupement des écritures canoniques en lots SQL bornés complète l'adoption FTS5/trigram. `config/scale-benchmark-protocol` vaut donc **4**. Une mesure protocole 3 ou antérieure ne doit pas être utilisée comme baseline relative homogène du protocole 4.
+Le protocole 4 a introduit le regroupement des écritures canoniques en lots SQL bornés. Le protocole **5** corrige la mesure à froid du premier palier et conserve ces mêmes écritures :
+
+- deux peuplements de 10k sur des bases séparées chauffent le chemin JVM/JDBC/FTS ; leurs durées restent publiées dans `populationWarmupSamplesMs` et soumises au plafond absolu 10k du candidat ;
+- le palier 10k utilise la médiane de trois peuplements de bases neuves, publiés dans `populationSamplesMs` ; les grands paliers conservent une mesure après cet échauffement, pour borner le coût de qualification ;
+- les lectures et le portfolio utilisent deux échauffements et vingt mesures, publiées dans `samplesMicros` ; le p95 est la 19e valeur triée, au lieu du maximum de cinq valeurs (trois pour le contexte) ;
+- `nexus.scale.benchmark.sqliteOnly=true` limite les runs dédiés à la courbe SQLite ; le rapport général conserve tous les scénarios.
 
 Les plafonds absolus de latence et de population restent inchangés. Le stockage est comparé à la base de la PR sur le même runner.
+
+Le gate est exécutable localement avec `python scripts/verify-scale-budgets.py target`. L'option `--require-base` impose la preuve PR et les quatre paliers. Un lancement manuel `full` peut être vérifié sans baseline de PR. Les tests `python -m unittest discover -s scripts/tests -p test_scale_budgets.py` vérifient notamment que les régressions 990/289 ms de population et 168,577/160 ms de recherche sont toujours refusées.
 
 ### Budgets SQLite p95
 
@@ -122,7 +129,7 @@ Autres plafonds SQLite :
 - lookup de 100 fichiers : <= 30 ms p95 ;
 - population : <= 1,4 s / 5 s / 20 s / 40 s aux paliers 10k / 100k / 500k / 1M ;
 - base à 1M : taille candidat <= taille de la base de la PR × 1,20, mesurées sur le même runner ;
-- lorsque base et candidat partagent le même protocole, population candidat <= `max(base × 1,20, base + jitter)` avec jitters 0,2 / 0,5 / 1,5 / 3 s.
+- lorsque base et candidat sont mesurés avec le même harness compatible, population candidat <= `max(base × 1,20, base + jitter)` avec jitters 0,2 / 0,5 / 1,5 / 3 s.
 
 Le gate dédié PR exige exactement les quatre paliers SQLite dans `scale-benchmark-sqlite-full.json`.
 
