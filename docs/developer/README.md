@@ -89,7 +89,9 @@ NexusApplication
 - Ollama distant HTTPS par défaut ; HTTP distant seulement via `NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA=true`.
 - credentials dans l'URI Ollama refusés.
 - secrets à forte confiance redigés avant embeddings et fragments de contexte.
-- profil sémantique `content-v2` pour reconstruire les vecteurs historiques incompatibles.
+- profil sémantique `content-v3` pour reconstruire les vecteurs historiques incompatibles.
+- lectures recherche/contexte protégées par un verrou partagé conservé pendant toute l'opération ; un dérivé Lucene absent ou issu d'une autre politique force sa reconstruction.
+- parcours Git incrémental : chaque entrée d'arbre est débitée avant collecte selon le budget de découverte.
 - `NEXUS_HOME` privé sur POSIX et chemins persistants symboliques concernés refusés.
 - sous Windows/filesystems ACL, `NEXUS_REQUIRE_PRIVATE_STORAGE=true` permet d'exiger une preuve de confidentialité et d'échouer fermé sans réécrire naïvement les ACL.
 - le fallback `SafeFileIO` sans `SecureDirectoryStream` capture et revalide l'identité filesystem autour de l'ouverture.

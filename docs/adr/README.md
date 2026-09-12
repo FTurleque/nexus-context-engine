@@ -104,6 +104,8 @@ Le numéro est un identifiant stable. Le nom de fichier utilise des minuscules, 
 | [ADR-0047](0047-borner-le-support-filesystem-aux-filesystems-locaux-qualifies.md) | Borner le support filesystem aux filesystems locaux qualifiés | Accepté |
 | [ADR-0050](0050-conserver-les-temporaires-sqlite-en-memoire.md) | Conserver les temporaires SQLite en mémoire | Accepté |
 | [ADR-0051](0051-borner-les-lots-d-ecriture-sqlite.md) | Borner les lots d'écriture SQLite | Accepté |
+| [ADR-0052](0052-garantir-la-coherence-des-lectures-et-des-index-derives.md) | Garantir la cohérence des lectures et des index dérivés | Accepté |
+| [ADR-0053](0053-borner-le-parcours-des-arbres-git-avant-collecte.md) | Borner le parcours des arbres Git avant collecte | Accepté |
 
 ## Modèle
 

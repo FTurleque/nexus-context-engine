@@ -93,6 +93,20 @@ class LuceneSearchIndexTest {
     }
 
     @Test
+    void boundsRepeatedSingleTermQueriesWithoutPassingTheRawQueryToLucene() throws Exception {
+        LuceneSearchIndex index = new LuceneSearchIndex(new NexusPaths(temporaryDirectory.resolve("repeated-home")));
+        UUID projectId = UUID.randomUUID();
+        index.rebuild(projectId, List.of(document("repeated.md", "alpha")));
+
+        String query = "alpha ".repeat(1_100);
+
+        List<LexicalSearchHit> hits = assertDoesNotThrow(() -> index.search(projectId, query, 10));
+
+        assertEquals(1, hits.size());
+        assertEquals("repeated.md", hits.getFirst().relativePath());
+    }
+
+    @Test
     void closesAllHandlesAfterRebuildAndSearch() throws Exception {
         NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("lifecycle-home"));
         LuceneSearchIndex index = new LuceneSearchIndex(paths);

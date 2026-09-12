@@ -81,6 +81,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Façade applicative indépendante des adaptateurs clients.
@@ -334,17 +338,26 @@ public final class NexusApplication implements AutoCloseable {
 
     public IndexStatistics inspect(UUID projectId) {
         getProject(projectId);
-        return indexRepository.statistics(projectId);
+        ProjectIndexLockManager.LockHandle readLock = projectIndexLockManager.acquireRead(projectId);
+        try {
+            return indexRepository.statistics(projectId);
+        } finally {
+            closeReadLock(readLock);
+        }
     }
 
     public SearchOperation search(UUID projectId, String query, int limit, boolean explain) throws IOException {
         String resolvedQuery = requireQuery(query);
-        ProjectDescriptor project = requireReadyProject(projectId);
         int resolvedLimit = positiveLimit(limit);
         long startedAt = System.nanoTime();
-        List<RankedCandidate> results = searchService.search(project, resolvedQuery, resolvedLimit, explain);
-        return new SearchOperation(
-                project, resolvedQuery, resolvedLimit, explain, elapsedMillis(startedAt), results);
+        requireReadyProject(projectId);
+        try (ProjectIndexLockManager.LockHandle ignored = projectIndexLockManager.acquireRead(projectId)) {
+            ProjectDescriptor project = requireReadyProject(projectId);
+            List<RankedCandidate> results = searchService.search(project, resolvedQuery, resolvedLimit, explain);
+            requireReadyProject(projectId);
+            return new SearchOperation(
+                    project, resolvedQuery, resolvedLimit, explain, elapsedMillis(startedAt), results);
+        }
     }
 
     public FederatedSearchOperation searchAcrossProjects(
@@ -355,14 +368,21 @@ public final class NexusApplication implements AutoCloseable {
         List<UUID> scope = FederatedScopePolicy.normalizeProjectIds(projectIds);
         String resolvedQuery = requireQuery(query);
         int resolvedLimit = positiveLimit(limit);
-        List<ProjectDescriptor> projects = scope.stream()
-                .map(this::requireReadyProject)
-                .toList();
         long startedAt = System.nanoTime();
-        List<FederatedSearchHit> results =
-                federatedSearchService.search(projects, resolvedQuery, resolvedLimit, explain);
-        return new FederatedSearchOperation(
-                projects, resolvedQuery, resolvedLimit, explain, elapsedMillis(startedAt), results);
+        scope.forEach(this::requireReadyProject);
+        List<ProjectIndexLockManager.LockHandle> readLocks = acquireReadLocks(scope);
+        try {
+            List<ProjectDescriptor> projects = scope.stream()
+                    .map(this::requireReadyProject)
+                    .toList();
+            List<FederatedSearchHit> results =
+                    federatedSearchService.search(projects, resolvedQuery, resolvedLimit, explain);
+            projects.forEach(project -> requireReadyProject(project.id()));
+            return new FederatedSearchOperation(
+                    projects, resolvedQuery, resolvedLimit, explain, elapsedMillis(startedAt), results);
+        } finally {
+            closeReadLocks(readLocks);
+        }
     }
 
     public ContextOperation context(
@@ -373,16 +393,23 @@ public final class NexusApplication implements AutoCloseable {
             Map<String, String> constraints,
             boolean explain) {
         String resolvedQuery = requireQuery(query);
-        ProjectDescriptor project = requireReadyProject(projectId);
         long startedAt = System.nanoTime();
-        ContextBundle bundle = contextBuilder.build(new ContextRequest(
-                projectId,
-                resolvedQuery,
-                tokenBudget,
-                requestedSources == null ? Set.of() : requestedSources,
-                constraints == null ? Map.of() : constraints,
-                explain));
-        return new ContextOperation(project, resolvedQuery, explain, elapsedMillis(startedAt), bundle);
+        requireReadyProject(projectId);
+        ProjectIndexLockManager.LockHandle readLock = projectIndexLockManager.acquireRead(projectId);
+        try {
+            ProjectDescriptor project = requireReadyProject(projectId);
+            ContextBundle bundle = contextBuilder.build(new ContextRequest(
+                    projectId,
+                    resolvedQuery,
+                    tokenBudget,
+                    requestedSources == null ? Set.of() : requestedSources,
+                    constraints == null ? Map.of() : constraints,
+                    explain));
+            requireReadyProject(projectId);
+            return new ContextOperation(project, resolvedQuery, explain, elapsedMillis(startedAt), bundle);
+        } finally {
+            closeReadLock(readLock);
+        }
     }
 
     public FederatedContextOperation contextAcrossProjects(
@@ -394,31 +421,55 @@ public final class NexusApplication implements AutoCloseable {
             boolean explain) {
         List<UUID> scope = FederatedScopePolicy.normalizeProjectIds(projectIds);
         String resolvedQuery = requireQuery(query);
-        List<ProjectDescriptor> projects = scope.stream()
-                .map(this::requireReadyProject)
-                .toList();
         long startedAt = System.nanoTime();
-        FederatedContextBundle bundle = federatedContextService.build(
-                projects,
-                resolvedQuery,
-                tokenBudget,
-                requestedSources == null ? Set.of() : requestedSources,
-                constraints == null ? Map.of() : constraints,
-                explain);
-        return new FederatedContextOperation(
-                projects, resolvedQuery, explain, elapsedMillis(startedAt), bundle);
+        scope.forEach(this::requireReadyProject);
+        List<ProjectIndexLockManager.LockHandle> readLocks = acquireReadLocks(scope);
+        try {
+            List<ProjectDescriptor> projects = scope.stream()
+                    .map(this::requireReadyProject)
+                    .toList();
+            FederatedContextBundle bundle = federatedContextService.build(
+                    projects,
+                    resolvedQuery,
+                    tokenBudget,
+                    requestedSources == null ? Set.of() : requestedSources,
+                    constraints == null ? Map.of() : constraints,
+                    explain);
+            projects.forEach(project -> requireReadyProject(project.id()));
+            return new FederatedContextOperation(
+                    projects, resolvedQuery, explain, elapsedMillis(startedAt), bundle);
+        } finally {
+            closeReadLocks(readLocks);
+        }
     }
 
     public List<IndexedSymbol> findSymbols(UUID projectId, String query, int limit) {
         String resolvedQuery = requireQuery(query);
         requireReadyProject(projectId);
-        return indexRepository.searchSymbols(projectId, resolvedQuery, positiveLimit(limit));
+        ProjectIndexLockManager.LockHandle readLock = projectIndexLockManager.acquireRead(projectId);
+        try {
+            requireReadyProject(projectId);
+            List<IndexedSymbol> symbols = indexRepository.searchSymbols(projectId, resolvedQuery, positiveLimit(limit));
+            requireReadyProject(projectId);
+            return symbols;
+        } finally {
+            closeReadLock(readLock);
+        }
     }
 
     public List<SymbolRelation> findUsages(UUID projectId, String symbol, int limit) {
         String resolvedSymbol = requireQuery(symbol);
         requireReadyProject(projectId);
-        return indexRepository.searchRelations(projectId, resolvedSymbol, positiveLimit(limit));
+        ProjectIndexLockManager.LockHandle readLock = projectIndexLockManager.acquireRead(projectId);
+        try {
+            requireReadyProject(projectId);
+            List<SymbolRelation> relations = indexRepository.searchRelations(
+                    projectId, resolvedSymbol, positiveLimit(limit));
+            requireReadyProject(projectId);
+            return relations;
+        } finally {
+            closeReadLock(readLock);
+        }
     }
 
     public ReadinessSnapshot readiness() {
@@ -429,9 +480,18 @@ public final class NexusApplication implements AutoCloseable {
         }
         projects.forEach(project -> counts.merge(project.indexStatus(), 1, Integer::sum));
 
-        boolean degraded = counts.get(IndexStatus.FAILED) > 0;
+        boolean derivedIndexesReady = projects.stream()
+                .filter(project -> project.indexStatus() == IndexStatus.READY)
+                .allMatch(project -> {
+                    try {
+                        return searchIndex.isPresent(project.id());
+                    } catch (IOException | RuntimeException failure) {
+                        return false;
+                    }
+                });
+        boolean degraded = counts.get(IndexStatus.FAILED) > 0 || !derivedIndexesReady;
         boolean allProjectsReady = !projects.isEmpty() && projects.stream()
-                .allMatch(project -> project.indexStatus() == IndexStatus.READY);
+                .allMatch(project -> project.indexStatus() == IndexStatus.READY) && derivedIndexesReady;
 
         return new ReadinessSnapshot(
                 true,
@@ -470,6 +530,65 @@ public final class NexusApplication implements AutoCloseable {
         ProjectDescriptor project = getProject(projectId);
         com.nexus.project.ProjectReadiness.requireReady(project);
         return project;
+    }
+
+    private List<ProjectIndexLockManager.LockHandle> acquireReadLocks(List<UUID> projectIds) {
+        // Un ordre global évite les cycles lorsque deux lectures fédérées
+        // concurrentes demandent des portées qui se recouvrent différemment.
+        List<UUID> lockOrder = projectIds.stream().sorted().toList();
+        List<ProjectIndexLockManager.LockHandle> locks = new ArrayList<>(lockOrder.size());
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<CompletableFuture<ProjectIndexLockManager.LockHandle>> acquisitions = lockOrder.stream()
+                    .map(projectId -> CompletableFuture.supplyAsync(
+                            () -> projectIndexLockManager.acquireRead(projectId), executor))
+                    .toList();
+            RuntimeException firstFailure = null;
+            for (CompletableFuture<ProjectIndexLockManager.LockHandle> acquisition : acquisitions) {
+                try {
+                    locks.add(acquisition.join());
+                } catch (CompletionException failure) {
+                    RuntimeException current = failure.getCause() instanceof RuntimeException runtime
+                            ? runtime
+                            : new IllegalStateException("Impossible d'acquérir les verrous de lecture fédérés", failure);
+                    if (firstFailure == null) {
+                        firstFailure = current;
+                    } else {
+                        firstFailure.addSuppressed(current);
+                    }
+                }
+            }
+            if (firstFailure != null) {
+                closeReadLocks(locks);
+                throw firstFailure;
+            }
+            return locks;
+        }
+    }
+
+    private static void closeReadLocks(List<ProjectIndexLockManager.LockHandle> locks) {
+        RuntimeException firstFailure = null;
+        for (int index = locks.size() - 1; index >= 0; index--) {
+            try {
+                closeReadLock(locks.get(index));
+            } catch (RuntimeException failure) {
+                if (firstFailure == null) {
+                    firstFailure = failure;
+                } else {
+                    firstFailure.addSuppressed(failure);
+                }
+            }
+        }
+        if (firstFailure != null) {
+            throw firstFailure;
+        }
+    }
+
+    private static void closeReadLock(ProjectIndexLockManager.LockHandle lock) {
+        try {
+            lock.close();
+        } catch (IOException failure) {
+            throw new IllegalStateException("Impossible de libérer le verrou de lecture d'index", failure);
+        }
     }
 
     private static String requireQuery(String value) {

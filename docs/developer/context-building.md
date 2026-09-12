@@ -57,7 +57,7 @@ Les fichiers sont lus via les frontières filesystem durcies. Les ressources de 
 
 ## Recherche sémantique
 
-Lorsque le sémantique est activé, `SemanticIndexingService` applique la même redaction avant l'appel au provider d'embeddings. Le profil `content-v2` force la reconstruction d'un index historique incompatible.
+Lorsque le sémantique est activé, `SemanticIndexingService` applique la même redaction avant l'appel au provider d'embeddings. Le profil `content-v3` force la reconstruction d'un index historique incompatible.
 
 Voir [`semantic-search.md`](semantic-search.md).
 

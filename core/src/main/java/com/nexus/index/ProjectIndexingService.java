@@ -240,6 +240,9 @@ public final class ProjectIndexingService {
         Instant startedAt = Instant.now();
         projectRepository.save(withState(project, IndexStatus.INDEXING, project.lastIndexedAt(), project.languages()));
         try {
+            if (!searchIndex.isPresent(projectId)) {
+                fullRebuild = true;
+            }
             ProjectScanResult scanResult = scanner.scanWithDiagnostics(project.rootPath());
             List<ScannedFile> scannedFiles = scanResult.files();
             String canonicalFingerprint = CanonicalIndexFingerprint.fromScannedFiles(scannedFiles);

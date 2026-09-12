@@ -95,7 +95,7 @@ public final class GraphCandidateEnricher implements CandidateEnricher {
             String relativePath,
             double graphScore) {
         IndexedFile indexedFile = indexedFiles.get(relativePath);
-        if (indexedFile == null) {
+        if (indexedFile == null || !isGenericSearchEligible(indexedFile.category())) {
             return;
         }
         String id = "file:" + relativePath;
@@ -107,6 +107,12 @@ public final class GraphCandidateEnricher implements CandidateEnricher {
                 relativePath,
                 Map.of(SearchSignals.GRAPH, Math.min(1.0d, graphScore)));
         candidates.merge(id, graphCandidate, candidateMerger::merge);
+    }
+
+    private static boolean isGenericSearchEligible(FileCategory category) {
+        return category != FileCategory.INSTRUCTION
+                && category != FileCategory.AGENT_PROFILE
+                && category != FileCategory.SKILL;
     }
 
     private static String relativePath(ProjectDescriptor project, SearchCandidate candidate) {

@@ -188,7 +188,7 @@ for path in (
     require(path, "NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA")
 
 require("core/src/main/java/com/nexus/security/SensitiveContentRedactor.java", "[REDACTED]")
-require("core/src/main/java/com/nexus/search/semantic/SemanticIndexingService.java", "CONTENT_PROFILE_VERSION = 2")
+require("core/src/main/java/com/nexus/search/semantic/SemanticIndexingService.java", "CONTENT_PROFILE_VERSION = 3")
 for path in (
     "README.md",
     "docs/architecture.md",
@@ -198,7 +198,7 @@ for path in (
     "docs/developer/release-and-recovery.md",
     "docs/developer/semantic-search.md",
 ):
-    require(path, "content-v2")
+    require(path, "content-v3")
 
 # NXA4 + audit follow-up: lexical content is redacted before Lucene tokenization.
 lucene = "core/src/main/java/com/nexus/search/lucene/LuceneSearchIndex.java"

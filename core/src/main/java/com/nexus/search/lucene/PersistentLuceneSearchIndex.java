@@ -67,6 +67,12 @@ public final class PersistentLuceneSearchIndex implements SearchIndex {
     }
 
     @Override
+    public boolean isPresent(UUID projectId) throws IOException {
+        readers.ensureOpen();
+        return operationScoped.isPresent(projectId);
+    }
+
+    @Override
     public void close() throws IOException {
         readers.close();
     }

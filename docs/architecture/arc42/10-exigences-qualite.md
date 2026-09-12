@@ -96,7 +96,7 @@ Health/metrics doivent rester sur le listener management `127.0.0.1:9000`; `/q/*
 
 Un endpoint Ollama distant doit utiliser HTTPS par défaut. HTTP distant exige `NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA=true`; une URI contenant des credentials est refusée.
 
-Les secrets à forte confiance sont redigés avant embeddings et fragments de contexte. Le profil `content-v2` force la reconstruction d'un ancien index sémantique incompatible.
+Les secrets à forte confiance sont redigés avant embeddings et fragments de contexte. Le profil `content-v3` force la reconstruction d'un ancien index sémantique incompatible.
 
 Une qualification périodique/manuelle doit exécuter `RealSemanticSearchBenchmarkTest` avec un runtime Ollama fixe vérifié par SHA-256, le modèle `qwen3-embedding:0.6b`, un endpoint loopback et des seuils de qualité/non-régression. Le rapport doit être conservé comme artefact.
 
