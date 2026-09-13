@@ -65,22 +65,20 @@ public final class SymbolSearchStrategy implements SearchStrategy {
 
             double exactScore = exactScore(normalizedQuery, terms, name, qualifiedName);
             double fuzzyScore = fuzzyScore(terms, name, qualifiedName);
-            if (exactScore == 0.0d && fuzzyScore < MIN_FUZZY_SCORE) {
-                continue;
+            if (exactScore > 0.0d || fuzzyScore >= MIN_FUZZY_SCORE) {
+                Map<String, Double> signals = new LinkedHashMap<>();
+                signals.put(SearchSignals.SYMBOL_EXACT, exactScore);
+                signals.put(SearchSignals.SYMBOL_FUZZY, fuzzyScore);
+                signals.put(SearchSignals.PATH, SearchText.pathScore(indexedSymbol.relativePath(), terms));
+
+                candidates.add(new SearchCandidate(
+                        "symbol:" + indexedSymbol.relativePath() + ":" + symbol.qualifiedName(),
+                        CandidateType.SYMBOL,
+                        new RepositoryPath(indexedSymbol.relativePath()).resolve(project.rootPath()),
+                        symbol,
+                        symbol.signature(),
+                        signals));
             }
-
-            Map<String, Double> signals = new LinkedHashMap<>();
-            signals.put(SearchSignals.SYMBOL_EXACT, exactScore);
-            signals.put(SearchSignals.SYMBOL_FUZZY, fuzzyScore);
-            signals.put(SearchSignals.PATH, SearchText.pathScore(indexedSymbol.relativePath(), terms));
-
-            candidates.add(new SearchCandidate(
-                    "symbol:" + indexedSymbol.relativePath() + ":" + symbol.qualifiedName(),
-                    CandidateType.SYMBOL,
-                    new RepositoryPath(indexedSymbol.relativePath()).resolve(project.rootPath()),
-                    symbol,
-                    symbol.signature(),
-                    signals));
         }
 
         return candidates.stream()

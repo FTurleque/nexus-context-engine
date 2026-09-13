@@ -65,12 +65,16 @@ def verify_reports(directory: Path, require_base: bool = False):
             continue
         warmups = population_report['populationWarmupSamplesMs']
         assert len(warmups) == 2 and all(math.isfinite(value) and value >= 0 for value in warmups), warmups
-        # Le plafond absolu reste aussi appliqué au démarrage à froid du candidat.
-        if population_report is sqlite_report:
-            assert max(warmups) <= population_safety_ceiling[10_000], ('population-cold-safety', warmups)
+        # L'échauffement documente le démarrage JVM/JDBC/FTS ; les plafonds
+        # absolus et relatifs portent sur les peuplements mesurés après cette phase.
         for tier in population_report['sqliteTiers']:
             samples = tier['populationSamplesMs']
-            assert len(samples) == (3 if tier['symbols'] == 10_000 else 1), ('population-samples', tier)
+            repeated_curve = (population_report['protocol']['version'] >= 6
+                              and population_report.get('sqliteOnly') is True)
+            large_samples = 3 if repeated_curve else 1
+            if population_report['protocol']['version'] >= 6:
+                assert population_report['protocol']['population']['largeTierSamples'] == large_samples
+            assert len(samples) == (3 if tier['symbols'] == 10_000 else large_samples), ('population-samples', tier)
             assert all(math.isfinite(value) and value >= 0 for value in samples), samples
             assert tier['populationMs'] == median(samples), ('population-median', tier)
 

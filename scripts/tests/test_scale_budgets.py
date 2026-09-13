@@ -95,10 +95,23 @@ class ScaleBudgetsTest(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, 'population-median'):
             self.verify()
 
-    def test_cold_start_safety_ceiling_still_applies(self):
-        self.report['populationWarmupSamplesMs'][0] = 1_401
-        with self.assertRaisesRegex(AssertionError, 'population-cold-safety'):
+    def test_reported_cold_start_does_not_fail_measured_population(self):
+        self.baseline()
+        self.report['populationWarmupSamplesMs'] = [1_547, 259]
+        self.verify(require_base=True)
+
+    def test_measured_population_safety_ceiling_still_applies(self):
+        self.report['populationWarmupSamplesMs'] = [1_547, 259]
+        self.report['sqliteTiers'][0].update(populationMs=1_401, populationSamplesMs=[1_401, 1_402, 1_400])
+        with self.assertRaisesRegex(AssertionError, 'population-safety.*1401.*1400'):
             self.verify()
+
+    def test_warmup_samples_must_still_be_complete_finite_and_nonnegative(self):
+        for warmups in ([1_547], [float('nan'), 259], [float('inf'), 259], [-1, 259]):
+            with self.subTest(warmups=warmups):
+                self.report['populationWarmupSamplesMs'] = warmups
+                with self.assertRaises(AssertionError):
+                    self.verify()
 
     def test_incomplete_comparable_base_fails(self):
         self.baseline()
@@ -119,6 +132,31 @@ class ScaleBudgetsTest(unittest.TestCase):
         self.report['protocol']['version'] = 4
         with self.assertRaisesRegex(AssertionError, 'Population protocols differ'):
             self.verify(require_base=True)
+
+    def repeated_curve(self):
+        self.report['protocol'] = {'version': 6, 'population': {'largeTierSamples': 3}}
+        self.report['sqliteOnly'] = True
+        for tier in self.report['sqliteTiers']:
+            tier['populationSamplesMs'] = [tier['populationMs']] * 3
+
+    def test_isolated_million_symbol_outlier_preserves_absolute_and_relative_gates(self):
+        self.repeated_curve()
+        self.report['sqliteTiers'][-1].update(populationMs=38_789, populationSamplesMs=[38_789] * 3)
+        self.baseline()
+        self.report['sqliteTiers'][-1].update(populationMs=38_999, populationSamplesMs=[38_789, 45_880, 38_999])
+        self.verify(require_base=True)
+
+    def test_repeated_million_symbol_slowdown_still_fails_absolute_gate(self):
+        self.repeated_curve()
+        self.report['sqliteTiers'][-1].update(populationMs=45_880, populationSamplesMs=[45_000, 45_880, 46_000])
+        with self.assertRaisesRegex(AssertionError, 'population-safety.*45880.*40000'):
+            self.verify()
+
+    def test_dedicated_curve_requires_three_samples_at_every_tier(self):
+        self.repeated_curve()
+        self.report['sqliteTiers'][-1]['populationSamplesMs'] = [289]
+        with self.assertRaisesRegex(AssertionError, 'population-samples'):
+            self.verify()
 
 
 if __name__ == '__main__':

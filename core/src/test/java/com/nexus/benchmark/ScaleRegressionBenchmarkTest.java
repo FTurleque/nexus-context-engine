@@ -58,6 +58,7 @@ class ScaleRegressionBenchmarkTest {
     private static final int QUERY_SAMPLES = 20;
     private static final int POPULATION_WARMUPS = 2;
     private static final int SMALL_POPULATION_SAMPLES = 3;
+    private static final int DEDICATED_POPULATION_SAMPLES = 3;
     private static final int SEARCH_LIMIT = 20;
     private static final int PORTFOLIO_FILES_PER_PROJECT = 2;
     private static final int PORTFOLIO_CONTEXT_BUDGET = 2_400;
@@ -100,7 +101,7 @@ class ScaleRegressionBenchmarkTest {
         }
         List<Map<String, Object>> sqlite = new ArrayList<>();
         for (int symbolCount : sqliteTiers) {
-            sqlite.add(benchmarkSqliteTier(symbolCount));
+            sqlite.add(benchmarkSqliteTier(symbolCount, sqliteOnly));
         }
 
         Map<String, Object> portfolio = sqliteOnly ? Map.of() : benchmarkPortfolio(portfolioTiers);
@@ -115,8 +116,11 @@ class ScaleRegressionBenchmarkTest {
         report.put("populationWarmupSamplesMs", populationWarmups);
         report.put("environment", environment());
         report.put("protocol", Map.of(
-                "version", 5,
-                "population", Map.of("warmups", POPULATION_WARMUPS, "smallTierSamples", SMALL_POPULATION_SAMPLES),
+                "version", 6,
+                "population", Map.of(
+                        "warmups", POPULATION_WARMUPS,
+                        "smallTierSamples", SMALL_POPULATION_SAMPLES,
+                        "largeTierSamples", sqliteOnly ? DEDICATED_POPULATION_SAMPLES : 1),
                 "queryWarmups", QUERY_WARMUPS,
                 "querySamples", QUERY_SAMPLES,
                 "searchLimit", SEARCH_LIMIT,
@@ -154,9 +158,10 @@ class ScaleRegressionBenchmarkTest {
                 output);
     }
 
-    private Map<String, Object> benchmarkSqliteTier(int symbolCount) throws Exception {
+    private Map<String, Object> benchmarkSqliteTier(int symbolCount, boolean sqliteOnly) throws Exception {
         List<Long> populationSamples = new ArrayList<>();
-        int sampleCount = symbolCount == 10_000 ? SMALL_POPULATION_SAMPLES : 1;
+        int largeSampleCount = sqliteOnly ? DEDICATED_POPULATION_SAMPLES : 1;
+        int sampleCount = symbolCount == 10_000 ? SMALL_POPULATION_SAMPLES : largeSampleCount;
         SqliteDatabase database = null;
         UUID projectId = null;
         String journalMode = null;

@@ -92,7 +92,7 @@ jobs:
             test
 
       - name: Run full SQLite scale curve for pull request
-        if: github.event_name == 'pull_request' && steps.profile.outputs.value == 'ci'
+        if: github.event_name == 'pull_request'
         shell: bash
         run: |
           ./mvnw -B -pl core \
@@ -119,9 +119,9 @@ jobs:
           test -s "$PROTOCOL_FILE"
           HEAD_PROTOCOL="$(tr -d '\r\n[:space:]' < "$PROTOCOL_FILE")"
           BASE_PROTOCOL="$(git show "$BASE_SHA:$PROTOCOL_FILE" 2>/dev/null | tr -d '\r\n[:space:]' || true)"
-          # Le harness 5 reste compatible avec l'API du protocole 4.
+          # Le harness 6 reste compatible avec l'API des protocoles 4 et 5.
           # Exécuter exactement le harness candidat sur les deux codes de production.
-          if [[ "$BASE_PROTOCOL" == "$HEAD_PROTOCOL" || ( "$BASE_PROTOCOL" == "4" && "$HEAD_PROTOCOL" == "5" ) ]]; then
+          if [[ "$BASE_PROTOCOL" == "$HEAD_PROTOCOL" || ( "$HEAD_PROTOCOL" == "6" && ( "$BASE_PROTOCOL" == "4" || "$BASE_PROTOCOL" == "5" ) ) ]]; then
             POPULATION_COMPARABLE=true
           else
             echo "::notice::Base/head benchmark protocols differ (base='${BASE_PROTOCOL:-absent}', head='$HEAD_PROTOCOL'). Relative population comparison is skipped, but the base 1M storage footprint is still measured on this runner."
@@ -167,9 +167,7 @@ jobs:
           test -s target/native-discovery-scale-benchmark.json
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             test -s target/scale-benchmark-base.json
-            if [[ "${{ steps.profile.outputs.value }}" == "ci" ]]; then
-              test -s target/scale-benchmark-sqlite-full.json
-            fi
+            test -s target/scale-benchmark-sqlite-full.json
           fi
           python3 -m unittest discover -s scripts/tests -p 'test_scale_budgets.py'
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then

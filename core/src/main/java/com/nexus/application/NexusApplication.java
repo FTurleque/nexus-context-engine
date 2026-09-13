@@ -542,18 +542,33 @@ public final class NexusApplication implements AutoCloseable {
         // sont réentrants et attachés au thread propriétaire.
         List<UUID> lockOrder = projectIds.stream().sorted().toList();
         List<ProjectIndexLockManager.LockHandle> locks = new ArrayList<>(lockOrder.size());
-        try {
+        try (ReadLockAcquisition acquisition = new ReadLockAcquisition(locks)) {
             for (UUID projectId : lockOrder) {
                 locks.add(projectIndexLockManager.acquireRead(projectId));
             }
+            return acquisition.transfer();
+        }
+    }
+
+    /** Le try-with-resources conserve l'échec initial si la libération échoue aussi. */
+    private static final class ReadLockAcquisition implements AutoCloseable {
+        private final List<ProjectIndexLockManager.LockHandle> locks;
+        private boolean transferred;
+
+        private ReadLockAcquisition(List<ProjectIndexLockManager.LockHandle> locks) {
+            this.locks = locks;
+        }
+
+        private List<ProjectIndexLockManager.LockHandle> transfer() {
+            transferred = true;
             return locks;
-        } catch (RuntimeException | Error failure) {
-            try {
+        }
+
+        @Override
+        public void close() {
+            if (!transferred) {
                 closeReadLocks(locks);
-            } catch (RuntimeException closeFailure) {
-                failure.addSuppressed(closeFailure);
             }
-            throw failure;
         }
     }
 

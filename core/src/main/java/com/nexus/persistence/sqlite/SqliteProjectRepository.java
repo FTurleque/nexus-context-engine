@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 public final class SqliteProjectRepository implements ProjectRepository {
 
@@ -66,11 +67,14 @@ public final class SqliteProjectRepository implements ProjectRepository {
             Map<UUID, ProjectDescriptor> found = new LinkedHashMap<>();
             for (int offset = 0; offset < ids.size(); offset += 500) {
                 List<UUID> batch = ids.subList(offset, Math.min(offset + 500, ids.size()));
-                String placeholders = String.join(",", java.util.Collections.nCopies(batch.size(), "?"));
+                // Un UUID ne contient aucun caractère à échapper en JSON.
+                // La liste reste un paramètre lié, jamais une partie du SQL.
+                String requestedIds = batch.stream().map(UUID::toString)
+                        .collect(Collectors.joining("\",\"", "[\"", "\"]"));
                 List<ProjectRow> rows = new ArrayList<>();
                 try (PreparedStatement statement = connection.prepareStatement(
-                        "SELECT * FROM projects WHERE id IN (" + placeholders + ")")) {
-                    bindProjectIds(statement, batch);
+                        "SELECT * FROM projects WHERE id IN (SELECT value FROM json_each(?))")) {
+                    statement.setString(1, requestedIds);
                     try (ResultSet results = statement.executeQuery()) {
                         while (results.next()) {
                             rows.add(projectRow(results));
@@ -80,15 +84,21 @@ public final class SqliteProjectRepository implements ProjectRepository {
                 Map<UUID, Set<String>> languages;
                 Map<UUID, Set<String>> technologies;
                 try (PreparedStatement statement = connection.prepareStatement(
-                        "SELECT project_id, language AS value FROM project_languages WHERE project_id IN ("
-                                + placeholders + ") ORDER BY project_id, language")) {
-                    bindProjectIds(statement, batch);
+                        """
+                        SELECT project_id, language AS value FROM project_languages
+                        WHERE project_id IN (SELECT value FROM json_each(?))
+                        ORDER BY project_id, language
+                        """)) {
+                    statement.setString(1, requestedIds);
                     languages = loadAllValues(statement);
                 }
                 try (PreparedStatement statement = connection.prepareStatement(
-                        "SELECT project_id, technology AS value FROM project_technologies WHERE project_id IN ("
-                                + placeholders + ") ORDER BY project_id, technology")) {
-                    bindProjectIds(statement, batch);
+                        """
+                        SELECT project_id, technology AS value FROM project_technologies
+                        WHERE project_id IN (SELECT value FROM json_each(?))
+                        ORDER BY project_id, technology
+                        """)) {
+                    statement.setString(1, requestedIds);
                     technologies = loadAllValues(statement);
                 }
                 for (ProjectRow row : rows) {
@@ -101,12 +111,6 @@ public final class SqliteProjectRepository implements ProjectRepository {
             return ids.stream().map(found::get).filter(java.util.Objects::nonNull).toList();
         } catch (SQLException exception) {
             throw new PersistenceException("Impossible de lire les projets demandés", exception);
-        }
-    }
-
-    private static void bindProjectIds(PreparedStatement statement, List<UUID> ids) throws SQLException {
-        for (int index = 0; index < ids.size(); index++) {
-            statement.setString(index + 1, ids.get(index).toString());
         }
     }
 
