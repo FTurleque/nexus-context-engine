@@ -19,10 +19,12 @@ import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -195,6 +197,52 @@ class OllamaEmbeddingProviderResponseLimitTest {
         assertEquals(
                 "Ollama /api/embed indisponible : délai dépassé après 50 ms",
                 exception.getMessage());
+    }
+
+    @Test
+    void reportsTimeoutWhenHeadersArriveButBodyStalls() throws Exception {
+        byte[] body = json("{\"embeddings\":[[1.0]]}");
+        CountDownLatch bodyPaused = new CountDownLatch(1);
+        server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        server.createContext("/api/embed", exchange -> {
+            try (exchange) {
+                exchange.getRequestBody().readAllBytes();
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, body.length);
+                try (OutputStream output = exchange.getResponseBody()) {
+                    output.write(body[0]);
+                    output.flush();
+                    bodyPaused.countDown();
+                    new CountDownLatch(1).await(1, TimeUnit.SECONDS);
+                    output.write(body, 1, body.length - 1);
+                }
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            } catch (IOException expectedAfterClientTimeout) {
+                // La fermeture du flux par le client est attendue après expiration.
+            }
+        });
+        server.start();
+        URI baseUri = serverUri(server);
+        OllamaEmbeddingProvider provider = provider(baseUri, 1, Duration.ofMillis(150), 1024);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+
+        Thread caller = Thread.ofVirtual().start(() -> {
+            try {
+                provider.embed("body-timeout");
+            } catch (Throwable exception) {
+                failure.set(exception);
+            }
+        });
+
+        assertTrue(bodyPaused.await(2, TimeUnit.SECONDS), "Le serveur doit avoir envoyé les en-têtes");
+        caller.join(2_000L);
+        assertFalse(caller.isAlive(), "L'appel doit respecter le délai pendant la lecture du corps");
+        EmbeddingProviderUnavailableException thrown =
+                assertInstanceOf(EmbeddingProviderUnavailableException.class, failure.get());
+        assertEquals(
+                "Ollama /api/embed indisponible : délai dépassé après 150 ms",
+                thrown.getMessage());
     }
 
     @Test

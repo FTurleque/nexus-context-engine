@@ -16,6 +16,8 @@ import java.util.regex.Pattern;
  */
 public final class SensitiveContentRedactor {
 
+    /** Version de la politique ; toute évolution impose la reconstruction des dérivés. */
+    public static final String POLICY_VERSION = "secret-redaction-v2";
     private static final String REDACTED = "[REDACTED]";
     private static final String PRIVATE_KEY_BEGIN = "-----BEGIN ";
     private static final String PRIVATE_KEY_END = "-----END ";
@@ -34,7 +36,7 @@ public final class SensitiveContentRedactor {
                     + "[A-Za-z0-9_-]{10," + MAX_SECRET_CHARS + "}+\\."
                     + "[A-Za-z0-9_-]{10," + MAX_SECRET_CHARS + "}+\\b");
     private static final Pattern SECRET_ASSIGNMENT = Pattern.compile(
-            "(?im)(?<![\\p{L}\\p{N}_])(" + SECRET_KEY + "\\s{0,32}[:=]\\s{0,32})"
+            "(?im)(?<![\\p{L}\\p{N}_])(\"?" + SECRET_KEY + "\"?\\s{0,32}[:=]\\s{0,32})"
                     + "(?:\"([^\"\\r\\n]{8," + MAX_SECRET_CHARS + "})\""
                     + "|'([^'\\r\\n]{8," + MAX_SECRET_CHARS + "})'"
                     + "|([^\\s\"'`;,#]{8," + MAX_SECRET_CHARS + "}))");

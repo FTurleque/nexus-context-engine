@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 public final class SqliteProjectRepository implements ProjectRepository {
 
@@ -52,6 +53,60 @@ public final class SqliteProjectRepository implements ProjectRepository {
     @Override
     public Optional<ProjectDescriptor> findById(UUID projectId) {
         return findOne("SELECT * FROM projects WHERE id = ?", projectId.toString());
+    }
+
+    @Override
+    public List<ProjectDescriptor> findByIds(List<UUID> projectIds) {
+        List<UUID> ids = projectIds.stream().distinct().toList();
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        try (Connection connection = database.openConnection();
+             PreparedStatement projectsStatement = connection.prepareStatement("""
+                     SELECT id, name, root_path, source_type, last_indexed_at, index_status
+                     FROM projects WHERE id IN (SELECT value FROM json_each(?))
+                     """);
+             PreparedStatement languagesStatement = connection.prepareStatement("""
+                     SELECT project_id, language AS value FROM project_languages
+                     WHERE project_id IN (SELECT value FROM json_each(?))
+                     ORDER BY project_id, language
+                     """);
+             PreparedStatement technologiesStatement = connection.prepareStatement("""
+                     SELECT project_id, technology AS value FROM project_technologies
+                     WHERE project_id IN (SELECT value FROM json_each(?))
+                     ORDER BY project_id, technology
+                     """)) {
+            // Un même snapshot pour les descripteurs et leurs métadonnées.
+            connection.setAutoCommit(false);
+            Map<UUID, ProjectDescriptor> found = new LinkedHashMap<>();
+            for (int offset = 0; offset < ids.size(); offset += 500) {
+                List<UUID> batch = ids.subList(offset, Math.min(offset + 500, ids.size()));
+                // Un UUID ne contient aucun caractère à échapper en JSON.
+                // La liste reste un paramètre lié, jamais une partie du SQL.
+                String requestedIds = batch.stream().map(UUID::toString)
+                        .collect(Collectors.joining("\",\"", "[\"", "\"]"));
+                List<ProjectRow> rows = new ArrayList<>();
+                projectsStatement.setString(1, requestedIds);
+                try (ResultSet results = projectsStatement.executeQuery()) {
+                    while (results.next()) {
+                        rows.add(projectRow(results));
+                    }
+                }
+                languagesStatement.setString(1, requestedIds);
+                Map<UUID, Set<String>> languages = loadAllValues(languagesStatement);
+                technologiesStatement.setString(1, requestedIds);
+                Map<UUID, Set<String>> technologies = loadAllValues(technologiesStatement);
+                for (ProjectRow row : rows) {
+                    found.put(row.id(), row.toDescriptor(
+                            languages.getOrDefault(row.id(), Set.of()),
+                            technologies.getOrDefault(row.id(), Set.of())));
+                }
+            }
+            connection.commit();
+            return ids.stream().map(found::get).filter(java.util.Objects::nonNull).toList();
+        } catch (SQLException exception) {
+            throw new PersistenceException("Impossible de lire les projets demandés", exception);
+        }
     }
 
     @Override

@@ -24,14 +24,14 @@ en recherche classée ou en contexte minimal, pertinent, explicable et borné.
 8. Les providers/importers externes sont optionnels, bornés en temps et en concurrence ; au plus 8 tâches externes restent réellement actives simultanément à l'échelle JVM.
 9. Le transport JSON-RPC JDT LS borne messages, headers, lignes et backlog avant allocation/accumulation ; son démarrage exige une racine canonique explicitement approuvée.
 10. Ranking, limites et budgets restent déterministes/explicables.
-11. Une seule mutation d'index par projet est active sur un `NEXUS_HOME` local ; snapshot revalidé avant `READY`.
+11. Une seule mutation d'index par projet est active sur un `NEXUS_HOME` local ; les lectures prennent le verrou partagé pendant toute l'opération et le snapshot est revalidé avant `READY`.
 12. Le graphe, Git, la fédération et la découverte native sont bornés en travail, pas seulement en résultat final.
 13. Une requête Lucene analysée est bornée à 128 termes uniques avant expansion multi-champs.
 14. Une exposition REST hors loopback est fail-closed sans authentification, token CSPRNG conforme au gate structurel, roots et transport TLS effectif conformes.
 15. Health/metrics ne sont pas servis par le listener applicatif : le management Quarkus reste sur `127.0.0.1:9000` par défaut.
 16. La recherche sémantique reste opt-in ; Ollama distant exige HTTPS sauf opt-in administratif explicite pour HTTP.
 17. Les secrets à forte confiance sont redigés avant embeddings et avant restitution des fragments de contexte.
-18. Le profil sémantique `content-v2` invalide/reconstruit les anciens vecteurs incompatibles.
+18. Le profil sémantique `content-v3` invalide/reconstruit les anciens vecteurs incompatibles.
 19. `NEXUS_HOME`/SQLite sont durcis en permissions privées sur POSIX ; les ACL Windows natives ne sont pas remplacées destructivement et peuvent être exigées fail-closed via `NEXUS_REQUIRE_PRIVATE_STORAGE=true`.
 20. Lorsque `SecureDirectoryStream` n'est pas disponible, `SafeFileIO` capture et revalide chemin réel + identité filesystem autour de l'ouverture finale afin de détecter les substitutions visibles.
 21. Les snapshots Code Intelligence sont bornés en champs UTF-8, cardinalité et volume cumulé avant canonicalisation.

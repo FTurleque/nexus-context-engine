@@ -14,7 +14,7 @@ Probabilité : F faible, M moyenne, E élevée. Impact : F faible, M moyen, E é
 | R6 | migration forward-only | F | E | backup avant upgrade |
 | R10 | compatibilité MCP | M | M | SDK 2.0.1 + tests STDIO/intégration |
 | R13 | snapshots externes obsolètes | M | E | clôturé par invalidation/provenance |
-| R14 | index sémantique incompatible | M | E | profil `content-v2` + rebuild/garde |
+| R14 | index sémantique incompatible | M | E | profil `content-v3` + rebuild/garde |
 | R15 | supply-chain incomplète | M | E | clôturé/renforcé : CodeQL, OSV, Trivy, SBOM, hashes |
 | R17 | snapshot publié après mutation | M | E | clôturé par revalidation canonique |
 | R18 | REST distant/management insuffisamment sécurisé | M | E | TLS effectif + token CSPRNG conforme au gate structurel + roots + proxy borné + management loopback séparé |
@@ -26,7 +26,7 @@ Probabilité : F faible, M moyenne, E élevée. Impact : F faible, M moyen, E é
 | R26 | `develop` non protégé côté GitHub | F | E | **clôturé** : ruleset actif `Protect main & develop`, NXA3-14 / #130 satisfait |
 | R27 | JDT LS hostile/défectueux ou lancé sur dépôt non approuvé | F | E | framing 16 MiB/64 KiB/8 KiB + queue 256 + confiance racine exacte + fail-closed |
 | R28 | requête Lucene à forte cardinalité dépasse le budget de clauses | F | M | cap 128 termes analysés + test de non-régression |
-| R29 | fuite accidentelle de secrets vers embeddings/contexte | M | E | exclusions sensibles + redaction forte confiance + profil `content-v2` |
+| R29 | fuite accidentelle de secrets vers embeddings/contexte | M | E | exclusions sensibles + redaction forte confiance + profil `content-v3` |
 | R30 | endpoint Ollama distant en HTTP / credentials URI | M | E | HTTPS distant par défaut, HTTP distant opt-in, userinfo refusé |
 | R31 | stockage NEXUS trop largement accessible | F | E | POSIX 0700/0600 ; ACL inspectées ; `NEXUS_REQUIRE_PRIVATE_STORAGE=true` pour mode fail-closed |
 | R32 | amplification métadonnées Code Intelligence | F | E | champs UTF-8 bornés + 100k symboles + 250k relations + 64 MiB cumulés |

@@ -23,7 +23,7 @@ Ce fichier complète la Section 10 de l'arc42 avec les scénarios de qualité **
 | QS-15 — REST distant | Sécurité | auth + roots + transport effectif | Couvert |
 | QS-16 — Management REST isolé | Sécurité/Opérabilité | test 404 app listener + health/metrics management | Couvert |
 | QS-17 — Ollama distant | Sécurité | HTTPS par défaut, HTTP distant opt-in, credentials URI refusés | Couvert |
-| QS-18 — Secrets avant embeddings/contexte | Sécurité | `SensitiveContentRedactorTest` + profil `content-v2` | Couvert |
+| QS-18 — Secrets avant embeddings/contexte | Sécurité | `SensitiveContentRedactorTest` + profil `content-v3` | Couvert |
 | QS-19 — SQLite invariants | Correctness | V004/V005 + tests fresh/upgrade/invalid INSERT | Couvert |
 | QS-20 — Supply-chain reactor | Sécurité | JaCoCo + OSV + CodeQL + notices/SBOM + ancres | Couvert |
 | QS-21 — Supply-chain Docker | Sécurité | Trivy + SBOM + image exacte qualifiée | Couvert |

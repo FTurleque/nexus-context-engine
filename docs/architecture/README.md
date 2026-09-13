@@ -44,7 +44,7 @@ La protection effective de `develop` est une règle GitHub de repository et non 
 - requêtes Lucene à forte cardinalité bornées à 128 termes analysés uniques.
 - limites REST fédérées centralisées et `constraints` non supportées rejetées explicitement.
 - Ollama distant HTTPS par défaut ; HTTP distant uniquement via opt-in administratif explicite.
-- secrets à forte confiance redigés avant embeddings/fragments ; profil sémantique `content-v2`.
+- secrets à forte confiance redigés avant embeddings/fragments ; profil sémantique `content-v3`.
 - `NEXUS_HOME`/SQLite privés sur POSIX ; chemins persistants symboliques durcis refusés.
 
 ## Preuve de qualification

@@ -19,6 +19,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 
 /** Provider d'embeddings Ollama explicitement opt-in. */
@@ -212,6 +216,7 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
                 .build();
 
+        long deadlineNanos = System.nanoTime() + timeout.toNanos();
         HttpResponse<InputStream> response;
         try {
             response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
@@ -228,7 +233,36 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
             throw new IOException("Appel Ollama interrompu", exception);
         }
 
-        byte[] responseBytes = readBoundedResponse(response.body(), maxResponseBytes, embedEndpoint);
+        byte[] responseBytes;
+        long remainingNanos = deadlineNanos - System.nanoTime();
+        if (remainingNanos <= 0L) {
+            closeQuietly(response.body());
+            throw timeoutUnavailable(null);
+        }
+        FutureTask<byte[]> bodyRead = new FutureTask<>(
+                () -> readBoundedResponse(response.body(), maxResponseBytes, embedEndpoint));
+        Thread.ofVirtual().name("nexus-ollama-body-reader").start(bodyRead);
+        try {
+            responseBytes = bodyRead.get(remainingNanos, TimeUnit.NANOSECONDS);
+        } catch (TimeoutException exception) {
+            closeQuietly(response.body());
+            bodyRead.cancel(true);
+            throw timeoutUnavailable(exception);
+        } catch (ExecutionException exception) {
+            Throwable cause = exception.getCause();
+            if (cause instanceof HttpTimeoutException) {
+                throw timeoutUnavailable(cause);
+            }
+            if (cause instanceof IOException ioException) {
+                throw ioException;
+            }
+            throw new IOException("Lecture de la réponse Ollama impossible", cause);
+        } catch (InterruptedException exception) {
+            closeQuietly(response.body());
+            bodyRead.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new IOException("Lecture de la réponse Ollama interrompue", exception);
+        }
         String responseBody = new String(responseBytes, StandardCharsets.UTF_8);
 
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
@@ -255,6 +289,21 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
             vectors.add(parseVector(embeddings.get(vectorIndex), vectorIndex));
         }
         return List.copyOf(vectors);
+    }
+
+    private EmbeddingProviderUnavailableException timeoutUnavailable(Throwable cause) {
+        String message = "Ollama /api/embed indisponible : délai dépassé après " + timeout.toMillis() + " ms";
+        return cause == null
+                ? new EmbeddingProviderUnavailableException(message)
+                : new EmbeddingProviderUnavailableException(message, cause);
+    }
+
+    private static void closeQuietly(InputStream body) {
+        try {
+            body.close();
+        } catch (IOException ignored) {
+            // Best effort lors d'un délai dépassé ou d'une interruption.
+        }
     }
 
     static byte[] readBoundedResponse(InputStream body, int maxResponseBytes, URI endpoint) throws IOException {

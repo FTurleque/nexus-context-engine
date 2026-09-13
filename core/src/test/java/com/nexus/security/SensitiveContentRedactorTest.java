@@ -68,6 +68,17 @@ class SensitiveContentRedactorTest {
     }
 
     @Test
+    void redactsJsonSecretsWhilePreservingQuotedKeys() {
+        String source = "{\"password\":\"AuditSyntheticPassword98765\",\"client_secret\":\"AuditSyntheticClientSecret98765\"}";
+
+        String redacted = SensitiveContentRedactor.redact(source);
+
+        assertEquals(
+                "{\"password\":\"[REDACTED]\",\"client_secret\":\"[REDACTED]\"}",
+                redacted);
+    }
+
+    @Test
     void doesNotRedactIdentifiersThatMerelyContainSecretAsSubstring() {
         String source = "notasecretvalue = \"ordinary configuration value\";";
 

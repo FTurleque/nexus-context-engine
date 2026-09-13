@@ -31,7 +31,7 @@ Le gate documentaire contrôle notamment :
 
 - listener management `127.0.0.1:9000` séparé du listener API ;
 - politique Ollama distante et opt-in HTTP ;
-- redaction de secrets + profil `content-v2` ;
+- redaction de secrets + profil `content-v3` ;
 - JDT LS : confiance racine exacte + framing 16 MiB / 64 KiB / 8 KiB / 256 messages ;
 - maximum 8 tâches externes actives et circuit-breaker linéarisé ;
 - métadonnées Code Intelligence bornées avant canonicalisation ;

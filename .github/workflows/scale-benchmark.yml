@@ -13,6 +13,10 @@ on:
       - develop
       - main
     paths:
+      - 'core/src/main/java/com/nexus/application/**'
+      - 'core/src/main/java/com/nexus/index/**'
+      - 'core/src/main/java/com/nexus/project/**'
+      - 'core/src/main/java/com/nexus/config/**'
       - 'core/src/main/java/com/nexus/persistence/sqlite/**'
       - 'core/src/main/java/com/nexus/search/**'
       - 'core/src/main/java/com/nexus/ranking/graph/**'
@@ -20,6 +24,8 @@ on:
       - 'core/src/test/java/com/nexus/benchmark/**'
       - 'core/pom.xml'
       - 'scripts/measure-scale-regression.ps1'
+      - 'scripts/verify-scale-budgets.py'
+      - 'scripts/tests/test_scale_budgets.py'
       - 'config/scale-benchmark-protocol'
       - 'docs/developer/scale-regression-benchmark.md'
       - 'docs/developer/scale-regression-results.md'
@@ -86,7 +92,7 @@ jobs:
             test
 
       - name: Run full SQLite scale curve for pull request
-        if: github.event_name == 'pull_request' && steps.profile.outputs.value == 'ci'
+        if: github.event_name == 'pull_request'
         shell: bash
         run: |
           ./mvnw -B -pl core \
@@ -95,6 +101,7 @@ jobs:
             -Dnexus.scale.benchmark.enabled=true \
             -Dnexus.scale.benchmark.profile=full \
             -Dnexus.scale.benchmark.output=target/scale-benchmark-sqlite-full.json \
+            -Dnexus.scale.benchmark.sqliteOnly=true \
             test
 
       - name: Benchmark PR base SQLite storage on the same runner
@@ -104,6 +111,7 @@ jobs:
           set -euo pipefail
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
           PROTOCOL_FILE="config/scale-benchmark-protocol"
+          BENCHMARK_HARNESS="core/src/test/java/com/nexus/benchmark/ScaleRegressionBenchmarkTest.java"
           CANDIDATE_REPORT="$RUNNER_TEMP/scale-benchmark-candidate.json"
           BASE_REPORT="$RUNNER_TEMP/scale-benchmark-base.json"
           POPULATION_COMPARABLE=false
@@ -111,7 +119,9 @@ jobs:
           test -s "$PROTOCOL_FILE"
           HEAD_PROTOCOL="$(tr -d '\r\n[:space:]' < "$PROTOCOL_FILE")"
           BASE_PROTOCOL="$(git show "$BASE_SHA:$PROTOCOL_FILE" 2>/dev/null | tr -d '\r\n[:space:]' || true)"
-          if [[ -n "$BASE_PROTOCOL" && "$BASE_PROTOCOL" == "$HEAD_PROTOCOL" ]]; then
+          # Le harness 6 reste compatible avec l'API des protocoles 4 et 5.
+          # Exécuter exactement le harness candidat sur les deux codes de production.
+          if [[ "$BASE_PROTOCOL" == "$HEAD_PROTOCOL" || ( "$HEAD_PROTOCOL" == "6" && ( "$BASE_PROTOCOL" == "4" || "$BASE_PROTOCOL" == "5" ) ) ]]; then
             POPULATION_COMPARABLE=true
           else
             echo "::notice::Base/head benchmark protocols differ (base='${BASE_PROTOCOL:-absent}', head='$HEAD_PROTOCOL'). Relative population comparison is skipped, but the base 1M storage footprint is still measured on this runner."
@@ -121,6 +131,9 @@ jobs:
           BASE_WORKTREE="$RUNNER_TEMP/nexus-scale-base"
           rm -rf "$BASE_WORKTREE"
           git worktree add --detach "$BASE_WORKTREE" "$BASE_SHA"
+          if [[ "$POPULATION_COMPARABLE" == "true" ]]; then
+            cp "$BENCHMARK_HARNESS" "$BASE_WORKTREE/$BENCHMARK_HARNESS"
+          fi
           cleanup_base_worktree() {
             git worktree remove --force "$BASE_WORKTREE" >/dev/null 2>&1 || true
           }
@@ -133,6 +146,7 @@ jobs:
               -Djunit.jupiter.execution.timeout.test.method.default=20m \
               -Dnexus.scale.benchmark.enabled=true \
               -Dnexus.scale.benchmark.profile=full \
+              -Dnexus.scale.benchmark.sqliteOnly=true \
               -Dnexus.scale.benchmark.output="$BASE_REPORT" \
               test
           )
@@ -151,165 +165,16 @@ jobs:
           test -s target/graph-scale-benchmark.json
           test -s target/federated-budget-scale-benchmark.json
           test -s target/native-discovery-scale-benchmark.json
-          if [[ "${{ github.event_name }}" == "pull_request" && "${{ steps.profile.outputs.value }}" == "ci" ]]; then
-            test -s target/scale-benchmark-sqlite-full.json
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             test -s target/scale-benchmark-base.json
+            test -s target/scale-benchmark-sqlite-full.json
           fi
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          report = json.loads(Path('target/scale-benchmark.json').read_text())
-          graph = json.loads(Path('target/graph-scale-benchmark.json').read_text())
-          federated = json.loads(Path('target/federated-budget-scale-benchmark.json').read_text())
-          native = json.loads(Path('target/native-discovery-scale-benchmark.json').read_text())
-          sqlite_full_path = Path('target/scale-benchmark-sqlite-full.json')
-          sqlite_report = json.loads(sqlite_full_path.read_text()) if sqlite_full_path.exists() else report
-          baseline_path = Path('target/scale-benchmark-base.json')
-          baseline = json.loads(baseline_path.read_text()) if baseline_path.exists() else None
-          population_comparable = Path('target/scale-benchmark-base-population-comparable').exists()
-          profile = report['profile']
-          assert profile in ('ci', 'full')
-          assert graph['profile'] == profile
-          assert report['sqliteTiers']
-          assert sqlite_report['sqliteTiers']
-          assert report['portfolio']['tiers']
-          assert report['semanticRecovery']['documents'] > 0
-
-          sqlite = {tier['symbols']: tier for tier in sqlite_report['sqliteTiers']}
-          baseline_sqlite = ({tier['symbols']: tier for tier in baseline['sqliteTiers']}
-                             if baseline is not None else {})
-          portfolio = {tier['projects']: tier for tier in report['portfolio']['tiers']}
-
-          sqlite_budgets = {
-              10_000:  {'exact': 50,   'contains': 30,   'miss': 30,   'relation': 25},
-              100_000: {'exact': 250,  'contains': 150,  'miss': 150,  'relation': 100},
-              500_000: {'exact': 1000, 'contains': 600,  'miss': 600,  'relation': 400},
-              1_000_000: {'exact': 2000, 'contains': 1200, 'miss': 1200, 'relation': 800},
-          }
-          population_safety_ceiling = {
-              10_000: 1_400,
-              100_000: 5_000,
-              500_000: 20_000,
-              1_000_000: 40_000,
-          }
-          population_jitter_ms = {
-              10_000: 200,
-              100_000: 500,
-              500_000: 1_500,
-              1_000_000: 3_000,
-          }
-
-          for symbols, tier in sqlite.items():
-              budget = sqlite_budgets[symbols]
-              assert tier['symbolExact']['p95Ms'] <= budget['exact'], (symbols, 'exact', tier['symbolExact']['p95Ms'])
-              assert tier['symbolContains']['p95Ms'] <= budget['contains'], (symbols, 'contains', tier['symbolContains']['p95Ms'])
-              assert tier['symbolMissingWorstCase']['p95Ms'] <= budget['miss'], (symbols, 'miss', tier['symbolMissingWorstCase']['p95Ms'])
-              assert tier['relationContains']['p95Ms'] <= budget['relation'], (symbols, 'relation', tier['relationContains']['p95Ms'])
-              assert tier['targeted100Files']['p95Ms'] <= 30, (symbols, 'targeted-files', tier['targeted100Files']['p95Ms'])
-
-              population = tier['populationMs']
-              ceiling = population_safety_ceiling[symbols]
-              assert population <= ceiling, (symbols, 'population-safety', population, ceiling)
-              if population_comparable and symbols in baseline_sqlite:
-                  baseline_population = baseline_sqlite[symbols]['populationMs']
-                  relative_ceiling = max(
-                      int(baseline_population * 1.20),
-                      baseline_population + population_jitter_ms[symbols])
-                  assert population <= relative_ceiling, (
-                      symbols,
-                      'population-relative',
-                      population,
-                      baseline_population,
-                      relative_ceiling)
-                  print(
-                      'sqlite-population-relative=',
-                      symbols,
-                      'candidate=', population,
-                      'base=', baseline_population,
-                      'allowed=', relative_ceiling)
-
-          if sqlite_full_path.exists():
-              assert set(sqlite) == {10_000, 100_000, 500_000, 1_000_000}, sorted(sqlite)
-          if 1_000_000 in sqlite:
-              assert 1_000_000 in baseline_sqlite, 'PR scale runs must measure the 1M base storage footprint'
-              candidate_bytes = sqlite[1_000_000]['databaseBytes']
-              baseline_bytes = baseline_sqlite[1_000_000]['databaseBytes']
-              storage_ceiling = int(baseline_bytes * 1.20)
-              assert candidate_bytes <= storage_ceiling, (
-                  'database-storage-relative', candidate_bytes, baseline_bytes, storage_ceiling)
-              print(
-                  'sqlite-storage-relative=',
-                  'candidate=', candidate_bytes,
-                  'base=', baseline_bytes,
-                  'allowed=', storage_ceiling)
-
-          portfolio_budgets = {
-              10: {'search': 120, 'context': 160},
-              25: {'search': 160, 'context': 260},
-              50: {'search': 250, 'context': 450},
-              100: {'search': 400, 'context': 800},
-          }
-          for projects, tier in portfolio.items():
-              budget = portfolio_budgets[projects]
-              assert tier['search']['p95Ms'] <= budget['search'], (projects, 'search', tier['search']['p95Ms'])
-              assert tier['context']['p95Ms'] <= budget['context'], (projects, 'context', tier['context']['p95Ms'])
-              assert tier['representativeResults'] > 0
-              assert tier['projectsRepresented'] > 0
-
-          expected_graph_scale = 1_000_000 if profile == 'full' else 100_000
-          assert graph['symbols'] == expected_graph_scale, graph['symbols']
-          assert graph['relations'] == expected_graph_scale, graph['relations']
-          assert graph['graphCandidates'] > 0
-          assert graph['graphCandidates'] <= 4_000, graph['graphCandidates']
-          assert graph['p95Ms'] <= 15_000, graph['p95Ms']
-          assert graph['heapDeltaBytes'] <= 256 * 1024 * 1024, graph['heapDeltaBytes']
-          assert graph['databaseBytes'] <= 900 * 1024 * 1024, graph['databaseBytes']
-
-          assert federated['projects'] == 100, federated['projects']
-          assert federated['globalBudget'] == 200_000, federated['globalBudget']
-          assert federated['candidateBudgetTotal'] == 600_000, federated['candidateBudgetTotal']
-          assert federated['candidateBudgetMultiplier'] <= 3.0, federated['candidateBudgetMultiplier']
-          assert federated['maxPerProjectCandidateBudget'] <= 6_000, federated['maxPerProjectCandidateBudget']
-          assert federated['selectedTokens'] <= 200_000, federated['selectedTokens']
-          assert federated['deterministic'] is True
-          assert federated['durationMs'] <= 5_000, federated['durationMs']
-
-          assert native['skills'] == 1_000, native
-          assert native['visitedEntries'] == 2_001, native
-          assert native['candidateResources'] == 1_000, native
-          assert native['cumulativeBytes'] > 0, native
-          assert native['deterministic'] is True, native
-          assert native['durationMs'] <= native['maxDurationMs'] <= 10_000, native
-
-          if profile == 'full':
-              assert report['portfolio']['totalFullIndexMs'] <= 6000, report['portfolio']['totalFullIndexMs']
-              assert report['semanticRecovery']['initialRebuildMs'] <= 12000, report['semanticRecovery']['initialRebuildMs']
-              assert report['semanticRecovery']['incompatibleRecoveryRebuildMs'] <= 12000, report['semanticRecovery']['incompatibleRecoveryRebuildMs']
-              assert report['semanticRecovery']['semanticIndexBytes'] <= 8 * 1024 * 1024, report['semanticRecovery']['semanticIndexBytes']
-              assert report['totalDurationMs'] <= 180000, report['totalDurationMs']
-
-          assert report['concurrentReadWrite']['delete']['reader']['failures'] == 0
-          assert report['concurrentReadWrite']['wal']['reader']['failures'] == 0
-          assert report['usedHeapDeltaBytes'] <= 256 * 1024 * 1024, report['usedHeapDeltaBytes']
-
-          print('profile=', profile)
-          print('sqlite-profile=', sqlite_report['profile'])
-          print('sqlite-max=', sqlite_report['sqliteTiers'][-1]['symbols'])
-          print('portfolio-max=', report['portfolio']['maximumProjects'])
-          print('semantic-documents=', report['semanticRecovery']['documents'])
-          print('graph-symbols=', graph['symbols'])
-          print('graph-relations=', graph['relations'])
-          print('graph-p95-ms=', graph['p95Ms'])
-          print('federated-projects=', federated['projects'])
-          print('federated-global-budget=', federated['globalBudget'])
-          print('federated-work-budget=', federated['candidateBudgetTotal'])
-          print('native-skills=', native['skills'])
-          print('native-visited=', native['visitedEntries'])
-          print('native-duration-ms=', native['durationMs'])
-          print('total-duration-ms=', report['totalDurationMs'])
-          print('all-regression-budgets=PASS')
-          PY
+          python3 -m unittest discover -s scripts/tests -p 'test_scale_budgets.py'
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            python3 scripts/verify-scale-budgets.py target --require-base
+          else
+            python3 scripts/verify-scale-budgets.py target
+          fi
 
       - name: Retain benchmark report
         if: always()

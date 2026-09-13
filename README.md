@@ -101,7 +101,7 @@ Le sémantique reste désactivé par défaut. Une URL Ollama distante doit utili
 NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA=true
 ```
 
-Les credentials intégrés dans `NEXUS_OLLAMA_BASE_URL` sont refusés. Les secrets à forte confiance sont redigés avant embeddings et à la frontière finale de chaque `ContextBundle`, y compris pour instructions natives, skills et diff Git. Les assignments quotés contenant des espaces et les clés composées usuelles (`DB_PASSWORD`, `AWS_SECRET_ACCESS_KEY`, `MY_CLIENT_SECRET`, `database.password`) sont pris en charge. Les clés privées reconnues mais tronquées sont redigées jusqu'à la fin du contenu. Le profil sémantique courant est `content-v2`, ce qui force le rebuild d'un ancien index incompatible.
+Les credentials intégrés dans `NEXUS_OLLAMA_BASE_URL` sont refusés. Les secrets à forte confiance sont redigés avant embeddings et à la frontière finale de chaque `ContextBundle`, y compris pour instructions natives, skills et diff Git. Les clés JSON/JavaScript entre guillemets, les assignments contenant des espaces et les clés composées usuelles (`DB_PASSWORD`, `AWS_SECRET_ACCESS_KEY`, `MY_CLIENT_SECRET`, `database.password`) sont pris en charge. Les clés privées reconnues mais tronquées sont redigées jusqu'à la fin du contenu. Le profil sémantique courant est `content-v3`, ce qui force le rebuild d'un ancien index incompatible.
 
 La configuration Ollama est bornée à **1 024 dimensions** et **600 s** de timeout maximum afin qu'une variable d'environnement ne puisse pas neutraliser les protections de ressources.
 

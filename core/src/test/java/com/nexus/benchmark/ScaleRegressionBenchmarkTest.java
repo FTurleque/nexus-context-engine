@@ -55,7 +55,10 @@ class ScaleRegressionBenchmarkTest {
     private static final int BATCH_SIZE = 5_000;
     private static final int SYMBOLS_PER_FILE = 100;
     private static final int QUERY_WARMUPS = 2;
-    private static final int QUERY_SAMPLES = 5;
+    private static final int QUERY_SAMPLES = 20;
+    private static final int POPULATION_WARMUPS = 2;
+    private static final int SMALL_POPULATION_SAMPLES = 3;
+    private static final int DEDICATED_POPULATION_SAMPLES = 3;
     private static final int SEARCH_LIMIT = 20;
     private static final int PORTFOLIO_FILES_PER_PROJECT = 2;
     private static final int PORTFOLIO_CONTEXT_BUDGET = 2_400;
@@ -68,6 +71,7 @@ class ScaleRegressionBenchmarkTest {
     void measuresHermeticScaleProfile() throws Exception {
         String profile = System.getProperty("nexus.scale.benchmark.profile", "ci").trim().toLowerCase(Locale.ROOT);
         boolean full = profile.equals("full");
+        boolean sqliteOnly = Boolean.getBoolean("nexus.scale.benchmark.sqliteOnly");
         if (!full && !profile.equals("ci")) {
             throw new IllegalArgumentException("nexus.scale.benchmark.profile must be ci or full");
         }
@@ -84,21 +88,39 @@ class ScaleRegressionBenchmarkTest {
         long benchmarkStarted = System.nanoTime();
         long usedHeapBefore = usedHeapBytes();
 
+        // Les deux JVM (base et candidat) chauffent le même chemin sur des bases
+        // distinctes. Le démarrage à froid reste visible dans le rapport.
+        List<Long> populationWarmups = new ArrayList<>();
+        for (int iteration = 0; iteration < POPULATION_WARMUPS; iteration++) {
+            SqliteDatabase warmup = new SqliteDatabase(new NexusPaths(
+                    temporaryDirectory.resolve("population-warmup-" + iteration)));
+            setJournalMode(warmup, "DELETE");
+            long started = System.nanoTime();
+            populateProject(warmup, UUID.randomUUID(), "warmup", 10_000, 10_000);
+            populationWarmups.add(elapsedMillis(started));
+        }
         List<Map<String, Object>> sqlite = new ArrayList<>();
         for (int symbolCount : sqliteTiers) {
-            sqlite.add(benchmarkSqliteTier(symbolCount));
+            sqlite.add(benchmarkSqliteTier(symbolCount, sqliteOnly));
         }
 
-        Map<String, Object> portfolio = benchmarkPortfolio(portfolioTiers);
-        Map<String, Object> concurrency = benchmarkJournalModes(concurrencySymbolsPerProject);
-        Map<String, Object> semantic = benchmarkSemanticRecovery(semanticDocuments);
+        Map<String, Object> portfolio = sqliteOnly ? Map.of() : benchmarkPortfolio(portfolioTiers);
+        Map<String, Object> concurrency = sqliteOnly ? Map.of() : benchmarkJournalModes(concurrencySymbolsPerProject);
+        Map<String, Object> semantic = sqliteOnly ? Map.of() : benchmarkSemanticRecovery(semanticDocuments);
 
         long usedHeapAfter = usedHeapBytes();
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("generatedAt", Instant.now().toString());
         report.put("profile", profile);
+        report.put("sqliteOnly", sqliteOnly);
+        report.put("populationWarmupSamplesMs", populationWarmups);
         report.put("environment", environment());
         report.put("protocol", Map.of(
+                "version", 6,
+                "population", Map.of(
+                        "warmups", POPULATION_WARMUPS,
+                        "smallTierSamples", SMALL_POPULATION_SAMPLES,
+                        "largeTierSamples", sqliteOnly ? DEDICATED_POPULATION_SAMPLES : 1),
                 "queryWarmups", QUERY_WARMUPS,
                 "querySamples", QUERY_SAMPLES,
                 "searchLimit", SEARCH_LIMIT,
@@ -136,27 +158,36 @@ class ScaleRegressionBenchmarkTest {
                 output);
     }
 
-    private Map<String, Object> benchmarkSqliteTier(int symbolCount) throws Exception {
-        Path home = temporaryDirectory.resolve("sqlite-" + symbolCount);
-        SqliteDatabase database = new SqliteDatabase(new NexusPaths(home));
-        String journalMode = setJournalMode(database, "DELETE");
-        UUID projectId = UUID.randomUUID();
-
-        long populateStarted = System.nanoTime();
-        populateProject(database, projectId, "sqlite-" + symbolCount, symbolCount, symbolCount);
-        long populationMs = elapsedMillis(populateStarted);
+    private Map<String, Object> benchmarkSqliteTier(int symbolCount, boolean sqliteOnly) throws Exception {
+        List<Long> populationSamples = new ArrayList<>();
+        int largeSampleCount = sqliteOnly ? DEDICATED_POPULATION_SAMPLES : 1;
+        int sampleCount = symbolCount == 10_000 ? SMALL_POPULATION_SAMPLES : largeSampleCount;
+        SqliteDatabase database = null;
+        UUID projectId = null;
+        String journalMode = null;
+        for (int sample = 0; sample < sampleCount; sample++) {
+            Path home = temporaryDirectory.resolve("sqlite-" + symbolCount + "-sample-" + sample);
+            database = new SqliteDatabase(new NexusPaths(home));
+            journalMode = setJournalMode(database, "DELETE");
+            projectId = UUID.randomUUID();
+            long populateStarted = System.nanoTime();
+            populateProject(database, projectId, "sqlite-" + symbolCount, symbolCount, symbolCount);
+            populationSamples.add(elapsedMillis(populateStarted));
+        }
+        long populationMs = percentile(populationSamples, 0.5d);
+        UUID measuredProjectId = projectId;
 
         SqliteIndexRepository repository = new SqliteIndexRepository(database);
-        Measurement exact = measure(() -> repository.searchSymbols(projectId, "BenchSymbol00000010", SEARCH_LIMIT));
-        Measurement contains = measure(() -> repository.searchSymbols(projectId, "ScaleNeedle", SEARCH_LIMIT));
-        Measurement missing = measure(() -> repository.searchSymbols(projectId, "DefinitelyAbsentScaleToken", SEARCH_LIMIT));
-        Measurement relations = measure(() -> repository.searchRelations(projectId, "TargetNeedle", SEARCH_LIMIT));
+        Measurement exact = measure(() -> repository.searchSymbols(measuredProjectId, "BenchSymbol00000010", SEARCH_LIMIT));
+        Measurement contains = measure(() -> repository.searchSymbols(measuredProjectId, "ScaleNeedle", SEARCH_LIMIT));
+        Measurement missing = measure(() -> repository.searchSymbols(measuredProjectId, "DefinitelyAbsentScaleToken", SEARCH_LIMIT));
+        Measurement relations = measure(() -> repository.searchRelations(measuredProjectId, "TargetNeedle", SEARCH_LIMIT));
 
         int fileCount = Math.max(1, (symbolCount + SYMBOLS_PER_FILE - 1) / SYMBOLS_PER_FILE);
         Set<String> targetedPaths = java.util.stream.IntStream.range(0, Math.min(100, fileCount))
                 .mapToObj(index -> filePath(index))
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        Measurement targetedFiles = measure(() -> repository.findFiles(projectId, targetedPaths));
+        Measurement targetedFiles = measure(() -> repository.findFiles(measuredProjectId, targetedPaths));
 
         assertFalse(repository.searchSymbols(projectId, "ScaleNeedle", SEARCH_LIMIT).isEmpty());
         assertFalse(repository.searchRelations(projectId, "TargetNeedle", SEARCH_LIMIT).isEmpty());
@@ -167,6 +198,7 @@ class ScaleRegressionBenchmarkTest {
         result.put("files", fileCount);
         result.put("journalMode", journalMode);
         result.put("populationMs", populationMs);
+        result.put("populationSamplesMs", populationSamples);
         result.put("databaseBytes", sqliteFilesSize(database.databaseFile()));
         result.put("symbolExact", exact.asMap());
         result.put("symbolContains", contains.asMap());
@@ -178,7 +210,12 @@ class ScaleRegressionBenchmarkTest {
 
     private Map<String, Object> benchmarkPortfolio(List<Integer> tiers) throws Exception {
         Path home = temporaryDirectory.resolve("portfolio-home");
-        NexusApplication application = NexusApplication.create(new NexusPaths(home));
+        try (NexusApplication application = NexusApplication.create(new NexusPaths(home))) {
+            return benchmarkPortfolio(application, tiers);
+        }
+    }
+
+    private Map<String, Object> benchmarkPortfolio(NexusApplication application, List<Integer> tiers) throws Exception {
         int maximumProjects = tiers.getLast();
         List<ProjectDescriptor> projects = new ArrayList<>(maximumProjects);
         long totalIndexMs = 0L;
@@ -194,7 +231,7 @@ class ScaleRegressionBenchmarkTest {
         for (int tier : tiers) {
             List<UUID> ids = projects.stream().limit(tier).map(ProjectDescriptor::id).toList();
             Measurement search = measure(() -> application.searchAcrossProjects(ids, "SharedScaleNeedle", SEARCH_LIMIT, false));
-            Measurement context = measureContext(() -> application.contextAcrossProjects(
+            Measurement context = measure(() -> application.contextAcrossProjects(
                     ids,
                     "SharedScaleNeedle",
                     PORTFOLIO_CONTEXT_BUDGET,
@@ -298,7 +335,8 @@ class ScaleRegressionBenchmarkTest {
                     } catch (RuntimeException failure) {
                         failures++;
                     }
-                } while (!writerDone.get() || durations.size() < 20);
+                } while (!Thread.currentThread().isInterrupted()
+                        && (!writerDone.get() || durations.size() + failures < 20));
                 return new ConcurrentReads(durations, failures);
             });
 
@@ -513,17 +551,6 @@ class ScaleRegressionBenchmarkTest {
         return Measurement.fromMicros(micros);
     }
 
-    private static Measurement measureContext(ThrowingSupplier<?> operation) throws Exception {
-        operation.get();
-        List<Long> micros = new ArrayList<>();
-        for (int sample = 0; sample < 3; sample++) {
-            long started = System.nanoTime();
-            operation.get();
-            micros.add(elapsedMicros(started));
-        }
-        return Measurement.fromMicros(micros);
-    }
-
     private static String setJournalMode(SqliteDatabase database, String requested) throws SQLException {
         try (Connection connection = database.openConnection();
              Statement statement = connection.createStatement();
@@ -623,7 +650,7 @@ class ScaleRegressionBenchmarkTest {
         T get() throws Exception;
     }
 
-    private record Measurement(long p50Micros, long p95Micros, long maxMicros, long meanMicros) {
+    private record Measurement(long p50Micros, long p95Micros, long maxMicros, long meanMicros, List<Long> samplesMicros) {
         private static Measurement fromMicros(List<Long> micros) {
             long mean = micros.isEmpty()
                     ? 0L
@@ -632,7 +659,8 @@ class ScaleRegressionBenchmarkTest {
                     percentile(micros, 0.50d),
                     percentile(micros, 0.95d),
                     micros.stream().mapToLong(Long::longValue).max().orElse(0L),
-                    mean);
+                    mean,
+                    List.copyOf(micros));
         }
 
         private Map<String, Object> asMap() {
@@ -643,6 +671,7 @@ class ScaleRegressionBenchmarkTest {
             result.put("p95Ms", p95Micros / 1_000.0d);
             result.put("maxMs", maxMicros / 1_000.0d);
             result.put("meanMs", meanMicros / 1_000.0d);
+            result.put("samplesMicros", samplesMicros);
             return result;
         }
     }

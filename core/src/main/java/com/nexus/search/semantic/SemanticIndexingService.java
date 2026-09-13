@@ -21,7 +21,9 @@ public final class SemanticIndexingService {
     public static final int DEFAULT_MAX_EMBEDDING_CHARS = 12_000;
     public static final int DEFAULT_EXCERPT_CHARS = 320;
     public static final int DEFAULT_BATCH_SIZE = 32;
-    private static final int CONTENT_PROFILE_VERSION = 2;
+    // Inclut la version de SensitiveContentRedactor : un changement de politique
+    // invalide les embeddings et leurs extraits déjà persistés.
+    private static final int CONTENT_PROFILE_VERSION = 3;
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 
     private final EmbeddingProvider embeddingProvider;
@@ -124,6 +126,7 @@ public final class SemanticIndexingService {
 
     private static String profileId(int maxEmbeddingChars) {
         return "content-v" + CONTENT_PROFILE_VERSION
+                + ";redactionPolicy=" + SensitiveContentRedactor.POLICY_VERSION
                 + ";maxEmbeddingChars=" + maxEmbeddingChars
                 + ";excerptChars=" + DEFAULT_EXCERPT_CHARS;
     }
