@@ -108,7 +108,7 @@ Le listener de management est volontairement loopback-only et ne doit pas être 
 - secrets à forte confiance redigés avant embeddings et avant restitution des fragments de contexte ;
 - les troncatures embedding/excerpt ne coupent plus une paire surrogate UTF-16 ;
 - le profil sémantique est `content-v3`, ce qui force le rebuild d'un ancien index incompatible ;
-- une indisponibilité provider dégrade la recherche de façon sûre et un index Lucene sémantique corrompu est purgé/reconstruit avant recovery ;
+- une indisponibilité provider dégrade la recherche de façon sûre ; un commit sémantique corrompu est reconstruit dans une génération publiée atomiquement, en conservant les anciens fichiers tant que des lecteurs externes peuvent les utiliser (voir ADR-0055 et la procédure de quarantaine) ;
 - `.github/workflows/semantic-search-qualification.yml` exécute périodiquement/manuellement le vrai benchmark avec Ollama `0.33.3` vérifié par SHA-256 repository-pinned et `qwen3-embedding:0.6b`, puis applique des seuils de qualité/non-régression et conserve le rapport comme artefact.
 
 La redaction conservatrice réduit les fuites accidentelles mais ne remplace pas un scanner de secrets spécialisé.

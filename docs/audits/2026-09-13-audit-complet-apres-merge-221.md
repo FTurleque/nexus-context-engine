@@ -3,6 +3,10 @@
 Date : 13 septembre 2026. Référence analysée :
 `6f863b78c1f7d384e234e1de64be850da31dda5c`.
 
+**Suivi :** les corrections et leurs nouvelles validations sont consignées
+dans [le bilan de correction](2026-09-13-corrections-audit-apres-merge-221.md).
+Les observations ci-dessous décrivent le commit audité avant ces corrections.
+
 La [PR #221](https://github.com/FTurleque/nexus-context-engine/pull/221)
 a été fusionnée le 13 septembre à 16:54:14 UTC. Les 21 contrôles du dernier
 commit de la PR, `68ff425c7896129d3c7985964b6c34448a8313f1`, étaient réussis.

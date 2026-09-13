@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 /**
@@ -29,6 +30,7 @@ final class SkillFrontmatterParser {
 
     private final Load yaml = new Load(LoadSettings.builder()
             .setAllowDuplicateKeys(false)
+            .setMaxAliasesForCollections(0)
             .setCodePointLimit(MAX_FRONTMATTER_CHARS)
             .build());
 
@@ -57,18 +59,20 @@ final class SkillFrontmatterParser {
         validateLength("description", description, MAX_DESCRIPTION_LENGTH, skillFile);
 
         String license = optionalString(values, "license");
-        String compatibility = optionalString(values, "compatibility");
+        String compatibility = compatibility(values);
         if (compatibility != null) {
             validateLength("compatibility", compatibility, MAX_COMPATIBILITY_LENGTH, skillFile);
         }
 
-        return new SkillFrontmatter(
+        SkillFrontmatter result = new SkillFrontmatter(
                 name,
                 description,
                 license,
                 compatibility,
                 metadata(values.get("metadata")),
                 allowedTools(values.get("allowed-tools")));
+        validateDecodedSize(result);
+        return result;
     }
 
     private static String readFrontmatter(Path skillFile, ContextDiscoveryBudget budget) throws IOException {
@@ -141,18 +145,21 @@ final class SkillFrontmatterParser {
         if (value == null) {
             return null;
         }
-        String text = String.valueOf(value).trim();
+        String text = stringValue(value, key).trim();
         return text.isEmpty() ? null : text;
     }
 
     private static Map<String, String> metadata(Object rawMetadata) {
-        if (!(rawMetadata instanceof Map<?, ?> map)) {
+        if (rawMetadata == null) {
             return Map.of();
+        }
+        if (!(rawMetadata instanceof Map<?, ?> map)) {
+            throw new IllegalArgumentException("Le champ metadata doit être un objet de chaînes");
         }
         Map<String, String> result = new LinkedHashMap<>();
         for (Map.Entry<?, ?> entry : map.entrySet()) {
             if (entry.getKey() != null && entry.getValue() != null) {
-                result.put(String.valueOf(entry.getKey()), String.valueOf(entry.getValue()));
+                result.put(stringValue(entry.getKey(), "metadata key"), stringValue(entry.getValue(), "metadata value"));
             }
         }
         return Map.copyOf(result);
@@ -164,13 +171,14 @@ final class SkillFrontmatterParser {
         }
         if (rawAllowedTools instanceof List<?> list) {
             return list.stream()
-                    .filter(value -> value != null && !String.valueOf(value).isBlank())
-                    .map(String::valueOf)
+                    .filter(Objects::nonNull)
+                    .map(value -> stringValue(value, "allowed-tools"))
                     .map(String::trim)
+                    .filter(value -> !value.isEmpty())
                     .toList();
         }
 
-        String text = String.valueOf(rawAllowedTools).trim();
+        String text = stringValue(rawAllowedTools, "allowed-tools").trim();
         if (text.isEmpty()) {
             return List.of();
         }
@@ -182,5 +190,49 @@ final class SkillFrontmatterParser {
             }
         }
         return List.copyOf(result);
+    }
+
+    private static String compatibility(Map<?, ?> values) {
+        if (!(values.get("compatibility") instanceof List<?> list)) {
+            return optionalString(values, "compatibility");
+        }
+        // The AI skills registry also accepts a flat list of client names.
+        // Check every element and its cumulative size before joining it.
+        StringBuilder text = new StringBuilder("[");
+        for (Object value : list) {
+            String item = stringValue(value, "compatibility");
+            int separatorLength = text.length() > 1 ? 2 : 0;
+            if ((long) text.length() + separatorLength + item.length() + 1 > MAX_COMPATIBILITY_LENGTH) {
+                throw new IllegalArgumentException("Champ compatibility trop volumineux");
+            }
+            if (separatorLength > 0) {
+                text.append(", ");
+            }
+            text.append(item);
+        }
+        return text.append(']').toString();
+    }
+
+    private static String stringValue(Object value, String field) {
+        if (!(value instanceof String text)) {
+            throw new IllegalArgumentException("Le champ " + field + " doit contenir une chaîne");
+        }
+        return text;
+    }
+
+    private static void validateDecodedSize(SkillFrontmatter value) {
+        long characters = (long) value.name().length() + value.description().length();
+        characters += value.license() == null ? 0 : value.license().length();
+        characters += value.compatibility() == null ? 0 : value.compatibility().length();
+        for (Map.Entry<String, String> entry : value.metadata().entrySet()) {
+            characters += (long) entry.getKey().length() + entry.getValue().length();
+        }
+        for (String tool : value.allowedTools()) {
+            characters += tool.length();
+        }
+        if (characters > MAX_FRONTMATTER_CHARS) {
+            throw new IllegalArgumentException("Métadonnées de skill décodées trop volumineuses (maximum "
+                    + MAX_FRONTMATTER_CHARS + " caractères)");
+        }
     }
 }

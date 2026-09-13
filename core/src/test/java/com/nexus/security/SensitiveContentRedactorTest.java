@@ -86,6 +86,31 @@ class SensitiveContentRedactorTest {
     }
 
     @Test
+    void redactsEscapedQuotesWithoutLeakingSuffixOrChangingDelimiters() {
+        String source = "{\"password\":\"AuditPrefix123\\\"VISIBLE_SECRET_SUFFIX\",\"count\":2}";
+        assertEquals("{\"password\":\"[REDACTED]\",\"count\":2}", SensitiveContentRedactor.redact(source));
+        assertEquals("{'password': '[REDACTED]'}",
+                SensitiveContentRedactor.redact("{'password': 'AuditPrefix123\\'VISIBLE_SECRET_SUFFIX'}"));
+    }
+
+    @Test
+    void redactsSingleQuotedKeysAndHandlesEvenBackslashesBeforeClosingQuote() {
+        assertEquals("{'password': '[REDACTED]', 'safe': 'ordinary'}",
+                SensitiveContentRedactor.redact("{'password': 'AuditSynthetic98765', 'safe': 'ordinary'}"));
+        assertEquals("{\"password\":\"[REDACTED]\",\"safe\":\"ordinary\"}",
+                SensitiveContentRedactor.redact("{\"password\":\"AuditSecret123\\\\\",\"safe\":\"ordinary\"}"));
+    }
+
+    @Test
+    void redactsLongAndTruncatedLiteralsInOnePassAndPreservesLines() {
+        String source = "password=\"" + "escaped\\\"".repeat(10_000) + "suffix\"\r\n"
+                + "password=" + "x".repeat(10_000) + "\npassword='unterminated-secret\n";
+        String expected = "password=\"[REDACTED]\"\r\npassword=[REDACTED]\npassword='[REDACTED]\n";
+        assertEquals(expected, SensitiveContentRedactor.redact(source));
+        assertEquals(expected, SensitiveContentRedactor.redact(expected));
+    }
+
+    @Test
     void redactsPrivateKeyBlocksWithoutChangingSourceLineCount() {
         String source = """
                 before

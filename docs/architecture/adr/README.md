@@ -2,7 +2,7 @@
 
 Ce répertoire contient les ADR **propres à la documentation d'architecture** (arc42, diagrammes,
 scénarios qualité). Les décisions architecturales du projet NEXUS se trouvent dans
-[`docs/adr/`](../../adr/README.md) (ADR-0000 à ADR-0044).
+[`docs/adr/`](../../adr/README.md) (ADR-0000 à ADR-0055).
 
 ## Quand créer un ADR ici ?
 

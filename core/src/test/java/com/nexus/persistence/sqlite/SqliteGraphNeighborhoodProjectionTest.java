@@ -24,6 +24,82 @@ class SqliteGraphNeighborhoodProjectionTest {
     Path tempDir;
 
     @Test
+    void outgoingAndOwnerPlansSeekRequestedSourcesAndQualifiedNames() throws Exception {
+        SqliteDatabase database = new SqliteDatabase(new NexusPaths(tempDir.resolve("outgoing-plan-home")));
+        String outgoingPlan = queryPlan(database, SqliteIndexRepository.OUTGOING_GRAPH_SQL,
+                "[\"src/Seed.java\"]", "project", "IMPORTS", 100);
+        assertTrue(outgoingPlan.contains("project_id=? AND kind=? AND source_ref=?"), outgoingPlan);
+        String ownerPlan = queryPlan(database, SqliteIndexRepository.TARGET_TYPE_OWNERS_SQL,
+                "[\"demo.Seed\"]", "project");
+        assertTrue(ownerPlan.contains("idx_symbols_qualified_name (qualified_name=?)"), ownerPlan);
+    }
+
+    private static String queryPlan(SqliteDatabase database, String sql, Object... parameters) throws SQLException {
+        try (Connection connection = database.openConnection();
+             PreparedStatement query = connection.prepareStatement("EXPLAIN QUERY PLAN " + sql)) {
+            for (int index = 0; index < parameters.length; index++) {
+                query.setObject(index + 1, parameters[index]);
+            }
+            StringBuilder plan = new StringBuilder();
+            try (ResultSet rows = query.executeQuery()) {
+                while (rows.next()) {
+                    plan.append(rows.getString("detail")).append('\n');
+                }
+            }
+            return plan.toString();
+        }
+    }
+
+    @Test
+    void incomingPlanUsesBothTargetEqualityAndTargetRange() throws Exception {
+        SqliteDatabase database = new SqliteDatabase(new NexusPaths(tempDir.resolve("plan-home")));
+        try (Connection connection = database.openConnection();
+             PreparedStatement query = connection.prepareStatement("EXPLAIN QUERY PLAN "
+                     + SqliteIndexRepository.INCOMING_GRAPH_SQL)) {
+            query.setString(1, "[\"src/Seed.java\"]");
+            query.setString(2, "project");
+            query.setString(3, "project");
+            query.setString(4, "IMPORTS");
+            query.setInt(5, 100);
+            StringBuilder plan = new StringBuilder();
+            try (ResultSet rows = query.executeQuery()) {
+                while (rows.next()) {
+                    plan.append(rows.getString("detail")).append('\n');
+                }
+            }
+            assertTrue(plan.toString().contains("project_id=? AND kind=? AND target_ref=?"), plan.toString());
+            assertTrue(plan.toString().contains("project_id=? AND kind=? AND target_ref>? AND target_ref<?"),
+                    plan.toString());
+        }
+    }
+
+    @Test
+    void incomingUnionDeduplicatesNestedOwnersAndPreservesProjectAndPrefixBoundaries() throws Exception {
+        SqliteDatabase database = new SqliteDatabase(new NexusPaths(tempDir.resolve("incoming-home")));
+        UUID projectId = UUID.randomUUID();
+        UUID otherId = UUID.randomUUID();
+        try (Connection connection = database.openConnection()) {
+            insertProject(connection, projectId);
+            insertProject(connection, otherId);
+            long seed = insertFile(connection, projectId, "src/Seed.java");
+            long caller = insertFile(connection, projectId, "src/Caller.java");
+            long nearMiss = insertFile(connection, projectId, "src/NearMiss.java");
+            long other = insertFile(connection, otherId, "src/Other.java");
+            insertType(connection, seed, "Seed", "demo.Seed");
+            insertType(connection, seed, "Inner", "demo.Seed.Inner");
+            insertImport(connection, projectId, caller, "src/Caller.java", "demo.Seed");
+            insertImport(connection, projectId, caller, "src/Caller.java", "demo.Seed.Inner");
+            insertImport(connection, projectId, caller, "src/Caller.java", "demo.Seed.Inner.method");
+            insertImport(connection, projectId, nearMiss, "src/NearMiss.java", "demo.Seedling");
+            insertImport(connection, projectId, nearMiss, "src/NearMiss.java", "demo.Seed/Excluded");
+            insertImport(connection, otherId, other, "src/Other.java", "demo.Seed");
+        }
+        SqliteIndexRepository repository = new SqliteIndexRepository(database);
+        assertEquals(Map.of("src/Seed.java", Set.of("src/Caller.java")),
+                repository.findGraphNeighbors(projectId, Set.of("src/Seed.java"), 10));
+    }
+
+    @Test
     void projectsOnlyRequestedGraphNeighborhoodAndHonorsEdgeBudget() throws Exception {
         SqliteDatabase database = new SqliteDatabase(new NexusPaths(tempDir.resolve("home")));
         UUID projectId = UUID.randomUUID();

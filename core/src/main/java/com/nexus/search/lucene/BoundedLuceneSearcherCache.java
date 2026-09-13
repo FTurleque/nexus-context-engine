@@ -55,6 +55,10 @@ public final class BoundedLuceneSearcherCache implements AutoCloseable {
         ensureOpen();
 
         ProjectSearcher searcher = searchers.get(projectId);
+        if (searcher != null && !searcher.indexPath.equals(indexPath)) {
+            invalidate(projectId);
+            searcher = null;
+        }
         if (searcher == null) {
             searcher = createIfCapacityAllows(projectId, indexPath);
             if (searcher == null) {
@@ -70,6 +74,19 @@ public final class BoundedLuceneSearcherCache implements AutoCloseable {
         ensureOpen();
         ProjectSearcher searcher = searchers.get(projectId);
         if (searcher != null) {
+            searcher.refresh();
+        }
+    }
+
+    /** A recovery may publish a different directory while this cache is idle. */
+    public void refreshIfCached(UUID projectId, Path indexPath) throws IOException {
+        Objects.requireNonNull(projectId, PROJECT_ID_ARGUMENT);
+        Objects.requireNonNull(indexPath, "indexPath");
+        ensureOpen();
+        ProjectSearcher searcher = searchers.get(projectId);
+        if (searcher != null && !searcher.indexPath.equals(indexPath)) {
+            invalidate(projectId);
+        } else if (searcher != null) {
             searcher.refresh();
         }
     }
@@ -169,12 +186,14 @@ public final class BoundedLuceneSearcherCache implements AutoCloseable {
     }
 
     private static final class ProjectSearcher implements AutoCloseable {
+        private final Path indexPath;
         private final Directory directory;
         private final SearcherManager manager;
         private final ReentrantReadWriteLock lifecycleLock = new ReentrantReadWriteLock();
         private boolean closed;
 
-        private ProjectSearcher(Directory directory, SearcherManager manager) {
+        private ProjectSearcher(Path indexPath, Directory directory, SearcherManager manager) {
+            this.indexPath = indexPath;
             this.directory = directory;
             this.manager = manager;
         }
@@ -186,7 +205,7 @@ public final class BoundedLuceneSearcherCache implements AutoCloseable {
                     directory.close();
                     return null;
                 }
-                return new ProjectSearcher(directory, new SearcherManager(directory, null));
+                return new ProjectSearcher(indexPath, directory, new SearcherManager(directory, null));
             } catch (IOException | RuntimeException failure) {
                 try {
                     directory.close();

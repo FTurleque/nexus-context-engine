@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
 public final class SensitiveContentRedactor {
 
     /** Version de la politique ; toute évolution impose la reconstruction des dérivés. */
-    public static final String POLICY_VERSION = "secret-redaction-v2";
+    public static final String POLICY_VERSION = "secret-redaction-v3";
     private static final String REDACTED = "[REDACTED]";
     private static final String PRIVATE_KEY_BEGIN = "-----BEGIN ";
     private static final String PRIVATE_KEY_END = "-----END ";
@@ -36,10 +36,8 @@ public final class SensitiveContentRedactor {
                     + "[A-Za-z0-9_-]{10," + MAX_SECRET_CHARS + "}+\\."
                     + "[A-Za-z0-9_-]{10," + MAX_SECRET_CHARS + "}+\\b");
     private static final Pattern SECRET_ASSIGNMENT = Pattern.compile(
-            "(?im)(?<![\\p{L}\\p{N}_])(\"?" + SECRET_KEY + "\"?\\s{0,32}[:=]\\s{0,32})"
-                    + "(?:\"([^\"\\r\\n]{8," + MAX_SECRET_CHARS + "})\""
-                    + "|'([^'\\r\\n]{8," + MAX_SECRET_CHARS + "})'"
-                    + "|([^\\s\"'`;,#]{8," + MAX_SECRET_CHARS + "}))");
+            "(?im)(?<![\\p{L}\\p{N}_])(?:\"" + SECRET_KEY + "\"|'" + SECRET_KEY + "'|"
+                    + SECRET_KEY + ")\\s{0,32}[:=]\\s{0,32}");
     private static final Pattern URI_CREDENTIAL = Pattern.compile(
             "(?i)(\\b[a-z][a-z0-9+.-]{0,31}+://[^\\s/:@]{1," + MAX_URI_USER_CHARS + "}+:)"
                     + "([^\\s/@]{3," + MAX_SECRET_CHARS + "}+)(@)");
@@ -106,25 +104,49 @@ public final class SensitiveContentRedactor {
         }
     }
 
-    private static String matchedQuote(Matcher matcher) {
-        if (matcher.group(2) != null) {
-            return "\"";
-        }
-        if (matcher.group(3) != null) {
-            return "'";
-        }
-        return "";
-    }
-
     private static String replaceSecretAssignments(String content) {
         Matcher matcher = SECRET_ASSIGNMENT.matcher(content);
         StringBuilder output = new StringBuilder(content.length());
-        while (matcher.find()) {
-            String quote = matchedQuote(matcher);
-            String replacement = matcher.group(1) + quote + REDACTED + quote;
-            matcher.appendReplacement(output, Matcher.quoteReplacement(replacement));
+        int copiedThrough = 0;
+        int searchFrom = 0;
+        while (searchFrom < content.length() && matcher.find(searchFrom)) {
+            int valueStart = matcher.end();
+            if (valueStart == content.length()) {
+                break;
+            }
+            char first = content.charAt(valueStart);
+            boolean quoted = first == '\"' || first == '\'';
+            int secretStart = quoted ? valueStart + 1 : valueStart;
+            int secretEnd = secretValueEnd(content, secretStart, quoted ? first : '\0');
+            if (secretEnd - secretStart >= 8) {
+                output.append(content, copiedThrough, secretStart).append(REDACTED);
+                copiedThrough = secretEnd;
+            }
+            // Consume each value once: long literals cannot cause recursive regex
+            // backtracking, repeated rescans or a leaked suffix at a size cutoff.
+            searchFrom = Math.min(content.length(), secretEnd + 1);
         }
-        matcher.appendTail(output);
+        output.append(content, copiedThrough, content.length());
         return output.toString();
+    }
+
+    private static int secretValueEnd(String content, int start, char quote) {
+        int cursor = start;
+        while (cursor < content.length()) {
+            char character = content.charAt(cursor);
+            if (character == '\r' || character == '\n'
+                    || (quote == '\0' && (Character.isWhitespace(character) || "\"'`;,#}".indexOf(character) >= 0))) {
+                return cursor;
+            }
+            if (quote != '\0' && character == quote) {
+                return cursor;
+            }
+            if (quote != '\0' && character == '\\' && cursor + 1 < content.length()
+                    && content.charAt(cursor + 1) != '\r' && content.charAt(cursor + 1) != '\n') {
+                cursor++;
+            }
+            cursor++;
+        }
+        return cursor;
     }
 }
