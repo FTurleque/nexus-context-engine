@@ -37,8 +37,9 @@ le rejet d'un ralentissement répété, les plafonds absolus et relatifs, les
 workflow sont valides. Une comparaison des constantes confirme que les plafonds
 SQLite, population, jitter et portfolio sont inchangés.
 
-Les résultats de build, self-smoke et benchmark de cette correction sont
-conservés sous `target/verification-ci-fixes-*` et `target/ci-linux-final/`.
+Les résultats de build, self-smoke et benchmark de cette correction ont été
+générés sous `target/verification-ci-fixes-*` et `target/ci-linux-final/`
+(répertoires temporaires supprimés lors du prochain `mvn clean`).
 La campagne Linux reproduit le profil PR `ci` et les deux courbes SQLite dédiées,
 avec Java 21, quatre processeurs visibles et 4 Go de heap. La base de la PR est
 `b3738a988fed6f58fddd194058d8a0eaa1cef6c2`.
@@ -58,12 +59,31 @@ corrections. Le validateur appliqué aux nouveaux rapports Linux retourne
 est identique à la base, à 938 147 840 octets. La recherche sur 25 projets mesure
 112,921 ms au p95 et le contexte 208,53 ms, sous leurs plafonds respectifs de
 160 et 260 ms. Le graphe 100k mesure 2 792,511 ms au p95 et la découverte des
-1 000 skills 240 ms. Les journaux et échantillons bruts sont conservés dans
+1 000 skills 240 ms. Les journaux et échantillons bruts ont été générés dans
 `target/ci-linux-final/` ; il s'agit d'une reproduction locale, pas d'un nouveau
 run GitHub Actions.
 
 Cette campagne ne qualifie pas le scénario graphe 1M du profil global `full` :
 un essai Linux du 12 septembre a mesuré 27,87 s au p95 pour un plafond de 15 s.
-Le profil PR utilise le scénario graphe 100k. L'analyse SonarCloud distante reste
-à confirmer sur le commit portant les corrections ; les cinq motifs signalés
-ont été supprimés du code concerné.
+Le profil PR utilise le scénario graphe 100k.
+
+## Vérification distante après push
+
+Le commit `d8ec71171e8c1a6cf345f5ee5c7c5a7ed81efeff` a été poussé sur la PR 221.
+Le [run Scale Benchmark 34755412715](https://github.com/FTurleque/nexus-context-engine/actions/runs/34755412715)
+a réussi le 13 septembre 2026 avec `all-regression-budgets=PASS` :
+
+| Symboles | Médiane candidat | Médiane base | Plafond relatif |
+|---:|---:|---:|---:|
+| 10 000 | 185 ms | 176 ms | 376 ms |
+| 100 000 | 2 198 ms | 2 135 ms | 2 635 ms |
+| 500 000 | 12 894 ms | 12 163 ms | 14 595 ms |
+| 1 000 000 | 28 078 ms | 27 210 ms | 32 652 ms |
+
+Le contrôle [SonarCloud de ce commit](https://github.com/FTurleque/nexus-context-engine/runs/103719020086)
+a également réussi, avec zéro nouveau hotspot de sécurité. Ses quatre remarques
+restantes concernent les trois préparations SQL dans la boucle des lots et le
+`SELECT *`. Le complément prépare désormais les trois requêtes une seule fois
+par connexion et sélectionne explicitement les six colonnes nécessaires. Chaque
+lot remplace le paramètre lié ; chaque résultat reste fermé avant le lot suivant.
+Ce complément doit à son tour être vérifié par une nouvelle analyse distante.

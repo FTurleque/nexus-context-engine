@@ -61,7 +61,21 @@ public final class SqliteProjectRepository implements ProjectRepository {
         if (ids.isEmpty()) {
             return List.of();
         }
-        try (Connection connection = database.openConnection()) {
+        try (Connection connection = database.openConnection();
+             PreparedStatement projectsStatement = connection.prepareStatement("""
+                     SELECT id, name, root_path, source_type, last_indexed_at, index_status
+                     FROM projects WHERE id IN (SELECT value FROM json_each(?))
+                     """);
+             PreparedStatement languagesStatement = connection.prepareStatement("""
+                     SELECT project_id, language AS value FROM project_languages
+                     WHERE project_id IN (SELECT value FROM json_each(?))
+                     ORDER BY project_id, language
+                     """);
+             PreparedStatement technologiesStatement = connection.prepareStatement("""
+                     SELECT project_id, technology AS value FROM project_technologies
+                     WHERE project_id IN (SELECT value FROM json_each(?))
+                     ORDER BY project_id, technology
+                     """)) {
             // Un même snapshot pour les descripteurs et leurs métadonnées.
             connection.setAutoCommit(false);
             Map<UUID, ProjectDescriptor> found = new LinkedHashMap<>();
@@ -72,35 +86,16 @@ public final class SqliteProjectRepository implements ProjectRepository {
                 String requestedIds = batch.stream().map(UUID::toString)
                         .collect(Collectors.joining("\",\"", "[\"", "\"]"));
                 List<ProjectRow> rows = new ArrayList<>();
-                try (PreparedStatement statement = connection.prepareStatement(
-                        "SELECT * FROM projects WHERE id IN (SELECT value FROM json_each(?))")) {
-                    statement.setString(1, requestedIds);
-                    try (ResultSet results = statement.executeQuery()) {
-                        while (results.next()) {
-                            rows.add(projectRow(results));
-                        }
+                projectsStatement.setString(1, requestedIds);
+                try (ResultSet results = projectsStatement.executeQuery()) {
+                    while (results.next()) {
+                        rows.add(projectRow(results));
                     }
                 }
-                Map<UUID, Set<String>> languages;
-                Map<UUID, Set<String>> technologies;
-                try (PreparedStatement statement = connection.prepareStatement(
-                        """
-                        SELECT project_id, language AS value FROM project_languages
-                        WHERE project_id IN (SELECT value FROM json_each(?))
-                        ORDER BY project_id, language
-                        """)) {
-                    statement.setString(1, requestedIds);
-                    languages = loadAllValues(statement);
-                }
-                try (PreparedStatement statement = connection.prepareStatement(
-                        """
-                        SELECT project_id, technology AS value FROM project_technologies
-                        WHERE project_id IN (SELECT value FROM json_each(?))
-                        ORDER BY project_id, technology
-                        """)) {
-                    statement.setString(1, requestedIds);
-                    technologies = loadAllValues(statement);
-                }
+                languagesStatement.setString(1, requestedIds);
+                Map<UUID, Set<String>> languages = loadAllValues(languagesStatement);
+                technologiesStatement.setString(1, requestedIds);
+                Map<UUID, Set<String>> technologies = loadAllValues(technologiesStatement);
                 for (ProjectRow row : rows) {
                     found.put(row.id(), row.toDescriptor(
                             languages.getOrDefault(row.id(), Set.of()),
