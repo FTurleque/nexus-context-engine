@@ -247,8 +247,9 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
         String generation;
         try (var reader = SafeFileIO.newBufferedReaderNoFollow(pointer, StandardCharsets.UTF_8, 128)) {
             generation = reader.readLine();
+            String extraLine = reader.readLine();
             if (generation == null || !generation.matches("recovery-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
-                    || reader.readLine() != null) {
+                    || extraLine != null) {
                 throw new IOException("Pointeur de récupération sémantique invalide");
             }
         }

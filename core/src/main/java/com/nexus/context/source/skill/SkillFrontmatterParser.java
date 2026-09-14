@@ -21,6 +21,9 @@ import java.util.regex.Pattern;
  */
 final class SkillFrontmatterParser {
 
+    private static final String ALLOWED_TOOLS_FIELD = "allowed-tools";
+    private static final String COMPATIBILITY_FIELD = "compatibility";
+
     private static final Pattern VALID_NAME = Pattern.compile("^[a-z0-9]+(?:-[a-z0-9]+)*$");
     private static final int MAX_NAME_LENGTH = 64;
     private static final int MAX_DESCRIPTION_LENGTH = 1_024;
@@ -61,7 +64,7 @@ final class SkillFrontmatterParser {
         String license = optionalString(values, "license");
         String compatibility = compatibility(values);
         if (compatibility != null) {
-            validateLength("compatibility", compatibility, MAX_COMPATIBILITY_LENGTH, skillFile);
+            validateLength(COMPATIBILITY_FIELD, compatibility, MAX_COMPATIBILITY_LENGTH, skillFile);
         }
 
         SkillFrontmatter result = new SkillFrontmatter(
@@ -70,7 +73,7 @@ final class SkillFrontmatterParser {
                 license,
                 compatibility,
                 metadata(values.get("metadata")),
-                allowedTools(values.get("allowed-tools")));
+                allowedTools(values.get(ALLOWED_TOOLS_FIELD)));
         validateDecodedSize(result);
         return result;
     }
@@ -172,13 +175,13 @@ final class SkillFrontmatterParser {
         if (rawAllowedTools instanceof List<?> list) {
             return list.stream()
                     .filter(Objects::nonNull)
-                    .map(value -> stringValue(value, "allowed-tools"))
+                    .map(value -> stringValue(value, ALLOWED_TOOLS_FIELD))
                     .map(String::trim)
                     .filter(value -> !value.isEmpty())
                     .toList();
         }
 
-        String text = stringValue(rawAllowedTools, "allowed-tools").trim();
+        String text = stringValue(rawAllowedTools, ALLOWED_TOOLS_FIELD).trim();
         if (text.isEmpty()) {
             return List.of();
         }
@@ -193,14 +196,14 @@ final class SkillFrontmatterParser {
     }
 
     private static String compatibility(Map<?, ?> values) {
-        if (!(values.get("compatibility") instanceof List<?> list)) {
-            return optionalString(values, "compatibility");
+        if (!(values.get(COMPATIBILITY_FIELD) instanceof List<?> list)) {
+            return optionalString(values, COMPATIBILITY_FIELD);
         }
         // The AI skills registry also accepts a flat list of client names.
         // Check every element and its cumulative size before joining it.
         StringBuilder text = new StringBuilder("[");
         for (Object value : list) {
-            String item = stringValue(value, "compatibility");
+            String item = stringValue(value, COMPATIBILITY_FIELD);
             int separatorLength = text.length() > 1 ? 2 : 0;
             if ((long) text.length() + separatorLength + item.length() + 1 > MAX_COMPATIBILITY_LENGTH) {
                 throw new IllegalArgumentException("Champ compatibility trop volumineux");

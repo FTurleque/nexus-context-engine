@@ -86,9 +86,10 @@ class LuceneSemanticSearchIndexTest {
         UUID project = UUID.randomUUID();
         LuceneSemanticSearchIndex writer = new LuceneSemanticSearchIndex(paths, 3);
         writer.rebuild(project, List.of(document("before.java", FileCategory.SOURCE, "before", 1, 0, 0)));
-        assertThrows(IllegalArgumentException.class, () -> writer.rebuild(project, List.of(
+        List<SemanticVectorDocument> invalidDocuments = List.of(
                 document("partial.java", FileCategory.SOURCE, "partial", 1, 0, 0),
-                document("invalid.java", FileCategory.SOURCE, "invalid", 1, 0))));
+                document("invalid.java", FileCategory.SOURCE, "invalid", 1, 0));
+        assertThrows(IllegalArgumentException.class, () -> writer.rebuild(project, invalidDocuments));
         assertEquals("before.java", writer.search(project, new float[]{1, 0, 0}, 2).getFirst().relativePath());
         assertEquals(1, writer.search(project, new float[]{1, 0, 0}, 2).size());
     }

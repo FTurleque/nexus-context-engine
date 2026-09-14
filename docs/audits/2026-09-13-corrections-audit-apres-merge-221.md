@@ -98,3 +98,25 @@ charge système variable, pas d'une promesse de latence universelle.
 
 La qualification GitHub doit porter sur le commit poussé. Les résultats
 locaux ci-dessus ne sont pas présentés comme des résultats de CI distante.
+
+## Complément du 14 septembre — alertes Sonar de la PR #222
+
+La reconnaissance des clés secrètes utilise désormais un parcours explicite
+des composants et une liste fixe de noms, sans répétition régulière récursive
+ni retour arrière. Les valeurs restent traitées avec leurs échappements.
+La politique passe à `secret-redaction-v4`, notamment pour masquer également
+les clés privées comme `_password`.
+
+Trois tests supplémentaires couvrent les clés de 20 000 composants, les
+variantes de noms sensibles, les frontières avec des identifiants ordinaires
+ou Unicode et les affectations incomplètes. Les trente tests ciblés de
+rédaction, YAML, provenance et récupération Lucene passent.
+
+Les noms de champs YAML répétés sont centralisés, les objets utilisés dans
+les assertions d'exception sont préparés hors des lambdas et les deux lignes
+du pointeur de récupération sont stockées avant validation. Ces ajustements
+conservent les bornes et les assertions fonctionnelles de l'audit.
+
+Validation locale finale : `mvnw.cmd -B clean install` réussi avec 575 tests
+recensés, 551 exécutés avec succès et 24 ignorés, puis `scripts/self-smoke.ps1`
+réussi. Les contrôles de couverture restent conformes.
