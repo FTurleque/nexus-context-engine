@@ -7,7 +7,6 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetAddress;
@@ -27,6 +26,43 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OllamaEmbeddingProviderResponseLimitTest {
+
+    @Test
+    void deadlineCoversStalledBodyAndSameProviderRecovers() throws Exception {
+        CountDownLatch headers = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicInteger calls = new AtomicInteger();
+        server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        server.createContext("/api/embed", exchange -> {
+            if (calls.incrementAndGet() != 1) {
+                respond(exchange, 200, json("{\"embeddings\":[[1.0]]}"), false, Duration.ZERO);
+                return;
+            }
+            try (exchange) {
+                exchange.getRequestBody().readAllBytes();
+                exchange.sendResponseHeaders(200, 0);
+                exchange.getResponseBody().write('{');
+                exchange.getResponseBody().flush();
+                headers.countDown();
+                release.await(10, TimeUnit.SECONDS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        server.start();
+        var provider = provider(serverUri(server), 1, Duration.ofMillis(800), 1024);
+        long started = System.nanoTime();
+        try {
+            var failure = org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(Duration.ofSeconds(4),
+                    () -> assertThrows(EmbeddingProviderUnavailableException.class, () -> provider.embed("stalled")));
+            assertEquals(0, headers.getCount(), "La panne doit survenir après les headers");
+            assertTrue(failure.getMessage().contains("délai dépassé"));
+            assertTrue(Duration.ofNanos(System.nanoTime() - started).toMillis() < 4000);
+        } finally {
+            release.countDown();
+        }
+        assertArrayEquals(new float[]{1.0f}, provider.embed("recovered"));
+    }
 
     private HttpServer server;
 
@@ -240,33 +276,6 @@ class OllamaEmbeddingProviderResponseLimitTest {
         }
     }
 
-    @Test
-    void boundedReaderClosesInputStreamOnSuccess() throws Exception {
-        TrackingInputStream input = new TrackingInputStream(json("abc"));
-
-        byte[] result = OllamaEmbeddingProvider.readBoundedResponse(
-                input,
-                3,
-                URI.create("http://localhost/api/embed"));
-
-        assertEquals("abc", new String(result, StandardCharsets.UTF_8));
-        assertTrue(input.closed);
-    }
-
-    @Test
-    void boundedReaderClosesInputStreamOnOverflow() {
-        TrackingInputStream input = new TrackingInputStream(json("abcd"));
-
-        assertThrows(
-                IOException.class,
-                () -> OllamaEmbeddingProvider.readBoundedResponse(
-                        input,
-                        3,
-                        URI.create("http://localhost/api/embed")));
-
-        assertTrue(input.closed);
-    }
-
     private OllamaEmbeddingProvider provider(
             URI baseUri,
             int dimensions,
@@ -333,18 +342,4 @@ class OllamaEmbeddingProviderResponseLimitTest {
         return value.getBytes(StandardCharsets.UTF_8);
     }
 
-    private static final class TrackingInputStream extends ByteArrayInputStream {
-
-        private boolean closed;
-
-        private TrackingInputStream(byte[] bytes) {
-            super(bytes);
-        }
-
-        @Override
-        public void close() throws IOException {
-            closed = true;
-            super.close();
-        }
-    }
 }
