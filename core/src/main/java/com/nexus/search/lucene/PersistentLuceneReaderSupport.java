@@ -52,6 +52,11 @@ public final class PersistentLuceneReaderSupport implements AutoCloseable {
         searcherCache.refreshIfCached(projectId);
     }
 
+    public void refreshIfCached(UUID projectId, Path indexPath) throws IOException {
+        ensureOpen();
+        searcherCache.refreshIfCached(projectId, indexPath);
+    }
+
     public void invalidate(UUID projectId) throws IOException {
         ensureOpen();
         searcherCache.invalidate(projectId);

@@ -260,6 +260,17 @@ Cette propriété est testée explicitement avec un marqueur placé dans le corp
 
 NEXUS utilise SnakeYAML Engine pour le frontmatter YAML 1.2.
 
+Les alias de collections sont refusés. Les clés/valeurs de `metadata` et les
+champs textuels doivent être des chaînes ; `allowed-tools` accepte une chaîne
+ou une liste plate de chaînes. La compatibilité du registre peut également
+être une liste plate de chaînes, limitée à 500 caractères une fois jointe.
+Aucune collection imbriquée n'est convertie implicitement en texte.
+
+Le contenu décodé cumulé est limité à 65 536 caractères, en plus des bornes de
+lecture physique et de longueur du frontmatter. Cette limite compte chaque
+occurrence d'un alias scalaire et empêche qu'un petit fichier produise des
+métadonnées démesurées pendant la découverte.
+
 Le parseur lit le fichier de manière incrémentale :
 
 ```text

@@ -1,0 +1,16 @@
+{
+  "generatedAt" : "2026-09-13T17:00:50.542197890Z",
+  "profile" : "full",
+  "symbols" : 1000000,
+  "structuralTypeSymbols" : 800000,
+  "structuralTypePercent" : 80,
+  "relations" : 1000000,
+  "files" : 10000,
+  "seedFiles" : 20,
+  "graphCandidates" : 120,
+  "samples" : 3,
+  "p95Ms" : 32251.22,
+  "populationMs" : 41178,
+  "heapDeltaBytes" : 12582912,
+  "databaseBytes" : 779321344
+}

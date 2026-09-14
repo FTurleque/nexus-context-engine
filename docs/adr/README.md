@@ -107,6 +107,7 @@ Le numéro est un identifiant stable. Le nom de fichier utilise des minuscules, 
 | [ADR-0052](0052-garantir-la-coherence-des-lectures-et-des-index-derives.md) | Garantir la cohérence des lectures et des index dérivés | Accepté |
 | [ADR-0053](0053-borner-le-parcours-des-arbres-git-avant-collecte.md) | Borner le parcours des arbres Git avant collecte | Accepté |
 | [ADR-0054](0054-lectures-registre-federees-groupees.md) | Grouper les lectures du registre pour les opérations fédérées | Accepté |
+| [ADR-0055](0055-preserver-les-lecteurs-lors-des-reconstructions-semantiques.md) | Préserver les lecteurs lors des reconstructions sémantiques | Accepté |
 
 ## Modèle
 

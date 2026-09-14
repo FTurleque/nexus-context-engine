@@ -19,13 +19,13 @@ import java.util.UUID;
  *
  * <p>Les mutations et le recovery restent délégués à
  * {@link LuceneSemanticSearchIndex}. En particulier, un rebuild invalide d'abord
- * le reader persistant afin que la purge du cache dérivé reste sûre sous Windows.</p>
+ * le reader persistant local ; les lecteurs indépendants suivent les nouveaux
+ * commits, ou changent de répertoire après récupération d'un commit corrompu.</p>
  */
 public final class PersistentLuceneSemanticSearchIndex implements SemanticSearchIndex {
 
     static final int MAX_CACHED_PROJECTS = 100;
 
-    private final NexusPaths paths;
     private final int dimensions;
     private final LuceneSemanticSearchIndex operationScoped;
     private final PersistentLuceneReaderSupport readers;
@@ -35,7 +35,6 @@ public final class PersistentLuceneSemanticSearchIndex implements SemanticSearch
     }
 
     PersistentLuceneSemanticSearchIndex(NexusPaths paths, int dimensions, int cacheCapacity) {
-        this.paths = Objects.requireNonNull(paths, "paths");
         this.operationScoped = new LuceneSemanticSearchIndex(paths, dimensions);
         this.dimensions = this.operationScoped.dimensions();
         this.readers = new PersistentLuceneReaderSupport(paths, cacheCapacity);
@@ -110,14 +109,14 @@ public final class PersistentLuceneSemanticSearchIndex implements SemanticSearch
         } else {
             operationScoped.applyChanges(projectId, provenance, documents, removedRelativePaths);
         }
-        readers.refreshIfCached(projectId);
+        readers.refreshIfCached(projectId, operationScoped.indexPath(projectId));
     }
 
     @Override
     public List<SemanticSearchHit> search(UUID projectId, float[] queryVector, int limit) throws IOException {
         readers.ensureOpen();
         operationScoped.validateSearchRequest(projectId, queryVector, limit);
-        Path indexPath = paths.projectSemanticLuceneIndex(projectId);
+        Path indexPath = operationScoped.indexPath(projectId);
         return readers.search(
                 projectId,
                 indexPath,
