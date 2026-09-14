@@ -9,6 +9,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SensitiveContentRedactorTest {
 
     @Test
+    void redactsQuotedJsonAndJavascriptKeysIncludingEscapedValues() {
+        String source = "{\"password\":\"synthetic\\\"secret123\",'api_key':'synthetic\\\\secret456',\"ordinary\":\"keep value\"}";
+        String redacted = SensitiveContentRedactor.redact(source);
+        assertEquals("{\"password\":\"[REDACTED]\",'api_key':'[REDACTED]',\"ordinary\":\"keep value\"}", redacted);
+        assertEquals(redacted, SensitiveContentRedactor.redact(redacted));
+    }
+
+    @Test
+    void quotedSecretScanIsBoundedAndPreservesLinesAndUnrelatedKeys() {
+        String source = "```json\r\n{\"client_secret\":\"" + "x".repeat(4096)
+                + "\",\"notasecretvalue\":\"ordinary value\"}\r\n```";
+        String redacted = SensitiveContentRedactor.redact(source);
+        assertFalse(redacted.contains("x".repeat(8)));
+        assertTrue(redacted.contains("ordinary value"));
+        assertEquals(source.lines().count(), redacted.lines().count());
+    }
+
+    @Test
     void redactsStructuredSecretsAndKeepsSurroundingCode() {
         String source = """
                 String password = "correctHorseBatteryStaple";

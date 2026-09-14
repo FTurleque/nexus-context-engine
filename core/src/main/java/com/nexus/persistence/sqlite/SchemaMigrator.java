@@ -25,7 +25,8 @@ final class SchemaMigrator {
             new Migration(5, "db/migration/V005__enforce_symbol_range_constraints.sql"),
             new Migration(6, "db/migration/V006__invalidate_unredacted_lexical_indexes.sql"),
             new Migration(7, "db/migration/V007__invalidate_legacy_repository_paths.sql"),
-            new Migration(8, "db/migration/V008__indexed_substring_search.sql"));
+            new Migration(8, "db/migration/V008__indexed_substring_search.sql"),
+            new Migration(9, "db/migration/V009__invalidate_quoted_secret_indexes.sql"));
 
     private SchemaMigrator() {
     }

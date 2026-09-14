@@ -21,7 +21,7 @@ public final class SemanticIndexingService {
     public static final int DEFAULT_MAX_EMBEDDING_CHARS = 12_000;
     public static final int DEFAULT_EXCERPT_CHARS = 320;
     public static final int DEFAULT_BATCH_SIZE = 32;
-    private static final int CONTENT_PROFILE_VERSION = 2;
+    private static final int CONTENT_PROFILE_VERSION = 3;
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 
     private final EmbeddingProvider embeddingProvider;

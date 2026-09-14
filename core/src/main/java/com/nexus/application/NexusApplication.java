@@ -338,13 +338,15 @@ public final class NexusApplication implements AutoCloseable {
     }
 
     public SearchOperation search(UUID projectId, String query, int limit, boolean explain) throws IOException {
-        String resolvedQuery = requireQuery(query);
-        ProjectDescriptor project = requireReadyProject(projectId);
-        int resolvedLimit = positiveLimit(limit);
-        long startedAt = System.nanoTime();
-        List<RankedCandidate> results = searchService.search(project, resolvedQuery, resolvedLimit, explain);
-        return new SearchOperation(
-                project, resolvedQuery, resolvedLimit, explain, elapsedMillis(startedAt), results);
+        try (var reads = indexRepository.openReadSession()) {
+            String resolvedQuery = requireQuery(query);
+            ProjectDescriptor project = requireReadyProject(projectId);
+            int resolvedLimit = positiveLimit(limit);
+            long startedAt = System.nanoTime();
+            List<RankedCandidate> results = searchService.search(project, resolvedQuery, resolvedLimit, explain);
+            return new SearchOperation(
+                    project, resolvedQuery, resolvedLimit, explain, elapsedMillis(startedAt), results);
+            }
     }
 
     public FederatedSearchOperation searchAcrossProjects(
@@ -352,17 +354,19 @@ public final class NexusApplication implements AutoCloseable {
             String query,
             int limit,
             boolean explain) throws IOException {
-        List<UUID> scope = FederatedScopePolicy.normalizeProjectIds(projectIds);
-        String resolvedQuery = requireQuery(query);
-        int resolvedLimit = positiveLimit(limit);
-        List<ProjectDescriptor> projects = scope.stream()
-                .map(this::requireReadyProject)
-                .toList();
-        long startedAt = System.nanoTime();
-        List<FederatedSearchHit> results =
-                federatedSearchService.search(projects, resolvedQuery, resolvedLimit, explain);
-        return new FederatedSearchOperation(
-                projects, resolvedQuery, resolvedLimit, explain, elapsedMillis(startedAt), results);
+        try (var reads = indexRepository.openReadSession()) {
+            List<UUID> scope = FederatedScopePolicy.normalizeProjectIds(projectIds);
+            String resolvedQuery = requireQuery(query);
+            int resolvedLimit = positiveLimit(limit);
+            List<ProjectDescriptor> projects = scope.stream()
+                    .map(this::requireReadyProject)
+                    .toList();
+            long startedAt = System.nanoTime();
+            List<FederatedSearchHit> results =
+                    federatedSearchService.search(projects, resolvedQuery, resolvedLimit, explain);
+            return new FederatedSearchOperation(
+                    projects, resolvedQuery, resolvedLimit, explain, elapsedMillis(startedAt), results);
+            }
     }
 
     public ContextOperation context(
@@ -372,17 +376,19 @@ public final class NexusApplication implements AutoCloseable {
             Set<CandidateType> requestedSources,
             Map<String, String> constraints,
             boolean explain) {
-        String resolvedQuery = requireQuery(query);
-        ProjectDescriptor project = requireReadyProject(projectId);
-        long startedAt = System.nanoTime();
-        ContextBundle bundle = contextBuilder.build(new ContextRequest(
-                projectId,
-                resolvedQuery,
-                tokenBudget,
-                requestedSources == null ? Set.of() : requestedSources,
-                constraints == null ? Map.of() : constraints,
-                explain));
-        return new ContextOperation(project, resolvedQuery, explain, elapsedMillis(startedAt), bundle);
+        try (var reads = indexRepository.openReadSession()) {
+            String resolvedQuery = requireQuery(query);
+            ProjectDescriptor project = requireReadyProject(projectId);
+            long startedAt = System.nanoTime();
+            ContextBundle bundle = contextBuilder.build(new ContextRequest(
+                    projectId,
+                    resolvedQuery,
+                    tokenBudget,
+                    requestedSources == null ? Set.of() : requestedSources,
+                    constraints == null ? Map.of() : constraints,
+                    explain));
+            return new ContextOperation(project, resolvedQuery, explain, elapsedMillis(startedAt), bundle);
+            }
     }
 
     public FederatedContextOperation contextAcrossProjects(
@@ -392,33 +398,39 @@ public final class NexusApplication implements AutoCloseable {
             Set<CandidateType> requestedSources,
             Map<String, String> constraints,
             boolean explain) {
-        List<UUID> scope = FederatedScopePolicy.normalizeProjectIds(projectIds);
-        String resolvedQuery = requireQuery(query);
-        List<ProjectDescriptor> projects = scope.stream()
-                .map(this::requireReadyProject)
-                .toList();
-        long startedAt = System.nanoTime();
-        FederatedContextBundle bundle = federatedContextService.build(
-                projects,
-                resolvedQuery,
-                tokenBudget,
-                requestedSources == null ? Set.of() : requestedSources,
-                constraints == null ? Map.of() : constraints,
-                explain);
-        return new FederatedContextOperation(
-                projects, resolvedQuery, explain, elapsedMillis(startedAt), bundle);
+        try (var reads = indexRepository.openReadSession()) {
+            List<UUID> scope = FederatedScopePolicy.normalizeProjectIds(projectIds);
+            String resolvedQuery = requireQuery(query);
+            List<ProjectDescriptor> projects = scope.stream()
+                    .map(this::requireReadyProject)
+                    .toList();
+            long startedAt = System.nanoTime();
+            FederatedContextBundle bundle = federatedContextService.build(
+                    projects,
+                    resolvedQuery,
+                    tokenBudget,
+                    requestedSources == null ? Set.of() : requestedSources,
+                    constraints == null ? Map.of() : constraints,
+                    explain);
+            return new FederatedContextOperation(
+                    projects, resolvedQuery, explain, elapsedMillis(startedAt), bundle);
+            }
     }
 
     public List<IndexedSymbol> findSymbols(UUID projectId, String query, int limit) {
-        String resolvedQuery = requireQuery(query);
-        requireReadyProject(projectId);
-        return indexRepository.searchSymbols(projectId, resolvedQuery, positiveLimit(limit));
+        try (var reads = indexRepository.openReadSession()) {
+            String resolvedQuery = requireQuery(query);
+            requireReadyProject(projectId);
+            return indexRepository.searchSymbols(projectId, resolvedQuery, positiveLimit(limit));
+            }
     }
 
     public List<SymbolRelation> findUsages(UUID projectId, String symbol, int limit) {
-        String resolvedSymbol = requireQuery(symbol);
-        requireReadyProject(projectId);
-        return indexRepository.searchRelations(projectId, resolvedSymbol, positiveLimit(limit));
+        try (var reads = indexRepository.openReadSession()) {
+            String resolvedSymbol = requireQuery(symbol);
+            requireReadyProject(projectId);
+            return indexRepository.searchRelations(projectId, resolvedSymbol, positiveLimit(limit));
+            }
     }
 
     public ReadinessSnapshot readiness() {
