@@ -107,7 +107,7 @@ Le listener de management est volontairement loopback-only et ne doit pas être 
 - credentials intégrés dans `NEXUS_OLLAMA_BASE_URL` refusés ;
 - secrets à forte confiance redigés avant embeddings et avant restitution des fragments de contexte ;
 - les troncatures embedding/excerpt ne coupent plus une paire surrogate UTF-16 ;
-- le profil sémantique est `content-v2`, ce qui force le rebuild d'un ancien index incompatible ;
+- le profil sémantique est `content-v3`, ce qui force le rebuild d'un ancien index incompatible ;
 - une indisponibilité provider dégrade la recherche de façon sûre et un index Lucene sémantique corrompu est purgé/reconstruit avant recovery ;
 - `.github/workflows/semantic-search-qualification.yml` exécute périodiquement/manuellement le vrai benchmark avec Ollama `0.33.3` vérifié par SHA-256 repository-pinned et `qwen3-embedding:0.6b`, puis applique des seuils de qualité/non-régression et conserve le rapport comme artefact.
 
