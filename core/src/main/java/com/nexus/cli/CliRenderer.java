@@ -1,6 +1,5 @@
 package com.nexus.cli;
 
-import com.nexus.paths.RepositoryPath;
 
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -10,23 +9,22 @@ import com.nexus.context.ContextItem;
 import com.nexus.context.FederatedContextBundle;
 import com.nexus.context.FederatedContextItem;
 import com.nexus.index.CodeIntelligenceSnapshot;
-import com.nexus.index.CodeSymbol;
 import com.nexus.index.IndexStatistics;
 import com.nexus.index.IndexingReport;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.ranking.RankedCandidate;
 import com.nexus.search.FederatedSearchHit;
-import com.nexus.security.PublicProjectPathPolicy;
 
 import java.io.IOException;
 import java.io.PrintStream;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+
+import static com.nexus.cli.CliResultMapper.*;
 
 final class CliRenderer {
 
@@ -66,7 +64,7 @@ final class CliRenderer {
         if (json) {
             writeJson(out, Map.of(
                     "command", "project.list",
-                    "projects", sorted.stream().map(this::projectMap).toList()));
+                    "projects", sorted.stream().map(CliResultMapper::projectMap).toList()));
             return;
         }
         sorted.forEach(this::printProject);
@@ -161,7 +159,7 @@ final class CliRenderer {
             }
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("command", "search-federated");
-            payload.put("projects", projects.stream().map(this::projectMap).toList());
+            payload.put("projects", projects.stream().map(CliResultMapper::projectMap).toList());
             payload.put("query", query);
             payload.put("limit", limit);
             payload.put("explain", explain);
@@ -231,7 +229,7 @@ final class CliRenderer {
             }
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("command", "context-federated");
-            payload.put("projects", projects.stream().map(this::projectMap).toList());
+            payload.put("projects", projects.stream().map(CliResultMapper::projectMap).toList());
             payload.put("query", query);
             payload.put("durationMs", durationMs);
             payload.put("tokenBudget", bundle.tokenBudget());
@@ -309,33 +307,6 @@ final class CliRenderer {
         err.println("Erreur NEXUS : " + human(message));
     }
 
-    private List<Map<String, Object>> rankedResults(
-            ProjectDescriptor project,
-            List<RankedCandidate> results,
-            boolean explain) {
-        List<Map<String, Object>> maps = new ArrayList<>();
-        for (int index = 0; index < results.size(); index++) {
-            maps.add(rankedResult(project, results.get(index), index + 1, explain));
-        }
-        return maps;
-    }
-
-    private Map<String, Object> rankedResult(
-            ProjectDescriptor project,
-            RankedCandidate ranked,
-            int rank,
-            boolean explain) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("rank", rank);
-        result.put("score", ranked.score());
-        result.put("type", ranked.candidate().type().name());
-        result.put("path", relativePath(project, ranked.candidate().path()));
-        result.put("symbol", symbolMap(ranked.candidate().symbol()));
-        result.put("scoreComponents", new TreeMap<>(ranked.components()));
-        result.put("reasons", explain ? new com.nexus.security.PublicDiagnosticPolicy(List.of(project.rootPath())).texts(ranked.reasons()) : List.of());
-        return result;
-    }
-
     private void printSearchResults(
             ProjectDescriptor project,
             String query,
@@ -355,22 +326,6 @@ final class CliRenderer {
                 new com.nexus.security.PublicDiagnosticPolicy(List.of(project.rootPath())).texts(ranked.reasons()).forEach(reason -> out.println("    - " + human(reason)));
             }
         }
-    }
-
-    private Map<String, Object> contextItemMap(ContextItem item, boolean explain) {
-        Map<String, Object> itemMap = new LinkedHashMap<>();
-        itemMap.put("type", item.type().name());
-        itemMap.put("path", repositoryPath(item.path()));
-        itemMap.put("symbol", item.symbol());
-        itemMap.put("startLine", item.startLine());
-        itemMap.put("endLine", item.endLine());
-        itemMap.put("content", item.content());
-        itemMap.put("score", item.score());
-        itemMap.put("scoreComponents", new TreeMap<>(item.scoreComponents()));
-        itemMap.put("reasons", explain ? item.reasons() : List.of());
-        itemMap.put(ESTIMATED_TOKENS_FIELD, item.estimatedTokens());
-        itemMap.put("truncated", item.truncated());
-        return itemMap;
     }
 
     private void printContextHeader(String query, long durationMs, int count, int estimatedTokens, int tokenBudget) {
@@ -407,48 +362,9 @@ final class CliRenderer {
         }
     }
 
-    private Map<String, Object> projectMap(ProjectDescriptor project) {
-        Map<String, Object> map = new LinkedHashMap<>();
-        map.put("id", project.id().toString());
-        map.put("name", project.name());
-        map.put("rootPath", null);
-        map.put("sourceType", project.sourceType().name());
-        map.put("languages", project.languages().stream().sorted().toList());
-        map.put("technologies", project.technologies().stream().sorted().toList());
-        map.put("lastIndexedAt", project.lastIndexedAt() == null ? null : project.lastIndexedAt().toString());
-        map.put("indexStatus", project.indexStatus().name());
-        return map;
-    }
-
-    private static Map<String, Object> statisticsMap(IndexStatistics statistics) {
-        return Map.of("files", statistics.files(), "symbols", statistics.symbols(), "relations", statistics.relations());
-    }
-
-    private static Map<String, Object> symbolMap(CodeSymbol symbol) {
-        if (symbol == null) {
-            return null;
-        }
-        Map<String, Object> map = new LinkedHashMap<>();
-        map.put("kind", symbol.kind().name());
-        map.put("name", symbol.name());
-        map.put("qualifiedName", symbol.qualifiedName());
-        map.put("signature", symbol.signature());
-        map.put("startLine", symbol.startLine());
-        map.put("endLine", symbol.endLine());
-        return map;
-    }
-
     private void printProject(ProjectDescriptor project) {
         out.printf("%s\t%s\t%s\t%s%n",
                 project.id(), human(project.name()), project.indexStatus(), "[repository]");
-    }
-
-    private static String relativePath(ProjectDescriptor project, Path path) {
-        return PublicProjectPathPolicy.expose(project.rootPath(), path);
-    }
-
-    private static String repositoryPath(Path path) {
-        return RepositoryPath.encode(path);
     }
 
     private static String human(Object value) {
