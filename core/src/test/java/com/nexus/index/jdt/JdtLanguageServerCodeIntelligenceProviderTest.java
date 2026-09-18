@@ -153,15 +153,15 @@ class JdtLanguageServerCodeIntelligenceProviderTest {
                         Duration.ofSeconds(30),
                         20);
         HangingProcess process = new HangingProcess();
-        JdtLanguageServerCodeIntelligenceProvider.StdioSession session =
-                new JdtLanguageServerCodeIntelligenceProvider.StdioSession(
+        JdtStdioSession session =
+                new JdtStdioSession(
                         configuration,
                         temporaryDirectory,
                         process);
 
         assertEquals(
                 Duration.ofSeconds(1),
-                JdtLanguageServerCodeIntelligenceProvider.StdioSession.shutdownTimeout(configuration.timeout()));
+                JdtStdioSession.shutdownTimeout(configuration.timeout()));
         assertTimeoutPreemptively(Duration.ofSeconds(2), session::close);
         assertTrue(process.destroyed);
     }
@@ -176,8 +176,8 @@ class JdtLanguageServerCodeIntelligenceProviderTest {
                         Duration.ofSeconds(1),
                         20);
         HangingProcess process = new HangingProcess();
-        JdtLanguageServerCodeIntelligenceProvider.StdioSession session =
-                new JdtLanguageServerCodeIntelligenceProvider.StdioSession(
+        JdtStdioSession session =
+                new JdtStdioSession(
                         configuration,
                         temporaryDirectory,
                         process);
