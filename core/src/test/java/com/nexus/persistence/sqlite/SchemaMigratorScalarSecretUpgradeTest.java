@@ -13,6 +13,7 @@ import java.nio.file.Path;
 import java.sql.DriverManager;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -33,7 +34,10 @@ class SchemaMigratorScalarSecretUpgradeTest {
              var statement = connection.createStatement()) {
             statement.execute("CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY, script_name TEXT NOT NULL, applied_at TEXT NOT NULL)");
             List<Path> migrations;
-            try (var files = Files.list(Path.of(getClass().getResource("/db/migration").toURI()))) {
+            var migrationResource = Objects.requireNonNull(
+                    getClass().getResource("/db/migration"),
+                    "Missing /db/migration test resource");
+            try (var files = Files.list(Path.of(migrationResource.toURI()))) {
                 migrations = files.filter(path -> path.getFileName().toString().matches("V00[1-9]__.*\\.sql"))
                         .sorted().toList();
             }
