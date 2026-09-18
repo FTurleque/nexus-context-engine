@@ -54,7 +54,12 @@ class SchemaMigratorScalarSecretUpgradeTest {
                 insert.setString(2, root.toRealPath().toString());
                 insert.executeUpdate();
             }
-            statement.execute("INSERT INTO project_index_generations VALUES ('" + id + "', 17)");
+            try (var generation = connection.prepareStatement(
+                    "INSERT INTO project_index_generations VALUES (?, ?)")) {
+                generation.setString(1, id.toString());
+                generation.setInt(2, 17);
+                generation.executeUpdate();
+            }
         }
         // Un ancien index Lucene contient réellement le terme sensible avant l’upgrade.
         paths.ensurePrivateDirectory(paths.projectLuceneIndex(id));
