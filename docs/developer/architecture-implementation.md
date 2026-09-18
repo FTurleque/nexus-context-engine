@@ -213,3 +213,25 @@ Docker Distribution construit une image unique, exécute smokes/Trivy/SBOM puis 
 Le ruleset GitHub actif `Protect main & develop` satisfait NXA3-14 / #130 pour `develop` : pull request obligatoire, suppression/non-fast-forward interdits et checks permanents requis.
 
 NEXUS est actuellement maintenu par **une seule personne**. Le modèle solo n'exige ni seconde approbation humaine ni resynchronisation stricte avec la base juste avant merge ; ces absences ne sont pas des hardenings ouverts. La qualification repose sur le SHA candidat et les gates automatisés applicables. Voir [`branch-governance.md`](branch-governance.md).
+
+## Séparation des capacités internes (septembre 2026)
+
+Les contrats publics restent portés par leurs façades. Les nouveaux collaborateurs
+sont internes au package et utilisent la composition, sans framework ni registre global.
+
+| Façade | Responsabilités déléguées |
+|---|---|
+| `NexusApplication` | `NexusApplicationFactory` compose les ports ; la façade conserve les gates publics et la fermeture des ressources. |
+| `JdtLanguageServerCodeIntelligenceProvider` | `JdtProcessLauncher` démarre via le constructeur de processus sécurisé ; `JdtStdioSession` porte la session JSON-RPC bornée ; `JdtWorkspaceMessages` et `JdtDocumentMessages` construisent les messages ; `JdtSymbolMapper`, `JdtLocationMapper` et `JdtRelationCollector` convertissent les faits. |
+| `SqliteIndexRepository` | `SqliteFileQueries`, `SqliteSymbolSearch`, `SqliteRelationQueries`, `SqliteGraphQueries`, `SqliteFileWriter`, `SqliteProviderWriter` partagent la même `SqliteDatabase`. `SqliteIndexRows` porte le mapping JDBC et `SqliteIndexSql` les primitives communes. Aucune connexion ni transaction n’est déplacée hors de son ancienne portée. |
+| `ScipCodeIndexImporter` | `ScipWireInput`, `ScipProtoReader`, `ScipDocumentParser`, `ScipParseBudget` et `ScipPayload` lisent le flux borné ; `ScipSnapshotMapper` accumule un snapshot par import avec vérification des chemins, plages et cardinalités. Aucun outil externe n’est exécuté par cet importeur. |
+| `MinosCodeIndexImporter` | `MinosPayloadReader`, `MinosDocumentParser`, `MinosFactMapper`, `MinosPathPolicy` séparent transport, contrat JSON, conversion et identité des chemins. |
+| `ProjectIndexingService` | `IndexDocumentPublisher` analyse les fichiers revalidés et publie les lots lexicaux/sémantiques ; `ExternalCodeIntelligenceRefresher` gère imports/providers via `ExternalTaskRunner`. La façade conserve verrous, delta canonique et transitions d’état. |
+| `DefaultContextBuilder` | `NativeContextPipeline`, `TaskContextMaterializer`, `ContextBudgetAllocator`, `ContextBuildMetadata` exposent les étapes ; les résultats intermédiaires immuables sont regroupés dans `ContextPipelineState`. L’ordre, les budgets partagés et les scores sont préservés. |
+| `LocalGitContextSourceProvider` | `GitWorkingTreeContext` produit le diff borné ; `GitContextFragments` rend les fragments d’historique et co-changements. |
+| `NexusMcpTools` | `McpToolArguments`, `McpToolSchemas`, `McpProjectResolver`, `McpResultMapper` isolent validation, schémas, résolution via la façade et projection publique. |
+| `CliRenderer` | `CliResultMapper` construit les contrats JSON ; le renderer conserve la présentation terminal et sa sanitation. |
+
+Les frontières ports/adaptateurs et les décisions architecturales existantes ne
+changent pas : les adapters appellent toujours `NexusApplication`, SQLite reste
+canonique et Lucene reconstructible. Ce découpage ne remplace aucun ADR accepté.

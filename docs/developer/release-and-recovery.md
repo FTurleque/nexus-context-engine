@@ -94,9 +94,9 @@ Un backup/restauration doit conserver les protections adaptées au système cibl
 
 Avant une migration de production, sauvegarder SQLite service arrêté. Ne jamais restaurer uniquement un index Lucene en ignorant SQLite.
 
-## Recovery sémantique / `content-v3`
+## Recovery sémantique / `content-v4`
 
-Le profil de contenu sémantique courant est `content-v3`, introduit avec la redaction de secrets avant embeddings. Un index créé sous l'ancien profil est considéré incompatible et doit être reconstruit ; NEXUS ne réutilise pas silencieusement les vecteurs historiques.
+Le profil de contenu sémantique courant est `content-v4`, introduit avec la redaction de secrets avant embeddings. Un index créé sous l'ancien profil est considéré incompatible et doit être reconstruit ; NEXUS ne réutilise pas silencieusement les vecteurs historiques.
 
 La redaction de secrets réduit la fuite accidentelle de tokens/clés/mots de passe structurés, mais n'est pas une sauvegarde ni un scanner de secrets complet.
 
@@ -143,3 +143,20 @@ Un endpoint Ollama distant doit utiliser HTTPS par défaut. HTTP distant nécess
 Une version, un merge ou une release n'est qualifié que si les gates applicables ont terminé en succès sur le **HEAD exact** concerné. Un ancien run vert n'est pas une preuve pour un nouveau commit.
 
 Voir aussi [`ci-and-supply-chain.md`](ci-and-supply-chain.md), [`branch-governance.md`](branch-governance.md), [`semantic-search.md`](semantic-search.md) et [`current-limitations.md`](current-limitations.md).
+## Mise à niveau V010 — scalaires sensibles
+
+V010 est une nouvelle migration ; V009 et ses empreintes restent inchangées.
+Elle incrémente la génération de chaque projet, passe son état à `NOT_INDEXED`
+et efface `last_indexed_at`. Les lectures publiques sont refusées jusqu’à la
+prochaine indexation, qui reconstruit intégralement les dérivés lexicaux.
+SQLite conserve les faits canoniques (fichiers, symboles et relations), pas le
+contenu brut des documents. Les termes Lucene issus des anciens scalaires sont
+supprimés par le rebuild. Cette invalidation ne constitue pas un effacement
+forensique des anciens fichiers, sauvegardes ou blocs disque.
+
+Le profil sémantique `content-v4` rend également incompatibles les vecteurs
+`content-v3`, même si le corpus n’a pas changé et si la sémantique était désactivée
+pendant la migration ou le rebuild lexical. Leur prochaine activation impose une
+reconstruction ; les vecteurs incompatibles ne participent pas aux recherches.
+Le mécanisme transactionnel et les empreintes de migrations garantissent que V010
+n’incrémente pas à nouveau les générations lors d’une seconde ouverture.

@@ -9,7 +9,7 @@ séparateurs `.`, `_`, `-`, éventuellement citée, puis `:` ou `=`, avec au plu
 `password`, `passwd`, `secret` (avec les variantes historiques). Une sous-chaîne
 comme `notasecretvalue` ne constitue pas une clé sensible.
 
-Les valeurs simples/doubles citées sont redigées en conservant les quotes,
+Les valeurs simples/doubles citées sont masquées en conservant les quotes,
 y compris les échappements et apostrophes YAML doublées. Les scalaires non cités
 (incluant nombres, booléens, `null`, valeurs courtes et vides) deviennent
 `[REDACTED]`. Les espaces internes, Unicode, `:` et `#` sans espace précédent
