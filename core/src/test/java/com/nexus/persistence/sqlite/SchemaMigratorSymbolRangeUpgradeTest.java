@@ -78,7 +78,7 @@ class SchemaMigratorSymbolRangeUpgradeTest {
         SqliteDatabase upgraded = new SqliteDatabase(paths);
         SqliteIndexRepository repository = new SqliteIndexRepository(upgraded);
 
-        assertProjectState(upgraded, projectId, "NOT_INDEXED", null, 13, 0, 0, 0);
+        assertProjectState(upgraded, projectId, "NOT_INDEXED", null, 14, 0, 0, 0);
         List<IndexedSymbol> symbols = repository.findSymbols(projectId);
         assertTrue(symbols.isEmpty(), "V007 supprime aussi les faits aux plages valides mais aux chemins ambigus");
         assertMigrationApplied(upgraded, 5, "db/migration/V005__enforce_symbol_range_constraints.sql");
@@ -90,7 +90,7 @@ class SchemaMigratorSymbolRangeUpgradeTest {
             connection.setAutoCommit(true);
             assertDoesNotThrow(() -> SchemaMigrator.migrate(connection));
         }
-        assertMigrationCount(upgraded, 8L);
+        assertMigrationCount(upgraded, 9L);
     }
 
     @Test
@@ -109,8 +109,8 @@ class SchemaMigratorSymbolRangeUpgradeTest {
         SqliteDatabase upgraded = new SqliteDatabase(paths);
         SqliteIndexRepository repository = new SqliteIndexRepository(upgraded);
 
-        assertProjectState(upgraded, invalidProject, "NOT_INDEXED", null, 8, 0, 0, 0);
-        assertProjectState(upgraded, validProject, "NOT_INDEXED", null, 13, 0, 0, 0);
+        assertProjectState(upgraded, invalidProject, "NOT_INDEXED", null, 9, 0, 0, 0);
+        assertProjectState(upgraded, validProject, "NOT_INDEXED", null, 14, 0, 0, 0);
         assertTrue(repository.findSymbols(invalidProject).isEmpty(),
                 "la lecture domaine ne doit jamais reconstruire un ancien CodeSymbol invalide");
         assertTrue(repository.findSymbols(validProject).isEmpty());

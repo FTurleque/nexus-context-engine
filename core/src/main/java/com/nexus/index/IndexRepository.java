@@ -14,6 +14,13 @@ import java.util.UUID;
 
 public interface IndexRepository {
 
+    /** Ressources de lecture limitées à une opération ; aucun snapshot persistant implicite. */
+    default ReadSession openReadSession() { return () -> { }; }
+
+    interface ReadSession extends AutoCloseable {
+        @Override void close();
+    }
+
     Map<String, IndexedFile> findFiles(UUID projectId);
 
     /**

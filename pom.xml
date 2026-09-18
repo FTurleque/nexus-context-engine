@@ -44,6 +44,7 @@
         <jackson.version>2.22.2</jackson.version>
         <micrometer.version>1.17.1</micrometer.version>
         <snakeyaml-engine.version>3.1.1</snakeyaml-engine.version>
+        <jna.version>5.19.1</jna.version>
         <junit.version>6.1.3</junit.version>
         <mcp.sdk.version>2.0.1</mcp.sdk.version>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
@@ -64,6 +65,11 @@
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>net.java.dev.jna</groupId>
+                <artifactId>jna-platform</artifactId>
+                <version>${jna.version}</version>
+            </dependency>
             <!-- These project-level BOMs intentionally precede Quarkus so Maven
                  cannot silently downgrade the security baselines selected here. -->
             <dependency>

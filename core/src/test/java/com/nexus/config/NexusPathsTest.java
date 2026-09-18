@@ -11,6 +11,7 @@ import java.nio.file.attribute.AclEntry;
 import java.nio.file.attribute.AclEntryPermission;
 import java.nio.file.attribute.AclEntryType;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -19,6 +20,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NexusPathsTest {
+    private static final Set<String> ENGLISH_SYSTEM_NAMES = Set.of(
+            "NT AUTHORITY\\SYSTEM", "BUILTIN\\ADMINISTRATORS", "CREATOR OWNER");
+    private static boolean trusted(String name, String user) {
+        return NexusPaths.isTrustedStoragePrincipal(name, user, ENGLISH_SYSTEM_NAMES);
+    }
+
 
     @TempDir
     Path temporaryDirectory;
@@ -51,17 +58,17 @@ class NexusPathsTest {
 
     @Test
     void classifiesOnlyExactExpectedWindowsAclPrincipals() {
-        assertTrue(NexusPaths.isTrustedStoragePrincipal("WORKSTATION\\alice", "WORKSTATION\\alice"));
-        assertTrue(NexusPaths.isTrustedStoragePrincipal("NT AUTHORITY\\SYSTEM", "WORKSTATION\\alice"));
-        assertTrue(NexusPaths.isTrustedStoragePrincipal("BUILTIN\\Administrators", "WORKSTATION\\alice"));
-        assertTrue(NexusPaths.isTrustedStoragePrincipal("CREATOR OWNER", "WORKSTATION\\alice"));
+        assertTrue(trusted("WORKSTATION\\alice", "WORKSTATION\\alice"));
+        assertTrue(trusted("NT AUTHORITY\\SYSTEM", "WORKSTATION\\alice"));
+        assertTrue(trusted("BUILTIN\\Administrators", "WORKSTATION\\alice"));
+        assertTrue(trusted("CREATOR OWNER", "WORKSTATION\\alice"));
 
-        assertFalse(NexusPaths.isTrustedStoragePrincipal("DOMAIN\\alice", "WORKSTATION\\alice"));
-        assertFalse(NexusPaths.isTrustedStoragePrincipal("CONTOSO\\Administrators", "WORKSTATION\\alice"));
-        assertFalse(NexusPaths.isTrustedStoragePrincipal("Everyone", "WORKSTATION\\alice"));
-        assertFalse(NexusPaths.isTrustedStoragePrincipal(
+        assertFalse(trusted("DOMAIN\\alice", "WORKSTATION\\alice"));
+        assertFalse(trusted("CONTOSO\\Administrators", "WORKSTATION\\alice"));
+        assertFalse(trusted("Everyone", "WORKSTATION\\alice"));
+        assertFalse(trusted(
                 "NT AUTHORITY\\Authenticated Users", "WORKSTATION\\alice"));
-        assertFalse(NexusPaths.isTrustedStoragePrincipal("BUILTIN\\Users", "WORKSTATION\\alice"));
+        assertFalse(trusted("BUILTIN\\Users", "WORKSTATION\\alice"));
     }
 
     @Test
@@ -79,7 +86,7 @@ class NexusPathsTest {
 
         List<String> unexpected = NexusPaths.unexpectedStoragePrincipals(
                 List.of(currentUser, system, everyoneRead, everyoneWrite, harmless, deny),
-                "WORKSTATION\\alice");
+                "WORKSTATION\\alice", ENGLISH_SYSTEM_NAMES);
 
         assertEquals(List.of("Everyone"), unexpected);
     }

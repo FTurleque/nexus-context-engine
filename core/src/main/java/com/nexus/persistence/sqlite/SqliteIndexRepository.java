@@ -39,6 +39,9 @@ import java.util.stream.Collectors;
 
 public final class SqliteIndexRepository implements IndexRepository {
 
+    @Override
+    public ReadSession openReadSession() { return database.openReadSession(); }
+
     private static final String EMBEDDED_SOURCE_PROVIDER = CodeSymbol.DEFAULT_SOURCE_PROVIDER;
     private static final String QUALIFIED_NAME_COLUMN = "qualified_name";
     private static final String RELATIVE_PATH_COLUMN = "relative_path";

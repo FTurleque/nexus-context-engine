@@ -272,6 +272,11 @@ public record NexusPaths(Path home) {
     static List<String> unexpectedStoragePrincipals(
             List<AclEntry> entries,
             String currentUserPrincipalName) {
+        return unexpectedStoragePrincipals(entries, currentUserPrincipalName, WindowsStoragePrincipals.names());
+    }
+
+    static List<String> unexpectedStoragePrincipals(
+            List<AclEntry> entries, String currentUserPrincipalName, Set<String> trustedSystemNames) {
         Objects.requireNonNull(entries, "entries");
         LinkedHashSet<String> unexpected = new LinkedHashSet<>();
         for (AclEntry entry : entries) {
@@ -280,7 +285,7 @@ public record NexusPaths(Path home) {
                 continue;
             }
             String principal = entry.principal().getName();
-            if (!isTrustedStoragePrincipal(principal, currentUserPrincipalName)) {
+            if (!isTrustedStoragePrincipal(principal, currentUserPrincipalName, trustedSystemNames)) {
                 unexpected.add(principal);
             }
         }
@@ -331,6 +336,11 @@ public record NexusPaths(Path home) {
     }
 
     static boolean isTrustedStoragePrincipal(String principalName, String currentUserPrincipalName) {
+        return isTrustedStoragePrincipal(principalName, currentUserPrincipalName, WindowsStoragePrincipals.names());
+    }
+
+    static boolean isTrustedStoragePrincipal(String principalName, String currentUserPrincipalName,
+            Set<String> trustedSystemNames) {
         if (principalName == null || principalName.isBlank()) {
             return false;
         }
@@ -341,8 +351,6 @@ public record NexusPaths(Path home) {
         if (!currentUser.isEmpty() && principal.equals(currentUser)) {
             return true;
         }
-        return principal.equals("NT AUTHORITY\\SYSTEM")
-                || principal.equals("CREATOR OWNER")
-                || principal.equals("BUILTIN\\ADMINISTRATORS");
+        return trustedSystemNames.contains(principal);
     }
 }
