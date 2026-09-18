@@ -1,0 +1,25 @@
+name: Diagnose Sonar PR 230
+
+on:
+  push:
+    branches:
+      - codex/fix-p1-and-eliminate-p3-debt
+
+permissions:
+  checks: read
+  contents: read
+
+jobs:
+  annotations:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump Sonar annotations
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECK_RUN_ID: "105797301795"
+        run: |
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/check-runs/${CHECK_RUN_ID}/annotations?per_page=100"
