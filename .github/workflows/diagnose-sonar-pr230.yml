@@ -1,9 +1,9 @@
 name: Diagnose Sonar PR 230
 
 on:
-  push:
+  pull_request:
     branches:
-      - codex/fix-p1-and-eliminate-p3-debt
+      - develop
 
 permissions:
   checks: read
