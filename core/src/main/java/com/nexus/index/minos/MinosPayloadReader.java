@@ -13,18 +13,21 @@ import static com.nexus.index.minos.MinosCodeIndexImporter.*;
 /** Composant interne du contrat d’import MINOS. */
 final class MinosPayloadReader {
     private static final int READER_BUFFER_CHARS = 16 * 1024;
+
     static String readPayload(InputStream input) throws IOException {
         Objects.requireNonNull(input, "input");
-        Reader reader = new InputStreamReader(new BoundedPayloadInputStream(input), StandardCharsets.UTF_8);
-        StringBuilder output = new StringBuilder(READER_BUFFER_CHARS);
-        char[] buffer = new char[READER_BUFFER_CHARS];
-        int read;
-        while ((read = reader.read(buffer)) >= 0) {
-            if (read > 0) {
-                output.append(buffer, 0, read);
+        try (Reader reader = new InputStreamReader(
+                new BoundedPayloadInputStream(input), StandardCharsets.UTF_8)) {
+            StringBuilder output = new StringBuilder(READER_BUFFER_CHARS);
+            char[] buffer = new char[READER_BUFFER_CHARS];
+            int read;
+            while ((read = reader.read(buffer)) >= 0) {
+                if (read > 0) {
+                    output.append(buffer, 0, read);
+                }
             }
+            return output.toString();
         }
-        return output.toString();
     }
 
     static void requireTransportSize(String payload) throws IOException {
@@ -53,6 +56,7 @@ final class MinosPayloadReader {
     static IOException transportTooLarge() {
         return new IOException("MINOS export exceeds the 128 MiB transport limit");
     }
+
     private static final class BoundedPayloadInputStream extends FilterInputStream {
 
         private long consumed;
@@ -83,6 +87,12 @@ final class MinosPayloadReader {
                 record(read);
             }
             return read;
+        }
+
+        @Override
+        public void close() {
+            // readPayload ne possède pas le flux fourni par l'appelant (notamment stdin).
+            // Le Reader peut donc être fermé sans fermer la source sous-jacente.
         }
 
         private void record(long bytes) throws IOException {
