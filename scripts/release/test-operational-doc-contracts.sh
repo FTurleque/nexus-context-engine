@@ -47,6 +47,7 @@ for path in (
     "core/src/main/resources/db/migration/V007__invalidate_legacy_repository_paths.sql",
     "core/src/main/resources/db/migration/V008__indexed_substring_search.sql",
     "core/src/main/resources/db/migration/V009__invalidate_quoted_secret_indexes.sql",
+    "core/src/main/resources/db/migration/V010__invalidate_scalar_secret_indexes.sql",
     "core/src/test/java/com/nexus/application/NexusApplicationSemanticConfigurationTest.java",
 ):
     if not (root / path).is_file():
@@ -57,7 +58,7 @@ for stale in ("<sourceDirectory>", "<testSourceDirectory>", "../src/main", "../s
         raise SystemExit(f"core layout drift: core/pom.xml still contains {stale!r}")
 
 migrations = sorted((root / "core/src/main/resources/db/migration").glob("V*.sql"))
-if not migrations or migrations[-1].name != "V009__invalidate_quoted_secret_indexes.sql":
+if not migrations or migrations[-1].name != "V010__invalidate_scalar_secret_indexes.sql":
     raise SystemExit(f"schema contract drift: latest migration is {migrations[-1].name if migrations else 'none'}")
 require("docs/developer/release-and-recovery.md", "V005__enforce_symbol_range_constraints.sql")
 require("docs/developer/release-and-recovery.md", "V006__invalidate_unredacted_lexical_indexes.sql")
@@ -171,7 +172,7 @@ for path in (
     require(path, "NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA")
 
 require("core/src/main/java/com/nexus/security/SensitiveContentRedactor.java", "[REDACTED]")
-require("core/src/main/java/com/nexus/search/semantic/SemanticIndexingService.java", "CONTENT_PROFILE_VERSION = 3")
+require("core/src/main/java/com/nexus/search/semantic/SemanticIndexingService.java", "CONTENT_PROFILE_VERSION = 4")
 for path in (
     "README.md",
     "docs/architecture.md",
@@ -181,7 +182,7 @@ for path in (
     "docs/developer/release-and-recovery.md",
     "docs/developer/semantic-search.md",
 ):
-    require(path, "content-v3")
+    require(path, "content-v4")
 
 # NXA4 + audit follow-up: lexical content is redacted before Lucene tokenization.
 lucene = "core/src/main/java/com/nexus/search/lucene/LuceneSearchIndex.java"
