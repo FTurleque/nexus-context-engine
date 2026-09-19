@@ -1,7 +1,6 @@
 package com.nexus.security;
 
 import java.util.Objects;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -23,23 +22,12 @@ public final class SensitiveContentRedactor {
     private static final int MAX_SECRET_CHARS = 4096;
     private static final int MAX_URI_USER_CHARS = 1024;
 
-    private static final String SECRET_KEY =
-            "(?:[A-Za-z0-9]+[_.-])*(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|"
-                    + "secret[_-]?access[_-]?key|password|passwd|secret)(?:[_.-][A-Za-z0-9]+)*";
-
     private static final Pattern STRUCTURED_TOKEN = Pattern.compile(
             "\\b(?:gh[pousr]_[A-Za-z0-9]{20,255}+|github_pat_\\w{20,255}+|(?:AKIA|ASIA)[0-9A-Z]{16})\\b");
     private static final Pattern JWT = Pattern.compile(
             "\\beyJ[A-Za-z0-9_-]{10," + MAX_SECRET_CHARS + "}+\\."
                     + "[A-Za-z0-9_-]{10," + MAX_SECRET_CHARS + "}+\\."
                     + "[A-Za-z0-9_-]{10," + MAX_SECRET_CHARS + "}+\\b");
-    private static final Pattern SECRET_ASSIGNMENT = Pattern.compile(
-            "(?im)(?<![\\p{L}\\p{N}_])(" + SECRET_KEY + "\\s{0,32}[:=]\\s{0,32})"
-                    + "(?:\"([^\"\\r\\n]{8," + MAX_SECRET_CHARS + "})\""
-                    + "|'([^'\\r\\n]{8," + MAX_SECRET_CHARS + "})'"
-                    + "|([^\\s\"'`;,#]{8," + MAX_SECRET_CHARS + "}))");
-    private static final Pattern QUOTED_SECRET_KEY = Pattern.compile(
-            "(?i)(?:\"" + SECRET_KEY + "\"|'" + SECRET_KEY + "')\\s{0,32}:\\s{0,32}");
     private static final Pattern URI_CREDENTIAL = Pattern.compile(
             "(?i)(\\b[a-z][a-z0-9+.-]{0,31}+://[^\\s/:@]{1," + MAX_URI_USER_CHARS + "}+:)"
                     + "([^\\s/@]{3," + MAX_SECRET_CHARS + "}+)(@)");
@@ -52,8 +40,7 @@ public final class SensitiveContentRedactor {
         String redacted = replacePrivateKeyBlocks(content);
         redacted = STRUCTURED_TOKEN.matcher(redacted).replaceAll(REDACTED);
         redacted = JWT.matcher(redacted).replaceAll(REDACTED);
-        redacted = replaceQuotedSecretAssignments(redacted);
-        redacted = replaceSecretAssignments(redacted);
+        redacted = SecretAssignmentScanner.redact(redacted);
         return URI_CREDENTIAL.matcher(redacted).replaceAll("$1" + REDACTED + "$3");
     }
 
@@ -107,60 +94,4 @@ public final class SensitiveContentRedactor {
         }
     }
 
-    private static String matchedQuote(Matcher matcher) {
-        if (matcher.group(2) != null) {
-            return "\"";
-        }
-        if (matcher.group(3) != null) {
-            return "'";
-        }
-        return "";
-    }
-
-    /** Scan borné des valeurs citées : les échappements ne terminent pas la valeur. */
-    private static String replaceQuotedSecretAssignments(String content) {
-        Matcher keys = QUOTED_SECRET_KEY.matcher(content);
-        StringBuilder output = new StringBuilder(content.length());
-        int cursor = 0;
-        int outputCursor = 0;
-        while (keys.find(cursor)) {
-            int start = keys.end();
-            if (start >= content.length()) break;
-            char quote = content.charAt(start);
-            if (quote != '"' && quote != '\'') {
-                // Une clé citée peut également introduire une valeur YAML non citée.
-                cursor = start;
-                continue;
-            }
-            int end = start + 1;
-            boolean escaped = false;
-            for (; end < content.length() && end - start <= MAX_SECRET_CHARS + 1; end++) {
-                char value = content.charAt(end);
-                if (value == '\r' || value == '\n') break;
-                if (!escaped && value == quote) break;
-                if (!escaped && value == '\\') escaped = true;
-                else escaped = false;
-            }
-            if (end < content.length() && content.charAt(end) == quote && !escaped
-                    && end - start - 1 >= 8 && end - start - 1 <= MAX_SECRET_CHARS) {
-                output.append(content, outputCursor, start + 1).append(REDACTED).append(quote);
-                outputCursor = end + 1;
-            }
-            cursor = Math.max(start + 1, end + 1);
-        }
-        output.append(content, outputCursor, content.length());
-        return output.toString();
-    }
-
-    private static String replaceSecretAssignments(String content) {
-        Matcher matcher = SECRET_ASSIGNMENT.matcher(content);
-        StringBuilder output = new StringBuilder(content.length());
-        while (matcher.find()) {
-            String quote = matchedQuote(matcher);
-            String replacement = matcher.group(1) + quote + REDACTED + quote;
-            matcher.appendReplacement(output, Matcher.quoteReplacement(replacement));
-        }
-        matcher.appendTail(output);
-        return output.toString();
-    }
 }

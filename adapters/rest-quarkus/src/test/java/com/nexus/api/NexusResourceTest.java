@@ -34,6 +34,7 @@ class NexusResourceTest {
         Files.writeString(source, """
                 package demo;
                 public class OrderService {
+                    // {"password": 123456789, "api_key": synthetic-unquoted-secret-123456}
                     public String processOrder(String id) {
                         return "processed-" + id;
                     }
@@ -107,6 +108,9 @@ class NexusResourceTest {
                 .statusCode(200)
                 .body("tokenBudget", equalTo(200))
                 .body("estimatedTokens", lessThanOrEqualTo(200))
+                .body(org.hamcrest.Matchers.not(containsString("123456789")))
+                .body(org.hamcrest.Matchers.not(containsString("synthetic-unquoted-secret-123456")))
+                .body(containsString("[REDACTED]"))
                 .body("items", hasSize(greaterThan(0)));
 
         given()

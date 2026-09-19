@@ -257,7 +257,7 @@ class LocalGitContextSourceProviderTest {
 
     private static OutputStream boundedOutput(int capacity) throws Exception {
         Class<?> sinkClass = Class.forName(
-                "com.nexus.context.source.git.LocalGitContextSourceProvider$BoundedOutput");
+                "com.nexus.context.source.git.GitWorkingTreeContext$BoundedOutput");
         Constructor<?> constructor = sinkClass.getDeclaredConstructor(int.class);
         constructor.setAccessible(true);
         return (OutputStream) constructor.newInstance(capacity);
