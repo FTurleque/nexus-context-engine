@@ -79,6 +79,41 @@ class ProjectIndexLockManagerTest {
     }
 
     @Test
+    void enforcesReadWriteSemanticsAcrossDistinctJvmProcesses() throws Exception {
+        NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("cross-process-read-write-home"));
+        ProjectIndexLockManager manager = ProjectIndexLockManager.fileBacked(paths);
+        UUID projectId = UUID.randomUUID();
+
+        try (ProjectIndexLockManager.LockHandle ignored = manager.acquireRead(projectId)) {
+            ProbeResult concurrentReader = runProbe(paths, projectId, ProjectIndexLockProbe.MODE_READ);
+            assertEquals(
+                    ProjectIndexLockProbe.EXIT_ACQUIRED,
+                    concurrentReader.exitCode(),
+                    concurrentReader.output());
+
+            ProbeResult blockedWriter = runProbe(paths, projectId, ProjectIndexLockProbe.MODE_WRITE);
+            assertEquals(
+                    ProjectIndexLockProbe.EXIT_BUSY,
+                    blockedWriter.exitCode(),
+                    blockedWriter.output());
+        }
+
+        try (ProjectIndexLockManager.LockHandle ignored = manager.acquire(projectId)) {
+            ProbeResult blockedReader = runProbe(paths, projectId, ProjectIndexLockProbe.MODE_READ);
+            assertEquals(
+                    ProjectIndexLockProbe.EXIT_BUSY,
+                    blockedReader.exitCode(),
+                    blockedReader.output());
+
+            ProbeResult blockedWriter = runProbe(paths, projectId, ProjectIndexLockProbe.MODE_WRITE);
+            assertEquals(
+                    ProjectIndexLockProbe.EXIT_BUSY,
+                    blockedWriter.exitCode(),
+                    blockedWriter.output());
+        }
+    }
+
+    @Test
     void ignoresReleaseFailureWhenClosingTheChannelSucceeds() {
         assertDoesNotThrow(() -> ProjectIndexLockManager.releaseAndClose(
                 () -> {
@@ -137,13 +172,18 @@ class ProjectIndexLockManagerTest {
     }
 
     private static ProbeResult runProbe(NexusPaths paths, UUID projectId) throws Exception {
+        return runProbe(paths, projectId, ProjectIndexLockProbe.MODE_WRITE);
+    }
+
+    private static ProbeResult runProbe(NexusPaths paths, UUID projectId, String mode) throws Exception {
         Process process = new ProcessBuilder(
                 javaExecutable().toString(),
                 "-cp",
                 testClasspath(),
                 ProjectIndexLockProbe.class.getName(),
                 paths.home().toString(),
-                projectId.toString())
+                projectId.toString(),
+                mode)
                 .redirectErrorStream(true)
                 .start();
 

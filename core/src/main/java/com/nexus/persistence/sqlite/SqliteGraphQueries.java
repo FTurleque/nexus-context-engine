@@ -22,6 +22,9 @@ import static com.nexus.persistence.sqlite.SqliteIndexSql.*;
 /** Capacité interne de persistance ; partage les sessions et transactions de SqliteDatabase. */
 final class SqliteGraphQueries {
 
+    private static final int MIN_OUTGOING_SCAN_PAGE_SIZE = 64;
+    private static final int OUTGOING_SCAN_PAGE_SIZE = ResultLimitPolicy.MAX_INTERNAL_RETRIEVAL_LIMIT;
+
     static final String OUTGOING_GRAPH_SQL = """
             WITH requested(path) AS (
                 SELECT value FROM json_each(?)
@@ -31,7 +34,7 @@ final class SqliteGraphQueries {
             CROSS JOIN symbol_relations r
             WHERE r.project_id = ? AND r.kind = ? AND r.source_ref = q.path
             ORDER BY r.source_ref, r.target_ref
-            LIMIT ?
+            LIMIT ? OFFSET ?
             """;
 
     static final String TARGET_TYPE_OWNERS_SQL = """
@@ -105,65 +108,136 @@ final class SqliteGraphQueries {
 
         String requestedPaths = serializePaths(relativePaths.stream().sorted().toList());
         Map<String, Set<String>> neighbors = new LinkedHashMap<>();
-        int projectedEdges = 0;
 
         try (Connection connection = database.openConnection()) {
-            List<GraphImportTarget> outgoingRelations = new ArrayList<>();
-            try (PreparedStatement outgoing = connection.prepareStatement(OUTGOING_GRAPH_SQL)) {
-                outgoing.setString(1, requestedPaths);
-                outgoing.setString(2, projectId.toString());
-                outgoing.setString(3, RelationKind.IMPORTS.name());
-                outgoing.setInt(4, maxEdges);
-                try (ResultSet resultSet = outgoing.executeQuery()) {
-                    while (resultSet.next()) {
-                        outgoingRelations.add(new GraphImportTarget(
-                                resultSet.getString("seed_path"),
-                                resultSet.getString("target_ref")));
-                    }
-                }
-            }
-
-            Map<String, String> typeOwners = findTypeOwners(
+            int projectedEdges = projectOutgoingNeighbors(
                     connection,
                     projectId,
-                    collectTypeOwnerCandidates(outgoingRelations));
-            for (GraphImportTarget relation : outgoingRelations) {
-                if (projectedEdges >= maxEdges) {
-                    break;
+                    requestedPaths,
+                    maxEdges,
+                    neighbors);
+            projectIncomingNeighbors(
+                    connection,
+                    projectId,
+                    requestedPaths,
+                    maxEdges - projectedEdges,
+                    neighbors);
+            return immutableNeighbors(neighbors);
+        } catch (SQLException exception) {
+            throw persistence("Impossible de projeter le voisinage graphe du projet " + projectId, exception);
+        }
+    }
+
+    private static int projectOutgoingNeighbors(
+            Connection connection,
+            UUID projectId,
+            String requestedPaths,
+            int maxEdges,
+            Map<String, Set<String>> neighbors) throws SQLException {
+        int pageSize = Math.min(OUTGOING_SCAN_PAGE_SIZE, Math.max(MIN_OUTGOING_SCAN_PAGE_SIZE, maxEdges));
+        int offset = 0;
+        int projectedEdges = 0;
+        boolean exhausted = false;
+
+        while (projectedEdges < maxEdges && !exhausted) {
+            List<GraphImportTarget> relations = loadOutgoingRelations(
+                    connection,
+                    projectId,
+                    requestedPaths,
+                    pageSize,
+                    offset);
+            exhausted = relations.size() < pageSize;
+            offset += relations.size();
+            projectedEdges += projectResolvedOutgoingRelations(
+                    connection,
+                    projectId,
+                    relations,
+                    maxEdges - projectedEdges,
+                    neighbors);
+        }
+        return projectedEdges;
+    }
+
+    private static List<GraphImportTarget> loadOutgoingRelations(
+            Connection connection,
+            UUID projectId,
+            String requestedPaths,
+            int pageSize,
+            int offset) throws SQLException {
+        List<GraphImportTarget> relations = new ArrayList<>();
+        try (PreparedStatement outgoing = connection.prepareStatement(OUTGOING_GRAPH_SQL)) {
+            outgoing.setString(1, requestedPaths);
+            outgoing.setString(2, projectId.toString());
+            outgoing.setString(3, RelationKind.IMPORTS.name());
+            outgoing.setInt(4, pageSize);
+            outgoing.setInt(5, offset);
+            try (ResultSet resultSet = outgoing.executeQuery()) {
+                while (resultSet.next()) {
+                    relations.add(new GraphImportTarget(
+                            resultSet.getString("seed_path"),
+                            resultSet.getString("target_ref")));
                 }
+            }
+        }
+        return List.copyOf(relations);
+    }
+
+    private static int projectResolvedOutgoingRelations(
+            Connection connection,
+            UUID projectId,
+            List<GraphImportTarget> relations,
+            int edgeBudget,
+            Map<String, Set<String>> neighbors) throws SQLException {
+        Map<String, String> typeOwners = findTypeOwners(
+                connection,
+                projectId,
+                collectTypeOwnerCandidates(relations));
+        int projectedEdges = 0;
+        for (GraphImportTarget relation : relations) {
+            if (projectedEdges < edgeBudget) {
                 String neighborPath = resolveTypeOwner(typeOwners, relation.targetRef());
                 if (addGraphNeighbor(neighbors, relation.seedPath(), neighborPath)) {
                     projectedEdges++;
                 }
             }
+        }
+        return projectedEdges;
+    }
 
-            int remainingEdges = maxEdges - projectedEdges;
-            if (remainingEdges > 0) {
-                try (PreparedStatement incoming = connection.prepareStatement(INCOMING_GRAPH_SQL)) {
-                    incoming.setString(1, requestedPaths);
-                    incoming.setString(2, projectId.toString());
-                    incoming.setString(3, projectId.toString());
-                    incoming.setString(4, RelationKind.IMPORTS.name());
-                    incoming.setInt(5, remainingEdges);
-                    try (ResultSet resultSet = incoming.executeQuery()) {
-                        while (resultSet.next() && projectedEdges < maxEdges) {
-                            if (addGraphNeighbor(
-                                    neighbors,
-                                    resultSet.getString("seed_path"),
-                                    resultSet.getString("neighbor_path"))) {
-                                projectedEdges++;
-                            }
-                        }
+    private static void projectIncomingNeighbors(
+            Connection connection,
+            UUID projectId,
+            String requestedPaths,
+            int edgeBudget,
+            Map<String, Set<String>> neighbors) throws SQLException {
+        if (edgeBudget <= 0) {
+            return;
+        }
+
+        int projectedEdges = 0;
+        try (PreparedStatement incoming = connection.prepareStatement(INCOMING_GRAPH_SQL)) {
+            incoming.setString(1, requestedPaths);
+            incoming.setString(2, projectId.toString());
+            incoming.setString(3, projectId.toString());
+            incoming.setString(4, RelationKind.IMPORTS.name());
+            incoming.setInt(5, edgeBudget);
+            try (ResultSet resultSet = incoming.executeQuery()) {
+                while (resultSet.next() && projectedEdges < edgeBudget) {
+                    if (addGraphNeighbor(
+                            neighbors,
+                            resultSet.getString("seed_path"),
+                            resultSet.getString("neighbor_path"))) {
+                        projectedEdges++;
                     }
                 }
             }
-
-            Map<String, Set<String>> immutable = new LinkedHashMap<>();
-            neighbors.forEach((path, values) -> immutable.put(path, Set.copyOf(values)));
-            return Map.copyOf(immutable);
-        } catch (SQLException exception) {
-            throw persistence("Impossible de projeter le voisinage graphe du projet " + projectId, exception);
         }
+    }
+
+    private static Map<String, Set<String>> immutableNeighbors(Map<String, Set<String>> neighbors) {
+        Map<String, Set<String>> immutable = new LinkedHashMap<>();
+        neighbors.forEach((path, values) -> immutable.put(path, Set.copyOf(values)));
+        return Map.copyOf(immutable);
     }
 
     static Map<String, String> findTypeOwners(
