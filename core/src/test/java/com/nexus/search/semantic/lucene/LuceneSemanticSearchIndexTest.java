@@ -27,6 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LuceneSemanticSearchIndexTest {
 
+    private static final String RECOVERY_GENERATION_PREFIX = "recovery-";
+
     @TempDir
     Path temporaryDirectory;
 
@@ -116,9 +118,9 @@ class LuceneSemanticSearchIndexTest {
         Path root = paths.projectSemanticLuceneIndex(project);
         paths.ensurePrivateDirectory(root);
 
-        Path active = root.resolve("recovery-" + UUID.randomUUID());
-        Path stale = root.resolve("recovery-" + UUID.randomUUID());
-        Path recent = root.resolve("recovery-" + UUID.randomUUID());
+        Path active = root.resolve(RECOVERY_GENERATION_PREFIX + UUID.randomUUID());
+        Path stale = root.resolve(RECOVERY_GENERATION_PREFIX + UUID.randomUUID());
+        Path recent = root.resolve(RECOVERY_GENERATION_PREFIX + UUID.randomUUID());
         Path unrelated = root.resolve("manual-backup");
         paths.ensurePrivateDirectory(active);
         paths.ensurePrivateDirectory(stale);
