@@ -30,35 +30,36 @@ import org.apache.lucene.store.FSDirectory;
 import java.io.IOException;
 import java.io.EOFException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 /**
  * Index vectoriel local dérivé basé sur les capacités kNN natives de Lucene.
  */
 public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
 
+    private static final System.Logger LOGGER = System.getLogger(LuceneSemanticSearchIndex.class.getName());
     private static final String PROVENANCE_ARGUMENT = "provenance";
     private static final String PATH_FIELD = "path";
     private static final String CATEGORY_FIELD = "category";
     private static final String EXCERPT_FIELD = "excerpt";
     private static final String VECTOR_FIELD = "embedding";
-    private static final Pattern RECOVERY_GENERATION_NAME = Pattern.compile(
-            "recovery-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}");
-    private static final Duration RECOVERY_GENERATION_RETENTION = Duration.ofHours(24);
+    private static final String RECOVERY_GENERATION_PREFIX = "recovery-";
+    private static final Duration RECOVERY_GENERATION_RETENTION = Duration.ofDays(1);
 
     private final NexusPaths paths;
     private final int dimensions;
@@ -124,7 +125,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
             // CREATE preserves healthy commit generations, but cannot read a
             // corrupt commit. Publish recovery elsewhere without deleting files
             // still mapped by independent readers (especially on Windows).
-            Path recovery = root.resolve("recovery-" + UUID.randomUUID());
+            Path recovery = root.resolve(RECOVERY_GENERATION_PREFIX + UUID.randomUUID());
             paths.ensurePrivateDirectory(recovery);
             rebuildDirectory(recovery, provenance, documents);
             publishRecovery(root, recovery);
@@ -258,8 +259,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
         try (var reader = SafeFileIO.newBufferedReaderNoFollow(pointer, StandardCharsets.UTF_8, 128)) {
             generation = reader.readLine();
             String extraLine = reader.readLine();
-            if (generation == null || !RECOVERY_GENERATION_NAME.matcher(generation).matches()
-                    || extraLine != null) {
+            if (generation == null || !isRecoveryGenerationName(generation) || extraLine != null) {
                 throw new IOException("Pointeur de récupération sémantique invalide");
             }
         }
@@ -288,10 +288,11 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
         FileTime cutoff = FileTime.from(Instant.now().minus(RECOVERY_GENERATION_RETENTION));
         try {
             cleanupRecoveryGenerations(root, activeGeneration, cutoff);
-        } catch (IOException ignored) {
-            // Maintenance best effort : une génération peut rester ouverte par
-            // un autre processus, en particulier sous Windows. Une prochaine
-            // reconstruction retentera le nettoyage sans compromettre l'index actif.
+        } catch (IOException cleanupFailure) {
+            LOGGER.log(
+                    System.Logger.Level.DEBUG,
+                    "Impossible de nettoyer immédiatement les anciennes générations Lucene sémantiques",
+                    cleanupFailure);
         }
     }
 
@@ -308,26 +309,48 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
         try (var children = Files.list(root)) {
             candidates = children
                     .filter(path -> Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS))
-                    .filter(path -> RECOVERY_GENERATION_NAME.matcher(path.getFileName().toString()).matches())
+                    .filter(path -> isRecoveryGenerationName(path.getFileName().toString()))
                     .filter(path -> !path.toAbsolutePath().normalize().equals(normalizedActive))
                     .toList();
         }
 
         for (Path candidate : candidates) {
             FileTime lastModified = Files.getLastModifiedTime(candidate, LinkOption.NOFOLLOW_LINKS);
-            if (lastModified.compareTo(cutoff) >= 0) {
-                continue;
+            if (lastModified.compareTo(cutoff) < 0) {
+                deleteRecoveryGeneration(candidate);
             }
-            deleteRecoveryGeneration(candidate);
+        }
+    }
+
+    private static boolean isRecoveryGenerationName(String generation) {
+        if (!generation.startsWith(RECOVERY_GENERATION_PREFIX)) {
+            return false;
+        }
+        String identifier = generation.substring(RECOVERY_GENERATION_PREFIX.length());
+        try {
+            return UUID.fromString(identifier).toString().equals(identifier);
+        } catch (IllegalArgumentException invalidIdentifier) {
+            return false;
         }
     }
 
     private static void deleteRecoveryGeneration(Path recovery) throws IOException {
-        try (var entries = Files.walk(recovery)) {
-            for (Path entry : entries.sorted(Comparator.reverseOrder()).toList()) {
-                Files.deleteIfExists(entry);
+        Files.walkFileTree(recovery, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+                Files.deleteIfExists(file);
+                return FileVisitResult.CONTINUE;
             }
-        }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path directory, IOException failure) throws IOException {
+                if (failure != null) {
+                    throw failure;
+                }
+                Files.deleteIfExists(directory);
+                return FileVisitResult.CONTINUE;
+            }
+        });
     }
 
     private static void applyProvenance(IndexWriter writer, SemanticIndexProvenance provenance) {
