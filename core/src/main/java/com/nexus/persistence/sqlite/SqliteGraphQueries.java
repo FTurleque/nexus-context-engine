@@ -22,6 +22,8 @@ import static com.nexus.persistence.sqlite.SqliteIndexSql.*;
 /** Capacité interne de persistance ; partage les sessions et transactions de SqliteDatabase. */
 final class SqliteGraphQueries {
 
+    private static final int OUTGOING_SCAN_PAGE_SIZE = ResultLimitPolicy.MAX_INTERNAL_RETRIEVAL_LIMIT;
+
     static final String OUTGOING_GRAPH_SQL = """
             WITH requested(path) AS (
                 SELECT value FROM json_each(?)
@@ -31,7 +33,7 @@ final class SqliteGraphQueries {
             CROSS JOIN symbol_relations r
             WHERE r.project_id = ? AND r.kind = ? AND r.source_ref = q.path
             ORDER BY r.source_ref, r.target_ref
-            LIMIT ?
+            LIMIT ? OFFSET ?
             """;
 
     static final String TARGET_TYPE_OWNERS_SQL = """
@@ -108,32 +110,46 @@ final class SqliteGraphQueries {
         int projectedEdges = 0;
 
         try (Connection connection = database.openConnection()) {
-            List<GraphImportTarget> outgoingRelations = new ArrayList<>();
-            try (PreparedStatement outgoing = connection.prepareStatement(OUTGOING_GRAPH_SQL)) {
-                outgoing.setString(1, requestedPaths);
-                outgoing.setString(2, projectId.toString());
-                outgoing.setString(3, RelationKind.IMPORTS.name());
-                outgoing.setInt(4, maxEdges);
-                try (ResultSet resultSet = outgoing.executeQuery()) {
-                    while (resultSet.next()) {
-                        outgoingRelations.add(new GraphImportTarget(
-                                resultSet.getString("seed_path"),
-                                resultSet.getString("target_ref")));
+            int outgoingPageSize = Math.min(OUTGOING_SCAN_PAGE_SIZE, Math.max(64, maxEdges));
+            int outgoingOffset = 0;
+            while (projectedEdges < maxEdges) {
+                List<GraphImportTarget> outgoingRelations = new ArrayList<>();
+                try (PreparedStatement outgoing = connection.prepareStatement(OUTGOING_GRAPH_SQL)) {
+                    outgoing.setString(1, requestedPaths);
+                    outgoing.setString(2, projectId.toString());
+                    outgoing.setString(3, RelationKind.IMPORTS.name());
+                    outgoing.setInt(4, outgoingPageSize);
+                    outgoing.setInt(5, outgoingOffset);
+                    try (ResultSet resultSet = outgoing.executeQuery()) {
+                        while (resultSet.next()) {
+                            outgoingRelations.add(new GraphImportTarget(
+                                    resultSet.getString("seed_path"),
+                                    resultSet.getString("target_ref")));
+                        }
                     }
                 }
-            }
 
-            Map<String, String> typeOwners = findTypeOwners(
-                    connection,
-                    projectId,
-                    collectTypeOwnerCandidates(outgoingRelations));
-            for (GraphImportTarget relation : outgoingRelations) {
-                if (projectedEdges >= maxEdges) {
+                if (outgoingRelations.isEmpty()) {
                     break;
                 }
-                String neighborPath = resolveTypeOwner(typeOwners, relation.targetRef());
-                if (addGraphNeighbor(neighbors, relation.seedPath(), neighborPath)) {
-                    projectedEdges++;
+                outgoingOffset += outgoingRelations.size();
+
+                Map<String, String> typeOwners = findTypeOwners(
+                        connection,
+                        projectId,
+                        collectTypeOwnerCandidates(outgoingRelations));
+                for (GraphImportTarget relation : outgoingRelations) {
+                    if (projectedEdges >= maxEdges) {
+                        break;
+                    }
+                    String neighborPath = resolveTypeOwner(typeOwners, relation.targetRef());
+                    if (addGraphNeighbor(neighbors, relation.seedPath(), neighborPath)) {
+                        projectedEdges++;
+                    }
+                }
+
+                if (outgoingRelations.size() < outgoingPageSize) {
+                    break;
                 }
             }
 

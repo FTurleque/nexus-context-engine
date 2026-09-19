@@ -59,6 +59,31 @@ class SqliteGraphNeighborhoodProjectionTest {
     }
 
     @Test
+    void skipsUnresolvedOutgoingImportsBeforeApplyingEdgeBudget() throws Exception {
+        SqliteDatabase database = new SqliteDatabase(new NexusPaths(tempDir.resolve("unresolved-home")));
+        UUID projectId = UUID.randomUUID();
+        try (Connection connection = database.openConnection()) {
+            insertProject(connection, projectId);
+            long app = insertFile(connection, projectId, "src/App.java");
+            long local = insertFile(connection, projectId, "src/Local.java");
+
+            insertType(connection, app, "App", "demo.App");
+            insertType(connection, local, "Local", "zzz.Local");
+
+            // L'import externe trie avant l'import local. Une limite appliquée aux
+            // relations brutes retournerait donc zéro voisin avec maxEdges=1.
+            insertImport(connection, projectId, app, "src/App.java", "aaa.External");
+            insertImport(connection, projectId, app, "src/App.java", "zzz.Local");
+        }
+
+        SqliteIndexRepository repository = new SqliteIndexRepository(database);
+
+        assertEquals(
+                Map.of("src/App.java", Set.of("src/Local.java")),
+                repository.findGraphNeighbors(projectId, Set.of("src/App.java"), 1));
+    }
+
+    @Test
     void remainsBoundedAndDeterministicWithHighStructuralTypeCardinality() throws Exception {
         SqliteDatabase database = new SqliteDatabase(new NexusPaths(tempDir.resolve("high-cardinality-home")));
         UUID projectId = UUID.randomUUID();

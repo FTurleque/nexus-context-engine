@@ -35,11 +35,16 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.FileTime;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * Index vectoriel local dérivé basé sur les capacités kNN natives de Lucene.
@@ -51,6 +56,9 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
     private static final String CATEGORY_FIELD = "category";
     private static final String EXCERPT_FIELD = "excerpt";
     private static final String VECTOR_FIELD = "embedding";
+    private static final Pattern RECOVERY_GENERATION_NAME = Pattern.compile(
+            "recovery-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}");
+    private static final Duration RECOVERY_GENERATION_RETENTION = Duration.ofHours(24);
 
     private final NexusPaths paths;
     private final int dimensions;
@@ -106,19 +114,21 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
             List<SemanticVectorDocument> documents) throws IOException {
         Objects.requireNonNull(projectId, "projectId");
         Objects.requireNonNull(documents, "documents");
+        Path root = paths.projectSemanticLuceneIndex(projectId);
         Path indexPath = indexPath(projectId);
         paths.ensurePrivateDirectory(indexPath);
         try {
             rebuildDirectory(indexPath, provenance, documents);
+            cleanupStaleRecoveryGenerations(root, indexPath);
         } catch (CorruptIndexException | IndexFormatTooOldException | IndexFormatTooNewException | EOFException failure) {
             // CREATE preserves healthy commit generations, but cannot read a
             // corrupt commit. Publish recovery elsewhere without deleting files
             // still mapped by independent readers (especially on Windows).
-            Path root = paths.projectSemanticLuceneIndex(projectId);
             Path recovery = root.resolve("recovery-" + UUID.randomUUID());
             paths.ensurePrivateDirectory(recovery);
             rebuildDirectory(recovery, provenance, documents);
             publishRecovery(root, recovery);
+            cleanupStaleRecoveryGenerations(root, recovery);
         }
     }
 
@@ -248,7 +258,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
         try (var reader = SafeFileIO.newBufferedReaderNoFollow(pointer, StandardCharsets.UTF_8, 128)) {
             generation = reader.readLine();
             String extraLine = reader.readLine();
-            if (generation == null || !generation.matches("recovery-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
+            if (generation == null || !RECOVERY_GENERATION_NAME.matcher(generation).matches()
                     || extraLine != null) {
                 throw new IOException("Pointeur de récupération sémantique invalide");
             }
@@ -271,6 +281,52 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
                     StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } finally {
             Files.deleteIfExists(temporaryPointer);
+        }
+    }
+
+    private void cleanupStaleRecoveryGenerations(Path root, Path activeGeneration) {
+        FileTime cutoff = FileTime.from(Instant.now().minus(RECOVERY_GENERATION_RETENTION));
+        try {
+            cleanupRecoveryGenerations(root, activeGeneration, cutoff);
+        } catch (IOException ignored) {
+            // Maintenance best effort : une génération peut rester ouverte par
+            // un autre processus, en particulier sous Windows. Une prochaine
+            // reconstruction retentera le nettoyage sans compromettre l'index actif.
+        }
+    }
+
+    static void cleanupRecoveryGenerations(Path root, Path activeGeneration, FileTime cutoff) throws IOException {
+        Objects.requireNonNull(root, "root");
+        Objects.requireNonNull(activeGeneration, "activeGeneration");
+        Objects.requireNonNull(cutoff, "cutoff");
+        if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) {
+            return;
+        }
+
+        Path normalizedActive = activeGeneration.toAbsolutePath().normalize();
+        List<Path> candidates;
+        try (var children = Files.list(root)) {
+            candidates = children
+                    .filter(path -> Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS))
+                    .filter(path -> RECOVERY_GENERATION_NAME.matcher(path.getFileName().toString()).matches())
+                    .filter(path -> !path.toAbsolutePath().normalize().equals(normalizedActive))
+                    .toList();
+        }
+
+        for (Path candidate : candidates) {
+            FileTime lastModified = Files.getLastModifiedTime(candidate, LinkOption.NOFOLLOW_LINKS);
+            if (lastModified.compareTo(cutoff) >= 0) {
+                continue;
+            }
+            deleteRecoveryGeneration(candidate);
+        }
+    }
+
+    private static void deleteRecoveryGeneration(Path recovery) throws IOException {
+        try (var entries = Files.walk(recovery)) {
+            for (Path entry : entries.sorted(Comparator.reverseOrder()).toList()) {
+                Files.deleteIfExists(entry);
+            }
         }
     }
 
