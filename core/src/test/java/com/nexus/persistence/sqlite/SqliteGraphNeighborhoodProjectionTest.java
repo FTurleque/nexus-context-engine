@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SqliteGraphNeighborhoodProjectionTest {
 
     private static final int UNRELATED_STRUCTURAL_TYPES = 20_000;
+    private static final String APP_PATH = "src/App.java";
 
     @TempDir
     Path tempDir;
@@ -29,7 +30,7 @@ class SqliteGraphNeighborhoodProjectionTest {
         UUID projectId = UUID.randomUUID();
         try (Connection connection = database.openConnection()) {
             insertProject(connection, projectId);
-            long app = insertFile(connection, projectId, "src/App.java");
+            long app = insertFile(connection, projectId, APP_PATH);
             long dependency = insertFile(connection, projectId, "src/Dependency.java");
             long caller = insertFile(connection, projectId, "src/Caller.java");
             long unrelated = insertFile(connection, projectId, "src/Unrelated.java");
@@ -39,21 +40,21 @@ class SqliteGraphNeighborhoodProjectionTest {
             insertType(connection, caller, "Caller", "demo.Caller");
             insertType(connection, unrelated, "Unrelated", "demo.Unrelated");
 
-            insertImport(connection, projectId, app, "src/App.java", "demo.Dependency.Inner");
+            insertImport(connection, projectId, app, APP_PATH, "demo.Dependency.Inner");
             insertImport(connection, projectId, caller, "src/Caller.java", "demo.App");
             insertImport(connection, projectId, unrelated, "src/Unrelated.java", "demo.Dependency");
         }
 
         SqliteIndexRepository repository = new SqliteIndexRepository(database);
         Map<String, Set<String>> neighbors =
-                repository.findGraphNeighbors(projectId, Set.of("src/App.java"), 10);
+                repository.findGraphNeighbors(projectId, Set.of(APP_PATH), 10);
 
         assertEquals(
                 Set.of("src/Dependency.java", "src/Caller.java"),
-                neighbors.get("src/App.java"));
+                neighbors.get(APP_PATH));
 
         Map<String, Set<String>> bounded =
-                repository.findGraphNeighbors(projectId, Set.of("src/App.java"), 1);
+                repository.findGraphNeighbors(projectId, Set.of(APP_PATH), 1);
         long materializedEdges = bounded.values().stream().mapToLong(Set::size).sum();
         assertTrue(materializedEdges <= 1, "graph projection must honor the global edge budget");
     }
@@ -64,7 +65,7 @@ class SqliteGraphNeighborhoodProjectionTest {
         UUID projectId = UUID.randomUUID();
         try (Connection connection = database.openConnection()) {
             insertProject(connection, projectId);
-            long app = insertFile(connection, projectId, "src/App.java");
+            long app = insertFile(connection, projectId, APP_PATH);
             long local = insertFile(connection, projectId, "src/Local.java");
 
             insertType(connection, app, "App", "demo.App");
@@ -72,15 +73,15 @@ class SqliteGraphNeighborhoodProjectionTest {
 
             // L'import externe trie avant l'import local. Une limite appliquée aux
             // relations brutes retournerait donc zéro voisin avec maxEdges=1.
-            insertImport(connection, projectId, app, "src/App.java", "aaa.External");
-            insertImport(connection, projectId, app, "src/App.java", "zzz.Local");
+            insertImport(connection, projectId, app, APP_PATH, "aaa.External");
+            insertImport(connection, projectId, app, APP_PATH, "zzz.Local");
         }
 
         SqliteIndexRepository repository = new SqliteIndexRepository(database);
 
         assertEquals(
-                Map.of("src/App.java", Set.of("src/Local.java")),
-                repository.findGraphNeighbors(projectId, Set.of("src/App.java"), 1));
+                Map.of(APP_PATH, Set.of("src/Local.java")),
+                repository.findGraphNeighbors(projectId, Set.of(APP_PATH), 1));
     }
 
     @Test
