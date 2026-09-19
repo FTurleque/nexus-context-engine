@@ -116,7 +116,7 @@ final class SqliteGraphQueries {
                     requestedPaths,
                     maxEdges,
                     neighbors);
-            projectedEdges += projectIncomingNeighbors(
+            projectIncomingNeighbors(
                     connection,
                     projectId,
                     requestedPaths,
@@ -204,14 +204,14 @@ final class SqliteGraphQueries {
         return projectedEdges;
     }
 
-    private static int projectIncomingNeighbors(
+    private static void projectIncomingNeighbors(
             Connection connection,
             UUID projectId,
             String requestedPaths,
             int edgeBudget,
             Map<String, Set<String>> neighbors) throws SQLException {
         if (edgeBudget <= 0) {
-            return 0;
+            return;
         }
 
         int projectedEdges = 0;
@@ -232,7 +232,6 @@ final class SqliteGraphQueries {
                 }
             }
         }
-        return projectedEdges;
     }
 
     private static Map<String, Set<String>> immutableNeighbors(Map<String, Set<String>> neighbors) {
