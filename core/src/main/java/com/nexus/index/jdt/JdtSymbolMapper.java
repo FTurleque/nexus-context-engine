@@ -18,7 +18,7 @@ import static com.nexus.index.jdt.JdtLanguageServerCodeIntelligenceProvider.SOUR
 /** Composant interne du provider JDT LS. */
 final class JdtSymbolMapper {
     private static final Pattern PACKAGE_PATTERN = Pattern.compile(
-            "(?m)^\\s*package\\s+([A-Za-z_$][\\w$]*(?:\\.[A-Za-z_$][\\w$]*)*)\\s*;");
+            "(?m)^\\s*+package\\s++([A-Za-z_$][\\w$]*+(?:\\.[A-Za-z_$][\\w$]*+)*+)\\s*+;");
 
     private static final int LSP_CLASS = 5;
     private static final int LSP_METHOD = 6;
