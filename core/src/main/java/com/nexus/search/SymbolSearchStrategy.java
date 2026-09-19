@@ -3,7 +3,9 @@ package com.nexus.search;
 import com.nexus.paths.RepositoryPath;
 
 import com.nexus.index.CodeSymbol;
+import com.nexus.index.FileCategory;
 import com.nexus.index.IndexRepository;
+import com.nexus.index.IndexedFile;
 import com.nexus.index.IndexedSymbol;
 import com.nexus.project.ProjectDescriptor;
 
@@ -14,6 +16,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public final class SymbolSearchStrategy implements SearchStrategy {
 
@@ -44,30 +48,37 @@ public final class SymbolSearchStrategy implements SearchStrategy {
                         symbolPool,
                         indexRepository.searchSymbols(project.id(), term, candidatePoolLimit)));
 
+        Set<String> symbolPaths = symbolPool.values().stream()
+                .map(IndexedSymbol::relativePath)
+                .collect(Collectors.toUnmodifiableSet());
+        Map<String, IndexedFile> indexedFiles =
+                indexRepository.findFiles(project.id(), symbolPaths);
         List<SearchCandidate> candidates = new ArrayList<>();
         for (IndexedSymbol indexedSymbol : symbolPool.values()) {
+            IndexedFile indexedFile = indexedFiles.get(indexedSymbol.relativePath());
+            if (indexedFile == null || !isGenericSearchEligible(indexedFile.category())) {
+                continue;
+            }
             CodeSymbol symbol = indexedSymbol.symbol();
             String name = symbol.name().toLowerCase(Locale.ROOT);
             String qualifiedName = symbol.qualifiedName().toLowerCase(Locale.ROOT);
 
             double exactScore = exactScore(normalizedQuery, terms, name, qualifiedName);
             double fuzzyScore = fuzzyScore(terms, name, qualifiedName);
-            if (exactScore == 0.0d && fuzzyScore < MIN_FUZZY_SCORE) {
-                continue;
+            if (exactScore > 0.0d || fuzzyScore >= MIN_FUZZY_SCORE) {
+                Map<String, Double> signals = new LinkedHashMap<>();
+                signals.put(SearchSignals.SYMBOL_EXACT, exactScore);
+                signals.put(SearchSignals.SYMBOL_FUZZY, fuzzyScore);
+                signals.put(SearchSignals.PATH, SearchText.pathScore(indexedSymbol.relativePath(), terms));
+
+                candidates.add(new SearchCandidate(
+                        "symbol:" + indexedSymbol.relativePath() + ":" + symbol.qualifiedName(),
+                        CandidateType.SYMBOL,
+                        new RepositoryPath(indexedSymbol.relativePath()).resolve(project.rootPath()),
+                        symbol,
+                        symbol.signature(),
+                        signals));
             }
-
-            Map<String, Double> signals = new LinkedHashMap<>();
-            signals.put(SearchSignals.SYMBOL_EXACT, exactScore);
-            signals.put(SearchSignals.SYMBOL_FUZZY, fuzzyScore);
-            signals.put(SearchSignals.PATH, SearchText.pathScore(indexedSymbol.relativePath(), terms));
-
-            candidates.add(new SearchCandidate(
-                    "symbol:" + indexedSymbol.relativePath() + ":" + symbol.qualifiedName(),
-                    CandidateType.SYMBOL,
-                    new RepositoryPath(indexedSymbol.relativePath()).resolve(project.rootPath()),
-                    symbol,
-                    symbol.signature(),
-                    signals));
         }
 
         return candidates.stream()
@@ -77,6 +88,12 @@ public final class SymbolSearchStrategy implements SearchStrategy {
                         .thenComparing(SearchCandidate::id))
                 .limit(limit)
                 .toList();
+    }
+
+    private static boolean isGenericSearchEligible(FileCategory category) {
+        return category != FileCategory.INSTRUCTION
+                && category != FileCategory.AGENT_PROFILE
+                && category != FileCategory.SKILL;
     }
 
     private static void collect(Map<String, IndexedSymbol> target, List<IndexedSymbol> symbols) {

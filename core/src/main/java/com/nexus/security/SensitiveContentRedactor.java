@@ -15,6 +15,9 @@ import java.util.regex.Pattern;
  */
 public final class SensitiveContentRedactor {
 
+    /** Version persistée dans les index dérivés ; toute évolution impose leur reconstruction. */
+    public static final String POLICY_VERSION = "secret-redaction-v5";
+
     private static final String REDACTED = "[REDACTED]";
     private static final String PRIVATE_KEY_BEGIN = "-----BEGIN ";
     private static final String PRIVATE_KEY_END = "-----END ";

@@ -56,6 +56,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: docker-distribution-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   docker:
     name: Docker CLI MCP REST parity and supply chain
