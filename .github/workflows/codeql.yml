@@ -31,7 +31,7 @@ jobs:
       NEXUS_CODEQL_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Checkout exact qualified head
-        uses: actions/checkout@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           ref: ${{ env.NEXUS_CODEQL_HEAD_SHA }}
