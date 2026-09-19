@@ -46,6 +46,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * Index vectoriel local dérivé basé sur les capacités kNN natives de Lucene.
@@ -59,6 +60,8 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
     private static final String EXCERPT_FIELD = "excerpt";
     private static final String VECTOR_FIELD = "embedding";
     private static final String RECOVERY_GENERATION_PREFIX = "recovery-";
+    private static final Pattern RECOVERY_GENERATION_PATTERN = Pattern.compile(
+            "recovery-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
     private static final Duration RECOVERY_GENERATION_RETENTION = Duration.ofDays(1);
 
     private final NexusPaths paths;
@@ -323,15 +326,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
     }
 
     private static boolean isRecoveryGenerationName(String generation) {
-        if (!generation.startsWith(RECOVERY_GENERATION_PREFIX)) {
-            return false;
-        }
-        String identifier = generation.substring(RECOVERY_GENERATION_PREFIX.length());
-        try {
-            return UUID.fromString(identifier).toString().equals(identifier);
-        } catch (IllegalArgumentException invalidIdentifier) {
-            return false;
-        }
+        return RECOVERY_GENERATION_PATTERN.matcher(generation).matches();
     }
 
     private static void deleteRecoveryGeneration(Path recovery) throws IOException {
