@@ -10,9 +10,7 @@ import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 
-import java.io.FilterInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -38,7 +36,10 @@ public final class NexusMcpServer {
         CountDownLatch lifecycle = new CountDownLatch(1);
         AtomicBoolean resourcesClosed = new AtomicBoolean(false);
 
-        InputStream lifecycleInput = new EofNotifyingInputStream(System.in, lifecycle::countDown);
+        McpStdioInputStream lifecycleInput = new McpStdioInputStream(
+                System.in,
+                McpStdioInputStream.DEFAULT_MAX_FRAME_BYTES,
+                lifecycle::countDown);
         StdioServerTransportProvider transportProvider = new StdioServerTransportProvider(
                 McpJsonDefaults.getMapper(),
                 lifecycleInput,
@@ -94,41 +95,8 @@ public final class NexusMcpServer {
 
     private static String version() {
         String implementationVersion = NexusMcpServer.class.getPackage().getImplementationVersion();
-        // Sans manifeste (exécution depuis les classes), on annonce explicitement un build de
-        // développement plutôt qu'un numéro codé en dur qui dériverait à chaque montée de version.
         return implementationVersion == null || implementationVersion.isBlank()
                 ? "0.0.0-dev"
                 : implementationVersion;
-    }
-
-    private static final class EofNotifyingInputStream extends FilterInputStream {
-
-        private final Runnable onEof;
-        private final AtomicBoolean eofObserved = new AtomicBoolean(false);
-
-        private EofNotifyingInputStream(InputStream delegate, Runnable onEof) {
-            super(delegate);
-            this.onEof = onEof;
-        }
-
-        @Override
-        public int read() throws IOException {
-            int value = super.read();
-            notifyIfEof(value);
-            return value;
-        }
-
-        @Override
-        public int read(byte[] buffer, int offset, int length) throws IOException {
-            int read = super.read(buffer, offset, length);
-            notifyIfEof(read);
-            return read;
-        }
-
-        private void notifyIfEof(int value) {
-            if (value == -1 && eofObserved.compareAndSet(false, true)) {
-                onEof.run();
-            }
-        }
     }
 }

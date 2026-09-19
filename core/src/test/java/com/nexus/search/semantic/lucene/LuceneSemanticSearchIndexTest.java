@@ -27,6 +27,85 @@ class LuceneSemanticSearchIndexTest {
     Path temporaryDirectory;
 
     @Test
+    void independentPersistentReaderFollowsRepeatedRebuildsAndEmptyCommits() throws Exception {
+        NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("independent-reader"));
+        UUID project = UUID.randomUUID();
+        LuceneSemanticSearchIndex writer = new LuceneSemanticSearchIndex(paths, 3);
+        try (var reader = new PersistentLuceneSemanticSearchIndex(paths, 3)) {
+            writer.rebuild(project, List.of(document("before.java", FileCategory.SOURCE, "before", 1, 0, 0)));
+            assertEquals("before.java", reader.search(project, new float[]{1, 0, 0}, 1).getFirst().relativePath());
+            for (int iteration = 0; iteration < 3; iteration++) {
+                String path = "after-" + iteration + ".java";
+                writer.rebuild(project, List.of(document(path, FileCategory.SOURCE, "after", 1, 0, 0)));
+                assertEquals(path, reader.search(project, new float[]{1, 0, 0}, 1).getFirst().relativePath());
+            }
+            writer.rebuild(project, List.of());
+            assertEquals(List.of(), reader.search(project, new float[]{1, 0, 0}, 1));
+        }
+        deleteTree(paths.projectSemanticLuceneIndex(project));
+    }
+
+    @Test
+    void independentReaderFollowsRecoveryFromCorruptCommitAndCanThenWrite() throws Exception {
+        NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("independent-recovery"));
+        UUID project = UUID.randomUUID();
+        LuceneSemanticSearchIndex writer = new LuceneSemanticSearchIndex(paths, 3);
+        try (var reader = new PersistentLuceneSemanticSearchIndex(paths, 3)) {
+            writer.rebuild(project, List.of(document("before.java", FileCategory.SOURCE, "before", 1, 0, 0)));
+            assertEquals("before.java", reader.search(project, new float[]{1, 0, 0}, 1).getFirst().relativePath());
+            corruptCommitFiles(paths.projectSemanticLuceneIndex(project));
+            writer.rebuild(project, List.of(document("recovered.java", FileCategory.SOURCE, "after", 1, 0, 0)));
+            // An idle cached reader may be followed by a mutation, not only by a search.
+            reader.applyChanges(project,
+                    List.of(document("updated.java", FileCategory.SOURCE, "updated", 1, 0, 0)),
+                    Set.of("recovered.java"));
+            assertEquals("updated.java", reader.search(project, new float[]{1, 0, 0}, 1).getFirst().relativePath());
+            assertEquals("updated.java", writer.search(project, new float[]{1, 0, 0}, 1).getFirst().relativePath());
+        }
+        deleteTree(paths.projectSemanticLuceneIndex(project));
+    }
+
+    @Test
+    void rebuildWithNewDimensionsDoesNotServeThePreviousVectorSpace() throws Exception {
+        NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("dimension-rebuild"));
+        UUID project = UUID.randomUUID();
+        LuceneSemanticSearchIndex original = new LuceneSemanticSearchIndex(paths, 2);
+        try (var oldReader = new PersistentLuceneSemanticSearchIndex(paths, 2)) {
+            original.rebuild(project, List.of(document("before.java", FileCategory.SOURCE, "before", 1, 0)));
+            oldReader.search(project, new float[]{1, 0}, 1);
+            LuceneSemanticSearchIndex resized = new LuceneSemanticSearchIndex(paths, 3);
+            resized.rebuild(project, List.of(document("after.java", FileCategory.SOURCE, "after", 1, 0, 0)));
+            assertEquals("after.java", resized.search(project, new float[]{1, 0, 0}, 1).getFirst().relativePath());
+            assertThrows(IllegalArgumentException.class, () -> oldReader.search(project, new float[]{1, 0}, 1));
+        }
+    }
+
+    @Test
+    void failedRebuildDoesNotPublishPartialDocuments() throws Exception {
+        NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("failed-rebuild"));
+        UUID project = UUID.randomUUID();
+        LuceneSemanticSearchIndex writer = new LuceneSemanticSearchIndex(paths, 3);
+        writer.rebuild(project, List.of(document("before.java", FileCategory.SOURCE, "before", 1, 0, 0)));
+        List<SemanticVectorDocument> invalidDocuments = List.of(
+                document("partial.java", FileCategory.SOURCE, "partial", 1, 0, 0),
+                document("invalid.java", FileCategory.SOURCE, "invalid", 1, 0));
+        assertThrows(IllegalArgumentException.class, () -> writer.rebuild(project, invalidDocuments));
+        assertEquals("before.java", writer.search(project, new float[]{1, 0, 0}, 2).getFirst().relativePath());
+        assertEquals(1, writer.search(project, new float[]{1, 0, 0}, 2).size());
+    }
+
+    @Test
+    void refusesRecoveryPointersOutsideTheSemanticDirectory() throws Exception {
+        NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("invalid-pointer"));
+        UUID project = UUID.randomUUID();
+        Path root = paths.projectSemanticLuceneIndex(project);
+        paths.ensurePrivateDirectory(root);
+        Files.writeString(root.resolve("current-generation"), "../outside");
+        LuceneSemanticSearchIndex writer = new LuceneSemanticSearchIndex(paths, 3);
+        assertThrows(IOException.class, () -> writer.search(project, new float[]{1, 0, 0}, 1));
+    }
+
+    @Test
     void rebuildsAndFindsNearestDocuments() throws Exception {
         LuceneSemanticSearchIndex index = new LuceneSemanticSearchIndex(
                 new NexusPaths(temporaryDirectory.resolve("nexus-home")),

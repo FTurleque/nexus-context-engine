@@ -34,6 +34,7 @@ public final class ProjectIndexingService {
     private final ProjectRepository projectRepository;
     private final IndexRepository indexRepository;
     private final ProjectScanner scanner;
+    private final SearchIndex searchIndex;
     private final List<CodeIntelligenceProvider> codeIntelligenceProviders;
     private final SemanticIndexingService semanticIndexingService;
     private final ExternalCodeIntelligenceRefresher externalRefresher;
@@ -163,7 +164,7 @@ public final class ProjectIndexingService {
         this.indexRepository = Objects.requireNonNull(indexRepository, "indexRepository");
         this.scanner = Objects.requireNonNull(scanner, "scanner");
         Objects.requireNonNull(analyzers, "analyzers");
-        Objects.requireNonNull(searchIndex, "searchIndex");
+        this.searchIndex = Objects.requireNonNull(searchIndex, "searchIndex");
         Objects.requireNonNull(codeIndexImporters, "codeIndexImporters");
         this.codeIntelligenceProviders = List.copyOf(
                 Objects.requireNonNull(codeIntelligenceProviders, "codeIntelligenceProviders"));
@@ -177,7 +178,7 @@ public final class ProjectIndexingService {
         if (indexDocumentBatchBytes <= 0) {
             throw new IllegalArgumentException("indexDocumentBatchBytes must be greater than zero");
         }
-        this.documentPublisher = new IndexDocumentPublisher(analyzers, searchIndex, semanticIndexingService,
+        this.documentPublisher = new IndexDocumentPublisher(analyzers, this.searchIndex, semanticIndexingService,
                 indexDocumentBatchFiles, indexDocumentBatchBytes);
     }
 
@@ -234,6 +235,14 @@ public final class ProjectIndexingService {
         Instant startedAt = Instant.now();
         projectRepository.save(withState(project, IndexStatus.INDEXING, project.lastIndexedAt(), project.languages()));
         try {
+            // READY ne suffit pas : un dérivé lexical peut avoir été supprimé,
+            // restauré depuis une ancienne sauvegarde ou construit avec une
+            // politique de redaction incompatible. Dans ces cas l'incrémental
+            // laisserait des documents absents ou obsolètes.
+            if (!fullRebuild && !searchIndex.isPresent(projectId)) {
+                fullRebuild = true;
+            }
+
             ProjectScanResult scanResult = scanner.scanWithDiagnostics(project.rootPath());
             List<ScannedFile> scannedFiles = scanResult.files();
             String canonicalFingerprint = CanonicalIndexFingerprint.fromScannedFiles(scannedFiles);

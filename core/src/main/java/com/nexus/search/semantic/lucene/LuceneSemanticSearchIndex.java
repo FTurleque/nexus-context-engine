@@ -6,12 +6,16 @@ import com.nexus.search.semantic.SemanticIndexProvenance;
 import com.nexus.search.semantic.SemanticSearchHit;
 import com.nexus.search.semantic.SemanticSearchIndex;
 import com.nexus.search.semantic.SemanticVectorDocument;
+import com.nexus.security.SafeFileIO;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.KnnFloatVectorField;
 import org.apache.lucene.document.StoredField;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.CorruptIndexException;
+import org.apache.lucene.index.IndexFormatTooOldException;
+import org.apache.lucene.index.IndexFormatTooNewException;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.Term;
@@ -24,12 +28,13 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 
 import java.io.IOException;
-import java.nio.file.FileVisitResult;
+import java.io.EOFException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -67,7 +72,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
     public boolean isCompatible(UUID projectId, SemanticIndexProvenance provenance) throws IOException {
         Objects.requireNonNull(projectId, "projectId");
         Objects.requireNonNull(provenance, PROVENANCE_ARGUMENT);
-        Path indexPath = paths.projectSemanticLuceneIndex(projectId);
+        Path indexPath = indexPath(projectId);
         if (!Files.exists(indexPath, LinkOption.NOFOLLOW_LINKS)) {
             return false;
         }
@@ -101,17 +106,36 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
             List<SemanticVectorDocument> documents) throws IOException {
         Objects.requireNonNull(projectId, "projectId");
         Objects.requireNonNull(documents, "documents");
-        Path indexPath = paths.projectSemanticLuceneIndex(projectId);
+        Path indexPath = indexPath(projectId);
         paths.ensurePrivateDirectory(indexPath);
-        clearDerivedIndexDirectory(indexPath);
+        try {
+            rebuildDirectory(indexPath, provenance, documents);
+        } catch (CorruptIndexException | IndexFormatTooOldException | IndexFormatTooNewException | EOFException failure) {
+            // CREATE preserves healthy commit generations, but cannot read a
+            // corrupt commit. Publish recovery elsewhere without deleting files
+            // still mapped by independent readers (especially on Windows).
+            Path root = paths.projectSemanticLuceneIndex(projectId);
+            Path recovery = root.resolve("recovery-" + UUID.randomUUID());
+            paths.ensurePrivateDirectory(recovery);
+            rebuildDirectory(recovery, provenance, documents);
+            publishRecovery(root, recovery);
+        }
+    }
+
+    private void rebuildDirectory(
+            Path indexPath,
+            SemanticIndexProvenance provenance,
+            List<SemanticVectorDocument> documents) throws IOException {
         try (Directory directory = FSDirectory.open(indexPath)) {
             IndexWriterConfig configuration = new IndexWriterConfig()
-                    .setOpenMode(IndexWriterConfig.OpenMode.CREATE);
+                    .setOpenMode(IndexWriterConfig.OpenMode.CREATE)
+                    .setCommitOnClose(false);
             try (IndexWriter writer = new IndexWriter(directory, configuration)) {
                 for (SemanticVectorDocument document : documents) {
                     writer.addDocument(toLuceneDocument(document));
                 }
                 applyProvenance(writer, provenance);
+                writer.commit();
             }
         }
     }
@@ -145,7 +169,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
         Objects.requireNonNull(projectId, "projectId");
         Objects.requireNonNull(documents, "documents");
         Objects.requireNonNull(removedRelativePaths, "removedRelativePaths");
-        Path indexPath = paths.projectSemanticLuceneIndex(projectId);
+        Path indexPath = indexPath(projectId);
         paths.ensurePrivateDirectory(indexPath);
         try (Directory directory = FSDirectory.open(indexPath)) {
             IndexWriterConfig configuration = new IndexWriterConfig()
@@ -169,7 +193,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
     public List<SemanticSearchHit> search(UUID projectId, float[] queryVector, int limit) throws IOException {
         validateSearchRequest(projectId, queryVector, limit);
 
-        Path indexPath = paths.projectSemanticLuceneIndex(projectId);
+        Path indexPath = indexPath(projectId);
         if (!Files.exists(indexPath, LinkOption.NOFOLLOW_LINKS)) {
             return List.of();
         }
@@ -213,26 +237,40 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
         return List.copyOf(hits);
     }
 
-    private static void clearDerivedIndexDirectory(Path indexPath) throws IOException {
-        try (var entries = Files.list(indexPath)) {
-            for (Path entry : entries.toList()) {
-                Files.walkFileTree(entry, new SimpleFileVisitor<>() {
-                    @Override
-                    public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
-                        Files.delete(file);
-                        return FileVisitResult.CONTINUE;
-                    }
-
-                    @Override
-                    public FileVisitResult postVisitDirectory(Path directory, IOException failure) throws IOException {
-                        if (failure != null) {
-                            throw failure;
-                        }
-                        Files.delete(directory);
-                        return FileVisitResult.CONTINUE;
-                    }
-                });
+    Path indexPath(UUID projectId) throws IOException {
+        Path root = paths.projectSemanticLuceneIndex(projectId);
+        Path pointer = root.resolve("current-generation");
+        if (!Files.exists(pointer, LinkOption.NOFOLLOW_LINKS)) {
+            return root;
+        }
+        paths.ensurePrivateDirectory(root);
+        String generation;
+        try (var reader = SafeFileIO.newBufferedReaderNoFollow(pointer, StandardCharsets.UTF_8, 128)) {
+            generation = reader.readLine();
+            String extraLine = reader.readLine();
+            if (generation == null || !generation.matches("recovery-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
+                    || extraLine != null) {
+                throw new IOException("Pointeur de récupération sémantique invalide");
             }
+        }
+        Path selected = root.resolve(generation);
+        if (!Files.isDirectory(selected, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IOException("Génération sémantique absente : " + selected);
+        }
+        paths.ensurePrivateDirectory(selected);
+        return selected;
+    }
+
+    private void publishRecovery(Path root, Path recovery) throws IOException {
+        Path temporaryPointer = root.resolve("current-generation-" + UUID.randomUUID() + ".tmp");
+        paths.ensurePrivateFile(temporaryPointer);
+        try {
+            Files.writeString(temporaryPointer, recovery.getFileName().toString(), StandardCharsets.UTF_8,
+                    StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING, LinkOption.NOFOLLOW_LINKS);
+            Files.move(temporaryPointer, root.resolve("current-generation"),
+                    StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } finally {
+            Files.deleteIfExists(temporaryPointer);
         }
     }
 

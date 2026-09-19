@@ -63,6 +63,7 @@ public final class LuceneSearchIndex implements SearchIndex {
     private static final String FIELD_SYMBOL_NAME = "symbol_name";
     private static final String FIELD_QUALIFIED_NAME = "qualified_name";
     private static final String FIELD_CODE_TERMS = "code_terms";
+    private static final String COMMIT_REDACTION_POLICY = "nexus.redaction.policy";
 
     private static final Pattern LOWER_OR_DIGIT_TO_UPPER =
             Pattern.compile("(?<=[\\p{Ll}\\p{Nd}])(?=\\p{Lu})");
@@ -103,7 +104,7 @@ public final class LuceneSearchIndex implements SearchIndex {
                         new Term(FIELD_DOCUMENT_KEY, documentKey(projectId, document.relativePath())),
                         toLuceneDocument(projectId, document));
             }
-            resources.writer().commit();
+            commit(resources.writer());
         }
     }
 
@@ -114,7 +115,7 @@ public final class LuceneSearchIndex implements SearchIndex {
             for (SearchDocument document : documents) {
                 resources.writer().addDocument(toLuceneDocument(projectId, document));
             }
-            resources.writer().commit();
+            commit(resources.writer());
         }
     }
 
@@ -136,6 +137,32 @@ public final class LuceneSearchIndex implements SearchIndex {
                 return search(new IndexSearcher(reader), query, limit);
             }
         }
+    }
+
+    @Override
+    public boolean isPresent(UUID projectId) throws IOException {
+        Objects.requireNonNull(projectId, "projectId");
+        Path indexPath = paths.projectLuceneIndex(projectId);
+        if (!Files.exists(indexPath, LinkOption.NOFOLLOW_LINKS)) {
+            return false;
+        }
+        paths.ensurePrivateDirectory(indexPath);
+        try (Directory directory = FSDirectory.open(indexPath)) {
+            if (!DirectoryReader.indexExists(directory)) {
+                return false;
+            }
+            try (DirectoryReader reader = DirectoryReader.open(directory)) {
+                return SensitiveContentRedactor.POLICY_VERSION.equals(
+                        reader.getIndexCommit().getUserData().get(COMMIT_REDACTION_POLICY));
+            }
+        }
+    }
+
+    private static void commit(IndexWriter writer) throws IOException {
+        writer.setLiveCommitData(List.of(Map.entry(
+                COMMIT_REDACTION_POLICY,
+                SensitiveContentRedactor.POLICY_VERSION)));
+        writer.commit();
     }
 
     static void validateSearchRequest(UUID projectId, String query, int limit) {
@@ -171,8 +198,11 @@ public final class LuceneSearchIndex implements SearchIndex {
         parser.setDefaultOperator(QueryParser.Operator.OR);
         try {
             List<String> analyzedTerms = analyzeUniqueTerms(query, analyzer);
-            if (analyzedTerms.size() < 2) {
-                return parser.parse(QueryParserBase.escape(query.trim()));
+            if (analyzedTerms.isEmpty()) {
+                return new org.apache.lucene.search.MatchNoDocsQuery("Aucun terme analysable");
+            }
+            if (analyzedTerms.size() == 1) {
+                return parser.parse(QueryParserBase.escape(analyzedTerms.getFirst()));
             }
 
             BooleanQuery.Builder coordinated = new BooleanQuery.Builder();

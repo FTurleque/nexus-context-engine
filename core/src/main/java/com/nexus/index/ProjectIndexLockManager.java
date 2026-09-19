@@ -5,25 +5,41 @@ import com.nexus.config.NexusPaths;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
+import java.nio.channels.NonReadableChannelException;
 import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
- * Verrou inter-processus des mutations d'index par projet.
+ * Verrou inter-processus des mutations et lectures d'index par projet.
  *
  * <p>Le fichier de lock reste présent après libération ; c'est le verrou OS porté
- * par {@link FileLock} qui représente la propriété exclusive. Son contenu n'a
+ * par {@link FileLock} qui représente la propriété exclusive ou partagée. Son contenu n'a
  * aucune sémantique et NEXUS ne le tronque ni ne l'utilise comme stockage.</p>
  *
- * <p>La composition de production porte également le budget global non bloquant
- * des indexations coûteuses. La capacité est acquise avant le verrou fichier et
+ * <p>Les lectures acquièrent un verrou OS partagé, mutualisé entre lecteurs du
+ * même processus, afin de ne jamais observer un dérivé Lucene pendant son
+ * remplacement. La composition de production porte également le budget global
+ * non bloquant des indexations coûteuses. La capacité est acquise avant le verrou fichier et
  * libérée avec le même handle, y compris lorsqu'une acquisition échoue.</p>
  */
 public final class ProjectIndexLockManager {
+
+    private static final boolean WINDOWS = System.getProperty("os.name", "")
+            .toLowerCase(Locale.ROOT)
+            .contains("win");
+    private static final ConcurrentMap<String, ReentrantReadWriteLock> PROCESS_LOCKS =
+            new ConcurrentHashMap<>();
+    private static final ConcurrentMap<String, SharedReadLock> SHARED_READ_LOCKS =
+            new ConcurrentHashMap<>();
 
     private final NexusPaths paths;
 
@@ -52,21 +68,94 @@ public final class ProjectIndexLockManager {
 
         IndexingCapacityGate.Permit capacityPermit = IndexingCapacityGate.acquireShared();
         boolean permitTransferred = false;
+        ReentrantReadWriteLock processLock = processLock(projectId);
+        if (!processLock.writeLock().tryLock()) {
+            capacityPermit.close();
+            throw busy(projectId);
+        }
+        boolean processLockTransferred = false;
         try {
             Path locksDirectory = paths.locksDirectory();
             paths.ensurePrivateDirectory(locksDirectory);
 
             Path lockPath = paths.projectIndexLock(projectId);
             FileChannel channel = openHardenedChannel(lockPath);
-            FileLock fileLock = acquireFileLock(channel, projectId);
-            LockHandle handle = new LockHandle(channel, fileLock, capacityPermit);
+            FileLock fileLock = acquireFileLock(channel, projectId, false);
+            LockHandle handle = new LockHandle(channel, fileLock, capacityPermit, processLock.writeLock());
             permitTransferred = true;
+            processLockTransferred = true;
             return handle;
         } finally {
             if (!permitTransferred) {
                 capacityPermit.close();
             }
+            if (!processLockTransferred) {
+                processLock.writeLock().unlock();
+            }
         }
+    }
+
+    /** Acquiert une vue de lecture cohérente avec les mutations locales du projet. */
+    public LockHandle acquireRead(UUID projectId) {
+        Objects.requireNonNull(projectId, "projectId");
+        if (paths == null) {
+            return LockHandle.noop();
+        }
+        Lock readLock = processLock(projectId).readLock();
+        readLock.lock();
+        try {
+            Path locksDirectory = paths.locksDirectory();
+            paths.ensurePrivateDirectory(locksDirectory);
+            Path lockPath = paths.projectIndexLock(projectId);
+            SharedReadLock sharedReadLock = acquireSharedReadLock(lockPath, projectId);
+            return new LockHandle(sharedReadLock, readLock);
+        } catch (IOException failure) {
+            readLock.unlock();
+            throw new IllegalStateException(
+                    "Impossible d'acquérir le verrou de lecture du projet " + projectId,
+                    failure);
+        } catch (RuntimeException failure) {
+            readLock.unlock();
+            throw failure;
+        }
+    }
+
+    private SharedReadLock acquireSharedReadLock(Path lockPath, UUID projectId) throws IOException {
+        String key = lockKey(lockPath);
+        synchronized (SHARED_READ_LOCKS) {
+            SharedReadLock existing = SHARED_READ_LOCKS.get(key);
+            if (existing != null) {
+                existing.references++;
+                return existing;
+            }
+            paths.ensurePrivateFile(lockPath);
+            FileChannel channel = FileChannel.open(
+                    lockPath,
+                    StandardOpenOption.READ,
+                    StandardOpenOption.WRITE,
+                    LinkOption.NOFOLLOW_LINKS);
+            FileLock fileLock;
+            try {
+                fileLock = acquireFileLock(channel, projectId, true);
+            } catch (IOException | RuntimeException failure) {
+                closeQuietly(channel);
+                throw failure;
+            }
+            SharedReadLock created = new SharedReadLock(key, channel, fileLock);
+            SHARED_READ_LOCKS.put(key, created);
+            return created;
+        }
+    }
+
+    private ReentrantReadWriteLock processLock(UUID projectId) {
+        Path lockPath = paths.projectIndexLock(projectId).toAbsolutePath().normalize();
+        String key = lockKey(lockPath);
+        return PROCESS_LOCKS.computeIfAbsent(key, ignored -> new ReentrantReadWriteLock(true));
+    }
+
+    private static String lockKey(Path lockPath) {
+        String normalized = lockPath.toAbsolutePath().normalize().toString();
+        return WINDOWS ? normalized.toLowerCase(Locale.ROOT) : normalized;
     }
 
     private FileChannel openHardenedChannel(Path lockPath) throws IOException {
@@ -84,13 +173,16 @@ public final class ProjectIndexLockManager {
         }
     }
 
-    private static FileLock acquireFileLock(FileChannel channel, UUID projectId) throws IOException {
+    private static FileLock acquireFileLock(FileChannel channel, UUID projectId, boolean shared) throws IOException {
         FileLock fileLock;
         try {
-            fileLock = channel.tryLock();
+            fileLock = channel.tryLock(0L, Long.MAX_VALUE, shared);
         } catch (OverlappingFileLockException alreadyLockedInJvm) {
             closeQuietly(channel);
             throw busy(projectId);
+        } catch (NonReadableChannelException unsupportedSharedLock) {
+            closeQuietly(channel);
+            throw new IOException("Le système de fichiers ne permet pas le verrou de lecture partagé", unsupportedSharedLock);
         } catch (IOException failure) {
             closeQuietly(channel);
             throw failure;
@@ -144,20 +236,40 @@ public final class ProjectIndexLockManager {
 
     public static final class LockHandle implements AutoCloseable {
 
-        private static final LockHandle NOOP = new LockHandle(null, null, null);
+        private static final LockHandle NOOP = new LockHandle(null, null, null, null);
 
         private final FileChannel channel;
         private final FileLock fileLock;
         private final IndexingCapacityGate.Permit capacityPermit;
+        private final Lock processLock;
+        private final SharedReadLock sharedReadLock;
         private boolean closed;
 
         private LockHandle(
                 FileChannel channel,
                 FileLock fileLock,
-                IndexingCapacityGate.Permit capacityPermit) {
+                IndexingCapacityGate.Permit capacityPermit,
+                Lock processLock) {
+            this(channel, fileLock, capacityPermit, processLock, null);
+        }
+
+        private LockHandle(
+                SharedReadLock sharedReadLock,
+                Lock processLock) {
+            this(null, null, null, processLock, sharedReadLock);
+        }
+
+        private LockHandle(
+                FileChannel channel,
+                FileLock fileLock,
+                IndexingCapacityGate.Permit capacityPermit,
+                Lock processLock,
+                SharedReadLock sharedReadLock) {
             this.channel = channel;
             this.fileLock = fileLock;
             this.capacityPermit = capacityPermit;
+            this.processLock = processLock;
+            this.sharedReadLock = sharedReadLock;
         }
 
         private static LockHandle noop() {
@@ -171,10 +283,50 @@ public final class ProjectIndexLockManager {
             }
             closed = true;
             try {
-                releaseAndClose(fileLock::release, channel::close);
+                if (sharedReadLock != null) {
+                    sharedReadLock.release();
+                } else if (fileLock != null && channel != null) {
+                    releaseAndClose(fileLock::release, channel::close);
+                }
             } finally {
-                capacityPermit.close();
+                try {
+                    if (processLock != null) {
+                        processLock.unlock();
+                    }
+                } finally {
+                    if (capacityPermit != null) {
+                        capacityPermit.close();
+                    }
+                }
             }
         }
     }
+
+    private static final class SharedReadLock {
+        private final String key;
+        private final FileChannel channel;
+        private final FileLock fileLock;
+        private int references = 1;
+
+        private SharedReadLock(String key, FileChannel channel, FileLock fileLock) {
+            this.key = key;
+            this.channel = channel;
+            this.fileLock = fileLock;
+        }
+
+        private void release() throws IOException {
+            synchronized (SHARED_READ_LOCKS) {
+                references--;
+                if (references > 0) {
+                    return;
+                }
+                try {
+                    releaseAndClose(fileLock::release, channel::close);
+                } finally {
+                    SHARED_READ_LOCKS.remove(key, this);
+                }
+            }
+        }
+    }
+
 }

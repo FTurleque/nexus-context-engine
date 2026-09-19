@@ -124,6 +124,7 @@ public final class SemanticIndexingService {
 
     private static String profileId(int maxEmbeddingChars) {
         return "content-v" + CONTENT_PROFILE_VERSION
+                + ";redactionPolicy=" + SensitiveContentRedactor.POLICY_VERSION
                 + ";maxEmbeddingChars=" + maxEmbeddingChars
                 + ";excerptChars=" + DEFAULT_EXCERPT_CHARS;
     }
