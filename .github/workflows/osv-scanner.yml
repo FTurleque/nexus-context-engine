@@ -79,7 +79,7 @@ jobs:
   scan-sbom:
     name: OSV aggregate SBOM vulnerability gate
     needs: build-sbom
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@8e5cf47b818121e8b405931c82126c2630b0b20d # fail closed on incomplete scans
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@8ac9e5ce44cc7178e0e04229a91bdcc003166e57 # fail closed on incomplete scans
     permissions:
       actions: read
       contents: read
