@@ -41,7 +41,7 @@
         <sqlite-jdbc.version>3.53.4.0</sqlite-jdbc.version>
         <lucene.version>10.5.1</lucene.version>
         <jgit.version>7.8.0.202609011348-r</jgit.version>
-        <jackson.version>2.22.2</jackson.version>
+        <jackson.version>2.22.3</jackson.version>
         <micrometer.version>1.17.1</micrometer.version>
         <snakeyaml-engine.version>3.1.1</snakeyaml-engine.version>
         <jna.version>5.19.1</jna.version>
