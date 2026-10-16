@@ -657,7 +657,7 @@ ContextBundle
 Le repository NEXUS contient :
 
 ```text
-.agents/skills/nexus-context-validation/
+.claude/skills/nexus-context-validation/
 ├── SKILL.md
 └── references/quality-checks.md
 ```
