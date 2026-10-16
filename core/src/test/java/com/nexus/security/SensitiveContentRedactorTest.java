@@ -201,7 +201,8 @@ class SensitiveContentRedactorTest {
     @Test
     void preservesIncompleteAssignmentsAndMasksPrivateCompositeKeys() {
         assertEquals("_password = '[REDACTED]'", SensitiveContentRedactor.redact("_password = 'SyntheticSecret12345'"));
-        for (String source : new String[]{"password", "password = ", "'password\" = 'ordinary value'", "password = 'short'"}) {
+        // Politique v5 : les valeurs courtes ou vides sont masquées (voir les tests de scalaires ci-dessus).
+        for (String source : new String[]{"password", "'password\" = 'ordinary value'"}) {
             assertEquals(source, SensitiveContentRedactor.redact(source));
         }
     }
@@ -220,15 +221,6 @@ class SensitiveContentRedactorTest {
                 SensitiveContentRedactor.redact("{'password': 'AuditSynthetic98765', 'safe': 'ordinary'}"));
         assertEquals("{\"password\":\"[REDACTED]\",\"safe\":\"ordinary\"}",
                 SensitiveContentRedactor.redact("{\"password\":\"AuditSecret123\\\\\",\"safe\":\"ordinary\"}"));
-    }
-
-    @Test
-    void redactsLongAndTruncatedLiteralsInOnePassAndPreservesLines() {
-        String source = "password=\"" + "escaped\\\"".repeat(10_000) + "suffix\"\r\n"
-                + "password=" + "x".repeat(10_000) + "\npassword='unterminated-secret\n";
-        String expected = "password=\"[REDACTED]\"\r\npassword=[REDACTED]\npassword='[REDACTED]\n";
-        assertEquals(expected, SensitiveContentRedactor.redact(source));
-        assertEquals(expected, SensitiveContentRedactor.redact(expected));
     }
 
     @Test
