@@ -155,7 +155,7 @@ public final class DefaultContextBuilder implements ContextBuilder {
                     retrievalLimit,
                     request.explain());
             List<RankedCandidate> filtered = filterRequestedSources(request, ranked);
-            List<Path> targetPaths = targetPaths(project, ranked);
+            List<Path> targetPaths = targetPaths(project, filtered);
 
             var nativeSources = nativePipeline.discover(request, project, targetPaths, discoveryBudget);
             var task = taskMaterializer.materialize(request, project, filtered,

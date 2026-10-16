@@ -1,0 +1,32 @@
+{
+  "commit": "6f863b78c1f7d384e234e1de64be850da31dda5c",
+  "productionJavaFiles": 199,
+  "productionJavaLines": 24750,
+  "workflowFiles": 19,
+  "tests": {
+    "core": {
+      "tests": 466,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 24
+    },
+    "adapters/rest-quarkus": {
+      "tests": 53,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "adapters/mcp-java": {
+      "tests": 14,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "adapters/assistant-clients": {
+      "tests": 24,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  }
+}

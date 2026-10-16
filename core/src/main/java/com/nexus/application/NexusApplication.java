@@ -386,10 +386,21 @@ public final class NexusApplication implements AutoCloseable {
     }
 
     private List<ProjectDescriptor> requireReadyProjects(List<UUID> projectIds) {
-        return projectIds.stream().map(this::requireReadyProject).toList();
+        Map<UUID, ProjectDescriptor> found = projectRepository.findByIds(projectIds).stream()
+                .collect(java.util.stream.Collectors.toMap(ProjectDescriptor::id, project -> project));
+        return projectIds.stream().map(projectId -> {
+            ProjectDescriptor project = found.get(projectId);
+            if (project == null) {
+                throw new IllegalArgumentException("Projet NEXUS introuvable : " + projectId);
+            }
+            com.nexus.project.ProjectReadiness.requireReady(project);
+            return project;
+        }).toList();
     }
 
     private List<ProjectIndexLockManager.LockHandle> acquireReadLocks(List<UUID> projectIds) {
+        // Acquisition et libération sur le même thread : les verrous locaux
+        // sont réentrants et attachés au thread propriétaire.
         List<UUID> lockOrder = projectIds.stream().sorted().toList();
         List<ProjectIndexLockManager.LockHandle> locks = new ArrayList<>(lockOrder.size());
         try (ReadLockAcquisition acquisition = new ReadLockAcquisition(locks)) {
@@ -400,6 +411,7 @@ public final class NexusApplication implements AutoCloseable {
         }
     }
 
+    /** Le try-with-resources conserve l'échec initial si la libération échoue aussi. */
     private static final class ReadLockAcquisition implements AutoCloseable {
         private final List<ProjectIndexLockManager.LockHandle> locks;
         private boolean transferred;
