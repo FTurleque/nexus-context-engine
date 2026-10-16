@@ -159,10 +159,68 @@ class SensitiveContentRedactorTest {
     }
 
     @Test
+    void redactsJsonSecretsWhilePreservingQuotedKeys() {
+        String source = "{\"password\":\"AuditSyntheticPassword98765\",\"client_secret\":\"AuditSyntheticClientSecret98765\"}";
+
+        String redacted = SensitiveContentRedactor.redact(source);
+
+        assertEquals(
+                "{\"password\":\"[REDACTED]\",\"client_secret\":\"[REDACTED]\"}",
+                redacted);
+    }
+
+    @Test
     void doesNotRedactIdentifiersThatMerelyContainSecretAsSubstring() {
         String source = "notasecretvalue = \"ordinary configuration value\";";
 
         assertEquals(source, SensitiveContentRedactor.redact(source));
+    }
+
+    @Test
+    void handlesVeryLongCompositeKeysWithoutRecursiveMatching() {
+        String prefix = "configuration_".repeat(20_000);
+        String source = prefix + "PASSWORD=\"SyntheticSecret12345\";\n"
+                + prefix + "ordinary=\"ordinary value\";";
+        String expected = prefix + "PASSWORD=\"[REDACTED]\";\n"
+                + prefix + "ordinary=\"ordinary value\";";
+        assertEquals(expected, SensitiveContentRedactor.redact(source));
+    }
+
+    @Test
+    void recognizesAllSupportedCompoundSpellingsAndKeepsKeyBoundaries() {
+        for (String name : new String[]{"apikey", "api_key", "api-key", "accessToken", "access_token",
+                "access-token", "authToken", "auth_token", "auth-token", "clientSecret", "client_secret",
+                "client-secret", "secretaccesskey", "secretaccess_key", "secretaccess-key", "secret_access_key"}) {
+            String key = "'service." + name + ".production'";
+            assertEquals(key + ": '[REDACTED]'", SensitiveContentRedactor.redact(key + ": 'SyntheticSecret12345'"));
+        }
+        String ordinary = "notapassword=\"ordinary value\"; passwordHint=\"ordinary value\"; πpassword=\"ordinary value\";";
+        assertEquals(ordinary, SensitiveContentRedactor.redact(ordinary));
+    }
+
+    @Test
+    void preservesIncompleteAssignmentsAndMasksPrivateCompositeKeys() {
+        assertEquals("_password = '[REDACTED]'", SensitiveContentRedactor.redact("_password = 'SyntheticSecret12345'"));
+        // Politique v5 : les valeurs courtes ou vides sont masquées (voir les tests de scalaires ci-dessus).
+        for (String source : new String[]{"password", "'password\" = 'ordinary value'"}) {
+            assertEquals(source, SensitiveContentRedactor.redact(source));
+        }
+    }
+
+    @Test
+    void redactsEscapedQuotesWithoutLeakingSuffixOrChangingDelimiters() {
+        String source = "{\"password\":\"AuditPrefix123\\\"VISIBLE_SECRET_SUFFIX\",\"count\":2}";
+        assertEquals("{\"password\":\"[REDACTED]\",\"count\":2}", SensitiveContentRedactor.redact(source));
+        assertEquals("{'password': '[REDACTED]'}",
+                SensitiveContentRedactor.redact("{'password': 'AuditPrefix123\\'VISIBLE_SECRET_SUFFIX'}"));
+    }
+
+    @Test
+    void redactsSingleQuotedKeysAndHandlesEvenBackslashesBeforeClosingQuote() {
+        assertEquals("{'password': '[REDACTED]', 'safe': 'ordinary'}",
+                SensitiveContentRedactor.redact("{'password': 'AuditSynthetic98765', 'safe': 'ordinary'}"));
+        assertEquals("{\"password\":\"[REDACTED]\",\"safe\":\"ordinary\"}",
+                SensitiveContentRedactor.redact("{\"password\":\"AuditSecret123\\\\\",\"safe\":\"ordinary\"}"));
     }
 
     @Test

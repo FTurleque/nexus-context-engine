@@ -53,6 +53,28 @@ class SqliteProjectRepositoryBulkReadTest {
         assertEquals(gamma, projects.get(2));
     }
 
+    @Test
+    void targetedReadPreservesScopeOrderAndMetadataAcrossBatches() throws Exception {
+        SqliteProjectRepository repository = new SqliteProjectRepository(
+                new SqliteDatabase(new NexusPaths(temporaryDirectory.resolve("targeted-home"))));
+        ProjectDescriptor alpha = project("alpha", Set.of("java"), Set.of("maven"), IndexStatus.READY);
+        ProjectDescriptor beta = project("beta", Set.of(), Set.of(), IndexStatus.FAILED);
+        repository.save(alpha);
+        repository.save(beta);
+        repository.save(project("unrequested", Set.of("python"), Set.of("pytest"), IndexStatus.READY));
+        List<UUID> scope = new java.util.ArrayList<>();
+        scope.add(beta.id());
+        for (int index = 0; index < 500; index++) {
+            scope.add(new UUID(0, index));
+        }
+        scope.add(alpha.id());
+        scope.add(beta.id());
+
+        assertEquals(List.of(beta, alpha), repository.findByIds(scope));
+        assertEquals(List.of(), repository.findByIds(List.of()));
+        assertEquals(List.of(), repository.findByIds(List.of(UUID.randomUUID())));
+    }
+
     private ProjectDescriptor project(
             String name,
             Set<String> languages,

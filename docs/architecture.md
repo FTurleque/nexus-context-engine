@@ -24,7 +24,7 @@ en recherche classée ou en contexte minimal, pertinent, explicable et borné.
 8. Les providers/importers externes sont optionnels, bornés en temps et en concurrence ; au plus 8 tâches externes restent réellement actives simultanément à l'échelle JVM.
 9. Le transport JSON-RPC JDT LS borne messages, headers, lignes et backlog avant allocation/accumulation ; son démarrage exige une racine canonique explicitement approuvée.
 10. Ranking, limites et budgets restent déterministes/explicables.
-11. Une seule mutation d'index par projet est active sur un `NEXUS_HOME` local ; snapshot revalidé avant `READY`.
+11. Une seule mutation d'index par projet est active sur un `NEXUS_HOME` local ; les lectures prennent le verrou partagé pendant toute l'opération et le snapshot est revalidé avant `READY`.
 12. Le graphe, Git, la fédération et la découverte native sont bornés en travail, pas seulement en résultat final.
 13. Une requête Lucene analysée est bornée à 128 termes uniques avant expansion multi-champs.
 14. Une exposition REST hors loopback est fail-closed sans authentification, token CSPRNG conforme au gate structurel, roots et transport TLS effectif conformes.

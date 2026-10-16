@@ -11,6 +11,12 @@ public interface ProjectRepository {
 
     Optional<ProjectDescriptor> findById(UUID projectId);
 
+    /** Renvoie les projets connus, sans doublons et dans l'ordre demandé. */
+    default List<ProjectDescriptor> findByIds(List<UUID> projectIds) {
+        return projectIds.stream().distinct().map(this::findById)
+                .flatMap(Optional::stream).toList();
+    }
+
     Optional<ProjectDescriptor> findByRootPath(Path rootPath);
 
     List<ProjectDescriptor> findAll();
