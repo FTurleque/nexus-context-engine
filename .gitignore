@@ -9,3 +9,5 @@ __pycache__/
 Thumbs.db
 /index.scip
 /.nexus/registry/
+/.claude/settings.local.json
+/.claude/**/__pycache__/
