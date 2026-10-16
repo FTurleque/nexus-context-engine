@@ -26,11 +26,11 @@ if "$VERIFY" sha512 "00000000000000000000000000000000000000000000000000000000000
   exit 1
 fi
 
-grep -Eq '^maven\.3\.9\.16\.sha512=[0-9a-f]{128}$' "$INTEGRITY"
+grep -Eq '^maven\.3\.10\.0\.sha512=[0-9a-f]{128}$' "$INTEGRITY"
 grep -Eq '^jdtls\.1\.60\.0-202606262232\.sha256=[0-9a-f]{64}$' "$INTEGRITY"
 grep -Eq '^ollama\.0\.33\.3\.linux-amd64\.sha256=[0-9a-f]{64}$' "$INTEGRITY"
-grep -q 'MAVEN_VERSION="3.9.16"' "$ROOT/mvnw"
-grep -q 'MAVEN_VERSION=3.9.16' "$ROOT/mvnw.cmd"
+grep -q 'MAVEN_VERSION="3.10.0"' "$ROOT/mvnw"
+grep -q 'MAVEN_VERSION=3.10.0' "$ROOT/mvnw.cmd"
 
 # Both wrappers must keep the repository-pinned digest as the trust anchor and
 # verify the extracted cache itself before executing Maven.

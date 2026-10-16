@@ -54,7 +54,7 @@ Mitigation : chemins/historique capés et sink de patch à capacité fixe, quali
 
 ### Supply-chain outils
 
-Mitigation : Maven 3.9.16 contrôlé par SHA-512 versionné, JDT LS fixe contrôlé par SHA-256 et runtime Ollama du benchmark réel contrôlé par SHA-256 ; contrats vérifiés dans NEXUS CI avant les usages concernés.
+Mitigation : Maven 3.10.0 contrôlé par SHA-512 versionné, JDT LS fixe contrôlé par SHA-256 et runtime Ollama du benchmark réel contrôlé par SHA-256 ; contrats vérifiés dans NEXUS CI avant les usages concernés.
 
 ### Publication Docker divergente
 
