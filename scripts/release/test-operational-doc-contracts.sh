@@ -104,7 +104,7 @@ require("docs/developer/ci-and-supply-chain.md", "`develop` est la branche d'int
 require("docs/developer/branch-governance.md", "force pushes")
 require("docs/developer/native-context-discovery-limits.md", "NativeContextDiscoveryBudgetBenchmarkTest")
 
-require("docs/developer/rest-api.md", "Quarkus     3.39.1")
+require("docs/developer/rest-api.md", "Quarkus     3.40.1")
 require("docs/developer/rest-api.md", "quarkus.http.insecure-requests")
 require("docs/developer/rest-api.md", "trusted-proxies")
 require("docs/developer/mcp.md", "MCP SDK     2.0.1")
