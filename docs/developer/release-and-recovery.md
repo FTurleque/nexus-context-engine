@@ -6,7 +6,7 @@ Ce document décrit le contrat opérationnel courant de NEXUS Context Engine 0.2
 
 - Java runtime : 21 ou supérieur ;
 - bytecode/API : Java 21 (`maven.compiler.release=21`) ;
-- wrapper : **Maven 3.9.16** avec SHA-512 versionné dans `config/tool-integrity.properties` ;
+- wrapper : **Maven 3.10.0** avec SHA-512 versionné dans `config/tool-integrity.properties` ;
 - Eclipse JDT LS optionnel : archive vérifiée contre le SHA-256 versionné dans le même fichier.
 
 Les scripts d'installation échouent si l'ancre attendue manque ou ne correspond pas aux octets téléchargés. L'installateur JDT LS ne fait pas confiance à un checksum récupéré depuis le même origin que l'archive.

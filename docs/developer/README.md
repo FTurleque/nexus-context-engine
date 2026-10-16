@@ -11,14 +11,14 @@ Ce répertoire distingue :
 ```text
 version      0.2.0
 Java         >=21, release 21
-Maven        3.9.16 via wrapper vérifié
+Maven        3.10.0 via wrapper vérifié
 integration  develop
 release      main
 Quarkus      3.39.1
 MCP SDK      2.0.1
 ```
 
-Le build courant utilise **Maven 3.9.16** via le wrapper et son ancre d'intégrité versionnée.
+Le build courant utilise **Maven 3.10.0** via le wrapper et son ancre d'intégrité versionnée.
 
 Les campagnes NXA3 et NXA4 constituent la baseline de hardening courante. Une ancienne PR ou un ancien run vert n'est jamais une preuve pour un nouveau HEAD : la preuve applicable reste le run exact-head du commit concerné.
 

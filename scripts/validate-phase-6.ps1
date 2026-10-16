@@ -146,7 +146,7 @@ try {
     Write-Host "Maven compiler release : $compilerRelease"
 
     Write-Host "[2/9] Maven reproductible avec fallback runner"
-    $wrapperMavenBin = Join-Path $env:USERPROFILE ".m2\wrapper\dists\nexus\apache-maven-3.9.16\apache-maven-3.9.16\bin"
+    $wrapperMavenBin = Join-Path $env:USERPROFILE ".m2\wrapper\dists\nexus\apache-maven-3.10.0\apache-maven-3.10.0\bin"
     if (Test-Path -LiteralPath $wrapperMavenBin -PathType Container) {
         $env:PATH = "$wrapperMavenBin;$env:PATH"
     }
