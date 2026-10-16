@@ -45,6 +45,7 @@ Les campagnes NXA3 et NXA4 constituent la baseline de hardening courante. Une an
 | Git | [Contexte Git](git-context.md) |
 | AI Skills Registry | [AI Skills Registry](ai-skills-registry.md) |
 | scale | [Recherche à grande échelle](large-scale-search.md) |
+| outillage Claude Code | [Outillage Claude Code](claude-code.md) |
 
 ## Composition
 

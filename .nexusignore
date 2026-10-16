@@ -8,6 +8,10 @@ node_modules/
 .idea/
 .vscode/
 
+# Claude Code tooling instructions: meant for the developer agent, not for NEXUS
+# context bundles, where they would outrank AGENTS.md (self-smoke step 9).
+/.claude/CLAUDE.md
+
 # Secrets and credentials
 .env
 .env.*
