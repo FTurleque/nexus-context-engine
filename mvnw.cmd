@@ -1,86 +1,189 @@
-@ECHO OFF
-SETLOCAL EnableExtensions
+<# : batch portion
+@REM ----------------------------------------------------------------------------
+@REM Licensed to the Apache Software Foundation (ASF) under one
+@REM or more contributor license agreements.  See the NOTICE file
+@REM distributed with this work for additional information
+@REM regarding copyright ownership.  The ASF licenses this file
+@REM to you under the Apache License, Version 2.0 (the
+@REM "License"); you may not use this file except in compliance
+@REM with the License.  You may obtain a copy of the License at
+@REM
+@REM    http://www.apache.org/licenses/LICENSE-2.0
+@REM
+@REM Unless required by applicable law or agreed to in writing,
+@REM software distributed under the License is distributed on an
+@REM "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+@REM KIND, either express or implied.  See the License for the
+@REM specific language governing permissions and limitations
+@REM under the License.
+@REM ----------------------------------------------------------------------------
 
-SET "MAVEN_VERSION=3.9.16"
-SET "MAVEN_DIST_URL=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/%MAVEN_VERSION%/apache-maven-%MAVEN_VERSION%-bin.zip"
-SET "WRAPPER_HOME=%USERPROFILE%\.m2\wrapper\dists\nexus\apache-maven-%MAVEN_VERSION%"
-SET "MAVEN_HOME=%WRAPPER_HOME%\apache-maven-%MAVEN_VERSION%"
-SET "ARCHIVE=%WRAPPER_HOME%\apache-maven-%MAVEN_VERSION%-bin.zip"
-SET "ARCHIVE_PREFIX=apache-maven-%MAVEN_VERSION%/"
-SET "POWERSHELL_EXE=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
-SET "INTEGRITY_FILE=%~dp0config\tool-integrity.properties"
-SET "CACHE_VERIFY_SCRIPT=%~dp0scripts\release\ToolArchiveVerifier.java"
+@REM ----------------------------------------------------------------------------
+@REM Apache Maven Wrapper startup batch script, version 3.3.4
+@REM
+@REM Optional ENV vars
+@REM   MVNW_REPOURL - repo url base for downloading maven distribution
+@REM   MVNW_USERNAME/MVNW_PASSWORD - user and password for downloading maven
+@REM   MVNW_VERBOSE - true: enable verbose log; others: silence the output
+@REM ----------------------------------------------------------------------------
 
-IF NOT EXIST "%POWERSHELL_EXE%" (
-  ECHO [NEXUS] Windows PowerShell 5.1 introuvable : %POWERSHELL_EXE%
-  EXIT /B 1
+@IF "%__MVNW_ARG0_NAME__%"=="" (SET __MVNW_ARG0_NAME__=%~nx0)
+@SET __MVNW_CMD__=
+@SET __MVNW_ERROR__=
+@SET __MVNW_PSMODULEP_SAVE=%PSModulePath%
+@SET PSModulePath=
+@FOR /F "usebackq tokens=1* delims==" %%A IN (`powershell -noprofile "& {$scriptDir='%~dp0'; $script='%__MVNW_ARG0_NAME__%'; icm -ScriptBlock ([Scriptblock]::Create((Get-Content -Raw '%~f0'))) -NoNewScope}"`) DO @(
+  IF "%%A"=="MVN_CMD" (set __MVNW_CMD__=%%B) ELSE IF "%%B"=="" (echo %%A) ELSE (echo %%A=%%B)
 )
-IF NOT EXIST "%INTEGRITY_FILE%" (
-  ECHO [NEXUS] Fichier d'integrite introuvable : %INTEGRITY_FILE%
-  EXIT /B 1
-)
-IF NOT EXIST "%CACHE_VERIFY_SCRIPT%" (
-  ECHO [NEXUS] Verificateur de cache Maven introuvable : %CACHE_VERIFY_SCRIPT%
-  EXIT /B 1
-)
-WHERE java.exe >NUL 2>NUL
-IF ERRORLEVEL 1 (
-  ECHO [NEXUS] Java 21+ est requis pour verifier et executer Maven Wrapper.
-  EXIT /B 1
-)
+@SET PSModulePath=%__MVNW_PSMODULEP_SAVE%
+@SET __MVNW_PSMODULEP_SAVE=
+@SET __MVNW_ARG0_NAME__=
+@SET MVNW_USERNAME=
+@SET MVNW_PASSWORD=
+@IF NOT "%__MVNW_CMD__%"=="" ("%__MVNW_CMD__%" %*)
+@echo Cannot start maven from wrapper >&2 && exit /b 1
+@GOTO :EOF
+: end batch / begin powershell #>
 
-"%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; [void](New-Item -ItemType Directory -Force -Path ([Environment]::ExpandEnvironmentVariables('%WRAPPER_HOME%')))"
-IF ERRORLEVEL 1 EXIT /B %ERRORLEVEL%
+$ErrorActionPreference = "Stop"
+if ($env:MVNW_VERBOSE -eq "true") {
+  $VerbosePreference = "Continue"
+}
 
-IF EXIST "%ARCHIVE%" GOTO VERIFY_MAVEN
+# calculate distributionUrl, requires .mvn/wrapper/maven-wrapper.properties
+$distributionUrl = (Get-Content -Raw "$scriptDir/.mvn/wrapper/maven-wrapper.properties" | ConvertFrom-StringData).distributionUrl
+if (!$distributionUrl) {
+  Write-Error "cannot read distributionUrl property in $scriptDir/.mvn/wrapper/maven-wrapper.properties"
+}
 
-:DOWNLOAD_MAVEN
-ECHO [NEXUS] Telechargement de Maven %MAVEN_VERSION% via Maven Central...
-WHERE curl.exe >NUL 2>NUL
-IF ERRORLEVEL 1 GOTO DOWNLOAD_POWERSHELL
+switch -wildcard -casesensitive ( $($distributionUrl -replace '^.*/','') ) {
+  "maven-mvnd-*" {
+    $USE_MVND = $true
+    $distributionUrl = $distributionUrl -replace '-bin\.[^.]*$',"-windows-amd64.zip"
+    $MVN_CMD = "mvnd.cmd"
+    break
+  }
+  default {
+    $USE_MVND = $false
+    $MVN_CMD = $script -replace '^mvnw','mvn'
+    break
+  }
+}
 
-curl.exe --fail --location --silent --show-error --retry 3 --retry-delay 2 --retry-all-errors --output "%ARCHIVE%" "%MAVEN_DIST_URL%"
-IF ERRORLEVEL 1 (
-  IF EXIST "%ARCHIVE%" DEL /F /Q "%ARCHIVE%" >NUL 2>NUL
-  ECHO [NEXUS] curl.exe indisponible pour Maven Central, tentative Windows PowerShell...
-  GOTO DOWNLOAD_POWERSHELL
-)
-GOTO VERIFY_MAVEN
+# apply MVNW_REPOURL and calculate MAVEN_HOME
+# maven home pattern: ~/.m2/wrapper/dists/{apache-maven-<version>,maven-mvnd-<version>-<platform>}/<hash>
+if ($env:MVNW_REPOURL) {
+  $MVNW_REPO_PATTERN = if ($USE_MVND -eq $False) { "/org/apache/maven/" } else { "/maven/mvnd/" }
+  $distributionUrl = "$env:MVNW_REPOURL$MVNW_REPO_PATTERN$($distributionUrl -replace "^.*$MVNW_REPO_PATTERN",'')"
+}
+$distributionUrlName = $distributionUrl -replace '^.*/',''
+$distributionUrlNameMain = $distributionUrlName -replace '\.[^.]*$','' -replace '-bin$',''
 
-:DOWNLOAD_POWERSHELL
-"%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $archive=[Environment]::ExpandEnvironmentVariables('%ARCHIVE%'); $headers=@{'User-Agent'='NEXUS-Maven-Wrapper/%MAVEN_VERSION%'}; Invoke-WebRequest -UseBasicParsing -Headers $headers -Uri '%MAVEN_DIST_URL%' -OutFile $archive"
-IF ERRORLEVEL 1 (
-  IF EXIST "%ARCHIVE%" DEL /F /Q "%ARCHIVE%" >NUL 2>NUL
-  ECHO [NEXUS] Echec du telechargement Maven avec Windows PowerShell.
-  EXIT /B 1
-)
+$MAVEN_M2_PATH = "$HOME/.m2"
+if ($env:MAVEN_USER_HOME) {
+  $MAVEN_M2_PATH = "$env:MAVEN_USER_HOME"
+}
 
-:VERIFY_MAVEN
-"%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $archive=[Environment]::ExpandEnvironmentVariables('%ARCHIVE%'); $integrity=[Environment]::ExpandEnvironmentVariables('%INTEGRITY_FILE%'); $key='maven.%MAVEN_VERSION%.sha512'; $entry=Get-Content -LiteralPath $integrity | Where-Object { $_ -like ($key + '=*') } | Select-Object -First 1; if (-not $entry) { throw ('Ancre SHA-512 Maven absente pour %MAVEN_VERSION% dans ' + $integrity) }; $expected=$entry.Substring($key.Length + 1).Trim().ToUpperInvariant(); if ($expected -notmatch '^[0-9A-F]{128}$') { throw 'Ancre SHA-512 Maven invalide' }; $sha=[System.Security.Cryptography.SHA512]::Create(); $stream=$null; try { $stream=[System.IO.File]::OpenRead($archive); $actual=([System.BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-','').ToUpperInvariant() } finally { if ($null -ne $stream) { $stream.Dispose() }; $sha.Dispose() }; if ($expected -ne $actual) { Remove-Item -Force $archive; throw ('Checksum SHA-512 Maven invalide. Attendu=' + $expected + ', obtenu=' + $actual) }"
-IF ERRORLEVEL 1 EXIT /B %ERRORLEVEL%
+if (-not (Test-Path -Path $MAVEN_M2_PATH)) {
+    New-Item -Path $MAVEN_M2_PATH -ItemType Directory | Out-Null
+}
 
-IF NOT EXIST "%MAVEN_HOME%\bin\mvn.cmd" GOTO INSTALL_MAVEN
-java "%CACHE_VERIFY_SCRIPT%" zip "%ARCHIVE%" "%MAVEN_HOME%" "%ARCHIVE_PREFIX%"
-IF NOT ERRORLEVEL 1 GOTO RUN_MAVEN
+$MAVEN_WRAPPER_DISTS = $null
+if ((Get-Item $MAVEN_M2_PATH).Target[0] -eq $null) {
+  $MAVEN_WRAPPER_DISTS = "$MAVEN_M2_PATH/wrapper/dists"
+} else {
+  $MAVEN_WRAPPER_DISTS = (Get-Item $MAVEN_M2_PATH).Target[0] + "/wrapper/dists"
+}
 
-ECHO [NEXUS] Cache Maven extrait altere ; reconstruction depuis l'archive SHA-512 verifiee.
-"%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $home=[Environment]::ExpandEnvironmentVariables('%MAVEN_HOME%'); if (Test-Path -LiteralPath $home) { Remove-Item -Recurse -Force -LiteralPath $home }"
-IF ERRORLEVEL 1 EXIT /B %ERRORLEVEL%
+$MAVEN_HOME_PARENT = "$MAVEN_WRAPPER_DISTS/$distributionUrlNameMain"
+$MAVEN_HOME_NAME = ([System.Security.Cryptography.SHA256]::Create().ComputeHash([byte[]][char[]]$distributionUrl) | ForEach-Object {$_.ToString("x2")}) -join ''
+$MAVEN_HOME = "$MAVEN_HOME_PARENT/$MAVEN_HOME_NAME"
 
-:INSTALL_MAVEN
-ECHO [NEXUS] Extraction de Maven %MAVEN_VERSION% depuis l'archive verifiee...
-"%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $archive=[Environment]::ExpandEnvironmentVariables('%ARCHIVE%'); $homeDir=[Environment]::ExpandEnvironmentVariables('%WRAPPER_HOME%'); Expand-Archive -Force -Path $archive -DestinationPath $homeDir"
-IF ERRORLEVEL 1 EXIT /B %ERRORLEVEL%
-IF NOT EXIST "%MAVEN_HOME%\bin\mvn.cmd" (
-  ECHO [NEXUS] L'archive Maven verifiee n'a pas produit le launcher attendu : %MAVEN_HOME%\bin\mvn.cmd
-  EXIT /B 1
-)
-java "%CACHE_VERIFY_SCRIPT%" zip "%ARCHIVE%" "%MAVEN_HOME%" "%ARCHIVE_PREFIX%"
-IF ERRORLEVEL 1 (
-  ECHO [NEXUS] Verification du Maven extrait en echec.
-  EXIT /B 1
-)
+if (Test-Path -Path "$MAVEN_HOME" -PathType Container) {
+  Write-Verbose "found existing MAVEN_HOME at $MAVEN_HOME"
+  Write-Output "MVN_CMD=$MAVEN_HOME/bin/$MVN_CMD"
+  exit $?
+}
 
-:RUN_MAVEN
-CALL "%MAVEN_HOME%\bin\mvn.cmd" %*
-EXIT /B %ERRORLEVEL%
+if (! $distributionUrlNameMain -or ($distributionUrlName -eq $distributionUrlNameMain)) {
+  Write-Error "distributionUrl is not valid, must end with *-bin.zip, but found $distributionUrl"
+}
+
+# prepare tmp dir
+$TMP_DOWNLOAD_DIR_HOLDER = New-TemporaryFile
+$TMP_DOWNLOAD_DIR = New-Item -Itemtype Directory -Path "$TMP_DOWNLOAD_DIR_HOLDER.dir"
+$TMP_DOWNLOAD_DIR_HOLDER.Delete() | Out-Null
+trap {
+  if ($TMP_DOWNLOAD_DIR.Exists) {
+    try { Remove-Item $TMP_DOWNLOAD_DIR -Recurse -Force | Out-Null }
+    catch { Write-Warning "Cannot remove $TMP_DOWNLOAD_DIR" }
+  }
+}
+
+New-Item -Itemtype Directory -Path "$MAVEN_HOME_PARENT" -Force | Out-Null
+
+# Download and Install Apache Maven
+Write-Verbose "Couldn't find MAVEN_HOME, downloading and installing it ..."
+Write-Verbose "Downloading from: $distributionUrl"
+Write-Verbose "Downloading to: $TMP_DOWNLOAD_DIR/$distributionUrlName"
+
+$webclient = New-Object System.Net.WebClient
+if ($env:MVNW_USERNAME -and $env:MVNW_PASSWORD) {
+  $webclient.Credentials = New-Object System.Net.NetworkCredential($env:MVNW_USERNAME, $env:MVNW_PASSWORD)
+}
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$webclient.DownloadFile($distributionUrl, "$TMP_DOWNLOAD_DIR/$distributionUrlName") | Out-Null
+
+# If specified, validate the SHA-256 sum of the Maven distribution zip file
+$distributionSha256Sum = (Get-Content -Raw "$scriptDir/.mvn/wrapper/maven-wrapper.properties" | ConvertFrom-StringData).distributionSha256Sum
+if ($distributionSha256Sum) {
+  if ($USE_MVND) {
+    Write-Error "Checksum validation is not supported for maven-mvnd. `nPlease disable validation by removing 'distributionSha256Sum' from your maven-wrapper.properties."
+  }
+  Import-Module $PSHOME\Modules\Microsoft.PowerShell.Utility -Function Get-FileHash
+  if ((Get-FileHash "$TMP_DOWNLOAD_DIR/$distributionUrlName" -Algorithm SHA256).Hash.ToLower() -ne $distributionSha256Sum) {
+    Write-Error "Error: Failed to validate Maven distribution SHA-256, your Maven distribution might be compromised. If you updated your Maven version, you need to update the specified distributionSha256Sum property."
+  }
+}
+
+# unzip and move
+Expand-Archive "$TMP_DOWNLOAD_DIR/$distributionUrlName" -DestinationPath "$TMP_DOWNLOAD_DIR" | Out-Null
+
+# Find the actual extracted directory name (handles snapshots where filename != directory name)
+$actualDistributionDir = ""
+
+# First try the expected directory name (for regular distributions)
+$expectedPath = Join-Path "$TMP_DOWNLOAD_DIR" "$distributionUrlNameMain"
+$expectedMvnPath = Join-Path "$expectedPath" "bin/$MVN_CMD"
+if ((Test-Path -Path $expectedPath -PathType Container) -and (Test-Path -Path $expectedMvnPath -PathType Leaf)) {
+  $actualDistributionDir = $distributionUrlNameMain
+}
+
+# If not found, search for any directory with the Maven executable (for snapshots)
+if (!$actualDistributionDir) {
+  Get-ChildItem -Path "$TMP_DOWNLOAD_DIR" -Directory | ForEach-Object {
+    $testPath = Join-Path $_.FullName "bin/$MVN_CMD"
+    if (Test-Path -Path $testPath -PathType Leaf) {
+      $actualDistributionDir = $_.Name
+    }
+  }
+}
+
+if (!$actualDistributionDir) {
+  Write-Error "Could not find Maven distribution directory in extracted archive"
+}
+
+Write-Verbose "Found extracted Maven distribution directory: $actualDistributionDir"
+Rename-Item -Path "$TMP_DOWNLOAD_DIR/$actualDistributionDir" -NewName $MAVEN_HOME_NAME | Out-Null
+try {
+  Move-Item -Path "$TMP_DOWNLOAD_DIR/$MAVEN_HOME_NAME" -Destination $MAVEN_HOME_PARENT | Out-Null
+} catch {
+  if (! (Test-Path -Path "$MAVEN_HOME" -PathType Container)) {
+    Write-Error "fail to move MAVEN_HOME"
+  }
+} finally {
+  try { Remove-Item $TMP_DOWNLOAD_DIR -Recurse -Force | Out-Null }
+  catch { Write-Warning "Cannot remove $TMP_DOWNLOAD_DIR" }
+}
+
+Write-Output "MVN_CMD=$MAVEN_HOME/bin/$MVN_CMD"
