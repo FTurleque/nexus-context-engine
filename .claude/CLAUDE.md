@@ -1,13 +1,13 @@
 # NEXUS — repères et outillage Claude Code
 
-Les instructions du projet sont dans `AGENTS.md` (chargé par Claude Code). Ce fichier n'est volontairement pas un `CLAUDE.md` : NEXUS indexe les `CLAUDE.md` comme instructions natives, et un second fichier d'instructions concurrencerait `AGENTS.md` dans ses propres contextes (vérifié par `scripts/self-smoke.ps1`).
+Les règles du projet sont dans `AGENTS.md`, que Claude Code charge directement ; ce fichier les complète pour l'outillage Claude Code. Il est exclu de l'indexation NEXUS par `.nexusignore` : comme instruction native, il passerait devant `AGENTS.md` dans les contextes sous budget serré (étape 9 de `scripts/self-smoke.ps1`). Il ne contient ni chemin local ni secret.
 
 ## Repères
 
 - Cœur métier : `core/src/main/java/com/nexus` (Java 21, sans framework). Composition root : `NexusApplication`. Adaptateurs minces : `adapters/rest-quarkus`, `adapters/mcp-java`, `adapters/assistant-clients`.
 - SQLite canonique (`persistence/sqlite`, migrations `core/src/main/resources/db/migration`), Lucene dérivé (`search/lucene`, `search/semantic`).
 - Documentation courante en français : `docs/architecture.md`, `docs/roadmap.md`, `docs/developer/`. Décisions : `docs/adr/` (append-only).
-- Les autres règles de `.claude/rules/` se chargent avec les fichiers qu'elles ciblent.
+- Les règles de `.claude/rules/` se chargent avec les fichiers qu'elles ciblent.
 
 ## Flux de travail
 

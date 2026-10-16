@@ -6,6 +6,13 @@ set -euo pipefail
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 cd "$ROOT"
 
+# Depuis PowerShell, `bash` désigne souvent WSL (System32\bash.exe) : sur une copie de
+# travail Windows en CRLF, plusieurs contrats y échouent à tort. Utiliser Git Bash ou Linux.
+if grep -qi microsoft /proc/version 2>/dev/null && [[ "$ROOT" == /mnt/* ]]; then
+  echo "contracts: WSL détecté sur une copie de travail Windows ; relancer avec Git Bash (\"C:\\Program Files\\Git\\bin\\bash.exe\" .claude/scripts/contracts.sh)." >&2
+  exit 2
+fi
+
 if ! command -v python3 >/dev/null 2>&1; then
   if ! command -v python >/dev/null 2>&1; then
     echo "contracts: python3 ou python est requis" >&2

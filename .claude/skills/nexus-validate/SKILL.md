@@ -36,5 +36,6 @@ allowed-tools: Bash(./mvnw *) Bash(bash .claude/scripts/contracts.sh) PowerShell
 
 - Ne jamais lancer `mvn` système : le wrapper vérifie l'archive Maven contre `config/tool-integrity.properties`.
 - Sous Windows, `mvnw.cmd` doit garder ses CRLF ; un `sed -i` les retire (« Le système ne trouve pas le nom de fichier de commandes »).
-- Le self-smoke vérifie que `AGENTS.md` est l'instruction retenue sous 180 tokens (étape 9) et que le skill `nexus-context-validation` est sélectionné sous 1200 tokens (étape 11) : ajouter un `CLAUDE.md` ou un skill trop proche de ces requêtes peut le faire échouer.
+- Le self-smoke vérifie que `AGENTS.md` est l'instruction retenue sous 180 tokens (étape 9) et que le skill `nexus-context-validation` est sélectionné sous 1200 tokens (étape 11) : un nouveau fichier d'instructions non exclu par `.nexusignore` (`CLAUDE.md`…) ou un skill trop proche de ces requêtes peut le faire échouer.
 - Dans un worktree au chemin long, `target/` peut dépasser la limite de chemin Windows.
+- Lancer les contrats depuis Git Bash (outil Bash) : depuis PowerShell, `bash` désigne souvent WSL, où la copie de travail CRLF fait échouer les contrats à tort (le script le détecte et s'arrête).

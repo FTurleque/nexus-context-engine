@@ -6,8 +6,9 @@ Le dépôt versionne une configuration Claude Code destinée au développement e
 
 ```text
 AGENTS.md                     instructions du projet (lues par Claude Code)
+.claude/CLAUDE.md             repères, flux de travail et table de l'outillage Claude Code
 .claude/settings.json         permissions et hooks partagés
-.claude/rules/                règles ; nexus-workflow.md est global, les autres ciblent des chemins
+.claude/rules/                règles chargées selon les fichiers touchés
 .claude/agents/               sous-agents spécialisés
 .claude/skills/               procédures réutilisables (Agent Skills)
 .claude/commands/             commandes /nx-*
@@ -22,11 +23,10 @@ AGENTS.md                     instructions du projet (lues par Claude Code)
 Conformément à l'ADR-0033, NEXUS sépare les sources contextuelles des configurations opérationnelles :
 
 - `.claude/skills/*/SKILL.md` sont des sources contextuelles que NEXUS peut sélectionner dans un `ContextBundle` ; ils ne contiennent donc ni chemin local, ni secret ;
-- `.claude/settings.json`, les hooks et les commandes sont des configurations opérationnelles : NEXUS ne les injecte pas et n'exécute jamais leurs scripts.
+- `.claude/settings.json`, les hooks et les commandes sont des configurations opérationnelles : NEXUS ne les injecte pas et n'exécute jamais leurs scripts ;
+- `.claude/CLAUDE.md` est exclu par `.nexusignore`. NEXUS le traiterait sinon comme instruction native de priorité 80 : sous un budget serré, il ne retient qu'une instruction et ce fichier passerait devant `AGENTS.md`, cas que l'étape 9 du self-smoke refuse. Il n'importe pas non plus `@AGENTS.md`, que Claude Code charge déjà.
 
-Le dépôt n'a volontairement pas de `CLAUDE.md` : NEXUS l'indexerait comme instruction native et, sous un budget serré, il remplacerait `AGENTS.md` dans les contextes produits (cas vérifié par l'étape 9 du self-smoke). Les repères Claude Code vivent donc dans la règle globale `.claude/rules/nexus-workflow.md`.
-
-Le skill de dogfooding `nexus-context-validation` vit dans `.claude/skills/` : il est à la fois utilisable par Claude Code et sélectionné par l'étape 11 du self-smoke. Toute évolution des skills doit être suivie d'un `scripts/self-smoke.ps1`.
+Le skill de dogfooding `nexus-context-validation` vit dans `.claude/skills/` : il est à la fois utilisable par Claude Code et sélectionné par l'étape 11 du self-smoke. Toute évolution de `.claude/CLAUDE.md` ou des skills doit être suivie d'un `scripts/self-smoke.ps1`.
 
 ## Hooks
 
