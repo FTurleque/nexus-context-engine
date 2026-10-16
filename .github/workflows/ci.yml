@@ -173,7 +173,7 @@ jobs:
 
       - name: Retain Linux smoke diagnostics on failure
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nexus-linux-smoke-diagnostics-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           retention-days: 14
@@ -184,7 +184,7 @@ jobs:
 
       - name: Retain SBOM, notices and coverage evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nexus-ci-evidence-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           retention-days: 90

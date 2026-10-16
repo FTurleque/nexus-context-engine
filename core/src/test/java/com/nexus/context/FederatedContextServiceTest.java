@@ -17,6 +17,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -184,7 +185,17 @@ class FederatedContextServiceTest {
         assertEquals(2, observedBudgets.size());
         assertSame(observedBudgets.get(0), observedBudgets.get(1));
         assertEquals(observedBudgets.get(0).limits(), bundle.metadata().get("taskMaterializationLimits"));
-        assertEquals(observedBudgets.get(0).snapshot(), bundle.metadata().get("taskMaterializationWork"));
+        // The reported work is captured before this later snapshot: counters must
+        // match exactly, while wall-clock fields may only have advanced since.
+        ContextMaterializationBudget.Snapshot reported = assertInstanceOf(
+                ContextMaterializationBudget.Snapshot.class, bundle.metadata().get("taskMaterializationWork"));
+        ContextMaterializationBudget.Snapshot later = observedBudgets.get(0).snapshot();
+        assertEquals(later.openedFiles(), reported.openedFiles());
+        assertEquals(later.cumulativeBytes(), reported.cumulativeBytes());
+        assertEquals(later.remainingBytes(), reported.remainingBytes());
+        assertEquals(later.remainingFiles(), reported.remainingFiles());
+        assertTrue(reported.elapsedMillis() <= later.elapsedMillis());
+        assertTrue(reported.remainingDurationMillis() >= later.remainingDurationMillis());
     }
 
     private static ContextBundle withinBudget(int tokenBudget, List<ContextItem> candidates) {
