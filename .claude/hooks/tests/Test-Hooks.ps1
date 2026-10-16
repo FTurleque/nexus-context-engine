@@ -59,6 +59,10 @@ Assert-Command "sed -i 's/a/b/' mvnw.cmd" 'deny'
 Assert-Command "sed -i 's/a/b/' README.md" 'none'
 Assert-Command 'git reset --hard origin/develop' 'ask'
 Assert-Command 'git status --short' 'none'
+Assert-Command "gh pr create --body 'refuse ``sed -i`` sur ``.cmd``/``.ps1`` et ``mvn`` hors wrapper'" 'none'
+Assert-Command "`$body = @'`n- hooks : refus de sed -i sur mvnw.cmd et de git push --force`n'@`ngh pr create --body `$body" 'none'
+Assert-Command 'git fetch origin; git push origin develop' 'deny'
+Assert-Command 'git status | sed -i s/a/b/ x.ps1' 'deny'
 
 # guard-edit
 Assert-Edit 'core/src/main/resources/db/migration/V001__initial_schema.sql' 'deny'
