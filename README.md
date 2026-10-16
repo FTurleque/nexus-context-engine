@@ -4,6 +4,44 @@
 
 NEXUS n'est ni un chatbot, ni un LLM, ni un orchestrateur d'agents. Il se place entre les repositories et les consommateurs IA afin de sélectionner un contexte technique pertinent, borné et traçable.
 
+## Pourquoi NEXUS ?
+
+**NEXUS est le point de convergence du contexte** : il relie la demande de l'utilisateur, le code, la documentation, les instructions et les skills pour fournir à l'IA les éléments pertinents, sous un budget maîtrisé et avec une provenance explicable.
+
+### Blade Runner : la référence d'origine
+
+Le nom rend hommage à *Blade Runner* (Ridley Scott, 1982), où **Nexus** désigne les séries de réplicants, notamment les Nexus-6. Cette référence de science-fiction évoque l'intelligence artificielle, la mémoire et la place des connaissances dans la construction d'une identité.
+
+> “More human than human.”
+>
+> — Devise de la Tyrell Corporation, énoncée par Eldon Tyrell dans *Blade Runner* (1982).
+
+Pour le projet, ce clin d'œil donne une identité au nom ; la mission concrète reste de préparer le contexte dont les outils IA ont besoin.
+
+> “All those moments will be lost in time, like tears in rain.”
+>
+> — Roy Batty, interprété par Rutger Hauer, *Blade Runner* (1982).
+
+Cette seconde citation évoque la fragilité des souvenirs. Nous y voyons un écho à la connaissance d'un projet lorsqu'elle reste dispersée ou difficile à retrouver : NEXUS vise à rendre les informations utiles accessibles au moment de la demande. Ce rapprochement est une interprétation propre au projet.
+
+### Charmed : un écho à la convergence
+
+Dans *Charmed*, le manoir Halliwell se trouve au-dessus d'un **Nexus spirituel**, un point de puissance à égale distance de cinq éléments mystiques : la terre, le feu, l'eau, le bois et le métal.
+
+Cette référence complémentaire illustre la convergence de plusieurs sources vers un même centre. Dans NEXUS, ce sont les sources de contexte qui se rejoignent pour former un ensemble sélectionné, cohérent et exploitable. Il s'agit d'une analogie symbolique, sans correspondance technique imposée entre les cinq éléments et les sources du moteur.
+
+### Signature du projet
+
+> **NEXUS — Là où les connaissances convergent, le contexte prend forme.**
+
+*Formulation originale du projet, distincte des citations de fiction.*
+
+Références culturelles et citations :
+
+- [*Blade Runner* — répliques du film et attributions (IMDb)](https://www.imdb.com/title/tt0083658/quotes/).
+- [*Blade Runner* — contexte et citations (Wikiquote)](https://en.wikiquote.org/wiki/Blade_Runner).
+- [*Charmed* — Nexus spirituel (encyclopédie communautaire)](https://charmed.fandom.com/wiki/Nexus).
+
 ## État courant
 
 ```text
