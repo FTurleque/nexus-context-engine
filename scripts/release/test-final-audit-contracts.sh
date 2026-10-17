@@ -150,6 +150,11 @@ grep -q 'RealSemanticSearchBenchmarkTest' "$SEMANTIC_WORKFLOW" \
   || fail 'real semantic qualification must execute the real retrieval benchmark'
 grep -q 'Enforce semantic quality floor' "$SEMANTIC_WORKFLOW" \
   || fail 'real semantic qualification must enforce a regression floor'
+grep -q 'Summarize embedding throughput' "$SEMANTIC_WORKFLOW" \
+  || fail 'real semantic qualification must retain measured embedding throughput'
+grep -q 'timeout-minutes: 180' "$SEMANTIC_WORKFLOW" \
+  && grep -q 'budget de \*\*180 minutes\*\*' docs/developer/ci-and-supply-chain.md \
+  || fail 'real semantic qualification time budget must stay documented with its measurements'
 grep -Eq '^ollama\.0\.33\.3\.linux-amd64\.sha256=[0-9a-f]{64}$' config/tool-integrity.properties \
   || fail 'Ollama qualification checksum anchor is missing'
 

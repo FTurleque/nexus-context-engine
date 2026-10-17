@@ -110,7 +110,10 @@ Le workflow :
 5. pull `qwen3-embedding:0.6b` et vérifie que son ID de manifest attendu commence par **`ac6da0dfba84`** ;
 6. exécute `RealSemanticSearchBenchmarkTest` sur le snapshot NEXUS exact et exige que le rapport référence `NEXUS_HEAD_SHA` ;
 7. exige un index sémantique non vide et des floors de recall/hit/MRR, ainsi qu'une absence de régression supérieure à 0,10 face au baseline ;
-8. conserve versions, logs et rapport JSON comme artefacts pendant 90 jours.
+8. résume le débit d'embeddings (CPU du runner, requêtes, tokens, secondes, tokens/s) dans `throughput.json` et dans le résumé du job ;
+9. conserve versions, logs et rapport JSON comme artefacts pendant 90 jours.
+
+Le job dispose d'un budget de **180 minutes**. Ce budget est dérivé des mesures et non d'un confort arbitraire ; voir [`semantic-search.md`](semantic-search.md#budget-de-temps-de-la-qualification-réelle).
 
 Ce gate est une sentinelle de qualité réelle et un gate ciblé des changements sémantiques, pas une dépendance nécessaire au fonctionnement lexical ni un téléchargement imposé aux PR sans rapport avec cette surface.
 
