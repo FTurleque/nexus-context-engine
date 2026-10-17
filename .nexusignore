@@ -12,6 +12,10 @@ node_modules/
 # context bundles, where they would outrank AGENTS.md (self-smoke step 9).
 /.claude/CLAUDE.md
 
+# Claude Code worktrees: full copies of the repository whose AGENTS.md and
+# docs would outrank the real ones in context bundles (self-smoke step 9).
+/.claude/worktrees/
+
 # Secrets and credentials
 .env
 .env.*

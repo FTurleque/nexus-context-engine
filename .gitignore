@@ -10,4 +10,5 @@ Thumbs.db
 /index.scip
 /.nexus/registry/
 /.claude/settings.local.json
+/.claude/worktrees/
 /.claude/**/__pycache__/
