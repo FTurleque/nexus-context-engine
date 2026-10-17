@@ -1,0 +1,6 @@
+{
+  "quiet_paths": ["docs/audits/**"],
+  "llm": {
+    "convention_files": [".claude/rules/code-review.md", ".claude/CLAUDE.md", "AGENTS.md"]
+  }
+}
