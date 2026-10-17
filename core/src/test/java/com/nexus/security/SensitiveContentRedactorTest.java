@@ -8,6 +8,97 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SensitiveContentRedactorTest {
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"123456789", "true", "false", "null",
+            "synthetic-unquoted-secret-123456", "correct horse battery staple", "Unicode-é漢字🔐",
+            "punctuation!@#:value", "x", ""})
+    void redactsScalarsWithEveryKeySyntax(String value) {
+        for (String key : java.util.List.of("password", "database.password", "\"password\"", "'api_key'")) {
+            for (String separator : java.util.List.of(": ", "=")) {
+                String result = SensitiveContentRedactor.redact(key + separator + value);
+                assertEquals(key + separator + "[REDACTED]", result);
+                assertEquals(result, SensitiveContentRedactor.redact(result));
+            }
+        }
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"\n", "\r\n", "\r"})
+    void preservesExactSeparatorsAndDocumentBoundaries(String newline) {
+        String input = "{\"password\": 123456789,\"api_key\":true}" + newline
+                + "'client_secret': synthetic value # public comment" + newline
+                + "ordinary: keep" + newline + "password: abc#def:ghi]";
+        String expected = "{\"password\": [REDACTED],\"api_key\":[REDACTED]}" + newline
+                + "'client_secret': [REDACTED] # public comment" + newline
+                + "ordinary: keep" + newline + "password: [REDACTED]]";
+        assertEquals(expected, SensitiveContentRedactor.redact(input));
+        assertEquals(expected, SensitiveContentRedactor.redact(expected));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"\"\"", "''", "\"x\"", "'x'",
+            "\"synthetic: #, 漢字\"", "'synthetic''apostrophe'"})
+    void redactsQuotedValuesIncludingEmptyAndShortValues(String value) {
+        String quote = value.substring(0, 1);
+        assertEquals("\"password\": " + quote + "[REDACTED]" + quote,
+                SensitiveContentRedactor.redact("\"password\": " + value));
+    }
+
+    @Test
+    void markerPrefixDoesNotAllowASecretSuffixToEscape() {
+        assertEquals("password=[REDACTED]", SensitiveContentRedactor.redact("password=[REDACTED]synthetic-tail"));
+        String composite = "prefix.".repeat(1000) + "password=synthetic-value";
+        assertEquals("prefix.".repeat(1000) + "password=[REDACTED]", SensitiveContentRedactor.redact(composite));
+    }
+
+    @Test
+    void malformedKeysAndOversizedValuesHaveBoundedLookahead() {
+        String malformed = "a.".repeat(100_000) + "ordinary = value";
+        org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(java.time.Duration.ofSeconds(2), () -> {
+            assertEquals(malformed, SensitiveContentRedactor.redact(malformed));
+            org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                    () -> SensitiveContentRedactor.redact("password=" + "x".repeat(1_000_000)));
+        });
+    }
+
+    @Test
+    void rejectsOversizedValuesWithoutPublishingAnySuffix() {
+        for (String quote : java.util.List.of("", "\"", "'")) {
+            String prefix = "\"password\": " + quote;
+            assertEquals(prefix + "[REDACTED]" + quote,
+                    SensitiveContentRedactor.redact(prefix + "x".repeat(4096) + quote));
+            var failure = org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                    () -> SensitiveContentRedactor.redact(prefix + "x".repeat(4097) + quote));
+            assertFalse(failure.getMessage().contains("xxxxxxxx"));
+        }
+    }
+
+    @Test
+    void malformedQuotedValuesNeverConsumeAnotherLine() {
+        String input = "\"password\": \"synthetic\\\"unfinished\r\nordinary: visible\npassword=short";
+        String expected = "\"password\": \"[REDACTED]\r\nordinary: visible\npassword=[REDACTED]";
+        assertEquals(expected, SensitiveContentRedactor.redact(input));
+        assertEquals(expected, SensitiveContentRedactor.redact(expected));
+    }
+
+    @Test
+    void redactsQuotedJsonAndJavascriptKeysIncludingEscapedValues() {
+        String source = "{\"password\":\"synthetic\\\"secret123\",'api_key':'synthetic\\\\secret456',\"ordinary\":\"keep value\"}";
+        String redacted = SensitiveContentRedactor.redact(source);
+        assertEquals("{\"password\":\"[REDACTED]\",'api_key':'[REDACTED]',\"ordinary\":\"keep value\"}", redacted);
+        assertEquals(redacted, SensitiveContentRedactor.redact(redacted));
+    }
+
+    @Test
+    void quotedSecretScanIsBoundedAndPreservesLinesAndUnrelatedKeys() {
+        String source = "```json\r\n{\"client_secret\":\"" + "x".repeat(4096)
+                + "\",\"notasecretvalue\":\"ordinary value\"}\r\n```";
+        String redacted = SensitiveContentRedactor.redact(source);
+        assertFalse(redacted.contains("x".repeat(8)));
+        assertTrue(redacted.contains("ordinary value"));
+        assertEquals(source.lines().count(), redacted.lines().count());
+    }
+
     @Test
     void redactsStructuredSecretsAndKeepsSurroundingCode() {
         String source = """
@@ -110,7 +201,8 @@ class SensitiveContentRedactorTest {
     @Test
     void preservesIncompleteAssignmentsAndMasksPrivateCompositeKeys() {
         assertEquals("_password = '[REDACTED]'", SensitiveContentRedactor.redact("_password = 'SyntheticSecret12345'"));
-        for (String source : new String[]{"password", "password = ", "'password\" = 'ordinary value'", "password = 'short'"}) {
+        // Politique v5 : les valeurs courtes ou vides sont masquées (voir les tests de scalaires ci-dessus).
+        for (String source : new String[]{"password", "'password\" = 'ordinary value'"}) {
             assertEquals(source, SensitiveContentRedactor.redact(source));
         }
     }
@@ -129,15 +221,6 @@ class SensitiveContentRedactorTest {
                 SensitiveContentRedactor.redact("{'password': 'AuditSynthetic98765', 'safe': 'ordinary'}"));
         assertEquals("{\"password\":\"[REDACTED]\",\"safe\":\"ordinary\"}",
                 SensitiveContentRedactor.redact("{\"password\":\"AuditSecret123\\\\\",\"safe\":\"ordinary\"}"));
-    }
-
-    @Test
-    void redactsLongAndTruncatedLiteralsInOnePassAndPreservesLines() {
-        String source = "password=\"" + "escaped\\\"".repeat(10_000) + "suffix\"\r\n"
-                + "password=" + "x".repeat(10_000) + "\npassword='unterminated-secret\n";
-        String expected = "password=\"[REDACTED]\"\r\npassword=[REDACTED]\npassword='[REDACTED]\n";
-        assertEquals(expected, SensitiveContentRedactor.redact(source));
-        assertEquals(expected, SensitiveContentRedactor.redact(expected));
     }
 
     @Test

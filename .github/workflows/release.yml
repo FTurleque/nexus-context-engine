@@ -192,25 +192,25 @@ jobs:
           scripts/release/validate-release-tag.sh "$GITHUB_REF_NAME" "$NEXUS_VERSION" "$NEXUS_HEAD_SHA" "$MAIN_SHA"
 
       - name: Download exact qualified image
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: nexus-qualified-image-${{ env.NEXUS_HEAD_SHA }}
           path: target/qualified-image
 
       - name: Download qualification container security evidence
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: nexus-container-security-${{ env.NEXUS_HEAD_SHA }}
           path: target/release
 
       - name: Download exact qualified Windows release
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: nexus-windows-release-${{ env.NEXUS_HEAD_SHA }}
           path: target/windows-release
 
       - name: Download qualification Windows security evidence
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: nexus-windows-security-${{ env.NEXUS_HEAD_SHA }}
           path: target/windows-security

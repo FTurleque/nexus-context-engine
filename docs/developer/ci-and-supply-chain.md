@@ -19,7 +19,7 @@ Les workflows versionnés conservent en plus une défense en profondeur sur les 
 `.github/workflows/ci.yml` qualifie `develop` et `main` :
 
 - Windows : Java 24 et qualification locale ;
-- Linux : Java 21, **Maven 3.9.16**, reactor complet, tests, distribution, JaCoCo, SBOM et notices ;
+- Linux : Java 21, **Maven 3.10.0**, reactor complet, tests, distribution, JaCoCo, SBOM et notices ;
 - vérification explicite des ancres d'intégrité Maven/JDT LS et des autres outils de qualification versionnés ;
 - vérification des contrats documentaires machine-vérifiables **avant** le reactor.
 
@@ -31,7 +31,7 @@ Le gate documentaire contrôle notamment :
 
 - listener management `127.0.0.1:9000` séparé du listener API ;
 - politique Ollama distante et opt-in HTTP ;
-- redaction de secrets + profil `content-v3` ;
+- redaction de secrets + profil `content-v4` ;
 - JDT LS : confiance racine exacte + framing 16 MiB / 64 KiB / 8 KiB / 256 messages ;
 - maximum 8 tâches externes actives et circuit-breaker linéarisé ;
 - métadonnées Code Intelligence bornées avant canonicalisation ;
@@ -59,7 +59,7 @@ Une modification Java ordinaire ne peut donc plus contourner le smoke du ZIP sel
 
 NXA7 a également durci le bootstrap `mvnw.cmd` après qu'un runner Windows a reçu un HTTP 403 via `Invoke-WebRequest` sur Maven Central. Le wrapper :
 
-1. conserve Maven **3.9.16** comme version de bootstrap ;
+1. conserve Maven **3.10.0** comme version de bootstrap ;
 2. préfère `curl.exe` avec suivi des redirections et retries ;
 3. bascule vers Windows PowerShell avec un User-Agent explicite si `curl.exe` est absent ou échoue ;
 4. refuse toujours l'archive si son SHA-512 ne correspond pas à l'ancre versionnée dans `config/tool-integrity.properties` ;
@@ -124,7 +124,7 @@ Ce gate est une sentinelle de qualité réelle et un gate ciblé des changements
 
 Les images de base builder/runtime sont épinglées par digest. Les Dockerfiles n'exécutent **aucun `apt-get`** après ces bases :
 
-- le builder utilise le wrapper repository-pinned `./mvnw`, donc Maven **3.9.16** après vérification de l'ancre SHA-512 versionnée et de l'arbre extrait ;
+- le builder utilise le wrapper repository-pinned `./mvnw`, donc Maven **3.10.0** après vérification de l'ancre SHA-512 versionnée et de l'arbre extrait ;
 - le runtime n'installe pas `curl`/`wget` uniquement pour le healthcheck ;
 - `/usr/local/bin/nexus-healthcheck` utilise le support TCP de Bash contre le listener management local.
 
@@ -158,7 +158,7 @@ Les attestations de provenance et SBOM portent sur le digest publié. `latest` n
 
 `config/tool-integrity.properties` contient les ancres indépendantes :
 
-- Maven 3.9.16 : SHA-512 ;
+- Maven 3.10.0 : SHA-512 ;
 - Eclipse JDT LS 1.60.0-202606262232 : SHA-256 ;
 - Ollama 0.33.3 Linux amd64, utilisé uniquement par la qualification sémantique réelle : SHA-256.
 

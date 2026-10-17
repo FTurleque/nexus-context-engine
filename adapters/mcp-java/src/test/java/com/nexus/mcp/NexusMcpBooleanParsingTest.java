@@ -12,16 +12,16 @@ class NexusMcpBooleanParsingTest {
 
     @Test
     void acceptsBooleanValuesAndCanonicalBooleanStrings() {
-        assertTrue(NexusMcpTools.booleanValue(Map.of("flag", true), "flag", false));
-        assertFalse(NexusMcpTools.booleanValue(Map.of("flag", false), "flag", true));
-        assertTrue(NexusMcpTools.booleanValue(Map.of("flag", "true"), "flag", false));
-        assertFalse(NexusMcpTools.booleanValue(Map.of("flag", "false"), "flag", true));
+        assertTrue(McpToolArguments.booleanValue(Map.of("flag", true), "flag", false));
+        assertFalse(McpToolArguments.booleanValue(Map.of("flag", false), "flag", true));
+        assertTrue(McpToolArguments.booleanValue(Map.of("flag", "true"), "flag", false));
+        assertFalse(McpToolArguments.booleanValue(Map.of("flag", "false"), "flag", true));
     }
 
     @Test
     void usesDefaultOnlyWhenArgumentIsAbsent() {
-        assertTrue(NexusMcpTools.booleanValue(Map.of(), "flag", true));
-        assertFalse(NexusMcpTools.booleanValue(Map.of(), "flag", false));
+        assertTrue(McpToolArguments.booleanValue(Map.of(), "flag", true));
+        assertFalse(McpToolArguments.booleanValue(Map.of(), "flag", false));
     }
 
     @Test
@@ -29,6 +29,6 @@ class NexusMcpBooleanParsingTest {
         Map<String, Object> invalidArguments = Map.of("flag", "not-a-boolean");
         assertThrows(
                 IllegalArgumentException.class,
-                () -> NexusMcpTools.booleanValue(invalidArguments, "flag", false));
+                () -> McpToolArguments.booleanValue(invalidArguments, "flag", false));
     }
 }

@@ -1,27 +1,11 @@
 package com.nexus.application;
 
 import com.nexus.config.NexusPaths;
-import com.nexus.context.BudgetedContextSelector;
 import com.nexus.context.ContextBuilder;
 import com.nexus.context.ContextBundle;
-import com.nexus.context.ContextFragmentFactory;
 import com.nexus.context.ContextRequest;
-import com.nexus.context.DefaultContextBuilder;
 import com.nexus.context.FederatedContextBundle;
 import com.nexus.context.FederatedContextService;
-import com.nexus.context.FragmentMerger;
-import com.nexus.context.source.git.GitContextSourceProvider;
-import com.nexus.context.source.git.GitRecencyCandidateEnricher;
-import com.nexus.context.source.git.LocalGitContextSourceProvider;
-import com.nexus.context.source.git.PersistentGitContextSourceProvider;
-import com.nexus.context.source.instruction.AgentsMdInstructionProvider;
-import com.nexus.context.source.instruction.ClaudeInstructionProvider;
-import com.nexus.context.source.instruction.CopilotInstructionProvider;
-import com.nexus.context.source.instruction.GeminiInstructionProvider;
-import com.nexus.context.source.skill.AiSkillsRegistryProvider;
-import com.nexus.context.source.skill.LocalAgentSkillsProvider;
-import com.nexus.index.CodeIndexImporter;
-import com.nexus.index.CodeIntelligenceProvider;
 import com.nexus.index.CodeIntelligenceSnapshot;
 import com.nexus.index.IndexRepository;
 import com.nexus.index.IndexStatistics;
@@ -30,25 +14,13 @@ import com.nexus.index.IndexingReport;
 import com.nexus.index.ProjectIndexingService;
 import com.nexus.index.ProjectIndexLockManager;
 import com.nexus.index.SymbolRelation;
-import com.nexus.index.java.JavaParserLanguageAnalyzer;
-import com.nexus.index.jdt.JdtLanguageServerCodeIntelligenceProvider;
-import com.nexus.index.markdown.MarkdownLanguageAnalyzer;
 import com.nexus.index.minos.MinosCodeIndexImporter;
-import com.nexus.index.scan.ProjectScanner;
-import com.nexus.index.scip.ScipCodeIndexImporter;
-import com.nexus.persistence.sqlite.SqliteDatabase;
-import com.nexus.persistence.sqlite.SqliteIndexRepository;
-import com.nexus.persistence.sqlite.SqliteProjectRepository;
 import com.nexus.project.FederatedScopePolicy;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectRegistry;
 import com.nexus.project.ProjectRepository;
-import com.nexus.ranking.ContextRanker;
-import com.nexus.ranking.DeterministicContextRanker;
 import com.nexus.ranking.RankedCandidate;
-import com.nexus.ranking.SemanticHybridContextRanker;
-import com.nexus.ranking.graph.GraphCandidateEnricher;
 import com.nexus.search.CandidateType;
 import com.nexus.search.FederatedSearchHit;
 import com.nexus.search.FederatedSearchService;
@@ -56,20 +28,8 @@ import com.nexus.search.QueryPolicy;
 import com.nexus.search.ResultLimitPolicy;
 import com.nexus.search.SearchIndex;
 import com.nexus.search.SearchService;
-import com.nexus.search.SearchStrategy;
-import com.nexus.search.SymbolSearchStrategy;
-import com.nexus.search.lucene.LuceneFileSearchStrategy;
-import com.nexus.search.lucene.LuceneSearchIndex;
-import com.nexus.search.lucene.PersistentLuceneSearchIndex;
-import com.nexus.search.semantic.EmbeddingProvider;
-import com.nexus.search.semantic.SemanticIndexingService;
 import com.nexus.search.semantic.SemanticSearchConfiguration;
 import com.nexus.search.semantic.SemanticSearchIndex;
-import com.nexus.search.semantic.SemanticSearchStrategy;
-import com.nexus.search.semantic.lucene.LuceneSemanticSearchIndex;
-import com.nexus.search.semantic.lucene.PersistentLuceneSemanticSearchIndex;
-import com.nexus.token.HeuristicTokenEstimator;
-import com.nexus.token.TokenEstimator;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -104,7 +64,7 @@ public final class NexusApplication implements AutoCloseable {
     private final SemanticSearchIndex semanticSearchIndex;
     private final boolean semanticSearchEnabled;
 
-    private NexusApplication(
+    NexusApplication(
             ProjectRepository projectRepository,
             IndexRepository indexRepository,
             ProjectRegistry projectRegistry,
@@ -133,14 +93,14 @@ public final class NexusApplication implements AutoCloseable {
 
     /** Compose NEXUS avec les opt-ins opérationnels explicitement présents dans l'environnement. */
     public static NexusApplication create(NexusPaths paths) throws SQLException, IOException {
-        return create(paths, SemanticSearchConfiguration.fromEnvironment(), false);
+        return NexusApplicationFactory.create(paths, SemanticSearchConfiguration.fromEnvironment(), false);
     }
 
     /** Compose NEXUS avec une configuration sémantique fournie explicitement par l'appelant. */
     public static NexusApplication create(
             NexusPaths paths,
             SemanticSearchConfiguration semanticSearchConfiguration) throws SQLException, IOException {
-        return create(paths, semanticSearchConfiguration, false);
+        return NexusApplicationFactory.create(paths, semanticSearchConfiguration, false);
     }
 
     /**
@@ -150,114 +110,14 @@ public final class NexusApplication implements AutoCloseable {
      * inter-processus existants.
      */
     public static NexusApplication createLongLived(NexusPaths paths) throws SQLException, IOException {
-        return create(paths, SemanticSearchConfiguration.fromEnvironment(), true);
+        return NexusApplicationFactory.create(paths, SemanticSearchConfiguration.fromEnvironment(), true);
     }
 
     /** Variante longue durée avec configuration sémantique explicite. */
     public static NexusApplication createLongLived(
             NexusPaths paths,
             SemanticSearchConfiguration semanticSearchConfiguration) throws SQLException, IOException {
-        return create(paths, semanticSearchConfiguration, true);
-    }
-
-    private static NexusApplication create(
-            NexusPaths paths,
-            SemanticSearchConfiguration semanticSearchConfiguration,
-            boolean persistentReaders) throws SQLException, IOException {
-        Objects.requireNonNull(paths, "paths");
-        Objects.requireNonNull(semanticSearchConfiguration, "semanticSearchConfiguration");
-
-        SqliteDatabase database = new SqliteDatabase(paths);
-        ProjectRepository projectRepository = new SqliteProjectRepository(database);
-        IndexRepository indexRepository = new SqliteIndexRepository(database);
-        ProjectRegistry projectRegistry = new ProjectRegistry(projectRepository);
-        SearchIndex searchIndex = persistentReaders
-                ? new PersistentLuceneSearchIndex(paths)
-                : new LuceneSearchIndex(paths);
-        ProjectIndexLockManager projectIndexLockManager = ProjectIndexLockManager.fileBacked(paths);
-
-        List<CodeIntelligenceProvider> codeIntelligenceProviders =
-                JdtLanguageServerCodeIntelligenceProvider.fromEnvironment(paths)
-                        .<List<CodeIntelligenceProvider>>map(List::of)
-                        .orElseGet(List::of);
-        List<CodeIndexImporter> codeIndexImporters = List.of(new ScipCodeIndexImporter());
-
-        List<SearchStrategy> searchStrategies = new ArrayList<>();
-        searchStrategies.add(new LuceneFileSearchStrategy(searchIndex));
-        searchStrategies.add(new SymbolSearchStrategy(indexRepository));
-
-        SemanticIndexingService semanticIndexingService = null;
-        SemanticSearchIndex semanticSearchIndex = null;
-        if (semanticSearchConfiguration.enabled()) {
-            EmbeddingProvider embeddingProvider = semanticSearchConfiguration.embeddingProvider()
-                    .orElseThrow(() -> new IllegalStateException("Configuration sémantique activée sans provider"));
-            semanticSearchIndex = persistentReaders
-                    ? new PersistentLuceneSemanticSearchIndex(paths, embeddingProvider.dimensions())
-                    : new LuceneSemanticSearchIndex(paths, embeddingProvider.dimensions());
-            semanticIndexingService = new SemanticIndexingService(embeddingProvider, semanticSearchIndex);
-            searchStrategies.add(new SemanticSearchStrategy(
-                    embeddingProvider,
-                    semanticSearchIndex,
-                    indexRepository));
-        }
-
-        ProjectIndexingService indexingService = new ProjectIndexingService(
-                projectRepository,
-                indexRepository,
-                new ProjectScanner(),
-                List.of(new JavaParserLanguageAnalyzer(), new MarkdownLanguageAnalyzer()),
-                searchIndex,
-                codeIndexImporters,
-                codeIntelligenceProviders,
-                semanticIndexingService,
-                projectIndexLockManager);
-
-        ContextRanker contextRanker = semanticSearchConfiguration.enabled()
-                ? new SemanticHybridContextRanker(semanticSearchConfiguration.semanticRrfWeight())
-                : new DeterministicContextRanker();
-        SearchService searchService = new SearchService(
-                searchStrategies,
-                List.of(
-                        new GraphCandidateEnricher(indexRepository),
-                        new GitRecencyCandidateEnricher()),
-                contextRanker);
-        FederatedSearchService federatedSearchService = new FederatedSearchService(searchService);
-
-        TokenEstimator tokenEstimator = new HeuristicTokenEstimator();
-        GitContextSourceProvider gitContextProvider = persistentReaders
-                ? new PersistentGitContextSourceProvider()
-                : new LocalGitContextSourceProvider();
-        ContextBuilder contextBuilder = new DefaultContextBuilder(
-                projectRepository,
-                searchService,
-                new ContextFragmentFactory(tokenEstimator),
-                new FragmentMerger(),
-                new BudgetedContextSelector(tokenEstimator),
-                tokenEstimator,
-                List.of(
-                        new AgentsMdInstructionProvider(),
-                        new CopilotInstructionProvider(),
-                        new ClaudeInstructionProvider(),
-                        new GeminiInstructionProvider()),
-                List.of(
-                        new LocalAgentSkillsProvider(),
-                        new AiSkillsRegistryProvider()),
-                gitContextProvider);
-        FederatedContextService federatedContextService = new FederatedContextService(contextBuilder);
-
-        return new NexusApplication(
-                projectRepository,
-                indexRepository,
-                projectRegistry,
-                indexingService,
-                projectIndexLockManager,
-                searchService,
-                federatedSearchService,
-                contextBuilder,
-                federatedContextService,
-                searchIndex,
-                semanticSearchIndex,
-                semanticSearchConfiguration.enabled());
+        return NexusApplicationFactory.create(paths, semanticSearchConfiguration, true);
     }
 
     public List<ProjectDescriptor> listProjects() {
@@ -335,7 +195,7 @@ public final class NexusApplication implements AutoCloseable {
     public IndexStatistics inspect(UUID projectId) {
         getProject(projectId);
         ProjectIndexLockManager.LockHandle readLock = projectIndexLockManager.acquireRead(projectId);
-        try {
+        try (var reads = indexRepository.openReadSession()) {
             return indexRepository.statistics(projectId);
         } finally {
             closeReadLock(readLock);
@@ -347,7 +207,8 @@ public final class NexusApplication implements AutoCloseable {
         int resolvedLimit = positiveLimit(limit);
         long startedAt = System.nanoTime();
         requireReadyProject(projectId);
-        try (ProjectIndexLockManager.LockHandle ignored = projectIndexLockManager.acquireRead(projectId)) {
+        try (ProjectIndexLockManager.LockHandle ignored = projectIndexLockManager.acquireRead(projectId);
+             var reads = indexRepository.openReadSession()) {
             ProjectDescriptor project = requireReadyProject(projectId);
             List<RankedCandidate> results = searchService.search(project, resolvedQuery, resolvedLimit, explain);
             requireReadyProject(projectId);
@@ -367,7 +228,7 @@ public final class NexusApplication implements AutoCloseable {
         long startedAt = System.nanoTime();
         requireReadyProjects(scope);
         List<ProjectIndexLockManager.LockHandle> readLocks = acquireReadLocks(scope);
-        try {
+        try (var reads = indexRepository.openReadSession()) {
             List<ProjectDescriptor> projects = requireReadyProjects(scope);
             List<FederatedSearchHit> results =
                     federatedSearchService.search(projects, resolvedQuery, resolvedLimit, explain);
@@ -390,7 +251,7 @@ public final class NexusApplication implements AutoCloseable {
         long startedAt = System.nanoTime();
         requireReadyProject(projectId);
         ProjectIndexLockManager.LockHandle readLock = projectIndexLockManager.acquireRead(projectId);
-        try {
+        try (var reads = indexRepository.openReadSession()) {
             ProjectDescriptor project = requireReadyProject(projectId);
             ContextBundle bundle = contextBuilder.build(new ContextRequest(
                     projectId,
@@ -418,7 +279,7 @@ public final class NexusApplication implements AutoCloseable {
         long startedAt = System.nanoTime();
         requireReadyProjects(scope);
         List<ProjectIndexLockManager.LockHandle> readLocks = acquireReadLocks(scope);
-        try {
+        try (var reads = indexRepository.openReadSession()) {
             List<ProjectDescriptor> projects = requireReadyProjects(scope);
             FederatedContextBundle bundle = federatedContextService.build(
                     projects,
@@ -439,7 +300,7 @@ public final class NexusApplication implements AutoCloseable {
         String resolvedQuery = requireQuery(query);
         requireReadyProject(projectId);
         ProjectIndexLockManager.LockHandle readLock = projectIndexLockManager.acquireRead(projectId);
-        try {
+        try (var reads = indexRepository.openReadSession()) {
             requireReadyProject(projectId);
             List<IndexedSymbol> symbols = indexRepository.searchSymbols(projectId, resolvedQuery, positiveLimit(limit));
             requireReadyProject(projectId);
@@ -453,7 +314,7 @@ public final class NexusApplication implements AutoCloseable {
         String resolvedSymbol = requireQuery(symbol);
         requireReadyProject(projectId);
         ProjectIndexLockManager.LockHandle readLock = projectIndexLockManager.acquireRead(projectId);
-        try {
+        try (var reads = indexRepository.openReadSession()) {
             requireReadyProject(projectId);
             List<SymbolRelation> relations = indexRepository.searchRelations(
                     projectId, resolvedSymbol, positiveLimit(limit));

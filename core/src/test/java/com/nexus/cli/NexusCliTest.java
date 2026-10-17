@@ -47,6 +47,22 @@ class NexusCliTest {
     }
 
     @Test
+    void publicCliContextRedactsQuotedScalarSecrets() throws Exception {
+        Path root = Files.createDirectories(temporaryDirectory.resolve("privacy"));
+        write(root, "fixture.md", "# PrivacyMarker\n{\"password\": 123456789, \"api_key\": synthetic-unquoted-secret-123456}");
+        configureNexusHome(temporaryDirectory.resolve("privacy-home"));
+        assertEquals(NexusCli.EXIT_SUCCESS, execute("project", "add", root.toString(), "privacy", "--json").exitCode());
+        assertEquals(NexusCli.EXIT_SUCCESS, execute("index", "privacy", "--json").exitCode());
+        for (String format : new String[]{"--json", "--explain"}) {
+            var result = execute("context", "privacy", "PrivacyMarker", "--budget", "2000", format);
+            assertEquals(NexusCli.EXIT_SUCCESS, result.exitCode());
+            assertFalse(result.stdout().contains("123456789"));
+            assertFalse(result.stdout().contains("synthetic-unquoted-secret-123456"));
+            assertTrue(result.stdout().contains("[REDACTED]"));
+        }
+    }
+
+    @Test
     void rendersHelpAsJsonWithoutInitializingAProject() throws Exception {
         CliExecution execution = execute("--help", "--json");
 

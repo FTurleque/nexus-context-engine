@@ -16,6 +16,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SemanticIndexingServiceTest {
 
     @Test
+    void neverSendsQuotedKeyScalarsToTheEmbeddingProvider() throws Exception {
+        var index = new CapturingSemanticIndex(3);
+        var texts = new ArrayList<String>();
+        EmbeddingProvider provider = new EmbeddingProvider() {
+            public String modelId() { return "local/privacy-fixture"; }
+            public int dimensions() { return 3; }
+            public float[] embed(String text) { texts.add(text); return new float[]{1, 0, 0}; }
+        };
+        var service = new SemanticIndexingService(provider, index);
+        service.rebuild(UUID.randomUUID(), List.of(document("fixture.md",
+                "{\"password\": 123456789, \"api_key\": synthetic-unquoted-secret-123456}")));
+        assertEquals(1, texts.size());
+        for (String value : List.of(texts.getFirst(), index.rebuilt.getFirst().excerpt())) {
+            assertFalse(value.contains("123456789"));
+            assertFalse(value.contains("synthetic-unquoted-secret-123456"));
+            assertTrue(value.contains("[REDACTED]"));
+        }
+        assertTrue(service.profileId().startsWith("content-v4;"));
+    }
+
+    @Test
     void vectorizesDocumentsForRebuildAndIncrementalUpdates() throws Exception {
         CapturingSemanticIndex index = new CapturingSemanticIndex(3);
         EmbeddingProvider provider = new EmbeddingProvider() {

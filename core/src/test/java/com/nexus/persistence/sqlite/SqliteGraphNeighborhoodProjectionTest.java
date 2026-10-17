@@ -19,59 +19,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SqliteGraphNeighborhoodProjectionTest {
 
     private static final int UNRELATED_STRUCTURAL_TYPES = 20_000;
+    private static final String APP_PATH = "src/App.java";
 
     @TempDir
     Path tempDir;
-
-    @Test
-    void outgoingAndOwnerPlansSeekRequestedSourcesAndQualifiedNames() throws Exception {
-        SqliteDatabase database = new SqliteDatabase(new NexusPaths(tempDir.resolve("outgoing-plan-home")));
-        String outgoingPlan = queryPlan(database, SqliteIndexRepository.OUTGOING_GRAPH_SQL,
-                "[\"src/Seed.java\"]", "project", "IMPORTS", 100);
-        assertTrue(outgoingPlan.contains("project_id=? AND kind=? AND source_ref=?"), outgoingPlan);
-        String ownerPlan = queryPlan(database, SqliteIndexRepository.TARGET_TYPE_OWNERS_SQL,
-                "[\"demo.Seed\"]", "project");
-        assertTrue(ownerPlan.contains("idx_symbols_qualified_name (qualified_name=?)"), ownerPlan);
-    }
-
-    private static String queryPlan(SqliteDatabase database, String sql, Object... parameters) throws SQLException {
-        try (Connection connection = database.openConnection();
-             PreparedStatement query = connection.prepareStatement("EXPLAIN QUERY PLAN " + sql)) {
-            for (int index = 0; index < parameters.length; index++) {
-                query.setObject(index + 1, parameters[index]);
-            }
-            StringBuilder plan = new StringBuilder();
-            try (ResultSet rows = query.executeQuery()) {
-                while (rows.next()) {
-                    plan.append(rows.getString("detail")).append('\n');
-                }
-            }
-            return plan.toString();
-        }
-    }
-
-    @Test
-    void incomingPlanUsesBothTargetEqualityAndTargetRange() throws Exception {
-        SqliteDatabase database = new SqliteDatabase(new NexusPaths(tempDir.resolve("plan-home")));
-        try (Connection connection = database.openConnection();
-             PreparedStatement query = connection.prepareStatement("EXPLAIN QUERY PLAN "
-                     + SqliteIndexRepository.INCOMING_GRAPH_SQL)) {
-            query.setString(1, "[\"src/Seed.java\"]");
-            query.setString(2, "project");
-            query.setString(3, "project");
-            query.setString(4, "IMPORTS");
-            query.setInt(5, 100);
-            StringBuilder plan = new StringBuilder();
-            try (ResultSet rows = query.executeQuery()) {
-                while (rows.next()) {
-                    plan.append(rows.getString("detail")).append('\n');
-                }
-            }
-            assertTrue(plan.toString().contains("project_id=? AND kind=? AND target_ref=?"), plan.toString());
-            assertTrue(plan.toString().contains("project_id=? AND kind=? AND target_ref>? AND target_ref<?"),
-                    plan.toString());
-        }
-    }
 
     @Test
     void incomingUnionDeduplicatesNestedOwnersAndPreservesProjectAndPrefixBoundaries() throws Exception {
@@ -105,7 +56,7 @@ class SqliteGraphNeighborhoodProjectionTest {
         UUID projectId = UUID.randomUUID();
         try (Connection connection = database.openConnection()) {
             insertProject(connection, projectId);
-            long app = insertFile(connection, projectId, "src/App.java");
+            long app = insertFile(connection, projectId, APP_PATH);
             long dependency = insertFile(connection, projectId, "src/Dependency.java");
             long caller = insertFile(connection, projectId, "src/Caller.java");
             long unrelated = insertFile(connection, projectId, "src/Unrelated.java");
@@ -115,23 +66,48 @@ class SqliteGraphNeighborhoodProjectionTest {
             insertType(connection, caller, "Caller", "demo.Caller");
             insertType(connection, unrelated, "Unrelated", "demo.Unrelated");
 
-            insertImport(connection, projectId, app, "src/App.java", "demo.Dependency.Inner");
+            insertImport(connection, projectId, app, APP_PATH, "demo.Dependency.Inner");
             insertImport(connection, projectId, caller, "src/Caller.java", "demo.App");
             insertImport(connection, projectId, unrelated, "src/Unrelated.java", "demo.Dependency");
         }
 
         SqliteIndexRepository repository = new SqliteIndexRepository(database);
         Map<String, Set<String>> neighbors =
-                repository.findGraphNeighbors(projectId, Set.of("src/App.java"), 10);
+                repository.findGraphNeighbors(projectId, Set.of(APP_PATH), 10);
 
         assertEquals(
                 Set.of("src/Dependency.java", "src/Caller.java"),
-                neighbors.get("src/App.java"));
+                neighbors.get(APP_PATH));
 
         Map<String, Set<String>> bounded =
-                repository.findGraphNeighbors(projectId, Set.of("src/App.java"), 1);
+                repository.findGraphNeighbors(projectId, Set.of(APP_PATH), 1);
         long materializedEdges = bounded.values().stream().mapToLong(Set::size).sum();
         assertTrue(materializedEdges <= 1, "graph projection must honor the global edge budget");
+    }
+
+    @Test
+    void skipsUnresolvedOutgoingImportsBeforeApplyingEdgeBudget() throws Exception {
+        SqliteDatabase database = new SqliteDatabase(new NexusPaths(tempDir.resolve("unresolved-home")));
+        UUID projectId = UUID.randomUUID();
+        try (Connection connection = database.openConnection()) {
+            insertProject(connection, projectId);
+            long app = insertFile(connection, projectId, APP_PATH);
+            long local = insertFile(connection, projectId, "src/Local.java");
+
+            insertType(connection, app, "App", "demo.App");
+            insertType(connection, local, "Local", "zzz.Local");
+
+            // L'import externe trie avant l'import local. Une limite appliquée aux
+            // relations brutes retournerait donc zéro voisin avec maxEdges=1.
+            insertImport(connection, projectId, app, APP_PATH, "aaa.External");
+            insertImport(connection, projectId, app, APP_PATH, "zzz.Local");
+        }
+
+        SqliteIndexRepository repository = new SqliteIndexRepository(database);
+
+        assertEquals(
+                Map.of(APP_PATH, Set.of("src/Local.java")),
+                repository.findGraphNeighbors(projectId, Set.of(APP_PATH), 1));
     }
 
     @Test

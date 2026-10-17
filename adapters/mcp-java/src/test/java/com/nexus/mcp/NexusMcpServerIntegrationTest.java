@@ -62,6 +62,7 @@ class NexusMcpServerIntegrationTest {
         Files.writeString(source, """
                 package demo;
                 public class OrderService {
+                    // {"password": 123456789, "api_key": synthetic-unquoted-secret-123456}
                     public String processOrder(String id) {
                         return "processed-" + id;
                     }
@@ -142,6 +143,9 @@ class NexusMcpServerIntegrationTest {
                             .build());
             assertFalse(Boolean.TRUE.equals(contextResult.isError()));
             JsonNode contextJson = json(contextResult);
+            assertFalse(contextJson.toString().contains("123456789"));
+            assertFalse(contextJson.toString().contains("synthetic-unquoted-secret-123456"));
+            assertTrue(contextJson.toString().contains("[REDACTED]"));
             assertEquals(directContext.bundle().tokenBudget(), contextJson.path("tokenBudget").asInt());
             assertEquals(directContext.bundle().estimatedTokens(), contextJson.path("estimatedTokens").asInt());
             assertEquals(

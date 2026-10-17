@@ -5,7 +5,6 @@ import com.nexus.index.RelationKind;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -19,27 +18,12 @@ class JdtRelationIdentityTest {
 
     @Test
     void localDeduplicationKeyKeepsDistinctFileProvenance(@TempDir Path temporaryDirectory) throws Exception {
-        JdtLanguageServerCodeIntelligenceProvider provider =
-                new JdtLanguageServerCodeIntelligenceProvider(
-                        new JdtLanguageServerCodeIntelligenceProvider.Configuration(
-                                temporaryDirectory.resolve("jdtls"),
-                                temporaryDirectory.resolve("workspaces"),
-                                "java",
-                                Duration.ofSeconds(1),
-                                10));
+        JdtRelationCollector provider = new JdtRelationCollector(new com.fasterxml.jackson.databind.ObjectMapper(),
+                JdtLanguageServerCodeIntelligenceProvider.SnapshotLimits.defaults());
         Map<String, IndexedRelation> relations = new LinkedHashMap<>();
-        Method addRelation = JdtLanguageServerCodeIntelligenceProvider.class.getDeclaredMethod(
-                "addRelation",
-                Map.class,
-                String.class,
-                RelationKind.class,
-                String.class,
-                String.class);
-        addRelation.setAccessible(true);
-
-        addRelation.invoke(provider, relations, "src/One.java", RelationKind.REFERENCES, "demo.Source", "demo.Target");
-        addRelation.invoke(provider, relations, "src/Two.java", RelationKind.REFERENCES, "demo.Source", "demo.Target");
-        addRelation.invoke(provider, relations, "src/One.java", RelationKind.REFERENCES, "demo.Source", "demo.Target");
+        provider.addRelation( relations, "src/One.java", RelationKind.REFERENCES, "demo.Source", "demo.Target");
+        provider.addRelation( relations, "src/Two.java", RelationKind.REFERENCES, "demo.Source", "demo.Target");
+        provider.addRelation( relations, "src/One.java", RelationKind.REFERENCES, "demo.Source", "demo.Target");
 
         assertEquals(2, relations.size());
         Set<String> paths = relations.values().stream()

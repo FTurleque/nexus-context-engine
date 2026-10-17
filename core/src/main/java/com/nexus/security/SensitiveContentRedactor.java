@@ -1,7 +1,6 @@
 package com.nexus.security;
 
 import java.util.Objects;
-import java.util.List;
 import java.util.regex.Pattern;
 
 /**
@@ -16,19 +15,15 @@ import java.util.regex.Pattern;
  */
 public final class SensitiveContentRedactor {
 
-    /** Version de la politique ; toute évolution impose la reconstruction des dérivés. */
-    public static final String POLICY_VERSION = "secret-redaction-v4";
+    /** Version persistée dans les index dérivés ; toute évolution impose leur reconstruction. */
+    public static final String POLICY_VERSION = "secret-redaction-v5";
+
     private static final String REDACTED = "[REDACTED]";
     private static final String PRIVATE_KEY_BEGIN = "-----BEGIN ";
     private static final String PRIVATE_KEY_END = "-----END ";
     private static final String PRIVATE_KEY_SUFFIX = "PRIVATE KEY-----";
     private static final int MAX_SECRET_CHARS = 4096;
     private static final int MAX_URI_USER_CHARS = 1024;
-
-    private static final List<String> SECRET_NAMES = List.of(
-            "password", "passwd", "secret", "apikey", "api_key", "api-key",
-            "accesstoken", "access_token", "access-token", "authtoken", "auth_token", "auth-token",
-            "clientsecret", "client_secret", "client-secret", "secretaccesskey", "secretaccess_key", "secretaccess-key");
 
     private static final Pattern STRUCTURED_TOKEN = Pattern.compile(
             "\\b(?:gh[pousr]_[A-Za-z0-9]{20,255}+|github_pat_\\w{20,255}+|(?:AKIA|ASIA)[0-9A-Z]{16})\\b");
@@ -48,7 +43,7 @@ public final class SensitiveContentRedactor {
         String redacted = replacePrivateKeyBlocks(content);
         redacted = STRUCTURED_TOKEN.matcher(redacted).replaceAll(REDACTED);
         redacted = JWT.matcher(redacted).replaceAll(REDACTED);
-        redacted = replaceSecretAssignments(redacted);
+        redacted = SecretAssignmentScanner.redact(redacted);
         return URI_CREDENTIAL.matcher(redacted).replaceAll("$1" + REDACTED + "$3");
     }
 
@@ -102,137 +97,4 @@ public final class SensitiveContentRedactor {
         }
     }
 
-    private static String replaceSecretAssignments(String content) {
-        StringBuilder output = new StringBuilder(content.length());
-        int copiedThrough = 0;
-        int searchFrom = 0;
-        while (searchFrom < content.length()) {
-            int valueStart = findSecretValueStart(content, searchFrom);
-            if (valueStart < 0 || valueStart == content.length()) {
-                break;
-            }
-            char first = content.charAt(valueStart);
-            boolean quoted = first == '\"' || first == '\'';
-            int secretStart = quoted ? valueStart + 1 : valueStart;
-            int secretEnd = secretValueEnd(content, secretStart, quoted ? first : '\0');
-            if (secretEnd - secretStart >= 8) {
-                output.append(content, copiedThrough, secretStart).append(REDACTED);
-                copiedThrough = secretEnd;
-            }
-            // Consume each value once: long literals cannot cause recursive regex
-            // backtracking, repeated rescans or a leaked suffix at a size cutoff.
-            searchFrom = Math.min(content.length(), secretEnd + 1);
-        }
-        output.append(content, copiedThrough, content.length());
-        return output.toString();
-    }
-
-    private static int findSecretValueStart(String content, int offset) {
-        int cursor = offset;
-        while (cursor < content.length()) {
-            if (!isKeyCharacter(content.charAt(cursor))) {
-                cursor++;
-            } else {
-                int start = cursor;
-                cursor = keyEnd(content, start);
-                if (hasKeyBoundary(content, start) && isSecretKey(content, start, cursor)) {
-                    int valueStart = assignmentValueStart(content, start, cursor);
-                    if (valueStart >= 0) {
-                        return valueStart;
-                    }
-                }
-            }
-        }
-        return -1;
-    }
-
-    private static int keyEnd(String content, int start) {
-        int cursor = start;
-        while (cursor < content.length() && isKeyCharacter(content.charAt(cursor))) {
-            cursor++;
-        }
-        return cursor;
-    }
-
-    private static boolean hasKeyBoundary(String content, int start) {
-        return start == 0 || !Character.isLetterOrDigit(content.codePointBefore(start));
-    }
-
-    private static boolean isKeyCharacter(char character) {
-        return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z')
-                || (character >= '0' && character <= '9') || isKeySeparator(character);
-    }
-
-    private static boolean isKeySeparator(char character) {
-        return character == '_' || character == '-' || character == '.';
-    }
-
-    private static boolean isSecretKey(String content, int start, int end) {
-        int component = start;
-        while (component < end) {
-            if (matchesSecretName(content, component, end)) {
-                return true;
-            }
-            while (component < end && !isKeySeparator(content.charAt(component))) {
-                component++;
-            }
-            component++;
-        }
-        return false;
-    }
-
-    private static boolean matchesSecretName(String content, int start, int end) {
-        for (String name : SECRET_NAMES) {
-            int nameEnd = start + name.length();
-            if (nameEnd <= end && (nameEnd == end || isKeySeparator(content.charAt(nameEnd)))
-                    && content.regionMatches(true, start, name, 0, name.length())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static int assignmentValueStart(String content, int keyStart, int keyEnd) {
-        int cursor = keyEnd;
-        char quote = keyStart == 0 ? '\0' : content.charAt(keyStart - 1);
-        if (quote == '\'' || quote == '"') {
-            if (cursor == content.length() || content.charAt(cursor) != quote) {
-                return -1;
-            }
-            cursor++;
-        }
-        cursor = skipAssignmentWhitespace(content, cursor);
-        if (cursor == content.length() || (content.charAt(cursor) != ':' && content.charAt(cursor) != '=')) {
-            return -1;
-        }
-        return skipAssignmentWhitespace(content, cursor + 1);
-    }
-
-    private static int skipAssignmentWhitespace(String content, int start) {
-        int cursor = start;
-        while (cursor < content.length() && cursor - start < 32 && Character.isWhitespace(content.charAt(cursor))) {
-            cursor++;
-        }
-        return cursor;
-    }
-
-    private static int secretValueEnd(String content, int start, char quote) {
-        int cursor = start;
-        while (cursor < content.length()) {
-            char character = content.charAt(cursor);
-            if (character == '\r' || character == '\n'
-                    || (quote == '\0' && (Character.isWhitespace(character) || "\"'`;,#}".indexOf(character) >= 0))) {
-                return cursor;
-            }
-            if (quote != '\0' && character == quote) {
-                return cursor;
-            }
-            if (quote != '\0' && character == '\\' && cursor + 1 < content.length()
-                    && content.charAt(cursor + 1) != '\r' && content.charAt(cursor + 1) != '\n') {
-                cursor++;
-            }
-            cursor++;
-        }
-        return cursor;
-    }
 }

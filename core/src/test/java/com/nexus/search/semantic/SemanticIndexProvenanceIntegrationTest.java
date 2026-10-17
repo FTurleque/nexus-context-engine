@@ -34,6 +34,32 @@ class SemanticIndexProvenanceIntegrationTest {
 
 
     @Test
+    void contentV3CannotReactivateAfterLexicalOnlyUpgrade() throws Exception {
+        Path root = Files.createDirectory(temporaryDirectory.resolve("scalar-project"));
+        Files.writeString(root.resolve("App.java"), "class App {}\n");
+        var paths = new NexusPaths(temporaryDirectory.resolve("scalar-home"));
+        var database = new SqliteDatabase(paths);
+        var projects = new SqliteProjectRepository(database);
+        var files = new SqliteIndexRepository(database);
+        var project = new ProjectRegistry(projects).register(root, "scalar");
+        service(paths, projects, files, null).index(project.id());
+        var model = new TestEmbeddingProvider("unchanged-model", 3);
+        var semantic = new LuceneSemanticSearchIndex(paths, 3);
+        String fingerprint = fingerprint(files, project);
+        var legacy = SemanticIndexProvenance.current(fingerprint, model,
+                "content-v3;maxEmbeddingChars=12000;excerptChars=320");
+        semantic.rebuild(project.id(), legacy, List.of());
+        service(paths, projects, files, null).rebuild(project.id());
+        assertEquals(fingerprint, fingerprint(files, project));
+        assertFalse(semantic.isCompatible(project.id(), SemanticIndexProvenance.current(fingerprint, model)));
+        assertTrue(new SemanticSearchStrategy(model, semantic, files).search(project, "App", 5).isEmpty());
+        assertEquals(0, model.embeddings);
+        service(paths, projects, files, new SemanticIndexingService(model, semantic)).index(project.id());
+        assertTrue(model.embeddings > 0);
+        assertTrue(semantic.isCompatible(project.id(), SemanticIndexProvenance.current(fingerprint, model)));
+    }
+
+    @Test
     void legacyPathFingerprintCannotReactivateSemanticIndexAfterLexicalOnlyRebuild() throws Exception {
         Path root = Files.createDirectory(temporaryDirectory.resolve("legacy-path-project"));
         Files.writeString(root.resolve("App.java"), "class App {}\n");

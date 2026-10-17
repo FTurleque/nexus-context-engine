@@ -11,14 +11,14 @@ Ce répertoire distingue :
 ```text
 version      0.2.0
 Java         >=21, release 21
-Maven        3.9.16 via wrapper vérifié
+Maven        3.10.0 via wrapper vérifié
 integration  develop
 release      main
-Quarkus      3.39.2
+Quarkus      3.40.1
 MCP SDK      2.0.1
 ```
 
-Le build courant utilise **Maven 3.9.16** via le wrapper et son ancre d'intégrité versionnée.
+Le build courant utilise **Maven 3.10.0** via le wrapper et son ancre d'intégrité versionnée.
 
 Les campagnes NXA3 et NXA4 constituent la baseline de hardening courante. Une ancienne PR ou un ancien run vert n'est jamais une preuve pour un nouveau HEAD : la preuve applicable reste le run exact-head du commit concerné.
 
@@ -45,6 +45,7 @@ Les campagnes NXA3 et NXA4 constituent la baseline de hardening courante. Une an
 | Git | [Contexte Git](git-context.md) |
 | AI Skills Registry | [AI Skills Registry](ai-skills-registry.md) |
 | scale | [Recherche à grande échelle](large-scale-search.md) |
+| outillage Claude Code | [Outillage Claude Code](claude-code.md) |
 
 ## Composition
 
@@ -89,7 +90,7 @@ NexusApplication
 - Ollama distant HTTPS par défaut ; HTTP distant seulement via `NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA=true`.
 - credentials dans l'URI Ollama refusés.
 - secrets à forte confiance redigés avant embeddings et fragments de contexte.
-- profil sémantique `content-v3` pour reconstruire les vecteurs historiques incompatibles.
+- profil sémantique `content-v4` pour reconstruire les vecteurs historiques incompatibles.
 - lectures recherche/contexte protégées par un verrou partagé conservé pendant toute l'opération ; un dérivé Lucene absent ou issu d'une autre politique force sa reconstruction.
 - parcours Git incrémental : chaque entrée d'arbre est débitée avant collecte selon le budget de découverte.
 - `NEXUS_HOME` privé sur POSIX et chemins persistants symboliques concernés refusés.

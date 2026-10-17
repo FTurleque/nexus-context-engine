@@ -21,6 +21,7 @@ public final class SqliteDatabase {
     private final Path databaseFile;
     private final int busyTimeoutMillis;
     private final SqliteWriteRetryPolicy writeRetryPolicy;
+    private final ThreadLocal<ReadConnections> readConnections = new ThreadLocal<>();
 
     public SqliteDatabase(NexusPaths paths) throws SQLException, IOException {
         this(paths, DEFAULT_BUSY_TIMEOUT_MILLIS, SqliteWriteRetryPolicy.defaults());
@@ -45,6 +46,55 @@ public final class SqliteDatabase {
     }
 
     public Connection openConnection() throws SQLException {
+        ReadConnections reads = readConnections.get();
+        if (reads == null) return newConnection();
+        if (reads.connection == null) {
+            reads.connection = newConnection();
+            reads.borrowed = (Connection) java.lang.reflect.Proxy.newProxyInstance(
+                    Connection.class.getClassLoader(), new Class<?>[]{Connection.class}, (proxy, method, args) -> {
+                        if (Thread.currentThread() != reads.owner) throw new SQLException("Session SQLite utilisée hors thread propriétaire");
+                        if (method.getName().equals("close")) return null;
+                        try { return method.invoke(reads.connection, args); }
+                        catch (java.lang.reflect.InvocationTargetException failure) { throw failure.getCause(); }
+                    });
+        }
+        return reads.borrowed;
+    }
+
+    /** Réutilise le schéma chargé pendant la requête, sans transaction ni cache de résultats. */
+    com.nexus.index.IndexRepository.ReadSession openReadSession() {
+        ReadConnections current = readConnections.get();
+        if (current == null) {
+            current = new ReadConnections();
+            readConnections.set(current);
+        }
+        ReadConnections reads = current;
+        reads.depth++;
+        return new com.nexus.index.IndexRepository.ReadSession() {
+            private boolean closed;
+            @Override public void close() {
+                if (Thread.currentThread() != reads.owner) throw new IllegalStateException("Session SQLite fermée hors thread propriétaire");
+                if (closed) return;
+                closed = true;
+                if (--reads.depth == 0) {
+                    readConnections.remove();
+                    if (reads.connection != null) {
+                        try { reads.connection.close(); }
+                        catch (SQLException failure) { throw new com.nexus.persistence.PersistenceException("Fermeture session SQLite impossible", failure); }
+                    }
+                }
+            }
+        };
+    }
+
+    private static final class ReadConnections {
+        private final Thread owner = Thread.currentThread();
+        private int depth;
+        private Connection connection;
+        private Connection borrowed;
+    }
+
+    private Connection newConnection() throws SQLException {
         Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databaseFile);
         try {
             try (Statement statement = connection.createStatement()) {
@@ -99,7 +149,7 @@ public final class SqliteDatabase {
     }
 
     private <T> T executeTransactionAttempt(SqlTransaction<T> transaction) throws SQLException {
-        Connection connection = openConnection();
+        Connection connection = newConnection();
         boolean committed = false;
         Throwable pendingFailure = null;
         try {

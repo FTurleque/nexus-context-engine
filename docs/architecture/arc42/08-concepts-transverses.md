@@ -109,13 +109,13 @@ Listener management distinct : `127.0.0.1:9000` pour `/q/health`, `/q/health/rea
 - HTTP distant exige `NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA=true` ;
 - userinfo/credentials intégrés à l'URI refusés ;
 - redaction conservatrice des secrets avant embeddings et fragments de contexte ;
-- profil sémantique `content-v3` pour invalider les vecteurs historiques incompatibles.
+- profil sémantique `content-v4` pour invalider les vecteurs historiques incompatibles après l'extension de la redaction aux scalaires sensibles.
 
 La redaction conserve les séparateurs de lignes des blocs multilignes afin de ne pas décaler les ranges source persistés.
 
 ## 8.11 Supply-chain
 
-- Maven 3.9.16 via wrapper + SHA-512 versionné ;
+- Maven 3.10.0 via wrapper + SHA-512 versionné ;
 - JDT LS fixe + SHA-256 versionné ;
 - CodeQL exact-head ;
 - OSV delta + SBOM agrégé ;

@@ -15,8 +15,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.concurrent.Semaphore;
 
 /**
  * Verrou inter-processus des mutations et lectures d'index par projet.
@@ -27,17 +26,18 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  *
  * <p>Les lectures acquièrent un verrou OS partagé, mutualisé entre lecteurs du
  * même processus, afin de ne jamais observer un dérivé Lucene pendant son
- * remplacement. La composition de production porte également le budget global
- * non bloquant des indexations coûteuses. La capacité est acquise avant le verrou fichier et
- * libérée avec le même handle, y compris lorsqu'une acquisition échoue.</p>
+ * remplacement. La coordination intra-JVM utilise un sémaphore équivalent à un
+ * read/write gate : une lecture consomme un permis, une mutation tous les permis.
+ * La composition de production porte également le budget global non bloquant des
+ * indexations coûteuses.</p>
  */
 public final class ProjectIndexLockManager {
 
     private static final boolean WINDOWS = System.getProperty("os.name", "")
             .toLowerCase(Locale.ROOT)
             .contains("win");
-    private static final ConcurrentMap<String, ReentrantReadWriteLock> PROCESS_LOCKS =
-            new ConcurrentHashMap<>();
+    private static final int PROCESS_READ_PERMITS = 1_000_000;
+    private static final ConcurrentMap<String, Semaphore> PROCESS_GATES = new ConcurrentHashMap<>();
     private static final ConcurrentMap<String, SharedReadLock> SHARED_READ_LOCKS =
             new ConcurrentHashMap<>();
 
@@ -68,12 +68,12 @@ public final class ProjectIndexLockManager {
 
         IndexingCapacityGate.Permit capacityPermit = IndexingCapacityGate.acquireShared();
         boolean permitTransferred = false;
-        ReentrantReadWriteLock processLock = processLock(projectId);
-        if (!processLock.writeLock().tryLock()) {
+        Semaphore processGate = processGate(projectId);
+        if (!processGate.tryAcquire(PROCESS_READ_PERMITS)) {
             capacityPermit.close();
             throw busy(projectId);
         }
-        boolean processLockTransferred = false;
+        boolean processGateTransferred = false;
         try {
             Path locksDirectory = paths.locksDirectory();
             paths.ensurePrivateDirectory(locksDirectory);
@@ -81,16 +81,20 @@ public final class ProjectIndexLockManager {
             Path lockPath = paths.projectIndexLock(projectId);
             FileChannel channel = openHardenedChannel(lockPath);
             FileLock fileLock = acquireFileLock(channel, projectId, false);
-            LockHandle handle = new LockHandle(channel, fileLock, capacityPermit, processLock.writeLock());
+            LockHandle handle = new LockHandle(
+                    channel,
+                    fileLock,
+                    capacityPermit,
+                    () -> processGate.release(PROCESS_READ_PERMITS));
             permitTransferred = true;
-            processLockTransferred = true;
+            processGateTransferred = true;
             return handle;
         } finally {
             if (!permitTransferred) {
                 capacityPermit.close();
             }
-            if (!processLockTransferred) {
-                processLock.writeLock().unlock();
+            if (!processGateTransferred) {
+                processGate.release(PROCESS_READ_PERMITS);
             }
         }
     }
@@ -101,22 +105,25 @@ public final class ProjectIndexLockManager {
         if (paths == null) {
             return LockHandle.noop();
         }
-        Lock readLock = processLock(projectId).readLock();
-        readLock.lock();
+        Semaphore processGate = processGate(projectId);
+        processGate.acquireUninterruptibly();
+        boolean processGateTransferred = false;
         try {
             Path locksDirectory = paths.locksDirectory();
             paths.ensurePrivateDirectory(locksDirectory);
             Path lockPath = paths.projectIndexLock(projectId);
             SharedReadLock sharedReadLock = acquireSharedReadLock(lockPath, projectId);
-            return new LockHandle(sharedReadLock, readLock);
+            LockHandle handle = new LockHandle(sharedReadLock, processGate::release);
+            processGateTransferred = true;
+            return handle;
         } catch (IOException failure) {
-            readLock.unlock();
             throw new IllegalStateException(
                     "Impossible d'acquérir le verrou de lecture du projet " + projectId,
                     failure);
-        } catch (RuntimeException failure) {
-            readLock.unlock();
-            throw failure;
+        } finally {
+            if (!processGateTransferred) {
+                processGate.release();
+            }
         }
     }
 
@@ -147,10 +154,10 @@ public final class ProjectIndexLockManager {
         }
     }
 
-    private ReentrantReadWriteLock processLock(UUID projectId) {
+    private Semaphore processGate(UUID projectId) {
         Path lockPath = paths.projectIndexLock(projectId).toAbsolutePath().normalize();
         String key = lockKey(lockPath);
-        return PROCESS_LOCKS.computeIfAbsent(key, ignored -> new ReentrantReadWriteLock(true));
+        return PROCESS_GATES.computeIfAbsent(key, ignored -> new Semaphore(PROCESS_READ_PERMITS, true));
     }
 
     private static String lockKey(Path lockPath) {
@@ -236,12 +243,12 @@ public final class ProjectIndexLockManager {
 
     public static final class LockHandle implements AutoCloseable {
 
-        private static final LockHandle NOOP = new LockHandle(null, null, null, null);
+        private static final LockHandle NOOP = new LockHandle(null, null, null, null, null);
 
         private final FileChannel channel;
         private final FileLock fileLock;
         private final IndexingCapacityGate.Permit capacityPermit;
-        private final Lock processLock;
+        private final Runnable processPermitRelease;
         private final SharedReadLock sharedReadLock;
         private boolean closed;
 
@@ -249,26 +256,26 @@ public final class ProjectIndexLockManager {
                 FileChannel channel,
                 FileLock fileLock,
                 IndexingCapacityGate.Permit capacityPermit,
-                Lock processLock) {
-            this(channel, fileLock, capacityPermit, processLock, null);
+                Runnable processPermitRelease) {
+            this(channel, fileLock, capacityPermit, processPermitRelease, null);
         }
 
         private LockHandle(
                 SharedReadLock sharedReadLock,
-                Lock processLock) {
-            this(null, null, null, processLock, sharedReadLock);
+                Runnable processPermitRelease) {
+            this(null, null, null, processPermitRelease, sharedReadLock);
         }
 
         private LockHandle(
                 FileChannel channel,
                 FileLock fileLock,
                 IndexingCapacityGate.Permit capacityPermit,
-                Lock processLock,
+                Runnable processPermitRelease,
                 SharedReadLock sharedReadLock) {
             this.channel = channel;
             this.fileLock = fileLock;
             this.capacityPermit = capacityPermit;
-            this.processLock = processLock;
+            this.processPermitRelease = processPermitRelease;
             this.sharedReadLock = sharedReadLock;
         }
 
@@ -290,8 +297,8 @@ public final class ProjectIndexLockManager {
                 }
             } finally {
                 try {
-                    if (processLock != null) {
-                        processLock.unlock();
+                    if (processPermitRelease != null) {
+                        processPermitRelease.run();
                     }
                 } finally {
                     if (capacityPermit != null) {
@@ -328,5 +335,4 @@ public final class ProjectIndexLockManager {
             }
         }
     }
-
 }

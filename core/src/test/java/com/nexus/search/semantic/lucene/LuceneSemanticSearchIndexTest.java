@@ -12,6 +12,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.FileTime;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
@@ -20,8 +23,11 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LuceneSemanticSearchIndexTest {
+
+    private static final String RECOVERY_GENERATION_PREFIX = "recovery-";
 
     @TempDir
     Path temporaryDirectory;
@@ -103,6 +109,39 @@ class LuceneSemanticSearchIndexTest {
         Files.writeString(root.resolve("current-generation"), "../outside");
         LuceneSemanticSearchIndex writer = new LuceneSemanticSearchIndex(paths, 3);
         assertThrows(IOException.class, () -> writer.search(project, new float[]{1, 0, 0}, 1));
+    }
+
+    @Test
+    void removesOnlyStaleInactiveRecoveryGenerations() throws Exception {
+        NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("recovery-gc"));
+        UUID project = UUID.randomUUID();
+        Path root = paths.projectSemanticLuceneIndex(project);
+        paths.ensurePrivateDirectory(root);
+
+        Path active = root.resolve(RECOVERY_GENERATION_PREFIX + UUID.randomUUID());
+        Path stale = root.resolve(RECOVERY_GENERATION_PREFIX + UUID.randomUUID());
+        Path recent = root.resolve(RECOVERY_GENERATION_PREFIX + UUID.randomUUID());
+        Path unrelated = root.resolve("manual-backup");
+        paths.ensurePrivateDirectory(active);
+        paths.ensurePrivateDirectory(stale);
+        paths.ensurePrivateDirectory(recent);
+        paths.ensurePrivateDirectory(unrelated);
+        Files.writeString(stale.resolve("marker"), "stale");
+
+        Instant now = Instant.now();
+        Files.setLastModifiedTime(active, FileTime.from(now.minus(Duration.ofDays(3))));
+        Files.setLastModifiedTime(stale, FileTime.from(now.minus(Duration.ofDays(2))));
+        Files.setLastModifiedTime(recent, FileTime.from(now.minus(Duration.ofHours(1))));
+
+        LuceneSemanticSearchIndex.cleanupRecoveryGenerations(
+                root,
+                active,
+                FileTime.from(now.minus(Duration.ofHours(24))));
+
+        assertTrue(Files.isDirectory(active), "the active generation must never be garbage collected");
+        assertFalse(Files.exists(stale), "stale inactive recovery generations must be removed");
+        assertTrue(Files.isDirectory(recent), "recent inactive generations remain available to old readers");
+        assertTrue(Files.isDirectory(unrelated), "non-recovery directories must not be touched");
     }
 
     @Test

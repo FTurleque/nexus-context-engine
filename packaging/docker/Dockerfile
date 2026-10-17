@@ -7,7 +7,7 @@ FROM ${MAVEN_IMAGE} AS build
 WORKDIR /workspace
 COPY . .
 # La base builder reste épinglée par digest, mais le build lui-même passe par le
-# wrapper repository-pinned afin d'utiliser exactement Maven 3.9.16 et de vérifier
+# wrapper repository-pinned afin d'utiliser exactement Maven 3.10.0 et de vérifier
 # son archive contre l'ancre SHA-512 versionnée avant extraction.
 RUN chmod +x ./mvnw \
     && ./mvnw -B -DskipTests package

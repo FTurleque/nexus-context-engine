@@ -74,7 +74,7 @@ class NexusMcpNegativeContractTest {
             var bundle = new com.nexus.context.ContextBundle(List.of(item), 100, 10, paths,
                     Map.of("nestedProvider", List.of(Map.of("diagnostic", paths))));
             var operation = new NexusApplication.ContextOperation(project, "query", true, 0, bundle);
-            var envelope = tools.textResult(tools.context(operation), false);
+            var envelope = tools.textResult(new McpResultMapper().context(operation), false);
             String payload = json.writeValueAsString(envelope);
             assertNotEquals(Boolean.TRUE, envelope.isError());
             for (String secret : List.of("alice", "Alice", "Build Secret", "Private", "cache", "file.java", "file:", "12345678")) {
@@ -83,7 +83,7 @@ class NexusMcpNegativeContractTest {
             assertTrue(payload.contains("src/App.java"));
             var unknown = new com.nexus.context.ContextBundle(List.of(), 100, 0, List.of(), Map.of("future", new Object()));
             var unknownOperation = new NexusApplication.ContextOperation(project, "query", true, 0, unknown);
-            assertThrows(IllegalStateException.class, () -> tools.context(unknownOperation));
+            assertThrows(IllegalStateException.class, () -> new McpResultMapper().context(unknownOperation));
         }
     }
 

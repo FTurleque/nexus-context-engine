@@ -61,20 +61,28 @@ grep -q 'métadonnées UTF-8 cumulées/snapshot' docs/developer/code-intelligenc
   || fail 'decoded metadata ceiling must remain documented'
 
 # Post-audit 2026-09-07: Windows ACL inspection covers every sensitive path,
-# principal matching is exact, and operators can require fail-closed privacy.
+# system principals are resolved from well-known SIDs and compared exactly, and
+# operators can require fail-closed privacy without relying on translated names.
 NEXUS_PATHS="core/src/main/java/com/nexus/config/NexusPaths.java"
+WINDOWS_PRINCIPALS="core/src/main/java/com/nexus/config/WindowsStoragePrincipals.java"
 grep -q 'canonicalCurrentUserPrincipal' "$NEXUS_PATHS" \
   || fail 'Windows ACL inspection must resolve the current principal canonically'
-grep -q 'principal.equals("BUILTIN\\\\ADMINISTRATORS")' "$NEXUS_PATHS" \
-  || fail 'Windows built-in Administrators principal must be matched exactly'
+grep -q 'trustedSystemNames.contains(principal)' "$NEXUS_PATHS" \
+  || fail 'Windows trusted system principals must be compared exactly after SID resolution'
+for sid in 'S-1-5-18' 'S-1-5-32-544' 'S-1-3-0'; do
+  grep -q --fixed-strings "$sid" "$WINDOWS_PRINCIPALS" \
+    || fail "Windows well-known principal SID must remain pinned: $sid"
+done
+grep -q 'getUserPrincipalLookupService' "$WINDOWS_PRINCIPALS" \
+  || fail 'Windows well-known SIDs must resolve through the filesystem principal lookup service'
 grep -q 'NEXUS_REQUIRE_PRIVATE_STORAGE' "$NEXUS_PATHS" \
   || fail 'private storage fail-closed opt-in is missing'
 grep -q 'enforceAclPrivacy' "$NEXUS_PATHS" \
   || fail 'private storage ACL enforcement must remain centralized'
-if grep -q 'endsWith("\\\\ADMINISTRATORS")' "$NEXUS_PATHS"; then
+if grep -q 'endsWith("\\\\ADMINISTRATORS")' "$NEXUS_PATHS" "$WINDOWS_PRINCIPALS"; then
   fail 'suffix-based Administrators trust must not return'
 fi
-if grep -q 'endsWith("\\\\" + currentUser)' "$NEXUS_PATHS"; then
+if grep -q 'endsWith("\\\\" + currentUser)' "$NEXUS_PATHS" "$WINDOWS_PRINCIPALS"; then
   fail 'suffix-based current-user ACL trust must not return'
 fi
 
