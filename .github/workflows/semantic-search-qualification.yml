@@ -25,9 +25,12 @@ jobs:
   real-ollama:
     name: Real Ollama semantic retrieval
     runs-on: ubuntu-latest
-    # Full-repository real-model qualification is CPU-bound on GitHub-hosted runners.
+    # Full-repository real-model qualification is CPU-bound on GitHub-hosted runners:
+    # ~620k embedded tokens at 86-165 tok/s depending on the allocated CPU (measured
+    # 2026-10, see docs/developer/semantic-search.md). The slowest observed runner needs
+    # ~2h05; 180 minutes keeps ~45% margin for corpus growth without lowering any floor.
     # Per-request Ollama timeouts remain independently bounded below at 120 seconds.
-    timeout-minutes: 120
+    timeout-minutes: 180
     env:
       NEXUS_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       OLLAMA_VERSION: '0.33.3'
@@ -75,6 +78,7 @@ jobs:
           chmod +x scripts/release/verify-pinned-checksum.sh
           scripts/release/verify-pinned-checksum.sh sha256 "$expected" "$OLLAMA_ARCHIVE"
           sudo tar --zstd -xf "$OLLAMA_ARCHIVE" -C /usr
+          lscpu > target/semantic-real/runner-cpu.txt
           command -v ollama
           ollama --version | tee target/semantic-real/ollama-version.txt
 
@@ -175,6 +179,54 @@ jobs:
               'semantic': semantic,
               'delta': report['delta'],
           }, indent=2))
+          PY
+
+      - name: Summarize embedding throughput
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          log = Path('target/semantic-real/ollama.log')
+          cpu = Path('target/semantic-real/runner-cpu.txt')
+          if not log.exists():
+              raise SystemExit(0)
+          units = {'µs': 1e-6, 'us': 1e-6, 'ms': 1e-3, 's': 1.0}
+          embed_seconds = 0.0
+          requests = 0
+          tokens = 0
+          for line in log.read_text(encoding='utf-8', errors='replace').splitlines():
+              if '"/api/embed"' in line:
+                  duration = line.split('|')[2].strip()
+                  match = re.fullmatch(r'(?:(\d+)m)?([\d.]+)(µs|us|ms|s)', duration)
+                  if match:
+                      embed_seconds += int(match.group(1) or 0) * 60 + float(match.group(2)) * units[match.group(3)]
+                      requests += 1
+              tokens_match = re.search(r'stop processing: n_tokens = (\d+)', line)
+              if tokens_match:
+                  tokens += int(tokens_match.group(1))
+          model_name = 'unknown'
+          if cpu.exists():
+              for line in cpu.read_text(encoding='utf-8', errors='replace').splitlines():
+                  if line.startswith('Model name:'):
+                      model_name = line.split(':', 1)[1].strip()
+          summary = {
+              'runnerCpu': model_name,
+              'embedRequests': requests,
+              'embeddedTokens': tokens,
+              'embedSeconds': round(embed_seconds, 1),
+              'tokensPerSecond': round(tokens / embed_seconds, 1) if embed_seconds else None,
+          }
+          rendered = json.dumps(summary, indent=2)
+          Path('target/semantic-real/throughput.json').write_text(rendered + '\n')
+          print(rendered)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as out:
+              out.write('### Embedding throughput\n\n```json\n' + rendered + '\n```\n')
           PY
 
       - name: Stop Ollama

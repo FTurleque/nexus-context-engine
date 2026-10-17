@@ -191,7 +191,25 @@ Le rapport doit démontrer :
 - `MRR@3 >= 0,20` ;
 - aucune baisse supérieure à `0,10` face au baseline lexical sur recall/hit/MRR.
 
-Ces floors sont des garde-fous de régression, pas des objectifs à optimiser artificiellement. Un échec doit conduire à analyser runtime, modèle, corpus, pipeline ou ranking ; il ne doit pas être résolu en abaissant automatiquement les seuils. Le rapport JSON, la version Ollama, la liste des modèles et les logs sont conservés comme artefacts pendant 90 jours.
+Ces floors sont des garde-fous de régression, pas des objectifs à optimiser artificiellement. Un échec doit conduire à analyser runtime, modèle, corpus, pipeline ou ranking ; il ne doit pas être résolu en abaissant automatiquement les seuils. Le rapport JSON, la version Ollama, la liste des modèles, le CPU du runner, le résumé de débit `throughput.json` et les logs sont conservés comme artefacts pendant 90 jours.
+
+### Budget de temps de la qualification réelle
+
+Mesures d'octobre 2026 sur les runners GitHub `ubuntu-latest` (4 vCPU = 2 cœurs physiques avec hyper-threading, sans GPU) :
+
+```text
+corpus            ~574 entrées embarquées, ~620 000 tokens, 324 requêtes /api/embed
+indexation        ≈ 100 % du temps passé dans les embeddings Ollama séquentiels
+débit observé     86 à 165 tokens/s selon le CPU alloué
+                  (Xeon 8573C : 100 à 165, Xeon 8370C : 103, EPYC 7763 : 86 à 88)
+durée du job      1 h 00 à 2 h 01 réussis ; 2 h 00 atteint après 318/324 requêtes sur EPYC 7763
+```
+
+La variabilité provient du CPU alloué par GitHub et non du code NEXUS : le nombre de requêtes et de tokens est identique d'un run à l'autre pour un même corpus, et le temps Java entre deux requêtes est négligeable.
+
+Une calibration ABBA sur le même runner (EPYC 7763, 12 documents de 12 000 caractères) a comparé 2 threads llama.cpp (défaut Ollama : cœurs physiques) et 4 threads (`LLAMA_ARG_THREADS=4` ou option `num_thread`) : 383,1 s contre 370,9 s, soit **−3,2 %** seulement. L'hyper-threading n'apporte presque rien à ce calcul vectoriel saturé ; le workflow conserve donc la configuration par défaut d'Ollama. Mettre le modèle en cache est sans intérêt (pull ≈ 5 s). Réduire le corpus ou réutiliser des vecteurs d'un run précédent affaiblirait la preuve (moins de distracteurs, transport d'embeddings non exercé) et n'est pas retenu.
+
+Le budget est donc fixé à **180 minutes** : le runner le plus lent observé exige environ 2 h 05 de bout en bout, et 180 minutes laissent environ 45 % de marge pour la croissance du corpus. Si `throughput.json` montre un corpus ou un débit qui rapproche la durée projetée de ce budget, il faut réanalyser le travail embarqué avant d'augmenter à nouveau le délai.
 
 ## Correctness
 
