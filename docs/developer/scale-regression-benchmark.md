@@ -16,6 +16,10 @@ Workflow :
 .github/workflows/scale-benchmark.yml
 ```
 
+Ce workflow s'exécute sur les pull requests vers `develop` et `main` qui touchent ses chemins surveillés. Après merge, `.github/workflows/develop-push-scale-benchmark.yml` le rappelle sur chaque push `develop` qui touche **exactement les mêmes chemins**, plus le wrapper lui-même : un merge, ou une combinaison de merges, est donc re-benchmarké sur `develop` dès qu'il touche une zone couverte en PR. GitHub Actions ne partage pas un filtre `paths` entre deux fichiers de workflow ; les deux listes restent donc écrites en double, et `scripts/release/test-operational-doc-contracts.sh` fait échouer NEXUS CI si elles divergent.
+
+Le check « Scale benchmark » reste consultatif : il n'appartient pas aux checks obligatoires du ruleset `Protect main & develop`. Un workflow filtré par chemins ne produit aucun check sur une PR qui ne touche pas ces chemins, et GitHub laisse alors un check requis en attente indéfinie, ce qui bloquerait le merge de toutes les autres PR. Le rendre obligatoire suppose d'abord de retirer le filtre `paths` du déclencheur `pull_request` au profit d'une détection de changements interne au job, qui conclut en succès sans mesurer lorsque aucun chemin surveillé n'est touché ; le mainteneur ajoute ensuite `Hermetic scale benchmark` aux checks obligatoires du ruleset. D'ici là, un rouge sur une PR est traité comme bloquant par revue, et le run post-merge sur `develop` reprend tout merge qui l'aurait contourné.
+
 Version du protocole :
 
 ```text
