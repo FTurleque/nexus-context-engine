@@ -2,7 +2,8 @@
 id: DATA-0007
 title: "Utiliser Apache Lucene comme index de recherche local"
 domain: data
-rules: false
+rules: true
+files: ["**/src/main/java/**"]
 ---
 
 # Utiliser Apache Lucene comme index de recherche local
@@ -107,6 +108,22 @@ La décision est respectée si :
 - aucune API Lucene n'apparaît dans `ContextRequest`, `ContextBundle` ou les modèles métier ;
 - le MVP fonctionne sans serveur de recherche externe.
 
+## Do's and Don'ts
+
+### Do
+
+- Utiliser Apache Lucene comme index de recherche local, derrière l'abstraction `SearchIndex` ou une équivalente.
+- Faire passer la recherche lexicale par un port NEXUS.
+- Garder l'index Lucene reconstructible à partir des données et sources canoniques.
+- Mesurer les scores de recherche sur un corpus de référence.
+
+### Don't
+
+- Ne pas faire dépendre le code métier des classes Lucene.
+- Ne pas faire apparaître d'API Lucene dans `ContextRequest`, `ContextBundle` ou les modèles métier.
+- Ne pas traiter Lucene comme source de vérité.
+- Ne pas exiger de serveur de recherche externe.
+
 ## Analyse détaillée des options
 
 ### Utiliser SQLite FTS comme moteur principal
@@ -200,6 +217,11 @@ LexicalSearchStrategy
 ```
 
 La recherche Lucene sera combinée avec symboles et graphe dans les étapes ultérieures.
+
+## Compliance and Enforcement
+
+- Règle Archgate `DATA-0007-utiliser-lucene-comme-index-de-recherche-local.rules.ts` / `lucene-confined-to-search-adapters` : dans les sources de production (`**/src/main/java`), `org.apache.lucene` n'est référencé (commentaires et littéraux effacés) que sous `core/src/main/java/com/nexus/search/lucene/` et `core/src/main/java/com/nexus/search/semantic/lucene/`.
+- Tests `LuceneSearchIndexTest` et `LuceneFileSearchStrategyLocaleTest` (`core/src/test/java/com/nexus/search/lucene/`), `ProjectIndexingBatchingTest.rebuildsDerivedIndexInBoundedDocumentBatches` (`core/src/test/java/com/nexus/index/`, reconstruction), `FederatedGoldenSearchCorpusTest` (`core/src/test/java/com/nexus/search/`, classement sur un corpus de référence), lancés par `mvnw clean install` (workflow `.github/workflows/ci.yml` : job Linux reactor, et job Windows gate par `scripts/validate-phase-6.ps1`).
 
 ## Conditions de réexamen
 

@@ -112,6 +112,19 @@ La décision est respectée si :
 - le `ContextBundle` conserve la provenance des instructions et skills ;
 - l'exécution d'un skill n'est pas implémentée dans le cœur du `ContextBuilder`.
 
+## Do's and Don'ts
+
+### Do
+
+- Découvrir les instructions natives (`AGENTS.md`, `.github/copilot-instructions.md`, `.github/instructions/*.instructions.md`, `CLAUDE.md`, `GEMINI.md`) par des providers qui les traduisent vers un modèle commun (origine, scope, motifs de chemin, priorité, contenu, métadonnées).
+- Adopter le standard Agent Skills (`SKILL.md`) en divulgation progressive : métadonnées à la découverte, `SKILL.md` à la sélection, scripts, références et assets chargés par l'agent à l'exécution.
+
+### Don't
+
+- Ne pas remplacer les fichiers natifs ni exiger leur migration.
+- Ne pas introduire de format de skill propriétaire obligatoire.
+- Ne pas implémenter l'exécution d'un skill dans le cœur du `ContextBuilder`.
+
 ## Analyse détaillée des options
 
 ### Créer des formats propriétaires NEXUS
@@ -194,6 +207,12 @@ Réexaminer si :
 - le standard Agent Skills évolue de manière incompatible ;
 - les providers fournisseurs deviennent trop coûteux à maintenir ;
 - AI Skills Registry impose un contrat d'échange plus riche, sans toutefois rendre le registre obligatoire.
+
+## Compliance and Enforcement
+
+- Règle Archgate `ARCH-0011-normaliser-les-sources-de-contexte.rules.ts` / `context-builder-reads-no-native-format` : les formats natifs ne sont nommés que par les providers de `com.nexus.context.source`.
+- Tests `LocalAgentSkillsProviderTest.discoversOnlyValidSkillsAndInventoriesResourcesWithoutLoadingTheirContent`, `AiSkillsRegistryProviderTest.discoversRegistryMetadataBeforeLoadingTheSelectedSkillBody`, `InstructionDiscoverySupportTest` et `NativeContextSourcesIntegrationTest` (`core/src/test/java/com/nexus/context`) ; tests lancés par `./mvnw -B clean install` (job « Linux reactor Maven build » de `.github/workflows/ci.yml`).
+- Revue : absence d'exécution de skill dans le cœur.
 
 ## Décisions liées
 

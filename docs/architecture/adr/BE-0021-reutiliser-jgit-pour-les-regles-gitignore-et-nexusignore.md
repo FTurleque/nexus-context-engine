@@ -2,7 +2,8 @@
 id: BE-0021
 title: "Réutiliser JGit pour les règles `.gitignore` et `.nexusignore`"
 domain: backend
-rules: false
+rules: true
+files: ["core/src/main/java/com/nexus/index/scan/**"]
 ---
 
 # Réutiliser JGit pour les règles `.gitignore` et `.nexusignore`
@@ -79,6 +80,25 @@ L'utilisation de JGit ici concerne uniquement la **sémantique d'ignore** ; elle
 - des tests couvrent règles racine, règles imbriquées et négations ;
 - le scanner exclut les dossiers générés et secrets évidents ;
 - l'exécutable `git` n'est pas requis pour scanner un projet.
+
+## Do's and Don'ts
+
+### Do
+
+- Parser et évaluer les règles de type `.gitignore` avec JGit.
+- Appliquer la même grammaire aux fichiers `.nexusignore`.
+- Maintenir des règles scopées par répertoire : règles héritées des parents, puis `.gitignore` et `.nexusignore` du répertoire courant pour ses descendants.
+- Appliquer les règles intégrées NEXUS : `.git`, `.idea`, `.gradle`, `target`, `build`, `out`, `node_modules`, `dist`, `coverage` et équivalents configurés.
+- Exclure par défaut les fichiers sensibles évidents (`.env`, clés privées, conteneurs de certificats).
+
+### Don't
+
+- Ne pas utiliser JGit dans le scanner pour autre chose que la sémantique d'ignore.
+
+## Compliance and Enforcement
+
+- Tests `ProjectScannerTest` (`respectsGitignoreNexusignoreAndBuiltInExclusions`, `respectsGitignoreNegationRules`) et `ProjectIgnoreMatcherBudgetTest` (`core/src/test/java/com/nexus/index/scan/`, lancés par `mvnw verify`).
+- Règle Archgate `BE-0021-reutiliser-jgit-pour-les-regles-gitignore-et-nexusignore.rules.ts` / `scanner-ignore-rules-use-jgit` : dans `core/src/main/java/com/nexus/index/scan/` (commentaires et littéraux effacés), `ProjectIgnoreMatcher` importe `org.eclipse.jgit.ignore.IgnoreNode` ; aucun usage de JGit hors de `org.eclipse.jgit.ignore`, aucun `PathMatcher`, aucun lancement de processus.
 
 ## Analyse détaillée des options
 

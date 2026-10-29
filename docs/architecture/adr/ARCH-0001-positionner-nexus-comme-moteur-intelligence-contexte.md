@@ -121,6 +121,20 @@ Cette décision est respectée si :
 - les adaptateurs MCP, REST ou IDE ne contiennent pas la logique métier de sélection ;
 - le routage des modèles reste hors du périmètre du cœur.
 
+## Do's and Don'ts
+
+### Do
+
+- Produire comme contrat canonique de sortie un `ContextBundle` indépendant du fournisseur consommateur.
+- Limiter ce que NEXUS décide ou recommande au contexte : sources applicables, fichiers et symboles pertinents, instructions, skills utiles, documentation ou contexte Git à inclure, éléments à exclure ou à tronquer.
+- Garder `ContextRequest` et `ContextBundle` indépendants des protocoles clients.
+
+### Don't
+
+- Ne pas décider dans NEXUS quel LLM utiliser, quel agent exécute la tâche, comment un skill s'exécute, comment l'orchestrateur répartit le travail ni quelle réponse finale produire.
+- Ne pas rendre le moteur dépendant de Copilot, de Claude, de JARVIS ou d'un fournisseur LLM.
+- Ne pas placer la logique métier de sélection dans les adaptateurs MCP, REST ou IDE.
+
 ## Analyse détaillée des options
 
 ### Construire NEXUS comme un chatbot complet
@@ -206,6 +220,12 @@ Les composants internes doivent converger vers la production d'un `ContextBundle
 ## Conditions de réexamen
 
 Cette décision ne doit être réexaminée que si le projet change volontairement de mission. L'ajout d'une API, d'un serveur MCP ou d'un connecteur d'agent ne constitue pas une raison de modifier ce positionnement.
+
+## Compliance and Enforcement
+
+- Règle Archgate `ARCH-0017-decoupler-nexus-des-outils-et-orchestrateurs-externes.rules.ts` / `core-depends-on-no-assistant-or-orchestrator` : aucune dépendance du cœur vers un SDK Copilot, Claude/Anthropic, OpenAI ni vers JARVIS, Alfred ou Brainiac.
+- Règles Archgate `ARCH-0039-isoler-l-adaptateur-rest-quarkus-du-coeur-nexus.rules.ts` / `rest-adapter-delegates-business-logic` et `ARCH-0040-exposer-nexus-via-un-adaptateur-mcp-stdio-mince.rules.ts` / `mcp-handlers-delegate-to-nexus-application` : les adaptateurs REST et MCP ne nomment aucun service de sélection du moteur.
+- Revue : absence de choix de modèle ou d'exécution d'agent dans le cœur, neutralité de `ContextRequest` et `ContextBundle`.
 
 ## Décisions liées
 

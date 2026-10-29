@@ -2,7 +2,8 @@
 id: ARCH-0040
 title: "Exposer NEXUS via un adaptateur MCP STDIO mince"
 domain: architecture
-rules: false
+rules: true
+files: ["**/src/*/java/**/*.java", "core/pom.xml", "adapters/rest-quarkus/pom.xml", "adapters/assistant-clients/pom.xml"]
 ---
 
 # Exposer NEXUS via un adaptateur MCP STDIO mince
@@ -61,6 +62,21 @@ explain_context
 ```
 
 Les autres tools envisagés par la roadmap pourront être ajoutés lorsqu'ils correspondent à un besoin réel, sans multiplier des variantes redondantes de `build_context`.
+
+## Do's and Don'ts
+
+### Do
+
+- Isoler l'adaptateur MCP dans `adapters/mcp-java`, sur le SDK Java MCP officiel, avec STDIO comme premier transport.
+- Centraliser la composition du moteur dans `NexusApplication`, à laquelle délèguent les adaptateurs MCP et REST.
+- Limiter un handler MCP à valider les arguments, résoudre le projet, appeler `NexusApplication` et traduire le résultat en réponse MCP.
+- Réserver `stdout` au flux JSON-RPC du SDK.
+
+### Don't
+
+- Ne pas calculer de score ni reconstruire de `ContextBundle` dans un handler MCP.
+- Ne pas écrire de diagnostic applicatif sur `stdout`.
+- Ne pas ajouter de variantes redondantes de `build_context`.
 
 ## Conséquences positives
 
@@ -145,6 +161,14 @@ Réexaminer si :
 - Streamable HTTP devient nécessaire pour une exposition distante ;
 - le SDK MCP modifie substantiellement son modèle d'outils ou de transport ;
 - la façade applicative devient trop large et nécessite des ports applicatifs plus fins.
+
+## Compliance and Enforcement
+
+- Règle Archgate `ARCH-0040-exposer-nexus-via-un-adaptateur-mcp-stdio-mince.rules.ts` / `mcp-sdk-only-in-mcp-adapter` : aucune référence à `io.modelcontextprotocol` dans les sources Java hors de `adapters/mcp-java` (commentaires et littéraux effacés), ni dans `core/pom.xml`, `adapters/rest-quarkus/pom.xml` et `adapters/assistant-clients/pom.xml`.
+- Règle Archgate `ARCH-0040-exposer-nexus-via-un-adaptateur-mcp-stdio-mince.rules.ts` / `mcp-stdout-reserved-for-transport` : dans `adapters/mcp-java/src/main/java`, `System.out` (ou `System.setOut`, `FileDescriptor.out`) n'apparaît que comme argument de `new StdioServerTransportProvider(...)`.
+- Règle Archgate `ARCH-0040-exposer-nexus-via-un-adaptateur-mcp-stdio-mince.rules.ts` / `mcp-handlers-delegate-to-nexus-application` : les sources de `adapters/mcp-java/src/main/java` ne nomment aucun service ni package technique du moteur et ne construisent ni `ContextBundle` ni `RankedCandidate`.
+- Tests `NexusMcpServerIntegrationTest.exposesTheSameSearchAndContextResultsThroughARealMcpStdioClient` (parité avec `NexusApplication` par un vrai client STDIO), `NexusMcpServerLifecycleTest` et `NexusMcpToolSchemaContractTest` (`adapters/mcp-java/src/test/java/com/nexus/mcp`) ; tests lancés par `./mvnw -B clean install` (job « Linux reactor Maven build » de `.github/workflows/ci.yml`).
+- Script `scripts/release/test-mcp-protocol.ps1`, lancé par `scripts/release/test-windows-installer.ps1` (workflow `.github/workflows/windows-installer.yml`).
 
 ## Décisions liées
 

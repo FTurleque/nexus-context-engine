@@ -116,6 +116,25 @@ La décision est respectée si :
 - les exclusions et troncatures sont expliquées ;
 - les métriques de réduction sont présentes dans `ContextBundle.metadata`.
 
+## Do's and Don'ts
+
+### Do
+
+- Sélectionner les fragments par un algorithme glouton déterministe après normalisation, fusion et déduplication.
+- Trier de façon déterministe par score, puis chemin, puis ligne.
+- Marquer explicitement toute troncature dans le contenu et dans les métadonnées de l'item, et donner un motif lisible à chaque exclusion.
+- Exposer dans le bundle les métriques de sélection (candidats, fragments, items, exclusions, troncatures, tokens avant et après sélection, ratio de réduction).
+
+### Don't
+
+- Ne jamais laisser la somme des `estimatedTokens` des `ContextItem` dépasser `tokenBudget` selon le `TokenEstimator` actif.
+- Ne pas tronquer un fragment si aucune portion significative ne peut être incluse.
+
+## Compliance and Enforcement
+
+- Tests `DefaultContextBuilderIntegrationTest` (`buildsDeterministicSymbolFirstContextWithinBudget`, `truncatesLargeRelevantFragmentWithoutExceedingBudget`), `BudgetedContextSelectorUnicodeTest` et `BudgetedContextSelectorRedactionTest` (`core/src/test/java/com/nexus/context/`, lancés par `mvnw verify`).
+- Aucune règle Archgate : le respect du budget est un comportement à l'exécution, vérifié par les tests et en revue.
+
 ## Analyse détaillée des options
 
 ### Accumulation jusqu'au premier dépassement

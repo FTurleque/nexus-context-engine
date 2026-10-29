@@ -2,7 +2,8 @@
 id: BE-0046
 title: "Mettre en cache le contexte Git dans les runtimes longue durée"
 domain: backend
-rules: false
+rules: true
+files: ["**/src/main/java/**"]
 ---
 
 # Mettre en cache le contexte Git dans les runtimes longue durée
@@ -99,6 +100,22 @@ Le cache est activé uniquement dans `NexusApplication.createLongLived(...)`, d�
 | Contournement du budget | Élevé | visites/checkpoint `ContextDiscoveryBudget` pendant fingerprint |
 | Régression CLI | Faible | activation uniquement via `createLongLived(...)` |
 
+## Do's and Don'ts
+
+### Do
+
+- Encapsuler `LocalGitContextSourceProvider` dans `PersistentGitContextSourceProvider`, le provider local restant la source de vérité.
+- Ne réutiliser un résultat que si le fingerprint calculé juste avant le hit (worktree réel, HEAD exact, status ciblé, SHA-256 des diffs staged et unstaged ciblés) est inchangé.
+- Construire la clé avec la racine projet, la requête, les chemins cibles normalisés et le mode `explain`.
+- Débiter le `ContextDiscoveryBudget` pendant la validation du fingerprint.
+- Borner le cache à 16 résultats par défaut, avec éviction LRU par ordre d'accès.
+- Activer le cache uniquement dans `NexusApplication.createLongLived(...)` et garder `LocalGitContextSourceProvider` dans `NexusApplication.create(...)`.
+
+### Don't
+
+- Ne jamais mettre en cache un résultat qui indique un repository indisponible.
+- Ne pas ajouter de fichier, de schéma SQLite ni de protocole inter-processus pour ce cache.
+
 ## Confirmation
 
 La décision est confirmée par :
@@ -124,6 +141,12 @@ Réévaluer cette décision si :
 
 - ADR-0005 — fonctionnement local-first et opt-in.
 - ADR-0045 — lifecycle Lucene long-lived borné.
+
+## Compliance and Enforcement
+
+- Tests (`core`, lancés par `mvnw clean install`) : `core/src/test/java/com/nexus/context/source/git/PersistentGitContextSourceProviderTest.java` (`reusesStableResultAndInvalidatesWorkingTreeIndexAndHead`, `keepsStorageBoundedWithAccessOrderEviction`, `unavailableRepositoryIsNeverCached`), `core/src/test/java/com/nexus/context/source/git/PersistentGitContextSourceProviderBudgetTest.java` (`abortsFingerprintWhileJgitStreamsDiffPastDiscoveryBudget`).
+- Workflow `.github/workflows/git-context-cache-qualification.yml` : `core/src/test/java/com/nexus/benchmark/GitContextCacheQualificationBenchmarkTest.java` et `PersistentGitContextSourceProviderTest` sur Linux et Windows.
+- Règle Archgate `BE-0046-mettre-en-cache-le-contexte-git-dans-les-runtimes-longue-duree.rules.ts` : `git-cache-only-in-long-lived-runtime` refuse toute instanciation de `PersistentGitContextSourceProvider` hors de `NexusApplicationFactory`, et tout appel `NexusApplicationFactory.create(..., true)` hors des méthodes `createLongLived` de `NexusApplication` ; `git-cache-in-memory-sixteen-entries` vérifie `DEFAULT_CAPACITY = 16` et refuse dans le cache toute écriture de fichier, connexion SQL ou accès réseau ; commentaires et littéraux effacés.
 
 ## References
 

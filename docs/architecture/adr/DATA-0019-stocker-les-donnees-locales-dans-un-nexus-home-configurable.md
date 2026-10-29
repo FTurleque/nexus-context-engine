@@ -2,7 +2,8 @@
 id: DATA-0019
 title: "Stocker les données locales dans un NEXUS_HOME configurable"
 domain: data
-rules: false
+rules: true
+files: ["**/src/main/java/**"]
 ---
 
 # Stocker les données locales dans un NEXUS_HOME configurable
@@ -84,6 +85,20 @@ Les tests doivent pouvoir injecter un répertoire temporaire via la propriété 
 - les tests utilisent un home temporaire ;
 - SQLite et Lucene utilisent des sous-chemins dérivés de `NEXUS_HOME`.
 
+## Do's and Don'ts
+
+### Do
+
+- Résoudre le répertoire racine par la propriété système `nexus.home`, puis par la variable d'environnement `NEXUS_HOME`, puis par repli sur `${user.home}/.nexus`.
+- Placer dans ce répertoire la base `nexus.db` et les index sous `indexes/<project-uuid>/lucene/`.
+- Centraliser la résolution des chemins dans `NexusPaths`.
+- Injecter dans les tests un répertoire temporaire par la propriété `nexus.home`.
+
+### Don't
+
+- Ne pas écrire d'index NEXUS dans les repositories source par défaut.
+- Ne pas écrire dans le profil réel de l'utilisateur pendant les tests.
+
 ## Analyse détaillée des options
 
 ### `.nexus/` dans chaque repository
@@ -109,6 +124,13 @@ Les tests doivent pouvoir injecter un répertoire temporaire via la propriété 
 **Avantages :** simplicité par défaut, configurabilité et testabilité.
 
 **Inconvénients :** convention propre à NEXUS à documenter.
+
+## Compliance and Enforcement
+
+- Règle Archgate `DATA-0019-stocker-les-donnees-locales-dans-un-nexus-home-configurable.rules.ts` / `nexus-home-resolution-order` : `NexusPaths` déclare `HOME_PROPERTY = "nexus.home"` et `HOME_ENVIRONMENT_VARIABLE = "NEXUS_HOME"`, et `fromEnvironment()` lit dans cet ordre la propriété, la variable, puis `user.home` avec `.nexus`.
+- Règle Archgate `DATA-0019-stocker-les-donnees-locales-dans-un-nexus-home-configurable.rules.ts` / `nexus-home-resolved-by-nexus-paths` : dans les sources de production, les littéraux `"nexus.home"`, `"NEXUS_HOME"` et `"nexus.db"` n'apparaissent que dans `NexusPaths.java`, et aucun autre fichier ne lit `NexusPaths.HOME_PROPERTY` ou `NexusPaths.HOME_ENVIRONMENT_VARIABLE` par `System.getProperty` ou `System.getenv`.
+- Test `NexusPathsTest` (`core/src/test/java/com/nexus/config/`, répertoires privés créés sous le home), lancés par `mvnw clean install` (workflow `.github/workflows/ci.yml` : job Linux reactor, et job Windows gate par `scripts/validate-phase-6.ps1`).
+- Aucun contrôle automatisé de l'absence d'index dans le repository source ; vérifié en revue.
 
 ## Conditions de réexamen
 

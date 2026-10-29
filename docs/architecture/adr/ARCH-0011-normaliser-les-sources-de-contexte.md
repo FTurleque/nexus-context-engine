@@ -2,7 +2,8 @@
 id: ARCH-0011
 title: "Normaliser les sources de contexte derrière des providers"
 domain: architecture
-rules: false
+rules: true
+files: ["core/src/main/java/com/nexus/context/*.java"]
 ---
 
 # Normaliser les sources de contexte derrière des providers
@@ -115,6 +116,19 @@ La décision est respectée si :
 - une nouvelle source peut être ajoutée sans modifier les contrats des autres providers ;
 - le `ContextBundle` peut contenir plusieurs types de contexte simultanément.
 
+## Do's and Don'ts
+
+### Do
+
+- Faire découvrir chaque famille de sources de contexte par un `ContextSourceProvider`.
+- Laisser aux providers la compréhension des conventions natives, et au cœur la normalisation, la recherche, le classement et le budget.
+- Conserver pour chaque candidat son origine et sa stratégie de découverte.
+
+### Don't
+
+- Ne pas faire lire `.github/`, `CLAUDE.md` ou `SKILL.md` directement par `ContextBuilder`.
+- Ne pas modifier les contrats des autres providers pour ajouter une nouvelle source.
+
 ## Analyse détaillée des options
 
 ### Coder chaque type directement dans `ContextBuilder`
@@ -195,6 +209,11 @@ Réexaminer le modèle commun si :
 - plusieurs providers nécessitent de contourner systématiquement le contrat ;
 - de nouvelles sources imposent des notions absentes comme durée de validité ou sécurité ;
 - le ranking multi-source devient impossible à expliquer avec les métadonnées existantes.
+
+## Compliance and Enforcement
+
+- Règle Archgate `ARCH-0011-normaliser-les-sources-de-contexte.rules.ts` / `context-builder-reads-no-native-format` : les sources du package `com.nexus.context` lui-même (hors providers `com.nexus.context.source.*`) ne nomment ni `.github`, ni `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `SKILL.md`, `*.instructions.md` ou `copilot-instructions` ; commentaires effacés, littéraux conservés.
+- Test `NativeContextSourcesIntegrationTest` (`core/src/test/java/com/nexus/context`) : un même bundle combine instructions natives, code et documentation ; tests lancés par `./mvnw -B clean install` (job « Linux reactor Maven build » de `.github/workflows/ci.yml`).
 
 ## Décisions liées
 

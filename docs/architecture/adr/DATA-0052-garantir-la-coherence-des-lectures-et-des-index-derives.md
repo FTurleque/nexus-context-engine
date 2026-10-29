@@ -34,6 +34,23 @@ vérifie l'existence, l'intégrité minimale et cette version avant qu'une index
 incrémentale soit autorisée. Le profil sémantique inclut également la version de la
 redaction ; un dérivé ancien ou absent force une reconstruction.
 
+## Do's and Don'ts
+
+### Do
+
+- Partager entre les mutations et les lectures d'un projet une identité de verrou par chemin de lock.
+- Prendre le verrou d'écriture inter-processus pour une mutation, et pour une lecture un verrou partagé inter-processus conservé pendant toute la façade de recherche, de contexte ou d'inspection.
+- Mutualiser le `FileLock` partagé entre les lecteurs du même processus.
+- Acquérir les verrous des lectures fédérées dans l'ordre global des UUID.
+- Porter la version de la politique de redaction dans chaque commit Lucene, et la vérifier par `isPresent`, avec l'existence et l'intégrité minimale, avant d'autoriser une indexation incrémentale.
+- Inclure la version de la redaction dans le profil sémantique et reconstruire un dérivé ancien ou absent.
+
+### Don't
+
+- Ne pas ouvrir Lucene pour une lecture publique sans le verrou partagé du projet.
+- Ne pas autoriser une indexation incrémentale sur un dérivé absent, altéré ou d'une autre version de redaction.
+- Ne pas présenter `READY` comme un snapshot atomique du filesystem vivant.
+
 ## Conséquences et validation
 
 Une lecture publique ne traverse plus un remplacement de dérivé et une indexation
@@ -45,3 +62,9 @@ Les tests couvrent la concurrence lecteurs/écrivain, la détection d'un index L
 absent, la compatibilité du commit, la reconstruction sémantique et la redaction
 des clés JSON citées. La validation complète est réalisée par `mvn clean install`
 et `scripts/self-smoke.ps1`.
+
+## Compliance and Enforcement
+
+- Tests `ProjectIndexLockManagerTest` (`core/src/test/java/com/nexus/index/`, dont `allowsConcurrentReadersButExcludesWriters` et `enforcesReadWriteSemanticsAcrossDistinctJvmProcesses`), `NexusApplicationFederatedScopePolicyTest.federatedReadsReleaseLocksAfterSuccessAndPartialAcquisitionFailure` (`core/src/test/java/com/nexus/application/`), `SemanticIndexProvenanceIntegrationTest` (`core/src/test/java/com/nexus/search/semantic/`, reconstruction quand la provenance sémantique est incompatible), lancés par `mvnw clean install` (workflow `.github/workflows/ci.yml` : job Linux reactor, et job Windows gate par `scripts/validate-phase-6.ps1`).
+- Workflow `.github/workflows/filesystem-semantics-qualification.yml` : `ProjectIndexLockManagerTest` sur les systèmes de fichiers qualifiés.
+- Aucune règle Archgate : la prise des verrous autour des façades ne se lit pas sur le texte du dépôt ; vérifié en revue.

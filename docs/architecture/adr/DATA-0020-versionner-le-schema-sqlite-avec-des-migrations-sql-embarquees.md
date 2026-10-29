@@ -2,7 +2,8 @@
 id: DATA-0020
 title: "Versionner le schéma SQLite avec des migrations SQL embarquées"
 domain: data
-rules: false
+rules: true
+files: ["**/src/main/java/**", "core/src/main/resources/db/migration/**"]
 ---
 
 # Versionner le schéma SQLite avec des migrations SQL embarquées
@@ -90,6 +91,22 @@ Le migrateur n'a pas vocation à devenir un framework généraliste. Si le nombr
 - un échec rollback la transaction ;
 - des tests couvrent l'initialisation.
 
+## Do's and Don'ts
+
+### Do
+
+- Placer les migrations dans `core/src/main/resources/db/migration/`, nommées `V001__initial_schema.sql`, `V002__description.sql`…
+- Enregistrer dans la table `schema_migrations` chaque version appliquée et sa date d'exécution.
+- Appliquer les migrations connues dans l'ordre, dans une transaction, avec rollback en cas d'échec.
+- Initialiser une base vierge par les migrations.
+- Réévaluer Flyway ou Liquibase par ADR si le nombre ou la complexité des migrations augmente significativement.
+
+### Don't
+
+- Ne pas créer de table métier directement dans les repositories.
+- Ne pas rejouer une migration déjà appliquée.
+- Ne pas faire du migrateur un framework généraliste : il reste limité à l'application ordonnée de migrations.
+
 ## Analyse détaillée des options
 
 ### SQL dispersé dans le code
@@ -109,6 +126,21 @@ Le migrateur n'a pas vocation à devenir un framework généraliste. Si le nombr
 **Avantages :** explicite, léger, versionné et suffisant pour le MVP.
 
 **Inconvénients :** quelques responsabilités de migration restent à notre charge.
+
+## Compliance and Enforcement
+
+- Règle Archgate `DATA-0020-versionner-le-schema-sqlite-avec-des-migrations-sql-embarquees.rules.ts` / `migration-files-named-vnnn` : chaque fichier de `core/src/main/resources/db/migration/` est nommé `Vnnn__description.sql`, numéros uniques et contigus depuis `001`.
+- Règle Archgate `DATA-0020-versionner-le-schema-sqlite-avec-des-migrations-sql-embarquees.rules.ts` / `migrations-listed-in-schema-migrator` : `SchemaMigrator.java` déclare chaque migration du dossier par `new Migration(n, "db/migration/Vnnn__….sql")`, `n` égal à `nnn`, une seule fois, dans l'ordre croissant, et aucun script absent.
+- Règle Archgate `DATA-0020-versionner-le-schema-sqlite-avec-des-migrations-sql-embarquees.rules.ts` / `no-table-creation-outside-migrations` : aucun `CREATE TABLE` dans les sources Java de production, hors de `schema_migrations` dans `SchemaMigrator.java`.
+- Tests `SchemaMigratorTest`, `SchemaMigratorChecksumTest` (dont `reRunningMigrationsWithUnchangedScriptsSucceeds`), `SchemaMigratorSymbolRangeUpgradeTest`, `SchemaMigratorLexicalRedactionUpgradeTest`, `SchemaMigratorRepositoryPathUpgradeTest`, `SchemaMigratorScalarSecretUpgradeTest` (`core/src/test/java/com/nexus/persistence/sqlite/`), lancés par `mvnw clean install` (workflow `.github/workflows/ci.yml` : job Linux reactor, et job Windows gate par `scripts/validate-phase-6.ps1`).
+- Contrat `scripts/release/test-operational-doc-contracts.sh` (exécuté par `.github/workflows/ci.yml`) : liste des migrations documentée et dernière migration attendue.
+- Hook `.claude/hooks/guard-edit.ps1` : refuse la modification d'une migration existante `core/src/main/resources/db/migration/V*__*.sql` ; tests dans `.claude/hooks/tests/Test-Hooks.ps1`.
+
+## Écarts constatés
+
+Constat du 2026-10-29, sans modification de la décision :
+
+- Le migrateur fait plus que l'application ordonnée de migrations décrite : il calcule l'empreinte SHA-256 de chaque script, la vérifie pour une migration déjà appliquée ou la rétro-remplit (`core/src/main/java/com/nexus/persistence/sqlite/SchemaMigrator.java:43`, `:48`), et ajoute pour cela la colonne `script_sha256` à `schema_migrations` par `ALTER TABLE` (`SchemaMigrator.java:73`). Cette vérification n'est décidée par aucun ADR actif ; DATA-0049 et DATA-0050 parlent seulement de migrations « checksumées ».
 
 ## Conditions de réexamen
 

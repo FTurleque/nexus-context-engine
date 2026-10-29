@@ -2,7 +2,8 @@
 id: SEC-0048
 title: "Distinguer traversée stricte et compatibilité filesystem"
 domain: security
-rules: false
+rules: true
+files: ["core/src/main/java/**", "adapters/*/src/main/java/**"]
 ---
 
 # Distinguer traversée stricte et compatibilité filesystem
@@ -45,6 +46,22 @@ exposition distante et n'impose pas ces deux flags. Une publication Docker
 distante doit utiliser les modes HTTPS. NEXUS ne peut pas introspecter la
 publication réelle du daemon : la déclaration reste une responsabilité opérateur.
 
+## Do's and Don'ts
+
+### Do
+
+- Utiliser `SecureDirectoryStream` dans `SafeFileIO` chaque fois qu'il est disponible.
+- Refuser le fallback avant l'ouverture du fichier lorsque `NEXUS_REQUIRE_STRICT_PATH_IO=true` (propriété JVM `nexus.requireStrictPathIo`), sans omettre l'inspection préalable du provider et des répertoires.
+- Garder dans le fallback de compatibilité les contrôles de composants, `NOFOLLOW_LINKS`, les identités et la revalidation avant lecture.
+- Exiger `NEXUS_REQUIRE_PRIVATE_STORAGE=true` et `NEXUS_REQUIRE_STRICT_PATH_IO=true` pour REST `direct-https`, `reverse-proxy-https` et le loopback avec hardening explicite, et échouer fermé si le provider ne permet pas la traversée stricte.
+- Exiger en `loopback-forward` Docker, token, allowlist et publication hôte loopback déclarée.
+
+### Don't
+
+- Ne pas offrir d'option de production qui force le fallback ; ne pas rendre publique la seam de test ni lui faire changer un état global.
+- Ne pas présenter le fallback de compatibilité comme résistant à l'ABA restauré.
+- Ne pas publier Docker à distance en `loopback-forward` : une publication distante utilise les modes HTTPS.
+
 ## Capacités et limites
 
 - OpenJDK Linux : le provider Unix utilise le stream sécurisé lorsque les
@@ -73,6 +90,14 @@ introduite pour prétendre fermer cette fenêtre. Les mutations détectées rest
 fail-closed (`FAILED`, puis reconstruction), et la matérialisation revalide et
 borne chaque lecture. Une cohérence instantanée exige un snapshot ou une
 immuabilité imposée extérieurement.
+
+## Compliance and Enforcement
+
+- Règle Archgate `SEC-0048-distinguer-traversee-stricte-et-compatibilite-filesystem.rules.ts` / `safe-file-io-fallback-not-forceable` : `SafeFileIO` référence `SecureDirectoryStream`, la surcharge `openReadNoFollow(…, forceFallback, …)` n'est ni `public` ni `protected`, l'entrée de production lui passe `SecurityPolicy.requireStrictPathIo()` et `false`, et aucun autre source de production ne mentionne `forceFallback` ; commentaires et littéraux effacés. Contrôle propre à Archgate.
+- Règle Archgate `SEC-0048-distinguer-traversee-stricte-et-compatibilite-filesystem.rules.ts` / `hardened-rest-requires-private-storage-and-strict-traversal` : `SecurityPolicy.requireHardenedStorageAndTraversal()` teste `NexusPaths.requirePrivateStorage()` et `requireStrictPathIo()`, et `NexusRestExposureGuard` l'appelle.
+- Test `core/src/test/java/com/nexus/security/SafeFileIOTest.java` (`forcedFallbackStrictRefusesBeforeOpeningEvenAnOrdinaryFile`, `abaRestorationDemonstratesCompatibilityLimitWithoutReadingOutsideContent`…) ; workflow `.github/workflows/filesystem-semantics-qualification.yml`.
+- Test `adapters/rest-quarkus/src/test/java/com/nexus/api/NexusRestExposureGuardTest.java` (`hardenedExposureRequiresPrivateStorageAndStrictTraversal`, cas `loopback-forward`).
+- Contrat `scripts/release/test-final-audit-contracts.sh` (workflow `ci.yml`) : le fallback de `SafeFileIO` capture et revalide les identités (`captureFallbackPathSnapshot`, `revalidateFallbackPathSnapshot`, `attributes.fileKey()`).
 
 ## Références primaires
 

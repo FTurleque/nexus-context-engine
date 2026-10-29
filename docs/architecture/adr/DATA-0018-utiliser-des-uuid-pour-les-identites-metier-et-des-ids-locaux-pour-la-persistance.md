@@ -78,6 +78,20 @@ Les identifiants internes SQLite ne doivent pas être exposés comme identifiant
 - `root_path` possède une contrainte d'unicité ;
 - aucun contrat métier ne dépend d'un `rowid` SQLite.
 
+## Do's and Don'ts
+
+### Do
+
+- Identifier chaque projet par un `UUID` (`ProjectDescriptor.id`), persisté dans SQLite sous sa représentation texte canonique.
+- Donner aux tables d'index locales (`indexed_files`, `symbols`, `symbol_relations`) des clés SQLite `INTEGER PRIMARY KEY`.
+- Protéger l'identité fonctionnelle de ces lignes par des contraintes naturelles, par exemple `UNIQUE(project_id, relative_path)` sur `indexed_files`.
+- Rendre unique dans le registre local le chemin racine canonique d'un projet.
+
+### Don't
+
+- Ne pas exposer les identifiants internes SQLite comme identifiants stables dans les contrats API publics.
+- Ne pas faire dépendre un contrat métier d'un `rowid` SQLite.
+
 ## Analyse détaillée des options
 
 ### Identifiants auto-incrémentés partout
@@ -103,6 +117,12 @@ Les identifiants internes SQLite ne doivent pas être exposés comme identifiant
 **Avantages :** stabilité là où elle est nécessaire et efficacité pour l'index local.
 
 **Inconvénients :** nécessite de respecter clairement la frontière entre domaine et persistance.
+
+## Compliance and Enforcement
+
+- Tests `ProjectRegistryTest.registrationIsIdempotentAndSurvivesRepositoryReopening` et `ProjectRegistryTest.concurrentRegistrationOfTheSameCanonicalRootIsIdempotent` (`core/src/test/java/com/nexus/project/`), lancés par `mvnw clean install` (workflow `.github/workflows/ci.yml` : job Linux reactor, et job Windows gate par `scripts/validate-phase-6.ps1`).
+- Le schéma (`projects.id TEXT PRIMARY KEY`, `root_path ... UNIQUE`, `indexed_files ... UNIQUE (project_id, relative_path)`) est fixé par `core/src/main/resources/db/migration/V001__initial_schema.sql` ; le hook `.claude/hooks/guard-edit.ps1` refuse la modification d'une migration publiée.
+- Aucun contrôle automatisé de l'absence d'identifiant SQLite dans les contrats publics ; vérifié en revue.
 
 ## Conditions de réexamen
 

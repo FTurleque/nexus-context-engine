@@ -2,7 +2,8 @@
 id: DATA-0045
 title: "Conserver les writers Lucene operation-scoped et mettre en cache les readers"
 domain: data
-rules: false
+rules: true
+files: ["**/src/main/java/**"]
 ---
 
 # Conserver les writers Lucene operation-scoped et mettre en cache les readers
@@ -97,6 +98,24 @@ La décision est confirmée par :
 - `Scale Benchmark`, NEXUS CI, Windows Installer, CodeQL, OSV et Docker Distribution ;
 - inspection de l'absence de writer persistant dans les classes de cache.
 
+## Do's and Don'ts
+
+### Do
+
+- Mettre en cache, par projet chaud, un `SearcherManager` et son `Directory` dans les implémentations de production, et garder les implémentations operation-scoped comme baseline et fallback.
+- Ouvrir les writers uniquement pendant `applyChanges` ou `rebuild`, puis les fermer.
+- Rafraîchir le `SearcherManager` avant chaque recherche servie par le cache, et le reader caché après une mutation locale.
+- Invalider le reader du projet avant un rebuild.
+- Borner le cache à 100 projets par index et retomber au-delà sur l'implémentation operation-scoped.
+- N'activer la persistance que par `NexusApplication.createLongLived(...)`, pour REST et MCP ; garder `NexusApplication.create(...)` operation-scoped pour la CLI, les commandes one-shot et les tests historiques.
+- Fermer explicitement la façade `AutoCloseable` composée par `createLongLived(...)`.
+
+### Don't
+
+- Ne pas garder d'`IndexWriter` ouvert pendant la vie d'un processus REST ou MCP.
+- Ne pas accumuler de nouveaux handles quand la capacité du cache est atteinte.
+- Ne pas retirer à `ProjectIndexLockManager` son rôle d'autorité de sérialisation des mutations inter-processus.
+
 ## Analyse détaillée des options
 
 ### Option A — tout operation-scoped
@@ -137,6 +156,14 @@ NexusApplication.createLongLived(...)        -> owner / AutoCloseable (REST / MC
 ```
 
 REST ferme la façade lors de la destruction du bean application-scoped. MCP ferme serveur et façade dans son shutdown hook. La CLI conserve la composition operation-scoped et n'ouvre donc aucun reader persistant entre commandes.
+
+## Compliance and Enforcement
+
+- Règle Archgate `DATA-0045-conserver-les-writers-operation-scoped-et-mettre-en-cache-les-readers-lucene.rules.ts` / `reader-cache-holds-no-index-writer` : `BoundedLuceneSearcherCache`, `PersistentLuceneReaderSupport`, `PersistentLuceneSearchIndex` et `PersistentLuceneSemanticSearchIndex` ne référencent pas `IndexWriter` (commentaires et littéraux effacés).
+- Règle Archgate `DATA-0045-conserver-les-writers-operation-scoped-et-mettre-en-cache-les-readers-lucene.rules.ts` / `reader-cache-bounded-to-100-projects` : `PersistentLuceneSearchIndex` et `PersistentLuceneSemanticSearchIndex` déclarent `MAX_CACHED_PROJECTS = 100`.
+- Règle Archgate `DATA-0045-conserver-les-writers-operation-scoped-et-mettre-en-cache-les-readers-lucene.rules.ts` / `long-lived-composition-only-in-rest-and-mcp` : `createLongLived(` n'est appelé que sous `adapters/rest-quarkus/src/main/java` et `adapters/mcp-java/src/main/java` ; `NexusApplication` ne demande des readers persistants à `NexusApplicationFactory.create` que depuis `createLongLived` ; les index persistants ne sont instanciés que par `NexusApplicationFactory`.
+- Tests `NexusApplicationLongLivedLifecycleTest` (`core/src/test/java/com/nexus/application/`, rafraîchissement, rebuild et libération des fichiers), `LuceneSearchIndexTest.closesAllHandlesAfterRebuildAndSearch`, `LuceneSemanticSearchIndexTest.closesAllHandlesAfterRebuildUpdateAndSearch`, `ProjectIndexLockManagerTest` (`core/src/test/java/com/nexus/index/`), lancés par `mvnw clean install` (workflow `.github/workflows/ci.yml` : job Linux reactor, et job Windows gate par `scripts/validate-phase-6.ps1`).
+- Workflow `.github/workflows/lucene-lifecycle-benchmark.yml` : benchmark ABBA `LuceneLifecycleQualificationBenchmarkTest` sous Linux et Windows.
 
 ## Conditions de réexamen
 

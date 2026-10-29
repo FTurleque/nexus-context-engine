@@ -2,7 +2,8 @@
 id: BE-0036
 title: "Importer SCIP comme enrichissement opportuniste de l'intelligence de code"
 domain: backend
-rules: false
+rules: true
+files: ["**/src/main/java/**"]
 ---
 
 # Importer SCIP comme enrichissement opportuniste de l'intelligence de code
@@ -165,6 +166,25 @@ La fusion est déterministe et conservatrice :
 
 Cette stratégie donne la priorité à la stabilité de JavaParser pour les définitions déjà connues tout en utilisant SCIP pour compléter la couverture sémantique.
 
+## Do's and Don'ts
+
+### Do
+
+- Importer `index.scip` à la racine du projet enregistré s'il existe, par `ScipCodeIndexImporter` derrière le port `CodeIndexImporter`, vers un `CodeIntelligenceSnapshot`.
+- Poursuivre normalement l'indexation JavaParser en l'absence d'`index.scip`.
+- Purger les données du provider `scip` quand `index.scip` disparaît après un import.
+- Garder le format SCIP dans `com.nexus.index.scip` et le convertir en `CodeSymbol`, `SymbolRelation`, `IndexedSymbol`, `IndexedRelation` et `CodeIntelligenceSnapshot`.
+- Convertir les lignes SCIP à base zéro en lignes à base un ; préférer les plages typées et accepter le champ compact `range` en repli.
+- Porter `sourceProvider` sur `CodeSymbol` et `SymbolRelation`, et une `confidence` entre `0` et `1` sur `SymbolRelation`.
+- Remplacer atomiquement les anciennes données d'un provider externe lors de son rafraîchissement.
+
+### Don't
+
+- Ne jamais lancer `scip-java` automatiquement.
+- Ne pas faire dépendre les consommateurs de recherche et de contexte d'une classe SCIP.
+- Ne pas dupliquer un symbole externe qui recouvre une définition existante (même fichier, type, nom et ligne de début), ni une relation externe identique à une relation connue.
+- Ne rattacher aucun symbole ni aucune relation externe à un fichier absent de `indexed_files`.
+
 ## Consequences
 
 ### Positives
@@ -225,6 +245,11 @@ Cette décision pourra être réexaminée si :
 - la fraîcheur de `index.scip` doit être contrôlée automatiquement ;
 - les mesures montrent que SCIP dégrade la précision ou introduit trop de bruit ;
 - un provider actif comme JDT devient préférable pour certains projets Java complexes.
+
+## Compliance and Enforcement
+
+- Tests (`core`, lancés par `mvnw clean install`) : `core/src/test/java/com/nexus/index/scip/ScipCodeIndexImporterTest.java` (`returnsEmptyWhenNoScipIndexIsAvailable`, `importsDefinitionsReferencesAndRelationshipsFromScip`, `fallsBackToLegacyPackedRangeWhenTypedRangeIsMissing`), `core/src/test/java/com/nexus/index/scip/ScipRelationIdentityTest.java`, `core/src/test/java/com/nexus/index/scip/ScipSymbolRangeValidationTest.java` (plages hors du fichier canonique refusées), `core/src/test/java/com/nexus/index/scip/ScipProjectPathGuardTest.java`, `core/src/test/java/com/nexus/index/ProjectIndexingServiceTest.java` (`mergesExternalCodeIntelligenceAndPurgesItWhenTheIndexDisappears`), `core/src/test/java/com/nexus/persistence/sqlite/ProviderProvenanceCollisionTest.java` (`duplicateWithinSameProviderSnapshotIsDeduplicated`).
+- Règle Archgate `BE-0036-importer-scip-comme-enrichissement-opportuniste.rules.ts` : `scip-format-confined-to-scip-package` refuse toute référence à `com.nexus.index.scip` dans les sources de production hors de ce paquetage, sauf la composition `NexusApplicationFactory` ; `scip-import-launches-no-process` refuse tout lancement de processus dans `com.nexus.index.scip` ; commentaires et littéraux effacés.
 
 ## Décisions liées
 

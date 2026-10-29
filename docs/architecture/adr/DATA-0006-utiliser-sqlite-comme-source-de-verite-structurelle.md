@@ -2,7 +2,8 @@
 id: DATA-0006
 title: "Utiliser SQLite comme source de vérité structurelle locale"
 domain: data
-rules: false
+rules: true
+files: ["core/src/main/java/**"]
 ---
 
 # Utiliser SQLite comme source de vérité structurelle locale
@@ -93,6 +94,21 @@ La décision est respectée si :
 - une réindexation Lucene complète est possible sans perdre les données canoniques ;
 - les opérations d'indexation critiques utilisent des transactions adaptées ;
 - le stockage fonctionne sans service de base de données externe.
+
+## Do's and Don'ts
+
+### Do
+
+- Persister dans SQLite le registre des projets, les fichiers indexés, leurs empreintes, leurs dates et états d'indexation, les symboles, les relations structurelles et leur provenance, les métadonnées des sources de contexte et les paramètres locaux nécessaires à la cohérence de l'index.
+- Faire passer les accès à SQLite par des repositories ou des ports de persistance.
+- Traiter l'index Lucene comme reconstructible à partir des données canoniques et des sources projet.
+- Utiliser des transactions adaptées pour les opérations d'indexation critiques.
+
+### Don't
+
+- Ne pas exposer de types JDBC ou SQLite dans le cœur métier.
+- Ne pas laisser une corruption de l'index de recherche remettre en cause l'identité du projet ou la cohérence structurelle stockée dans SQLite.
+- Ne pas exiger de service de base de données externe.
 
 ## Analyse détaillée des options
 
@@ -188,6 +204,18 @@ SQLite Adapter
 Lucene Index
       └── index dérivé / reconstructible
 ```
+
+## Compliance and Enforcement
+
+- Règle Archgate `DATA-0006-utiliser-sqlite-comme-source-de-verite-structurelle.rules.ts` / `core-jdbc-confined-to-sqlite-adapter` : dans `core/src/main/java`, `java.sql`, `javax.sql` et `org.sqlite` ne sont référencés (commentaires et littéraux effacés) que sous `com/nexus/persistence/sqlite/` ; seule exception, `java.sql.SQLException` dans `NexusApplication`, `NexusApplicationFactory` et `NexusCli` (voir « Écarts constatés »).
+- Tests `ProjectRegistryTest` (`core/src/test/java/com/nexus/project/`, enregistrement idempotent qui survit à la réouverture du repository), `SqliteIndexedSubstringSearchTest.rollbackRestoresCanonicalRowsAndFlushedProjection` et `SchemaMigratorTest` (`core/src/test/java/com/nexus/persistence/sqlite/`, transactions et rollback), `ProjectIndexingBatchingTest.rebuildsDerivedIndexInBoundedDocumentBatches` (`core/src/test/java/com/nexus/index/`, reconstruction de l'index dérivé), lancés par `mvnw clean install` (workflow `.github/workflows/ci.yml` : job Linux reactor, et job Windows gate par `scripts/validate-phase-6.ps1`).
+- Revue : un nouvel accès aux données passe par un port de persistance du cœur et son implémentation sous `persistence/sqlite`.
+
+## Écarts constatés
+
+Constat du 2026-10-29, sans modification de la décision :
+
+- La façade publique du cœur déclare un type JDBC : `NexusApplication.create(...)` et `NexusApplication.createLongLived(...)` déclarent `throws SQLException` (`core/src/main/java/com/nexus/application/NexusApplication.java:95`, `:102`, `:112`, `:119`), comme `NexusApplicationFactory.create(...)` (`core/src/main/java/com/nexus/application/NexusApplicationFactory.java:69`). Le type traverse donc la frontière du cœur : `core/src/main/java/com/nexus/cli/NexusCli.java:68` le redéclare, `adapters/rest-quarkus/src/main/java/com/nexus/api/NexusApiApplicationService.java:192` l'attrape et `adapters/mcp-java/src/main/java/com/nexus/mcp/NexusMcpServer.java:32` le déclare. Aucun autre type JDBC ou SQLite n'apparaît hors de `persistence/sqlite` ; la règle compagnon tolère cette seule référence dans ces trois fichiers du cœur.
 
 ## Conditions de réexamen
 

@@ -2,7 +2,8 @@
 id: ARCH-0009
 title: "Rendre l'intelligence de code extensible via des providers et index externes"
 domain: architecture
-rules: false
+rules: true
+files: ["core/src/main/java/com/nexus/index/*.java"]
 ---
 
 # Rendre l'intelligence de code extensible via des providers et index externes
@@ -107,6 +108,18 @@ La décision est respectée si :
 - la provenance des relations enrichies peut être inspectée ;
 - l'ajout d'un nouveau langage ne modifie pas le contrat du `ContextBuilder`.
 
+## Do's and Don'ts
+
+### Do
+
+- Faire passer l'intelligence de code par les ports `CodeIntelligenceProvider` (définitions, références, usages, implémentations, hiérarchies) et `CodeIndexImporter` (import d'un index externe), l'extraction embarquée restant à `LanguageAnalyzer`.
+- Convertir les données des providers vers le modèle NEXUS (`CodeSymbol`, `SymbolRelation`) en conservant leur provenance (`sourceProvider`).
+
+### Don't
+
+- Ne pas faire dépendre ces contrats d'un format externe (SCIP, JDT, Tree-sitter).
+- Ne rendre obligatoire pour le MVP aucun des outils SCIP, scip-java, Eclipse JDT Language Server ou Tree-sitter.
+
 ## Analyse détaillée des options
 
 ### Étendre JavaParser jusqu'à couvrir toute l'intelligence sémantique
@@ -201,6 +214,11 @@ La priorité d'un provider spécifique doit être réévaluée si :
 - les métriques montrent que son enrichissement n'améliore pas le contexte.
 
 L'abstraction multi-provider reste la décision fondamentale même si les implémentations changent.
+
+## Compliance and Enforcement
+
+- Règle Archgate `ARCH-0009-rendre-intelligence-code-extensible-via-providers.rules.ts` / `code-intelligence-contracts-free-of-external-formats` : `CodeIntelligenceProvider`, `CodeIndexImporter`, `CodeIntelligenceSnapshot`, `CodeSymbol` et `SymbolRelation` n'importent que `java.*` et `com.nexus.*`, sans référence (commentaires et littéraux effacés) à `com.nexus.index.{jdt,scip,minos,java}` ni aux bibliothèques JavaParser, Eclipse, SCIP, Protobuf ou Jackson.
+- Tests `ScipCodeIndexImporterTest` (`returnsEmptyWhenNoScipIndexIsAvailable`, `importsDefinitionsReferencesAndRelationshipsFromScip`), `JdtLanguageServerCodeIntelligenceProviderTest` et `MinosCodeIndexImporterTest` (`core/src/test/java/com/nexus/index`) ; tests lancés par `./mvnw -B clean install` (job « Linux reactor Maven build » de `.github/workflows/ci.yml`).
 
 ## Décisions liées
 

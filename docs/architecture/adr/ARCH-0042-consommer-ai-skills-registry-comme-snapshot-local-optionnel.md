@@ -24,6 +24,18 @@ Les skills locaux du projet conservent une priorité supérieure à ceux du regi
 
 L'absence du snapshot ne constitue pas une erreur et ne modifie pas le comportement normal de NEXUS.
 
+## Do's and Don'ts
+
+### Do
+
+- Lire AI Skills Registry depuis un snapshot local placé sous `.nexus/registry/skills` dans le projet courant.
+- Ne découvrir par `AiSkillsRegistryProvider` que les métadonnées des `SKILL.md`, le corps complet étant chargé par `SkillLoader` après sélection.
+- Donner la priorité aux skills locaux du projet : à nom identique, la définition locale est conservée.
+
+### Don't
+
+- Ne pas traiter l'absence du snapshot comme une erreur, ni laisser cette absence modifier le comportement normal de NEXUS.
+
 ## Consequences
 
 - aucune requête réseau n'est effectuée pendant la construction du contexte ;
@@ -42,6 +54,12 @@ La décision est respectée si :
 - le corps complet n'est chargé qu'après sélection ;
 - un skill local de même nom gagne sur le skill du registre ;
 - les tests du cœur et le self-smoke restent verts sans snapshot de registre.
+
+## Compliance and Enforcement
+
+- Tests `AiSkillsRegistryProviderTest.discoversRegistryMetadataBeforeLoadingTheSelectedSkillBody` et `AiSkillsRegistryProviderTest.keepsProjectLocalSkillWhenRegistryContainsTheSameName` (`core/src/test/java/com/nexus/context/source/skill`) ; tests lancés par `./mvnw -B clean install` (job « Linux reactor Maven build » de `.github/workflows/ci.yml`).
+- Règle Archgate `ARCH-0005-adopter-un-fonctionnement-local-first-et-opt-in.rules.ts` / `core-network-only-in-opt-in-providers` : aucun client réseau dans le cœur hors du provider d'embeddings Ollama, donc aucun dans `AiSkillsRegistryProvider`.
+- Revue : absence de snapshot sans erreur.
 
 ## Décisions liées
 

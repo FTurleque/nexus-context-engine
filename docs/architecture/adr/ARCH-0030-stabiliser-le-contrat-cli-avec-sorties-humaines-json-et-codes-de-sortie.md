@@ -2,7 +2,8 @@
 id: ARCH-0030
 title: "Stabiliser le contrat CLI avec sorties humaines, JSON et codes de sortie"
 domain: architecture
-rules: false
+rules: true
+files: ["core/src/main/java/**"]
 ---
 
 # Stabiliser le contrat CLI avec sorties humaines, JSON et codes de sortie
@@ -59,6 +60,20 @@ Règles :
 - Jackson est utilisé uniquement comme infrastructure de sérialisation de l'adaptateur CLI.
 
 Le flag `--json` est traité comme une option globale et peut être placé avec les options de la commande.
+
+## Do's and Don'ts
+
+### Do
+
+- Garder la sortie humaine par défaut et émettre, avec `--json`, un document JSON unique sur `stdout`.
+- Émettre les erreurs sur `stderr`, structurées en mode JSON.
+- Retourner `0` en cas de succès, `2` pour une erreur d'utilisation ou d'arguments invalides, `1` pour une erreur d'exécution ou inattendue.
+- Convertir les objets métier à la frontière CLI vers des structures sérialisables.
+
+### Don't
+
+- Ne pas appeler `System.exit` ailleurs que dans `main`.
+- Ne pas utiliser Jackson hors de l'infrastructure de sérialisation de l'adaptateur CLI.
 
 ## Conséquences positives
 
@@ -143,6 +158,18 @@ Réévaluer si :
 - le nombre de commandes/options rend le parsing manuel difficile à maintenir ;
 - un contrat CLI public versionné nécessite des DTO dédiés plus formels ;
 - plusieurs plateformes imposent une bibliothèque CLI spécialisée.
+
+## Compliance and Enforcement
+
+- Règle Archgate `ARCH-0030-stabiliser-le-contrat-cli-avec-sorties-humaines-json-et-codes-de-sortie.rules.ts` / `cli-only-main-calls-system-exit` : dans `core/src/main/java`, commentaires et littéraux effacés, `System.exit` (ou `Runtime.exit`/`halt`) n'apparaît que dans le corps de `NexusCli.main`.
+- Tests `NexusCliTest` (`rendersHelpAsJsonWithoutInitializingAProject`, `returnsStructuredUsageErrorForUnknownCommand`, `executesTheMvpFlowThroughStableJsonOutputs`, `core/src/test/java/com/nexus/cli`) ; tests lancés par `./mvnw -B clean install` (job « Linux reactor Maven build » de `.github/workflows/ci.yml`).
+- Confinement de Jackson à l'adaptateur CLI : aucun contrôle automatisé, la décision n'étant pas respectée (voir « Écarts constatés »).
+
+## Écarts constatés
+
+Constat du 2026-10-29 (la décision ci-dessus est inchangée) :
+
+- Jackson est importé hors de l'adaptateur CLI (`com.nexus.cli`), y compris dans les packages `index` et `search` que la confirmation exclut : `core/src/main/java/com/nexus/index/jdt/JdtDocumentMessages.java:3`, `JdtJsonRpcFrameReader.java:3`, `JdtLanguageServerCodeIntelligenceProvider.java:6`, `JdtLocationMapper.java:5`, `JdtRelationCollector.java:3`, `JdtStdioSession.java:3`, `JdtSymbolMapper.java:3`, `JdtWorkspaceMessages.java:3` ; `core/src/main/java/com/nexus/index/minos/MinosCodeIndexImporter.java:4`, `MinosDocumentParser.java:3`, `MinosFactMapper.java:5` ; `core/src/main/java/com/nexus/search/semantic/ollama/OllamaEmbeddingProvider.java:3` ; `core/src/main/java/com/nexus/persistence/sqlite/SqliteIndexSql.java:3`.
 
 ## Décisions liées
 

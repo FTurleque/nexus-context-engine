@@ -98,6 +98,23 @@ La décision est respectée si :
 - les benchmarks comparent ranking avec et sans graphe ;
 - l'ajout futur de relations SCIP ne nécessite pas de modifier le contrat du ranker.
 
+## Do's and Don'ts
+
+### Do
+
+- Construire un graphe orienté entre fichiers à partir des imports résolus vers les types définis dans le repository (nœud = `relativePath`, arête = import résolu).
+- Calculer `graphScore` à partir de la proximité avec les fichiers déjà pertinents et de l'importance structurelle locale.
+- N'ajouter un PageRank personnalisé que si les benchmarks montrent un gain sur `precision@K` ou `recall@K`.
+
+### Don't
+
+- Ne pas créer d'arête pour un import externe qui ne correspond à aucun type du repository.
+
+## Compliance and Enforcement
+
+- Tests `ProjectGraphBuilderProjectionTest` (`core/src/test/java/com/nexus/ranking/graph/`) et `SearchServiceIntegrationTest` (`combinesLexicalSymbolAndGraphSignalsDeterministically`, `core/src/test/java/com/nexus/search/`), lancés par `mvnw verify`.
+- Aucune règle Archgate : la résolution des imports ne se vérifie pas sur le texte du dépôt ; vérifié en revue.
+
 ## Analyse détaillée des options
 
 ### Attendre SCIP

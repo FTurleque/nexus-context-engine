@@ -110,6 +110,27 @@ La décision est respectée si :
 - le remplacement du `TokenEstimator` ne modifie pas le contrat du builder ;
 - le ratio de réduction du contexte est mesuré.
 
+## Do's and Don'ts
+
+### Do
+
+- Construire dans NEXUS un `ContextBundle` canonique sous budget à partir d'un `ContextRequest`.
+- Porter dans `ContextRequest` au minimum projet, requête, budget de tokens, sources demandées, contraintes et indicateur `explain`.
+- Porter dans `ContextBundle` au minimum éléments sélectionnés, score et raisons par élément, estimation des tokens, budget configuré, exclusions significatives et motifs, stratégies et métadonnées de construction.
+- Estimer les tokens par le port indépendant `TokenEstimator`.
+- Privilégier les extraits de symboles aux fichiers complets lorsque cela conserve le sens, fusionner les extraits qui se chevauchent et éliminer les doublons inter-sources.
+- Enregistrer les exclusions et troncatures lorsque `explain=true`.
+
+### Don't
+
+- Ne jamais dépasser le budget selon le `TokenEstimator` actif.
+
+## Compliance and Enforcement
+
+- Tests `DefaultContextBuilderIntegrationTest` (`buildsDeterministicSymbolFirstContextWithinBudget`, `truncatesLargeRelevantFragmentWithoutExceedingBudget`), `FragmentMergerTest`, `ContextBudgetPolicyTest` et `ContextMaterializationBudgetTest` (`core/src/test/java/com/nexus/context/`, lancés par `mvnw verify`).
+- Règle Archgate de BE-0027 `token-estimation-behind-port` : le pipeline de contexte ne nomme pas l'heuristique et passe par `TokenEstimator`.
+- Revue : contenu minimal de `ContextRequest` et `ContextBundle` ; aucun contrôle automatisé ne le vérifie champ par champ.
+
 ## Analyse détaillée des options
 
 ### Retourner uniquement une liste ordonnée de fichiers

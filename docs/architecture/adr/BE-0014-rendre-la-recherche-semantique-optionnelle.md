@@ -95,6 +95,26 @@ La décision est respectée si :
 - un benchmark compare la stratégie avec et sans sémantique avant adoption recommandée ;
 - aucune base vectorielle dédiée n'est ajoutée sans ADR justifiant son besoin.
 
+## Do's and Don'ts
+
+### Do
+
+- Définir la recherche sémantique comme stratégie optionnelle, désactivée par défaut.
+- N'adopter durablement la recherche sémantique que si elle démontre un gain mesurable.
+- Comparer au minimum précision et rappel, coût d'indexation, taille de stockage, latence, coût financier, volume de données envoyé à l'extérieur et gain sur le contexte final sous budget.
+- Exiger un opt-in explicite pour un fournisseur d'embeddings externe.
+
+### Don't
+
+- Ne pas faire dépendre le MVP d'un embedding.
+
+## Compliance and Enforcement
+
+- Test `NexusApplicationSemanticConfigurationTest` (`defaultCompositionKeepsSemanticSearchDisabled`, `core/src/test/java/com/nexus/application/`) : la composition par défaut laisse la recherche sémantique désactivée.
+- Tests `SemanticSearchBenchmarkTest` (`compareLexicalBaselineWithOptionalSemanticSearch`), `SemanticSearchConfigurationBoundsTest`, `OllamaEndpointResolverTest` et `OllamaEmbeddingProviderEndpointPolicyTest` (`core/src/test/java/com/nexus/search/semantic/`), lancés par `mvnw verify`.
+- Workflow `.github/workflows/semantic-search-qualification.yml` : qualification réelle de la recherche sémantique (`RealSemanticSearchBenchmarkTest`) sur les PR qui touchent `core/src/main/java/com/nexus/search/semantic/**`.
+- Revue : aucune base vectorielle dédiée n'est ajoutée sans ADR.
+
 ## Analyse détaillée des options
 
 ### Rendre les embeddings obligatoires dès le MVP

@@ -2,7 +2,8 @@
 id: ARCH-0017
 title: "Découpler NEXUS des outils et orchestrateurs externes"
 domain: architecture
-rules: false
+rules: true
+files: ["core/**"]
 ---
 
 # Découpler NEXUS des outils et orchestrateurs externes
@@ -113,6 +114,20 @@ La décision est respectée si :
 - les décisions de routage de modèles ne sont pas présentes dans le cœur ;
 - les tests du moteur peuvent s'exécuter sans aucun de ces outils.
 
+## Do's and Don'ts
+
+### Do
+
+- Exposer NEXUS par des adaptateurs indépendants ; Copilot, Claude, AI Skills Registry, JARVIS, Alfred, Brainiac et les autres outils restent des consommateurs ou fournisseurs optionnels.
+- Garder AI Skills Registry optionnel : NEXUS découvre des skills locaux sans lui.
+- Intégrer JARVIS, Alfred et Brainiac par API, MCP ou contrat dédié.
+
+### Don't
+
+- Ne pas créer de dépendance de compilation du cœur vers JARVIS, Alfred, Brainiac ou un SDK Copilot ou Claude.
+- Ne pas placer de logique de routage de modèles dans le cœur.
+- Ne pas faire des formats natifs Copilot ou Claude les modèles métier du cœur, ni remplacer leurs mécanismes natifs.
+
 ## Analyse détaillée des options
 
 ### Faire de JARVIS l'orchestrateur obligatoire
@@ -196,6 +211,12 @@ AI Skills Registry
 Cette décision ne doit être réexaminée que si NEXUS change explicitement de mission pour devenir un orchestrateur complet ou un produit lié à un fournisseur unique.
 
 Une intégration peut devenir recommandée ou livrée par défaut sans devenir une dépendance du cœur.
+
+## Compliance and Enforcement
+
+- Règle Archgate `ARCH-0017-decoupler-nexus-des-outils-et-orchestrateurs-externes.rules.ts` / `core-depends-on-no-assistant-or-orchestrator` : refuse dans `core/pom.xml` tout `groupId`/`artifactId` Anthropic, OpenAI, Copilot, Claude, JARVIS, Alfred ou Brainiac, et dans `core/src/main/java` (commentaires et littéraux effacés) tout import de ces SDK ou projets.
+- Règles Archgate `ARCH-0039-isoler-l-adaptateur-rest-quarkus-du-coeur-nexus.rules.ts` / `rest-adapter-delegates-business-logic` et `ARCH-0040-exposer-nexus-via-un-adaptateur-mcp-stdio-mince.rules.ts` / `mcp-handlers-delegate-to-nexus-application` : les adaptateurs appellent les mêmes services du cœur.
+- Revue : absence de routage de modèles dans le cœur.
 
 ## Décisions liées
 

@@ -2,7 +2,8 @@
 id: DATA-0023
 title: "Utiliser SHA-256 pour détecter les changements de fichiers"
 domain: data
-rules: false
+rules: true
+files: ["core/src/main/java/com/nexus/index/**"]
 ---
 
 # Utiliser SHA-256 pour détecter les changements de fichiers
@@ -79,6 +80,20 @@ Les fichiers disparus lors du scan sont supprimés de l'index structurel et de L
 - un changement de contenu est détecté même si le nom reste identique ;
 - les suppressions sont propagées aux stockages.
 
+## Do's and Don'ts
+
+### Do
+
+- Persister pour chaque fichier indexé `sizeBytes`, `modifiedAt` et `contentHash` SHA-256.
+- Calculer le SHA-256 des fichiers éligibles au scan.
+- Conserver les symboles et le document Lucene d'un fichier dont l'empreinte est identique à celle persistée, sans nouvelle analyse AST.
+- Supprimer de l'index structurel et de Lucene les fichiers disparus lors du scan.
+
+### Don't
+
+- Ne pas prendre les timestamps ni la taille seuls comme preuve canonique de l'identité du contenu.
+- Ne pas introduire de stratégie metadata-first sans mesure.
+
 ## Analyse détaillée des options
 
 ### Timestamp uniquement
@@ -110,6 +125,11 @@ Les fichiers disparus lors du scan sont supprimés de l'index structurel et de L
 **Avantages :** évite potentiellement de relire certains fichiers.
 
 **Inconvénients :** complexifie la garantie qu'un fichier est réellement inchangé. Cette optimisation doit être introduite uniquement avec des métriques.
+
+## Compliance and Enforcement
+
+- Règle Archgate `DATA-0023-utiliser-sha-256-pour-detecter-les-changements-de-fichiers.rules.ts` / `content-hash-is-sha256-hex` : `ProjectScanner` calcule l'empreinte par `FileHasher.sha256(…)` ; `FileHasher` n'instancie que `MessageDigest.getInstance("SHA-256")` et encode le condensat par `HexFormat.of().formatHex(…)`.
+- Test `ProjectIndexingServiceTest.indexesIncrementallyAndPropagatesChangesAndDeletions` (`core/src/test/java/com/nexus/index/`, indexation incrémentale, propagation des changements et des suppressions), lancés par `mvnw clean install` (workflow `.github/workflows/ci.yml` : job Linux reactor, et job Windows gate par `scripts/validate-phase-6.ps1`).
 
 ## Conditions de réexamen
 
