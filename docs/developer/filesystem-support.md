@@ -110,7 +110,7 @@ Pour un changement touchant `NexusPaths`, `ProjectIndexLockManager`, `ProjectPat
 
 ## Contrat de hardening du 9 septembre 2026
 
-Voir [ADR-0048](../architecture/adr/0048-distinguer-traversee-stricte-et-compatibilite-filesystem.md)
+Voir [ADR-0048](../architecture/adr/SEC-0048-distinguer-traversee-stricte-et-compatibilite-filesystem.md)
 pour la distinction entre traversée strict et compatibility. Le fallback sans
 `SecureDirectoryStream` est best-effort : la revalidation ne détecte pas un ABA
 restauré. `NEXUS_REQUIRE_STRICT_PATH_IO=true` le refuse avant ouverture du fichier.
@@ -133,4 +133,4 @@ les backslashes POSIX. `a\b.java` et `a/b.java` sont deux identités distinctes 
 POSIX. La résolution sur un autre filesystem refuse les composants qui y seraient
 réinterprétés. V007 invalide les anciens index et impose une reconstruction ; le
 fingerprint `nexus-repository-path-v2` invalide également les dérivés sémantiques
-restés désactivés pendant l'upgrade. Voir [ADR-0049](../architecture/adr/0049-identite-repository-par-composants-et-diagnostics-publics.md).
+restés désactivés pendant l'upgrade. Voir [ADR-0049](../architecture/adr/DATA-0049-identite-repository-par-composants-et-diagnostics-publics.md).

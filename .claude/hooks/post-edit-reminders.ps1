@@ -27,8 +27,8 @@ $reminders = @(
        Text = 'Bootstrap Maven modifié : lancer bash scripts/release/test-tool-integrity-anchors.sh puis un build complet via le wrapper.' },
     @{ Pattern = '^adapters/rest-quarkus/src/main/java/com/nexus/api/NexusRest(Security|ExposureGuard)\.java$'
        Text = 'Sécurité REST modifiée : lancer bash scripts/release/test-final-audit-contracts.sh et revoir docs/developer/rest-api.md.' },
-    @{ Pattern = '^docs/architecture/adr/\d{4}-'
-       Text = 'ADR modifié/ajouté : mettre à jour l''index docs/architecture/adr/README.md.' }
+    @{ Pattern = '^docs/architecture/adr/(ARCH|BE|DATA|GEN|SEC)-\d{4}-'
+       Text = 'ADR modifié/ajouté : mettre à jour l''index docs/architecture/adr/README.md et docs/architecture/arc42/09-decisions.md, puis lancer archgate check (GEN-0057).' }
 )
 
 foreach ($reminder in $reminders) {

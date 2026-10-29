@@ -54,7 +54,7 @@ Une ancienne PR verte n'est jamais recopiée ici comme preuve de l'état courant
 ## Organisation
 
 ```text
-adr/          décisions d'architecture (registre unique, index adr/README.md)
+adr/          décisions d'architecture (registre unique au format Archgate, index adr/README.md, GEN-0057)
 arc42/        vues architecture
 quality/      scénarios qualité
 risks/        registre de risques
