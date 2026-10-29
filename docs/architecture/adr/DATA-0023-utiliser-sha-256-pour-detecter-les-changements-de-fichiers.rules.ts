@@ -15,38 +15,54 @@ const ALGORITHME = /\bMessageDigest\s*\.\s*getInstance\s*\(\s*("(?:[^"\\\n]|\\.)
 const HEXADECIMAL = /\bHexFormat\s*\.\s*of\s*\(\s*\)\s*\.\s*formatHex\s*\(/;
 
 /** Efface les commentaires et garde les littéraux (longueur et sauts de ligne conservés). */
-function masquerCommentaires(source: string): string {
+// Fonctions communes : copie conforme de gabarit/fonctions-communes.ts (contrôlée par GEN-0057).
+
+type Jeton =
+  | { type: "commentaire"; fin: number }
+  | { type: "litteral"; fin: number; delimiteur: number }
+  | { type: "code"; fin: number };
+
+function finDeJeton(source: string, i: number): Jeton {
+  const n = source.length;
+  const c = source[i];
+  if (c === "/" && source[i + 1] === "/") {
+    const fin = source.indexOf("\n", i);
+    return { type: "commentaire", fin: fin < 0 ? n : fin };
+  }
+  if (c === "/" && source[i + 1] === "*") {
+    const fin = source.indexOf("*/", i + 2);
+    return { type: "commentaire", fin: fin < 0 ? n : fin + 2 };
+  }
+  if (source.startsWith('"""', i)) {
+    let j = i + 3;
+    while (j < n && !source.startsWith('"""', j)) j += source[j] === "\\" ? 2 : 1;
+    return { type: "litteral", fin: Math.min(n, j + 3), delimiteur: 3 };
+  }
+  if (c === '"' || c === "'") {
+    let j = i + 1;
+    while (j < n && source[j] !== c && source[j] !== "\n") j += source[j] === "\\" ? 2 : 1;
+    return { type: "litteral", fin: Math.min(n, j + 1), delimiteur: 1 };
+  }
+  return { type: "code", fin: i + 1 };
+}
+
+function masquerJava(source: string, garderLitteraux = false): string {
   const out = source.split("");
   const effacer = (debut: number, fin: number) => {
     for (let k = debut; k < fin; k++) if (out[k] !== "\n" && out[k] !== "\r") out[k] = " ";
   };
-  const n = source.length;
   let i = 0;
-  while (i < n) {
-    const c = source[i];
-    if (c === "/" && source[i + 1] === "/") {
-      let j = i;
-      while (j < n && source[j] !== "\n") j++;
-      effacer(i, j);
-      i = j;
-    } else if (c === "/" && source[i + 1] === "*") {
-      const fin = source.indexOf("*/", i + 2);
-      const j = fin < 0 ? n : fin + 2;
-      effacer(i, j);
-      i = j;
-    } else if (source.startsWith('"""', i)) {
-      let j = i + 3;
-      while (j < n && !source.startsWith('"""', j)) j += source[j] === "\\" ? 2 : 1;
-      i = Math.min(n, j + 3);
-    } else if (c === '"' || c === "'") {
-      let j = i + 1;
-      while (j < n && source[j] !== c && source[j] !== "\n") j += source[j] === "\\" ? 2 : 1;
-      i = Math.min(n, j + 1);
-    } else {
-      i++;
-    }
+  while (i < source.length) {
+    const jeton = finDeJeton(source, i);
+    if (jeton.type === "commentaire") effacer(i, jeton.fin);
+    else if (jeton.type === "litteral" && !garderLitteraux) effacer(i + jeton.delimiteur, jeton.fin - jeton.delimiteur);
+    i = jeton.fin;
   }
   return out.join("");
+}
+
+function masquerCommentaires(source: string): string {
+  return masquerJava(source, true);
 }
 
 function ligne(texte: string, index: number): number {

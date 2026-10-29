@@ -81,7 +81,8 @@ Options considérées pour l'identifiant :
 
 ## Compliance and Enforcement
 
-- Règle Archgate `GEN-0057-tenir-le-registre-d-adr-au-format-archgate.rules.ts` : `adr-id-matches-file-name` (nom `{PRÉFIXE}-{NNNN}-…`, `id` égal, préfixe conforme au domaine), `adr-number-is-unique` (registre et archive), `adr-listed-in-index`, `adr-heading-matches-title`, `adr-has-archgate-sections` (avertissement), `archgate-adrs-holds-only-gitkeep`.
+- Règle Archgate `GEN-0057-tenir-le-registre-d-adr-au-format-archgate.rules.ts` : `adr-id-matches-file-name` (nom `{PRÉFIXE}-{NNNN}-…`, `id` égal, préfixe conforme au domaine), `adr-number-is-unique` (registre et archive), `adr-listed-in-index`, `adr-heading-matches-title`, `adr-has-archgate-sections` (avertissement), `archgate-adrs-holds-only-gitkeep`, `rule-helpers-match-template`.
+- Fonctions communes des règles : le scanner de sécurité d'Archgate refuse tout import local dans un `*.rules.ts`. Une règle recopie donc à l'identique les fonctions de `gabarit/fonctions-communes.ts` dont elle a besoin (masquage des commentaires et littéraux Java ou XML, numéro de ligne) ; `rule-helpers-match-template` échoue dès qu'une copie diverge. Une correction se fait dans le gabarit, puis dans toutes les copies.
 - Hooks Claude Code : `.claude/hooks/guard-edit.ps1` demande confirmation avant de modifier un ADR existant du registre ; `.claude/hooks/post-edit-reminders.ps1` rappelle la mise à jour de l'index ; tests dans `.claude/hooks/tests/Test-Hooks.ps1`.
 - `archgate adr list` liste chaque ADR actif ; un ADR absent de la liste a un en-tête invalide.
 - Revue : un nouvel ADR part du gabarit, figure dans `README.md` et dans `docs/architecture/arc42/09-decisions.md` (skill `nexus-adr`, commande `/nx-adr`).

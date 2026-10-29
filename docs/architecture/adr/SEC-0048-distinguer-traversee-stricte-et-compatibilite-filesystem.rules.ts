@@ -19,46 +19,56 @@ const REST_GUARD = "adapters/rest-quarkus/src/main/java/com/nexus/api/NexusRestE
 const PRODUCTION = ["core/src/main/java/**/*.java", "adapters/*/src/main/java/**/*.java"];
 
 /** Efface commentaires et littéraux Java (longueur et sauts de ligne conservés). */
-function maskJava(source: string): string {
-  const out = source.split("");
-  const blank = (from: number, to: number) => {
-    for (let k = from; k < to; k++) if (out[k] !== "\n" && out[k] !== "\r") out[k] = " ";
-  };
+// Fonctions communes : copie conforme de gabarit/fonctions-communes.ts (contrôlée par GEN-0057).
+
+type Jeton =
+  | { type: "commentaire"; fin: number }
+  | { type: "litteral"; fin: number; delimiteur: number }
+  | { type: "code"; fin: number };
+
+function finDeJeton(source: string, i: number): Jeton {
   const n = source.length;
+  const c = source[i];
+  if (c === "/" && source[i + 1] === "/") {
+    const fin = source.indexOf("\n", i);
+    return { type: "commentaire", fin: fin < 0 ? n : fin };
+  }
+  if (c === "/" && source[i + 1] === "*") {
+    const fin = source.indexOf("*/", i + 2);
+    return { type: "commentaire", fin: fin < 0 ? n : fin + 2 };
+  }
+  if (source.startsWith('"""', i)) {
+    let j = i + 3;
+    while (j < n && !source.startsWith('"""', j)) j += source[j] === "\\" ? 2 : 1;
+    return { type: "litteral", fin: Math.min(n, j + 3), delimiteur: 3 };
+  }
+  if (c === '"' || c === "'") {
+    let j = i + 1;
+    while (j < n && source[j] !== c && source[j] !== "\n") j += source[j] === "\\" ? 2 : 1;
+    return { type: "litteral", fin: Math.min(n, j + 1), delimiteur: 1 };
+  }
+  return { type: "code", fin: i + 1 };
+}
+
+function masquerJava(source: string, garderLitteraux = false): string {
+  const out = source.split("");
+  const effacer = (debut: number, fin: number) => {
+    for (let k = debut; k < fin; k++) if (out[k] !== "\n" && out[k] !== "\r") out[k] = " ";
+  };
   let i = 0;
-  while (i < n) {
-    const c = source[i];
-    if (c === "/" && source[i + 1] === "/") {
-      let j = i;
-      while (j < n && source[j] !== "\n") j++;
-      blank(i, j);
-      i = j;
-    } else if (c === "/" && source[i + 1] === "*") {
-      const end = source.indexOf("*/", i + 2);
-      const j = end < 0 ? n : end + 2;
-      blank(i, j);
-      i = j;
-    } else if (source.startsWith('"""', i)) {
-      let j = i + 3;
-      while (j < n && !source.startsWith('"""', j)) j += source[j] === "\\" ? 2 : 1;
-      j = Math.min(n, j + 3);
-      blank(i + 3, j - 3);
-      i = j;
-    } else if (c === '"' || c === "'") {
-      let j = i + 1;
-      while (j < n && source[j] !== c && source[j] !== "\n") j += source[j] === "\\" ? 2 : 1;
-      j = Math.min(n, j + 1);
-      blank(i + 1, j - 1);
-      i = j;
-    } else {
-      i++;
-    }
+  while (i < source.length) {
+    const jeton = finDeJeton(source, i);
+    if (jeton.type === "commentaire") effacer(i, jeton.fin);
+    else if (jeton.type === "litteral" && !garderLitteraux) effacer(i + jeton.delimiteur, jeton.fin - jeton.delimiteur);
+    i = jeton.fin;
   }
   return out.join("");
 }
 
-function lineOf(text: string, index: number): number {
-  return text.slice(0, index).split("\n").length;
+function ligne(texte: string, index: number): number {
+  let l = 1;
+  for (let k = 0; k < index; k++) if (texte[k] === "\n") l++;
+  return l;
 }
 
 /** Arguments de premier niveau de l'appel dont la parenthèse ouvrante est à `open`. */
@@ -103,7 +113,7 @@ export default {
         "Aucune option de production ne force le fallback de SafeFileIO : la seam forceFallback est package-private et l'entrée de production lui passe false",
       severity: "error",
       async check(ctx) {
-        const code = maskJava(await ctx.readFile(SAFE_FILE_IO));
+        const code = masquerJava(await ctx.readFile(SAFE_FILE_IO));
         if (!/\bSecureDirectoryStream\b/.test(code)) {
           ctx.report.violation({
             message: "SafeFileIO ne référence plus SecureDirectoryStream : la traversée stricte n'est plus utilisée lorsqu'elle est disponible.",
@@ -127,7 +137,7 @@ export default {
                 ctx.report.violation({
                   message: "La surcharge openReadNoFollow(…, forceFallback, …) est publique ou protégée : le fallback deviendrait forçable hors des tests.",
                   file: SAFE_FILE_IO,
-                  line: lineOf(code, index),
+                  line: ligne(code, index),
                   fix: "Garder cette seam package-private, réservée aux tests du paquet com.nexus.security.",
                 });
               }
@@ -140,7 +150,7 @@ export default {
               ctx.report.violation({
                 message: `Appel de production openReadNoFollow(${args.join(", ").replace(/\s+/g, " ")}) : il doit passer requireStrictPathIo() et forceFallback=false.`,
                 file: SAFE_FILE_IO,
-                line: lineOf(code, index),
+                line: ligne(code, index),
                 fix: "Passer SecurityPolicy.requireStrictPathIo() et false ; seuls les tests forcent le fallback.",
               });
             }
@@ -157,12 +167,12 @@ export default {
         const files = (await Promise.all(PRODUCTION.map((pattern) => ctx.glob(pattern)))).flat().sort();
         for (const file of files) {
           if (file === SAFE_FILE_IO) continue;
-          const other = maskJava(await ctx.readFile(file));
+          const other = masquerJava(await ctx.readFile(file));
           for (const found of other.matchAll(/\bforceFallback\b/g)) {
             ctx.report.violation({
               message: "forceFallback hors de SafeFileIO dans un source de production : aucune option de production ne force le fallback (SEC-0048).",
               file,
-              line: lineOf(other, found.index ?? 0),
+              line: ligne(other, found.index ?? 0),
             });
           }
         }
@@ -174,7 +184,7 @@ export default {
         "Le guard REST exige ensemble NEXUS_REQUIRE_PRIVATE_STORAGE et NEXUS_REQUIRE_STRICT_PATH_IO par SecurityPolicy.requireHardenedStorageAndTraversal()",
       severity: "error",
       async check(ctx) {
-        const policy = maskJava(await ctx.readFile(SECURITY_POLICY));
+        const policy = masquerJava(await ctx.readFile(SECURITY_POLICY));
         const body = methodBody(policy, "requireHardenedStorageAndTraversal");
         if (body === undefined) {
           ctx.report.violation({
@@ -190,12 +200,12 @@ export default {
               ctx.report.violation({
                 message: `requireHardenedStorageAndTraversal() ne vérifie plus ${what} : une exposition durcie exige les deux politiques (SEC-0048).`,
                 file: SECURITY_POLICY,
-                line: lineOf(policy, policy.indexOf(body)),
+                line: ligne(policy, policy.indexOf(body)),
               });
             }
           }
         }
-        const guard = maskJava(await ctx.readFile(REST_GUARD));
+        const guard = masquerJava(await ctx.readFile(REST_GUARD));
         if (!/\brequireHardenedStorageAndTraversal\s*\(\s*\)/.test(guard)) {
           ctx.report.violation({
             message: "NexusRestExposureGuard n'appelle plus SecurityPolicy.requireHardenedStorageAndTraversal() : les modes HTTPS et le loopback durci n'exigent plus les deux politiques.",
