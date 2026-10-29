@@ -219,7 +219,7 @@ La distribution Windows x64 ajoute le ZIP self-contained et le setup EXE avec le
 
 Les gates comprennent :
 
-- **NEXUS CI** : Windows Java 24, Linux Java 21, tests, distribution, JaCoCo, SBOM/notices, ancres d'intégrité et contrats documentaires ;
+- **NEXUS CI** : Windows Java 21.0.12 épinglé, Linux Java 21, tests, distribution, JaCoCo, SBOM/notices, ancres d'intégrité et contrats documentaires ;
 - **Windows Installer** ;
 - **Docker Distribution** : smokes CLI/MCP/REST, Trivy, SBOM image et gate de vulnérabilités ;
 - **Scale Benchmark** : SQLite, graphe, fédération et découverte native filesystem ;

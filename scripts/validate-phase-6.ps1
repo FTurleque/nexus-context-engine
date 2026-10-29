@@ -53,22 +53,33 @@ function Get-JavaMajorVersion {
     return [int]$Matches['version']
 }
 
+function Test-ContinuousIntegration {
+    return (-not [string]::IsNullOrWhiteSpace($env:CI)) -or (-not [string]::IsNullOrWhiteSpace($env:GITHUB_ACTIONS))
+}
+
 function Select-MavenCommand {
     param([Parameter(Mandatory = $true)][string]$RepositoryRoot)
 
     $wrapper = Join-Path $RepositoryRoot "mvnw.cmd"
+    $wrapperFailure = "Le Maven Wrapper est absent : $wrapper."
     if (Test-Path -LiteralPath $wrapper -PathType Leaf) {
         try {
             & $wrapper --version 2>&1 | Out-Host
             if ($LASTEXITCODE -eq 0) {
                 return $wrapper
             }
-            Write-Warning "Le Maven Wrapper est indisponible (code $LASTEXITCODE). Utilisation de Maven installe sur le runner."
+            $wrapperFailure = "Le Maven Wrapper est indisponible (code $LASTEXITCODE)."
         }
         catch {
-            Write-Warning "Le Maven Wrapper n'a pas pu telecharger Maven : $($_.Exception.Message). Utilisation de Maven installe sur le runner."
+            $wrapperFailure = "Le Maven Wrapper n'a pas pu telecharger Maven : $($_.Exception.Message)."
         }
     }
+
+    # En CI, seul le Maven ancre par le wrapper verifie qualifie le build.
+    if (Test-ContinuousIntegration) {
+        throw "$wrapperFailure La CI (CI ou GITHUB_ACTIONS definie) exige le Maven Wrapper verifie : aucun repli sur le Maven du runner."
+    }
+    Write-Warning "$wrapperFailure Repli local sur le Maven installe (interdit en CI) : la version Maven n'est pas ancree."
 
     foreach ($candidate in @("mvn.cmd", "mvn")) {
         $installed = Get-Command $candidate -ErrorAction SilentlyContinue
@@ -145,7 +156,7 @@ try {
     Write-Host $javaVersion
     Write-Host "Maven compiler release : $compilerRelease"
 
-    Write-Host "[2/9] Maven reproductible avec fallback runner"
+    Write-Host "[2/9] Maven reproductible via le wrapper (repli local hors CI)"
     $wrapperMavenBin = Join-Path $env:USERPROFILE ".m2\wrapper\dists\nexus\apache-maven-3.10.0\apache-maven-3.10.0\bin"
     if (Test-Path -LiteralPath $wrapperMavenBin -PathType Container) {
         $env:PATH = "$wrapperMavenBin;$env:PATH"
