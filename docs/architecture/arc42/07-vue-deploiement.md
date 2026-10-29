@@ -94,7 +94,7 @@ NEXUS_HOME/jdtls-workspaces/<project-id-derived>
 
 ## 7.6 MCP
 
-MCP Java 2.0.1 reste supporté en STDIO local. `stdout` est réservé au framing JSON-RPC ; les diagnostics vont sur `stderr`.
+MCP Java 2.1.0 reste supporté en STDIO local. `stdout` est réservé au framing JSON-RPC ; les diagnostics vont sur `stderr`.
 
 ## 7.7 Persistance et recovery
 

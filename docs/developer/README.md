@@ -14,8 +14,8 @@ Java         >=21, release 21
 Maven        3.10.0 via wrapper vérifié
 integration  develop
 release      main
-Quarkus      3.40.1
-MCP SDK      2.0.1
+Quarkus      3.40.1.1
+MCP SDK      2.1.0
 ```
 
 Le build courant utilise **Maven 3.10.0** via le wrapper et son ancre d'intégrité versionnée.

@@ -7,12 +7,12 @@ L'adaptateur MCP expose NEXUS aux assistants compatibles Model Context Protocol 
 ```text
 module      adapters/mcp-java
 Java        21
-MCP SDK     2.0.1
+MCP SDK     2.1.0
 transport   STDIO
 version     NEXUS 0.2.0
 ```
 
-Le BOM MCP et Jackson sont gouvernés par le parent Maven. Le SDK MCP 2.0.1 apporte notamment en amont des lectures HTTP/STDIO bornées ; NEXUS supporte ici le transport local STDIO.
+Le BOM MCP et Jackson sont gouvernés par le parent Maven. Le SDK MCP 2.1.0 apporte notamment en amont des lectures HTTP/STDIO bornées ; NEXUS supporte ici le transport local STDIO.
 
 ## Architecture
 
