@@ -47,21 +47,37 @@ class SymbolicLinksTest {
     }
 
     @Test
-    void unavailableLinkFailsWhenSupportIsRequired() throws Exception {
+    void unavailableLinkFailsWhenSupportIsRequired() {
+        Path link = temporaryDirectory.resolve("link");
+        Path target = temporaryDirectory.resolve("target");
+
+        AssertionFailedError failure = assertThrows(AssertionFailedError.class,
+                () -> SymbolicLinks.createOrSkip(link, target, true, SymbolicLinksTest::unsupported));
+
+        assertInstanceOf(UnsupportedOperationException.class, failure.getCause());
+    }
+
+    @Test
+    void unavailableLinkAbortsWhenSupportIsOptional() {
+        Path link = temporaryDirectory.resolve("link");
+        Path target = temporaryDirectory.resolve("target");
+
+        assertThrows(TestAbortedException.class,
+                () -> SymbolicLinks.createOrSkip(link, target, false, SymbolicLinksTest::unsupported));
+    }
+
+    @Test
+    void occupiedLinkPathFailsEvenWhenSupportIsOptional() throws Exception {
         Path occupied = Files.writeString(temporaryDirectory.resolve("occupied"), "file");
         Path target = temporaryDirectory.resolve("target");
 
         AssertionFailedError failure = assertThrows(AssertionFailedError.class,
-                () -> SymbolicLinks.createOrSkip(occupied, target, true));
+                () -> SymbolicLinks.createOrSkip(occupied, target, false, Files::createSymbolicLink));
 
         assertInstanceOf(FileAlreadyExistsException.class, failure.getCause());
     }
 
-    @Test
-    void unavailableLinkAbortsWhenSupportIsOptional() throws Exception {
-        Path occupied = Files.writeString(temporaryDirectory.resolve("occupied"), "file");
-        Path target = temporaryDirectory.resolve("target");
-
-        assertThrows(TestAbortedException.class, () -> SymbolicLinks.createOrSkip(occupied, target, false));
+    private static void unsupported(Path link, Path target) {
+        throw new UnsupportedOperationException("symlinks indisponibles");
     }
 }

@@ -3,6 +3,7 @@ package com.nexus.testsupport;
 import org.junit.jupiter.api.Assumptions;
 
 import java.io.IOException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
@@ -29,15 +30,24 @@ public final class SymbolicLinks {
 
     /**
      * Crée {@code link} vers {@code target} tel quel, ou interrompt/échoue le test si le
-     * filesystem ne le permet pas.
+     * filesystem ne le permet pas. Un chemin {@code link} déjà occupé est une erreur du test
+     * et échoue toujours.
      */
     public static void createOrSkip(Path link, Path target) {
-        createOrSkip(link, target, required(System.getenv(), System.getProperty(REQUIRED_PROPERTY)));
+        createOrSkip(link, target, required(System.getenv(), System.getProperty(REQUIRED_PROPERTY)),
+                Files::createSymbolicLink);
     }
 
-    static void createOrSkip(Path link, Path target, boolean required) {
+    @FunctionalInterface
+    interface LinkCreator {
+        void create(Path link, Path target) throws IOException;
+    }
+
+    static void createOrSkip(Path link, Path target, boolean required, LinkCreator creator) {
         try {
-            Files.createSymbolicLink(link, target);
+            creator.create(link, target);
+        } catch (FileAlreadyExistsException occupied) {
+            fail("Le chemin du lien symbolique existe déjà : " + link, occupied);
         } catch (UnsupportedOperationException | IOException | SecurityException unavailable) {
             String message = "Liens symboliques indisponibles sur ce filesystem : " + unavailable;
             if (required) {
