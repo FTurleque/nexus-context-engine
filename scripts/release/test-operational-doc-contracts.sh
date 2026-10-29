@@ -341,5 +341,65 @@ for path in current_docs:
     ):
         forbid(path, stale)
 
+
+# Scale benchmark: the develop push caller must watch exactly the paths the
+# reusable workflow watches on pull request, plus the caller itself.
+def trigger_paths(source: str, event: str) -> list[str]:
+    paths: list[str] = []
+    in_on = in_event = in_paths = False
+    for raw in source.splitlines():
+        line = raw.rstrip()
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        if indent == 0:
+            in_on = stripped == "on:"
+            in_event = in_paths = False
+        elif in_on and indent == 2:
+            in_event = stripped == f"{event}:"
+            in_paths = False
+        elif in_event and indent == 4:
+            in_paths = stripped == "paths:"
+        elif in_paths and indent == 6 and stripped.startswith("- "):
+            paths.append(stripped[2:].strip().strip("'\""))
+    return paths
+
+
+def check_scale_benchmark_paths(reusable: str, caller: str, caller_path: str) -> None:
+    pull_request = trigger_paths(reusable, "pull_request")
+    push = trigger_paths(caller, "push")
+    if not pull_request or not push:
+        raise SystemExit("scale benchmark contract drift: paths filters not found")
+    for name, values in (("pull_request", pull_request), ("push", push)):
+        if len(values) != len(set(values)):
+            raise SystemExit(f"scale benchmark contract drift: duplicate {name} paths")
+    expected = set(pull_request) | {caller_path}
+    missing = sorted(expected - set(push))
+    extra = sorted(set(push) - expected)
+    if missing or extra:
+        raise SystemExit(
+            "scale benchmark contract drift: develop push paths differ from pull_request paths"
+            f" (missing={missing}, extra={extra})"
+        )
+
+
+scale_caller_path = ".github/workflows/develop-push-scale-benchmark.yml"
+scale_reusable = text(".github/workflows/scale-benchmark.yml")
+scale_caller = text(scale_caller_path)
+check_scale_benchmark_paths(scale_reusable, scale_caller, scale_caller_path)
+if f"'{scale_caller_path}'" not in scale_caller.split("pull_request:", 1)[-1]:
+    raise SystemExit("scale benchmark contract drift: caller must run on its own pull_request changes")
+drifted_caller = scale_caller.replace("      - 'config/scale-benchmark-protocol'\n", "", 1)
+if drifted_caller == scale_caller:
+    raise SystemExit("scale benchmark contract self-test: fixture path not found")
+try:
+    check_scale_benchmark_paths(scale_reusable, drifted_caller, scale_caller_path)
+except SystemExit:
+    pass
+else:
+    raise SystemExit("scale benchmark contract self-test: drift was not detected")
+require("docs/developer/scale-regression-benchmark.md", "reste consultatif")
+
 print("operational-documentation-contracts=PASS")
 PY

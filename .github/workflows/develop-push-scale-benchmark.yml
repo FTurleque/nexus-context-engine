@@ -4,7 +4,13 @@ on:
   push:
     branches:
       - develop
+    # Liste identique aux paths pull_request de scale-benchmark.yml, plus ce wrapper.
+    # Contrat : scripts/release/test-operational-doc-contracts.sh.
     paths:
+      - 'core/src/main/java/com/nexus/application/**'
+      - 'core/src/main/java/com/nexus/index/**'
+      - 'core/src/main/java/com/nexus/project/**'
+      - 'core/src/main/java/com/nexus/config/**'
       - 'core/src/main/java/com/nexus/persistence/sqlite/**'
       - 'core/src/main/java/com/nexus/search/**'
       - 'core/src/main/java/com/nexus/ranking/graph/**'
@@ -12,6 +18,9 @@ on:
       - 'core/src/test/java/com/nexus/benchmark/**'
       - 'core/pom.xml'
       - 'scripts/measure-scale-regression.ps1'
+      - 'scripts/verify-scale-budgets.py'
+      - 'scripts/tests/test_scale_budgets.py'
+      - 'config/scale-benchmark-protocol'
       - 'docs/developer/scale-regression-benchmark.md'
       - 'docs/developer/scale-regression-results.md'
       - '.github/workflows/scale-benchmark.yml'
