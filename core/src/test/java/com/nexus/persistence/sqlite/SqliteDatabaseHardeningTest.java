@@ -1,7 +1,7 @@
 package com.nexus.persistence.sqlite;
 
 import com.nexus.config.NexusPaths;
-import org.junit.jupiter.api.Assumptions;
+import com.nexus.testsupport.SymbolicLinks;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -53,11 +53,7 @@ class SqliteDatabaseHardeningTest {
         Path home = Files.createDirectories(temporaryDirectory.resolve("symlink-home"));
         Path externalTarget = temporaryDirectory.resolve("external.db");
         Path databaseLink = home.resolve("nexus.db");
-        try {
-            Files.createSymbolicLink(databaseLink, externalTarget.toAbsolutePath());
-        } catch (IOException | UnsupportedOperationException | SecurityException exception) {
-            Assumptions.assumeTrue(false, "symbolic links unavailable: " + exception.getMessage());
-        }
+        SymbolicLinks.createOrSkip(databaseLink, externalTarget.toAbsolutePath());
 
         assertThrows(IOException.class, () -> new SqliteDatabase(new NexusPaths(home)));
 

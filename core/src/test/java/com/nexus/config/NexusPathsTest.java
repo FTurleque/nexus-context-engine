@@ -1,6 +1,6 @@
 package com.nexus.config;
 
-import org.junit.jupiter.api.Assumptions;
+import com.nexus.testsupport.SymbolicLinks;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -26,7 +26,6 @@ class NexusPathsTest {
         return NexusPaths.isTrustedStoragePrincipal(name, user, ENGLISH_SYSTEM_NAMES);
     }
 
-
     @TempDir
     Path temporaryDirectory;
 
@@ -47,11 +46,7 @@ class NexusPathsTest {
         UUID projectId = UUID.randomUUID();
         Path projectDirectory = paths.indexesDirectory().resolve(projectId.toString());
         Path outside = Files.createDirectories(temporaryDirectory.resolve("outside"));
-        try {
-            Files.createSymbolicLink(projectDirectory, outside);
-        } catch (IOException | UnsupportedOperationException | SecurityException exception) {
-            Assumptions.assumeTrue(false, "symbolic links unavailable: " + exception.getMessage());
-        }
+        SymbolicLinks.createOrSkip(projectDirectory, outside);
 
         assertThrows(IOException.class, () -> paths.ensurePrivateDirectory(paths.projectLuceneIndex(projectId)));
     }

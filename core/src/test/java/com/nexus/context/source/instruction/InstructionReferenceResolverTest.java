@@ -3,6 +3,7 @@ package com.nexus.context.source.instruction;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;
+import com.nexus.testsupport.SymbolicLinks;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -20,7 +21,6 @@ class InstructionReferenceResolverTest {
 
     @TempDir
     Path temporaryDirectory;
-
 
     @Test
     void referencesKeepBothPosixIdentitiesAndContents() throws Exception {
@@ -96,8 +96,7 @@ class InstructionReferenceResolverTest {
         Path link = projectRoot.resolve("docs/external.md");
         Files.createDirectories(link.getParent());
 
-        Assumptions.assumeTrue(createSymbolicLink(link, outside),
-                "Les liens symboliques ne sont pas disponibles dans cet environnement");
+        SymbolicLinks.createOrSkip(link, outside.toAbsolutePath());
 
         var references = new InstructionReferenceResolver().resolve(
                 project(projectRoot, "symlink-references"),
@@ -124,14 +123,5 @@ class InstructionReferenceResolverTest {
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);
         return file;
-    }
-
-    private static boolean createSymbolicLink(Path link, Path target) {
-        try {
-            Files.createSymbolicLink(link, target.toAbsolutePath());
-            return true;
-        } catch (UnsupportedOperationException | IOException | SecurityException unavailable) {
-            return false;
-        }
     }
 }
