@@ -6,7 +6,7 @@ Les règles du projet sont dans `AGENTS.md`, que Claude Code charge directement 
 
 - Cœur métier : `core/src/main/java/com/nexus` (Java 21, sans framework). Composition root : `NexusApplication`. Adaptateurs minces : `adapters/rest-quarkus`, `adapters/mcp-java`, `adapters/assistant-clients`.
 - SQLite canonique (`persistence/sqlite`, migrations `core/src/main/resources/db/migration`), Lucene dérivé (`search/lucene`, `search/semantic`).
-- Documentation courante en français : `docs/architecture.md`, `docs/roadmap.md`, `docs/developer/`. Décisions : `docs/architecture/adr/` (append-only).
+- Documentation courante en français : `docs/architecture.md`, `docs/roadmap.md`, `docs/developer/`. Décisions : `docs/architecture/adr/` (append-only, format Archgate `{PRÉFIXE}-{NNNN}-{slug}.md`, GEN-0057 ; ADR remplacés dans `archive/`, contrôle `archgate check`).
 - Les règles de `.claude/rules/` se chargent avec les fichiers qu'elles ciblent.
 
 ## Flux de travail
@@ -33,4 +33,4 @@ Les règles du projet sont dans `AGENTS.md`, que Claude Code charge directement 
 | Release develop → main | `/nx-release`, skill `nexus-pr-workflow` |
 | Bilan d'entretien | `/nx-health` |
 
-Les hooks du projet (`.claude/hooks/`) refusent le force-push, le push direct sur `develop`/`main`, `--no-verify`, `mvn` hors wrapper, `gh pr merge` sans `--match-head-commit`, `sed -i` sur les scripts Windows et la modification d'une migration publiée ; ils demandent confirmation avant de toucher un ADR accepté ou un audit daté. Leurs tests : `pwsh -NoProfile -File .claude/hooks/tests/Test-Hooks.ps1`.
+Les hooks du projet (`.claude/hooks/`) refusent le force-push, le push direct sur `develop`/`main`, `--no-verify`, `mvn` hors wrapper, `gh pr merge` sans `--match-head-commit`, `sed -i` sur les scripts Windows et la modification d'une migration publiée ; ils demandent confirmation avant de toucher un ADR accepté ou archivé, ou un audit daté. Leurs tests : `pwsh -NoProfile -File .claude/hooks/tests/Test-Hooks.ps1`.

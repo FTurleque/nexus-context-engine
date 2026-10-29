@@ -67,8 +67,11 @@ Assert-Command 'git status | sed -i s/a/b/ x.ps1' 'deny'
 # guard-edit
 Assert-Edit 'core/src/main/resources/db/migration/V001__initial_schema.sql' 'deny'
 Assert-Edit 'core/src/main/resources/db/migration/V999__future_migration.sql' 'none'
-Assert-Edit 'docs/architecture/adr/0051-borner-les-lots-d-ecriture-sqlite.md' 'ask'
-Assert-Edit 'docs/architecture/adr/9999-nouvelle-decision.md' 'none'
+Assert-Edit 'docs/architecture/adr/DATA-0051-borner-les-lots-d-ecriture-sqlite.md' 'ask'
+Assert-Edit 'docs/architecture/adr/GEN-0057-tenir-le-registre-d-adr-au-format-archgate.md' 'ask'
+Assert-Edit 'docs/architecture/adr/GEN-9999-nouvelle-decision.md' 'none'
+Assert-Edit 'docs/architecture/adr/archive/0000-adopter-les-adr-madr.md' 'ask'
+Assert-Edit 'docs/architecture/adr/README.md' 'none'
 Assert-Edit '.env' 'deny'
 Assert-Edit 'config/tool-integrity.properties' 'ask'
 Assert-Edit 'core/src/main/java/com/nexus/application/NexusApplication.java' 'none'
@@ -76,6 +79,8 @@ Assert-Edit 'core/src/main/java/com/nexus/application/NexusApplication.java' 'no
 # post-edit-reminders
 $pom = Invoke-Hook 'post-edit-reminders.ps1' @{ tool_name = 'Edit'; tool_input = @{ file_path = (Join-Path $root 'pom.xml') } }
 Assert-Equal 'rappel pom.xml' 'True' ([string]($pom -match 'contracts\.sh'))
+$adr = Invoke-Hook 'post-edit-reminders.ps1' @{ tool_name = 'Edit'; tool_input = @{ file_path = (Join-Path $root 'docs/architecture/adr/DATA-0051-borner-les-lots-d-ecriture-sqlite.md') } }
+Assert-Equal 'rappel ADR' 'True' ([string]($adr -match 'archgate check'))
 $plain = Invoke-Hook 'post-edit-reminders.ps1' @{ tool_name = 'Edit'; tool_input = @{ file_path = (Join-Path $root 'core/src/main/java/com/nexus/cli/NexusCli.java') } }
 Assert-Equal 'aucun rappel hors zones sensibles' 'True' ([string][string]::IsNullOrWhiteSpace($plain))
 

@@ -153,7 +153,7 @@ Voir [`ci-and-supply-chain.md`](ci-and-supply-chain.md) et [`../architecture.md`
 
 ## Contrat de hardening du 9 septembre 2026
 
-Voir [ADR-0048](../architecture/adr/0048-distinguer-traversee-stricte-et-compatibilite-filesystem.md)
+Voir [ADR-0048](../architecture/adr/SEC-0048-distinguer-traversee-stricte-et-compatibilite-filesystem.md)
 pour la distinction entre traversée strict et compatibility. Le fallback sans
 `SecureDirectoryStream` est best-effort : la revalidation ne détecte pas un ABA
 restauré. `NEXUS_REQUIRE_STRICT_PATH_IO=true` le refuse avant ouverture du fichier.

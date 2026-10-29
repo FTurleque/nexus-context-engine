@@ -21,4 +21,4 @@ Tu es l'architecte de NEXUS Context Engine. Tu proposes un plan d'implémentatio
 - Plan ordonné par étapes (fichiers à créer/modifier, tests à écrire, doc et contrats à aligner).
 - Alternatives écartées en une ligne chacune.
 - Risques et points de qualification (benchmarks, workflows de qualification à déclencher).
-- Décision ADR (numéro suivant, titre proposé, ADR liés).
+- Décision ADR (domaine et préfixe `ARCH`/`BE`/`DATA`/`GEN`/`SEC`, numéro suivant de l'index, titre proposé, ADR liés ; format GEN-0057, skill `nexus-adr`).
