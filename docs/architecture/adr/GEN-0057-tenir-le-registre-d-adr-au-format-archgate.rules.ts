@@ -8,6 +8,8 @@
 // - Décision § 3 : sections Decision et Do's and Don'ts (avertissement).
 // - Décision § 1 : .archgate/adrs/ ne contient que .gitkeep.
 // - Do : chaque ADR figure dans l'index README.md.
+// - Compliance : les fonctions communes recopiées dans les règles (le scanner d'Archgate refuse tout import
+//   local) sont identiques à leur version canonique, gabarit/fonctions-communes.ts.
 
 const REGISTRY = "docs/architecture/adr";
 const INDEX = `${REGISTRY}/README.md`;
@@ -15,6 +17,8 @@ const CONFIG = ".archgate/config.json";
 const ADR_FILE = /^([A-Z]+)-(\d{4})-[^/]+\.md$/;
 const BRIDGE_DIRECTORY = ".archgate/adrs";
 const REQUIRED_SECTIONS = ["Decision", "Do's and Don'ts"];
+const COMMON_HELPERS = `${REGISTRY}/gabarit/fonctions-communes.ts`;
+const HELPER_NAMES = ["Jeton", "finDeJeton", "masquerJava", "masquerCommentaires", "masquerXml", "ligne"];
 // Préfixes des domaines intégrés à Archgate (reference/adr-schema) ; les domaines du projet sont lus dans CONFIG.
 const BUILT_IN_PREFIXES: Record<string, string> = {
   architecture: "ARCH",
@@ -47,6 +51,16 @@ function frontmatter(text: string): Record<string, string> | null {
 async function domainPrefixes(ctx: RuleContext): Promise<Record<string, string>> {
   const config = (await ctx.readJSON(CONFIG)) as { domains?: Record<string, string> };
   return { ...BUILT_IN_PREFIXES, ...(config.domains ?? {}) };
+}
+
+// Extrait de texte le bloc qui définit name (type ou fonction de premier niveau), fins de ligne normalisées.
+function helperBlock(text: string, name: string): string | null {
+  const source = text.replace(/\r\n/g, "\n");
+  const start = new RegExp(`^(?:type ${name} =|function ${name}\\()`, "m").exec(source);
+  if (start === null) return null;
+  const terminator = name === "Jeton" ? ";\n" : "\n}\n";
+  const end = source.indexOf(terminator, start.index);
+  return end < 0 ? source.slice(start.index) : source.slice(start.index, end + terminator.length - 1);
 }
 
 export default {
@@ -189,6 +203,39 @@ export default {
             file,
             fix: `Supprimer ce fichier ; écrire ou modifier l'ADR dans ${REGISTRY}/.`,
           });
+        }
+      },
+    },
+
+    "rule-helpers-match-template": {
+      description:
+        "Les fonctions communes recopiées dans les règles sont identiques à gabarit/fonctions-communes.ts (Compliance)",
+      severity: "error",
+      async check(ctx) {
+        const template = await ctx.readFile(COMMON_HELPERS);
+        const canonical = new Map<string, string>();
+        for (const name of HELPER_NAMES) {
+          const block = helperBlock(template, name);
+          if (block === null) {
+            ctx.report.violation({ message: `${name} absent de ${COMMON_HELPERS}.`, file: COMMON_HELPERS });
+            return;
+          }
+          canonical.set(name, block);
+        }
+        for (const file of (await ctx.glob(`${REGISTRY}/*.rules.ts`)).sort()) {
+          const text = await ctx.readFile(file);
+          for (const name of HELPER_NAMES) {
+            const block = helperBlock(text, name);
+            if (block === null || block === canonical.get(name)) continue;
+            const normalized = text.replace(/\r\n/g, "\n");
+            const line = normalized.slice(0, normalized.indexOf(block)).split("\n").length;
+            ctx.report.violation({
+              message: `${name} diffère de sa version canonique : les copies des fonctions communes restent identiques à ${COMMON_HELPERS}.`,
+              file,
+              line,
+              fix: `Recopier ${name} depuis ${COMMON_HELPERS} ; une correction se fait dans le gabarit puis dans toutes les copies.`,
+            });
+          }
         }
       },
     },

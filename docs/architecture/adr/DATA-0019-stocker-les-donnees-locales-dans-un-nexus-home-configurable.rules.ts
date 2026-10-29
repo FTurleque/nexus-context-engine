@@ -59,6 +59,8 @@ function analyser(source: string): { code: string; chaines: { valeur: string; in
   return { code: out.join(""), chaines };
 }
 
+// Fonctions communes : copie conforme de gabarit/fonctions-communes.ts (contrôlée par GEN-0057).
+
 function ligne(texte: string, index: number): number {
   let l = 1;
   for (let k = 0; k < index; k++) if (texte[k] === "\n") l++;

@@ -17,8 +17,12 @@ function withoutXmlComments(text: string): string {
   return text.replace(/<!--[\s\S]*?-->/g, (comment) => comment.replace(/[^\r\n]/g, " "));
 }
 
-function lineOf(text: string, index: number): number {
-  return text.slice(0, index).split("\n").length;
+// Fonctions communes : copie conforme de gabarit/fonctions-communes.ts (contrôlée par GEN-0057).
+
+function ligne(texte: string, index: number): number {
+  let l = 1;
+  for (let k = 0; k < index; k++) if (texte[k] === "\n") l++;
+  return l;
 }
 
 export default {
@@ -42,7 +46,7 @@ export default {
             ctx.report.violation({
               message: `maven.compiler.release vaut « ${release[1]} » : GEN-0002 fixe le niveau de compilation du cœur à ${EXPECTED}.`,
               file: ROOT_POM,
-              line: lineOf(root, release.index ?? 0),
+              line: ligne(root, release.index ?? 0),
               fix: `Revenir à ${EXPECTED} ; un relèvement global du niveau minimal exige un nouvel ADR qui remplace GEN-0002.`,
             });
           }
@@ -56,7 +60,7 @@ export default {
             ctx.report.violation({
               message: `${match[0]} dans ${pom} : le niveau de compilation du cœur ne se règle que par maven.compiler.release=${EXPECTED}.`,
               file: pom,
-              line: lineOf(text, match.index ?? 0),
+              line: ligne(text, match.index ?? 0),
               fix: "Retirer ce réglage ; un adaptateur qui exige un runtime plus récent l'isole dans son propre POM avec un ADR spécifique.",
             });
           }
@@ -65,7 +69,7 @@ export default {
               ctx.report.violation({
                 message: `${CORE_POM} redéfinit maven.compiler.release : le cœur hérite du niveau ${EXPECTED} du POM racine.`,
                 file: CORE_POM,
-                line: lineOf(text, match.index ?? 0),
+                line: ligne(text, match.index ?? 0),
                 fix: "Supprimer la redéfinition dans core/pom.xml.",
               });
             }
