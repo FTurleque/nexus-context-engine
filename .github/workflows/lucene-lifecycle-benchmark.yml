@@ -21,7 +21,7 @@ on:
       - 'core/src/test/java/com/nexus/benchmark/LuceneLifecycleQualificationBenchmarkTest.java'
       - 'core/src/test/java/com/nexus/application/NexusApplicationLongLivedLifecycleTest.java'
       - 'docs/developer/lucene-lifecycle-qualification.md'
-      - 'docs/adr/0045-conserver-les-writers-operation-scoped-et-mettre-en-cache-les-readers-lucene.md'
+      - 'docs/architecture/adr/0045-conserver-les-writers-operation-scoped-et-mettre-en-cache-les-readers-lucene.md'
       - '.github/workflows/lucene-lifecycle-benchmark.yml'
   push:
     branches:
@@ -35,7 +35,7 @@ on:
       - 'core/src/test/java/com/nexus/benchmark/LuceneLifecycleQualificationBenchmarkTest.java'
       - 'core/src/test/java/com/nexus/application/NexusApplicationLongLivedLifecycleTest.java'
       - 'docs/developer/lucene-lifecycle-qualification.md'
-      - 'docs/adr/0045-conserver-les-writers-operation-scoped-et-mettre-en-cache-les-readers-lucene.md'
+      - 'docs/architecture/adr/0045-conserver-les-writers-operation-scoped-et-mettre-en-cache-les-readers-lucene.md'
       - '.github/workflows/lucene-lifecycle-benchmark.yml'
   workflow_dispatch:
     inputs:

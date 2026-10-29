@@ -67,5 +67,5 @@ répétés, l'index vide, un changement de dimension, une corruption réelle du
 commit, une mutation après récupération externe, les pointeurs invalides et
 l'absence de publication partielle. Ils sont exécutés sous Windows et Linux.
 
-- [Procédure opérateur](../developer/semantic-search.md)
-- [Audit d'origine](../audits/2026-09-13-audit-complet-apres-merge-221.md)
+- [Procédure opérateur](../../developer/semantic-search.md)
+- [Audit d'origine](../../audits/2026-09-13-audit-complet-apres-merge-221.md)

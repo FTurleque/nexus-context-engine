@@ -309,7 +309,7 @@ class RealSemanticRetrievalDiagnosticTest {
         return List.of(
                 new QueryCase(
                         "generated lookup state should be disposable and recoverable from the authoritative metadata store",
-                        Set.of("docs/adr/0022-traiter-lucene-comme-un-index-derive-reconstructible-de-sqlite.md")),
+                        Set.of("docs/architecture/adr/0022-traiter-lucene-comme-un-index-derive-reconstructible-de-sqlite.md")),
                 new QueryCase(
                         "screen lightweight capability summaries before loading the full operating procedure",
                         Set.of("docs/developer/agent-skills.md")),
@@ -323,11 +323,11 @@ class RealSemanticRetrievalDiagnosticTest {
                         "combine results from several codebases while keeping every hit tied to its repository of origin",
                         Set.of(
                                 "docs/developer/large-scale-search.md",
-                                "docs/adr/0043-federer-la-recherche-locale-par-projet-avant-un-moteur-externe.md")),
+                                "docs/architecture/adr/0043-federer-la-recherche-locale-par-projet-avant-un-moteur-externe.md")),
                 new QueryCase(
                         "retain only the most useful fragments that fit inside a bounded language-model input allowance",
                         Set.of(
-                                "docs/adr/0013-construire-un-contextbundle-sous-budget-de-tokens.md",
+                                "docs/architecture/adr/0013-construire-un-contextbundle-sous-budget-de-tokens.md",
                                 "docs/developer/context-building.md")));
     }
 

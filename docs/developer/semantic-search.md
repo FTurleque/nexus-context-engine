@@ -116,7 +116,7 @@ nexus index <id-ou-nom> --rebuild
 
 Le Lucene sémantique est dérivé de l'index canonique et des fichiers du repository. Un rebuild normal utilise `OpenMode.CREATE` sans supprimer préalablement les fichiers : Lucene conserve la progression des générations et les lecteurs indépendants voient le nouveau commit. Une erreur pendant la construction ne publie pas les documents partiellement ajoutés.
 
-Si le commit `segments_*` est corrompu ou illisible, NEXUS construit un index complet dans `semantic-lucene/recovery-<uuid>`, puis publie atomiquement ce répertoire via `semantic-lucene/current-generation`. Les lecteurs persistants changent de répertoire à leur prochaine opération. Le pointeur est borné, validé et lu sans suivre de lien symbolique. Voir [ADR-0055](../adr/0055-preserver-les-lecteurs-lors-des-reconstructions-semantiques.md).
+Si le commit `segments_*` est corrompu ou illisible, NEXUS construit un index complet dans `semantic-lucene/recovery-<uuid>`, puis publie atomiquement ce répertoire via `semantic-lucene/current-generation`. Les lecteurs persistants changent de répertoire à leur prochaine opération. Le pointeur est borné, validé et lu sans suivre de lien symbolique. Voir [ADR-0055](../architecture/adr/0055-preserver-les-lecteurs-lors-des-reconstructions-semantiques.md).
 
 Les anciennes générations corrompues restent présentes pour préserver les fichiers encore ouverts par d'autres processus. Après des récupérations répétées, la procédure de quarantaine ci-dessous permet de récupérer cet espace, après arrêt de tous les processus NEXUS. Un retour à une version antérieure ne comprenant pas `current-generation` exige également une quarantaine du seul index sémantique et sa reconstruction.
 

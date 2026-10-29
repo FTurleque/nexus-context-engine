@@ -17,7 +17,7 @@ on:
       - 'core/src/test/java/com/nexus/security/SafeFileIOTest.java'
       - 'docs/developer/filesystem-support.md'
       - 'docs/developer/current-limitations.md'
-      - 'docs/adr/0047-borner-le-support-filesystem-aux-filesystems-locaux-qualifies.md'
+      - 'docs/architecture/adr/0047-borner-le-support-filesystem-aux-filesystems-locaux-qualifies.md'
       - '.github/workflows/filesystem-semantics-qualification.yml'
   push:
     branches:
@@ -33,7 +33,7 @@ on:
       - 'core/src/test/java/com/nexus/security/SafeFileIOTest.java'
       - 'docs/developer/filesystem-support.md'
       - 'docs/developer/current-limitations.md'
-      - 'docs/adr/0047-borner-le-support-filesystem-aux-filesystems-locaux-qualifies.md'
+      - 'docs/architecture/adr/0047-borner-le-support-filesystem-aux-filesystems-locaux-qualifies.md'
       - '.github/workflows/filesystem-semantics-qualification.yml'
   workflow_dispatch:
 

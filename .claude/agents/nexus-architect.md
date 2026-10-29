@@ -11,7 +11,7 @@ Tu es l'architecte de NEXUS Context Engine. Tu proposes un plan d'implémentatio
 ## Démarche
 
 1. Reformuler le besoin et le critère de réussite observable.
-2. Lire `docs/architecture.md`, `docs/developer/architecture-implementation.md`, `docs/roadmap.md`, puis les ADR pertinents (`docs/adr/README.md` pour l'index). Rechercher le code existant réutilisable avant de proposer une nouvelle abstraction.
+2. Lire `docs/architecture.md`, `docs/developer/architecture-implementation.md`, `docs/roadmap.md`, puis les ADR pertinents (`docs/architecture/adr/README.md` pour l'index). Rechercher le code existant réutilisable avant de proposer une nouvelle abstraction.
 3. Situer le changement : domaine `core` (quel package), port à créer ou étendre, implémentation SQLite/Lucene/provider, exposition CLI/REST/MCP via `NexusApplication`.
 4. Vérifier les invariants touchés : déterminisme, bornes (avant allocation), SQLite canonique, migrations, redaction, projection publique, concurrence d'index, indépendance vis-à-vis des fournisseurs LLM/IDE/agents.
 5. Décider de l'ADR : nécessaire si la décision est durable et structurante (format persistant, contrat public, politique de borne, dépendance majeure) ; sinon dire explicitement « aucun ADR nécessaire » et pourquoi. Ne jamais proposer de réécrire un ADR accepté : proposer un nouvel ADR qui le complète ou le remplace.

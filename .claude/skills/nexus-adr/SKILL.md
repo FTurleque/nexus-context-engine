@@ -13,8 +13,8 @@ Non pour un simple durcissement d'implémentation, un refactoring sans changemen
 
 ## Rédaction
 
-1. Numéro suivant : `ls docs/adr | grep -E '^[0-9]{4}-' | sort | tail -1`.
-2. Fichier `docs/adr/NNNN-verbe-a-l-infinitif-objet.md` (kebab-case français, sans accents), à partir de `docs/adr/template.md`. Les ADR récents utilisent l'en-tête court :
+1. Numéro suivant : `ls docs/architecture/adr | grep -E '^[0-9]{4}-' | sort | tail -1`.
+2. Fichier `docs/architecture/adr/NNNN-verbe-a-l-infinitif-objet.md` (kebab-case français, sans accents), à partir de `docs/architecture/adr/template.md`. Les ADR récents utilisent l'en-tête court :
    ```markdown
    # ADR-NNNN — Titre exprimant la décision
 
@@ -28,7 +28,7 @@ Non pour un simple durcissement d'implémentation, un refactoring sans changemen
    ```
 3. Rédiger en français : contexte factuel (mesures, PR, runs), décision précise et vérifiable, conséquences, validation (tests, contrats, benchmarks).
 4. Statut `Proposé` tant que l'utilisateur n'a pas validé ; ne jamais passer `Accepté` sans sa décision explicite.
-5. Ajouter la ligne dans le tableau de `docs/adr/README.md` (`| [ADR-NNNN](fichier.md) | Titre | Statut |`) et, si l'ADR touche l'architecture courante, référencer-le depuis `docs/architecture.md` ou le document développeur concerné.
+5. Ajouter la ligne dans le tableau de `docs/architecture/adr/README.md` (`| [ADR-NNNN](fichier.md) | Titre | Statut |`) et, si l'ADR touche l'architecture courante, référencer-le depuis `docs/architecture.md` ou le document développeur concerné.
 
 ## Remplacer une décision
 

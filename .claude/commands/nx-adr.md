@@ -6,7 +6,7 @@ allowed-tools: Bash(git log *) Bash(ls *) Bash(grep *) Bash(sort *) Bash(tail *)
 
 Derniers ADR :
 
-!`ls docs/adr | grep -E '^[0-9]{4}-' | sort | tail -5`
+!`ls docs/architecture/adr | grep -E '^[0-9]{4}-' | sort | tail -5`
 
 Sujet : $ARGUMENTS
 
