@@ -6,7 +6,7 @@ Les règles du projet sont dans `AGENTS.md`, que Claude Code charge directement 
 
 - Cœur métier : `core/src/main/java/com/nexus` (Java 21, sans framework). Composition root : `NexusApplication`. Adaptateurs minces : `adapters/rest-quarkus`, `adapters/mcp-java`, `adapters/assistant-clients`.
 - SQLite canonique (`persistence/sqlite`, migrations `core/src/main/resources/db/migration`), Lucene dérivé (`search/lucene`, `search/semantic`).
-- Documentation courante en français : `docs/architecture.md`, `docs/roadmap.md`, `docs/developer/`. Décisions : `docs/adr/` (append-only).
+- Documentation courante en français : `docs/architecture.md`, `docs/roadmap.md`, `docs/developer/`. Décisions : `docs/architecture/adr/` (append-only).
 - Les règles de `.claude/rules/` se chargent avec les fichiers qu'elles ciblent.
 
 ## Flux de travail

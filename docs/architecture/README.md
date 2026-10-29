@@ -17,7 +17,7 @@ La protection effective de `develop` est une règle GitHub de repository et non 
 |---|---|
 | `docs/architecture.md` | synthèse courante |
 | `docs/architecture/arc42/` | vues arc42 courantes |
-| `docs/adr/` | historique décisionnel |
+| `docs/architecture/adr/` | historique décisionnel |
 | `docs/roadmap.md` | état/travail restant |
 | `docs/developer/` | contrats techniques détaillés |
 | code + workflows | autorité exécutable |
@@ -54,6 +54,7 @@ Une ancienne PR verte n'est jamais recopiée ici comme preuve de l'état courant
 ## Organisation
 
 ```text
+adr/          décisions d'architecture (registre unique, index adr/README.md)
 arc42/        vues architecture
 quality/      scénarios qualité
 risks/        registre de risques

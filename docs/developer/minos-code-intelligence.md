@@ -120,7 +120,7 @@ Replay réel : 11 symboles, 6 relations, symbole `GreetingPort` retrouvé avec p
 
 La Phase 6 ne modifie pas le contrat JSON MINOS ; elle modifie uniquement l'utilisation de l'état canonique NEXUS et le gate READY. NXA6 ne modifie pas non plus ce contrat : il borne davantage la consommation mémoire et le nombre de faits.
 
-Décision historique : [ADR-0044](../adr/0044-consommer-minos-via-un-contrat-json-local-versionne.md).
+Décision historique : [ADR-0044](../architecture/adr/0044-consommer-minos-via-un-contrat-json-local-versionne.md).
 
 
 ### Exports historiques et composants POSIX contenant un backslash
