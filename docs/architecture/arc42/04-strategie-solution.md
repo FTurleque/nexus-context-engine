@@ -88,14 +88,14 @@ flowchart TD
 
 | Décision | ADR |
 |----------|-----|
-| Positionnement comme moteur de contexte indépendant | [ADR-0001](../adr/0001-positionner-nexus-comme-moteur-intelligence-contexte.md) |
-| Java 21 | [ADR-0002](../adr/0002-compiler-le-coeur-en-java-21.md) |
-| Cœur sans framework | [ADR-0003](../adr/0003-conserver-un-coeur-java-sans-framework-applicatif.md) |
-| Local-first et opt-in | [ADR-0005](../adr/0005-adopter-un-fonctionnement-local-first-et-opt-in.md) |
-| SQLite canonique | [ADR-0006](../adr/0006-utiliser-sqlite-comme-source-de-verite-structurelle.md) |
-| Lucene dérivé | [ADR-0007](../adr/0007-utiliser-lucene-comme-index-de-recherche-local.md) |
-| Ranking hybride | [ADR-0010](../adr/0010-adopter-un-ranking-hybride-deterministe-et-explicable.md) |
-| ContextBundle sous budget | [ADR-0013](../adr/0013-construire-un-contextbundle-sous-budget-de-tokens.md) |
-| Adaptateur REST Quarkus | [ADR-0039](../adr/0039-isoler-l-adaptateur-rest-quarkus-du-coeur-nexus.md) |
-| Adaptateur MCP STDIO | [ADR-0040](../adr/0040-exposer-nexus-via-un-adaptateur-mcp-stdio-mince.md) |
-| Fédération locale | [ADR-0043](../adr/0043-federer-la-recherche-locale-par-projet-avant-un-moteur-externe.md) |
+| Positionnement comme moteur de contexte indépendant | [ADR-0001](../adr/ARCH-0001-positionner-nexus-comme-moteur-intelligence-contexte.md) |
+| Java 21 | [ADR-0002](../adr/GEN-0002-compiler-le-coeur-en-java-21.md) |
+| Cœur sans framework | [ADR-0003](../adr/ARCH-0003-conserver-un-coeur-java-sans-framework-applicatif.md) |
+| Local-first et opt-in | [ADR-0005](../adr/ARCH-0005-adopter-un-fonctionnement-local-first-et-opt-in.md) |
+| SQLite canonique | [ADR-0006](../adr/DATA-0006-utiliser-sqlite-comme-source-de-verite-structurelle.md) |
+| Lucene dérivé | [ADR-0007](../adr/DATA-0007-utiliser-lucene-comme-index-de-recherche-local.md) |
+| Ranking hybride | [ADR-0010](../adr/BE-0010-adopter-un-ranking-hybride-deterministe-et-explicable.md) |
+| ContextBundle sous budget | [ADR-0013](../adr/BE-0013-construire-un-contextbundle-sous-budget-de-tokens.md) |
+| Adaptateur REST Quarkus | [ADR-0039](../adr/ARCH-0039-isoler-l-adaptateur-rest-quarkus-du-coeur-nexus.md) |
+| Adaptateur MCP STDIO | [ADR-0040](../adr/ARCH-0040-exposer-nexus-via-un-adaptateur-mcp-stdio-mince.md) |
+| Fédération locale | [ADR-0043](../adr/BE-0043-federer-la-recherche-locale-par-projet-avant-un-moteur-externe.md) |

@@ -18,9 +18,13 @@ if ($exists -and $path -match '^core/src/main/resources/db/migration/V\d+__.+\.s
     Write-PreToolDecision 'deny' "Migration existante ($path) : les migrations sont append-only. Créer la migration suivante (skill nexus-schema-migration)."
 }
 
-if ($exists -and $path -match '^docs/architecture/adr/\d{4}-.+\.md$') {
-    $head = (Get-Content -LiteralPath $filePath -TotalCount 12) -join "`n"
-    if ($head -match '(?i)statut\s*:\s*accept|status:\s*accepted') {
+if ($exists -and $path -match '^docs/architecture/adr/archive/.+\.md$') {
+    Write-PreToolDecision 'ask' "ADR archivé ($path) : historique, normalement non réécrit (GEN-0057)."
+}
+
+if ($exists -and $path -match '^docs/architecture/adr/(ARCH|BE|DATA|GEN|SEC)-\d{4}-.+\.md$') {
+    $head = (Get-Content -LiteralPath $filePath -TotalCount 15) -join "`n"
+    if ($head -match '(?i)statut\W*:\s*accept') {
         Write-PreToolDecision 'ask' "ADR accepté ($path) : ne pas réécrire la décision. Seuls un lien « Remplacé par / Complété par » ou une correction typographique sont admis ; sinon créer un nouvel ADR (skill nexus-adr)."
     }
 }

@@ -199,13 +199,13 @@ class RealSemanticSearchBenchmarkTest {
                 new QueryCase(
                         "generated lookup state should be disposable and recoverable from the authoritative metadata store",
                         Set.of(
-                                "docs/architecture/adr/0022-traiter-lucene-comme-un-index-derive-reconstructible-de-sqlite.md",
+                                "docs/architecture/adr/DATA-0022-traiter-lucene-comme-un-index-derive-reconstructible-de-sqlite.md",
                                 "docs/index-provenance.md")),
                 new QueryCase(
                         "screen lightweight capability summaries before loading the full operating procedure",
                         Set.of(
                                 "docs/developer/agent-skills.md",
-                                "docs/architecture/adr/0034-adopter-la-divulgation-progressive-pour-les-agent-skills.md")),
+                                "docs/architecture/adr/BE-0034-adopter-la-divulgation-progressive-pour-les-agent-skills.md")),
                 new QueryCase(
                         "version-control activity should influence relevance while remaining completely offline and read-only",
                         Set.of(
@@ -220,12 +220,12 @@ class RealSemanticSearchBenchmarkTest {
                         "combine results from several codebases while keeping every hit tied to its repository of origin",
                         Set.of(
                                 "docs/developer/large-scale-search.md",
-                                "docs/architecture/adr/0043-federer-la-recherche-locale-par-projet-avant-un-moteur-externe.md",
+                                "docs/architecture/adr/BE-0043-federer-la-recherche-locale-par-projet-avant-un-moteur-externe.md",
                                 "core/src/main/java/com/nexus/search/FederatedSearchService.java")),
                 new QueryCase(
                         "retain only the most useful fragments that fit inside a bounded language-model input allowance",
                         Set.of(
-                                "docs/architecture/adr/0013-construire-un-contextbundle-sous-budget-de-tokens.md",
+                                "docs/architecture/adr/BE-0013-construire-un-contextbundle-sous-budget-de-tokens.md",
                                 "docs/developer/context-building.md",
                                 "core/src/main/java/com/nexus/context/BudgetedContextSelector.java")));
     }

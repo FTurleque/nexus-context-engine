@@ -18,7 +18,7 @@ on:
       - 'core/src/test/java/com/nexus/context/source/git/**'
       - 'core/src/test/java/com/nexus/benchmark/GitContextCacheQualificationBenchmarkTest.java'
       - 'docs/developer/git-context.md'
-      - 'docs/architecture/adr/0046-mettre-en-cache-le-contexte-git-dans-les-runtimes-longue-duree.md'
+      - 'docs/architecture/adr/BE-0046-mettre-en-cache-le-contexte-git-dans-les-runtimes-longue-duree.md'
       - '.github/workflows/git-context-cache-qualification.yml'
   push:
     branches:
@@ -29,7 +29,7 @@ on:
       - 'core/src/test/java/com/nexus/context/source/git/**'
       - 'core/src/test/java/com/nexus/benchmark/GitContextCacheQualificationBenchmarkTest.java'
       - 'docs/developer/git-context.md'
-      - 'docs/architecture/adr/0046-mettre-en-cache-le-contexte-git-dans-les-runtimes-longue-duree.md'
+      - 'docs/architecture/adr/BE-0046-mettre-en-cache-le-contexte-git-dans-les-runtimes-longue-duree.md'
       - '.github/workflows/git-context-cache-qualification.yml'
   workflow_dispatch:
     inputs:
