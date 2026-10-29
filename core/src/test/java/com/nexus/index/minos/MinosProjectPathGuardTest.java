@@ -3,6 +3,7 @@ package com.nexus.index.minos;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.nexus.index.CodeIntelligenceSnapshot;
+import com.nexus.testsupport.SymbolicLinks;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -21,7 +22,6 @@ class MinosProjectPathGuardTest {
 
     @TempDir
     Path temporaryDirectory;
-
 
     @Test
     void mapsPosixBackslashUsingExactScannedIdentity() throws Exception {
@@ -72,7 +72,7 @@ class MinosProjectPathGuardTest {
         Path outside = temporaryDirectory.resolve("outside-final.ts");
         Files.writeString(outside, "outside secret");
         Files.delete(source);
-        assumeSymlink(source, outside);
+        SymbolicLinks.createOrSkip(source, outside.toAbsolutePath());
 
         assertThrows(IOException.class, () ->
                 importSymbol(root, canonicalAllowlist, "src/Selected.ts", 1, 1));
@@ -90,7 +90,7 @@ class MinosProjectPathGuardTest {
         Files.writeString(outsideDirectory.resolve("Selected.ts"), "outside secret");
         Files.delete(source);
         Files.delete(sourceDirectory);
-        assumeSymlink(sourceDirectory, outsideDirectory);
+        SymbolicLinks.createOrSkip(sourceDirectory, outsideDirectory.toAbsolutePath());
 
         assertThrows(IOException.class, () ->
                 importSymbol(root, canonicalAllowlist, "src/Selected.ts", 1, 1));
@@ -150,15 +150,5 @@ class MinosProjectPathGuardTest {
                 canonicalRoot,
                 indexedProjectFiles,
                 JSON.writeValueAsString(document));
-    }
-
-    private static void assumeSymlink(Path link, Path target) {
-        try {
-            Files.createSymbolicLink(link, target.toAbsolutePath());
-        } catch (IOException | UnsupportedOperationException | SecurityException exception) {
-            Assumptions.assumeTrue(
-                    false,
-                    "Symbolic links are not supported in this test environment: " + exception);
-        }
     }
 }

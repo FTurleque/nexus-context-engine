@@ -2,7 +2,7 @@ package com.nexus.index.scan;
 
 import com.nexus.index.FileCategory;
 import com.nexus.index.ScannedFile;
-import org.junit.jupiter.api.Assumptions;
+import com.nexus.testsupport.SymbolicLinks;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -102,8 +102,7 @@ class ProjectScannerTest {
         Files.writeString(outside, "class OutsideSecret {}\n");
         Path link = projectRoot.resolve("LinkedSecret.java");
 
-        Assumptions.assumeTrue(createSymbolicLink(link, outside),
-                "Les liens symboliques ne sont pas disponibles dans cet environnement");
+        SymbolicLinks.createOrSkip(link, outside.toAbsolutePath());
 
         ProjectScanResult result = new ProjectScanner().scanWithDiagnostics(projectRoot);
 
@@ -138,14 +137,5 @@ class ProjectScannerTest {
         Path file = temporaryDirectory.resolve(relativePath);
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);
-    }
-
-    private static boolean createSymbolicLink(Path link, Path target) {
-        try {
-            Files.createSymbolicLink(link, target.toAbsolutePath());
-            return true;
-        } catch (UnsupportedOperationException | IOException | SecurityException unavailable) {
-            return false;
-        }
     }
 }

@@ -18,7 +18,7 @@ Les workflows versionnés conservent en plus une défense en profondeur sur les 
 
 `.github/workflows/ci.yml` qualifie `develop` et `main` :
 
-- Windows : Java 24 et qualification locale ;
+- Windows : Java 21.0.12 épinglé (Temurin `21.0.12+101.0.LTS`, version livrée), tests des hooks Claude Code et du contrat token REST, puis qualification locale `scripts/validate-phase-6.ps1` ; en CI (`CI` ou `GITHUB_ACTIONS` définie), ce script échoue si le Maven Wrapper vérifié échoue, sans repli sur le Maven du runner ;
 - Linux : Java 21, **Maven 3.10.0**, reactor complet, tests, distribution, JaCoCo, SBOM et notices ;
 - vérification explicite des ancres d'intégrité Maven/JDT LS et des autres outils de qualification versionnés ;
 - vérification des contrats documentaires machine-vérifiables **avant** le reactor.
@@ -71,7 +71,7 @@ La résilience réseau ne modifie donc pas la racine de confiance du bootstrap e
 
 ## CodeQL, OSV et SonarCloud
 
-- CodeQL : Java/Kotlin `security-extended`, contrat exact-head ;
+- CodeQL : Java/Kotlin `security-extended`, `build-mode: manual` (compilation des sources et des tests par `./mvnw` sur Java 21.0.12 épinglé), contrat exact-head ;
 - OSV : delta PR + scan bloquant du SBOM CycloneDX agrégé ;
 - reusable workflow OSV épinglé au SHA qui échoue fermé lorsqu'un scan est incomplet ;
 - SonarQube Cloud : GitHub App en Automatic Analysis, avec Quality Gate externe sur les changements de PR.

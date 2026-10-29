@@ -30,11 +30,19 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
-      - name: Set up Java 24
+      - name: Set up pinned Java 21
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
-          java-version: '24'
+          java-version: '21.0.12+101.0.LTS'
+
+      - name: Run Claude Code hook guard tests
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/tests/Test-Hooks.ps1
+
+      - name: Verify REST token contract
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/release/test-rest-token-contract.ps1
 
       - name: Run local qualification script
         shell: powershell

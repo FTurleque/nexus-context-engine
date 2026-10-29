@@ -1,5 +1,6 @@
 package com.nexus.security;
 
+import com.nexus.testsupport.SymbolicLinks;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -51,8 +52,8 @@ class SafeFileIOTest {
         Path secret = Files.writeString(outside.resolve("data"), "outside");
         Path directoryLink = temporaryDirectory.resolve("directory-link");
         Path fileLink = temporaryDirectory.resolve("file-link");
-        Assumptions.assumeTrue(createSymbolicLink(directoryLink, outside));
-        Assumptions.assumeTrue(createSymbolicLink(fileLink, secret));
+        SymbolicLinks.createOrSkip(directoryLink, outside.toAbsolutePath());
+        SymbolicLinks.createOrSkip(fileLink, secret.toAbsolutePath());
         for (Path candidate : java.util.List.of(fileLink, directoryLink.resolve("data"))) {
             assertThrows(IOException.class, () -> SafeFileIO.openReadNoFollow(candidate, false, true,
                     path -> { throw new AssertionError("No file may be opened"); }));
@@ -66,8 +67,7 @@ class SafeFileIOTest {
         Path outside = Files.createDirectory(temporaryDirectory.resolve("outside-race"));
         Files.writeString(outside.resolve("data"), "outside");
         Path probe = temporaryDirectory.resolve("probe");
-        Assumptions.assumeTrue(createSymbolicLink(probe, outside));
-        Files.delete(probe);
+        SymbolicLinks.requireSupport(probe, outside.toAbsolutePath());
         SeekableByteChannel[] opened = new SeekableByteChannel[1];
         assertThrows(IOException.class, () -> SafeFileIO.openReadNoFollow(candidate, false, true, path -> {
             Files.move(directory, temporaryDirectory.resolve("saved"));
@@ -85,8 +85,7 @@ class SafeFileIOTest {
         Path outside = Files.createDirectory(temporaryDirectory.resolve("outside-aba"));
         Files.writeString(outside.resolve("data"), "outside");
         Path probe = temporaryDirectory.resolve("aba-probe");
-        Assumptions.assumeTrue(createSymbolicLink(probe, outside));
-        Files.delete(probe);
+        SymbolicLinks.requireSupport(probe, outside.toAbsolutePath());
         // L'ouverture effectue une substitution puis restaure le chemin AVANT
         // revalidation. Aucune lecture du channel extérieur n'est effectuée.
         SafeFileIO.ChannelOpener aba = path -> {
@@ -197,8 +196,7 @@ class SafeFileIOTest {
         Files.writeString(target, "secret");
         Path link = temporaryDirectory.resolve("link.txt");
 
-        Assumptions.assumeTrue(createSymbolicLink(link, target),
-                "Les liens symboliques ne sont pas disponibles dans cet environnement");
+        SymbolicLinks.createOrSkip(link, target.toAbsolutePath());
 
         assertThrows(IOException.class, () -> SafeFileIO.readStringNoFollow(link));
     }
@@ -212,8 +210,7 @@ class SafeFileIOTest {
         Files.createDirectories(safe);
         Path redirect = safe.resolve("redirect");
 
-        Assumptions.assumeTrue(createSymbolicLink(redirect, outside),
-                "Les liens symboliques ne sont pas disponibles dans cet environnement");
+        SymbolicLinks.createOrSkip(redirect, outside.toAbsolutePath());
 
         assertThrows(IOException.class, () -> SafeFileIO.readStringNoFollow(redirect.resolve("secret.txt")));
     }
@@ -244,14 +241,5 @@ class SafeFileIOTest {
                 () -> SafeFileIO.revalidateFallbackPathSnapshot(snapshot));
 
         assertTrue(failure.getMessage().contains("Identité filesystem modifiée"));
-    }
-
-    private static boolean createSymbolicLink(Path link, Path target) {
-        try {
-            Files.createSymbolicLink(link, target.toAbsolutePath());
-            return true;
-        } catch (UnsupportedOperationException | IOException | SecurityException unavailable) {
-            return false;
-        }
     }
 }
