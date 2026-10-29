@@ -12,7 +12,7 @@ Probabilité : F faible, M moyenne, E élevée. Impact : F faible, M moyen, E é
 | R4 | `FileLock` filesystem réseau | M | E | local qualifié + preuve SMB loopback ciblée ; autres sémantiques non supportées sans qualification |
 | R5 | provider externe in-process non coopératif | F | M | runtime courant sans provider tiers arbitraire ; timeout + max 8 workers + circuit-breaker ; isolation processus conditionnée à un cas réel |
 | R6 | migration forward-only | F | E | backup avant upgrade |
-| R10 | compatibilité MCP | M | M | SDK 2.0.1 + tests STDIO/intégration |
+| R10 | compatibilité MCP | M | M | SDK 2.1.0 + tests STDIO/intégration |
 | R13 | snapshots externes obsolètes | M | E | clôturé par invalidation/provenance |
 | R14 | index sémantique incompatible | M | E | profil `content-v4` + rebuild/garde |
 | R15 | supply-chain incomplète | M | E | clôturé/renforcé : CodeQL, OSV, Trivy, SBOM, hashes |

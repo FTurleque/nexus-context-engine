@@ -26,7 +26,7 @@ nexus-context-engine/
 
 Le module `core` possède physiquement son layout Maven standard. Aucun `src/` applicatif n'existe à la racine et `core/pom.xml` ne redirige plus `sourceDirectory`, `testSourceDirectory`, resources ou test-resources vers le parent. Les artefacts publics et la distribution restent publiés sous les emplacements historiques de `target/` pour compatibilité.
 
-Le parent gouverne Java 21, BOM/plugins, JaCoCo, SBOM et dépendances communes. Quarkus est en 3.40.1 et le SDK MCP en 2.0.1.
+Le parent gouverne Java 21, BOM/plugins, JaCoCo, SBOM et dépendances communes. Quarkus est en 3.40.1.1 et le SDK MCP en 2.1.0.
 
 ## Composition root
 
@@ -200,7 +200,7 @@ Health/metrics `/q/*` sont servis par le management listener uniquement. Le reve
 
 ## MCP
 
-Le module utilise le SDK MCP 2.0.1 en STDIO. `stdout` reste réservé au framing JSON-RPC. NEXUS conserve STDIO comme transport local supporté.
+Le module utilise le SDK MCP 2.1.0 en STDIO. `stdout` reste réservé au framing JSON-RPC. NEXUS conserve STDIO comme transport local supporté.
 
 ## Supply-chain
 

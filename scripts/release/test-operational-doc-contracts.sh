@@ -125,7 +125,7 @@ require("docs/developer/architecture-implementation.md", f"Quarkus est en {quark
 require("docs/developer/rest-api.md", f"Quarkus     {quarkus_version}")
 require("docs/developer/rest-api.md", "quarkus.http.insecure-requests")
 require("docs/developer/rest-api.md", "trusted-proxies")
-require("docs/developer/mcp.md", "MCP SDK     2.0.1")
+require("docs/developer/mcp.md", "MCP SDK     2.1.0")
 require("docs/developer/mcp.md", "100 projets uniques")
 
 for path in (
