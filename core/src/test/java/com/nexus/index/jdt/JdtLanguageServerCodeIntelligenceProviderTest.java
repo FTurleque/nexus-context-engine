@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.nexus.index.CodeIntelligenceSnapshot;
 import com.nexus.index.RelationKind;
 import com.nexus.index.SymbolRelation;
+import com.nexus.testsupport.SymbolicLinks;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -34,7 +35,6 @@ class JdtLanguageServerCodeIntelligenceProviderTest {
 
     @TempDir
     Path temporaryDirectory;
-
 
     @Test
     void fileUrisKeepPosixBackslashAndSlashSymbolsDistinct() throws Exception {
@@ -126,11 +126,7 @@ class JdtLanguageServerCodeIntelligenceProviderTest {
         Path home = Files.createDirectories(temporaryDirectory.resolve("nexus-home"));
         Path outside = Files.createDirectories(temporaryDirectory.resolve("outside"));
         Path workspaceRoot = home.resolve("jdtls-workspaces");
-        try {
-            Files.createSymbolicLink(workspaceRoot, outside);
-        } catch (IOException | UnsupportedOperationException | SecurityException exception) {
-            Assumptions.assumeTrue(false, "symbolic links unavailable: " + exception.getMessage());
-        }
+        SymbolicLinks.createOrSkip(workspaceRoot, outside);
 
         JdtLanguageServerCodeIntelligenceProvider.Configuration configuration =
                 new JdtLanguageServerCodeIntelligenceProvider.Configuration(

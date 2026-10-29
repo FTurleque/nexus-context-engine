@@ -3,7 +3,7 @@ package com.nexus.context.source.skill;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;
-import org.junit.jupiter.api.Assumptions;
+import com.nexus.testsupport.SymbolicLinks;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -109,7 +109,7 @@ class AiSkillsRegistryProviderTest {
                 """);
 
         Path registry = Files.createDirectories(temporaryDirectory.resolve(".nexus/registry"));
-        assumeSymlink(registry.resolve("skills"), outside);
+        SymbolicLinks.createOrSkip(registry.resolve("skills"), outside);
 
         SkillProviderResult result = new AiSkillsRegistryProvider().discover(
                 new SkillSourceQuery(project(), true));
@@ -130,7 +130,7 @@ class AiSkillsRegistryProviderTest {
                 """);
         Path skillDirectory = Files.createDirectories(
                 temporaryDirectory.resolve(".nexus/registry/skills/shared/java/escaped-final"));
-        assumeSymlink(skillDirectory.resolve("SKILL.md"), outside);
+        SymbolicLinks.createOrSkip(skillDirectory.resolve("SKILL.md"), outside);
 
         SkillProviderResult result = new AiSkillsRegistryProvider().discover(
                 new SkillSourceQuery(project(), true));
@@ -155,13 +155,5 @@ class AiSkillsRegistryProviderTest {
         Path file = temporaryDirectory.resolve(relativePath);
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);
-    }
-
-    private static void assumeSymlink(Path link, Path target) throws IOException {
-        try {
-            Files.createSymbolicLink(link, target);
-        } catch (UnsupportedOperationException | SecurityException | IOException exception) {
-            Assumptions.assumeTrue(false, "Symbolic links unavailable: " + exception.getMessage());
-        }
     }
 }
