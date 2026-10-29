@@ -1,6 +1,6 @@
 # Gates de couverture des adaptateurs
 
-NXA2-09 contractualise la couverture JaCoCo des trois modules d'adaptation NEXUS : REST, MCP et assistant-clients. Le gate historique du core reste inchangé.
+NXA2-09 contractualise la couverture JaCoCo des trois modules d'adaptation NEXUS : REST, MCP et assistant-clients. Ce document décrit aussi le gate du core et les planchers par paquet et par classe qui complètent le niveau `BUNDLE`.
 
 ## Principe
 
@@ -46,18 +46,57 @@ Le nouveau plancher `assistant-clients` est volontairement inférieur à cette m
 
 ## Seuils bloquants
 
-| Module | Minimum lignes | Minimum branches |
-|---|---:|---:|
-| core | 70 % | 50 % |
-| REST | 60 % | 60 % |
-| MCP | 80 % | 55 % |
-| assistant-clients | **90 %** | **75 %** |
+Chaque module exécute deux `jacoco:check` : `jacoco-check`, hérité du `pom.xml` racine (`BUNDLE`, 65 % des lignes, 55 % des branches, propriétés `nexus.coverage.line.minimum` et `nexus.coverage.branch.minimum`), et l'exécution propre au module. Le seuil effectif est le plus strict des deux ; les valeurs du `pom.xml` de module sont égales à ce seuil effectif.
 
-Ces seuils sont versionnés dans le `pom.xml` de chaque module. Un `./mvnw -B clean install` échoue si l'un des planchers n'est plus respecté.
+### Niveau module (`BUNDLE`)
+
+| Module | Exécution | Minimum lignes | Minimum branches |
+|---|---|---:|---:|
+| core | `jacoco-check-core` | 70 % | 55 % |
+| REST | `jacoco-check-rest` | 65 % | 60 % |
+| MCP | `jacoco-check-mcp` | 80 % | 55 % |
+| assistant-clients | `jacoco-check-assistant-clients` | **90 %** | **75 %** |
+
+### Niveau paquet et classe
+
+Le niveau `BUNDLE` laisse une marge de plusieurs centaines de lignes dans le core : une régression concentrée sur un paquet de confinement ou sur un importeur de code intelligence ne le fait pas échouer. Des règles `PACKAGE` et `CLASS` fixent donc un plancher proche de la mesure pour ces zones :
+
+| Module | Élément | Cible | Minimum lignes | Minimum branches |
+|---|---|---|---:|---:|
+| core | `PACKAGE` | `com.nexus.security` | 85 % | 77 % |
+| core | `PACKAGE` | `com.nexus.index.jdt` | 66 % | 52 % |
+| core | `PACKAGE` | `com.nexus.index.minos` | 73 % | 59 % |
+| core | `PACKAGE` | `com.nexus.index.scip` | 79 % | 60 % |
+| REST | `PACKAGE` | `com.nexus.api` | 78 % | 67 % |
+| REST | `CLASS` | `com.nexus.api.NexusApiApplicationService` | 60 % | 38 % |
+
+Ces planchers sont deux à trois points sous la mesure Windows du reactor complet :
+
+| Cible | Lignes couvertes | Lignes | Branches couvertes | Branches |
+|---|---:|---:|---:|---:|
+| core (`BUNDLE`) | 8 378 / 9 997 | 83,81 % | 2 926 / 4 321 | 67,72 % |
+| `com.nexus.security` | 360 / 413 | 87,17 % | 260 / 326 | 79,75 % |
+| `com.nexus.index.jdt` | 550 / 804 | 68,41 % | 204 / 375 | 54,40 % |
+| `com.nexus.index.minos` | 224 / 296 | 75,68 % | 120 / 195 | 61,54 % |
+| `com.nexus.index.scip` | 373 / 459 | 81,26 % | 159 / 255 | 62,35 % |
+| REST (`BUNDLE`, `com.nexus.api`) | 496 / 612 | 81,05 % | 183 / 261 | 70,11 % |
+| `NexusApiApplicationService` | 60 / 95 | 63,16 % | 4 / 10 | 40,00 % |
+| MCP | 392 / 437 | 89,70 % | 89 / 113 | 78,76 % |
+| assistant-clients | 121 / 128 | 94,53 % | 79 / 89 | 88,76 % |
+
+Un `./mvnw -B clean install` échoue si l'un des planchers n'est plus respecté. Une hausse durable de la mesure justifie de remonter le plancher correspondant ; une baisse ne justifie jamais de l'abaisser sans décision explicite.
 
 ## Chemins critiques couverts
 
 ### REST
+
+Les `@QuarkusTest` chargent les classes de l'application dans le `QuarkusClassLoader`, que l'agent JaCoCo de Surefire ne crédite pas pour les beans CDI : `NexusApiApplicationService`, exercé par `NexusResourceTest`, n'apparaît alors qu'à 13 lignes sur 95. L'extension `io.quarkus:quarkus-jacoco` (scope test, version gérée par le BOM Quarkus) instrumente ces classes. La configuration conjointe suit la documentation Quarkus « Tests with coverage » :
+
+- l'exécution `jacoco-prepare` du module exclut `*QuarkusClassLoader` et ajoute ses données (`append`) ;
+- Surefire fixe `quarkus.jacoco.data-file` sur `target/jacoco.exec`, avec `quarkus.jacoco.reuse-data-file=true` et `quarkus.jacoco.report=false` ;
+- le rapport `target/site/jacoco` et les deux `jacoco:check` lisent ce fichier unique.
+
+La règle `CLASS` sur `NexusApiApplicationService` échoue si cette instrumentation disparaît.
 
 La qualification couvre notamment :
 
