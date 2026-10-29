@@ -94,6 +94,21 @@ Les documents Lucene utilisent une clé stable dérivée de `(projectId, relativ
 - les mises à jour utilisent une clé stable ;
 - les fichiers supprimés disparaissent également de Lucene.
 
+## Do's and Don'ts
+
+### Do
+
+- Committer d'abord l'état canonique dans une transaction SQLite (fichiers, symboles, relations, état d'indexation), puis mettre à jour Lucene.
+- Marquer ou retenir qu'une reconstruction est nécessaire quand la mise à jour Lucene échoue.
+- Permettre de supprimer l'index Lucene d'un projet puis de le recréer à partir des fichiers et métadonnées persistés.
+- Identifier les documents Lucene par une clé stable dérivée de `(projectId, relativePath)`, pour `updateDocument` et `deleteDocuments` idempotents.
+- Faire disparaître de Lucene les fichiers supprimés.
+
+### Don't
+
+- Ne pas laisser un échec Lucene annuler ou corrompre silencieusement l'état SQLite déjà validé.
+- Ne pas traiter Lucene comme une seconde source de vérité.
+
 ## Analyse détaillée des options
 
 ### Deux sources de vérité égales
@@ -119,6 +134,11 @@ Les documents Lucene utilisent une clé stable dérivée de `(projectId, relativ
 **Avantages :** responsabilité claire, récupération simple et architecture robuste.
 
 **Inconvénients :** cohérence éventuelle courte et besoin d'un mécanisme de rebuild.
+
+## Compliance and Enforcement
+
+- Tests `ProjectIndexingServiceTest.indexesIncrementallyAndPropagatesChangesAndDeletions` et `ProjectIndexingBatchingTest.rebuildsDerivedIndexInBoundedDocumentBatches` (`core/src/test/java/com/nexus/index/`), `LuceneSearchIndexTest.closesAllHandlesAfterRebuildAndSearch` (`core/src/test/java/com/nexus/search/lucene/`), `LuceneSemanticSearchIndexTest.appliesUpdatesAndRemovalsByRelativePath` (`core/src/test/java/com/nexus/search/semantic/lucene/`), lancés par `mvnw clean install` (workflow `.github/workflows/ci.yml` : job Linux reactor, et job Windows gate par `scripts/validate-phase-6.ps1`).
+- Aucune règle Archgate : l'ordre « commit SQLite puis Lucene » ne se lit pas sur le texte du dépôt ; vérifié en revue.
 
 ## Conditions de réexamen
 

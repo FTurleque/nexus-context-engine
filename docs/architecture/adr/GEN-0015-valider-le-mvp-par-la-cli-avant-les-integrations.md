@@ -2,7 +2,8 @@
 id: GEN-0015
 title: "Valider le MVP par la CLI avant l'API, MCP et les intégrations IDE"
 domain: general
-rules: false
+rules: true
+files: ["core/src/main/java/com/nexus/cli/**"]
 ---
 
 # Valider le MVP par la CLI avant l'API, MCP et les intégrations IDE
@@ -93,6 +94,19 @@ La décision est respectée si :
 - les tests de bout en bout peuvent exécuter les scénarios principaux sans LLM ;
 - l'API ou le MCP ne sont pas nécessaires pour valider la qualité du ranking.
 
+## Do's and Don'ts
+
+### Do
+
+- Valider le MVP par la CLI locale avant l'API REST, MCP et les intégrations IDE.
+- Offrir au minimum `nexus project add`, `nexus project list`, `nexus index`, `nexus search`, `nexus context` et `nexus inspect`, avec `--budget`, `--explain`, une sortie lisible par un humain et une sortie JSON.
+- Garder la CLI comme adaptateur mince qui délègue aux services applicatifs.
+- Démontrer le MVP sur un repository Java local et une demande textuelle : fichiers et symboles pertinents classés, `ContextBundle` respectant le budget.
+
+### Don't
+
+- Ne pas mettre de logique de recherche, de ranking ni de politique de budget dans la CLI.
+
 ## Analyse détaillée des options
 
 ### Commencer par une API REST
@@ -170,6 +184,13 @@ REST / MCP / IDE
 ## Conditions de réexamen
 
 Cette décision est principalement liée à l'ordre d'implémentation. Une fois le MVP validé, API et MCP peuvent devenir des surfaces de premier plan sans invalider l'ADR historique.
+
+## Compliance and Enforcement
+
+- Règle Archgate `GEN-0015-valider-le-mvp-par-la-cli-avant-les-integrations.rules.ts` / `cli-delegates-to-application-services` : le paquet `com.nexus.cli` (commentaires et littéraux effacés) ne référence ni Lucene, SQLite/JDBC, JavaParser, JGit, `com.nexus.persistence`, `com.nexus.search.lucene`, `com.nexus.search.semantic`, `com.nexus.ranking.graph`, ni les classes de recherche, de ranking et de sélection sous budget (`SearchService`, `ContextRanker`, `DefaultContextBuilder`, `BudgetedContextSelector`…), et référence `NexusApplication`. Contrôle propre à Archgate.
+- Règle Archgate `GEN-0015-valider-le-mvp-par-la-cli-avant-les-integrations.rules.ts` / `cli-exposes-mvp-commands` : `NexusCli.java` porte les commandes `project add`/`list`, `index`, `search`, `context`, `inspect` et les options `--budget`, `--explain`, `--json`.
+- Test `core/src/test/java/com/nexus/cli/NexusCliTest.java` (`NexusCliTest.executesTheMvpFlowThroughStableJsonOutputs`) : le flux du MVP s'exécute de bout en bout par la CLI, en sortie JSON stable, sans LLM.
+- `scripts/self-smoke.ps1` (via `/nx-validate`) : le JAR CLI indexe et construit un contexte sur le dépôt lui-même.
 
 ## Décisions liées
 

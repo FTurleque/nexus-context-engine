@@ -100,6 +100,26 @@ La décision est respectée si :
 - les raisons affichées correspondent à des composantes non nulles ;
 - un même jeu de candidats produit toujours le même ordre.
 
+## Do's and Don'ts
+
+### Do
+
+- Normaliser chaque signal dans la plage `[0,1]`.
+- Calculer le score composé de façon déterministe avec des poids explicites et versionnés dans le code (`score = Σ(normalizedSignal × weight)`).
+- Exposer dans chaque `RankedCandidate` le score final, les composantes utilisées, les raisons textuelles dérivées de ces composantes et un ordre secondaire stable.
+- Produire l'explication dans le moteur de ranking lui-même.
+
+### Don't
+
+- Ne pas faire reformuler ni inventer l'explication par un LLM.
+- Ne pas considérer les poids initiaux comme définitivement optimaux.
+
+## Compliance and Enforcement
+
+- Tests `DeterministicContextRankerValidationTest` et `SemanticRankingTest` (`core/src/test/java/com/nexus/ranking/`), `SearchServiceIntegrationTest` et `GoldenSearchCorpusTest` (`core/src/test/java/com/nexus/search/`), lancés par `mvnw verify`.
+- Règle Archgate de BE-0010 `ranking-has-no-network-or-llm-call` : aucun appel réseau ni LLM dans `core/src/main/java/com/nexus/ranking/`.
+- Revue : bornes `[0,1]` des signaux et centralisation des poids ; aucun contrôle automatisé propre à cet ADR.
+
 ## Analyse détaillée des options
 
 ### Additionner les scores bruts

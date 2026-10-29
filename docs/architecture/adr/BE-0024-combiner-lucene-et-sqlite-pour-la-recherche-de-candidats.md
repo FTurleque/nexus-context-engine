@@ -2,7 +2,8 @@
 id: BE-0024
 title: "Combiner Lucene et SQLite pour la recherche de candidats"
 domain: backend
-rules: false
+rules: true
+files: ["core/src/main/java/com/nexus/search/lucene/**"]
 ---
 
 # Combiner Lucene et SQLite pour la recherche de candidats
@@ -102,6 +103,25 @@ La décision est respectée si :
 - un candidat peut accumuler plusieurs signaux provenant de plusieurs stratégies ;
 - une reconstruction Lucene ne modifie pas les symboles stockés dans SQLite ;
 - les tests couvrent la fusion et la déduplication.
+
+## Do's and Don'ts
+
+### Do
+
+- Utiliser Lucene pour la recherche lexicale de fichiers et SQLite pour la recherche structurelle de symboles et relations.
+- Fusionner les candidats avant ranking.
+- Indexer les noms de symboles comme champs du document fichier Lucene.
+- Lire les objets `CodeSymbol` complets depuis SQLite.
+- Dédupliquer par identifiants déterministes un même fichier ou symbole produit par plusieurs stratégies, en conservant l'ensemble des signaux.
+
+### Don't
+
+- Ne pas faire de Lucene une source des objets `CodeSymbol` complets.
+
+## Compliance and Enforcement
+
+- Tests `SearchServiceIntegrationTest` (`combinesLexicalSymbolAndGraphSignalsDeterministically`), `SearchCandidateValidationTest` et `GoldenSearchCorpusTest` (`core/src/test/java/com/nexus/search/`, lancés par `mvnw verify`).
+- Règle Archgate `BE-0024-combiner-lucene-et-sqlite-pour-la-recherche-de-candidats.rules.ts` / `lucene-search-does-not-touch-sqlite` : refuse dans `core/src/main/java/com/nexus/search/lucene/` toute référence à `com.nexus.persistence`, `java.sql`, `org.sqlite` ou `IndexRepository` (commentaires et littéraux effacés).
 
 ## Analyse détaillée des options
 

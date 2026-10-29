@@ -2,7 +2,8 @@
 id: BE-0043
 title: "Fédérer la recherche locale par projet avant d'introduire un moteur externe"
 domain: backend
-rules: false
+rules: true
+files: ["core/src/main/java/com/nexus/search/FederatedSearchService.java", "core/src/main/java/com/nexus/application/NexusApplication.java", "core/src/main/java/com/nexus/context/ContextBuilder.java", "core/src/main/java/com/nexus/context/DefaultContextBuilder.java"]
 ---
 
 # Fédérer la recherche locale par projet avant d'introduire un moteur externe
@@ -77,6 +78,22 @@ Aucune recherche globale implicite sur tous les projets n'est introduite dans ce
 
 Le `ContextBuilder` reste mono-projet. La construction d'un contexte multi-projet doit faire l'objet d'une décision séparée, car les instructions natives, skills et données Git sont projet-locales et doivent être arbitrées sous un budget de tokens unique.
 
+## Do's and Don'ts
+
+### Do
+
+- Fédérer des recherches projet-locales par `FederatedSearchService`, au-dessus du `SearchService` existant.
+- Accepter uniquement une liste explicite de projets, dédupliquée par `projectId`.
+- Exécuter la recherche indépendamment pour chaque projet, avec son index Lucene isolé, ses données SQLite, ses stratégies et son ranking.
+- Trier les résultats globaux de façon déterministe et conserver le `ProjectDescriptor` avec chaque résultat.
+- Exposer la fédération par `NexusApplication.searchAcrossProjects(...)` pour que les adaptateurs ne la réimplémentent pas.
+
+### Don't
+
+- Ne pas dédupliquer deux résultats provenant de projets distincts.
+- Ne pas introduire de recherche globale implicite sur tous les projets.
+- Ne pas rendre le `ContextBuilder` multi-projet : un contexte multi-projet relève d'une décision séparée.
+
 ## Conséquences positives
 
 - le multi-repository devient possible sans nouveau moteur ;
@@ -139,6 +156,17 @@ La décision est respectée si :
 ## Conditions de réexamen
 
 Réexaminer cette décision si les mesures de passage à l'échelle montrent que l'exécution d'une recherche par projet, la recherche structurelle SQLite ou la reconstruction des index Lucene ne satisfont plus les besoins opérationnels de NEXUS.
+
+## Compliance and Enforcement
+
+- Tests (`core`, lancés par `mvnw clean install`) : `core/src/test/java/com/nexus/search/FederatedSearchServiceIntegrationTest.java` (`searchesExplicitProjectsPreservesProvenanceAndDiversifiesPaths`, `rejectsAnEmptyProjectScope`), `core/src/test/java/com/nexus/search/FederatedSearchServicePolicyTest.java`, `core/src/test/java/com/nexus/search/FederatedSearchScopePolicyTest.java`, `core/src/test/java/com/nexus/search/FederatedGoldenSearchCorpusTest.java`.
+- Règle Archgate `BE-0043-federer-la-recherche-locale-par-projet-avant-un-moteur-externe.rules.ts` : `federated-search-built-on-search-service` exige que `FederatedSearchService` référence `SearchService` sans accès direct à Lucene, à `com.nexus.persistence`, à `java.sql` ni à `java.net`, et que `NexusApplication` déclare `searchAcrossProjects` ; `context-builder-stays-single-project` refuse tout type `Federated*` dans `ContextBuilder.java` et `DefaultContextBuilder.java` ; commentaires et littéraux effacés.
+
+## Écarts constatés
+
+Constat du 2026-10-29 ; la décision est inchangée.
+
+- **Contexte multi-projet sans décision séparée.** La décision réserve la construction d'un contexte multi-projet à une décision séparée. `FederatedContextService` (`core/src/main/java/com/nexus/context/FederatedContextService.java:28`) construit un contexte sur plusieurs projets en composant des `ContextBuilder` mono-projet (`core/src/main/java/com/nexus/context/FederatedContextService.java:39`), et aucun ADR du registre ni de `archive/` ne porte cette décision (aucune occurrence de `FederatedContext` dans `docs/architecture/adr/`). Le `ContextBuilder` lui-même reste mono-projet : `ContextRequest` porte un seul `projectId` (`core/src/main/java/com/nexus/context/ContextRequest.java:11`).
 
 ## Décisions liées
 

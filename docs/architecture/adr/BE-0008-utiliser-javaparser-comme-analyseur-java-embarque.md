@@ -2,7 +2,8 @@
 id: BE-0008
 title: "Utiliser JavaParser comme analyseur Java embarqué du MVP"
 domain: backend
-rules: false
+rules: true
+files: ["core/src/main/java/**", "adapters/*/src/main/java/**"]
 ---
 
 # Utiliser JavaParser comme analyseur Java embarqué du MVP
@@ -91,6 +92,26 @@ La décision est respectée si :
 - les tests vérifient l'extraction des catégories de symboles prévues ;
 - un échec d'analyse d'un fichier ne rend pas conceptuellement impossible l'indexation du reste du repository ;
 - les besoins sémantiques avancés ne sont pas ajoutés arbitrairement à `LanguageAnalyzer`.
+
+## Do's and Don'ts
+
+### Do
+
+- Utiliser JavaParser comme implémentation embarquée par défaut de `LanguageAnalyzer` pour Java.
+- Extraire avec JavaParser classes, interfaces, records, enums, méthodes, signatures, imports, package, positions et plages de lignes.
+- Normaliser le résultat de JavaParser dans les modèles NEXUS (`CodeSymbol`, `SymbolRelation`).
+- Confier les résolutions plus riches (références précises, usages, implémentations, hiérarchies) à des `CodeIntelligenceProvider` distincts.
+
+### Don't
+
+- Ne pas faire de JavaParser une dépendance des contrats métier.
+- Ne pas désigner JavaParser comme moteur sémantique universel de NEXUS.
+
+## Compliance and Enforcement
+
+- Tests `JavaParserLanguageAnalyzerTest` et `JavaParserSymbolRangeValidationTest` (`core/src/test/java/com/nexus/index/java/`, lancés par `mvnw verify`) : extraction des types, méthodes et imports, refus d'un AST partiel, bornes de cardinalité et de plages.
+- Règle Archgate `BE-0008-utiliser-javaparser-comme-analyseur-java-embarque.rules.ts` / `javaparser-confined-to-java-analyzer` : refuse toute référence à `com.github.javaparser` dans les sources de production hors de `core/src/main/java/com/nexus/index/java/` (commentaires et littéraux effacés) et vérifie que `JavaParserLanguageAnalyzer` implémente `LanguageAnalyzer`.
+- Revue : les besoins sémantiques avancés ne sont pas ajoutés à `LanguageAnalyzer`.
 
 ## Analyse détaillée des options
 

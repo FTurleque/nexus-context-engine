@@ -99,6 +99,24 @@ La décision est respectée si :
 - un fichier long utilise un extrait plutôt qu'une inclusion intégrale automatique ;
 - chaque `ContextItem` indique sa plage de lignes et sa troncature.
 
+## Do's and Don'ts
+
+### Do
+
+- Matérialiser d'abord des fragments à partir des symboles classés (lignes `startLine..endLine` et petit contexte autour).
+- Utiliser des fragments de fichier lorsque aucun symbole suffisamment précis n'est disponible : contenu complet pour un fichier court, fenêtres autour des termes de la requête pour un fichier long.
+- Fusionner les plages chevauchantes ou adjacentes d'un même fichier avant estimation du budget.
+- Conserver dans chaque fragment chemin, type de candidat, symbole éventuel, lignes de début et de fin, score, raisons, estimation de tokens et indication de troncature.
+
+### Don't
+
+- Ne pas ajouter le contenu complet d'un fichier qui a déjà des fragments symboliques pertinents, sauf fichier assez petit pour rester sous les limites configurées.
+
+## Compliance and Enforcement
+
+- Tests `FragmentMergerTest`, `ContextFragmentFactoryRangeValidationTest`, `ContextFragmentFactoryPathBoundaryTest` et `DefaultContextBuilderIntegrationTest` (`buildsDeterministicSymbolFirstContextWithinBudget`), dans `core/src/test/java/com/nexus/context/`, lancés par `mvnw verify`.
+- Aucune règle Archgate : le choix des fragments est un comportement, vérifié par les tests et en revue.
+
 ## Analyse détaillée des options
 
 ### Toujours inclure les fichiers complets

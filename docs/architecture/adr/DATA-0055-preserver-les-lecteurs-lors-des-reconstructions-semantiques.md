@@ -49,6 +49,22 @@ Le cache ferme et remplace son lecteur lorsqu'un même UUID désigne désormais
 un autre répertoire. Les mutations et les lectures de façade conservent la
 sérialisation par projet de l'ADR-0052.
 
+## Do's and Don'ts
+
+### Do
+
+- Reconstruire normalement par `IndexWriter` en mode `CREATE`, sans purge préalable.
+- Ne valider le nouveau corpus qu'après l'ajout de tous les documents.
+- Sur un commit corrompu ou illisible, produire un index complet dans `semantic-lucene/recovery-<uuid>`, puis le publier, une fois son commit réussi, par remplacement atomique du fichier `current-generation`.
+- Borner le pointeur `current-generation`, le lire sans suivre de lien et le limiter à un nom de génération local validé.
+- Lire les index existants à leur emplacement historique en l'absence de pointeur.
+- Résoudre le répertoire actif avant chaque opération de lecture, et fermer puis remplacer le lecteur caché quand un même UUID désigne un autre répertoire.
+
+### Don't
+
+- Ne pas purger les fichiers Lucene avant un rebuild normal.
+- Ne pas publier un corpus partiel, ni après une exception, ni sur un stockage qui ne permet pas le remplacement atomique.
+
 ## Consequences
 
 Les lecteurs indépendants suivent les rebuilds ordinaires et les récupérations,
@@ -76,3 +92,8 @@ l'absence de publication partielle. Ils sont exécutés sous Windows et Linux.
 
 - [Procédure opérateur](../../developer/semantic-search.md)
 - [Audit d'origine](../../audits/2026-09-13-audit-complet-apres-merge-221.md)
+
+## Compliance and Enforcement
+
+- Tests `LuceneSemanticSearchIndexTest` (`core/src/test/java/com/nexus/search/semantic/lucene/`) : `independentPersistentReaderFollowsRepeatedRebuildsAndEmptyCommits`, `independentReaderFollowsRecoveryFromCorruptCommitAndCanThenWrite`, `rebuildWithNewDimensionsDoesNotServeThePreviousVectorSpace`, `failedRebuildDoesNotPublishPartialDocuments`, `refusesRecoveryPointersOutsideTheSemanticDirectory`, `explicitRebuildRecoversPhysicallyCorruptIndex`, lancés par `mvnw clean install` (workflow `.github/workflows/ci.yml` : job Linux reactor, et job Windows gate par `scripts/validate-phase-6.ps1`).
+- Aucune règle Archgate : le mode d'ouverture et la publication du pointeur ne se vérifient pas sur le texte du dépôt ; vérifié en revue.

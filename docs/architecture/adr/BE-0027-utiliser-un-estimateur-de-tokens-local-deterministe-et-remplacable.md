@@ -2,7 +2,8 @@
 id: BE-0027
 title: "Utiliser un estimateur de tokens local, déterministe et remplaçable"
 domain: backend
-rules: false
+rules: true
+files: ["core/src/main/java/com/nexus/token/**", "core/src/main/java/com/nexus/context/**"]
 ---
 
 # Utiliser un estimateur de tokens local, déterministe et remplaçable
@@ -76,6 +77,23 @@ La décision est respectée si :
 - l'implémentation par défaut fonctionne sans réseau ;
 - un autre `TokenEstimator` peut être injecté ;
 - le bundle expose l'identité ou la stratégie de l'estimateur utilisé.
+
+## Do's and Don'ts
+
+### Do
+
+- Fournir une heuristique locale déterministe derrière le port `TokenEstimator`.
+- Estimer par défaut `ceil(codePointCount / 3.5)`, à partir des points de code Unicode.
+- Garder le contrat `TokenEstimator` indépendant de l'heuristique.
+
+### Don't
+
+- Ne pas présenter l'estimation comme le comptage exact d'un modèle.
+
+## Compliance and Enforcement
+
+- Test `HeuristicTokenEstimatorTest` (`estimatesDeterministicallyAndHandlesUnicodeCodePoints`, `core/src/test/java/com/nexus/token/`, lancé par `mvnw verify`).
+- Règle Archgate `BE-0027-utiliser-un-estimateur-de-tokens-local-deterministe-et-remplacable.rules.ts` / `token-estimation-behind-port` : `HeuristicTokenEstimator` implémente `TokenEstimator` et n'ouvre aucun accès réseau ; `core/src/main/java/com/nexus/context/` ne nomme pas `HeuristicTokenEstimator` et ne code pas en dur le ratio `3.5` (commentaires et littéraux effacés).
 
 ## Analyse détaillée des options
 

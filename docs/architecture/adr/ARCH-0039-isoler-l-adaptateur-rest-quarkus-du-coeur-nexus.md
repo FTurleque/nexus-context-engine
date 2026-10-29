@@ -2,7 +2,8 @@
 id: ARCH-0039
 title: "Isoler l'adaptateur REST Quarkus du cœur NEXUS"
 domain: architecture
-rules: false
+rules: true
+files: ["core/pom.xml", "adapters/mcp-java/pom.xml", "adapters/assistant-clients/pom.xml", "adapters/rest-quarkus/src/main/java/**"]
 ---
 
 # Isoler l'adaptateur REST Quarkus du cœur NEXUS
@@ -132,6 +133,20 @@ Il expose :
 
 Les DTO REST sont définis dans l'adaptateur. Aucun modèle du cœur n'est utilisé comme contrat HTTP public.
 
+## Do's and Don'ts
+
+### Do
+
+- Implémenter l'adaptateur REST dans `adapters/rest-quarkus/`, avec son propre `pom.xml`, dépendant du JAR cœur NEXUS.
+- Faire porter à l'adaptateur la composition du runtime, les DTO HTTP, le mapping domaine ↔ DTO, les ressources, la gestion des erreurs HTTP, la santé et les métriques.
+- Définir les DTO REST dans l'adaptateur et versionner le contrat HTTP sous `/api/v1`.
+
+### Don't
+
+- Ne pas ajouter de dépendance Quarkus au `pom.xml` racine.
+- Ne pas mettre de logique métier d'indexation, de recherche ou de construction de contexte dans les ressources REST.
+- Ne pas utiliser un modèle du cœur comme contrat HTTP public.
+
 ## Consequences
 
 ### Positives
@@ -160,6 +175,19 @@ La décision est respectée si :
 5. les réponses HTTP utilisent des DTO dédiés ;
 6. les tests Quarkus valident projets, indexation, recherche, contexte, explication, santé et métriques ;
 7. le self-smoke historique du cœur reste vert.
+
+## Compliance and Enforcement
+
+- Règle Archgate `ARCH-0039-isoler-l-adaptateur-rest-quarkus-du-coeur-nexus.rules.ts` / `quarkus-dependencies-only-in-rest-adapter` : aucun `groupId` Quarkus dans `core/pom.xml`, `adapters/mcp-java/pom.xml` et `adapters/assistant-clients/pom.xml`. Le `pom.xml` racine n'est pas couvert (voir « Écarts constatés »).
+- Règle Archgate `ARCH-0039-isoler-l-adaptateur-rest-quarkus-du-coeur-nexus.rules.ts` / `rest-adapter-delegates-business-logic` : les sources de `adapters/rest-quarkus/src/main/java`, commentaires et littéraux effacés, ne nomment aucun service ni package technique du moteur (`ContextBuilder`, rankers, `SearchService`, `ProjectIndexingService`, `com.nexus.persistence`, `com.nexus.search.lucene`…) et ne construisent ni `ContextBundle` ni `RankedCandidate`.
+- Test `NexusResourceTest.exposesTheNexusFlowThroughRestWithoutLeakingCoreModels` et `ManagementEndpointIsolationTest` (`adapters/rest-quarkus/src/test/java/com/nexus/api`) ; tests lancés par `./mvnw -B clean install` (job « Linux reactor Maven build » de `.github/workflows/ci.yml`).
+
+## Écarts constatés
+
+Constat du 2026-10-29 (la décision ci-dessus est inchangée) :
+
+- Le `pom.xml` racine importe la BOM Quarkus dans son `dependencyManagement` (`pom.xml:89-95`) et gère `quarkus-maven-plugin` dans son `pluginManagement` (`pom.xml:172-176`).
+- L'adaptateur n'est plus un sous-projet Maven autonome (option C) : c'est un module du réacteur racine (`pom.xml:25`) qui hérite de `nexus-context-engine-parent` (`adapters/rest-quarkus/pom.xml:7-12`), forme proche de l'option B, et dépend de `nexus-context-engine:${project.version}`, soit `0.2.0` (`adapters/rest-quarkus/pom.xml:19-23`, `pom.xml:9`), et non de `0.1.0-SNAPSHOT`.
 
 ## Analyse détaillée et réexamen
 

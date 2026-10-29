@@ -2,7 +2,8 @@
 id: SEC-0033
 title: "Séparer les instructions contextuelles de la configuration opérationnelle des agents"
 domain: security
-rules: false
+rules: true
+files: ["core/src/main/java/com/nexus/context/**"]
 ---
 
 # Séparer les instructions contextuelles de la configuration opérationnelle des agents
@@ -128,6 +129,21 @@ sont considérées comme spécifiques à la machine ou à l'utilisateur.
 
 Elles ne deviennent jamais une source de contexte portable par défaut.
 
+## Do's and Don'ts
+
+### Do
+
+- Sélectionner comme sources contextuelles `AGENTS.md`, `AGENT.md`, `CLAUDE.md`, `.claude/CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, `.github/instructions/**/*.instructions.md`, la documentation Markdown pertinente et les fichiers référencés explicitement depuis une instruction supportée.
+- Détecter et signaler les configurations opérationnelles dans les métadonnées de diagnostic du build de contexte.
+- Confier une directive contextuelle explicite (`@docs/architecture.md`, `applyTo`) à un provider qui la comprend et l'interprète de manière sûre.
+
+### Don't
+
+- Ne pas injecter automatiquement le contenu brut d'une configuration opérationnelle (`.claude/settings.json`, `.claude/settings.local.json`, `.mcp.json`, permissions, hooks, serveurs MCP, modèle, variables d'environnement).
+- Ne lancer aucun hook, ne démarrer aucun serveur MCP et ne pas transformer les permissions d'un outil en instructions de contexte.
+- Ne pas demander au LLM d'interpréter arbitrairement un JSON de configuration.
+- Ne pas faire d'une variante locale non versionnée comme `.claude/settings.local.json` une source de contexte portable par défaut.
+
 ## Conséquences positives
 
 - NEXUS tient compte de l'écosystème existant sans absorber son exécution ;
@@ -160,6 +176,18 @@ La décision est respectée si :
 - `.claude/CLAUDE.md` reste une source d'instructions ;
 - une référence explicite vers un fichier du repository peut être intégrée ;
 - aucun hook ou serveur externe n'est exécuté pendant la construction du contexte.
+
+## Compliance and Enforcement
+
+- Règle Archgate `SEC-0033-separer-instructions-contextuelles-et-configuration-operationnelle-des-agents.rules.ts` / `context-build-runs-no-hook-or-mcp-server` : sous `core/src/main/java/com/nexus/context/` (commentaires et littéraux effacés), aucun `ProcessBuilder`, `Runtime.getRuntime().exec`, `ProcessHandle` ni référence au SDK `io.modelcontextprotocol`. Contrôle propre à Archgate.
+- Test `core/src/test/java/com/nexus/context/NativeContextSourcesIntegrationTest.java` (`combinesApplicableNativeInstructionsCodeAndDocumentationWithoutInjectingOperationalConfig`) : `.claude/CLAUDE.md` est sélectionné, le contenu de `.claude/settings.json` n'est pas injecté et sa présence figure dans les métadonnées.
+- Test `core/src/test/java/com/nexus/context/source/NativeProjectCustomizationDetectorTest.java` : la détection refuse les symlinks finaux et d'ancêtre.
+
+## Écarts constatés
+
+### 2026-10-29
+
+- La décision nomme la métadonnée de diagnostic `nativeConfigurationsDetected` ; le code l'expose sous la clé `nativeCustomizationsDetected` (`core/src/main/java/com/nexus/context/ContextBuildMetadata.java:100`), clé vérifiée par `NativeContextSourcesIntegrationTest.java:133`. Aucune occurrence de `nativeConfigurationsDetected` hors de cet ADR.
 
 ## Conditions de réexamen
 

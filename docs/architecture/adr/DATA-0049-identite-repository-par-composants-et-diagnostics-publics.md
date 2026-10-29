@@ -52,6 +52,23 @@ Les formes drive/UNC externes sont refusées par le parseur provider. Les noms P
 contenant un backslash non initial restent littéraux. Aucun repli ne cherche un
 autre fichier quand un chemin provider est inconnu ou incompatible.
 
+## Do's and Don'ts
+
+### Do
+
+- Encoder les identités repository par `com.nexus.paths.RepositoryPath` : composants du `Path` relatif joints par `/`, casse, espaces et caractères de chaque composant conservés.
+- Refuser dans une identité fichier la racine, les composants vides, `.`, `..` et NUL ; n'admettre la chaîne vide que par `encode`, pour le scope racine.
+- Reconstruire un chemin par le filesystem du projet, un composant à la fois, et refuser un composant non représentable à l'identique.
+- Laisser à `ProjectPathGuard` puis `SafeFileIO` les accès physiques, les symlinks, la revalidation et les lectures bornées.
+- Passer par `fromPath` / `encode` pour le filesystem, par le constructeur validant puis `resolve` / `toPath` pour les identités persistées, et par `PublicProjectPathPolicy` pour la sortie publique.
+- Refuser dans le parseur provider les formes drive et UNC externes.
+
+### Don't
+
+- Ne pas transformer silencieusement un backslash POSIX en séparateur Windows.
+- Ne pas chercher un autre fichier quand un chemin provider est inconnu ou incompatible.
+- Ne pas réinterpréter les chaînes JGit.
+
 ## Upgrade et invalidation
 
 V007 est une nouvelle migration checksumée ; V001–V006 sont inchangées. Elle
@@ -96,3 +113,8 @@ information déjà perdue. Sur un corpus contenant un backslash, NEXUS exige don
 `repositoryPathFormat=repository-components-v2` et contrôle cette déclaration
 avant toute lecture source. Le producteur doit être corrigé pour émettre ce
 format. Le corpus ordinaire reste compatible avec les exports v1 existants.
+
+## Compliance and Enforcement
+
+- Tests `RepositoryPathTest` (`core/src/test/java/com/nexus/paths/`), `PosixPathIdentityIntegrationTest` (`core/src/test/java/com/nexus/index/`), `SchemaMigratorRepositoryPathUpgradeTest` (`core/src/test/java/com/nexus/persistence/sqlite/`, invalidation V007 puis reconstruction), `MinosProjectPathGuardTest.mapsPosixBackslashUsingExactScannedIdentity`, `PublicProjectPathPolicyTest` et `PublicDiagnosticPolicyTest` (`core/src/test/java/com/nexus/security/`), `ApiMapperPrivacyTest` (`adapters/rest-quarkus`) et `NexusMcpNegativeContractTest` (`adapters/mcp-java`) pour `[INTERNAL_PATH]`, lancés par `mvnw clean install` (workflow `.github/workflows/ci.yml` : job Linux reactor, et job Windows gate par `scripts/validate-phase-6.ps1`).
+- Aucune règle Archgate : une interdiction textuelle du remplacement de séparateur toucherait aussi `core/src/main/java/com/nexus/security/PublicDiagnosticPolicy.java:33`, qui l'applique à une racine Windows pour filtrer la sortie publique, hors de l'identité repository ; vérifié en revue.

@@ -2,7 +2,8 @@
 id: ARCH-0005
 title: "Adopter un fonctionnement local-first et des intégrations externes opt-in"
 domain: architecture
-rules: false
+rules: true
+files: ["core/src/main/java/**"]
 ---
 
 # Adopter un fonctionnement local-first et des intégrations externes opt-in
@@ -98,6 +99,19 @@ La décision est respectée si :
 - les secrets et dossiers générés courants sont exclus ;
 - toute fonctionnalité externe expose clairement son activation et sa provenance.
 
+## Do's and Don'ts
+
+### Do
+
+- Faire fonctionner le chemin critique sans LLM distant, fournisseur d'embeddings, base vectorielle distante, index de code hébergé, GitHub ou GitLab obligatoire, ni registre de skills externe.
+- Rendre toute intégration externe explicitement activée, identifiable dans la configuration, observable dans les journaux ou métadonnées, désactivable sans empêcher le cœur de fonctionner, et documentée quant aux données qui peuvent quitter la machine.
+- Respecter à l'indexation `.gitignore`, `.nexusignore`, les exclusions intégrées des contenus générés courants et les exclusions des secrets manifestes (`.env`, clés privées, certificats sensibles).
+
+### Don't
+
+- Ne pas faire d'appel réseau dans le chemin local.
+- Ne pas exiger de clé API pour indexer, rechercher ou construire un contexte.
+
 ## Analyse détaillée des options
 
 ### Utiliser par défaut des services cloud
@@ -177,6 +191,12 @@ Une intégration externe spécifique peut faire l'objet d'un ADR séparé si ell
 - coût significatif ;
 - contrainte réglementaire ;
 - dépendance structurante.
+
+## Compliance and Enforcement
+
+- Règle Archgate `ARCH-0005-adopter-un-fonctionnement-local-first-et-opt-in.rules.ts` / `core-network-only-in-opt-in-providers` : refuse dans `core/src/main/java`, commentaires et littéraux effacés, tout client réseau Java (`java.net.http`, `URL`/`URLConnection`, sockets, canaux réseau NIO) et tout transport distant JGit, hors du provider d'embeddings opt-in `com.nexus.search.semantic.ollama`.
+- Test `ProjectScannerTest.respectsGitignoreNexusignoreAndBuiltInExclusions` (`core/src/test/java/com/nexus/index/scan`) ; tests lancés par `./mvnw -B clean install` (job « Linux reactor Maven build » de `.github/workflows/ci.yml`).
+- Revue : activation explicite, observabilité et documentation de toute intégration externe.
 
 ## Décisions liées
 

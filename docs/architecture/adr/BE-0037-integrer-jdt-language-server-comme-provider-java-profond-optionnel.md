@@ -2,7 +2,8 @@
 id: BE-0037
 title: "Intégrer JDT Language Server comme provider Java profond optionnel"
 domain: backend
-rules: false
+rules: true
+files: ["core/src/main/java/**", "core/pom.xml"]
 ---
 
 # Intégrer JDT Language Server comme provider Java profond optionnel
@@ -208,6 +209,28 @@ Le provider JDT NEXUS est un consommateur d'intelligence de code.
 
 Il n'applique pas les `workspace/applyEdit` demandés par le serveur et ne transforme pas NEXUS en IDE ou en client de refactoring.
 
+## Do's and Don'ts
+
+### Do
+
+- Intégrer JDT LS comme implémentation optionnelle de `CodeIntelligenceProvider` (`JdtLanguageServerCodeIntelligenceProvider`).
+- Ne rendre le provider disponible que si `NEXUS_JDTLS_HOME` pointe vers une distribution JDT Language Server extraite.
+- Déclencher l'analyse profonde uniquement par `nexus index <projet> --deep-java` ou `nexus index <projet> --rebuild --deep-java`.
+- Échouer explicitement quand `--deep-java` est demandé sans provider configuré.
+- Lancer JDT LS dans un processus Java distinct, sur `stdio` avec le framing JSON-RPC de LSP, et l'arrêter après chaque analyse profonde initiale.
+- Donner à chaque projet un workspace JDT LS distinct sous `NEXUS_HOME/jdtls-workspaces`.
+- Normaliser les réponses en `CodeSymbol`, `SymbolRelation`, `IndexedSymbol`, `IndexedRelation` et `CodeIntelligenceSnapshot`, avec la provenance `jdtls` et une confiance initiale de `1,0`.
+- Purger les données du provider actif quand une indexation normale sans `--deep-java` détecte une modification ou une suppression Java.
+- Borner à 250 symboles par défaut (`NEXUS_JDTLS_MAX_SYMBOLS`, plafond 10 000) et à 120 secondes par échange (`NEXUS_JDTLS_TIMEOUT_SECONDS`, plafond 3 600).
+
+### Don't
+
+- Ne jamais lancer JDT LS sans `--deep-java`.
+- Ne pas dépendre des classes Eclipse JDT ni des modèles LSP dans le cœur.
+- Ne pas accepter, pour ces deux paramètres, une valeur non entière, nulle, négative ou supérieure au plafond ; seule une valeur absente ou vide prend le défaut.
+- Ne pas appliquer les `workspace/applyEdit` demandés par le serveur.
+- Ne pas introduire de pool ni de daemon persistant sans mesure qui le justifie.
+
 ## Conséquences positives
 
 - l'indexation normale reste inchangée lorsqu'aucun besoin profond n'existe ;
@@ -247,6 +270,11 @@ Cette décision pourra être réexaminée si :
 - un mode daemon JDT LS apporte un gain mesurable ;
 - une bibliothèque LSP mature réduit significativement le code d'adaptation sans alourdir le cœur ;
 - un autre provider Java offre un meilleur compromis coût/qualité.
+
+## Compliance and Enforcement
+
+- Tests (`core`, lancés par `mvnw clean install`) : `core/src/test/java/com/nexus/index/jdt/JdtLanguageServerCodeIntelligenceProviderTest.java` (`normalizesReferencesImplementationsTypeHierarchyAndCallHierarchy`, `rejectsSymlinkedWorkspaceRoot`), `core/src/test/java/com/nexus/index/jdt/JdtConfigurationBoundsTest.java` (plafonds acceptés, valeurs invalides ou trop grandes rejetées, défaut seulement si la valeur est absente), `core/src/test/java/com/nexus/index/ProjectIndexingServiceTest.java` (`runsActiveProviderOnlyOnDeepIndexAndPurgesItAfterJavaChanges`).
+- Règle Archgate `BE-0037-integrer-jdt-language-server-comme-provider-java-profond-optionnel.rules.ts` : `core-has-no-eclipse-jdt-or-lsp-dependency` refuse `org.eclipse.jdt` et `org.eclipse.lsp4j` dans `core/src/main/java` (commentaires et littéraux effacés) et dans `core/pom.xml` ; `jdt-cost-bounds-match-decision` vérifie que `DEFAULT_MAX_SYMBOLS`, `MAX_SYMBOLS`, `DEFAULT_TIMEOUT_SECONDS` et `MAX_TIMEOUT_SECONDS` valent 250, 10 000, 120 et 3 600 ; `jdt-workspace-edits-refused` exige que `JdtStdioSession` réponde `applied=false` à `workspace/applyEdit` et ne réponde jamais `applied=true`.
 
 ## Décisions liées
 

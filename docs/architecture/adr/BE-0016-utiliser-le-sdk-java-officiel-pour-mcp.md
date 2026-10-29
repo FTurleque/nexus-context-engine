@@ -2,7 +2,8 @@
 id: BE-0016
 title: "Utiliser le SDK Java MCP officiel pour l'adaptateur MCP"
 domain: backend
-rules: false
+rules: true
+files: ["core/src/main/java/**", "adapters/*/src/main/java/**", "adapters/mcp-java/pom.xml"]
 ---
 
 # Utiliser le SDK Java MCP officiel pour l'adaptateur MCP
@@ -101,6 +102,28 @@ La décision est respectée si :
 - un même service de recherche produit les mêmes résultats depuis CLI et MCP ;
 - les handlers ne calculent aucun score métier ;
 - NEXUS reste utilisable sans démarrer un serveur MCP.
+
+## Do's and Don'ts
+
+### Do
+
+- Construire l'adaptateur MCP sur le SDK Java MCP officiel.
+- Garder les handlers MCP minces : valider et traduire la requête, appeler un service applicatif NEXUS, traduire le résultat en réponse MCP.
+- Traiter le SDK MCP comme une dépendance d'adaptateur.
+
+### Don't
+
+- Ne pas réimplémenter la recherche, le ranking ou le budget dans les handlers MCP.
+- Ne pas faire apparaître le SDK MCP dans `ContextRequest`, `ContextBundle`, `SearchStrategy` ou les modèles métier.
+- Ne pas traiter la liste des outils MCP candidats comme une API figée.
+
+## Compliance and Enforcement
+
+- Tests `NexusMcpServerIntegrationTest` (`exposesTheSameSearchAndContextResultsThroughARealMcpStdioClient`), `NexusMcpToolSchemaContractTest`, `NexusMcpNegativeContractTest` et `NexusMcpServerLifecycleTest` (`adapters/mcp-java/src/test/java/com/nexus/mcp/`, lancés par `mvnw verify`).
+- Script `scripts/release/test-mcp-protocol.ps1`, appelé par `scripts/release/test-docker-runtime.ps1` et `scripts/release/test-windows-installer.ps1` : dialogue MCP réel contre l'artefact empaqueté.
+- Règle Archgate `BE-0016-utiliser-le-sdk-java-officiel-pour-mcp.rules.ts` / `mcp-sdk-confined-to-mcp-adapter` : refuse toute référence à `io.modelcontextprotocol` dans les sources de production hors de `adapters/mcp-java/src/main/java/` (commentaires et littéraux effacés).
+- Règle Archgate `BE-0016-utiliser-le-sdk-java-officiel-pour-mcp.rules.ts` / `mcp-adapter-uses-official-sdk` : `adapters/mcp-java/pom.xml` dépend du groupId `io.modelcontextprotocol.sdk` et une source de l'adaptateur importe `io.modelcontextprotocol.server`.
+- Revue : les handlers ne calculent aucun score métier.
 
 ## Analyse détaillée des options
 

@@ -2,7 +2,8 @@
 id: BE-0010
 title: "Adopter un ranking hybride, déterministe et explicable"
 domain: backend
-rules: false
+rules: true
+files: ["core/src/main/java/com/nexus/ranking/**"]
 ---
 
 # Adopter un ranking hybride, déterministe et explicable
@@ -103,6 +104,27 @@ La décision est respectée si :
 - les gains des signaux de graphe sont mesurés avant généralisation ;
 - `--explain` présente les raisons de sélection et d'exclusion ;
 - aucun appel LLM n'est nécessaire pour calculer ou expliquer le score.
+
+## Do's and Don'ts
+
+### Do
+
+- Combiner plusieurs composantes de score normalisées dans un ranking hybride.
+- Calculer le score final à partir d'une configuration explicite et stable.
+- Produire le même classement pour une même requête, un même index et une même configuration.
+- Produire l'explication d'un score à partir des composantes qui ont servi à le calculer.
+- Valider par mesure les principes repris du RepoMap d'Aider.
+
+### Don't
+
+- Ne pas copier mécaniquement l'algorithme ni le code d'Aider.
+- Ne pas générer l'explication d'un score a posteriori par un LLM.
+
+## Compliance and Enforcement
+
+- Tests `DeterministicContextRankerValidationTest`, `DeterministicContextRankerGitTest`, `SemanticRankingTest` (`core/src/test/java/com/nexus/ranking/`), `SearchServiceIntegrationTest` (`combinesLexicalSymbolAndGraphSignalsDeterministically`) et `GoldenSearchCorpusTest` (`core/src/test/java/com/nexus/search/`), lancés par `mvnw verify`.
+- Règle Archgate `BE-0010-adopter-un-ranking-hybride-deterministe-et-explicable.rules.ts` / `ranking-has-no-network-or-llm-call` : refuse dans `core/src/main/java/com/nexus/ranking/` tout accès réseau (`java.net`, client HTTP, socket), tout lancement de processus et toute référence à `EmbeddingProvider` ou à Ollama (commentaires et littéraux effacés).
+- Revue : la stabilité des poids et des composantes ; aucun contrôle automatisé ne les fige.
 
 ## Analyse détaillée des options
 

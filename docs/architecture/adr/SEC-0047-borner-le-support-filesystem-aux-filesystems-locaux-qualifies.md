@@ -2,7 +2,8 @@
 id: SEC-0047
 title: "Borner le support filesystem aux filesystems locaux qualifiés"
 domain: security
-rules: false
+rules: true
+files: ["core/src/main/java/**", "adapters/*/src/main/java/**"]
 ---
 
 # Borner le support filesystem aux filesystems locaux qualifiés
@@ -61,6 +62,21 @@ Cette décision n'ajoute pas un blocage runtime fondé sur `FileStore.type()` : 
 
 « Non supporté » signifie ici que NEXUS ne promet ni exclusion mutuelle inter-processus ni confinement renforcé au-delà des garanties fournies par le filesystem sous-jacent. Cela ne signifie pas que l'exécution échouera nécessairement.
 
+## Do's and Don'ts
+
+### Do
+
+- Ne déclarer supportés que les usages sur filesystem local, lorsque les qualifications Linux/Windows de la version concernée sont vertes.
+- Exiger une qualification complète (technologie, configuration et scénarios) avant toute extension du support.
+- Tenir la frontière de support par la documentation et la qualification.
+
+### Don't
+
+- Ne pas ajouter de blocage runtime fondé sur `FileStore.type()`.
+- Ne pas présenter comme supportés SMB/CIFS général, NFS, les volumes distribués ou synchronisés non démontrés, ni les montages WSL/DrvFS ou de virtualisation sans qualification dédiée.
+- Ne pas élargir le contrat sur la seule foi d'une qualification ciblée ou observationnelle, dont la fixture SMB 3.1.1 loopback Windows.
+- Ne pas promettre, hors périmètre, d'exclusion mutuelle inter-processus ni de confinement au-delà des garanties du filesystem sous-jacent.
+
 ## Confirmation
 
 La décision est confirmée par une qualification dédiée Linux/Windows couvrant au minimum :
@@ -104,6 +120,13 @@ Le résultat est une **preuve sélectionnée**, pas une extension du support. El
 - certains déploiements sur partage réseau restent hors support ;
 - aucune protection absolue contre un administrateur local ou un acteur filesystem activement hostile ;
 - une future extension réseau nécessitera une infrastructure de test adaptée, notamment multi-client et avec injection de panne.
+
+## Compliance and Enforcement
+
+- Règle Archgate `SEC-0047-borner-le-support-filesystem-aux-filesystems-locaux-qualifies.rules.ts` / `no-runtime-filesystem-type-gate` : aucun source de production (`core/src/main/java`, `adapters/*/src/main/java`) qui référence `FileStore` ou `getFileStore` n'appelle `.type()` ; commentaires et littéraux effacés. Contrôle propre à Archgate.
+- Workflow `.github/workflows/filesystem-semantics-qualification.yml` (Ubuntu et Windows) : `ProjectIndexLockManagerTest`, `SafeFileIOTest` et `FilesystemSemanticsQualificationTest` (`core/src/test/java/com/nexus/index/`, `core/src/test/java/com/nexus/security/`).
+- Workflow `.github/workflows/smb-filesystem-qualification.yml` : `SmbFilesystemQualificationTest` (`core/src/test/java/com/nexus/index/`), preuve ciblée SMB 3.1.1 loopback.
+- Revue : toute extension du support vers un filesystem réseau arrive par une PR de qualification séparée.
 
 ## Conditions de réexamen
 

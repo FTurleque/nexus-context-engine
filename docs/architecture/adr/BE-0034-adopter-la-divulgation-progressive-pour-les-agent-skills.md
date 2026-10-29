@@ -2,7 +2,8 @@
 id: BE-0034
 title: "Adopter la divulgation progressive pour les Agent Skills"
 domain: backend
-rules: false
+rules: true
+files: ["core/src/main/java/com/nexus/context/source/skill/**"]
 ---
 
 # Adopter la divulgation progressive pour les Agent Skills
@@ -131,6 +132,26 @@ La sélection est déterministe et locale. Elle utilise uniquement les métadonn
 
 Les skills activés utilisent un budget séparé et borné. Un skill ne doit pas être tronqué silencieusement : s'il ne tient pas dans le budget prévu, il est exclu avec une raison explicable afin d'éviter de transmettre des instructions procédurales incomplètes.
 
+## Do's and Don'ts
+
+### Do
+
+- Découvrir les skills par le port `SkillSourceProvider`, distinct de `ContextSourceProvider`.
+- À la découverte, lire uniquement le frontmatter de `SKILL.md` pour construire un `SkillDescriptor`.
+- Sélectionner de façon déterministe et locale, à partir des seuls `name` et `description` du skill et de la requête, avec un score et des raisons.
+- Lire le `SKILL.md` complet seulement à l'activation d'un skill sélectionné et en faire un `ContextItem` de type `SKILL`.
+- Reconnaître `.github/skills/**/SKILL.md`, `.claude/skills/**/SKILL.md` et `.agents/skills/**/SKILL.md`.
+- Valider `name` (obligatoire, 1 à 64 caractères, minuscules alphanumériques et tirets, égal au nom du dossier parent) et `description` (obligatoire, non vide, 1024 caractères au plus).
+- Inventorier les ressources du dossier du skill comme métadonnées légères.
+- Exclure avec une raison explicable un skill qui ne tient pas dans son budget séparé et borné.
+
+### Don't
+
+- Ne pas charger le corps Markdown dans le `SkillDescriptor`.
+- Ne jamais lancer les fichiers de `scripts/`, interpréter les permissions ni charger automatiquement les assets binaires.
+- Ne pas tronquer silencieusement un skill.
+- Ne pas rendre les embeddings obligatoires pour la sélection.
+
 ## Consequences
 
 ### Positives
@@ -167,6 +188,12 @@ Cette décision pourra être réexaminée si :
 - les clients imposent une sélection de skills non déterministe ou pilotée par modèle ;
 - un AI Skills Registry nécessite un contrat incompatible avec `SkillSourceProvider` ;
 - les mesures montrent qu'un ranking sémantique apporte un gain suffisamment important pour compléter le sélecteur lexical local.
+
+## Compliance and Enforcement
+
+- Tests (`core`, lancés par `mvnw clean install`) : `core/src/test/java/com/nexus/context/AgentSkillsIntegrationTest.java` (`activatesOnlyRelevantSkillAndNeverLoadsOrExecutesItsResourcesAutomatically`), `core/src/test/java/com/nexus/context/source/skill/LocalAgentSkillsProviderTest.java` (`discoversOnlyValidSkillsAndInventoriesResourcesWithoutLoadingTheirContent`), `core/src/test/java/com/nexus/context/source/skill/SkillFrontmatterParserTest.java`, `core/src/test/java/com/nexus/context/source/skill/SkillSelectorTest.java` (sélection sur `name` et `description`, déterministe), `core/src/test/java/com/nexus/context/source/skill/SkillContextSelectorTest.java` (`excludesOversizedSkillInsteadOfTruncatingIt`).
+- `scripts/self-smoke.ps1` (lancé par `/nx-validate`) vérifie qu'un item `SKILL` sélectionné porte le `SKILL.md` complet.
+- Règle Archgate `BE-0034-adopter-la-divulgation-progressive-pour-les-agent-skills.rules.ts` : `skill-resources-never-executed` refuse dans `com.nexus.context.source.skill` tout lancement de processus (`ProcessBuilder`, `Runtime.exec`, `ProcessHandle`), tout moteur de script (`javax.script`) et toute ouverture par `java.awt.Desktop` ; commentaires et littéraux effacés.
 
 ## References
 

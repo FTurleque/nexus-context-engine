@@ -2,7 +2,8 @@
 id: GEN-0002
 title: "Compiler le cœur avec Java 21 comme niveau minimal"
 domain: general
-rules: false
+rules: true
+files: ["pom.xml", "core/pom.xml"]
 ---
 
 # Compiler le cœur avec Java 21 comme niveau minimal
@@ -79,6 +80,19 @@ La décision est confirmée par :
 - l'absence d'option Maven imposant un niveau supérieur dans le module cœur ;
 - les futurs pipelines CI qui devront inclure au moins une exécution compatible Java 21.
 
+## Do's and Don'ts
+
+### Do
+
+- Fixer `<maven.compiler.release>21</maven.compiler.release>` dans le `pom.xml`.
+- Garder le code du cœur compatible avec Java 21, même quand il est développé et compilé avec un JDK plus récent.
+- Isoler dans un adaptateur optionnel, justifié par un ADR spécifique, toute contrainte de runtime plus récent que Java 21.
+
+### Don't
+
+- Ne pas relever le niveau minimal de compilation du cœur au-delà de Java 21.
+- Ne pas imposer un runtime plus récent à un adaptateur sans ADR spécifique qui isole et justifie cette contrainte.
+
 ## Analyse détaillée des options
 
 ### Compiler avec Java 25
@@ -150,6 +164,13 @@ Réexaminer la décision si :
 - une fonctionnalité essentielle nécessite une version supérieure ;
 - le coût de maintenir la compatibilité Java 21 dépasse son bénéfice ;
 - une future version majeure de NEXUS justifie explicitement un relèvement du niveau minimal.
+
+## Compliance and Enforcement
+
+- Règle Archgate `GEN-0002-compiler-le-coeur-en-java-21.rules.ts` / `core-compiles-with-release-21` : le `pom.xml` racine déclare une seule propriété `maven.compiler.release`, de valeur 21, et ni lui ni `core/pom.xml` ne fixent un autre niveau (`maven.compiler.source`/`target`, `<release>` ou `<source>` du compilateur) ; commentaires XML ignorés. Contrôle propre à Archgate.
+- `maven-enforcer-plugin` du `pom.xml` racine (`requireJavaVersion` `[21,)`) : le JDK de build est au moins Java 21 ; il ne borne pas le niveau de bytecode.
+- Workflow `.github/workflows/ci.yml` : les jobs installent un JDK 21 (`java-version`) avant `mvnw`.
+- Revue : une dépendance du cœur qui exige un runtime plus récent est isolée dans un adaptateur avec son ADR.
 
 ## Décisions liées
 

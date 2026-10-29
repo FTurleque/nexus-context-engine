@@ -2,7 +2,8 @@
 id: BE-0032
 title: "Préserver et normaliser le contexte natif des projets"
 domain: backend
-rules: false
+rules: true
+files: ["core/src/main/java/com/nexus/context/*.java"]
 ---
 
 # Préserver et normaliser le contexte natif des projets
@@ -182,6 +183,24 @@ Deux instructions dont le contenu normalisé est identique ne doivent pas consom
 
 NEXUS conserve la source de plus forte priorité et explique qu'une source équivalente a été dédupliquée.
 
+## Do's and Don'ts
+
+### Do
+
+- Découvrir chaque convention native (`.github/copilot-instructions.md`, `.github/instructions/**/*.instructions.md`, `AGENTS.md`, `AGENT.md`, `CLAUDE.md`, `.claude/CLAUDE.md`, `GEMINI.md`) par un `ContextSourceProvider` et la normaliser dans le modèle commun (`id`, `provider`, `origin`, `path`, `type`, `scope`, `applyTo`, `priority`, `content`, `metadata`, `reasons`).
+- Résoudre l'applicabilité à partir des chemins cibles tirés des meilleurs candidats de `SearchService`.
+- Appliquer toujours une instruction repository-wide ; une instruction de scope répertoire seulement si un chemin cible appartient à son sous-arbre ; une instruction `applyTo` seulement si un chemin cible correspond à l'un de ses motifs.
+- Classer par spécificité (`applyTo` > instruction imbriquée proche du fichier cible > instruction repository-wide > alias ou convention générique) et favoriser la plus spécifique sous budget.
+- Traiter `AGENT.md` comme un alias de compatibilité, `.claude/CLAUDE.md` racine comme instruction de repository, `CLAUDE.md` et `GEMINI.md` comme instructions de scope répertoire.
+- Ne compter qu'une fois deux instructions au contenu normalisé identique : garder la source de plus forte priorité et expliquer la déduplication.
+
+### Don't
+
+- Ne pas traiter comme globale une instruction Copilot sans `applyTo` valide : la signaler comme non applicable.
+- Ne pas utiliser la priorité comme un remplacement destructif des instructions parentes.
+- Ne pas charger une référence `@chemin` résolue hors du repository, absolue ou vers le home utilisateur.
+- Ne pas suivre les références `@` au-delà de cinq niveaux ni à travers un cycle, ni interpréter celles d'un bloc de code Markdown.
+
 ## Conséquences positives
 
 - les applications existantes conservent leurs configurations ;
@@ -221,6 +240,12 @@ La décision est respectée si :
 - une instruction plus spécifique est prioritaire sous budget ;
 - une référence `@` hors repository est ignorée et expliquée ;
 - `ContextBuilder` ne contient aucune condition spécifique à Copilot ou Claude.
+
+## Compliance and Enforcement
+
+- Tests (`core`, lancés par `mvnw clean install`) : `core/src/test/java/com/nexus/context/NativeContextSourcesIntegrationTest.java` (`combinesApplicableNativeInstructionsCodeAndDocumentationWithoutInjectingOperationalConfig`), `core/src/test/java/com/nexus/context/source/instruction/InstructionReferenceResolverTest.java` (références gardées dans le repository, cycles arrêtés, refus des liens symboliques sortants), `core/src/test/java/com/nexus/context/source/instruction/InstructionDiscoverySupportTest.java`.
+- Règle Archgate `BE-0032-preserver-et-normaliser-le-contexte-natif-des-projets.rules.ts` : `context-builder-has-no-vendor-condition` refuse, dans les sources du paquetage `com.nexus.context` hors sous-paquetages (donc hors providers de `com.nexus.context.source`), toute mention de Copilot, Claude, Gemini ou `AGENTS.md` / `AGENT.md` ; commentaires effacés, littéraux conservés.
+- Revue : toute nouvelle convention native passe par un provider de `com.nexus.context.source.instruction` et respecte les contraintes des références `@`.
 
 ## References
 

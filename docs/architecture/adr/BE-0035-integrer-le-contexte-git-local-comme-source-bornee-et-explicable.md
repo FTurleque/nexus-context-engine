@@ -2,7 +2,8 @@
 id: BE-0035
 title: "Intégrer le contexte Git local comme source bornée et explicable"
 domain: backend
-rules: false
+rules: true
+files: ["core/src/main/java/com/nexus/context/source/git/**"]
 ---
 
 # Intégrer le contexte Git local comme source bornée et explicable
@@ -166,6 +167,23 @@ Si le projet n'est pas contenu dans un repository Git valide :
 - aucune erreur fonctionnelle n'est levée ;
 - un diagnostic peut être exposé en mode explicable.
 
+## Do's and Don'ts
+
+### Do
+
+- Séparer le signal de recherche (`GitRecencyCandidateEnricher`, `gitRecencyScore` ajouté aux candidats connus) de la construction du contexte (`GitContextSourceProvider`, fragments `GIT` bornés sur les chemins les mieux classés).
+- Lire les données Git depuis le repository local uniquement, par le provider JGit.
+- Borner l'analyse (bornes initiales) : 50 commits récents, 5 chemins cibles, 5 commits par historique de fichier, 8 relations de co-changement, un diff local borné en taille.
+- Normaliser `gitRecencyScore` entre `0` et `1` et limiter sa contribution à `gitRecencyScore × 0,05`.
+- Sélectionner le contexte Git après les instructions et les skills, avant le contexte de tâche, avec `gitBudget = min(budget restant, 500, max(64, budget total × 15 %))`.
+- Hors repository Git valide, ne produire ni bonus ni fragment et ne lever aucune erreur fonctionnelle.
+
+### Don't
+
+- Ne pas modifier le score d'un candidat sans historique Git local.
+- Ne pas produire de contexte Git pour un budget global inférieur à 500 tokens.
+- Ne pas inclure de diff local hors des chemins cibles.
+
 ## Consequences
 
 ### Positives
@@ -205,3 +223,9 @@ Cette décision pourra être réexaminée si :
 - le suivi des renommages doit devenir exhaustif ;
 - le bonus de récence dégrade la précision du corpus de référence ;
 - un provider Git distant devient nécessaire dans une future itération multi-repository.
+
+## Compliance and Enforcement
+
+- Tests (`core`, lancés par `mvnw clean install`) : `core/src/test/java/com/nexus/context/source/git/LocalGitContextSourceProviderTest.java` (`buildsOnlyGitContextRelatedToTargetPaths`, `truncatesLargeTargetDiffDeterministically`, `degradesGracefullyOutsideAGitRepository`), `core/src/test/java/com/nexus/context/source/git/GitRecencyCandidateEnricherTest.java` (`addsRecencyOnlyToCandidatesTouchedByRecentCommits`, `leavesCandidatesUntouchedOutsideAGitRepository`).
+- `scripts/self-smoke.ps1` (lancé par `/nx-validate`) vérifie sur le repository NEXUS la cohérence entre commits liés et item `GIT` sélectionné.
+- Règle Archgate `BE-0035-integrer-le-contexte-git-local-comme-source-bornee-et-explicable.rules.ts` : `git-context-reads-local-repository-only` refuse dans `com.nexus.context.source.git` les commandes JGit distantes (`fetch`, `pull`, `push`, `lsRemote`, `cloneRepository`, `Transport`) et celles qui modifient le repository (`commit`, `checkout`, `add`, `rm`, `reset`, `merge`, `rebase`, stash, tag, branche, `RefUpdate`, `ObjectInserter`, verrou du `DirCache`) ; commentaires et littéraux effacés.

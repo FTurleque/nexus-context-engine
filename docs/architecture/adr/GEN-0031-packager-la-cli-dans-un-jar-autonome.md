@@ -2,7 +2,8 @@
 id: GEN-0031
 title: "Packager la CLI dans un JAR autonome"
 domain: general
-rules: false
+rules: true
+files: ["core/pom.xml", "core/src/main/java/com/nexus/cli/NexusCli.java"]
 ---
 
 # Packager la CLI dans un JAR autonome
@@ -58,6 +59,19 @@ java -jar target/nexus-context-engine-<version>-cli.jar ...
 ```
 
 Des scripts Windows légers peuvent rechercher ce JAR dans `target/` et déléguer l'exécution à `java -jar`.
+
+## Do's and Don'ts
+
+### Do
+
+- Produire, en plus du JAR standard, un JAR autonome attaché avec le classifier `cli` par Maven Shade Plugin.
+- Garder `com.nexus.cli.NexusCli` comme classe principale.
+- Rendre le JAR autonome lançable par `java -jar target/nexus-context-engine-<version>-cli.jar ...`.
+- Limiter les scripts Windows à rechercher ce JAR dans `target/` et à déléguer l'exécution à `java -jar`.
+
+### Don't
+
+- Ne pas remplacer le JAR standard du projet par le JAR autonome.
 
 ## Conséquences positives
 
@@ -124,6 +138,12 @@ Le changement concerne uniquement la couche de build et l'adaptateur CLI. Le cœ
 ## Conditions de réévaluation
 
 Réévaluer si NEXUS doit être distribué publiquement sous forme d'installateurs, de paquets OS ou d'image native.
+
+## Compliance and Enforcement
+
+- Règle Archgate `GEN-0031-packager-la-cli-dans-un-jar-autonome.rules.ts` / `cli-uber-jar-attached-with-cli-classifier` : dans `core/pom.xml` (commentaires XML effacés), artifactId `nexus-context-engine`, `maven-shade-plugin` avec `shadedArtifactAttached=true` et `shadedClassifierName=cli`, `Main-Class` `com.nexus.cli.NexusCli`, même `mainClass` pour `exec-maven-plugin`, copie des deux JAR dans le `target/` racine (exécution antrun `publish-legacy-root-artifacts`) ; `NexusCli.java` existe. Contrôle propre à Archgate.
+- `scripts/self-smoke.ps1` (via `/nx-validate`) : échoue si `target/nexus-context-engine-*-cli.jar` est absent, puis lance ce JAR.
+- Workflow `.github/workflows/ci.yml`, étape « Run packaged Linux distribution » : la distribution qui embarque le JAR CLI est décompressée et lancée.
 
 ## Décisions liées
 

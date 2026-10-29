@@ -2,7 +2,8 @@
 id: BE-0038
 title: "Indexer les langages additionnels lexicalement et enrichir la structure via des providers"
 domain: backend
-rules: false
+rules: true
+files: ["core/src/main/java/com/nexus/index/SourceLanguage.java"]
 ---
 
 # Indexer les langages additionnels lexicalement et enrichir la structure via des providers
@@ -133,6 +134,23 @@ La classification `FileCategory.TEST` est étendue aux conventions usuelles déj
 
 Cette classification reste une heuristique de catégorie de fichier, pas une analyse syntaxique.
 
+## Do's and Don'ts
+
+### Do
+
+- Centraliser dans `SourceLanguage` les extensions reconnues par le scanner.
+- Reconnaître nativement Kotlin (`.kt`, `.kts`), TypeScript (`.ts`, `.tsx`), JavaScript (`.js`, `.jsx`, `.mjs`, `.cjs`), Python (`.py`) et SQL (`.sql`), en conservant Java et Markdown.
+- Persister dans SQLite tout fichier reconnu, l'indexer dans Lucene s'il appartient à une catégorie de recherche générique et ajouter son langage aux métadonnées du projet.
+- Produire un `AnalysisResult` vide en symboles et relations, et poursuivre l'indexation lexicale, quand aucun `LanguageAnalyzer` ne supporte le fichier.
+- Ajouter symboles et relations par un `LanguageAnalyzer` spécialisé, un `CodeIndexImporter` (notamment SCIP) ou un `CodeIntelligenceProvider`, dans les modèles `CodeSymbol` et `SymbolRelation`, avec leur provenance.
+- Classer en `FileCategory.TEST` selon les répertoires (`src/test`, `src/it`, `test`, `tests`, `__tests__`) et les suffixes listés pour Java/Kotlin, Python et JavaScript/TypeScript.
+
+### Don't
+
+- Ne pas exiger de `LanguageAnalyzer` structurel pour indexer un fichier scanné.
+- Ne pas ajouter d'adaptateur Tree-sitter sans métriques qui justifient son adoption.
+- Ne pas faire de la classification `FileCategory.TEST` une analyse syntaxique.
+
 ## Consequences
 
 ### Positives
@@ -171,3 +189,8 @@ Cette décision devra être réévaluée si :
 - la majorité des projets ciblés exige une navigation symbolique sans index SCIP disponible.
 
 Dans ce cas, l'ajout d'un analyseur structurel doit rester compatible avec le niveau lexical existant et ne pas rendre les autres langages dépendants de ce composant.
+
+## Compliance and Enforcement
+
+- Tests (`core`, lancés par `mvnw clean install`) : `core/src/test/java/com/nexus/index/MultiLanguageIndexingIntegrationTest.java` (`indexesAndSearchesAdditionalLanguagesWithoutStructuralAnalyzers`), `core/src/test/java/com/nexus/index/SourceLanguageTest.java` (`detectsSupportedSourceExtensionsCaseInsensitively`), `core/src/test/java/com/nexus/index/scan/ProjectScannerTest.java`.
+- Règle Archgate `BE-0038-indexer-les-langages-additionnels-lexicalement-et-enrichir-la-structure-via-providers.rules.ts` : `source-language-declares-decided-extensions` vérifie que `SourceLanguage` déclare `JAVA`, `MARKDOWN`, `KOTLIN`, `TYPESCRIPT`, `JAVASCRIPT`, `PYTHON` et `SQL` avec chacune des extensions de la décision ; commentaires effacés, littéraux conservés.

@@ -2,7 +2,8 @@
 id: ARCH-0044
 title: "Consommer MINOS via un contrat JSON local versionné"
 domain: architecture
-rules: false
+rules: true
+files: ["**/src/*/java/**/*.java", "**/pom.xml"]
 ---
 
 # Consommer MINOS via un contrat JSON local versionné
@@ -92,6 +93,21 @@ Pour les chemins :
 3. un chemin absolu, remontant ou absent de l’allow-list est ignoré ;
 4. le `filePath` externe n’est jamais utilisé comme argument d’une API d’I/O.
 
+## Do's and Don'ts
+
+### Do
+
+- Faire de `MinosCodeIndexImporter` un adaptateur pur du contrat JSON : `minos-import` lit le payload sur stdin avec une borne de 128 MiB, le valide puis appelle `IndexRepository.replaceExternalCodeIntelligence(...)` avec `sourceProvider=minos`.
+- Ne convertir que les symboles et relations `RESOLVED` dont la sémantique existe dans le modèle NEXUS.
+- Construire l'allow-list des chemins à partir des fichiers locaux réellement présents sous la racine projet de confiance, et ne normaliser le `filePath` du JSON que lexicalement.
+
+### Don't
+
+- Ne pas lancer de processus ni découvrir de JAR MINOS depuis NEXUS.
+- Ne pas déclencher un import MINOS implicitement par `nexus index`.
+- Ne pas reclasser arbitrairement un kind non représentable : l'ignorer.
+- Ne pas utiliser le `filePath` externe comme argument d'une API d'I/O ; ignorer un chemin absolu, remontant ou absent de l'allow-list.
+
 ## Conséquences positives
 
 - aucun couplage binaire Java 21/24 ;
@@ -131,3 +147,10 @@ Réexaminer cette décision si :
 - NEXUS relève officiellement son niveau Java au niveau de MINOS ;
 - un contrat local standardisé de l’écosystème remplace l’échange JSON ;
 - un besoin mesuré exige un rafraîchissement automatique avec un mécanisme d’orchestration situé hors du cœur NEXUS.
+
+## Compliance and Enforcement
+
+- Règle Archgate `ARCH-0044-consommer-minos-via-un-contrat-json-local-versionne.rules.ts` / `minos-import-launches-no-process` : aucun `ProcessBuilder`, `Runtime.exec` ni `ProcessHandle` dans `core/src/main/java/com/nexus/index/minos` (commentaires et littéraux effacés).
+- Règle Archgate `ARCH-0044-consommer-minos-via-un-contrat-json-local-versionne.rules.ts` / `no-minos-types-in-nexus` : aucune référence au package `com.minos` dans les sources Java du dépôt, et aucune dépendance Maven `com.minos*` ou `minos-*` dans les `pom.xml`.
+- Tests `MinosCodeIndexImporterTest` (`rejectsForeignContractVersionAndProjectRoot`, `ignoresUnsafeUnknownAndUnsupportedPaths`), `MinosCodeIndexImporterStreamingTest`, `MinosProjectPathGuardTest` et `MinosRealIntegrationTest` (`core/src/test/java/com/nexus/index/minos`) ; tests lancés par `./mvnw -B clean install` (job « Linux reactor Maven build » de `.github/workflows/ci.yml`).
+- Script manuel `scripts/validate-minos-integration.ps1` (replay avec un vrai export MINOS).

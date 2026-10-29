@@ -2,7 +2,8 @@
 id: ARCH-0003
 title: "Conserver un cœur Java sans framework applicatif obligatoire"
 domain: architecture
-rules: false
+rules: true
+files: ["core/**"]
 ---
 
 # Conserver un cœur Java sans framework applicatif obligatoire
@@ -91,6 +92,21 @@ La décision est respectée si :
 - les handlers MCP délèguent aux mêmes services applicatifs ;
 - les ressources REST ne contiennent pas de logique de ranking ou de construction de contexte.
 
+## Do's and Don'ts
+
+### Do
+
+- Faire dépendre le domaine et les services principaux de contrats Java propres à NEXUS.
+- Réserver les frameworks (Quarkus, SDK MCP) aux adaptateurs qui en ont besoin.
+- Faire déléguer les handlers MCP aux mêmes services applicatifs que les autres adaptateurs.
+
+### Don't
+
+- Ne pas déclarer de dépendance obligatoire à Quarkus, Spring ou un autre framework applicatif dans le module cœur.
+- Ne pas laisser Quarkus imposer ses annotations ou ses types aux contrats du cœur.
+- Ne pas faire entrer les DTO REST dans les signatures métier.
+- Ne pas placer de logique de ranking ou de construction de contexte dans les ressources REST.
+
 ## Analyse détaillée des options
 
 ### Utiliser Quarkus dans tout le projet dès le départ
@@ -175,6 +191,14 @@ Réexaminer uniquement si :
 - le cœur devient exclusivement destiné à un runtime unique ;
 - le coût du câblage indépendant devient objectivement supérieur aux bénéfices ;
 - une fonctionnalité fondamentale ne peut être fournie correctement qu'à travers un framework partagé.
+
+## Compliance and Enforcement
+
+- Règle Archgate `ARCH-0003-conserver-un-coeur-java-sans-framework-applicatif.rules.ts` / `core-imports-no-application-framework` : refuse dans `core/src/main/java`, commentaires et littéraux effacés, toute référence à Quarkus, CDI/Jakarta (`inject`, `enterprise`, `ws.rs`, `interceptor`), Spring, Micronaut ou Guice.
+- Règle Archgate `ARCH-0003-conserver-un-coeur-java-sans-framework-applicatif.rules.ts` / `core-pom-declares-no-application-framework` : refuse dans `core/pom.xml` tout `groupId` de ces frameworks.
+- Règles Archgate `ARCH-0039-isoler-l-adaptateur-rest-quarkus-du-coeur-nexus.rules.ts` / `rest-adapter-delegates-business-logic` et `ARCH-0040-exposer-nexus-via-un-adaptateur-mcp-stdio-mince.rules.ts` / `mcp-handlers-delegate-to-nexus-application` : ressources REST et handlers MCP passent par `NexusApplication`.
+- Tests lancés par `./mvnw -B clean install` (job « Linux reactor Maven build » de `.github/workflows/ci.yml`) : les services du cœur sont instanciés par les tests unitaires de `core/src/test/java` sans conteneur applicatif.
+- Revue : DTO REST absents des signatures métier.
 
 ## Décisions liées
 

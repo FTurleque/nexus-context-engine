@@ -96,6 +96,18 @@ La décision est respectée si :
 - les dépendances externes sont encapsulées ;
 - toute création de module Maven supplémentaire est motivée par une contrainte documentée ou un nouvel ADR.
 
+## Do's and Don'ts
+
+### Do
+
+- Maintenir la séparation logique par packages et par dépendances internes.
+- Motiver toute extraction d'un module Maven par l'un des critères listés (runtime distinct, packaging distinct, dépendance lourde ou native, cycle de livraison indépendant, dépendance indésirable à empêcher structurellement, gain mesurable) documenté, ou par un nouvel ADR.
+
+### Don't
+
+- Ne pas créer de module Maven supplémentaire sans contrainte documentée ou nouvel ADR.
+- Ne pas traiter l'ordre d'extraction indicatif comme une obligation de créer tous ces modules.
+
 ## Analyse détaillée des options
 
 ### Créer immédiatement tous les modules envisagés
@@ -164,6 +176,16 @@ Réexaminer lors de :
 - l'introduction d'un serveur MCP ;
 - l'ajout d'un provider nécessitant un processus ou runtime spécifique ;
 - l'apparition de temps de build ou conflits de dépendances significatifs.
+
+## Compliance and Enforcement
+
+- Aucun contrôle automatisé ; vérifié en revue.
+
+## Écarts constatés
+
+Constat du 2026-10-29 (la décision ci-dessus est inchangée) :
+
+- Le `pom.xml` racine est un réacteur (`<packaging>pom</packaging>`, `pom.xml:10`) qui déclare quatre modules Maven : `core`, `adapters/rest-quarkus`, `adapters/mcp-java` et `adapters/assistant-clients` (`pom.xml:24-27`), depuis le commit `cf235632`. Les trois adaptateurs sont décidés par ARCH-0039, ARCH-0040 et ARCH-0041 ; le passage à un réacteur parent commun n'est décidé par aucun ADR du registre.
 
 ## Décisions liées
 
