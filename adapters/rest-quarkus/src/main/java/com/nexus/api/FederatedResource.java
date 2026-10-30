@@ -1,10 +1,9 @@
 package com.nexus.api;
 
 import com.nexus.api.ApiModels.FederatedContextRequest;
-import com.nexus.api.ApiModels.FederatedContextResponse;
 import com.nexus.api.ApiModels.FederatedSearchRequest;
-import com.nexus.api.ApiModels.FederatedSearchResponse;
 import com.nexus.context.ContextBudgetPolicy;
+import com.nexus.exposure.PublicOutput;
 import com.nexus.project.FederatedScopePolicy;
 import com.nexus.search.QueryPolicy;
 import com.nexus.search.ResultLimitPolicy;
@@ -34,7 +33,7 @@ public class FederatedResource {
 
     @POST
     @Path("/search")
-    public FederatedSearchResponse search(FederatedSearchRequest request) throws IOException {
+    public PublicOutput.FederatedSearch search(FederatedSearchRequest request) throws IOException {
         requireRequest(request);
         List<UUID> projectIds = requireProjects(request.projectIds());
         String query = QueryPolicy.normalize(request.query());
@@ -45,7 +44,7 @@ public class FederatedResource {
 
     @POST
     @Path("/context")
-    public FederatedContextResponse context(FederatedContextRequest request) {
+    public PublicOutput.FederatedContext context(FederatedContextRequest request) {
         requireRequest(request);
         List<UUID> projectIds = requireProjects(request.projectIds());
         String query = QueryPolicy.normalize(request.query());

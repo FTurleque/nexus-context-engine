@@ -9,7 +9,6 @@ import java.nio.file.Path;
 import java.util.Set;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertNull;
 
 class ApiMapperPrivacyTest {
 
@@ -81,7 +80,7 @@ class ApiMapperPrivacyTest {
     }
 
     @Test
-    void omitsAbsoluteProjectRootFromPublicProjectRepresentation() {
+    void omitsAbsoluteProjectRootFromPublicProjectRepresentation() throws Exception {
         ProjectDescriptor project = new ProjectDescriptor(
                 UUID.randomUUID(),
                 "private-project",
@@ -92,6 +91,8 @@ class ApiMapperPrivacyTest {
                 null,
                 IndexStatus.READY);
 
-        assertNull(ApiMapper.project(project).rootPath());
+        String json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(ApiMapper.project(project));
+        org.junit.jupiter.api.Assertions.assertFalse(json.contains("rootPath"), json);
+        org.junit.jupiter.api.Assertions.assertFalse(json.contains("alice"), json);
     }
 }

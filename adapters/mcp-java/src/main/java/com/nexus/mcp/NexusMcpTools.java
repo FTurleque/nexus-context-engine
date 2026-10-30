@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexus.application.NexusApplication;
 import com.nexus.context.ContextBudgetPolicy;
+import com.nexus.exposure.PublicOutputProjection;
 import com.nexus.index.IndexedSymbol;
 import com.nexus.index.SymbolRelation;
 import com.nexus.project.ProjectDescriptor;
@@ -28,7 +29,6 @@ final class NexusMcpTools {
 
     private final NexusApplication application;
     private final McpProjectResolver projects;
-    private final McpResultMapper results = new McpResultMapper();
     private final ObjectMapper objectMapper;
 
     NexusMcpTools(NexusApplication application, ObjectMapper objectMapper) {
@@ -55,7 +55,7 @@ final class NexusMcpTools {
                 "list_projects",
                 "Liste les projets enregistrés dans NEXUS avec leur état d'indexation.",
                 objectSchema(Map.of(), List.of()),
-                arguments -> application.listProjects().stream().map(results::project).toList());
+                arguments -> PublicOutputProjection.projects(application.listProjects()));
     }
 
     private McpServerFeatures.SyncToolSpecification searchCode() {
@@ -76,7 +76,8 @@ final class NexusMcpTools {
                             requiredString(arguments, "query"),
                             positiveInteger(arguments, "limit", DEFAULT_LIMIT, ResultLimitPolicy.MAX_RESULT_LIMIT),
                             booleanValue(arguments, "explain", false));
-                    return results.search(operation);
+                    return PublicOutputProjection.search(operation.project(), operation.query(), operation.limit(),
+                            operation.explain(), operation.durationMs(), operation.results());
                 });
     }
 
@@ -100,7 +101,8 @@ final class NexusMcpTools {
                             requiredString(arguments, "query"),
                             positiveInteger(arguments, "limit", DEFAULT_LIMIT, ResultLimitPolicy.MAX_RESULT_LIMIT),
                             booleanValue(arguments, "explain", false));
-                    return results.federatedSearch(operation);
+                    return PublicOutputProjection.federatedSearch(operation.projects(), operation.query(),
+                            operation.limit(), operation.explain(), operation.durationMs(), operation.results());
                 });
     }
 
@@ -120,10 +122,7 @@ final class NexusMcpTools {
                     List<IndexedSymbol> symbols = application.findSymbols(
                             project.id(), query,
                             positiveInteger(arguments, "limit", DEFAULT_LIMIT, ResultLimitPolicy.MAX_RESULT_LIMIT));
-                    return Map.of(
-                            "project", results.project(project),
-                            "query", query,
-                            "symbols", symbols.stream().map(results::indexedSymbol).toList());
+                    return PublicOutputProjection.symbolSearch(project, query, symbols);
                 });
     }
 
@@ -143,10 +142,7 @@ final class NexusMcpTools {
                     List<SymbolRelation> relations = application.findUsages(
                             project.id(), symbol,
                             positiveInteger(arguments, "limit", 20, ResultLimitPolicy.MAX_RESULT_LIMIT));
-                    return Map.of(
-                            "project", results.project(project),
-                            "symbol", symbol,
-                            "relations", relations.stream().map(results::relation).toList());
+                    return PublicOutputProjection.usages(project, symbol, relations);
                 });
     }
 
@@ -178,7 +174,8 @@ final class NexusMcpTools {
                             requestedSources(arguments.get(REQUESTED_SOURCES_ARGUMENT)),
                             stringMap(arguments.get("constraints")),
                             forceExplain);
-                    return results.context(operation);
+                    return PublicOutputProjection.context(operation.project(), operation.query(),
+                            operation.explain(), operation.durationMs(), operation.bundle());
                 });
     }
 
@@ -212,7 +209,8 @@ final class NexusMcpTools {
                             requestedSources(arguments.get(REQUESTED_SOURCES_ARGUMENT)),
                             stringMap(arguments.get("constraints")),
                             forceExplain);
-                    return results.federatedContext(operation);
+                    return PublicOutputProjection.federatedContext(operation.projects(), operation.query(),
+                            operation.explain(), operation.durationMs(), operation.bundle());
                 });
     }
 

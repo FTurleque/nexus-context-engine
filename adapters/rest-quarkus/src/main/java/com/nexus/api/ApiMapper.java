@@ -1,180 +1,49 @@
 package com.nexus.api;
 
-import com.nexus.api.ApiModels.ContextItemResponse;
-import com.nexus.api.ApiModels.ContextResponse;
-import com.nexus.api.ApiModels.FederatedContextItemResponse;
-import com.nexus.api.ApiModels.FederatedContextResponse;
-import com.nexus.api.ApiModels.FederatedSearchResponse;
-import com.nexus.api.ApiModels.FederatedSearchResultResponse;
-import com.nexus.api.ApiModels.IndexReportResponse;
-import com.nexus.api.ApiModels.IndexResponse;
-import com.nexus.api.ApiModels.IndexStatisticsResponse;
-import com.nexus.api.ApiModels.ProjectResponse;
-import com.nexus.api.ApiModels.SearchResponse;
-import com.nexus.api.ApiModels.SearchResultResponse;
-import com.nexus.api.ApiModels.SymbolResponse;
-import com.nexus.context.ContextItem;
-import com.nexus.context.FederatedContextItem;
-import com.nexus.index.CodeSymbol;
+import com.nexus.application.NexusApplication;
+import com.nexus.exposure.PublicOutput;
+import com.nexus.exposure.PublicOutputProjection;
 import com.nexus.index.IndexStatistics;
-import com.nexus.index.IndexingReport;
 import com.nexus.project.ProjectDescriptor;
-import com.nexus.ranking.RankedCandidate;
-import com.nexus.search.FederatedSearchHit;
-import com.nexus.security.PublicProjectPathPolicy;
 
-import java.util.ArrayList;
-import java.util.List;
-
+/**
+ * Passe les opérations de {@link NexusApplication} à la projection publique du cœur ; REST
+ * sérialise ses structures sans les recomposer.
+ */
 final class ApiMapper {
 
     private ApiMapper() {
     }
 
-    static ProjectResponse project(ProjectDescriptor project) {
-        return new ProjectResponse(
-                project.id(),
-                project.name(),
-                null,
-                project.sourceType().name(),
-                project.languages(),
-                project.technologies(),
-                project.lastIndexedAt(),
-                project.indexStatus().name());
+    static PublicOutput.Project project(ProjectDescriptor project) {
+        return PublicOutputProjection.project(project);
     }
 
-    static IndexStatisticsResponse statistics(IndexStatistics statistics) {
-        return new IndexStatisticsResponse(statistics.files(), statistics.symbols(), statistics.relations());
+    static PublicOutput.IndexStatistics statistics(IndexStatistics statistics) {
+        return PublicOutputProjection.statistics(statistics);
     }
 
-    static IndexResponse index(com.nexus.application.NexusApplication.IndexOperation operation) {
-        IndexingReport report = operation.report();
-        return new IndexResponse(
-                project(operation.project()),
-                new IndexReportResponse(
-                        report.scannedFiles(),
-                        report.changedFiles(),
-                        report.removedFiles(),
-                        report.skippedFiles(),
-                        new com.nexus.security.PublicDiagnosticPolicy(List.of(operation.project().rootPath())).texts(report.diagnostics()),
-                        report.fullSearchRebuild(),
-                        report.duration().toMillis(),
-                        statistics(report.statistics())));
+    static PublicOutput.Index index(NexusApplication.IndexOperation operation) {
+        return PublicOutputProjection.index(operation.project(), operation.report());
     }
 
-    static SearchResponse search(com.nexus.application.NexusApplication.SearchOperation operation) {
-        List<SearchResultResponse> results = new ArrayList<>(operation.results().size());
-        for (int index = 0; index < operation.results().size(); index++) {
-            results.add(searchResult(operation.project(), operation.results().get(index), index + 1));
-        }
-        return new SearchResponse(
-                project(operation.project()),
-                operation.query(),
-                operation.limit(),
-                operation.explain(),
-                operation.durationMs(),
-                List.copyOf(results));
+    static PublicOutput.Search search(NexusApplication.SearchOperation operation) {
+        return PublicOutputProjection.search(operation.project(), operation.query(), operation.limit(),
+                operation.explain(), operation.durationMs(), operation.results());
     }
 
-    static FederatedSearchResponse federatedSearch(com.nexus.application.NexusApplication.FederatedSearchOperation operation) {
-        List<FederatedSearchResultResponse> results = new ArrayList<>(operation.results().size());
-        for (int index = 0; index < operation.results().size(); index++) {
-            FederatedSearchHit hit = operation.results().get(index);
-            results.add(new FederatedSearchResultResponse(
-                    project(hit.project()),
-                    searchResult(hit.project(), hit.rankedCandidate(), index + 1)));
-        }
-        return new FederatedSearchResponse(
-                operation.projects().stream().map(ApiMapper::project).toList(),
-                operation.query(),
-                operation.limit(),
-                operation.explain(),
-                operation.durationMs(),
-                List.copyOf(results));
+    static PublicOutput.FederatedSearch federatedSearch(NexusApplication.FederatedSearchOperation operation) {
+        return PublicOutputProjection.federatedSearch(operation.projects(), operation.query(), operation.limit(),
+                operation.explain(), operation.durationMs(), operation.results());
     }
 
-    static ContextResponse context(com.nexus.application.NexusApplication.ContextOperation operation) {
-        var bundle = com.nexus.security.PublicContextPolicy.expose(operation.project(), operation.bundle(), operation.query());
-        List<ContextItemResponse> items = bundle.items().stream()
-                .map(item -> contextItem(operation.project(), item))
-                .toList();
-        return new ContextResponse(
-                project(operation.project()),
-                operation.query(),
-                operation.explain(),
-                operation.durationMs(),
-                bundle.tokenBudget(),
-                bundle.estimatedTokens(),
-                items,
-                bundle.excluded(),
-                bundle.metadata());
+    static PublicOutput.Context context(NexusApplication.ContextOperation operation) {
+        return PublicOutputProjection.context(operation.project(), operation.query(), operation.explain(),
+                operation.durationMs(), operation.bundle());
     }
 
-    static FederatedContextResponse federatedContext(com.nexus.application.NexusApplication.FederatedContextOperation operation) {
-        var bundle = com.nexus.security.PublicContextPolicy.expose(operation.projects(), operation.bundle(), operation.query());
-        List<FederatedContextItemResponse> items = bundle.items().stream()
-                .map(ApiMapper::federatedContextItem)
-                .toList();
-        return new FederatedContextResponse(
-                operation.projects().stream().map(ApiMapper::project).toList(),
-                operation.query(),
-                operation.explain(),
-                operation.durationMs(),
-                bundle.tokenBudget(),
-                bundle.estimatedTokens(),
-                items,
-                bundle.excluded(),
-                bundle.metadata());
-    }
-
-    private static SearchResultResponse searchResult(
-            ProjectDescriptor project,
-            RankedCandidate ranked,
-            int rank) {
-        CodeSymbol symbol = ranked.candidate().symbol();
-        return new SearchResultResponse(
-                rank,
-                ranked.score(),
-                ranked.candidate().type().name(),
-                relativePath(project, ranked.candidate().path()),
-                symbol == null ? null : symbol(symbol),
-                ranked.components(),
-                new com.nexus.security.PublicDiagnosticPolicy(List.of(project.rootPath())).texts(ranked.reasons()));
-    }
-
-    private static SymbolResponse symbol(CodeSymbol symbol) {
-        return new SymbolResponse(
-                symbol.kind().name(),
-                symbol.name(),
-                symbol.qualifiedName(),
-                symbol.signature(),
-                symbol.startLine(),
-                symbol.endLine(),
-                symbol.sourceProvider());
-    }
-
-    private static FederatedContextItemResponse federatedContextItem(FederatedContextItem federated) {
-        return new FederatedContextItemResponse(
-                project(federated.project()),
-                contextItem(federated.project(), federated.item()));
-    }
-
-    private static ContextItemResponse contextItem(ProjectDescriptor project, ContextItem item) {
-        return new ContextItemResponse(
-                item.type().name(),
-                relativePath(project, item.path()),
-                item.symbol(),
-                item.startLine(),
-                item.endLine(),
-                item.content(),
-                item.score(),
-                item.scoreComponents(),
-                item.reasons(),
-                item.estimatedTokens(),
-                item.truncated());
-    }
-
-    private static String relativePath(ProjectDescriptor project, java.nio.file.Path path) {
-        return PublicProjectPathPolicy.expose(project.rootPath(), path);
+    static PublicOutput.FederatedContext federatedContext(NexusApplication.FederatedContextOperation operation) {
+        return PublicOutputProjection.federatedContext(operation.projects(), operation.query(), operation.explain(),
+                operation.durationMs(), operation.bundle());
     }
 }
