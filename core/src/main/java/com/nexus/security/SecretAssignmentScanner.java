@@ -126,7 +126,7 @@ final class SecretAssignmentScanner {
     private static void requireWithinLimit(int length) {
         if (length > MAX_SECRET_CHARS) {
             // Refuser le contenu entier évite de publier le suffixe d'un secret trop long.
-            throw new IllegalArgumentException("Valeur sensible dépassant la limite de redaction");
+            throw new OversizedSecretException();
         }
     }
 }

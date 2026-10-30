@@ -27,7 +27,7 @@ Prérequis : `AUD-TST-01` fermé par #268 ; `AUD-TST-07` (sprint 3) fusionné av
 
 ## 6. Valeur sensible trop longue
 
-- [ ] 6.1 AUD-SEC-02 — Remplacer l'`IllegalArgumentException` de `SecretAssignmentScanner` par une exception dédiée, la capturer par fichier dans `LuceneSearchIndex`, `SemanticIndexingService` et la construction de contexte (`ContextBundle`), exclure le seul fichier fautif et ajouter un diagnostic public sans valeur ni contenu ; mettre à jour `SensitiveContentRedactorTest` (cas 4 097 caractères) ; vérifier par `./mvnw -B -ntp -pl core test -Dtest=SensitiveContentRedactorTest,LuceneSearchIndexTest,SemanticIndexingServiceTest,ProjectIndexingServiceTest -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
+- [x] 6.1 AUD-SEC-02 — Remplacer l'`IllegalArgumentException` de `SecretAssignmentScanner` par une exception dédiée, la capturer par fichier dans `LuceneSearchIndex`, `SemanticIndexingService` et la construction de contexte (`ContextBundle`), exclure le seul fichier fautif et ajouter un diagnostic public sans valeur ni contenu ; mettre à jour `SensitiveContentRedactorTest` (cas 4 097 caractères) ; vérifier par `./mvnw -B -ntp -pl core test -Dtest=SensitiveContentRedactorTest,LuceneSearchIndexTest,SemanticIndexingServiceTest,ProjectIndexingServiceTest -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
 - [ ] 6.2 AUD-SEC-02 — Ajouter un test d'indexation : projet de trois fichiers dont un porte `password = "<5 000 caractères>"`, l'indexation réussit, deux fichiers sont recherchables, le rapport contient un diagnostic d'exclusion, aucune sortie REST ne renvoie 400 ; vérifier par `-Dtest=ProjectIndexingServiceTest` puis `./mvnw -B -ntp -pl adapters/rest-quarkus -am test`
 
 ## 7. Couverture de redaction

@@ -58,7 +58,7 @@ class SensitiveContentRedactorTest {
         // pas une mesure de performance : marge supérieure à x5 sur la durée nominale (~0,3 s à froid).
         org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(java.time.Duration.ofSeconds(10), () -> {
             assertEquals(malformed, SensitiveContentRedactor.redact(malformed));
-            org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+            org.junit.jupiter.api.Assertions.assertThrows(OversizedSecretException.class,
                     () -> SensitiveContentRedactor.redact("password=" + "x".repeat(1_000_000)));
         });
     }
@@ -69,7 +69,7 @@ class SensitiveContentRedactorTest {
             String prefix = "\"password\": " + quote;
             assertEquals(prefix + "[REDACTED]" + quote,
                     SensitiveContentRedactor.redact(prefix + "x".repeat(4096) + quote));
-            var failure = org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+            var failure = org.junit.jupiter.api.Assertions.assertThrows(OversizedSecretException.class,
                     () -> SensitiveContentRedactor.redact(prefix + "x".repeat(4097) + quote));
             assertFalse(failure.getMessage().contains("xxxxxxxx"));
         }

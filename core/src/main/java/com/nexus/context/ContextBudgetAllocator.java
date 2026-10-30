@@ -93,8 +93,13 @@ final class ContextBudgetAllocator {
 
         int available = 0;
         for (ContextFragment fragment : fragments) {
-            available = (int) Math.min(Integer.MAX_VALUE, (long) available
-                    + tokenEstimator.estimate(com.nexus.security.SensitiveContentRedactor.redact(fragment.content())));
+            String safeContent;
+            try {
+                safeContent = com.nexus.security.SensitiveContentRedactor.redact(fragment.content());
+            } catch (com.nexus.security.OversizedSecretException exception) {
+                continue;
+            }
+            available = (int) Math.min(Integer.MAX_VALUE, (long) available + tokenEstimator.estimate(safeContent));
         }
         List<String> excluded = explain
                 ? fragments.stream()

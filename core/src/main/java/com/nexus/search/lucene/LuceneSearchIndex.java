@@ -6,6 +6,7 @@ import com.nexus.index.FileCategory;
 import com.nexus.search.LexicalSearchHit;
 import com.nexus.search.SearchDocument;
 import com.nexus.search.SearchIndex;
+import com.nexus.security.OversizedSecretException;
 import com.nexus.security.SensitiveContentRedactor;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
@@ -46,6 +47,8 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 public final class LuceneSearchIndex implements SearchIndex {
+    private static final System.Logger LOGGER = System.getLogger(LuceneSearchIndex.class.getName());
+
 
     /**
      * MultiFieldQueryParser expands each analyzed term across the five search fields.
@@ -100,9 +103,13 @@ public final class LuceneSearchIndex implements SearchIndex {
                 resources.writer().deleteDocuments(new Term(FIELD_DOCUMENT_KEY, documentKey(projectId, relativePath)));
             }
             for (SearchDocument document : documents) {
-                resources.writer().updateDocument(
-                        new Term(FIELD_DOCUMENT_KEY, documentKey(projectId, document.relativePath())),
-                        toLuceneDocument(projectId, document));
+                Term key = new Term(FIELD_DOCUMENT_KEY, documentKey(projectId, document.relativePath()));
+                Document lucene = toLuceneDocumentOrNull(projectId, document);
+                if (lucene == null) {
+                    resources.writer().deleteDocuments(key);
+                } else {
+                    resources.writer().updateDocument(key, lucene);
+                }
             }
             commit(resources.writer());
         }
@@ -113,7 +120,10 @@ public final class LuceneSearchIndex implements SearchIndex {
         try (IndexResources resources = open(projectId)) {
             resources.writer().deleteAll();
             for (SearchDocument document : documents) {
-                resources.writer().addDocument(toLuceneDocument(projectId, document));
+                Document lucene = toLuceneDocumentOrNull(projectId, document);
+                if (lucene != null) {
+                    resources.writer().addDocument(lucene);
+                }
             }
             commit(resources.writer());
         }
@@ -248,6 +258,17 @@ public final class LuceneSearchIndex implements SearchIndex {
             analyzer.close();
             directory.close();
             throw exception;
+        }
+    }
+
+    /** Un document que la redaction refuse est exclu seul ; le reste du lot est indexé. */
+    private static Document toLuceneDocumentOrNull(UUID projectId, SearchDocument source) {
+        try {
+            return toLuceneDocument(projectId, source);
+        } catch (OversizedSecretException exception) {
+            LOGGER.log(System.Logger.Level.WARNING, "Document exclu de l'index lexical : "
+                    + source.relativePath() + " (" + OversizedSecretException.PUBLIC_REASON + ")");
+            return null;
         }
     }
 
