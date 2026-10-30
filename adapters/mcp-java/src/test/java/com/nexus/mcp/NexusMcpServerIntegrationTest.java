@@ -21,7 +21,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.File;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.nio.file.Files;
@@ -305,8 +304,6 @@ class NexusMcpServerIntegrationTest {
         ProjectDescriptor first;
         ProjectDescriptor second;
         try (NexusApplication ownApplication = NexusApplication.create(new NexusPaths(ownHome))) {
-            // Le nom ne doit pas être « first-project » : sous Windows, la séquence échappée
-            // first-project\" du JSON ferait échouer l'assertion sur first-project + séparateur.
             first = ownApplication.registerProject(firstRoot, "mcp-validation");
             ownApplication.index(first.id(), true, false);
             second = ownApplication.registerProject(secondRoot, "second-project");
@@ -330,13 +327,14 @@ class NexusMcpServerIntegrationTest {
                         McpSchema.CallToolRequest.builder(tool).arguments(arguments).build());
                 assertFalse(Boolean.TRUE.equals(missing.isError()));
                 String completePayload = mapper.writeValueAsString(missing);
-                assertFalse(completePayload.contains("first-project" + File.separator));
+                assertFalse(completePayload.contains("Alice Smith"), completePayload);
+                assertFalse(completePayload.contains("Build Secret"), completePayload);
                 // Le résultat MCP contient lui-même du JSON dans TextContent : inspecter
                 // aussi l'arbre décodé évite de dépendre du nombre d'échappements JSON.
                 String decoded = json(missing).toString();
+                assertFalse(decoded.contains("Alice Smith"), decoded);
+                assertFalse(decoded.contains("Build Secret"), decoded);
                 for (Path hidden : List.of(firstRoot, secondRoot, ownHome)) {
-                    assertFalse(decoded.contains("Alice Smith"), decoded);
-                    assertFalse(decoded.contains("Build Secret"), decoded);
                     assertFalse(decoded.contains(hidden.toString().replace("\\", "\\\\")), decoded);
                     assertFalse(decoded.contains(hidden.toString().replace('\\', '/')), decoded);
                 }

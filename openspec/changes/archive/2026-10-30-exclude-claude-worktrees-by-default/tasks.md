@@ -4,7 +4,7 @@
 
 - [x] 1.1 Ajouter dans `ProjectIgnoreMatcher` la détection des segments consécutifs `.claude`/`worktrees` (insensible à la casse, à toute profondeur), appliquée dans `isBuiltInExcluded` avant les fichiers d'ignore ; vérifier par `./mvnw -B -ntp -pl core test -Dtest=ProjectIgnoreMatcher* -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
 - [x] 1.2 Couvrir dans `ProjectScannerTest` : worktree à la racine, worktree dans `module/`, `.claude/skills/` toujours indexé, `docs/worktrees/` et `.claude/worktrees-notes.md` non exclus, négation `!.claude/worktrees/` sans effet ; vérifier par `-Dtest=ProjectScannerTest`
-- [ ] 1.3 Vérifier sous Windows et Linux que les cas de 1.2 passent (séparateurs de chemin) en lançant le module `core` complet : `./mvnw -B -ntp -pl core test`
+- [x] 1.3 Vérifier sous Windows et Linux que les cas de 1.2 passent (séparateurs de chemin) en lançant le module `core` complet : `./mvnw -B -ntp -pl core test`
 
 ## 2. Décision et documentation
 
