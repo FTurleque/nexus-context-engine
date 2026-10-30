@@ -93,7 +93,7 @@ NexusApplication
 - `NEXUS_HOME` privé sur POSIX et chemins persistants symboliques concernés refusés.
 - sous Windows/filesystems ACL, `NEXUS_REQUIRE_PRIVATE_STORAGE=true` permet d'exiger une preuve de confidentialité et d'échouer fermé sans réécrire naïvement les ACL.
 - le fallback `SafeFileIO` sans `SecureDirectoryStream` capture et revalide l'identité filesystem autour de l'ouverture.
-- la qualification sémantique réelle Ollama est disponible périodiquement/manuellement avec runtime vérifié par SHA-256 et seuils de non-régression.
+- la qualification sémantique réelle Ollama tourne sur les PR sémantiques (corpus réduit), sur `develop` après fusion (corpus complet), manuellement et chaque mois avec runtime vérifié par SHA-256 et seuils de non-régression.
 - `jdk.incubator.vector` reste volontairement non activé après qualification ABBA ; toute adoption exige une nouvelle mesure probante.
 
 ## Build

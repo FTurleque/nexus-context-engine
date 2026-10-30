@@ -7,27 +7,11 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+Import-Module (Join-Path $PSScriptRoot "lib/NexusScript.psm1") -Force
 $smokeHome = Join-Path $repoRoot "target\nexus-self-smoke-home"
 $previousNexusHome = $env:NEXUS_HOME
 $locationPushed = $false
 $script:cliJar = $null
-
-function Invoke-Maven {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string[]]$Arguments
-    )
-
-    $mvnw = Join-Path $repoRoot "mvnw.cmd"
-    if (-not (Test-Path $mvnw)) {
-        $mvnw = Join-Path $repoRoot "mvnw"
-    }
-    & $mvnw @Arguments
-    $exitCode = $LASTEXITCODE
-    if ($exitCode -ne 0) {
-        throw "La commande Maven a echoue avec le code $exitCode : mvnw $($Arguments -join ' ')"
-    }
-}
 
 function Invoke-Nexus {
     param(

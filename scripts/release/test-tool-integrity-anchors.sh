@@ -105,4 +105,30 @@ if grep -q '\$checksumUrl' "$ROOT/scripts/install-jdtls.ps1"; then
   exit 1
 fi
 
+# GitHub Actions pins: full SHA + '# vX.Y.Z', one comment per SHA and one
+# major version per action. Upstream tags are checked by hand on a bump
+# (git ls-remote), since CI has no guaranteed network access to them.
+HYGIENE="${SCRIPT_DIR}/workflow_hygiene.py"
+HYGIENE_FIXTURES="${SCRIPT_DIR}/fixtures/workflow-hygiene"
+python3 "$HYGIENE" pins "$ROOT/.github/workflows"
+# Each negative fixture must be rejected by its own rule: exit code 1 and the
+# rule's message, so a missing fixture or another rule cannot satisfy the case.
+for case in \
+  'pins-comment-mismatch|is commented' \
+  'pins-version-two-shas|is pinned on' \
+  'pins-two-majors|several major versions' \
+  'pins-not-a-version|version comment' \
+  'pins-tag-reference|not pinned by a full commit SHA'; do
+  fixture="${case%%|*}"
+  message="${case#*|}"
+  set +e
+  output="$(python3 "$HYGIENE" pins "$HYGIENE_FIXTURES/${fixture}.yml" 2>&1)"
+  status=$?
+  set -e
+  if [ "$status" -ne 1 ] || ! printf '%s\n' "$output" | grep -q "$message"; then
+    echo "workflow pin fixture ${fixture} was not rejected for '${message}' (exit ${status})" >&2
+    exit 1
+  fi
+done
+
 printf 'Pinned tool integrity anchor tests passed\n'

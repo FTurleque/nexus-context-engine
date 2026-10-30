@@ -4,7 +4,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $locationPushed = $false
 
 function Invoke-Maven {
@@ -35,7 +35,7 @@ try {
 
         Write-Host
         Write-Host "[2/3] Self-smoke historique du coeur"
-        & (Join-Path $PSScriptRoot "self-smoke.ps1")
+        & (Join-Path $PSScriptRoot "..\self-smoke.ps1")
         if ($LASTEXITCODE -ne 0) {
             throw "Le self-smoke a echoue avec le code $LASTEXITCODE"
         }

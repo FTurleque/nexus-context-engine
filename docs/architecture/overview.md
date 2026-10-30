@@ -98,7 +98,7 @@ Les contenus à forte probabilité de secret sont redigés avant les embeddings 
 
 Ollama HTTP est accepté sans opt-in uniquement sur loopback. Une URI distante doit utiliser HTTPS ; HTTP distant exige `NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA=true`. Les credentials intégrés à l'URI sont refusés.
 
-La qualité du chemin sémantique réel est qualifiée périodiquement/manuellement avec un runtime Ollama épinglé et vérifié par SHA-256, `qwen3-embedding:0.6b`, le vrai corpus NEXUS et des seuils explicites de qualité/non-régression. Ce workflow reste séparé des PR ordinaires en raison du coût du runtime et du modèle.
+La qualité du chemin sémantique réel est qualifiée sur les PR qui touchent la recherche sémantique (corpus réduit), sur `develop` après fusion (corpus complet), manuellement et chaque mois (GEN-0060), avec un runtime Ollama épinglé et vérifié par SHA-256, `qwen3-embedding:0.6b`, le vrai corpus NEXUS et des seuils explicites de qualité/non-régression. Ce workflow reste séparé des PR ordinaires en raison du coût du runtime et du modèle, et la release ne l'exige pas.
 
 ## Code Intelligence externe
 
@@ -151,7 +151,7 @@ Le listener de management ne doit pas être publié par le reverse proxy.
 
 ## Supply-chain et release
 
-Les gates exact-head comprennent NEXUS CI, CodeQL, OSV, Docker Distribution, Scale Benchmark, Scanner Corpus Benchmark et Windows Installer selon leur périmètre ; SonarCloud fournit en plus le Quality Gate de PR. La qualification sémantique réelle Ollama est périodique/manuelle et conserve ses propres preuves.
+Les gates exact-head comprennent NEXUS CI, CodeQL, OSV, Docker Distribution, Scale Benchmark, Scanner Corpus Benchmark et Windows Installer selon leur périmètre ; SonarCloud fournit en plus le Quality Gate de PR. La qualification sémantique réelle Ollama tourne sur les PR sémantiques et sur `develop` après fusion, hors du chemin de release (GEN-0060), et conserve ses propres preuves.
 
 Docker Distribution construit et qualifie une image unique. La release charge l'artefact qualifié, vérifie hash/ID et publie ce contenu exact.
 

@@ -4,7 +4,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $restPom = Join-Path $repoRoot "adapters\rest-quarkus\pom.xml"
 $mcpPom = Join-Path $repoRoot "adapters\mcp-java\pom.xml"
 $mcpRunner = Join-Path $repoRoot "adapters\mcp-java\target\nexus-mcp-java-0.1.0-SNAPSHOT-runner.jar"
@@ -38,7 +38,7 @@ try {
 
         Write-Host
         Write-Host "[2/5] Self-smoke historique du coeur"
-        & (Join-Path $PSScriptRoot "self-smoke.ps1")
+        & (Join-Path $PSScriptRoot "..\self-smoke.ps1")
     }
 
     Write-Host
