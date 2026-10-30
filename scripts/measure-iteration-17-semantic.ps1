@@ -10,16 +10,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+Import-Module (Join-Path $PSScriptRoot "lib/NexusScript.psm1") -Force
 $locationPushed = $false
-
-function Resolve-AbsolutePath {
-    param([Parameter(Mandatory = $true)][string]$Path)
-
-    if ([System.IO.Path]::IsPathRooted($Path)) {
-        return [System.IO.Path]::GetFullPath($Path)
-    }
-    return [System.IO.Path]::GetFullPath((Join-Path $repoRoot $Path))
-}
 
 try {
     if ($Dimensions -le 0 -or $Dimensions -gt 1024) {
@@ -73,10 +65,7 @@ try {
         "test"
     )
 
-    & mvn @arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "Le benchmark Maven a echoue avec le code $LASTEXITCODE"
-    }
+    Invoke-Maven -Arguments $arguments
 
     if (-not (Test-Path -Path $outputPath -PathType Leaf)) {
         throw "Le benchmark est termine sans produire le rapport attendu : $outputPath"
