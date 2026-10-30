@@ -77,10 +77,11 @@ class RealSemanticBenchmarkCorpusTest {
     void materializationFailsWhenARelevantPathLeavesThePrCorpus() throws IOException {
         Path root = fixtureWithEveryRelevantPath();
         Files.delete(root.resolve("docs/developer/mcp.md"));
+        Path target = temporaryDirectory.resolve("corpus");
 
         IllegalStateException rejected = assertThrows(
                 IllegalStateException.class,
-                () -> RealSemanticBenchmarkCorpus.materializePrCorpus(root, temporaryDirectory.resolve("corpus")));
+                () -> RealSemanticBenchmarkCorpus.materializePrCorpus(root, target));
         assertTrue(rejected.getMessage().contains("docs/developer/mcp.md"));
     }
 
