@@ -600,19 +600,23 @@
     "AUD-ARC-05",
     "AUD-ARC-06"
    ],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-30",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #282 (b6b56a07)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "4 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-30",
+    "commit": "b6b56a07",
+    "verdict": "Fermé",
+    "preuve": "CoreArchitectureTest échoue sur un import interdit du cœur, baseline package-cycles.txt, ADR complétant ADR-0004 (PR #282)",
     "reserve": null
    }
   },
@@ -631,19 +635,23 @@
    "sprint": 3,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-30",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #282 (b6b56a07)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-30",
+    "commit": "b6b56a07",
+    "verdict": "Fermé",
+    "preuve": "ProjectPathGuardTest couvre chaque garde de ProjectPathGuard (PR #282)",
     "reserve": null
    }
   },
@@ -662,19 +670,23 @@
    "sprint": 3,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-30",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #282 (b6b56a07)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-30",
+    "commit": "b6b56a07",
+    "verdict": "Fermé",
+    "preuve": "GitRecencyCandidateEnricher journalise par System.Logger ce qu'il attrape, sans chemin, en restant fail-open (PR #282)",
     "reserve": null
    }
   },
@@ -693,20 +705,24 @@
    "sprint": 3,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-30",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Prévention pour le code futur (règle de revue), code existant inchangé",
+   "changement": "Corrigé par la PR #282 (b6b56a07)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
-    "reserve": ".claude/rules/code-review.md:20 (PR #254) interdit les assertions sur l'horloge pour le code revu ; les 5 assertions de durée existantes sont inchangées."
+    "date": "2026-10-30",
+    "commit": "b6b56a07",
+    "verdict": "Fermé",
+    "preuve": "assertions de durée murale remplacées par des assertions d'état ou la borne du worker récalcitrant, marges x5 sans seuil abaissé ; Windows gate vert sur b2f88d8c (PR #282)",
+    "reserve": null
    }
   },
   {
@@ -726,19 +742,23 @@
    "bloque": [
     "AUD-QUA-09"
    ],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-30",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #282 (b6b56a07)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-30",
+    "commit": "b6b56a07",
+    "verdict": "Fermé",
+    "preuve": "NexusResourceTest et NexusMcpServerIntegrationTest : un @Test par endpoint et par outil (PR #282)",
     "reserve": null
    }
   },
@@ -788,19 +808,23 @@
    "sprint": 3,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-30",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #282 (b6b56a07)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-30",
+    "commit": "b6b56a07",
+    "verdict": "Fermé",
+    "preuve": "méthodes default d'IndexRepository rendues abstraites (PR #282)",
     "reserve": null
    }
   },
@@ -3888,5 +3912,5 @@
   }
  ],
  "date_maj": "2026-10-30",
- "commit_maj": "4024c874"
+ "commit_maj": "b6b56a07"
 }

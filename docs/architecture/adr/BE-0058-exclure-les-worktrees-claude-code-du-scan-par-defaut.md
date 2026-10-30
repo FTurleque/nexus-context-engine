@@ -88,6 +88,6 @@ La décision est réévaluée si Claude Code change l'emplacement de ses worktre
 ## References
 
 - [BE-0021](BE-0021-reutiliser-jgit-pour-les-regles-gitignore-et-nexusignore.md) — JGit pour les règles d'ignore et liste intégrée d'exclusions.
-- Changement OpenSpec `openspec/changes/exclude-claude-worktrees-by-default/`.
+- Changement OpenSpec `openspec/changes/archive/2026-10-30-exclude-claude-worktrees-by-default/` et spécification `openspec/specs/project-indexing-exclusions/spec.md`.
 - [Pipeline d'indexation](../../developer/indexing-pipeline.md) — exclusions intégrées du scan.
 - [arc42 §9 — Décisions](../arc42/09-decisions.md).
