@@ -4,6 +4,7 @@ import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;
 import com.nexus.testsupport.SymbolicLinks;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -22,6 +23,13 @@ class AiSkillsRegistryProviderTest {
 
     @TempDir
     Path temporaryDirectory;
+
+    private Path projectRoot;
+
+    @BeforeEach
+    void createProjectRoot() throws IOException {
+        projectRoot = Files.createDirectories(temporaryDirectory.resolve("project"));
+    }
 
     @Test
     void discoversRegistryMetadataBeforeLoadingTheSelectedSkillBody() throws Exception {
@@ -96,8 +104,7 @@ class AiSkillsRegistryProviderTest {
 
     @Test
     void rejectsAncestorSymlinkForRegistrySkillsRoot() throws Exception {
-        Path outside = Files.createDirectories(temporaryDirectory.resolveSibling(
-                temporaryDirectory.getFileName() + "-outside-registry"));
+        Path outside = Files.createDirectories(temporaryDirectory.resolve("outside-registry"));
         Path outsideSkill = outside.resolve("shared/java/SKILL.md");
         Files.createDirectories(outsideSkill.getParent());
         Files.writeString(outsideSkill, """
@@ -108,7 +115,7 @@ class AiSkillsRegistryProviderTest {
                 OUTSIDE
                 """);
 
-        Path registry = Files.createDirectories(temporaryDirectory.resolve(".nexus/registry"));
+        Path registry = Files.createDirectories(projectRoot.resolve(".nexus/registry"));
         SymbolicLinks.createOrSkip(registry.resolve("skills"), outside);
 
         SkillProviderResult result = new AiSkillsRegistryProvider().discover(
@@ -120,7 +127,7 @@ class AiSkillsRegistryProviderTest {
 
     @Test
     void rejectsFinalSkillDefinitionSymlink() throws Exception {
-        Path outside = temporaryDirectory.resolveSibling(temporaryDirectory.getFileName() + "-outside-skill.md");
+        Path outside = temporaryDirectory.resolve("outside-skill.md");
         Files.writeString(outside, """
                 ---
                 name: escaped-final
@@ -129,7 +136,7 @@ class AiSkillsRegistryProviderTest {
                 OUTSIDE
                 """);
         Path skillDirectory = Files.createDirectories(
-                temporaryDirectory.resolve(".nexus/registry/skills/shared/java/escaped-final"));
+                projectRoot.resolve(".nexus/registry/skills/shared/java/escaped-final"));
         SymbolicLinks.createOrSkip(skillDirectory.resolve("SKILL.md"), outside);
 
         SkillProviderResult result = new AiSkillsRegistryProvider().discover(
@@ -143,7 +150,7 @@ class AiSkillsRegistryProviderTest {
         return new ProjectDescriptor(
                 UUID.randomUUID(),
                 "registry-test",
-                temporaryDirectory,
+                projectRoot,
                 ProjectSourceType.LOCAL,
                 Set.of(),
                 Set.of(),
@@ -152,7 +159,7 @@ class AiSkillsRegistryProviderTest {
     }
 
     private void write(String relativePath, String content) throws Exception {
-        Path file = temporaryDirectory.resolve(relativePath);
+        Path file = projectRoot.resolve(relativePath);
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);
     }
