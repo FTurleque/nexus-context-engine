@@ -87,7 +87,7 @@ public final class SensitiveContentRedactor {
                     + "|[^\\s/:@]{1," + MAX_URI_USER_CHARS + "}+:[^\\s/@]{" + (MAX_SECRET_CHARS + 1) + ",}+@)");
     /** Jeton structuré plus long que sa borne : refusé, jamais tronqué ni publié en clair. */
     private static final Pattern OVERSIZED_TOKEN = Pattern.compile(
-            "\\b(?:gh[pousr]_[A-Za-z0-9]|github_pat_\\w|(?:sk|rk)_(?:live|test)_[A-Za-z0-9])[A-Za-z0-9_]{255}"
+            "\\b(?:gh[pousr]_[A-Za-z0-9]|github_pat_\\w|(?:sk|rk)_(?:live|test)_[A-Za-z0-9])\\w{255}"
                     + "|(?<![A-Za-z0-9_-])(?:sk-[A-Za-z0-9_-]{261}|(?:glpat-|xox[abposr]-)[A-Za-z0-9_-]{256})");
 
     private SensitiveContentRedactor() {

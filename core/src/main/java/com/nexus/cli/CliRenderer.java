@@ -30,6 +30,7 @@ import java.util.Map;
 final class CliRenderer {
 
     private static final TypeReference<LinkedHashMap<String, Object>> OBJECT = new TypeReference<>() { };
+    private static final String PROJECT_FIELD = "project";
 
     private final PrintStream out;
     private final PrintStream err;
@@ -51,7 +52,7 @@ final class CliRenderer {
 
     void renderProject(ProjectDescriptor project) throws IOException {
         if (json) {
-            writeJson(out, command("project.add", Map.of("project", PublicOutputProjection.project(project))));
+            writeJson(out, command("project.add", Map.of(PROJECT_FIELD, PublicOutputProjection.project(project))));
             return;
         }
         printProject(project);
@@ -93,7 +94,7 @@ final class CliRenderer {
         if (json) {
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("command", "minos-import");
-            payload.put("project", PublicOutputProjection.project(project));
+            payload.put(PROJECT_FIELD, PublicOutputProjection.project(project));
             payload.put("sourceProvider", snapshot.sourceProvider());
             payload.put("symbols", snapshot.symbols().size());
             payload.put("relations", snapshot.relations().size());
@@ -189,7 +190,7 @@ final class CliRenderer {
     void renderInspect(ProjectDescriptor project, IndexStatistics statistics) throws IOException {
         if (json) {
             Map<String, Object> payload = new LinkedHashMap<>();
-            payload.put("project", PublicOutputProjection.project(project));
+            payload.put(PROJECT_FIELD, PublicOutputProjection.project(project));
             payload.put("index", PublicOutputProjection.statistics(statistics));
             writeJson(out, command("inspect", payload));
             return;

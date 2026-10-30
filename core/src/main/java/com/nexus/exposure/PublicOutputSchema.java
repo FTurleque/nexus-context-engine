@@ -59,22 +59,28 @@ public final class PublicOutputSchema {
             out.add(path + " : clés " + actualKeys + " au lieu de " + expected);
         }
         for (RecordComponent component : type.getRecordComponents()) {
-            Object value = json.get(component.getName());
-            String child = path + "." + component.getName();
-            Class<?> raw = component.getType();
-            if (raw.isRecord() && value instanceof Map<?, ?> nested) {
-                walk(raw, nested, keysOf(nested), child, out);
-            } else if (List.class.isAssignableFrom(raw) && value instanceof List<?> list) {
-                Class<?> element = elementType(component.getGenericType());
-                if (element != null && element.isRecord()) {
-                    for (Object item : list) {
-                        if (item instanceof Map<?, ?> nested) {
-                            walk(element, nested, keysOf(nested), child + "[]", out);
-                        } else {
-                            out.add(child + "[] : objet attendu");
-                        }
-                    }
-                }
+            walkComponent(component, json.get(component.getName()), path + "." + component.getName(), out);
+        }
+    }
+
+    private static void walkComponent(RecordComponent component, Object value, String path, List<String> out) {
+        Class<?> raw = component.getType();
+        if (raw.isRecord() && value instanceof Map<?, ?> nested) {
+            walk(raw, nested, keysOf(nested), path, out);
+            return;
+        }
+        if (!List.class.isAssignableFrom(raw) || !(value instanceof List<?> list)) {
+            return;
+        }
+        Class<?> element = elementType(component.getGenericType());
+        if (element == null || !element.isRecord()) {
+            return;
+        }
+        for (Object item : list) {
+            if (item instanceof Map<?, ?> nested) {
+                walk(element, nested, keysOf(nested), path + "[]", out);
+            } else {
+                out.add(path + "[] : objet attendu");
             }
         }
     }

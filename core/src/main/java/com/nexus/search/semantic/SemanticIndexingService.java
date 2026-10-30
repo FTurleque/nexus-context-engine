@@ -137,19 +137,8 @@ public final class SemanticIndexingService {
             return List.of();
         }
 
-        // Chaque document est redigé une seule fois ; embedding et extrait partent de ce texte.
-        List<SearchDocument> redactable = new ArrayList<>(documents.size());
         List<String> redactedContents = new ArrayList<>(documents.size());
-        for (SearchDocument document : documents) {
-            try {
-                redactedContents.add(SensitiveContentRedactor.redact(document.content()));
-                redactable.add(document);
-            } catch (OversizedSecretException exception) {
-                LOGGER.log(System.Logger.Level.WARNING, "Document exclu de l'index sémantique : "
-                        + document.relativePath() + " (" + OversizedSecretException.PUBLIC_REASON + ")");
-            }
-        }
-        documents = redactable;
+        documents = redactOnce(documents, redactedContents);
 
         List<SemanticVectorDocument> vectors = new ArrayList<>(documents.size());
         int documentIndex = 0;
@@ -194,6 +183,25 @@ public final class SemanticIndexingService {
             }
         }
         return List.copyOf(vectors);
+    }
+
+    /**
+     * Redige chaque document une seule fois ; embedding et extrait partent de ce texte. Un document
+     * que la redaction refuse est écarté seul. Renvoie les documents retenus, alignés sur
+     * {@code redactedContents}.
+     */
+    private static List<SearchDocument> redactOnce(List<SearchDocument> documents, List<String> redactedContents) {
+        List<SearchDocument> redactable = new ArrayList<>(documents.size());
+        for (SearchDocument document : documents) {
+            try {
+                redactedContents.add(SensitiveContentRedactor.redact(document.content()));
+                redactable.add(document);
+            } catch (OversizedSecretException exception) {
+                LOGGER.log(System.Logger.Level.WARNING, "Document exclu de l'index sémantique : "
+                        + document.relativePath() + " (" + OversizedSecretException.PUBLIC_REASON + ")");
+            }
+        }
+        return redactable;
     }
 
     private void validateDimensions(float[] vector) throws IOException {

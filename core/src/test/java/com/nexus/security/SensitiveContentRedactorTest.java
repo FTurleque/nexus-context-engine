@@ -58,8 +58,9 @@ class SensitiveContentRedactorTest {
         // pas une mesure de performance : marge supérieure à x5 sur la durée nominale (~0,3 s à froid).
         org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(java.time.Duration.ofSeconds(10), () -> {
             assertEquals(malformed, SensitiveContentRedactor.redact(malformed));
+            String oversized = "password=" + "x".repeat(1_000_000);
             org.junit.jupiter.api.Assertions.assertThrows(OversizedSecretException.class,
-                    () -> SensitiveContentRedactor.redact("password=" + "x".repeat(1_000_000)));
+                    () -> SensitiveContentRedactor.redact(oversized));
         });
     }
 
@@ -69,8 +70,9 @@ class SensitiveContentRedactorTest {
             String prefix = "\"password\": " + quote;
             assertEquals(prefix + "[REDACTED]" + quote,
                     SensitiveContentRedactor.redact(prefix + "x".repeat(4096) + quote));
+            String aboveBound = prefix + "x".repeat(4097) + quote;
             var failure = org.junit.jupiter.api.Assertions.assertThrows(OversizedSecretException.class,
-                    () -> SensitiveContentRedactor.redact(prefix + "x".repeat(4097) + quote));
+                    () -> SensitiveContentRedactor.redact(aboveBound));
             assertFalse(failure.getMessage().contains("xxxxxxxx"));
         }
     }
@@ -82,14 +84,16 @@ class SensitiveContentRedactorTest {
             String suffix = prefix.equals("<password>") ? "</password>" : "";
             String atBound = SensitiveContentRedactor.redact(prefix + "v".repeat(4096) + suffix);
             assertFalse(atBound.contains("vvvv"), atBound);
+            String aboveBound = prefix + "v".repeat(4097) + suffix;
             var failure = org.junit.jupiter.api.Assertions.assertThrows(OversizedSecretException.class,
-                    () -> SensitiveContentRedactor.redact(prefix + "v".repeat(4097) + suffix));
+                    () -> SensitiveContentRedactor.redact(aboveBound));
             assertFalse(failure.getMessage().contains("vvvv"));
         }
         String user = "u".repeat(1024);
         assertFalse(SensitiveContentRedactor.redact("https://" + user + "@host/repo").contains("uuuu"));
+        String longUser = "https://" + user + "u@host/repo";
         org.junit.jupiter.api.Assertions.assertThrows(OversizedSecretException.class,
-                () -> SensitiveContentRedactor.redact("https://" + user + "u@host/repo"));
+                () -> SensitiveContentRedactor.redact(longUser));
     }
 
     @Test

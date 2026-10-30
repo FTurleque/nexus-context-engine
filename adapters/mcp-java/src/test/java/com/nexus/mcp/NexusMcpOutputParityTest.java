@@ -98,7 +98,8 @@ class NexusMcpOutputParityTest {
 
     @Test
     void symbolToolsAreTheDeclaredMcpOnlyOperationsAndMatchTheContract() throws Exception {
-        assertEquals(List.of("find_symbol", "find_usages"), PublicOutputSchema.MCP_ONLY_OPERATIONS);
+        List<String> mcpOnly = PublicOutputSchema.MCP_ONLY_OPERATIONS;
+        assertEquals(List.of("find_symbol", "find_usages"), mcpOnly);
         Map<?, ?> symbols = call("find_symbol", Map.of("project", "first", "query", "OrderService"));
         assertFalse(((List<?>) symbols.get("symbols")).isEmpty());
         assertEquals(List.of(), PublicOutputSchema.divergences(PublicOutput.SymbolSearch.class, symbols, List.of()));
@@ -166,7 +167,7 @@ class NexusMcpOutputParityTest {
                 .orElseThrow();
         McpSchema.CallToolResult result = specification.callHandler()
                 .apply(null, new McpSchema.CallToolRequest(tool, arguments));
-        assertFalse(Boolean.TRUE.equals(result.isError()), () -> text(result));
+        org.junit.jupiter.api.Assertions.assertNotEquals(Boolean.TRUE, result.isError(), () -> text(result));
         return result;
     }
 

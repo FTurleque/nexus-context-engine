@@ -48,11 +48,11 @@ class SchemaMigratorSecretFormatUpgradeTest {
                         .sorted().toList();
             }
             assertEquals(10, migrations.size());
-            for (int index = 0; index < migrations.size(); index++) {
-                for (String sql : SqlScriptSplitter.split(Files.readString(migrations.get(index), StandardCharsets.UTF_8))) {
-                    statement.execute(sql);
-                }
-                try (var insert = connection.prepareStatement("INSERT INTO schema_migrations VALUES (?, ?, ?)")) {
+            try (var insert = connection.prepareStatement("INSERT INTO schema_migrations VALUES (?, ?, ?)")) {
+                for (int index = 0; index < migrations.size(); index++) {
+                    for (String sql : SqlScriptSplitter.split(Files.readString(migrations.get(index), StandardCharsets.UTF_8))) {
+                        statement.execute(sql);
+                    }
                     insert.setInt(1, index + 1);
                     insert.setString(2, "db/migration/" + migrations.get(index).getFileName());
                     insert.setString(3, "2026-01-01T00:00:00Z");
