@@ -49,6 +49,8 @@ class RealSemanticBenchmarkCorpusTest {
         write(root, "docs/architecture/adr/GEN-0099-hors-corpus.md");
         write(root, "docs/project/history/hors-corpus.md");
         write(root, "core/src/test/java/com/nexus/search/HorsCorpusTest.java");
+        write(root, "core/src/main/java/com/nexus/context/source/skills/HorsCorpus.java");
+        write(root, "core/src/main/java/com/nexus/search/lucene/HorsCorpus.java");
 
         Set<String> files = RealSemanticBenchmarkCorpus.prCorpusFiles(root);
 
@@ -58,6 +60,9 @@ class RealSemanticBenchmarkCorpusTest {
         assertFalse(files.contains("docs/architecture/adr/GEN-0099-hors-corpus.md"));
         assertFalse(files.contains("docs/project/history/hors-corpus.md"));
         assertFalse(files.contains("core/src/test/java/com/nexus/search/HorsCorpusTest.java"));
+        assertFalse(files.contains("core/src/main/java/com/nexus/context/source/skills/HorsCorpus.java"));
+        assertFalse(files.contains("core/src/main/java/com/nexus/search/lucene/HorsCorpus.java"));
+        assertTrue(files.contains("core/src/main/java/com/nexus/search/SearchService.java"));
         assertEquals(List.of(), RealSemanticBenchmarkCorpus.missingRelevantPaths(files));
     }
 

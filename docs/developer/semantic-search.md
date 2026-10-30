@@ -169,7 +169,7 @@ Le workflow n'est pas exécuté sur les PR sans rapport avec le sémantique. Ses
 - un `push` vers `develop` qui touche ces mêmes chemins, c'est-à-dire la fusion d'une telle PR, exécute le corpus complet `full` sur le SHA de `develop` ; le groupe de concurrence est ce SHA, donc un push ultérieur n'annule pas ce run, et un run en cours n'est jamais annulé (seul un run en attente sur le même SHA peut être remplacé) ;
 - `workflow_dispatch` choisit le corpus (`full` par défaut) ; la planification mensuelle exécute `full` sur `main`.
 
-Le corpus `pr` est déclaré dans `RealSemanticBenchmarkCorpus` (test de `core`) : `docs/developer/`, ADR `BE-*` et `DATA-*`, paquets `com.nexus.context` et `com.nexus.search` de `core`, sources de `adapters/mcp-java`. Il est copié dans un répertoire temporaire avant indexation et contient chaque chemin jugé pertinent par les requêtes ; `RealSemanticBenchmarkCorpusTest` vérifie cette inclusion sur le dépôt à chaque build. Les seuils sont les mêmes pour les deux corpus.
+Le corpus `pr` est déclaré dans `RealSemanticBenchmarkCorpus` (test de `core`) : `docs/developer/`, ADR `BE-*` et `DATA-*`, classes de premier niveau des paquets `com.nexus.context` et `com.nexus.search` de `core`, paquet `com.nexus.context.source.git`, sources de `adapters/mcp-java`. Il est copié dans un répertoire temporaire avant indexation et contient chaque chemin jugé pertinent par les requêtes ; `RealSemanticBenchmarkCorpusTest` vérifie cette inclusion sur le dépôt à chaque build. Les seuils sont les mêmes pour les deux corpus.
 
 Contrat courant :
 
@@ -217,7 +217,7 @@ Une calibration ABBA sur le même runner (EPYC 7763, 12 documents de 12 000 cara
 
 Le budget du corpus `full` est donc fixé à **180 minutes** : le runner le plus lent observé exige environ 2 h 05 de bout en bout, et 180 minutes laissent environ 45 % de marge pour la croissance du corpus.
 
-Le corpus `pr` compte environ 190 fichiers, soit un tiers des entrées du corpus complet ; avec la même densité de tokens (environ 7 caractères par token sur le texte embarqué, plafonné à 12 000 caractères par fichier), il représente environ 135 000 tokens, soit 14 à 27 minutes d'embeddings selon le débit observé. Son budget est fixé à **45 minutes**, préparation du runner et build de `core` compris.
+Le corpus `pr` compte environ 130 fichiers. Un premier découpage, avec les paquets `com.nexus.context` et `com.nexus.search` entiers (191 fichiers), a embarqué 224 479 tokens en 30 min 25 s (123 tokens/s, AMD EPYC 9V74) pour un job de 31 min 40 s : au débit le plus lent observé (86 tokens/s), il aurait dépassé 45 minutes. Le découpage courant garde les classes de premier niveau de ces paquets et le paquet `com.nexus.context.source.git` ; à la densité mesurée sur ce run (4,36 caractères par token, texte embarqué plafonné à 12 000 caractères par fichier), il représente environ 173 000 tokens, soit 23 minutes d'embeddings à 123 tokens/s et 34 minutes à 86 tokens/s. Son budget est fixé à **45 minutes**, préparation du runner et build de `core` compris (environ 1 minute 30).
 
 Si `throughput.json` montre un corpus ou un débit qui rapproche la durée projetée d'un de ces budgets, il faut réanalyser le travail embarqué, ou réduire le corpus `pr`, avant d'augmenter le délai.
 

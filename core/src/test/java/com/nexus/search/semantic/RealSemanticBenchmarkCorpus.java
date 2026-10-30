@@ -20,9 +20,10 @@ import java.util.stream.Stream;
  *
  * <p>Le corpus {@code full} est le snapshot NEXUS entier. Le corpus {@code pr} en
  * est un sous-ensemble déclaré, copié dans un répertoire dédié avant indexation :
- * il contient tous les chemins jugés pertinents par les requêtes et environ un
- * tiers des entrées embarquées du corpus complet, pour qu'une pull request
- * reçoive un verdict sous 45 minutes.</p>
+ * il contient tous les chemins jugés pertinents par les requêtes, avec la
+ * documentation développeur, les ADR backend et data et les classes de premier
+ * niveau des paquets de contexte et de recherche comme distracteurs, pour qu'une
+ * pull request reçoive un verdict sous 45 minutes.</p>
  */
 final class RealSemanticBenchmarkCorpus {
 
@@ -33,8 +34,9 @@ final class RealSemanticBenchmarkCorpus {
             new Slice("docs/developer", "**"),
             new Slice("docs/architecture/adr", "BE-*.md"),
             new Slice("docs/architecture/adr", "DATA-*.md"),
-            new Slice("core/src/main/java/com/nexus/context", "**"),
-            new Slice("core/src/main/java/com/nexus/search", "**"),
+            new Slice("core/src/main/java/com/nexus/context", "*.java"),
+            new Slice("core/src/main/java/com/nexus/context/source/git", "**"),
+            new Slice("core/src/main/java/com/nexus/search", "*.java"),
             new Slice("adapters/mcp-java/src/main", "**"));
 
     private RealSemanticBenchmarkCorpus() {
