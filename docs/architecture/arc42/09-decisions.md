@@ -67,6 +67,7 @@ Cette section présente un index synthétique avec statut, date et relations de 
 | [DATA-0054](../adr/DATA-0054-lectures-registre-federees-groupees.md) | Grouper les lectures du registre pour les opérations fédérées | Accepted | 2026-09-12 |
 | [DATA-0055](../adr/DATA-0055-preserver-les-lecteurs-lors-des-reconstructions-semantiques.md) | Préserver les lecteurs lors des reconstructions sémantiques | Accepted | 2026-09-13 |
 | [GEN-0057](../adr/GEN-0057-tenir-le-registre-d-adr-au-format-archgate.md) | Tenir le registre d'ADR au format Archgate, à l'emplacement arc42 | Accepted | 2026-10-29 |
+| [BE-0058](../adr/BE-0058-exclure-les-worktrees-claude-code-du-scan-par-defaut.md) | Exclure les worktrees Claude Code du scan par défaut | Accepted | 2026-10-30 |
 | [ADR-0000](../adr/archive/0000-adopter-les-adr-madr.md) | Adopter MADR comme format et définir la gouvernance des ADR | Superseded (GEN-0057) | 2026-07-19 |
 | [ADR-0056](../adr/archive/0056-regrouper-le-registre-des-adr-dans-la-documentation-d-architecture.md) | Regrouper le registre des ADR dans la documentation d'architecture | Superseded (GEN-0057) | 2026-10-29 |
 
@@ -79,8 +80,9 @@ principe local-first.
 
 ### Persistance et indexation
 
-DATA-0006, DATA-0007, BE-0008, DATA-0020, BE-0021, DATA-0022, DATA-0023 — SQLite,
-Lucene, JavaParser, migrations, JGit, SHA-256.
+DATA-0006, DATA-0007, BE-0008, DATA-0020, BE-0021, DATA-0022, DATA-0023, BE-0058 —
+SQLite, Lucene, JavaParser, migrations, JGit, SHA-256, exclusion des worktrees
+Claude Code.
 
 ### Recherche et ranking
 
