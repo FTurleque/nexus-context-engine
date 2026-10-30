@@ -12,7 +12,7 @@ argument-hint: "[open|merge <pr>|promote|sync]"
 - Mainteneur unique : pas de seconde approbation humaine requise, pas d'obligation d'être à jour avec la base avant merge.
 - Intégration par **merge commit** (`--merge`), jamais squash/rebase, toujours **exact-head** (`--match-head-commit`).
 
-Checks obligatoires sur `develop` : `Windows gate`, `Linux reactor Maven build`, `CodeQL Java analysis`, `OSV new-vulnerability delta gate / osv-scan`, `Build aggregate reactor SBOM`, `OSV aggregate SBOM vulnerability gate / osv-scan`, `SonarCloud Code Analysis`. `Real Ollama semantic retrieval` est long et non obligatoire.
+Checks obligatoires sur `develop` : `Windows gate`, `Linux reactor Maven build`, `CodeQL Java analysis`, `OSV new-vulnerability delta gate / osv-scan`, `Build aggregate reactor SBOM`, `OSV aggregate SBOM vulnerability gate / osv-scan`, `SonarCloud Code Analysis`, et `Hermetic scale benchmark` une fois ajouté au ruleset par le mainteneur (produit sur toute PR, succès sans mesure hors des chemins surveillés ; avant cet ajout, un rouge reste bloquant en revue). `Real Ollama semantic retrieval` est long et non obligatoire.
 
 ## Ouvrir
 
