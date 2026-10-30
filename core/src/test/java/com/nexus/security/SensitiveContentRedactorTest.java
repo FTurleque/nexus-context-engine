@@ -54,7 +54,9 @@ class SensitiveContentRedactorTest {
     @Test
     void malformedKeysAndOversizedValuesHaveBoundedLookahead() {
         String malformed = "a.".repeat(100_000) + "ordinary = value";
-        org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(java.time.Duration.ofSeconds(2), () -> {
+        // Garde-fou contre un lookahead quadratique (bloquant en pratique sur 200 000 caractères),
+        // pas une mesure de performance : marge supérieure à x5 sur la durée nominale (~0,3 s à froid).
+        org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(java.time.Duration.ofSeconds(10), () -> {
             assertEquals(malformed, SensitiveContentRedactor.redact(malformed));
             org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
                     () -> SensitiveContentRedactor.redact("password=" + "x".repeat(1_000_000)));

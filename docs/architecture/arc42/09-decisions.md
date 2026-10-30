@@ -68,6 +68,7 @@ Cette section présente un index synthétique avec statut, date et relations de 
 | [DATA-0055](../adr/DATA-0055-preserver-les-lecteurs-lors-des-reconstructions-semantiques.md) | Préserver les lecteurs lors des reconstructions sémantiques | Accepted | 2026-09-13 |
 | [GEN-0057](../adr/GEN-0057-tenir-le-registre-d-adr-au-format-archgate.md) | Tenir le registre d'ADR au format Archgate, à l'emplacement arc42 | Accepted | 2026-10-29 |
 | [BE-0058](../adr/BE-0058-exclure-les-worktrees-claude-code-du-scan-par-defaut.md) | Exclure les worktrees Claude Code du scan par défaut | Accepted | 2026-10-30 |
+| [ARCH-0059](../adr/ARCH-0059-verifier-les-frontieres-du-coeur-par-un-test-d-architecture.md) | Vérifier les frontières du cœur par un test d'architecture | Proposed | 2026-10-30 |
 | [ADR-0000](../adr/archive/0000-adopter-les-adr-madr.md) | Adopter MADR comme format et définir la gouvernance des ADR | Superseded (GEN-0057) | 2026-07-19 |
 | [ADR-0056](../adr/archive/0056-regrouper-le-registre-des-adr-dans-la-documentation-d-architecture.md) | Regrouper le registre des ADR dans la documentation d'architecture | Superseded (GEN-0057) | 2026-10-29 |
 
@@ -121,5 +122,5 @@ dérivés, lectures fédérées, reconstructions sémantiques.
 
 ### Gouvernance
 
-ARCH-0004, DATA-0018, DATA-0019, GEN-0057 — module unique, UUID, NEXUS_HOME,
+ARCH-0004, DATA-0018, DATA-0019, GEN-0057, ARCH-0059 — module unique, UUID, NEXUS_HOME,
 registre des ADR au format Archgate (remplace ADR-0000 et ADR-0056, archivés).

@@ -17,6 +17,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -25,6 +26,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -158,7 +160,10 @@ class JdtLanguageServerCodeIntelligenceProviderTest {
         assertEquals(
                 Duration.ofSeconds(1),
                 JdtStdioSession.shutdownTimeout(configuration.timeout()));
-        assertTimeoutPreemptively(Duration.ofSeconds(2), session::close);
+        // Garde-fou contre un blocage infini : marge x5 sur le shutdown dédié de 1 s, toujours
+        // très en deçà du timeout opérationnel de 30 s que le test exclut.
+        assertTimeoutPreemptively(Duration.ofSeconds(5), session::close);
+        assertTrue(process.sentMessages().contains("\"method\":\"shutdown\""), process.sentMessages());
         assertTrue(process.destroyed);
     }
 
@@ -179,7 +184,12 @@ class JdtLanguageServerCodeIntelligenceProviderTest {
                         process);
 
         assertThrows(IOException.class, () -> session.request("test/neverReplies", JSON.createObjectNode()));
-        assertTimeoutPreemptively(Duration.ofMillis(500), session::close);
+        // L'absence d'arrêt gracieux est prouvée par l'état : aucune requête shutdown n'est émise.
+        // Le délai ne sert que de garde-fou contre un blocage infini (marge x5 sur le shutdown de 1 s).
+        assertTimeoutPreemptively(Duration.ofSeconds(5), session::close);
+        String sent = process.sentMessages();
+        assertTrue(sent.contains("\"method\":\"test/neverReplies\""), sent);
+        assertFalse(sent.contains("\"method\":\"shutdown\""), sent);
         assertTrue(process.destroyed);
     }
 
@@ -217,6 +227,10 @@ class JdtLanguageServerCodeIntelligenceProviderTest {
         @Override
         public OutputStream getOutputStream() {
             return stdin;
+        }
+
+        private String sentMessages() {
+            return stdin.toString(StandardCharsets.UTF_8);
         }
 
         @Override
