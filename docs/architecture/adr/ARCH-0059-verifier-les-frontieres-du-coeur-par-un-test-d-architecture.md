@@ -89,5 +89,5 @@ La décision est réévaluée si le cœur est découpé en modules Maven ou reç
 ## References
 
 - [ARCH-0003](ARCH-0003-conserver-un-coeur-java-sans-framework-applicatif.md), [ARCH-0004](ARCH-0004-demarrer-avec-un-seul-module-maven.md), [DATA-0006](DATA-0006-utiliser-sqlite-comme-source-de-verite-structurelle.md), [DATA-0007](DATA-0007-utiliser-lucene-comme-index-de-recherche-local.md)
-- Changement OpenSpec `openspec/changes/sprint-03-filets-de-test-et-traces/` (spec `core-package-boundaries`)
+- Changement OpenSpec `openspec/changes/archive/2026-10-31-sprint-03-filets-de-test-et-traces/` et spécification `openspec/specs/core-package-boundaries/spec.md`
 - [Architecture d'implémentation](../../developer/architecture-implementation.md), section « Frontières vérifiées du cœur »

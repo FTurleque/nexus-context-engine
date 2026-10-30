@@ -775,7 +775,7 @@ grep -rn "test-rest-token-contract\|Test-Hooks" .github scripts → seulement l'
 
 - **Axe** : Tests · **Effort** : S<1j · **Sprint** : S3 · Filets de test et traces
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 4 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #285 (6dc03c2d) · **Vérification du 2026-10-30** (`6dc03c2d`) : les cinq tests de mesure opt-in ont un lanceur : measurement-tools.yml (replay MINOS 1.2.0 et baselines d'indexation, verts sur la PR #285) et job semantic-diagnostics de semantic-search-qualification.yml (run 41122508294)
 
 **Preuve**
 
