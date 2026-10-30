@@ -79,7 +79,10 @@ if ($java24Version -notmatch 'version "24(?:\.|\")') {
     throw "The -Java24 executable must be Java 24. Detected: $java24Version"
 }
 
-$replayRoot = Join-Path (Get-Location) 'target\m13-replay'
+# Core tests run from the repository root (workingDirectory in core/pom.xml): the replay
+# sandbox and the Maven call start from it, whatever the current directory is.
+$repositoryRoot = Split-Path -Parent $PSScriptRoot
+$replayRoot = Join-Path $repositoryRoot 'target\m13-replay'
 $nexusHome = Join-Path $replayRoot 'nexus-home'
 $replayFixture = Join-Path $replayRoot 'fixture'
 $minosHome = Join-Path $replayRoot 'minos-home'
@@ -131,11 +134,19 @@ try {
         $utf8NoBom)
 
     $env:NEXUS_HOME = $nexusHome
-    Invoke-Maven -Arguments @(
-        '-Dtest=MinosRealIntegrationTest',
-        '-Dnexus.minos.integration.replay=true',
-        'test'
-    )
+    Push-Location $repositoryRoot
+    try {
+        Invoke-Maven -RepositoryRoot $repositoryRoot -Arguments @(
+            '-pl', 'core',
+            '-Dtest=MinosRealIntegrationTest',
+            '-Dsurefire.failIfNoSpecifiedTests=false',
+            '-Dnexus.minos.integration.replay=true',
+            'test'
+        )
+    }
+    finally {
+        Pop-Location
+    }
 
     Write-Host 'M13 MINOS -> NEXUS replay SUCCESS'
 }

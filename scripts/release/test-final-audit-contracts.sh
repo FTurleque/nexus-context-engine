@@ -212,6 +212,24 @@ grep -q 'GEN-0060' docs/developer/semantic-search.md \
 grep -Eq '^ollama\.0\.33\.3\.linux-amd64\.sha256=[0-9a-f]{64}$' config/tool-integrity.properties \
   || fail 'Ollama qualification checksum anchor is missing'
 
+# AUD-TST-09: every opt-in measurement test of src/test has an automated launcher,
+# and its status is documented in docs/developer/ci-and-supply-chain.md.
+MEASUREMENT_WORKFLOW=".github/workflows/measurement-tools.yml"
+for launcher in \
+  "$MEASUREMENT_WORKFLOW:MinosRealIntegrationTest:validate-minos-integration.ps1" \
+  "$MEASUREMENT_WORKFLOW:LargeScaleSearchBaselineTest:LargeScaleSearchBaselineTest" \
+  "$MEASUREMENT_WORKFLOW:SmallDeltaIndexingBaselineTest:SmallDeltaIndexingBaselineTest" \
+  "$SEMANTIC_WORKFLOW:SemanticSearchBenchmarkTest:SemanticSearchBenchmarkTest" \
+  "$SEMANTIC_WORKFLOW:RealSemanticRetrievalDiagnosticTest:RealSemanticRetrievalDiagnosticTest"; do
+  IFS=: read -r workflow test_class needle <<< "$launcher"
+  grep -qF "$needle" "$workflow" \
+    || fail "$test_class must be launched by $workflow"
+  grep -qF "\`$test_class\`" docs/developer/ci-and-supply-chain.md \
+    || fail "$test_class launcher status must be documented in docs/developer/ci-and-supply-chain.md"
+done
+grep -qF -- '-Dtest=MinosRealIntegrationTest' scripts/validate-minos-integration.ps1 \
+  || fail 'validate-minos-integration.ps1 must run MinosRealIntegrationTest'
+
 # Vector API remains a measured non-adoption decision. It must not silently enter
 # production launchers until a new same-runner qualification changes that decision.
 grep -q -- '--add-modules=jdk.incubator.vector' docs/developer/runtime-flags-qualification.md \

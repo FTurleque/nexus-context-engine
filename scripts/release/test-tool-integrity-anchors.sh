@@ -29,6 +29,9 @@ fi
 grep -Eq '^maven\.3\.10\.0\.sha512=[0-9a-f]{128}$' "$INTEGRITY"
 grep -Eq '^jdtls\.1\.60\.0-202606262232\.sha256=[0-9a-f]{64}$' "$INTEGRITY"
 grep -Eq '^ollama\.0\.33\.3\.linux-amd64\.sha256=[0-9a-f]{64}$' "$INTEGRITY"
+grep -Eq '^minos\.1\.2\.0\.windows-x64\.sha256=[0-9a-f]{64}$' "$INTEGRITY"
+grep -qF "MINOS_VERSION: '1.2.0'" "$ROOT/.github/workflows/measurement-tools.yml"
+grep -qF 'minos.$env:MINOS_VERSION.windows-x64.sha256' "$ROOT/.github/workflows/measurement-tools.yml"
 grep -q 'MAVEN_VERSION="3.10.0"' "$ROOT/mvnw"
 grep -q 'MAVEN_VERSION=3.10.0' "$ROOT/mvnw.cmd"
 

@@ -51,7 +51,7 @@ Le gate documentaire contrôle notamment :
 - **Épinglage** (`test-tool-integrity-anchors.sh`) : chaque `uses:` externe est épinglé par SHA complet suivi de `# vX.Y.Z` ; un même SHA porte le même commentaire partout ; une action n'a qu'une version majeure dans l'ensemble des workflows. La concordance avec les tags amont n'est pas vérifiée en CI : elle se vérifie à la main lors d'une montée, par `git ls-remote --tags` (skill `nexus-dependency-bump`). Les workflows réutilisables OSV sont épinglés sur le SHA de **commit** d'un tag publié, jamais sur le SHA de l'objet tag.
 - **Inputs** (`test-operational-doc-contracts.sh`) : aucune expression `${{ inputs.` dans un bloc `run:` ; la valeur passe par une variable d'environnement de l'étape (`REQUESTED: ${{ inputs.profile }}`), puis la validation `ci|full` s'applique à la variable.
 - **Durée** (`test-operational-doc-contracts.sh`) : tout job qui déclare `runs-on:` déclare `timeout-minutes`. Un job qui appelle un workflow réutilisable (`uses:`) n'accepte pas `timeout-minutes` : il est borné par les jobs du workflow appelé, eux-mêmes soumis à ce contrôle, ou, pour un workflow externe comme OSV, par ce workflow et la borne de 6 h de GitHub.
-- **Images de runner** (`test-operational-doc-contracts.sh`) : les jobs de benchmark et de qualification de performance (`scale-benchmark.yml`, `lucene-lifecycle-benchmark.yml`, `scanner-corpus-benchmark.yml`, `git-context-cache-qualification.yml`, job `scale-comparison` de `runtime-flags-qualification.yml`) tournent sur `ubuntu-24.04` et `windows-2025`, pour que leurs budgets comparent des mesures prises sur la même image. Les autres jobs restent sur `ubuntu-latest` et `windows-latest`. Le retrait d'une image épinglée par GitHub fait échouer le benchmark ; la montée d'image est alors explicite.
+- **Images de runner** (`test-operational-doc-contracts.sh`) : les jobs de benchmark et de qualification de performance (`scale-benchmark.yml`, `lucene-lifecycle-benchmark.yml`, `scanner-corpus-benchmark.yml`, `git-context-cache-qualification.yml`, job `scale-comparison` de `runtime-flags-qualification.yml`, jobs `minos-replay` et `index-baselines` de `measurement-tools.yml`, job `semantic-diagnostics` de `semantic-search-qualification.yml`) tournent sur `ubuntu-24.04` et `windows-2025`, pour que leurs budgets comparent des mesures prises sur la même image. Les autres jobs restent sur `ubuntu-latest` et `windows-latest`. Le retrait d'une image épinglée par GitHub fait échouer le benchmark ; la montée d'image est alors explicite.
 - **Cache Maven** : `setup-java` `cache: maven` n'est activé sur aucun job. Mesure du 2026-10-30 sur `linux-reactor` (`ubuntu-latest`) : sans cache, l'étape `Run Maven reactor` dure 80, 102 et 114 s sur trois runs de PR ; avec cache, 102 s au premier run (cache absent, puis 5 s de sauvegarde) et 90 s au second (≈ 270 Mo restaurés en 2 s). L'écart reste dans la variance d'un run à l'autre : le cache n'apporte pas de gain mesurable et ajouterait une surface d'empoisonnement. Les jobs de release et de qualification d'artefacts publiés restent de toute façon construits sans cache.
 
 ## Scripts de validation
@@ -121,7 +121,7 @@ La release n'exige pas cette qualification ; voir [`semantic-search.md`](semanti
 Le workflow :
 
 1. résout `NEXUS_HEAD_SHA` vers le **HEAD exact de la PR** ou le SHA exact du run hors PR, checkout ce SHA puis vérifie `git rev-parse HEAD` ;
-2. télécharge Ollama **0.33.3** depuis sa release officielle ;
+2. télécharge Ollama **0.33.3** depuis sa release officielle, par l'action locale `.github/actions/ollama-embedding-runtime` (étapes 2 à 5) ;
 3. vérifie l'archive Linux amd64 contre le SHA-256 versionné dans `config/tool-integrity.properties` ;
 4. démarre Ollama uniquement sur `127.0.0.1:11434` ;
 5. pull `qwen3-embedding:0.6b` et vérifie que son ID de manifest attendu commence par **`ac6da0dfba84`** ;
@@ -132,7 +132,23 @@ Le workflow :
 
 Le job dispose d'un budget de **45 minutes** pour le corpus `pr` et d'un budget de **180 minutes** pour le corpus `full`. Ces budgets sont dérivés des mesures et non d'un confort arbitraire ; voir [`semantic-search.md`](semantic-search.md#budget-de-temps-de-la-qualification-réelle).
 
+Sur `workflow_dispatch` avec `diagnostics` à `true`, le job `semantic-diagnostics` lance en plus, sur le même runtime, `SemanticSearchBenchmarkTest` (corpus synthétique de 8 documents) et `RealSemanticRetrievalDiagnosticTest` (snapshot NEXUS complet, un rapport par poids RRF), sans seuil : ce sont des outils de mesure dont les rapports JSON sont conservés 90 jours.
+
 Ce gate est une sentinelle de qualité réelle et un gate ciblé des changements sémantiques, pas une dépendance nécessaire au fonctionnement lexical ni un téléchargement imposé aux PR sans rapport avec cette surface.
+
+### Tests de mesure opt-in
+
+Un test de `src/test` désactivé par défaut par une propriété système a un lanceur automatisé (contrat `test-final-audit-contracts.sh`) :
+
+| Test | Lanceur | Déclencheurs | Prérequis installé par le job |
+|---|---|---|---|
+| `MinosRealIntegrationTest` | job `minos-replay` de `measurement-tools.yml`, via `scripts/validate-minos-integration.ps1`, qui prépare son bac à sable sous `target/m13-replay` à la racine du dépôt, répertoire de travail des tests de `core` | PR qui touche le workflow, le script ou un des trois tests ; `workflow_dispatch` ; chaque lundi | distribution MINOS 1.2.0 Windows x64 vérifiée contre `config/tool-integrity.properties`, Java 24, fixture `fixtures/typescript/typescript-modules` du dépôt MINOS au commit du tag `v1.2.0` |
+| `LargeScaleSearchBaselineTest` | job `index-baselines` de `measurement-tools.yml` | idem | snapshot `git archive` du commit testé |
+| `SmallDeltaIndexingBaselineTest` | job `index-baselines` de `measurement-tools.yml` | idem | snapshot `git archive` du commit testé |
+| `SemanticSearchBenchmarkTest` | job `semantic-diagnostics` de `semantic-search-qualification.yml` | `workflow_dispatch` avec `diagnostics` | runtime Ollama de la qualification réelle |
+| `RealSemanticRetrievalDiagnosticTest` | job `semantic-diagnostics` de `semantic-search-qualification.yml` | `workflow_dispatch` avec `diagnostics` | runtime Ollama de la qualification réelle |
+
+En CI, les baselines mesurent le snapshot NEXUS lui-même : elles vérifient que l'outil de mesure fonctionne et produisent un rapport de référence, sans seuil. La mesure sur un portefeuille de dépôts externes reste locale, par les scripts `scripts/measure-iteration-16-*.ps1` et `scripts/measure-iteration-17-*.ps1` (voir [`large-scale-baseline-runbook.md`](large-scale-baseline-runbook.md)). Ces scripts restent actifs et importent `scripts/lib/NexusScript.psm1` ; seuls les runners `validate-iteration-*.ps1` sont archivés.
 
 ### Vector API
 
@@ -180,7 +196,8 @@ Les attestations de provenance et SBOM portent sur le digest publié. `latest` n
 
 - Maven 3.10.0 : SHA-512 ;
 - Eclipse JDT LS 1.60.0-202606262232 : SHA-256 ;
-- Ollama 0.33.3 Linux amd64, utilisé uniquement par la qualification sémantique réelle : SHA-256.
+- Ollama 0.33.3 Linux amd64, utilisé uniquement par la qualification sémantique réelle et ses diagnostics : SHA-256 ;
+- MINOS 1.2.0 Windows x64, utilisé uniquement par le replay `minos-replay` de `measurement-tools.yml` : SHA-256.
 
 Sur Unix et Windows, les wrappers Maven conservent l'archive dont le checksum correspond à l'ancre versionnée. `scripts/release/ToolArchiveVerifier.java`, lancé en mode source Java avant Maven, exige ensuite que l'installation extraite soit une projection exacte de cette archive : contenu identique, aucun symlink et aucun fichier supplémentaire. Un écart reconstruit le cache extrait depuis l'archive vérifiée.
 
