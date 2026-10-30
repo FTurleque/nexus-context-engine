@@ -111,7 +111,7 @@ core/src/main/java/com/nexus/ranking/RankedCandidate.java:30 `components = Map.c
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : S1 · Remettre les mesures d'aplomb
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 3 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #266 (89a37f0b) · **Vérification du 2026-10-30** (`4024c874`) : gate Windows sur JDK 21 épinglé, wrapper Maven obligatoire en CI (PR #266)
 
 **Preuve**
 
@@ -225,7 +225,7 @@ adapters/rest-quarkus/src/main/java/com/nexus/api/NexusRestExposureGuard.java:79
 
 - **Axe** : Tests, Dépendances · **Effort** : S · **Sprint** : S1 · Remettre les mesures d'aplomb
 - **Dépend de** : aucun · **Débloque** : `AUD-QUA-08`
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #268 (dfb695ce) · **Vérification du 2026-10-30** (`4024c874`) : quarkus-jacoco crédite NexusApiApplicationService dans la couverture REST (PR #268)
 
 **Preuve**
 
@@ -258,7 +258,7 @@ core/src/test/java/com/nexus/security/FilesystemSemanticsQualificationTest.java:
 - **Axe** : Tests · **Effort** : S<1j · **Sprint** : S1 · Remettre les mesures d'aplomb
 - **Dépend de** : aucun · **Débloque** : aucun
 - **Fusionne** : `AUD-TST-04`
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 4 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #268 (dfb695ce) · **Vérification du 2026-10-30** (`4024c874`) : gates JaCoCo par paquet pour les classes de bornes (PR #268)
 
 **Preuve**
 
@@ -355,7 +355,7 @@ WebFetch https://github.com/FTurleque/nexus-context-engine/actions/workflows/rel
 
 - **Axe** : Dépendances, Sécurité · **Effort** : S · **Sprint** : S1 · Remettre les mesures d'aplomb
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé (vérifié en direct) — gh api repos/…/vulnerability-alerts → 404 « Vulnerability alerts are disabled » ; security_and_analysis : dependabot_security_updates, secret_scanning, push_protection = disabled.
+- **Statut** : Partiel · **Changement** : Procédure de traitement des alertes dans SECURITY.md (PR #276) ; activation en attente du mainteneur · **Vérification du 2026-10-30** (`4024c874`) : security_and_analysis : dependabot_security_updates, secret_scanning et secret_scanning_push_protection « disabled » ; vulnerability-alerts répond 404 (tâche 1.1)
 
 **Preuve**
 
@@ -759,7 +759,7 @@ adapters/rest-quarkus/src/test/java/com/nexus/api/NexusResourceTest.java:29-30 u
 
 - **Axe** : Tests · **Effort** : S<1j · **Sprint** : S1 · Remettre les mesures d'aplomb
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #266 (89a37f0b) · **Vérification du 2026-10-30** (`4024c874`) : CodeQL analyse le code avec build (PR #266)
 
 **Preuve**
 
@@ -807,7 +807,7 @@ core/src/main/java/com/nexus/index/IndexRepository.java:18,31,52 « default … 
 
 - **Axe** : Tests · **Effort** : S<1j · **Sprint** : S1 · Remettre les mesures d'aplomb
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par les PR #267 (e3f67017) et #277 (a218a613) · **Vérification du 2026-10-30** (`4024c874`) : tests symlink fail-closed quand CI est défini (PR #267) ; cibles sous le @TempDir, git grep -n "temporaryDirectory.resolveSibling" -- core/src/test vide (PR #277)
 
 **Preuve**
 
@@ -1191,7 +1191,7 @@ grep -ho 'uses: …# …' .github/workflows/*.yml | uniq -c → `11 actions/chec
 
 - **Axe** : Dépendances, Tests · **Effort** : S · **Sprint** : S1 · Remettre les mesures d'aplomb
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 3 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Partiel · **Changement** : PR #265 (4aa90dfa) et #278 (4024c874) ; ajout au ruleset en attente du mainteneur · **Vérification du 2026-10-30** (`4024c874`) : « Hermetic scale benchmark » produit sur toute PR et conclu en succès hors chemins surveillés (PR #278) ; absent des required_status_checks du ruleset « Protect main & develop » (tâche 2.4)
 
 **Preuve**
 
@@ -1287,7 +1287,7 @@ WebFetch …/actions/workflows/semantic-search-qualification.yml → runs #40-#6
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S1 · Remettre les mesures d'aplomb
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #266 (89a37f0b) · **Vérification du 2026-10-30** (`4024c874`) : wrapper Maven obligatoire en CI, sans repli sur le Maven du runner (PR #266)
 
 **Preuve**
 
