@@ -9,7 +9,7 @@ Prérequis : `AUD-TST-01` fermé par #268 ; `AUD-TST-07` (sprint 3) fusionné av
 ## 2. Projection publique unique
 
 - [x] 2.1 AUD-QUA-09 — Créer dans le cœur la projection publique (package `com.nexus.exposure`, design D1-D3) qui produit, pour les résultats de recherche, de symbole, de contexte et de contexte fédéré, des structures à ordre de clés fixe, avec chemins projetés par `PublicProjectPathPolicy`, `excerpt` redacté et `id` ; couvrir par un test unitaire de la projection ; vérifier par `./mvnw -B -ntp -pl core test -Dtest=PublicOutputProjection* -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
-- [ ] 2.2 AUD-QUA-09 — Brancher `CliResultMapper`, `McpResultMapper` et `ApiMapper` sur la projection, supprimer les appels directs à `PublicContextPolicy.expose` et les `relativePath` dupliqués ; vérifier par `git grep -n "PublicContextPolicy.expose" adapters/ core/src/main/java/com/nexus/cli/` sans résultat et `./mvnw -B -ntp clean install`
+- [x] 2.2 AUD-QUA-09 — Brancher `CliResultMapper`, `McpResultMapper` et `ApiMapper` sur la projection, supprimer les appels directs à `PublicContextPolicy.expose` et les `relativePath` dupliqués ; vérifier par `git grep -n "PublicContextPolicy.expose" adapters/ core/src/main/java/com/nexus/cli/` sans résultat et `./mvnw -B -ntp clean install`
 - [x] 2.3 AUD-QUA-09 — Ajouter un test de parité qui compare, pour un même projet de fixture, les clés JSON produites par CLI, MCP et REST pour `search`, `find_symbol`, `context` et `context` fédéré, et échoue sur toute clé absente d'un canal sans divergence déclarée par la projection ; vérifier par `./mvnw -B -ntp -pl adapters/rest-quarkus,adapters/mcp-java -am test -Dtest=*Parity* -Dsurefire.failIfNoSpecifiedTests=false`
 - [x] 2.4 AUD-QUA-09 — Rédiger un nouvel ADR (skill `nexus-adr`) qui complète ADR-0039 et ADR-0040 : le contrat de sortie des trois canaux est décidé par la projection publique du cœur ; mettre à jour `docs/developer/rest-api.md`, `docs/developer/mcp.md` et l'index des ADR ; vérifier par `bash .claude/scripts/contracts.sh`
 
@@ -28,7 +28,7 @@ Prérequis : `AUD-TST-01` fermé par #268 ; `AUD-TST-07` (sprint 3) fusionné av
 ## 6. Valeur sensible trop longue
 
 - [x] 6.1 AUD-SEC-02 — Remplacer l'`IllegalArgumentException` de `SecretAssignmentScanner` par une exception dédiée, la capturer par fichier dans `LuceneSearchIndex`, `SemanticIndexingService` et la construction de contexte (`ContextBundle`), exclure le seul fichier fautif et ajouter un diagnostic public sans valeur ni contenu ; mettre à jour `SensitiveContentRedactorTest` (cas 4 097 caractères) ; vérifier par `./mvnw -B -ntp -pl core test -Dtest=SensitiveContentRedactorTest,LuceneSearchIndexTest,SemanticIndexingServiceTest,ProjectIndexingServiceTest -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
-- [ ] 6.2 AUD-SEC-02 — Ajouter un test d'indexation : projet de trois fichiers dont un porte `password = "<5 000 caractères>"`, l'indexation réussit, deux fichiers sont recherchables, le rapport contient un diagnostic d'exclusion, aucune sortie REST ne renvoie 400 ; vérifier par `-Dtest=ProjectIndexingServiceTest` puis `./mvnw -B -ntp -pl adapters/rest-quarkus -am test`
+- [x] 6.2 AUD-SEC-02 — Ajouter un test d'indexation : projet de trois fichiers dont un porte `password = "<5 000 caractères>"`, l'indexation réussit, deux fichiers sont recherchables, le rapport contient un diagnostic d'exclusion, aucune sortie REST ne renvoie 400 ; vérifier par `-Dtest=ProjectIndexingServiceTest` puis `./mvnw -B -ntp -pl adapters/rest-quarkus -am test`
 
 ## 7. Couverture de redaction
 
@@ -43,7 +43,7 @@ Prérequis : `AUD-TST-01` fermé par #268 ; `AUD-TST-07` (sprint 3) fusionné av
 
 ## 9. Validation
 
-- [ ] 9.1 Valider l'itération (`/nx-validate full` : contrats, `./mvnw -B -ntp clean install`, `scripts/self-smoke.ps1`) et faire relire par les agents `nexus-reviewer` et `nexus-security-auditor`
+- [x] 9.1 Valider l'itération (`/nx-validate full` : contrats, `./mvnw -B -ntp clean install`, `scripts/self-smoke.ps1`) et faire relire par les agents `nexus-reviewer` et `nexus-security-auditor`
 
 ## Workflow follow-up
 
