@@ -16,7 +16,7 @@ class ProjectIgnoreMatcherBuiltInExclusionTest {
 
     @Test
     void excludesClaudeWorktreesAtAnyDepthIgnoringCase() throws Exception {
-        Path root = Files.createDirectory(temporaryDirectory.resolve("project"));
+        Path root = Files.createDirectory(temporaryDirectory.resolve("project")).toRealPath();
         ProjectIgnoreMatcher matcher = new ProjectIgnoreMatcher(root);
 
         assertTrue(matcher.isIgnored(root.resolve(".claude/worktrees"), true));
@@ -27,7 +27,7 @@ class ProjectIgnoreMatcherBuiltInExclusionTest {
 
     @Test
     void keepsNeighbouringPathsThatDoNotFormTheSequence() throws Exception {
-        Path root = Files.createDirectory(temporaryDirectory.resolve("project"));
+        Path root = Files.createDirectory(temporaryDirectory.resolve("project")).toRealPath();
         ProjectIgnoreMatcher matcher = new ProjectIgnoreMatcher(root);
 
         assertFalse(matcher.isIgnored(root.resolve(".claude"), true));
