@@ -211,10 +211,12 @@ class GitRecencyCandidateEnricherTest {
 
             @Override
             public void flush() {
+                // Les enregistrements sont gardés en mémoire : rien à vider.
             }
 
             @Override
             public void close() {
+                // Aucune ressource à libérer : le handler est retiré après l'action.
             }
         };
         logger.addHandler(handler);

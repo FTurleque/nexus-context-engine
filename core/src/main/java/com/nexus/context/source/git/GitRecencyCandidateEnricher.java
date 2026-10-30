@@ -7,6 +7,7 @@ import com.nexus.search.CandidateEnricher;
 import com.nexus.search.SearchCandidate;
 import com.nexus.search.SearchSignals;
 import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.diff.DiffFormatter;
 import org.eclipse.jgit.errors.RepositoryNotFoundException;
@@ -107,7 +108,8 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
      * Score de récence par chemin projet sur les {@value #MAX_COMMITS} derniers commits, ou
      * un résultat vide quand le nombre de chemins modifiés dépasse le budget.
      */
-    private static Optional<Map<String, Double>> recency(Path projectRoot, Set<String> projectPaths) throws Exception {
+    private static Optional<Map<String, Double>> recency(Path projectRoot, Set<String> projectPaths)
+            throws IOException, GitAPIException {
         Map<String, Double> recency = new HashMap<>();
         try (Repository repository = openRepository(projectRoot);
              Git git = new Git(repository);
