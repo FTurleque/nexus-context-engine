@@ -168,6 +168,33 @@ class GitRecencyCandidateEnricherTest {
     }
 
     @Test
+    void computesRecencyWithoutBudgetReasonAtExactlyTheCandidatePathBudget() throws Exception {
+        Path recent = write(temporaryDirectory, "src/Service.java", "class Service {}\n");
+        try (Git git = Git.init().setDirectory(temporaryDirectory.toFile()).call()) {
+            commitAll(git, "initial");
+            Files.writeString(recent, "class Service { void changed() {} }\n");
+            commitAll(git, "change service");
+        }
+        List<SearchCandidate> candidates = new ArrayList<>();
+        candidates.add(candidate("service", recent));
+        for (int index = 1; index < GitRecencyCandidateEnricher.MAX_CANDIDATE_PATHS; index++) {
+            candidates.add(candidate(
+                    "candidate-" + index,
+                    temporaryDirectory.resolve("generated/Candidate" + index + ".java")));
+        }
+        List<String> reasons = new ArrayList<>();
+
+        List<SearchCandidate> enriched = new GitRecencyCandidateEnricher().enrich(
+                project(temporaryDirectory),
+                candidates,
+                reasons::add);
+
+        assertEquals(GitRecencyCandidateEnricher.MAX_CANDIDATE_PATHS, enriched.size());
+        assertEquals(List.of(), reasons);
+        assertEquals(1.0d, enriched.getFirst().signals().get(SearchSignals.GIT_RECENCY), 0.000001d);
+    }
+
+    @Test
     void failsOpenWhenCandidatePathBudgetIsExceeded() throws Exception {
         write(temporaryDirectory, "src/Service.java", "class Service {}\n");
         try (Git git = Git.init().setDirectory(temporaryDirectory.toFile()).call()) {
