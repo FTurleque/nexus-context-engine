@@ -44,6 +44,10 @@ jobs:
         shell: pwsh
         run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/release/test-rest-token-contract.ps1
 
+      - name: Run NexusScript module tests
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/tests/Test-NexusScript.ps1
+
       - name: Run local qualification script
         shell: powershell
         env:

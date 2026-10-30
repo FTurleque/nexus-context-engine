@@ -46,6 +46,12 @@ Le gate documentaire contrôle notamment :
 
 Les actions GitHub contrôlées par le dépôt sont référencées par SHA immuable.
 
+## Scripts de validation
+
+Les seuls points d'entrée de validation sont `scripts/validate-phase-6.ps1` (qualification Windows complète, appelée par le job `Windows gate`) et `scripts/self-smoke.ps1` (self-smoke du JAR, exigé avant toute PR). Les runners d'itération `validate-iteration-*.ps1` sont archivés, non maintenus, dans `scripts/archive/`.
+
+Les scripts actifs de `scripts/` importent `scripts/lib/NexusScript.psm1`, seul endroit qui définit `Invoke-Maven`, `Resolve-AbsolutePath` et `Invoke-NexusJson`. `Invoke-Maven` appelle le Maven Wrapper vérifié (`mvnw.cmd` ou `mvnw`) ; en CI (`CI` ou `GITHUB_ACTIONS` définie), un wrapper absent ou en échec lève une exception, sans repli ; hors CI, le repli sur le Maven installé est averti. Un code de sortie Maven non nul lève une exception qui porte ce code. `scripts/tests/Test-NexusScript.ps1` couvre ces cas sur des wrappers factices et tourne dans le job `Windows gate` ; le contrat `test-operational-doc-contracts.sh` échoue si un script actif hors `scripts/lib/` et `scripts/archive/` appelle Maven directement ou redéfinit ces fonctions.
+
 ## Windows Installer
 
 `.github/workflows/windows-installer.yml` est un gate exact-head de packaging et de comportement Windows. Ses filtres PR couvrent les sources qui peuvent modifier le payload distribué :
