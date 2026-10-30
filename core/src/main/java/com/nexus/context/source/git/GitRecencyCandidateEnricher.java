@@ -24,13 +24,22 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * Ajoute un faible signal de récence Git aux candidats déjà découverts.
  * Le provider est strictement local, en lecture seule et son coût est borné
  * par les seuls chemins candidats au lieu de scanner les diffs complets.
+ *
+ * <p>Le signal est fail-open : un incident JGit laisse les candidats inchangés, émet un
+ * enregistrement {@code WARNING} qui ne nomme que le type d'exception et, si une explication est
+ * demandée, la raison {@value #UNAVAILABLE_REASON}. Un projet hors Git reste silencieux.</p>
  */
 public final class GitRecencyCandidateEnricher implements CandidateEnricher {
+
+    static final String UNAVAILABLE_REASON = "récence Git indisponible";
+
+    private static final System.Logger LOGGER = System.getLogger(GitRecencyCandidateEnricher.class.getName());
 
     static final int MAX_COMMITS = 50;
     static final int MAX_CANDIDATE_PATHS = 512;
@@ -39,6 +48,14 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
 
     @Override
     public List<SearchCandidate> enrich(ProjectDescriptor project, List<SearchCandidate> candidates) throws IOException {
+        return enrich(project, candidates, reason -> { });
+    }
+
+    @Override
+    public List<SearchCandidate> enrich(
+            ProjectDescriptor project,
+            List<SearchCandidate> candidates,
+            Consumer<String> explanationReasons) throws IOException {
         if (candidates.isEmpty()) {
             return candidates;
         }
@@ -97,8 +114,12 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
         } catch (RepositoryNotFoundException exception) {
             return candidates;
         } catch (Exception exception) {
-            // La récence Git est un signal optionnel : tout incident ou dépassement implicite
-            // reste fail-open pour ne jamais rendre la recherche principale indisponible.
+            // La récence Git est un signal optionnel : tout incident reste fail-open pour ne jamais
+            // rendre la recherche principale indisponible. Le message de l'exception peut citer le
+            // chemin du dépôt : seul son type est journalisé.
+            LOGGER.log(System.Logger.Level.WARNING,
+                    "Récence Git indisponible, signal ignoré : {0}", exception.getClass().getName());
+            explanationReasons.accept(UNAVAILABLE_REASON);
             return candidates;
         }
 
@@ -128,10 +149,11 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
     }
 
     private static Repository openRepository(Path projectRoot) throws IOException {
-        return new FileRepositoryBuilder()
-                .findGitDir(projectRoot.toFile())
-                .setMustExist(true)
-                .build();
+        FileRepositoryBuilder builder = new FileRepositoryBuilder().findGitDir(projectRoot.toFile());
+        if (builder.getGitDir() == null) {
+            throw new RepositoryNotFoundException(projectRoot.toFile());
+        }
+        return builder.setMustExist(true).build();
     }
 
     private static void addScore(

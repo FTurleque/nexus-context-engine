@@ -13,10 +13,15 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -110,6 +115,58 @@ class GitRecencyCandidateEnricherTest {
     }
 
     @Test
+    void outsideAGitRepositoryNoWarningAndNoExplanationReasonAreEmitted() throws Exception {
+        Path file = write(temporaryDirectory, "src/Service.java", "class Service {}\n");
+        List<SearchCandidate> candidates = List.of(candidate("service", file));
+        List<String> reasons = new ArrayList<>();
+
+        List<LogRecord> records = captureWarnings(() -> new GitRecencyCandidateEnricher().enrich(
+                project(temporaryDirectory), candidates, reasons::add));
+
+        assertEquals(List.of(), records);
+        assertEquals(List.of(), reasons);
+    }
+
+    @Test
+    void jgitIncidentKeepsCandidatesLogsOneWarningWithoutPathAndExplainsTheMissingSignal() throws Exception {
+        Path file = write(temporaryDirectory, "src/Service.java", "class Service {}\n");
+        String branch;
+        try (Git git = Git.init().setDirectory(temporaryDirectory.toFile()).call()) {
+            commitAll(git, "initial");
+            Files.writeString(file, "class Service { void changed() {} }\n");
+            commitAll(git, "change service");
+            branch = git.getRepository().getFullBranch();
+        }
+        // La branche courante pointe vers un commit absent : le parcours de l'historique échoue.
+        Files.writeString(temporaryDirectory.resolve(".git").resolve(branch),
+                "0123456789abcdef0123456789abcdef01234567\n");
+        List<SearchCandidate> candidates = List.of(candidate("service", file));
+        List<String> reasons = new ArrayList<>();
+        List<List<SearchCandidate>> results = new ArrayList<>();
+
+        List<LogRecord> records = captureWarnings(() -> results.add(new GitRecencyCandidateEnricher().enrich(
+                project(temporaryDirectory), candidates, reasons::add)));
+
+        assertEquals(candidates, results.getFirst());
+        assertEquals(1, records.size());
+        LogRecord warning = records.getFirst();
+        assertEquals(Level.WARNING, warning.getLevel());
+        String message = java.text.MessageFormat.format(warning.getMessage(),
+                warning.getParameters() == null ? new Object[0] : warning.getParameters());
+        assertTrue(message.contains("org.eclipse.jgit"), message);
+        for (String forbidden : List.of(
+                temporaryDirectory.toString(),
+                temporaryDirectory.toAbsolutePath().toString().replace('\\', '/'),
+                temporaryDirectory.toRealPath().toString(),
+                "class Service")) {
+            assertFalse(message.contains(forbidden), message);
+        }
+        assertEquals(null, warning.getThrown());
+        assertEquals(List.of(GitRecencyCandidateEnricher.UNAVAILABLE_REASON), reasons);
+        assertEquals("récence Git indisponible", GitRecencyCandidateEnricher.UNAVAILABLE_REASON);
+    }
+
+    @Test
     void failsOpenWhenCandidatePathBudgetIsExceeded() throws Exception {
         write(temporaryDirectory, "src/Service.java", "class Service {}\n");
         try (Git git = Git.init().setDirectory(temporaryDirectory.toFile()).call()) {
@@ -130,6 +187,39 @@ class GitRecencyCandidateEnricherTest {
         assertEquals(candidates, enriched);
         assertTrue(enriched.stream().noneMatch(candidate ->
                 candidate.signals().containsKey(SearchSignals.GIT_RECENCY)));
+    }
+
+    private interface Action {
+        void run() throws Exception;
+    }
+
+    /** Enregistrements {@code WARNING} ou plus émis par l'enrichisseur pendant {@code action}. */
+    private static List<LogRecord> captureWarnings(Action action) throws Exception {
+        Logger logger = Logger.getLogger(GitRecencyCandidateEnricher.class.getName());
+        List<LogRecord> records = Collections.synchronizedList(new ArrayList<>());
+        Handler handler = new Handler() {
+            @Override
+            public void publish(LogRecord logRecord) {
+                if (logRecord.getLevel().intValue() >= Level.WARNING.intValue()) {
+                    records.add(logRecord);
+                }
+            }
+
+            @Override
+            public void flush() {
+            }
+
+            @Override
+            public void close() {
+            }
+        };
+        logger.addHandler(handler);
+        try {
+            action.run();
+        } finally {
+            logger.removeHandler(handler);
+        }
+        return List.copyOf(records);
     }
 
     private static Path write(Path root, String relativePath, String content) throws Exception {

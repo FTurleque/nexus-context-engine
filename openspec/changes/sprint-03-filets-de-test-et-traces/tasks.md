@@ -13,11 +13,11 @@
 
 ## 3. Traces de la récence Git
 
-- [ ] 3.1 `AUD-QUA-07` — Ajouter un `System.Logger` à `GitRecencyCandidateEnricher`, journaliser au niveau `WARNING` le type d'exception et un message sans chemin absolu dans la branche `catch (Exception)`, garder `RepositoryNotFoundException` silencieux et ajouter la raison « récence Git indisponible » quand une explication est demandée ; couvrir par un test qui provoque un incident JGit et vérifie : candidats inchangés, un enregistrement de log, aucun chemin absolu dans le message ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='GitRecencyCandidateEnricher*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
+- [x] 3.1 `AUD-QUA-07` — Ajouter un `System.Logger` à `GitRecencyCandidateEnricher`, journaliser au niveau `WARNING` le type d'exception et un message sans chemin absolu dans la branche `catch (Exception)`, garder `RepositoryNotFoundException` silencieux et ajouter la raison « récence Git indisponible » quand une explication est demandée ; couvrir par un test qui provoque un incident JGit et vérifie : candidats inchangés, un enregistrement de log, aucun chemin absolu dans le message ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='GitRecencyCandidateEnricher*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
 
 ## 4. Confinement des chemins
 
-- [ ] 4.1 `AUD-TST-02` — Créer `core/src/test/java/com/nexus/security/ProjectPathGuardTest.java` : chaque méthode publique (`resolve(Path)`, `resolve(RepositoryPath)`, `requireRegularFile`, `requireDirectory`, `containsSymbolicLink`, `repositoryPath`) × traversal `..`, chemin absolu, symlink final, symlink intermédiaire, racine non répertoire, cible hors racine ; symlinks via `SymbolicLinks.createOrSkip` ; vérifier par `./mvnw -B -ntp -pl core test -Dtest=ProjectPathGuardTest -Dsurefire.failIfNoSpecifiedTests=false` puis la couverture de branches de `ProjectPathGuard` dans `core/target/site/jacoco/jacoco.csv`, qui passe au-dessus de 54,2 %
+- [x] 4.1 `AUD-TST-02` — Créer `core/src/test/java/com/nexus/security/ProjectPathGuardTest.java` : chaque méthode publique (`resolve(Path)`, `resolve(RepositoryPath)`, `requireRegularFile`, `requireDirectory`, `containsSymbolicLink`, `repositoryPath`) × traversal `..`, chemin absolu, symlink final, symlink intermédiaire, racine non répertoire, cible hors racine ; symlinks via `SymbolicLinks.createOrSkip` ; vérifier par `./mvnw -B -ntp -pl core test -Dtest=ProjectPathGuardTest -Dsurefire.failIfNoSpecifiedTests=false` puis la couverture de branches de `ProjectPathGuard` dans `core/target/site/jacoco/jacoco.csv`, qui passe au-dessus de 54,2 %
 
 ## 5. Fiabilité de la suite par défaut
 
