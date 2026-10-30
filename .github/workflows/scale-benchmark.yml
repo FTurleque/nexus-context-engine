@@ -12,24 +12,6 @@ on:
     branches:
       - develop
       - main
-    paths:
-      - 'core/src/main/java/com/nexus/application/**'
-      - 'core/src/main/java/com/nexus/index/**'
-      - 'core/src/main/java/com/nexus/project/**'
-      - 'core/src/main/java/com/nexus/config/**'
-      - 'core/src/main/java/com/nexus/persistence/sqlite/**'
-      - 'core/src/main/java/com/nexus/search/**'
-      - 'core/src/main/java/com/nexus/ranking/graph/**'
-      - 'core/src/main/java/com/nexus/context/**'
-      - 'core/src/test/java/com/nexus/benchmark/**'
-      - 'core/pom.xml'
-      - 'scripts/measure-scale-regression.ps1'
-      - 'scripts/verify-scale-budgets.py'
-      - 'scripts/tests/test_scale_budgets.py'
-      - 'config/scale-benchmark-protocol'
-      - 'docs/developer/scale-regression-benchmark.md'
-      - 'docs/project/history/scale-regression-results.md'
-      - '.github/workflows/scale-benchmark.yml'
   workflow_dispatch:
     inputs:
       profile:
@@ -45,7 +27,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: scale-benchmark-${{ github.event.pull_request.number || github.ref }}
+  # github.workflow désigne le workflow appelant en workflow_call : le wrapper
+  # develop-push-scale-benchmark.yml et ce workflow n'ont jamais le même groupe,
+  # et aucun des deux n'annule l'autre sur une PR qui touche les deux.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -60,13 +45,75 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
+      - name: Detect scale-sensitive changes
+        id: changes
+        shell: bash
+        # WATCHED_PATHS est la source unique des chemins surveillés : le filtre push
+        # de develop-push-scale-benchmark.yml en reprend exactement la liste.
+        # Contrat : scripts/release/test-operational-doc-contracts.sh.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          WATCHED_PATHS: |
+            core/src/main/java/com/nexus/application/**
+            core/src/main/java/com/nexus/index/**
+            core/src/main/java/com/nexus/project/**
+            core/src/main/java/com/nexus/config/**
+            core/src/main/java/com/nexus/persistence/sqlite/**
+            core/src/main/java/com/nexus/search/**
+            core/src/main/java/com/nexus/ranking/graph/**
+            core/src/main/java/com/nexus/context/**
+            core/src/test/java/com/nexus/benchmark/**
+            core/pom.xml
+            scripts/measure-scale-regression.ps1
+            scripts/verify-scale-budgets.py
+            scripts/tests/test_scale_budgets.py
+            config/scale-benchmark-protocol
+            docs/developer/scale-regression-benchmark.md
+            docs/project/history/scale-regression-results.md
+            .github/workflows/scale-benchmark.yml
+            .github/workflows/develop-push-scale-benchmark.yml
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != "pull_request" ]]; then
+            echo "Événement $EVENT_NAME : le benchmark mesure toujours."
+            echo "measure=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CHANGED="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
+          MATCHED=""
+          while IFS= read -r file; do
+            [[ -n "$file" ]] || continue
+            while IFS= read -r pattern; do
+              [[ -n "$pattern" ]] || continue
+              # Dans [[ == ]], * couvre aussi « / » : « dir/** » vaut préfixe de répertoire.
+              if [[ "$file" == $pattern ]]; then
+                MATCHED+="$file"$'\n'
+                break
+              fi
+            done <<< "$WATCHED_PATHS"
+          done <<< "$CHANGED"
+          if [[ -n "$MATCHED" ]]; then
+            echo "Chemins surveillés touchés :"
+            printf '%s' "$MATCHED"
+            echo "measure=true" >> "$GITHUB_OUTPUT"
+          else
+            MESSAGE="Aucun chemin surveillé n'est touché par cette PR : benchmark non mesuré, check conclu en succès."
+            echo "::notice::$MESSAGE"
+            echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
+            echo "measure=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Java 21
+        if: steps.changes.outputs.measure == 'true'
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: '21'
 
       - name: Resolve benchmark profile
+        if: steps.changes.outputs.measure == 'true'
         id: profile
         shell: bash
         run: |
@@ -81,6 +128,7 @@ jobs:
           echo "value=$REQUESTED" >> "$GITHUB_OUTPUT"
 
       - name: Run hermetic scale benchmark
+        if: steps.changes.outputs.measure == 'true'
         shell: bash
         run: |
           chmod +x ./mvnw
@@ -96,7 +144,7 @@ jobs:
             test
 
       - name: Run full SQLite scale curve for pull request
-        if: github.event_name == 'pull_request'
+        if: steps.changes.outputs.measure == 'true' && github.event_name == 'pull_request'
         shell: bash
         run: |
           ./mvnw -B -pl core \
@@ -109,7 +157,7 @@ jobs:
             test
 
       - name: Benchmark PR base SQLite storage on the same runner
-        if: github.event_name == 'pull_request'
+        if: steps.changes.outputs.measure == 'true' && github.event_name == 'pull_request'
         shell: bash
         run: |
           set -euo pipefail
@@ -163,6 +211,7 @@ jobs:
           fi
 
       - name: Verify report and regression budgets
+        if: steps.changes.outputs.measure == 'true'
         shell: bash
         run: |
           test -s target/scale-benchmark.json
@@ -181,7 +230,7 @@ jobs:
           fi
 
       - name: Retain benchmark report
-        if: always()
+        if: always() && steps.changes.outputs.measure == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nexus-scale-benchmark-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}-${{ steps.profile.outputs.value }}

@@ -342,10 +342,12 @@ for path in current_docs:
         forbid(path, stale)
 
 
-# Scale benchmark: the develop push caller must watch exactly the paths the
-# reusable workflow watches on pull request, plus the caller itself.
-def trigger_paths(source: str, event: str) -> list[str]:
-    paths: list[str] = []
+# Scale benchmark: the pull_request trigger has no paths filter, so the required
+# "Hermetic scale benchmark" check exists on every PR. The detection step's
+# WATCHED_PATHS block is the single list of watched paths; the develop push
+# caller must watch exactly that list.
+def trigger_paths(source: str, event: str) -> list[str] | None:
+    paths: list[str] | None = None
     in_on = in_event = in_paths = False
     for raw in source.splitlines():
         line = raw.rstrip()
@@ -359,6 +361,8 @@ def trigger_paths(source: str, event: str) -> list[str]:
         elif in_on and indent == 2:
             in_event = stripped == f"{event}:"
             in_paths = False
+            if in_event and paths is None:
+                paths = []
         elif in_event and indent == 4:
             in_paths = stripped == "paths:"
         elif in_paths and indent == 6 and stripped.startswith("- "):
@@ -366,20 +370,43 @@ def trigger_paths(source: str, event: str) -> list[str]:
     return paths
 
 
-def check_scale_benchmark_paths(reusable: str, caller: str, caller_path: str) -> None:
+def watched_paths(source: str) -> list[str]:
+    paths: list[str] = []
+    block_indent = None
+    lines = source.splitlines()
+    for index, raw in enumerate(lines):
+        if raw.strip() == "WATCHED_PATHS: |":
+            for item in lines[index + 1:]:
+                if not item.strip():
+                    break
+                indent = len(item) - len(item.lstrip(" "))
+                if block_indent is None:
+                    block_indent = indent
+                if indent != block_indent or block_indent <= len(raw) - len(raw.lstrip(" ")):
+                    break
+                paths.append(item.strip())
+            break
+    return paths
+
+
+def check_scale_benchmark_paths(reusable: str, caller: str) -> None:
     pull_request = trigger_paths(reusable, "pull_request")
-    push = trigger_paths(caller, "push")
-    if not pull_request or not push:
-        raise SystemExit("scale benchmark contract drift: paths filters not found")
-    for name, values in (("pull_request", pull_request), ("push", push)):
+    if pull_request is None:
+        raise SystemExit("scale benchmark contract drift: pull_request trigger not found")
+    if pull_request:
+        raise SystemExit("scale benchmark contract drift: pull_request trigger must not filter paths")
+    watched = watched_paths(reusable)
+    push = trigger_paths(caller, "push") or []
+    if not watched or not push:
+        raise SystemExit("scale benchmark contract drift: watched paths or push paths not found")
+    for name, values in (("WATCHED_PATHS", watched), ("push", push)):
         if len(values) != len(set(values)):
             raise SystemExit(f"scale benchmark contract drift: duplicate {name} paths")
-    expected = set(pull_request) | {caller_path}
-    missing = sorted(expected - set(push))
-    extra = sorted(set(push) - expected)
+    missing = sorted(set(watched) - set(push))
+    extra = sorted(set(push) - set(watched))
     if missing or extra:
         raise SystemExit(
-            "scale benchmark contract drift: develop push paths differ from pull_request paths"
+            "scale benchmark contract drift: develop push paths differ from WATCHED_PATHS"
             f" (missing={missing}, extra={extra})"
         )
 
@@ -387,19 +414,40 @@ def check_scale_benchmark_paths(reusable: str, caller: str, caller_path: str) ->
 scale_caller_path = ".github/workflows/develop-push-scale-benchmark.yml"
 scale_reusable = text(".github/workflows/scale-benchmark.yml")
 scale_caller = text(scale_caller_path)
-check_scale_benchmark_paths(scale_reusable, scale_caller, scale_caller_path)
+check_scale_benchmark_paths(scale_reusable, scale_caller)
+if scale_caller_path not in watched_paths(scale_reusable):
+    raise SystemExit("scale benchmark contract drift: WATCHED_PATHS must include the develop push caller")
 if f"'{scale_caller_path}'" not in scale_caller.split("pull_request:", 1)[-1]:
     raise SystemExit("scale benchmark contract drift: caller must run on its own pull_request changes")
+if "    name: Hermetic scale benchmark\n" not in scale_reusable:
+    raise SystemExit("scale benchmark contract drift: required check name 'Hermetic scale benchmark' changed")
+# github.workflow names the caller under workflow_call: the wrapper and the
+# direct pull_request run must never share (and cancel) a concurrency group.
+if "  group: ${{ github.workflow }}-" not in scale_reusable:
+    raise SystemExit("scale benchmark contract drift: concurrency group must start with github.workflow")
 drifted_caller = scale_caller.replace("      - 'config/scale-benchmark-protocol'\n", "", 1)
-if drifted_caller == scale_caller:
-    raise SystemExit("scale benchmark contract self-test: fixture path not found")
-try:
-    check_scale_benchmark_paths(scale_reusable, drifted_caller, scale_caller_path)
-except SystemExit:
-    pass
-else:
-    raise SystemExit("scale benchmark contract self-test: drift was not detected")
-require("docs/developer/scale-regression-benchmark.md", "reste consultatif")
+drifted_watched = scale_reusable.replace(
+    "            config/scale-benchmark-protocol\n",
+    "            config/scale-benchmark-protocol\n            config/drift-fixture\n",
+    1,
+)
+drifted_trigger = scale_reusable.replace(
+    "      - main\n  workflow_dispatch:", "      - main\n    paths:\n      - 'core/**'\n  workflow_dispatch:", 1
+)
+for label, reusable, caller in (
+    ("push", scale_reusable, drifted_caller),
+    ("WATCHED_PATHS", drifted_watched, scale_caller),
+    ("pull_request paths", drifted_trigger, scale_caller),
+):
+    if (reusable, caller) == (scale_reusable, scale_caller):
+        raise SystemExit(f"scale benchmark contract self-test: {label} fixture not found")
+    try:
+        check_scale_benchmark_paths(reusable, caller)
+    except SystemExit:
+        pass
+    else:
+        raise SystemExit(f"scale benchmark contract self-test: {label} drift was not detected")
+require("docs/developer/scale-regression-benchmark.md", "conclut en succès sans mesurer")
 
 # SECURITY.md keeps the alert handling procedure, including test fixtures of the redaction policy.
 for needle in (

@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - develop
-    # Liste identique aux paths pull_request de scale-benchmark.yml, plus ce wrapper.
+    # Liste identique à WATCHED_PATHS (étape de détection de scale-benchmark.yml).
     # Contrat : scripts/release/test-operational-doc-contracts.sh.
     paths:
       - 'core/src/main/java/com/nexus/application/**'
