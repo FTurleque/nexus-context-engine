@@ -103,6 +103,7 @@ Oui si la décision est **durable et structurante** et tranche entre des options
 | [GEN-0057](GEN-0057-tenir-le-registre-d-adr-au-format-archgate.md) | Tenir le registre d'ADR au format Archgate, à l'emplacement arc42 | 2026-10-29 | Accepted |
 | [BE-0058](BE-0058-exclure-les-worktrees-claude-code-du-scan-par-defaut.md) | Exclure les worktrees Claude Code du scan par défaut | 2026-10-30 | Accepted |
 | [ARCH-0059](ARCH-0059-verifier-les-frontieres-du-coeur-par-un-test-d-architecture.md) | Vérifier les frontières du cœur par un test d'architecture | 2026-10-30 | Proposed |
+| [GEN-0060](GEN-0060-qualifier-la-recherche-semantique-reelle-en-deux-corpus.md) | Qualifier la recherche sémantique réelle en deux corpus, hors du chemin de release | 2026-10-30 | Proposed |
 
 ## Archive
 

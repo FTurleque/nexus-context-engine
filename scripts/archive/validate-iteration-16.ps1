@@ -4,7 +4,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $locationPushed = $false
 
 function Invoke-Maven {
@@ -21,7 +21,7 @@ try {
     $locationPushed = $true
 
     Write-Host "============================================================"
-    Write-Host " NEXUS - Validation locale Iteration 17 / Semantic Search"
+    Write-Host " NEXUS - Validation locale Iteration 16 / Large Scale Search"
     Write-Host "============================================================"
     Write-Host
 
@@ -35,46 +35,43 @@ try {
 
         Write-Host
         Write-Host "[2/3] Self-smoke historique du coeur"
-        & (Join-Path $PSScriptRoot "self-smoke.ps1")
+        & (Join-Path $PSScriptRoot "..\self-smoke.ps1")
         if ($LASTEXITCODE -ne 0) {
             throw "Le self-smoke a echoue avec le code $LASTEXITCODE"
         }
     }
 
     Write-Host
-    Write-Host "[3/3] Composition opt-in, fusion RRF, index vectoriel Lucene et non-regression qualite"
+    Write-Host "[3/3] Tests dedies recherche federee, coordination lexicale et baselines qualite"
     Invoke-Maven -Arguments @(
-        "-Dtest=NexusApplicationSemanticConfigurationTest,SemanticSearchStrategyTest,SemanticRankingTest,SemanticHybridContextRankerTest,SemanticIndexingServiceTest,LuceneSemanticSearchIndexTest,GoldenSearchCorpusTest,FederatedGoldenSearchCorpusTest",
+        "-Dtest=FederatedSearchServiceIntegrationTest,FederatedGoldenSearchCorpusTest,GoldenSearchCorpusTest,LuceneSearchIndexTest",
         "test"
     )
 
     Write-Host
-    Write-Host "=== VALIDATION ITERATION 17 / INCREMENT 3 ==="
+    Write-Host "=== VALIDATION ITERATION 16 ==="
     if ($FocusedOnly) {
-        Write-Host "Coeur Maven                : SKIPPED"
-        Write-Host "Self-smoke                 : SKIPPED"
+        Write-Host "Coeur Maven              : SKIPPED"
+        Write-Host "Self-smoke               : SKIPPED"
     }
     else {
-        Write-Host "Coeur Maven                : SUCCESS"
-        Write-Host "Self-smoke                 : SUCCESS"
+        Write-Host "Coeur Maven              : SUCCESS"
+        Write-Host "Self-smoke               : SUCCESS"
     }
-    Write-Host "Contrats embeddings        : SUCCESS"
-    Write-Host "SemanticSearchStrategy     : SUCCESS"
-    Write-Host "Index vectoriel Lucene     : SUCCESS"
-    Write-Host "Cycle rebuild / delta      : SUCCESS"
-    Write-Host "Fusion semantic RRF        : SUCCESS"
-    Write-Host "Composition application    : OPT-IN VALIDEE"
-    Write-Host "Corpus golden historique   : SUCCESS"
-    Write-Host "Corpus golden federe       : SUCCESS"
-    Write-Host "Activation create(paths)   : DESACTIVEE"
-    Write-Host "================================================"
+    Write-Host "Recherche multi-projet   : SUCCESS"
+    Write-Host "Coordination multi-termes: SUCCESS"
+    Write-Host "Provenance projectId     : VALIDEE PAR TEST"
+    Write-Host "Corpus golden historique : SUCCESS"
+    Write-Host "Corpus golden federe     : SUCCESS"
+    Write-Host "Moteur externe           : NON INTRODUIT"
+    Write-Host "================================"
     Write-Host
-    Write-Host "VALIDATION INCREMENT 3 ITERATION 17 TERMINEE"
+    Write-Host "VALIDATION ITERATION 16 TERMINEE"
 }
 catch {
     Write-Host
     Write-Host "============================================================"
-    Write-Host " VALIDATION ITERATION 17 INTERROMPUE"
+    Write-Host " VALIDATION ITERATION 16 INTERROMPUE"
     Write-Host "============================================================"
     Write-Host $_.Exception.Message
     Write-Host

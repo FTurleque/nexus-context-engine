@@ -8,11 +8,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$resolvedOutput = if ([System.IO.Path]::IsPathRooted($Output)) {
-    [System.IO.Path]::GetFullPath($Output)
-} else {
-    [System.IO.Path]::GetFullPath((Join-Path $repoRoot $Output))
-}
+Import-Module (Join-Path $PSScriptRoot "lib/NexusScript.psm1") -Force
+$resolvedOutput = Resolve-AbsolutePath -Path $Output -BasePath $repoRoot
 
 Push-Location $repoRoot
 try {
@@ -20,17 +17,16 @@ try {
     Write-Host "Profile : $Profile"
     Write-Host "Output  : $resolvedOutput"
 
-    & .\mvnw.cmd -B -pl core `
-        "-Dtest=ScaleRegressionBenchmarkTest" `
-        "-Djunit.jupiter.execution.timeout.test.method.default=20m" `
-        "-Dnexus.scale.benchmark.enabled=true" `
-        "-Dnexus.scale.benchmark.profile=$Profile" `
-        "-Dnexus.scale.benchmark.output=$resolvedOutput" `
-        test
+    Invoke-Maven -Arguments @(
+        "-B", "-pl", "core",
+        "-Dtest=ScaleRegressionBenchmarkTest",
+        "-Djunit.jupiter.execution.timeout.test.method.default=20m",
+        "-Dnexus.scale.benchmark.enabled=true",
+        "-Dnexus.scale.benchmark.profile=$Profile",
+        "-Dnexus.scale.benchmark.output=$resolvedOutput",
+        "test"
+    )
 
-    if ($LASTEXITCODE -ne 0) {
-        throw "Scale benchmark failed with exit code $LASTEXITCODE"
-    }
     if (-not (Test-Path -LiteralPath $resolvedOutput -PathType Leaf)) {
         throw "Scale benchmark report was not produced: $resolvedOutput"
     }

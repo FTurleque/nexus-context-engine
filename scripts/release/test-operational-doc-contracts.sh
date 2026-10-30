@@ -462,5 +462,113 @@ for needle in (
 if not (root / "core/src/test/java/com/nexus/security/SensitiveContentRedactorTest.java").is_file():
     raise SystemExit("security contract drift: redaction fixture path cited by SECURITY.md is missing")
 
+# Active PowerShell scripts call Maven only through scripts/lib/NexusScript.psm1 (AUD-QUA-05).
+import re
+
+SHARED_SCRIPT_FUNCTION = re.compile(
+    r"^\s*function\s+(Invoke-Maven|Resolve-AbsolutePath|Invoke-NexusJson|Select-MavenCommand)\b",
+    re.IGNORECASE,
+)
+MAVEN_TOKEN = r"(?:\.\.?[\\/])?(?:[\w$:.\\/-]*[\\/])?mvnw?(?:\.cmd)?"
+DIRECT_MAVEN_CALL = (
+    re.compile(r"&\s*['\"]?" + MAVEN_TOKEN + r"['\"]?(?:\s|$)", re.IGNORECASE),
+    re.compile(r"^\s*" + MAVEN_TOKEN + r"\s", re.IGNORECASE),
+    re.compile(r"Get-Command\s+(?:-Name\s+)?['\"]?mvn", re.IGNORECASE),
+    re.compile(r"Start-Process\b.*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE),
+    re.compile(r"Join-Path\b.*['\"](?:\.\.[\\/])*mvnw?(?:\.cmd)?['\"]", re.IGNORECASE),
+)
+
+
+def powershell_maven_violations(relative: str, source: str) -> list[str]:
+    violations = []
+    for number, line in enumerate(source.splitlines(), 1):
+        code = line.split("#", 1)[0] if line.lstrip().startswith("#") else line
+        if not code.strip():
+            continue
+        if SHARED_SCRIPT_FUNCTION.search(code):
+            violations.append(f"{relative}:{number}: redefines a NexusScript.psm1 function")
+        if any(pattern.search(code) for pattern in DIRECT_MAVEN_CALL):
+            violations.append(f"{relative}:{number}: calls Maven directly instead of Invoke-Maven")
+    return violations
+
+
+def active_powershell_scripts() -> list[Path]:
+    scripts_root = root / "scripts"
+    excluded = (scripts_root / "lib", scripts_root / "archive")
+    return sorted(
+        path
+        for pattern in ("*.ps1", "*.psm1")
+        for path in scripts_root.rglob(pattern)
+        if not any(parent in excluded for parent in path.parents)
+    )
+
+
+maven_violations = []
+for script in active_powershell_scripts():
+    maven_violations.extend(
+        powershell_maven_violations(script.relative_to(root).as_posix(), script.read_text(encoding="utf-8"))
+    )
+if maven_violations:
+    raise SystemExit("powershell maven contract drift:\n" + "\n".join(maven_violations))
+for label, fixture in (
+    ("installed mvn call", "Push-Location $root\n& mvn @arguments\n"),
+    ("installed mvn.cmd call", "    & mvn.cmd -q package\n"),
+    ("direct wrapper call", "    & .\\mvnw.cmd -B test\n"),
+    ("quoted wrapper call", "    & '.\\mvnw.cmd' @mavenArgs\n"),
+    ("bare command", "mvn clean install\n"),
+    ("wrapper path variable", "$w = (Resolve-Path (Join-Path $PSScriptRoot '..\\mvnw.cmd')).Path\n"),
+    ("installed lookup", "$m = Get-Command mvn -ErrorAction SilentlyContinue\n"),
+    ("local Invoke-Maven", "function Invoke-Maven {\n}\n"),
+    ("local Resolve-AbsolutePath", "function Resolve-AbsolutePath {\n}\n"),
+):
+    if not powershell_maven_violations(f"fixture/{label}.ps1", fixture):
+        raise SystemExit(f"powershell maven contract self-test: {label} was not detected")
+for label, fixture in (
+    ("module call", "Invoke-Maven -Arguments @('-q', 'package')\n"),
+    ("comment", "# & mvn clean install\n"),
+    ("message", 'Write-Error "Lancez d\'abord : .\\\\mvnw.cmd clean package"\n'),
+):
+    if powershell_maven_violations(f"fixture/{label}.ps1", fixture):
+        raise SystemExit(f"powershell maven contract self-test: {label} was rejected")
+require(
+    "scripts/lib/NexusScript.psm1",
+    "Export-ModuleMember -Function Invoke-Maven, Resolve-AbsolutePath, Invoke-NexusJson",
+)
+require("scripts/lib/NexusScript.psm1", "exige le Maven Wrapper verifie")
+require(".github/workflows/ci.yml", "scripts/tests/Test-NexusScript.ps1")
+for retired in range(9, 18):
+    if retired == 15:
+        continue
+    if (root / f"scripts/validate-iteration-{retired}.ps1").exists():
+        raise SystemExit(f"script archive drift: scripts/validate-iteration-{retired}.ps1 must live in scripts/archive/")
+require("scripts/archive/README.md", "non maintenus")
+require("docs/developer/ci-and-supply-chain.md", "Les seuls points d'entrée de validation sont `scripts/validate-phase-6.ps1`")
+
 print("operational-documentation-contracts=PASS")
 PY
+
+# Workflow hygiene: no input interpolated in run: blocks, a timeout on every
+# non-reusable job, versioned runner images for benchmarks. Each check must
+# also reject its negative fixture.
+HYGIENE="scripts/release/workflow_hygiene.py"
+HYGIENE_FIXTURES="scripts/release/fixtures/workflow-hygiene"
+for check in inputs timeouts runners; do
+  python3 "$HYGIENE" "$check" .github/workflows
+done
+# A fixture counts as rejected only with exit code 1 and the message of its rule.
+for case in \
+  "inputs|inputs-in-run.yml|interpolated inside a run" \
+  "inputs|inputs-inline-run.yml|interpolated inside a run" \
+  "inputs|inputs-event-inputs.yml|interpolated inside a run" \
+  "timeouts|timeout-missing.yml|no timeout-minutes" \
+  "runners|runners/scale-benchmark.yml|unpinned image"; do
+  IFS='|' read -r check fixture message <<< "$case"
+  set +e
+  output="$(python3 "$HYGIENE" "$check" "$HYGIENE_FIXTURES/$fixture" 2>&1)"
+  status=$?
+  set -e
+  if [[ "$status" -ne 1 ]] || ! grep -q "$message" <<< "$output"; then
+    echo "workflow hygiene fixture $fixture was not rejected by the $check check for '$message' (exit $status)" >&2
+    exit 1
+  fi
+done

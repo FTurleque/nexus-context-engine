@@ -177,7 +177,7 @@ Le profil sémantique est `content-v4`, ce qui rend un index historique incompat
 
 `OllamaEmbeddingProvider` borne la réponse `/api/embed` avant matérialisation JSON et valide dimension/valeurs finies.
 
-`.github/workflows/semantic-search-qualification.yml` apporte la preuve réelle périodique/manuelle : téléchargement Ollama 0.33.3 depuis la release officielle, vérification SHA-256 repository-pinned, endpoint loopback, modèle `qwen3-embedding:0.6b`, `RealSemanticSearchBenchmarkTest`, floors de qualité/non-régression et artefacts de preuve.
+`.github/workflows/semantic-search-qualification.yml` apporte la preuve réelle (corpus réduit sur PR, corpus complet sur `develop` après fusion, manuelle et mensuelle ; GEN-0060) : téléchargement Ollama 0.33.3 depuis la release officielle, vérification SHA-256 repository-pinned, endpoint loopback, modèle `qwen3-embedding:0.6b`, `RealSemanticSearchBenchmarkTest`, floors de qualité/non-régression et artefacts de preuve.
 
 ## Git local
 

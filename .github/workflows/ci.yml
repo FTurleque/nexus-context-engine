@@ -23,6 +23,7 @@ jobs:
   windows-gate:
     name: Windows gate
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -44,6 +45,14 @@ jobs:
         shell: pwsh
         run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/release/test-rest-token-contract.ps1
 
+      - name: Run NexusScript module tests
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/tests/Test-NexusScript.ps1
+
+      - name: Run NexusScript module tests (Windows PowerShell 5.1)
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tests/Test-NexusScript.ps1
+
       - name: Run local qualification script
         shell: powershell
         env:
@@ -55,6 +64,7 @@ jobs:
   linux-reactor:
     name: Linux reactor Maven build
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

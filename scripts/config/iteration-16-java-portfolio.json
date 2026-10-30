@@ -11,7 +11,7 @@
     "scripts/measure-iteration-16-baseline.ps1",
     "scripts/measure-iteration-16-portfolio.ps1",
     "scripts/measure-iteration-16-small-delta.ps1",
-    "scripts/validate-iteration-16.ps1",
+    "scripts/archive/validate-iteration-16.ps1",
     "core/src/test/java/com/nexus/search/LargeScaleSearchBaselineTest.java",
     "core/src/test/java/com/nexus/index/SmallDeltaIndexingBaselineTest.java"
   ],

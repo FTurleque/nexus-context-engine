@@ -7,6 +7,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+Import-Module (Join-Path $PSScriptRoot "lib/NexusScript.psm1") -Force
 $evaluationHome = Join-Path $repoRoot "target\nexus-jdt-evaluation-home"
 $resultsDirectory = Join-Path $repoRoot "target\jdt-evaluation"
 $summaryPath = Join-Path $resultsDirectory "summary.json"
@@ -14,52 +15,6 @@ $previousNexusHome = $env:NEXUS_HOME
 $previousTrustedJdtRoots = $env:NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS
 $locationPushed = $false
 $script:cliJar = $null
-
-function Invoke-Maven {
-    param([Parameter(Mandatory = $true)][string[]]$Arguments)
-
-    & mvn @Arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "La commande Maven a echoue avec le code $LASTEXITCODE : mvn $($Arguments -join ' ')"
-    }
-}
-
-function Invoke-NexusJson {
-    param([Parameter(Mandatory = $true)][string[]]$Arguments)
-
-    $stdoutFile = [System.IO.Path]::GetTempFileName()
-    $stderrFile = [System.IO.Path]::GetTempFileName()
-    $previousErrorActionPreference = $ErrorActionPreference
-    try {
-        # Windows PowerShell 5.1 transforme parfois les warnings stderr des
-        # processus natifs en NativeCommandError visuels. Le code de sortie
-        # du processus Java reste la source de verite.
-        $ErrorActionPreference = "Continue"
-        & java -jar $script:cliJar.FullName @Arguments 1> $stdoutFile 2> $stderrFile
-        $exitCode = $LASTEXITCODE
-    }
-    finally {
-        $ErrorActionPreference = $previousErrorActionPreference
-    }
-
-    try {
-        $stdout = Get-Content -Raw -Path $stdoutFile -ErrorAction SilentlyContinue
-        $stderr = Get-Content -Raw -Path $stderrFile -ErrorAction SilentlyContinue
-        if (-not [string]::IsNullOrWhiteSpace($stderr)) {
-            Write-Host $stderr.TrimEnd()
-        }
-        if ($exitCode -ne 0) {
-            throw "La CLI NEXUS a echoue avec le code $exitCode pour : $($Arguments -join ' ')"
-        }
-        if ([string]::IsNullOrWhiteSpace($stdout)) {
-            throw "La CLI NEXUS n'a retourne aucune sortie JSON pour : $($Arguments -join ' ')"
-        }
-        return ($stdout | ConvertFrom-Json)
-    }
-    finally {
-        Remove-Item -Force $stdoutFile, $stderrFile -ErrorAction SilentlyContinue
-    }
-}
 
 function Measure-Quality {
     param(
@@ -72,7 +27,7 @@ function Measure-Quality {
     $details = @()
 
     foreach ($query in $Queries) {
-        $search = Invoke-NexusJson -Arguments @("search", $ProjectName, $query.Query, "--limit", "20", "--json")
+        $search = Invoke-NexusJson -CliJar $script:cliJar.FullName -Arguments @("search", $ProjectName, $query.Query, "--limit", "20", "--json")
         $rankedPaths = @(
             $search.results |
                 ForEach-Object { ([string]$_.path).Replace('\', '/') } |
@@ -168,16 +123,16 @@ try {
     $env:NEXUS_HOME = $evaluationHome
 
     Write-Host "[3/7] Enregistrement du repository"
-    $null = Invoke-NexusJson -Arguments @("project", "add", ".", $ProjectName, "--json")
+    $null = Invoke-NexusJson -CliJar $script:cliJar.FullName -Arguments @("project", "add", ".", $ProjectName, "--json")
 
     Write-Host "[4/7] Baseline JavaParser + importers opportunistes"
-    $baselineIndex = Invoke-NexusJson -Arguments @("index", $ProjectName, "--rebuild", "--json")
-    $baselineInspect = Invoke-NexusJson -Arguments @("inspect", $ProjectName, "--json")
+    $baselineIndex = Invoke-NexusJson -CliJar $script:cliJar.FullName -Arguments @("index", $ProjectName, "--rebuild", "--json")
+    $baselineInspect = Invoke-NexusJson -CliJar $script:cliJar.FullName -Arguments @("inspect", $ProjectName, "--json")
     $baselineQuality = Measure-Quality -Queries $queries -TopK $K
 
     Write-Host "[5/7] Enrichissement JDT LS avec --deep-java"
-    $deepIndex = Invoke-NexusJson -Arguments @("index", $ProjectName, "--rebuild", "--deep-java", "--json")
-    $deepInspect = Invoke-NexusJson -Arguments @("inspect", $ProjectName, "--json")
+    $deepIndex = Invoke-NexusJson -CliJar $script:cliJar.FullName -Arguments @("index", $ProjectName, "--rebuild", "--deep-java", "--json")
+    $deepInspect = Invoke-NexusJson -CliJar $script:cliJar.FullName -Arguments @("inspect", $ProjectName, "--json")
     $deepQuality = Measure-Quality -Queries $queries -TopK $K
 
     Write-Host "[6/7] Calcul des ecarts"

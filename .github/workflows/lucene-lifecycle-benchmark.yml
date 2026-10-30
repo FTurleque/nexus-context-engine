@@ -62,15 +62,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             label: linux
-          - os: windows-latest
+          - os: windows-2025
             label: windows
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
       - name: Checkout exact head
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
@@ -84,8 +84,9 @@ jobs:
       - name: Resolve benchmark profile
         id: profile
         shell: bash
+        env:
+          REQUESTED: ${{ inputs.profile }}
         run: |
-          REQUESTED="${{ inputs.profile }}"
           if [[ -z "$REQUESTED" ]]; then
             REQUESTED=ci
           fi

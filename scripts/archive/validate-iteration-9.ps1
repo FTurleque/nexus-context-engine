@@ -2,7 +2,7 @@
 param()
 
 $ErrorActionPreference = "Stop"
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $locationPushed = $false
 
 try {
@@ -22,11 +22,11 @@ try {
 
     Write-Host
     Write-Host "[2/4] Self-smoke"
-    & (Join-Path $PSScriptRoot "self-smoke.ps1")
+    & (Join-Path $PSScriptRoot "..\self-smoke.ps1")
 
     Write-Host
     Write-Host "[3/4] Installation / configuration JDT LS"
-    & (Join-Path $PSScriptRoot "install-jdtls.ps1")
+    & (Join-Path $PSScriptRoot "..\install-jdtls.ps1")
 
     if ([string]::IsNullOrWhiteSpace($env:NEXUS_JDTLS_HOME)) {
         throw "L'installation JDT LS n'a pas configure NEXUS_JDTLS_HOME."
@@ -34,7 +34,7 @@ try {
 
     Write-Host
     Write-Host "[4/4] Comparaison baseline vs JDT LS"
-    & (Join-Path $PSScriptRoot "compare-jdt.ps1")
+    & (Join-Path $PSScriptRoot "..\compare-jdt.ps1")
 
     Write-Host
     Write-Host "============================================================"

@@ -3,21 +3,9 @@ param()
 
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+Import-Module (Join-Path $PSScriptRoot "lib/NexusScript.psm1") -Force
 $locationPushed = $false
 $previousPath = $env:PATH
-
-function Invoke-Native {
-    param(
-        [Parameter(Mandatory = $true)][string]$Command,
-        [Parameter(Mandatory = $false)][string[]]$Arguments = @()
-    )
-
-    & $Command @Arguments
-    $exitCode = $LASTEXITCODE
-    if ($exitCode -ne 0) {
-        throw "Commande en echec ($exitCode) : $Command $($Arguments -join ' ')"
-    }
-}
 
 function Get-JavaVersionText {
     param([Parameter(Mandatory = $true)][string]$JavaExecutable)
@@ -51,48 +39,6 @@ function Get-JavaMajorVersion {
         return $null
     }
     return [int]$Matches['version']
-}
-
-function Test-ContinuousIntegration {
-    return (-not [string]::IsNullOrWhiteSpace($env:CI)) -or (-not [string]::IsNullOrWhiteSpace($env:GITHUB_ACTIONS))
-}
-
-function Select-MavenCommand {
-    param([Parameter(Mandatory = $true)][string]$RepositoryRoot)
-
-    $wrapper = Join-Path $RepositoryRoot "mvnw.cmd"
-    $wrapperFailure = "Le Maven Wrapper est absent : $wrapper."
-    if (Test-Path -LiteralPath $wrapper -PathType Leaf) {
-        try {
-            & $wrapper --version 2>&1 | Out-Host
-            if ($LASTEXITCODE -eq 0) {
-                return $wrapper
-            }
-            $wrapperFailure = "Le Maven Wrapper est indisponible (code $LASTEXITCODE)."
-        }
-        catch {
-            $wrapperFailure = "Le Maven Wrapper n'a pas pu telecharger Maven : $($_.Exception.Message)."
-        }
-    }
-
-    # En CI, seul le Maven ancre par le wrapper verifie qualifie le build.
-    if (Test-ContinuousIntegration) {
-        throw "$wrapperFailure La CI (CI ou GITHUB_ACTIONS definie) exige le Maven Wrapper verifie : aucun repli sur le Maven du runner."
-    }
-    Write-Warning "$wrapperFailure Repli local sur le Maven installe (interdit en CI) : la version Maven n'est pas ancree."
-
-    foreach ($candidate in @("mvn.cmd", "mvn")) {
-        $installed = Get-Command $candidate -ErrorAction SilentlyContinue
-        if ($null -ne $installed -and -not [string]::IsNullOrWhiteSpace($installed.Source)) {
-            Write-Host "Maven systeme selectionne : $($installed.Source)"
-            & $installed.Source --version 2>&1 | Out-Host
-            if ($LASTEXITCODE -eq 0) {
-                return $installed.Source
-            }
-        }
-    }
-
-    throw "Impossible d'executer Maven : le wrapper et Maven systeme sont indisponibles."
 }
 
 function Assert-Sha256File {
@@ -161,10 +107,10 @@ try {
     if (Test-Path -LiteralPath $wrapperMavenBin -PathType Container) {
         $env:PATH = "$wrapperMavenBin;$env:PATH"
     }
-    $mavenCommand = Select-MavenCommand -RepositoryRoot $repoRoot
+    Invoke-Maven -RepositoryRoot $repoRoot -Arguments @("--version")
 
     Write-Host "[3/9] Reactor complet : clean install"
-    Invoke-Native -Command $mavenCommand -Arguments @("clean", "install")
+    Invoke-Maven -RepositoryRoot $repoRoot -Arguments @("clean", "install")
 
     Write-Host "[4/9] Self-smoke historique obligatoire"
     & (Join-Path $repoRoot "scripts\self-smoke.ps1")

@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 $jar = (Resolve-Path $MinosJar).Path
 $java24 = (Resolve-Path $Java24).Path
 $fixturePath = (Resolve-Path $Fixture).Path
-$mavenWrapper = (Resolve-Path (Join-Path $PSScriptRoot '..\mvnw.cmd')).Path
+Import-Module (Join-Path $PSScriptRoot 'lib/NexusScript.psm1') -Force
 
 if ([string]::IsNullOrWhiteSpace($env:JAVA_HOME)) {
     throw 'JAVA_HOME must point to a JDK 21 or newer used to validate NEXUS.'
@@ -131,14 +131,11 @@ try {
         $utf8NoBom)
 
     $env:NEXUS_HOME = $nexusHome
-    & $mavenWrapper `
-        '-Dtest=MinosRealIntegrationTest' `
-        '-Dnexus.minos.integration.replay=true' `
-        test
-
-    if ($LASTEXITCODE -ne 0) {
-        throw "MINOS -> NEXUS replay failed with exit code $LASTEXITCODE"
-    }
+    Invoke-Maven -Arguments @(
+        '-Dtest=MinosRealIntegrationTest',
+        '-Dnexus.minos.integration.replay=true',
+        'test'
+    )
 
     Write-Host 'M13 MINOS -> NEXUS replay SUCCESS'
 }

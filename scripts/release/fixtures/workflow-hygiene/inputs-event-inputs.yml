@@ -1,0 +1,15 @@
+# Fixture négative : github.event.inputs interpolé dans un bloc run.
+name: fixture
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        type: string
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - shell: bash
+        run: |
+          echo "${{ github.event.inputs.profile }}"
