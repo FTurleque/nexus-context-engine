@@ -64,6 +64,12 @@ Les endpoints `/q/*` ne sont pas servis par le listener applicatif. Cette sépar
 
 Les lectures indexées exigent un projet `READY`.
 
+## Contrat de sortie
+
+Les réponses sont construites par la projection publique du cœur, `com.nexus.exposure.PublicOutputProjection` ([ARCH-0061](../architecture/adr/ARCH-0061-decider-le-contrat-de-sortie-publique-dans-la-projection-du-coeur.md)), commune à la CLI, REST et MCP : mêmes clés, dans le même ordre, sur les trois canaux. Chemins relatifs au projet, aucune clé `rootPath`, `rank`, `id` et `excerpt` redigé sur chaque résultat classé, `qualifiedName`, `signature`, `source` et `target` redigés, `scoreComponents` et `metadata` triés par clé. Les résultats fédérés imbriquent `project` et `result` (recherche) ou `project` et `item` (contexte). Les tests `*OutputParityTest` des trois modules comparent chaque canal au contrat de `PublicOutputSchema`.
+
+REST n'ajoute aucune clé : les endpoints renvoient les records `PublicOutput` tels quels.
+
 ## Limites de requête
 
 Les endpoints mono-projet et fédérés appliquent les mêmes politiques centrales :
