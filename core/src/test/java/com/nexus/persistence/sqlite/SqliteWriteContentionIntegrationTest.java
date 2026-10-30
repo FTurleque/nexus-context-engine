@@ -36,6 +36,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -229,11 +230,9 @@ class SqliteWriteContentionIntegrationTest {
             UUID projectBId = projectB.id();
             List<IndexedFileUpdate> updates = List.of(update);
             Set<String> removedPaths = Set.of();
-            long started = System.nanoTime();
             PersistenceException failure = assertThrows(
                     PersistenceException.class,
                     () -> index.applyChanges(projectBId, updates, removedPaths));
-            long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
 
             SQLiteException sqliteFailure = sqliteFailure(failure);
             assertNotNull(sqliteFailure);
@@ -241,8 +240,9 @@ class SqliteWriteContentionIntegrationTest {
                     || sqliteFailure.getResultCode() == SQLiteErrorCode.SQLITE_LOCKED);
             assertEquals(1L, database.writeRetryCount(),
                     "Deux tentatives impliquent exactement un retry");
-            assertTrue(elapsedMillis < 1_000L,
-                    () -> "La politique de test doit échouer de façon bornée, elapsed=" + elapsedMillis + " ms");
+            assertFalse(holder.isDone(),
+                    "La politique doit échouer pendant que le writer concurrent tient encore le verrou, "
+                            + "sans attendre sa libération");
             assertEquals(0L, index.generation(projectB.id()));
             assertTrue(index.findFiles(projectB.id()).isEmpty(),
                     "Aucune ligne partielle ne doit survivre à l'échec borné");
@@ -323,7 +323,8 @@ class SqliteWriteContentionIntegrationTest {
                     statement.executeUpdate();
                 }
                 lockHeld.countDown();
-                if (!release.await(2, TimeUnit.SECONDS)) {
+                // Borne de sûreté seulement : chaque test relâche le writer explicitement.
+                if (!release.await(30, TimeUnit.SECONDS)) {
                     throw new IllegalStateException("Timed out waiting to release SQLite writer lock");
                 }
                 connection.rollback();
