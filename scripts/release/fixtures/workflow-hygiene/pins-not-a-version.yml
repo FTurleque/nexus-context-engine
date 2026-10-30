@@ -1,0 +1,6 @@
+# Fixture négative : commentaire qui n'est pas une version.
+name: fixture
+on: workflow_call
+jobs:
+  scan:
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@9a96bc4d2b09685b6142bcfe25a3dc17cb2d7347 # fail closed on incomplete scans

@@ -44,7 +44,14 @@ Le gate documentaire contrôle notamment :
 - non-adoption mesurée du Vector API dans les launchers de production ;
 - politique de maintenance solo documentée.
 
-Les actions GitHub contrôlées par le dépôt sont référencées par SHA immuable.
+## Hygiène des workflows
+
+`scripts/release/workflow_hygiene.py` vérifie les workflows de `.github/workflows/` ; chaque contrôle rejette aussi une fixture négative de `scripts/release/fixtures/workflow-hygiene/`.
+
+- **Épinglage** (`test-tool-integrity-anchors.sh`) : chaque `uses:` externe est épinglé par SHA complet suivi de `# vX.Y.Z` ; un même SHA porte le même commentaire partout ; une action n'a qu'une version majeure dans l'ensemble des workflows. La concordance avec les tags amont n'est pas vérifiée en CI : elle se vérifie à la main lors d'une montée, par `git ls-remote --tags` (skill `nexus-dependency-bump`). Les workflows réutilisables OSV sont épinglés sur le SHA de **commit** d'un tag publié, jamais sur le SHA de l'objet tag.
+- **Inputs** (`test-operational-doc-contracts.sh`) : aucune expression `${{ inputs.` dans un bloc `run:` ; la valeur passe par une variable d'environnement de l'étape (`REQUESTED: ${{ inputs.profile }}`), puis la validation `ci|full` s'applique à la variable.
+- **Durée** (`test-operational-doc-contracts.sh`) : tout job qui déclare `runs-on:` déclare `timeout-minutes`. Un job qui appelle un workflow réutilisable (`uses:`) n'accepte pas `timeout-minutes` : il est borné par les jobs du workflow appelé, eux-mêmes soumis à ce contrôle, ou, pour un workflow externe comme OSV, par ce workflow et la borne de 6 h de GitHub.
+- **Images de runner** (`test-operational-doc-contracts.sh`) : les jobs de benchmark et de qualification de performance (`scale-benchmark.yml`, `lucene-lifecycle-benchmark.yml`, `scanner-corpus-benchmark.yml`, `git-context-cache-qualification.yml`, job `scale-comparison` de `runtime-flags-qualification.yml`) tournent sur `ubuntu-24.04` et `windows-2025`, pour que leurs budgets comparent des mesures prises sur la même image. Les autres jobs restent sur `ubuntu-latest` et `windows-latest`. Le retrait d'une image épinglée par GitHub fait échouer le benchmark ; la montée d'image est alors explicite.
 
 ## Scripts de validation
 
@@ -79,7 +86,7 @@ La résilience réseau ne modifie donc pas la racine de confiance du bootstrap e
 
 - CodeQL : Java/Kotlin `security-extended`, `build-mode: manual` (compilation des sources et des tests par `./mvnw` sur Java 21.0.12 épinglé), contrat exact-head ;
 - OSV : delta PR + scan bloquant du SBOM CycloneDX agrégé ;
-- reusable workflow OSV épinglé au SHA qui échoue fermé lorsqu'un scan est incomplet ;
+- workflows réutilisables OSV épinglés sur `v2.7.0` (SHA de commit), qui échoue fermé lorsqu'un scan est incomplet ;
 - SonarQube Cloud : GitHub App en Automatic Analysis, avec Quality Gate externe sur les changements de PR.
 
 Un check externe n'apparaît pas nécessairement dans la liste des workflows GitHub Actions ; la qualification finale d'une PR doit donc regarder les **check-runs du commit**, pas seulement les workflow runs.

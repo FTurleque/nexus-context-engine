@@ -105,4 +105,17 @@ if grep -q '\$checksumUrl' "$ROOT/scripts/install-jdtls.ps1"; then
   exit 1
 fi
 
+# GitHub Actions pins: full SHA + '# vX.Y.Z', one comment per SHA and one
+# major version per action. Upstream tags are checked by hand on a bump
+# (git ls-remote), since CI has no guaranteed network access to them.
+HYGIENE="${SCRIPT_DIR}/workflow_hygiene.py"
+HYGIENE_FIXTURES="${SCRIPT_DIR}/fixtures/workflow-hygiene"
+python3 "$HYGIENE" pins "$ROOT/.github/workflows"
+for fixture in pins-comment-mismatch pins-two-majors pins-not-a-version pins-tag-reference; do
+  if python3 "$HYGIENE" pins "$HYGIENE_FIXTURES/${fixture}.yml" >/dev/null 2>&1; then
+    echo "workflow pin fixture ${fixture} unexpectedly accepted" >&2
+    exit 1
+  fi
+done
+
 printf 'Pinned tool integrity anchor tests passed\n'

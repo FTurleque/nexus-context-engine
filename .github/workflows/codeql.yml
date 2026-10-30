@@ -27,6 +27,7 @@ jobs:
   analyze:
     name: CodeQL Java analysis
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       NEXUS_CODEQL_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
     steps:

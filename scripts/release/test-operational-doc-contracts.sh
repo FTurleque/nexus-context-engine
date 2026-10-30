@@ -546,3 +546,19 @@ require("docs/developer/ci-and-supply-chain.md", "Les seuls points d'entrée de 
 
 print("operational-documentation-contracts=PASS")
 PY
+
+# Workflow hygiene: no input interpolated in run: blocks, a timeout on every
+# non-reusable job, versioned runner images for benchmarks. Each check must
+# also reject its negative fixture.
+HYGIENE="scripts/release/workflow_hygiene.py"
+HYGIENE_FIXTURES="scripts/release/fixtures/workflow-hygiene"
+for check in inputs timeouts runners; do
+  python3 "$HYGIENE" "$check" .github/workflows
+done
+for case in "inputs inputs-in-run.yml" "inputs inputs-inline-run.yml" "timeouts timeout-missing.yml" "runners runners/scale-benchmark.yml"; do
+  set -- $case
+  if python3 "$HYGIENE" "$1" "$HYGIENE_FIXTURES/$2" >/dev/null 2>&1; then
+    echo "workflow hygiene fixture $2 unexpectedly accepted by the $1 check" >&2
+    exit 1
+  fi
+done
