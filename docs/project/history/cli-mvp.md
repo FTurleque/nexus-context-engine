@@ -2,7 +2,7 @@
 
 > **Document historique.** Cette page décrit le contrat validé lors de l'Itération 4, le 19 juillet 2026. Elle ne représente plus toute la surface actuelle de NEXUS.
 
-Pour la CLI courante, voir [`cli.md`](cli.md).
+Pour la CLI courante, voir [`cli.md`](../../developer/cli.md).
 
 ## But historique
 
@@ -126,7 +126,7 @@ L'implémentation actuelle possède encore un composition root dupliqué dans `N
 
 ## Où trouver l'état actuel
 
-- CLI courante : [`cli.md`](cli.md)
-- architecture : [`../architecture.md`](../architecture.md)
-- limites : [`current-limitations.md`](current-limitations.md)
-- roadmap : [`../roadmap.md`](../roadmap.md)
+- CLI courante : [`cli.md`](../../developer/cli.md)
+- architecture : [`../architecture.md`](../../architecture/overview.md)
+- limites : [`current-limitations.md`](../../developer/current-limitations.md)
+- roadmap : [`../roadmap.md`](../governance/ROADMAP.md)

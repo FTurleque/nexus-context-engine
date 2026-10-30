@@ -269,7 +269,7 @@ NEXUS_RUNTIME
 
 ## Documentation
 
-- architecture : [`docs/architecture.md`](docs/architecture.md) ;
+- architecture : [`docs/architecture/overview.md`](docs/architecture/overview.md) ;
 - CI/supply-chain : [`docs/developer/ci-and-supply-chain.md`](docs/developer/ci-and-supply-chain.md) ;
 - release/recovery : [`docs/developer/release-and-recovery.md`](docs/developer/release-and-recovery.md) ;
 - REST : [`docs/developer/rest-api.md`](docs/developer/rest-api.md) ;
@@ -277,7 +277,7 @@ NEXUS_RUNTIME
 - Code Intelligence/JDT : [`docs/developer/code-intelligence.md`](docs/developer/code-intelligence.md) ;
 - gouvernance des branches : [`docs/developer/branch-governance.md`](docs/developer/branch-governance.md) ;
 - limites courantes : [`docs/developer/current-limitations.md`](docs/developer/current-limitations.md) ;
-- roadmap : [`docs/roadmap.md`](docs/roadmap.md).
+- roadmap : [`docs/project/governance/ROADMAP.md`](docs/project/governance/ROADMAP.md).
 
 ## Licence
 

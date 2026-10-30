@@ -22,7 +22,7 @@ on:
       - 'scripts/tests/test_scale_budgets.py'
       - 'config/scale-benchmark-protocol'
       - 'docs/developer/scale-regression-benchmark.md'
-      - 'docs/developer/scale-regression-results.md'
+      - 'docs/project/history/scale-regression-results.md'
       - '.github/workflows/scale-benchmark.yml'
       - '.github/workflows/develop-push-scale-benchmark.yml'
   pull_request:

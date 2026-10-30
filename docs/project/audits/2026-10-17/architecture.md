@@ -1,6 +1,6 @@
 # Architecture observée — audit du 17 octobre 2026
 
-Découpage **réellement observé**, reconstruit à partir des `import com.nexus.*` des 243 fichiers de production (script Tarjan sur le graphe des packages), comparé à [`docs/architecture.md`](../../architecture.md) et à ADR-0004.
+Découpage **réellement observé**, reconstruit à partir des `import com.nexus.*` des 243 fichiers de production (script Tarjan sur le graphe des packages), comparé à [`docs/architecture.md`](../../../architecture/overview.md) et à ADR-0004.
 
 ## Ce que dit le code
 

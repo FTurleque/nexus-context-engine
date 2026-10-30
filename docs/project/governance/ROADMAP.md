@@ -9,7 +9,7 @@ develop = intégration et qualification
 main    = release
 ```
 
-Toute promotion vers `main` doit partir d'un HEAD exact qualifié. Le contrat de protection de `develop` est décrit dans [`developer/branch-governance.md`](developer/branch-governance.md) et doit être appliqué dans les règles GitHub du repository.
+Toute promotion vers `main` doit partir d'un HEAD exact qualifié. Le contrat de protection de `develop` est décrit dans [`developer/branch-governance.md`](../../developer/branch-governance.md) et doit être appliqué dans les règles GitHub du repository.
 
 ## Baseline fonctionnelle NEXUS 0.2.0
 
@@ -104,10 +104,10 @@ Les améliorations suivantes restent conditionnées à une preuve reproductible 
 
 ## Références
 
-- Architecture : [`architecture.md`](architecture.md)
-- CI / supply-chain : [`developer/ci-and-supply-chain.md`](developer/ci-and-supply-chain.md)
-- Release/recovery : [`developer/release-and-recovery.md`](developer/release-and-recovery.md)
-- REST : [`developer/rest-api.md`](developer/rest-api.md)
-- Sémantique : [`developer/semantic-search.md`](developer/semantic-search.md)
-- JDT LS : [`developer/jdt-language-server.md`](developer/jdt-language-server.md)
-- Limites courantes : [`developer/current-limitations.md`](developer/current-limitations.md)
+- Architecture : [`architecture.md`](../../architecture/overview.md)
+- CI / supply-chain : [`developer/ci-and-supply-chain.md`](../../developer/ci-and-supply-chain.md)
+- Release/recovery : [`developer/release-and-recovery.md`](../../developer/release-and-recovery.md)
+- REST : [`developer/rest-api.md`](../../developer/rest-api.md)
+- Sémantique : [`developer/semantic-search.md`](../../developer/semantic-search.md)
+- JDT LS : [`developer/jdt-language-server.md`](../../developer/jdt-language-server.md)
+- Limites courantes : [`developer/current-limitations.md`](../../developer/current-limitations.md)

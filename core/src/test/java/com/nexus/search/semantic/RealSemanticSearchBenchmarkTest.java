@@ -200,7 +200,7 @@ class RealSemanticSearchBenchmarkTest {
                         "generated lookup state should be disposable and recoverable from the authoritative metadata store",
                         Set.of(
                                 "docs/architecture/adr/DATA-0022-traiter-lucene-comme-un-index-derive-reconstructible-de-sqlite.md",
-                                "docs/index-provenance.md")),
+                                "docs/developer/index-provenance.md")),
                 new QueryCase(
                         "screen lightweight capability summaries before loading the full operating procedure",
                         Set.of(

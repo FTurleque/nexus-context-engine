@@ -23,7 +23,7 @@ et leurs reproductions, sans correction du code de production.**
 ### A221-01 — P1 — Des mots de passe littéraux échappent à la rédaction
 
 Localisation :
-[`SensitiveContentRedactor.java:38–42`](../../core/src/main/java/com/nexus/security/SensitiveContentRedactor.java).
+[`SensitiveContentRedactor.java:38–42`](../../../../../core/src/main/java/com/nexus/security/SensitiveContentRedactor.java).
 
 La reconnaissance des affectations accepte les guillemets doubles autour de
 la clé, mais pas les simples. La reconnaissance d'une valeur entre guillemets
@@ -57,7 +57,7 @@ reconstruire les dérivés concernés.
 ### A221-02 — P1 — Le décodage des métadonnées YAML permet une amplification mémoire
 
 Localisation :
-[`SkillFrontmatterParser.java:149–158`](../../core/src/main/java/com/nexus/context/source/skill/SkillFrontmatterParser.java),
+[`SkillFrontmatterParser.java:149–158`](../../../../../core/src/main/java/com/nexus/context/source/skill/SkillFrontmatterParser.java),
 ainsi que les conversions génériques des champs facultatifs aux lignes 144,
 167 et 173.
 
@@ -87,9 +87,9 @@ limite sur le nombre d'alias ou sur les octets du fichier ne suffit pas.
 ### A221-03 — P1 — Un rebuild sémantique invalide les lecteurs d'une autre instance
 
 Localisation :
-[`LuceneSemanticSearchIndex.java:106`](../../core/src/main/java/com/nexus/search/semantic/lucene/LuceneSemanticSearchIndex.java)
+[`LuceneSemanticSearchIndex.java:106`](../../../../../core/src/main/java/com/nexus/search/semantic/lucene/LuceneSemanticSearchIndex.java)
 et `clearDerivedIndexDirectory`, lignes 216–237 ;
-[`PersistentLuceneSemanticSearchIndex.java:73`](../../core/src/main/java/com/nexus/search/semantic/lucene/PersistentLuceneSemanticSearchIndex.java).
+[`PersistentLuceneSemanticSearchIndex.java:73`](../../../../../core/src/main/java/com/nexus/search/semantic/lucene/PersistentLuceneSemanticSearchIndex.java).
 
 Le rebuild supprime manuellement les fichiers du répertoire Lucene avant de
 créer le nouvel index. L'invalidation du cache ne concerne que l'instance
@@ -123,8 +123,8 @@ leur durée de vie ; ce rapport ne tranche pas cette architecture.
 ### A221-04 — P2 — Le profil graphe complet dépasse localement le budget de livraison
 
 Localisation :
-[`SqliteIndexRepository.java:404`](../../core/src/main/java/com/nexus/persistence/sqlite/SqliteIndexRepository.java)
-et [`verify-scale-budgets.py:145`](../../scripts/verify-scale-budgets.py).
+[`SqliteIndexRepository.java:404`](../../../../../core/src/main/java/com/nexus/persistence/sqlite/SqliteIndexRepository.java)
+et [`verify-scale-budgets.py:145`](../../../../../scripts/verify-scale-budgets.py).
 
 Nouvelle exécution de `GraphScaleRegressionBenchmarkTest` sur le commit
 fusionné, sous Ubuntu/WSL, OpenJDK 21.0.11, avec
@@ -141,7 +141,7 @@ fusionné, sous Ubuntu/WSL, OpenJDK 21.0.11, avec
 | Plafond du vérificateur | **15 000 ms** |
 | Population | 41 178 ms |
 
-Le [rapport brut](reproductions/2026-09-13/graph-full.json) a été généré le
+Le [rapport brut](reproductions/graph-full.json) a été généré le
 13 septembre à 17:00:50 UTC. Le test JUnit produit la mesure et réussit ;
 c'est l'assertion du vérificateur de budgets qui rejette cette valeur.
 Le workflow de livraison demande le profil `full`. La qualification PR à
@@ -215,7 +215,7 @@ mainteneur unique n'est pas reclassé comme défaut d'approbation humaine.
 ## Reproductions et suite attendue
 
 Les sources des sondes, leurs commandes et les mesures sont conservées dans
-[`reproductions/2026-09-13`](reproductions/2026-09-13/README.md).
+[`reproductions/2026-09-13`](reproductions/README.md).
 Traiter A221-01 et A221-02 en priorité pour les contenus de dépôt non fiables,
 puis A221-03 pour les instances partageant le stockage. A221-04 nécessite une
 qualification de performance complète avant de considérer l'échelle maximale

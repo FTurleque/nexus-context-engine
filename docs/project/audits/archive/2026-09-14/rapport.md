@@ -24,7 +24,7 @@ P1 signifie à traiter avant de compter sur la garantie concernée en exploitati
 
 **NXA-20260914-01 — P1 : fuite de secrets dans les objets JSON**
 
-Localisation : [SensitiveContentRedactor.java:36](../../../core/src/main/java/com/nexus/security/SensitiveContentRedactor.java#L36).
+Localisation : [SensitiveContentRedactor.java:36](../../../../../core/src/main/java/com/nexus/security/SensitiveContentRedactor.java#L36).
 
 `SECRET_ASSIGNMENT` reconnaît une clé sensible immédiatement suivie d'espaces puis de `:` ou `=`. Le guillemet fermant de `"password"` ou `"api_key"` empêche la correspondance. Une affectation `password = "…"` est correctement masquée ; la même valeur sous une clé JSON reste intacte. Il s'agit de clés explicitement prises en charge par la politique actuelle, pas de la demande de détecter tout secret arbitraire.
 
@@ -50,7 +50,7 @@ Critères de clôture : tests de clés JSON citées, exemples Markdown/JS, absen
 
 **NXA-20260914-02 — P2 : délai Ollama incomplet**
 
-Localisations : [OllamaEmbeddingProvider.java:217](../../../core/src/main/java/com/nexus/search/semantic/ollama/OllamaEmbeddingProvider.java#L217) et [lecture bloquante:274](../../../core/src/main/java/com/nexus/search/semantic/ollama/OllamaEmbeddingProvider.java#L274).
+Localisations : [OllamaEmbeddingProvider.java:217](../../../../../core/src/main/java/com/nexus/search/semantic/ollama/OllamaEmbeddingProvider.java#L217) et [lecture bloquante:274](../../../../../core/src/main/java/com/nexus/search/semantic/ollama/OllamaEmbeddingProvider.java#L274).
 
 Le provider applique `HttpRequest.timeout`, puis utilise `BodyHandlers.ofInputStream()`. L'objet réponse peut être rendu avant réception complète du corps, comme l'indique la [documentation Java 21](https://docs.oracle.com/en/java/javase/21/docs/api/java.net.http/java/net/http/HttpResponse.BodyHandlers.html#ofInputStream()). La boucle `readBoundedResponse` impose un plafond d'octets, mais pas une échéance à `InputStream.read`.
 
@@ -64,7 +64,7 @@ Critères de clôture : tests avec headers reçus puis corps interrompu, corps l
 
 **NXA-20260914-03 — P2 : confidentialité Windows dépendante de la langue**
 
-Localisation : [NexusPaths.java:333](../../../core/src/main/java/com/nexus/config/NexusPaths.java#L333).
+Localisation : [NexusPaths.java:333](../../../../../core/src/main/java/com/nexus/config/NexusPaths.java#L333).
 
 `isTrustedStoragePrincipal` compare les noms à `NT AUTHORITY\SYSTEM`, `CREATOR OWNER` et `BUILTIN\ADMINISTRATORS`. Sur la machine auditée, les SID système donnent :
 
@@ -90,7 +90,7 @@ Les deux checks suivants étaient en échec lors de la consultation GitHub du 14
 | [34661130804](https://github.com/FTurleque/nexus-context-engine/actions/runs/34661130804/job/103463686159) | Pull request | Contexte, 25 projets : p95 = 263,821 ms | 260 ms |
 | [34661129224](https://github.com/FTurleque/nexus-context-engine/actions/runs/34661129224/job/103463681413) | Push | Recherche, 25 projets : p95 = 168,396 ms | 160 ms |
 
-Les plafonds figurent dans [scale-benchmark.yml:247](../../../.github/workflows/scale-benchmark.yml#L247). Les écarts observés sont respectivement d'environ 1,47 % et 5,25 %. Les programmes de benchmark s'exécutent ; c'est le contrôle des budgets qui échoue. Ces checks ne peuvent pas être présentés comme verts au motif que le reactor ou la PR antérieure a réussi.
+Les plafonds figurent dans [scale-benchmark.yml:247](../../../../../.github/workflows/scale-benchmark.yml#L247). Les écarts observés sont respectivement d'environ 1,47 % et 5,25 %. Les programmes de benchmark s'exécutent ; c'est le contrôle des budgets qui échoue. Ces checks ne peuvent pas être présentés comme verts au motif que le reactor ou la PR antérieure a réussi.
 
 La cause n'est pas établie. Les petits écarts, deux warmups et cinq échantillons par requête justifient de distinguer variance du runner et régression avant toute modification. La première assertion qui échoue empêche également de conclure que tous les contrôles situés après elle ont été évalués.
 
@@ -100,7 +100,7 @@ Critère de clôture : gate de charge applicable vert sur le commit contenant la
 
 **NXA-20260914-05 — P3 : documentation courante périmée**
 
-- [Guide développeur:17](../../../docs/developer/README.md#L17) et [architecture d'implémentation:29](../../../docs/developer/architecture-implementation.md#L29) annoncent Quarkus `3.39.1` ; le POM courant impose `3.39.2`.
+- [Guide développeur:17](../../../../developer/README.md#L17) et [architecture d'implémentation:29](../../../../developer/architecture-implementation.md#L29) annoncent Quarkus `3.39.1` ; le POM courant impose `3.39.2`.
 - Le watch item « nouveau moteur FTS/trigram pour les recherches substring » de `current-limitations.md` décrit encore comme futur un mécanisme déjà présent dans V008 et `SqliteIndexRepository`. Le guide de recovery et les ADR-0050/0051 reconnaissent bien ce mécanisme.
 
 Impact : diagnostic de version trompeur et priorisation d'une fonctionnalité déjà livrée. La documentation s'annonce comme reflétant le HEAD courant ; il ne s'agit donc pas simplement d'un document historique à préserver.
@@ -173,7 +173,7 @@ Les succès OSV/CodeQL observés sont des preuves de ces scanners au moment de l
 
 **Reproduction et conservation**
 
-Les sondes utilisent exclusivement des valeurs synthétiques. Elles sont fournies avec le rapport : [AuditProbe.java](../../../docs/audits/2026-09-14/AuditProbe.java) et [ContextProbe.java](../../../docs/audits/2026-09-14/ContextProbe.java). Elles exposent l'état actuel et affichent les défauts ; ce ne sont pas des tests verts attestant que les défauts sont corrigés.
+Les sondes utilisent exclusivement des valeurs synthétiques. Elles sont fournies avec le rapport : [AuditProbe.java](AuditProbe.java) et [ContextProbe.java](ContextProbe.java). Elles exposent l'état actuel et affichent les défauts ; ce ne sont pas des tests verts attestant que les défauts sont corrigés.
 
 Depuis la racine du dépôt, avec Java 21 actif et après construction du JAR :
 
@@ -187,6 +187,6 @@ java --enable-native-access=ALL-UNNAMED -cp target/nexus-context-engine-0.2.0-cl
 
 `ContextProbe` crée un sous-répertoire de fixture dans `target/audit-20260914`. `AuditProbe` ouvre temporairement un serveur HTTP loopback et le ferme en fin de sonde. Les identifiants de projets et les durées peuvent varier.
 
-Les états externes consultés sont conservés dans [github-checks.json](../../../docs/audits/2026-09-14/github-checks.json) et [github-ruleset.json](../../../docs/audits/2026-09-14/github-ruleset.json). Les logs détaillés locaux sont dans `target/audit-20260914/` : build, self-smoke, sondes et deux runs de charge. Ce dossier est ignoré par Git et effaçable par un futur clean ; les constats essentiels et sorties utiles sont donc reproduits dans le présent rapport.
+Les états externes consultés sont conservés dans [github-checks.json](github-checks.json) et [github-ruleset.json](github-ruleset.json). Les logs détaillés locaux sont dans `target/audit-20260914/` : build, self-smoke, sondes et deux runs de charge. Ce dossier est ignoré par Git et effaçable par un futur clean ; les constats essentiels et sorties utiles sont donc reproduits dans le présent rapport.
 
 Seuls les livrables de cet audit ont été ajoutés au dépôt. Le code applicatif, les tests existants, les dépendances, les protections GitHub et les artefacts publiés n'ont pas été modifiés.

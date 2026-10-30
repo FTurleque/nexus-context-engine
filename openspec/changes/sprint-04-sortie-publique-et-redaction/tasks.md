@@ -15,7 +15,7 @@ Prérequis : `AUD-TST-01` fermé par #268 ; `AUD-TST-07` (sprint 3) fusionné av
 
 ## 3. Cycle context ↔ security
 
-- [ ] 3.1 AUD-ARC-03 — Déplacer `PublicContextPolicy` de `com.nexus.security` vers `com.nexus.exposure` (après 2.2) et mettre à jour ses appelants restants (les sondes datées de `docs/audits/` ne sont pas compilées et restent inchangées) ; vérifier par `git grep -n "^import com.nexus.context" core/src/main/java/com/nexus/security/` sans résultat et `./mvnw -B -ntp -pl core test -Djacoco.skip=true`
+- [ ] 3.1 AUD-ARC-03 — Déplacer `PublicContextPolicy` de `com.nexus.security` vers `com.nexus.exposure` (après 2.2) et mettre à jour ses appelants restants (les sondes datées de `docs/project/audits/` ne sont pas compilées et restent inchangées) ; vérifier par `git grep -n "^import com.nexus.context" core/src/main/java/com/nexus/security/` sans résultat et `./mvnw -B -ntp -pl core test -Djacoco.skip=true`
 
 ## 4. Ordre déterministe
 
@@ -35,7 +35,7 @@ Prérequis : `AUD-TST-01` fermé par #268 ; `AUD-TST-07` (sprint 3) fusionné av
 - [ ] 7.1 AUD-SEC-01 — Versionner la sonde de 35 cas de l'audit en test paramétré (`SecretRedactionProbeTest` ou équivalent) : les 19 formats retenus sont redigés, les cas négatifs restent intacts, les deux formats hors périmètre (YAML bloc, valeur sur la ligne suivante) sont épinglés comme limite connue ; vérifier qu'il échoue avant la tâche 7.2 par `./mvnw -B -ntp -pl core test -Dtest=SecretRedactionProbeTest -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
 - [ ] 7.2 AUD-SEC-01 — Étendre `SecretAssignmentScanner` (composants de clé) et `SensitiveContentRedactor` (jetons structurés `sk-`, `sk_live_`, `xoxb-`, `AIza`, `glpat-`, `npm_`, `Bearer`, identifiants dans une URL, bloc PGP, balise XML `<password>`, option `--password`) avec des motifs bornés (design D8) ; vérifier par `-Dtest=SecretRedactionProbeTest,SensitiveContentRedactorTest`
 - [ ] 7.3 AUD-SEC-01, AUD-SEC-02 — Passer `POLICY_VERSION` à `secret-redaction-v6` et `CONTENT_PROFILE_VERSION` à 5 (`content-v5`) ; ajouter la migration d'invalidation suivante (skill `nexus-schema-migration`, motif de V010) et son test `SchemaMigrator<Sujet>UpgradeTest` ; vérifier par `./mvnw -B -ntp -pl core test -Dtest=SchemaMigrator* -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
-- [ ] 7.4 AUD-SEC-01, AUD-SEC-02 — Mettre à jour `docs/developer/secret-redaction.md` (formats couverts, exclusion par fichier), `README.md`, `docs/architecture.md`, `docs/architecture/arc42/08-concepts-transverses.md`, `docs/architecture/arc42/10-exigences-qualite.md`, `docs/developer/current-limitations.md`, `docs/developer/release-and-recovery.md`, `docs/developer/semantic-search.md` et les `require(...)` de `scripts/release/test-operational-doc-contracts.sh` (skill `nexus-redaction-change`) ; vérifier par `bash .claude/scripts/contracts.sh`
+- [ ] 7.4 AUD-SEC-01, AUD-SEC-02 — Mettre à jour `docs/developer/secret-redaction.md` (formats couverts, exclusion par fichier), `README.md`, `docs/architecture/overview.md`, `docs/architecture/arc42/08-concepts-transverses.md`, `docs/architecture/arc42/10-exigences-qualite.md`, `docs/developer/current-limitations.md`, `docs/developer/release-and-recovery.md`, `docs/developer/semantic-search.md` et les `require(...)` de `scripts/release/test-operational-doc-contracts.sh` (skill `nexus-redaction-change`) ; vérifier par `bash .claude/scripts/contracts.sh`
 
 ## 8. Redaction sémantique unique
 

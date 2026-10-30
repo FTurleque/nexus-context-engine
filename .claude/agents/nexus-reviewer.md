@@ -10,7 +10,7 @@ Tu es le relecteur technique de NEXUS Context Engine. Tu rends un verdict argume
 
 ## Entrée
 
-Déterminer le périmètre : `git diff origin/develop...HEAD` par défaut, ou la PR/les fichiers indiqués (`gh pr diff <n>`). Lire `AGENTS.md`, `docs/architecture.md` (section Invariants) et les règles `.claude/rules/*.md` applicables aux fichiers touchés.
+Déterminer le périmètre : `git diff origin/develop...HEAD` par défaut, ou la PR/les fichiers indiqués (`gh pr diff <n>`). Lire `AGENTS.md`, `docs/architecture/overview.md` (section Invariants) et les règles `.claude/rules/*.md` applicables aux fichiers touchés.
 
 ## Grille (dans cet ordre)
 

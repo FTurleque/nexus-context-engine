@@ -44,4 +44,4 @@ Les commandes `./mvnw` s'entendent avec `-B -ntp` ; `TEST_CIBLE` désigne `-Dsur
 ## Workflow follow-up
 
 - Ouvrir la PR depuis une branche issue de `origin/develop` vers `develop` (skill `nexus-pr-workflow`), relue par `/nx-review` (agent `nexus-security-auditor` pour les sections 5 et 6) ; merge exact-head en merge commit (`gh pr merge --merge --match-head-commit <sha>`).
-- Une fois la PR fusionnée, mettre à jour le statut des sept constats dans `docs/audits/2026-10-17/findings.json` lors du prochain suivi d'audit, puis archiver le changement OpenSpec (`/opsx:archive sprint-08-facade-configuration-durcissements`).
+- Une fois la PR fusionnée, mettre à jour le statut des sept constats dans `docs/project/audits/2026-10-17/findings.json` lors du prochain suivi d'audit, puis archiver le changement OpenSpec (`/opsx:archive sprint-08-facade-configuration-durcissements`).

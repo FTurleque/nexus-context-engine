@@ -26,6 +26,6 @@ Le moteur ne l'évite pas seul : `ProjectIgnoreMatcher` n'exclut que des répert
 
 - Code : `core/src/main/java/com/nexus/index/scan/ProjectIgnoreMatcher.java`.
 - Tests : `core/src/test/java/com/nexus/index/scan/ProjectScannerTest.java`.
-- Documentation : `docs/adr/` (nouvel ADR + index), `docs/developer/indexing-pipeline.md`.
+- Documentation : `docs/architecture/adr/` (nouvel ADR + index), `docs/developer/indexing-pipeline.md`.
 - Comportement observable : les fichiers sous `.claude/worktrees/` disparaissent de l'index, de la recherche et des contextes. Aucune migration SQLite : un réindexage les retire.
 - Hors périmètre : lecture de `.git/info/exclude`, exclusion d'autres outils (`.cursor/`, `.codex/`…).

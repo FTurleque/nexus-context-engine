@@ -166,7 +166,7 @@ Voir :
 - [`code-intelligence.md`](code-intelligence.md) ;
 - [`minos-code-intelligence.md`](minos-code-intelligence.md) ;
 - [`current-limitations.md`](current-limitations.md) ;
-- [`../roadmap.md`](../roadmap.md), Itération 19.
+- [`../roadmap.md`](../project/governance/ROADMAP.md), Itération 19.
 
 ## Validation historique
 

@@ -10,7 +10,7 @@
 | **Opt-in strict** | Chaque provider externe (Ollama, JDT LS, MINOS, SCIP) doit être activé explicitement | ADR-0005, ADR-0009 |
 | **Déterminisme / explicabilité** | Scores, ranking et sélection doivent être reproductibles et auditables | ADR-0010, ADR-0025, ADR-0029 |
 | **Budget strict** | Le ContextBundle ne peut jamais dépasser le budget déclaré | ADR-0013, ADR-0027 |
-| **Fédération isolée** | Le contexte fédéré multi-projets conserve la provenance et n'étend pas implicitement les sources natives | `docs/architecture.md` Invariant 9 |
+| **Fédération isolée** | Le contexte fédéré multi-projets conserve la provenance et n'étend pas implicitement les sources natives | `docs/architecture/overview.md` Invariant 9 |
 
 ## 4.2 Style de décomposition
 

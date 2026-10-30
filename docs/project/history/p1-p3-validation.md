@@ -14,7 +14,7 @@ Des fixtures synthétiques traversent les véritables chemins CLI, REST et MCP, 
 
 ## Hotspots
 
-Le détail des composants, de leurs responsabilités et dépendances figure dans [architecture-implementation.md](architecture-implementation.md#séparation-des-capacités-internes-septembre-2026). Les anciens composants réunissaient orchestration, transport/parsing, mapping ou persistance ; les façades conservent leurs contrats publics et délèguent ces capacités à des collaborateurs de package.
+Le détail des composants, de leurs responsabilités et dépendances figure dans [architecture-implementation.md](../../developer/architecture-implementation.md#séparation-des-capacités-internes-septembre-2026). Les anciens composants réunissaient orchestration, transport/parsing, mapping ou persistance ; les façades conservent leurs contrats publics et délèguent ces capacités à des collaborateurs de package.
 
 | Façade | Lignes avant | Lignes après |
 |---|---:|---:|

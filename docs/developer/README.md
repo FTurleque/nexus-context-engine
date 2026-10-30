@@ -1,10 +1,6 @@
 # Guide développeur NEXUS
 
-Ce répertoire distingue :
-
-1. **documentation courante** — doit suivre l'exact head ;
-2. **documents d'itération/benchmark** — résultats historiques, volontairement datés ;
-3. **ADR** — décisions append-only.
+Ce répertoire contient la documentation développeur **courante** : elle suit l'exact head. Les résultats d'itération et de benchmark, datés, sont dans [`../project/history/`](../project/history/README.md) ; les décisions, append-only, dans le [registre des ADR](../architecture/adr/README.md).
 
 ## État courant
 
@@ -26,12 +22,13 @@ Les campagnes NXA3 et NXA4 constituent la baseline de hardening courante. Une an
 
 | Sujet | Document |
 |---|---|
-| architecture globale | [Architecture](../architecture.md) |
+| architecture globale | [Architecture](../architecture/overview.md) |
 | Arc42 | [Documentation d'architecture](../architecture/README.md) |
 | architecture concrète | [Architecture d'implémentation](architecture-implementation.md) |
 | limites et watch items | [Limites actuelles](current-limitations.md) |
 | filesystem / locks / support réseau | [Support filesystem](filesystem-support.md) |
-| roadmap | [Roadmap](../roadmap.md) |
+| roadmap | [Roadmap](../project/governance/ROADMAP.md) |
+| provenance et fraîcheur des index | [Index provenance](index-provenance.md) |
 | release / migration / recovery | [Release et recovery](release-and-recovery.md) |
 | CI / supply-chain | [CI et supply-chain](ci-and-supply-chain.md) |
 | gouvernance branches | [Gouvernance](branch-governance.md) |

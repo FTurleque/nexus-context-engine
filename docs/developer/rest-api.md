@@ -149,7 +149,7 @@ En tests, `quarkus.management.test-port=0` laisse le système choisir un port li
 
 Le reactor Maven, NEXUS CI et Docker Distribution qualifient l'adaptateur sur le SHA exact concerné. Le smoke Docker REST exerce le listener packagé ; les tests unitaires couvrent les combinaisons TLS/proxy acceptées et rejetées.
 
-Voir [`ci-and-supply-chain.md`](ci-and-supply-chain.md) et [`../architecture.md`](../architecture.md).
+Voir [`ci-and-supply-chain.md`](ci-and-supply-chain.md) et [`../architecture.md`](../architecture/overview.md).
 
 ## Contrat de hardening du 9 septembre 2026
 

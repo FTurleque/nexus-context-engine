@@ -169,8 +169,8 @@ if grep -q -- '--add-modules=jdk.incubator.vector' distribution/bin/nexus distri
 fi
 
 governance_docs=(
-  docs/roadmap.md
-  docs/architecture.md
+  docs/project/governance/ROADMAP.md
+  docs/architecture/overview.md
   docs/architecture/risks/register.md
   docs/architecture/arc42/07-vue-deploiement.md
   docs/architecture/arc42/10-exigences-qualite.md

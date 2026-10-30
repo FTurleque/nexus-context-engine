@@ -29,8 +29,8 @@ if ($exists -and $path -match '^docs/architecture/adr/(ARCH|BE|DATA|GEN|SEC)-\d{
     }
 }
 
-if ($exists -and $path -match '^docs/audits/') {
-    Write-PreToolDecision 'ask' "Document d'audit daté ($path) : historique, normalement non réécrit."
+if ($exists -and $path -match '^docs/project/(audits|history)/') {
+    Write-PreToolDecision 'ask' "Relevé daté ($path) : historique, normalement non réécrit."
 }
 
 if ($path -eq 'config/tool-integrity.properties') {

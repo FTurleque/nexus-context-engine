@@ -161,13 +161,13 @@ Les tags version/SHA sont immuables. Le préflight GHCR échoue fermé sur les e
 
 Le ruleset GitHub actif `Protect main & develop` protège `develop` et `main`, impose le passage par pull request, interdit suppression/non-fast-forward et exige les checks permanents approuvés. NXA3-14 / #130 est satisfait.
 
-NEXUS est actuellement maintenu par **une seule personne**. L'absence d'une approbation humaine distincte du mainteneur et l'absence de resynchronisation stricte de la PR avec sa base ne constituent pas des findings sous ce modèle. La barrière de merge repose sur le HEAD candidat, les checks automatisés applicables, la PR obligatoire et les protections de branche. Voir [`developer/branch-governance.md`](developer/branch-governance.md).
+NEXUS est actuellement maintenu par **une seule personne**. L'absence d'une approbation humaine distincte du mainteneur et l'absence de resynchronisation stricte de la PR avec sa base ne constituent pas des findings sous ce modèle. La barrière de merge repose sur le HEAD candidat, les checks automatisés applicables, la PR obligatoire et les protections de branche. Voir [`developer/branch-governance.md`](../developer/branch-governance.md).
 
-Voir aussi [`developer/architecture-implementation.md`](developer/architecture-implementation.md), [`developer/ci-and-supply-chain.md`](developer/ci-and-supply-chain.md), [`developer/current-limitations.md`](developer/current-limitations.md) et [`roadmap.md`](roadmap.md).
+Voir aussi [`developer/architecture-implementation.md`](../developer/architecture-implementation.md), [`developer/ci-and-supply-chain.md`](../developer/ci-and-supply-chain.md), [`developer/current-limitations.md`](../developer/current-limitations.md) et [`roadmap.md`](../project/governance/ROADMAP.md).
 
 ## Contrat de hardening du 9 septembre 2026
 
-Voir [ADR-0048](architecture/adr/SEC-0048-distinguer-traversee-stricte-et-compatibilite-filesystem.md)
+Voir [ADR-0048](adr/SEC-0048-distinguer-traversee-stricte-et-compatibilite-filesystem.md)
 pour la distinction entre traversée strict et compatibility. Le fallback sans
 `SecureDirectoryStream` est best-effort : la revalidation ne détecte pas un ABA
 restauré. `NEXUS_REQUIRE_STRICT_PATH_IO=true` le refuse avant ouverture du fichier.
@@ -190,4 +190,4 @@ les backslashes POSIX. `a\b.java` et `a/b.java` sont deux identités distinctes 
 POSIX. La résolution sur un autre filesystem refuse les composants qui y seraient
 réinterprétés. V007 invalide les anciens index et impose une reconstruction ; le
 fingerprint `nexus-repository-path-v2` invalide également les dérivés sémantiques
-restés désactivés pendant l'upgrade. Voir [ADR-0049](architecture/adr/DATA-0049-identite-repository-par-composants-et-diagnostics-publics.md).
+restés désactivés pendant l'upgrade. Voir [ADR-0049](adr/DATA-0049-identite-repository-par-composants-et-diagnostics-publics.md).
