@@ -1,5 +1,7 @@
 {
-  "quiet_paths": ["docs/audits/**"],
+  "_doc": "Surcharges du superviseur de code pour NEXUS (le reste vient de la configuration globale). log_subdir : rapports et état de session sous docs/project/rapport-supervisor, à la racine Git (dossier local, auto-ignoré). quiet_paths : relevés datés que le superviseur ne relit pas. llm.convention_files remplace la liste globale.",
+  "log_subdir": "docs/project/rapport-supervisor",
+  "quiet_paths": ["docs/project/audits/**", "docs/project/history/**"],
   "llm": {
     "convention_files": [".claude/rules/code-review.md", ".claude/CLAUDE.md", "AGENTS.md"]
   }

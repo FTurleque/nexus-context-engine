@@ -24,7 +24,7 @@ Non pour un simple durcissement d'implémentation, un refactoring sans changemen
    - sections `Context`, `Decision`, `Do's and Don'ts` (`Do`, `Don't`, tirés du seul texte de la décision), `Consequences`, `Compliance and Enforcement` (contrôles qui existent vraiment), `References` ; les autres sections gardent leur titre français.
 4. Rédiger en français : contexte factuel (mesures, PR, runs), décision précise et vérifiable, conséquences, validation (tests, contrats, benchmarks).
 5. Statut `Proposed` tant que l'utilisateur n'a pas validé ; ne jamais passer `Accepted` sans sa décision explicite.
-6. Ajouter la ligne dans la table « Index » de `docs/architecture/adr/README.md` (`| [{PRÉFIXE}-{NNNN}]({fichier}.md) | Titre | Date | Statut |`) et dans `docs/architecture/arc42/09-decisions.md` ; si l'ADR touche l'architecture courante, le référencer depuis `docs/architecture.md` ou le document développeur concerné.
+6. Ajouter la ligne dans la table « Index » de `docs/architecture/adr/README.md` (`| [{PRÉFIXE}-{NNNN}]({fichier}.md) | Titre | Date | Statut |`) et dans `docs/architecture/arc42/09-decisions.md` ; si l'ADR touche l'architecture courante, le référencer depuis `docs/architecture/overview.md` ou le document développeur concerné.
 7. Vérifier : `archgate check` (aucune violation ; la règle de GEN-0057 contrôle nom, `id`, préfixe, numéro, titre et index) et `archgate adr list` (le nouvel ADR y figure). Ne jamais utiliser `archgate init` ni `archgate adr create`, ni écrire dans `.archgate/adrs/`.
 
 ## Remplacer une décision

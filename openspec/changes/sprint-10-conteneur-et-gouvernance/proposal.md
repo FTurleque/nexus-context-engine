@@ -6,7 +6,7 @@ L'image Docker de NEXUS tourne sans privilèges, mais ses binaires et ses script
 
 Côté dépôt, la politique « merge commit uniquement » n'est tenue que par un hook local : le ruleset GitHub et les réglages du dépôt acceptent encore squash et rebase. Le dépôt public n'offre aucun canal privé de signalement de vulnérabilité ni de propriétaire déclaré pour les fichiers sensibles. Enfin, la documentation courante recopie des numéros de version de dépendances que le contrat documentaire compare au `pom.xml` : chaque montée Dependabot de ces dépendances rend sa PR rouge.
 
-Ce changement porte le sprint 10 de l'audit du 17/10/2026 (`docs/audits/2026-10-17/sprints.md`).
+Ce changement porte le sprint 10 de l'audit du 17/10/2026 (`docs/project/audits/2026-10-17/sprints.md`).
 
 ## What Changes
 

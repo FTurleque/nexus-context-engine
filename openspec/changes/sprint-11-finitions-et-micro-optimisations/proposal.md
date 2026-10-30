@@ -4,7 +4,7 @@
 
 Quatre écarts séparent la documentation courante et les décisions consignées de l'état du code : la section « Graphe dérivé par génération » décrit un cache que le code ne matérialise plus (et `ProjectGraph` n'a plus aucune référence) ; `current-limitations.md` présente comme futur le moteur FTS5 trigram livré par la migration V008 ; `AGENTS.md`, instruction primaire des agents, prescrit `mvn clean install` que les hooks du dépôt refusent ; le choix du journal rollback plutôt que WAL est mesuré mais ne figure dans aucun ADR. S'y ajoutent des messages d'exception en anglais remontés à l'utilisateur malgré la convention française, et trois coûts évitables sur des chemins chauds : troncature de fragment quadratique, pagination du voisinage graphe par `OFFSET`, regex compilées à chaque appel.
 
-Ce changement porte le sprint 11 de l'audit du 17/10/2026 (`docs/audits/2026-10-17/sprints.md`). Ces corrections sont isolées, sans prérequis ni conséquence sur les autres lots ; le sprint exige des arbitrages écrits.
+Ce changement porte le sprint 11 de l'audit du 17/10/2026 (`docs/project/audits/2026-10-17/sprints.md`). Ces corrections sont isolées, sans prérequis ni conséquence sur les autres lots ; le sprint exige des arbitrages écrits.
 
 ## What Changes
 
@@ -37,7 +37,7 @@ Aucun constat du sprint n'est déjà fermé.
 
 - Code : `core/.../ranking/graph/ProjectGraph.java` (supprimé), `ProjectGraphBuilder.java` (renommé) et ses appelants, `core/.../context/BudgetedContextSelector.java`, `core/.../persistence/sqlite/SqliteGraphQueries.java`, `core/.../paths/RepositoryPath.java`, `core/.../context/source/instruction/RepositoryGlobMatcher.java`, messages d'exception des services atteints par CLI, REST et MCP (requêtes, budgets, configuration Ollama).
 - Tests : `ProjectGraphBuilderProjectionTest` (renommé), `BudgetedContextSelector*Test`, `SqliteGraphNeighborhoodProjectionTest`, `SqliteGraphQueryPlanTest`, `RepositoryPathTest`, `InstructionDiscoverySupportTest`, tests qui comparent des messages traduits.
-- Documentation : `AGENTS.md`, `docs/developer/search-ranking.md`, `docs/developer/current-limitations.md`, `docs/developer/scale-regression-results.md` (renvoi à l'ADR), `.claude/rules/java-core.md`, deux nouveaux ADR et l'index du registre.
+- Documentation : `AGENTS.md`, `docs/developer/search-ranking.md`, `docs/developer/current-limitations.md`, `docs/project/history/scale-regression-results.md` (renvoi à l'ADR), `.claude/rules/java-core.md`, deux nouveaux ADR et l'index du registre.
 - Contrats : `scripts/release/test-operational-doc-contracts.sh`.
 - Comportement observable : messages d'erreur en français ; sorties de contexte, de recherche et de voisinage identiques. Aucune migration SQLite.
 - Hors périmètre : adoption de WAL, traduction des préconditions internes (`Objects.requireNonNull`, invariants d'API interne).

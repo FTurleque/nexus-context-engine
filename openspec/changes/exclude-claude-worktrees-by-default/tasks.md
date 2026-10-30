@@ -8,7 +8,7 @@
 
 ## 2. Décision et documentation
 
-- [ ] 2.1 Rédiger l'ADR suivant (skill `nexus-adr`), statut accepté, qui complète l'ADR-0021 ; mettre à jour `docs/adr/README.md` et la vue arc42 `09-decisions.md` ; vérifier avec `bash .claude/scripts/contracts.sh`
+- [ ] 2.1 Rédiger l'ADR suivant (skill `nexus-adr`), statut accepté, qui complète l'ADR-0021 ; mettre à jour `docs/architecture/adr/README.md` et la vue arc42 `09-decisions.md` ; vérifier avec `bash .claude/scripts/contracts.sh`
 - [ ] 2.2 Mettre à jour `docs/developer/indexing-pipeline.md` si elle liste les exclusions intégrées, sinon l'y ajouter ; vérifier que `bash .claude/scripts/contracts.sh` passe
 
 ## 3. Intégration

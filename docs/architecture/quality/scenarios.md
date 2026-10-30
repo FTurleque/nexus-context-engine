@@ -78,7 +78,7 @@ Les minima JaCoCo bloquants restent 70 % lignes / 50 % branches. Une mesure hist
 
 ## Baselines historiques
 
-Les mesures historiques de performance/qualité restent dans `docs/developer/iteration-*` et autres rapports dédiés. Elles servent uniquement de point de comparaison.
+Les mesures historiques de performance/qualité restent dans `docs/project/history/` (relevés d'itération et de benchmark). Elles servent uniquement de point de comparaison.
 
 ## Preuve de qualification
 

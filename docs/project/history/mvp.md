@@ -4,10 +4,10 @@
 
 Pour l'état courant :
 
-- [`README.md`](../README.md) — capacités livrées ;
-- [`docs/architecture.md`](architecture.md) — architecture courante ;
-- [`docs/roadmap.md`](roadmap.md) — feuille de route active ;
-- [`docs/developer/current-limitations.md`](developer/current-limitations.md) — dette et limites vérifiées.
+- [`README.md`](../../../README.md) — capacités livrées ;
+- [`docs/architecture.md`](../../architecture/overview.md) — architecture courante ;
+- [`docs/roadmap.md`](../governance/ROADMAP.md) — feuille de route active ;
+- [`docs/developer/current-limitations.md`](../../developer/current-limitations.md) — dette et limites vérifiées.
 
 ## Objectif du MVP historique
 
@@ -58,7 +58,7 @@ nexus context mon-projet "Corrige le traitement d'upload PDF" --budget 20000 --e
 nexus inspect mon-projet
 ```
 
-La surface courante comprend en plus notamment `index --deep-java` et `minos-import`. Voir [`docs/developer/cli.md`](developer/cli.md).
+La surface courante comprend en plus notamment `index --deep-java` et `minos-import`. Voir [`docs/developer/cli.md`](../../developer/cli.md).
 
 ## Critères de validation historiques
 

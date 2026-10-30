@@ -16,7 +16,7 @@
 
 ## 4. Journal SQLite
 
-- [ ] 4.1 `AUD-PRF-10` — Nouvel ADR (skill `nexus-adr`) qui complète ADR-0052 : journal rollback conservé, mesures DELETE/WAL de `docs/developer/scale-regression-results.md`, condition de réévaluation de `docs/developer/scale-regression-benchmark.md` ; renvoyer ces deux documents à l'ADR ; vérifier par `bash .claude/scripts/contracts.sh`
+- [ ] 4.1 `AUD-PRF-10` — Nouvel ADR (skill `nexus-adr`) qui complète ADR-0052 : journal rollback conservé, mesures DELETE/WAL de `docs/project/history/scale-regression-results.md`, condition de réévaluation de `docs/developer/scale-regression-benchmark.md` ; renvoyer ces deux documents à l'ADR ; vérifier par `bash .claude/scripts/contracts.sh`
 - [ ] 4.2 `AUD-PRF-10` — Ajouter à `SqliteDatabaseHardeningTest` une assertion `PRAGMA journal_mode` = `delete` sur une base ouverte par `SqliteDatabase`, avec message qui cite l'ADR de 4.1 ; vérifier par `./mvnw -B -ntp -pl core test -Dtest=SqliteDatabaseHardeningTest -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
 
 ## 5. Langue des messages d'erreur
@@ -41,7 +41,7 @@
 
 ## 9. Clôture
 
-- [ ] 9.1 Mettre à jour le statut des constats du sprint 11 dans `docs/audits/2026-10-17/findings.json` (fermés avec la PR) ; vérifier par `/nx-validate` (contrats, `./mvnw clean install`, `scripts/self-smoke.ps1`)
+- [ ] 9.1 Mettre à jour le statut des constats du sprint 11 dans `docs/project/audits/2026-10-17/findings.json` (fermés avec la PR) ; vérifier par `/nx-validate` (contrats, `./mvnw clean install`, `scripts/self-smoke.ps1`)
 
 ## Workflow follow-up
 

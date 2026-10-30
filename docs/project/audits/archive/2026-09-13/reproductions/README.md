@@ -1,7 +1,7 @@
 # Reproductions de l'audit après fusion #221
 
 Référence : `6f863b78c1f7d384e234e1de64be850da31dda5c`.
-Voir le [rapport](../../2026-09-13-audit-complet-apres-merge-221.md).
+Voir le [rapport](../2026-09-13-audit-complet-apres-merge-221.md).
 Les sondes n'utilisent que des données synthétiques et des répertoires
 temporaires distincts. Elles n'accèdent à aucun projet enregistré et ne font
 aucun appel réseau. Java 21 est requis.

@@ -2,7 +2,7 @@
 
 ## Why
 
-Le sprint 9 de l'audit de code du 17/10/2026 (`docs/audits/2026-10-17/sprints.md`, section S9) rend la chaîne de release exécutable. Le workflow `Release` n'a jamais tourné : avant de le lancer une première fois, on corrige ce qu'il manipule (secrets, environnement, attestations, version). Les neuf constats sont toujours présents sur `origin/develop` (vérification du 2026-10-29, état GitHub lu en direct avec `gh`) :
+Le sprint 9 de l'audit de code du 17/10/2026 (`docs/project/audits/2026-10-17/sprints.md`, section S9) rend la chaîne de release exécutable. Le workflow `Release` n'a jamais tourné : avant de le lancer une première fois, on corrige ce qu'il manipule (secrets, environnement, attestations, version). Les neuf constats sont toujours présents sur `origin/develop` (vérification du 2026-10-29, état GitHub lu en direct avec `gh`) :
 
 - `AUD-DEP-21` — `release.yml` appelle `windows-installer.yml` avec `secrets: inherit` : tout secret du dépôt devient accessible au build Windows.
 - `AUD-SEC-06` (fusionne `AUD-DEP-01`) — le PFX Authenticode et son mot de passe sont posés dans l'`env` du job Windows, donc visibles de toutes ses étapes, y compris sur `pull_request` où le code de la PR est extrait.

@@ -2,9 +2,9 @@
 
 Ce répertoire contient les **Architecture Decision Records (ADR)** de NEXUS : c'est le registre unique des décisions, à l'emplacement que prévoit arc42 (section 9, [`09-decisions.md`](../arc42/09-decisions.md)).
 
-Les ADR constituent l'historique durable des décisions architecturales significatives du projet. Ils complètent `docs/architecture.md` :
+Les ADR constituent l'historique durable des décisions architecturales significatives du projet. Ils complètent `docs/architecture/overview.md` :
 
-- `docs/architecture.md` décrit l'architecture actuelle de manière synthétique ;
+- `docs/architecture/overview.md` décrit l'architecture actuelle de manière synthétique ;
 - les ADR expliquent **pourquoi** cette architecture existe, quelles alternatives ont été étudiées et quelles conséquences ont été acceptées.
 
 ## Convention

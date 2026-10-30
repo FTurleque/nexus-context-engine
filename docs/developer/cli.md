@@ -1,6 +1,6 @@
 # CLI NEXUS — surface 0.2.0
 
-Ce document décrit la CLI Phase 6. Le contrat historique MVP reste dans [`cli-mvp.md`](cli-mvp.md).
+Ce document décrit la CLI Phase 6. Le contrat historique MVP reste dans [`cli-mvp.md`](../project/history/cli-mvp.md).
 
 ## Commandes
 

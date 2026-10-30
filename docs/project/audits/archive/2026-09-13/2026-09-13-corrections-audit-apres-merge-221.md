@@ -38,7 +38,7 @@ Les rebuilds sains laissent Lucene gérer les générations et les anciens
 segments. Les commits corrompus sont récupérés dans un répertoire distinct,
 publié atomiquement après sa construction complète. Le cache remplace son
 lecteur si le répertoire actif change. Les détails et conséquences de stockage
-sont documentés dans [ADR-0055](../adr/0055-preserver-les-lecteurs-lors-des-reconstructions-semantiques.md).
+sont documentés dans [ADR-0055](../../../../architecture/adr/DATA-0055-preserver-les-lecteurs-lors-des-reconstructions-semantiques.md).
 
 Les neuf tests de `LuceneSemanticSearchIndexTest` passent sous Windows et
 Linux. Ils comprennent deux instances indépendantes, des rebuilds répétés,
@@ -79,7 +79,7 @@ des trois requêtes, le même benchmark complet donne :
 Le plafond du vérificateur reste **15 000 ms**. La nouvelle mesure a été
 produite le 13 septembre à 17:45:34 UTC, sous Ubuntu/WSL, Java 21.0.11,
 `-XX:ActiveProcessorCount=4 -Xmx4g`. Le
-[rapport brut corrigé](reproductions/2026-09-13/graph-full-corrected.json)
+[rapport brut corrigé](reproductions/graph-full-corrected.json)
 est conservé à côté du rapport initial. Il s'agit de mesures locales avec
 charge système variable, pas d'une promesse de latence universelle.
 

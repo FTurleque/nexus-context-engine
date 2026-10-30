@@ -153,4 +153,4 @@ FTS5/trigram est retenu comme index secondaire **local, dérivé et reconstructi
 
 La qualification de #216 n'est acquise que si le HEAD exact passe le reactor Linux/Windows, les tests de migration/replay, CodeQL/OSV/SonarCloud et la courbe SQLite 10k→1M avec les plafonds absolus ci-dessus.
 
-Les résultats historiques du protocole 2 restent disponibles dans [`scale-regression-results.md`](scale-regression-results.md) comme référence pré-FTS, et non comme baseline relative homogène.
+Les résultats historiques du protocole 2 restent disponibles dans [`scale-regression-results.md`](../project/history/scale-regression-results.md) comme référence pré-FTS, et non comme baseline relative homogène.

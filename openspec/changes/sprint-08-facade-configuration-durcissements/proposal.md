@@ -2,7 +2,7 @@
 
 ## Why
 
-Le sprint 8 de l'audit de code du 17/10/2026 (`docs/audits/2026-10-17/sprints.md`, section S8) nettoie la façade `NexusApplication` et la lecture de la configuration une fois les packages stabilisés par les sprints 4 et 7, puis durcit deux points d'entrée locaux. Les sept constats sont toujours présents sur `origin/develop` (vérification du 2026-10-29) :
+Le sprint 8 de l'audit de code du 17/10/2026 (`docs/project/audits/2026-10-17/sprints.md`, section S8) nettoie la façade `NexusApplication` et la lecture de la configuration une fois les packages stabilisés par les sprints 4 et 7, puis durcit deux points d'entrée locaux. Les sept constats sont toujours présents sur `origin/develop` (vérification du 2026-10-29) :
 
 - `AUD-ARC-09` — la séquence de lecture cohérente (READY, verrou partagé, session de lecture, revalidation READY) est recopiée dans six méthodes de la façade ; `inspect` n'en applique qu'une partie. L'invariant porté par ADR-0052 tient au copier-coller.
 - `AUD-ARC-11` — `SQLException` figure dans les signatures publiques de `NexusApplication.create*`, de `NexusApplicationFactory` et dans les points d'entrée CLI, MCP et REST : les trois adaptateurs connaissent JDBC.

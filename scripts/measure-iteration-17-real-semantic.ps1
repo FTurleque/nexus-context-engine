@@ -87,7 +87,7 @@ try {
 
     $excludedPaths = @(
         "docs/developer/semantic-search.md",
-        "docs/developer/iteration-17-semantic-results.md",
+        "docs/project/history/iteration-17-semantic-results.md",
         "scripts/measure-iteration-17-semantic.ps1",
         "scripts/measure-iteration-17-real-semantic.ps1",
         "scripts/measure-iteration-17-real-semantic-diagnostic.ps1",

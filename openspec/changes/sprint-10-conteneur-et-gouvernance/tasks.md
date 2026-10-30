@@ -6,7 +6,7 @@
 
 ## 2. Contexte de build filtré
 
-- [ ] 2.1 `AUD-SEC-08` — Ajouter `.dockerignore` à la racine (`.git`, `**/target`, fichiers d'environnement locaux, données et espaces de travail locaux, `docs/audits/`, `.claude/worktrees/`) sans exclure une entrée lue par `./mvnw -B -DskipTests package` ; vérifier que le build de 1.1 passe et que `docker build --file packaging/docker/Dockerfile --target build --tag nexus-s10-build .` puis `docker run --rm --entrypoint /bin/sh nexus-s10-build -c 'test ! -e /workspace/.git'` réussit
+- [ ] 2.1 `AUD-SEC-08` — Ajouter `.dockerignore` à la racine (`.git`, `**/target`, fichiers d'environnement locaux, données et espaces de travail locaux, `docs/project/audits/`, `.claude/worktrees/`) sans exclure une entrée lue par `./mvnw -B -DskipTests package` ; vérifier que le build de 1.1 passe et que `docker build --file packaging/docker/Dockerfile --target build --tag nexus-s10-build .` puis `docker run --rm --entrypoint /bin/sh nexus-s10-build -c 'test ! -e /workspace/.git'` réussit
 - [ ] 2.2 `AUD-SEC-08` — Ajouter `packaging/docker/Dockerfile.runtime.dockerignore` en liste d'autorisation (D2), l'inclure dans le payload Windows (`scripts/release/build-windows-distribution.ps1`, `build-windows-installer.ps1`) et dans le staging de repli de `.github/workflows/docker-distribution.yml` ; vérifier par le job « Smoke installed-payload fallback image » du workflow `Docker distribution` sur la PR
 
 ## 3. Notices et métadonnées OCI
@@ -34,7 +34,7 @@
 
 ## 7. Clôture
 
-- [ ] 7.1 Mettre à jour le statut des constats du sprint 10 dans `docs/audits/2026-10-17/findings.json` (fermés avec la PR ; `AUD-DEP-31` : symptôme fermé par #269, cause fermée par cette PR) ; vérifier par `/nx-validate`
+- [ ] 7.1 Mettre à jour le statut des constats du sprint 10 dans `docs/project/audits/2026-10-17/findings.json` (fermés avec la PR ; `AUD-DEP-31` : symptôme fermé par #269, cause fermée par cette PR) ; vérifier par `/nx-validate`
 
 ## Workflow follow-up
 

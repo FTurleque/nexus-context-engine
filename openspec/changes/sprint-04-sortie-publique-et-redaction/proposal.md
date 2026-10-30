@@ -36,5 +36,5 @@ Constats du sprint déjà fermés : aucun. Prérequis : `AUD-TST-01` est fermé 
 - Schéma : une migration d'invalidation `Vnnn__invalidate_<sujet>_indexes.sql`, numéro suivant disponible (V011 si aucune autre migration n'est fusionnée avant).
 - Contrat public : clés JSON alignées entre canaux (la CLI gagne `excerpt` et `id` si la parité les retient, MCP et REST ordonnent `scoreComponents`). Les formats de sortie changent pour les clients qui dépendaient d'une divergence.
 - Opérations : reconstruction des index lexicaux et sémantiques à la mise à jour ; documentée dans `docs/developer/release-and-recovery.md`.
-- Documentation : `docs/developer/secret-redaction.md`, `docs/developer/current-limitations.md`, `docs/developer/semantic-search.md`, `README.md`, `docs/architecture.md`, vues arc42 08 et 10, `scripts/release/test-operational-doc-contracts.sh`.
+- Documentation : `docs/developer/secret-redaction.md`, `docs/developer/current-limitations.md`, `docs/developer/semantic-search.md`, `README.md`, `docs/architecture/overview.md`, vues arc42 08 et 10, `scripts/release/test-operational-doc-contracts.sh`.
 - Hors périmètre : scalaires YAML de bloc et valeurs sur la ligne suivante (exclus par `secret-redaction.md`), qui relèvent d'un changement de politique séparé.

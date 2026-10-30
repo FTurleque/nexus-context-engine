@@ -4,7 +4,7 @@
 
 `ProjectGraphBuilder` (`ranking.graph`) ne construit plus de graphe : il interroge le repository pour les seules arêtes qui touchent les chemins courants, bornées par `MAX_NEIGHBOR_EDGES`. `ProjectGraph` n'a aucune référence en code ni en test ; ADR-0026 (accepté) cite encore les deux noms. Le sprint 7 déplace des types entre `search` et `ranking.graph` ; ce sprint vient après et part de l'état qu'il laisse.
 
-`SqliteDatabase` ne fixe aucun `PRAGMA journal_mode` : SQLite reste en journal rollback (`delete`). `docs/developer/scale-regression-results.md` compare `DELETE` et WAL et conclut que WAL n'est pas adopté ; la transaction unique d'écriture est une décision d'ADR-0052.
+`SqliteDatabase` ne fixe aucun `PRAGMA journal_mode` : SQLite reste en journal rollback (`delete`). `docs/project/history/scale-regression-results.md` compare `DELETE` et WAL et conclut que WAL n'est pas adopté ; la transaction unique d'écriture est une décision d'ADR-0052.
 
 La règle `.claude/rules/java-core.md` exige le français pour les messages destinés à l'utilisateur. Sur 316 messages littéraux de `IllegalArgumentException`, `IllegalStateException`, `IOException` et `UncheckedIOException` du code de production, environ un tiers est en anglais ; une partie remonte telle quelle par CLI, REST et MCP (message filtré par `safeMessage`).
 

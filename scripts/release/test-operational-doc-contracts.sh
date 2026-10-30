@@ -82,7 +82,7 @@ require("docs/developer/release-and-recovery.md", "V007__invalidate_legacy_repos
 require("docs/developer/release-and-recovery.md", "V008__indexed_substring_search.sql")
 for path in (
     "README.md",
-    "docs/architecture.md",
+    "docs/architecture/overview.md",
     "docs/developer/release-and-recovery.md",
     "docs/developer/ci-and-supply-chain.md",
     "docs/developer/architecture-implementation.md",
@@ -129,7 +129,7 @@ require("docs/developer/mcp.md", "MCP SDK     2.1.0")
 require("docs/developer/mcp.md", "100 projets uniques")
 
 for path in (
-    "docs/architecture.md",
+    "docs/architecture/overview.md",
     "docs/developer/architecture-implementation.md",
     "docs/developer/context-building.md",
     "docs/developer/large-scale-search.md",
@@ -139,7 +139,7 @@ for path in (
     require(path, "100 projets uniques")
 
 for path in (
-    "docs/architecture.md",
+    "docs/architecture/overview.md",
     "docs/developer/architecture-implementation.md",
     "docs/developer/context-building.md",
     "docs/developer/native-context-sources.md",
@@ -160,7 +160,7 @@ for needle in (
     require(app_props, needle)
 for path in (
     "README.md",
-    "docs/architecture.md",
+    "docs/architecture/overview.md",
     "docs/architecture/arc42/06-vue-execution.md",
     "docs/architecture/arc42/07-vue-deploiement.md",
     "docs/architecture/arc42/08-concepts-transverses.md",
@@ -177,7 +177,7 @@ semantic_cfg = "core/src/main/java/com/nexus/search/semantic/SemanticSearchConfi
 require(semantic_cfg, "NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA")
 for path in (
     "README.md",
-    "docs/architecture.md",
+    "docs/architecture/overview.md",
     "docs/architecture/arc42/06-vue-execution.md",
     "docs/architecture/arc42/07-vue-deploiement.md",
     "docs/architecture/arc42/08-concepts-transverses.md",
@@ -193,7 +193,7 @@ require("core/src/main/java/com/nexus/security/SensitiveContentRedactor.java", "
 require("core/src/main/java/com/nexus/search/semantic/SemanticIndexingService.java", "CONTENT_PROFILE_VERSION = 4")
 for path in (
     "README.md",
-    "docs/architecture.md",
+    "docs/architecture/overview.md",
     "docs/architecture/arc42/08-concepts-transverses.md",
     "docs/architecture/arc42/10-exigences-qualite.md",
     "docs/developer/current-limitations.md",
@@ -229,7 +229,7 @@ for needle in (
 ):
     require(jdt_reader, needle)
 for path in (
-    "docs/architecture.md",
+    "docs/architecture/overview.md",
     "docs/architecture/arc42/06-vue-execution.md",
     "docs/architecture/arc42/08-concepts-transverses.md",
     "docs/architecture/quality/scenarios.md",
@@ -251,7 +251,7 @@ forbid("docs/developer/jdt-language-server.md", "télécharge le checksum SHA-25
 require(lucene, "MAX_ANALYZED_QUERY_TERMS = 128")
 for path in (
     "README.md",
-    "docs/architecture.md",
+    "docs/architecture/overview.md",
     "docs/architecture/arc42/06-vue-execution.md",
     "docs/architecture/arc42/08-concepts-transverses.md",
     "docs/architecture/arc42/10-exigences-qualite.md",
@@ -269,7 +269,7 @@ require(nexus_paths, 'PosixFilePermissions.fromString("rw-------")')
 require(nexus_paths, "AclFileAttributeView")
 for path in (
     "README.md",
-    "docs/architecture.md",
+    "docs/architecture/overview.md",
     "docs/architecture/arc42/07-vue-deploiement.md",
     "docs/developer/current-limitations.md",
     "docs/developer/release-and-recovery.md",
@@ -281,7 +281,7 @@ for path in (
 context_request = "core/src/main/java/com/nexus/context/ContextRequest.java"
 require(context_request, "constraints are not supported yet")
 for path in (
-    "docs/architecture.md",
+    "docs/architecture/overview.md",
     "docs/architecture/arc42/05-vue-blocs.md",
     "docs/architecture/arc42/06-vue-execution.md",
     "docs/architecture/arc42/10-exigences-qualite.md",
@@ -304,8 +304,8 @@ forbid("docs/architecture/arc42/06-vue-execution.md", "indexation réussie sans 
 
 current_docs = (
     "README.md",
-    "docs/roadmap.md",
-    "docs/architecture.md",
+    "docs/project/governance/ROADMAP.md",
+    "docs/architecture/overview.md",
     "docs/architecture/README.md",
     "docs/architecture/arc42/05-vue-blocs.md",
     "docs/architecture/arc42/06-vue-execution.md",

@@ -25,7 +25,7 @@ Chaque entrée de `BUILT_IN_DIRECTORIES` est un nom d'un seul segment, ce qui ne
 
 **D3 — Pas de lecture de `.git/info/exclude`.** Cette source est locale à une copie de travail et non reproductible : le même dépôt donnerait des index différents selon la machine, contraire au déterminisme du projet. Alternative écartée.
 
-**D4 — ADR complémentaire.** La liste intégrée est une décision d'ADR-0021 (« liste intégrée conservatrice »). Un nouvel ADR la complète (statut « complète », jamais « remplace ») et l'ADR-0021 n'est pas modifié (règle d'ADR append-only). Le numéro est le suivant disponible dans `docs/adr/` au moment de l'implémentation.
+**D4 — ADR complémentaire.** La liste intégrée est une décision d'ADR-0021 (« liste intégrée conservatrice »). Un nouvel ADR la complète (statut « complète », jamais « remplace ») et l'ADR-0021 n'est pas modifié (règle d'ADR append-only). Le numéro est le suivant disponible dans `docs/architecture/adr/` au moment de l'implémentation.
 
 ## Risks / Trade-offs
 

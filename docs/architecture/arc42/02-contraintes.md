@@ -9,11 +9,11 @@
 | T3 | Aucune dépendance obligatoire vers un LLM, un IDE ou un orchestrateur externe | Imposée | ADR-0001, ADR-0005 |
 | T4 | Le cœur Java est sans framework applicatif obligatoire (`NexusApplication` instanciée manuellement) | Imposée | ADR-0003 |
 | T5 | Maven ≥ 3.9 requis pour le build ; Maven Wrapper (SHA-512) fourni | Imposée | `core/pom.xml`, ADR-0020 |
-| T6 | Micrometer (Prometheus) pour les métriques REST | Imposée | `application.properties`, `docs/architecture.md` |
+| T6 | Micrometer (Prometheus) pour les métriques REST | Imposée | `application.properties`, `docs/architecture/overview.md` |
 | T7 | MCP transport : STDIO uniquement (pas de HTTP côté MCP) | Imposée | ADR-0040, `NexusMcpServer.java` |
 | T8 | Le schéma SQLite est migré par des scripts SQL embarqués, forward-only | Imposée | ADR-0020 |
 | T9 | Les données locales sont stockées dans `NEXUS_HOME` configurable | Imposée | ADR-0019 |
-| T10 | Toute ouverture de fichier final passe par `SafeFileIO` avec `NOFOLLOW_LINKS` | Imposée (hardening #16) | H1, `docs/roadmap.md` |
+| T10 | Toute ouverture de fichier final passe par `SafeFileIO` avec `NOFOLLOW_LINKS` | Imposée (hardening #16) | H1, `docs/project/governance/ROADMAP.md` |
 
 ## 2.2 Contraintes organisationnelles
 
@@ -22,7 +22,7 @@
 | O1 | Documentation rédigée en français ; identifiants de code en anglais | Imposée | `AGENTS.md` |
 | O2 | Toute décision architecturale durable doit faire l'objet d'un ADR au format Archgate ; aucun ADR accepté ne peut être réécrit rétroactivement | Imposée | GEN-0057, `docs/architecture/adr/README.md` |
 | O3 | Avant toute itération validée : `mvn clean install` puis `scripts/self-smoke.ps1` | Imposée | `AGENTS.md` |
-| O4 | Aucune CI ni merge dans `develop` avant validation explicite du propriétaire | Imposée | `docs/roadmap.md` § Gate #16 |
+| O4 | Aucune CI ni merge dans `develop` avant validation explicite du propriétaire | Imposée | `docs/project/governance/ROADMAP.md` § Gate #16 |
 
 ## 2.3 Contraintes réglementaires
 

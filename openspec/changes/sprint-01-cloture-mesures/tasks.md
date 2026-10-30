@@ -22,7 +22,7 @@
 
 ## 4. Clôture
 
-- [ ] 4.1 Passer à « Fermé », avec leur PR, les constats du sprint 1 (`AUD-TST-01`, `AUD-TST-03` : #268 ; `AUD-QUA-06`, `AUD-DEP-20`, `AUD-TST-08` : #266 ; `AUD-TST-11` : #267 ; `AUD-DEP-14` : #265 et 2.4 ; `AUD-DEP-30` : 1.1) ; mettre à jour leur statut dans `docs/audits/2026-10-17/findings.json` (fermés, avec la PR) ; vérifier par `/nx-validate quick`
+- [ ] 4.1 Passer à « Fermé », avec leur PR, les constats du sprint 1 (`AUD-TST-01`, `AUD-TST-03` : #268 ; `AUD-QUA-06`, `AUD-DEP-20`, `AUD-TST-08` : #266 ; `AUD-TST-11` : #267 ; `AUD-DEP-14` : #265 et 2.4 ; `AUD-DEP-30` : 1.1) ; mettre à jour leur statut dans `docs/project/audits/2026-10-17/findings.json` (fermés, avec la PR) ; vérifier par `/nx-validate quick`
 
 ## Workflow follow-up
 
