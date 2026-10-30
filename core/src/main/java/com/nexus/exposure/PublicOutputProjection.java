@@ -8,7 +8,6 @@ import com.nexus.index.SymbolRelation;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.ranking.RankedCandidate;
 import com.nexus.search.FederatedSearchHit;
-import com.nexus.security.PublicContextPolicy;
 import com.nexus.security.PublicDiagnosticPolicy;
 import com.nexus.security.PublicProjectPathPolicy;
 import com.nexus.security.SensitiveContentRedactor;

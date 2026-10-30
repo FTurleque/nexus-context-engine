@@ -109,6 +109,45 @@ class NexusMcpOutputParityTest {
     }
 
     @Test
+    void externalSymbolSignaturesAreRedactedBySymbolAndSearchTools() throws Exception {
+        String token = "ghp_" + "c".repeat(36);
+        var project = application.listProjects().stream()
+                .filter(candidate -> candidate.name().equals("first")).findFirst().orElseThrow();
+        Map<String, Object> symbol = new java.util.LinkedHashMap<>();
+        symbol.put("id", "order-service");
+        symbol.put("symbolKey", "demo.OrderService");
+        symbol.put("filePath", "src/main/java/demo/OrderService.java");
+        symbol.put("kind", "CLASS");
+        symbol.put("name", "OrderService");
+        symbol.put("qualifiedName", "demo.OrderService");
+        symbol.put("signature", "OrderService TOKEN = \"" + token + "\" password = \"hunter2-minos-secret\"");
+        symbol.put("language", "java");
+        symbol.put("startLine", 3);
+        symbol.put("endLine", 7);
+        symbol.put("resolutionStatus", "RESOLVED");
+        symbol.put("identityQuality", "CANONICAL");
+        symbol.put("generated", false);
+        Map<String, Object> document = new java.util.LinkedHashMap<>();
+        document.put("contractVersion", "1");
+        document.put("producer", "MINOS");
+        document.put("project", Map.of("id", "minos-project", "name", "first",
+                "rootPath", project.rootPath().toRealPath().toString(), "snapshotId", "parity"));
+        document.put("symbols", List.of(symbol));
+        document.put("relations", List.of());
+        document.put("limitations", List.of());
+        application.importMinos(project.id(), JSON.writeValueAsString(document));
+        assertTrue(text(invoke("find_symbol", Map.of("project", "first", "query", "OrderService")))
+                .contains("OrderService TOKEN = \\\"[REDACTED]\\\""));
+
+        for (var output : List.of(
+                text(invoke("find_symbol", Map.of("project", "first", "query", "OrderService"))),
+                text(invoke("search_code", Map.of("project", "first", "query", "OrderService", "explain", true))))) {
+            assertFalse(output.contains(token), output);
+            assertFalse(output.contains("hunter2-minos-secret"), output);
+        }
+    }
+
+    @Test
     void listProjectsMatchesThePublicContract() throws Exception {
         String json = text(invoke("list_projects", Map.of()));
         for (Object project : JSON.readValue(json, List.class)) {

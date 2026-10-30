@@ -37,6 +37,9 @@ class NexusRestOutputParityTest {
 
     private final List<String> projectIds = new ArrayList<>();
 
+    @jakarta.inject.Inject
+    ObjectMapper objectMapper;
+
     /** Initialisation paresseuse : le port RestAssured n'est fixé qu'avant chaque test Quarkus. */
     @BeforeEach
     void indexFixtureOnce() throws Exception {
@@ -104,6 +107,26 @@ class NexusRestOutputParityTest {
                 .then().statusCode(200).extract().asString();
         assertEquals(List.of(), PublicOutputSchema.divergences(PublicOutput.Project.class,
                 JSON.readValue(project, Map.class), List.of()));
+    }
+
+    @Test
+    void searchResponseRedactsExternalSymbolSignatures() throws Exception {
+        String token = "ghp_" + "d".repeat(36);
+        Path root = classDirectory.resolve("first");
+        var project = new com.nexus.project.ProjectDescriptor(UUID.randomUUID(), "redaction", root,
+                com.nexus.project.ProjectSourceType.LOCAL, java.util.Set.of(), java.util.Set.of(), null,
+                com.nexus.project.IndexStatus.READY);
+        var symbol = new com.nexus.index.CodeSymbol(com.nexus.index.SymbolKind.TYPE, "TOKEN",
+                "demo.TOKEN password = \"hunter2-rest-secret\"", "String TOKEN = \"" + token + "\"", 1, 1, "scip");
+        var ranked = new com.nexus.ranking.RankedCandidate(new com.nexus.search.SearchCandidate(
+                "symbol:src/main/java/demo/OrderService.java:demo.TOKEN", com.nexus.search.CandidateType.SYMBOL,
+                root.resolve("src/main/java/demo/OrderService.java"), symbol, "TOKEN", Map.of()),
+                1.0d, Map.of("symbol", 1.0d), List.of());
+        String json = objectMapper.writeValueAsString(ApiMapper.search(
+                new com.nexus.application.NexusApplication.SearchOperation(project, "TOKEN", 5, true, 0, List.of(ranked))));
+
+        assertFalse(json.contains(token), json);
+        assertFalse(json.contains("hunter2-rest-secret"), json);
     }
 
     private static Map<?, ?> post(String path, Map<String, Object> body) throws Exception {

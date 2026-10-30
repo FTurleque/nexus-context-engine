@@ -15,15 +15,15 @@ Prérequis : `AUD-TST-01` fermé par #268 ; `AUD-TST-07` (sprint 3) fusionné av
 
 ## 3. Cycle context ↔ security
 
-- [ ] 3.1 AUD-ARC-03 — Déplacer `PublicContextPolicy` de `com.nexus.security` vers `com.nexus.exposure` (après 2.2) et mettre à jour ses appelants restants (les sondes datées de `docs/project/audits/` ne sont pas compilées et restent inchangées) ; vérifier par `git grep -n "^import com.nexus.context" core/src/main/java/com/nexus/security/` sans résultat et `./mvnw -B -ntp -pl core test -Djacoco.skip=true`
+- [x] 3.1 AUD-ARC-03 — Déplacer `PublicContextPolicy` de `com.nexus.security` vers `com.nexus.exposure` (après 2.2) et mettre à jour ses appelants restants (les sondes datées de `docs/project/audits/` ne sont pas compilées et restent inchangées) ; vérifier par `git grep -n "^import com.nexus.context" core/src/main/java/com/nexus/security/` sans résultat et `./mvnw -B -ntp -pl core test -Djacoco.skip=true`
 
 ## 4. Ordre déterministe
 
-- [ ] 4.1 AUD-QUA-01 — Trier `scoreComponents` par clé dans la projection (résultats classés et éléments de contexte, simples et fédérés) ; ajouter un test qui construit les composantes dans deux ordres d'insertion différents et compare la sérialisation JSON MCP et REST à l'ordre trié ; vérifier par `./mvnw -B -ntp -pl adapters/rest-quarkus,adapters/mcp-java -am test -Dtest=*ScoreComponents*,*Parity* -Dsurefire.failIfNoSpecifiedTests=false`
+- [x] 4.1 AUD-QUA-01 — Trier `scoreComponents` par clé dans la projection (résultats classés et éléments de contexte, simples et fédérés) ; ajouter un test qui construit les composantes dans deux ordres d'insertion différents et compare la sérialisation JSON MCP et REST à l'ordre trié ; vérifier par `./mvnw -B -ntp -pl adapters/rest-quarkus,adapters/mcp-java -am test -Dtest=*ScoreComponents*,*Parity* -Dsurefire.failIfNoSpecifiedTests=false`
 
 ## 5. Métadonnées de symbole
 
-- [ ] 5.1 AUD-SEC-03 — Rediger dans la projection `signature`, `qualifiedName`, `source` et `target`, et faire passer `CliRenderer` (lignes du rendu humain qui concatènent la signature) par la même redaction ; ajouter un test avec une signature SCIP, MINOS et JDT contenant `password = "…"` et un jeton `ghp_…` ; vérifier par `./mvnw -B -ntp -pl core test -Dtest=PublicOutputProjection*,CliRenderer* -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true` puis `-Dtest=*Parity*` sur les adaptateurs
+- [x] 5.1 AUD-SEC-03 — Rediger dans la projection `signature`, `qualifiedName`, `source` et `target`, et faire passer `CliRenderer` (lignes du rendu humain qui concatènent la signature) par la même redaction ; ajouter un test avec une signature SCIP, MINOS et JDT contenant `password = "…"` et un jeton `ghp_…` ; vérifier par `./mvnw -B -ntp -pl core test -Dtest=PublicOutputProjection*,CliRenderer* -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true` puis `-Dtest=*Parity*` sur les adaptateurs
 
 ## 6. Valeur sensible trop longue
 

@@ -1,4 +1,4 @@
-package com.nexus.security;
+package com.nexus.exposure;
 
 import com.nexus.paths.RepositoryPath;
 
@@ -7,12 +7,18 @@ import com.nexus.context.ContextItem;
 import com.nexus.context.FederatedContextBundle;
 import com.nexus.context.FederatedContextItem;
 import com.nexus.project.ProjectDescriptor;
+import com.nexus.security.PublicDiagnosticPolicy;
+import com.nexus.security.PublicProjectPathPolicy;
+import com.nexus.security.SensitiveContentRedactor;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Défense commune REST/MCP/CLI, appliquée même aux bundles de producteurs tiers. */
+/**
+ * Politique de sortie des contextes, appliquée par {@link PublicOutputProjection} sur les trois
+ * canaux, même aux bundles de producteurs tiers.
+ */
 public final class PublicContextPolicy {
     private PublicContextPolicy() { }
 

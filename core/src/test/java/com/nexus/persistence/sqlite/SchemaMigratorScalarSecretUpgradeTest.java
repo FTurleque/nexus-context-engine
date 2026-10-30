@@ -3,7 +3,7 @@ package com.nexus.persistence.sqlite;
 import com.nexus.application.NexusApplication;
 import com.nexus.config.NexusPaths;
 import com.nexus.project.IndexStatus;
-import com.nexus.security.PublicContextPolicy;
+import com.nexus.exposure.PublicContextPolicy;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
