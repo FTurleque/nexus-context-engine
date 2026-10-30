@@ -176,25 +176,22 @@ Sources :
 - `.gitignore` ;
 - `.nexusignore` ;
 - règles imbriquées avec leur scope ;
-- exclusions intégrées de sécurité et contenus générés.
+- exclusions intégrées de sécurité, contenus générés et worktrees d'outils.
 
-Exemples typiques :
+Les exclusions intégrées s'appliquent avant les fichiers d'ignore et sans configuration :
 
-```text
-.git/
-target/
-build/
-node_modules/
-.env
-clés privées
-```
+- répertoires d'un segment, à toute profondeur et sans tenir compte de la casse : `.git`, `.idea`, `.gradle`, `.nexus`, `.aws`, `.ssh`, `.gnupg`, `.kube`, `.secrets`, `target`, `build`, `out`, `node_modules`, `dist`, `coverage` ;
+- suites de segments consécutifs, à toute profondeur et sans tenir compte de la casse : `.claude/worktrees` (worktrees Git de Claude Code, copies complètes du dépôt), décidée par [BE-0058](../architecture/adr/BE-0058-exclure-les-worktrees-claude-code-du-scan-par-defaut.md). Le reste de `.claude/` (skills, agents, règles) reste indexé, de même que `docs/worktrees/` ou `.claude/worktrees-notes.md` ;
+- fichiers sensibles : `.env`, `.env.*`, fichiers d'identifiants (`.npmrc`, `.netrc`, `credentials.json`…) et clés privées (`.pem`, `.key`, `.p12`…).
 
-La négation est supportée :
+La négation est supportée dans les fichiers d'ignore :
 
 ```gitignore
 *.generated.java
 !important.generated.java
 ```
+
+Elle ne réintègre jamais un chemin d'une exclusion intégrée : `!.claude/worktrees/` dans un `.nexusignore` reste sans effet.
 
 Les liens symboliques et entrées non régulières sont refusés pour les fichiers indexables. Les chemins retenus sont revalidés par `ProjectPathGuard` avant hash et lecture.
 
