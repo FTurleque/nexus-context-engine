@@ -33,6 +33,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -395,10 +398,12 @@ class NexusMcpServerIntegrationTest {
 
         private final McpSyncClient client;
         private final ChildCoverage coverage;
+        private final List<ProcessHandle> processes;
 
-        private McpServerProcess(McpSyncClient client, ChildCoverage coverage) {
+        private McpServerProcess(McpSyncClient client, ChildCoverage coverage, List<ProcessHandle> processes) {
             this.client = client;
             this.coverage = coverage;
+            this.processes = List.copyOf(processes);
         }
 
         McpSyncClient client() {
@@ -412,6 +417,23 @@ class NexusMcpServerIntegrationTest {
                 }
             } finally {
                 assertTrue(client.closeGracefully(), "The MCP server process must stop before the test completes");
+                awaitServerProcessExit();
+            }
+        }
+
+        /**
+         * Attend la sortie effective du processus serveur lancé par cette instance : sous Windows,
+         * un fichier Lucene encore ouvert par un enfant en cours d'arrêt empêche la suppression du
+         * répertoire temporaire. Les autres serveurs de la classe ne sont pas concernés.
+         */
+        private void awaitServerProcessExit() throws Exception {
+            for (ProcessHandle process : processes) {
+                try {
+                    process.onExit().get(30, TimeUnit.SECONDS);
+                } catch (TimeoutException exception) {
+                    process.destroyForcibly();
+                    process.onExit().get(30, TimeUnit.SECONDS);
+                }
             }
         }
     }
@@ -432,12 +454,22 @@ class NexusMcpServerIntegrationTest {
                 .args(serverArguments.toArray(String[]::new))
                 .build();
 
+        Set<Long> existingChildren = childProcessIds();
         McpSyncClient client = McpClient.sync(
                         new StdioClientTransport(parameters, McpJsonDefaults.getMapper()))
                 .requestTimeout(Duration.ofSeconds(30))
                 .build();
         client.initialize();
-        return new McpServerProcess(client, childCoverage);
+        List<ProcessHandle> started = ProcessHandle.current().children()
+                .filter(child -> !existingChildren.contains(child.pid()))
+                .toList();
+        return new McpServerProcess(client, childCoverage, started);
+    }
+
+    private static Set<Long> childProcessIds() {
+        return ProcessHandle.current().children()
+                .map(ProcessHandle::pid)
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     private static ChildCoverage childCoverage() throws Exception {
