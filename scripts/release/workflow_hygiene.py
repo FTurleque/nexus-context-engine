@@ -37,6 +37,8 @@ PINNED_RUNNER_JOBS = {
     "scanner-corpus-benchmark.yml": ("benchmark",),
     "git-context-cache-qualification.yml": ("benchmark",),
     "runtime-flags-qualification.yml": ("scale-comparison",),
+    "measurement-tools.yml": ("minos-replay", "index-baselines"),
+    "semantic-search-qualification.yml": ("semantic-diagnostics",),
 }
 VERSIONED_RUNNER = re.compile(r"^(?:ubuntu-\d{2}\.\d{2}|windows-\d{4}|macos-\d+)$")
 

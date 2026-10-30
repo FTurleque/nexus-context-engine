@@ -10,6 +10,7 @@ on:
       - main
     paths:
       - '.github/workflows/semantic-search-qualification.yml'
+      - '.github/actions/ollama-embedding-runtime/**'
       - 'config/tool-integrity.properties'
       - 'core/src/main/java/com/nexus/search/semantic/**'
       - 'core/src/test/java/com/nexus/search/semantic/RealSemantic*.java'
@@ -18,6 +19,7 @@ on:
       - develop
     paths:
       - '.github/workflows/semantic-search-qualification.yml'
+      - '.github/actions/ollama-embedding-runtime/**'
       - 'config/tool-integrity.properties'
       - 'core/src/main/java/com/nexus/search/semantic/**'
       - 'core/src/test/java/com/nexus/search/semantic/RealSemantic*.java'
@@ -30,11 +32,22 @@ on:
           - full
           - pr
         default: full
+      diagnostics:
+        description: 'Lancer aussi les diagnostics sémantiques (SemanticSearchBenchmarkTest, RealSemanticRetrievalDiagnosticTest)'
+        type: boolean
+        default: false
   schedule:
     - cron: '17 3 3 * *'
 
 permissions:
   contents: read
+
+# Runtime et modèle partagés par les deux jobs ; l'archive est vérifiée contre
+# config/tool-integrity.properties par l'action ollama-embedding-runtime.
+env:
+  OLLAMA_VERSION: '0.33.3'
+  OLLAMA_MODEL: 'qwen3-embedding:0.6b'
+  OLLAMA_MODEL_ID_PREFIX: 'ac6da0dfba84'
 
 # Hors pull request, le groupe est le SHA qualifié : le run en cours n'est jamais annulé ;
 # un run en attente sur le même SHA peut être remplacé par un run plus récent du même SHA.
@@ -55,10 +68,6 @@ jobs:
     env:
       NEXUS_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       SEMANTIC_CORPUS: ${{ github.event_name == 'pull_request' && 'pr' || inputs.corpus || 'full' }}
-      OLLAMA_VERSION: '0.33.3'
-      OLLAMA_MODEL: 'qwen3-embedding:0.6b'
-      OLLAMA_MODEL_ID_PREFIX: 'ac6da0dfba84'
-      OLLAMA_ARCHIVE: target/semantic-real/ollama-linux-amd64.tar.zst
       SEMANTIC_REPORT: target/semantic-real/benchmark.json
     steps:
       - name: Checkout exact head
@@ -83,54 +92,13 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Download and verify pinned Ollama runtime
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p target/semantic-real
-          key="ollama.${OLLAMA_VERSION}.linux-amd64.sha256"
-          expected="$(awk -F= -v key="$key" '$1 == key { print $2 }' config/tool-integrity.properties)"
-          if [[ ! "$expected" =~ ^[0-9a-f]{64}$ ]]; then
-            echo "::error::Missing or invalid repository-pinned Ollama SHA-256 for $key"
-            exit 1
-          fi
-          curl --fail --location --retry 4 --retry-all-errors \
-            --output "$OLLAMA_ARCHIVE" \
-            "https://github.com/ollama/ollama/releases/download/v${OLLAMA_VERSION}/ollama-linux-amd64.tar.zst"
-          chmod +x scripts/release/verify-pinned-checksum.sh
-          scripts/release/verify-pinned-checksum.sh sha256 "$expected" "$OLLAMA_ARCHIVE"
-          sudo tar --zstd -xf "$OLLAMA_ARCHIVE" -C /usr
-          lscpu > target/semantic-real/runner-cpu.txt
-          command -v ollama
-          ollama --version | tee target/semantic-real/ollama-version.txt
-
-      - name: Start Ollama and pull embedding model
-        shell: bash
-        run: |
-          set -euo pipefail
-          OLLAMA_HOST=127.0.0.1:11434 nohup ollama serve > target/semantic-real/ollama.log 2>&1 &
-          echo "$!" > target/semantic-real/ollama.pid
-          ready=false
-          for attempt in $(seq 1 90); do
-            if curl --fail --silent --show-error http://127.0.0.1:11434/api/version \
-              > target/semantic-real/ollama-api-version.json; then
-              ready=true
-              break
-            fi
-            sleep 2
-          done
-          if [[ "$ready" != true ]]; then
-            echo '::error::Ollama did not become ready'
-            cat target/semantic-real/ollama.log || true
-            exit 1
-          fi
-          OLLAMA_HOST=127.0.0.1:11434 ollama pull "$OLLAMA_MODEL"
-          OLLAMA_HOST=127.0.0.1:11434 ollama list | tee target/semantic-real/ollama-models.txt
-          actual_model_id="$(awk -v model="$OLLAMA_MODEL" '$1 == model { print $2 }' target/semantic-real/ollama-models.txt)"
-          if [[ "$actual_model_id" != "$OLLAMA_MODEL_ID_PREFIX" ]]; then
-            echo "::error::Unexpected Ollama model manifest prefix: expected=$OLLAMA_MODEL_ID_PREFIX actual=$actual_model_id"
-            exit 1
-          fi
+      - name: Start pinned Ollama runtime
+        uses: ./.github/actions/ollama-embedding-runtime
+        with:
+          version: ${{ env.OLLAMA_VERSION }}
+          model: ${{ env.OLLAMA_MODEL }}
+          model-id-prefix: ${{ env.OLLAMA_MODEL_ID_PREFIX }}
+          work-dir: target/semantic-real
 
       - name: Run real semantic benchmark
         shell: bash
@@ -275,3 +243,64 @@ jobs:
             target/semantic-real/*.json
             target/semantic-real/*.txt
             target/semantic-real/*.log
+
+  semantic-diagnostics:
+    name: Semantic retrieval diagnostics
+    # Outillage de mesure lancé à la demande (AUD-TST-09) : benchmark synthétique
+    # lexical/sémantique et diagnostic par poids RRF sur le snapshot exact.
+    if: github.event_name == 'workflow_dispatch' && inputs.diagnostics
+    runs-on: ubuntu-24.04
+    # Le diagnostic indexe le snapshot NEXUS complet une fois puis interroge chaque poids RRF ;
+    # la borne couvre l'indexation complète mesurée pour le corpus `full` (~2 h 05) avec marge.
+    timeout-minutes: 240
+    env:
+      DIAGNOSTICS_DIR: target/semantic-diagnostics
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Java 21
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Start pinned Ollama runtime
+        uses: ./.github/actions/ollama-embedding-runtime
+        with:
+          version: ${{ env.OLLAMA_VERSION }}
+          model: ${{ env.OLLAMA_MODEL }}
+          model-id-prefix: ${{ env.OLLAMA_MODEL_ID_PREFIX }}
+          work-dir: target/semantic-diagnostics
+
+      - name: Run semantic diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./mvnw
+          ./mvnw -B -ntp -pl core             -Dtest='SemanticSearchBenchmarkTest,RealSemanticRetrievalDiagnosticTest'             -Dnexus.semantic.benchmark.enabled=true             -Dnexus.semantic.benchmark.output="$GITHUB_WORKSPACE/$DIAGNOSTICS_DIR/semantic-benchmark.json"             -Dnexus.semantic.realDiagnostic.enabled=true             -Dnexus.semantic.realBenchmark.root="$GITHUB_WORKSPACE"             -Dnexus.semantic.realBenchmark.commit="$GITHUB_SHA"             -Dnexus.semantic.realDiagnostic.output="$GITHUB_WORKSPACE/$DIAGNOSTICS_DIR/real-diagnostic.json"             -Dnexus.semantic.ollama.baseUri=http://127.0.0.1:11434             -Dnexus.semantic.ollama.model="$OLLAMA_MODEL"             -Dnexus.semantic.ollama.dimensions=1024             -Dnexus.semantic.ollama.timeoutSeconds=120             -Djacoco.skip=true             test
+          for report in semantic-benchmark.json real-diagnostic.json; do
+            test -s "$DIAGNOSTICS_DIR/$report" || { echo "::error::Missing diagnostic report $report"; exit 1; }
+          done
+
+      - name: Stop Ollama
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$DIAGNOSTICS_DIR/ollama.pid" ]]; then
+            kill "$(cat "$DIAGNOSTICS_DIR/ollama.pid")" 2>/dev/null || true
+          fi
+
+      - name: Retain semantic diagnostics evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: semantic-diagnostics-${{ github.sha }}
+          retention-days: 90
+          if-no-files-found: error
+          path: |
+            target/semantic-diagnostics/*.json
+            target/semantic-diagnostics/*.txt
+            target/semantic-diagnostics/*.log
