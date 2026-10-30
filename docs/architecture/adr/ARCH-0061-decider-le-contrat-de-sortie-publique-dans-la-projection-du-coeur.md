@@ -10,7 +10,7 @@ rules: false
 - **Statut** : Proposed
 - **Date** : 2026-10-30
 - **Origine** : audit du 2026-10-17, constats AUD-QUA-09 (avec AUD-ARC-08), AUD-QUA-01 et AUD-SEC-03 ; changement OpenSpec `sprint-04-sortie-publique-et-redaction`
-- **Complète** : [ARCH-0039](ARCH-0039-isoler-l-adaptateur-rest-quarkus-du-coeur-nexus.md), [ARCH-0040](ARCH-0040-exposer-nexus-via-un-adaptateur-mcp-stdio-mince.md)
+- **Complète** : [ARCH-0030](ARCH-0030-stabiliser-le-contrat-cli-avec-sorties-humaines-json-et-codes-de-sortie.md), [ARCH-0039](ARCH-0039-isoler-l-adaptateur-rest-quarkus-du-coeur-nexus.md), [ARCH-0040](ARCH-0040-exposer-nexus-via-un-adaptateur-mcp-stdio-mince.md)
 
 ## Context
 
