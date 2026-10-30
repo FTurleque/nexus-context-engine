@@ -132,7 +132,9 @@ try {
 
     $env:NEXUS_HOME = $nexusHome
     Invoke-Maven -Arguments @(
+        '-pl', 'core',
         '-Dtest=MinosRealIntegrationTest',
+        '-Dsurefire.failIfNoSpecifiedTests=false',
         '-Dnexus.minos.integration.replay=true',
         'test'
     )
