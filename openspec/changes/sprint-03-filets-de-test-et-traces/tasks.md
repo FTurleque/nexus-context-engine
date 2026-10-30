@@ -27,7 +27,7 @@
 
 ## 6. Validation
 
-- [ ] 6.1 Lancer `/nx-validate` (contrats, `./mvnw clean install`, `scripts/self-smoke.ps1`) sur la branche avant la PR
+- [x] 6.1 Lancer `/nx-validate` (contrats, `./mvnw clean install`, `scripts/self-smoke.ps1`) sur la branche avant la PR
 
 ## Workflow follow-up
 
