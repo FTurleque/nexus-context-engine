@@ -81,14 +81,12 @@ jobs:
             throw "MINOS archive SHA-256 mismatch: expected=$expected actual=$actual"
           }
           Expand-Archive -Path $env:MINOS_ARCHIVE -DestinationPath target/minos/dist
-          $jars = @(Get-ChildItem -Path target/minos/dist -Recurse -Filter 'minos*.jar' | Sort-Object FullName)
-          $all = @($jars | Where-Object { $_.Name -like '*-all.jar' })
-          $selected = if ($all.Count -eq 1) { $all[0] } elseif ($jars.Count -eq 1) { $jars[0] } else { $null }
-          if ($null -eq $selected) {
-            $jars | ForEach-Object { Write-Host "candidate: $($_.FullName)" }
-            throw "Cannot select a single MINOS JAR in the verified distribution"
+          # lib/minos.jar est le JAR lancé par minos.cmd ; app/ porte la copie du lanceur natif.
+          $jar = Join-Path (Resolve-Path target/minos/dist).Path "minos-$env:MINOS_VERSION-windows-x64/lib/minos.jar"
+          if (-not (Test-Path -LiteralPath $jar -PathType Leaf)) {
+            throw "MINOS JAR not found in the verified distribution: $jar"
           }
-          "jar=$($selected.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "jar=$jar" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       # Le script prépare target/m13-replay dans le répertoire courant, là où
       # MinosRealIntegrationTest le lit : il se lance donc depuis le module core.
