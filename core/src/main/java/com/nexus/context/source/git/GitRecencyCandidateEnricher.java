@@ -24,6 +24,8 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -33,11 +35,14 @@ import java.util.function.Consumer;
  *
  * <p>Le signal est fail-open : un incident JGit laisse les candidats inchangés, émet un
  * enregistrement {@code WARNING} qui ne nomme que le type d'exception et, si une explication est
- * demandée, la raison {@value #UNAVAILABLE_REASON}. Un projet hors Git reste silencieux.</p>
+ * demandée, la raison {@value #UNAVAILABLE_REASON}. Un dépassement de budget (chemins candidats ou
+ * chemins modifiés) laisse aussi les candidats inchangés, avec la raison {@value #BUDGET_REASON}.
+ * Un projet hors Git reste silencieux.</p>
  */
 public final class GitRecencyCandidateEnricher implements CandidateEnricher {
 
     static final String UNAVAILABLE_REASON = "récence Git indisponible";
+    static final String BUDGET_REASON = "récence Git ignorée : budget de chemins dépassé";
 
     private static final System.Logger LOGGER = System.getLogger(GitRecencyCandidateEnricher.class.getName());
 
@@ -67,12 +72,42 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
                 candidatesByProjectPath.putIfAbsent(relativePath, candidate);
             }
         }
-        if (candidatesByProjectPath.isEmpty() || candidatesByProjectPath.size() > MAX_CANDIDATE_PATHS) {
+        if (candidatesByProjectPath.isEmpty()) {
+            return candidates;
+        }
+        if (candidatesByProjectPath.size() > MAX_CANDIDATE_PATHS) {
+            explanationReasons.accept(BUDGET_REASON);
             return candidates;
         }
 
+        Optional<Map<String, Double>> recency;
+        try {
+            recency = recency(project.rootPath(), candidatesByProjectPath.keySet());
+        } catch (RepositoryNotFoundException exception) {
+            return candidates;
+        } catch (Exception exception) {
+            // La récence Git est un signal optionnel : tout incident reste fail-open pour ne jamais
+            // rendre la recherche principale indisponible. Le message de l'exception peut citer le
+            // chemin du dépôt : seul son type est journalisé.
+            LOGGER.log(System.Logger.Level.WARNING,
+                    "Récence Git indisponible, signal ignoré : {0}", exception.getClass().getName());
+            explanationReasons.accept(UNAVAILABLE_REASON);
+            return candidates;
+        }
+        if (recency.isEmpty()) {
+            explanationReasons.accept(BUDGET_REASON);
+            return candidates;
+        }
+        return recency.get().isEmpty() ? candidates : withRecency(project, candidates, recency.get());
+    }
+
+    /**
+     * Score de récence par chemin projet sur les {@value #MAX_COMMITS} derniers commits, ou
+     * un résultat vide quand le nombre de chemins modifiés dépasse le budget.
+     */
+    private static Optional<Map<String, Double>> recency(Path projectRoot, Set<String> projectPaths) throws Exception {
         Map<String, Double> recency = new HashMap<>();
-        try (Repository repository = openRepository(project.rootPath());
+        try (Repository repository = openRepository(projectRoot);
              Git git = new Git(repository);
              RevWalk revWalk = new RevWalk(repository);
              DiffFormatter diffFormatter = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
@@ -81,9 +116,9 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
             // pour ce signal : une modification du chemin courant reste visible comme ADD/DELETE.
             diffFormatter.setDetectRenames(false);
 
-            String projectPrefix = projectPrefix(repository, project.rootPath());
+            String projectPrefix = projectPrefix(repository, projectRoot);
             Map<String, String> projectPathByGitPath = new HashMap<>();
-            for (String projectPath : candidatesByProjectPath.keySet()) {
+            for (String projectPath : projectPaths) {
                 projectPathByGitPath.put(toGitPath(projectPrefix, projectPath), projectPath);
             }
             diffFormatter.setPathFilter(PathFilterGroup.createFromStrings(projectPathByGitPath.keySet()));
@@ -97,12 +132,10 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
                 }
                 RevCommit parent = revWalk.parseCommit(commit.getParent(0).getId());
                 List<DiffEntry> entries = diffFormatter.scan(parent.getTree(), commit.getTree());
-                if (entries.size() > MAX_CHANGED_PATHS_PER_COMMIT) {
-                    return candidates;
-                }
                 cumulativeChangedPaths += entries.size();
-                if (cumulativeChangedPaths > MAX_CUMULATIVE_CHANGED_PATHS) {
-                    return candidates;
+                if (entries.size() > MAX_CHANGED_PATHS_PER_COMMIT
+                        || cumulativeChangedPaths > MAX_CUMULATIVE_CHANGED_PATHS) {
+                    return Optional.empty();
                 }
 
                 double score = recencyScore(position++);
@@ -111,22 +144,14 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
                     addScore(recency, projectPathByGitPath, entry.getNewPath(), score);
                 }
             }
-        } catch (RepositoryNotFoundException exception) {
-            return candidates;
-        } catch (Exception exception) {
-            // La récence Git est un signal optionnel : tout incident reste fail-open pour ne jamais
-            // rendre la recherche principale indisponible. Le message de l'exception peut citer le
-            // chemin du dépôt : seul son type est journalisé.
-            LOGGER.log(System.Logger.Level.WARNING,
-                    "Récence Git indisponible, signal ignoré : {0}", exception.getClass().getName());
-            explanationReasons.accept(UNAVAILABLE_REASON);
-            return candidates;
         }
+        return Optional.of(recency);
+    }
 
-        if (recency.isEmpty()) {
-            return candidates;
-        }
-
+    private static List<SearchCandidate> withRecency(
+            ProjectDescriptor project,
+            List<SearchCandidate> candidates,
+            Map<String, Double> recency) {
         List<SearchCandidate> enriched = new ArrayList<>(candidates.size());
         for (SearchCandidate candidate : candidates) {
             String path = relativePath(project, candidate.path());

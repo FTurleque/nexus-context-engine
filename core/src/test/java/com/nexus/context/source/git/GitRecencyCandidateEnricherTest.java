@@ -25,6 +25,7 @@ import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GitRecencyCandidateEnricherTest {
@@ -161,7 +162,7 @@ class GitRecencyCandidateEnricherTest {
                 "class Service")) {
             assertFalse(message.contains(forbidden), message);
         }
-        assertEquals(null, warning.getThrown());
+        assertNull(warning.getThrown());
         assertEquals(List.of(GitRecencyCandidateEnricher.UNAVAILABLE_REASON), reasons);
         assertEquals("récence Git indisponible", GitRecencyCandidateEnricher.UNAVAILABLE_REASON);
     }
@@ -180,11 +181,14 @@ class GitRecencyCandidateEnricherTest {
                     temporaryDirectory.resolve("generated/Candidate" + index + ".java")));
         }
 
+        List<String> reasons = new ArrayList<>();
         List<SearchCandidate> enriched = new GitRecencyCandidateEnricher().enrich(
                 project(temporaryDirectory),
-                candidates);
+                candidates,
+                reasons::add);
 
         assertEquals(candidates, enriched);
+        assertEquals(List.of(GitRecencyCandidateEnricher.BUDGET_REASON), reasons);
         assertTrue(enriched.stream().noneMatch(candidate ->
                 candidate.signals().containsKey(SearchSignals.GIT_RECENCY)));
     }
