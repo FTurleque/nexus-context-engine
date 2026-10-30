@@ -4,6 +4,7 @@ import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;
 import com.nexus.testsupport.SymbolicLinks;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -21,13 +22,19 @@ class NativeProjectCustomizationDetectorTest {
     @TempDir
     Path temporaryDirectory;
 
+    private Path projectRoot;
+
+    @BeforeEach
+    void createProjectRoot() throws IOException {
+        projectRoot = Files.createDirectories(temporaryDirectory.resolve("project"));
+    }
+
     @Test
     void rejectsAncestorSymlinkForAgentProfiles() throws Exception {
-        Path outside = Files.createDirectories(temporaryDirectory.resolveSibling(
-                temporaryDirectory.getFileName() + "-outside-agents"));
+        Path outside = Files.createDirectories(temporaryDirectory.resolve("outside-agents"));
         Files.writeString(outside.resolve("escaped.md"), "outside agent profile");
 
-        Path github = Files.createDirectories(temporaryDirectory.resolve(".github"));
+        Path github = Files.createDirectories(projectRoot.resolve(".github"));
         SymbolicLinks.createOrSkip(github.resolve("agents"), outside);
 
         Map<String, java.util.List<String>> detected = new NativeProjectCustomizationDetector().detect(project());
@@ -37,11 +44,10 @@ class NativeProjectCustomizationDetectorTest {
 
     @Test
     void rejectsFinalSymlinkForOperationalConfiguration() throws Exception {
-        Path outside = temporaryDirectory.resolveSibling(
-                temporaryDirectory.getFileName() + "-outside-settings.json");
+        Path outside = temporaryDirectory.resolve("outside-settings.json");
         Files.writeString(outside, "{\"outside\":true}");
 
-        Path claude = Files.createDirectories(temporaryDirectory.resolve(".claude"));
+        Path claude = Files.createDirectories(projectRoot.resolve(".claude"));
         SymbolicLinks.createOrSkip(claude.resolve("settings.json"), outside);
 
         Map<String, java.util.List<String>> detected = new NativeProjectCustomizationDetector().detect(project());
@@ -53,7 +59,7 @@ class NativeProjectCustomizationDetectorTest {
         return new ProjectDescriptor(
                 UUID.randomUUID(),
                 "native-customization-test",
-                temporaryDirectory,
+                projectRoot,
                 ProjectSourceType.LOCAL,
                 Set.of(),
                 Set.of(),
