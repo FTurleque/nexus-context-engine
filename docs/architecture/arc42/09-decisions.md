@@ -69,6 +69,7 @@ Cette section présente un index synthétique avec statut, date et relations de 
 | [GEN-0057](../adr/GEN-0057-tenir-le-registre-d-adr-au-format-archgate.md) | Tenir le registre d'ADR au format Archgate, à l'emplacement arc42 | Accepted | 2026-10-29 |
 | [BE-0058](../adr/BE-0058-exclure-les-worktrees-claude-code-du-scan-par-defaut.md) | Exclure les worktrees Claude Code du scan par défaut | Accepted | 2026-10-30 |
 | [ARCH-0059](../adr/ARCH-0059-verifier-les-frontieres-du-coeur-par-un-test-d-architecture.md) | Vérifier les frontières du cœur par un test d'architecture | Proposed | 2026-10-30 |
+| [GEN-0060](../adr/GEN-0060-qualifier-la-recherche-semantique-reelle-en-deux-corpus.md) | Qualifier la recherche sémantique réelle en deux corpus, hors du chemin de release | Proposed | 2026-10-30 |
 | [ADR-0000](../adr/archive/0000-adopter-les-adr-madr.md) | Adopter MADR comme format et définir la gouvernance des ADR | Superseded (GEN-0057) | 2026-07-19 |
 | [ADR-0056](../adr/archive/0056-regrouper-le-registre-des-adr-dans-la-documentation-d-architecture.md) | Regrouper le registre des ADR dans la documentation d'architecture | Superseded (GEN-0057) | 2026-10-29 |
 
@@ -87,8 +88,8 @@ Claude Code.
 
 ### Recherche et ranking
 
-BE-0010, BE-0014, BE-0024, BE-0025, BE-0026 — ranking hybride, sémantique
-optionnel, graphe, score composé.
+BE-0010, BE-0014, BE-0024, BE-0025, BE-0026, GEN-0060 — ranking hybride, sémantique
+optionnel et sa qualification réelle, graphe, score composé.
 
 ### Contexte et budget
 

@@ -44,7 +44,21 @@ Le gate documentaire contrôle notamment :
 - non-adoption mesurée du Vector API dans les launchers de production ;
 - politique de maintenance solo documentée.
 
-Les actions GitHub contrôlées par le dépôt sont référencées par SHA immuable.
+## Hygiène des workflows
+
+`scripts/release/workflow_hygiene.py` vérifie les workflows de `.github/workflows/` ; chaque contrôle rejette aussi une fixture négative de `scripts/release/fixtures/workflow-hygiene/`.
+
+- **Épinglage** (`test-tool-integrity-anchors.sh`) : chaque `uses:` externe est épinglé par SHA complet suivi de `# vX.Y.Z` ; un même SHA porte le même commentaire partout ; une action n'a qu'une version majeure dans l'ensemble des workflows. La concordance avec les tags amont n'est pas vérifiée en CI : elle se vérifie à la main lors d'une montée, par `git ls-remote --tags` (skill `nexus-dependency-bump`). Les workflows réutilisables OSV sont épinglés sur le SHA de **commit** d'un tag publié, jamais sur le SHA de l'objet tag.
+- **Inputs** (`test-operational-doc-contracts.sh`) : aucune expression `${{ inputs.` dans un bloc `run:` ; la valeur passe par une variable d'environnement de l'étape (`REQUESTED: ${{ inputs.profile }}`), puis la validation `ci|full` s'applique à la variable.
+- **Durée** (`test-operational-doc-contracts.sh`) : tout job qui déclare `runs-on:` déclare `timeout-minutes`. Un job qui appelle un workflow réutilisable (`uses:`) n'accepte pas `timeout-minutes` : il est borné par les jobs du workflow appelé, eux-mêmes soumis à ce contrôle, ou, pour un workflow externe comme OSV, par ce workflow et la borne de 6 h de GitHub.
+- **Images de runner** (`test-operational-doc-contracts.sh`) : les jobs de benchmark et de qualification de performance (`scale-benchmark.yml`, `lucene-lifecycle-benchmark.yml`, `scanner-corpus-benchmark.yml`, `git-context-cache-qualification.yml`, job `scale-comparison` de `runtime-flags-qualification.yml`) tournent sur `ubuntu-24.04` et `windows-2025`, pour que leurs budgets comparent des mesures prises sur la même image. Les autres jobs restent sur `ubuntu-latest` et `windows-latest`. Le retrait d'une image épinglée par GitHub fait échouer le benchmark ; la montée d'image est alors explicite.
+- **Cache Maven** : `setup-java` `cache: maven` n'est activé sur aucun job. Mesure du 2026-10-30 sur `linux-reactor` (`ubuntu-latest`) : sans cache, l'étape `Run Maven reactor` dure 80, 102 et 114 s sur trois runs de PR ; avec cache, 102 s au premier run (cache absent, puis 5 s de sauvegarde) et 90 s au second (≈ 270 Mo restaurés en 2 s). L'écart reste dans la variance d'un run à l'autre : le cache n'apporte pas de gain mesurable et ajouterait une surface d'empoisonnement. Les jobs de release et de qualification d'artefacts publiés restent de toute façon construits sans cache.
+
+## Scripts de validation
+
+Les seuls points d'entrée de validation sont `scripts/validate-phase-6.ps1` (qualification Windows complète, appelée par le job `Windows gate`) et `scripts/self-smoke.ps1` (self-smoke du JAR, exigé avant toute PR). Les runners d'itération `validate-iteration-*.ps1` sont archivés, non maintenus, dans `scripts/archive/`.
+
+Les scripts actifs de `scripts/` importent `scripts/lib/NexusScript.psm1`, seul endroit qui définit `Invoke-Maven`, `Resolve-AbsolutePath` et `Invoke-NexusJson`. `Invoke-Maven` appelle le Maven Wrapper vérifié (`mvnw.cmd` ou `mvnw`) ; en CI (`CI` ou `GITHUB_ACTIONS` définie), un wrapper absent ou en échec lève une exception, sans repli ; hors CI, le repli sur le Maven installé est averti. Un code de sortie Maven non nul lève une exception qui porte ce code. `scripts/tests/Test-NexusScript.ps1` couvre ces cas sur des wrappers factices et tourne dans le job `Windows gate` ; le contrat `test-operational-doc-contracts.sh` échoue si un script actif hors `scripts/lib/` et `scripts/archive/` appelle Maven directement ou redéfinit ces fonctions.
 
 ## Windows Installer
 
@@ -73,7 +87,7 @@ La résilience réseau ne modifie donc pas la racine de confiance du bootstrap e
 
 - CodeQL : Java/Kotlin `security-extended`, `build-mode: manual` (compilation des sources et des tests par `./mvnw` sur Java 21.0.12 épinglé), contrat exact-head ;
 - OSV : delta PR + scan bloquant du SBOM CycloneDX agrégé ;
-- reusable workflow OSV épinglé au SHA qui échoue fermé lorsqu'un scan est incomplet ;
+- workflows réutilisables OSV épinglés sur `v2.7.0` (SHA de commit), qui échouent fermé lorsqu'un scan est incomplet ;
 - SonarQube Cloud : GitHub App en Automatic Analysis, avec Quality Gate externe sur les changements de PR.
 
 Un check externe n'apparaît pas nécessairement dans la liste des workflows GitHub Actions ; la qualification finale d'une PR doit donc regarder les **check-runs du commit**, pas seulement les workflow runs.
@@ -95,11 +109,14 @@ La borne Lucene de 128 termes est couverte par un test de non-régression du rea
 
 ### Qualification sémantique réelle
 
-`.github/workflows/semantic-search-qualification.yml` n'est pas exécuté sur chaque PR. Il est déclenché :
+`.github/workflows/semantic-search-qualification.yml` n'est pas exécuté sur chaque PR. Ses déclencheurs et ses corpus suivent [GEN-0060](../architecture/adr/GEN-0060-qualifier-la-recherche-semantique-reelle-en-deux-corpus.md) :
 
-- sur une PR vers `develop`/`main` uniquement lorsque le workflow, l'ancre d'intégrité ou le code/test sémantique concerné change ;
-- manuellement ;
-- selon une planification périodique.
+- sur une PR vers `develop`/`main`, lorsque le workflow, l'ancre d'intégrité ou le code/test sémantique concerné change : corpus réduit `pr` ;
+- sur un `push` vers `develop` qui touche ces mêmes chemins, donc après fusion : corpus complet `full`, groupé par SHA : un push ultérieur ne l'annule pas et un run en cours n'est jamais annulé ;
+- manuellement, corpus au choix (`full` par défaut) ;
+- selon une planification mensuelle, sur `main` : corpus `full`.
+
+La release n'exige pas cette qualification ; voir [`semantic-search.md`](semantic-search.md#qualification-réelle-et-release).
 
 Le workflow :
 
@@ -108,12 +125,12 @@ Le workflow :
 3. vérifie l'archive Linux amd64 contre le SHA-256 versionné dans `config/tool-integrity.properties` ;
 4. démarre Ollama uniquement sur `127.0.0.1:11434` ;
 5. pull `qwen3-embedding:0.6b` et vérifie que son ID de manifest attendu commence par **`ac6da0dfba84`** ;
-6. exécute `RealSemanticSearchBenchmarkTest` sur le snapshot NEXUS exact et exige que le rapport référence `NEXUS_HEAD_SHA` ;
+6. exécute `RealSemanticSearchBenchmarkTest` sur le snapshot NEXUS exact, avec le corpus `SEMANTIC_CORPUS`, et exige que le rapport référence `NEXUS_HEAD_SHA` et ce corpus ;
 7. exige un index sémantique non vide et des floors de recall/hit/MRR, ainsi qu'une absence de régression supérieure à 0,10 face au baseline ;
 8. résume le débit d'embeddings (CPU du runner, requêtes, tokens, secondes, tokens/s) dans `throughput.json` et dans le résumé du job ;
 9. conserve versions, logs et rapport JSON comme artefacts pendant 90 jours.
 
-Le job dispose d'un budget de **180 minutes**. Ce budget est dérivé des mesures et non d'un confort arbitraire ; voir [`semantic-search.md`](semantic-search.md#budget-de-temps-de-la-qualification-réelle).
+Le job dispose d'un budget de **45 minutes** pour le corpus `pr` et d'un budget de **180 minutes** pour le corpus `full`. Ces budgets sont dérivés des mesures et non d'un confort arbitraire ; voir [`semantic-search.md`](semantic-search.md#budget-de-temps-de-la-qualification-réelle).
 
 Ce gate est une sentinelle de qualité réelle et un gate ciblé des changements sémantiques, pas une dépendance nécessaire au fonctionnement lexical ni un téléchargement imposé aux PR sans rapport avec cette surface.
 

@@ -2,7 +2,7 @@
 param()
 
 $ErrorActionPreference = "Stop"
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $validationProject = Join-Path $repoRoot "target\nexus-multilang-validation-project"
 $validationHome = Join-Path $repoRoot "target\nexus-multilang-validation-home"
 $previousNexusHome = $env:NEXUS_HOME
@@ -87,7 +87,7 @@ try {
 
     Write-Host
     Write-Host "[2/5] Self-smoke du repository NEXUS"
-    & (Join-Path $PSScriptRoot "self-smoke.ps1")
+    & (Join-Path $PSScriptRoot "..\self-smoke.ps1")
 
     Write-Host
     Write-Host "[3/5] Creation d'un projet polyglotte de validation"

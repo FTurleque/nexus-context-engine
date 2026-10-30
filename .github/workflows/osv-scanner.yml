@@ -27,7 +27,7 @@ jobs:
   scan-pr:
     name: OSV new-vulnerability delta gate
     if: ${{ github.event_name == 'pull_request' }}
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@9a96bc4d2b09685b6142bcfe25a3dc17cb2d7347 # fail closed on incomplete scans
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
     permissions:
       actions: read
       contents: read
@@ -69,7 +69,7 @@ jobs:
           cp target/sbom/bom.json nexus.cdx.json
 
       - name: Upload aggregate SBOM for OSV
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nexus-aggregate-sbom
           path: nexus.cdx.json
@@ -79,7 +79,7 @@ jobs:
   scan-sbom:
     name: OSV aggregate SBOM vulnerability gate
     needs: build-sbom
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@9a96bc4d2b09685b6142bcfe25a3dc17cb2d7347 # fail closed on incomplete scans
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
     permissions:
       actions: read
       contents: read

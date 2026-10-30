@@ -71,7 +71,7 @@ La campagne de consolidation ajoute :
 - mode optionnel `NEXUS_REQUIRE_PRIVATE_STORAGE=true` pour échouer fermé lorsque la confidentialité du stockage ne peut pas être démontrée ;
 - revalidation de l'identité filesystem avant/après ouverture dans le fallback `SafeFileIO` lorsque `SecureDirectoryStream` n'est pas disponible ;
 - circuit-breaker provider linéarisé contre les races timeout/start ;
-- qualification sémantique réelle Ollama mensuelle/manuelle avec runtime épinglé par SHA-256 et seuils de non-régression ;
+- qualification sémantique réelle Ollama (corpus réduit sur PR, complet sur `develop` après fusion, mensuelle et manuelle) avec runtime épinglé par SHA-256 et seuils de non-régression ;
 - contrat explicite de non-adoption de `jdk.incubator.vector` tant qu'une nouvelle mesure same-runner ne démontre pas un bénéfice robuste.
 
 ## Qualification de scale

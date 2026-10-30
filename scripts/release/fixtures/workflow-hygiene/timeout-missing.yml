@@ -1,0 +1,11 @@
+# Fixture négative : job sans timeout-minutes.
+name: fixture
+on: workflow_dispatch
+jobs:
+  reusable:
+    uses: ./.github/workflows/ci.yml
+  unbounded:
+    name: Unbounded job
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo unbounded

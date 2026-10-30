@@ -14,6 +14,7 @@ if ($env:OS -ne 'Windows_NT') {
 }
 
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+Import-Module (Join-Path $PSScriptRoot '../lib/NexusScript.psm1') -Force
 if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
     $OutputRoot = Join-Path $repo 'target\dist'
 }
@@ -73,8 +74,7 @@ try {
     if ($SkipTests) {
         $mavenArgs += '-DskipTests'
     }
-    & '.\mvnw.cmd' @mavenArgs
-    if ($LASTEXITCODE -ne 0) { throw "NEXUS Maven build failed with exit code $LASTEXITCODE" }
+    Invoke-Maven -Arguments $mavenArgs -RepositoryRoot $repo
 }
 finally { Pop-Location }
 

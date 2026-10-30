@@ -4,7 +4,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $adapterPom = Join-Path $repoRoot "adapters\rest-quarkus\pom.xml"
 $adapterTarget = Join-Path $repoRoot "adapters\rest-quarkus\target"
 $locationPushed = $false
@@ -33,7 +33,7 @@ try {
 
         Write-Host
         Write-Host "[2/4] Self-smoke historique du coeur"
-        & (Join-Path $PSScriptRoot "self-smoke.ps1")
+        & (Join-Path $PSScriptRoot "..\self-smoke.ps1")
     }
     else {
         Write-Host "[1/4] Build et tests du coeur NEXUS : SKIPPED (deja valide)"
