@@ -18,19 +18,23 @@
    "sprint": 1,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Partiel",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-30",
+     "statut": "Partiel"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Procédure de traitement des alertes dans SECURITY.md (PR #276) ; activation en attente du mainteneur",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé (vérifié en direct)",
-    "preuve": "gh api repos/…/vulnerability-alerts → 404 « Vulnerability alerts are disabled » ; security_and_analysis : dependabot_security_updates, secret_scanning, push_protection = disabled.",
+    "date": "2026-10-30",
+    "commit": "4024c874",
+    "verdict": "Partiel",
+    "preuve": "security_and_analysis : dependabot_security_updates, secret_scanning et secret_scanning_push_protection « disabled » ; vulnerability-alerts répond 404 (tâche 1.1)",
     "reserve": null
    }
   },
@@ -49,19 +53,23 @@
    "sprint": 1,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-30",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #266 (89a37f0b)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "3 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-30",
+    "commit": "4024c874",
+    "verdict": "Fermé",
+    "preuve": "gate Windows sur JDK 21 épinglé, wrapper Maven obligatoire en CI (PR #266)",
     "reserve": null
    }
   },
@@ -83,19 +91,23 @@
    "bloque": [
     "AUD-QUA-08"
    ],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-30",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #268 (dfb695ce)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-30",
+    "commit": "4024c874",
+    "verdict": "Fermé",
+    "preuve": "quarkus-jacoco crédite NexusApiApplicationService dans la couverture REST (PR #268)",
     "reserve": null
    }
   },
@@ -117,19 +129,23 @@
    "sprint": 1,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-30",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #268 (dfb695ce)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "4 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-30",
+    "commit": "4024c874",
+    "verdict": "Fermé",
+    "preuve": "gates JaCoCo par paquet pour les classes de bornes (PR #268)",
     "reserve": null
    }
   },
@@ -149,19 +165,23 @@
    "sprint": 1,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Partiel",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-30",
+     "statut": "Partiel"
     }
    ],
-   "changement": "Aucun",
+   "changement": "PR #265 (4aa90dfa) et #278 (4024c874) ; ajout au ruleset en attente du mainteneur",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "3 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-30",
+    "commit": "4024c874",
+    "verdict": "Partiel",
+    "preuve": "« Hermetic scale benchmark » produit sur toute PR et conclu en succès hors chemins surveillés (PR #278) ; absent des required_status_checks du ruleset « Protect main & develop » (tâche 2.4)",
     "reserve": null
    }
   },
@@ -180,19 +200,23 @@
    "sprint": 1,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-30",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #266 (89a37f0b)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-30",
+    "commit": "4024c874",
+    "verdict": "Fermé",
+    "preuve": "wrapper Maven obligatoire en CI, sans repli sur le Maven du runner (PR #266)",
     "reserve": null
    }
   },
@@ -211,19 +235,23 @@
    "sprint": 1,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-30",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #266 (89a37f0b)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-30",
+    "commit": "4024c874",
+    "verdict": "Fermé",
+    "preuve": "CodeQL analyse le code avec build (PR #266)",
     "reserve": null
    }
   },
@@ -242,19 +270,23 @@
    "sprint": 1,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-30",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par les PR #267 (e3f67017) et #277 (a218a613)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-30",
+    "commit": "4024c874",
+    "verdict": "Fermé",
+    "preuve": "tests symlink fail-closed quand CI est défini (PR #267) ; cibles sous le @TempDir, git grep -n \"temporaryDirectory.resolveSibling\" -- core/src/test vide (PR #277)",
     "reserve": null
    }
   },
@@ -3855,6 +3887,6 @@
    }
   }
  ],
- "date_maj": "2026-10-29",
- "commit_maj": "0b6828ce"
+ "date_maj": "2026-10-30",
+ "commit_maj": "4024c874"
 }
