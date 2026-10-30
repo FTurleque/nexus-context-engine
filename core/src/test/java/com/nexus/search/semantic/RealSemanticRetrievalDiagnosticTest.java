@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.nexus.application.NexusApplication;
 import com.nexus.config.NexusPaths;
 import com.nexus.project.ProjectDescriptor;
-import com.nexus.ranking.RankedCandidate;
 import com.nexus.search.semantic.SemanticBenchmarkSupport.Aggregate;
 import com.nexus.search.semantic.SemanticBenchmarkSupport.OllamaSettings;
 import com.nexus.search.semantic.SemanticBenchmarkSupport.RetrievalMeasurement;
@@ -25,6 +24,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static com.nexus.search.semantic.SemanticBenchmarkSupport.firstRelevantRank;
+import static com.nexus.search.semantic.SemanticBenchmarkSupport.rankedRelativePaths;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @EnabledIfSystemProperty(named = "nexus.semantic.realDiagnostic.enabled", matches = "true")
@@ -177,11 +177,7 @@ class RealSemanticRetrievalDiagnosticTest {
                 queryCase.query(),
                 RETRIEVAL_LIMIT,
                 true);
-        List<String> rankedPaths = operation.results().stream()
-                .map(RankedCandidate::candidate)
-                .map(candidate -> RealSemanticBenchmarkCorpus.normalize(corpusRoot.relativize(candidate.path())))
-                .distinct()
-                .toList();
+        List<String> rankedPaths = rankedRelativePaths(operation, corpusRoot);
         return RetrievalMeasurement.of(rankedPaths, queryCase.relevantPaths(), operation.durationMs());
     }
 

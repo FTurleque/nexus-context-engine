@@ -1,5 +1,7 @@
 package com.nexus.search.semantic;
 
+import com.nexus.application.NexusApplication;
+import com.nexus.ranking.RankedCandidate;
 import com.nexus.search.semantic.ollama.OllamaEmbeddingProvider;
 
 import java.io.IOException;
@@ -85,6 +87,15 @@ final class SemanticBenchmarkSupport {
                     mean(measurements.stream().map(RetrievalMeasurement::mrrAt3).toList()),
                     meanLong(measurements.stream().map(RetrievalMeasurement::durationMs).toList()));
         }
+    }
+
+    /** Chemins des résultats, relatifs à {@code corpusRoot}, au format {@code a/b/c}, dédoublonnés dans l'ordre du classement. */
+    static List<String> rankedRelativePaths(NexusApplication.SearchOperation operation, Path corpusRoot) {
+        return operation.results().stream()
+                .map(RankedCandidate::candidate)
+                .map(candidate -> RealSemanticBenchmarkCorpus.normalize(corpusRoot.relativize(candidate.path())))
+                .distinct()
+                .toList();
     }
 
     /** Rang, à partir de 1, du premier chemin pertinent de {@code rankedPaths}, ou 0. */
