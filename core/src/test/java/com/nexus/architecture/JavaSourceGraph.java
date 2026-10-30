@@ -221,43 +221,65 @@ final class JavaSourceGraph {
      */
     static String stripCommentsAndLiterals(String source) {
         StringBuilder out = new StringBuilder(source.length());
-        int i = 0;
-        int length = source.length();
-        while (i < length) {
-            char c = source.charAt(i);
-            char next = i + 1 < length ? source.charAt(i + 1) : '\0';
-            if (c == '/' && next == '/') {
-                while (i < length && source.charAt(i) != '\n') {
-                    out.append(' ');
-                    i++;
-                }
-            } else if (c == '/' && next == '*') {
-                int end = source.indexOf("*/", i + 2);
-                int stop = end < 0 ? length : end + 2;
-                blank(source, i, stop, out);
-                i = stop;
-            } else if (c == '"' && source.startsWith("\"\"\"", i)) {
-                int end = source.indexOf("\"\"\"", i + 3);
-                while (end > 0 && isEscaped(source, end)) {
-                    end = source.indexOf("\"\"\"", end + 1);
-                }
-                int stop = end < 0 ? length : end + 3;
-                blank(source, i, stop, out);
-                i = stop;
-            } else if (c == '"' || c == '\'') {
-                int j = i + 1;
-                while (j < length && source.charAt(j) != c && source.charAt(j) != '\n') {
-                    j += source.charAt(j) == '\\' ? 2 : 1;
-                }
-                int stop = Math.min(length, j + 1);
-                blank(source, i, stop, out);
-                i = stop;
+        int position = 0;
+        while (position < source.length()) {
+            int stop = endOfCommentOrLiteral(source, position);
+            if (stop < 0) {
+                out.append(source.charAt(position));
+                position++;
             } else {
-                out.append(c);
-                i++;
+                blank(source, position, stop, out);
+                position = stop;
             }
         }
         return out.toString();
+    }
+
+    /**
+     * Fin (exclue) du commentaire, du bloc de texte ou du littéral qui commence à
+     * {@code position}, ou {@code -1} si un caractère de code commence là.
+     */
+    private static int endOfCommentOrLiteral(String source, int position) {
+        if (source.startsWith("//", position)) {
+            return endOfLineComment(source, position);
+        }
+        if (source.startsWith("/*", position)) {
+            return endAfter(source, source.indexOf("*/", position + 2), 2);
+        }
+        if (source.startsWith("\"\"\"", position)) {
+            return endOfTextBlock(source, position);
+        }
+        char current = source.charAt(position);
+        if (current == '"' || current == '\'') {
+            return endOfQuotedLiteral(source, position, current);
+        }
+        return -1;
+    }
+
+    private static int endOfLineComment(String source, int position) {
+        int newline = source.indexOf('\n', position);
+        return newline < 0 ? source.length() : newline;
+    }
+
+    private static int endOfTextBlock(String source, int position) {
+        int end = source.indexOf("\"\"\"", position + 3);
+        while (end > 0 && isEscaped(source, end)) {
+            end = source.indexOf("\"\"\"", end + 1);
+        }
+        return endAfter(source, end, 3);
+    }
+
+    private static int endOfQuotedLiteral(String source, int position, char quote) {
+        int cursor = position + 1;
+        while (cursor < source.length() && source.charAt(cursor) != quote && source.charAt(cursor) != '\n') {
+            cursor += source.charAt(cursor) == '\\' ? 2 : 1;
+        }
+        return Math.min(source.length(), cursor + 1);
+    }
+
+    /** Position qui suit un délimiteur de fermeture trouvé en {@code index}, ou la fin du texte. */
+    private static int endAfter(String source, int index, int delimiterLength) {
+        return index < 0 ? source.length() : index + delimiterLength;
     }
 
     private static boolean isEscaped(String source, int position) {

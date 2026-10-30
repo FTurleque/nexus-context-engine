@@ -84,6 +84,8 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
         try {
             recency = recency(project.rootPath(), candidatesByProjectPath.keySet());
         } catch (RepositoryNotFoundException exception) {
+            // Cas normal d'un projet hors Git : pas d'avertissement, une trace de diagnostic.
+            LOGGER.log(System.Logger.Level.DEBUG, "Projet hors dépôt Git : récence Git non calculée");
             return candidates;
         } catch (Exception exception) {
             // La récence Git est un signal optionnel : tout incident reste fail-open pour ne jamais

@@ -22,91 +22,103 @@ class ProjectGraphBuilderProjectionTest {
     @Test
     void delegatesOnlyToBoundedNeighborhoodProjection() {
         UUID projectId = UUID.randomUUID();
-        AtomicReference<Set<String>> requestedPaths = new AtomicReference<>();
-        AtomicReference<Integer> requestedLimit = new AtomicReference<>();
-        IndexRepository repository = new IndexRepository() {
-            @Override
-            public Map<String, IndexedFile> findFiles(UUID ignored) { return Map.of(); }
-
-            @Override
-            public List<IndexedSymbol> findSymbols(UUID ignored) {
-                throw new AssertionError("Graph must not materialize every symbol");
-            }
-
-            @Override
-            public List<SymbolRelation> findRelations(UUID ignored) {
-                throw new AssertionError("Graph must not materialize every relation");
-            }
-
-            @Override
-            public Map<String, Set<String>> findGraphNeighbors(
-                    UUID ignored,
-                    Set<String> relativePaths,
-                    int maxEdges) {
-                requestedPaths.set(Set.copyOf(relativePaths));
-                requestedLimit.set(maxEdges);
-                return Map.of("src/App.java", Set.of("src/Dependency.java"));
-            }
-
-            @Override
-            public void applyChanges(UUID ignored, List<IndexedFileUpdate> updates, Set<String> removedPaths) {
-                // Mutation is outside this read-only graph projection fixture.
-            }
-
-            @Override
-            public void replaceExternalCodeIntelligence(UUID ignored, CodeIntelligenceSnapshot snapshot) {
-                // External intelligence mutation is outside this read-only fixture.
-            }
-
-            @Override
-            public IndexStatistics statistics(UUID ignored) { return new IndexStatistics(0, 0, 0); }
-
-            @Override
-            public ReadSession openReadSession() {
-                throw new AssertionError("Graph must not open a read session");
-            }
-
-            @Override
-            public Map<String, IndexedFile> findFiles(UUID ignored, Set<String> relativePaths) {
-                throw new AssertionError("Graph must not load files");
-            }
-
-            @Override
-            public Map<String, String> findTypeOwners(UUID ignored) {
-                throw new AssertionError("Graph must not materialize type owners");
-            }
-
-            @Override
-            public List<IndexedSymbol> searchSymbols(UUID ignored, String query, int limit) {
-                throw new AssertionError("Graph must not search symbols");
-            }
-
-            @Override
-            public List<SymbolRelation> findImportRelations(UUID ignored) {
-                throw new AssertionError("Graph must not materialize every import");
-            }
-
-            @Override
-            public Set<String> findExternalProviders(UUID ignored) {
-                throw new AssertionError("Graph must not list providers");
-            }
-
-            @Override
-            public List<SymbolRelation> searchRelations(UUID ignored, String symbol, int limit) {
-                throw new AssertionError("Graph must not search relations");
-            }
-
-            @Override
-            public long generation(UUID ignored) {
-                throw new AssertionError("Graph must not read the generation");
-            }
-        };
+        NeighborhoodOnlyRepository repository = new NeighborhoodOnlyRepository(
+                Map.of("src/App.java", Set.of("src/Dependency.java")));
 
         Map<String, Set<String>> neighbors =
                 new ProjectGraphBuilder(repository).neighbors(projectId, Set.of("src/App.java"));
 
-        assertEquals(Set.of("src/App.java"), requestedPaths.get());
-        assertEquals(ProjectGraphBuilder.MAX_NEIGHBOR_EDGES, requestedLimit.get());
+        assertEquals(Set.of("src/App.java"), repository.requestedPaths.get());
+        assertEquals(ProjectGraphBuilder.MAX_NEIGHBOR_EDGES, repository.requestedLimit.get());
         assertEquals(Set.of("src/Dependency.java"), neighbors.get("src/App.java"));
+    }
+
+    /** Repository qui n'accepte que la projection de voisinage bornée et l'enregistre. */
+    private static final class NeighborhoodOnlyRepository implements IndexRepository {
+
+        private final Map<String, Set<String>> neighbors;
+        private final AtomicReference<Set<String>> requestedPaths = new AtomicReference<>();
+        private final AtomicReference<Integer> requestedLimit = new AtomicReference<>();
+
+        private NeighborhoodOnlyRepository(Map<String, Set<String>> neighbors) {
+            this.neighbors = neighbors;
+        }
+
+        @Override
+        public Map<String, Set<String>> findGraphNeighbors(
+                UUID ignored,
+                Set<String> relativePaths,
+                int maxEdges) {
+            requestedPaths.set(Set.copyOf(relativePaths));
+            requestedLimit.set(maxEdges);
+            return neighbors;
+        }
+
+        @Override
+        public Map<String, IndexedFile> findFiles(UUID ignored) { return Map.of(); }
+
+        @Override
+        public List<IndexedSymbol> findSymbols(UUID ignored) {
+            throw new AssertionError("Graph must not materialize every symbol");
+        }
+
+        @Override
+        public List<SymbolRelation> findRelations(UUID ignored) {
+            throw new AssertionError("Graph must not materialize every relation");
+        }
+
+
+        @Override
+        public void applyChanges(UUID ignored, List<IndexedFileUpdate> updates, Set<String> removedPaths) {
+            // Mutation is outside this read-only graph projection fixture.
+        }
+
+        @Override
+        public void replaceExternalCodeIntelligence(UUID ignored, CodeIntelligenceSnapshot snapshot) {
+            // External intelligence mutation is outside this read-only fixture.
+        }
+
+        @Override
+        public IndexStatistics statistics(UUID ignored) { return new IndexStatistics(0, 0, 0); }
+
+        @Override
+        public ReadSession openReadSession() {
+            throw new AssertionError("Graph must not open a read session");
+        }
+
+        @Override
+        public Map<String, IndexedFile> findFiles(UUID ignored, Set<String> relativePaths) {
+            throw new AssertionError("Graph must not load files");
+        }
+
+        @Override
+        public Map<String, String> findTypeOwners(UUID ignored) {
+            throw new AssertionError("Graph must not materialize type owners");
+        }
+
+        @Override
+        public List<IndexedSymbol> searchSymbols(UUID ignored, String query, int limit) {
+            throw new AssertionError("Graph must not search symbols");
+        }
+
+        @Override
+        public List<SymbolRelation> findImportRelations(UUID ignored) {
+            throw new AssertionError("Graph must not materialize every import");
+        }
+
+        @Override
+        public Set<String> findExternalProviders(UUID ignored) {
+            throw new AssertionError("Graph must not list providers");
+        }
+
+        @Override
+        public List<SymbolRelation> searchRelations(UUID ignored, String symbol, int limit) {
+            throw new AssertionError("Graph must not search relations");
+        }
+
+        @Override
+        public long generation(UUID ignored) {
+            throw new AssertionError("Graph must not read the generation");
+        }
     }
 }
