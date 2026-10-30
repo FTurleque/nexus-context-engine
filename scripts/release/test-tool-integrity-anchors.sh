@@ -111,9 +111,22 @@ fi
 HYGIENE="${SCRIPT_DIR}/workflow_hygiene.py"
 HYGIENE_FIXTURES="${SCRIPT_DIR}/fixtures/workflow-hygiene"
 python3 "$HYGIENE" pins "$ROOT/.github/workflows"
-for fixture in pins-comment-mismatch pins-two-majors pins-not-a-version pins-tag-reference; do
-  if python3 "$HYGIENE" pins "$HYGIENE_FIXTURES/${fixture}.yml" >/dev/null 2>&1; then
-    echo "workflow pin fixture ${fixture} unexpectedly accepted" >&2
+# Each negative fixture must be rejected by its own rule: exit code 1 and the
+# rule's message, so a missing fixture or another rule cannot satisfy the case.
+for case in \
+  'pins-comment-mismatch|is commented' \
+  'pins-version-two-shas|is pinned on' \
+  'pins-two-majors|several major versions' \
+  'pins-not-a-version|version comment' \
+  'pins-tag-reference|not pinned by a full commit SHA'; do
+  fixture="${case%%|*}"
+  message="${case#*|}"
+  set +e
+  output="$(python3 "$HYGIENE" pins "$HYGIENE_FIXTURES/${fixture}.yml" 2>&1)"
+  status=$?
+  set -e
+  if [ "$status" -ne 1 ] || ! printf '%s\n' "$output" | grep -q "$message"; then
+    echo "workflow pin fixture ${fixture} was not rejected for '${message}' (exit ${status})" >&2
     exit 1
   fi
 done

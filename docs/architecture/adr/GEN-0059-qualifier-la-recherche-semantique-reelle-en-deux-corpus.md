@@ -30,8 +30,8 @@ La question est double : sur quel corpus et à quel moment la qualification rée
 
 **Option retenue : Option B.**
 
-- **Pull request** : le job exécute le corpus `pr`, un sous-ensemble déclaré dans `RealSemanticSearchBenchmarkTest` (`docs/developer/`, ADR `BE-*` et `DATA-*`, paquets `com.nexus.context` et `com.nexus.search` de `core`, sources de `adapters/mcp-java`). Il contient tous les documents jugés pertinents par les requêtes du benchmark et environ un tiers des entrées du corpus complet. Sa borne est `timeout-minutes: 45`. Les seuils sont ceux du corpus complet.
-- **`develop`** : un `push` sur `develop` qui touche les chemins surveillés exécute le corpus `full`, borné à 180 minutes. Le groupe de concurrence d'un run hors PR est le SHA qualifié : un run ultérieur ne l'annule pas et ne le remplace pas. Le rapport porte `snapshotCommit` égal à ce SHA.
+- **Pull request** : le job exécute le corpus `pr`, un sous-ensemble déclaré dans `RealSemanticBenchmarkCorpus`, utilisé par `RealSemanticSearchBenchmarkTest` (`docs/developer/`, ADR `BE-*` et `DATA-*`, paquets `com.nexus.context` et `com.nexus.search` de `core`, sources de `adapters/mcp-java`). Il contient tous les documents jugés pertinents par les requêtes du benchmark et environ un tiers des entrées du corpus complet. Sa borne est `timeout-minutes: 45`. Les seuils sont ceux du corpus complet.
+- **`develop`** : un `push` sur `develop` qui touche les chemins surveillés exécute le corpus `full`, borné à 180 minutes. Le groupe de concurrence d'un run hors PR est le SHA qualifié : un push ultérieur sur `develop` ne l'annule pas, et un run en cours n'est jamais annulé ; seul un run en attente sur le même SHA peut être remplacé. Le rapport porte `snapshotCommit` égal à ce SHA.
 - **Release** : `release.yml` n'exige pas la qualification sémantique réelle. La recherche sémantique est désactivée par défaut (BE-0014) ; la preuve de qualité est le dernier run `full` réussi sur `develop`, que le mainteneur consulte avant une promotion (`gh run list -w semantic-search-qualification.yml --branch develop`).
 - `workflow_dispatch` choisit le corpus (`full` par défaut) ; le `schedule` mensuel exécute `full` sur `main`.
 
@@ -50,7 +50,7 @@ Cette décision ne change ni les seuils, ni le modèle, ni le runtime Ollama.
 
 - Ne pas ajouter la qualification sémantique réelle aux `needs` du job `publish` de `release.yml` sans un ADR qui remplace celui-ci.
 - Ne pas abaisser un seuil pour faire passer le corpus `pr`.
-- Ne pas mettre `cancel-in-progress` sur un run hors pull request.
+- Ne pas annuler un run en cours hors pull request (`cancel-in-progress` limité aux pull requests).
 
 ## Consequences
 
@@ -76,7 +76,7 @@ Cette décision ne change ni les seuils, ni le modèle, ni le runtime Ollama.
 ## Compliance and Enforcement
 
 - Contrat `scripts/release/test-final-audit-contracts.sh` : déclencheurs `pull_request` et `push` sur `develop`, borne de 45 minutes pour le corpus `pr` et de 180 minutes pour le corpus `full`, sélection du corpus, absence d'annulation hors PR, absence de la qualification dans les `needs` de `publish`, budgets documentés dans `docs/developer/ci-and-supply-chain.md`.
-- `RealSemanticSearchBenchmarkTest` : refuse un corpus inconnu et un corpus `pr` qui ne contient pas un chemin pertinent.
+- `RealSemanticBenchmarkCorpus` (utilisé par `RealSemanticSearchBenchmarkTest`) refuse un corpus inconnu et un corpus `pr` qui ne contient pas un chemin pertinent ; `RealSemanticBenchmarkCorpusTest` vérifie à chaque build que le corpus `pr` du dépôt contient chaque chemin pertinent.
 - Revue : un changement des requêtes du benchmark garde leurs chemins pertinents dans le corpus `pr`.
 
 ## Conditions de réexamen

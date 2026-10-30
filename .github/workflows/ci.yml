@@ -49,6 +49,10 @@ jobs:
         shell: pwsh
         run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/tests/Test-NexusScript.ps1
 
+      - name: Run NexusScript module tests (Windows PowerShell 5.1)
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tests/Test-NexusScript.ps1
+
       - name: Run local qualification script
         shell: powershell
         env:

@@ -166,7 +166,7 @@ Phase 6 implémente le batching. Les mesures historiques restent une référence
 Le workflow n'est pas exécuté sur les PR sans rapport avec le sémantique. Ses déclencheurs suivent [GEN-0059](../architecture/adr/GEN-0059-qualifier-la-recherche-semantique-reelle-en-deux-corpus.md) :
 
 - une PR vers `develop`/`main` qui modifie le workflow, l'ancre Ollama ou le code/test sémantique ciblé exécute le corpus réduit `pr` ;
-- un `push` vers `develop` qui touche ces mêmes chemins, c'est-à-dire la fusion d'une telle PR, exécute le corpus complet `full` sur le SHA de `develop` ; ce run n'est ni annulé ni remplacé par un run ultérieur ;
+- un `push` vers `develop` qui touche ces mêmes chemins, c'est-à-dire la fusion d'une telle PR, exécute le corpus complet `full` sur le SHA de `develop` ; le groupe de concurrence est ce SHA, donc un push ultérieur n'annule pas ce run, et un run en cours n'est jamais annulé (seul un run en attente sur le même SHA peut être remplacé) ;
 - `workflow_dispatch` choisit le corpus (`full` par défaut) ; la planification mensuelle exécute `full` sur `main`.
 
 Le corpus `pr` est déclaré dans `RealSemanticBenchmarkCorpus` (test de `core`) : `docs/developer/`, ADR `BE-*` et `DATA-*`, paquets `com.nexus.context` et `com.nexus.search` de `core`, sources de `adapters/mcp-java`. Il est copié dans un répertoire temporaire avant indexation et contient chaque chemin jugé pertinent par les requêtes ; `RealSemanticBenchmarkCorpusTest` vérifie cette inclusion sur le dépôt à chaque build. Les seuils sont les mêmes pour les deux corpus.

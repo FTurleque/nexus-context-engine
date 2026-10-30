@@ -6,12 +6,15 @@ Usage: workflow_hygiene.py <check> <workflow-or-directory>...
 Checks:
   pins      every external `uses:` is pinned by a full SHA with a `# vX.Y.Z`
             comment; one SHA carries one comment; one major version per action
-  inputs    no `${{ inputs.` expression inside a `run:` block
+  inputs    no expression reading `inputs` (or `github.event.inputs`) inside a
+            `run:` block
   timeouts  every job with `runs-on:` declares `timeout-minutes`
   runners   benchmark and performance qualification jobs use versioned images
 
 The parser is line based on purpose: it needs no third-party YAML library and
-only reads the subset of YAML the repository workflows use.
+only reads the subset of YAML the repository workflows use (block mappings, one
+key per line). A job written as a flow mapping is not seen by the timeouts
+check; a runner value followed by a comment is rejected by the runners check.
 """
 from __future__ import annotations
 
@@ -23,7 +26,7 @@ USES = re.compile(r"^\s*(?:-\s+)?uses:\s*['\"]?(?P<ref>[^'\"\s#]+)['\"]?\s*(?:#\
 PINNED = re.compile(r"^(?P<action>[\w.-]+/[\w.-]+(?:/[^@\s]+)?)@(?P<sha>[0-9a-f]{40})$")
 VERSION_COMMENT = re.compile(r"^v(?P<major>\d+)(?:\.\d+){0,2}$")
 RUN = re.compile(r"^(?P<indent>\s*)(?:-\s+)?run:\s*(?P<value>.*)$")
-INPUT_EXPRESSION = re.compile(r"\$\{\{\s*inputs\.")
+INPUT_EXPRESSION = re.compile(r"\$\{\{[^}]*\b(?:github\.event\.)?inputs\b")
 TOP_LEVEL_KEY = re.compile(r"^[A-Za-z_][\w-]*:")
 KEY = re.compile(r"^(?P<indent> *)(?P<key>[A-Za-z_][\w-]*):(?:\s|$)")
 
@@ -56,6 +59,7 @@ def lines_of(path: Path) -> list[str]:
 def check_pins(files: list[Path]) -> list[str]:
     errors: list[str] = []
     comments_by_sha: dict[tuple[str, str], tuple[str, str]] = {}
+    shas_by_version: dict[tuple[str, str], tuple[str, str]] = {}
     majors_by_action: dict[str, dict[str, str]] = {}
     for path in files:
         for number, line in enumerate(lines_of(path), 1):
@@ -84,6 +88,14 @@ def check_pins(files: list[Path]) -> list[str]:
                 )
             else:
                 comments_by_sha.setdefault(key, (comment, where))
+            version_key = (pinned.group("action"), comment)
+            known = shas_by_version.get(version_key)
+            if known and known[0] != key[1]:
+                errors.append(
+                    f"{where}: {version_key[0]} {comment} is pinned on {key[1]} but {known[1]} uses {known[0]}"
+                )
+            else:
+                shas_by_version.setdefault(version_key, (key[1], where))
             majors_by_action.setdefault(repository, {}).setdefault(version.group("major"), where)
     for repository, majors in sorted(majors_by_action.items()):
         if len(majors) > 1:
@@ -116,7 +128,7 @@ def check_inputs(files: list[Path]) -> list[str]:
                 index += 1
             for number, text in block:
                 if INPUT_EXPRESSION.search(text):
-                    errors.append(f"{path.as_posix()}:{number}: '${{{{ inputs.' is interpolated inside a run: block")
+                    errors.append(f"{path.as_posix()}:{number}: an input is interpolated inside a run: block")
     return errors
 
 

@@ -1,4 +1,4 @@
-# Fixture négative : même SHA, commentaires de version différents.
+# Fixture négative : même SHA, deux commentaires de la même version majeure.
 name: fixture
 on: workflow_dispatch
 jobs:
@@ -7,4 +7,4 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.1

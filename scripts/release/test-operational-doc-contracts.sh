@@ -555,10 +555,20 @@ HYGIENE_FIXTURES="scripts/release/fixtures/workflow-hygiene"
 for check in inputs timeouts runners; do
   python3 "$HYGIENE" "$check" .github/workflows
 done
-for case in "inputs inputs-in-run.yml" "inputs inputs-inline-run.yml" "timeouts timeout-missing.yml" "runners runners/scale-benchmark.yml"; do
-  set -- $case
-  if python3 "$HYGIENE" "$1" "$HYGIENE_FIXTURES/$2" >/dev/null 2>&1; then
-    echo "workflow hygiene fixture $2 unexpectedly accepted by the $1 check" >&2
+# A fixture counts as rejected only with exit code 1 and the message of its rule.
+for case in \
+  "inputs|inputs-in-run.yml|interpolated inside a run" \
+  "inputs|inputs-inline-run.yml|interpolated inside a run" \
+  "inputs|inputs-event-inputs.yml|interpolated inside a run" \
+  "timeouts|timeout-missing.yml|no timeout-minutes" \
+  "runners|runners/scale-benchmark.yml|unpinned image"; do
+  IFS='|' read -r check fixture message <<< "$case"
+  set +e
+  output="$(python3 "$HYGIENE" "$check" "$HYGIENE_FIXTURES/$fixture" 2>&1)"
+  status=$?
+  set -e
+  if [[ "$status" -ne 1 ]] || ! grep -q "$message" <<< "$output"; then
+    echo "workflow hygiene fixture $fixture was not rejected by the $check check for '$message' (exit $status)" >&2
     exit 1
   fi
 done

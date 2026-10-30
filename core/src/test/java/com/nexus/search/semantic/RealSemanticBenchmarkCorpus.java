@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.nio.file.PathMatcher;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -128,7 +129,7 @@ final class RealSemanticBenchmarkCorpus {
             }
             files.addAll(sliceFiles);
         }
-        return Set.copyOf(files);
+        return Collections.unmodifiableSet(files);
     }
 
     /** Chemins pertinents des requêtes absents du corpus {@code pr}. */
@@ -148,7 +149,7 @@ final class RealSemanticBenchmarkCorpus {
         if (!missing.isEmpty()) {
             throw new IllegalStateException("Le corpus pr doit contenir chaque chemin pertinent : " + missing);
         }
-        for (String relative : files.stream().sorted().toList()) {
+        for (String relative : files) {
             Path destination = target.resolve(relative);
             Files.createDirectories(destination.getParent());
             Files.copy(root.resolve(relative), destination, StandardCopyOption.COPY_ATTRIBUTES);

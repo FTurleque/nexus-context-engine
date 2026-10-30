@@ -36,7 +36,8 @@ on:
 permissions:
   contents: read
 
-# Hors pull request, le groupe est le SHA qualifié : un run ultérieur ne l'annule ni ne le remplace.
+# Hors pull request, le groupe est le SHA qualifié : le run en cours n'est jamais annulé ;
+# un run en attente sur le même SHA peut être remplacé par un run plus récent du même SHA.
 concurrency:
   group: semantic-search-real-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -140,7 +141,8 @@ jobs:
             -Dtest=RealSemanticSearchBenchmarkTest \
             -Dnexus.semantic.realBenchmark.enabled=true \
             -Dnexus.semantic.realBenchmark.root="$GITHUB_WORKSPACE" \
-            -Dnexus.semantic.realBenchmark.commit="$NEXUS_HEAD_SHA"             -Dnexus.semantic.realBenchmark.corpus="$SEMANTIC_CORPUS" \
+            -Dnexus.semantic.realBenchmark.commit="$NEXUS_HEAD_SHA" \
+            -Dnexus.semantic.realBenchmark.corpus="$SEMANTIC_CORPUS" \
             -Dnexus.semantic.realBenchmark.output="$GITHUB_WORKSPACE/$SEMANTIC_REPORT" \
             -Dnexus.semantic.ollama.baseUri=http://127.0.0.1:11434 \
             -Dnexus.semantic.ollama.model="$OLLAMA_MODEL" \

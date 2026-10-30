@@ -99,6 +99,8 @@ class RealSemanticBenchmarkCorpusTest {
         assertTrue(rejected.getMessage().contains("adapters/mcp-java/src/main"));
     }
 
+    // Lit le dépôt NEXUS lui-même : garde contre la dérive entre les jugements de
+    // pertinence des requêtes et les tranches du corpus pr, que seul le benchmark réel exerce sinon.
     @Test
     void repositoryPrCorpusContainsEveryRelevantPath() throws IOException {
         Path repositoryRoot = repositoryRoot();
