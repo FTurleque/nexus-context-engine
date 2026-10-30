@@ -56,11 +56,8 @@ def lines_of(path: Path) -> list[str]:
     return path.read_text(encoding="utf-8").splitlines()
 
 
-def check_pins(files: list[Path]) -> list[str]:
-    errors: list[str] = []
-    comments_by_sha: dict[tuple[str, str], tuple[str, str]] = {}
-    shas_by_version: dict[tuple[str, str], tuple[str, str]] = {}
-    majors_by_action: dict[str, dict[str, str]] = {}
+def external_pins(files: list[Path]):
+    """Yield (location, action, sha, comment) for each external `uses:`, or an error string."""
     for path in files:
         for number, line in enumerate(lines_of(path), 1):
             match = USES.match(line)
@@ -71,32 +68,40 @@ def check_pins(files: list[Path]) -> list[str]:
                 continue
             where = f"{path.as_posix()}:{number}"
             pinned = PINNED.match(ref)
-            if not pinned:
-                errors.append(f"{where}: {ref} is not pinned by a full commit SHA")
-                continue
             comment = (match.group("comment") or "").strip()
-            version = VERSION_COMMENT.match(comment)
-            if not version:
-                errors.append(f"{where}: {ref} must carry a '# vX.Y.Z' version comment, found {comment!r}")
-                continue
-            repository = "/".join(pinned.group("action").split("/")[:2])
-            key = (repository, pinned.group("sha"))
-            previous = comments_by_sha.get(key)
-            if previous and previous[0] != comment:
-                errors.append(
-                    f"{where}: {repository}@{key[1]} is commented {comment!r} but {previous[1]} says {previous[0]!r}"
-                )
+            if not pinned:
+                yield f"{where}: {ref} is not pinned by a full commit SHA"
+            elif not VERSION_COMMENT.match(comment):
+                yield f"{where}: {ref} must carry a '# vX.Y.Z' version comment, found {comment!r}"
             else:
-                comments_by_sha.setdefault(key, (comment, where))
-            version_key = (pinned.group("action"), comment)
-            known = shas_by_version.get(version_key)
-            if known and known[0] != key[1]:
-                errors.append(
-                    f"{where}: {version_key[0]} {comment} is pinned on {key[1]} but {known[1]} uses {known[0]}"
-                )
-            else:
-                shas_by_version.setdefault(version_key, (key[1], where))
-            majors_by_action.setdefault(repository, {}).setdefault(version.group("major"), where)
+                yield (where, pinned.group("action"), pinned.group("sha"), comment)
+
+
+def first_conflict(seen: dict, key, value: str, where: str):
+    """Record value for key; return the earlier (value, where) when it differs."""
+    previous = seen.setdefault(key, (value, where))
+    return previous if previous[0] != value else None
+
+
+def check_pins(files: list[Path]) -> list[str]:
+    errors: list[str] = []
+    comments_by_sha: dict = {}
+    shas_by_version: dict = {}
+    majors_by_action: dict[str, dict[str, str]] = {}
+    for pin in external_pins(files):
+        if isinstance(pin, str):
+            errors.append(pin)
+            continue
+        where, action, sha, comment = pin
+        repository = "/".join(action.split("/")[:2])
+        conflict = first_conflict(comments_by_sha, (repository, sha), comment, where)
+        if conflict:
+            errors.append(f"{where}: {repository}@{sha} is commented {comment!r} but {conflict[1]} says {conflict[0]!r}")
+        conflict = first_conflict(shas_by_version, (action, comment), sha, where)
+        if conflict:
+            errors.append(f"{where}: {action} {comment} is pinned on {sha} but {conflict[1]} uses {conflict[0]}")
+        major = VERSION_COMMENT.match(comment).group("major")
+        majors_by_action.setdefault(repository, {}).setdefault(major, where)
     for repository, majors in sorted(majors_by_action.items()):
         if len(majors) > 1:
             listed = ", ".join(f"v{major} ({where})" for major, where in sorted(majors.items()))
@@ -104,31 +109,36 @@ def check_pins(files: list[Path]) -> list[str]:
     return errors
 
 
+def run_blocks(lines: list[str]):
+    """Yield the (line number, text) lines of each `run:` value, block scalars included."""
+    index = 0
+    while index < len(lines):
+        match = RUN.match(lines[index])
+        index += 1
+        if not match:
+            continue
+        block = [(index, match.group("value"))]
+        if match.group("value").strip()[:1] in ("|", ">"):
+            key_indent = len(match.group("indent"))
+            while index < len(lines) and not ending_block(lines[index], key_indent):
+                block.append((index + 1, lines[index]))
+                index += 1
+        yield block
+
+
+def ending_block(line: str, key_indent: int) -> bool:
+    return bool(line.strip()) and len(line) - len(line.lstrip()) <= key_indent
+
+
 def check_inputs(files: list[Path]) -> list[str]:
     errors: list[str] = []
     for path in files:
-        lines = lines_of(path)
-        index = 0
-        while index < len(lines):
-            match = RUN.match(lines[index])
-            if not match:
-                index += 1
-                continue
-            block = [(index + 1, match.group("value"))]
-            key_indent = len(match.group("indent"))
-            if match.group("value").strip()[:1] in ("|", ">"):
-                index += 1
-                while index < len(lines):
-                    line = lines[index]
-                    if line.strip() and len(line) - len(line.lstrip()) <= key_indent:
-                        break
-                    block.append((index + 1, line))
-                    index += 1
-            else:
-                index += 1
-            for number, text in block:
-                if INPUT_EXPRESSION.search(text):
-                    errors.append(f"{path.as_posix()}:{number}: an input is interpolated inside a run: block")
+        for block in run_blocks(lines_of(path)):
+            errors.extend(
+                f"{path.as_posix()}:{number}: an input is interpolated inside a run: block"
+                for number, text in block
+                if INPUT_EXPRESSION.search(text)
+            )
     return errors
 
 
