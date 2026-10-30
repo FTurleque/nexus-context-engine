@@ -116,6 +116,37 @@ class NexusMcpServerIntegrationTest {
             if (application != null) {
                 application.close();
             }
+            deleteWhenReleased(nexusHome);
+        }
+    }
+
+    /**
+     * Sous Windows, un segment Lucene mappé par le serveur enfant reste verrouillé un court instant
+     * après la sortie du processus. La home de classe est supprimée ici, avec des tentatives bornées,
+     * avant le nettoyage du {@code @TempDir} ; un verrou qui persiste au-delà fait toujours échouer
+     * ce nettoyage.
+     */
+    private static void deleteWhenReleased(Path root) throws Exception {
+        if (root == null || !Files.exists(root)) {
+            return;
+        }
+        for (int attempt = 0; attempt < 50; attempt++) {
+            List<Path> remaining;
+            try (var walk = Files.walk(root)) {
+                remaining = walk.sorted(java.util.Comparator.reverseOrder()).toList();
+            }
+            boolean deleted = true;
+            for (Path path : remaining) {
+                try {
+                    Files.deleteIfExists(path);
+                } catch (java.io.IOException locked) {
+                    deleted = false;
+                }
+            }
+            if (deleted) {
+                return;
+            }
+            TimeUnit.MILLISECONDS.sleep(200);
         }
     }
 

@@ -92,6 +92,35 @@ class PublicOutputProjectionTest {
     }
 
     @Test
+    void anOversizedExternalSignatureIsMaskedWithoutFailingTheResponse() throws Exception {
+        ProjectDescriptor project = project("demo");
+        String oversized = "password = \"" + "o".repeat(5_000) + "\"";
+        CodeSymbol symbol = new CodeSymbol(SymbolKind.TYPE, "TOKEN", "demo.TOKEN", oversized, 1, 1, "scip");
+        RankedCandidate ranked = new RankedCandidate(new SearchCandidate("symbol:src/App.java:demo.TOKEN",
+                CandidateType.SYMBOL, project.rootPath().resolve("src/App.java"), symbol, oversized, Map.of()),
+                1.0d, Map.of(), List.of());
+        ContextItem item = new ContextItem(CandidateType.SYMBOL, project.rootPath().resolve("src/App.java"),
+                oversized, 1, 1, "class App {}", 1.0d, Map.of(), List.of(), 5, false);
+
+        String json = JSON.writeValueAsString(List.of(
+                PublicOutputProjection.search(project, "TOKEN", 5, false, 0, List.of(ranked)),
+                PublicOutputProjection.usages(project, "TOKEN", List.of(new SymbolRelation(
+                        RelationKind.REFERENCES, oversized, oversized, 1.0d, "scip"))),
+                PublicOutputProjection.context(project, "TOKEN", false, 0,
+                        new ContextBundle(List.of(item), 100, 5, List.of(), Map.of()))));
+
+        assertFalse(json.contains("oooo"), json);
+        assertTrue(json.contains("\"signature\":\"[REDACTED]\""), json);
+    }
+
+    @Test
+    void projectListIsOrderedByNameIgnoringCaseThenId() {
+        List<String> names = PublicOutputProjection.projectList(List.of(project("Beta"), project("alpha"), project("Gamma")))
+                .stream().map(PublicOutput.Project::name).toList();
+        assertEquals(List.of("alpha", "Beta", "Gamma"), names);
+    }
+
+    @Test
     void contextIsExposedWithRelativePathsSortedComponentsAndSortedMetadata() throws Exception {
         ProjectDescriptor project = project("demo");
         Map<String, Object> metadata = new LinkedHashMap<>();

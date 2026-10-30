@@ -55,7 +55,7 @@ final class NexusMcpTools {
                 "list_projects",
                 "Liste les projets enregistrés dans NEXUS avec leur état d'indexation.",
                 objectSchema(Map.of(), List.of()),
-                arguments -> PublicOutputProjection.projects(application.listProjects()));
+                arguments -> PublicOutputProjection.projectList(application.listProjects()));
     }
 
     private McpServerFeatures.SyncToolSpecification searchCode() {

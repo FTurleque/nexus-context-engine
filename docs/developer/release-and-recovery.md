@@ -165,7 +165,7 @@ n’incrémente pas à nouveau les générations lors d’une seconde ouverture.
 
 `V011__invalidate_secret_format_indexes.sql` accompagne la politique
 `secret-redaction-v6` : 19 formats de secrets supplémentaires sont redigés et une
-valeur sensible trop longue n’exclut plus que son fichier. Comme V010, elle
+valeur sensible trop longue n’exclut que son fichier. Comme V010, elle
 incrémente la génération de chaque projet, le passe à `NOT_INDEXED` et efface
 `last_indexed_at` ; le registre et les faits canoniques sont conservés. La
 prochaine indexation reconstruit les dérivés lexicaux, et le profil `content-v5`

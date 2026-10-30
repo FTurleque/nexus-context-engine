@@ -19,6 +19,10 @@ final class ApiMapper {
         return PublicOutputProjection.project(project);
     }
 
+    static java.util.List<PublicOutput.Project> projectList(java.util.List<ProjectDescriptor> projects) {
+        return PublicOutputProjection.projectList(projects);
+    }
+
     static PublicOutput.IndexStatistics statistics(IndexStatistics statistics) {
         return PublicOutputProjection.statistics(statistics);
     }

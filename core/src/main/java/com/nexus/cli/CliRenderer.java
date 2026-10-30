@@ -19,7 +19,6 @@ import com.nexus.search.FederatedSearchHit;
 
 import java.io.IOException;
 import java.io.PrintStream;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -59,12 +58,9 @@ final class CliRenderer {
     }
 
     void renderProjects(List<ProjectDescriptor> projects) throws IOException {
-        List<ProjectDescriptor> sorted = projects.stream()
-                .sorted(Comparator.comparing(ProjectDescriptor::name, String.CASE_INSENSITIVE_ORDER)
-                        .thenComparing(project -> project.id().toString()))
-                .toList();
+        List<PublicOutput.Project> sorted = PublicOutputProjection.projectList(projects);
         if (json) {
-            writeJson(out, command("project.list", Map.of("projects", PublicOutputProjection.projects(sorted))));
+            writeJson(out, command("project.list", Map.of("projects", sorted)));
             return;
         }
         sorted.forEach(this::printProject);
@@ -290,6 +286,10 @@ final class CliRenderer {
     }
 
     private void printProject(ProjectDescriptor project) {
+        printProject(PublicOutputProjection.project(project));
+    }
+
+    private void printProject(PublicOutput.Project project) {
         out.printf("%s\t%s\t%s\t%s%n",
                 project.id(), human(project.name()), project.indexStatus(), "[repository]");
     }

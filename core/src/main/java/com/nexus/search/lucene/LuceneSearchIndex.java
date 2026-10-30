@@ -49,7 +49,6 @@ import java.util.regex.Pattern;
 public final class LuceneSearchIndex implements SearchIndex {
     private static final System.Logger LOGGER = System.getLogger(LuceneSearchIndex.class.getName());
 
-
     /**
      * MultiFieldQueryParser expands each analyzed term across the five search fields.
      * Keeping 128 terms caps the resulting query well below Lucene's default 1024

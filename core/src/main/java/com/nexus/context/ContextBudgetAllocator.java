@@ -92,20 +92,21 @@ final class ContextBudgetAllocator {
         }
 
         int available = 0;
+        List<String> excluded = new ArrayList<>();
         for (ContextFragment fragment : fragments) {
             String safeContent;
             try {
                 safeContent = com.nexus.security.SensitiveContentRedactor.redact(fragment.content());
             } catch (com.nexus.security.OversizedSecretException exception) {
+                excluded.add(com.nexus.security.OversizedSecretException.exclusion(fragment.path()));
                 continue;
             }
             available = (int) Math.min(Integer.MAX_VALUE, (long) available + tokenEstimator.estimate(safeContent));
+            excluded.add(fragment.path() + " exclu : budget épuisé pour " + category);
         }
-        List<String> excluded = explain
-                ? fragments.stream()
-                    .map(fragment -> fragment.path() + " exclu : budget épuisé pour " + category)
-                    .toList()
-                : List.of();
+        if (!explain) {
+            excluded = List.of();
+        }
         return new ContextSelectionResult(List.of(), excluded, available, 0, 0);
     }
 

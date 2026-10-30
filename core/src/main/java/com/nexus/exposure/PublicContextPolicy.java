@@ -52,8 +52,17 @@ public final class PublicContextPolicy {
         var diagnostics = new PublicDiagnosticPolicy(List.of(project.rootPath()));
         return new ContextItem(item.type(), new RepositoryPath(PublicProjectPathPolicy.expose(project.rootPath(), item.path()))
                 .toPath(project.rootPath().getFileSystem()),
-                diagnostics.text(item.symbol()), item.startLine(), item.endLine(),
-                SensitiveContentRedactor.redact(item.content()), item.score(), item.scoreComponents(),
+                symbol(diagnostics, item.symbol()), item.startLine(), item.endLine(),
+                SensitiveContentRedactor.redactField(item.content()), item.score(), item.scoreComponents(),
                 diagnostics.texts(item.reasons()), item.estimatedTokens(), item.truncated());
+    }
+
+    /** Le symbole d'un fragment vient d'une signature externe : refusé par la redaction, il sort masqué. */
+    private static String symbol(PublicDiagnosticPolicy diagnostics, String symbol) {
+        try {
+            return diagnostics.text(symbol);
+        } catch (com.nexus.security.OversizedSecretException exception) {
+            return "[REDACTED]";
+        }
     }
 }

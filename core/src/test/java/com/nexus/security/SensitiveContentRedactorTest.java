@@ -93,6 +93,51 @@ class SensitiveContentRedactorTest {
     }
 
     @Test
+    void historicalTokensFollowedByAHyphenStayRedacted() {
+        String github = "gh" + "p_" + "abcdefghijklmnopqrstuvwxyz0123456789";
+        String aws = "AK" + "IA" + "ABCDEFGHIJKLMNOP";
+        assertEquals("x [REDACTED]-ci y", SensitiveContentRedactor.redact("x " + github + "-ci y"));
+        assertEquals("[REDACTED]-prod", SensitiveContentRedactor.redact(aws + "-prod"));
+        assertEquals("a-[REDACTED]", SensitiveContentRedactor.redact("a-" + aws));
+    }
+
+    @Test
+    void commandLineAndXmlVariantsAreRedacted() {
+        for (String input : java.util.List.of(
+                "mysql --password \"hunter2-quoted-secret\" --user app",
+                "cmd --token 'hunter2-quoted-secret'",
+                "deploy --db-password hunter2-quoted-secret",
+                "gh --access-token hunter2-quoted-secret",
+                "<password type=\"plain\">hunter2-quoted-secret</password>",
+                "<db.password>hunter2-quoted-secret</db.password>",
+                "<password><![CDATA[hunter2-quoted-secret]]></password>",
+                "Authorization: Bearer          hunter2quotedsecret0123")) {
+            String redacted = SensitiveContentRedactor.redact(input);
+            assertFalse(redacted.contains("hunter2"), redacted);
+            assertTrue(redacted.contains("[REDACTED]"), redacted);
+        }
+        assertEquals("--password-file /etc/app.pw", SensitiveContentRedactor.redact("--password-file /etc/app.pw"));
+    }
+
+    @Test
+    void valuesAboveTheirBoundAreRefusedInsteadOfPublished() {
+        for (String input : java.util.List.of(
+                "sk-" + "a".repeat(300),
+                "gh" + "p_" + "b".repeat(300),
+                "xox" + "b-" + "c".repeat(300),
+                "https://user:" + "p".repeat(5_000) + "@host/repo",
+                "https://" + "u".repeat(2_000) + ":pw@host/repo",
+                "mysql --password \"" + "q".repeat(5_000) + "\"",
+                "<db.password>" + "r".repeat(5_000) + "</db.password>")) {
+            var failure = org.junit.jupiter.api.Assertions.assertThrows(OversizedSecretException.class,
+                    () -> SensitiveContentRedactor.redact(input));
+            assertFalse(failure.getMessage().contains("aaaa"));
+        }
+        assertEquals("[REDACTED]", SensitiveContentRedactor.redactField("password = \"" + "s".repeat(5_000) + "\""));
+        org.junit.jupiter.api.Assertions.assertNull(SensitiveContentRedactor.redactField(null));
+    }
+
+    @Test
     void newKeyComponentsMatchWholeSegmentsOnly() {
         for (String ordinary : java.util.List.of("tokenizer = build()", "authority: local", "oauth_flow=pkce",
                 "max_tokens = 4096", "pwd_history: 3", "secretary: Jane")) {

@@ -24,7 +24,8 @@ import java.util.TreeMap;
  * <p>Elle applique en un seul endroit la politique de sortie : chemins relatifs au projet via
  * {@link PublicProjectPathPolicy}, diagnostics filtrés par {@link PublicDiagnosticPolicy},
  * redaction des extraits, du contenu et des métadonnées de symbole d'origine externe, et tri par
- * clé des maps exposées.</p>
+ * clé des maps exposées. Un champ court que la redaction refuse sort en {@code [REDACTED]} : une
+ * métadonnée de symbole trop longue ne fait pas échouer la réponse.</p>
  */
 public final class PublicOutputProjection {
 
@@ -46,6 +47,18 @@ public final class PublicOutputProjection {
         return projects.stream().map(PublicOutputProjection::project).toList();
     }
 
+    /**
+     * Liste des projets enregistrés, dans le même ordre sur les trois canaux : nom sans tenir compte
+     * de la casse, puis identifiant. Une portée fédérée garde l'ordre demandé ({@link #projects}).
+     */
+    public static List<PublicOutput.Project> projectList(List<ProjectDescriptor> projects) {
+        return projects.stream()
+                .sorted(java.util.Comparator.comparing(ProjectDescriptor::name, String.CASE_INSENSITIVE_ORDER)
+                        .thenComparing(project -> project.id().toString()))
+                .map(PublicOutputProjection::project)
+                .toList();
+    }
+
     public static PublicOutput.Symbol symbol(CodeSymbol symbol) {
         if (symbol == null) {
             return null;
@@ -53,8 +66,8 @@ public final class PublicOutputProjection {
         return new PublicOutput.Symbol(
                 symbol.kind().name(),
                 symbol.name(),
-                SensitiveContentRedactor.redact(symbol.qualifiedName()),
-                SensitiveContentRedactor.redact(symbol.signature()),
+                SensitiveContentRedactor.redactField(symbol.qualifiedName()),
+                SensitiveContentRedactor.redactField(symbol.signature()),
                 symbol.startLine(),
                 symbol.endLine(),
                 symbol.sourceProvider());
@@ -64,10 +77,10 @@ public final class PublicOutputProjection {
         var candidate = ranked.candidate();
         return new PublicOutput.RankedResult(
                 rank,
-                SensitiveContentRedactor.redact(candidate.id()),
+                SensitiveContentRedactor.redactField(candidate.id()),
                 candidate.type().name(),
                 PublicProjectPathPolicy.expose(project.rootPath(), candidate.path()),
-                SensitiveContentRedactor.redact(candidate.excerpt()),
+                SensitiveContentRedactor.redactField(candidate.excerpt()),
                 ranked.score(),
                 new TreeMap<>(ranked.components()),
                 diagnostics(project).texts(ranked.reasons()),
@@ -165,8 +178,8 @@ public final class PublicOutputProjection {
     public static PublicOutput.Relation relation(SymbolRelation relation) {
         return new PublicOutput.Relation(
                 relation.kind().name(),
-                SensitiveContentRedactor.redact(relation.source()),
-                SensitiveContentRedactor.redact(relation.target()),
+                SensitiveContentRedactor.redactField(relation.source()),
+                SensitiveContentRedactor.redactField(relation.target()),
                 relation.confidence(),
                 relation.sourceProvider());
     }

@@ -38,9 +38,7 @@ public class NexusResource {
 
     @GET
     public List<PublicOutput.Project> listProjects() {
-        return service.listProjects().stream()
-                .map(ApiMapper::project)
-                .toList();
+        return ApiMapper.projectList(service.listProjects());
     }
 
     @POST

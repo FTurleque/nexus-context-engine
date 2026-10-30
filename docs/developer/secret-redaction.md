@@ -9,8 +9,8 @@ credentials URI et les affectations sensibles :
 | Jetons à préfixe | `ghp_`, `github_pat_`, `AKIA`/`ASIA`, `sk-` (`sk-proj-`, `sk-ant-`), `sk_live_`/`rk_test_`, `xoxb-` et autres `xox?-`, `AIza`, `glpat-`, `npm_` |
 | En-tête HTTP | `Bearer <jeton>`, quelle que soit la clé qui le porte |
 | URL | `scheme://user:motdepasse@hôte`, `scheme://<jeton de 20 caractères ou plus>@hôte` |
-| Ligne de commande | `--password <valeur>`, `--token`, `--secret`, `--pwd`, `--api-key` |
-| XML | `<password>…</password>`, `<secret>`, `<token>`, `<api_key>`, `<client_secret>`, `<access_key>`, `<private_key>` sur une ligne |
+| Ligne de commande | `--password <valeur>`, valeur citée ou non, et les options dont le dernier composant est `password`, `pwd`, `token`, `secret`, `api-key`, `access-token`… (`--db-password`, `-token`) |
+| XML | `<password>…</password>` et les éléments `secret`, `token`, `api_key`, `client_secret`, `access_key`, `private_key`, y compris un nom pointé (`<db.password>`), des attributs ou un bloc CDATA, sur une ligne |
 | Affectations | voir ci-dessous |
 
 `SecretAssignmentScanner` traite les affectations sans parser JSON/YAML complet :
@@ -39,7 +39,7 @@ Le scanner ne traverse jamais une ligne pour chercher sa fermeture. LF, CRLF
 et CR sont conservés à l’identique. La redaction est déterministe et idempotente.
 Les noms composites sont parcourus linéairement, sans répétition regex récursive.
 Une valeur dépassant 4 096 caractères (1 024 pour la partie utilisateur d’une
-URL) provoque un refus du contenu entier par `OversizedSecretException`, sans
+URL, 255 pour le corps d’un jeton à préfixe) provoque un refus du contenu entier par `OversizedSecretException`, sans
 suffixe secret ni valeur dans le message d’erreur. L’indexation exclut alors le
 seul fichier concerné des index lexical et sémantique (diagnostic
 `INDEX_REDACTION_LIMIT` dans le rapport) et le garde dans l’index structurel ; la

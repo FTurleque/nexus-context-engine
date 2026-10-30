@@ -20,7 +20,6 @@ import java.util.regex.Pattern;
 public final class SemanticIndexingService {
     private static final System.Logger LOGGER = System.getLogger(SemanticIndexingService.class.getName());
 
-
     public static final int DEFAULT_MAX_EMBEDDING_CHARS = 12_000;
     public static final int DEFAULT_EXCERPT_CHARS = 320;
     public static final int DEFAULT_BATCH_SIZE = 32;
