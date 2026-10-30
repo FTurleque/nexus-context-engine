@@ -88,8 +88,6 @@ jobs:
           }
           "jar=$jar" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
-      # Le script prépare target/m13-replay dans le répertoire courant ; les tests de core
-      # tournent à la racine du dépôt (workingDirectory de core/pom.xml), où le test le lit.
       - name: Run MINOS replay
         shell: pwsh
         env:
