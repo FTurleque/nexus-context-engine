@@ -50,7 +50,7 @@ En runtime Docker, une URL de bouclage configurée est adaptée vers `host.docke
 
 Avant chaque embedding, `SemanticIndexingService` applique une redaction conservatrice des secrets à forte confiance : clés privées, tokens structurés connus, JWT, affectations évidentes de mots de passe/secrets et credentials d'URI. La redaction est également appliquée aux excerpts sémantiques.
 
-Le profil d'index sémantique est passé à `content-v4`. Un index créé avec l'ancien profil n'est donc pas considéré compatible : la prochaine indexation reconstruit les vecteurs afin de ne pas conserver silencieusement des embeddings historiques issus d'un contenu non redigé.
+Le profil d'index sémantique est `content-v5` et porte la version de politique `secret-redaction-v6`. Un index créé avec un autre profil n'est pas considéré compatible : la prochaine indexation reconstruit les vecteurs afin de ne pas conserver silencieusement des embeddings issus d'un contenu redigé par une politique antérieure. Chaque document est redigé une seule fois avant normalisation, troncature et envoi au provider ; un document qu'il est impossible de rediger (valeur sensible de plus de 4 096 caractères) n'est pas envoyé.
 
 Cette protection complète, sans la remplacer, la politique d'exclusion des chemins sensibles du scanner.
 

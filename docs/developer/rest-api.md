@@ -30,7 +30,7 @@ Par défaut, l'API reste local-first sur `127.0.0.1:8080`.
 ```text
 Client HTTP
   ↓
-Resources REST / DTO / ApiMapper
+Resources REST / DTO / ApiMapper → PublicOutputProjection (cœur)
   ↓
 NexusApiApplicationService
   ↓

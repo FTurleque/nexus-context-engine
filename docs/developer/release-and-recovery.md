@@ -94,9 +94,9 @@ Un backup/restauration doit conserver les protections adaptées au système cibl
 
 Avant une migration de production, sauvegarder SQLite service arrêté. Ne jamais restaurer uniquement un index Lucene en ignorant SQLite.
 
-## Recovery sémantique / `content-v4`
+## Recovery sémantique / `content-v5`
 
-Le profil de contenu sémantique courant est `content-v4`, introduit avec la redaction de secrets avant embeddings. Un index créé sous l'ancien profil est considéré incompatible et doit être reconstruit ; NEXUS ne réutilise pas silencieusement les vecteurs historiques.
+Le profil de contenu sémantique courant est `content-v5`, lié à la politique de redaction `secret-redaction-v6`. Un index créé sous l'ancien profil est considéré incompatible et doit être reconstruit ; NEXUS ne réutilise pas silencieusement les vecteurs historiques.
 
 La redaction de secrets réduit la fuite accidentelle de tokens/clés/mots de passe structurés, mais n'est pas une sauvegarde ni un scanner de secrets complet.
 
@@ -154,9 +154,21 @@ contenu brut des documents. Les termes Lucene issus des anciens scalaires sont
 supprimés par le rebuild. Cette invalidation ne constitue pas un effacement
 forensique des anciens fichiers, sauvegardes ou blocs disque.
 
-Le profil sémantique `content-v4` rend également incompatibles les vecteurs
-`content-v3`, même si le corpus n’a pas changé et si la sémantique était désactivée
+Le profil sémantique courant rend également incompatibles les vecteurs des
+profils antérieurs, même si le corpus n’a pas changé et si la sémantique était désactivée
 pendant la migration ou le rebuild lexical. Leur prochaine activation impose une
 reconstruction ; les vecteurs incompatibles ne participent pas aux recherches.
 Le mécanisme transactionnel et les empreintes de migrations garantissent que V010
 n’incrémente pas à nouveau les générations lors d’une seconde ouverture.
+
+## Mise à niveau V011 — formats de secrets
+
+`V011__invalidate_secret_format_indexes.sql` accompagne la politique
+`secret-redaction-v6` : 19 formats de secrets supplémentaires sont redigés et une
+valeur sensible trop longue n’exclut plus que son fichier. Comme V010, elle
+incrémente la génération de chaque projet, le passe à `NOT_INDEXED` et efface
+`last_indexed_at` ; le registre et les faits canoniques sont conservés. La
+prochaine indexation reconstruit les dérivés lexicaux, et le profil `content-v5`
+impose la reconstruction des vecteurs sémantiques. Un index Lucene dont la version
+de politique diffère de `secret-redaction-v6` est traité comme absent et reconstruit.
+V001 à V010 et leurs empreintes restent inchangées.
