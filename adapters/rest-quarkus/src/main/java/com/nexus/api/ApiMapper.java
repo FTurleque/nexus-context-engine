@@ -47,7 +47,7 @@ final class ApiMapper {
         return new IndexStatisticsResponse(statistics.files(), statistics.symbols(), statistics.relations());
     }
 
-    static IndexResponse index(NexusApiApplicationService.IndexOperation operation) {
+    static IndexResponse index(com.nexus.application.NexusApplication.IndexOperation operation) {
         IndexingReport report = operation.report();
         return new IndexResponse(
                 project(operation.project()),
@@ -62,7 +62,7 @@ final class ApiMapper {
                         statistics(report.statistics())));
     }
 
-    static SearchResponse search(NexusApiApplicationService.SearchOperation operation) {
+    static SearchResponse search(com.nexus.application.NexusApplication.SearchOperation operation) {
         List<SearchResultResponse> results = new ArrayList<>(operation.results().size());
         for (int index = 0; index < operation.results().size(); index++) {
             results.add(searchResult(operation.project(), operation.results().get(index), index + 1));
@@ -76,7 +76,7 @@ final class ApiMapper {
                 List.copyOf(results));
     }
 
-    static FederatedSearchResponse federatedSearch(NexusApiApplicationService.FederatedSearchOperation operation) {
+    static FederatedSearchResponse federatedSearch(com.nexus.application.NexusApplication.FederatedSearchOperation operation) {
         List<FederatedSearchResultResponse> results = new ArrayList<>(operation.results().size());
         for (int index = 0; index < operation.results().size(); index++) {
             FederatedSearchHit hit = operation.results().get(index);
@@ -93,7 +93,7 @@ final class ApiMapper {
                 List.copyOf(results));
     }
 
-    static ContextResponse context(NexusApiApplicationService.ContextOperation operation) {
+    static ContextResponse context(com.nexus.application.NexusApplication.ContextOperation operation) {
         var bundle = com.nexus.security.PublicContextPolicy.expose(operation.project(), operation.bundle(), operation.query());
         List<ContextItemResponse> items = bundle.items().stream()
                 .map(item -> contextItem(operation.project(), item))
@@ -110,7 +110,7 @@ final class ApiMapper {
                 bundle.metadata());
     }
 
-    static FederatedContextResponse federatedContext(NexusApiApplicationService.FederatedContextOperation operation) {
+    static FederatedContextResponse federatedContext(com.nexus.application.NexusApplication.FederatedContextOperation operation) {
         var bundle = com.nexus.security.PublicContextPolicy.expose(operation.projects(), operation.bundle(), operation.query());
         List<FederatedContextItemResponse> items = bundle.items().stream()
                 .map(ApiMapper::federatedContextItem)

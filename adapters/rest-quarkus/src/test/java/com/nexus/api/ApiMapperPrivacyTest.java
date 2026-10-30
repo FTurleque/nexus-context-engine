@@ -26,7 +26,7 @@ class ApiMapperPrivacyTest {
                 "file:///home/alice/My%20Project/src/App.java", "file:///C:/Users/Alice%20Smith/Nexus/file.java");
         var bundle = new com.nexus.context.ContextBundle(java.util.List.of(), 50, 0, diagnostics,
                 java.util.Map.of("providerDiagnostics", java.util.List.of(java.util.Map.of("cause", diagnostics))));
-        var response = ApiMapper.context(new NexusApiApplicationService.ContextOperation(project, "query", true, 0, bundle));
+        var response = ApiMapper.context(new com.nexus.application.NexusApplication.ContextOperation(project, "query", true, 0, bundle));
         String payload = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(response);
         for (String secret : java.util.List.of("alice", "Alice", "Build Secret", "Private", "cache", "file.java", "file:", "data/index")) {
             org.junit.jupiter.api.Assertions.assertFalse(payload.contains(secret), payload);
@@ -53,9 +53,9 @@ class ApiMapperPrivacyTest {
                     "Needle", 1000, Set.of(), java.util.Map.of(), true);
             var mapper = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules();
             for (Object response : java.util.List.of(
-                    ApiMapper.context(new NexusApiApplicationService.ContextOperation(local.project(), local.query(),
+                    ApiMapper.context(new com.nexus.application.NexusApplication.ContextOperation(local.project(), local.query(),
                             true, 0, local.bundle())),
-                    ApiMapper.federatedContext(new NexusApiApplicationService.FederatedContextOperation(
+                    ApiMapper.federatedContext(new com.nexus.application.NexusApplication.FederatedContextOperation(
                             multi.projects(), multi.query(), true, 0, multi.bundle())))) {
                 String payload = mapper.writeValueAsString(response);
                 org.junit.jupiter.api.Assertions.assertFalse(payload.contains(temporary.toString().replace("\\", "\\\\")), payload);
@@ -72,7 +72,7 @@ class ApiMapperPrivacyTest {
         var bundle = new com.nexus.context.ContextBundle(java.util.List.of(), 50, 0, java.util.List.of(),
                 java.util.Map.of("nested", java.util.List.of(java.util.Map.of("reason",
                         temporary.resolve("missing").toString() + " password=12345678")), "query", clientQuery));
-        var response = ApiMapper.context(new NexusApiApplicationService.ContextOperation(project, clientQuery, true, 0, bundle));
+        var response = ApiMapper.context(new com.nexus.application.NexusApplication.ContextOperation(project, clientQuery, true, 0, bundle));
         String json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(response);
         org.junit.jupiter.api.Assertions.assertFalse(json.contains("12345678"));
         org.junit.jupiter.api.Assertions.assertFalse(json.contains(temporary.toString().replace("\\", "\\\\")));

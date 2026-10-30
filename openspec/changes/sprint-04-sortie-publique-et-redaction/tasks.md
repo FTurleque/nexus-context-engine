@@ -4,7 +4,7 @@ Prérequis : `AUD-TST-01` fermé par #268 ; `AUD-TST-07` (sprint 3) fusionné av
 
 ## 1. Records d'opération REST
 
-- [ ] 1.1 AUD-QUA-08 — Faire renvoyer par `NexusApiApplicationService` les records `NexusApplication.IndexOperation`, `SearchOperation`, `FederatedSearchOperation`, `ContextOperation` et `FederatedContextOperation`, supprimer les cinq copies et leur recopie champ à champ, ne garder dans le service REST que l'ajout des métriques ; vérifier par `./mvnw -B -ntp -pl adapters/rest-quarkus -am verify` (gate JaCoCo REST inclus) et `git grep -n "record SearchOperation" adapters/` sans résultat
+- [x] 1.1 AUD-QUA-08 — Faire renvoyer par `NexusApiApplicationService` les records `NexusApplication.IndexOperation`, `SearchOperation`, `FederatedSearchOperation`, `ContextOperation` et `FederatedContextOperation`, supprimer les cinq copies et leur recopie champ à champ, ne garder dans le service REST que l'ajout des métriques ; vérifier par `./mvnw -B -ntp -pl adapters/rest-quarkus -am verify` (gate JaCoCo REST inclus) et `git grep -n "record SearchOperation" adapters/` sans résultat
 
 ## 2. Projection publique unique
 
