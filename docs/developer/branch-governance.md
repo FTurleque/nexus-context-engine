@@ -40,6 +40,8 @@ Il impose actuellement :
   - `OSV aggregate SBOM vulnerability gate / osv-scan` ;
   - `SonarCloud Code Analysis`.
 
+`Hermetic scale benchmark` (`.github/workflows/scale-benchmark.yml`) est conçu pour être le huitième check requis : il est produit sur toute PR et conclut en succès sans mesurer lorsque la PR ne touche aucun chemin surveillé (voir [scale-regression-benchmark.md](scale-regression-benchmark.md)). Il devient requis lorsque le mainteneur l'ajoute au ruleset `Protect main & develop` ; tant qu'il n'y figure pas, un rouge de ce check est traité comme bloquant en revue.
+
 NXA3-14 / #130 est satisfait pour `develop`. Le même ruleset couvre également `main`.
 
 ## Contrat attendu pour `develop`
