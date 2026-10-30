@@ -109,7 +109,7 @@ La borne Lucene de 128 termes est couverte par un test de non-régression du rea
 
 ### Qualification sémantique réelle
 
-`.github/workflows/semantic-search-qualification.yml` n'est pas exécuté sur chaque PR. Ses déclencheurs et ses corpus suivent [GEN-0059](../architecture/adr/GEN-0059-qualifier-la-recherche-semantique-reelle-en-deux-corpus.md) :
+`.github/workflows/semantic-search-qualification.yml` n'est pas exécuté sur chaque PR. Ses déclencheurs et ses corpus suivent [GEN-0060](../architecture/adr/GEN-0060-qualifier-la-recherche-semantique-reelle-en-deux-corpus.md) :
 
 - sur une PR vers `develop`/`main`, lorsque le workflow, l'ancre d'intégrité ou le code/test sémantique concerné change : corpus réduit `pr` ;
 - sur un `push` vers `develop` qui touche ces mêmes chemins, donc après fusion : corpus complet `full`, groupé par SHA : un push ultérieur ne l'annule pas et un run en cours n'est jamais annulé ;

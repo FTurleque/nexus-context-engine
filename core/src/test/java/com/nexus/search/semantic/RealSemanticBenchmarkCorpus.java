@@ -16,7 +16,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * Corpus et requêtes du benchmark sémantique réel (GEN-0059).
+ * Corpus et requêtes du benchmark sémantique réel (GEN-0060).
  *
  * <p>Le corpus {@code full} est le snapshot NEXUS entier. Le corpus {@code pr} en
  * est un sous-ensemble déclaré, copié dans un répertoire dédié avant indexation :

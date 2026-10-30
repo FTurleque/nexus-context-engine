@@ -152,7 +152,7 @@ grep -q 'Enforce semantic quality floor' "$SEMANTIC_WORKFLOW" \
   || fail 'real semantic qualification must enforce a regression floor'
 grep -q 'Summarize embedding throughput' "$SEMANTIC_WORKFLOW" \
   || fail 'real semantic qualification must retain measured embedding throughput'
-# GEN-0059: reduced `pr` corpus bounded at 45 minutes on pull requests, `full` corpus
+# GEN-0060: reduced `pr` corpus bounded at 45 minutes on pull requests, `full` corpus
 # bounded at 180 minutes on develop after merge, never cancelled outside pull requests,
 # and not required by release.yml.
 grep -qF "timeout-minutes: \${{ github.event_name == 'pull_request' && 45 || 180 }}" "$SEMANTIC_WORKFLOW" \
@@ -204,11 +204,11 @@ semantic_jobs = set(re.findall(
     release,
     re.MULTILINE))
 if needed & (semantic_jobs | {"semantic-search", "semantic-search-qualification", "real-ollama"}):
-    raise SystemExit("final-audit-contracts: GEN-0059 keeps the real semantic qualification out of publish needs")
+    raise SystemExit("final-audit-contracts: GEN-0060 keeps the real semantic qualification out of publish needs")
 PY
-grep -q 'GEN-0059' docs/developer/semantic-search.md \
+grep -q 'GEN-0060' docs/developer/semantic-search.md \
   && grep -q "La release n'exige pas la qualification sémantique réelle" docs/developer/semantic-search.md \
-  || fail 'docs/developer/semantic-search.md must state the release rule of GEN-0059'
+  || fail 'docs/developer/semantic-search.md must state the release rule of GEN-0060'
 grep -Eq '^ollama\.0\.33\.3\.linux-amd64\.sha256=[0-9a-f]{64}$' config/tool-integrity.properties \
   || fail 'Ollama qualification checksum anchor is missing'
 

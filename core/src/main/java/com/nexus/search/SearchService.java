@@ -8,8 +8,10 @@ import com.nexus.ranking.graph.GraphCandidateEnricher;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 public final class SearchService {
 
@@ -52,9 +54,22 @@ public final class SearchService {
         }
 
         List<SearchCandidate> enriched = candidateMerger.merge(rawCandidates);
+        Set<String> resultReasons = new LinkedHashSet<>();
         for (CandidateEnricher enricher : enrichers) {
-            enriched = enricher.enrich(project, enriched);
+            enriched = enricher.enrich(project, enriched, resultReasons::add);
         }
-        return ranker.rank(new RankingRequest(normalizedQuery, limit, explain), enriched);
+        List<RankedCandidate> ranked = ranker.rank(new RankingRequest(normalizedQuery, limit, explain), enriched);
+        if (!explain || resultReasons.isEmpty()) {
+            return ranked;
+        }
+        return ranked.stream()
+                .map(candidate -> withReasons(candidate, resultReasons))
+                .toList();
+    }
+
+    private static RankedCandidate withReasons(RankedCandidate candidate, Set<String> resultReasons) {
+        List<String> reasons = new ArrayList<>(candidate.reasons());
+        reasons.addAll(resultReasons);
+        return new RankedCandidate(candidate.candidate(), candidate.score(), candidate.components(), reasons);
     }
 }

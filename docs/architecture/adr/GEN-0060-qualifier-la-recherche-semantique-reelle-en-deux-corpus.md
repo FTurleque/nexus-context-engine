@@ -1,5 +1,5 @@
 ---
-id: GEN-0059
+id: GEN-0060
 title: "Qualifier la recherche sémantique réelle en deux corpus, hors du chemin de release"
 domain: general
 rules: false

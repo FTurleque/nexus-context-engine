@@ -163,7 +163,7 @@ Phase 6 implémente le batching. Les mesures historiques restent une référence
 
 `.github/workflows/semantic-search-qualification.yml` qualifie le chemin complet **runtime Ollama → modèle réel → embeddings → index Lucene sémantique → ranking**.
 
-Le workflow n'est pas exécuté sur les PR sans rapport avec le sémantique. Ses déclencheurs suivent [GEN-0059](../architecture/adr/GEN-0059-qualifier-la-recherche-semantique-reelle-en-deux-corpus.md) :
+Le workflow n'est pas exécuté sur les PR sans rapport avec le sémantique. Ses déclencheurs suivent [GEN-0060](../architecture/adr/GEN-0060-qualifier-la-recherche-semantique-reelle-en-deux-corpus.md) :
 
 - une PR vers `develop`/`main` qui modifie le workflow, l'ancre Ollama ou le code/test sémantique ciblé exécute le corpus réduit `pr` ;
 - un `push` vers `develop` qui touche ces mêmes chemins, c'est-à-dire la fusion d'une telle PR, exécute le corpus complet `full` sur le SHA de `develop` ; le groupe de concurrence est ce SHA, donc un push ultérieur n'annule pas ce run, et un run en cours n'est jamais annulé (seul un run en attente sur le même SHA peut être remplacé) ;
@@ -223,7 +223,7 @@ Si `throughput.json` montre un corpus ou un débit qui rapproche la durée proje
 
 ### Qualification réelle et release
 
-La release n'exige pas la qualification sémantique réelle (GEN-0059) : `release.yml` ne la place pas dans les `needs` du job `publish`. La recherche sémantique est désactivée par défaut (BE-0014). La preuve de qualité d'une promotion `develop` → `main` est le dernier run `full` réussi sur `develop`, à consulter avant la promotion :
+La release n'exige pas la qualification sémantique réelle (GEN-0060) : `release.yml` ne la place pas dans les `needs` du job `publish`. La recherche sémantique est désactivée par défaut (BE-0014). La preuve de qualité d'une promotion `develop` → `main` est le dernier run `full` réussi sur `develop`, à consulter avant la promotion :
 
 ```bash
 gh run list -w semantic-search-qualification.yml --branch develop

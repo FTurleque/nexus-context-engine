@@ -177,7 +177,7 @@ Le profil sémantique est `content-v4`, ce qui rend un index historique incompat
 
 `OllamaEmbeddingProvider` borne la réponse `/api/embed` avant matérialisation JSON et valide dimension/valeurs finies.
 
-`.github/workflows/semantic-search-qualification.yml` apporte la preuve réelle (corpus réduit sur PR, corpus complet sur `develop` après fusion, manuelle et mensuelle ; GEN-0059) : téléchargement Ollama 0.33.3 depuis la release officielle, vérification SHA-256 repository-pinned, endpoint loopback, modèle `qwen3-embedding:0.6b`, `RealSemanticSearchBenchmarkTest`, floors de qualité/non-régression et artefacts de preuve.
+`.github/workflows/semantic-search-qualification.yml` apporte la preuve réelle (corpus réduit sur PR, corpus complet sur `develop` après fusion, manuelle et mensuelle ; GEN-0060) : téléchargement Ollama 0.33.3 depuis la release officielle, vérification SHA-256 repository-pinned, endpoint loopback, modèle `qwen3-embedding:0.6b`, `RealSemanticSearchBenchmarkTest`, floors de qualité/non-régression et artefacts de preuve.
 
 ## Git local
 
@@ -235,3 +235,21 @@ sont internes au package et utilisent la composition, sans framework ni registre
 Les frontières ports/adaptateurs et les décisions architecturales existantes ne
 changent pas : les adapters appellent toujours `NexusApplication`, SQLite reste
 canonique et Lucene reconstructible. Ce découpage ne remplace aucun ADR accepté.
+
+## Frontières vérifiées du cœur
+
+`core/src/test/java/com/nexus/architecture/CoreArchitectureTest.java` ([ARCH-0059](../architecture/adr/ARCH-0059-verifier-les-frontieres-du-coeur-par-un-test-d-architecture.md)) lit les sources de `core/src/main/java` sans dépendance de test supplémentaire : déclarations `package` et `import` (dont `import static` et les jokers), plus les noms pleinement qualifiés des préfixes surveillés ; commentaires, chaînes et blocs de texte sont ignorés. Il s'exécute dans la suite par défaut du module `core`.
+
+| Règle | Contrainte |
+|---|---|
+| `core-sans-framework` | aucun type `io.quarkus`, `jakarta`, `javax.ws`, `org.springframework`, `io.modelcontextprotocol` |
+| `lucene-confine` | `org.apache.lucene` seulement dans `com.nexus.search.lucene` et `com.nexus.search.semantic.lucene` |
+| `sqlite-confine` | `org.sqlite` et `java.sql` seulement dans `com.nexus.persistence.sqlite`, plus la liste fermée `SQLITE_EXCEPTIONS` de `CoreArchitectureRules` (`java.sql.SQLException` dans `NexusApplication`, `NexusApplicationFactory`, `NexusCli`) |
+| `project-feuille` | `com.nexus.project` n'importe aucun autre package `com.nexus` |
+| `cycles-baseline` | les arêtes de cycle du graphe des packages sont égales à `core/src/test/resources/architecture/package-cycles.txt` |
+
+Un message d'échec a la forme `[règle] classe -> nom importé`. La baseline de cycles liste une arête `source -> cible` par ligne, triée ; elle ne peut que décroître : une arête nouvelle échoue, une entrée qui ne forme plus de cycle échoue aussi et doit être retirée dans la même PR. Lancement ciblé :
+
+```bash
+./mvnw -B -ntp -pl core test -Dtest='*Architecture*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true
+```

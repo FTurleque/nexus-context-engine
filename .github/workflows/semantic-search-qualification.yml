@@ -1,6 +1,6 @@
 name: Semantic Search Real Qualification
 
-# GEN-0059 : corpus `pr` sur pull request (borne 45 min), corpus `full` sur develop
+# GEN-0060 : corpus `pr` sur pull request (borne 45 min), corpus `full` sur develop
 # après fusion (borne 180 min, jamais annulé), au choix sur workflow_dispatch, et
 # `full` sur main au planning mensuel. La release n'exige pas cette qualification.
 on:
