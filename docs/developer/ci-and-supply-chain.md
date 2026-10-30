@@ -142,7 +142,7 @@ Un test de `src/test` désactivé par défaut par une propriété système a un 
 
 | Test | Lanceur | Déclencheurs | Prérequis installé par le job |
 |---|---|---|---|
-| `MinosRealIntegrationTest` | job `minos-replay` de `measurement-tools.yml`, via `scripts/validate-minos-integration.ps1` lancé depuis `core/` | PR qui touche le workflow, le script ou un des trois tests ; `workflow_dispatch` ; chaque lundi | distribution MINOS 1.2.0 Windows x64 vérifiée contre `config/tool-integrity.properties`, Java 24, fixture `fixtures/typescript/typescript-modules` du dépôt MINOS au commit du tag `v1.2.0` |
+| `MinosRealIntegrationTest` | job `minos-replay` de `measurement-tools.yml`, via `scripts/validate-minos-integration.ps1` lancé depuis la racine du dépôt | PR qui touche le workflow, le script ou un des trois tests ; `workflow_dispatch` ; chaque lundi | distribution MINOS 1.2.0 Windows x64 vérifiée contre `config/tool-integrity.properties`, Java 24, fixture `fixtures/typescript/typescript-modules` du dépôt MINOS au commit du tag `v1.2.0` |
 | `LargeScaleSearchBaselineTest` | job `index-baselines` de `measurement-tools.yml` | idem | snapshot `git archive` du commit testé |
 | `SmallDeltaIndexingBaselineTest` | job `index-baselines` de `measurement-tools.yml` | idem | snapshot `git archive` du commit testé |
 | `SemanticSearchBenchmarkTest` | job `semantic-diagnostics` de `semantic-search-qualification.yml` | `workflow_dispatch` avec `diagnostics` | runtime Ollama de la qualification réelle |

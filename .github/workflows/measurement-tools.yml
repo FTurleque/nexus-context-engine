@@ -88,17 +88,16 @@ jobs:
           }
           "jar=$jar" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
-      # Le script prépare target/m13-replay dans le répertoire courant, là où
-      # MinosRealIntegrationTest le lit : il se lance donc depuis le module core.
+      # Le script prépare target/m13-replay dans le répertoire courant ; les tests de core
+      # tournent à la racine du dépôt (workingDirectory de core/pom.xml), où le test le lit.
       - name: Run MINOS replay
         shell: pwsh
-        working-directory: core
         env:
           MINOS_JAR: ${{ steps.minos.outputs.jar }}
           JAVA24_HOME: ${{ steps.java24.outputs.path }}
         run: |
           $ErrorActionPreference = 'Stop'
-          ../scripts/validate-minos-integration.ps1 `
+          ./scripts/validate-minos-integration.ps1 `
             -MinosJar $env:MINOS_JAR `
             -Java24 (Join-Path $env:JAVA24_HOME 'bin/java.exe') `
             -Fixture (Join-Path $env:GITHUB_WORKSPACE $env:MINOS_FIXTURE)
