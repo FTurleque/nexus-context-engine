@@ -76,6 +76,37 @@ class SensitiveContentRedactorTest {
     }
 
     @Test
+    void boundedFormsAreRedactedAtTheBoundAndRefusedJustAbove() {
+        for (String prefix : java.util.List.of("Authorization: Bearer ", "curl -H 'X: Bearer ",
+                "run --password ", "<password>")) {
+            String suffix = prefix.equals("<password>") ? "</password>" : "";
+            String atBound = SensitiveContentRedactor.redact(prefix + "v".repeat(4096) + suffix);
+            assertFalse(atBound.contains("vvvv"), atBound);
+            var failure = org.junit.jupiter.api.Assertions.assertThrows(OversizedSecretException.class,
+                    () -> SensitiveContentRedactor.redact(prefix + "v".repeat(4097) + suffix));
+            assertFalse(failure.getMessage().contains("vvvv"));
+        }
+        String user = "u".repeat(1024);
+        assertFalse(SensitiveContentRedactor.redact("https://" + user + "@host/repo").contains("uuuu"));
+        org.junit.jupiter.api.Assertions.assertThrows(OversizedSecretException.class,
+                () -> SensitiveContentRedactor.redact("https://" + user + "u@host/repo"));
+    }
+
+    @Test
+    void newKeyComponentsMatchWholeSegmentsOnly() {
+        for (String ordinary : java.util.List.of("tokenizer = build()", "authority: local", "oauth_flow=pkce",
+                "max_tokens = 4096", "pwd_history: 3", "secretary: Jane")) {
+            if (ordinary.startsWith("pwd_history")) {
+                assertEquals("pwd_history: [REDACTED]", SensitiveContentRedactor.redact(ordinary));
+            } else {
+                assertEquals(ordinary, SensitiveContentRedactor.redact(ordinary));
+            }
+        }
+        assertEquals("page_token=[REDACTED]", SensitiveContentRedactor.redact("page_token=abc123"));
+        assertEquals("accessKey: [REDACTED]", SensitiveContentRedactor.redact("accessKey: abc123"));
+    }
+
+    @Test
     void malformedQuotedValuesNeverConsumeAnotherLine() {
         String input = "\"password\": \"synthetic\\\"unfinished\r\nordinary: visible\npassword=short";
         String expected = "\"password\": \"[REDACTED]\r\nordinary: visible\npassword=[REDACTED]";
