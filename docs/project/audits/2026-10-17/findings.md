@@ -63,7 +63,7 @@ core/src/main/java/com/nexus/security/PublicContextPolicy.java:5-8 `import com.n
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : S3 · Filets de test et traces
 - **Dépend de** : aucun · **Débloque** : `AUD-ARC-01`, `AUD-ARC-02`, `AUD-ARC-04`, `AUD-ARC-05`, `AUD-ARC-06`
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 4 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #282 (b6b56a07) · **Vérification du 2026-10-30** (`b6b56a07`) : CoreArchitectureTest échoue sur un import interdit du cœur, baseline package-cycles.txt, ADR complétant ADR-0004 (PR #282)
 
 **Preuve**
 
@@ -241,7 +241,7 @@ adapters/rest-quarkus/src/main/java/com/nexus/api/NexusRestExposureGuard.java:79
 
 - **Axe** : Tests · **Effort** : S<1j · **Sprint** : S3 · Filets de test et traces
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #282 (b6b56a07) · **Vérification du 2026-10-30** (`b6b56a07`) : ProjectPathGuardTest couvre chaque garde de ProjectPathGuard (PR #282)
 
 **Preuve**
 
@@ -582,7 +582,7 @@ Comptage `grep -rl <nom>` hors du fichier lui-même : validate-iteration-11/12/1
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : S3 · Filets de test et traces
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #282 (b6b56a07) · **Vérification du 2026-10-30** (`b6b56a07`) : GitRecencyCandidateEnricher journalise par System.Logger ce qu'il attrape, sans chemin, en restant fail-open (PR #282)
 
 **Preuve**
 
@@ -727,7 +727,7 @@ packaging/docker/Dockerfile:8 `COPY . .` ; `ls -a` à la racine : aucun .dockeri
 
 - **Axe** : Tests · **Effort** : S<1j · **Sprint** : S3 · Filets de test et traces
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Prévention pour le code futur (règle de revue), code existant inchangé · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration) Réserve : .claude/rules/code-review.md:20 (PR #254) interdit les assertions sur l'horloge pour le code revu ; les 5 assertions de durée existantes sont inchangées.
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #282 (b6b56a07) · **Vérification du 2026-10-30** (`b6b56a07`) : assertions de durée murale remplacées par des assertions d'état ou la borne du worker récalcitrant, marges x5 sans seuil abaissé ; Windows gate vert sur b2f88d8c (PR #282)
 
 **Preuve**
 
@@ -743,7 +743,7 @@ core/src/test/java/com/nexus/index/ExternalTaskRunnerTest.java:34 « assertTrue(
 
 - **Axe** : Tests · **Effort** : S<1j · **Sprint** : S3 · Filets de test et traces
 - **Dépend de** : aucun · **Débloque** : `AUD-QUA-09`
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #282 (b6b56a07) · **Vérification du 2026-10-30** (`b6b56a07`) : NexusResourceTest et NexusMcpServerIntegrationTest : un @Test par endpoint et par outil (PR #282)
 
 **Preuve**
 
@@ -791,7 +791,7 @@ core/src/test/java/com/nexus/index/minos/MinosRealIntegrationTest.java:45 assume
 
 - **Axe** : Tests · **Effort** : S<1j · **Sprint** : S3 · Filets de test et traces
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #282 (b6b56a07) · **Vérification du 2026-10-30** (`b6b56a07`) : méthodes default d'IndexRepository rendues abstraites (PR #282)
 
 **Preuve**
 
