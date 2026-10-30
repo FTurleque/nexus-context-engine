@@ -1,0 +1,39 @@
+# Arêtes de cycle du graphe des packages du cœur (CoreArchitectureTest, règle cycles-baseline).
+# Une arête par ligne, au format "source -> cible", triée. La liste ne peut que décroître :
+# une arête nouvelle fait échouer le build, une entrée qui ne forme plus de cycle aussi.
+com.nexus.context -> com.nexus.context.source
+com.nexus.context -> com.nexus.context.source.git
+com.nexus.context -> com.nexus.context.source.skill
+com.nexus.context -> com.nexus.index
+com.nexus.context -> com.nexus.ranking
+com.nexus.context -> com.nexus.search
+com.nexus.context -> com.nexus.security
+com.nexus.context.source -> com.nexus.context
+com.nexus.context.source -> com.nexus.search
+com.nexus.context.source -> com.nexus.security
+com.nexus.context.source.git -> com.nexus.context
+com.nexus.context.source.git -> com.nexus.context.source
+com.nexus.context.source.git -> com.nexus.search
+com.nexus.context.source.skill -> com.nexus.context
+com.nexus.context.source.skill -> com.nexus.context.source
+com.nexus.context.source.skill -> com.nexus.index.scan
+com.nexus.context.source.skill -> com.nexus.search
+com.nexus.context.source.skill -> com.nexus.security
+com.nexus.index -> com.nexus.index.scan
+com.nexus.index -> com.nexus.search
+com.nexus.index -> com.nexus.search.semantic
+com.nexus.index -> com.nexus.security
+com.nexus.index.scan -> com.nexus.index
+com.nexus.index.scan -> com.nexus.security
+com.nexus.ranking -> com.nexus.search
+com.nexus.ranking.graph -> com.nexus.index
+com.nexus.ranking.graph -> com.nexus.search
+com.nexus.search -> com.nexus.index
+com.nexus.search -> com.nexus.ranking
+com.nexus.search -> com.nexus.ranking.graph
+com.nexus.search.semantic -> com.nexus.index
+com.nexus.search.semantic -> com.nexus.search
+com.nexus.search.semantic -> com.nexus.search.semantic.ollama
+com.nexus.search.semantic -> com.nexus.security
+com.nexus.search.semantic.ollama -> com.nexus.search.semantic
+com.nexus.security -> com.nexus.context
