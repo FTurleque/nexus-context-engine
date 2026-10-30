@@ -41,7 +41,7 @@ Oui si la décision est **durable et structurante** et tranche entre des options
 
 ## Index
 
-57 ADR actifs : architecture 15, backend 21, data 14, general 4, security 3.
+58 ADR actifs : architecture 15, backend 22, data 14, general 4, security 3.
 
 | ADR | Décision | Date | Statut |
 |---|---|---|---|
@@ -101,7 +101,8 @@ Oui si la décision est **durable et structurante** et tranche entre des options
 | [DATA-0054](DATA-0054-lectures-registre-federees-groupees.md) | Grouper les lectures du registre pour les opérations fédérées | 2026-09-12 | Accepted |
 | [DATA-0055](DATA-0055-preserver-les-lecteurs-lors-des-reconstructions-semantiques.md) | Préserver les lecteurs lors des reconstructions sémantiques | 2026-09-13 | Accepted |
 | [GEN-0057](GEN-0057-tenir-le-registre-d-adr-au-format-archgate.md) | Tenir le registre d'ADR au format Archgate, à l'emplacement arc42 | 2026-10-29 | Accepted |
-| [ARCH-0058](ARCH-0058-verifier-les-frontieres-du-coeur-par-un-test-d-architecture.md) | Vérifier les frontières du cœur par un test d'architecture | 2026-10-30 | Proposed |
+| [BE-0058](BE-0058-exclure-les-worktrees-claude-code-du-scan-par-defaut.md) | Exclure les worktrees Claude Code du scan par défaut | 2026-10-30 | Accepted |
+| [ARCH-0059](ARCH-0059-verifier-les-frontieres-du-coeur-par-un-test-d-architecture.md) | Vérifier les frontières du cœur par un test d'architecture | 2026-10-30 | Proposed |
 
 ## Archive
 

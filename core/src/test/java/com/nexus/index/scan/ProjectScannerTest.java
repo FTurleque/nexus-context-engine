@@ -49,6 +49,44 @@ class ProjectScannerTest {
     }
 
     @Test
+    void excludesClaudeWorktreesWithoutAnyIgnoreRule() throws Exception {
+        write("AGENTS.md", "instructions");
+        write(".claude/worktrees/demo/AGENTS.md", "worktree instructions");
+        write(".claude/worktrees/demo/README.md", "worktree documentation");
+        write("module/.claude/worktrees/demo/src/App.java", "class App {}\n");
+        write("module/src/main/java/demo/Module.java", "package demo; class Module {}\n");
+
+        List<String> paths = scanPaths();
+
+        assertEquals(List.of("AGENTS.md", "module/src/main/java/demo/Module.java"), paths);
+    }
+
+    @Test
+    void claudeWorktreesExclusionKeepsTheRestOfClaudeAndNearbyNames() throws Exception {
+        write(".claude/skills/exemple/SKILL.md", "skill");
+        write(".claude/worktrees/demo/README.md", "worktree documentation");
+        write(".claude/worktrees-notes.md", "notes");
+        write("docs/worktrees/guide.md", "guide");
+
+        List<String> paths = scanPaths();
+
+        assertEquals(List.of(
+                ".claude/skills/exemple/SKILL.md",
+                ".claude/worktrees-notes.md",
+                "docs/worktrees/guide.md"), paths);
+    }
+
+    @Test
+    void ignoreNegationCannotReincludeClaudeWorktrees() throws Exception {
+        write("AGENTS.md", "instructions");
+        write(".claude/worktrees/demo/AGENTS.md", "worktree instructions");
+        write(".nexusignore", "!.claude/worktrees/\n");
+        write(".gitignore", "!.claude/worktrees/\n");
+
+        assertEquals(List.of("AGENTS.md"), scanPaths());
+    }
+
+    @Test
     void classifiesDocumentationInstructionsAgentProfilesAndSkills() throws Exception {
         write("README.md", "documentation");
         write("AGENTS.md", "instructions");

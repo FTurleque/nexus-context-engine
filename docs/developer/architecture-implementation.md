@@ -238,7 +238,7 @@ canonique et Lucene reconstructible. Ce découpage ne remplace aucun ADR accept�
 
 ## Frontières vérifiées du cœur
 
-`core/src/test/java/com/nexus/architecture/CoreArchitectureTest.java` ([ARCH-0058](../architecture/adr/ARCH-0058-verifier-les-frontieres-du-coeur-par-un-test-d-architecture.md)) lit les sources de `core/src/main/java` sans dépendance de test supplémentaire : déclarations `package` et `import` (dont `import static` et les jokers), plus les noms pleinement qualifiés des préfixes surveillés ; commentaires, chaînes et blocs de texte sont ignorés. Il s'exécute dans la suite par défaut du module `core`.
+`core/src/test/java/com/nexus/architecture/CoreArchitectureTest.java` ([ARCH-0059](../architecture/adr/ARCH-0059-verifier-les-frontieres-du-coeur-par-un-test-d-architecture.md)) lit les sources de `core/src/main/java` sans dépendance de test supplémentaire : déclarations `package` et `import` (dont `import static` et les jokers), plus les noms pleinement qualifiés des préfixes surveillés ; commentaires, chaînes et blocs de texte sont ignorés. Il s'exécute dans la suite par défaut du module `core`.
 
 | Règle | Contrainte |
 |---|---|

@@ -1,5 +1,5 @@
 ---
-id: ARCH-0058
+id: ARCH-0059
 title: "Vérifier les frontières du cœur par un test d'architecture"
 domain: architecture
 rules: false

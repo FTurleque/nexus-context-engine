@@ -53,6 +53,15 @@ public final class ProjectIgnoreMatcher {
             "dist",
             "coverage");
 
+    /**
+     * Répertoires d'outils identifiés par une suite de segments consécutifs,
+     * exclus à toute profondeur. Une entrée de {@link #BUILT_IN_DIRECTORIES}
+     * ne porte qu'un segment : {@code .claude/worktrees} y exclurait soit tout
+     * {@code .claude/}, soit tout répertoire nommé {@code worktrees}.
+     */
+    private static final List<List<String>> BUILT_IN_DIRECTORY_SEQUENCES = List.of(
+            List.of(".claude", "worktrees"));
+
     private static final Set<String> SENSITIVE_FILE_NAMES = Set.of(
             ".env",
             ".npmrc",
@@ -238,6 +247,9 @@ public final class ProjectIgnoreMatcher {
                 return true;
             }
         }
+        if (containsBuiltInDirectorySequence(relativePath)) {
+            return true;
+        }
 
         if (directory) {
             return false;
@@ -248,6 +260,28 @@ public final class ProjectIgnoreMatcher {
             return true;
         }
         return SENSITIVE_SUFFIXES.stream().anyMatch(fileName::endsWith);
+    }
+
+    private static boolean containsBuiltInDirectorySequence(Path relativePath) {
+        int segmentCount = relativePath.getNameCount();
+        for (List<String> sequence : BUILT_IN_DIRECTORY_SEQUENCES) {
+            for (int start = 0; start + sequence.size() <= segmentCount; start++) {
+                if (matchesSequenceAt(relativePath, start, sequence)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean matchesSequenceAt(Path relativePath, int start, List<String> sequence) {
+        for (int offset = 0; offset < sequence.size(); offset++) {
+            String segment = relativePath.getName(start + offset).toString().toLowerCase(Locale.ROOT);
+            if (!segment.equals(sequence.get(offset))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static String toGitPath(Path path) {
