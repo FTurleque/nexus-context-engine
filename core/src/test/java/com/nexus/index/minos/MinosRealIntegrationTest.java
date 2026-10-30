@@ -59,7 +59,8 @@ class MinosRealIntegrationTest {
         SqliteDatabase database = new SqliteDatabase(paths);
         ProjectRepository projectRepository = new SqliteProjectRepository(database);
         IndexRepository indexRepository = new SqliteIndexRepository(database);
-        ProjectDescriptor project = new ProjectRegistry(projectRepository).register(fixture, "m13-fixture");
+        ProjectRegistry projectRegistry = new ProjectRegistry(projectRepository);
+        ProjectDescriptor registered = projectRegistry.register(fixture, "m13-fixture");
         LuceneSearchIndex searchIndex = new LuceneSearchIndex(paths);
         ProjectIndexingService indexingService = new ProjectIndexingService(
                 projectRepository,
@@ -67,8 +68,10 @@ class MinosRealIntegrationTest {
                 new ProjectScanner(),
                 List.of(new JavaParserLanguageAnalyzer(), new MarkdownLanguageAnalyzer()),
                 searchIndex);
-        indexingService.rebuild(project.id());
-        indexRepository.replaceExternalCodeIntelligence(project.id(), exported);
+        indexingService.rebuild(registered.id());
+        indexRepository.replaceExternalCodeIntelligence(registered.id(), exported);
+        // Le descripteur rendu par register() reste NOT_INDEXED : la recherche exige l'état READY relu.
+        ProjectDescriptor project = projectRegistry.get(registered.id());
 
         List<IndexedSymbol> indexedSymbols = indexRepository.findSymbols(project.id());
         assertTrue(indexedSymbols.stream().anyMatch(symbol ->
