@@ -101,6 +101,7 @@ Oui si la décision est **durable et structurante** et tranche entre des options
 | [DATA-0054](DATA-0054-lectures-registre-federees-groupees.md) | Grouper les lectures du registre pour les opérations fédérées | 2026-09-12 | Accepted |
 | [DATA-0055](DATA-0055-preserver-les-lecteurs-lors-des-reconstructions-semantiques.md) | Préserver les lecteurs lors des reconstructions sémantiques | 2026-09-13 | Accepted |
 | [GEN-0057](GEN-0057-tenir-le-registre-d-adr-au-format-archgate.md) | Tenir le registre d'ADR au format Archgate, à l'emplacement arc42 | 2026-10-29 | Accepted |
+| [GEN-0059](GEN-0059-qualifier-la-recherche-semantique-reelle-en-deux-corpus.md) | Qualifier la recherche sémantique réelle en deux corpus, hors du chemin de release | 2026-10-30 | Proposed |
 
 ## Archive
 

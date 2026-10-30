@@ -163,7 +163,13 @@ Phase 6 implémente le batching. Les mesures historiques restent une référence
 
 `.github/workflows/semantic-search-qualification.yml` qualifie le chemin complet **runtime Ollama → modèle réel → embeddings → index Lucene sémantique → ranking**.
 
-Le workflow n'est pas exécuté sur les PR sans rapport avec le sémantique. Il est déclenché sur une PR vers `develop`/`main` lorsque le workflow, l'ancre Ollama ou le code/test sémantique ciblé change ; il reste également déclenchable manuellement et planifié périodiquement.
+Le workflow n'est pas exécuté sur les PR sans rapport avec le sémantique. Ses déclencheurs suivent [GEN-0059](../architecture/adr/GEN-0059-qualifier-la-recherche-semantique-reelle-en-deux-corpus.md) :
+
+- une PR vers `develop`/`main` qui modifie le workflow, l'ancre Ollama ou le code/test sémantique ciblé exécute le corpus réduit `pr` ;
+- un `push` vers `develop` qui touche ces mêmes chemins, c'est-à-dire la fusion d'une telle PR, exécute le corpus complet `full` sur le SHA de `develop` ; ce run n'est ni annulé ni remplacé par un run ultérieur ;
+- `workflow_dispatch` choisit le corpus (`full` par défaut) ; la planification mensuelle exécute `full` sur `main`.
+
+Le corpus `pr` est déclaré dans `RealSemanticBenchmarkCorpus` (test de `core`) : `docs/developer/`, ADR `BE-*` et `DATA-*`, paquets `com.nexus.context` et `com.nexus.search` de `core`, sources de `adapters/mcp-java`. Il est copié dans un répertoire temporaire avant indexation et contient chaque chemin jugé pertinent par les requêtes ; `RealSemanticBenchmarkCorpusTest` vérifie cette inclusion sur le dépôt à chaque build. Les seuils sont les mêmes pour les deux corpus.
 
 Contrat courant :
 
@@ -173,7 +179,7 @@ modèle              qwen3-embedding:0.6b
 manifest ID attendu ac6da0dfba84
 dimensions          1024
 endpoint            127.0.0.1:11434 uniquement
-corpus              checkout exact de NEXUS_HEAD_SHA
+corpus              checkout exact de NEXUS_HEAD_SHA, entier (full) ou réduit (pr)
 benchmark           RealSemanticSearchBenchmarkTest
 ```
 
@@ -183,7 +189,7 @@ L'archive Ollama est téléchargée depuis la release officielle mais **n'est ja
 
 Le rapport doit démontrer :
 
-- SHA exact, modèle et endpoint attendus ;
+- SHA exact, corpus, modèle et endpoint attendus ;
 - au moins les six requêtes de référence ;
 - index sémantique non vide ;
 - `recall@3 >= 0,25` ;
@@ -207,9 +213,21 @@ durée du job      1 h 00 à 2 h 01 réussis ; 2 h 00 atteint après 318/324 req
 
 La variabilité provient du CPU alloué par GitHub et non du code NEXUS : le nombre de requêtes et de tokens est identique d'un run à l'autre pour un même corpus, et le temps Java entre deux requêtes est négligeable.
 
-Une calibration ABBA sur le même runner (EPYC 7763, 12 documents de 12 000 caractères) a comparé 2 threads llama.cpp (défaut Ollama : cœurs physiques) et 4 threads (`LLAMA_ARG_THREADS=4` ou option `num_thread`) : 383,1 s contre 370,9 s, soit **−3,2 %** seulement. L'hyper-threading n'apporte presque rien à ce calcul vectoriel saturé ; le workflow conserve donc la configuration par défaut d'Ollama. Mettre le modèle en cache est sans intérêt (pull ≈ 5 s). Réduire le corpus ou réutiliser des vecteurs d'un run précédent affaiblirait la preuve (moins de distracteurs, transport d'embeddings non exercé) et n'est pas retenu.
+Une calibration ABBA sur le même runner (EPYC 7763, 12 documents de 12 000 caractères) a comparé 2 threads llama.cpp (défaut Ollama : cœurs physiques) et 4 threads (`LLAMA_ARG_THREADS=4` ou option `num_thread`) : 383,1 s contre 370,9 s, soit **−3,2 %** seulement. L'hyper-threading n'apporte presque rien à ce calcul vectoriel saturé ; le workflow conserve donc la configuration par défaut d'Ollama. Mettre le modèle en cache est sans intérêt (pull ≈ 5 s). Réutiliser des vecteurs d'un run précédent affaiblirait la preuve (transport d'embeddings non exercé) et n'est pas retenu. Le corpus réduit `pr` a moins de distracteurs : il donne un verdict rapide sur PR, et le corpus complet reste la mesure de référence, sur `develop` après fusion.
 
-Le budget est donc fixé à **180 minutes** : le runner le plus lent observé exige environ 2 h 05 de bout en bout, et 180 minutes laissent environ 45 % de marge pour la croissance du corpus. Si `throughput.json` montre un corpus ou un débit qui rapproche la durée projetée de ce budget, il faut réanalyser le travail embarqué avant d'augmenter à nouveau le délai.
+Le budget du corpus `full` est donc fixé à **180 minutes** : le runner le plus lent observé exige environ 2 h 05 de bout en bout, et 180 minutes laissent environ 45 % de marge pour la croissance du corpus.
+
+Le corpus `pr` compte environ 190 fichiers, soit un tiers des entrées du corpus complet ; avec la même densité de tokens (environ 7 caractères par token sur le texte embarqué, plafonné à 12 000 caractères par fichier), il représente environ 135 000 tokens, soit 14 à 27 minutes d'embeddings selon le débit observé. Son budget est fixé à **45 minutes**, préparation du runner et build de `core` compris.
+
+Si `throughput.json` montre un corpus ou un débit qui rapproche la durée projetée d'un de ces budgets, il faut réanalyser le travail embarqué, ou réduire le corpus `pr`, avant d'augmenter le délai.
+
+### Qualification réelle et release
+
+La release n'exige pas la qualification sémantique réelle (GEN-0059) : `release.yml` ne la place pas dans les `needs` du job `publish`. La recherche sémantique est désactivée par défaut (BE-0014). La preuve de qualité d'une promotion `develop` → `main` est le dernier run `full` réussi sur `develop`, à consulter avant la promotion :
+
+```bash
+gh run list -w semantic-search-qualification.yml --branch develop
+```
 
 ## Correctness
 

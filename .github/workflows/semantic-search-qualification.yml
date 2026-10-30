@@ -1,5 +1,8 @@
 name: Semantic Search Real Qualification
 
+# GEN-0059 : corpus `pr` sur pull request (borne 45 min), corpus `full` sur develop
+# après fusion (borne 180 min, jamais annulé), au choix sur workflow_dispatch, et
+# `full` sur main au planning mensuel. La release n'exige pas cette qualification.
 on:
   pull_request:
     branches:
@@ -9,30 +12,48 @@ on:
       - '.github/workflows/semantic-search-qualification.yml'
       - 'config/tool-integrity.properties'
       - 'core/src/main/java/com/nexus/search/semantic/**'
-      - 'core/src/test/java/com/nexus/search/semantic/RealSemanticSearchBenchmarkTest.java'
+      - 'core/src/test/java/com/nexus/search/semantic/RealSemantic*.java'
+  push:
+    branches:
+      - develop
+    paths:
+      - '.github/workflows/semantic-search-qualification.yml'
+      - 'config/tool-integrity.properties'
+      - 'core/src/main/java/com/nexus/search/semantic/**'
+      - 'core/src/test/java/com/nexus/search/semantic/RealSemantic*.java'
   workflow_dispatch:
+    inputs:
+      corpus:
+        description: 'Corpus du benchmark (full ou pr)'
+        type: choice
+        options:
+          - full
+          - pr
+        default: full
   schedule:
     - cron: '17 3 3 * *'
 
 permissions:
   contents: read
 
+# Hors pull request, le groupe est le SHA qualifié : un run ultérieur ne l'annule ni ne le remplace.
 concurrency:
-  group: semantic-search-real-${{ github.event.pull_request.number || github.ref }}
+  group: semantic-search-real-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   real-ollama:
     name: Real Ollama semantic retrieval
     runs-on: ubuntu-latest
-    # Full-repository real-model qualification is CPU-bound on GitHub-hosted runners:
-    # ~620k embedded tokens at 86-165 tok/s depending on the allocated CPU (measured
-    # 2026-10, see docs/developer/semantic-search.md). The slowest observed runner needs
-    # ~2h05; 180 minutes keeps ~45% margin for corpus growth without lowering any floor.
+    # Real-model qualification is CPU-bound on GitHub-hosted runners at 86-165 tok/s
+    # depending on the allocated CPU (measured 2026-10, see docs/developer/semantic-search.md).
+    # Corpus `full` (~620k embedded tokens) needs up to ~2h05: 180 minutes keeps ~45% margin.
+    # Corpus `pr` (about a third of the entries) stays under 45 minutes on the slowest runner.
     # Per-request Ollama timeouts remain independently bounded below at 120 seconds.
-    timeout-minutes: 180
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 45 || 180 }}
     env:
       NEXUS_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      SEMANTIC_CORPUS: ${{ github.event_name == 'pull_request' && 'pr' || inputs.corpus || 'full' }}
       OLLAMA_VERSION: '0.33.3'
       OLLAMA_MODEL: 'qwen3-embedding:0.6b'
       OLLAMA_MODEL_ID_PREFIX: 'ac6da0dfba84'
@@ -119,7 +140,7 @@ jobs:
             -Dtest=RealSemanticSearchBenchmarkTest \
             -Dnexus.semantic.realBenchmark.enabled=true \
             -Dnexus.semantic.realBenchmark.root="$GITHUB_WORKSPACE" \
-            -Dnexus.semantic.realBenchmark.commit="$NEXUS_HEAD_SHA" \
+            -Dnexus.semantic.realBenchmark.commit="$NEXUS_HEAD_SHA"             -Dnexus.semantic.realBenchmark.corpus="$SEMANTIC_CORPUS" \
             -Dnexus.semantic.realBenchmark.output="$GITHUB_WORKSPACE/$SEMANTIC_REPORT" \
             -Dnexus.semantic.ollama.baseUri=http://127.0.0.1:11434 \
             -Dnexus.semantic.ollama.model="$OLLAMA_MODEL" \
@@ -142,6 +163,8 @@ jobs:
           if report.get('snapshotCommit') != os.environ['NEXUS_HEAD_SHA']:
               raise SystemExit(
                   f"unexpected snapshotCommit: {report.get('snapshotCommit')} != {os.environ['NEXUS_HEAD_SHA']}")
+          if report.get('corpus') != os.environ['SEMANTIC_CORPUS']:
+              raise SystemExit(f"unexpected corpus: {report.get('corpus')} != {os.environ['SEMANTIC_CORPUS']}")
           if report.get('modelId') != expected_model:
               raise SystemExit(f"unexpected modelId: {report.get('modelId')} != {expected_model}")
           if report.get('localEndpoint') is not True:
@@ -175,6 +198,8 @@ jobs:
           print(json.dumps({
               'modelId': report['modelId'],
               'snapshotCommit': report['snapshotCommit'],
+              'corpus': report['corpus'],
+              'corpusFiles': report['corpusFiles'],
               'baseline': baseline,
               'semantic': semantic,
               'delta': report['delta'],
@@ -241,7 +266,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: semantic-real-${{ env.NEXUS_HEAD_SHA }}
+          name: semantic-real-${{ env.SEMANTIC_CORPUS }}-${{ env.NEXUS_HEAD_SHA }}
           retention-days: 90
           if-no-files-found: error
           path: |

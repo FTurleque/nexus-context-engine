@@ -108,11 +108,14 @@ La borne Lucene de 128 termes est couverte par un test de non-régression du rea
 
 ### Qualification sémantique réelle
 
-`.github/workflows/semantic-search-qualification.yml` n'est pas exécuté sur chaque PR. Il est déclenché :
+`.github/workflows/semantic-search-qualification.yml` n'est pas exécuté sur chaque PR. Ses déclencheurs et ses corpus suivent [GEN-0059](../architecture/adr/GEN-0059-qualifier-la-recherche-semantique-reelle-en-deux-corpus.md) :
 
-- sur une PR vers `develop`/`main` uniquement lorsque le workflow, l'ancre d'intégrité ou le code/test sémantique concerné change ;
-- manuellement ;
-- selon une planification périodique.
+- sur une PR vers `develop`/`main`, lorsque le workflow, l'ancre d'intégrité ou le code/test sémantique concerné change : corpus réduit `pr` ;
+- sur un `push` vers `develop` qui touche ces mêmes chemins, donc après fusion : corpus complet `full`, groupé par SHA et jamais annulé par un run ultérieur ;
+- manuellement, corpus au choix (`full` par défaut) ;
+- selon une planification mensuelle, sur `main` : corpus `full`.
+
+La release n'exige pas cette qualification ; voir [`semantic-search.md`](semantic-search.md#qualification-réelle-et-release).
 
 Le workflow :
 
@@ -121,12 +124,12 @@ Le workflow :
 3. vérifie l'archive Linux amd64 contre le SHA-256 versionné dans `config/tool-integrity.properties` ;
 4. démarre Ollama uniquement sur `127.0.0.1:11434` ;
 5. pull `qwen3-embedding:0.6b` et vérifie que son ID de manifest attendu commence par **`ac6da0dfba84`** ;
-6. exécute `RealSemanticSearchBenchmarkTest` sur le snapshot NEXUS exact et exige que le rapport référence `NEXUS_HEAD_SHA` ;
+6. exécute `RealSemanticSearchBenchmarkTest` sur le snapshot NEXUS exact, avec le corpus `SEMANTIC_CORPUS`, et exige que le rapport référence `NEXUS_HEAD_SHA` et ce corpus ;
 7. exige un index sémantique non vide et des floors de recall/hit/MRR, ainsi qu'une absence de régression supérieure à 0,10 face au baseline ;
 8. résume le débit d'embeddings (CPU du runner, requêtes, tokens, secondes, tokens/s) dans `throughput.json` et dans le résumé du job ;
 9. conserve versions, logs et rapport JSON comme artefacts pendant 90 jours.
 
-Le job dispose d'un budget de **180 minutes**. Ce budget est dérivé des mesures et non d'un confort arbitraire ; voir [`semantic-search.md`](semantic-search.md#budget-de-temps-de-la-qualification-réelle).
+Le job dispose d'un budget de **45 minutes** pour le corpus `pr` et d'un budget de **180 minutes** pour le corpus `full`. Ces budgets sont dérivés des mesures et non d'un confort arbitraire ; voir [`semantic-search.md`](semantic-search.md#budget-de-temps-de-la-qualification-réelle).
 
 Ce gate est une sentinelle de qualité réelle et un gate ciblé des changements sémantiques, pas une dépendance nécessaire au fonctionnement lexical ni un téléchargement imposé aux PR sans rapport avec cette surface.
 

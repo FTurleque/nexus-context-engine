@@ -152,9 +152,63 @@ grep -q 'Enforce semantic quality floor' "$SEMANTIC_WORKFLOW" \
   || fail 'real semantic qualification must enforce a regression floor'
 grep -q 'Summarize embedding throughput' "$SEMANTIC_WORKFLOW" \
   || fail 'real semantic qualification must retain measured embedding throughput'
-grep -q 'timeout-minutes: 180' "$SEMANTIC_WORKFLOW" \
-  && grep -q 'budget de \*\*180 minutes\*\*' docs/developer/ci-and-supply-chain.md \
-  || fail 'real semantic qualification time budget must stay documented with its measurements'
+# GEN-0059: reduced `pr` corpus bounded at 45 minutes on pull requests, `full` corpus
+# bounded at 180 minutes on develop after merge, never cancelled outside pull requests,
+# and not required by release.yml.
+grep -qF "timeout-minutes: \${{ github.event_name == 'pull_request' && 45 || 180 }}" "$SEMANTIC_WORKFLOW" \
+  && grep -q 'budget de \*\*45 minutes\*\* pour le corpus `pr`' docs/developer/ci-and-supply-chain.md \
+  && grep -q 'budget de \*\*180 minutes\*\* pour le corpus `full`' docs/developer/ci-and-supply-chain.md \
+  || fail 'real semantic qualification time budget per corpus must stay documented with its measurements'
+grep -qF "SEMANTIC_CORPUS: \${{ github.event_name == 'pull_request' && 'pr' || inputs.corpus || 'full' }}" "$SEMANTIC_WORKFLOW" \
+  || fail 'pull requests must run the pr corpus and other events the full corpus by default'
+grep -qF -- '-Dnexus.semantic.realBenchmark.corpus="$SEMANTIC_CORPUS"' "$SEMANTIC_WORKFLOW" \
+  || fail 'the selected corpus must reach RealSemanticSearchBenchmarkTest'
+python3 - "$SEMANTIC_WORKFLOW" .github/workflows/release.yml <<'PY'
+import re
+import sys
+from pathlib import Path
+
+
+def block(text: str, key: str) -> str:
+    match = re.search(rf"^  {key}:\n((?:(?:    |\s*\n).*\n?)*)", text, re.MULTILINE)
+    return match.group(1) if match else ""
+
+
+workflow = Path(sys.argv[1]).read_text(encoding="utf-8")
+push = block(workflow, "push")
+pull = block(workflow, "pull_request")
+if "      - develop\n" not in push or "    paths:\n" not in push:
+    raise SystemExit("final-audit-contracts: the full corpus must run on push to develop, filtered by the watched paths")
+def watched(section: str) -> list[str]:
+    paths = re.search(r"^    paths:\n((?:      - .*\n?)+)", section, re.MULTILINE)
+    return paths.group(1).split() if paths else []
+
+
+if not watched(push) or watched(push) != watched(pull):
+    raise SystemExit("final-audit-contracts: push and pull_request must watch the same paths")
+concurrency = workflow.split("\nconcurrency:\n", 1)[-1].split("\n\n", 1)[0]
+if "|| github.sha }}" not in concurrency or "cancel-in-progress: ${{ github.event_name == 'pull_request' }}" not in concurrency:
+    raise SystemExit("final-audit-contracts: runs outside pull requests must be grouped by SHA and never cancelled")
+
+release = Path(sys.argv[2]).read_text(encoding="utf-8")
+publish = release.split("\n  publish:\n", 1)
+if len(publish) != 2:
+    raise SystemExit("final-audit-contracts: release.yml publish job not found")
+job = re.split(r"\n  [a-z0-9_-]+:\n", publish[1], maxsplit=1)[0]
+needs = re.search(r"^    needs:(.*(?:\n      - .*)*)", job, re.MULTILINE)
+if needs is None:
+    raise SystemExit("final-audit-contracts: release.yml publish job has no needs")
+needed = set(re.findall(r"[A-Za-z0-9_-]+", needs.group(1)))
+semantic_jobs = set(re.findall(
+    r"^  ([A-Za-z0-9_-]+):\n(?:    .*\n)*?    uses: \./\.github/workflows/semantic-search-qualification\.yml",
+    release,
+    re.MULTILINE))
+if needed & (semantic_jobs | {"semantic-search", "semantic-search-qualification", "real-ollama"}):
+    raise SystemExit("final-audit-contracts: GEN-0059 keeps the real semantic qualification out of publish needs")
+PY
+grep -q 'GEN-0059' docs/developer/semantic-search.md \
+  && grep -q "La release n'exige pas la qualification sémantique réelle" docs/developer/semantic-search.md \
+  || fail 'docs/developer/semantic-search.md must state the release rule of GEN-0059'
 grep -Eq '^ollama\.0\.33\.3\.linux-amd64\.sha256=[0-9a-f]{64}$' config/tool-integrity.properties \
   || fail 'Ollama qualification checksum anchor is missing'
 

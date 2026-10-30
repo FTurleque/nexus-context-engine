@@ -18,9 +18,9 @@
 
 ## 3. Qualification sémantique réelle
 
-- [ ] 3.1 `AUD-DEP-19` — Nouvel ADR (skill `nexus-adr`) qui complète ADR-0014 : corpus PR réduit, corpus complet sur `develop`, rôle de la qualification dans `release.yml` ; vérifier par `bash .claude/scripts/contracts.sh`
+- [x] 3.1 `AUD-DEP-19` — Nouvel ADR (skill `nexus-adr`) qui complète ADR-0014 : corpus PR réduit, corpus complet sur `develop`, rôle de la qualification dans `release.yml` ; vérifier par `bash .claude/scripts/contracts.sh`
 - [ ] 3.2 `AUD-DEP-19` — Dans `semantic-search-qualification.yml` et `RealSemanticSearchBenchmarkTest`, introduire un sous-ensemble PR représentatif (durée bornée sous 45 min) et un corpus complet déclenché sur `develop` sans `cancel-in-progress`, selon l'ADR de 3.1 ; mettre à jour `test-final-audit-contracts.sh` (borne par corpus) et `docs/developer/semantic-search.md` ; vérifier par `./mvnw -B -ntp -pl core test -Dtest=RealSemanticSearchBenchmarkTest -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true` (benchmark désactivé par défaut, compilation et cas désactivé), `bash .claude/scripts/contracts.sh`, puis un run PR et un run sur `develop` terminés en succès (`gh run list -w semantic-search-qualification.yml --branch develop`)
-- [ ] 3.3 `AUD-DEP-19` — Si l'ADR de 3.1 exige la qualification en release, ajouter le job correspondant aux `needs` de `publish` dans `release.yml` ; vérifier par `bash .claude/scripts/contracts.sh`
+- [x] 3.3 `AUD-DEP-19` — Si l'ADR de 3.1 exige la qualification en release, ajouter le job correspondant aux `needs` de `publish` dans `release.yml` ; vérifier par `bash .claude/scripts/contracts.sh`
 
 ## 4. Validation
 
