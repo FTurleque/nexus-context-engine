@@ -449,5 +449,18 @@ for label, reusable, caller in (
         raise SystemExit(f"scale benchmark contract self-test: {label} drift was not detected")
 require("docs/developer/scale-regression-benchmark.md", "conclut en succès sans mesurer")
 
+# SECURITY.md keeps the alert handling procedure, including test fixtures of the redaction policy.
+for needle in (
+    "## Traitement des alertes de sécurité",
+    "### Délai de prise en charge",
+    "### Alertes Dependabot",
+    "### Alertes de secret scanning",
+    "`used_in_tests`",
+    "core/src/test/java/com/nexus/security/SensitiveContentRedactorTest.java",
+):
+    require("SECURITY.md", needle)
+if not (root / "core/src/test/java/com/nexus/security/SensitiveContentRedactorTest.java").is_file():
+    raise SystemExit("security contract drift: redaction fixture path cited by SECURITY.md is missing")
+
 print("operational-documentation-contracts=PASS")
 PY
