@@ -6,6 +6,9 @@ import com.nexus.application.NexusApplication;
 import com.nexus.config.NexusPaths;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.ranking.RankedCandidate;
+import com.nexus.search.semantic.SemanticBenchmarkSupport.Aggregate;
+import com.nexus.search.semantic.SemanticBenchmarkSupport.OllamaSettings;
+import com.nexus.search.semantic.SemanticBenchmarkSupport.RetrievalMeasurement;
 import com.nexus.search.semantic.lucene.LuceneSemanticSearchIndex;
 import com.nexus.search.semantic.ollama.OllamaEmbeddingProvider;
 import org.junit.jupiter.api.Test;
@@ -13,22 +16,20 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
-import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.nexus.search.semantic.SemanticBenchmarkSupport.firstRelevantRank;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @EnabledIfSystemProperty(named = "nexus.semantic.realDiagnostic.enabled", matches = "true")
 class RealSemanticRetrievalDiagnosticTest {
 
-    private static final int K = 3;
     private static final int RETRIEVAL_LIMIT = 50;
     private static final List<Double> SEMANTIC_RRF_WEIGHTS =
             List.of(1.0d, 1.25d, 1.5d, 2.0d, 3.0d, 4.0d, 6.0d, 8.0d);
@@ -42,11 +43,7 @@ class RealSemanticRetrievalDiagnosticTest {
         assertTrue(Files.isDirectory(corpusRoot), "Le snapshot NEXUS doit exister : " + corpusRoot);
 
         OllamaSettings ollama = OllamaSettings.fromSystemProperties();
-        OllamaEmbeddingProvider provider = new OllamaEmbeddingProvider(
-                ollama.baseUri(),
-                ollama.model(),
-                ollama.dimensions(),
-                Duration.ofSeconds(ollama.timeoutSeconds()));
+        OllamaEmbeddingProvider provider = ollama.provider();
 
         NexusPaths semanticPaths = new NexusPaths(temporaryDirectory.resolve("semantic-home"));
         NexusApplication indexingApplication = NexusApplication.create(
@@ -78,13 +75,13 @@ class RealSemanticRetrievalDiagnosticTest {
                     queryCase));
         }
 
-        Aggregate rawAggregate = aggregate(diagnostics.stream().map(QueryDiagnostic::raw).toList());
-        Aggregate baselineAggregate = aggregate(diagnostics.stream().map(QueryDiagnostic::baseline).toList());
+        Aggregate rawAggregate = Aggregate.of(diagnostics.stream().map(QueryDiagnostic::raw).toList());
+        Aggregate baselineAggregate = Aggregate.of(diagnostics.stream().map(QueryDiagnostic::baseline).toList());
         Map<Double, Aggregate> sweepAggregates = new LinkedHashMap<>();
         for (double semanticWeight : SEMANTIC_RRF_WEIGHTS) {
             sweepAggregates.put(
                     semanticWeight,
-                    aggregate(diagnostics.stream()
+                    Aggregate.of(diagnostics.stream()
                             .map(diagnostic -> diagnostic.weightedHybrid().get(semanticWeight))
                             .toList()));
         }
@@ -144,15 +141,15 @@ class RealSemanticRetrievalDiagnosticTest {
                 .map(SemanticSearchHit::relativePath)
                 .distinct()
                 .toList();
-        RetrievalResult raw = result(rawPaths, queryCase.relevantPaths(), rawDurationMs);
+        RetrievalMeasurement raw = RetrievalMeasurement.of(rawPaths, queryCase.relevantPaths(), rawDurationMs);
 
-        RetrievalResult baseline = runApplicationSearch(
+        RetrievalMeasurement baseline = runApplicationSearch(
                 baselineApplication,
                 project,
                 corpusRoot,
                 queryCase);
 
-        Map<Double, RetrievalResult> weightedHybrid = new LinkedHashMap<>();
+        Map<Double, RetrievalMeasurement> weightedHybrid = new LinkedHashMap<>();
         for (Map.Entry<Double, NexusApplication> entry : weightedApplications.entrySet()) {
             weightedHybrid.put(
                     entry.getKey(),
@@ -170,7 +167,7 @@ class RealSemanticRetrievalDiagnosticTest {
         return new QueryDiagnostic(queryCase, raw, baseline, Map.copyOf(weightedHybrid), List.copyOf(rawTop));
     }
 
-    private RetrievalResult runApplicationSearch(
+    private RetrievalMeasurement runApplicationSearch(
             NexusApplication application,
             ProjectDescriptor project,
             Path corpusRoot,
@@ -182,44 +179,14 @@ class RealSemanticRetrievalDiagnosticTest {
                 true);
         List<String> rankedPaths = operation.results().stream()
                 .map(RankedCandidate::candidate)
-                .map(candidate -> normalize(corpusRoot.relativize(candidate.path())))
+                .map(candidate -> RealSemanticBenchmarkCorpus.normalize(corpusRoot.relativize(candidate.path())))
                 .distinct()
                 .toList();
-        return result(rankedPaths, queryCase.relevantPaths(), operation.durationMs());
+        return RetrievalMeasurement.of(rankedPaths, queryCase.relevantPaths(), operation.durationMs());
     }
 
-    private static RetrievalResult result(List<String> rankedPaths, Set<String> relevantPaths, long durationMs) {
-        List<String> topK = rankedPaths.stream().limit(K).toList();
-        long relevantInTopK = topK.stream().filter(relevantPaths::contains).count();
-        int rankAt3 = firstRelevantRank(topK, relevantPaths);
-        int rankAt50 = firstRelevantRank(rankedPaths.stream().limit(RETRIEVAL_LIMIT).toList(), relevantPaths);
-        return new RetrievalResult(
-                rankedPaths,
-                rankAt3,
-                rankAt50,
-                (double) relevantInTopK / K,
-                (double) relevantInTopK / relevantPaths.size(),
-                relevantInTopK > 0 ? 1.0d : 0.0d,
-                rankAt3 > 0 ? 1.0d / rankAt3 : 0.0d,
-                durationMs);
-    }
-
-    private static int firstRelevantRank(List<String> rankedPaths, Set<String> relevantPaths) {
-        for (int index = 0; index < rankedPaths.size(); index++) {
-            if (relevantPaths.contains(rankedPaths.get(index))) {
-                return index + 1;
-            }
-        }
-        return 0;
-    }
-
-    private static Aggregate aggregate(List<RetrievalResult> results) {
-        return new Aggregate(
-                mean(results.stream().map(RetrievalResult::precisionAt3).toList()),
-                mean(results.stream().map(RetrievalResult::recallAt3).toList()),
-                mean(results.stream().map(RetrievalResult::hitAt3).toList()),
-                mean(results.stream().map(RetrievalResult::mrrAt3).toList()),
-                meanLong(results.stream().map(RetrievalResult::durationMs).toList()));
+    private static int rankAt50(RetrievalMeasurement measurement, Set<String> relevantPaths) {
+        return firstRelevantRank(measurement.rankedPaths().stream().limit(RETRIEVAL_LIMIT).toList(), relevantPaths);
     }
 
     private static Map<String, Object> summary(Aggregate aggregate) {
@@ -281,9 +248,9 @@ class RealSemanticRetrievalDiagnosticTest {
         result.put("query", diagnostic.queryCase().query());
         result.put("relevantPaths", diagnostic.queryCase().relevantPaths().stream().sorted().toList());
         result.put("rawRankAt3", diagnostic.raw().rankAt3());
-        result.put("rawRankAt50", diagnostic.raw().rankAt50());
+        result.put("rawRankAt50", rankAt50(diagnostic.raw(), diagnostic.queryCase().relevantPaths()));
         result.put("baselineRankAt3", diagnostic.baseline().rankAt3());
-        result.put("baselineRankAt50", diagnostic.baseline().rankAt50());
+        result.put("baselineRankAt50", rankAt50(diagnostic.baseline(), diagnostic.queryCase().relevantPaths()));
         result.put("rawTop", diagnostic.rawTop());
         result.put("baselineTop", diagnostic.baseline().rankedPaths().stream().limit(10).toList());
 
@@ -291,10 +258,10 @@ class RealSemanticRetrievalDiagnosticTest {
         diagnostic.weightedHybrid().entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
                 .forEach(entry -> {
-                    RetrievalResult measurement = entry.getValue();
+                    RetrievalMeasurement measurement = entry.getValue();
                     Map<String, Object> item = new LinkedHashMap<>();
                     item.put("rankAt3", measurement.rankAt3());
-                    item.put("rankAt50", measurement.rankAt50());
+                    item.put("rankAt50", rankAt50(measurement, diagnostic.queryCase().relevantPaths()));
                     item.put("top", measurement.rankedPaths().stream().limit(10).toList());
                     item.put("searchMs", measurement.durationMs());
                     sweep.put(formatWeight(entry.getKey()), item);
@@ -346,20 +313,8 @@ class RealSemanticRetrievalDiagnosticTest {
         return Path.of(configured).toAbsolutePath().normalize();
     }
 
-    private static String normalize(Path path) {
-        return path.toString().replace('\\', '/');
-    }
-
     private static String formatWeight(double value) {
         return String.format(java.util.Locale.ROOT, "%.2f", value);
-    }
-
-    private static double mean(List<Double> values) {
-        return values.stream().mapToDouble(Double::doubleValue).average().orElse(0.0d);
-    }
-
-    private static double meanLong(List<Long> values) {
-        return values.stream().mapToLong(Long::longValue).average().orElse(0.0d);
     }
 
     private static long elapsedMillis(long startedAt) {
@@ -372,42 +327,11 @@ class RealSemanticRetrievalDiagnosticTest {
         }
     }
 
-    private record RetrievalResult(
-            List<String> rankedPaths,
-            int rankAt3,
-            int rankAt50,
-            double precisionAt3,
-            double recallAt3,
-            double hitAt3,
-            double mrrAt3,
-            long durationMs) {
-    }
-
     private record QueryDiagnostic(
             QueryCase queryCase,
-            RetrievalResult raw,
-            RetrievalResult baseline,
-            Map<Double, RetrievalResult> weightedHybrid,
+            RetrievalMeasurement raw,
+            RetrievalMeasurement baseline,
+            Map<Double, RetrievalMeasurement> weightedHybrid,
             List<Map<String, Object>> rawTop) {
-    }
-
-    private record Aggregate(
-            double precisionAt3,
-            double recallAt3,
-            double hitAt3,
-            double mrrAt3,
-            double meanSearchMs) {
-    }
-
-    private record OllamaSettings(URI baseUri, String model, int dimensions, long timeoutSeconds) {
-        private static OllamaSettings fromSystemProperties() {
-            return new OllamaSettings(
-                    URI.create(System.getProperty(
-                            "nexus.semantic.ollama.baseUri",
-                            OllamaEmbeddingProvider.DEFAULT_BASE_URI.toString())),
-                    System.getProperty("nexus.semantic.ollama.model", OllamaEmbeddingProvider.DEFAULT_MODEL),
-                    Integer.getInteger("nexus.semantic.ollama.dimensions", OllamaEmbeddingProvider.DEFAULT_DIMENSIONS),
-                    Long.getLong("nexus.semantic.ollama.timeoutSeconds", OllamaEmbeddingProvider.DEFAULT_TIMEOUT.toSeconds()));
-        }
     }
 }
