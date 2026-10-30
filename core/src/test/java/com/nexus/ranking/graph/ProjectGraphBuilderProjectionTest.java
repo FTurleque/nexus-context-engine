@@ -60,6 +60,46 @@ class ProjectGraphBuilderProjectionTest {
 
             @Override
             public IndexStatistics statistics(UUID ignored) { return new IndexStatistics(0, 0, 0); }
+
+            @Override
+            public ReadSession openReadSession() {
+                throw new AssertionError("Graph must not open a read session");
+            }
+
+            @Override
+            public Map<String, IndexedFile> findFiles(UUID ignored, Set<String> relativePaths) {
+                throw new AssertionError("Graph must not load files");
+            }
+
+            @Override
+            public Map<String, String> findTypeOwners(UUID ignored) {
+                throw new AssertionError("Graph must not materialize type owners");
+            }
+
+            @Override
+            public List<IndexedSymbol> searchSymbols(UUID ignored, String query, int limit) {
+                throw new AssertionError("Graph must not search symbols");
+            }
+
+            @Override
+            public List<SymbolRelation> findImportRelations(UUID ignored) {
+                throw new AssertionError("Graph must not materialize every import");
+            }
+
+            @Override
+            public Set<String> findExternalProviders(UUID ignored) {
+                throw new AssertionError("Graph must not list providers");
+            }
+
+            @Override
+            public List<SymbolRelation> searchRelations(UUID ignored, String symbol, int limit) {
+                throw new AssertionError("Graph must not search relations");
+            }
+
+            @Override
+            public long generation(UUID ignored) {
+                throw new AssertionError("Graph must not read the generation");
+            }
         };
 
         Map<String, Set<String>> neighbors =
