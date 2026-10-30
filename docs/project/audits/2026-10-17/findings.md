@@ -95,7 +95,7 @@ core/src/main/java/com/nexus/ranking/RankedCandidate.java:30 `components = Map.c
 
 - **Axe** : Qualité · **Effort** : M 1-3j · **Sprint** : S2 · Outillage des scripts et des workflows
 - **Dépend de** : `AUD-QUA-04` · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-10-30** (`6dc03c2d`) : scripts/lib/NexusScript.psm1 seul définisseur d'Invoke-Maven, Resolve-AbsolutePath et Invoke-NexusJson ; Test-NexusScript.ps1 dans Windows gate ; contrat contre l'appel direct à Maven (PR #281)
 
 **Preuve**
 
@@ -566,7 +566,7 @@ AGENTS.md:11 « exécuter `mvn clean install` puis `scripts/self-smoke.ps1` » ;
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : S2 · Outillage des scripts et des workflows
 - **Dépend de** : aucun · **Débloque** : `AUD-QUA-05`
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 3 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-10-30** (`6dc03c2d`) : validate-iteration-9 à 17 archivés dans scripts/archive/ (non maintenus) ; validate-phase-6.ps1 et self-smoke.ps1 seuls points d'entrée documentés (PR #281)
 
 **Preuve**
 
@@ -695,7 +695,7 @@ core/src/main/java/com/nexus/context/source/git/LocalGitContextSourceProvider.ja
 - **Axe** : Sécurité, Dépendances · **Effort** : S<1j · **Sprint** : S2 · Outillage des scripts et des workflows
 - **Dépend de** : aucun · **Débloque** : aucun
 - **Fusionne** : `AUD-DEP-13`
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-10-30** (`6dc03c2d`) : inputs.profile passé par env: dans les trois workflows de benchmark ; workflow_hygiene.py inputs rejette toute expression inputs dans un bloc run: (PR #281)
 
 **Preuve**
 
@@ -1143,7 +1143,7 @@ packaging/docker/Dockerfile:22-27 et Dockerfile.runtime:10-15 : seuls JAR, quark
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S2 · Outillage des scripts et des workflows
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-10-30** (`6dc03c2d`) : commentaire osv-scanner.yml corrigé ; contrat SHA ↔ commentaire avec fixture négative (PR #281)
 
 **Preuve**
 
@@ -1159,7 +1159,7 @@ packaging/docker/Dockerfile:22-27 et Dockerfile.runtime:10-15 : seuls JAR, quark
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S2 · Outillage des scripts et des workflows
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-10-30** (`6dc03c2d`) : actions/checkout aligné sur v7.0.1 ; une seule version majeure par action, contrôlée par workflow_hygiene.py pins (PR #281)
 
 **Preuve**
 
@@ -1175,7 +1175,7 @@ grep -ho 'uses: …# …' .github/workflows/*.yml | uniq -c → `11 actions/chec
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S2 · Outillage des scripts et des workflows
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé (vérifié en direct) — Les PR Dependabot #257 et #259 (ouvertes, vertes) remplacent 8ac9e5c par 9a96bc4, qui n'est pas non plus un tag (v2.7.0 = b1d267a) : le constat survivrait à leur fusion.
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-10-30** (`6dc03c2d`) : workflows réutilisables OSV épinglés sur le commit du tag v2.7.0 (b1d267ae), vérifié par git ls-remote --tags (PR #281)
 
 **Preuve**
 
@@ -1207,7 +1207,7 @@ scale-benchmark.yml:15-31 (PR) inclut application/**, index/**, project/**, conf
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S2 · Outillage des scripts et des workflows
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — preuve par commande ou mesure ; aucun fichier de code modifié entre 98b1f3f0 et 0b6828ce
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-10-30** (`6dc03c2d`) : timeout-minutes sur chaque job avec runs-on, contrôlé par workflow_hygiene.py timeouts (PR #281)
 
 **Preuve**
 
@@ -1271,7 +1271,7 @@ packaging/docker/Dockerfile:1-55 sans HEALTHCHECK (sonde seulement dans docker-c
 
 - **Axe** : Dépendances · **Effort** : M · **Sprint** : S2 · Outillage des scripts et des workflows
 - **Dépend de** : aucun · **Débloque** : `AUD-PRF-02`
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé (vérifié en direct) — Aucun run de Semantic Search Qualification sur develop depuis le 17/10 (gh run list --branch develop -L 15).
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-10-30** (`6dc03c2d`) : corpus pr sur PR (25 min 24 s, run 41103264168) et corpus full sur develop après fusion (run 41114001269, succès sur 85c08184) ; release hors qualification (PR #281) · **Réserve** : GEN-0060 reste en statut Proposed tant que le mainteneur ne l'a pas accepté
 
 **Preuve**
 
@@ -1319,7 +1319,7 @@ WebFetch …/actions/workflows/semantic-search-qualification.yml → runs #40-#6
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S2 · Outillage des scripts et des workflows
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-10-30** (`6dc03c2d`) : jobs de benchmark et de qualification sur ubuntu-24.04 / windows-2025, contrôlés par workflow_hygiene.py runners ; cache Maven mesuré sans gain, non activé (PR #281)
 
 **Preuve**
 

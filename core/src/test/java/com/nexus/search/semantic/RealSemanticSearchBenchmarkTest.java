@@ -127,7 +127,7 @@ class RealSemanticSearchBenchmarkTest {
                 true);
         List<String> rankedPaths = operation.results().stream()
                 .map(RankedCandidate::candidate)
-                .map(candidate -> normalize(corpusRoot.relativize(candidate.path())))
+                .map(candidate -> RealSemanticBenchmarkCorpus.normalize(corpusRoot.relativize(candidate.path())))
                 .distinct()
                 .toList();
 
@@ -213,10 +213,6 @@ class RealSemanticSearchBenchmarkTest {
                 "nexus.semantic.realBenchmark.output",
                 "target/iteration-17-real-semantic-benchmark.json");
         return Path.of(configured).toAbsolutePath().normalize();
-    }
-
-    private static String normalize(Path path) {
-        return path.toString().replace('\\', '/');
     }
 
     private static double mean(List<Double> values) {

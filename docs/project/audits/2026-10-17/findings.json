@@ -307,19 +307,23 @@
     "AUD-QUA-04"
    ],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-30",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #281 (85c08184)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-30",
+    "commit": "6dc03c2d",
+    "verdict": "Fermé",
+    "preuve": "scripts/lib/NexusScript.psm1 seul définisseur d'Invoke-Maven, Resolve-AbsolutePath et Invoke-NexusJson ; Test-NexusScript.ps1 dans Windows gate ; contrat contre l'appel direct à Maven (PR #281)",
     "reserve": null
    }
   },
@@ -338,19 +342,23 @@
    "sprint": 2,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-30",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #281 (85c08184)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-30",
+    "commit": "6dc03c2d",
+    "verdict": "Fermé",
+    "preuve": "commentaire osv-scanner.yml corrigé ; contrat SHA ↔ commentaire avec fixture négative (PR #281)",
     "reserve": null
    }
   },
@@ -369,19 +377,23 @@
    "sprint": 2,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-30",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #281 (85c08184)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-30",
+    "commit": "6dc03c2d",
+    "verdict": "Fermé",
+    "preuve": "actions/checkout aligné sur v7.0.1 ; une seule version majeure par action, contrôlée par workflow_hygiene.py pins (PR #281)",
     "reserve": null
    }
   },
@@ -400,19 +412,23 @@
    "sprint": 2,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-30",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #281 (85c08184)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé (vérifié en direct)",
-    "preuve": "Les PR Dependabot #257 et #259 (ouvertes, vertes) remplacent 8ac9e5c par 9a96bc4, qui n'est pas non plus un tag (v2.7.0 = b1d267a) : le constat survivrait à leur fusion.",
+    "date": "2026-10-30",
+    "commit": "6dc03c2d",
+    "verdict": "Fermé",
+    "preuve": "workflows réutilisables OSV épinglés sur le commit du tag v2.7.0 (b1d267ae), vérifié par git ls-remote --tags (PR #281)",
     "reserve": null
    }
   },
@@ -431,19 +447,23 @@
    "sprint": 2,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-30",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #281 (85c08184)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "preuve par commande ou mesure ; aucun fichier de code modifié entre 98b1f3f0 et 0b6828ce",
+    "date": "2026-10-30",
+    "commit": "6dc03c2d",
+    "verdict": "Fermé",
+    "preuve": "timeout-minutes sur chaque job avec runs-on, contrôlé par workflow_hygiene.py timeouts (PR #281)",
     "reserve": null
    }
   },
@@ -464,20 +484,24 @@
    "bloque": [
     "AUD-PRF-02"
    ],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-30",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #281 (85c08184)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé (vérifié en direct)",
-    "preuve": "Aucun run de Semantic Search Qualification sur develop depuis le 17/10 (gh run list --branch develop -L 15).",
-    "reserve": null
+    "date": "2026-10-30",
+    "commit": "6dc03c2d",
+    "verdict": "Fermé",
+    "preuve": "corpus pr sur PR (25 min 24 s, run 41103264168) et corpus full sur develop après fusion (run 41114001269, succès sur 85c08184) ; release hors qualification (PR #281)",
+    "reserve": "GEN-0060 reste en statut Proposed tant que le mainteneur ne l'a pas accepté"
    }
   },
   {
@@ -495,19 +519,23 @@
    "sprint": 2,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-30",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #281 (85c08184)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-30",
+    "commit": "6dc03c2d",
+    "verdict": "Fermé",
+    "preuve": "jobs de benchmark et de qualification sur ubuntu-24.04 / windows-2025, contrôlés par workflow_hygiene.py runners ; cache Maven mesuré sans gain, non activé (PR #281)",
     "reserve": null
    }
   },
@@ -528,19 +556,23 @@
    "bloque": [
     "AUD-QUA-05"
    ],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-30",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #281 (85c08184)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "3 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-30",
+    "commit": "6dc03c2d",
+    "verdict": "Fermé",
+    "preuve": "validate-iteration-9 à 17 archivés dans scripts/archive/ (non maintenus) ; validate-phase-6.ps1 et self-smoke.ps1 seuls points d'entrée documentés (PR #281)",
     "reserve": null
    }
   },
@@ -563,19 +595,23 @@
    "sprint": 2,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-30",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #281 (85c08184)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-30",
+    "commit": "6dc03c2d",
+    "verdict": "Fermé",
+    "preuve": "inputs.profile passé par env: dans les trois workflows de benchmark ; workflow_hygiene.py inputs rejette toute expression inputs dans un bloc run: (PR #281)",
     "reserve": null
    }
   },
@@ -3912,5 +3948,5 @@
   }
  ],
  "date_maj": "2026-10-30",
- "commit_maj": "b6b56a07"
+ "commit_maj": "6dc03c2d"
 }
