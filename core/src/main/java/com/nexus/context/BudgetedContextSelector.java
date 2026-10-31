@@ -1,5 +1,6 @@
 package com.nexus.context;
 
+import com.nexus.security.OversizedSecretException;
 import com.nexus.security.SensitiveContentRedactor;
 import com.nexus.token.TokenEstimator;
 
@@ -38,10 +39,17 @@ public final class BudgetedContextSelector {
         // Redact before token estimation/truncation so secrets never consume artificial
         // budget and every accounting value describes the content that can actually leave
         // the selector. ContextBundle keeps a second redaction barrier at the API boundary.
-        List<PreparedFragment> sorted = fragments.stream()
-                .map(fragment -> new PreparedFragment(
-                        fragment,
-                        SensitiveContentRedactor.redact(fragment.content())))
+        // Un fragment dont une valeur sensible dépasse la borne de redaction est écarté seul.
+        List<String> excluded = new ArrayList<>();
+        List<PreparedFragment> redactable = new ArrayList<>(fragments.size());
+        for (ContextFragment fragment : fragments) {
+            try {
+                redactable.add(new PreparedFragment(fragment, SensitiveContentRedactor.redact(fragment.content())));
+            } catch (OversizedSecretException exception) {
+                excluded.add(OversizedSecretException.exclusion(fragment.path()));
+            }
+        }
+        List<PreparedFragment> sorted = redactable.stream()
                 .sorted(Comparator
                         .comparingDouble((PreparedFragment prepared) -> prepared.fragment().score()).reversed()
                         .thenComparing(prepared -> prepared.fragment().path().toString())
@@ -59,7 +67,6 @@ public final class BudgetedContextSelector {
         int remaining = tokenBudget;
         int truncatedItems = 0;
         List<ContextItem> selected = new ArrayList<>();
-        List<String> excluded = new ArrayList<>();
 
         for (PreparedFragment prepared : sorted) {
             ContextFragment fragment = prepared.fragment();

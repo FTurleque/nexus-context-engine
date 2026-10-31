@@ -2,14 +2,10 @@ package com.nexus.api;
 
 import com.nexus.application.NexusApplication;
 import com.nexus.config.NexusPaths;
-import com.nexus.context.ContextBundle;
-import com.nexus.context.FederatedContextBundle;
 import com.nexus.index.IndexStatistics;
 import com.nexus.index.IndexingReport;
 import com.nexus.project.ProjectDescriptor;
-import com.nexus.ranking.RankedCandidate;
 import com.nexus.search.CandidateType;
-import com.nexus.search.FederatedSearchHit;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -58,14 +54,14 @@ public class NexusApiApplicationService {
         return requireAllowedProject(projectId);
     }
 
-    public IndexOperation index(UUID projectId, boolean rebuild, boolean deepJava) throws IOException {
+    public NexusApplication.IndexOperation index(UUID projectId, boolean rebuild, boolean deepJava) throws IOException {
         requireAllowedProject(projectId);
         long startedAt = System.nanoTime();
         operationCounter("index");
         try {
             NexusApplication.IndexOperation operation = application.index(projectId, rebuild, deepJava);
             recordProviderDurations(operation.report());
-            return new IndexOperation(operation.project(), operation.report());
+            return operation;
         } finally {
             recordDuration("index", startedAt);
         }
@@ -76,21 +72,18 @@ public class NexusApiApplicationService {
         return application.inspect(projectId);
     }
 
-    public SearchOperation search(UUID projectId, String query, int limit, boolean explain) throws IOException {
+    public NexusApplication.SearchOperation search(UUID projectId, String query, int limit, boolean explain) throws IOException {
         requireAllowedProject(projectId);
         long startedAt = System.nanoTime();
         operationCounter("search");
         try {
-            NexusApplication.SearchOperation operation = application.search(projectId, query, limit, explain);
-            return new SearchOperation(
-                    operation.project(), operation.query(), operation.limit(), operation.explain(),
-                    operation.durationMs(), operation.results());
+            return application.search(projectId, query, limit, explain);
         } finally {
             recordDuration("search", startedAt);
         }
     }
 
-    public FederatedSearchOperation searchAcrossProjects(
+    public NexusApplication.FederatedSearchOperation searchAcrossProjects(
             List<UUID> projectIds,
             String query,
             int limit,
@@ -99,17 +92,13 @@ public class NexusApiApplicationService {
         long startedAt = System.nanoTime();
         operationCounter("search_federated");
         try {
-            NexusApplication.FederatedSearchOperation operation =
-                    application.searchAcrossProjects(projectIds, query, limit, explain);
-            return new FederatedSearchOperation(
-                    operation.projects(), operation.query(), operation.limit(), operation.explain(),
-                    operation.durationMs(), operation.results());
+            return application.searchAcrossProjects(projectIds, query, limit, explain);
         } finally {
             recordDuration("search_federated", startedAt);
         }
     }
 
-    public ContextOperation context(
+    public NexusApplication.ContextOperation context(
             UUID projectId,
             String query,
             int tokenBudget,
@@ -120,18 +109,15 @@ public class NexusApiApplicationService {
         long startedAt = System.nanoTime();
         operationCounter("context");
         try {
-            NexusApplication.ContextOperation operation = application.context(
+            return application.context(
                     projectId, query, tokenBudget, parseRequestedSources(requestedSources),
                     constraints == null ? Map.of() : constraints, explain);
-            return new ContextOperation(
-                    operation.project(), operation.query(), operation.explain(),
-                    operation.durationMs(), operation.bundle());
         } finally {
             recordDuration("context", startedAt);
         }
     }
 
-    public FederatedContextOperation contextAcrossProjects(
+    public NexusApplication.FederatedContextOperation contextAcrossProjects(
             List<UUID> projectIds,
             String query,
             int tokenBudget,
@@ -142,12 +128,9 @@ public class NexusApiApplicationService {
         long startedAt = System.nanoTime();
         operationCounter("context_federated");
         try {
-            NexusApplication.FederatedContextOperation operation = application.contextAcrossProjects(
+            return application.contextAcrossProjects(
                     projectIds, query, tokenBudget, parseRequestedSources(requestedSources),
                     constraints == null ? Map.of() : constraints, explain);
-            return new FederatedContextOperation(
-                    operation.projects(), operation.query(), operation.explain(),
-                    operation.durationMs(), operation.bundle());
         } finally {
             recordDuration("context_federated", startedAt);
         }
@@ -222,52 +205,5 @@ public class NexusApiApplicationService {
         report.providerDurationsMs().forEach((provider, durationMs) ->
                 meterRegistry.timer("nexus.code_intelligence.duration", "provider", provider)
                         .record(Duration.ofMillis(durationMs)));
-    }
-
-    public record IndexOperation(ProjectDescriptor project, IndexingReport report) {
-    }
-
-    public record SearchOperation(
-            ProjectDescriptor project,
-            String query,
-            int limit,
-            boolean explain,
-            long durationMs,
-            List<RankedCandidate> results) {
-        public SearchOperation {
-            results = List.copyOf(results);
-        }
-    }
-
-    public record FederatedSearchOperation(
-            List<ProjectDescriptor> projects,
-            String query,
-            int limit,
-            boolean explain,
-            long durationMs,
-            List<FederatedSearchHit> results) {
-        public FederatedSearchOperation {
-            projects = List.copyOf(projects);
-            results = List.copyOf(results);
-        }
-    }
-
-    public record ContextOperation(
-            ProjectDescriptor project,
-            String query,
-            boolean explain,
-            long durationMs,
-            ContextBundle bundle) {
-    }
-
-    public record FederatedContextOperation(
-            List<ProjectDescriptor> projects,
-            String query,
-            boolean explain,
-            long durationMs,
-            FederatedContextBundle bundle) {
-        public FederatedContextOperation {
-            projects = List.copyOf(projects);
-        }
     }
 }

@@ -104,10 +104,7 @@ public final class PublicDiagnosticPolicy {
         }
         // Ces records ne contiennent que des compteurs numériques validés. Garder
         // leur type préserve aussi le contrat core des snapshots de budgets.
-        if (value instanceof com.nexus.context.source.ContextDiscoveryLimits
-                || value instanceof com.nexus.context.source.ContextDiscoveryBudget.Snapshot
-                || value instanceof com.nexus.context.ContextMaterializationLimits
-                || value instanceof com.nexus.context.ContextMaterializationBudget.Snapshot) return value;
+        if (value instanceof PublicCounterSnapshot) return value;
         throw unsupported();
     }
 

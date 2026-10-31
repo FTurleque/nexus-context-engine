@@ -3,7 +3,7 @@ package com.nexus.persistence.sqlite;
 import com.nexus.application.NexusApplication;
 import com.nexus.config.NexusPaths;
 import com.nexus.project.IndexStatus;
-import com.nexus.security.PublicContextPolicy;
+import com.nexus.exposure.PublicContextPolicy;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -85,7 +85,8 @@ class SchemaMigratorScalarSecretUpgradeTest {
             assertNull(app.getProject(id).lastIndexedAt());
             assertThrows(IllegalStateException.class, () -> app.search(id, "PrivacyMarker", 10, false));
             var repository = new SqliteIndexRepository(new SqliteDatabase(paths));
-            assertEquals(18, repository.generation(id));
+            // V010 puis V011 incrémentent chacune la génération une fois.
+            assertEquals(19, repository.generation(id));
             app.index(id, false, false);
             assertTrue(lexical.search(id, "123456789", 10).isEmpty());
             assertTrue(app.search(id, "123456789", 10, false).results().isEmpty());

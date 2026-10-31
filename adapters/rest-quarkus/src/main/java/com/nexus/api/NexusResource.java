@@ -1,14 +1,10 @@
 package com.nexus.api;
 
 import com.nexus.api.ApiModels.ContextRequestDto;
-import com.nexus.api.ApiModels.ContextResponse;
 import com.nexus.api.ApiModels.CreateProjectRequest;
-import com.nexus.api.ApiModels.IndexResponse;
-import com.nexus.api.ApiModels.IndexStatisticsResponse;
-import com.nexus.api.ApiModels.ProjectResponse;
 import com.nexus.api.ApiModels.SearchRequest;
-import com.nexus.api.ApiModels.SearchResponse;
 import com.nexus.context.ContextBudgetPolicy;
+import com.nexus.exposure.PublicOutput;
 import com.nexus.search.QueryPolicy;
 import com.nexus.search.ResultLimitPolicy;
 import jakarta.inject.Inject;
@@ -41,10 +37,8 @@ public class NexusResource {
     NexusApiApplicationService service;
 
     @GET
-    public List<ProjectResponse> listProjects() {
-        return service.listProjects().stream()
-                .map(ApiMapper::project)
-                .toList();
+    public List<PublicOutput.Project> listProjects() {
+        return ApiMapper.projectList(service.listProjects());
     }
 
     @POST
@@ -52,19 +46,19 @@ public class NexusResource {
     public Response createProject(CreateProjectRequest request) throws IOException {
         requireRequest(request, "Le corps de la requête projet est obligatoire");
         String rootPath = requireNonBlank(request.rootPath(), "rootPath est obligatoire");
-        ProjectResponse project = ApiMapper.project(service.registerProject(Paths.get(rootPath), request.name()));
+        PublicOutput.Project project = ApiMapper.project(service.registerProject(Paths.get(rootPath), request.name()));
         return Response.status(Response.Status.CREATED).entity(project).build();
     }
 
     @GET
     @Path("/{projectId}")
-    public ProjectResponse getProject(@PathParam("projectId") UUID projectId) {
+    public PublicOutput.Project getProject(@PathParam("projectId") UUID projectId) {
         return ApiMapper.project(service.getProject(projectId));
     }
 
     @POST
     @Path("/{projectId}/index")
-    public IndexResponse index(
+    public PublicOutput.Index index(
             @PathParam("projectId") UUID projectId,
             @QueryParam("rebuild") @DefaultValue("false") boolean rebuild,
             @QueryParam("deepJava") @DefaultValue("false") boolean deepJava) throws IOException {
@@ -73,39 +67,39 @@ public class NexusResource {
 
     @GET
     @Path("/{projectId}/index")
-    public IndexStatisticsResponse inspect(@PathParam("projectId") UUID projectId) {
+    public PublicOutput.IndexStatistics inspect(@PathParam("projectId") UUID projectId) {
         return ApiMapper.statistics(service.inspect(projectId));
     }
 
     @POST
     @Path("/{projectId}/search")
     @Consumes(MediaType.APPLICATION_JSON)
-    public SearchResponse search(@PathParam("projectId") UUID projectId, SearchRequest request) throws IOException {
+    public PublicOutput.Search search(@PathParam("projectId") UUID projectId, SearchRequest request) throws IOException {
         return search(projectId, request, null);
     }
 
     @POST
     @Path("/{projectId}/explain/search")
     @Consumes(MediaType.APPLICATION_JSON)
-    public SearchResponse explainSearch(@PathParam("projectId") UUID projectId, SearchRequest request) throws IOException {
+    public PublicOutput.Search explainSearch(@PathParam("projectId") UUID projectId, SearchRequest request) throws IOException {
         return search(projectId, request, true);
     }
 
     @POST
     @Path("/{projectId}/context")
     @Consumes(MediaType.APPLICATION_JSON)
-    public ContextResponse context(@PathParam("projectId") UUID projectId, ContextRequestDto request) {
+    public PublicOutput.Context context(@PathParam("projectId") UUID projectId, ContextRequestDto request) {
         return context(projectId, request, null);
     }
 
     @POST
     @Path("/{projectId}/explain/context")
     @Consumes(MediaType.APPLICATION_JSON)
-    public ContextResponse explainContext(@PathParam("projectId") UUID projectId, ContextRequestDto request) {
+    public PublicOutput.Context explainContext(@PathParam("projectId") UUID projectId, ContextRequestDto request) {
         return context(projectId, request, true);
     }
 
-    private SearchResponse search(UUID projectId, SearchRequest request, Boolean forceExplain) throws IOException {
+    private PublicOutput.Search search(UUID projectId, SearchRequest request, Boolean forceExplain) throws IOException {
         requireRequest(request, "Le corps de la requête de recherche est obligatoire");
         String query = QueryPolicy.normalize(request.query());
         int limit = request.limit() == null
@@ -115,7 +109,7 @@ public class NexusResource {
         return ApiMapper.search(service.search(projectId, query, limit, explain));
     }
 
-    private ContextResponse context(UUID projectId, ContextRequestDto request, Boolean forceExplain) {
+    private PublicOutput.Context context(UUID projectId, ContextRequestDto request, Boolean forceExplain) {
         requireRequest(request, "Le corps de la requête de contexte est obligatoire");
         String query = QueryPolicy.normalize(request.query());
         int tokenBudget = request.tokenBudget() == null

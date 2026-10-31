@@ -7,9 +7,15 @@ import java.util.regex.Pattern;
 final class SecretAssignmentScanner {
     private static final int MAX_SECRET_CHARS = 4096;
     private static final String REDACTED = "[REDACTED]";
+    /**
+     * Composants de clé sensibles, comparés par segment ({@code _ . -}) pour ne pas viser
+     * {@code tokenizer}, {@code author} ou {@code max_tokens}. Les formes camelCase usuelles
+     * ({@code secretKey}, {@code accessKey}, {@code privateKey}) sont des segments entiers.
+     */
     private static final Pattern SENSITIVE_KEY_COMPONENT = Pattern.compile(
             "(?i)(?:^|[_.-])(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|"
-                    + "secret[_-]?access[_-]?key|password|passwd|secret)(?=$|[_.-])");
+                    + "secret[_-]?access[_-]?key|access[_-]?key|private[_-]?key|secret[_-]?key|"
+                    + "password|passwd|pwd|secret|token|auth|credentials|authorization)(?=$|[_.-])");
 
     private SecretAssignmentScanner() { }
 
@@ -126,7 +132,7 @@ final class SecretAssignmentScanner {
     private static void requireWithinLimit(int length) {
         if (length > MAX_SECRET_CHARS) {
             // Refuser le contenu entier évite de publier le suffixe d'un secret trop long.
-            throw new IllegalArgumentException("Valeur sensible dépassant la limite de redaction");
+            throw new OversizedSecretException();
         }
     }
 }

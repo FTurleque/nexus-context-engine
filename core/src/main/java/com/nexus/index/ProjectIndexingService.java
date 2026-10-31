@@ -272,7 +272,7 @@ public final class ProjectIndexingService {
                     searchRemovedPaths);
 
             List<IndexedFileUpdate> updates = documentPublisher.publish(projectId, project.rootPath(),
-                    scannedFiles, existingFiles, canonicalFingerprint, fullRebuild, semanticFullRebuild);
+                    scannedFiles, existingFiles, canonicalFingerprint, fullRebuild, semanticFullRebuild, diagnostics);
 
             boolean codeSourcesChanged = codeIntelligenceSourcesChanged(
                     fullRebuild, updates, removedPaths, existingFiles);

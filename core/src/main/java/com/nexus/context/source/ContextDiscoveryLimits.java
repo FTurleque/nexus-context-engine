@@ -11,7 +11,7 @@ public record ContextDiscoveryLimits(
         int maxVisitedEntries,
         int maxCandidateResources,
         long maxCumulativeBytes,
-        long maxElapsedMillis) {
+        long maxElapsedMillis) implements com.nexus.security.PublicCounterSnapshot {
 
     public static final String ENV_MAX_VISITED_ENTRIES = "NEXUS_CONTEXT_DISCOVERY_MAX_VISITED_ENTRIES";
     public static final String ENV_MAX_CANDIDATES = "NEXUS_CONTEXT_DISCOVERY_MAX_CANDIDATES";

@@ -1,4 +1,4 @@
-package com.nexus.security;
+package com.nexus.exposure;
 
 import com.nexus.paths.RepositoryPath;
 
@@ -7,12 +7,18 @@ import com.nexus.context.ContextItem;
 import com.nexus.context.FederatedContextBundle;
 import com.nexus.context.FederatedContextItem;
 import com.nexus.project.ProjectDescriptor;
+import com.nexus.security.PublicDiagnosticPolicy;
+import com.nexus.security.PublicProjectPathPolicy;
+import com.nexus.security.SensitiveContentRedactor;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Défense commune REST/MCP/CLI, appliquée même aux bundles de producteurs tiers. */
+/**
+ * Politique de sortie des contextes, appliquée par {@link PublicOutputProjection} sur les trois
+ * canaux, même aux bundles de producteurs tiers.
+ */
 public final class PublicContextPolicy {
     private PublicContextPolicy() { }
 
@@ -46,8 +52,17 @@ public final class PublicContextPolicy {
         var diagnostics = new PublicDiagnosticPolicy(List.of(project.rootPath()));
         return new ContextItem(item.type(), new RepositoryPath(PublicProjectPathPolicy.expose(project.rootPath(), item.path()))
                 .toPath(project.rootPath().getFileSystem()),
-                diagnostics.text(item.symbol()), item.startLine(), item.endLine(),
-                SensitiveContentRedactor.redact(item.content()), item.score(), item.scoreComponents(),
+                symbol(diagnostics, item.symbol()), item.startLine(), item.endLine(),
+                SensitiveContentRedactor.redactField(item.content()), item.score(), item.scoreComponents(),
                 diagnostics.texts(item.reasons()), item.estimatedTokens(), item.truncated());
+    }
+
+    /** Le symbole d'un fragment vient d'une signature externe : refusé par la redaction, il sort masqué. */
+    private static String symbol(PublicDiagnosticPolicy diagnostics, String symbol) {
+        try {
+            return diagnostics.text(symbol);
+        } catch (com.nexus.security.OversizedSecretException exception) {
+            return "[REDACTED]";
+        }
     }
 }
