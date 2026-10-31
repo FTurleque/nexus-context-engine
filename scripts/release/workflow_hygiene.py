@@ -184,33 +184,40 @@ def check_timeouts(files: list[Path]) -> list[str]:
     return errors
 
 
+def declared_runners(lines: list[str], start: int, end: int) -> list[tuple[int, str]]:
+    """Return (line number, image) for each literal runner declared between start and end."""
+    runners = []
+    for number in range(start, end):
+        text = lines[number - 1].strip()
+        prefix = next((p for p in ("runs-on:", "- os:", "os:") if text.startswith(p)), None)
+        if prefix is None:
+            continue
+        value = text[len(prefix):].strip().strip("'\"")
+        if not value.startswith("${{"):
+            runners.append((number, value))
+    return runners
+
+
 def check_runners(files: list[Path]) -> list[str]:
     errors: list[str] = []
     for path in files:
-        expected_jobs = PINNED_RUNNER_JOBS.get(path.name)
-        if not expected_jobs:
-            continue
-        lines = lines_of(path)
-        jobs = {job: (number, keys) for job, number, keys in jobs_of(lines)}
+        expected_jobs = PINNED_RUNNER_JOBS.get(path.name, ())
+        lines = lines_of(path) if expected_jobs else []
+        starts = {job: number for job, number, _ in jobs_of(lines)}
         for job in expected_jobs:
-            if job not in jobs:
+            if job not in starts:
                 errors.append(f"{path.as_posix()}: benchmark job '{job}' not found")
                 continue
-            start, keys = jobs[job]
-            end = min((n for _, n, _ in jobs_of(lines) if n > start), default=len(lines) + 1)
-            runners = []
-            for number in range(start, end):
-                text = lines[number - 1].strip()
-                for prefix in ("runs-on:", "- os:", "os:"):
-                    if text.startswith(prefix):
-                        value = text[len(prefix):].strip().strip("'\"")
-                        if not value.startswith("${{"):
-                            runners.append((number, value))
+            start = starts[job]
+            end = min((n for n in starts.values() if n > start), default=len(lines) + 1)
+            runners = declared_runners(lines, start, end)
             if not runners:
                 errors.append(f"{path.as_posix()}:{start}: benchmark job '{job}' declares no runner image")
-            for number, value in runners:
-                if not VERSIONED_RUNNER.match(value):
-                    errors.append(f"{path.as_posix()}:{number}: benchmark job '{job}' runs on unpinned image {value!r}")
+            errors.extend(
+                f"{path.as_posix()}:{number}: benchmark job '{job}' runs on unpinned image {value!r}"
+                for number, value in runners
+                if not VERSIONED_RUNNER.match(value)
+            )
     return errors
 
 

@@ -132,7 +132,7 @@ Le workflow :
 
 Le job dispose d'un budget de **45 minutes** pour le corpus `pr` et d'un budget de **180 minutes** pour le corpus `full`. Ces budgets sont dérivés des mesures et non d'un confort arbitraire ; voir [`semantic-search.md`](semantic-search.md#budget-de-temps-de-la-qualification-réelle).
 
-Sur `workflow_dispatch` avec `diagnostics` à `true`, le job `semantic-diagnostics` lance en plus, sur le même runtime, `SemanticSearchBenchmarkTest` (corpus synthétique de 8 documents) et `RealSemanticRetrievalDiagnosticTest` (snapshot NEXUS complet, un rapport par poids RRF), sans seuil : ce sont des outils de mesure dont les rapports JSON sont conservés 90 jours.
+Sur `workflow_dispatch` avec `diagnostics` à `true`, le job `semantic-diagnostics` lance en plus, sur le même runtime, `SemanticSearchBenchmarkTest` (corpus synthétique de 8 documents) et `RealSemanticRetrievalDiagnosticTest` (snapshot NEXUS complet, un rapport par poids RRF), sans seuil : ce sont des outils de mesure dont les rapports JSON sont conservés 90 jours. Le job dispose d'un budget de **240 minutes** : le diagnostic a duré 2 h 58 le 2026-10-30 (run 41122508294), dont l'indexation sémantique du snapshot complet.
 
 Ce gate est une sentinelle de qualité réelle et un gate ciblé des changements sémantiques, pas une dépendance nécessaire au fonctionnement lexical ni un téléchargement imposé aux PR sans rapport avec cette surface.
 

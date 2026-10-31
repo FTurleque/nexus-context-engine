@@ -250,8 +250,8 @@ jobs:
     # lexical/sémantique et diagnostic par poids RRF sur le snapshot exact.
     if: github.event_name == 'workflow_dispatch' && inputs.diagnostics
     runs-on: ubuntu-24.04
-    # Le diagnostic indexe le snapshot NEXUS complet une fois puis interroge chaque poids RRF ;
-    # la borne couvre l'indexation complète mesurée pour le corpus `full` (~2 h 05) avec marge.
+    # Le diagnostic indexe le snapshot NEXUS complet une fois puis interroge chaque poids RRF :
+    # 2 h 58 mesurées le 2026-10-30 (run 41122508294) ; 240 minutes laissent ~35 % de marge.
     timeout-minutes: 240
     env:
       DIAGNOSTICS_DIR: target/semantic-diagnostics
