@@ -62,3 +62,10 @@ Le test d'architecture SHALL comparer les arêtes de cycle du graphe des package
 #### Scenario: Cycle cassé sans mise à jour de la baseline
 - **WHEN** une modification casse un cycle listé dans la baseline sans retirer l'entrée
 - **THEN** le test d'architecture échoue et demande de retirer l'entrée
+
+### Requirement: La politique de sortie ne dépend pas du package security
+La politique d'exposition des contextes SHALL résider hors du package `com.nexus.security`, et ce package SHALL NOT importer de type du package `com.nexus.context`.
+
+#### Scenario: Contrôle des imports
+- **WHEN** on recherche `import com.nexus.context` dans `core/src/main/java/com/nexus/security/`
+- **THEN** aucune occurrence n'est trouvée

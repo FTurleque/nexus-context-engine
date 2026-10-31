@@ -887,19 +887,23 @@
    "bloque": [
     "AUD-ARC-01"
    ],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-31",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #284 (050af1e4)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-31",
+    "commit": "16bf2311",
+    "verdict": "Fermé",
+    "preuve": "PublicContextPolicy déplacée de com.nexus.security vers com.nexus.exposure, cycle context ↔ security rompu (PR #284)",
     "reserve": null
    }
   },
@@ -918,20 +922,24 @@
    "sprint": 4,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-31",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Prévention pour le code futur (règle de revue), code existant inchangé",
+   "changement": "Corrigé par la PR #284 (050af1e4)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "5 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
-    "reserve": ".claude/rules/code-review.md:12 (PR #254) interdit l'ordre d'itération d'un HashMap/HashSet en sortie pour le code revu ; les mappers MCP/REST existants transmettent toujours Map.copyOf sans tri."
+    "date": "2026-10-31",
+    "commit": "16bf2311",
+    "verdict": "Fermé",
+    "preuve": "scoreComponents triés par clé dans la projection, test sur deux ordres d'insertion (PR #284)",
+    "reserve": null
    }
   },
   {
@@ -957,20 +965,24 @@
    "bloque": [
     "AUD-ARC-03"
    ],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-31",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Prévention pour le code futur (règle de revue), code existant inchangé",
+   "changement": "Corrigé par la PR #284 (050af1e4)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "4 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
-    "reserve": ".claude/rules/code-review.md:14 (PR #254) rappelle la parité CLI/REST/MCP ; la projection reste écrite trois fois."
+    "date": "2026-10-31",
+    "commit": "16bf2311",
+    "verdict": "Fermé",
+    "preuve": "projection publique unique du cœur (com.nexus.exposure) branchée sur CliResultMapper, McpResultMapper et ApiMapper ; test de parité des clés JSON CLI/MCP/REST ; ADR ARCH-0061 (PR #284)",
+    "reserve": null
    }
   },
   {
@@ -988,19 +1000,23 @@
    "sprint": 4,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-31",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #284 (050af1e4)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-31",
+    "commit": "16bf2311",
+    "verdict": "Fermé",
+    "preuve": "sonde de 35 cas versionnée en test paramétré ; formats structurés ajoutés ; secret-redaction-v6, content-v5 et migration d'invalidation (PR #284)",
     "reserve": null
    }
   },
@@ -1019,19 +1035,23 @@
    "sprint": 4,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-31",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #284 (050af1e4)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-31",
+    "commit": "16bf2311",
+    "verdict": "Fermé",
+    "preuve": "OversizedSecretException capturée par fichier : fichier exclu des index avec le diagnostic INDEX_REDACTION_LIMIT, champ public masqué en [REDACTED] ; test d'indexation à trois fichiers (PR #284)",
     "reserve": null
    }
   },
@@ -1050,19 +1070,23 @@
    "sprint": 4,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-31",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #284 (050af1e4)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-31",
+    "commit": "16bf2311",
+    "verdict": "Fermé",
+    "preuve": "second appel à SensitiveContentRedactor.redact retiré de SemanticIndexingService (PR #284)",
     "reserve": null
    }
   },
@@ -1083,19 +1107,23 @@
     "AUD-TST-01"
    ],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-31",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #284 (050af1e4)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-31",
+    "commit": "16bf2311",
+    "verdict": "Fermé",
+    "preuve": "NexusApiApplicationService renvoie les records d'opération de NexusApplication, sans records REST parallèles (PR #284)",
     "reserve": null
    }
   },
@@ -1114,19 +1142,23 @@
    "sprint": 4,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-10-31",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé par la PR #284 (050af1e4)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "3 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-10-31",
+    "commit": "16bf2311",
+    "verdict": "Fermé",
+    "preuve": "signature, qualifiedName, source et target redigés dans la projection et dans le rendu CLI humain (PR #284)",
     "reserve": null
    }
   },
@@ -3951,6 +3983,6 @@
    }
   }
  ],
- "date_maj": "2026-10-30",
- "commit_maj": "6dc03c2d"
+ "date_maj": "2026-10-31",
+ "commit_maj": "16bf2311"
 }
