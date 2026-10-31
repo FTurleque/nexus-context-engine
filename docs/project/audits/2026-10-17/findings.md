@@ -47,7 +47,7 @@ core/src/main/java/com/nexus/index/ProjectIndexingService.java:8-9 `import com.n
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : S4 · Une seule sortie publique, redaction complétée
 - **Dépend de** : `AUD-QUA-09` · **Débloque** : `AUD-ARC-01`
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-10-31** (`16bf2311`) : PublicContextPolicy déplacée de com.nexus.security vers com.nexus.exposure, cycle context ↔ security rompu (PR #284)
 
 **Preuve**
 
@@ -79,7 +79,7 @@ Commande : `grep -rli 'archunit|jdeps|ArchitectureTest' core/src/test adapters/*
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : S4 · Une seule sortie publique, redaction complétée
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Prévention pour le code futur (règle de revue), code existant inchangé · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 5 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration) Réserve : .claude/rules/code-review.md:12 (PR #254) interdit l'ordre d'itération d'un HashMap/HashSet en sortie pour le code revu ; les mappers MCP/REST existants transmettent toujours Map.copyOf sans tri.
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-10-31** (`16bf2311`) : scoreComponents triés par clé dans la projection, test sur deux ordres d'insertion (PR #284)
 
 **Preuve**
 
@@ -128,7 +128,7 @@ scripts/validate-phase-6.ps1:60-73 : `Write-Warning "Le Maven Wrapper est indisp
 - **Axe** : Qualité, Architecture · **Effort** : M 1-3j · **Sprint** : S4 · Une seule sortie publique, redaction complétée
 - **Dépend de** : `AUD-TST-07` · **Débloque** : `AUD-ARC-03`
 - **Fusionne** : `AUD-ARC-08`
-- **Statut** : Ouvert · **Changement** : Prévention pour le code futur (règle de revue), code existant inchangé · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 4 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration) Réserve : .claude/rules/code-review.md:14 (PR #254) rappelle la parité CLI/REST/MCP ; la projection reste écrite trois fois.
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-10-31** (`16bf2311`) : projection publique unique du cœur (com.nexus.exposure) branchée sur CliResultMapper, McpResultMapper et ApiMapper ; test de parité des clés JSON CLI/MCP/REST ; ADR ARCH-0061 (PR #284)
 
 **Preuve**
 
@@ -160,7 +160,7 @@ Mesure heuristique (script d'accolades, 1 213 méthodes) : 18 méthodes > 60 lig
 
 - **Axe** : Sécurité · **Effort** : M 1-3j · **Sprint** : S4 · Une seule sortie publique, redaction complétée
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-10-31** (`16bf2311`) : sonde de 35 cas versionnée en test paramétré ; formats structurés ajoutés ; secret-redaction-v6, content-v5 et migration d'invalidation (PR #284)
 
 **Preuve**
 
@@ -176,7 +176,7 @@ core/src/main/java/com/nexus/security/SecretAssignmentScanner.java:10-12 — lis
 
 - **Axe** : Sécurité · **Effort** : S<1j · **Sprint** : S4 · Une seule sortie publique, redaction complétée
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-10-31** (`16bf2311`) : OversizedSecretException capturée par fichier : fichier exclu des index avec le diagnostic INDEX_REDACTION_LIMIT, champ public masqué en [REDACTED] ; test d'indexation à trois fichiers (PR #284)
 
 **Preuve**
 
@@ -598,7 +598,7 @@ core/src/main/java/com/nexus/context/source/git/GitRecencyCandidateEnricher.java
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : S4 · Une seule sortie publique, redaction complétée
 - **Dépend de** : `AUD-TST-01` · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-10-31** (`16bf2311`) : NexusApiApplicationService renvoie les records d'opération de NexusApplication, sans records REST parallèles (PR #284)
 
 **Preuve**
 
@@ -662,7 +662,7 @@ docs/developer/current-limitations.md:148 « nouveau moteur FTS/trigram pour les
 
 - **Axe** : Sécurité · **Effort** : S<1j · **Sprint** : S4 · Une seule sortie publique, redaction complétée
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 3 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-10-31** (`16bf2311`) : signature, qualifiedName, source et target redigés dans la projection et dans le rendu CLI humain (PR #284)
 
 **Preuve**
 
@@ -1015,7 +1015,7 @@ core/src/main/java/com/nexus/paths/RepositoryPath.java:42 `slashPath.matches("^[
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S4 · Une seule sortie publique, redaction complétée
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-10-31** (`16bf2311`) : second appel à SensitiveContentRedactor.redact retiré de SemanticIndexingService (PR #284)
 
 **Preuve**
 
