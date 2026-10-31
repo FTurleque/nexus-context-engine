@@ -31,19 +31,30 @@ public final class SkillContextSelector {
             List<ActivatedSkill> activatedSkills,
             int budget,
             boolean explain) {
-        List<String> contents = activatedSkills.stream()
-                .map(skill -> com.nexus.security.SensitiveContentRedactor.redact(skill.content())).toList();
+        List<String> oversized = new ArrayList<>();
+        List<ActivatedSkill> redactable = new ArrayList<>();
+        List<String> contents = new ArrayList<>();
+        for (ActivatedSkill skill : activatedSkills) {
+            try {
+                contents.add(com.nexus.security.SensitiveContentRedactor.redact(skill.content()));
+                redactable.add(skill);
+            } catch (com.nexus.security.OversizedSecretException exception) {
+                oversized.add(repositoryPath(skill.descriptor().definitionPath()) + " exclu : "
+                        + com.nexus.security.OversizedSecretException.PUBLIC_REASON);
+            }
+        }
+        activatedSkills = redactable;
         int availableTokens = 0;
         for (String content : contents) {
             availableTokens = (int) Math.min(Integer.MAX_VALUE,
                     (long) availableTokens + tokenEstimator.estimate(content));
         }
         if (activatedSkills.isEmpty()) {
-            return new ContextSelectionResult(List.of(), List.of(), 0, 0, 0);
+            return new ContextSelectionResult(List.of(), oversized, 0, 0, 0);
         }
 
         List<ContextItem> items = new ArrayList<>();
-        List<String> excluded = new ArrayList<>();
+        List<String> excluded = new ArrayList<>(oversized);
         int selectedTokens = 0;
 
         for (int index = 0; index < activatedSkills.size(); index++) {

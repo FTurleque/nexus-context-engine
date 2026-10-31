@@ -30,7 +30,7 @@ Par défaut, l'API reste local-first sur `127.0.0.1:8080`.
 ```text
 Client HTTP
   ↓
-Resources REST / DTO / ApiMapper
+Resources REST / DTO / ApiMapper → PublicOutputProjection (cœur)
   ↓
 NexusApiApplicationService
   ↓
@@ -63,6 +63,12 @@ GET  /q/metrics
 Les endpoints `/q/*` ne sont pas servis par le listener applicatif. Cette séparation évite de publier accidentellement les métriques/health lorsqu'un reverse proxy expose l'API métier.
 
 Les lectures indexées exigent un projet `READY`.
+
+## Contrat de sortie
+
+Les réponses sont construites par la projection publique du cœur, `com.nexus.exposure.PublicOutputProjection` ([ARCH-0061](../architecture/adr/ARCH-0061-decider-le-contrat-de-sortie-publique-dans-la-projection-du-coeur.md)), commune à la CLI, REST et MCP : mêmes clés, dans le même ordre, sur les trois canaux. Chemins relatifs au projet, aucune clé `rootPath`, `rank`, `id` et `excerpt` redigé sur chaque résultat classé, `qualifiedName`, `signature`, `source` et `target` redigés, `scoreComponents` et `metadata` triés par clé, `languages` et `technologies` en listes triées ; la liste des projets est triée par nom sans tenir compte de la casse, puis par identifiant, et une portée fédérée garde l'ordre demandé. Les résultats fédérés imbriquent `project` et `result` (recherche) ou `project` et `item` (contexte). Les tests `*OutputParityTest` des trois modules comparent chaque canal au contrat de `PublicOutputSchema`.
+
+REST n'ajoute aucune clé : les endpoints renvoient les records `PublicOutput` tels quels.
 
 ## Limites de requête
 

@@ -162,7 +162,7 @@ Les limites REST fédérées réutilisent `ResultLimitPolicy` et `ContextBudgetP
 
 Les blocs privés multilignes conservent leurs séparateurs de lignes après redaction afin de ne pas déplacer les ranges source.
 
-Le profil sémantique est `content-v4`, ce qui rend un index historique incompatible et force sa reconstruction.
+Le profil sémantique est `content-v5`, ce qui rend un index historique incompatible et force sa reconstruction.
 
 ## Ollama
 
@@ -229,8 +229,8 @@ sont internes au package et utilisent la composition, sans framework ni registre
 | `ProjectIndexingService` | `IndexDocumentPublisher` analyse les fichiers revalidés et publie les lots lexicaux/sémantiques ; `ExternalCodeIntelligenceRefresher` gère imports/providers via `ExternalTaskRunner`. La façade conserve verrous, delta canonique et transitions d’état. |
 | `DefaultContextBuilder` | `NativeContextPipeline`, `TaskContextMaterializer`, `ContextBudgetAllocator`, `ContextBuildMetadata` exposent les étapes ; les résultats intermédiaires immuables sont regroupés dans `ContextPipelineState`. L’ordre, les budgets partagés et les scores sont préservés. |
 | `LocalGitContextSourceProvider` | `GitWorkingTreeContext` produit le diff borné ; `GitContextFragments` rend les fragments d’historique et co-changements. |
-| `NexusMcpTools` | `McpToolArguments`, `McpToolSchemas`, `McpProjectResolver`, `McpResultMapper` isolent validation, schémas, résolution via la façade et projection publique. |
-| `CliRenderer` | `CliResultMapper` construit les contrats JSON ; le renderer conserve la présentation terminal et sa sanitation. |
+| `NexusMcpTools` | `McpToolArguments`, `McpToolSchemas`, `McpProjectResolver` isolent validation, schémas et résolution via la façade ; la réponse vient de `PublicOutputProjection`. |
+| `CliRenderer` | Sérialise les structures de `PublicOutputProjection` (clé `command` en tête) et conserve la présentation terminal et sa sanitation. |
 
 Les frontières ports/adaptateurs et les décisions architecturales existantes ne
 changent pas : les adapters appellent toujours `NexusApplication`, SQLite reste

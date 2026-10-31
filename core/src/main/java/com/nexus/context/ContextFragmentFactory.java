@@ -140,6 +140,14 @@ public final class ContextFragmentFactory {
 
                 RankedCandidate fileCandidate = entry.getValue().getFirst();
                 fragments.addAll(fileFragments(relativePath, lines, query, fileCandidate, tokenBudget));
+            } catch (com.nexus.security.OversizedSecretException exception) {
+                String diagnostic = new com.nexus.security.PublicDiagnosticPolicy(List.of(project.rootPath())).render(
+                        new com.nexus.security.PublicDiagnosticPolicy.Diagnostic(
+                                "CONTEXT_REDACTION_LIMIT",
+                                "Candidat de contexte exclu : " + com.nexus.security.OversizedSecretException.PUBLIC_REASON,
+                                candidatePath, exception.getClass().getSimpleName()), project.rootPath());
+                diagnostics.add(diagnostic);
+                LOGGER.log(System.Logger.Level.WARNING, diagnostic);
             } catch (ContextMaterializationLimitExceededException exception) {
                 String diagnostic = materializationDiagnostic(project.rootPath(), candidatePath, exception);
                 diagnostics.add(diagnostic);

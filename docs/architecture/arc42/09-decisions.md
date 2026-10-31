@@ -70,6 +70,7 @@ Cette section présente un index synthétique avec statut, date et relations de 
 | [BE-0058](../adr/BE-0058-exclure-les-worktrees-claude-code-du-scan-par-defaut.md) | Exclure les worktrees Claude Code du scan par défaut | Accepted | 2026-10-30 |
 | [ARCH-0059](../adr/ARCH-0059-verifier-les-frontieres-du-coeur-par-un-test-d-architecture.md) | Vérifier les frontières du cœur par un test d'architecture | Proposed | 2026-10-30 |
 | [GEN-0060](../adr/GEN-0060-qualifier-la-recherche-semantique-reelle-en-deux-corpus.md) | Qualifier la recherche sémantique réelle en deux corpus, hors du chemin de release | Proposed | 2026-10-30 |
+| [ARCH-0061](../adr/ARCH-0061-decider-le-contrat-de-sortie-publique-dans-la-projection-du-coeur.md) | Décider le contrat de sortie publique dans la projection du cœur | Proposed | 2026-10-30 |
 | [ADR-0000](../adr/archive/0000-adopter-les-adr-madr.md) | Adopter MADR comme format et définir la gouvernance des ADR | Superseded (GEN-0057) | 2026-07-19 |
 | [ADR-0056](../adr/archive/0056-regrouper-le-registre-des-adr-dans-la-documentation-d-architecture.md) | Regrouper le registre des ADR dans la documentation d'architecture | Superseded (GEN-0057) | 2026-10-29 |
 
@@ -107,7 +108,7 @@ MINOS.
 
 ### Surfaces d'exposition
 
-GEN-0015, BE-0016, ARCH-0017, ARCH-0030, GEN-0031, ARCH-0039, ARCH-0040, ARCH-0041 —
+GEN-0015, BE-0016, ARCH-0017, ARCH-0030, GEN-0031, ARCH-0039, ARCH-0040, ARCH-0041, ARCH-0061 —
 CLI, REST, MCP, découplage, packaging.
 
 ### Écosystème et fédération

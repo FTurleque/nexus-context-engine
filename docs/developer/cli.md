@@ -20,6 +20,10 @@ nexus --version [--json]
 
 `--json` est global. `stdout` porte les résultats, `stderr` les erreurs.
 
+Les réponses sont construites par la projection publique du cœur, `com.nexus.exposure.PublicOutputProjection` ([ARCH-0061](../architecture/adr/ARCH-0061-decider-le-contrat-de-sortie-publique-dans-la-projection-du-coeur.md)), commune à la CLI, REST et MCP : mêmes clés, dans le même ordre, sur les trois canaux. Chemins relatifs au projet, aucune clé `rootPath`, `rank`, `id` et `excerpt` redigé sur chaque résultat classé, `qualifiedName`, `signature`, `source` et `target` redigés, `scoreComponents` et `metadata` triés par clé, `languages` et `technologies` en listes triées ; la liste des projets est triée par nom sans tenir compte de la casse, puis par identifiant, et une portée fédérée garde l'ordre demandé. Les résultats fédérés imbriquent `project` et `result` (recherche) ou `project` et `item` (contexte). Les tests `*OutputParityTest` des trois modules comparent chaque canal au contrat de `PublicOutputSchema`.
+
+En JSON, la CLI ajoute la clé `command` en tête de chaque objet de premier niveau : c'est la seule divergence déclarée de ce canal. Le rendu humain lit les mêmes structures, signatures redigées comprises.
+
 | Code | Sens |
 |---:|---|
 | 0 | succès |

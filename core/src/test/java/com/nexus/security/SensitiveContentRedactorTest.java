@@ -58,8 +58,9 @@ class SensitiveContentRedactorTest {
         // pas une mesure de performance : marge supérieure à x5 sur la durée nominale (~0,3 s à froid).
         org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(java.time.Duration.ofSeconds(10), () -> {
             assertEquals(malformed, SensitiveContentRedactor.redact(malformed));
-            org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
-                    () -> SensitiveContentRedactor.redact("password=" + "x".repeat(1_000_000)));
+            String oversized = "password=" + "x".repeat(1_000_000);
+            org.junit.jupiter.api.Assertions.assertThrows(OversizedSecretException.class,
+                    () -> SensitiveContentRedactor.redact(oversized));
         });
     }
 
@@ -69,10 +70,89 @@ class SensitiveContentRedactorTest {
             String prefix = "\"password\": " + quote;
             assertEquals(prefix + "[REDACTED]" + quote,
                     SensitiveContentRedactor.redact(prefix + "x".repeat(4096) + quote));
-            var failure = org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
-                    () -> SensitiveContentRedactor.redact(prefix + "x".repeat(4097) + quote));
+            String aboveBound = prefix + "x".repeat(4097) + quote;
+            var failure = org.junit.jupiter.api.Assertions.assertThrows(OversizedSecretException.class,
+                    () -> SensitiveContentRedactor.redact(aboveBound));
             assertFalse(failure.getMessage().contains("xxxxxxxx"));
         }
+    }
+
+    @Test
+    void boundedFormsAreRedactedAtTheBoundAndRefusedJustAbove() {
+        for (String prefix : java.util.List.of("Authorization: Bearer ", "curl -H 'X: Bearer ",
+                "run --password ", "<password>")) {
+            String suffix = prefix.equals("<password>") ? "</password>" : "";
+            String atBound = SensitiveContentRedactor.redact(prefix + "v".repeat(4096) + suffix);
+            assertFalse(atBound.contains("vvvv"), atBound);
+            String aboveBound = prefix + "v".repeat(4097) + suffix;
+            var failure = org.junit.jupiter.api.Assertions.assertThrows(OversizedSecretException.class,
+                    () -> SensitiveContentRedactor.redact(aboveBound));
+            assertFalse(failure.getMessage().contains("vvvv"));
+        }
+        String user = "u".repeat(1024);
+        assertFalse(SensitiveContentRedactor.redact("https://" + user + "@host/repo").contains("uuuu"));
+        String longUser = "https://" + user + "u@host/repo";
+        org.junit.jupiter.api.Assertions.assertThrows(OversizedSecretException.class,
+                () -> SensitiveContentRedactor.redact(longUser));
+    }
+
+    @Test
+    void historicalTokensFollowedByAHyphenStayRedacted() {
+        String github = "gh" + "p_" + "abcdefghijklmnopqrstuvwxyz0123456789";
+        String aws = "AK" + "IA" + "ABCDEFGHIJKLMNOP";
+        assertEquals("x [REDACTED]-ci y", SensitiveContentRedactor.redact("x " + github + "-ci y"));
+        assertEquals("[REDACTED]-prod", SensitiveContentRedactor.redact(aws + "-prod"));
+        assertEquals("a-[REDACTED]", SensitiveContentRedactor.redact("a-" + aws));
+    }
+
+    @Test
+    void commandLineAndXmlVariantsAreRedacted() {
+        for (String input : java.util.List.of(
+                "mysql --password \"hunter2-quoted-secret\" --user app",
+                "cmd --token 'hunter2-quoted-secret'",
+                "deploy --db-password hunter2-quoted-secret",
+                "gh --access-token hunter2-quoted-secret",
+                "<password type=\"plain\">hunter2-quoted-secret</password>",
+                "<db.password>hunter2-quoted-secret</db.password>",
+                "<password><![CDATA[hunter2-quoted-secret]]></password>",
+                "Authorization: Bearer          hunter2quotedsecret0123")) {
+            String redacted = SensitiveContentRedactor.redact(input);
+            assertFalse(redacted.contains("hunter2"), redacted);
+            assertTrue(redacted.contains("[REDACTED]"), redacted);
+        }
+        assertEquals("--password-file /etc/app.pw", SensitiveContentRedactor.redact("--password-file /etc/app.pw"));
+    }
+
+    @Test
+    void valuesAboveTheirBoundAreRefusedInsteadOfPublished() {
+        for (String input : java.util.List.of(
+                "sk-" + "a".repeat(300),
+                "gh" + "p_" + "b".repeat(300),
+                "xox" + "b-" + "c".repeat(300),
+                "https://user:" + "p".repeat(5_000) + "@host/repo",
+                "https://" + "u".repeat(2_000) + ":pw@host/repo",
+                "mysql --password \"" + "q".repeat(5_000) + "\"",
+                "<db.password>" + "r".repeat(5_000) + "</db.password>")) {
+            var failure = org.junit.jupiter.api.Assertions.assertThrows(OversizedSecretException.class,
+                    () -> SensitiveContentRedactor.redact(input));
+            assertFalse(failure.getMessage().contains("aaaa"));
+        }
+        assertEquals("[REDACTED]", SensitiveContentRedactor.redactField("password = \"" + "s".repeat(5_000) + "\""));
+        org.junit.jupiter.api.Assertions.assertNull(SensitiveContentRedactor.redactField(null));
+    }
+
+    @Test
+    void newKeyComponentsMatchWholeSegmentsOnly() {
+        for (String ordinary : java.util.List.of("tokenizer = build()", "authority: local", "oauth_flow=pkce",
+                "max_tokens = 4096", "pwd_history: 3", "secretary: Jane")) {
+            if (ordinary.startsWith("pwd_history")) {
+                assertEquals("pwd_history: [REDACTED]", SensitiveContentRedactor.redact(ordinary));
+            } else {
+                assertEquals(ordinary, SensitiveContentRedactor.redact(ordinary));
+            }
+        }
+        assertEquals("page_token=[REDACTED]", SensitiveContentRedactor.redact("page_token=abc123"));
+        assertEquals("accessKey: [REDACTED]", SensitiveContentRedactor.redact("accessKey: abc123"));
     }
 
     @Test
