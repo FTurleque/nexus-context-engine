@@ -134,3 +134,78 @@ POSIX. La résolution sur un autre filesystem refuse les composants qui y seraie
 réinterprétés. V007 invalide les anciens index et impose une reconstruction ; le
 fingerprint `nexus-repository-path-v2` invalide également les dérivés sémantiques
 restés désactivés pendant l'upgrade. Voir [ADR-0049](../architecture/adr/DATA-0049-identite-repository-par-composants-et-diagnostics-publics.md).
+
+## OpenSpec project-path-confinement
+
+Spec : [`openspec/specs/project-path-confinement/spec.md`](../../openspec/specs/project-path-confinement/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md). Les limites acceptées de la section précédente (acteur qui remplace des ancêtres entre deux étapes) restent valables : le confinement décrit ici est une vérification, pas une sandbox.
+
+### Comportement existant vérifié
+
+| Méthode de `ProjectPathGuard` | Comportement observé | Source |
+|---|---|---|
+| Constructeur | Canonicalise la racine par `toRealPath`, refuse une racine qui n'est pas un répertoire. Une racine fournie par un lien symbolique est acceptée : sa cible canonique devient la frontière de confiance. | `core/src/main/java/com/nexus/security/ProjectPathGuard.java:11-31`, test `ProjectPathGuardTest#acceptsARootGivenThroughASymbolicLinkAndTrustsItsTarget`, `#rejectsARootThatIsARegularFile` |
+| `resolve(Path)` | Refuse tout chemin absolu (même situé sous la racine), puis exige que le chemin normalisé reste sous la racine. Ne vérifie ni l'existence ni les liens symboliques. | `ProjectPathGuard.java:39-45`, tests `#rejectsAnAbsolutePath`, `#rejectsAnAbsolutePathEvenInsideTheRoot`, `#rejectsADotDotTraversal`, `#rejectsATraversalHiddenBehindAnInsideSegment`, `#resolvesAPathThatDoesNotExistYet` |
+| `resolve(RepositoryPath)` | Décode l'identité NEXUS avec le système de fichiers de la racine ; un composant que ce système réinterpréterait (antislash sous Windows) devient `IOException("Invalid repository path")`. | `ProjectPathGuard.java:47-54`, tests `#resolvesASlashSeparatedRepositoryPathOnEveryPlatform`, `#handlesABackslashComponentAccordingToTheTargetFileSystem` |
+| `requireRegularFile` | Ordre : chemin contenu dans la racine, aucun composant lien symbolique sous la racine, chemin réel sous la racine, fichier régulier sans suivre les liens. | `ProjectPathGuard.java:56-71` |
+| `requireDirectory` | Même ordre, avec répertoire sans suivre les liens ; la racine elle-même est acceptée. | `ProjectPathGuard.java:73-88`, test `#acceptsTheRootItselfAsADirectory` |
+| `containsSymbolicLink` | Parcourt chaque composant sous la racine et renvoie `true` au premier lien ; un chemin hors racine lève `IOException`. | `ProjectPathGuard.java:90-101`, tests `#reportsAFinalSymbolicLink`, `#reportsAnIntermediateSymbolicLinkToAFileOutsideTheProject`, `#rejectsALinkQueryOutsideTheRoot` |
+| `repositoryPath` | Chemin relatif à la racine, normalisé et encodé avec `/` ; `""` pour la racine ; `[INTERNAL_PATH]` pour un chemin hors racine. | `ProjectPathGuard.java:103-110`, tests `#encodesANestedRepositoryPathWithForwardSlashes`, `#encodesTheRootAsTheEmptyRepositoryPath`, `#masksAPathOutsideTheRoot` |
+| Contrôle de contenance (`requireContained`) | Normalise et tente `toRealPath(NOFOLLOW_LINKS)` pour aligner les noms courts 8.3 de Windows sur la racine canonique ; un chemin qui n'existe pas encore reste tel quel. Hors racine : `IOException("Chemin hors repository : …")`. | `ProjectPathGuard.java:112-127` |
+| Création de liens dans les tests | `SymbolicLinks.createOrSkip` interrompt le test (`Assumptions.abort`) si le lien est impossible, sauf si le support est exigé : variable `CI` définie à une valeur autre que `false` ou `0`, ou propriété `nexus.test.symlinks.required=true`. Dans ce cas le test échoue. Un chemin de lien déjà occupé échoue toujours. | `core/src/test/java/com/nexus/testsupport/SymbolicLinks.java:36-58,73-83`, tests `SymbolicLinksTest#supportIsRequiredWhenCiIsDefined`, `#unavailableLinkFailsWhenSupportIsRequired`, `#unavailableLinkAbortsWhenSupportIsOptional` |
+| Exécution de `ProjectPathGuardTest` en CI | La classe fait partie du reactor `clean install` : Linux par `./mvnw -B clean install`, Windows par `scripts/validate-phase-6.ps1`. La qualification `filesystem-semantics-qualification.yml` est déclenchée par un changement de `ProjectPathGuard` mais ne lance que `ProjectIndexLockManagerTest`, `SafeFileIOTest` et `FilesystemSemanticsQualificationTest`. | `.github/workflows/ci.yml:56-63,105-108`, `scripts/validate-phase-6.ps1:112-113`, `.github/workflows/filesystem-semantics-qualification.yml:12,28,104,113` |
+
+### Vues
+
+Vue organigramme (non UML) — dans quel ordre `requireRegularFile` et `requireDirectory` refusent-ils un chemin, et à quel endroit le lien symbolique est-il détecté (existant) ?
+
+```mermaid
+flowchart TD
+    A[candidat Path] --> B[normaliser, puis toRealPath sans suivre les liens si le chemin existe]
+    B --> C{sous la racine canonique ?}
+    C -- non --> E1[IOException : Chemin hors repository]
+    C -- oui --> D{un composant sous la racine est un lien symbolique ?}
+    D -- oui --> E2[IOException : Lien symbolique interdit dans le repository]
+    D -- non --> F[toRealPath en suivant les liens]
+    F --> G{chemin réel sous la racine ?}
+    G -- non --> E3[IOException : Chemin réel hors repository]
+    G -- oui --> H{type attendu, sans suivre les liens ?}
+    H -- non --> E4[IOException : Fichier absent ou non régulier, ou Répertoire absent ou invalide]
+    H -- oui --> R[chemin réel renvoyé]
+```
+
+Le lien symbolique, final ou intermédiaire, est refusé à l'étape D, avant la résolution réelle ; l'étape G est une défense qui ne se déclenche que si un composant mène hors de la racine sans être un lien symbolique au sens de `Files.isSymbolicLink` (voir Questions). Exigences : `project-path-confinement › Les chemins hors du projet sont refusés`, `project-path-confinement › Les liens symboliques sont refusés à toute position`, `project-path-confinement › Le type attendu est vérifié`.
+
+Vue organigramme (non UML) — comment `resolve` (chemin relatif d'entrée) se distingue-t-il de `requireRegularFile` et `requireDirectory` (existant) ?
+
+```mermaid
+flowchart LR
+    I1[resolve Path] --> A1{chemin absolu ?}
+    A1 -- oui --> X1[IOException : Chemin absolu interdit]
+    A1 -- non --> C1[contenance lexicale et réelle sans suivre les liens]
+    I2[resolve RepositoryPath] --> D2[décodage selon le système de fichiers]
+    D2 -- composant réinterprété --> X2[IOException : Invalid repository path]
+    D2 -- ok --> A1
+    C1 -- hors racine --> X3[IOException : Chemin hors repository]
+    C1 -- dans la racine --> OK1[chemin absolu normalisé, existence non vérifiée]
+    I3[requireRegularFile ou requireDirectory] --> C3[contenance, puis liens, puis chemin réel, puis type]
+    C3 --> OK3[chemin réel canonique]
+```
+
+Un chemin absolu situé sous la racine est refusé par `resolve(Path)` mais accepté par `requireRegularFile`, `requireDirectory` et `containsSymbolicLink`, qui reçoivent des chemins déjà résolus. Exigences : `project-path-confinement › Les chemins hors du projet sont refusés`.
+
+### Écarts et limites
+
+- [Écart] L'exigence « Les chemins hors du projet sont refusés » dit que `ProjectPathGuard` refuse « un chemin absolu ». Le refus d'un chemin absolu n'existe que dans `resolve(Path)` (`ProjectPathGuard.java:41-43`) ; `requireRegularFile`, `requireDirectory` et `containsSymbolicLink` acceptent un chemin absolu contenu dans la racine (tests `ProjectPathGuardTest#returnsTheCanonicalRegularFile`, `#returnsTheCanonicalDirectory`). Le scénario « Chemin absolu » ne vise que la résolution.
+- [Écart] La même exigence cite « une cible dont la résolution réelle est hors de la racine ». Le code la contrôle (`ProjectPathGuard.java:64-66,81-83`), mais aucun test lu n'atteint cette branche : les cibles hors racine des tests sont soit refusées lexicalement, soit des liens symboliques refusés avant la résolution réelle. Aucun scénario n'existe pour ce cas (`test non écrit`).
+- [Écart] Le scénario « Couverture directe » est une recherche à faire à la main : aucun contrôle automatisé n'échoue si une méthode publique est ajoutée sans test direct. Les six méthodes sont appelées dans `ProjectPathGuardTest` au HEAD (relevé par lecture).
+- [Écart] La qualification dédiée `filesystem-semantics-qualification.yml` se déclenche sur `ProjectPathGuard.java` (`:12,28`) mais n'exécute pas `ProjectPathGuardTest` (liste `-Dtest` limitée à trois classes) ; la page existante demande de relancer « la matrice Linux/Windows » pour un changement de `ProjectPathGuard`. `ProjectPathGuardTest` ne passe que par le reactor complet.
+- Limite : sur un poste sans droit de création de lien symbolique (cas fréquent sous Windows sans mode développeur), les scénarios « Symlink final », « Symlink intermédiaire » et « Signalement d'un symlink final » sont interrompus (`TestAbortedException`), pas échoués. Seule la variable `CI` (ou la propriété `nexus.test.symlinks.required`) les rend obligatoires.
+- Limite : le scénario « Runner sans symlinks en CI » est prouvé sur la primitive `SymbolicLinks` avec un créateur de lien simulé (`SymbolicLinksTest#unavailableLinkFailsWhenSupportIsRequired`), pas sur un vrai runner sans liens symboliques.
+- Limite : le comportement face aux jonctions Windows, aux points de montage et aux liens physiques n'est testé par aucun test de `ProjectPathGuardTest` ; la page existante n'en promet pas la détection.
+
+### Propositions et questions ouvertes
+
+- [Question] Un composant qui sort de la racine sans être un lien symbolique pour `Files.isSymbolicLink` (jonction Windows, point de montage) est-il bien arrêté par le contrôle du chemin réel (`ProjectPathGuard.java:64,81`) ? Hypothèse non vérifiée, aucun test.
+- [Question] L'exigence « refuse un chemin absolu » doit-elle viser aussi `requireRegularFile`, `requireDirectory` et `containsSymbolicLink`, ou seulement `resolve` ? Le texte actuel est plus large que le comportement.
+- [Proposition] Un test de la branche « chemin réel hors racine » (jonction ou point de montage sur Windows, système de fichiers qui le permet sur Linux) fermerait le deuxième écart.
+- [Proposition] Ajouter `ProjectPathGuardTest` à la liste `-Dtest` de `filesystem-semantics-qualification.yml`, ou corriger la phrase de la page existante, aligne la qualification sur son déclencheur.

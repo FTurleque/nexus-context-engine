@@ -43,6 +43,8 @@ Les campagnes NXA3 et NXA4 constituent la baseline de hardening courante. Une an
 | AI Skills Registry | [AI Skills Registry](ai-skills-registry.md) |
 | scale | [Recherche à grande échelle](large-scale-search.md) |
 | outillage Claude Code | [Outillage Claude Code](claude-code.md) |
+| specs OpenSpec (schéma, conventions, contrôles) | [OpenSpec](openspec.md) |
+| traçabilité exigence → preuve | [Traçabilité OpenSpec](openspec-traceability.md) |
 
 ## Composition
 

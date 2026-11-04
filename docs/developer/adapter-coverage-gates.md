@@ -146,3 +146,71 @@ NEXUS CI :
 - le gate Windows exige également la présence des quatre rapports après le reactor complet.
 
 La source d'autorité du PASS reste `jacoco:check` dans le lifecycle Maven ; l'impression CI sert au diagnostic et au suivi de tendance.
+
+## OpenSpec adapter-contract-tests
+
+Spec : [`openspec/specs/adapter-contract-tests/spec.md`](../../openspec/specs/adapter-contract-tests/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+Cette section décrit la granularité des tests de contrat REST et MCP, les tests de bout en bout dont dépendent aussi les gates de couverture ci-dessus. Elle ne contient pas de diagramme : le sujet est une correspondance endpoint → test et outil → test, que deux tableaux rendent mieux qu'une vue.
+
+### Comportement existant vérifié
+
+- **[Existant vérifié]** `NexusResourceTest` est un `@QuarkusTest` à cycle de vie `PER_CLASS` qui compte 14 méthodes `@Test` (`adapters/rest-quarkus/src/test/java/com/nexus/api/NexusResourceTest.java:38-40`). Sa Javadoc annonce « un test par endpoint public et par endpoint Quarkus attendu » (`:31-37`).
+- **[Existant vérifié]** L'adaptateur REST publie 11 endpoints applicatifs : 9 dans `NexusResource` (`adapters/rest-quarkus/src/main/java/com/nexus/api/NexusResource.java:29-98`) et 2 dans `FederatedResource` (`adapters/rest-quarkus/src/main/java/com/nexus/api/FederatedResource.java:23-47`). Correspondance avec `NexusResourceTest` :
+
+| Endpoint | Test dans `NexusResourceTest` |
+|---|---|
+| `GET /api/v1/projects` | `listProjectsIncludesTheFixtureWithoutRootPaths` |
+| `POST /api/v1/projects` | `createProjectReturnsANotIndexedProjectWithoutRootPath` |
+| `GET /api/v1/projects/{projectId}` | **aucun** (voir Écarts) |
+| `POST /api/v1/projects/{projectId}/index` | `indexMarksAFreshProjectReadyAndReportsStatistics` (et le `@BeforeEach` de la fixture) |
+| `GET /api/v1/projects/{projectId}/index` | `inspectIndexReturnsTheFixtureStatistics` |
+| `POST …/search` | `searchReturnsExplainedResultsWithPublicPaths`, `searchRejectsBlankAndOversizedQueries` |
+| `POST …/explain/search` | `explainSearchForcesExplanation` |
+| `POST …/context` | `contextRespectsTheBudgetAndRedactsSecrets`, `contextRejectsConstraintsAndOversizedQueries` |
+| `POST …/explain/context` | `explainContextForcesExplanation` |
+| `POST /api/v1/federated/search` | `federatedSearchAcceptsTheMaximumLimitAndRejectsMaximumPlusOne` |
+| `POST /api/v1/federated/context` | `federatedContextRespectsTheBudgetAndRejectsMaximumPlusOne` |
+| `/q/health/ready` | `readinessIsNotPublishedOnTheApplicationListener` (attend `404`) |
+| `/q/metrics` | `metricsAreNotPublishedOnTheApplicationListener` (attend `404`) |
+
+- **[Existant vérifié]** Health et métriques ne sont plus servis par le listener applicatif : `quarkus.management.enabled=true`, hôte `127.0.0.1`, port `9000` (`adapters/rest-quarkus/src/main/resources/application.properties:8-10`). Leur exposition effective (`200`) est vérifiée dans une autre classe, `ManagementEndpointIsolationTest#exposesHealthAndMetricsOnlyOnTheDedicatedManagementListener` (`adapters/rest-quarkus/src/test/java/com/nexus/api/ManagementEndpointIsolationTest.java:24-25`).
+- **[Existant vérifié]** `NexusMcpServerIntegrationTest` lance un vrai serveur STDIO et compte 14 méthodes `@Test`. Le serveur enregistre 9 outils (`adapters/mcp-java/src/main/java/com/nexus/mcp/NexusMcpTools.java:41-51`). Chaque outil a au moins un test propre :
+
+| Outil MCP | Test dans `NexusMcpServerIntegrationTest` |
+|---|---|
+| `list_projects` | `listProjectsReturnsTheRegisteredProjectWithoutRootPath` |
+| `search_code` | `searchCodeReturnsTheDirectSearchResultWithAPublicPath`, `searchCodeRejectsAnOversizedUtf8Query`, `searchCodeRejectsSensitiveSelectorsAndUnexpectedArgumentsWithoutEchoingThem` |
+| `build_context` | `buildContextRedactsSecretsAndMatchesTheDirectContextBudget` |
+| `explain_context` | `explainContextReturnsAnExplainedContext` (et `explainToolsDoNotLeakPathsWhenIndexedFilesHaveDisappeared`) |
+| `find_symbol` | `findSymbolReturnsTheIndexedSymbol` |
+| `find_usages` | `findUsagesReturnsARelationArray` |
+| `search_across_projects` | `searchAcrossProjectsDeduplicatesTheScope`, `searchAcrossProjectsRejectsTooManyDistinctProjects` |
+| `build_context_across_projects` | `buildContextAcrossProjectsCoversTheRequestedProject` |
+| `explain_context_across_projects` | `explainContextAcrossProjectsReturnsAnExplainedContext` (et le test de disparition de fichiers) |
+
+  Le quatorzième test, `listsExactlyTheExpectedTools`, compare l'ensemble des outils exposés à `EXPECTED_TOOLS` (9 noms) : un outil ajouté sans mise à jour de ce test le fait échouer, mais il n'impose pas de méthode `@Test` dédiée au nouvel outil.
+- **[Existant vérifié]** Non-fuite REST : les 14 tests appellent `assertNoLeak` sur chaque corps lu (`NexusResourceTest.java:404-413`). Elle vérifie l'absence du répertoire de fixture (formes `\`, `\\` et `/`), de `synthetic-unquoted-secret-123456` et de six marqueurs de modèle interne (`com.nexus.`, `ProjectDescriptor`, `RankedCandidate`, `IndexingReport`, `FederatedSearchHit`, `CodeSymbol`).
+- **[Existant vérifié]** Non-fuite MCP : `assertNoLeak` (méthode privée de `NexusMcpServerIntegrationTest`) inspecte la charge sérialisée et le texte décodé, avec la racine du projet, la home NEXUS, le répertoire de classe, les noms `Alice Smith` et `Build Secret`, le secret de fixture et cinq marqueurs de modèle interne (`com.nexus.`, `ProjectDescriptor`, `RankedCandidate`, `ContextBundle`, `FederatedSearchHit`). Les tests d'outils l'appellent ; `listsExactlyTheExpectedTools` ne lit aucune réponse d'outil et ne l'appelle pas.
+- **[Existant vérifié]** Indépendance d'ordre : ni `@Order` ni `@TestMethodOrder` dans `adapters/*/src/test`, et aucune option d'ordre (`runOrder`, `junit.jupiter.testmethod.order`) dans les `pom.xml`, `.java` ou `.properties` du dépôt (recherche par Grep). Par construction, REST crée la fixture paresseusement dans un `@BeforeEach` car un `@BeforeAll` précède la fixation du port RestAssured (`NexusResourceTest.java:57-75`), et les tests qui mutent l'état créent leur propre projet (`indexMarksAFreshProjectReadyAndReportsStatistics`). MCP prépare serveur et projet dans un `@BeforeAll` ; le seul test mutant (`explainToolsDoNotLeakPathsWhenIndexedFilesHaveDisappeared`) démarre sa propre home et son propre serveur (Javadoc de classe, `NexusMcpServerIntegrationTest.java:42-49`).
+
+### Vues
+
+Aucune : la correspondance endpoint → test et outil → test est donnée par les deux tableaux ci-dessus. Exigences : `adapter-contract-tests › Un test par endpoint REST`, `adapter-contract-tests › Un test par outil MCP`.
+
+### Écarts et limites
+
+- **[Écart]** `GET /api/v1/projects/{projectId}` (`NexusResource#getProject`, `NexusResource.java:54-55`) n'a pas de test dans `NexusResourceTest`, alors que l'exigence demande « une méthode `@Test` distincte pour chaque endpoint REST public ». Il est exercé ailleurs, dans `NexusRestOutputParityTest#indexAndProjectMatchThePublicContract` (`adapters/rest-quarkus/src/test/java/com/nexus/api/NexusRestOutputParityTest.java:101-108`), classe qui n'est pas celle visée. La tâche archivée 2.1 ne listait pas cet endpoint.
+- **[Écart]** Pour `/q/health/ready` et `/q/metrics`, l'exigence parle d'endpoints « exposés » ; `NexusResourceTest` vérifie au contraire qu'ils ne sont **pas** publiés sur le listener applicatif (`404`). La preuve d'exposition sur le listener de management vit dans `ManagementEndpointIsolationTest`, hors de `NexusResourceTest`. Le texte de l'exigence n'a pas été modifié.
+- **[Écart]** « Seul le test de cet endpoint échoue » : `POST …/search` et `POST …/context` sont chacun visés par deux méthodes (nominal et rejets) ; une régression de contrat sur l'un de ces endpoints peut donc faire échouer deux tests.
+- **[Écart]** « Ni chemin absolu de la machine » : les assertions ne cherchent que les chemins de la fixture (répertoire de classe, racine projet, home NEXUS), pas un chemin absolu quelconque ; la liste des marqueurs de modèle interne est fermée (six en REST, cinq en MCP, listes différentes).
+- **[Limite]** Aucun test ni job CI n'exécute les classes dans un ordre inversé ou aléatoire : l'indépendance d'ordre repose sur la lecture de la conception.
+- **[Limite]** Le rapport Surefire du HEAD courant n'a pas été relu (aucune exécution Maven pour cette documentation) ; les 14 méthodes de chaque classe sont comptées dans les sources.
+- **[Écart]** Les ADR `ARCH-0039` et `ARCH-0040` citent encore `NexusResourceTest.exposesTheNexusFlowThroughRestWithoutLeakingCoreModels` et `NexusMcpServerIntegrationTest.exposesTheSameSearchAndContextResultsThroughARealMcpStdioClient`, méthodes qui n'existent plus depuis le découpage. Les ADR ne sont pas modifiés ici.
+
+### Propositions et questions ouvertes
+
+- **[Proposition]** Ajouter dans `NexusResourceTest` un test dédié à `GET /api/v1/projects/{projectId}` (avec `assertNoLeak`), ou préciser dans l'exigence que la couverture de cet endpoint peut résider dans `NexusRestOutputParityTest`.
+- **[Question]** L'exigence « un test par endpoint Quarkus exposé » doit-elle être reformulée pour distinguer le `404` du listener applicatif de l'exposition sur l'interface de management (port `9000`) ?
+- **[Proposition]** Exécuter les deux classes avec un ordre de méthodes inversé ou aléatoire (`junit.jupiter.testmethod.order.default`) dans un job CI, pour prouver le scénario « Ordre inversé » ; rien ne l'exécute aujourd'hui.
+- **[Proposition]** Un test de complétude qui dérive les endpoints JAX-RS (ou les outils MCP) par réflexion et exige un `@Test` référencé pour chacun, au lieu de la seule égalité d'ensemble de `listsExactlyTheExpectedTools`.

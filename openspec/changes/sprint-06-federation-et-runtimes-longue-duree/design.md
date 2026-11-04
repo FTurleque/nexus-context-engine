@@ -56,3 +56,58 @@ L'ADR-0043 exclut tout parallélisme tant qu'une mesure ne le justifie pas. Le s
 - [Capacité Git portée à 100 entrées] → mémoire bornée par la taille déjà plafonnée des fragments ; à confirmer par `PersistentGitContextSourceProviderBudgetTest`.
 - [Cache de récence obsolète après un commit] → la clé contient HEAD ; un working tree modifié n'affecte pas la récence des commits.
 - [Migration sur une base existante] → ajout d'index seulement, sans invalidation ; testé par un test d'upgrade.
+
+## Vues
+
+Vue UML (diagramme de séquence) — Comment une requête fédérée cible calcule-t-elle un seul vecteur et respecte-t-elle l'échéance globale ? ([Proposition] — cible, non disponible)
+
+```mermaid
+sequenceDiagram
+    participant FED as FederatedSearchService et FederatedContextService
+    participant RED as SensitiveContentRedactor
+    participant EMB as EmbeddingProvider
+    participant SEM as SemanticSearchStrategy
+    participant PUB as Projection publique
+    FED->>RED: redact de la requête
+    FED->>EMB: embedQuery de la requête redactée, une seule fois
+    loop chaque projet du scope, dans l'ordre déterministe
+        alt échéance globale non atteinte
+            FED->>SEM: recherche du projet avec le vecteur transmis
+            SEM-->>FED: résultats du projet
+        else échéance atteinte
+            FED->>FED: le projet n'est pas commencé et reste non servi
+        end
+    end
+    FED->>PUB: réponse et diagnostic des projets non servis
+```
+
+Explication : aujourd'hui la boucle synchrone délègue au chemin mono-projet, donc `embedQuery` est appelé par projet (voir Context). La vue montre la cible de D2 et D3 : un seul vecteur calculé sur la requête redactée, une échéance vérifiée avant chaque projet sans parallélisme (ADR-0043), un diagnostic public émis par la projection publique unique. `[Question]` D3 plafonne le délai d'embedding par le temps restant alors que D2 calcule le vecteur avant la boucle : le moment du calcul par rapport à l'échéance n'est pas fixé par le design, et la vue ne l'affirme pas.
+
+Exigences : `federated-search-bounds › Le vecteur de requête est calculé une fois par requête fédérée`, `federated-search-bounds › La fédération respecte une échéance globale`, `federated-search-bounds › Les projets non servis sont nommés`.
+
+## Traçabilité
+
+Ces changements sont des plans non réalisés : aucune exigence n'est déclarée couverte, aucune case de `tasks.md` n'est cochée.
+
+| Exigence (`capacité › titre`) | Scénario | Conception ou diagramme | Tâche | Test ou preuve |
+|---|---|---|---|---|
+| `federated-search-bounds › Le vecteur de requête est calculé une fois par requête fédérée` | Scope de plusieurs projets | D2 ; vue « requête fédérée cible » | 2.1 | à produire par la tâche 2.1 — test avec un `EmbeddingProvider` qui compte ses appels (1 appel pour 3 projets) ; test non écrit |
+| `federated-search-bounds › Le vecteur de requête est calculé une fois par requête fédérée` | Requête redactée avant embedding | D2 ; vue « requête fédérée cible » | 2.1 | à produire par la tâche 2.1 — même test (requête transmise redactée) ; test non écrit |
+| `federated-search-bounds › Le vecteur de requête est calculé une fois par requête fédérée` | Fournisseur indisponible | D2 | 2.2 | à produire par la tâche 2.2 — test ciblé (un seul appel, tous les projets dégradés avec le même diagnostic), puis workflow `semantic-search-qualification.yml` ; test non écrit |
+| `federated-search-bounds › La fédération respecte une échéance globale` | Échéance atteinte en cours de scope | D3 ; vue « requête fédérée cible » | 3.1, 3.2 | à produire par la tâche 3.2 — test à horloge simulée (`FederatedContextServiceTest`, `FederatedSearchServicePolicyTest`) ; ADR de la tâche 3.1 non rédigé ; test non écrit |
+| `federated-search-bounds › La fédération respecte une échéance globale` | Échéance non atteinte | D3 | 3.2 | à produire par la tâche 3.2 — test à horloge simulée ; l'absence de diagnostic et l'identité des résultats sans échéance ne sont pas décrites par la tâche : test non écrit |
+| `federated-search-bounds › Les projets non servis sont nommés` | Diagnostic ordonné | D3 | 3.2 | à produire par la tâche 3.2 — test à horloge simulée (ordre du diagnostic, projets servis inchangés) ; test non écrit |
+| `federated-search-bounds › Les projets non servis sont nommés` | Parité des interfaces | D3 | 3.3 | à produire par la tâche 3.3 — `./mvnw -B -ntp clean install` (tests REST et MCP inclus) ; le test de parité CLI, REST et MCP n'est pas décrit : test non écrit |
+| `git-context-cache › Le cache de contexte Git couvre le scope fédéré maximal` | Requête fédérée répétée au-delà de 16 projets | D5 | 5.1, 5.2, 5.3 | à produire par la tâche 5.2 — test de 2 passages cycliques sur 20 projets (hits au second passage) ; à produire par la tâche 5.3 — exécution `workflow_dispatch` de `git-context-cache-qualification.yml` ; ADR de la tâche 5.1 non rédigé ; test non écrit |
+| `git-context-cache › Les statistiques du cache Git sont exposées` | Explain après un hit | D5 | 5.2 | à produire par la tâche 5.2 — exposition des `CacheStats` dans `explain` ; le test qui lit les compteurs dans les métadonnées `explain` n'est pas décrit : test non écrit |
+| `git-context-cache › La récence des commits est mise en cache par HEAD` | HEAD inchangé | D6 | 6.1 | à produire par la tâche 6.1 — test `GitRecencyCandidateEnricherTest` (second appel sans parcours de log) ; test non écrit |
+| `git-context-cache › La récence des commits est mise en cache par HEAD` | Nouveau commit | D6 | 6.1 | à produire par la tâche 6.1 — même test (nouveau commit pris en compte) ; test non écrit |
+| `lucene-reader-cache › La compatibilité sémantique est lue sur le reader en cache` | Recherches sémantiques successives | D4 | 4.1 | à produire par la tâche 4.1 — test qui compte les ouvertures de reader sur deux recherches successives ; test non écrit |
+| `lucene-reader-cache › La compatibilité sémantique est lue sur le reader en cache` | Résultat inchangé | D4 | 4.1 | à produire par la tâche 4.1 — `LuceneSemanticSearchIndexTest,SemanticSearchStrategyTest` ; le cas « provenance différente, incompatible » n'est pas décrit par la tâche : test non écrit |
+| `lucene-reader-cache › La présence de l'index lexical est lue sans ouvrir l'index` | Sonde de readiness répétée | D4 | 4.2 | à produire par la tâche 4.2 — `-Dtest='*LuceneSearchIndex*,NexusApplication*'` ; le test qui compte les ouvertures de reader entre deux sondes n'est pas décrit : test non écrit |
+| `lucene-reader-cache › La présence de l'index lexical est lue sans ouvrir l'index` | Index absent | D4 | 4.2 | à produire par la tâche 4.2 — mêmes tests ciblés ; le cas « répertoire absent, rend absent sans erreur » n'est pas décrit : test non écrit |
+| `symbol-search-scoping › La recherche de symboles est scopée projet avant le tri` | Plan de requête | D7 | 7.1, 7.2 | à produire par la tâche 7.2 — benchmark 25/100 projets peuplés dans la même base (plan `EXPLAIN` sans `SCAN` global) ; migration de la tâche 7.1 non écrite ; test non écrit |
+| `symbol-search-scoping › La recherche de symboles est scopée projet avant le tri` | Résultats inchangés | D7 | 7.2 | à produire par la tâche 7.2 — `-Dtest='*SymbolSearch*,FederatedGoldenSearchCorpusTest'` ; test non écrit |
+| `symbol-search-scoping › Les termes d'une requête sont interrogés en lot` | Requête de plusieurs termes | D7 | 7.2 | à produire par la tâche 7.2 — interrogation en lot dans `SymbolSearchStrategy` ; le test qui compte les requêtes SQL (8 termes contre 1 terme) n'est pas décrit : test non écrit |
+
+Aucun scénario sans tâche (`tâche absente`). Les tâches 1.1, 1.2 (`AUD-QUA-10`, découpage sans nouveau comportement) et 8.1 (intégration) ne correspondent à aucun scénario.

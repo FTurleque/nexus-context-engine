@@ -12,3 +12,4 @@ Résultats d'itération, de benchmark et de qualification, figés à leur date. 
 | recherche sémantique de l'itération 17 | [Résultats de l'itération 17](iteration-17-semantic-results.md) |
 | benchmark de régression scale | [Résultats du benchmark scale](scale-regression-results.md) |
 | qualification P1 / P3 | [Qualification P1 / P3](p1-p3-validation.md) |
+| enrichissement des specs OpenSpec (2026-11-04) | [Bilan de couverture OpenSpec](openspec-couverture-2026-11-04.md) |

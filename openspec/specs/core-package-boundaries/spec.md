@@ -2,6 +2,7 @@
 
 ## Purpose
 Définit les frontières technologiques du cœur `com.nexus` et la baseline de cycles de packages, vérifiées par le test d'architecture de la suite par défaut.
+Documentation durable : docs/developer/architecture-implementation.md#openspec-core-package-boundaries
 
 ## Requirements
 
@@ -44,6 +45,10 @@ Les types `org.sqlite` et `java.sql` SHALL être importés uniquement depuis `co
 #### Scenario: Exception autorisée
 - **WHEN** `com.nexus.application.NexusApplicationFactory` importe `java.sql.SQLException`
 - **THEN** la règle `sqlite-confine` passe
+
+#### Scenario: Usage hors de la liste fermée
+- **WHEN** une classe de `com.nexus.application` absente de la liste fermée importe `java.sql.SQLException`
+- **THEN** le test d'architecture échoue sur la règle `sqlite-confine`
 
 ### Requirement: Le package project est une feuille
 Le package `com.nexus.project` SHALL NOT importer de type d'un autre package `com.nexus`.

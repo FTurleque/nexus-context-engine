@@ -2,6 +2,7 @@
 
 ## Purpose
 Définit le comportement vérifié de `ProjectPathGuard`, primitive de confinement des lectures de projet, par une classe de test dédiée.
+Documentation durable : docs/developer/filesystem-support.md#openspec-project-path-confinement
 
 ## Requirements
 
@@ -27,15 +28,23 @@ Définit le comportement vérifié de `ProjectPathGuard`, primitive de confineme
 `ProjectPathGuard` SHALL refuser un chemin dont le composant final ou un composant intermédiaire est un lien symbolique, et `containsSymbolicLink` SHALL renvoyer `true` dans ces deux cas.
 
 #### Scenario: Symlink final
-- **WHEN** `requireRegularFile` reçoit un lien symbolique vers un fichier du projet
+- **GIVEN** un lien symbolique vers un fichier du projet
+- **WHEN** `requireRegularFile` le reçoit
 - **THEN** une `IOException` est levée
 
 #### Scenario: Symlink intermédiaire
-- **WHEN** un répertoire intermédiaire du chemin est un lien symbolique vers un répertoire hors projet
+- **GIVEN** un répertoire intermédiaire du chemin qui est un lien symbolique vers un répertoire hors projet
+- **WHEN** `containsSymbolicLink` et `requireDirectory` reçoivent ce chemin
 - **THEN** `containsSymbolicLink` renvoie `true` et `requireDirectory` lève une `IOException`
 
+#### Scenario: Signalement d'un symlink final
+- **GIVEN** un lien symbolique vers un fichier du projet
+- **WHEN** `containsSymbolicLink` reçoit ce lien
+- **THEN** il renvoie `true`
+
 #### Scenario: Runner sans symlinks en CI
-- **WHEN** le système de fichiers refuse la création de lien symbolique et `CI` est défini
+- **GIVEN** un système de fichiers qui refuse la création de lien symbolique et la variable `CI` définie
+- **WHEN** un test de confinement tente de créer un lien symbolique
 - **THEN** le test échoue au lieu d'être ignoré
 
 ### Requirement: Le type attendu est vérifié
@@ -43,6 +52,10 @@ Définit le comportement vérifié de `ProjectPathGuard`, primitive de confineme
 
 #### Scenario: Racine non répertoire
 - **WHEN** `requireDirectory` reçoit un fichier régulier du projet
+- **THEN** une `IOException` est levée
+
+#### Scenario: Répertoire à la place d'un fichier
+- **WHEN** `requireRegularFile` reçoit un répertoire du projet
 - **THEN** une `IOException` est levée
 
 ### Requirement: Le chemin de dépôt est relatif et normalisé
