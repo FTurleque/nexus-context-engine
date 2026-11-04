@@ -53,3 +53,84 @@ ADR applicables : ADR-0020 (migrations embarquées append-only), ADR-0022 (Lucen
 - [Suppression d'un index utilisé par une requête non testée (D6)] → test de plan sur toutes les requêtes connues ; la migration est réversible par une migration ultérieure qui recrée l'index.
 - [Conflits avec le sprint 6 sur `ProjectIndexingService`] → ordre de fusion sprint 5 puis sprint 6.
 - [Mesure D3 non concluante] → le constat AUD-PRF-08 se ferme par la mesure documentée, sans raccourci.
+
+## Vues
+
+Vue UML (diagramme de séquence) — Comment l'indexation cible enchaîne le scan, l'écriture par lot, le writer Lucene unique et la publication de la génération ? ([Proposition] — cible, non disponible)
+
+```mermaid
+sequenceDiagram
+    participant PIS as ProjectIndexingService
+    participant SC as ProjectScanner
+    participant PUB as IndexDocumentPublisher
+    participant LUC as LuceneSearchIndex et LuceneSemanticSearchIndex
+    participant REP as IndexRepository SQLite
+    PIS->>SC: scanWithDiagnostics
+    PIS->>LUC: ouvre un IndexWriter pour toute l'indexation (D4)
+    loop chaque lot de 128 fichiers ou 16 MiB
+        PIS->>PUB: publie le lot
+        PUB->>LUC: ajoute les documents, sans commit
+        PUB->>REP: écrit les analyses du lot dans la transaction d'indexation (D2)
+    end
+    alt indexation réussie
+        PIS->>LUC: commit à la barrière de publication
+        PIS->>SC: scanWithDiagnostics de contrôle de cohérence
+        Note over PIS,REP: la génération est publiée à la fin
+    else échec avant publication
+        PIS->>LUC: rollback
+        Note over PIS,REP: la génération précédente reste servie
+    end
+```
+
+Explication : aujourd'hui chaque lot Lucene ouvre un `IndexWriter` puis committe, et les `IndexedFileUpdate` de tous les fichiers modifiés s'accumulent jusqu'à une écriture SQLite unique (voir Context). La vue montre la cible de D2 et D4 : un writer par indexation, des analyses écrites au rythme des lots, un seul commit Lucene, rollback en cas d'échec. `[Question]` L'ordre exact entre le commit Lucene, le scan de contrôle et la publication de la génération n'est pas fixé par le design ; la vue ne l'affirme pas.
+
+Exigences : `project-indexing-pipeline › Un writer Lucene par indexation, committé à la publication`, `sqlite-index-writes › Les analyses en attente sont bornées par lot`.
+
+Vue UML (diagramme de séquence) — Comment un import MINOS prend-il les mêmes verrous qu'une indexation ? ([Proposition] — cible, non disponible)
+
+```mermaid
+sequenceDiagram
+    participant CLI as NexusCli
+    participant APP as NexusApplication
+    participant PIS as ProjectIndexingService
+    participant IMP as MinosCodeIndexImporter
+    participant REP as IndexRepository
+    CLI->>APP: lit le payload par la méthode bornée de la façade
+    CLI->>APP: demande l'import MINOS
+    APP->>PIS: importExternalCodeIntelligence, nom à confirmer
+    PIS->>PIS: prend le LockSlot single-flight
+    alt indexation du même projet en cours
+        PIS-->>APP: refus comme une indexation concurrente, même diagnostic
+    else projet libre
+        PIS->>PIS: prend le verrou inter-processus
+        PIS->>IMP: convertit le payload
+        PIS->>REP: replaceExternalCodeIntelligence
+    end
+```
+
+Explication : aujourd'hui `NexusApplication` acquiert `projectIndexLockManager` sans le `LockSlot` et instancie `MinosCodeIndexImporter`, et `NexusCli` lit le payload directement (voir Context). La vue montre la cible de D7 : le verrou single-flight puis le verrou inter-processus sont pris dans `ProjectIndexingService`, et la CLI n'importe plus `MinosCodeIndexImporter`.
+
+Exigences : `project-indexing-pipeline › Toute écriture d'index passe par ProjectIndexingService`.
+
+## Traçabilité
+
+Ces changements sont des plans non réalisés : aucune exigence n'est déclarée couverte, aucune case de `tasks.md` n'est cochée.
+
+| Exigence (`capacité › titre`) | Scénario | Conception ou diagramme | Tâche | Test ou preuve |
+|---|---|---|---|---|
+| `project-indexing-pipeline › Toute écriture d'index passe par ProjectIndexingService` | Import MINOS pendant une indexation | D7 ; vue « import MINOS » | 7.1 | à produire par la tâche 7.1 — test d'import MINOS concurrent d'une indexation du même projet (`-Dtest=Minos*,ProjectIndexingServiceTest,NexusCli*`) ; test non écrit |
+| `project-indexing-pipeline › Toute écriture d'index passe par ProjectIndexingService` | Lecture du payload par la CLI | D7 ; vue « import MINOS » | 7.1 | à produire par la tâche 7.1 — `git grep -n "MinosCodeIndexImporter" core/src/main/java/com/nexus/cli/ core/src/main/java/com/nexus/application/NexusApplication.java` sans résultat ; l'égalité des bornes avec REST et MCP n'est pas vérifiée par la tâche : test non écrit |
+| `project-indexing-pipeline › Le service d'indexation exige un gestionnaire de verrou explicite` | Composition de production | D8 | 8.1 | à produire par la tâche 8.1 — `git grep -c "public ProjectIndexingService(" ...` égal à 1 et `./mvnw -B -ntp -pl core test -Djacoco.skip=true` ; l'absence d'appel de production à `processLocalOnly()` n'est pas vérifiée par la tâche : preuve manquante |
+| `project-indexing-pipeline › Un writer Lucene par indexation, committé à la publication` | Indexation de plusieurs lots | D4 ; vue « indexation cible » | 4.1 | à produire par la tâche 4.1 — test qui compte un seul commit pour une indexation de plus de 128 fichiers ; test non écrit |
+| `project-indexing-pipeline › Un writer Lucene par indexation, committé à la publication` | Échec avant publication | D4 ; vue « indexation cible » | 4.1, 2.2 | à produire par les tâches 4.1 et 2.2 — tests d'échec qui conservent l'index ou la génération précédents ; tests non écrits |
+| `project-indexing-pipeline › La réindexation sur base peuplée est mesurée` | Profil CI du benchmark | D1 (scénario ajouté à `ScaleRegressionBenchmarkTest`) | 1.3 | à produire par la tâche 1.3 — `./mvnw ... -Dtest=ScaleRegressionBenchmarkTest -Dnexus.scale.benchmark.enabled=true -Dnexus.scale.benchmark.profile=ci ...` ; scénario de benchmark non écrit |
+| `sqlite-index-writes › La suppression des relations d'un fichier utilise un index` | Plan de la suppression par fichier | D1 | 1.1, 1.2 | à produire par la tâche 1.1 — test `EXPLAIN QUERY PLAN` dans `SqliteGraphQueryPlanTest` qui échoue d'abord ; à produire par la tâche 1.2 — migration et `-Dtest=SqliteGraphQueryPlanTest,SchemaMigrator*` ; tests non écrits |
+| `sqlite-index-writes › La suppression des relations d'un fichier utilise un index` | Plan de la cascade | D1 | 1.1, 1.2 | à produire par la tâche 1.1 — test de plan de `SELECT 1 FROM symbol_relations WHERE file_id = ?` ; test non écrit |
+| `sqlite-index-writes › Le schéma ne porte pas d'index préfixe redondant` | Liste des index après migration | D6 | 6.1 | à produire par la tâche 6.1 — migration `DROP INDEX IF EXISTS` et `-Dtest=SqliteGraphQueryPlanTest,SchemaMigrator*` ; le test de liste d'index absents n'est pas décrit par la tâche : test non écrit |
+| `sqlite-index-writes › Le schéma ne porte pas d'index préfixe redondant` | Requêtes existantes | D6 | 6.1 | à produire par la tâche 6.1 — plans des requêtes servies par `idx_symbol_relations_project`, `idx_indexed_files_project` et `idx_symbols_file` ; tests non écrits |
+| `sqlite-index-writes › Les migrations d'index conservent les données` | Upgrade d'une base peuplée | D1, D6 | 1.2, 6.1 | à produire par les tâches 1.2 et 6.1 — tests d'upgrade ; la conservation des faits et du statut des projets n'est pas détaillée par les tâches : test non écrit |
+| `sqlite-index-writes › L'écriture d'un fichier ne relit pas son identifiant` | Écriture de plusieurs fichiers | D5 | 5.1 | à produire par la tâche 5.1 — `-Dtest=Sqlite*` et `git grep` du `SELECT id ...` sans résultat ; le test montrant un nombre d'instructions préparées indépendant de N n'est pas décrit : test non écrit |
+| `sqlite-index-writes › Les analyses en attente sont bornées par lot` | Rebuild complet | D2 ; vue « indexation cible » | 2.1, 2.2 | à produire par la tâche 2.1 — mesure du pic de heap (profil `full`) ; à produire par la tâche 2.2 — `-Dtest=ProjectIndexingServiceTest,IndexDocumentPublisher*` ; le test montrant que la recherche sert la génération précédente jusqu'à la publication n'est pas décrit : test non écrit |
+| `sqlite-index-writes › Les analyses en attente sont bornées par lot` | Échec en cours d'indexation | D2 ; vue « indexation cible » | 2.2 | à produire par la tâche 2.2 — test qui vérifie qu'un échec en cours d'indexation laisse la génération précédente intacte ; test non écrit |
+
+Aucun scénario sans tâche (`tâche absente`). Les tâches 3.1, 3.2 (double hachage, `AUD-PRF-08`), 6.2 et 9.1 ne correspondent à aucun scénario : le design D3 conditionne le résultat à une mesure.

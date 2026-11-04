@@ -232,3 +232,158 @@ Un résultat rouge ou ambigu n'est pas un PASS :
 - benchmark hors budget : analyser le run exact-head ;
 - qualification sémantique réelle sous les floors ou manifest modèle divergent : analyser modèle/runtime/ranking avant de modifier les seuils ;
 - tag immuable divergent : échec définitif, jamais d'écrasement automatique.
+
+## OpenSpec ci-workflow-tooling
+
+Spec : [`openspec/specs/ci-workflow-tooling/spec.md`](../../openspec/specs/ci-workflow-tooling/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+Cette section relie les quatre exigences d'hygiène des workflows aux contrôles qui les portent. Les contrôles de la section « Hygiène des workflows » ci-dessus restent la description courante ; ici sont ajoutés les emplacements exacts, ce qui est testé et ce qui ne l'est pas.
+
+### Comportement existant vérifié (ci-workflow-tooling)
+
+**[Existant vérifié]** Les quatre contrôles sont des sous-commandes de `scripts/release/workflow_hygiene.py` (`pins`, `inputs`, `timeouts`, `runners`, table `CHECKS` à `scripts/release/workflow_hygiene.py:224`). Le script lit les workflows ligne à ligne, sans bibliothèque YAML (`scripts/release/workflow_hygiene.py:14-17`).
+
+| Exigence | Contrôle | Source |
+|---|---|---|
+| Les inputs ne sont jamais interpolés dans du shell | `inputs` : refuse toute expression `${{ … inputs … }}` (y compris `github.event.inputs`) sur une ligne d'un bloc `run:`, valeur en ligne ou bloc `\|` / `>` | `scripts/release/workflow_hygiene.py:29`, `:114-144` |
+| Le commentaire de version d'une action concorde avec son SHA | `pins` : SHA de 40 hexadécimaux, commentaire de forme version, un commentaire par SHA, une version majeure par action | `scripts/release/workflow_hygiene.py:26-27`, `:61-111` |
+| Chaque job non réutilisable est borné dans le temps | `timeouts` : tout job avec `runs-on:` et sans `uses:` doit déclarer `timeout-minutes` | `scripts/release/workflow_hygiene.py:147-184` |
+| Les benchmarks tournent sur des images de runner épinglées | `runners` : pour une liste fixe de jobs, chaque `runs-on:`, `os:` ou `- os:` littéral doit correspondre à `ubuntu-NN.NN`, `windows-NNNN` ou `macos-N` | `scripts/release/workflow_hygiene.py:34-43`, `:187-221` |
+
+**[Existant vérifié]** Où chaque contrôle est lancé, avec sa fixture négative (le contrat n'accepte la fixture que si le code de sortie est 1 et que le message de la règle apparaît) :
+
+- `pins` : `scripts/release/test-tool-integrity-anchors.sh:116`, fixtures aux lignes `:119-135` (`pins-comment-mismatch`, `pins-version-two-shas`, `pins-two-majors`, `pins-not-a-version`, `pins-tag-reference`) ;
+- `inputs`, `timeouts`, `runners` : `scripts/release/test-operational-doc-contracts.sh:564-566`, fixtures aux lignes `:568-583` (trois fixtures `inputs-*`, `timeout-missing`, `runners/scale-benchmark`) ;
+- en CI : étapes du job `Linux reactor Maven build`, `.github/workflows/ci.yml:81-85` (ancres et `pins`) et `:87-91` (`inputs`, `timeouts`, `runners`) ; en local : `bash .claude/scripts/contracts.sh` (`.claude/scripts/contracts.sh:30-34`) ou directement `python scripts/release/workflow_hygiene.py <contrôle> .github/workflows`. Au HEAD de cette rédaction, les quatre contrôles passent (exécutés en local).
+
+**[Existant vérifié]** État des workflows pour les scénarios :
+
+- profil de benchmark : `REQUESTED: ${{ inputs.profile }}` en `env:` dans `scale-benchmark.yml:120`, `lucene-lifecycle-benchmark.yml:88`, `scanner-corpus-benchmark.yml:63`, puis refus si la valeur n'est ni `ci` ni `full` (`scale-benchmark.yml:125-128`, `lucene-lifecycle-benchmark.yml:93-96`, `scanner-corpus-benchmark.yml:68-71`) avant l'écriture de `value=` dans `GITHUB_OUTPUT` (`scale-benchmark.yml:129`, `lucene-lifecycle-benchmark.yml:97`, `scanner-corpus-benchmark.yml:72`) ; tous sous `.github/workflows/` ;
+- épinglage : `actions/checkout` n'a qu'une version (`# v7.0.1`) dans `.github/workflows/` ; les deux workflows réutilisables OSV sont épinglés sur `b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0` (`osv-scanner.yml:30`, `osv-scanner.yml:82`). Relevé du 2026-11-04 par `git ls-remote https://github.com/google/osv-scanner-action 'refs/tags/v2.7.0*'` : le tag annoté `v2.7.0` pointe l'objet `6ad84ce1ef2d4124ba333b221894c133c4a970ea`, et `v2.7.0^{}` (le commit) est `b1d267aea5211fa648d9d442fa64b90dbdcbdd36` ; l'épinglage est donc sur le SHA de commit, pas sur l'objet tag. Cette concordance n'est vérifiée ni par le contrat ni par la CI (`scripts/release/test-tool-integrity-anchors.sh:111-113`, section « Hygiène des workflows » ci-dessus) ;
+- bornes de durée des quatre gates : `windows-gate` et `linux-reactor` à 45 minutes (`.github/workflows/ci.yml:26`, `:67`), `analyze` à 30 (`.github/workflows/codeql.yml:30`), `validate-release` à 10 (`.github/workflows/release.yml:19`) ; les jobs `uses:` de `release.yml` (par exemple `nexus-ci`, `.github/workflows/release.yml:49-52`) n'en déclarent pas et passent le contrôle (`scripts/release/workflow_hygiene.py:180-181`) ;
+- images de runner : `scale-benchmark.yml:39` (`ubuntu-24.04`), `lucene-lifecycle-benchmark.yml:65` et `:67`, `git-context-cache-qualification.yml:59` et `:61` (`ubuntu-24.04`, `windows-2025`).
+
+### Vues (ci-workflow-tooling)
+
+#### Vue organigramme — Quel script lance quel contrôle d'hygiène, en CI et en local ? (existant)
+
+```mermaid
+flowchart LR
+    WF[".github/workflows/*.yml"]
+    FX["scripts/release/fixtures/workflow-hygiene/"]
+
+    subgraph HY["scripts/release/workflow_hygiene.py"]
+        P["pins"]
+        I["inputs"]
+        T["timeouts"]
+        R["runners"]
+    end
+
+    A["test-tool-integrity-anchors.sh"]
+    O["test-operational-doc-contracts.sh"]
+    CIJ["ci.yml › linux-reactor, Linux reactor Maven build"]
+    LOC["bash .claude/scripts/contracts.sh, local"]
+
+    CIJ --> A
+    CIJ --> O
+    LOC --> A
+    LOC --> O
+
+    A --> P
+    O --> I
+    O --> T
+    O --> R
+
+    WF -->|"lu par chaque contrôle"| HY
+    FX -->|"chaque règle doit rejeter sa fixture, code de sortie 1 + message de la règle"| HY
+    HY -->|"code 1 et message nommant fichier:ligne, ou fichier et job"| A
+    HY -->|"idem"| O
+```
+
+Le schéma répond à « où est vérifiée chaque règle », car `pins` vit dans le script des ancres d'intégrité et les trois autres dans le script des contrats opérationnels. La concordance d'un SHA avec le tag amont n'apparaît nulle part : elle est manuelle (`git ls-remote`).
+
+Exigences : `ci-workflow-tooling › Les inputs ne sont jamais interpolés dans du shell`, `ci-workflow-tooling › Le commentaire de version d'une action concorde avec son SHA`, `ci-workflow-tooling › Chaque job non réutilisable est borné dans le temps`, `ci-workflow-tooling › Les benchmarks tournent sur des images de runner épinglées`.
+
+### Écarts et limites (ci-workflow-tooling)
+
+- **[Écart]** Périmètre « qualification de performance ». L'exigence cible les jobs de benchmark et de qualification de performance. Le job `real-ollama` de `semantic-search-qualification.yml` est une qualification dont les budgets (45 et 180 minutes) dépendent du débit CPU du runner (voir `semantic-search.md`, « Budget de temps de la qualification réelle »), mais il tourne sur `ubuntu-latest` (`.github/workflows/semantic-search-qualification.yml:61`) et n'est pas dans la liste du contrôle, qui ne contient que `semantic-diagnostics` pour ce workflow (`scripts/release/workflow_hygiene.py:41`). Le texte de la section « Hygiène des workflows » ci-dessus (images de runner) dit explicitement que les autres jobs restent sur `-latest`. Le périmètre de la spec n'est pas défini par une liste.
+- **[Écart]** Forme du commentaire de version. L'exigence écrit `# vX.Y.Z` ; le contrôle accepte `vN`, `vN.N` et `vN.N.N` (`scripts/release/workflow_hygiene.py:27`).
+- **Limite** Le contrôle `runners` est un dictionnaire fixe de workflows et de jobs (`scripts/release/workflow_hygiene.py:34-42`) : un nouveau job de benchmark sur `-latest` n'est pas vu tant qu'il n'y est pas ajouté. Il accepte aussi toute image `ubuntu-NN.NN`, `windows-NNNN` ou `macos-N` (`:43`), pas seulement `ubuntu-24.04` et `windows-2025`.
+- **Limite** Un job écrit en flow mapping n'est pas vu par `timeouts`, et une valeur de `runs-on` suivie d'un commentaire est rejetée par `runners` (`scripts/release/workflow_hygiene.py:14-17`).
+- **Limite** Les boucles de fixtures vérifient le code de sortie 1 et un fragment du message (`scripts/release/test-tool-integrity-anchors.sh:131`, `scripts/release/test-operational-doc-contracts.sh:579`) ; elles n'assertent ni le nom du fichier ou de la ligne, ni le nom du job. Le message produit les contient (`scripts/release/workflow_hygiene.py:75-77`, `:101`, `:140`, `:183`, `:217`).
+- **Limite** Le contrôle `inputs` ne regarde que `inputs` : `${{ steps.profile.outputs.value }}` dans un bloc `run:` (`scale-benchmark.yml:140`, `scanner-corpus-benchmark.yml:81`, `lucene-lifecycle-benchmark.yml:108`) n'est pas signalé ; la valeur a été validée à l'étape précédente. Dans `git-context-cache-qualification.yml`, `BENCHMARK_PROFILE` (`:66`) est transmis entre guillemets (`:95`) mais n'est pas validé par une étape shell ; seul le rapport l'est après coup (`:124`, `:169`). L'action locale `.github/actions/ollama-embedding-runtime/action.yml` passe ses inputs par `env:` (`:27-28`, `:52-54`) mais n'est pas dans le périmètre des contrôles, qui lisent `.github/workflows/`.
+- **Limite** Aucun test n'envoie une valeur hostile à un workflow : le scénario « Valeur hostile » repose sur l'absence d'interpolation (contrôle `inputs`) et sur la lecture de l'étape de validation, pas sur un run.
+
+### Propositions et questions ouvertes (ci-workflow-tooling)
+
+- **[Question]** Le job `real-ollama` (`semantic-search-qualification.yml`) est-il une « qualification de performance » au sens de l'exigence sur les images de runner ? Si oui, il faut l'ajouter à `PINNED_RUNNER_JOBS` ; si non, la spec devrait nommer le périmètre.
+- **[Proposition]** Resserrer `VERSION_COMMENT` à `vX.Y.Z` (trois composantes) ou reformuler l'exigence en `vN[.N[.N]]`.
+- **[Proposition]** Faire asserter par les boucles de fixtures le nom du fichier et, pour `timeouts` et `runners`, celui du job, afin de couvrir « en nommant le fichier et la ligne » et « en nommant le workflow et le job ».
+- **[Proposition]** Remplacer le dictionnaire `PINNED_RUNNER_JOBS` par une détection (par exemple une marque dans le job) pour qu'un nouveau benchmark ne puisse pas y échapper.
+- **[Question]** Une valeur dérivée d'un input (`steps.<id>.outputs.value`) utilisée dans un bloc `run:` doit-elle aussi être refusée ?
+
+## OpenSpec powershell-script-tooling
+
+Spec : [`openspec/specs/powershell-script-tooling/spec.md`](../../openspec/specs/powershell-script-tooling/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+### Comportement existant vérifié (powershell-script-tooling)
+
+**[Existant vérifié]** Module partagé `scripts/lib/NexusScript.psm1` : `Invoke-Maven` (`scripts/lib/NexusScript.psm1:73`), `Resolve-AbsolutePath` (`:105`), `Invoke-NexusJson` (`:117`), seuls exports (`:161`). Les scripts actifs qui appellent Maven ou ces fonctions l'importent par `Import-Module (Join-Path $PSScriptRoot "lib/NexusScript.psm1") -Force` : `compare-jdt.ps1:10`, `compare-scip.ps1:10`, `measure-iteration-16-baseline.ps1:14`, `measure-iteration-16-portfolio.ps1:10`, `measure-iteration-16-small-delta.ps1:13`, `measure-iteration-17-real-semantic-diagnostic.ps1:15`, `measure-iteration-17-real-semantic.ps1:15`, `measure-iteration-17-semantic.ps1:13`, `measure-scale-regression.ps1:11`, `self-smoke.ps1:10`, `validate-minos-integration.ps1:17`, `validate-phase-6.ps1:6` (tous sous `scripts/`) et `scripts/release/build-windows-distribution.ps1:17`.
+
+**[Existant vérifié]** Contrat local, dans `scripts/release/test-operational-doc-contracts.sh` : motif des fonctions partagées (`:477-480`), motifs d'appel direct de Maven (`:481-488`), détection par ligne (`:491-501`), parcours de tous les `*.ps1` et `*.psm1` de `scripts/` hors `scripts/lib/` et `scripts/archive/` (`:504-521`), auto-test sur neuf fixtures qui doivent être détectées (`:522-534`) et trois qui ne doivent pas l'être (`:535-541`), présence de l'export et du message « exige le Maven Wrapper verifie » dans le module (`:542-546`), appel de `Test-NexusScript.ps1` par `ci.yml` (`:547`).
+
+**[Existant vérifié]** Comportement de `Invoke-Maven` : le wrapper est `mvnw.cmd` sous Windows et `mvnw` ailleurs (`scripts/lib/NexusScript.psm1:13-20`) ; le wrapper est testé par `--version` (`:33`) ; en cas d'échec, `CI` ou `GITHUB_ACTIONS` non vide (`:9-11`) lève une exception sans repli (`:54-56`) ; hors CI un avertissement « Repli local » précède la recherche de `mvn.cmd` puis `mvn` (`:57-68`) ; la sélection est mémorisée par racine (`:90-92`) ; un code Maven non nul lève une exception dont `Data['ExitCode']` porte le code (`:95-102`).
+
+**[Existant vérifié]** Tests de `scripts/tests/Test-NexusScript.ps1`, sur des wrappers factices (aucun Maven réel) : wrapper présent (`:83-88`), wrapper en échec avec `CI` défini et un `mvn` factice dans le `PATH` (`:90-113`), code retour 3 propagé (`:115-135`), repli averti hors CI (`:137-154`), `Resolve-AbsolutePath` (`:156-163`). Ils tournent dans `Windows gate` sous PowerShell 7 puis Windows PowerShell 5.1 (`.github/workflows/ci.yml:48-54`) ; la version PowerShell 7 a été exécutée en local à cette rédaction (tous PASS).
+
+**[Existant vérifié]** Scripts d'itération : `validate-iteration-9`, `10`, `11`, `12`, `13`, `14`, `16` et `17` sont sous `scripts/archive/` ; aucun `validate-iteration-15.ps1` n'existe, et le contrat l'ignore (`scripts/release/test-operational-doc-contracts.sh:548-552`). `scripts/archive/README.md` les déclare non maintenus (contrat `:553`). La phrase « Les seuls points d'entrée de validation sont `scripts/validate-phase-6.ps1` … » est épinglée (`:554`) et présente à `docs/developer/ci-and-supply-chain.md:59`.
+
+**[Existant vérifié]** `0.1.0-SNAPSHOT` n'apparaît pas dans les scripts actifs (recherche du 2026-11-04 sur `scripts/` hors `scripts/archive/`) ; il reste dans `scripts/archive/validate-iteration-12.ps1:10` et `scripts/archive/validate-iteration-13.ps1:10-11`. Aucun contrat ne cherche cette chaîne.
+
+### Vues (powershell-script-tooling)
+
+#### Vue organigramme — Quel Maven Invoke-Maven sélectionne-t-il, et quand échoue-t-il ? (existant)
+
+```mermaid
+flowchart TD
+    START["Invoke-Maven -Arguments"] --> MEMO{"Maven déjà sélectionné, pour cette racine ?"}
+    MEMO -- oui --> RUN
+    MEMO -- non --> PRESENT{"mvnw.cmd ou mvnw présent ?"}
+    PRESENT -- oui --> PROBE["wrapper --version"]
+    PROBE --> CODE{"code de sortie 0 ?"}
+    CODE -- oui --> USEW["sélection = le wrapper"]
+    CODE -- non --> CI
+    PRESENT -- non --> CI
+    CI{"CI ou GITHUB_ACTIONS non vide ?"}
+    CI -- oui --> ERRCI["exception: exige le Maven Wrapper verifie,, aucun repli sur le Maven du runner"]
+    CI -- non --> WARN["avertissement: Repli local"]
+    WARN --> FALLBACK{"mvn.cmd ou mvn installé, et --version à 0 ?"}
+    FALLBACK -- oui --> USEF["sélection = Maven installé"]
+    FALLBACK -- non --> ERRNO["exception: wrapper et Maven système indisponibles"]
+    USEW --> RUN
+    USEF --> RUN
+    RUN["exécute Maven avec les arguments"] --> RC{"code de sortie Maven = 0 ?"}
+    RC -- oui --> DONE["retour normal"]
+    RC -- non --> ERRMVN["exception: La commande Maven a echoue avec le code N, Data ExitCode = N"]
+```
+
+Le schéma répond à « dans quels cas un script actif échoue sans Maven vérifié », car l'exigence ne cite que la branche CI. Parmi les trois sorties en exception, `ERRCI` et `ERRMVN` ont un cas de test dédié ; `ERRNO` n'en a pas, et le repli n'est testé que dans le cas où un `mvn` factice existe.
+
+Exigences : `powershell-script-tooling › Maven est appelé par le wrapper vérifié`.
+
+### Écarts et limites (powershell-script-tooling)
+
+- **[Écart]** Code de retour. Le scénario « Code retour Maven propagé » dit que le script appelant échoue « avec ce code ». `Invoke-Maven` lève une exception qui porte le code dans `Data['ExitCode']` (`scripts/lib/NexusScript.psm1:97-102`) et le test vérifie ce code (`scripts/tests/Test-NexusScript.ps1:129-131`). Aucun script de `scripts/` ne lit `Data['ExitCode']` (recherche du 2026-11-04) : l'exception remonte avec `$ErrorActionPreference = "Stop"` (par exemple `scripts/validate-phase-6.ps1:4`, appel à `:113`). Un script PowerShell qui laisse échapper une exception se termine avec le code 1 (vérifié sur un script minimal en PowerShell 7, pas sur ces scripts) : il échoue, mais le code de sortie n'est pas celui de Maven.
+- **[Écart]** Variable `GITHUB_ACTIONS`. Le scénario « Wrapper indisponible en CI » pose `GITHUB_ACTIONS` ; le test pose `CI` (`scripts/tests/Test-NexusScript.ps1:56-59`, appelé à `:96`). La branche `GITHUB_ACTIONS` seule (`scripts/lib/NexusScript.psm1:10`) n'est pas testée isolément ; sur un runner GitHub, les deux variables sont définies.
+- **[Écart]** `0.1.0-SNAPSHOT` : l'exigence « Aucune référence vers un artefact inexistant » n'a aucun contrat ; l'absence constatée est une recherche manuelle.
+- **Limite** Le contrat interdit de redéfinir et d'appeler Maven en direct, mais n'impose pas qu'un script importe le module (aucune vérification d'`Import-Module` dans `scripts/release/test-operational-doc-contracts.sh`) ; `Invoke-NexusJson` n'a aucun test dans `scripts/tests/Test-NexusScript.ps1`.
+- **Limite** L'auto-test du contrat vérifie que les fixtures sont détectées (`scripts/release/test-operational-doc-contracts.sh:533-534`), pas que le message nomme le script ; le message le fait (`:498`, `:500`, `:521`). Le scénario « Script d'itération obsolète » est vérifié par l'absence à la racine (`:548-552`) ; la présence sous `scripts/archive/` n'est pas assertée.
+- **Limite** Hors CI, le repli sur un Maven installé non ancré est permis et seulement averti (`scripts/lib/NexusScript.psm1:57-68`) ; l'exigence ne l'interdit que « en CI ».
+
+### Propositions et questions ouvertes (powershell-script-tooling)
+
+- **[Question]** « Le script appelant échoue avec ce code » : faut-il propager le code Maven comme code de sortie du processus (lecture de `Data['ExitCode']` par les scripts), ou reformuler le scénario en « le script appelant échoue » ?
+- **[Proposition]** Ajouter à `Test-NexusScript.ps1` un cas avec seule `GITHUB_ACTIONS` définie.
+- **[Proposition]** Ajouter au contrat `test-operational-doc-contracts.sh` une recherche de `0.1.0-SNAPSHOT` dans les scripts actifs, et une vérification de l'import du module par tout script qui appelle `Invoke-Maven`, `Resolve-AbsolutePath` ou `Invoke-NexusJson`.
+- **[Proposition]** Couvrir `Invoke-NexusJson` (code de sortie non nul, sortie vide) dans `Test-NexusScript.ps1`.
+- **[Question]** Le repli local hors CI sur un Maven installé non ancré est-il compatible avec l'intention « Maven est appelé par le wrapper vérifié » ? La spec ne l'interdit pas.

@@ -1,32 +1,36 @@
-schema: spec-driven
+schema: detailed-uml
 
-# Project context (optional)
-# Add only constraints that should guide OpenSpec artifacts and workflows.
-# Include constraints an agent cannot infer by reading the code.
-# Keep general project documentation and discoverable codebase facts out.
-# Example:
-#   context: |
-#     Designs and tasks must cover Windows, macOS, and Linux
-#     Write all artifacts in Spanish
+# Contraintes qui ne se déduisent pas du code. Les structures détaillées sont dans
+# openspec/schemas/detailed-uml/templates/ ; le mode d'emploi est docs/developer/openspec.md.
+context: |
+  Rédiger tous les artefacts en français ; les marqueurs OpenSpec (Requirement, Scenario, GIVEN/WHEN/THEN/AND, ADDED/MODIFIED/REMOVED/RENAMED, Why, What Changes, Capabilities, Impact), les identifiants de code, les commandes et les chemins restent en anglais.
+  Étiqueter chaque information : [Exigence], [Existant vérifié] (avec chemin:ligne ou test), [Décision], [Proposition], [Question], [Écart]. Le code prouve l'implémentation, pas l'intention métier ; un écart entre code, tests et specs se documente, il ne se masque pas.
+  Une spec ne contient que des exigences. Les diagrammes Mermaid et l'existant vérifié vivent dans la page durable de la capacité (docs/developer/) ou dans docs/architecture/ (arc42, ADR), jamais dans un delta. Les tests et les preuves sont suivis dans docs/developer/openspec-traceability.md.
+  Les workflows OpenSpec de ce dépôt ne synchronisent ni n'archivent un comportement seulement proposé, et n'archivent jamais sans demande explicite. Les conventions du dépôt (AGENTS.md, .claude/rules/documentation.md) s'appliquent à toute documentation.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always state what is out of scope
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+rules:
+  proposal:
+    - Déclarer le type de changement (fonctionnel, architectural, documentaire, outillage) et le périmètre exclu.
+    - Étiqueter chaque puce de nature ; citer la source de tout constat sur l'existant.
+  specs:
+    - Une exigence énonce un comportement atomique, observable, en 500 caractères ou moins.
+    - Aucun seuil, règle métier ou performance sans source ; poser une [Question] à la place.
+    - Scénarios GIVEN/WHEN/THEN/AND avec résultat observable, erreur attendue et effets persistés ou leur absence.
+    - Ne jamais renommer une exigence existante hors d'un RENAMED.
+  design:
+    - Nommer le profil (complet ou court) ; justifier en une ligne chaque section non applicable.
+    - Diagrammes Mermaid nommés par leur vrai type (UML, C4, entité-relation, organigramme), avec explication et exigences citées.
+    - Référencer les contrats exécutables existants au lieu de les copier ; ADR seulement pour une décision structurante.
+  tasks:
+    - Chaque tâche cite l'exigence couverte et sa vérification ; les tests et la documentation restent dans leur groupe.
+    - Prévoir un groupe « Documentation durable » (diagrammes, page de la capacité, matrice de traçabilité).
 
-# Per-operation guidance (optional)
-# Add advisory guidance for how apply and archive work should be conducted.
-# This is separate from artifact rules above.
-# Example:
-#   operations:
-#     apply:
-#       guidance:
-#         - Keep test summaries concise
-#     archive:
-#       guidance:
-#         - Summarize the archive outcome before finishing
+operations:
+  apply:
+    guidance:
+      - Ne cocher une tâche qu'avec sa preuve ; signaler « test non écrit » ou « preuve manquante » sinon.
+      - Mettre à jour la traçabilité du design et docs/developer/openspec-traceability.md avec les références réelles.
+  archive:
+    guidance:
+      - Avant d'archiver, vérifier que les pages et diagrammes durables et la matrice de traçabilité sont à jour.
+      - Ne pas synchroniser comme livré un comportement seulement proposé.

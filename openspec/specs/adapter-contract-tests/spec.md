@@ -2,6 +2,7 @@
 
 ## Purpose
 Définit la granularité des tests de contrat des adaptateurs REST et MCP, pour qu'un contrat en échec ne masque pas les autres.
+Documentation durable : docs/developer/adapter-coverage-gates.md#openspec-adapter-contract-tests
 
 ## Requirements
 
@@ -27,8 +28,18 @@ Définit la granularité des tests de contrat des adaptateurs REST et MCP, pour 
 Chaque test qui lit une réponse REST ou MCP SHALL vérifier que la réponse ne contient ni chemin absolu de la machine, ni secret de la fixture, ni type du modèle interne du cœur.
 
 #### Scenario: Secret de la fixture
-- **WHEN** la fixture contient la valeur synthétique `synthetic-unquoted-secret-123456`
+- **GIVEN** la fixture contient la valeur synthétique `synthetic-unquoted-secret-123456`
+- **WHEN** un test de contrat lit une réponse REST ou MCP
 - **THEN** aucune réponse testée ne contient cette valeur
+
+#### Scenario: Chemin absolu de la fixture
+- **GIVEN** la fixture est écrite sous un répertoire temporaire de la machine
+- **WHEN** un test de contrat lit une réponse REST ou MCP
+- **THEN** la réponse ne contient pas le chemin absolu de ce répertoire, quelle que soit la forme des séparateurs
+
+#### Scenario: Type du modèle interne
+- **WHEN** un test de contrat lit une réponse REST ou MCP
+- **THEN** la réponse ne contient aucun type du modèle interne du cœur
 
 ### Requirement: Les tests de contrat ne dépendent pas de leur ordre
 Les tests de contrat REST et MCP SHALL passer quel que soit leur ordre d'exécution.

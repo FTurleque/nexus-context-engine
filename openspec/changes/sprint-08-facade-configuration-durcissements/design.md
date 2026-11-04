@@ -45,3 +45,67 @@ Côté REST, `NexusRestExposureGuard` valide la posture au démarrage ; en trust
 - [Propriétaire de fichier non déterminable (système de fichiers sans propriétaire, partage SMB)] → le dépôt parent est ignoré par défaut, avec diagnostic ; les systèmes de fichiers qualifiés d'ADR-0047 sont couverts par les tests Windows et Linux.
 - [Refactoring de configuration étendu à douze classes] → livré classe par classe derrière la même suite de tests ; les valeurs par défaut et les messages d'erreur sont figés par les tests de limites existants.
 - [Règle d'architecture dépendante de `AUD-ARC-07`] → si le test d'architecture n'est pas encore fusionné, la tâche 3.3 le signale et bloque la sortie du sprint plutôt que d'ajouter un contrôle parallèle.
+
+## Vues
+
+Vue organigramme — quelles requêtes le listener loopback accepte-t-il ou refuse-t-il (D6) ? ([Proposition] — cible, non disponible)
+
+```mermaid
+flowchart TD
+    requete["Requête sur le listener applicatif"] --> loopback{"Listener loopback ?  trust-local ou jeton loopback"}
+    loopback -- "non" --> garde["Garde fail-closed existant seul :  jeton, allowlist, TLS  NexusRestExposureGuard"]
+    loopback -- "oui" --> host{"Host = 127.0.0.1, localhost  ou [::1], avec ou sans port ?"}
+    host -- "non" --> refus["403 sans détail"]
+    host -- "oui" --> origin{"En-tête Origin présent ?"}
+    origin -- "non" --> accepte["Requête traitée normalement"]
+    origin -- "oui" --> originLoopback{"Origin loopback ?"}
+    originLoopback -- "oui" --> accepte
+    originLoopback -- "non" --> refus
+```
+
+Le filtre JAX-RS `@PreMatching` de D6 n'existe pas au HEAD : seul `NexusRestAuthenticationFilter` est un `ContainerRequestFilter` de l'adaptateur. Hors loopback, le garde de démarrage est le seul contrôle, comme avant. Notation : organigramme, pas UML.
+
+Exigences : `rest-transport-hardening › Un listener loopback n'accepte que des hôtes loopback`, `rest-transport-hardening › Un listener loopback refuse les origines web non loopback`, `rest-transport-hardening › Le contrôle de transport ne remplace pas le garde d'exposition`.
+
+Vue organigramme — quel dépôt Git alimente le contexte d'un projet (D7) ? ([Proposition] — cible, non disponible)
+
+```mermaid
+flowchart TD
+    racine["Racine du projet enregistré"] --> propre{"Répertoire .git  à la racine ou en dessous ?"}
+    propre -- "oui" --> retenu["Dépôt retenu :  contexte Git produit"]
+    propre -- "non" --> parent{"Dépôt trouvé dans  un répertoire parent ?"}
+    parent -- "non" --> aucun["Aucun contexte Git"]
+    parent -- "oui" --> proprio{"Répertoire Git appartenant  à l'utilisateur courant ?"}
+    proprio -- "oui" --> retenu
+    proprio -- "non ou propriétaire non déterminable" --> ecarte["Contexte Git ignoré :  diagnostic public sans chemin absolu"]
+```
+
+La fabrique unique de D7 serait appelée par `LocalGitContextSourceProvider`, `PersistentGitContextSourceProvider` et `GitRecencyCandidateEnricher` ; au HEAD, chacun appelle `FileRepositoryBuilder.findGitDir(projectRoot)` lui-même. Le cas « propriétaire non déterminable → dépôt parent ignoré » vient du paragraphe Risks / Trade-offs. Notation : organigramme, pas UML.
+
+Exigences : `git-context-discovery › La découverte Git est plafonnée à la racine du projet`, `git-context-discovery › Un dépôt écarté produit un diagnostic public`, `git-context-discovery › Les trois usages de Git appliquent la même règle`.
+
+## Traçabilité
+
+Aucun scénario n'est couvert : le changement n'est pas réalisé. La colonne « Tâche » renvoie aux numéros de `tasks.md` ; `TEST_CIBLE` est défini en tête de `tasks.md`.
+
+| Exigence (`capacité › titre`) | Scénario | Conception ou diagramme | Tâche | Test ou preuve |
+|---|---|---|---|---|
+| `git-context-discovery › La découverte Git est plafonnée à la racine du projet` | Dépôt à la racine | D7 ; vue D7 | 6.1, 6.2 | à produire par la tâche 6.2 — `./mvnw -pl core test -Dtest='*Git*' TEST_CIBLE` ; test non écrit |
+| `git-context-discovery › La découverte Git est plafonnée à la racine du projet` | Sous-module d'un dépôt de l'utilisateur | D7 ; vue D7 | 6.1, 6.2 | à produire par la tâche 6.2 — même commande ; test non écrit |
+| `git-context-discovery › La découverte Git est plafonnée à la racine du projet` | Dépôt parent d'un autre compte | D7 ; vue D7 | 6.1, 6.2 | à produire par la tâche 6.2 — dépôt parent écarté ; test non écrit |
+| `git-context-discovery › Un dépôt écarté produit un diagnostic public` | Diagnostic sans chemin | D7 ; vue D7 | 6.2 | à produire par la tâche 6.2 — diagnostic sans chemin absolu ; test non écrit |
+| `git-context-discovery › Les trois usages de Git appliquent la même règle` | Runtime longue durée | D7 | 6.1 | à produire par la tâche 6.1 — `./mvnw -pl core test -Dtest='*GitContextSourceProvider*,GitRecencyCandidateEnricherTest' TEST_CIBLE` ; la tâche 6.2 ne cite pas de cas runtime longue durée ; test non écrit |
+| `rest-transport-hardening › Un listener loopback n'accepte que des hôtes loopback` | Hôte loopback accepté | D6 ; vue D6 | 5.1, 5.2 | à produire par la tâche 5.2 — `./mvnw -pl adapters/rest-quarkus -am test -Dtest='NexusRest*,NexusResourceTest' TEST_CIBLE` ; test non écrit |
+| `rest-transport-hardening › Un listener loopback n'accepte que des hôtes loopback` | Hôte non loopback refusé en trust-local | D6 ; vue D6 | 5.1, 5.2 | à produire par la tâche 5.2 — `@QuarkusTest` en trust-local et en jeton loopback ; test non écrit |
+| `rest-transport-hardening › Un listener loopback n'accepte que des hôtes loopback` | Refus sans détail | D6 ; vue D6 | 5.1 | à produire par la tâche 5.1 — « refus 403 sans détail » ; test non écrit |
+| `rest-transport-hardening › Un listener loopback refuse les origines web non loopback` | Client sans origine | D6 ; vue D6 | 5.1, 5.2 | à produire par la tâche 5.2 — même commande ; test non écrit |
+| `rest-transport-hardening › Un listener loopback refuse les origines web non loopback` | Origine distante | D6 ; vue D6 | 5.1, 5.2 | à produire par la tâche 5.2 — même commande ; test non écrit |
+| `rest-transport-hardening › Le contrôle de transport ne remplace pas le garde d'exposition` | Écoute réseau sans jeton | D6 ; vue D6 | 5.2 | à produire par la tâche 5.2 — `NexusRestExposureGuardTest` (test existant) doit rester vert ; aucun test nouveau cité |
+
+## Écarts et points à vérifier
+
+- [Existant vérifié] Les douze classes de D3 appellent `System.getenv` dans `core/src/main` (`git grep -n "System.getenv" -- core/src/main` : `NexusPaths`, `SecurityPolicy`, `ContextMaterializationLimits`, `ContextDiscoveryLimits`, `IndexingCapacityGate`, `ProjectIndexingService`, `JdtLanguageServerCodeIntelligenceProvider`, `index/jdt/ProcessBuilder`, `ProjectScanLimits`, `ScipIndexLimits`, `SemanticSearchConfiguration`, `ProjectFileLimits`) ; aucune autre classe n'en appelle.
+- [Existant vérifié] Le test d'architecture visé par le dernier risque existe au HEAD : `core/src/test/java/com/nexus/architecture/CoreArchitectureTest.java` et sa baseline `/architecture/package-cycles.txt` (constante `CYCLE_BASELINE`, ligne 28) ; il ne contient aucune règle sur `getenv`. La condition « si le test d'architecture n'est pas encore fusionné » (section Risks / Trade-offs) est donc à réexaminer au démarrage du sprint.
+- [Écart] `design.md:7` écrit que `ProjectScanLimits` et `ContextDiscoveryLimits` exposent « déjà une fabrique `from(Map<String, String>)` » : seule `ContextDiscoveryLimits.from` est `public` (`core/src/main/java/com/nexus/context/source/ContextDiscoveryLimits.java:50`) ; `ProjectScanLimits.from` est `static` sans modificateur d'accès, donc package-private (`core/src/main/java/com/nexus/index/scan/ProjectScanLimits.java:48`).
+- [Existant vérifié] Aucun filtre ne contrôle `Host` ni `Origin` : le seul `ContainerRequestFilter` de l'adaptateur est `NexusRestAuthenticationFilter` (`adapters/rest-quarkus/src/main/java/com/nexus/api/NexusRestAuthenticationFilter.java:26`).
+- [Question] D3 et la tâche 3.1 modifient `ProjectIndexingService`, que `sprint-05-indexation-et-ecriture-sqlite` modifie aussi (son design, section Context, y relève cinq constructeurs publics). L'ordre de fusion n'est pas décidé ici.

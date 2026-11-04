@@ -2,6 +2,7 @@
 
 ## Purpose
 Définit quand et sur quel corpus la qualification sémantique réelle (Ollama local, modèle épinglé) s'exécute, pour qu'elle termine et produise une mesure sur `develop`.
+Documentation durable : docs/developer/semantic-search.md#openspec-semantic-search-qualification
 
 ## Requirements
 
@@ -11,17 +12,21 @@ Sur une pull request, la qualification sémantique réelle SHALL exécuter un so
 #### Scenario: PR touchant la recherche sémantique
 - **WHEN** une PR vers `develop` modifie `core/src/main/java/com/nexus/search/semantic/**`
 - **THEN** le job exécute le corpus réduit, avec un timeout de 45 minutes au plus, et échoue si un seuil n'est pas atteint
+- **AND** le rapport, les journaux et les fichiers texte du run sont conservés comme artefacts, même en cas d'échec
 
 ### Requirement: Le corpus complet s'exécute sur develop
 Le corpus complet SHALL s'exécuter sur `develop` après la fusion d'un changement des chemins surveillés, et ce run SHALL NOT être annulé par un run ultérieur.
 
 #### Scenario: Fusion sur develop
-- **WHEN** une PR qui touche les chemins surveillés est fusionnée dans `develop`
+- **GIVEN** une PR qui touche les chemins surveillés
+- **WHEN** elle est fusionnée dans `develop`
 - **THEN** un run du corpus complet démarre sur le SHA de `develop` et va jusqu'à son terme
+- **AND** son groupe de concurrence est ce SHA : un push ultérieur sur `develop` ne l'annule pas
 
 #### Scenario: Rapport rattaché au SHA
 - **WHEN** le run du corpus complet se termine
 - **THEN** son rapport porte `snapshotCommit` égal au SHA de `develop` qualifié
+- **AND** le run échoue si le `snapshotCommit` du rapport diffère du SHA attendu
 
 ### Requirement: Le rôle de la qualification dans la release est explicite
 `release.yml` SHALL refléter la décision de l'ADR qui complète ADR-0014 : soit le job de publication dépend d'une qualification sémantique réussie, soit `docs/developer/semantic-search.md` indique que la release ne l'exige pas.

@@ -173,3 +173,192 @@ Les contextes REST/MCP/CLI projettent les chemins en repository-relative et
 filtrent les diagnostics/métadonnées internes à la frontière de sortie. Les
 requêtes client sont conservées séparément. La redaction des skills précède
 estimation et sélection ; les compteurs décrivent le contenu effectivement fourni.
+
+## OpenSpec public-output-projection
+
+Spec : [`openspec/specs/public-output-projection/spec.md`](../../openspec/specs/public-output-projection/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md). Le contrat de sortie est décrit de la même façon dans [`mcp.md`](mcp.md) et [`cli.md`](cli.md) ; cette section porte la vue de la capacité pour les trois canaux.
+
+### Comportement existant vérifié
+
+| Fait | Nature | Source |
+|---|---|---|
+| Une seule classe construit les structures publiques (projets, symboles, résultats classés, recherche, recherche fédérée, contexte, contexte fédéré, usages, index) ; les adaptateurs les sérialisent sans les recomposer. | [Existant vérifié] | `core/src/main/java/com/nexus/exposure/PublicOutputProjection.java:35-201`, `core/src/main/java/com/nexus/exposure/PublicOutput.java:9-15` |
+| Les trois canaux appellent cette projection : REST par `ApiMapper`, MCP par `NexusMcpTools`, CLI par `CliRenderer`. | [Existant vérifié] | `adapters/rest-quarkus/src/main/java/com/nexus/api/ApiMapper.java:19-50`, `adapters/mcp-java/src/main/java/com/nexus/mcp/NexusMcpTools.java:58,79,104,125,145,177,212`, `core/src/main/java/com/nexus/cli/CliRenderer.java:62,71,116,136,156,175` |
+| L'ordre des clés JSON est l'ordre des composantes des records de `PublicOutput`. Le contrat de clés se lit sur ces records. | [Existant vérifié] | `core/src/main/java/com/nexus/exposure/PublicOutputSchema.java:14,30-32` |
+| Deux divergences sont déclarées : la clé `command` ajoutée en tête des objets JSON de la CLI, et les outils MCP `find_symbol` et `find_usages`, sans équivalent CLI ni REST. | [Existant vérifié] | `core/src/main/java/com/nexus/exposure/PublicOutputSchema.java:21,24`, `core/src/main/java/com/nexus/cli/CliRenderer.java:302-306` |
+| Les chemins passent par `PublicProjectPathPolicy.expose` pour les résultats classés, les symboles indexés et les éléments de contexte ; un chemin hors de la racine lève `IllegalStateException("Result path is outside the project root")`. | [Existant vérifié] | `core/src/main/java/com/nexus/exposure/PublicOutputProjection.java:82,167,206`, `core/src/main/java/com/nexus/security/PublicProjectPathPolicy.java:26-51`, `core/src/main/java/com/nexus/exposure/PublicContextPolicy.java:51-56` |
+| Le record `Project` n'a pas de racine : aucune clé `rootPath` n'est exposée. | [Existant vérifié] | `core/src/main/java/com/nexus/exposure/PublicOutput.java:22-29`, `core/src/test/java/com/nexus/exposure/PublicOutputProjectionTest.java:58` |
+| `scoreComponents` est copié dans un `TreeMap` par la projection et trié de nouveau par les constructeurs des records ; les `metadata` de contexte sont triées récursivement par clé. | [Existant vérifié] | `core/src/main/java/com/nexus/exposure/PublicOutputProjection.java:85,212,223-239`, `core/src/main/java/com/nexus/exposure/PublicOutput.java:59,106,194-196` |
+| `qualifiedName` et `signature` (symbole) puis `source` et `target` (relation) passent par `SensitiveContentRedactor.redactField` ; `id` et `excerpt` d'un résultat classé aussi. | [Existant vérifié] | `core/src/main/java/com/nexus/exposure/PublicOutputProjection.java:69-70,80,83,181-182` |
+| `redactField` renvoie `[REDACTED]` quand la redaction refuse la valeur (`OversizedSecretException`), sans faire échouer la réponse. | [Existant vérifié] | `core/src/main/java/com/nexus/security/SensitiveContentRedactor.java:122-131`, `core/src/test/java/com/nexus/exposure/PublicOutputProjectionTest.java#anOversizedExternalSignatureIsMaskedWithoutFailingTheResponse` |
+| Le rendu humain de la CLI lit la signature de la structure déjà projetée, donc redigée. | [Existant vérifié] | `core/src/main/java/com/nexus/cli/CliRenderer.java:247-249`, `core/src/test/java/com/nexus/cli/CliRendererSymbolRedactionTest.java#externalSignaturesAreRedactedOnEveryCliOutput` |
+| Le service REST renvoie les records `NexusApplication.*Operation` ; `ApiModels` ne contient que des DTO de requête et `ErrorResponse`. | [Existant vérifié] | `adapters/rest-quarkus/src/main/java/com/nexus/api/NexusApiApplicationService.java:57,75,86,101,120`, `adapters/rest-quarkus/src/main/java/com/nexus/api/ApiModels.java:13-43` |
+| Une `IllegalStateException` autre que les deux conflits de cycle de vie devient un HTTP 500 `internal_state_error` côté REST. C'est ce que devient une `IllegalStateException` de la politique de chemins, par lecture du code (aucun test ne la déclenche de bout en bout). | [Existant vérifié] | `adapters/rest-quarkus/src/main/java/com/nexus/api/IllegalStateExceptionMapper.java:20-43` |
+
+### Vues
+
+Vue UML de séquence — comment une recherche devient-elle une sortie publique, et que deviennent un chemin hors racine ou un champ que la redaction refuse (existant) ?
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Canal as CLI, REST ou MCP
+    participant App as NexusApplication
+    participant Proj as PublicOutputProjection
+    participant Path as PublicProjectPathPolicy
+    participant Red as SensitiveContentRedactor
+
+    Canal->>App: search(projectId, query, limit, explain)
+    App-->>Canal: SearchOperation avec RankedCandidate
+    Canal->>Proj: search(project, query, limit, explain, durationMs, results)
+    loop chaque RankedCandidate
+        Proj->>Path: expose(project.rootPath(), candidate.path())
+        alt chemin dans la racine du projet
+            Path-->>Proj: chemin relatif, séparateur /
+        else chemin hors de la racine
+            Path-->>Proj: IllegalStateException
+            Proj-->>Canal: l'exception remonte, aucune sortie produite
+        end
+        Proj->>Red: redactField(id, excerpt, qualifiedName, signature)
+        alt valeur refusée par la redaction
+            Red-->>Proj: [REDACTED]
+        else valeur acceptée
+            Red-->>Proj: valeur redigée
+        end
+        Proj->>Proj: scoreComponents copié dans un TreeMap
+    end
+    Proj-->>Canal: PublicOutput.Search
+    Canal->>Canal: sérialisation, la CLI JSON ajoute command en tête
+```
+
+La projection est le seul endroit où le chemin, la redaction et l'ordre des composantes sont décidés ; l'erreur d'un chemin hors racine remonte au canal, dont le traitement n'est pas spécifié (voir Écarts). Exigences : `public-output-projection › Les chemins publics sont relatifs au projet`, `public-output-projection › L'ordre des composantes de score est déterministe`, `public-output-projection › Les métadonnées de symbole sont redigées à la sortie`.
+
+Vue UML de classes — quelles structures portent le contrat de clés et où sont déclarées les divergences entre canaux (existant) ?
+
+```mermaid
+classDiagram
+    class PublicOutputProjection {
+        <<utility>>
+        +project(ProjectDescriptor) Project
+        +projectList(List) List
+        +symbol(CodeSymbol) Symbol
+        +rankedResult(ProjectDescriptor, RankedCandidate, int) RankedResult
+        +search(...) Search
+        +federatedSearch(...) FederatedSearch
+        +context(...) Context
+        +federatedContext(...) FederatedContext
+        +symbolSearch(...) SymbolSearch
+        +usages(...) Usages
+        +index(...) Index
+    }
+    class PublicOutputSchema {
+        <<utility>>
+        +String CLI_COMMAND_FIELD
+        +List MCP_ONLY_OPERATIONS
+        +keys(Class) List
+        +divergences(Class, Object, List) List
+    }
+    class Search {
+        +Project project
+        +String query
+        +int limit
+        +boolean explain
+        +long durationMs
+        +List results
+    }
+    class FederatedSearch {
+        +List projects
+        +List results
+    }
+    class RankedResult {
+        +int rank
+        +String id
+        +String type
+        +String path
+        +String excerpt
+        +double score
+        +SortedMap scoreComponents
+        +List reasons
+        +Symbol symbol
+    }
+    class Symbol {
+        +String kind
+        +String name
+        +String qualifiedName
+        +String signature
+    }
+    class Context {
+        +List items
+        +List excluded
+        +SortedMap metadata
+    }
+    class ContextItem {
+        +String path
+        +String content
+        +SortedMap scoreComponents
+    }
+    class FederatedContext {
+        +List projects
+        +List items
+    }
+    class Project {
+        +String id
+        +String name
+        +List languages
+    }
+    PublicOutputProjection ..> Search : produit
+    PublicOutputProjection ..> FederatedSearch : produit
+    PublicOutputProjection ..> Context : produit
+    PublicOutputProjection ..> FederatedContext : produit
+    PublicOutputSchema ..> Search : clés = composantes du record
+    Search "1" *-- "0..*" RankedResult
+    FederatedSearch "1" *-- "0..*" RankedResult
+    RankedResult "1" --> "0..1" Symbol
+    Context "1" *-- "0..*" ContextItem
+    FederatedContext "1" *-- "0..*" ContextItem
+    Search --> Project
+```
+
+Les records sont imbriqués dans `PublicOutput` ; l'alias court est utilisé ici pour la lisibilité, et seuls les attributs utiles au contrat sont listés. `FederatedSearchResult` et `FederatedContextItem` (un `project` et un `result` ou un `item`) sont omis du schéma. Exigences : `public-output-projection › Les trois canaux exposent les mêmes clés`, `public-output-projection › Le REST réutilise les records d'opération du cœur`.
+
+Vue organigramme (non UML) — comment un test de parité décide-t-il qu'un canal diverge du contrat (existant) ?
+
+```mermaid
+flowchart TD
+    A[JSON réel d'un canal, désérialisé] --> B{objet JSON ?}
+    B -- non --> X[écart : objet attendu]
+    B -- oui --> C[retirer en tête les clés d'enveloppe admises, seulement command pour la CLI]
+    C --> D{clés restantes = composantes du record, même ordre ?}
+    D -- non --> Y[écart : clés trouvées au lieu des clés attendues]
+    D -- oui --> E[descendre dans chaque record imbriqué et chaque liste de records]
+    E --> D
+    E --> F[liste d'écarts]
+    X --> F
+    Y --> F
+    F --> G{liste vide ?}
+    G -- oui --> H[parité conforme au contrat]
+    G -- non --> I[le test de parité du canal échoue]
+```
+
+Chaque canal est comparé à `PublicOutputSchema.divergences` par son propre test ; aucun test ne compare deux canaux entre eux (voir Écarts). Exigences : `public-output-projection › Les trois canaux exposent les mêmes clés`.
+
+### Écarts et limites
+
+- [Écart] Le scénario « Recherche sur un projet de fixture » décrit la même requête exécutée sur les trois canaux et comparée. Trois tests, un par module, comparent chacun un canal au contrat `PublicOutputSchema` sur une fixture identique ; l'identité des clés entre canaux est donc transitive, sans comparaison directe des valeurs (`core/src/test/java/com/nexus/cli/CliOutputParityTest.java`, `adapters/mcp-java/src/test/java/com/nexus/mcp/NexusMcpOutputParityTest.java`, `adapters/rest-quarkus/src/test/java/com/nexus/api/NexusRestOutputParityTest.java`).
+- [Écart] Le scénario « Deux processus » (réponses identiques octet pour octet entre deux JVM, hors durée) n'a pas de test : les tests existants construisent les composantes dans deux ordres d'insertion au sein d'une seule JVM (`McpScoreComponentsOrderTest`, `RestScoreComponentsOrderTest`, `PublicOutputProjectionTest#scoreComponentsSerializeInKeyOrderWhateverTheInsertionOrder`). L'égalité octet pour octet de toute la réponse n'est pas vérifiée, et seul `scoreComponents` est comparé.
+- [Écart] Le scénario « Élément de contexte » attend `path` = `src/main/java/App.java` sur les trois canaux. La valeur est vérifiée sur la projection (`PublicOutputProjectionTest#contextIsExposedWithRelativePathsSortedComponentsAndSortedMetadata`) et, pour la CLI, par l'absence de chemin absolu (`core/src/test/java/com/nexus/cli/NexusCliTest.java:144`) ; les tests REST et MCP ne comparent pas cette valeur.
+- [Écart] Le scénario « Signature externe porteuse d'un secret » cite SCIP, MINOS et JDT et trois sorties (`find_symbol`, `search_code`, recherche REST). Le test MCP n'injecte que MINOS (`NexusMcpOutputParityTest#externalSymbolSignaturesAreRedactedBySymbolAndSearchTools`) ; le test REST appelle `ApiMapper.search` avec un symbole `scip` sans passer par HTTP (`NexusRestOutputParityTest#searchResponseRedactsExternalSymbolSignatures`) ; les trois fournisseurs ne sont couverts qu'au niveau de la projection (`PublicOutputProjectionTest#symbolMetadataFromExternalProducersIsRedacted`) et de la CLI (`CliRendererSymbolRedactionTest`).
+- [Écart] Le scénario « Ajout d'un champ côté cœur » n'a pas de test. Le code est conforme au jour du relevé (aucun record d'opération dans `adapters/rest-quarkus/src/main`, hors `ApiModels`) ; la vérification archivée est une commande `git grep` ponctuelle (changement `2026-10-31-sprint-04-sortie-publique-et-redaction`, tâche 1.1), pas un test.
+- [Écart] `docs/developer/rest-api.md` liste `POST /api/v1/projects/{projectId}/search` et `/context` mais pas les endpoints `/explain/search` et `/explain/context`, qui existent (`adapters/rest-quarkus/src/main/java/com/nexus/api/NexusResource.java:82,96`) et servent aux tests de parité. La liste existante n'est pas modifiée ici.
+- [Écart] [ARCH-0061](../architecture/adr/ARCH-0061-decider-le-contrat-de-sortie-publique-dans-la-projection-du-coeur.md) porte le statut `Proposed` alors que la projection est livrée et que les pages `rest-api.md`, `mcp.md` et `cli.md` s'y réfèrent comme à une décision.
+- Limite : la parité couvre, côté CLI, `search`, `search-federated`, `context`, `context-federated` et `index` ; les sorties JSON de `project add`, `minos-import`, `inspect`, `--help` et `--version` sont construites comme des maps ad hoc, avec ou sans morceaux projetés (`core/src/main/java/com/nexus/cli/CliRenderer.java:55,96,193,217,228`), et ne sont pas dans le test de parité.
+- Limite : `Symbol.name` et `Symbol.sourceProvider` ne passent pas par `redactField` (`core/src/main/java/com/nexus/exposure/PublicOutputProjection.java:68,73`) ; la spec ne les liste pas. Le symbole d'un élément de contexte passe par `PublicDiagnosticPolicy.text`, avec repli `[REDACTED]` (`core/src/main/java/com/nexus/exposure/PublicContextPolicy.java:61-66`).
+- Limite : le comportement des canaux face à un chemin hors racine n'est pas spécifié. Par lecture, REST renvoie HTTP 500 `internal_state_error` ; le comportement CLI et MCP n'a pas été relevé.
+
+### Propositions et questions ouvertes
+
+- [Proposition] Un test de parité unique indexant une fixture et comparant les valeurs de `path`, `id`, `excerpt` et `scoreComponents` des trois canaux rendrait le scénario « Recherche sur un projet de fixture » littéral.
+- [Proposition] Un test qui lance deux JVM sur la même requête et compare les corps JSON, hors `durationMs`, fermerait le scénario « Deux processus ».
+- [Proposition] Un contrôle automatisé (règle de `CoreArchitectureTest` étendue aux adaptateurs, ou test de réflexion) interdisant tout record d'opération dans le module REST fermerait le scénario « Ajout d'un champ côté cœur ».
+- [Question] La redaction doit-elle aussi couvrir `Symbol.name` ? La spec ne liste que `signature`, `qualifiedName`, `source` et `target`.
+- [Question] Quel doit être le comportement public des trois canaux quand la projection rencontre un chemin hors racine (erreur typée, résultat omis, code de sortie CLI) ?

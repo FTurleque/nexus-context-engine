@@ -57,3 +57,70 @@ Le test d'architecture du sprint 3 (`AUD-ARC-07`) calcule ce graphe et porte une
 - [Les adaptateurs REST et MCP importent des types déplacés] → mise à jour des imports seulement ; le build du reactor (`./mvnw clean install`) et les tests de contrat REST/MCP vérifient l'absence de changement observable.
 - [Les noms de packages proposés ne conviennent pas] → ils sont fixés par l'ADR avant le premier déplacement.
 - [Un cycle transitif apparaît après les cassures bilatérales] → D6 le traite ; le test d'architecture le signale.
+
+## Vues
+
+Vue UML (diagramme de paquetages, adapté en `flowchart` Mermaid) — Quel est le sens de dépendance cible entre les packages du cœur après les déplacements ? ([Proposition] — cible, non disponible)
+
+```mermaid
+flowchart TD
+    app["application (NexusApplicationFactory)"]
+    idxsvc["index.service (nom confirmé par l'ADR)"]
+    idx["index (modèle et ports)"]
+    leaf["package feuille partagé (ResultLimitPolicy, SearchDocument)"]
+    port["port d'indexation sémantique (package à fixer)"]
+    srch["search"]
+    cand["search.candidate (nom confirmé par l'ADR)"]
+    rank["ranking"]
+    rankg["ranking.graph"]
+    sem["search.semantic"]
+    oll["search.semantic.ollama"]
+    ctx["context"]
+    ctxm["context.model"]
+    ctxs["context.source.* (git, skill)"]
+    app --> oll
+    app --> sem
+    idxsvc --> idx
+    idxsvc --> leaf
+    idxsvc --> port
+    sem --> port
+    srch --> idx
+    srch --> rank
+    srch --> cand
+    rank --> cand
+    rankg --> cand
+    ctx --> ctxm
+    ctx --> ctxs
+    ctxs --> ctxm
+    oll --> sem
+```
+
+Explication : chaque flèche va du package dépendant vers le package dont il dépend. La vue reprend les sens de D2 à D5 : `index` ne dépend plus de `search`, `context.source.*` ne dépend plus de `context`, `ranking` et `ranking.graph` ne dépendent plus de `search`, `search.semantic` ne dépend plus de `search.semantic.ollama` (construit par `application`). Elle ne montre pas toutes les arêtes du cœur, seulement celles que le design nomme ; le graphe complet est vérifié par le test d'architecture (D6). `[Question]` Le package du port d'indexation sémantique n'est pas nommé par le design. Les noms `index.service` et `search.candidate` sont des propositions que l'ADR de la tâche 1.1 doit confirmer.
+
+Exigences : `core-package-boundaries › Le graphe des packages du cœur est acyclique`, `core-package-boundaries › Le modèle et les ports d'indexation ne dépendent pas de la recherche`, `core-package-boundaries › Les sources de contexte ne dépendent pas du builder de contexte`, `core-package-boundaries › Le ranking ne dépend pas du service de recherche`, `core-package-boundaries › Le port d'embeddings ne construit pas son adaptateur`.
+
+## Traçabilité
+
+Ces changements sont des plans non réalisés : aucune exigence n'est déclarée couverte, aucune case de `tasks.md` n'est cochée.
+
+| Exigence (`capacité › titre`) | Scénario | Conception ou diagramme | Tâche | Test ou preuve |
+|---|---|---|---|---|
+| `core-package-boundaries › Le graphe des packages du cœur est acyclique` | Graphe courant | D1, D6 ; vue « sens de dépendance cible » | 6.1 | à produire par la tâche 6.1 — `./mvnw -B -ntp -pl core test -Dtest='*Architecture*' ...` avec la baseline vidée ; test non écrit |
+| `core-package-boundaries › Le graphe des packages du cœur est acyclique` | Cycle introduit | D6 (règles de sens nommées) | 6.1 | à produire par la tâche 6.1 — règles de sens nommées dans le test d'architecture ; le cas « `ranking` importe `search` fait échouer le test » n'est pas décrit comme test : test non écrit |
+| `core-package-boundaries › Le modèle et les ports d'indexation ne dépendent pas de la recherche` | Imports du package index | D2 ; vue « sens de dépendance cible » | 2.1, 6.1 | à produire par la tâche 2.1 — `-Dtest='*Architecture*,ProjectIndexingService*'` ; à produire par la tâche 6.1 — règle `index` sans `search` ; tests non écrits |
+| `core-package-boundaries › Le modèle et les ports d'indexation ne dépendent pas de la recherche` | Indexation sémantique désactivée | D2 | 2.2 | à produire par la tâche 2.2 — `-Dtest='*Architecture*,ProjectIndexingService*,NexusApplicationSemanticConfigurationTest'` ; le test de l'implémentation sans effet et du rapport lexical inchangé n'est pas décrit : test non écrit |
+| `core-package-boundaries › Les sources de contexte ne dépendent pas du builder de contexte` | Imports des sources | D3 ; vue « sens de dépendance cible » | 3.1, 6.1 | à produire par la tâche 3.1 — `-Dtest='*Architecture*,DefaultContextBuilder*,SkillContext*,LocalGitContextSourceProvider*'` puis `./mvnw -B -ntp clean install` ; à produire par la tâche 6.1 — règle `context.source.*` sans `context` ; tests non écrits |
+| `core-package-boundaries › Le ranking ne dépend pas du service de recherche` | Imports du ranking | D4 ; vue « sens de dépendance cible » | 4.1, 6.1 | à produire par la tâche 4.1 — `-Dtest='*Architecture*,*Ranker*,GraphCandidateEnricher*,FederatedGoldenSearchCorpusTest'` puis `clean install` ; à produire par la tâche 6.1 — règle `ranking` sans `search` ; tests non écrits |
+| `core-package-boundaries › Le port d'embeddings ne construit pas son adaptateur` | Imports du port sémantique | D5 ; vue « sens de dépendance cible » | 5.1, 6.1 | à produire par la tâche 5.1 — `-Dtest='*Architecture*,SemanticSearchConfiguration*,NexusApplicationSemanticConfigurationTest'` ; à produire par la tâche 6.1 — règle `search.semantic` sans `ollama` ; tests non écrits |
+| `core-package-boundaries › Le port d'embeddings ne construit pas son adaptateur` | Configuration Ollama inchangée | D5 | 5.1 | à produire par la tâche 5.1 — `SemanticSearchConfigurationBoundsTest` et `NexusApplicationSemanticConfigurationTest` inchangés ; le test comparant endpoint, modèle et bornes avant et après le déplacement n'est pas décrit : test non écrit |
+| `core-package-boundaries › Le découpage ne change aucun comportement observable` | Contrats publics | Risks / Trade-offs, 2e puce | 3.1, 4.1, 7.1 | à produire par la tâche 7.1 — `/nx-validate` (contrats, `./mvnw -B -ntp clean install`, `scripts/self-smoke.ps1`) ; à produire par les tâches 3.1 et 4.1 — `clean install` (tests de contrat REST et MCP) ; exécutions non faites |
+
+Aucun scénario sans tâche (`tâche absente`). Les tâches 1.1 (ADR), 1.2 (préalables) et 6.2 (documentation arc42) ne correspondent à aucun scénario.
+
+## Écarts et points à vérifier
+
+- `[Écart]` `proposal.md:30` écrit « `openspec/specs/` est vide » alors que `openspec/specs/core-package-boundaries/spec.md` existe désormais (7 exigences, dont `Les cycles de packages ne peuvent que décroître`, `spec.md:55`). Le même chemin est déclaré en capacité nouvelle (`proposal.md:25-26`) et le delta porte un `## Purpose` (`specs/core-package-boundaries/spec.md:3`) : pour une capacité existante, le schéma `detailed-uml` indique qu'un `## Purpose` de delta est ignoré. Aucune correction n'est faite ici ; le choix entre ADDED sur la capacité existante et MODIFIED relève de la mise à jour du changement.
+- `[Écart]` `proposal.md:19` affirme qu'« aucun test d'architecture n'existe » : `core/src/test/java/com/nexus/architecture/CoreArchitectureTest.java` et `core/src/test/resources/architecture/package-cycles.txt` (22 arêtes de cycle, règle `cycles-baseline`, `CoreArchitectureTest.java:67`) sont présents au HEAD (`AUD-ARC-07` réalisé). La tâche 1.2 (`tasks.md`) en vérifie la présence.
+- `[Écart]` `proposal.md:19` affirme que `PublicContextPolicy` est « toujours dans `security` » : elle est dans `core/src/main/java/com/nexus/exposure/PublicContextPolicy.java:22`, et aucune arête de `security` ne figure dans `package-cycles.txt`. La ligne `context` ↔ `security` du tableau de `design.md:15` et le prérequis `AUD-ARC-03` (`design.md:50`) sont donc à relire.
+- `[Écart]` La baseline du HEAD contient les arêtes `ranking.graph -> index` et `search.semantic -> index` (`package-cycles.txt`) que le tableau de `design.md:9-14` ne nomme pas comme arêtes à casser ; D6 les couvre en bloc (« cycles transitifs restants »).
+- `[Question]` L'exigence `core-package-boundaries › Le graphe des packages du cœur est acyclique` supprime la baseline, alors que l'exigence existante `Les cycles de packages ne peuvent que décroître` (`openspec/specs/core-package-boundaries/spec.md:55`) la définit : le sort de cette dernière exigence à la fin du changement n'est pas écrit.

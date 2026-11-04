@@ -2,6 +2,7 @@
 
 ## Purpose
 Définit les propriétés de fiabilité de la suite de tests : indépendance vis-à-vis de la charge du runner, absence de code de port non exécuté, exécution réelle des tests opt-in.
+Documentation durable : docs/developer/reproduce-and-debug.md#openspec-test-suite-reliability
 
 ## Requirements
 
@@ -9,11 +10,13 @@ Définit les propriétés de fiabilité de la suite de tests : indépendance vis
 Un test de la suite par défaut SHALL NOT comparer une durée mesurée à un seuil absolu inférieur à la durée de l'opération attendue (délai d'un worker, timeout configuré) ; un garde-fou contre un blocage infini SHALL laisser une marge d'au moins cinq fois la durée nominale.
 
 #### Scenario: Worker récalcitrant
-- **WHEN** `ExternalTaskRunnerTest` vérifie que l'appelant n'attend pas un worker qui ignore l'interruption
+- **GIVEN** un worker qui ignore l'interruption
+- **WHEN** `ExternalTaskRunnerTest` vérifie que l'appelant n'attend pas ce worker
 - **THEN** l'assertion porte sur l'état de la tâche ou sur une borne égale au délai du worker, non sur un seuil absolu inférieur
 
 #### Scenario: Runner chargé
-- **WHEN** la suite s'exécute sur un runner Windows chargé
+- **GIVEN** un runner Windows chargé
+- **WHEN** la suite s'exécute
 - **THEN** aucun des tests `ExternalTaskRunnerTest`, `ProjectIndexingServiceTimeoutTest`, `SqliteWriteContentionIntegrationTest`, `JdtLanguageServerCodeIntelligenceProviderTest` et `SensitiveContentRedactorTest` n'échoue pour la seule durée observée
 
 ### Requirement: Le port IndexRepository ne porte pas de comportement non exécuté

@@ -51,3 +51,58 @@ Dans `windows-installer.yml`, les deux secrets PFX sont posés dans l'`env` du j
 - [La pré-version publie dans le namespace GHCR réel] → tags distincts, immuables, jamais `latest` ; acceptable pour un projet sans consommateur de pré-version.
 - [`requireUpperBoundDeps` ou la liste blanche cassent une PR Dependabot] → l'échec est voulu ; la procédure de la skill `nexus-dependency-bump` est complétée.
 - [Approbation de l'environnement par le seul mainteneur] → la protection porte sur l'exécution non sollicitée (tag poussé par un autre acteur), pas sur la revue à deux.
+
+## Vues
+
+Vue organigramme — dans quel ordre la chaîne de release valide, approuve, atteste puis publie-t-elle (Context, D3, D4, D9) ? ([Proposition] — cible, non disponible)
+
+```mermaid
+flowchart TD
+    tag["Push d'un tag v*.*.*  cible : ou vX.Y.Z-rc.N"] --> validate{"validate-release :  tag = version Maven  et commit = tête de main ?"}
+    validate -- "non" --> stop["Échec : aucune qualification  ni publication"]
+    validate -- "oui" --> qualif["Douze workflows réutilisables  dont windows-installer"]
+    qualif --> env["cible : approbation de  l'environnement release"]
+    env --> image["Image GHCR sous tags immuables  attestation provenance et SBOM"]
+    image --> attest["cible : actions/attest sur les ZIP  et setup.exe puis gh attestation verify"]
+    attest -- "vérification en échec" --> stop2["cible : échec avant  tout upload et avant latest"]
+    attest -- "vérification réussie" --> assets["publish-github-release-assets.sh  release GitHub"]
+    assets --> rc{"Tag -rc ?"}
+    rc -- "oui" --> pre["cible : release marquée pré-version  latest inchangé"]
+    rc -- "non" --> latest["latest déplacé"]
+```
+
+Au HEAD, le job `publish` n'a pas de clé `environment:`, `actions/attest` n'est appelé que pour l'image (`.github/workflows/release.yml:354` et `:361`) et `validate-release-tag.sh` n'accepte que `vX.Y.Z` (`scripts/release/validate-release-tag.sh:8`). Les nœuds « cible » sont des [Proposition]. Notation : organigramme, pas UML.
+
+Exigences : `release-pipeline › La publication s'exécute dans l'environnement protégé`, `release-pipeline › Chaque asset publié porte une attestation de provenance`, `release-pipeline › Un tag de pré-version publie une pré-version`.
+
+## Traçabilité
+
+Aucun scénario n'est couvert : le changement n'est pas réalisé. La colonne « Tâche » renvoie aux numéros de `tasks.md`. Les tâches 3.1, 3.3 et 9.3 sont manuelles (réglages GitHub du mainteneur).
+
+| Exigence (`capacité › titre`) | Scénario | Conception ou diagramme | Tâche | Test ou preuve |
+|---|---|---|---|---|
+| `build-reproducibility › Les JAR et le ZIP de distribution sont reproductibles` | Deux builds successifs | D5 | 5.1 | à produire par la tâche 5.1 — deux `./mvnw -B -ntp clean package -DskipTests` puis `sha256sum` du JAR CLI et du ZIP ; preuve manquante |
+| `build-reproducibility › Les plugins du build ont une version explicite` | Plugin sans version | D6 | 6.1 | à produire par la tâche 6.1 — `./mvnw -B -ntp clean install` (cas nominal seulement) ; test du cas d'échec non écrit |
+| `build-reproducibility › Les dépendances résolues respectent les bornes supérieures` | Borne supérieure violée | D6 | 6.1, 6.2 | à produire par la tâche 6.1 — `./mvnw -B -ntp clean install` (cas nominal seulement) ; test du cas d'échec non écrit |
+| `build-reproducibility › La version minimale de Maven suit le wrapper` | Maven trop ancien | D6 | 6.1 | à produire par la tâche 6.1 — `./mvnw -B -ntp clean install` (cas nominal seulement) ; test du cas d'échec non écrit |
+| `license-compliance › Seules les licences de la liste blanche sont acceptées` | Licence hors liste | D7 | 7.1, 7.2 | à produire par la tâche 7.2 — présence de `failOnBlacklist` et de `includedLicenses` dans `pom.xml` par `bash .claude/scripts/contracts.sh` ; test du cas d'échec non écrit |
+| `license-compliance › Seules les licences de la liste blanche sont acceptées` | Licence manquante | D7 | tâche absente | preuve manquante : aucune tâche ne vérifie le cas |
+| `license-compliance › Les libellés de licence sont normalisés` | Variantes d'Apache 2.0 | D7 | 7.1 | à produire par la tâche 7.1 — `./mvnw -B -ntp clean install` (notices inchangées hormis la normalisation) ; test non écrit |
+| `release-pipeline › Les workflows appelés ne reçoivent que les secrets déclarés` | Contrat de workflow | D1 ; vue de la chaîne | 1.1, 1.2 | à produire par la tâche 1.2 — `bash .claude/scripts/contracts.sh` après ajout du refus de `secrets: inherit` ; test non écrit |
+| `release-pipeline › Le matériel de signature est confiné aux étapes de signature` | Pull request | D2 | 2.1, 2.2 | à produire par la tâche 2.2 — check « Windows self-contained installer » de la PR (artefacts non signés, aucun secret exposé) ; contrat de 2.1 non écrit |
+| `release-pipeline › Le matériel de signature est confiné aux étapes de signature` | Étapes de qualification d'un run de release | D2 | 2.1, 2.2 | à produire par la tâche 2.2 — `workflow_dispatch` de `windows-installer.yml` avec `require_authenticode: true` ; preuve manquante |
+| `release-pipeline › La publication s'exécute dans l'environnement protégé` | Tag poussé | D3 ; vue de la chaîne | 3.2, 9.3 | à produire par la tâche 3.2 — contrat « `publish` déclare `environment: release` » ; approbation réelle à produire par la tâche 9.3 ; test non écrit |
+| `release-pipeline › La publication s'exécute dans l'environnement protégé` | Réglages vérifiables | D3 | 3.1, 3.3 | à produire par les tâches 3.1 et 3.3 — `gh api repos/FTurleque/nexus-context-engine/environments` et `.../rulesets` (lecture) ; preuve manquante |
+| `release-pipeline › Chaque asset publié porte une attestation de provenance` | Vérification consommateur | D4 ; vue de la chaîne | 4.1, 4.2, 9.4 | à produire par la tâche 9.4 — `gh attestation verify` sur l'image, le ZIP et le `setup.exe` ; preuve manquante |
+| `release-pipeline › Chaque asset publié porte une attestation de provenance` | Attestation absente | D4 ; vue de la chaîne | 4.1 | à produire par la tâche 4.1 — contrat : les deux `subject-path` et la vérification existent ; test du cas d'échec avant upload non écrit |
+| `release-pipeline › La version n'est écrite que dans les pom` | Changement de version | D8 | 8.1, 8.2 | à produire par la tâche 8.1 — `git grep -n "0\.2\.0" -- .github/workflows/ci.yml scripts/validate-phase-6.ps1` sans résultat, checks « Linux reactor Maven build » et « Windows gate » ; contrat de 8.2 non écrit |
+| `release-pipeline › Un tag de pré-version publie une pré-version` | Tag de pré-version valide | D9 ; vue de la chaîne | 9.1, 9.3, 9.4 | à produire par la tâche 9.1 — `bash scripts/release/test-release-tag-policy.sh` et `bash scripts/release/test-publish-github-release-assets.sh` ; run réel à produire par la tâche 9.3 ; test non écrit |
+| `release-pipeline › Un tag de pré-version publie une pré-version` | Tag incohérent | D9 ; vue de la chaîne | 9.1 | à produire par la tâche 9.1 — cas invalides de `scripts/release/test-release-tag-policy.sh` ; test non écrit |
+
+## Écarts et points à vérifier
+
+- [Existant vérifié] `secrets: inherit` figure à `.github/workflows/release.yml:62`, sur l'appel de `windows-installer.yml` ; les deux secrets PFX sont dans l'`env` du job (`.github/workflows/windows-installer.yml:55-56`) et le chemin du PFX est publié dans `GITHUB_ENV` (`:92`) ; le workflow se déclenche aussi sur `pull_request` (`:16`). `release.yml` appelle douze workflows réutilisables.
+- [Existant vérifié] La version littérale `0.2.0` est présente dans `.github/workflows/ci.yml:115,117,157,206` et `scripts/validate-phase-6.ps1:121-155`. Le fichier `ci.yml` est modifié dans la copie de travail (`git status`) : les numéros de ligne sont à relire avant la tâche 8.1.
+- [Existant vérifié] Le pom racine ne contient ni `outputTimestamp`, ni `requirePluginVersions`, ni `requireUpperBoundDeps`, ni `failOnBlacklist` ; `requireMavenVersion` y vaut `[3.9.0,)` (`pom.xml:262`) alors que le wrapper cible Maven 3.10.0 (`scripts/release/test-operational-doc-contracts.sh`, contrôle « Maven 3.10.0 »).
+- [Question] `build-windows-distribution.ps1` et `build-windows-installer.ps1` sont modifiés par la tâche 2.2 de ce changement et par les tâches 2.2 de `sprint-10-conteneur-et-gouvernance` (inclusion de `Dockerfile.runtime.dockerignore` dans le payload) ; l'ordre de fusion n'est pas décidé ici.
+- Limites : l'état GitHub cité dans Context (aucun environnement, un seul ruleset, aucun run, aucun tag) n'a pas été relu, faute d'accès aux API depuis ce contrôle.
