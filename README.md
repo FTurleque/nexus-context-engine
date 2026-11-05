@@ -139,7 +139,7 @@ Le sémantique reste désactivé par défaut. Une URL Ollama distante doit utili
 NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA=true
 ```
 
-Les credentials intégrés dans `NEXUS_OLLAMA_BASE_URL` sont refusés. Les secrets à forte confiance sont redigés avant embeddings et à la frontière finale de chaque `ContextBundle`, y compris pour instructions natives, skills et diff Git. Les clés JSON/JavaScript entre guillemets, les assignments contenant des espaces, les assignments sensibles cités ou scalaires non cités, y compris les valeurs courtes, ainsi que les clés composées usuelles (`DB_PASSWORD`, `AWS_SECRET_ACCESS_KEY`, `MY_CLIENT_SECRET`, `database.password`) sont pris en charge. Les clés privées reconnues mais tronquées sont redigées jusqu'à la fin du contenu. Le profil sémantique courant est `content-v4`, ce qui force le rebuild d'un ancien index incompatible.
+Les credentials intégrés dans `NEXUS_OLLAMA_BASE_URL` sont refusés. Les secrets à forte confiance sont redigés avant embeddings et à la frontière finale de chaque `ContextBundle`, y compris pour instructions natives, skills et diff Git. Les clés JSON/JavaScript entre guillemets, les assignments contenant des espaces, les assignments sensibles cités ou scalaires non cités, y compris les valeurs courtes, ainsi que les clés composées usuelles (`DB_PASSWORD`, `AWS_SECRET_ACCESS_KEY`, `MY_CLIENT_SECRET`, `database.password`) sont pris en charge. Les composants `token`, `auth`, `pwd`, `credentials`, `private_key`, `access_key`, `secretKey` et `Authorization`, les en-têtes `Bearer`, les jetons `sk-`, `sk_live_`, `xoxb-`, `AIza`, `glpat-` et `npm_`, un jeton dans la partie utilisateur d'une URL, les blocs `PGP PRIVATE KEY BLOCK`, la balise `<password>` et l'option `--password` sont aussi redigés (politique `secret-redaction-v6`). Les clés privées reconnues mais tronquées sont redigées jusqu'à la fin du contenu. Un fichier dont une valeur sensible dépasse 4 096 caractères est exclu seul des index et des contextes, avec un diagnostic public. Le profil sémantique courant est `content-v5`, ce qui force le rebuild d'un ancien index incompatible.
 
 La configuration Ollama est bornée à **1 024 dimensions** et **600 s** de timeout maximum afin qu'une variable d'environnement ne puisse pas neutraliser les protections de ressources.
 
@@ -219,7 +219,7 @@ La distribution Windows x64 ajoute le ZIP self-contained et le setup EXE avec le
 
 Les gates comprennent :
 
-- **NEXUS CI** : Windows Java 24, Linux Java 21, tests, distribution, JaCoCo, SBOM/notices, ancres d'intégrité et contrats documentaires ;
+- **NEXUS CI** : Windows Java 21.0.12 épinglé, Linux Java 21, tests, distribution, JaCoCo, SBOM/notices, ancres d'intégrité et contrats documentaires ;
 - **Windows Installer** ;
 - **Docker Distribution** : smokes CLI/MCP/REST, Trivy, SBOM image et gate de vulnérabilités ;
 - **Scale Benchmark** : SQLite, graphe, fédération et découverte native filesystem ;
@@ -269,7 +269,7 @@ NEXUS_RUNTIME
 
 ## Documentation
 
-- architecture : [`docs/architecture.md`](docs/architecture.md) ;
+- architecture : [`docs/architecture/overview.md`](docs/architecture/overview.md) ;
 - CI/supply-chain : [`docs/developer/ci-and-supply-chain.md`](docs/developer/ci-and-supply-chain.md) ;
 - release/recovery : [`docs/developer/release-and-recovery.md`](docs/developer/release-and-recovery.md) ;
 - REST : [`docs/developer/rest-api.md`](docs/developer/rest-api.md) ;
@@ -277,7 +277,7 @@ NEXUS_RUNTIME
 - Code Intelligence/JDT : [`docs/developer/code-intelligence.md`](docs/developer/code-intelligence.md) ;
 - gouvernance des branches : [`docs/developer/branch-governance.md`](docs/developer/branch-governance.md) ;
 - limites courantes : [`docs/developer/current-limitations.md`](docs/developer/current-limitations.md) ;
-- roadmap : [`docs/roadmap.md`](docs/roadmap.md).
+- roadmap : [`docs/project/governance/ROADMAP.md`](docs/project/governance/ROADMAP.md).
 
 ## Licence
 

@@ -7,12 +7,12 @@ L'adaptateur MCP expose NEXUS aux assistants compatibles Model Context Protocol 
 ```text
 module      adapters/mcp-java
 Java        21
-MCP SDK     2.0.1
+MCP SDK     2.1.0
 transport   STDIO
 version     NEXUS 0.2.0
 ```
 
-Le BOM MCP et Jackson sont gouvernés par le parent Maven. Le SDK MCP 2.0.1 apporte notamment en amont des lectures HTTP/STDIO bornées ; NEXUS supporte ici le transport local STDIO.
+Le BOM MCP et Jackson sont gouvernés par le parent Maven. Le SDK MCP 2.1.0 apporte notamment en amont des lectures HTTP/STDIO bornées ; NEXUS supporte ici le transport local STDIO.
 
 ## Architecture
 
@@ -50,6 +50,12 @@ explain_context_across_projects
 ```
 
 Les trois surfaces CLI/REST/MCP délèguent aux mêmes politiques applicatives.
+
+## Contrat de sortie
+
+Les réponses sont construites par la projection publique du cœur, `com.nexus.exposure.PublicOutputProjection` ([ARCH-0061](../architecture/adr/ARCH-0061-decider-le-contrat-de-sortie-publique-dans-la-projection-du-coeur.md)), commune à la CLI, REST et MCP : mêmes clés, dans le même ordre, sur les trois canaux. Chemins relatifs au projet, aucune clé `rootPath`, `rank`, `id` et `excerpt` redigé sur chaque résultat classé, `qualifiedName`, `signature`, `source` et `target` redigés, `scoreComponents` et `metadata` triés par clé, `languages` et `technologies` en listes triées ; la liste des projets est triée par nom sans tenir compte de la casse, puis par identifiant, et une portée fédérée garde l'ordre demandé. Les résultats fédérés imbriquent `project` et `result` (recherche) ou `project` et `item` (contexte). Les tests `*OutputParityTest` des trois modules comparent chaque canal au contrat de `PublicOutputSchema`.
+
+MCP n'ajoute aucune clé. `find_symbol` et `find_usages` sont ses seuls outils sans équivalent CLI ni REST ; cette divergence est déclarée par `PublicOutputSchema.MCP_ONLY_OPERATIONS`.
 
 ## Portée fédérée
 

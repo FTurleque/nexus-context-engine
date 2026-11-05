@@ -3,7 +3,9 @@ package com.nexus.index;
 import com.nexus.search.SearchDocument;
 import com.nexus.search.SearchIndex;
 import com.nexus.search.semantic.SemanticIndexingService;
+import com.nexus.security.OversizedSecretException;
 import com.nexus.security.SafeFileIO;
+import com.nexus.security.SensitiveContentRedactor;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -28,10 +30,17 @@ final class IndexDocumentPublisher {
         this.indexDocumentBatchFiles = maxFiles;
         this.indexDocumentBatchBytes = maxBytes;
     }
+    /**
+     * Publie les documents dérivés des fichiers modifiés. Un fichier dont une valeur sensible dépasse
+     * la borne de redaction reste dans l'index structurel, mais n'entre ni dans l'index lexical ni dans
+     * l'index sémantique ; son exclusion est ajoutée à {@code diagnostics} sans valeur ni contenu.
+     */
     List<IndexedFileUpdate> publish(UUID projectId, java.nio.file.Path projectRoot,
             List<ScannedFile> scannedFiles, Map<String, IndexedFile> existingFiles,
-            String canonicalFingerprint, boolean fullRebuild, boolean semanticFullRebuild) throws IOException {
+            String canonicalFingerprint, boolean fullRebuild, boolean semanticFullRebuild,
+            List<String> diagnostics) throws IOException {
         List<IndexedFileUpdate> updates = new ArrayList<>();
+        Set<String> excludedPaths = new java.util.TreeSet<>();
         IndexDocumentBatch documentBatch = new IndexDocumentBatch(
                 indexDocumentBatchFiles,
                 indexDocumentBatchBytes);
@@ -68,12 +77,19 @@ final class IndexDocumentPublisher {
                 updates.add(new IndexedFileUpdate(scannedFile, analysis));
             }
 
-            if (lexicalDocumentRequired || semanticDocumentRequired) {
+            String redactedContent = lexicalDocumentRequired || semanticDocumentRequired
+                    ? redactedOrNull(snapshotContent)
+                    : null;
+            if ((lexicalDocumentRequired || semanticDocumentRequired) && redactedContent == null) {
+                excludedPaths.add(scannedFile.relativePath());
+                diagnostics.add("INDEX_REDACTION_LIMIT: fichier exclu des index lexical et sémantique : "
+                        + scannedFile.relativePath() + " (" + OversizedSecretException.PUBLIC_REASON + ")");
+            } else if (lexicalDocumentRequired || semanticDocumentRequired) {
                 SearchDocument document = new SearchDocument(
                         scannedFile.relativePath(),
                         scannedFile.language(),
                         scannedFile.category(),
-                        snapshotContent,
+                        redactedContent,
                         analysis.symbols());
                 documentBatch.add(
                         document,
@@ -86,8 +102,32 @@ final class IndexDocumentPublisher {
             }
         }
         flushDocumentBatch(projectId, canonicalFingerprint, documentBatch);
+        removeStaleDocuments(projectId, canonicalFingerprint, excludedPaths, fullRebuild, semanticFullRebuild);
 
         return List.copyOf(updates);
+    }
+
+    /** Contenu redigé publié aux index dérivés, ou {@code null} si la redaction refuse le fichier. */
+    private static String redactedOrNull(String content) {
+        try {
+            return SensitiveContentRedactor.redact(content);
+        } catch (OversizedSecretException exception) {
+            return null;
+        }
+    }
+
+    /** Un document indexé avant que son fichier ne devienne non redigeable ne doit pas rester visible. */
+    private void removeStaleDocuments(UUID projectId, String canonicalFingerprint, Set<String> excludedPaths,
+            boolean fullRebuild, boolean semanticFullRebuild) throws IOException {
+        if (excludedPaths.isEmpty()) {
+            return;
+        }
+        if (!fullRebuild) {
+            searchIndex.applyChanges(projectId, List.of(), excludedPaths);
+        }
+        if (semanticIndexingService != null && !semanticFullRebuild) {
+            semanticIndexingService.applyChanges(projectId, canonicalFingerprint, List.of(), excludedPaths);
+        }
     }
     void prepareDerivedIndexes(
             UUID projectId,

@@ -7,15 +7,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-
-function Resolve-AbsolutePath {
-    param([Parameter(Mandatory = $true)][string]$Path)
-
-    if ([System.IO.Path]::IsPathRooted($Path)) {
-        return [System.IO.Path]::GetFullPath($Path)
-    }
-    return [System.IO.Path]::GetFullPath((Join-Path $repoRoot $Path))
-}
+Import-Module (Join-Path $PSScriptRoot "lib/NexusScript.psm1") -Force
 
 function Invoke-Git {
     param(

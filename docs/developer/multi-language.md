@@ -166,14 +166,8 @@ Voir :
 - [`code-intelligence.md`](code-intelligence.md) ;
 - [`minos-code-intelligence.md`](minos-code-intelligence.md) ;
 - [`current-limitations.md`](current-limitations.md) ;
-- [`../roadmap.md`](../roadmap.md), Itération 19.
+- [`../roadmap.md`](../project/governance/ROADMAP.md), Itération 19.
 
-## Validation historique
+## Validation
 
-Le runner de l'Itération 10 reste disponible :
-
-```powershell
-.\scripts\validate-iteration-10.ps1
-```
-
-Il vérifie notamment un projet polyglotte synthétique, la détection des langages, des recherches Python/TypeScript/SQL et la construction d'un contexte sous budget.
+Le projet polyglotte synthétique, la détection des langages et les recherches Python/TypeScript/SQL sont couverts par les tests du reactor (`MultiLanguageIndexingIntegrationTest`, `SourceLanguageTest`). La validation d'une itération passe par `scripts/validate-phase-6.ps1` et `scripts/self-smoke.ps1` (voir [`ci-and-supply-chain.md`](ci-and-supply-chain.md)).

@@ -1,0 +1,17 @@
+# Fixture négative : input interpolé dans un bloc run.
+name: fixture
+on:
+  workflow_call:
+    inputs:
+      profile:
+        type: string
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Resolve
+        shell: bash
+        run: |
+          echo start
+          REQUESTED="${{ inputs.profile }}"

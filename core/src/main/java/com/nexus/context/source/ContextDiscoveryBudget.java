@@ -203,6 +203,6 @@ public final class ContextDiscoveryBudget {
             int visitedEntries,
             int candidateResources,
             long cumulativeBytes,
-            long elapsedMillis) {
+            long elapsedMillis) implements com.nexus.security.PublicCounterSnapshot {
     }
 }

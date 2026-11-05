@@ -4,7 +4,7 @@ package com.nexus.context;
 public record ContextMaterializationLimits(
         long maxCumulativeBytes,
         int maxOpenedFiles,
-        long maxDurationMillis) {
+        long maxDurationMillis) implements com.nexus.security.PublicCounterSnapshot {
 
     public static final String MAX_CUMULATIVE_BYTES_ENVIRONMENT_VARIABLE =
             "NEXUS_MAX_CONTEXT_MATERIALIZATION_BYTES";

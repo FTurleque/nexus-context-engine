@@ -20,10 +20,10 @@ génère pas de réponses, n'exécute pas d'agents et ne route pas de modèles.
 
 | # | Objectif | Source |
 |---|----------|--------|
-| M1 | Construire un contexte IA pertinent et minimal pour toute requête sur un repository local, sans appel de modèle | ADR-0001, `docs/architecture.md` |
+| M1 | Construire un contexte IA pertinent et minimal pour toute requête sur un repository local, sans appel de modèle | ADR-0001, `docs/architecture/overview.md` |
 | M2 | Fonctionner sans dépendance réseau obligatoire (local-first) | ADR-0005 |
-| M3 | Exposer le même moteur à la CLI, à une API REST et aux clients MCP | `docs/architecture.md` § Surfaces |
-| M4 | Permettre la recherche et le contexte fédérés sur plusieurs projets enregistrés | `docs/roadmap.md` Phase 5 |
+| M3 | Exposer le même moteur à la CLI, à une API REST et aux clients MCP | `docs/architecture/overview.md` § Surfaces |
+| M4 | Permettre la recherche et le contexte fédérés sur plusieurs projets enregistrés | `docs/project/governance/ROADMAP.md` Phase 5 |
 | M5 | Maintenir l'explicabilité complète de chaque sélection, score et exclusion | ADR-0010, ADR-0025 |
 
 ## 1.3 Parties prenantes

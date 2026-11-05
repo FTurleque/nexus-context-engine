@@ -38,28 +38,28 @@
         <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
 
         <javaparser.version>3.28.2</javaparser.version>
-        <sqlite-jdbc.version>3.53.4.0</sqlite-jdbc.version>
-        <lucene.version>10.5.2</lucene.version>
+        <sqlite-jdbc.version>3.54.1.0</sqlite-jdbc.version>
+        <lucene.version>10.6.0</lucene.version>
         <jgit.version>7.8.0.202609011348-r</jgit.version>
-        <jackson.version>2.22.3</jackson.version>
-        <micrometer.version>1.17.1</micrometer.version>
+        <jackson.version>2.22.4</jackson.version>
+        <micrometer.version>1.17.2</micrometer.version>
         <snakeyaml-engine.version>3.2</snakeyaml-engine.version>
         <jna.version>5.19.1</jna.version>
         <junit.version>6.1.3</junit.version>
-        <mcp.sdk.version>2.0.1</mcp.sdk.version>
+        <mcp.sdk.version>2.1.0</mcp.sdk.version>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
-        <quarkus.platform.version>3.40.1</quarkus.platform.version>
+        <quarkus.platform.version>3.40.1.1</quarkus.platform.version>
 
         <maven.compiler-plugin.version>3.16.0</maven.compiler-plugin.version>
-        <maven.surefire-plugin.version>3.6.0</maven.surefire-plugin.version>
+        <maven.surefire-plugin.version>3.6.1</maven.surefire-plugin.version>
         <maven.shade-plugin.version>3.6.2</maven.shade-plugin.version>
         <exec-maven-plugin.version>3.6.4</exec-maven-plugin.version>
-        <maven.enforcer-plugin.version>3.6.3</maven.enforcer-plugin.version>
+        <maven.enforcer-plugin.version>3.7.0</maven.enforcer-plugin.version>
         <maven.assembly-plugin.version>3.8.0</maven.assembly-plugin.version>
         <maven.antrun-plugin.version>3.2.0</maven.antrun-plugin.version>
         <cyclonedx-maven-plugin.version>2.9.3</cyclonedx-maven-plugin.version>
-        <jacoco.version>0.8.15</jacoco.version>
+        <jacoco.version>0.8.16</jacoco.version>
         <license-maven-plugin.version>2.7.1</license-maven-plugin.version>
     </properties>
 

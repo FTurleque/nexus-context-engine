@@ -23,6 +23,7 @@ jobs:
   windows-gate:
     name: Windows gate
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -30,11 +31,27 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
-      - name: Set up Java 24
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+      - name: Set up pinned Java 21
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
-          java-version: '24'
+          java-version: '21.0.12+101.0.LTS'
+
+      - name: Run Claude Code hook guard tests
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/tests/Test-Hooks.ps1
+
+      - name: Verify REST token contract
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/release/test-rest-token-contract.ps1
+
+      - name: Run NexusScript module tests
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/tests/Test-NexusScript.ps1
+
+      - name: Run NexusScript module tests (Windows PowerShell 5.1)
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tests/Test-NexusScript.ps1
 
       - name: Run local qualification script
         shell: powershell
@@ -47,6 +64,7 @@ jobs:
   linux-reactor:
     name: Linux reactor Maven build
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -55,7 +73,7 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Java 21
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: '21'
@@ -77,6 +95,12 @@ jobs:
         run: |
           chmod +x scripts/release/test-final-audit-contracts.sh
           scripts/release/test-final-audit-contracts.sh
+
+      - name: Verify OpenSpec documentation contracts
+        shell: bash
+        run: |
+          chmod +x scripts/release/test-openspec-doc-contracts.sh
+          scripts/release/test-openspec-doc-contracts.sh
 
       - name: Run Maven reactor
         run: |

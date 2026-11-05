@@ -33,7 +33,7 @@ class SemanticIndexingServiceTest {
             assertFalse(value.contains("synthetic-unquoted-secret-123456"));
             assertTrue(value.contains("[REDACTED]"));
         }
-        assertTrue(service.profileId().startsWith("content-v4;"));
+        assertTrue(service.profileId().startsWith("content-v5;"));
     }
 
     @Test
@@ -191,6 +191,28 @@ class SemanticIndexingServiceTest {
             }
         }
         return false;
+    }
+
+    @Test
+    void excludesOnlyTheDocumentWhoseSecretExceedsTheRedactionBound() throws Exception {
+        var index = new CapturingSemanticIndex(3);
+        var texts = new ArrayList<String>();
+        EmbeddingProvider provider = new EmbeddingProvider() {
+            public String modelId() { return "local/oversized-fixture"; }
+            public int dimensions() { return 3; }
+            public float[] embed(String text) { texts.add(text); return new float[]{1, 0, 0}; }
+        };
+        var service = new SemanticIndexingService(provider, index);
+
+        service.rebuild(UUID.randomUUID(), List.of(
+                document("big.md", "password = \"" + "x".repeat(5_000) + "\""),
+                document("small.md", "password = \"short-secret\" visible")));
+
+        assertEquals(List.of("small.md"), index.rebuilt.stream().map(SemanticVectorDocument::relativePath).toList());
+        assertEquals(1, texts.size());
+        assertFalse(texts.getFirst().contains("short-secret"));
+        assertFalse(index.rebuilt.getFirst().excerpt().contains("short-secret"));
+        assertTrue(index.rebuilt.getFirst().excerpt().contains("visible"));
     }
 
     private static SearchDocument document(String path, String content) {

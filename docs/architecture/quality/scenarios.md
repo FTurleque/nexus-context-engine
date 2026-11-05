@@ -23,7 +23,7 @@ Ce fichier complète la Section 10 de l'arc42 avec les scénarios de qualité **
 | QS-15 — REST distant | Sécurité | auth + roots + transport effectif | Couvert |
 | QS-16 — Management REST isolé | Sécurité/Opérabilité | test 404 app listener + health/metrics management | Couvert |
 | QS-17 — Ollama distant | Sécurité | HTTPS par défaut, HTTP distant opt-in, credentials URI refusés | Couvert |
-| QS-18 — Secrets avant embeddings/contexte | Sécurité | `SensitiveContentRedactorTest` + profil `content-v4` | Couvert |
+| QS-18 — Secrets avant embeddings/contexte | Sécurité | `SensitiveContentRedactorTest`, `SecretRedactionProbeTest` + profil `content-v5` | Couvert |
 | QS-19 — SQLite invariants | Correctness | V004/V005 + tests fresh/upgrade/invalid INSERT | Couvert |
 | QS-20 — Supply-chain reactor | Sécurité | JaCoCo + OSV + CodeQL + notices/SBOM + ancres | Couvert |
 | QS-21 — Supply-chain Docker | Sécurité | Trivy + SBOM + image exacte qualifiée | Couvert |
@@ -78,7 +78,7 @@ Les minima JaCoCo bloquants restent 70 % lignes / 50 % branches. Une mesure hist
 
 ## Baselines historiques
 
-Les mesures historiques de performance/qualité restent dans `docs/developer/iteration-*` et autres rapports dédiés. Elles servent uniquement de point de comparaison.
+Les mesures historiques de performance/qualité restent dans `docs/project/history/` (relevés d'itération et de benchmark). Elles servent uniquement de point de comparaison.
 
 ## Preuve de qualification
 

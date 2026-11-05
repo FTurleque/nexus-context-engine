@@ -2,6 +2,7 @@ package com.nexus.search.semantic;
 
 import com.nexus.index.CodeSymbol;
 import com.nexus.search.SearchDocument;
+import com.nexus.security.OversizedSecretException;
 import com.nexus.security.SensitiveContentRedactor;
 
 import java.io.IOException;
@@ -17,11 +18,12 @@ import java.util.regex.Pattern;
  * et un index sémantique ont été explicitement composés.
  */
 public final class SemanticIndexingService {
+    private static final System.Logger LOGGER = System.getLogger(SemanticIndexingService.class.getName());
 
     public static final int DEFAULT_MAX_EMBEDDING_CHARS = 12_000;
     public static final int DEFAULT_EXCERPT_CHARS = 320;
     public static final int DEFAULT_BATCH_SIZE = 32;
-    private static final int CONTENT_PROFILE_VERSION = 4;
+    private static final int CONTENT_PROFILE_VERSION = 5;
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 
     private final EmbeddingProvider embeddingProvider;
@@ -135,22 +137,28 @@ public final class SemanticIndexingService {
             return List.of();
         }
 
+        List<String> redactedContents = new ArrayList<>(documents.size());
+        documents = redactOnce(documents, redactedContents);
+
         List<SemanticVectorDocument> vectors = new ArrayList<>(documents.size());
         int documentIndex = 0;
         while (documentIndex < documents.size()) {
             int batchCapacity = Math.min(batchSize, documents.size() - documentIndex);
             List<SearchDocument> batch = new ArrayList<>(batchCapacity);
             List<String> texts = new ArrayList<>(batchCapacity);
+            List<String> contents = new ArrayList<>(batchCapacity);
             int batchChars = 0;
 
             while (documentIndex < documents.size() && batch.size() < batchSize) {
                 SearchDocument document = documents.get(documentIndex);
-                String text = embeddingText(document);
+                String content = redactedContents.get(documentIndex);
+                String text = embeddingText(document, content);
                 if (!batch.isEmpty() && text.length() > maxEmbeddingChars - batchChars) {
                     break;
                 }
                 batch.add(document);
                 texts.add(text);
+                contents.add(content);
                 batchChars += text.length();
                 documentIndex++;
             }
@@ -170,11 +178,30 @@ public final class SemanticIndexingService {
                 vectors.add(new SemanticVectorDocument(
                         document.relativePath(),
                         document.category(),
-                        excerpt(document),
+                        excerpt(document, contents.get(index)),
                         vector));
             }
         }
         return List.copyOf(vectors);
+    }
+
+    /**
+     * Redige chaque document une seule fois ; embedding et extrait partent de ce texte. Un document
+     * que la redaction refuse est écarté seul. Renvoie les documents retenus, alignés sur
+     * {@code redactedContents}.
+     */
+    private static List<SearchDocument> redactOnce(List<SearchDocument> documents, List<String> redactedContents) {
+        List<SearchDocument> redactable = new ArrayList<>(documents.size());
+        for (SearchDocument document : documents) {
+            try {
+                redactedContents.add(SensitiveContentRedactor.redact(document.content()));
+                redactable.add(document);
+            } catch (OversizedSecretException exception) {
+                LOGGER.log(System.Logger.Level.WARNING, "Document exclu de l'index sémantique : "
+                        + document.relativePath() + " (" + OversizedSecretException.PUBLIC_REASON + ")");
+            }
+        }
+        return redactable;
     }
 
     private void validateDimensions(float[] vector) throws IOException {
@@ -186,7 +213,7 @@ public final class SemanticIndexingService {
         }
     }
 
-    private String embeddingText(SearchDocument document) {
+    private String embeddingText(SearchDocument document, String redactedContent) {
         StringBuilder text = new StringBuilder();
         text.append("path: ").append(document.relativePath()).append('\n');
         text.append("language: ").append(document.language()).append('\n');
@@ -199,15 +226,14 @@ public final class SemanticIndexingService {
         }
         int remaining = Math.max(0, maxEmbeddingChars - text.length());
         if (remaining > 0) {
-            String content = SensitiveContentRedactor.redact(document.content());
-            text.append(content, 0, safePrefixEnd(content, remaining));
+            text.append(redactedContent, 0, safePrefixEnd(redactedContent, remaining));
         }
         String candidate = text.toString();
         return candidate.substring(0, safePrefixEnd(candidate, maxEmbeddingChars));
     }
 
-    private static String excerpt(SearchDocument document) {
-        String normalized = WHITESPACE.matcher(SensitiveContentRedactor.redact(document.content()))
+    private static String excerpt(SearchDocument document, String redactedContent) {
+        String normalized = WHITESPACE.matcher(redactedContent)
                 .replaceAll(" ")
                 .trim();
         if (normalized.isEmpty()) {

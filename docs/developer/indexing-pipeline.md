@@ -176,25 +176,22 @@ Sources :
 - `.gitignore` ;
 - `.nexusignore` ;
 - règles imbriquées avec leur scope ;
-- exclusions intégrées de sécurité et contenus générés.
+- exclusions intégrées de sécurité, contenus générés et worktrees d'outils.
 
-Exemples typiques :
+Les exclusions intégrées s'appliquent avant les fichiers d'ignore et sans configuration :
 
-```text
-.git/
-target/
-build/
-node_modules/
-.env
-clés privées
-```
+- répertoires d'un segment, à toute profondeur et sans tenir compte de la casse : `.git`, `.idea`, `.gradle`, `.nexus`, `.aws`, `.ssh`, `.gnupg`, `.kube`, `.secrets`, `target`, `build`, `out`, `node_modules`, `dist`, `coverage` ;
+- suites de segments consécutifs, à toute profondeur et sans tenir compte de la casse : `.claude/worktrees` (worktrees Git de Claude Code, copies complètes du dépôt), décidée par [BE-0058](../architecture/adr/BE-0058-exclure-les-worktrees-claude-code-du-scan-par-defaut.md). Le reste de `.claude/` (skills, agents, règles) reste indexé, de même que `docs/worktrees/` ou `.claude/worktrees-notes.md` ;
+- fichiers sensibles : `.env`, `.env.*`, fichiers d'identifiants (`.npmrc`, `.netrc`, `credentials.json`…) et clés privées (`.pem`, `.key`, `.p12`…).
 
-La négation est supportée :
+La négation est supportée dans les fichiers d'ignore :
 
 ```gitignore
 *.generated.java
 !important.generated.java
 ```
+
+Elle ne réintègre jamais un chemin d'une exclusion intégrée : `!.claude/worktrees/` dans un `.nexusignore` reste sans effet.
 
 Les liens symboliques et entrées non régulières sont refusés pour les fichiers indexables. Les chemins retenus sont revalidés par `ProjectPathGuard` avant hash et lecture.
 
@@ -283,3 +280,62 @@ classDiagram
     AnalysisResult --> CodeSymbol
     AnalysisResult --> SymbolRelation
 ```
+
+## OpenSpec project-indexing-exclusions
+
+Spec : [`openspec/specs/project-indexing-exclusions/spec.md`](../../openspec/specs/project-indexing-exclusions/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+### Comportement existant vérifié
+
+| Étiquette | Fait | Source |
+|---|---|---|
+| [Existant vérifié] | `isIgnored` calcule le chemin relatif à la racine du projet et évalue d'abord les exclusions intégrées ; les règles `.gitignore` puis `.nexusignore` ne sont évaluées que si aucune exclusion intégrée ne s'applique. | `core/src/main/java/com/nexus/index/scan/ProjectIgnoreMatcher.java:142-159` |
+| [Existant vérifié] | La suite de segments consécutifs `.claude`, `worktrees` est exclue à toute profondeur, sans tenir compte de la casse, pour un fichier comme pour un répertoire. | `ProjectIgnoreMatcher.java:62-63`, `:244-253`, `:265-286` |
+| [Existant vérifié] | Le scanner élague un répertoire exclu (`SKIP_SUBTREE`) avant de lire ses fichiers d'ignore et ignore un fichier exclu avant de l'analyser. | `core/src/main/java/com/nexus/index/scan/ProjectScanner.java:95-103`, `:108-111` |
+| [Existant vérifié] | Les mêmes exclusions intégrées s'appliquent à la découverte native d'instructions et de skills, qui réutilisent `ProjectIgnoreMatcher`. | `core/src/main/java/com/nexus/context/source/instruction/InstructionDiscoverySupport.java:38`, `:49`, `:59` ; `core/src/main/java/com/nexus/context/source/skill/LocalAgentSkillsProvider.java:42`, `:92`, `:103` |
+| [Existant vérifié] | Une négation d'un fichier d'ignore ne réintègre pas le chemin : l'évaluation des règles n'est atteinte qu'après le retour `true` des exclusions intégrées. | `ProjectIgnoreMatcher.java:153-158` ; `ProjectScannerTest#ignoreNegationCannotReincludeClaudeWorktrees` |
+| [Existant vérifié] | Le chemin est mesuré relativement à la racine du projet : un projet dont la racine est elle-même un worktree `.claude/worktrees/x` voit ses fichiers indexés (déduction de `relativize`, sans test). | `ProjectIgnoreMatcher.java:148` |
+| [Existant vérifié] | Les autres exclusions intégrées (répertoires d'un segment, noms de fichiers sensibles, suffixes de clés) sont décrites en [§ Règles d'exclusion](#6-règles-dexclusion-et-sécurité-filesystem) ; la spec ne couvre que `.claude/worktrees`. | `ProjectIgnoreMatcher.java:39-87` |
+
+### Vues
+
+Vue Organigramme — Dans quel ordre le scan décide-t-il d'exclure un chemin, et pourquoi une négation ne le réintègre-t-elle pas ? (existant)
+
+```mermaid
+flowchart TD
+    S["ProjectScanner : preVisitDirectory ou visitFile"] --> I["ProjectIgnoreMatcher.isIgnored(chemin, directory)"]
+    I --> R{"chemin relatif vide ?"}
+    R -- oui --> N["non exclu"]
+    R -- non --> B{"isBuiltInExcluded"}
+    B --> B1{"un segment parmi .git, target, node_modules, …"}
+    B1 -- oui --> E["exclu"]
+    B1 -- non --> B2{"segments consécutifs .claude puis worktrees, casse ignorée"}
+    B2 -- oui --> E
+    B2 -- non --> B3{"répertoire ?"}
+    B3 -- oui --> G
+    B3 -- non --> B4{"fichier sensible : .env, clé, identifiants"}
+    B4 -- oui --> E
+    B4 -- non --> G["evaluate gitScopes puis nexusScopes (négations comprises)"]
+    G --> D{"décision : exclu"}
+    D -- oui --> E
+    D -- non --> N
+    E --> X["répertoire : SKIP_SUBTREE ; fichier : ignoré"]
+```
+
+L'exclusion intégrée `.claude/worktrees` est testée avant toute lecture des règles d'ignore : une négation `!.claude/worktrees/` dans `.gitignore` ou `.nexusignore` n'est jamais consultée pour ce chemin. Un voisin proche (`.claude/skills/…`, `docs/worktrees/…`, `.claude/worktrees-notes.md`, `worktrees/.claude/…`, `.claude/autre/worktrees/…`) ne forme pas la suite `.claude` puis `worktrees` consécutifs et passe aux règles habituelles.
+
+Exigences : `project-indexing-exclusions › Les worktrees Claude Code sont exclus du scan`, `project-indexing-exclusions › L'exclusion ne touche pas le reste de .claude`, `project-indexing-exclusions › L'exclusion intégrée n'est pas réversible par les fichiers d'ignore`.
+
+### Écarts et limites
+
+- [Écart] 1 — La casse n'est pas dans la spec : le code et `ProjectIgnoreMatcherBuiltInExclusionTest#excludesClaudeWorktreesAtAnyDepthIgnoringCase` excluent aussi `.Claude/WorkTrees/…`. Comportement existant non exigé.
+- [Écart] 2 — Le scénario « Worktree à la racine du projet » parle de « résultats » ; `ProjectScannerTest#excludesClaudeWorktreesWithoutAnyIgnoreRule` vérifie la liste scannée, pas les résultats d'une recherche après indexation.
+- [Écart] 3 — L'exigence dit « le scan » ; le code applique la même règle à la découverte native d'instructions et de skills (voir ci-dessus) sans que la spec ni un test la couvre.
+- Limite : « Skills et instructions voisins » est vérifié au niveau du scan (`.claude/skills/exemple/SKILL.md` est dans la liste scannée), pas au niveau de la découverte native de skills.
+- Limite : ni la spec ni un test ne couvrent un projet dont la racine est déjà un worktree (déduit seulement du code, `ProjectIgnoreMatcher.java:148`).
+
+### Propositions et questions ouvertes
+
+- [Proposition] Ajouter un scénario « Casse du nom » (`.Claude/WorkTrees/demo/README.md` exclu) si l'insensibilité à la casse doit devenir contractuelle ; le test existe déjà.
+- [Proposition] Ajouter une exigence sur la découverte native (instructions, skills) si l'exclusion y est voulue, avec un test dédié.
+- [Question] Les exclusions intégrées autres que `.claude/worktrees` (`.git`, `node_modules`, fichiers sensibles…) doivent-elles recevoir leur propre exigence OpenSpec ? Le Purpose parle de contenu « généré, sensible ou dupliqué » alors que les trois exigences ne visent que `.claude/worktrees`.

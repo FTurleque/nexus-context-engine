@@ -1,0 +1,79 @@
+name: Ollama embedding runtime
+description: >-
+  Télécharge le runtime Ollama épinglé, vérifie son archive contre l'ancre de
+  config/tool-integrity.properties, le démarre sur 127.0.0.1:11434 et tire le modèle
+  d'embeddings dont l'identifiant de manifest est verrouillé.
+
+inputs:
+  version:
+    description: Version d'Ollama, présente dans config/tool-integrity.properties
+    required: true
+  model:
+    description: Modèle d'embeddings à tirer
+    required: true
+  model-id-prefix:
+    description: Préfixe attendu de l'identifiant de manifest du modèle
+    required: true
+  work-dir:
+    description: Répertoire des journaux et preuves, relatif au workspace
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Download and verify pinned Ollama runtime
+      shell: bash
+      env:
+        OLLAMA_VERSION: ${{ inputs.version }}
+        WORK_DIR: ${{ inputs.work-dir }}
+      run: |
+        set -euo pipefail
+        mkdir -p "$WORK_DIR"
+        archive="$WORK_DIR/ollama-linux-amd64.tar.zst"
+        key="ollama.${OLLAMA_VERSION}.linux-amd64.sha256"
+        expected="$(awk -F= -v key="$key" '$1 == key { print $2 }' config/tool-integrity.properties)"
+        if [[ ! "$expected" =~ ^[0-9a-f]{64}$ ]]; then
+          echo "::error::Missing or invalid repository-pinned Ollama SHA-256 for $key"
+          exit 1
+        fi
+        curl --fail --location --retry 4 --retry-all-errors \
+          --output "$archive" \
+          "https://github.com/ollama/ollama/releases/download/v${OLLAMA_VERSION}/ollama-linux-amd64.tar.zst"
+        chmod +x scripts/release/verify-pinned-checksum.sh
+        scripts/release/verify-pinned-checksum.sh sha256 "$expected" "$archive"
+        sudo tar --zstd -xf "$archive" -C /usr
+        lscpu > "$WORK_DIR/runner-cpu.txt"
+        command -v ollama
+        ollama --version | tee "$WORK_DIR/ollama-version.txt"
+
+    - name: Start Ollama and pull embedding model
+      shell: bash
+      env:
+        OLLAMA_MODEL: ${{ inputs.model }}
+        OLLAMA_MODEL_ID_PREFIX: ${{ inputs.model-id-prefix }}
+        WORK_DIR: ${{ inputs.work-dir }}
+      run: |
+        set -euo pipefail
+        OLLAMA_HOST=127.0.0.1:11434 nohup ollama serve > "$WORK_DIR/ollama.log" 2>&1 &
+        echo "$!" > "$WORK_DIR/ollama.pid"
+        ready=false
+        for attempt in $(seq 1 90); do
+          if curl --fail --silent --show-error http://127.0.0.1:11434/api/version \
+            > "$WORK_DIR/ollama-api-version.json"; then
+            ready=true
+            break
+          fi
+          sleep 2
+        done
+        if [[ "$ready" != true ]]; then
+          echo '::error::Ollama did not become ready'
+          cat "$WORK_DIR/ollama.log" || true
+          exit 1
+        fi
+        OLLAMA_HOST=127.0.0.1:11434 ollama pull "$OLLAMA_MODEL"
+        OLLAMA_HOST=127.0.0.1:11434 ollama list | tee "$WORK_DIR/ollama-models.txt"
+        actual_model_id="$(awk -v model="$OLLAMA_MODEL" '$1 == model { print $2 }' "$WORK_DIR/ollama-models.txt")"
+        if [[ "$actual_model_id" != "$OLLAMA_MODEL_ID_PREFIX" ]]; then
+          echo "::error::Unexpected Ollama model manifest prefix: expected=$OLLAMA_MODEL_ID_PREFIX actual=$actual_model_id"
+          exit 1
+        fi

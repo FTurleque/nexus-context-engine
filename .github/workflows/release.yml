@@ -16,6 +16,7 @@ jobs:
   validate-release:
     name: Validate immutable release identity
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       version: ${{ steps.identity.outputs.version }}
       release_sha: ${{ steps.identity.outputs.release_sha }}

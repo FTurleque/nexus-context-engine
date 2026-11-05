@@ -140,6 +140,6 @@ public final class ContextMaterializationBudget {
             long remainingBytes,
             int remainingFiles,
             long elapsedMillis,
-            long remainingDurationMillis) {
+            long remainingDurationMillis) implements com.nexus.security.PublicCounterSnapshot {
     }
 }

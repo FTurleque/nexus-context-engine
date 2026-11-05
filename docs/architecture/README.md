@@ -15,10 +15,10 @@ La protection effective de `develop` est une règle GitHub de repository et non 
 
 | Source | Rôle |
 |---|---|
-| `docs/architecture.md` | synthèse courante |
+| `docs/architecture/overview.md` | synthèse courante |
 | `docs/architecture/arc42/` | vues arc42 courantes |
-| `docs/adr/` | historique décisionnel |
-| `docs/roadmap.md` | état/travail restant |
+| `docs/architecture/adr/` | historique décisionnel |
+| `docs/project/governance/ROADMAP.md` | état/travail restant |
 | `docs/developer/` | contrats techniques détaillés |
 | code + workflows | autorité exécutable |
 
@@ -44,7 +44,7 @@ La protection effective de `develop` est une règle GitHub de repository et non 
 - requêtes Lucene à forte cardinalité bornées à 128 termes analysés uniques.
 - limites REST fédérées centralisées et `constraints` non supportées rejetées explicitement.
 - Ollama distant HTTPS par défaut ; HTTP distant uniquement via opt-in administratif explicite.
-- secrets à forte confiance redigés avant embeddings/fragments ; profil sémantique `content-v4`.
+- secrets à forte confiance redigés avant embeddings/fragments ; profil sémantique `content-v5`.
 - `NEXUS_HOME`/SQLite privés sur POSIX ; chemins persistants symboliques durcis refusés.
 
 ## Preuve de qualification
@@ -54,9 +54,11 @@ Une ancienne PR verte n'est jamais recopiée ici comme preuve de l'état courant
 ## Organisation
 
 ```text
+overview.md   synthèse courante de l'architecture
+adr/          décisions d'architecture (registre unique au format Archgate, index adr/README.md, GEN-0057)
 arc42/        vues architecture
 quality/      scénarios qualité
 risks/        registre de risques
 ```
 
-Les documents d'itération peuvent conserver des numéros de PR, dates et mesures historiques ; les documents marqués courants doivent décrire le contrat actif.
+Les relevés d'itération (`docs/project/history/`) peuvent conserver des numéros de PR, dates et mesures historiques ; les documents marqués courants doivent décrire le contrat actif.

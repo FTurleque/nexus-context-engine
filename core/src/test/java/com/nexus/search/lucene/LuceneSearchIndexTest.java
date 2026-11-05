@@ -126,6 +126,21 @@ class LuceneSearchIndexTest {
         }
     }
 
+    @Test
+    void excludesOnlyTheDocumentWhoseSecretExceedsTheRedactionBound() throws Exception {
+        LuceneSearchIndex index = new LuceneSearchIndex(new NexusPaths(temporaryDirectory.resolve("oversized-home")));
+        UUID projectId = UUID.randomUUID();
+        String oversized = "password = \"" + "x".repeat(5_000) + "\" oversizedMarker";
+
+        index.rebuild(projectId, List.of(document("big.md", oversized), document("small.md", "visibleMarker")));
+        assertEquals(1, index.search(projectId, "visibleMarker", 10).size());
+        assertTrue(index.search(projectId, "oversizedMarker", 10).isEmpty());
+
+        index.applyChanges(projectId, List.of(document("small.md", oversized)), java.util.Set.of());
+        assertTrue(index.search(projectId, "visibleMarker", 10).isEmpty());
+        assertTrue(index.search(projectId, "oversizedMarker", 10).isEmpty());
+    }
+
     private static SearchDocument document(String relativePath, String content) {
         return new SearchDocument(relativePath, "markdown", FileCategory.DOCUMENTATION, content, List.of());
     }

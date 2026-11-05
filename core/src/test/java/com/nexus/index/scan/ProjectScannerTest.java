@@ -2,7 +2,7 @@ package com.nexus.index.scan;
 
 import com.nexus.index.FileCategory;
 import com.nexus.index.ScannedFile;
-import org.junit.jupiter.api.Assumptions;
+import com.nexus.testsupport.SymbolicLinks;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -46,6 +46,44 @@ class ProjectScannerTest {
         write(".gitignore", "*.java\n!Keep.java\n");
 
         assertEquals(List.of("Keep.java"), scanPaths());
+    }
+
+    @Test
+    void excludesClaudeWorktreesWithoutAnyIgnoreRule() throws Exception {
+        write("AGENTS.md", "instructions");
+        write(".claude/worktrees/demo/AGENTS.md", "worktree instructions");
+        write(".claude/worktrees/demo/README.md", "worktree documentation");
+        write("module/.claude/worktrees/demo/src/App.java", "class App {}\n");
+        write("module/src/main/java/demo/Module.java", "package demo; class Module {}\n");
+
+        List<String> paths = scanPaths();
+
+        assertEquals(List.of("AGENTS.md", "module/src/main/java/demo/Module.java"), paths);
+    }
+
+    @Test
+    void claudeWorktreesExclusionKeepsTheRestOfClaudeAndNearbyNames() throws Exception {
+        write(".claude/skills/exemple/SKILL.md", "skill");
+        write(".claude/worktrees/demo/README.md", "worktree documentation");
+        write(".claude/worktrees-notes.md", "notes");
+        write("docs/worktrees/guide.md", "guide");
+
+        List<String> paths = scanPaths();
+
+        assertEquals(List.of(
+                ".claude/skills/exemple/SKILL.md",
+                ".claude/worktrees-notes.md",
+                "docs/worktrees/guide.md"), paths);
+    }
+
+    @Test
+    void ignoreNegationCannotReincludeClaudeWorktrees() throws Exception {
+        write("AGENTS.md", "instructions");
+        write(".claude/worktrees/demo/AGENTS.md", "worktree instructions");
+        write(".nexusignore", "!.claude/worktrees/\n");
+        write(".gitignore", "!.claude/worktrees/\n");
+
+        assertEquals(List.of("AGENTS.md"), scanPaths());
     }
 
     @Test
@@ -102,8 +140,7 @@ class ProjectScannerTest {
         Files.writeString(outside, "class OutsideSecret {}\n");
         Path link = projectRoot.resolve("LinkedSecret.java");
 
-        Assumptions.assumeTrue(createSymbolicLink(link, outside),
-                "Les liens symboliques ne sont pas disponibles dans cet environnement");
+        SymbolicLinks.createOrSkip(link, outside.toAbsolutePath());
 
         ProjectScanResult result = new ProjectScanner().scanWithDiagnostics(projectRoot);
 
@@ -138,14 +175,5 @@ class ProjectScannerTest {
         Path file = temporaryDirectory.resolve(relativePath);
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);
-    }
-
-    private static boolean createSymbolicLink(Path link, Path target) {
-        try {
-            Files.createSymbolicLink(link, target.toAbsolutePath());
-            return true;
-        } catch (UnsupportedOperationException | IOException | SecurityException unavailable) {
-            return false;
-        }
     }
 }

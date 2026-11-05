@@ -1,6 +1,7 @@
 package com.nexus.index.scip;
 
 import com.nexus.index.CodeIntelligenceSnapshot;
+import com.nexus.testsupport.SymbolicLinks;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -19,7 +20,6 @@ class ScipProjectPathGuardTest {
 
     @TempDir
     Path temporaryDirectory;
-
 
     @Test
     void mapsPosixBackslashWithoutReadingTheSlashAlias() throws Exception {
@@ -80,7 +80,7 @@ class ScipProjectPathGuardTest {
         Path outside = temporaryDirectory.resolve("outside-final.java");
         Files.writeString(outside, "outside secret");
         Path source = sourceDirectory.resolve("Fixture.java");
-        assumeSymlink(source, outside);
+        SymbolicLinks.createOrSkip(source, outside.toAbsolutePath());
         writeIndex(root, "src/Fixture.java", 0, 0);
 
         assertThrows(IOException.class, () -> new ScipCodeIndexImporter().importIndex(root));
@@ -91,7 +91,7 @@ class ScipProjectPathGuardTest {
         Path root = Files.createDirectory(temporaryDirectory.resolve("ancestor-link-project"));
         Path outsideDirectory = Files.createDirectory(temporaryDirectory.resolve("outside-dir"));
         Files.writeString(outsideDirectory.resolve("Fixture.java"), "outside secret");
-        assumeSymlink(root.resolve("src"), outsideDirectory);
+        SymbolicLinks.createOrSkip(root.resolve("src"), outsideDirectory.toAbsolutePath());
         writeIndex(root, "src/Fixture.java", 0, 0);
 
         assertThrows(IOException.class, () -> new ScipCodeIndexImporter().importIndex(root));
@@ -114,7 +114,7 @@ class ScipProjectPathGuardTest {
         Files.writeString(root.resolve("Fixture.java"), "class Fixture {}");
         Path externalIndexRoot = Files.createDirectory(temporaryDirectory.resolve("external-index"));
         writeIndex(externalIndexRoot, "Fixture.java", 0, 0);
-        assumeSymlink(root.resolve("index.scip"), externalIndexRoot.resolve("index.scip"));
+        SymbolicLinks.createOrSkip(root.resolve("index.scip"), externalIndexRoot.resolve("index.scip").toAbsolutePath());
 
         assertThrows(IOException.class, () -> new ScipCodeIndexImporter().importIndex(root));
     }
@@ -172,15 +172,5 @@ class ScipProjectPathGuardTest {
             remaining >>>= 7;
         }
         output.write((int) remaining);
-    }
-
-    private static void assumeSymlink(Path link, Path target) {
-        try {
-            Files.createSymbolicLink(link, target.toAbsolutePath());
-        } catch (IOException | UnsupportedOperationException | SecurityException exception) {
-            Assumptions.assumeTrue(
-                    false,
-                    "Symbolic links are not supported in this test environment: " + exception);
-        }
     }
 }

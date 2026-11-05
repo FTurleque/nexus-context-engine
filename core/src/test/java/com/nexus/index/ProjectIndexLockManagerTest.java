@@ -1,7 +1,7 @@
 package com.nexus.index;
 
 import com.nexus.config.NexusPaths;
-import org.junit.jupiter.api.Assumptions;
+import com.nexus.testsupport.SymbolicLinks;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -145,8 +145,7 @@ class ProjectIndexLockManagerTest {
         Files.createDirectories(paths.home());
         Path external = Files.createDirectories(temporaryDirectory.resolve("external-locks"));
 
-        Assumptions.assumeTrue(createSymbolicLink(paths.locksDirectory(), external),
-                "Les liens symboliques ne sont pas disponibles dans cet environnement");
+        SymbolicLinks.createOrSkip(paths.locksDirectory(), external.toAbsolutePath());
 
         assertThrows(
                 IOException.class,
@@ -162,8 +161,7 @@ class ProjectIndexLockManagerTest {
         UUID projectId = UUID.randomUUID();
         Path lockPath = paths.projectIndexLock(projectId);
 
-        Assumptions.assumeTrue(createSymbolicLink(lockPath, victim),
-                "Les liens symboliques ne sont pas disponibles dans cet environnement");
+        SymbolicLinks.createOrSkip(lockPath, victim.toAbsolutePath());
 
         assertThrows(
                 IOException.class,
@@ -210,15 +208,6 @@ class ProjectIndexLockManagerTest {
             return surefireClasspath;
         }
         return System.getProperty("java.class.path");
-    }
-
-    private static boolean createSymbolicLink(Path link, Path target) {
-        try {
-            Files.createSymbolicLink(link, target.toAbsolutePath());
-            return true;
-        } catch (UnsupportedOperationException | IOException | SecurityException unavailable) {
-            return false;
-        }
     }
 
     private record ProbeResult(int exitCode, String output) {

@@ -10,16 +10,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+Import-Module (Join-Path $PSScriptRoot "lib/NexusScript.psm1") -Force
 $locationPushed = $false
-
-function Resolve-AbsolutePath {
-    param([Parameter(Mandatory = $true)][string]$Path)
-
-    if ([System.IO.Path]::IsPathRooted($Path)) {
-        return [System.IO.Path]::GetFullPath($Path)
-    }
-    return [System.IO.Path]::GetFullPath((Join-Path $repoRoot $Path))
-}
 
 function Invoke-Git {
     param(
@@ -47,15 +39,6 @@ function Invoke-Git {
     }
     finally {
         $ErrorActionPreference = $previousPreference
-    }
-}
-
-function Invoke-Maven {
-    param([Parameter(Mandatory = $true)][string[]]$Arguments)
-
-    & mvn @Arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "La commande Maven a echoue avec le code $LASTEXITCODE : mvn $($Arguments -join ' ')"
     }
 }
 

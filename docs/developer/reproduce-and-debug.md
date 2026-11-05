@@ -548,3 +548,100 @@ Remove-Item Env:NEXUS_HOME -ErrorAction SilentlyContinue
 | JSON mélangé à des warnings | séparation stdout/stderr de la CLI ou du wrapper |
 | `*-cli.jar` introuvable | phase Maven package / Shade Plugin |
 | JAR autonome démarre mais SQLite échoue | services `META-INF/services` ou packaging natif |
+
+## OpenSpec test-suite-reliability
+
+Spec : [`openspec/specs/test-suite-reliability/spec.md`](../../openspec/specs/test-suite-reliability/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+Cette section complète la procédure de test ci-dessus par les propriétés de fiabilité de la suite par défaut de `core`. Le tableau des lanceurs de tests de mesure vit dans [ci-and-supply-chain.md](ci-and-supply-chain.md#tests-de-mesure-opt-in) ; la vue ci-dessous le recoupe avec les workflows.
+
+### Comportement existant vérifié
+
+**Durées dans la suite par défaut** (exigence `La suite par défaut n'impose pas de durée murale serrée`)
+
+- **[Existant vérifié]** `ExternalTaskRunnerTest#returnsAtTimeoutEvenWhenTheTaskIgnoresInterruption` prouve que l'appelant n'attend pas le worker par l'état : `workerFinished.getCount()` vaut encore `1` après le timeout de 50 ms et `ExternalTaskRunner.status()` expose `timedOutTasks()` et `activeTasks()` (`core/src/test/java/com/nexus/index/ExternalTaskRunnerTest.java:29-52`). Le worker est borné par `WORKER_SAFETY_CAP` de 30 s (`:18`), annoncé en Javadoc comme borne de sûreté sur laquelle aucune assertion ne porte.
+- **[Existant vérifié]** `ExternalTaskRunnerTest#opensCircuitBreakerUntilTimedOutWorkerActuallyStops` suit le même principe : état du circuit et attente conditionnelle `await` bornée à 10 s (`:56-78`, `:80-86`), sans comparaison de durée mesurée.
+- **[Existant vérifié]** `ProjectIndexingServiceTimeoutTest#boundsCodeIndexImportersAndMarksTheProjectFailed` vérifie le message `timeout global de 50 ms`, l'importer encore bloqué (`importerFinished.getCount()` à `1`) et l'état `IndexStatus.FAILED` (`core/src/test/java/com/nexus/index/ProjectIndexingServiceTimeoutTest.java:39-83`).
+- **[Existant vérifié]** `SqliteWriteContentionIntegrationTest` ne contient aucune assertion de durée murale (recherche de `assertTimeout`, `nanoTime`, `elapsed`, `Instant` sans résultat sur une comparaison de durée) ; les `Duration` y paramètrent seulement la politique de retry (`core/src/test/java/com/nexus/persistence/sqlite/SqliteWriteContentionIntegrationTest.java:203-258`).
+- **[Existant vérifié]** Deux classes conservent un garde-fou `assertTimeoutPreemptively` contre un blocage infini, avec marge documentée en commentaire : `JdtLanguageServerCodeIntelligenceProviderTest` à 5 s pour un arrêt dédié de 1 s, soit cinq fois (`core/src/test/java/com/nexus/index/jdt/JdtLanguageServerCodeIntelligenceProviderTest.java:165` et `:189`) ; `SensitiveContentRedactorTest#malformedKeysAndOversizedValuesHaveBoundedLookahead` à 10 s pour une durée nominale d'environ 0,3 s à froid selon le commentaire du test (`core/src/test/java/com/nexus/security/SensitiveContentRedactorTest.java:55-59`). Cette valeur nominale est celle du commentaire ; elle n'a pas été remesurée.
+- **[Existant vérifié]** Dans `core/src/test`, hors tests de mesure, la recherche de `assertTimeout`, `nanoTime` et `currentTimeMillis` ne relève comme autre comparaison de durée mesurée que celle de dans `OllamaEmbeddingProviderResponseLimitTest#deadlineCoversStalledBodyAndSameProviderRecovers` : timeout du provider de 800 ms, garde-fou `assertTimeoutPreemptively` de 4 s (cinq fois) et comparaison complémentaire `< 4000` ms (`core/src/test/java/com/nexus/search/semantic/ollama/OllamaEmbeddingProviderResponseLimitTest.java:33-62`).
+
+**Port `IndexRepository`** (exigence `Le port IndexRepository ne porte pas de comportement non exécuté`)
+
+- **[Existant vérifié]** `core/src/main/java/com/nexus/index/IndexRepository.java` (66 lignes) ne contient aucune méthode `default` : la recherche du mot-clé `default` y est vide. Le commit `239af54c` (« make every IndexRepository projection abstract ») a rendu abstraites les neuf méthodes `default` jadis en repli mémoire, `SqliteIndexRepository` les implémentant toutes, et a adapté le fake de `core/src/test/java/com/nexus/ranking/graph/ProjectGraphBuilderProjectionTest.java` (`delegatesOnlyToBoundedNeighborhoodProjection`, `:23`).
+- **[Existant vérifié]** Le rapport JaCoCo de `core` est produit par le reactor (`core/target/site/jacoco/jacoco.xml`, `.github/workflows/ci.yml:168`) mais les règles de `jacoco:check` de `core` sont au niveau `BUNDLE` et `PACKAGE` (`core/pom.xml:68-152` ; aucune règle `CLASS` ni mention d'`IndexRepository`).
+
+**Tests opt-in** (exigence `Chaque test opt-in a un lanceur automatisé`)
+
+- **[Existant vérifié]** Treize classes de `core/src/test` sont désactivées par défaut : trois par `Assumptions` (les trois premières lignes du tableau), dix par `@EnabledIfSystemProperty`. Chacune a un lanceur dans un workflow :
+
+| Test | Désactivé tant que | Lanceur (workflow, job) |
+|---|---|---|
+| `MinosRealIntegrationTest` | `nexus.minos.integration.replay` n'est pas `true` (`core/src/test/java/com/nexus/index/minos/MinosRealIntegrationTest.java:45`) | `measurement-tools.yml`, job `minos-replay` → `scripts/validate-minos-integration.ps1` (`.github/workflows/measurement-tools.yml:98`), qui passe `-Dtest=MinosRealIntegrationTest` et `-Dnexus.minos.integration.replay=true` (`scripts/validate-minos-integration.ps1:141-143`) |
+| `LargeScaleSearchBaselineTest` | aucun dépôt fourni par `nexus.baseline.projects` ou `nexus.baseline.input` (`core/src/test/java/com/nexus/search/LargeScaleSearchBaselineTest.java:49`) | `measurement-tools.yml`, job `index-baselines` (`:136`) |
+| `SmallDeltaIndexingBaselineTest` | `nexus.delta.source` vide (`core/src/test/java/com/nexus/index/SmallDeltaIndexingBaselineTest.java:44`) | idem |
+| `SemanticSearchBenchmarkTest` | `nexus.semantic.benchmark.enabled` (`core/src/test/java/com/nexus/search/semantic/SemanticSearchBenchmarkTest.java:33`) | `semantic-search-qualification.yml`, job `semantic-diagnostics`, `if: github.event_name == 'workflow_dispatch' && inputs.diagnostics` (job `:247`, condition `:251`, commande `:283`) |
+| `RealSemanticRetrievalDiagnosticTest` | `nexus.semantic.realDiagnostic.enabled` (`core/src/test/java/com/nexus/search/semantic/RealSemanticRetrievalDiagnosticTest.java:30`) | idem |
+| `RealSemanticSearchBenchmarkTest` | `nexus.semantic.realBenchmark.enabled` (`core/src/test/java/com/nexus/search/semantic/RealSemanticSearchBenchmarkTest.java:33`) | `semantic-search-qualification.yml`, job `real-ollama` (`:109-110`) |
+| `ScaleRegressionBenchmarkTest`, `GraphScaleRegressionBenchmarkTest`, `FederatedContextBudgetScaleBenchmarkTest`, `NativeContextDiscoveryBudgetBenchmarkTest` | `nexus.scale.benchmark.enabled` (annotations dans `core/src/test/java/com/nexus/benchmark/`) | `scale-benchmark.yml` (`:137-139`, étape conditionnée par `steps.changes.outputs.measure == 'true'`, `:132`) et `runtime-flags-qualification.yml`, job `scale-comparison` (`:202-204`) |
+| `LuceneLifecycleQualificationBenchmarkTest` | `nexus.scale.benchmark.enabled` | `lucene-lifecycle-benchmark.yml` (`:105-107`) |
+| `ProjectScannerCorpusBudgetBenchmarkTest` | `nexus.scale.benchmark.enabled` | `scanner-corpus-benchmark.yml` (`:79-80`) |
+| `GitContextCacheQualificationBenchmarkTest` | `nexus.git.cache.benchmark.enabled` | `git-context-cache-qualification.yml` (`:92-94`) |
+
+- **[Existant vérifié]** Le contrat `scripts/release/test-final-audit-contracts.sh:215-231` épingle les cinq tests nommés par la spec (`MinosRealIntegrationTest`, `LargeScaleSearchBaselineTest`, `SmallDeltaIndexingBaselineTest`, `SemanticSearchBenchmarkTest`, `RealSemanticRetrievalDiagnosticTest`, lignes 219-223), exige qu'ils soient documentés dans `docs/developer/ci-and-supply-chain.md` et vérifie la ligne `-Dtest=MinosRealIntegrationTest` du script (`:230-231`). `RealSemanticSearchBenchmarkTest` est contrôlé à part (`:149` et `:165`). Le contrat ne parcourt pas `src/test` : un nouveau test opt-in ne serait pas détecté.
+
+### Vues
+
+Vue organigramme (non UML) — quel lanceur exécute les cinq tests opt-in nommés par la spec, et sous quelle condition (existant) :
+
+```mermaid
+flowchart LR
+    subgraph MT["measurement-tools.yml"]
+        MR["job minos-replay"]
+        IB["job index-baselines"]
+    end
+    subgraph SS["semantic-search-qualification.yml"]
+        SD["job semantic-diagnostics"]
+    end
+    PS["scripts/validate-minos-integration.ps1"]
+    MR -->|"appelle"| PS
+    PS -->|"Dtest=MinosRealIntegrationTest + replay=true"| T1["MinosRealIntegrationTest"]
+    IB -->|"nexus.baseline.projects"| T2["LargeScaleSearchBaselineTest"]
+    IB -->|"nexus.delta.source"| T3["SmallDeltaIndexingBaselineTest"]
+    SD -->|"nexus.semantic.benchmark.enabled"| T4["SemanticSearchBenchmarkTest"]
+    SD -->|"nexus.semantic.realDiagnostic.enabled"| T5["RealSemanticRetrievalDiagnosticTest"]
+    TR1["PR sur chemins surveillés, workflow_dispatch, lundi 04:23 UTC"] --> MT
+    TR2["workflow_dispatch avec diagnostics"] --> SD
+```
+
+Le diagramme répond à la question « un test opt-in nommé par la spec est-il lancé, et quand ? ». Les deux workflows se déclenchent sur des conditions différentes : `measurement-tools.yml` sur PR touchant ses chemins, à la demande et chaque lundi (bloc `on:` des lignes 6-20 du workflow) ; `semantic-diagnostics` uniquement à la demande avec l'entrée `diagnostics`. Exigences : `test-suite-reliability › Chaque test opt-in a un lanceur automatisé`.
+
+### Écarts et limites
+
+- **[Écart]** La tâche archivée 5.1 désigne `SqliteWriteContentionIntegrationTest:244` pour une assertion de durée à remplacer ; ce test ne contient plus aucune assertion de durée, ce qui satisfait l'exigence mais rend la ligne citée obsolète. Aucune exigence n'est modifiée.
+- **[Limite]** Aucun test ne vérifie la propriété « aucune assertion de durée serrée » ; elle repose sur la revue (règle `.claude/rules/tests.md`) et sur le comportement observé du Windows gate. Le comportement sur un runner chargé n'a pas été exécuté ici.
+- **[Limite]** Le scénario `Couverture du port` ne se vérifie aujourd'hui que par un état de fait : `IndexRepository` n'a plus de méthode `default`. Aucun test ne garde contre l'ajout futur d'une `default` non exécutée, et aucune étape CI ne contrôle la ligne `IndexRepository` du rapport JaCoCo.
+- **[Limite]** Le contrat d'audit final épingle six tests opt-in sur treize ; les benchmarks de scale, le cycle de vie Lucene, le corpus du scanner, le cache Git et le benchmark sémantique réel sont lancés par leurs workflows sans contrôle automatique d'existence du lanceur.
+- **[Limite]** Les workflows n'ont pas été exécutés pour cette documentation ; le tableau lit leurs commandes, pas leurs résultats.
+
+### Propositions et questions ouvertes
+
+- **[Proposition]** Ajouter un contrôle (script de contrat ou test) qui liste les classes de `src/test` portant `@EnabledIfSystemProperty` ou une `Assumptions` sur une propriété `nexus.*` et exige un lanceur dans `.github/workflows`, pour généraliser l'exigence aux treize classes actuelles et aux suivantes.
+- **[Proposition]** Ajouter un test de non-régression de `IndexRepository` (réflexion : aucune méthode `default` sans test, ou aucune méthode `default`) pour fermer le scénario `Couverture du port`.
+- **[Question]** L'exigence de durée vise-t-elle aussi les garde-fous `assertTimeoutPreemptively` et comparaisons de `OllamaEmbeddingProviderResponseLimitTest` (marge exactement égale à cinq fois) ? La spec ne nomme que cinq classes dans le scénario `Runner chargé`.
+
+## OpenSpec test-filesystem-isolation
+
+Spec : [`openspec/specs/test-filesystem-isolation/spec.md`](../../openspec/specs/test-filesystem-isolation/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+Un test crée tous ses fichiers sous le `@TempDir` que JUnit nettoie, y compris la cible « hors projet » d'un test d'évasion : la racine du projet simulé est `temporaryDirectory.resolve("project")` et la cible externe un autre enfant du `@TempDir`.
+
+### Comportement existant vérifié
+
+- **[Existant vérifié]** `NativeProjectCustomizationDetectorTest` place la racine sous `temporaryDirectory.resolve("project")` (`core/src/test/java/com/nexus/context/source/NativeProjectCustomizationDetectorTest.java:29`) et les cibles externes sous `outside-agents` et `outside-settings.json` (`:34`, `:47`).
+- **[Existant vérifié]** `AiSkillsRegistryProviderTest` suit le même schéma (`core/src/test/java/com/nexus/context/source/skill/AiSkillsRegistryProviderTest.java:31`, `:107`, `:130`).
+- **[Existant vérifié]** `git grep -n "temporaryDirectory.resolveSibling" -- core/src/test` ne renvoie rien (2026-11-05).
+
+### Écarts et limites
+
+- **[Limite]** Aucun contrôle automatique n'empêche un nouveau test de créer un fichier à côté du `@TempDir` ; la propriété repose sur la revue et sur le `git grep` ci-dessus.

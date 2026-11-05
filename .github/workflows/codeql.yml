@@ -27,6 +27,7 @@ jobs:
   analyze:
     name: CodeQL Java analysis
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       NEXUS_CODEQL_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
     steps:
@@ -46,14 +47,27 @@ jobs:
             exit 1
           fi
 
+      - name: Set up pinned Java 21
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21.0.12+101.0.LTS'
+
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           languages: java-kotlin
-          build-mode: none
+          build-mode: manual
           queries: security-extended
 
+      - name: Build Java sources with the verified Maven wrapper
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./mvnw
+          ./mvnw -B -DskipTests clean test-compile
+
       - name: Analyze exact head
-        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           category: '/language:java-kotlin'

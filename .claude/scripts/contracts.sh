@@ -30,7 +30,8 @@ status=0
 for contract in \
   scripts/release/test-tool-integrity-anchors.sh \
   scripts/release/test-operational-doc-contracts.sh \
-  scripts/release/test-final-audit-contracts.sh; do
+  scripts/release/test-final-audit-contracts.sh \
+  scripts/release/test-openspec-doc-contracts.sh; do
   # Les contrats incluent des cas négatifs bruyants : la sortie n'est montrée qu'en cas d'échec.
   if bash "$contract" >"$LOG" 2>&1; then
     echo "PASS $contract"

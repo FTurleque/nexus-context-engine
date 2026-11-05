@@ -5,30 +5,34 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.nexus.application.NexusApplication;
 import com.nexus.config.NexusPaths;
 import com.nexus.project.ProjectDescriptor;
-import com.nexus.ranking.RankedCandidate;
+import com.nexus.search.semantic.RealSemanticBenchmarkCorpus.QueryCase;
+import com.nexus.search.semantic.SemanticBenchmarkSupport.Aggregate;
+import com.nexus.search.semantic.SemanticBenchmarkSupport.OllamaSettings;
+import com.nexus.search.semantic.SemanticBenchmarkSupport.RetrievalMeasurement;
 import com.nexus.search.semantic.ollama.OllamaEmbeddingProvider;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
-import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 
+import static com.nexus.search.semantic.SemanticBenchmarkSupport.K;
+import static com.nexus.search.semantic.SemanticBenchmarkSupport.directorySize;
+import static com.nexus.search.semantic.SemanticBenchmarkSupport.isLocalEndpoint;
+import static com.nexus.search.semantic.SemanticBenchmarkSupport.measurementSummary;
+import static com.nexus.search.semantic.SemanticBenchmarkSupport.rankedRelativePaths;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @EnabledIfSystemProperty(named = "nexus.semantic.realBenchmark.enabled", matches = "true")
 class RealSemanticSearchBenchmarkTest {
 
-    private static final int K = 3;
     private static final int RETRIEVAL_LIMIT = 50;
 
     @TempDir
@@ -36,15 +40,17 @@ class RealSemanticSearchBenchmarkTest {
 
     @Test
     void compareBaselineAndSemanticSearchOnHermeticNexusSnapshot() throws Exception {
-        Path corpusRoot = corpusRoot();
-        assertTrue(Files.isDirectory(corpusRoot), "Le snapshot NEXUS doit exister : " + corpusRoot);
+        Path snapshotRoot = snapshotRoot();
+        assertTrue(Files.isDirectory(snapshotRoot), "Le snapshot NEXUS doit exister : " + snapshotRoot);
+        RealSemanticBenchmarkCorpus.Kind corpus = RealSemanticBenchmarkCorpus.Kind.fromSystemProperties();
+        Path corpusRoot = corpus == RealSemanticBenchmarkCorpus.Kind.PR
+                ? RealSemanticBenchmarkCorpus.materializePrCorpus(
+                        snapshotRoot,
+                        temporaryDirectory.resolve("corpus-pr"))
+                : snapshotRoot;
 
         OllamaSettings ollama = OllamaSettings.fromSystemProperties();
-        OllamaEmbeddingProvider provider = new OllamaEmbeddingProvider(
-                ollama.baseUri(),
-                ollama.model(),
-                ollama.dimensions(),
-                Duration.ofSeconds(ollama.timeoutSeconds()));
+        OllamaEmbeddingProvider provider = ollama.provider();
 
         NexusApplication baseline = NexusApplication.create(
                 new NexusPaths(temporaryDirectory.resolve("baseline-home")));
@@ -59,14 +65,14 @@ class RealSemanticSearchBenchmarkTest {
         NexusApplication.IndexOperation semanticIndex = semantic.index(semanticProject.id(), true, false);
 
         List<QueryMeasurement> measurements = new ArrayList<>();
-        for (QueryCase queryCase : queries()) {
-            QueryResult baselineResult = runQuery(baseline, baselineProject, corpusRoot, queryCase);
-            QueryResult semanticResult = runQuery(semantic, semanticProject, corpusRoot, queryCase);
+        for (QueryCase queryCase : RealSemanticBenchmarkCorpus.queries()) {
+            RetrievalMeasurement baselineResult = runQuery(baseline, baselineProject, corpusRoot, queryCase);
+            RetrievalMeasurement semanticResult = runQuery(semantic, semanticProject, corpusRoot, queryCase);
             measurements.add(new QueryMeasurement(queryCase, baselineResult, semanticResult));
         }
 
-        Aggregate baselineAggregate = aggregate(measurements.stream().map(QueryMeasurement::baseline).toList());
-        Aggregate semanticAggregate = aggregate(measurements.stream().map(QueryMeasurement::semantic).toList());
+        Aggregate baselineAggregate = Aggregate.of(measurements.stream().map(QueryMeasurement::baseline).toList());
+        Aggregate semanticAggregate = Aggregate.of(measurements.stream().map(QueryMeasurement::semantic).toList());
         long semanticIndexBytes = directorySize(semanticPaths.projectSemanticLuceneIndex(semanticProject.id()));
 
         Map<String, Object> report = new LinkedHashMap<>();
@@ -75,10 +81,11 @@ class RealSemanticSearchBenchmarkTest {
         report.put("dimensions", provider.dimensions());
         report.put("endpoint", ollama.baseUri().toString());
         report.put("localEndpoint", isLocalEndpoint(ollama.baseUri()));
+        report.put("corpus", corpus.id());
         report.put("corpusFiles", baselineIndex.report().scannedFiles());
         report.put("corpusSymbols", baselineIndex.report().statistics().symbols());
         report.put("corpusRelations", baselineIndex.report().statistics().relations());
-        report.put("queries", queries().size());
+        report.put("queries", RealSemanticBenchmarkCorpus.queries().size());
         report.put("baseline", measurementSummary(
                 baselineIndex.report().duration().toMillis(),
                 0L,
@@ -98,7 +105,8 @@ class RealSemanticSearchBenchmarkTest {
 
         System.out.printf(
                 Locale.ROOT,
-                "NEXUS real semantic benchmark: baseline mrr@3=%.4f recall@3=%.4f, semantic mrr@3=%.4f recall@3=%.4f, output=%s%n",
+                "NEXUS real semantic benchmark (corpus %s): baseline mrr@3=%.4f recall@3=%.4f, semantic mrr@3=%.4f recall@3=%.4f, output=%s%n",
+                corpus.id(),
                 baselineAggregate.mrrAt3(),
                 baselineAggregate.recallAt3(),
                 semanticAggregate.mrrAt3(),
@@ -106,7 +114,7 @@ class RealSemanticSearchBenchmarkTest {
                 output);
     }
 
-    private QueryResult runQuery(
+    private RetrievalMeasurement runQuery(
             NexusApplication application,
             ProjectDescriptor project,
             Path corpusRoot,
@@ -116,56 +124,8 @@ class RealSemanticSearchBenchmarkTest {
                 queryCase.query(),
                 RETRIEVAL_LIMIT,
                 true);
-        List<String> rankedPaths = operation.results().stream()
-                .map(RankedCandidate::candidate)
-                .map(candidate -> normalize(corpusRoot.relativize(candidate.path())))
-                .distinct()
-                .toList();
-
-        List<String> topK = rankedPaths.stream().limit(K).toList();
-        long relevantInTopK = topK.stream().filter(queryCase.relevantPaths()::contains).count();
-        int firstRelevantRank = firstRelevantRank(topK, queryCase.relevantPaths());
-        return new QueryResult(
-                rankedPaths,
-                firstRelevantRank,
-                (double) relevantInTopK / K,
-                (double) relevantInTopK / queryCase.relevantPaths().size(),
-                relevantInTopK > 0 ? 1.0d : 0.0d,
-                firstRelevantRank > 0 ? 1.0d / firstRelevantRank : 0.0d,
-                operation.durationMs());
-    }
-
-    private static int firstRelevantRank(List<String> rankedPaths, Set<String> relevantPaths) {
-        for (int index = 0; index < rankedPaths.size(); index++) {
-            if (relevantPaths.contains(rankedPaths.get(index))) {
-                return index + 1;
-            }
-        }
-        return 0;
-    }
-
-    private static Aggregate aggregate(List<QueryResult> results) {
-        return new Aggregate(
-                mean(results.stream().map(QueryResult::precisionAt3).toList()),
-                mean(results.stream().map(QueryResult::recallAt3).toList()),
-                mean(results.stream().map(QueryResult::hitAt3).toList()),
-                mean(results.stream().map(QueryResult::mrrAt3).toList()),
-                meanLong(results.stream().map(QueryResult::durationMs).toList()));
-    }
-
-    private static Map<String, Object> measurementSummary(
-            long indexingMs,
-            long semanticIndexBytes,
-            Aggregate aggregate) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("indexingMs", indexingMs);
-        result.put("semanticIndexBytes", semanticIndexBytes);
-        result.put("precisionAt3", aggregate.precisionAt3());
-        result.put("recallAt3", aggregate.recallAt3());
-        result.put("hitAt3", aggregate.hitAt3());
-        result.put("mrrAt3", aggregate.mrrAt3());
-        result.put("meanSearchMs", aggregate.meanSearchMs());
-        return result;
+        List<String> rankedPaths = rankedRelativePaths(operation, corpusRoot);
+        return RetrievalMeasurement.of(rankedPaths, queryCase.relevantPaths(), operation.durationMs());
     }
 
     private static Map<String, Object> delta(Aggregate baseline, Aggregate semantic) {
@@ -182,8 +142,8 @@ class RealSemanticSearchBenchmarkTest {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("query", measurement.queryCase().query());
         result.put("relevantPaths", measurement.queryCase().relevantPaths().stream().sorted().toList());
-        result.put("baselineRank", measurement.baseline().firstRelevantRank());
-        result.put("semanticRank", measurement.semantic().firstRelevantRank());
+        result.put("baselineRank", measurement.baseline().rankAt3());
+        result.put("semanticRank", measurement.semantic().rankAt3());
         result.put("baselineTop", measurement.baseline().rankedPaths().stream().limit(K).toList());
         result.put("semanticTop", measurement.semantic().rankedPaths().stream().limit(K).toList());
         result.put("baselineSearchMs", measurement.baseline().durationMs());
@@ -191,46 +151,7 @@ class RealSemanticSearchBenchmarkTest {
         return result;
     }
 
-    private static List<QueryCase> queries() {
-        // Chaque requête décrit un besoin d'information. Les jugements de pertinence
-        // acceptent la documentation d'architecture et l'implémentation canonique qui
-        // satisfont indépendamment ce besoin ; le moteur NEXUS recherche les deux.
-        return List.of(
-                new QueryCase(
-                        "generated lookup state should be disposable and recoverable from the authoritative metadata store",
-                        Set.of(
-                                "docs/adr/0022-traiter-lucene-comme-un-index-derive-reconstructible-de-sqlite.md",
-                                "docs/index-provenance.md")),
-                new QueryCase(
-                        "screen lightweight capability summaries before loading the full operating procedure",
-                        Set.of(
-                                "docs/developer/agent-skills.md",
-                                "docs/adr/0034-adopter-la-divulgation-progressive-pour-les-agent-skills.md")),
-                new QueryCase(
-                        "version-control activity should influence relevance while remaining completely offline and read-only",
-                        Set.of(
-                                "docs/developer/git-context.md",
-                                "core/src/main/java/com/nexus/context/source/git/LocalGitContextSourceProvider.java")),
-                new QueryCase(
-                        "let agent clients invoke project search through a standard stdio tool bridge without coupling the engine core",
-                        Set.of(
-                                "docs/developer/mcp.md",
-                                "adapters/mcp-java/src/main/java/com/nexus/mcp/NexusMcpTools.java")),
-                new QueryCase(
-                        "combine results from several codebases while keeping every hit tied to its repository of origin",
-                        Set.of(
-                                "docs/developer/large-scale-search.md",
-                                "docs/adr/0043-federer-la-recherche-locale-par-projet-avant-un-moteur-externe.md",
-                                "core/src/main/java/com/nexus/search/FederatedSearchService.java")),
-                new QueryCase(
-                        "retain only the most useful fragments that fit inside a bounded language-model input allowance",
-                        Set.of(
-                                "docs/adr/0013-construire-un-contextbundle-sous-budget-de-tokens.md",
-                                "docs/developer/context-building.md",
-                                "core/src/main/java/com/nexus/context/BudgetedContextSelector.java")));
-    }
-
-    private static Path corpusRoot() {
+    private static Path snapshotRoot() {
         String configured = System.getProperty("nexus.semantic.realBenchmark.root");
         if (configured == null || configured.isBlank()) {
             throw new IllegalArgumentException("nexus.semantic.realBenchmark.root doit pointer vers le snapshot NEXUS");
@@ -245,93 +166,6 @@ class RealSemanticSearchBenchmarkTest {
         return Path.of(configured).toAbsolutePath().normalize();
     }
 
-    private static String normalize(Path path) {
-        return path.toString().replace('\\', '/');
-    }
-
-    private static double mean(List<Double> values) {
-        return values.stream().mapToDouble(Double::doubleValue).average().orElse(0.0d);
-    }
-
-    private static double meanLong(List<Long> values) {
-        return values.stream().mapToLong(Long::longValue).average().orElse(0.0d);
-    }
-
-    private static long directorySize(Path root) throws IOException {
-        if (!Files.exists(root)) {
-            return 0L;
-        }
-        try (var paths = Files.walk(root)) {
-            return paths.filter(Files::isRegularFile)
-                    .mapToLong(path -> {
-                        try {
-                            return Files.size(path);
-                        } catch (IOException exception) {
-                            throw new DirectorySizeException(exception);
-                        }
-                    })
-                    .sum();
-        } catch (DirectorySizeException exception) {
-            throw exception.ioException();
-        }
-    }
-
-    private static boolean isLocalEndpoint(URI baseUri) {
-        String host = baseUri.getHost();
-        return host != null && (host.equalsIgnoreCase("localhost")
-                || host.equals("127.0.0.1")
-                || host.equals("::1"));
-    }
-
-    private record QueryCase(String query, Set<String> relevantPaths) {
-        private QueryCase {
-            relevantPaths = Set.copyOf(relevantPaths);
-        }
-    }
-
-    private record QueryResult(
-            List<String> rankedPaths,
-            int firstRelevantRank,
-            double precisionAt3,
-            double recallAt3,
-            double hitAt3,
-            double mrrAt3,
-            long durationMs) {
-    }
-
-    private record QueryMeasurement(QueryCase queryCase, QueryResult baseline, QueryResult semantic) {
-    }
-
-    private record Aggregate(
-            double precisionAt3,
-            double recallAt3,
-            double hitAt3,
-            double mrrAt3,
-            double meanSearchMs) {
-    }
-
-    private record OllamaSettings(URI baseUri, String model, int dimensions, long timeoutSeconds) {
-        private static OllamaSettings fromSystemProperties() {
-            return new OllamaSettings(
-                    URI.create(System.getProperty(
-                            "nexus.semantic.ollama.baseUri",
-                            OllamaEmbeddingProvider.DEFAULT_BASE_URI.toString())),
-                    System.getProperty("nexus.semantic.ollama.model", OllamaEmbeddingProvider.DEFAULT_MODEL),
-                    Integer.getInteger("nexus.semantic.ollama.dimensions", OllamaEmbeddingProvider.DEFAULT_DIMENSIONS),
-                    Long.getLong("nexus.semantic.ollama.timeoutSeconds", OllamaEmbeddingProvider.DEFAULT_TIMEOUT.toSeconds()));
-        }
-    }
-
-    private static final class DirectorySizeException extends RuntimeException {
-        private final IOException ioException;
-
-        private DirectorySizeException(IOException ioException) {
-            super(ioException);
-            this.ioException = ioException;
-        }
-
-        private IOException ioException() {
-            return ioException;
-        }
+    private record QueryMeasurement(QueryCase queryCase, RetrievalMeasurement baseline, RetrievalMeasurement semantic) {
     }
 }

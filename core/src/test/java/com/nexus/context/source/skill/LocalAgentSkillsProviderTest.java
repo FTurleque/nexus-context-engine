@@ -5,6 +5,7 @@ import com.nexus.paths.RepositoryPath;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;
+import com.nexus.testsupport.SymbolicLinks;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -23,7 +24,6 @@ class LocalAgentSkillsProviderTest {
 
     @TempDir
     Path temporaryDirectory;
-
 
     @Test
     void resourceInventoryKeepsBothPosixIdentities() throws Exception {
@@ -110,8 +110,7 @@ class LocalAgentSkillsProviderTest {
         Path agents = Files.createDirectories(projectRoot.resolve(".agents"));
         Path skillLink = agents.resolve("skills");
 
-        Assumptions.assumeTrue(createSymbolicLink(skillLink, outsideSkills),
-                "Les liens symboliques ne sont pas disponibles dans cet environnement");
+        SymbolicLinks.createOrSkip(skillLink, outsideSkills.toAbsolutePath());
 
         SkillProviderResult result = new LocalAgentSkillsProvider().discover(
                 new SkillSourceQuery(project(projectRoot, "symlink-skills"), true));
@@ -137,14 +136,5 @@ class LocalAgentSkillsProviderTest {
         Path file = root.resolve(relativePath);
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);
-    }
-
-    private static boolean createSymbolicLink(Path link, Path target) {
-        try {
-            Files.createSymbolicLink(link, target.toAbsolutePath());
-            return true;
-        } catch (UnsupportedOperationException | IOException | SecurityException unavailable) {
-            return false;
-        }
     }
 }

@@ -1,10 +1,6 @@
 # Guide développeur NEXUS
 
-Ce répertoire distingue :
-
-1. **documentation courante** — doit suivre l'exact head ;
-2. **documents d'itération/benchmark** — résultats historiques, volontairement datés ;
-3. **ADR** — décisions append-only.
+Ce répertoire contient la documentation développeur **courante** : elle suit l'exact head. Les résultats d'itération et de benchmark, datés, sont dans [`../project/history/`](../project/history/README.md) ; les décisions, append-only, dans le [registre des ADR](../architecture/adr/README.md).
 
 ## État courant
 
@@ -14,8 +10,8 @@ Java         >=21, release 21
 Maven        3.10.0 via wrapper vérifié
 integration  develop
 release      main
-Quarkus      3.40.1
-MCP SDK      2.0.1
+Quarkus      3.40.1.1
+MCP SDK      2.1.0
 ```
 
 Le build courant utilise **Maven 3.10.0** via le wrapper et son ancre d'intégrité versionnée.
@@ -26,12 +22,13 @@ Les campagnes NXA3 et NXA4 constituent la baseline de hardening courante. Une an
 
 | Sujet | Document |
 |---|---|
-| architecture globale | [Architecture](../architecture.md) |
+| architecture globale | [Architecture](../architecture/overview.md) |
 | Arc42 | [Documentation d'architecture](../architecture/README.md) |
 | architecture concrète | [Architecture d'implémentation](architecture-implementation.md) |
 | limites et watch items | [Limites actuelles](current-limitations.md) |
 | filesystem / locks / support réseau | [Support filesystem](filesystem-support.md) |
-| roadmap | [Roadmap](../roadmap.md) |
+| roadmap | [Roadmap](../project/governance/ROADMAP.md) |
+| provenance et fraîcheur des index | [Index provenance](index-provenance.md) |
 | release / migration / recovery | [Release et recovery](release-and-recovery.md) |
 | CI / supply-chain | [CI et supply-chain](ci-and-supply-chain.md) |
 | gouvernance branches | [Gouvernance](branch-governance.md) |
@@ -46,6 +43,8 @@ Les campagnes NXA3 et NXA4 constituent la baseline de hardening courante. Une an
 | AI Skills Registry | [AI Skills Registry](ai-skills-registry.md) |
 | scale | [Recherche à grande échelle](large-scale-search.md) |
 | outillage Claude Code | [Outillage Claude Code](claude-code.md) |
+| specs OpenSpec (schéma, conventions, contrôles) | [OpenSpec](openspec.md) |
+| traçabilité exigence → preuve | [Traçabilité OpenSpec](openspec-traceability.md) |
 
 ## Composition
 
@@ -90,13 +89,13 @@ NexusApplication
 - Ollama distant HTTPS par défaut ; HTTP distant seulement via `NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA=true`.
 - credentials dans l'URI Ollama refusés.
 - secrets à forte confiance redigés avant embeddings et fragments de contexte.
-- profil sémantique `content-v4` pour reconstruire les vecteurs historiques incompatibles.
+- profil sémantique `content-v5` pour reconstruire les vecteurs historiques incompatibles.
 - lectures recherche/contexte protégées par un verrou partagé conservé pendant toute l'opération ; un dérivé Lucene absent ou issu d'une autre politique force sa reconstruction.
 - parcours Git incrémental : chaque entrée d'arbre est débitée avant collecte selon le budget de découverte.
 - `NEXUS_HOME` privé sur POSIX et chemins persistants symboliques concernés refusés.
 - sous Windows/filesystems ACL, `NEXUS_REQUIRE_PRIVATE_STORAGE=true` permet d'exiger une preuve de confidentialité et d'échouer fermé sans réécrire naïvement les ACL.
 - le fallback `SafeFileIO` sans `SecureDirectoryStream` capture et revalide l'identité filesystem autour de l'ouverture.
-- la qualification sémantique réelle Ollama est disponible périodiquement/manuellement avec runtime vérifié par SHA-256 et seuils de non-régression.
+- la qualification sémantique réelle Ollama tourne sur les PR sémantiques (corpus réduit), sur `develop` après fusion (corpus complet), manuellement et chaque mois avec runtime vérifié par SHA-256 et seuils de non-régression.
 - `jdk.incubator.vector` reste volontairement non activé après qualification ABBA ; toute adoption exige une nouvelle mesure probante.
 
 ## Build
@@ -123,7 +122,7 @@ La protection effective de `develop` reste une configuration GitHub externe au c
 
 ## Contrat de hardening du 9 septembre 2026
 
-Voir [ADR-0048](../adr/0048-distinguer-traversee-stricte-et-compatibilite-filesystem.md)
+Voir [ADR-0048](../architecture/adr/SEC-0048-distinguer-traversee-stricte-et-compatibilite-filesystem.md)
 pour la distinction entre traversée strict et compatibility. Le fallback sans
 `SecureDirectoryStream` est best-effort : la revalidation ne détecte pas un ABA
 restauré. `NEXUS_REQUIRE_STRICT_PATH_IO=true` le refuse avant ouverture du fichier.
@@ -146,4 +145,4 @@ les backslashes POSIX. `a\b.java` et `a/b.java` sont deux identités distinctes 
 POSIX. La résolution sur un autre filesystem refuse les composants qui y seraient
 réinterprétés. V007 invalide les anciens index et impose une reconstruction ; le
 fingerprint `nexus-repository-path-v2` invalide également les dérivés sémantiques
-restés désactivés pendant l'upgrade. Voir [ADR-0049](../adr/0049-identite-repository-par-composants-et-diagnostics-publics.md).
+restés désactivés pendant l'upgrade. Voir [ADR-0049](../architecture/adr/DATA-0049-identite-repository-par-composants-et-diagnostics-publics.md).

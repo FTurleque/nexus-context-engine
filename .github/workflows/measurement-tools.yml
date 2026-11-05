@@ -1,0 +1,157 @@
+name: Measurement tools
+
+# Lanceurs des tests de mesure désactivés par défaut dans le reactor (AUD-TST-09) :
+# replay réel MINOS -> NEXUS et baselines d'indexation sur le snapshot NEXUS exact.
+# Les diagnostics sémantiques ont leur job dans semantic-search-qualification.yml.
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - '.github/workflows/measurement-tools.yml'
+      - 'scripts/validate-minos-integration.ps1'
+      - 'core/src/test/java/com/nexus/index/minos/MinosRealIntegrationTest.java'
+      - 'core/src/test/java/com/nexus/search/LargeScaleSearchBaselineTest.java'
+      - 'core/src/test/java/com/nexus/index/SmallDeltaIndexingBaselineTest.java'
+  workflow_dispatch:
+  schedule:
+    - cron: '23 4 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: measurement-tools-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  minos-replay:
+    name: MINOS to NEXUS replay
+    runs-on: windows-2025
+    timeout-minutes: 30
+    env:
+      MINOS_VERSION: '1.2.0'
+      MINOS_ARCHIVE: target/minos/minos-windows-x64.zip
+      MINOS_FIXTURE: minos-source/fixtures/typescript/typescript-modules
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Checkout MINOS fixture at v1.2.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: FTurleque/minos-code-intelligence
+          ref: 730b760020b8ed9d69666c32a35fcff05bf21bdb
+          path: minos-source
+          persist-credentials: false
+          sparse-checkout: fixtures/typescript/typescript-modules
+
+      - name: Set up Java 24 for MINOS
+        id: java24
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '24'
+
+      - name: Set up Java 21 for NEXUS
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Download and verify pinned MINOS distribution
+        id: minos
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $key = "minos.$env:MINOS_VERSION.windows-x64.sha256"
+          $line = Get-Content config/tool-integrity.properties | Where-Object { $_ -like "$key=*" }
+          $expected = if ($line) { ($line -split '=', 2)[1].Trim() } else { '' }
+          if ($expected -notmatch '^[0-9a-f]{64}$') {
+            throw "Missing or invalid repository-pinned MINOS SHA-256 for $key"
+          }
+          New-Item -ItemType Directory -Force -Path target/minos | Out-Null
+          $url = "https://github.com/FTurleque/minos-code-intelligence/releases/download/v$env:MINOS_VERSION/minos-$env:MINOS_VERSION-windows-x64.zip"
+          Invoke-WebRequest -Uri $url -OutFile $env:MINOS_ARCHIVE -MaximumRetryCount 4 -RetryIntervalSec 5
+          $actual = (Get-FileHash -Algorithm SHA256 -Path $env:MINOS_ARCHIVE).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) {
+            throw "MINOS archive SHA-256 mismatch: expected=$expected actual=$actual"
+          }
+          Expand-Archive -Path $env:MINOS_ARCHIVE -DestinationPath target/minos/dist
+          # lib/minos.jar est le JAR lancé par minos.cmd ; app/ porte la copie du lanceur natif.
+          $jar = Join-Path (Resolve-Path target/minos/dist).Path "minos-$env:MINOS_VERSION-windows-x64/lib/minos.jar"
+          if (-not (Test-Path -LiteralPath $jar -PathType Leaf)) {
+            throw "MINOS JAR not found in the verified distribution: $jar"
+          }
+          "jar=$jar" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Run MINOS replay
+        shell: pwsh
+        env:
+          MINOS_JAR: ${{ steps.minos.outputs.jar }}
+          JAVA24_HOME: ${{ steps.java24.outputs.path }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./scripts/validate-minos-integration.ps1 `
+            -MinosJar $env:MINOS_JAR `
+            -Java24 (Join-Path $env:JAVA24_HOME 'bin/java.exe') `
+            -Fixture (Join-Path $env:GITHUB_WORKSPACE $env:MINOS_FIXTURE)
+
+  index-baselines:
+    name: Indexing baselines on NEXUS snapshot
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      BASELINE_DIR: target/measurement-baselines
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Java 21
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Export tracked snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          snapshot="$RUNNER_TEMP/nexus-snapshot"
+          mkdir -p "$snapshot" "$BASELINE_DIR"
+          git archive HEAD | tar -x -C "$snapshot"
+          echo "NEXUS_SNAPSHOT=$snapshot" >> "$GITHUB_ENV"
+
+      - name: Run indexing baselines
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./mvnw
+          ./mvnw -B -ntp -pl core \
+            -Dtest='LargeScaleSearchBaselineTest,SmallDeltaIndexingBaselineTest' \
+            -Dnexus.baseline.projects="$NEXUS_SNAPSHOT" \
+            -Dnexus.baseline.queries='SearchService|ProjectIndexingService|ContextBudgetPolicy' \
+            -Dnexus.baseline.output="$GITHUB_WORKSPACE/$BASELINE_DIR/search-baseline.json" \
+            -Dnexus.delta.source="$NEXUS_SNAPSHOT" \
+            -Dnexus.delta.modified=core/src/main/java/com/nexus/search/SearchService.java \
+            -Dnexus.delta.added=core/src/main/java/com/nexus/search/NexusIteration16DeltaProbe.java \
+            -Dnexus.delta.output="$GITHUB_WORKSPACE/$BASELINE_DIR/small-delta.json" \
+            -Djacoco.skip=true \
+            test
+          for report in search-baseline.json small-delta.json; do
+            test -s "$BASELINE_DIR/$report" || { echo "::error::Missing baseline report $report"; exit 1; }
+          done
+
+      - name: Retain baseline reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: measurement-baselines-${{ github.sha }}
+          retention-days: 30
+          if-no-files-found: warn
+          path: target/measurement-baselines/*.json

@@ -7,6 +7,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+Import-Module (Join-Path $PSScriptRoot "lib/NexusScript.psm1") -Force
 $evaluationHome = Join-Path $repoRoot "target\nexus-scip-evaluation-home"
 $resultsDirectory = Join-Path $repoRoot "target\scip-evaluation"
 $summaryPath = Join-Path $resultsDirectory "summary.json"
@@ -16,49 +17,6 @@ $previousNexusHome = $env:NEXUS_HOME
 $locationPushed = $false
 $indexMoved = $false
 $script:cliJar = $null
-
-function Invoke-Maven {
-    param([Parameter(Mandatory = $true)][string[]]$Arguments)
-
-    & mvn @Arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "La commande Maven a echoue avec le code $LASTEXITCODE : mvn $($Arguments -join ' ')"
-    }
-}
-
-function Invoke-NexusJson {
-    param([Parameter(Mandatory = $true)][string[]]$Arguments)
-
-    $stdoutFile = [System.IO.Path]::GetTempFileName()
-    $stderrFile = [System.IO.Path]::GetTempFileName()
-    $previousErrorActionPreference = $ErrorActionPreference
-    try {
-        $ErrorActionPreference = "Continue"
-        & java -jar $script:cliJar.FullName @Arguments 1> $stdoutFile 2> $stderrFile
-        $exitCode = $LASTEXITCODE
-    }
-    finally {
-        $ErrorActionPreference = $previousErrorActionPreference
-    }
-
-    try {
-        $stdout = Get-Content -Raw -Path $stdoutFile -ErrorAction SilentlyContinue
-        $stderr = Get-Content -Raw -Path $stderrFile -ErrorAction SilentlyContinue
-        if (-not [string]::IsNullOrWhiteSpace($stderr)) {
-            Write-Host $stderr.TrimEnd()
-        }
-        if ($exitCode -ne 0) {
-            throw "La CLI NEXUS a echoue avec le code $exitCode pour : $($Arguments -join ' ')"
-        }
-        if ([string]::IsNullOrWhiteSpace($stdout)) {
-            throw "La CLI NEXUS n'a retourne aucune sortie JSON pour : $($Arguments -join ' ')"
-        }
-        return ($stdout | ConvertFrom-Json)
-    }
-    finally {
-        Remove-Item -Force $stdoutFile, $stderrFile -ErrorAction SilentlyContinue
-    }
-}
 
 function Measure-Quality {
     param(
@@ -71,7 +29,7 @@ function Measure-Quality {
     $details = @()
 
     foreach ($query in $Queries) {
-        $search = Invoke-NexusJson -Arguments @("search", $ProjectName, $query.Query, "--limit", "20", "--json")
+        $search = Invoke-NexusJson -CliJar $script:cliJar.FullName -Arguments @("search", $ProjectName, $query.Query, "--limit", "20", "--json")
         $rankedPaths = @(
             $search.results |
                 ForEach-Object { ([string]$_.path).Replace('\', '/') } |
@@ -158,13 +116,13 @@ try {
     $env:NEXUS_HOME = $evaluationHome
 
     Write-Host "[3/8] Enregistrement du repository"
-    $null = Invoke-NexusJson -Arguments @("project", "add", ".", $ProjectName, "--json")
+    $null = Invoke-NexusJson -CliJar $script:cliJar.FullName -Arguments @("project", "add", ".", $ProjectName, "--json")
 
     Write-Host "[4/8] Baseline JavaParser seul"
     Move-Item -Path $indexPath -Destination $backupPath
     $indexMoved = $true
-    $baselineIndex = Invoke-NexusJson -Arguments @("index", $ProjectName, "--rebuild", "--json")
-    $baselineInspect = Invoke-NexusJson -Arguments @("inspect", $ProjectName, "--json")
+    $baselineIndex = Invoke-NexusJson -CliJar $script:cliJar.FullName -Arguments @("index", $ProjectName, "--rebuild", "--json")
+    $baselineInspect = Invoke-NexusJson -CliJar $script:cliJar.FullName -Arguments @("inspect", $ProjectName, "--json")
     $baselineQuality = Measure-Quality -Queries $queries -TopK $K
 
     Write-Host "[5/8] Restauration de index.scip"
@@ -172,8 +130,8 @@ try {
     $indexMoved = $false
 
     Write-Host "[6/8] Enrichissement JavaParser + SCIP"
-    $scipIndex = Invoke-NexusJson -Arguments @("index", $ProjectName, "--rebuild", "--json")
-    $scipInspect = Invoke-NexusJson -Arguments @("inspect", $ProjectName, "--json")
+    $scipIndex = Invoke-NexusJson -CliJar $script:cliJar.FullName -Arguments @("index", $ProjectName, "--rebuild", "--json")
+    $scipInspect = Invoke-NexusJson -CliJar $script:cliJar.FullName -Arguments @("inspect", $ProjectName, "--json")
     $scipQuality = Measure-Quality -Queries $queries -TopK $K
 
     Write-Host "[7/8] Calcul des ecarts"

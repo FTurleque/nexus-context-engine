@@ -13,5 +13,5 @@ Ces règles s'appliquent à l'ensemble du repository.
 Contexte détaillé à consulter :
 
 - @docs/developer/README.md
-- @docs/architecture.md
-- @docs/roadmap.md
+- @docs/architecture/overview.md
+- @docs/project/governance/ROADMAP.md

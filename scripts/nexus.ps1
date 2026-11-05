@@ -6,7 +6,7 @@ $cliJar = Get-ChildItem -Path $targetDirectory -Filter "nexus-context-engine-*-c
     Select-Object -First 1
 
 if ($null -eq $cliJar) {
-    Write-Error "JAR CLI NEXUS introuvable dans target/. Lancez d'abord : mvn clean package"
+    Write-Error "JAR CLI NEXUS introuvable dans target/. Lancez d'abord : .\mvnw.cmd clean package"
     exit 1
 }
 

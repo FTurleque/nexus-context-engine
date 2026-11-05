@@ -64,6 +64,7 @@ for path in (
     "core/src/main/resources/db/migration/V008__indexed_substring_search.sql",
     "core/src/main/resources/db/migration/V009__invalidate_quoted_secret_indexes.sql",
     "core/src/main/resources/db/migration/V010__invalidate_scalar_secret_indexes.sql",
+    "core/src/main/resources/db/migration/V011__invalidate_secret_format_indexes.sql",
     "core/src/test/java/com/nexus/application/NexusApplicationSemanticConfigurationTest.java",
 ):
     if not (root / path).is_file():
@@ -74,7 +75,7 @@ for stale in ("<sourceDirectory>", "<testSourceDirectory>", "../src/main", "../s
         raise SystemExit(f"core layout drift: core/pom.xml still contains {stale!r}")
 
 migrations = sorted((root / "core/src/main/resources/db/migration").glob("V*.sql"))
-if not migrations or migrations[-1].name != "V010__invalidate_scalar_secret_indexes.sql":
+if not migrations or migrations[-1].name != "V011__invalidate_secret_format_indexes.sql":
     raise SystemExit(f"schema contract drift: latest migration is {migrations[-1].name if migrations else 'none'}")
 require("docs/developer/release-and-recovery.md", "V005__enforce_symbol_range_constraints.sql")
 require("docs/developer/release-and-recovery.md", "V006__invalidate_unredacted_lexical_indexes.sql")
@@ -82,7 +83,7 @@ require("docs/developer/release-and-recovery.md", "V007__invalidate_legacy_repos
 require("docs/developer/release-and-recovery.md", "V008__indexed_substring_search.sql")
 for path in (
     "README.md",
-    "docs/architecture.md",
+    "docs/architecture/overview.md",
     "docs/developer/release-and-recovery.md",
     "docs/developer/ci-and-supply-chain.md",
     "docs/developer/architecture-implementation.md",
@@ -125,11 +126,11 @@ require("docs/developer/architecture-implementation.md", f"Quarkus est en {quark
 require("docs/developer/rest-api.md", f"Quarkus     {quarkus_version}")
 require("docs/developer/rest-api.md", "quarkus.http.insecure-requests")
 require("docs/developer/rest-api.md", "trusted-proxies")
-require("docs/developer/mcp.md", "MCP SDK     2.0.1")
+require("docs/developer/mcp.md", "MCP SDK     2.1.0")
 require("docs/developer/mcp.md", "100 projets uniques")
 
 for path in (
-    "docs/architecture.md",
+    "docs/architecture/overview.md",
     "docs/developer/architecture-implementation.md",
     "docs/developer/context-building.md",
     "docs/developer/large-scale-search.md",
@@ -139,7 +140,7 @@ for path in (
     require(path, "100 projets uniques")
 
 for path in (
-    "docs/architecture.md",
+    "docs/architecture/overview.md",
     "docs/developer/architecture-implementation.md",
     "docs/developer/context-building.md",
     "docs/developer/native-context-sources.md",
@@ -160,7 +161,7 @@ for needle in (
     require(app_props, needle)
 for path in (
     "README.md",
-    "docs/architecture.md",
+    "docs/architecture/overview.md",
     "docs/architecture/arc42/06-vue-execution.md",
     "docs/architecture/arc42/07-vue-deploiement.md",
     "docs/architecture/arc42/08-concepts-transverses.md",
@@ -177,7 +178,7 @@ semantic_cfg = "core/src/main/java/com/nexus/search/semantic/SemanticSearchConfi
 require(semantic_cfg, "NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA")
 for path in (
     "README.md",
-    "docs/architecture.md",
+    "docs/architecture/overview.md",
     "docs/architecture/arc42/06-vue-execution.md",
     "docs/architecture/arc42/07-vue-deploiement.md",
     "docs/architecture/arc42/08-concepts-transverses.md",
@@ -190,17 +191,25 @@ for path in (
     require(path, "NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA")
 
 require("core/src/main/java/com/nexus/security/SensitiveContentRedactor.java", "[REDACTED]")
-require("core/src/main/java/com/nexus/search/semantic/SemanticIndexingService.java", "CONTENT_PROFILE_VERSION = 4")
+require("core/src/main/java/com/nexus/search/semantic/SemanticIndexingService.java", "CONTENT_PROFILE_VERSION = 5")
 for path in (
     "README.md",
-    "docs/architecture.md",
+    "docs/architecture/overview.md",
     "docs/architecture/arc42/08-concepts-transverses.md",
     "docs/architecture/arc42/10-exigences-qualite.md",
     "docs/developer/current-limitations.md",
     "docs/developer/release-and-recovery.md",
     "docs/developer/semantic-search.md",
 ):
-    require(path, "content-v4")
+    require(path, "content-v5")
+
+# AUD-SEC-01/AUD-SEC-02: redaction policy v6, V011 invalidation, per-file exclusion.
+require("core/src/main/java/com/nexus/security/SensitiveContentRedactor.java", '"secret-redaction-v6"')
+require("docs/developer/secret-redaction.md", "secret-redaction-v6")
+require("docs/developer/secret-redaction.md", "INDEX_REDACTION_LIMIT")
+require("docs/developer/secret-redaction.md", "SecretRedactionProbeTest")
+require("docs/developer/release-and-recovery.md", "V011__invalidate_secret_format_indexes.sql")
+require("docs/developer/current-limitations.md", "INDEX_REDACTION_LIMIT")
 
 # NXA4 + audit follow-up: lexical content is redacted before Lucene tokenization.
 lucene = "core/src/main/java/com/nexus/search/lucene/LuceneSearchIndex.java"
@@ -229,7 +238,7 @@ for needle in (
 ):
     require(jdt_reader, needle)
 for path in (
-    "docs/architecture.md",
+    "docs/architecture/overview.md",
     "docs/architecture/arc42/06-vue-execution.md",
     "docs/architecture/arc42/08-concepts-transverses.md",
     "docs/architecture/quality/scenarios.md",
@@ -251,7 +260,7 @@ forbid("docs/developer/jdt-language-server.md", "télécharge le checksum SHA-25
 require(lucene, "MAX_ANALYZED_QUERY_TERMS = 128")
 for path in (
     "README.md",
-    "docs/architecture.md",
+    "docs/architecture/overview.md",
     "docs/architecture/arc42/06-vue-execution.md",
     "docs/architecture/arc42/08-concepts-transverses.md",
     "docs/architecture/arc42/10-exigences-qualite.md",
@@ -269,7 +278,7 @@ require(nexus_paths, 'PosixFilePermissions.fromString("rw-------")')
 require(nexus_paths, "AclFileAttributeView")
 for path in (
     "README.md",
-    "docs/architecture.md",
+    "docs/architecture/overview.md",
     "docs/architecture/arc42/07-vue-deploiement.md",
     "docs/developer/current-limitations.md",
     "docs/developer/release-and-recovery.md",
@@ -281,7 +290,7 @@ for path in (
 context_request = "core/src/main/java/com/nexus/context/ContextRequest.java"
 require(context_request, "constraints are not supported yet")
 for path in (
-    "docs/architecture.md",
+    "docs/architecture/overview.md",
     "docs/architecture/arc42/05-vue-blocs.md",
     "docs/architecture/arc42/06-vue-execution.md",
     "docs/architecture/arc42/10-exigences-qualite.md",
@@ -304,8 +313,8 @@ forbid("docs/architecture/arc42/06-vue-execution.md", "indexation réussie sans 
 
 current_docs = (
     "README.md",
-    "docs/roadmap.md",
-    "docs/architecture.md",
+    "docs/project/governance/ROADMAP.md",
+    "docs/architecture/overview.md",
     "docs/architecture/README.md",
     "docs/architecture/arc42/05-vue-blocs.md",
     "docs/architecture/arc42/06-vue-execution.md",
@@ -341,5 +350,234 @@ for path in current_docs:
     ):
         forbid(path, stale)
 
+
+# Scale benchmark: the pull_request trigger has no paths filter, so the required
+# "Hermetic scale benchmark" check exists on every PR. The detection step's
+# WATCHED_PATHS block is the single list of watched paths; the develop push
+# caller must watch exactly that list.
+def trigger_paths(source: str, event: str) -> list[str] | None:
+    paths: list[str] | None = None
+    in_on = in_event = in_paths = False
+    for raw in source.splitlines():
+        line = raw.rstrip()
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        if indent == 0:
+            in_on = stripped == "on:"
+            in_event = in_paths = False
+        elif in_on and indent == 2:
+            in_event = stripped == f"{event}:"
+            in_paths = False
+            if in_event and paths is None:
+                paths = []
+        elif in_event and indent == 4:
+            in_paths = stripped == "paths:"
+        elif in_paths and indent == 6 and stripped.startswith("- "):
+            paths.append(stripped[2:].strip().strip("'\""))
+    return paths
+
+
+def watched_paths(source: str) -> list[str]:
+    paths: list[str] = []
+    block_indent = None
+    lines = source.splitlines()
+    for index, raw in enumerate(lines):
+        if raw.strip() == "WATCHED_PATHS: |":
+            for item in lines[index + 1:]:
+                if not item.strip():
+                    break
+                indent = len(item) - len(item.lstrip(" "))
+                if block_indent is None:
+                    block_indent = indent
+                if indent != block_indent or block_indent <= len(raw) - len(raw.lstrip(" ")):
+                    break
+                paths.append(item.strip())
+            break
+    return paths
+
+
+def check_scale_benchmark_paths(reusable: str, caller: str) -> None:
+    pull_request = trigger_paths(reusable, "pull_request")
+    if pull_request is None:
+        raise SystemExit("scale benchmark contract drift: pull_request trigger not found")
+    if pull_request:
+        raise SystemExit("scale benchmark contract drift: pull_request trigger must not filter paths")
+    watched = watched_paths(reusable)
+    push = trigger_paths(caller, "push") or []
+    if not watched or not push:
+        raise SystemExit("scale benchmark contract drift: watched paths or push paths not found")
+    for name, values in (("WATCHED_PATHS", watched), ("push", push)):
+        if len(values) != len(set(values)):
+            raise SystemExit(f"scale benchmark contract drift: duplicate {name} paths")
+    missing = sorted(set(watched) - set(push))
+    extra = sorted(set(push) - set(watched))
+    if missing or extra:
+        raise SystemExit(
+            "scale benchmark contract drift: develop push paths differ from WATCHED_PATHS"
+            f" (missing={missing}, extra={extra})"
+        )
+
+
+scale_caller_path = ".github/workflows/develop-push-scale-benchmark.yml"
+scale_reusable = text(".github/workflows/scale-benchmark.yml")
+scale_caller = text(scale_caller_path)
+check_scale_benchmark_paths(scale_reusable, scale_caller)
+if scale_caller_path not in watched_paths(scale_reusable):
+    raise SystemExit("scale benchmark contract drift: WATCHED_PATHS must include the develop push caller")
+if f"'{scale_caller_path}'" not in scale_caller.split("pull_request:", 1)[-1]:
+    raise SystemExit("scale benchmark contract drift: caller must run on its own pull_request changes")
+if "    name: Hermetic scale benchmark\n" not in scale_reusable:
+    raise SystemExit("scale benchmark contract drift: required check name 'Hermetic scale benchmark' changed")
+# github.workflow names the caller under workflow_call: the wrapper and the
+# direct pull_request run must never share (and cancel) a concurrency group.
+if "  group: ${{ github.workflow }}-" not in scale_reusable:
+    raise SystemExit("scale benchmark contract drift: concurrency group must start with github.workflow")
+drifted_caller = scale_caller.replace("      - 'config/scale-benchmark-protocol'\n", "", 1)
+drifted_watched = scale_reusable.replace(
+    "            config/scale-benchmark-protocol\n",
+    "            config/scale-benchmark-protocol\n            config/drift-fixture\n",
+    1,
+)
+drifted_trigger = scale_reusable.replace(
+    "      - main\n  workflow_dispatch:", "      - main\n    paths:\n      - 'core/**'\n  workflow_dispatch:", 1
+)
+for label, reusable, caller in (
+    ("push", scale_reusable, drifted_caller),
+    ("WATCHED_PATHS", drifted_watched, scale_caller),
+    ("pull_request paths", drifted_trigger, scale_caller),
+):
+    if (reusable, caller) == (scale_reusable, scale_caller):
+        raise SystemExit(f"scale benchmark contract self-test: {label} fixture not found")
+    try:
+        check_scale_benchmark_paths(reusable, caller)
+    except SystemExit:
+        pass
+    else:
+        raise SystemExit(f"scale benchmark contract self-test: {label} drift was not detected")
+require("docs/developer/scale-regression-benchmark.md", "conclut en succès sans mesurer")
+
+# SECURITY.md keeps the alert handling procedure, including test fixtures of the redaction policy.
+for needle in (
+    "## Traitement des alertes de sécurité",
+    "### Délai de prise en charge",
+    "### Alertes Dependabot",
+    "### Alertes de secret scanning",
+    "`used_in_tests`",
+    "core/src/test/java/com/nexus/security/SensitiveContentRedactorTest.java",
+):
+    require("SECURITY.md", needle)
+if not (root / "core/src/test/java/com/nexus/security/SensitiveContentRedactorTest.java").is_file():
+    raise SystemExit("security contract drift: redaction fixture path cited by SECURITY.md is missing")
+
+# Active PowerShell scripts call Maven only through scripts/lib/NexusScript.psm1 (AUD-QUA-05).
+import re
+
+SHARED_SCRIPT_FUNCTION = re.compile(
+    r"^\s*function\s+(Invoke-Maven|Resolve-AbsolutePath|Invoke-NexusJson|Select-MavenCommand)\b",
+    re.IGNORECASE,
+)
+MAVEN_TOKEN = r"(?:\.\.?[\\/])?(?:[\w$:.\\/-]*[\\/])?mvnw?(?:\.cmd)?"
+DIRECT_MAVEN_CALL = (
+    re.compile(r"&\s*['\"]?" + MAVEN_TOKEN + r"['\"]?(?:\s|$)", re.IGNORECASE),
+    re.compile(r"^\s*" + MAVEN_TOKEN + r"\s", re.IGNORECASE),
+    re.compile(r"Get-Command\s+(?:-Name\s+)?['\"]?mvn", re.IGNORECASE),
+    re.compile(r"Start-Process\b.*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE),
+    re.compile(r"Join-Path\b.*['\"](?:\.\.[\\/])*mvnw?(?:\.cmd)?['\"]", re.IGNORECASE),
+)
+
+
+def powershell_maven_violations(relative: str, source: str) -> list[str]:
+    violations = []
+    for number, line in enumerate(source.splitlines(), 1):
+        code = line.split("#", 1)[0] if line.lstrip().startswith("#") else line
+        if not code.strip():
+            continue
+        if SHARED_SCRIPT_FUNCTION.search(code):
+            violations.append(f"{relative}:{number}: redefines a NexusScript.psm1 function")
+        if any(pattern.search(code) for pattern in DIRECT_MAVEN_CALL):
+            violations.append(f"{relative}:{number}: calls Maven directly instead of Invoke-Maven")
+    return violations
+
+
+def active_powershell_scripts() -> list[Path]:
+    scripts_root = root / "scripts"
+    excluded = (scripts_root / "lib", scripts_root / "archive")
+    return sorted(
+        path
+        for pattern in ("*.ps1", "*.psm1")
+        for path in scripts_root.rglob(pattern)
+        if not any(parent in excluded for parent in path.parents)
+    )
+
+
+maven_violations = []
+for script in active_powershell_scripts():
+    maven_violations.extend(
+        powershell_maven_violations(script.relative_to(root).as_posix(), script.read_text(encoding="utf-8"))
+    )
+if maven_violations:
+    raise SystemExit("powershell maven contract drift:\n" + "\n".join(maven_violations))
+for label, fixture in (
+    ("installed mvn call", "Push-Location $root\n& mvn @arguments\n"),
+    ("installed mvn.cmd call", "    & mvn.cmd -q package\n"),
+    ("direct wrapper call", "    & .\\mvnw.cmd -B test\n"),
+    ("quoted wrapper call", "    & '.\\mvnw.cmd' @mavenArgs\n"),
+    ("bare command", "mvn clean install\n"),
+    ("wrapper path variable", "$w = (Resolve-Path (Join-Path $PSScriptRoot '..\\mvnw.cmd')).Path\n"),
+    ("installed lookup", "$m = Get-Command mvn -ErrorAction SilentlyContinue\n"),
+    ("local Invoke-Maven", "function Invoke-Maven {\n}\n"),
+    ("local Resolve-AbsolutePath", "function Resolve-AbsolutePath {\n}\n"),
+):
+    if not powershell_maven_violations(f"fixture/{label}.ps1", fixture):
+        raise SystemExit(f"powershell maven contract self-test: {label} was not detected")
+for label, fixture in (
+    ("module call", "Invoke-Maven -Arguments @('-q', 'package')\n"),
+    ("comment", "# & mvn clean install\n"),
+    ("message", 'Write-Error "Lancez d\'abord : .\\\\mvnw.cmd clean package"\n'),
+):
+    if powershell_maven_violations(f"fixture/{label}.ps1", fixture):
+        raise SystemExit(f"powershell maven contract self-test: {label} was rejected")
+require(
+    "scripts/lib/NexusScript.psm1",
+    "Export-ModuleMember -Function Invoke-Maven, Resolve-AbsolutePath, Invoke-NexusJson",
+)
+require("scripts/lib/NexusScript.psm1", "exige le Maven Wrapper verifie")
+require(".github/workflows/ci.yml", "scripts/tests/Test-NexusScript.ps1")
+for retired in range(9, 18):
+    if retired == 15:
+        continue
+    if (root / f"scripts/validate-iteration-{retired}.ps1").exists():
+        raise SystemExit(f"script archive drift: scripts/validate-iteration-{retired}.ps1 must live in scripts/archive/")
+require("scripts/archive/README.md", "non maintenus")
+require("docs/developer/ci-and-supply-chain.md", "Les seuls points d'entrée de validation sont `scripts/validate-phase-6.ps1`")
+
 print("operational-documentation-contracts=PASS")
 PY
+
+# Workflow hygiene: no input interpolated in run: blocks, a timeout on every
+# non-reusable job, versioned runner images for benchmarks. Each check must
+# also reject its negative fixture.
+HYGIENE="scripts/release/workflow_hygiene.py"
+HYGIENE_FIXTURES="scripts/release/fixtures/workflow-hygiene"
+for check in inputs timeouts runners; do
+  python3 "$HYGIENE" "$check" .github/workflows
+done
+# A fixture counts as rejected only with exit code 1 and the message of its rule.
+for case in \
+  "inputs|inputs-in-run.yml|interpolated inside a run" \
+  "inputs|inputs-inline-run.yml|interpolated inside a run" \
+  "inputs|inputs-event-inputs.yml|interpolated inside a run" \
+  "timeouts|timeout-missing.yml|no timeout-minutes" \
+  "runners|runners/scale-benchmark.yml|unpinned image"; do
+  IFS='|' read -r check fixture message <<< "$case"
+  set +e
+  output="$(python3 "$HYGIENE" "$check" "$HYGIENE_FIXTURES/$fixture" 2>&1)"
+  status=$?
+  set -e
+  if [[ "$status" -ne 1 ]] || ! grep -q "$message" <<< "$output"; then
+    echo "workflow hygiene fixture $fixture was not rejected by the $check check for '$message' (exit $status)" >&2
+    exit 1
+  fi
+done

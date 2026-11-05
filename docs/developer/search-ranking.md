@@ -163,4 +163,4 @@ p50 / p95
 
 La Phase 6 ne remplace pas Lucene par Zoekt/OpenGrok/OpenSearch : les optimisations locales sont appliquées d'abord et doivent être re-mesurées avant toute décision d'infrastructure.
 
-Voir [`large-scale-search.md`](large-scale-search.md), [`current-limitations.md`](current-limitations.md) et la [`roadmap`](../roadmap.md).
+Voir [`large-scale-search.md`](large-scale-search.md), [`current-limitations.md`](current-limitations.md) et la [`roadmap`](../project/governance/ROADMAP.md).

@@ -39,6 +39,11 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-jacoco</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>io.rest-assured</groupId>
             <artifactId>rest-assured</artifactId>
             <scope>test</scope>
@@ -68,6 +73,13 @@
                     <systemPropertyVariables>
                         <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                         <nexus.home>${project.build.directory}/nexus-api-test-home</nexus.home>
+                        <!-- quarkus-jacoco instrumente les classes chargées par le
+                             QuarkusClassLoader des @QuarkusTest et écrit dans le même
+                             fichier que l'agent JaCoCo ; le rapport et le gate Maven
+                             lisent ce fichier unique. -->
+                        <quarkus.jacoco.data-file>${project.build.directory}/jacoco.exec</quarkus.jacoco.data-file>
+                        <quarkus.jacoco.reuse-data-file>true</quarkus.jacoco.reuse-data-file>
+                        <quarkus.jacoco.report>false</quarkus.jacoco.report>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>
@@ -75,6 +87,15 @@
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <executions>
+                    <!-- L'agent couvre les tests sans @QuarkusTest ; les classes du
+                         QuarkusClassLoader relèvent de quarkus-jacoco. -->
+                    <execution>
+                        <id>jacoco-prepare</id>
+                        <configuration>
+                            <exclClassLoaders>*QuarkusClassLoader</exclClassLoaders>
+                            <append>true</append>
+                        </configuration>
+                    </execution>
                     <execution>
                         <id>jacoco-check-rest</id>
                         <phase>verify</phase>
@@ -87,12 +108,50 @@
                                         <limit>
                                             <counter>LINE</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.60</minimum>
+                                            <minimum>0.65</minimum>
                                         </limit>
                                         <limit>
                                             <counter>BRANCH</counter>
                                             <value>COVEREDRATIO</value>
                                             <minimum>0.60</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                                <rule>
+                                    <element>PACKAGE</element>
+                                    <includes>
+                                        <include>com.nexus.api</include>
+                                    </includes>
+                                    <limits>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.78</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.67</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                                <!-- Bean CDI central de l'adaptateur : sa couverture dépend de
+                                     quarkus-jacoco ; sans l'extension, il retombe sous 15 %. -->
+                                <rule>
+                                    <element>CLASS</element>
+                                    <includes>
+                                        <include>com.nexus.api.NexusApiApplicationService</include>
+                                    </includes>
+                                    <limits>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.60</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.38</minimum>
                                         </limit>
                                     </limits>
                                 </rule>

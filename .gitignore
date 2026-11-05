@@ -10,4 +10,9 @@ Thumbs.db
 /index.scip
 /.nexus/registry/
 /.claude/settings.local.json
+/.claude/worktrees/
 /.claude/**/__pycache__/
+
+# Archgate : runtime généré (regénéré par archgate check)
+.archgate/rules.d.ts
+docs/architecture/rules.d.ts

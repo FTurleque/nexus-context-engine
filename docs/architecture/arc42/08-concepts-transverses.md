@@ -109,7 +109,8 @@ Listener management distinct : `127.0.0.1:9000` pour `/q/health`, `/q/health/rea
 - HTTP distant exige `NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA=true` ;
 - userinfo/credentials intégrés à l'URI refusés ;
 - redaction conservatrice des secrets avant embeddings et fragments de contexte ;
-- profil sémantique `content-v4` pour invalider les vecteurs historiques incompatibles après l'extension de la redaction aux scalaires sensibles.
+- profil sémantique `content-v5` pour invalider les vecteurs construits sous une politique de redaction antérieure à `secret-redaction-v6` ;
+- un fichier dont une valeur sensible dépasse la borne de redaction (4 096 caractères) est exclu seul des index lexical et sémantique et des contextes, avec un diagnostic public sans valeur ni contenu.
 
 La redaction conserve les séparateurs de lignes des blocs multilignes afin de ne pas décaler les ranges source persistés.
 

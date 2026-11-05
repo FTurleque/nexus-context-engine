@@ -91,3 +91,73 @@ Le contexte Git n'est activé que lorsque le budget global le permet et reçoit 
 - absence de cache pour un repository indisponible.
 
 `GitContextCacheQualificationBenchmarkTest` couvre Linux et Windows sur plusieurs repositories ainsi que HEAD/index/working-tree/rename/rebase/worktrees liés. Les benchmarks et tests exact-head restent l'autorité de qualification.
+
+## OpenSpec git-recency-diagnostics
+
+Spec : [`openspec/specs/git-recency-diagnostics/spec.md`](../../openspec/specs/git-recency-diagnostics/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+Cette section décrit le signal de récence Git des candidats de recherche (`GitRecencyCandidateEnricher`), distinct du provider de contexte `LocalGitContextSourceProvider` décrit plus haut.
+
+### Comportement existant vérifié
+
+| Étiquette | Fait | Source |
+|---|---|---|
+| [Existant vérifié] | Le signal est fail-open : toute exception autre que `RepositoryNotFoundException` renvoie les candidats inchangés, émet un enregistrement `System.Logger` de niveau `WARNING` `Récence Git indisponible, signal ignoré : {0}` où `{0}` est `exception.getClass().getName()`, et ajoute la raison d'explication `récence Git indisponible`. Aucune exception n'est attachée à l'enregistrement. | `core/src/main/java/com/nexus/context/source/git/GitRecencyCandidateEnricher.java:45`, `:91-99` |
+| [Existant vérifié] | Un projet hors Git (`RepositoryNotFoundException`, y compris l'absence de répertoire `.git` trouvé) renvoie les candidats inchangés avec un enregistrement `DEBUG` seulement, sans raison d'explication. | `GitRecencyCandidateEnricher.java:87-90`, `:180-186` |
+| [Existant vérifié] | Au-delà de 512 chemins candidats, ou si les commits modifient plus de 1 024 chemins chacun ou 4 096 cumulés (sur les 50 derniers commits), les candidats sont renvoyés inchangés avec la raison `récence Git ignorée : budget de chemins dépassé`. Ce comportement n'est pas dans la spec. | `GitRecencyCandidateEnricher.java:46`, `:50-53`, `:79-82`, `:100-103`, `:140-143` |
+| [Existant vérifié] | `SearchService` fournit à chaque enrichisseur un collecteur de raisons ; il ne les ajoute aux `reasons` des candidats classés que lorsque `explain` est vrai, une seule fois par raison. | `core/src/main/java/com/nexus/search/SearchService.java:57-67`, `:70-74` |
+| [Existant vérifié] | Les `reasons` d'un candidat classé alimentent celles des fragments de contexte. | `core/src/main/java/com/nexus/context/ContextFragmentFactory.java:218`, `:243`, `:258` |
+| [Existant vérifié] | Le message journalisé ne contient que le nom de classe de l'exception : le chemin du dépôt et le contenu des fichiers n'y figurent donc pas, même si le message de l'exception les cite. | `GitRecencyCandidateEnricher.java:92-96` |
+
+### Vues
+
+Vue UML séquence — Que devient un incident de récence Git, qui l'absorbe et qui en est informé ? (existant)
+
+```mermaid
+sequenceDiagram
+    participant SS as SearchService
+    participant GE as GitRecencyCandidateEnricher
+    participant JG as JGit (Repository, RevWalk)
+    participant LG as System.Logger
+    participant RC as raisons d'explication
+
+    SS->>GE: enrich(project, candidats, resultReasons::add)
+    alt plus de 512 chemins candidats
+        GE->>RC: récence Git ignorée : budget de chemins dépassé
+        GE-->>SS: candidats inchangés
+    else calcul de récence
+        GE->>JG: openRepository puis parcours des 50 derniers commits
+        alt RepositoryNotFoundException (projet hors Git)
+            GE->>LG: DEBUG Projet hors dépôt Git
+            GE-->>SS: candidats inchangés (aucune raison)
+        else autre exception (dépôt corrompu)
+            GE->>LG: WARNING Récence Git indisponible, signal ignoré : type d'exception
+            GE->>RC: récence Git indisponible
+            GE-->>SS: candidats inchangés
+        else budget de chemins modifiés dépassé
+            GE->>RC: récence Git ignorée : budget de chemins dépassé
+            GE-->>SS: candidats inchangés
+        else récence calculée
+            GE-->>SS: candidats avec signal GIT_RECENCY
+        end
+    end
+    SS->>SS: si explain, ajoute les raisons à chaque candidat classé
+```
+
+L'incident n'atteint jamais l'appelant : l'exception est absorbée, tracée sans chemin et signalée dans l'explication quand elle est demandée. Les cas « hors Git » et « budget » ne produisent pas de `WARNING`.
+
+Exigences : `git-recency-diagnostics › Un incident de récence Git est journalisé`, `git-recency-diagnostics › La trace ne divulgue ni chemin ni contenu`, `git-recency-diagnostics › L'explication signale la récence indisponible`.
+
+### Écarts et limites
+
+- [Écart] 1 — Le texte de l'exigence « La trace ne divulgue ni chemin ni contenu » est tenu par construction (seul le nom de classe est journalisé, `GitRecencyCandidateEnricher.java:95-96`). Le test `GitRecencyCandidateEnricherTest#jgitIncidentKeepsCandidatesLogsOneWarningWithoutPathAndExplainsTheMissingSignal` vérifie l'absence de chemin dans le message, mais l'exception JGit qu'il provoque (référence de branche vers un commit absent) n'est pas prouvée citer le chemin du dépôt : le scénario « Message d'exception avec chemin » est donc partiellement couvert.
+- [Écart] 2 — Le scénario « Explication après incident » n'est pas testé de bout en bout : `GitRecencyCandidateEnricherTest` vérifie l'émission de la raison par l'enrichisseur réel et `SearchServiceExplanationReasonTest` vérifie le transfert avec un enrichisseur factice ; aucun test ne chaîne l'enrichisseur réel, `SearchService` et l'explication de contexte.
+- [Écart] 3 — La spec ne mentionne pas la raison `récence Git ignorée : budget de chemins dépassé`, les bornes 512 / 1 024 / 4 096 ni le niveau `DEBUG` du cas hors Git. Ces comportements sont des faits existants non exigés.
+- Limite : les bornes de changement (1 024 par commit, 4 096 cumulés) n'ont pas de test dans `GitRecencyCandidateEnricherTest` ; seule la borne de 512 chemins candidats est testée à N et N+1 (`computesRecencyWithoutBudgetReasonAtExactlyTheCandidatePathBudget`, `failsOpenWhenCandidatePathBudgetIsExceeded`).
+- Limite : le test d'incident dépend d'un état de dépôt corrompu fabriqué dans le test ; il n'a pas été exécuté ici.
+
+### Propositions et questions ouvertes
+
+- [Proposition] Ajouter à la spec un scénario « Budget de chemins dépassé » (candidats inchangés, raison `récence Git ignorée : budget de chemins dépassé`, aucun `WARNING`) si ce comportement doit devenir contractuel ; les bornes 1 024 et 4 096 resteraient alors à tester.
+- [Proposition] Ajouter un test d'intégration qui fait échouer la récence Git sur un dépôt réel et vérifie la raison dans une explication de contexte demandée par `NexusApplication`.
+- Questions : aucune.

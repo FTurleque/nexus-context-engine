@@ -17,10 +17,17 @@ public record ContextBundle(
         Objects.requireNonNull(items, "items");
         Objects.requireNonNull(excluded, "excluded");
         Objects.requireNonNull(metadata, "metadata");
-        items = items.stream()
-                .map(ContextBundle::redact)
-                .toList();
-        excluded = com.nexus.security.PublicDiagnosticPolicy.internal().texts(excluded);
+        List<ContextItem> redacted = new java.util.ArrayList<>(items.size());
+        List<String> exclusions = new java.util.ArrayList<>(excluded);
+        for (ContextItem item : items) {
+            try {
+                redacted.add(redact(item));
+            } catch (com.nexus.security.OversizedSecretException exception) {
+                exclusions.add(com.nexus.security.OversizedSecretException.exclusion(item.path()));
+            }
+        }
+        items = List.copyOf(redacted);
+        excluded = com.nexus.security.PublicDiagnosticPolicy.internal().texts(exclusions);
         metadata = Map.copyOf(metadata);
         if (tokenBudget <= 0) {
             throw new IllegalArgumentException("tokenBudget must be greater than zero");

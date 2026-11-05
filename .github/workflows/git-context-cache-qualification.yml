@@ -18,7 +18,7 @@ on:
       - 'core/src/test/java/com/nexus/context/source/git/**'
       - 'core/src/test/java/com/nexus/benchmark/GitContextCacheQualificationBenchmarkTest.java'
       - 'docs/developer/git-context.md'
-      - 'docs/adr/0046-mettre-en-cache-le-contexte-git-dans-les-runtimes-longue-duree.md'
+      - 'docs/architecture/adr/BE-0046-mettre-en-cache-le-contexte-git-dans-les-runtimes-longue-duree.md'
       - '.github/workflows/git-context-cache-qualification.yml'
   push:
     branches:
@@ -29,7 +29,7 @@ on:
       - 'core/src/test/java/com/nexus/context/source/git/**'
       - 'core/src/test/java/com/nexus/benchmark/GitContextCacheQualificationBenchmarkTest.java'
       - 'docs/developer/git-context.md'
-      - 'docs/adr/0046-mettre-en-cache-le-contexte-git-dans-les-runtimes-longue-duree.md'
+      - 'docs/architecture/adr/BE-0046-mettre-en-cache-le-contexte-git-dans-les-runtimes-longue-duree.md'
       - '.github/workflows/git-context-cache-qualification.yml'
   workflow_dispatch:
     inputs:
@@ -56,9 +56,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             label: linux
-          - os: windows-latest
+          - os: windows-2025
             label: windows
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
@@ -66,13 +66,13 @@ jobs:
       BENCHMARK_PROFILE: ${{ inputs.profile || 'ci' }}
     steps:
       - name: Checkout exact head
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Java 21
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: '21'

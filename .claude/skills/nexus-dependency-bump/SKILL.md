@@ -9,7 +9,7 @@ argument-hint: "<dépendance> <version>"
 ## Propriété Maven (`pom.xml`)
 
 1. Modifier la propriété `<x.version>` du pom parent.
-2. Rechercher la version dans la doc courante : `git grep -n "<ancienne>" -- README.md docs ':!docs/audits'`.
+2. Rechercher la version dans la doc courante : `git grep -n "<ancienne>" -- README.md docs ':!docs/project/audits' ':!docs/project/history'`.
 3. Quarkus / SDK MCP : la version est documentée dans `docs/developer/README.md`, `docs/developer/architecture-implementation.md`, `docs/developer/rest-api.md` et vérifiée par `scripts/release/test-operational-doc-contracts.sh`.
 4. `bash .claude/scripts/contracts.sh`, puis validation complète (skill `nexus-validate`).
 
@@ -23,7 +23,7 @@ Les wrappers `mvnw`/`mvnw.cmd` sont **durcis** (ancre SHA-512 versionnée, véri
    curl -sfSLO "$U" && curl -sfSL "$U.sha512"; sha512sum apache-maven-<v>-bin.zip
    ```
    Les deux empreintes doivent être identiques.
-2. Remplacer la version dans : `mvnw` (`MAVEN_VERSION="<v>"`), `mvnw.cmd` (`SET "MAVEN_VERSION=<v>"`), `.mvn/wrapper/maven-wrapper.properties`, `config/tool-integrity.properties` (`maven.<v>.sha512=<empreinte>`), `scripts/release/test-tool-integrity-anchors.sh` (regex échappée `maven\.<v>\.sha512`), `scripts/release/test-operational-doc-contracts.sh`, `scripts/validate-phase-6.ps1`, `packaging/docker/Dockerfile` (commentaire), doc courante (README, `docs/developer/*`, arc42, registre des risques). Ne pas réécrire `docs/audits/**`.
+2. Remplacer la version dans : `mvnw` (`MAVEN_VERSION="<v>"`), `mvnw.cmd` (`SET "MAVEN_VERSION=<v>"`), `.mvn/wrapper/maven-wrapper.properties`, `config/tool-integrity.properties` (`maven.<v>.sha512=<empreinte>`), `scripts/release/test-tool-integrity-anchors.sh` (regex échappée `maven\.<v>\.sha512`), `scripts/release/test-operational-doc-contracts.sh`, `scripts/validate-phase-6.ps1`, `packaging/docker/Dockerfile` (commentaire), doc courante (README, `docs/developer/*`, arc42, registre des risques). Ne pas réécrire `docs/project/audits/**` ni `docs/project/history/**`.
 3. Préserver les CRLF de `mvnw.cmd` et des `.ps1` : outil Edit ou `perl -pi`, jamais `sed -i`.
 4. `bash .claude/scripts/contracts.sh`, build complet via le nouveau wrapper (il télécharge et vérifie l'archive), self-smoke.
 5. Ouvrir une PR dédiée, fermer la PR Dependabot en expliquant le remplacement.

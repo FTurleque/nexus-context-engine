@@ -6,7 +6,7 @@ import com.nexus.project.ProjectSourceType;
 import com.nexus.ranking.RankedCandidate;
 import com.nexus.search.CandidateType;
 import com.nexus.search.SearchCandidate;
-import org.junit.jupiter.api.Assumptions;
+import com.nexus.testsupport.SymbolicLinks;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -73,7 +73,7 @@ class ContextFragmentFactoryPathBoundaryTest {
         Path outsideDirectory = Files.createDirectory(temporaryDirectory.resolve("outside-dir"));
         Files.writeString(outsideDirectory.resolve("secret.txt"), OUTSIDE_SECRET);
         Path link = projectRoot.resolve("linked-dir");
-        assumeSymlink(link, outsideDirectory);
+        SymbolicLinks.createOrSkip(link, outsideDirectory);
 
         ContextFragmentFactory.MaterializationResult result = materialize(link.resolve("secret.txt"));
 
@@ -86,7 +86,7 @@ class ContextFragmentFactoryPathBoundaryTest {
         Files.writeString(selected, "original safe content");
         RankedCandidate candidate = candidate(selected);
         Files.delete(selected);
-        assumeSymlink(selected, outsideFile);
+        SymbolicLinks.createOrSkip(selected, outsideFile);
 
         ContextFragmentFactory.MaterializationResult result = factory().materialize(
                 project(),
@@ -100,7 +100,7 @@ class ContextFragmentFactoryPathBoundaryTest {
     @Test
     void rejectsFinalSymlinkWithoutLeakingOutsideContent() throws Exception {
         Path link = projectRoot.resolve("final-link.txt");
-        assumeSymlink(link, outsideFile);
+        SymbolicLinks.createOrSkip(link, outsideFile);
 
         ContextFragmentFactory.MaterializationResult result = materialize(link);
 
@@ -169,14 +169,6 @@ class ContextFragmentFactoryPathBoundaryTest {
                 "fixture",
                 Map.of());
         return new RankedCandidate(candidate, 1.0d, Map.of(), List.of("fixture"));
-    }
-
-    private static void assumeSymlink(Path link, Path target) {
-        try {
-            Files.createSymbolicLink(link, target);
-        } catch (IOException | UnsupportedOperationException | SecurityException exception) {
-            Assumptions.assumeTrue(false, "Symbolic links are not supported in this test environment: " + exception);
-        }
     }
 
     private static void assertRejectedWithoutSecret(ContextFragmentFactory.MaterializationResult result) {

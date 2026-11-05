@@ -29,6 +29,9 @@ fi
 grep -Eq '^maven\.3\.10\.0\.sha512=[0-9a-f]{128}$' "$INTEGRITY"
 grep -Eq '^jdtls\.1\.60\.0-202606262232\.sha256=[0-9a-f]{64}$' "$INTEGRITY"
 grep -Eq '^ollama\.0\.33\.3\.linux-amd64\.sha256=[0-9a-f]{64}$' "$INTEGRITY"
+grep -Eq '^minos\.1\.2\.0\.windows-x64\.sha256=[0-9a-f]{64}$' "$INTEGRITY"
+grep -qF "MINOS_VERSION: '1.2.0'" "$ROOT/.github/workflows/measurement-tools.yml"
+grep -qF 'minos.$env:MINOS_VERSION.windows-x64.sha256' "$ROOT/.github/workflows/measurement-tools.yml"
 grep -q 'MAVEN_VERSION="3.10.0"' "$ROOT/mvnw"
 grep -q 'MAVEN_VERSION=3.10.0' "$ROOT/mvnw.cmd"
 
@@ -104,5 +107,31 @@ if grep -q '\$checksumUrl' "$ROOT/scripts/install-jdtls.ps1"; then
   echo 'JDT LS installer still trusts a remote checksum URL' >&2
   exit 1
 fi
+
+# GitHub Actions pins: full SHA + '# vX.Y.Z', one comment per SHA and one
+# major version per action. Upstream tags are checked by hand on a bump
+# (git ls-remote), since CI has no guaranteed network access to them.
+HYGIENE="${SCRIPT_DIR}/workflow_hygiene.py"
+HYGIENE_FIXTURES="${SCRIPT_DIR}/fixtures/workflow-hygiene"
+python3 "$HYGIENE" pins "$ROOT/.github/workflows"
+# Each negative fixture must be rejected by its own rule: exit code 1 and the
+# rule's message, so a missing fixture or another rule cannot satisfy the case.
+for case in \
+  'pins-comment-mismatch|is commented' \
+  'pins-version-two-shas|is pinned on' \
+  'pins-two-majors|several major versions' \
+  'pins-not-a-version|version comment' \
+  'pins-tag-reference|not pinned by a full commit SHA'; do
+  fixture="${case%%|*}"
+  message="${case#*|}"
+  set +e
+  output="$(python3 "$HYGIENE" pins "$HYGIENE_FIXTURES/${fixture}.yml" 2>&1)"
+  status=$?
+  set -e
+  if [ "$status" -ne 1 ] || ! printf '%s\n' "$output" | grep -q "$message"; then
+    echo "workflow pin fixture ${fixture} was not rejected for '${message}' (exit ${status})" >&2
+    exit 1
+  fi
+done
 
 printf 'Pinned tool integrity anchor tests passed\n'

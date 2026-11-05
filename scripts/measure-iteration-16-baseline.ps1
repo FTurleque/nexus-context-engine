@@ -11,17 +11,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+Import-Module (Join-Path $PSScriptRoot "lib/NexusScript.psm1") -Force
 $locationPushed = $false
 $inputPath = $null
-
-function Invoke-Maven {
-    param([Parameter(Mandatory = $true)][string[]]$Arguments)
-
-    & mvn @Arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "La commande Maven a echoue avec le code $LASTEXITCODE : mvn $($Arguments -join ' ')"
-    }
-}
 
 function Resolve-OutputPath {
     param([Parameter(Mandatory = $true)][string]$Path)

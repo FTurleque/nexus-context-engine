@@ -27,7 +27,8 @@ final class SchemaMigrator {
             new Migration(7, "db/migration/V007__invalidate_legacy_repository_paths.sql"),
             new Migration(8, "db/migration/V008__indexed_substring_search.sql"),
             new Migration(9, "db/migration/V009__invalidate_quoted_secret_indexes.sql"),
-            new Migration(10, "db/migration/V010__invalidate_scalar_secret_indexes.sql"));
+            new Migration(10, "db/migration/V010__invalidate_scalar_secret_indexes.sql"),
+            new Migration(11, "db/migration/V011__invalidate_secret_format_indexes.sql"));
 
     private SchemaMigrator() {
     }

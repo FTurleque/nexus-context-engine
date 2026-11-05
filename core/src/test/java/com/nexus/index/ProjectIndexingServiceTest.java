@@ -335,6 +335,46 @@ class ProjectIndexingServiceTest {
         assertEquals(new IndexStatistics(1, 4, 1), deepAgain.statistics());
     }
 
+    @Test
+    void anOversizedSecretExcludesOnlyItsFileFromDerivedIndexes() throws Exception {
+        Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("oversized"));
+        String value = "y".repeat(5_000);
+        Files.writeString(projectRoot.resolve("first.md"), "# firstMarker\n");
+        Files.writeString(projectRoot.resolve("second.md"), "# secondMarker\n");
+        Files.writeString(projectRoot.resolve("leak.md"), "# leakMarker\npassword = \"" + value + "\"\n");
+
+        NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("oversized-home"));
+        SqliteDatabase database = new SqliteDatabase(paths);
+        ProjectRepository projectRepository = new SqliteProjectRepository(database);
+        ProjectRegistry registry = new ProjectRegistry(projectRepository);
+        ProjectDescriptor project = registry.register(projectRoot, "oversized");
+        LuceneSearchIndex searchIndex = new LuceneSearchIndex(paths);
+        ProjectIndexingService service = new ProjectIndexingService(
+                projectRepository,
+                new SqliteIndexRepository(database),
+                new ProjectScanner(),
+                List.of(new MarkdownLanguageAnalyzer()),
+                searchIndex);
+
+        IndexingReport report = service.index(project.id());
+
+        assertEquals(IndexStatus.READY, registry.get(project.id()).indexStatus());
+        assertEquals(2, luceneDocumentCount(paths, project));
+        assertEquals(1, searchIndex.search(project.id(), "firstMarker", 10).size());
+        assertEquals(1, searchIndex.search(project.id(), "secondMarker", 10).size());
+        assertTrue(searchIndex.search(project.id(), "leakMarker", 10).isEmpty());
+        assertEquals(List.of("INDEX_REDACTION_LIMIT: fichier exclu des index lexical et sémantique : leak.md"
+                        + " (valeur sensible dépassant la limite de redaction)"),
+                report.diagnostics().stream().filter(diagnostic -> diagnostic.startsWith("INDEX_REDACTION")).toList());
+        assertFalse(String.join("\n", report.diagnostics()).contains("yyyy"));
+
+        Files.writeString(projectRoot.resolve("first.md"), "# firstMarker\npassword = \"" + value + "\"\n");
+        IndexingReport incremental = service.index(project.id());
+        assertFalse(incremental.fullSearchRebuild());
+        assertTrue(searchIndex.search(project.id(), "firstMarker", 10).isEmpty());
+        assertEquals(1, luceneDocumentCount(paths, project));
+    }
+
     private static int luceneDocumentCount(NexusPaths paths, ProjectDescriptor project) throws Exception {
         try (Directory directory = FSDirectory.open(paths.projectLuceneIndex(project.id()));
              DirectoryReader reader = DirectoryReader.open(directory)) {

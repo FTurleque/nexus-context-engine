@@ -45,10 +45,13 @@ class MinosRealIntegrationTest {
         Assumptions.assumeTrue(Boolean.getBoolean(REPLAY_PROPERTY),
                 () -> "opt-in: provide -D" + REPLAY_PROPERTY + "=true via the validation script");
 
+        // Une fois le replay demandé, un bac à sable incomplet est un échec, pas un test ignoré.
+        assertTrue(Files.isRegularFile(EXPORT_FILE),
+                () -> "missing MINOS export in deterministic replay sandbox: " + EXPORT_FILE);
+        assertTrue(Files.isDirectory(REPLAY_ROOT.resolve("fixture")),
+                () -> "missing fixture in deterministic replay sandbox: " + REPLAY_ROOT.resolve("fixture"));
         NexusPaths paths = new NexusPaths(REPLAY_ROOT.resolve("nexus-home"));
         Path fixture = REPLAY_ROOT.resolve("fixture").toRealPath();
-        Assumptions.assumeTrue(Files.isRegularFile(EXPORT_FILE),
-                () -> "missing MINOS export in deterministic replay sandbox");
 
         String payload = Files.readString(EXPORT_FILE, StandardCharsets.UTF_8);
         CodeIntelligenceSnapshot exported = new MinosCodeIndexImporter().importPayload(fixture, payload);
@@ -59,7 +62,8 @@ class MinosRealIntegrationTest {
         SqliteDatabase database = new SqliteDatabase(paths);
         ProjectRepository projectRepository = new SqliteProjectRepository(database);
         IndexRepository indexRepository = new SqliteIndexRepository(database);
-        ProjectDescriptor project = new ProjectRegistry(projectRepository).register(fixture, "m13-fixture");
+        ProjectRegistry projectRegistry = new ProjectRegistry(projectRepository);
+        ProjectDescriptor registered = projectRegistry.register(fixture, "m13-fixture");
         LuceneSearchIndex searchIndex = new LuceneSearchIndex(paths);
         ProjectIndexingService indexingService = new ProjectIndexingService(
                 projectRepository,
@@ -67,8 +71,10 @@ class MinosRealIntegrationTest {
                 new ProjectScanner(),
                 List.of(new JavaParserLanguageAnalyzer(), new MarkdownLanguageAnalyzer()),
                 searchIndex);
-        indexingService.rebuild(project.id());
-        indexRepository.replaceExternalCodeIntelligence(project.id(), exported);
+        indexingService.rebuild(registered.id());
+        indexRepository.replaceExternalCodeIntelligence(registered.id(), exported);
+        // Le descripteur rendu par register() reste NOT_INDEXED : la recherche exige l'état READY relu.
+        ProjectDescriptor project = projectRegistry.get(registered.id());
 
         List<IndexedSymbol> indexedSymbols = indexRepository.findSymbols(project.id());
         assertTrue(indexedSymbols.stream().anyMatch(symbol ->
