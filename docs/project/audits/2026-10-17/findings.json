@@ -18,7 +18,7 @@
    "sprint": 1,
    "depends_on": [],
    "bloque": [],
-   "statut": "Partiel",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
@@ -27,14 +27,18 @@
     {
      "date": "2026-10-30",
      "statut": "Partiel"
+    },
+    {
+     "date": "2026-11-05",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Procédure de traitement des alertes dans SECURITY.md (PR #276) ; activation en attente du mainteneur",
+   "changement": "Procédure de traitement des alertes dans SECURITY.md (PR #276) ; réglages de sécurité activés par le mainteneur",
    "verification": {
-    "date": "2026-10-30",
-    "commit": "4024c874",
-    "verdict": "Partiel",
-    "preuve": "security_and_analysis : dependabot_security_updates, secret_scanning et secret_scanning_push_protection « disabled » ; vulnerability-alerts répond 404 (tâche 1.1)",
+    "date": "2026-11-05",
+    "commit": "e6d81f8e",
+    "verdict": "Fermé",
+    "preuve": "security_and_analysis : dependabot_security_updates, secret_scanning et secret_scanning_push_protection « enabled » ; vulnerability-alerts répond 204 ; 0 alerte Dependabot, 0 alerte secret scanning, 0 alerte code scanning ouvertes (tâches 1.1 et 1.3)",
     "reserve": null
    }
   },
@@ -165,7 +169,7 @@
    "sprint": 1,
    "depends_on": [],
    "bloque": [],
-   "statut": "Partiel",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
@@ -174,14 +178,18 @@
     {
      "date": "2026-10-30",
      "statut": "Partiel"
+    },
+    {
+     "date": "2026-11-05",
+     "statut": "Fermé"
     }
    ],
-   "changement": "PR #265 (4aa90dfa) et #278 (4024c874) ; ajout au ruleset en attente du mainteneur",
+   "changement": "PR #265 (4aa90dfa) et #278 (4024c874) ; « Hermetic scale benchmark » ajouté au ruleset par le mainteneur",
    "verification": {
-    "date": "2026-10-30",
-    "commit": "4024c874",
-    "verdict": "Partiel",
-    "preuve": "« Hermetic scale benchmark » produit sur toute PR et conclu en succès hors chemins surveillés (PR #278) ; absent des required_status_checks du ruleset « Protect main & develop » (tâche 2.4)",
+    "date": "2026-11-05",
+    "commit": "e6d81f8e",
+    "verdict": "Fermé",
+    "preuve": "« Hermetic scale benchmark » produit sur toute PR et conclu en succès sans mesure hors chemins surveillés (run 41927606261, PR #293, 8 s) ; présent dans les required_status_checks du ruleset « Protect main & develop » (gh api repos/FTurleque/nexus-context-engine/rulesets/20503835)",
     "reserve": null
    }
   },

@@ -355,7 +355,7 @@ WebFetch https://github.com/FTurleque/nexus-context-engine/actions/workflows/rel
 
 - **Axe** : Dépendances, Sécurité · **Effort** : S · **Sprint** : S1 · Remettre les mesures d'aplomb
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Partiel · **Changement** : Procédure de traitement des alertes dans SECURITY.md (PR #276) ; activation en attente du mainteneur · **Vérification du 2026-10-30** (`4024c874`) : security_and_analysis : dependabot_security_updates, secret_scanning et secret_scanning_push_protection « disabled » ; vulnerability-alerts répond 404 (tâche 1.1)
+- **Statut** : Fermé · **Changement** : Procédure de traitement des alertes dans SECURITY.md (PR #276) ; réglages de sécurité activés par le mainteneur · **Vérification du 2026-11-05** (`e6d81f8e`) : security_and_analysis : dependabot_security_updates, secret_scanning et secret_scanning_push_protection « enabled » ; vulnerability-alerts répond 204 ; 0 alerte Dependabot, 0 alerte secret scanning, 0 alerte code scanning ouvertes (tâches 1.1 et 1.3)
 
 **Preuve**
 
@@ -1191,7 +1191,7 @@ grep -ho 'uses: …# …' .github/workflows/*.yml | uniq -c → `11 actions/chec
 
 - **Axe** : Dépendances, Tests · **Effort** : S · **Sprint** : S1 · Remettre les mesures d'aplomb
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Partiel · **Changement** : PR #265 (4aa90dfa) et #278 (4024c874) ; ajout au ruleset en attente du mainteneur · **Vérification du 2026-10-30** (`4024c874`) : « Hermetic scale benchmark » produit sur toute PR et conclu en succès hors chemins surveillés (PR #278) ; absent des required_status_checks du ruleset « Protect main & develop » (tâche 2.4)
+- **Statut** : Fermé · **Changement** : PR #265 (4aa90dfa) et #278 (4024c874) ; « Hermetic scale benchmark » ajouté au ruleset par le mainteneur · **Vérification du 2026-11-05** (`e6d81f8e`) : « Hermetic scale benchmark » produit sur toute PR et conclu en succès sans mesure hors chemins surveillés (run 41927606261, PR #293, 8 s) ; présent dans les required_status_checks du ruleset « Protect main & develop » (tâche 2.4)
 
 **Preuve**
 
