@@ -31,16 +31,17 @@ Il impose actuellement :
 - interdiction de suppression ;
 - interdiction des non-fast-forward / force pushes ;
 - bypass `Repository admin` limité au mode `pull_request` ;
-- sept checks permanents requis :
+- huit checks permanents requis :
   - `Windows gate` ;
   - `Linux reactor Maven build` ;
   - `CodeQL Java analysis` ;
   - `OSV new-vulnerability delta gate / osv-scan` ;
   - `Build aggregate reactor SBOM` ;
   - `OSV aggregate SBOM vulnerability gate / osv-scan` ;
-  - `SonarCloud Code Analysis`.
+  - `SonarCloud Code Analysis` ;
+  - `Hermetic scale benchmark`.
 
-`Hermetic scale benchmark` (`.github/workflows/scale-benchmark.yml`) est conçu pour être le huitième check requis : il est produit sur toute PR et conclut en succès sans mesurer lorsque la PR ne touche aucun chemin surveillé (voir [scale-regression-benchmark.md](scale-regression-benchmark.md)). Il devient requis lorsque le mainteneur l'ajoute au ruleset `Protect main & develop` ; tant qu'il n'y figure pas, un rouge de ce check est traité comme bloquant en revue.
+`Hermetic scale benchmark` (`.github/workflows/scale-benchmark.yml`) est produit sur toute PR et conclut en succès sans mesurer lorsque la PR ne touche aucun chemin surveillé (voir [scale-regression-benchmark.md](scale-regression-benchmark.md)) : il peut donc être requis sans laisser en attente les PR qui ne touchent pas ses chemins.
 
 NXA3-14 / #130 est satisfait pour `develop`. Le même ruleset couvre également `main`.
 
@@ -93,3 +94,18 @@ required checks = politique approuvée
 ```
 
 Aucune approbation humaine additionnelle ni resynchronisation stricte de branche n'est requise par le modèle solo courant. Si le projet passe un jour à plusieurs mainteneurs, cette section devra être revue explicitement avant de changer les règles GitHub.
+
+## OpenSpec repository-security-settings
+
+Spec : [`openspec/specs/repository-security-settings/spec.md`](../../openspec/specs/repository-security-settings/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+Le dépôt public est surveillé en continu, indépendamment des PR : les gates OSV des PR ne couvrent que le code en revue, les alertes GitHub couvrent l'état fusionné.
+
+### Comportement existant vérifié
+
+- **[Existant vérifié]** `gh api repos/FTurleque/nexus-context-engine --jq '.security_and_analysis'` renvoie `dependabot_security_updates`, `secret_scanning` et `secret_scanning_push_protection` à `enabled`, et `gh api repos/FTurleque/nexus-context-engine/vulnerability-alerts -i` répond `204` (lecture du 2026-11-05). Aucune alerte Dependabot ni secret scanning n'est ouverte à cette date.
+- **[Existant vérifié]** La procédure de traitement (délai de 7 jours, triage, fermeture `used_in_tests` d'une fixture de redaction avec son chemin) vit dans [`SECURITY.md`](../../SECURITY.md#traitement-des-alertes-de-sécurité) ; `scripts/release/test-operational-doc-contracts.sh:460-472` exige ses sections, le motif `used_in_tests` et l'existence de la fixture citée.
+
+### Écarts et limites
+
+- **[Limite]** Les réglages sont modifiés à la main par le mainteneur ; aucun contrôle automatique du dépôt ne détecte leur désactivation. La vérification reste la lecture `gh api` ci-dessus.
