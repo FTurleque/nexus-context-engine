@@ -629,3 +629,19 @@ Le diagramme répond à la question « un test opt-in nommé par la spec est-il 
 - **[Proposition]** Ajouter un contrôle (script de contrat ou test) qui liste les classes de `src/test` portant `@EnabledIfSystemProperty` ou une `Assumptions` sur une propriété `nexus.*` et exige un lanceur dans `.github/workflows`, pour généraliser l'exigence aux treize classes actuelles et aux suivantes.
 - **[Proposition]** Ajouter un test de non-régression de `IndexRepository` (réflexion : aucune méthode `default` sans test, ou aucune méthode `default`) pour fermer le scénario `Couverture du port`.
 - **[Question]** L'exigence de durée vise-t-elle aussi les garde-fous `assertTimeoutPreemptively` et comparaisons de `OllamaEmbeddingProviderResponseLimitTest` (marge exactement égale à cinq fois) ? La spec ne nomme que cinq classes dans le scénario `Runner chargé`.
+
+## OpenSpec test-filesystem-isolation
+
+Spec : [`openspec/specs/test-filesystem-isolation/spec.md`](../../openspec/specs/test-filesystem-isolation/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+Un test crée tous ses fichiers sous le `@TempDir` que JUnit nettoie, y compris la cible « hors projet » d'un test d'évasion : la racine du projet simulé est `temporaryDirectory.resolve("project")` et la cible externe un autre enfant du `@TempDir`.
+
+### Comportement existant vérifié
+
+- **[Existant vérifié]** `NativeProjectCustomizationDetectorTest` place la racine sous `temporaryDirectory.resolve("project")` (`core/src/test/java/com/nexus/context/source/NativeProjectCustomizationDetectorTest.java:29`) et les cibles externes sous `outside-agents` et `outside-settings.json` (`:34`, `:47`).
+- **[Existant vérifié]** `AiSkillsRegistryProviderTest` suit le même schéma (`core/src/test/java/com/nexus/context/source/skill/AiSkillsRegistryProviderTest.java:31`, `:107`, `:130`).
+- **[Existant vérifié]** `git grep -n "temporaryDirectory.resolveSibling" -- core/src/test` ne renvoie rien (2026-11-05).
+
+### Écarts et limites
+
+- **[Limite]** Aucun contrôle automatique n'empêche un nouveau test de créer un fichier à côté du `@TempDir` ; la propriété repose sur la revue et sur le `git grep` ci-dessus.

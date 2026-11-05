@@ -22,7 +22,7 @@ Ce workflow s'exécute sur **toute** pull request vers `develop` et `main` : son
 
 Le groupe de concurrence commence par `github.workflow`, qui désigne le workflow appelant en `workflow_call`. Sur une PR qui modifie le wrapper, le run direct (`Hermetic scale benchmark`) et celui du wrapper (`benchmark / Hermetic scale benchmark`) ont donc des groupes distincts et aucun n'annule l'autre.
 
-Le check `Hermetic scale benchmark` est conçu pour être obligatoire dans le ruleset `Protect main & develop`, ce qui suppose que le mainteneur l'y ajoute. Tant qu'il n'y figure pas, un rouge sur une PR est traité comme bloquant par revue, et le run post-merge sur `develop` reprend tout merge qui l'aurait contourné.
+Le check `Hermetic scale benchmark` est obligatoire dans le ruleset `Protect main & develop`, et le run post-merge sur `develop` reprend toute combinaison de merges qui touche un chemin surveillé.
 
 Pour vérifier la détection sur une PR de documentation seule, ouvrir le run du check `Hermetic scale benchmark` : l'étape `Detect scale-sensitive changes` affiche la notice, les étapes suivantes sont marquées ignorées et le job dure quelques secondes.
 
@@ -160,3 +160,18 @@ FTS5/trigram est retenu comme index secondaire **local, dérivé et reconstructi
 La qualification de #216 n'est acquise que si le HEAD exact passe le reactor Linux/Windows, les tests de migration/replay, CodeQL/OSV/SonarCloud et la courbe SQLite 10k→1M avec les plafonds absolus ci-dessus.
 
 Les résultats historiques du protocole 2 restent disponibles dans [`scale-regression-results.md`](../project/history/scale-regression-results.md) comme référence pré-FTS, et non comme baseline relative homogène.
+
+## OpenSpec scale-benchmark-gate
+
+Spec : [`openspec/specs/scale-benchmark-gate/spec.md`](../../openspec/specs/scale-benchmark-gate/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+### Comportement existant vérifié
+
+- **[Existant vérifié]** Le déclencheur `pull_request` de `.github/workflows/scale-benchmark.yml:11-14` ne filtre aucun chemin. L'étape `Detect scale-sensitive changes` (`:48-105`) compare le diff de la PR à `WATCHED_PATHS` (`:58`) et écrit `measure=false` avec la notice « Aucun chemin surveillé n'est touché » (`:102-105`) ; les étapes de mesure sont conditionnées par `measure == 'true'` (`:109` à `:215`).
+- **[Existant vérifié]** `scripts/release/test-operational-doc-contracts.sh:401-420` fait échouer les contrats si le filtre push de `develop-push-scale-benchmark.yml` diverge de `WATCHED_PATHS` ou si le déclencheur `pull_request` retrouve un filtre `paths` ; l'auto-test `:437-458` vérifie que les trois dérives sont détectées, dont un chemin ajouté à `WATCHED_PATHS` seul.
+- **[Existant vérifié]** Le ruleset `Protect main & develop` liste `Hermetic scale benchmark` dans sa règle `required_status_checks` (lecture `gh api repos/FTurleque/nexus-context-engine/rulesets/<id>` du 2026-11-05).
+
+### Écarts et limites
+
+- **[Limite]** Le comportement du check sur une PR (succès sans mesure ou mesure) ne se prouve que par un run GitHub Actions ; aucun test local ne l'exécute.
+- **[Limite]** La présence du check dans le ruleset n'est contrôlée par aucun script du dépôt.
