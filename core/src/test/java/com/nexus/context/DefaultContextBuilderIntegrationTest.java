@@ -6,6 +6,7 @@ import com.nexus.context.source.git.GitContextResult;
 import com.nexus.context.source.git.GitContextSourceProvider;
 import com.nexus.index.IndexRepository;
 import com.nexus.index.ProjectIndexingService;
+import com.nexus.index.ProjectIndexingServices;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.scan.ProjectScanner;
 import com.nexus.persistence.sqlite.SqliteDatabase;
@@ -190,7 +191,7 @@ class DefaultContextBuilderIntegrationTest {
         IndexRepository indexRepository = new SqliteIndexRepository(database);
         ProjectDescriptor project = new ProjectRegistry(projectRepository).register(projectRoot, name);
         SearchIndex searchIndex = new LuceneSearchIndex(paths);
-        ProjectIndexingService indexingService = new ProjectIndexingService(
+        ProjectIndexingService indexingService = ProjectIndexingServices.of(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),

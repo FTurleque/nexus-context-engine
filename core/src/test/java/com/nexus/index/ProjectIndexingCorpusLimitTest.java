@@ -40,7 +40,7 @@ class ProjectIndexingCorpusLimitTest {
         ProjectRegistry registry = new ProjectRegistry(projects);
         ProjectDescriptor project = registry.register(projectRoot, "corpus-budget");
 
-        ProjectIndexingService service = new ProjectIndexingService(
+        ProjectIndexingService service = ProjectIndexingServices.of(
                 projects,
                 index,
                 new ProjectScanner(1024L, 2, 1024L),

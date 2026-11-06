@@ -62,7 +62,7 @@ class ProjectIndexingServiceTimeoutTest {
             }
         };
 
-        ProjectIndexingService service = new ProjectIndexingService(
+        ProjectIndexingService service = ProjectIndexingServices.withProviderTimeout(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),
