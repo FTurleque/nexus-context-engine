@@ -23,18 +23,33 @@ final class SqliteFileWriter {
 
     void applyChanges(UUID projectId, List<IndexedFileUpdate> updates, Set<String> removedPaths) {
         try {
-            database.writeTransaction("apply index changes for project " + projectId, connection -> {
-                deleteRemovedFiles(connection, projectId, removedPaths);
-                for (IndexedFileUpdate update : updates) {
-                    long fileId = upsertFile(connection, projectId, update.file());
-                    replaceAnalysis(connection, projectId, fileId, update);
-                }
-                if (!updates.isEmpty() || !removedPaths.isEmpty()) {
-                    bumpGeneration(connection, projectId);
-                }
-            });
+            database.writeTransaction("apply index changes for project " + projectId,
+                    connection -> {
+                        writeChanges(connection, projectId, updates, removedPaths);
+                    });
         } catch (SQLException exception) {
             throw persistence("Impossible de mettre à jour l'index SQLite du projet " + projectId, exception);
+        }
+    }
+
+    /** Corps de la transaction d'indexation ; la transaction reste possédée par l'appelant (ADR-0051). */
+    static void writeChanges(
+            Connection connection,
+            UUID projectId,
+            List<IndexedFileUpdate> updates,
+            Set<String> removedPaths) throws SQLException {
+        deleteRemovedFiles(connection, projectId, removedPaths);
+        if (!updates.isEmpty()) {
+            // Instructions préparées une fois par transaction, réutilisées pour chaque fichier.
+            try (FileStatements statements = new FileStatements(connection, projectId)) {
+                for (IndexedFileUpdate update : updates) {
+                    long fileId = statements.upsertFile(update.file());
+                    statements.replaceAnalysis(fileId, update);
+                }
+            }
+        }
+        if (!updates.isEmpty() || !removedPaths.isEmpty()) {
+            bumpGeneration(connection, projectId);
         }
     }
 
@@ -54,92 +69,137 @@ final class SqliteFileWriter {
         }
     }
 
-    static long upsertFile(Connection connection, UUID projectId, ScannedFile file) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT INTO indexed_files(
-                    project_id, relative_path, language, size_bytes,
-                    content_hash, modified_at, estimated_tokens, category)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(project_id, relative_path) DO UPDATE SET
-                    language = excluded.language,
-                    size_bytes = excluded.size_bytes,
-                    content_hash = excluded.content_hash,
-                    modified_at = excluded.modified_at,
-                    estimated_tokens = excluded.estimated_tokens,
-                    category = excluded.category
-                """)) {
-            statement.setString(1, projectId.toString());
-            statement.setString(2, file.relativePath());
-            statement.setString(3, file.language());
-            statement.setLong(4, file.sizeBytes());
-            statement.setString(5, file.contentHash());
-            statement.setString(6, file.modifiedAt().toString());
-            statement.setInt(7, file.estimatedTokens());
-            statement.setString(8, file.category().name());
-            statement.executeUpdate();
+    private static final String UPSERT_FILE_SQL = """
+            INSERT INTO indexed_files(
+                project_id, relative_path, language, size_bytes,
+                content_hash, modified_at, estimated_tokens, category)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(project_id, relative_path) DO UPDATE SET
+                language = excluded.language,
+                size_bytes = excluded.size_bytes,
+                content_hash = excluded.content_hash,
+                modified_at = excluded.modified_at,
+                estimated_tokens = excluded.estimated_tokens,
+                category = excluded.category
+            RETURNING id
+            """;
+    private static final String DELETE_RELATIONS_SQL =
+            "DELETE FROM symbol_relations WHERE file_id = ? AND source_provider = ?";
+    private static final String DELETE_SYMBOLS_SQL =
+            "DELETE FROM symbols WHERE file_id = ? AND source_provider = ?";
+
+    /**
+     * Instructions d'écriture d'un fichier, préparées une fois pour toute la transaction. Le nombre
+     * d'instructions préparées ne dépend donc pas du nombre de fichiers écrits.
+     */
+    private static final class FileStatements implements AutoCloseable {
+        private final String projectId;
+        private final PreparedStatement upsert;
+        private final PreparedStatement deleteRelations;
+        private final PreparedStatement deleteSymbols;
+        private final SqliteBatchInsert symbols;
+        private final SqliteBatchInsert relations;
+
+        FileStatements(Connection connection, UUID projectId) throws SQLException {
+            this.projectId = projectId.toString();
+            PreparedStatement preparedUpsert = null;
+            PreparedStatement preparedDeleteRelations = null;
+            PreparedStatement preparedDeleteSymbols = null;
+            try {
+                preparedUpsert = connection.prepareStatement(UPSERT_FILE_SQL);
+                preparedDeleteRelations = connection.prepareStatement(DELETE_RELATIONS_SQL);
+                preparedDeleteSymbols = connection.prepareStatement(DELETE_SYMBOLS_SQL);
+            } catch (SQLException failure) {
+                closeQuietly(failure, preparedUpsert, preparedDeleteRelations, preparedDeleteSymbols);
+                throw failure;
+            }
+            this.upsert = preparedUpsert;
+            this.deleteRelations = preparedDeleteRelations;
+            this.deleteSymbols = preparedDeleteSymbols;
+            this.symbols = new SqliteBatchInsert(connection, SqliteBatchInsert.Table.SYMBOLS);
+            this.relations = new SqliteBatchInsert(connection, SqliteBatchInsert.Table.RELATIONS);
         }
 
-        try (PreparedStatement statement = connection.prepareStatement(
-                "SELECT id FROM indexed_files WHERE project_id = ? AND relative_path = ?")) {
-            statement.setString(1, projectId.toString());
-            statement.setString(2, file.relativePath());
-            try (ResultSet resultSet = statement.executeQuery()) {
+        /** Upsert du fichier ; l'identifiant vient de {@code RETURNING id}, sans relecture. */
+        long upsertFile(ScannedFile file) throws SQLException {
+            upsert.setString(1, projectId);
+            upsert.setString(2, file.relativePath());
+            upsert.setString(3, file.language());
+            upsert.setLong(4, file.sizeBytes());
+            upsert.setString(5, file.contentHash());
+            upsert.setString(6, file.modifiedAt().toString());
+            upsert.setInt(7, file.estimatedTokens());
+            upsert.setString(8, file.category().name());
+            try (ResultSet resultSet = upsert.executeQuery()) {
                 if (!resultSet.next()) {
-                    throw new SQLException("Fichier indexé introuvable après upsert : " + file.relativePath());
+                    throw new SQLException("Fichier indexé sans identifiant après upsert : " + file.relativePath());
                 }
                 return resultSet.getLong(1);
             }
         }
-    }
 
-    static void replaceAnalysis(
-            Connection connection,
-            UUID projectId,
-            long fileId,
-            IndexedFileUpdate update) throws SQLException {
-        try (PreparedStatement deleteRelations = connection.prepareStatement(
-                "DELETE FROM symbol_relations WHERE file_id = ? AND source_provider = ?");
-             PreparedStatement deleteSymbols = connection.prepareStatement(
-                     "DELETE FROM symbols WHERE file_id = ? AND source_provider = ?")) {
+        void replaceAnalysis(long fileId, IndexedFileUpdate update) throws SQLException {
             deleteRelations.setLong(1, fileId);
             deleteRelations.setString(2, EMBEDDED_SOURCE_PROVIDER);
             deleteRelations.executeUpdate();
             deleteSymbols.setLong(1, fileId);
             deleteSymbols.setString(2, EMBEDDED_SOURCE_PROVIDER);
             deleteSymbols.executeUpdate();
-        }
-        insertSymbols(connection, fileId, update.analysis().symbols());
-        insertRelations(connection, projectId, fileId, update.analysis().relations());
-    }
-
-    static void insertSymbols(Connection connection, long fileId, List<CodeSymbol> symbols)
-            throws SQLException {
-        if (symbols.isEmpty()) {
-            return;
-        }
-        try (var statement = new SqliteBatchInsert(connection, SqliteBatchInsert.Table.SYMBOLS)) {
-            for (CodeSymbol symbol : symbols) {
-                statement.add(fileId, symbol.kind().name(), symbol.name(), symbol.qualifiedName(),
+            for (CodeSymbol symbol : update.analysis().symbols()) {
+                symbols.add(fileId, symbol.kind().name(), symbol.name(), symbol.qualifiedName(),
                         symbol.signature(), symbol.startLine(), symbol.endLine(), symbol.sourceProvider());
             }
-            statement.flush();
-        }
-    }
-
-    static void insertRelations(
-            Connection connection,
-            UUID projectId,
-            long fileId,
-            List<SymbolRelation> relations) throws SQLException {
-        if (relations.isEmpty()) {
-            return;
-        }
-        try (var statement = new SqliteBatchInsert(connection, SqliteBatchInsert.Table.RELATIONS)) {
-            for (SymbolRelation relation : relations) {
-                statement.add(projectId.toString(), fileId, relation.kind().name(), relation.source(),
+            symbols.flush();
+            for (SymbolRelation relation : update.analysis().relations()) {
+                relations.add(projectId, fileId, relation.kind().name(), relation.source(),
                         relation.target(), relation.confidence(), relation.sourceProvider());
             }
-            statement.flush();
+            relations.flush();
+        }
+
+        @Override
+        public void close() throws SQLException {
+            SQLException failure = null;
+            try {
+                symbols.close();
+            } catch (SQLException closeFailure) {
+                failure = closeFailure;
+            }
+            try {
+                relations.close();
+            } catch (SQLException closeFailure) {
+                failure = merge(failure, closeFailure);
+            }
+            for (PreparedStatement statement : new PreparedStatement[] {upsert, deleteRelations, deleteSymbols}) {
+                try {
+                    statement.close();
+                } catch (SQLException closeFailure) {
+                    failure = merge(failure, closeFailure);
+                }
+            }
+            if (failure != null) {
+                throw failure;
+            }
+        }
+
+        private static SQLException merge(SQLException primary, SQLException secondary) {
+            if (primary == null) {
+                return secondary;
+            }
+            primary.addSuppressed(secondary);
+            return primary;
+        }
+
+        private static void closeQuietly(SQLException primary, PreparedStatement... statements) {
+            for (PreparedStatement statement : statements) {
+                if (statement != null) {
+                    try {
+                        statement.close();
+                    } catch (SQLException closeFailure) {
+                        primary.addSuppressed(closeFailure);
+                    }
+                }
+            }
         }
     }
 }
