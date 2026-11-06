@@ -588,6 +588,7 @@ Cette section complète la procédure de test ci-dessus par les propriétés de 
 | `ProjectScannerCorpusBudgetBenchmarkTest` | `nexus.scale.benchmark.enabled` | `scanner-corpus-benchmark.yml` (`:79-80`) |
 | `GitContextCacheQualificationBenchmarkTest` | `nexus.git.cache.benchmark.enabled` | `git-context-cache-qualification.yml` (`:92-94`) |
 
+- **[Existant vérifié]** `IndexingHeapPeakBenchmarkTest` porte la même propriété `nexus.scale.benchmark.enabled` mais n'a volontairement aucun workflow : c'est un relevé manuel du pic de heap d'un rebuild complet, décrit dans [indexing-pipeline.md](indexing-pipeline.md#reproduire-les-mesures). Il n'est pas compté parmi les treize classes ci-dessus.
 - **[Existant vérifié]** Le contrat `scripts/release/test-final-audit-contracts.sh:215-231` épingle les cinq tests nommés par la spec (`MinosRealIntegrationTest`, `LargeScaleSearchBaselineTest`, `SmallDeltaIndexingBaselineTest`, `SemanticSearchBenchmarkTest`, `RealSemanticRetrievalDiagnosticTest`, lignes 219-223), exige qu'ils soient documentés dans `docs/developer/ci-and-supply-chain.md` et vérifie la ligne `-Dtest=MinosRealIntegrationTest` du script (`:230-231`). `RealSemanticSearchBenchmarkTest` est contrôlé à part (`:149` et `:165`). Le contrat ne parcourt pas `src/test` : un nouveau test opt-in ne serait pas détecté.
 
 ### Vues

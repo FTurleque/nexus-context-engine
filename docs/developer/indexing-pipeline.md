@@ -281,6 +281,42 @@ classDiagram
     AnalysisResult --> SymbolRelation
 ```
 
+## 9. Coûts mesurés du pipeline
+
+Cette section porte les conclusions durables des mesures de coût du pipeline ; les valeurs relevées, leur date, leur environnement et leur protocole sont dans [le relevé du 2026-11-07](../project/history/indexing-heap-and-hashing-measures-2026-11-07.md).
+
+### Rétention des analyses et écriture SQLite
+
+`IndexDocumentPublisher.publish` borne les **documents** retenus (128 fichiers ou 16 MiB par lot), mais accumule les `IndexedFileUpdate` de **tous** les fichiers modifiés jusqu'à l'écriture SQLite unique (`indexRepository.applyChanges`). Le heap vivant d'un rebuild complet croît donc linéairement avec le nombre de fichiers modifiés, de l'ordre de quelques Kio par fichier pour des sources Java courants (valeur dans le relevé), et non avec la taille d'un lot. Le plafond de `NEXUS_MAX_INDEX_FILES` (100 000 par défaut, voir [indexing-corpus-limits.md](indexing-corpus-limits.md)) borne cette croissance sans la rendre proportionnelle au lot.
+
+Écrire les analyses dans SQLite au rythme des flushs, **dans la transaction d'indexation unique**, n'est pas viable : la transaction resterait ouverte pendant toute l'indexation (scan, analyse, Lucene) au lieu de la seule écriture finale. SQLite n'admet qu'un écrivain à la fois et la politique de reprise est de 5 s de `busy_timeout` et deux tentatives (voir [sqlite-write-contention.md](sqlite-write-contention.md)) : tout autre écrivain, y compris l'indexation d'un autre projet, échouerait en `SQLITE_BUSY` dès que l'indexation dépasse une dizaine de secondes. La durée de la transaction d'écriture finale d'aujourd'hui représente déjà une fraction mesurable de la durée d'indexation ; la tenir pendant toute l'indexation multiplie le temps de verrou d'un facteur de l'ordre de vingt.
+
+Conclusion pour la tâche 2.2 de `sprint-05-indexation-et-ecriture-sqlite` : l'alternative du design D2 est retenue, c'est-à-dire une **table de staging** alimentée par de courtes transactions au rythme des flushs, puis vidée dans les tables canoniques par la transaction finale (migration dédiée et ADR complétant ADR-0051 et ADR-0052). La génération reste publiée à la fin et un échec laisse la génération précédente intacte.
+
+### Double hachage
+
+`ProjectScanner` hache chaque fichier retenu (`FileHasher.sha256`), au scan initial puis au scan final de contrôle de cohérence ; `IndexDocumentPublisher.publish` relit en plus les octets des fichiers modifiés et les hache en mémoire. `ProjectScannerCorpusBudgetBenchmarkTest` rapporte la part du hachage seul dans un scan complet (`hashingSmallFiles`, `hashingMediumFiles`, scan initial et scan final).
+
+Décision du design D3 : **aucun raccourci par taille et date de modification n'est introduit**, ADR-0023 reste inchangé.
+
+- Le coût relevé par fichier est le même pour des fichiers de quelques dizaines d'octets et de 16 Kio : il vient de l'ouverture du fichier (`SafeFileIO.newInputStreamNoFollow` : validation du chemin sans suivi de lien, puis ouverture), pas du calcul SHA-256 dont la durée ne dépend pas mesurablement de la taille jusqu'à 16 Kio.
+- Un raccourci metadata-first supprimerait cette ouverture pour les fichiers inchangés, mais il retirerait aussi au scan final sa propriété de détecter une mutation qui préserve taille et date. Fixer le seuil qui justifie ce compromis exige une mesure sur le runner de référence (Linux, `scanner-corpus-benchmark.yml` en déclenchement manuel, profil `full`), pas sur un poste de développement Windows chargé.
+- Si cette mesure montre que l'ouverture domine un scan de contrôle d'indexation incrémentale sans modification, le raccourci se décide alors par un ADR qui complète ADR-0023 et fixe le seuil ; tant qu'elle n'existe pas, le constat reste fermé par la mesure sans changement de code.
+
+### Reproduire les mesures
+
+Les deux classes sont désactivées par défaut (`nexus.scale.benchmark.enabled`) :
+
+```powershell
+# Pic de heap d'un rebuild complet (corpus synthétique, 20 000 fichiers en profil full)
+./mvnw -B -ntp -pl core test -Dtest=IndexingHeapPeakBenchmarkTest -Dnexus.scale.benchmark.enabled=true -Dnexus.scale.benchmark.profile=full -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true
+
+# Part du hachage dans le scan initial et final
+./mvnw -B -ntp -pl core test -Dtest=ProjectScannerCorpusBudgetBenchmarkTest -Dnexus.scale.benchmark.enabled=true -Dnexus.scale.benchmark.profile=full -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true
+```
+
+`IndexingHeapPeakBenchmarkTest` écrit `target/indexing-heap-benchmark.json` (`nexus.indexing.heap.benchmark.output`). Il relève le heap occupé maximal échantillonné et le heap **vivant** maximal après collection forcée ; le nombre de fichiers se règle par `nexus.scale.benchmark.indexing.files`, la période de la sonde par `nexus.indexing.heap.benchmark.liveProbeMillis` et le heap de la JVM de test par `-DargLine=-Xmx…`. Il n'a pas de workflow : c'est un relevé manuel, à relancer avant et après toute modification de la rétention des analyses. Préférer les rapports (heap vivant par fichier, parts du hachage et de l'écriture) aux durées absolues, très sensibles à la charge de la machine.
+
 ## OpenSpec project-indexing-exclusions
 
 Spec : [`openspec/specs/project-indexing-exclusions/spec.md`](../../openspec/specs/project-indexing-exclusions/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
