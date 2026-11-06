@@ -13,3 +13,4 @@ Résultats d'itération, de benchmark et de qualification, figés à leur date. 
 | benchmark de régression scale | [Résultats du benchmark scale](scale-regression-results.md) |
 | qualification P1 / P3 | [Qualification P1 / P3](p1-p3-validation.md) |
 | enrichissement des specs OpenSpec (2026-11-04) | [Bilan de couverture OpenSpec](openspec-couverture-2026-11-04.md) |
+| heap, transaction d'écriture et hachage du pipeline d'indexation (2026-11-07) | [Mesures du pipeline d'indexation](indexing-heap-and-hashing-measures-2026-11-07.md) |
