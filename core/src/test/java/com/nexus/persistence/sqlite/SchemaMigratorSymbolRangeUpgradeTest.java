@@ -90,7 +90,7 @@ class SchemaMigratorSymbolRangeUpgradeTest {
             connection.setAutoCommit(true);
             assertDoesNotThrow(() -> SchemaMigrator.migrate(connection));
         }
-        assertMigrationCount(upgraded, 12L);
+        assertMigrationCount(upgraded, 13L);
     }
 
     @Test

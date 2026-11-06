@@ -25,8 +25,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Les migrations d'index (V012 : index par fichier de symbol_relations) créent ou suppriment des
- * index sans toucher aux faits canoniques ni au statut d'indexation des projets (AUD-PRF-01).
+ * Les migrations d'index (V012 : index par fichier de symbol_relations ; V013 : suppression des index
+ * préfixes redondants) créent ou suppriment des index sans toucher aux faits canoniques ni au statut
+ * d'indexation des projets (AUD-PRF-01, AUD-PRF-15).
  */
 class SchemaMigratorFileIndexUpgradeTest {
 
@@ -60,7 +61,33 @@ class SchemaMigratorFileIndexUpgradeTest {
     }
 
     @Test
-    void v012IsAppliedOnceAndAReopenDoesNothing() throws Exception {
+    void v013DropsTheRedundantPrefixIndexesWithoutTouchingCanonicalFactsOrProjectStatus() throws Exception {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite::memory:")) {
+            buildPopulatedBase(connection, 12);
+            assertTrue(indexNames(connection, "symbol_relations").contains("idx_symbol_relations_project"));
+            assertTrue(indexNames(connection, "indexed_files").contains("idx_indexed_files_project"));
+            assertTrue(indexNames(connection, "symbols").contains("idx_symbols_file"));
+            List<String> before = canonicalSnapshot(connection);
+
+            SchemaMigrator.migrate(connection);
+
+            assertFalse(indexNames(connection, "symbol_relations").contains("idx_symbol_relations_project"));
+            assertFalse(indexNames(connection, "indexed_files").contains("idx_indexed_files_project"));
+            assertFalse(indexNames(connection, "symbols").contains("idx_symbols_file"));
+            // Les index plus larges qui servent désormais ces requêtes restent présents.
+            assertTrue(indexNames(connection, "symbol_relations").contains("idx_symbol_relations_project_provider"));
+            assertTrue(indexNames(connection, "symbol_relations").contains("idx_symbol_relations_file_provider"));
+            assertTrue(indexNames(connection, "indexed_files").contains("sqlite_autoindex_indexed_files_1"));
+            assertTrue(indexNames(connection, "symbols").contains("idx_symbols_file_provider"));
+            assertEquals(before, canonicalSnapshot(connection));
+            assertEquals("READY", projectStatus(connection));
+            assertEquals(7L, projectGeneration(connection));
+            assertTrue(appliedVersions(connection).contains(13));
+        }
+    }
+
+    @Test
+    void indexMigrationsAreAppliedOnceAndAReopenDoesNothing() throws Exception {
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite::memory:")) {
             buildPopulatedBase(connection, 11);
             SchemaMigrator.migrate(connection);
