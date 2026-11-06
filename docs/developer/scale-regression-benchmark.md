@@ -147,6 +147,17 @@ Autres plafonds SQLite :
 
 Le gate dédié PR exige exactement les quatre paliers SQLite dans `scale-benchmark-sqlite-full.json`.
 
+## Réindexation sur base peuplée
+
+Le rapport général (hors `sqliteOnly=true`) porte la clé `reindexExistingFiles`. `ScaleRegressionBenchmarkTest` peuple d'abord un projet de 100 000 symboles et 100 000 relations (1 000 fichiers de 100 symboles), puis réécrit des fichiers **déjà indexés** par `SqliteIndexRepository.applyChanges`, le chemin d'écriture de l'indexation : upsert du fichier, suppression de ses symboles et relations, réinsertion.
+
+- `incremental` : 50 fichiers modifiés ;
+- `rebuild` : les 1 000 fichiers ;
+- chaque variante est répétée trois fois (`samplesMs`) et publie sa médiane (`medianMs`) ;
+- le scénario vérifie que les comptes de fichiers, symboles et relations restent inchangés (aucune duplication).
+
+La suppression des relations d'un fichier est servie par `idx_symbol_relations_file_provider` (migration `V012`) ; sans cet index elle parcourait toute la table à chaque fichier. Le scénario ne porte pas de plafond dans `scripts/verify-scale-budgets.py` : il rend la durée visible et reste hors du protocole de population, dont la version n'change pas. Un plafond ne se fixe qu'après des mesures répétées sur le runner CI.
+
 ## Autres scénarios scale
 
 Le benchmark général conserve les scénarios #23 : recherche/contexte fédérés, comparaison DELETE/WAL, recovery sémantique déterministe et mesure de graphe. Le mode SQLite de production n'est pas changé : WAL n'est adopté que si des mesures répétées montrent un gain reader p95 >=25 % sans régression writer/recovery.

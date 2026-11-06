@@ -10,6 +10,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SqliteGraphQueryPlanTest {
@@ -44,6 +45,38 @@ class SqliteGraphQueryPlanTest {
 
         assertTrue(plan.contains("project_id=? AND kind=? AND target_ref=?"), plan);
         assertTrue(plan.contains("project_id=? AND kind=? AND target_ref>? AND target_ref<?"), plan);
+    }
+
+    @Test
+    void perFileRelationDeletionSeeksByFileAndProvider() throws Exception {
+        SqliteDatabase database = new SqliteDatabase(new NexusPaths(tempDir.resolve("delete-plan-home")));
+
+        String plan = queryPlan(
+                database,
+                "DELETE FROM symbol_relations WHERE file_id = ? AND source_provider = ?",
+                1L, "javaparser");
+
+        assertSeeksByIndex(plan, "symbol_relations");
+        assertTrue(plan.contains("idx_symbol_relations_file_provider (file_id=? AND source_provider=?)"), plan);
+    }
+
+    @Test
+    void foreignKeyCascadeProbeSeeksByFile() throws Exception {
+        SqliteDatabase database = new SqliteDatabase(new NexusPaths(tempDir.resolve("cascade-plan-home")));
+
+        String plan = queryPlan(
+                database,
+                "SELECT 1 FROM symbol_relations WHERE file_id = ?",
+                1L);
+
+        assertSeeksByIndex(plan, "symbol_relations");
+        assertTrue(plan.contains("(file_id=?)"), plan);
+    }
+
+    /** SQLite écrit {@code USING COVERING INDEX} quand l'index suffit à la requête. */
+    private static void assertSeeksByIndex(String plan, String table) {
+        assertTrue(plan.matches("(?s).*SEARCH " + table + " USING (COVERING )?INDEX.*"), plan);
+        assertFalse(plan.contains("SCAN " + table), plan);
     }
 
     private static String queryPlan(SqliteDatabase database, String sql, Object... parameters) throws SQLException {
