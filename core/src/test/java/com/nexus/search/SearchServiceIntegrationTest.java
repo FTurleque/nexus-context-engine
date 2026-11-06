@@ -2,7 +2,7 @@ package com.nexus.search;
 
 import com.nexus.config.NexusPaths;
 import com.nexus.index.IndexRepository;
-import com.nexus.index.ProjectIndexingService;
+import com.nexus.index.ProjectIndexingServices;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.scan.ProjectScanner;
 import com.nexus.persistence.sqlite.SqliteDatabase;
@@ -73,7 +73,7 @@ class SearchServiceIntegrationTest {
         ProjectDescriptor project = new ProjectRegistry(projectRepository).register(projectRoot, "demo");
         LuceneSearchIndex searchIndex = new LuceneSearchIndex(paths);
 
-        new ProjectIndexingService(
+        ProjectIndexingServices.of(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),

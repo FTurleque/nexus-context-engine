@@ -4,6 +4,7 @@ import com.nexus.config.NexusPaths;
 import com.nexus.context.source.skill.LocalAgentSkillsProvider;
 import com.nexus.index.IndexRepository;
 import com.nexus.index.ProjectIndexingService;
+import com.nexus.index.ProjectIndexingServices;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.markdown.MarkdownLanguageAnalyzer;
 import com.nexus.index.scan.ProjectScanner;
@@ -125,7 +126,7 @@ class AgentSkillsIntegrationTest {
         IndexRepository indexRepository = new SqliteIndexRepository(database);
         ProjectDescriptor project = new ProjectRegistry(projectRepository).register(projectRoot, "skills-context");
         SearchIndex searchIndex = new LuceneSearchIndex(paths);
-        ProjectIndexingService indexingService = new ProjectIndexingService(
+        ProjectIndexingService indexingService = ProjectIndexingServices.of(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),

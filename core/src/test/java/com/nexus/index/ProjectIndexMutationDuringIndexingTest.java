@@ -56,7 +56,7 @@ class ProjectIndexMutationDuringIndexingTest {
             }
         };
 
-        ProjectIndexingService service = new ProjectIndexingService(
+        ProjectIndexingService service = ProjectIndexingServices.of(
                 projects,
                 new SqliteIndexRepository(database),
                 new ProjectScanner(),

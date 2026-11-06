@@ -14,7 +14,6 @@ import com.nexus.index.IndexingReport;
 import com.nexus.index.ProjectIndexingService;
 import com.nexus.index.ProjectIndexLockManager;
 import com.nexus.index.SymbolRelation;
-import com.nexus.index.minos.MinosCodeIndexImporter;
 import com.nexus.project.FederatedScopePolicy;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
@@ -32,6 +31,7 @@ import com.nexus.search.semantic.SemanticSearchConfiguration;
 import com.nexus.search.semantic.SemanticSearchIndex;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -181,15 +181,17 @@ public final class NexusApplication implements AutoCloseable {
 
     /** Le payload est fourni explicitement ; NEXUS ne lance jamais MINOS. */
     public CodeIntelligenceSnapshot importMinos(UUID projectId, String payload) throws IOException {
-        Objects.requireNonNull(projectId, "projectId");
-        try (ProjectIndexLockManager.LockHandle ignored = projectIndexLockManager.acquire(projectId)) {
-            ProjectDescriptor project = requireReadyProject(projectId);
-            Set<String> indexedFiles = indexRepository.findFiles(projectId).keySet();
-            CodeIntelligenceSnapshot snapshot = new MinosCodeIndexImporter()
-                    .importPayload(project.rootPath(), indexedFiles, payload);
-            indexRepository.replaceExternalCodeIntelligence(projectId, snapshot);
-            return snapshot;
-        }
+        return indexingService.importExternalCodeIntelligence(projectId, payload);
+    }
+
+    /**
+     * Lit un payload MINOS UTF-8 sur un flux fourni par l'appelant (stdin pour la
+     * CLI), sous la borne de transport de l'import (ADR-0044), sans fermer le flux.
+     *
+     * @throws IOException si le flux dépasse la borne de transport ou ne peut être lu
+     */
+    public String readMinosPayload(InputStream input) throws IOException {
+        return indexingService.readExternalCodeIntelligencePayload(input);
     }
 
     public IndexStatistics inspect(UUID projectId) {

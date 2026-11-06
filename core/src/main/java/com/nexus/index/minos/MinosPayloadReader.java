@@ -15,9 +15,14 @@ final class MinosPayloadReader {
     private static final int READER_BUFFER_CHARS = 16 * 1024;
 
     static String readPayload(InputStream input) throws IOException {
+        return readPayload(input, MAX_EXPORT_BYTES);
+    }
+
+    /** Variante à borne explicite, pour tester le seuil exact sans allouer 128 MiB. */
+    static String readPayload(InputStream input, long maxBytes) throws IOException {
         Objects.requireNonNull(input, "input");
         try (Reader reader = new InputStreamReader(
-                new BoundedPayloadInputStream(input), StandardCharsets.UTF_8)) {
+                new BoundedPayloadInputStream(input, maxBytes), StandardCharsets.UTF_8)) {
             StringBuilder output = new StringBuilder(READER_BUFFER_CHARS);
             char[] buffer = new char[READER_BUFFER_CHARS];
             int read;
@@ -59,10 +64,12 @@ final class MinosPayloadReader {
 
     private static final class BoundedPayloadInputStream extends FilterInputStream {
 
+        private final long maxBytes;
         private long consumed;
 
-        private BoundedPayloadInputStream(InputStream input) {
+        private BoundedPayloadInputStream(InputStream input, long maxBytes) {
             super(input);
+            this.maxBytes = maxBytes;
         }
 
         @Override
@@ -80,7 +87,7 @@ final class MinosPayloadReader {
             if (length == 0) {
                 return 0;
             }
-            long remaining = MAX_EXPORT_BYTES - consumed;
+            long remaining = maxBytes - consumed;
             int requested = (int) Math.min((long) length, remaining + 1L);
             int read = super.read(buffer, offset, requested);
             if (read > 0) {
@@ -96,7 +103,7 @@ final class MinosPayloadReader {
         }
 
         private void record(long bytes) throws IOException {
-            if (bytes > MAX_EXPORT_BYTES - consumed) {
+            if (bytes > maxBytes - consumed) {
                 throw transportTooLarge();
             }
             consumed += bytes;

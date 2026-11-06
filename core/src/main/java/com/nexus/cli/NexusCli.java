@@ -4,7 +4,6 @@ import com.nexus.application.NexusApplication;
 import com.nexus.config.NexusPaths;
 import com.nexus.context.ContextBudgetPolicy;
 import com.nexus.index.CodeIntelligenceSnapshot;
-import com.nexus.index.minos.MinosCodeIndexImporter;
 import com.nexus.project.FederatedScopePolicy;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.search.ResultLimitPolicy;
@@ -147,7 +146,7 @@ public final class NexusCli {
         ProjectDescriptor project = application.resolveProject(args[1]);
         String payload;
         try {
-            payload = MinosCodeIndexImporter.readPayload(input);
+            payload = application.readMinosPayload(input);
         } catch (IOException exception) {
             if (exception.getMessage() != null && exception.getMessage().contains("128 MiB transport limit")) {
                 throw new IllegalArgumentException("Le payload MINOS dépasse la limite de 128 MiB", exception);

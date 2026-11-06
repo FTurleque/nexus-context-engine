@@ -64,7 +64,7 @@ class PosixPathIdentityIntegrationTest {
         var index = new SqliteIndexRepository(database);
         var project = new ProjectRegistry(projects).register(root, "paths");
         try (var lucene = new LuceneSearchIndex(paths)) {
-            var service = new ProjectIndexingService(projects, index, new ProjectScanner(),
+            var service = ProjectIndexingServices.of(projects, index, new ProjectScanner(),
                     List.of(new JavaParserLanguageAnalyzer()), lucene);
             service.index(project.id());
             var files = index.findFiles(project.id());

@@ -58,7 +58,7 @@ class ProjectIndexingServiceTest {
         ProjectRegistry registry = new ProjectRegistry(projectRepository);
         ProjectDescriptor project = registry.register(projectRoot, "demo");
 
-        ProjectIndexingService service = new ProjectIndexingService(
+        ProjectIndexingService service = ProjectIndexingServices.of(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),
@@ -125,7 +125,7 @@ class ProjectIndexingServiceTest {
         IndexRepository indexRepository = new SqliteIndexRepository(database);
         ProjectDescriptor project = new ProjectRegistry(projectRepository).register(projectRoot, "skills-demo");
         LuceneSearchIndex searchIndex = new LuceneSearchIndex(paths);
-        ProjectIndexingService service = new ProjectIndexingService(
+        ProjectIndexingService service = ProjectIndexingServices.of(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),
@@ -219,7 +219,7 @@ class ProjectIndexingServiceTest {
             }
         };
 
-        ProjectIndexingService service = new ProjectIndexingService(
+        ProjectIndexingService service = ProjectIndexingServices.withImporters(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),
@@ -296,7 +296,7 @@ class ProjectIndexingServiceTest {
             }
         };
 
-        ProjectIndexingService service = new ProjectIndexingService(
+        ProjectIndexingService service = ProjectIndexingServices.withProviders(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),
@@ -349,7 +349,7 @@ class ProjectIndexingServiceTest {
         ProjectRegistry registry = new ProjectRegistry(projectRepository);
         ProjectDescriptor project = registry.register(projectRoot, "oversized");
         LuceneSearchIndex searchIndex = new LuceneSearchIndex(paths);
-        ProjectIndexingService service = new ProjectIndexingService(
+        ProjectIndexingService service = ProjectIndexingServices.of(
                 projectRepository,
                 new SqliteIndexRepository(database),
                 new ProjectScanner(),

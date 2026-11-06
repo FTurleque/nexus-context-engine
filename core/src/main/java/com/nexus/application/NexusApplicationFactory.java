@@ -26,6 +26,7 @@ import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.jdt.JdtLanguageServerCodeIntelligenceProvider;
 import com.nexus.index.markdown.MarkdownLanguageAnalyzer;
 import com.nexus.index.scan.ProjectScanner;
+import com.nexus.index.minos.MinosCodeIndexImporter;
 import com.nexus.index.scip.ScipCodeIndexImporter;
 import com.nexus.persistence.sqlite.SqliteDatabase;
 import com.nexus.persistence.sqlite.SqliteIndexRepository;
@@ -113,6 +114,7 @@ final class NexusApplicationFactory {
                 codeIndexImporters,
                 codeIntelligenceProviders,
                 semanticIndexingService,
+                new MinosCodeIndexImporter(),
                 projectIndexLockManager);
 
         ContextRanker contextRanker = semanticSearchConfiguration.enabled()

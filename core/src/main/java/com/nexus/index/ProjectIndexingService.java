@@ -4,6 +4,7 @@ import com.nexus.index.scan.ProjectScanResult;
 import com.nexus.index.scan.ProjectScanner;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
+import com.nexus.project.ProjectReadiness;
 import com.nexus.project.ProjectRepository;
 import com.nexus.search.SearchIndex;
 import com.nexus.search.semantic.SemanticIndexingService;
@@ -31,6 +32,8 @@ public final class ProjectIndexingService {
     public static final int DEFAULT_INDEX_DOCUMENT_BATCH_FILES = 128;
     public static final long DEFAULT_INDEX_DOCUMENT_BATCH_BYTES = 16L * 1024L * 1024L;
 
+    private static final String CONCURRENT_INDEXING_MESSAGE = "Une indexation est déjà en cours pour le projet ";
+
     private final ProjectRepository projectRepository;
     private final IndexRepository indexRepository;
     private final ProjectScanner scanner;
@@ -39,57 +42,15 @@ public final class ProjectIndexingService {
     private final SemanticIndexingService semanticIndexingService;
     private final ExternalCodeIntelligenceRefresher externalRefresher;
     private final IndexDocumentPublisher documentPublisher;
+    private final ExternalCodeIntelligencePayloadImporter payloadImporter;
     private final ProjectIndexLockManager projectIndexLockManager;
     private final ConcurrentMap<UUID, LockSlot> projectLocks = new ConcurrentHashMap<>();
 
-    public ProjectIndexingService(
-            ProjectRepository projectRepository,
-            IndexRepository indexRepository,
-            ProjectScanner scanner,
-            List<LanguageAnalyzer> analyzers,
-            SearchIndex searchIndex) {
-        this(projectRepository, indexRepository, scanner, analyzers, searchIndex, List.of(), List.of(), null);
-    }
-
-    public ProjectIndexingService(
-            ProjectRepository projectRepository,
-            IndexRepository indexRepository,
-            ProjectScanner scanner,
-            List<LanguageAnalyzer> analyzers,
-            SearchIndex searchIndex,
-            List<CodeIndexImporter> codeIndexImporters) {
-        this(projectRepository, indexRepository, scanner, analyzers, searchIndex, codeIndexImporters, List.of(), null);
-    }
-
-    public ProjectIndexingService(
-            ProjectRepository projectRepository,
-            IndexRepository indexRepository,
-            ProjectScanner scanner,
-            List<LanguageAnalyzer> analyzers,
-            SearchIndex searchIndex,
-            List<CodeIndexImporter> codeIndexImporters,
-            List<CodeIntelligenceProvider> codeIntelligenceProviders) {
-        this(projectRepository, indexRepository, scanner, analyzers, searchIndex,
-                codeIndexImporters, codeIntelligenceProviders, null);
-    }
-
-    public ProjectIndexingService(
-            ProjectRepository projectRepository,
-            IndexRepository indexRepository,
-            ProjectScanner scanner,
-            List<LanguageAnalyzer> analyzers,
-            SearchIndex searchIndex,
-            List<CodeIndexImporter> codeIndexImporters,
-            List<CodeIntelligenceProvider> codeIntelligenceProviders,
-            SemanticIndexingService semanticIndexingService) {
-        this(projectRepository, indexRepository, scanner, analyzers, searchIndex,
-                codeIndexImporters, codeIntelligenceProviders, semanticIndexingService,
-                providerTimeoutFromEnvironment(), ProjectIndexLockManager.processLocalOnly());
-    }
-
     /**
-     * Composition de production : conserve le timeout environnemental et ajoute
-     * le verrou inter-processus fourni explicitement par la façade applicative.
+     * Seul constructeur public : composition de production. Le gestionnaire de
+     * verrou inter-processus est explicite, sans valeur par défaut, et le timeout
+     * des providers vient de l'environnement. Les variantes de commodité des
+     * tests vivent dans une fabrique de test du même paquetage.
      */
     public ProjectIndexingService(
             ProjectRepository projectRepository,
@@ -100,10 +61,12 @@ public final class ProjectIndexingService {
             List<CodeIndexImporter> codeIndexImporters,
             List<CodeIntelligenceProvider> codeIntelligenceProviders,
             SemanticIndexingService semanticIndexingService,
+            ExternalCodeIntelligencePayloadImporter payloadImporter,
             ProjectIndexLockManager projectIndexLockManager) {
         this(projectRepository, indexRepository, scanner, analyzers, searchIndex,
                 codeIndexImporters, codeIntelligenceProviders, semanticIndexingService,
-                providerTimeoutFromEnvironment(), projectIndexLockManager);
+                payloadImporter, providerTimeoutFromEnvironment(), projectIndexLockManager,
+                DEFAULT_INDEX_DOCUMENT_BATCH_FILES, DEFAULT_INDEX_DOCUMENT_BATCH_BYTES);
     }
 
     ProjectIndexingService(
@@ -115,47 +78,7 @@ public final class ProjectIndexingService {
             List<CodeIndexImporter> codeIndexImporters,
             List<CodeIntelligenceProvider> codeIntelligenceProviders,
             SemanticIndexingService semanticIndexingService,
-            Duration providerTimeout) {
-        this(projectRepository, indexRepository, scanner, analyzers, searchIndex,
-                codeIndexImporters, codeIntelligenceProviders, semanticIndexingService,
-                providerTimeout, ProjectIndexLockManager.processLocalOnly());
-    }
-
-    ProjectIndexingService(
-            ProjectRepository projectRepository,
-            IndexRepository indexRepository,
-            ProjectScanner scanner,
-            List<LanguageAnalyzer> analyzers,
-            SearchIndex searchIndex,
-            List<CodeIndexImporter> codeIndexImporters,
-            List<CodeIntelligenceProvider> codeIntelligenceProviders,
-            SemanticIndexingService semanticIndexingService,
-            Duration providerTimeout,
-            ProjectIndexLockManager projectIndexLockManager) {
-        this(
-                projectRepository,
-                indexRepository,
-                scanner,
-                analyzers,
-                searchIndex,
-                codeIndexImporters,
-                codeIntelligenceProviders,
-                semanticIndexingService,
-                providerTimeout,
-                projectIndexLockManager,
-                DEFAULT_INDEX_DOCUMENT_BATCH_FILES,
-                DEFAULT_INDEX_DOCUMENT_BATCH_BYTES);
-    }
-
-    ProjectIndexingService(
-            ProjectRepository projectRepository,
-            IndexRepository indexRepository,
-            ProjectScanner scanner,
-            List<LanguageAnalyzer> analyzers,
-            SearchIndex searchIndex,
-            List<CodeIndexImporter> codeIndexImporters,
-            List<CodeIntelligenceProvider> codeIntelligenceProviders,
-            SemanticIndexingService semanticIndexingService,
+            ExternalCodeIntelligencePayloadImporter payloadImporter,
             Duration providerTimeout,
             ProjectIndexLockManager projectIndexLockManager,
             int indexDocumentBatchFiles,
@@ -169,6 +92,7 @@ public final class ProjectIndexingService {
         this.codeIntelligenceProviders = List.copyOf(
                 Objects.requireNonNull(codeIntelligenceProviders, "codeIntelligenceProviders"));
         this.semanticIndexingService = semanticIndexingService;
+        this.payloadImporter = Objects.requireNonNull(payloadImporter, "payloadImporter");
         this.externalRefresher = new ExternalCodeIntelligenceRefresher(indexRepository, codeIndexImporters,
                 codeIntelligenceProviders, providerTimeout);
         this.projectIndexLockManager = Objects.requireNonNull(projectIndexLockManager, "projectIndexLockManager");
@@ -198,6 +122,42 @@ public final class ProjectIndexingService {
         return index(projectId, true, true);
     }
 
+    /**
+     * Import d'un export MINOS fourni explicitement : même point d'entrée
+     * d'écriture que l'indexation, donc même verrou single-flight JVM puis même
+     * verrou inter-processus, et même diagnostic en cas d'indexation concurrente.
+     */
+    public CodeIntelligenceSnapshot importExternalCodeIntelligence(UUID projectId, String payload)
+            throws IOException {
+        Objects.requireNonNull(projectId, "projectId");
+        Objects.requireNonNull(payload, "payload");
+        LockSlot lockSlot = retainProjectLock(projectId);
+        if (!lockSlot.lock.tryLock()) {
+            releaseProjectLock(projectId, lockSlot);
+            throw new IllegalStateException(CONCURRENT_INDEXING_MESSAGE + projectId);
+        }
+        try (ProjectIndexLockManager.LockHandle ignored = projectIndexLockManager.acquire(projectId)) {
+            ProjectDescriptor project = projectRepository.findById(projectId)
+                    .orElseThrow(() -> new IllegalArgumentException("Projet NEXUS introuvable : " + projectId));
+            ProjectReadiness.requireReady(project);
+            Set<String> indexedFiles = indexRepository.findFiles(projectId).keySet();
+            CodeIntelligenceSnapshot snapshot = payloadImporter.importPayload(project.rootPath(), indexedFiles, payload);
+            indexRepository.replaceExternalCodeIntelligence(projectId, snapshot);
+            return snapshot;
+        } finally {
+            lockSlot.lock.unlock();
+            releaseProjectLock(projectId, lockSlot);
+        }
+    }
+
+    /**
+     * Lit un payload d'export UTF-8 sous la borne de transport de l'adaptateur
+     * (128 MiB pour MINOS, ADR-0044), sans fermer le flux.
+     */
+    public String readExternalCodeIntelligencePayload(java.io.InputStream input) throws IOException {
+        return payloadImporter.readBoundedPayload(input);
+    }
+
     private IndexingReport index(
             UUID projectId,
             boolean explicitRebuild,
@@ -206,7 +166,7 @@ public final class ProjectIndexingService {
         LockSlot lockSlot = retainProjectLock(projectId);
         if (!lockSlot.lock.tryLock()) {
             releaseProjectLock(projectId, lockSlot);
-            throw new IllegalStateException("Une indexation est déjà en cours pour le projet " + projectId);
+            throw new IllegalStateException(CONCURRENT_INDEXING_MESSAGE + projectId);
         }
         try (ProjectIndexLockManager.LockHandle ignored = projectIndexLockManager.acquire(projectId)) {
             return indexLocked(projectId, explicitRebuild, includeCodeIntelligenceProviders);

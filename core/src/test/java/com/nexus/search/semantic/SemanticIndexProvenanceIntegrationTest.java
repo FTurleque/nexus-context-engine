@@ -4,6 +4,7 @@ import com.nexus.config.NexusPaths;
 import com.nexus.index.CanonicalIndexFingerprint;
 import com.nexus.index.IndexRepository;
 import com.nexus.index.ProjectIndexingService;
+import com.nexus.index.ProjectIndexingServices;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.scan.ProjectScanner;
 import com.nexus.persistence.sqlite.SqliteDatabase;
@@ -218,7 +219,7 @@ class SemanticIndexProvenanceIntegrationTest {
             ProjectRepository projectRepository,
             IndexRepository indexRepository,
             SemanticIndexingService semanticIndexingService) {
-        return new ProjectIndexingService(
+        return ProjectIndexingServices.withSemantic(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),
