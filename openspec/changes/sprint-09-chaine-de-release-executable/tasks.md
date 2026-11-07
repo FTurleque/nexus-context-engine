@@ -2,22 +2,22 @@
 
 Ordre interne du sprint : `AUD-DEP-21`, `AUD-SEC-06`, `AUD-DEP-03`, `AUD-DEP-09` et `AUD-QUA-12` débloquent `AUD-DEP-02`, traité en dernier. Les tâches marquées « manuel » sont des réglages GitHub du mainteneur ; leur vérification n'utilise que des lectures `gh`.
 
-Préalable à la fusion de la PR : les tâches manuelles 3.1 et 3.3 sont faites et relevées par `gh api`. GitHub crée sans protection un environnement absent au premier job qui le référence ; fusionner avant 3.1 exposerait `publish` et les secrets PFX à un run non approuvé (premier tag `v*` ou `workflow_dispatch` signé).
+Préalable à la fusion de la PR : les tâches manuelles 3.1 et 3.3 sont faites et relevées par `gh api`. GitHub crée sans protection un environnement absent au premier job qui le référence ; fusionner avant 3.1 laisserait `publish` écrire dans GHCR et dans les releases sans approbation au premier tag `v*`.
 
 ## 1. Secrets explicites (AUD-DEP-21)
 
-- [x] 1.1 AUD-DEP-21 — Remplacer `secrets: inherit` de `release.yml` par la transmission des deux secrets PFX nommés (design D1) ; vérifier par `git grep -n "secrets: inherit" -- .github/workflows` (aucun résultat)
+- [x] 1.1 AUD-DEP-21 — Retirer `secrets: inherit` de `release.yml`, qui ne transmet aucun secret au job Windows (design D1) ; vérifier par `git grep -n "secrets: inherit" -- .github/workflows` (aucun résultat)
 - [x] 1.2 AUD-DEP-21 — Ajouter à `scripts/release/test-final-audit-contracts.sh` le refus de `secrets: inherit` dans `.github/workflows/` ; vérifier par `bash .claude/scripts/contracts.sh`
 
 ## 2. Matériel de signature confiné (AUD-SEC-06)
 
 - [x] 2.1 AUD-SEC-06 — Retirer les secrets PFX de l'`env` du job `windows-installer` et ne les mapper que sur les étapes de signature (distribution, installeur de production), sous condition `github.event_name != 'pull_request'` (design D2) ; vérifier par `bash .claude/scripts/contracts.sh` après ajout du contrat correspondant dans `test-final-audit-contracts.sh`
-- [ ] 2.2 AUD-SEC-06 — Décoder le PFX dans chaque étape de signature, l'effacer dans un `finally` de la même étape et ne plus publier son chemin dans `GITHUB_ENV` (`build-windows-distribution.ps1`, `build-windows-installer.ps1`, `sign-windows-artifact.ps1`) ; vérifier par le check « Windows self-contained installer » de la PR (artefacts non signés, aucun secret exposé, job exécuté sans environnement) ; la preuve signée est produite par la répétition 9.3 et 9.4, la politique de déploiement de `release` (tags `v*`) refusant un `workflow_dispatch` signé sur une branche
+- [ ] 2.2 AUD-SEC-06 — Décoder le PFX dans chaque étape de signature, l'effacer dans un `finally` de la même étape et ne plus publier son chemin dans `GITHUB_ENV` (`build-windows-distribution.ps1`, `build-windows-installer.ps1`, `sign-windows-artifact.ps1`) ; vérifier par le check « Windows self-contained installer » de la PR (artefacts non signés, aucun secret exposé, job exécuté sans environnement) ; les assets de release n'étant pas signés, la signature optionnelle n'a pas de preuve en run réel
 
 ## 3. Environnement protégé et tags (AUD-DEP-03)
 
-- [ ] 3.1 AUD-DEP-03 (manuel) — Créer l'environnement `release` : reviewer requis (mainteneur), politique de déploiement limitée aux tags `v*` ; y créer les deux secrets PFX puis les supprimer des secrets de dépôt ; vérifier par `gh api repos/FTurleque/nexus-context-engine/environments --jq '.environments[] | {name, protection_rules}'`
-- [x] 3.2 AUD-DEP-03 — Déclarer `environment: release` sur le job `publish` et sur le job Windows appelé avec `require_authenticode: true` ; si l'environnement conditionnel n'est pas accepté dans le workflow réutilisable, appliquer l'alternative du design (job de signature dédiée) ; garder la transmission nommée des deux secrets PFX dans `release.yml` (design D1, D3) ; vérifier par `bash .claude/scripts/contracts.sh` (contrat : `publish` déclare `environment: release`, environnement conditionnel du job Windows, transmission nommée)
+- [ ] 3.1 AUD-DEP-03 (manuel) — Créer l'environnement `release` : reviewer requis (mainteneur), politique de déploiement limitée aux tags `v*`, sans secret ; vérifier par `gh api repos/FTurleque/nexus-context-engine/environments --jq '.environments[] | {name, protection_rules}'`
+- [x] 3.2 AUD-DEP-03 — Déclarer `environment: release` sur le job `publish` et sur le job Windows appelé avec `require_authenticode: true` ; si l'environnement conditionnel n'est pas accepté dans le workflow réutilisable, appliquer l'alternative du design (job de signature dédiée) ; appeler le job Windows avec `require_authenticode: false` et sans secret (design D1, D3) ; vérifier par `bash .claude/scripts/contracts.sh` (contrat : `publish` déclare `environment: release`, environnement conditionnel du job Windows, aucun secret transmis)
 - [ ] 3.3 AUD-DEP-03 (manuel) — Créer un ruleset de tags ciblant `refs/tags/v*` (création, mise à jour, suppression restreintes au mainteneur) ; vérifier par `gh api repos/FTurleque/nexus-context-engine/rulesets --jq '.[] | {name, target, enforcement}'` (un ruleset `tag` actif)
 
 ## 4. Provenance des assets Windows (AUD-DEP-09)
@@ -49,7 +49,7 @@ Préalable à la fusion de la PR : les tâches manuelles 3.1 et 3.3 sont faites 
 - [x] 9.1 AUD-DEP-02 — Accepter `vX.Y.Z-rc.N` dans `validate-release-tag.sh`, avec les cas valides et invalides dans `scripts/release/test-release-tag-policy.sh` ; marquer la release GitHub comme pré-version et ne pas déplacer `latest` pour un tag `-rc` (`publish-github-release-assets.sh` et son test, étape `latest` de `release.yml`) (design D9) ; vérifier par `bash scripts/release/test-release-tag-policy.sh`, `bash scripts/release/test-publish-github-release-assets.sh` et `bash .claude/scripts/contracts.sh`
 - [x] 9.2 AUD-DEP-02 — Nouvel ADR (skill `nexus-adr`) qui complète ADR-0031 : politique de publication (environnement protégé, attestations de tous les assets, tags de pré-version) ; mettre à jour le registre des ADR, la vue arc42 des décisions et `docs/developer/immutable-release-publishing.md` ; vérifier par `bash .claude/scripts/contracts.sh`
 - [ ] 9.3 AUD-DEP-02 (manuel) — Après fusion des sections 1 à 9.2 et des tâches manuelles 3.1 et 3.3 : passer la version à `X.Y.Z-rc.1`, promouvoir `develop` vers `main` (`/nx-release`), poser le tag `vX.Y.Z-rc.1` sur la tête de `main`, approuver l'environnement `release` ; vérifier par `gh run list --workflow release.yml --limit 1` (run réussi) et `gh release view vX.Y.Z-rc.1 --json isPrerelease,assets`
-- [ ] 9.4 AUD-DEP-02 — Vérifier la répétition : `gh attestation verify` sur l'image `ghcr.io/fturleque/nexus-context-engine:X.Y.Z-rc.1`, le ZIP et le `setup.exe` ; signature Authenticode valide du `setup.exe` ; `latest` inchangé ; consigner la preuve (identifiant de run, sorties de vérification) dans un relevé daté sous `docs/project/history/` ; vérifier par `bash .claude/scripts/contracts.sh`
+- [ ] 9.4 AUD-DEP-02 — Vérifier la répétition : `gh attestation verify` sur l'image `ghcr.io/fturleque/nexus-context-engine:X.Y.Z-rc.1`, le ZIP et le `setup.exe` ; `latest` inchangé ; consigner la preuve (identifiant de run, sorties de vérification) dans un relevé daté sous `docs/project/history/` ; vérifier par `bash .claude/scripts/contracts.sh`
 
 ## Workflow follow-up
 

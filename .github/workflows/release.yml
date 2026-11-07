@@ -57,14 +57,11 @@ jobs:
     name: Windows installer release gate
     needs: validate-release
     uses: ./.github/workflows/windows-installer.yml
+    # Windows release assets are not Authenticode-signed (no paid code-signing certificate);
+    # their provenance is the GitHub attestation produced and verified by `publish`. No secret
+    # is passed, and never `inherit`.
     with:
-      require_authenticode: true
-    # Only the two declared secrets, never `inherit`. A caller job cannot declare `environment`:
-    # the called job runs in `release`, and GitHub resolves these names to that environment's
-    # secrets even when they no longer exist at repository level.
-    secrets:
-      NEXUS_WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.NEXUS_WINDOWS_SIGNING_PFX_BASE64 }}
-      NEXUS_WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.NEXUS_WINDOWS_SIGNING_PFX_PASSWORD }}
+      require_authenticode: false
     permissions:
       contents: read
 

@@ -73,9 +73,9 @@ Une modification Java ordinaire ne peut donc plus contourner le smoke du ZIP sel
 
 Signature Authenticode (`AUD-DEP-21`, `AUD-SEC-06`, `AUD-DEP-03`) :
 
-- `release.yml` transmet à `windows-installer.yml` les deux secrets déclarés (`NEXUS_WINDOWS_SIGNING_PFX_BASE64`, `NEXUS_WINDOWS_SIGNING_PFX_PASSWORD`) par leur nom ; `secrets: inherit` est refusé dans `.github/workflows/` ;
-- le job Windows appelé avec `require_authenticode: true` et le job `publish` s'exécutent dans l'environnement protégé `release`, qui porte les secrets PFX ; le job appelant ne peut pas déclarer `environment`, GitHub résout donc les noms transmis vers les secrets de l'environnement ;
-- seules les étapes « Build self-contained Windows distribution » et « Build production installer » reçoivent les secrets, et jamais sur `pull_request` : une PR produit des artefacts non signés, comme un fork ; l'installeur de smoke n'est jamais signé ;
+- les assets Windows d'une release ne sont pas signés Authenticode (pas de certificat de signature de code payant, [SEC-0068](../architecture/adr/SEC-0068-publier-les-releases-depuis-un-environnement-protege-avec-des-assets-attestes.md)) : `release.yml` appelle `windows-installer.yml` avec `require_authenticode: false` et sans aucun secret ; leur provenance est l'attestation GitHub vérifiée par le job `publish` ;
+- `secrets: inherit` est refusé dans `.github/workflows/` ; un workflow réutilisable ne reçoit, par leur nom, que les secrets qu'il déclare ;
+- `windows-installer.yml` garde une signature optionnelle pour une qualification manuelle (`workflow_dispatch` avec `require_authenticode: true`) : le job entre alors dans l'environnement `release`, et seules les étapes « Build self-contained Windows distribution » et « Build production installer » reçoivent les secrets PFX, jamais sur `pull_request` ; l'installeur de smoke n'est jamais signé ;
 - `build-windows-distribution.ps1` et `build-windows-installer.ps1` retirent ces variables de l'environnement du processus avant Maven, jpackage, le smoke CLI et Inno Setup, puis les passent en paramètres à `sign-windows-artifact.ps1` ;
 - `sign-windows-artifact.ps1` décode le PFX dans un répertoire propre à l'appel sous `RUNNER_TEMP` et l'efface dans un bloc `finally` ; aucun chemin n'est publié dans `GITHUB_ENV`, et l'étape `always()` de nettoyage reste en défense en profondeur.
 

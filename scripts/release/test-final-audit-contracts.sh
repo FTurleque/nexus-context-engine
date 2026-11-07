@@ -351,9 +351,10 @@ release = open(".github/workflows/release.yml", encoding="utf-8").read().splitli
 if not any(line.rstrip() == "    environment: release" for line in job_block(release, "publish")):
     fail("the publish job must declare environment: release")
 caller = job_block(release, "windows-installer")
-for name in ("NEXUS_WINDOWS_SIGNING_PFX_BASE64", "NEXUS_WINDOWS_SIGNING_PFX_PASSWORD"):
-    if not any(line.strip() == f"{name}: ${{{{ secrets.{name} }}}}" for line in caller):
-        fail(f"release.yml must pass {name} by name to windows-installer.yml")
+if not any(line.strip() == "require_authenticode: false" for line in caller):
+    fail("release.yml publishes unsigned Windows assets: require_authenticode must be false")
+if any(line.strip().startswith("secrets:") or "NEXUS_WINDOWS_SIGNING_PFX" in line for line in caller):
+    fail("release.yml must not pass any secret to windows-installer.yml")
 PY
 
 # --- Sprint 9 : attest-prerelease (AUD-DEP-09, AUD-DEP-02) ---

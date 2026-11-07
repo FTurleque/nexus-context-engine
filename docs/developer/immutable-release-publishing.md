@@ -120,18 +120,18 @@ Un rollback de consommation pointe vers un tag SemVer historique ou, de préfér
 
 ## Politique de publication cible (SEC-0068, proposée)
 
-[SEC-0068](../architecture/adr/SEC-0068-publier-les-releases-depuis-un-environnement-protege-avec-des-assets-attestes.md), au statut `Proposed`, complète [GEN-0031](../architecture/adr/GEN-0031-packager-la-cli-dans-un-jar-autonome.md) et fixe les conditions de publication que met en œuvre le changement OpenSpec `sprint-09-chaine-de-release-executable`. Les workflows et scripts du dépôt portent les règles qui les concernent ; les réglages GitHub (environnement `release`, secrets d'environnement, ruleset de tags) restent à appliquer par le mainteneur et ne sont pas encore en place. L'état constaté avant le changement est relevé dans le contexte de l'ADR.
+[SEC-0068](../architecture/adr/SEC-0068-publier-les-releases-depuis-un-environnement-protege-avec-des-assets-attestes.md), au statut `Proposed`, complète [GEN-0031](../architecture/adr/GEN-0031-packager-la-cli-dans-un-jar-autonome.md) et fixe les conditions de publication que met en œuvre le changement OpenSpec `sprint-09-chaine-de-release-executable`. Les workflows et scripts du dépôt portent les règles qui les concernent ; les réglages GitHub (environnement `release`, ruleset de tags) sont appliqués par le mainteneur et vérifiables en lecture. L'état constaté avant le changement est relevé dans le contexte de l'ADR.
 
-- Aucun workflow ne transmet `secrets: inherit` ; un workflow réutilisable ne reçoit, par leur nom, que les secrets qu'il déclare, y compris quand ils n'existent que dans l'environnement `release`.
-- Le job `publish` et la signature de release déclarent `environment: release` : reviewer requis, déploiement limité aux tags `v*`, secrets PFX Authenticode portés par l'environnement. Aucune écriture dans GHCR ni dans les releases avant l'approbation.
-- Une release demande deux approbations de l'environnement `release` : le job Windows signé, puis le job `publish`.
-- L'environnement et le ruleset de tags existent avant qu'un workflow référence `release` : GitHub crée sans protection un environnement absent au premier job qui le nomme. Aucun tag `v*` ni `workflow_dispatch` avec `require_authenticode: true` n'est lancé tant que la lecture `gh api` ci-dessous ne montre pas le reviewer requis et le ruleset actif.
+- Aucun workflow ne transmet `secrets: inherit` ; un workflow réutilisable ne reçoit, par leur nom, que les secrets qu'il déclare. `release.yml` ne transmet aucun secret au job Windows.
+- Le job `publish` déclare `environment: release` : reviewer requis, déploiement limité aux tags `v*`. Aucune écriture dans GHCR ni dans les releases avant l'approbation ; une release demande une approbation.
+- Le ZIP et le `setup.exe` Windows ne sont pas signés Authenticode : SmartScreen affiche « éditeur inconnu » à l'installation. Leur provenance se vérifie par `gh attestation verify` (section « Vérification consommateur »).
+- L'environnement et le ruleset de tags existent avant qu'un workflow référence `release` : GitHub crée sans protection un environnement absent au premier job qui le nomme. Aucun tag `v*` n'est poussé tant que la lecture `gh api` ci-dessous ne montre pas le reviewer requis et le ruleset actif.
 - Un ruleset de tags actif cible `refs/tags/v*` et réserve leur création, leur mise à jour et leur suppression au mainteneur.
 - Chaque ZIP et chaque `setup.exe` publiés reçoivent une attestation de provenance (`actions/attest` en `subject-path`, même version épinglée que pour l'image), vérifiée par `gh attestation verify` avant tout upload et avant le déplacement de `latest`.
 - Le tag de release est `vX.Y.Z` ou `vX.Y.Z-rc.N`, égal à la version Maven et posé sur la tête de `main`. Une pré-version publie une release marquée pré-version, sous des tags d'image version et SHA immuables, et ne déplace jamais `latest`.
-- La première exécution de la chaîne est une répétition sur `X.Y.Z-rc.1`, prouvée par un relevé daté sous `docs/project/history/` (run, `gh attestation verify` sur l'image et les assets, signature Authenticode).
+- La première exécution de la chaîne est une répétition sur `X.Y.Z-rc.1`, prouvée par un relevé daté sous `docs/project/history/` (run, `gh attestation verify` sur l'image et les assets).
 
-Les réglages GitHub (environnement, secrets d'environnement, ruleset de tags) se vérifient en lecture :
+Les réglages GitHub (environnement, ruleset de tags) se vérifient en lecture :
 
 ```bash
 gh api repos/FTurleque/nexus-context-engine/environments --jq '.environments[] | {name, protection_rules}'
