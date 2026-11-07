@@ -37,7 +37,7 @@ class ExternalCodeIntelligenceInvalidationTest {
         IndexRepository indexRepository = new SqliteIndexRepository(database);
         ProjectDescriptor project = new ProjectRegistry(projectRepository).register(projectRoot, "demo");
 
-        ProjectIndexingService service = new ProjectIndexingService(
+        ProjectIndexingService service = ProjectIndexingServices.of(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),

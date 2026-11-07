@@ -62,7 +62,7 @@ class MultiLanguageIndexingIntegrationTest {
         ProjectDescriptor project = new ProjectRegistry(projectRepository).register(projectRoot, "multi-language");
         LuceneSearchIndex searchIndex = new LuceneSearchIndex(paths);
 
-        IndexingReport report = new ProjectIndexingService(
+        IndexingReport report = ProjectIndexingServices.of(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),

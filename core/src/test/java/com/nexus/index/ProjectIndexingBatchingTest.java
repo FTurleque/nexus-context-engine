@@ -48,7 +48,7 @@ class ProjectIndexingBatchingTest {
         CapturingSearchIndex searchIndex = new CapturingSearchIndex();
         long batchBytes = 70L;
 
-        ProjectIndexingService service = new ProjectIndexingService(
+        ProjectIndexingService service = ProjectIndexingServices.withBatching(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),

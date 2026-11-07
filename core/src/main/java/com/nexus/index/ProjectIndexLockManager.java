@@ -53,8 +53,9 @@ public final class ProjectIndexLockManager {
     }
 
     /**
-     * Mode de compatibilité pour les constructions unitaires historiques du
-     * service. La façade de production utilise toujours {@link #fileBacked(NexusPaths)}.
+     * Verrouillage limité au processus, réservé aux tests unitaires qui n'ont pas de
+     * {@code NEXUS_HOME}. Aucun code de production ne l'appelle : la composition de
+     * production fournit explicitement {@link #fileBacked(NexusPaths)}.
      */
     public static ProjectIndexLockManager processLocalOnly() {
         return new ProjectIndexLockManager(null);

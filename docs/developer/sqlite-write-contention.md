@@ -22,6 +22,7 @@ The timeout was bounded, but there was no application-level recovery after that 
 
 - `SqliteProjectRepository.save`;
 - `SqliteIndexRepository.applyChanges`;
+- `SqliteIndexWriteSession` (mise en attente, publication et nettoyage des analyses d'une indexation, voir [Indexation](#indexation-par-lots-mis-en-attente)) ;
 - `SqliteIndexRepository.replaceExternalCodeIntelligence`.
 
 Bootstrap/migrations use the same `SqliteWriteRetryPolicy`, while `SchemaMigrator` retains its own transaction rollback semantics.
@@ -74,6 +75,12 @@ A failed attempt is rolled back before a retry. Tests deliberately insert a row 
 For index mutations the whole `applyChanges` transaction, including `project_index_generations`, is replayed atomically. A recovered transient contention therefore produces one committed file state and exactly one generation increment.
 
 External code-intelligence replacement follows the same rule. Importing an identical external snapshot remains a true no-op and does not increment generation.
+
+## Indexation par lots mis en attente
+
+Une indexation ne tient jamais une transaction d'écriture ouverte pendant l'analyse : les analyses des fichiers modifiés sont mises en attente par lots dans les tables transitoires `index_staged_*` (V014), chaque lot dans une courte transaction `writeTransaction`, puis publiées avec la génération par **une** transaction finale (décision DATA-0062). Le temps de verrou d'écriture attribuable à une indexation est donc la somme de transactions courtes, et non la durée de l'indexation.
+
+Scénario de contention couvert par `ProjectIndexingPublicationTest#anotherProjectCanWriteWhileAnIndexingIsInProgressBetweenBatches` : l'indexation d'un projet est suspendue en cours d'analyse, après plusieurs lots déjà mis en attente. Un autre projet écrit alors (`applyChanges` et `ProjectRepository.save`) sans attendre le `busy_timeout` ni échouer en `SQLITE_BUSY`, et la génération du projet indexé n'est pas publiée avant la fin. Les tests `SqliteIndexWriteSessionTest` couvrent l'atomicité de la publication et l'écart des analyses en attente d'une indexation qui échoue ou qui a été interrompue.
 
 ## Multi-process behavior
 

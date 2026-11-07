@@ -5,6 +5,7 @@ import com.nexus.index.CodeIntelligenceSnapshot;
 import com.nexus.index.IndexRepository;
 import com.nexus.index.IndexedSymbol;
 import com.nexus.index.ProjectIndexingService;
+import com.nexus.index.ProjectIndexingServices;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.markdown.MarkdownLanguageAnalyzer;
 import com.nexus.index.scan.ProjectScanner;
@@ -65,7 +66,7 @@ class MinosRealIntegrationTest {
         ProjectRegistry projectRegistry = new ProjectRegistry(projectRepository);
         ProjectDescriptor registered = projectRegistry.register(fixture, "m13-fixture");
         LuceneSearchIndex searchIndex = new LuceneSearchIndex(paths);
-        ProjectIndexingService indexingService = new ProjectIndexingService(
+        ProjectIndexingService indexingService = ProjectIndexingServices.of(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),

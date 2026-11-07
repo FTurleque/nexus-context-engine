@@ -7,6 +7,7 @@ import com.nexus.context.source.instruction.CopilotInstructionProvider;
 import com.nexus.context.source.instruction.GeminiInstructionProvider;
 import com.nexus.index.IndexRepository;
 import com.nexus.index.ProjectIndexingService;
+import com.nexus.index.ProjectIndexingServices;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.markdown.MarkdownLanguageAnalyzer;
 import com.nexus.index.scan.ProjectScanner;
@@ -145,7 +146,7 @@ class NativeContextSourcesIntegrationTest {
         IndexRepository indexRepository = new SqliteIndexRepository(database);
         ProjectDescriptor project = new ProjectRegistry(projectRepository).register(projectRoot, "native-context");
         SearchIndex searchIndex = new LuceneSearchIndex(paths);
-        ProjectIndexingService indexingService = new ProjectIndexingService(
+        ProjectIndexingService indexingService = ProjectIndexingServices.of(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),

@@ -54,6 +54,14 @@ public interface IndexRepository {
 
     void applyChanges(UUID projectId, List<IndexedFileUpdate> updates, Set<String> removedPaths);
 
+    /**
+     * Ouvre les écritures d'une indexation : les analyses sont mises en attente par lots bornés puis
+     * publiées en une transaction, au lieu d'être retenues en mémoire jusqu'à un {@link #applyChanges}
+     * unique. Les analyses en attente laissées par une indexation interrompue sont écartées à
+     * l'ouverture.
+     */
+    IndexWriteSession openWriteSession(UUID projectId);
+
     void replaceExternalCodeIntelligence(UUID projectId, CodeIntelligenceSnapshot snapshot);
 
     IndexStatistics statistics(UUID projectId);

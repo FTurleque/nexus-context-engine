@@ -172,3 +172,45 @@ prochaine indexation reconstruit les dérivés lexicaux, et le profil `content-v
 impose la reconstruction des vecteurs sémantiques. Un index Lucene dont la version
 de politique diffère de `secret-redaction-v6` est traité comme absent et reconstruit.
 V001 à V010 et leurs empreintes restent inchangées.
+
+## Mise à niveau V012 et V013 — index du chemin d'écriture SQLite
+
+Ces deux migrations ne modifient que des index : aucun rebuild n'est imposé. Elles
+ne changent ni les faits canoniques (fichiers, symboles, relations), ni la
+génération, ni le statut d'indexation des projets, et les index Lucene et
+sémantiques restent valides. V001 à V011 et leurs empreintes restent inchangées.
+
+- `V012__index_symbol_relations_by_file.sql` crée
+  `idx_symbol_relations_file_provider` sur `symbol_relations(file_id, source_provider)`.
+  Il sert la suppression des relations d'un fichier par fournisseur et la
+  vérification de la cascade de clé étrangère depuis `indexed_files`, qui
+  parcouraient toute la table. La création de l'index sur une grande base prend un
+  temps proportionnel au nombre de relations, au premier démarrage qui applique la
+  migration.
+- `V013__drop_redundant_prefix_indexes.sql` supprime par `DROP INDEX IF EXISTS`
+  trois index qui sont des préfixes stricts d'autres index :
+  `idx_symbol_relations_project`, `idx_indexed_files_project` et `idx_symbols_file`.
+  Les requêtes qu'ils servaient restent servies par un index plus large, ce que
+  `SqliteGraphQueryPlanTest` vérifie par `EXPLAIN QUERY PLAN`. Un index supprimé se
+  recrée par une migration ultérieure si une requête nouvelle en a besoin.
+
+`SchemaMigratorFileIndexUpgradeTest` migre une base peuplée et vérifie que les
+données et le statut des projets sont conservés. Une seconde ouverture n'applique
+plus aucune des deux migrations.
+
+## Mise à niveau V014 — mise en attente des analyses d'indexation
+
+`V014__index_staged_analyses.sql` crée trois tables transitoires,
+`index_staged_files`, `index_staged_symbols` et `index_staged_relations`, où une
+indexation met ses analyses en attente par lots avant de les publier (décision
+DATA-0062, [indexing-pipeline.md](indexing-pipeline.md#9-coûts-mesurés-du-pipeline)).
+Elle ne modifie ni les faits canoniques, ni la génération, ni le statut des
+projets : aucun rebuild n'est imposé et les index Lucene et sémantiques restent
+valides. V001 à V013 et leurs empreintes restent inchangées.
+
+Ces tables sont vides hors indexation : la transaction de publication les vide, une
+indexation qui échoue les vide à sa fermeture et toute nouvelle indexation d'un
+projet écarte d'abord ce qu'une indexation interrompue (arrêt brutal du processus) y
+aurait laissé. Elles ne contiennent donc rien à sauvegarder ni à restaurer ; une
+base restaurée depuis une sauvegarde prise pendant une indexation reste cohérente,
+le projet étant alors dans un état non `READY` qui impose un rebuild complet.

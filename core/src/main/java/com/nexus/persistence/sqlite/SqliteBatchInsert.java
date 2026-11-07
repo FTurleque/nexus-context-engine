@@ -5,14 +5,25 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
-/** Parameterized multi-row inserts; transaction ownership stays with the caller. */
+/**
+ * Parameterized multi-row inserts; transaction ownership stays with the caller.
+ *
+ * <p>Les instructions préparées sont mises en cache par taille de lot (au plus {@code ROW_LIMIT}
+ * tailles distinctes) et réutilisées par tous les {@link #flush()} jusqu'à {@link #close()} : un
+ * même objet peut donc servir tous les fichiers d'une transaction d'indexation.</p>
+ */
 public final class SqliteBatchInsert implements AutoCloseable {
     public enum Table {
         SYMBOLS("INSERT INTO symbols(file_id,kind,name,qualified_name,signature,start_line,end_line,source_provider) VALUES ", 8),
-        RELATIONS("INSERT INTO symbol_relations(project_id,file_id,kind,source_ref,target_ref,confidence,source_provider) VALUES ", 7);
+        RELATIONS("INSERT INTO symbol_relations(project_id,file_id,kind,source_ref,target_ref,confidence,source_provider) VALUES ", 7),
+        /** Analyses en attente d'une indexation (V014), vidées par la transaction de publication. */
+        STAGED_SYMBOLS("INSERT INTO index_staged_symbols(staged_file_id,kind,name,qualified_name,signature,start_line,end_line,source_provider) VALUES ", 8),
+        STAGED_RELATIONS("INSERT INTO index_staged_relations(staged_file_id,kind,source_ref,target_ref,confidence,source_provider) VALUES ", 6);
 
         private final String prefix;
         private final int columns;
@@ -23,11 +34,11 @@ public final class SqliteBatchInsert implements AutoCloseable {
         }
     }
 
-    private static final int ROW_LIMIT = 128;
+    static final int ROW_LIMIT = 128;
     private final Connection connection;
     private final Table table;
     private final List<Object[]> rows = new ArrayList<>(ROW_LIMIT);
-    private PreparedStatement fullBatch;
+    private final Map<Integer, PreparedStatement> statementsBySize = new HashMap<>();
     private boolean closed;
 
     public SqliteBatchInsert(Connection connection, Table table) {
@@ -42,10 +53,7 @@ public final class SqliteBatchInsert implements AutoCloseable {
         }
         rows.add(values.clone());
         if (rows.size() == ROW_LIMIT) {
-            if (fullBatch == null) {
-                fullBatch = prepare(ROW_LIMIT);
-            }
-            execute(fullBatch);
+            execute(statementFor(ROW_LIMIT));
         }
     }
 
@@ -54,9 +62,16 @@ public final class SqliteBatchInsert implements AutoCloseable {
         if (rows.isEmpty()) {
             return;
         }
-        try (PreparedStatement tail = prepare(rows.size())) {
-            execute(tail);
+        execute(statementFor(rows.size()));
+    }
+
+    private PreparedStatement statementFor(int count) throws SQLException {
+        PreparedStatement cached = statementsBySize.get(count);
+        if (cached == null) {
+            cached = prepare(count);
+            statementsBySize.put(count, cached);
         }
+        return cached;
     }
 
     @SuppressWarnings("java:S2077") // Only enum-owned SQL and bounded '?' tuples; values are bound below.
@@ -87,8 +102,21 @@ public final class SqliteBatchInsert implements AutoCloseable {
         closed = true;
         // Never implicitly flush while unwinding a failed transaction.
         rows.clear();
-        if (fullBatch != null) {
-            fullBatch.close();
+        SQLException failure = null;
+        for (PreparedStatement statement : statementsBySize.values()) {
+            try {
+                statement.close();
+            } catch (SQLException closeFailure) {
+                if (failure == null) {
+                    failure = closeFailure;
+                } else {
+                    failure.addSuppressed(closeFailure);
+                }
+            }
+        }
+        statementsBySize.clear();
+        if (failure != null) {
+            throw failure;
         }
     }
 }

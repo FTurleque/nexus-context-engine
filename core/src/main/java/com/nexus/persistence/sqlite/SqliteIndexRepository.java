@@ -3,6 +3,7 @@ package com.nexus.persistence.sqlite;
 import com.nexus.index.CodeIntelligenceSnapshot;
 import com.nexus.index.IndexRepository;
 import com.nexus.index.IndexStatistics;
+import com.nexus.index.IndexWriteSession;
 import com.nexus.index.IndexedFile;
 import com.nexus.index.IndexedFileUpdate;
 import com.nexus.index.IndexedSymbol;
@@ -92,6 +93,11 @@ public final class SqliteIndexRepository implements IndexRepository {
     @Override
     public void applyChanges(UUID projectId, List<IndexedFileUpdate> updates, Set<String> removedPaths) {
         fileWriter.applyChanges(projectId, updates, removedPaths);
+    }
+
+    @Override
+    public IndexWriteSession openWriteSession(UUID projectId) {
+        return new SqliteIndexWriteSession(database, projectId);
     }
 
     @Override

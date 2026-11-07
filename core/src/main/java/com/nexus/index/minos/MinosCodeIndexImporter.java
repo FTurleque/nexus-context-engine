@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexus.index.CodeIntelligenceSnapshot;
+import com.nexus.index.ExternalCodeIntelligencePayloadImporter;
 import com.nexus.index.scan.ProjectScanner;
 import com.nexus.security.ProjectPathGuard;
 
@@ -32,7 +33,7 @@ import static com.nexus.index.minos.MinosDocumentParser.requiredParserText;
  * par un, avec des plafonds explicites en plus de la limite de transport.</p>
  */
 
-public final class MinosCodeIndexImporter {
+public final class MinosCodeIndexImporter implements ExternalCodeIntelligencePayloadImporter {
 
     public static final String SOURCE_PROVIDER = "minos";
     public static final long MAX_EXPORT_BYTES = 128L * 1024L * 1024L;
@@ -56,6 +57,7 @@ public final class MinosCodeIndexImporter {
         return importPayload(root, scannedProjectFiles, payload);
     }
 
+    @Override
     public CodeIntelligenceSnapshot importPayload(
             Path projectRoot,
             Set<String> indexedProjectFiles,
@@ -105,6 +107,11 @@ public final class MinosCodeIndexImporter {
      */
     public static String readPayload(InputStream input) throws IOException {
         return MinosPayloadReader.readPayload(input);
+    }
+
+    @Override
+    public String readBoundedPayload(InputStream input) throws IOException {
+        return readPayload(input);
     }
 
 }
