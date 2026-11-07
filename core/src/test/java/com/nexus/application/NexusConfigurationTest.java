@@ -34,7 +34,9 @@ class NexusConfigurationTest {
         assertEquals(ContextMaterializationLimits.defaults(), configuration.contextMaterializationLimits());
         assertEquals(ContextDiscoveryLimits.defaults(), configuration.contextDiscoveryLimits());
         assertEquals(FederationDeadlinePolicy.DEFAULT_DURATION, configuration.federationDeadlinePolicy().duration());
-        assertEquals(ScipIndexLimits.defaults(), new ScipIndexLimits(configuration.maxScipIndexBytes(), configuration.maxScipMessageBytes()));
+        assertEquals(
+                ScipIndexLimits.defaults(),
+                new ScipIndexLimits(configuration.maxScipIndexBytes(), configuration.maxScipMessageBytes()));
         assertEquals(2, configuration.maxConcurrentIndexing());
         assertEquals(ProjectIndexingService.DEFAULT_PROVIDER_TIMEOUT, configuration.codeIntelligenceTimeout());
         assertTrue(configuration.jdtConfiguration().isEmpty());
