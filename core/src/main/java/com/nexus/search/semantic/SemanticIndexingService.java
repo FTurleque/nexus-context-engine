@@ -1,6 +1,7 @@
 package com.nexus.search.semantic;
 
 import com.nexus.index.CodeSymbol;
+import com.nexus.index.SemanticIndexing;
 import com.nexus.index.SearchDocument;
 import com.nexus.security.OversizedSecretException;
 import com.nexus.security.SensitiveContentRedactor;
@@ -17,7 +18,7 @@ import java.util.regex.Pattern;
  * Construit l'index vectoriel dérivé uniquement lorsqu'un provider d'embeddings
  * et un index sémantique ont été explicitement composés.
  */
-public final class SemanticIndexingService {
+public final class SemanticIndexingService implements SemanticIndexing {
     private static final System.Logger LOGGER = System.getLogger(SemanticIndexingService.class.getName());
 
     public static final int DEFAULT_MAX_EMBEDDING_CHARS = 12_000;
@@ -80,6 +81,12 @@ public final class SemanticIndexingService {
         return profileId(DEFAULT_MAX_EMBEDDING_CHARS);
     }
 
+    @Override
+    public boolean enabled() {
+        return true;
+    }
+
+    @Override
     public boolean isCompatible(UUID projectId, String canonicalFingerprint) throws IOException {
         return semanticSearchIndex.isCompatible(projectId, provenance(canonicalFingerprint));
     }
@@ -121,6 +128,7 @@ public final class SemanticIndexingService {
      * Ouvre les écritures d'une indexation : les lots sont vectorisés puis accumulés sans commit,
      * la provenance n'est publiée qu'au {@link IndexingSession#commit()}.
      */
+    @Override
     public IndexingSession openSession(UUID projectId, String canonicalFingerprint, boolean rebuild)
             throws IOException {
         return new IndexingSession(semanticSearchIndex.openSession(
@@ -128,18 +136,20 @@ public final class SemanticIndexingService {
     }
 
     /** Écritures vectorisées d'une indexation ; voir {@link SemanticIndexSession}. */
-    public final class IndexingSession implements AutoCloseable {
+    public final class IndexingSession implements SemanticIndexing.Session {
         private final SemanticIndexSession delegate;
 
         private IndexingSession(SemanticIndexSession delegate) {
             this.delegate = delegate;
         }
 
+        @Override
         public void applyChanges(List<SearchDocument> documents, Set<String> removedRelativePaths)
                 throws IOException {
             delegate.applyChanges(vectorize(documents), removedRelativePaths);
         }
 
+        @Override
         public void commit() throws IOException {
             delegate.commit();
         }

@@ -20,6 +20,7 @@ import com.nexus.context.source.skill.LocalAgentSkillsProvider;
 import com.nexus.index.CodeIndexImporter;
 import com.nexus.index.CodeIntelligenceProvider;
 import com.nexus.index.IndexRepository;
+import com.nexus.index.SemanticIndexing;
 import com.nexus.index.service.ProjectIndexingService;
 import com.nexus.index.ProjectIndexLockManager;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
@@ -90,7 +91,7 @@ final class NexusApplicationFactory {
         searchStrategies.add(new LuceneFileSearchStrategy(searchIndex));
         searchStrategies.add(new SymbolSearchStrategy(indexRepository));
 
-        SemanticIndexingService semanticIndexingService = null;
+        SemanticIndexing semanticIndexingService = SemanticIndexing.disabled();
         SemanticSearchIndex semanticSearchIndex = null;
         if (semanticSearchConfiguration.enabled()) {
             EmbeddingProvider embeddingProvider = semanticSearchConfiguration.embeddingProvider()

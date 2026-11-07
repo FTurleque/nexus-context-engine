@@ -3,8 +3,8 @@ package com.nexus.index.service;
 import com.nexus.index.IndexWriteSession;
 import com.nexus.index.IndexedFileUpdate;
 import com.nexus.index.SearchDocument;
+import com.nexus.index.SemanticIndexing;
 import com.nexus.search.SearchIndexSession;
-import com.nexus.search.semantic.SemanticIndexingService;
 
 import java.io.IOException;
 import java.util.List;
@@ -24,12 +24,12 @@ import java.util.Set;
  */
 final class IndexPublication implements AutoCloseable {
     private final SearchIndexSession lexical;
-    private final SemanticIndexingService.IndexingSession semantic;
+    private final SemanticIndexing.Session semantic;
     private final IndexWriteSession writes;
 
     IndexPublication(
             SearchIndexSession lexical,
-            SemanticIndexingService.IndexingSession semantic,
+            SemanticIndexing.Session semantic,
             IndexWriteSession writes) {
         this.lexical = Objects.requireNonNull(lexical, "lexical");
         this.semantic = semantic;

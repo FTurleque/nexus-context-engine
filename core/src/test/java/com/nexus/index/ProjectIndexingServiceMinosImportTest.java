@@ -118,7 +118,7 @@ class ProjectIndexingServiceMinosImportTest {
                 new LuceneSearchIndex(paths),
                 List.of(),
                 List.of(),
-                null,
+                SemanticIndexing.disabled(),
                 Duration.ofSeconds(5),
                 ProjectIndexLockManager.fileBacked(paths));
         return new Fixture(paths, project, service);

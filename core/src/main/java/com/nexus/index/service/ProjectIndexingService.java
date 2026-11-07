@@ -12,6 +12,7 @@ import com.nexus.index.IndexingReport;
 import com.nexus.index.LanguageAnalyzer;
 import com.nexus.index.ProjectIndexLockManager;
 import com.nexus.index.ScannedFile;
+import com.nexus.index.SemanticIndexing;
 import com.nexus.index.scan.ProjectScanResult;
 import com.nexus.index.scan.ProjectScanner;
 import com.nexus.project.IndexStatus;
@@ -19,7 +20,6 @@ import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectReadiness;
 import com.nexus.project.ProjectRepository;
 import com.nexus.search.SearchIndex;
-import com.nexus.search.semantic.SemanticIndexingService;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -51,7 +51,7 @@ public final class ProjectIndexingService {
     private final ProjectScanner scanner;
     private final SearchIndex searchIndex;
     private final List<CodeIntelligenceProvider> codeIntelligenceProviders;
-    private final SemanticIndexingService semanticIndexingService;
+    private final SemanticIndexing semanticIndexingService;
     private final ExternalCodeIntelligenceRefresher externalRefresher;
     private final IndexDocumentPublisher documentPublisher;
     private final ExternalCodeIntelligencePayloadImporter payloadImporter;
@@ -72,7 +72,7 @@ public final class ProjectIndexingService {
             SearchIndex searchIndex,
             List<CodeIndexImporter> codeIndexImporters,
             List<CodeIntelligenceProvider> codeIntelligenceProviders,
-            SemanticIndexingService semanticIndexingService,
+            SemanticIndexing semanticIndexingService,
             ExternalCodeIntelligencePayloadImporter payloadImporter,
             ProjectIndexLockManager projectIndexLockManager) {
         this(projectRepository, indexRepository, scanner, analyzers, searchIndex,
@@ -89,7 +89,7 @@ public final class ProjectIndexingService {
             SearchIndex searchIndex,
             List<CodeIndexImporter> codeIndexImporters,
             List<CodeIntelligenceProvider> codeIntelligenceProviders,
-            SemanticIndexingService semanticIndexingService,
+            SemanticIndexing semanticIndexingService,
             ExternalCodeIntelligencePayloadImporter payloadImporter,
             Duration providerTimeout,
             ProjectIndexLockManager projectIndexLockManager,
@@ -103,7 +103,7 @@ public final class ProjectIndexingService {
         Objects.requireNonNull(codeIndexImporters, "codeIndexImporters");
         this.codeIntelligenceProviders = List.copyOf(
                 Objects.requireNonNull(codeIntelligenceProviders, "codeIntelligenceProviders"));
-        this.semanticIndexingService = semanticIndexingService;
+        this.semanticIndexingService = Objects.requireNonNull(semanticIndexingService, "semanticIndexingService");
         this.payloadImporter = Objects.requireNonNull(payloadImporter, "payloadImporter");
         this.externalRefresher = new ExternalCodeIntelligenceRefresher(indexRepository, codeIndexImporters,
                 codeIntelligenceProviders, providerTimeout);
@@ -233,7 +233,7 @@ public final class ProjectIndexingService {
                     .map(ScannedFile::relativePath)
                     .forEach(searchRemovedPaths::add);
 
-            boolean semanticFullRebuild = semanticIndexingService != null
+            boolean semanticFullRebuild = semanticIndexingService.enabled()
                     && (fullRebuild || !semanticIndexingService.isCompatible(projectId, canonicalFingerprint));
 
             int updatedFiles;

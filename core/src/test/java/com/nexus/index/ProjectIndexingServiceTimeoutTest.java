@@ -72,7 +72,7 @@ class ProjectIndexingServiceTimeoutTest {
                 new LuceneSearchIndex(paths),
                 List.of(stubbornImporter),
                 List.of(),
-                null,
+                SemanticIndexing.disabled(),
                 Duration.ofMillis(50));
 
         try {

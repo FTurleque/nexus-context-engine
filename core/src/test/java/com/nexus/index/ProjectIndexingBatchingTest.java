@@ -57,7 +57,7 @@ class ProjectIndexingBatchingTest {
                 searchIndex,
                 List.of(),
                 List.of(),
-                null,
+                SemanticIndexing.disabled(),
                 Duration.ofSeconds(5),
                 ProjectIndexLockManager.processLocalOnly(),
                 100,
