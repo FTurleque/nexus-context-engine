@@ -163,4 +163,13 @@ class GitRepositoryLocatorTest {
 
         assertEquals(Ownership.UNDETERMINED, ownership);
     }
+
+    @Test
+    void fileSystemOwnershipRecognizesAnEntryCreatedByTheCurrentUser() throws Exception {
+        Path gitEntry = Files.createDirectories(temporaryDirectory.resolve("owned/.git"));
+
+        Ownership ownership = new GitRepositoryLocator.FileOwnershipResolver().ownership(gitEntry);
+
+        assertEquals(Ownership.CURRENT_USER, ownership);
+    }
 }

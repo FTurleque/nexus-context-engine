@@ -11,9 +11,17 @@ import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.AclEntry;
+import java.nio.file.attribute.AclEntryPermission;
+import java.nio.file.attribute.AclEntryType;
+import java.nio.file.attribute.FileAttribute;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.nio.file.attribute.UserPrincipal;
+import java.util.EnumSet;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -183,17 +191,23 @@ final class GitRepositoryLocator {
 
         private static Set<UserPrincipal> resolveCurrentPrincipals(FileSystem fileSystem) {
             Set<UserPrincipal> principals = new LinkedHashSet<>();
+            UserPrincipal namedUser = null;
             String userName = System.getProperty("user.name");
             if (userName != null && !userName.isBlank()) {
                 try {
-                    principals.add(fileSystem.getUserPrincipalLookupService().lookupPrincipalByName(userName));
+                    namedUser = fileSystem.getUserPrincipalLookupService().lookupPrincipalByName(userName);
+                    principals.add(namedUser);
                 } catch (IOException | UnsupportedOperationException | SecurityException ignored) {
                     // Compte introuvable par son nom : seul le propriétaire du fichier sonde reste.
                 }
             }
+            Optional<FileAttribute<?>> ownerOnly = ownerOnlyAttribute(fileSystem, namedUser);
+            if (ownerOnly.isEmpty()) {
+                return Set.copyOf(principals);
+            }
             Path probe = null;
             try {
-                probe = Files.createTempFile("nexus-owner-", ".probe");
+                probe = Files.createTempFile("nexus-owner-", ".probe", ownerOnly.get());
                 principals.add(Files.getOwner(probe, LinkOption.NOFOLLOW_LINKS));
             } catch (IOException | UnsupportedOperationException | SecurityException ignored) {
                 // Sonde impossible : seul le compte résolu par son nom reste.
@@ -207,6 +221,38 @@ final class GitRepositoryLocator {
                 }
             }
             return Set.copyOf(principals);
+        }
+
+        /**
+         * Permissions de création du fichier sonde, réservées à son propriétaire : POSIX
+         * {@code rw-------}, ou ACL limitée au compte courant. Sans l'un ni l'autre, aucune sonde
+         * n'est créée dans le répertoire temporaire.
+         */
+        private static Optional<FileAttribute<?>> ownerOnlyAttribute(FileSystem fileSystem, UserPrincipal namedUser) {
+            Set<String> views = fileSystem.supportedFileAttributeViews();
+            if (views.contains("posix")) {
+                return Optional.of(PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
+            }
+            if (views.contains("acl") && namedUser != null) {
+                AclEntry entry = AclEntry.newBuilder()
+                        .setType(AclEntryType.ALLOW)
+                        .setPrincipal(namedUser)
+                        .setPermissions(EnumSet.allOf(AclEntryPermission.class))
+                        .build();
+                List<AclEntry> acl = List.of(entry);
+                return Optional.of(new FileAttribute<List<AclEntry>>() {
+                    @Override
+                    public String name() {
+                        return "acl:acl";
+                    }
+
+                    @Override
+                    public List<AclEntry> value() {
+                        return acl;
+                    }
+                });
+            }
+            return Optional.empty();
         }
     }
 }
