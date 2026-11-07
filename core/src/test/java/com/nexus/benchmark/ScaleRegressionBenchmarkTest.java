@@ -473,6 +473,10 @@ class ScaleRegressionBenchmarkTest {
                 .newInstance(relativePath, "java", FileCategory.SOURCE, content, List.of());
     }
 
+    /**
+     * Le type {@code SearchDocument} n'est pas nommable ici : la liste est transmise sans paramètre de type,
+     * ce qui justifie la suppression de {@code rawtypes} et {@code unchecked} sur cette seule méthode.
+     */
     @SuppressWarnings({"rawtypes", "unchecked"})
     private static void rebuild(SemanticIndexingService service, UUID projectId, String fingerprint,
                                 List<Object> documents) throws IOException {
