@@ -190,10 +190,14 @@ public final class LuceneSearchIndex implements SearchIndex {
                 return false;
             }
             try (DirectoryReader reader = DirectoryReader.open(directory)) {
-                return SensitiveContentRedactor.POLICY_VERSION.equals(
-                        reader.getIndexCommit().getUserData().get(COMMIT_REDACTION_POLICY));
+                return hasCurrentRedactionPolicy(reader.getIndexCommit().getUserData());
             }
         }
+    }
+
+    /** Vrai si le commit a été construit avec la politique de redaction courante. */
+    static boolean hasCurrentRedactionPolicy(Map<String, String> commitUserData) {
+        return SensitiveContentRedactor.POLICY_VERSION.equals(commitUserData.get(COMMIT_REDACTION_POLICY));
     }
 
     private static void commit(IndexWriter writer) throws IOException {

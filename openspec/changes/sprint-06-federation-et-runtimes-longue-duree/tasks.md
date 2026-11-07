@@ -18,8 +18,8 @@
 
 ## 4. Métadonnées Lucene sur le reader en cache (AUD-PRF-04)
 
-- [ ] 4.1 `AUD-PRF-04` — Lire `userData` sur le reader en cache (ADR-0045) dans `PersistentLuceneSemanticSearchIndex.isCompatible`, repli `SegmentInfos.readLatestCommit` sans reader ; vérifier par un test qui compte les ouvertures de reader sur deux recherches successives : `./mvnw -B -ntp -pl core test -Dtest='LuceneSemanticSearchIndexTest,SemanticSearchStrategyTest' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
-- [ ] 4.2 `AUD-PRF-04` — Même traitement pour `PersistentLuceneSearchIndex.isPresent` utilisé par la sonde de readiness de `NexusApplication` ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='*LuceneSearchIndex*,NexusApplication*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
+- [x] 4.1 `AUD-PRF-04` — Lire `userData` sur le reader en cache (ADR-0045) dans `PersistentLuceneSemanticSearchIndex.isCompatible`, repli `SegmentInfos.readLatestCommit` sans reader ; vérifier par un test qui compte les ouvertures de reader sur deux recherches successives : `./mvnw -B -ntp -pl core test -Dtest='LuceneSemanticSearchIndexTest,SemanticSearchStrategyTest' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
+- [x] 4.2 `AUD-PRF-04` — Même traitement pour `PersistentLuceneSearchIndex.isPresent` utilisé par la sonde de readiness de `NexusApplication` ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='*LuceneSearchIndex*,NexusApplication*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
 
 ## 5. Cache de contexte Git (AUD-PRF-06)
 

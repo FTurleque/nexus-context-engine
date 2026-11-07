@@ -96,8 +96,12 @@ public final class PersistentLuceneSearchIndex implements SearchIndex {
 
     @Override
     public boolean isPresent(UUID projectId) throws IOException {
+        Objects.requireNonNull(projectId, "projectId");
         readers.ensureOpen();
-        return operationScoped.isPresent(projectId);
+        // Sonde de readiness : lecture sur le reader en cache ou sur le dernier commit,
+        // sans DirectoryReader supplémentaire (ADR-0045).
+        return readers.readCommitMetadata(
+                projectId, paths.projectLuceneIndex(projectId), LuceneSearchIndex::hasCurrentRedactionPolicy, false);
     }
 
     @Override
@@ -107,5 +111,9 @@ public final class PersistentLuceneSearchIndex implements SearchIndex {
 
     int cachedProjectCount() {
         return readers.cachedProjectCount();
+    }
+
+    long openedReaderCount() {
+        return readers.openedReaderCount();
     }
 }
