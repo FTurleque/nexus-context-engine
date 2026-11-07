@@ -345,9 +345,14 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
         return Math.max(0.05d, 1.0d - ((double) position / (MAX_COMMITS - 1)));
     }
 
-    private static String projectPrefix(Repository repository, Path projectRoot) {
-        Path workTree = repository.getWorkTree().toPath().toAbsolutePath().normalize();
-        Path root = projectRoot.toAbsolutePath().normalize();
+    /**
+     * Préfixe du projet dans le worktree. Les deux chemins sont comparés sous leur forme réelle :
+     * {@link GitRepositoryLocator} ouvre le dépôt depuis la racine réelle du projet, alors que la
+     * racine enregistrée peut passer par un nom court Windows ou un lien.
+     */
+    private static String projectPrefix(Repository repository, Path projectRoot) throws IOException {
+        Path workTree = repository.getWorkTree().toPath().toRealPath();
+        Path root = projectRoot.toRealPath();
         if (!root.startsWith(workTree)) {
             return "";
         }
