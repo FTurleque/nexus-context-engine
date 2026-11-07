@@ -5,6 +5,7 @@ import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
@@ -24,6 +25,8 @@ import java.util.Set;
  * appartient à l'utilisateur qui exécute NEXUS, à l'image de {@code safe.directory} de Git ;
  * sinon, ou si le propriétaire n'est pas déterminable, l'ouverture échoue par
  * {@link RejectedParentRepositoryException} avant toute lecture de la configuration du dépôt.
+ * Après ouverture, le propriétaire du répertoire Git et du répertoire commun retenus est
+ * revérifié ; s'il ne correspond plus, le dépôt est fermé et écarté avec le même diagnostic.
  * La remontée s'arrête au premier {@code .git} rencontré : un dépôt invalide ne fait pas
  * chercher plus haut.</p>
  */
@@ -98,10 +101,33 @@ final class GitRepositoryLocator {
                 requireCurrentUser(gitDir);
             }
         }
-        return new FileRepositoryBuilder()
+        Repository repository = new FileRepositoryBuilder()
                 .setGitDir(gitDir.toFile())
                 .setMustExist(true)
                 .build();
+        if (parentRepository) {
+            try {
+                requireCurrentUserOfOpenedRepository(repository);
+            } catch (RejectedParentRepositoryException rejected) {
+                repository.close();
+                throw rejected;
+            }
+        }
+        return repository;
+    }
+
+    /**
+     * Revérifie, après ouverture, le propriétaire du répertoire Git et du répertoire commun
+     * retenus par JGit : un remplacement entre le contrôle initial et l'ouverture écarte le dépôt.
+     */
+    private void requireCurrentUserOfOpenedRepository(Repository repository)
+            throws RejectedParentRepositoryException {
+        Path directory = repository.getDirectory().toPath();
+        requireCurrentUser(directory);
+        File common = repository.getCommonDirectory();
+        if (common != null && !common.toPath().equals(directory)) {
+            requireCurrentUser(common.toPath());
+        }
     }
 
     private static Path resolveGitLink(Path directory) throws IOException {

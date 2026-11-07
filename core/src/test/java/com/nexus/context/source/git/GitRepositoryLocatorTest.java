@@ -56,7 +56,29 @@ class GitRepositoryLocatorTest {
         try (Repository repository = locator.open(projectRoot)) {
             assertEquals(temporaryDirectory.toRealPath(), repository.getWorkTree().toPath().toRealPath());
         }
-        assertEquals(List.of(temporaryDirectory.toRealPath().resolve(".git")), inspected);
+        // Contrôle avant ouverture, puis revérification du répertoire Git ouvert.
+        assertEquals(2, inspected.size());
+        for (Path entry : inspected) {
+            assertEquals(temporaryDirectory.toRealPath().resolve(".git"), entry.toRealPath());
+        }
+    }
+
+    @Test
+    void rejectsAParentRepositoryWhoseOwnerChangesBetweenTheCheckAndTheOpening() throws Exception {
+        Git.init().setDirectory(temporaryDirectory.toFile()).call().close();
+        Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("project"));
+        List<Path> inspected = new ArrayList<>();
+        GitRepositoryLocator locator = new GitRepositoryLocator(entry -> {
+            inspected.add(entry);
+            return inspected.size() == 1 ? Ownership.CURRENT_USER : Ownership.OTHER_ACCOUNT;
+        });
+
+        RejectedParentRepositoryException rejected =
+                assertThrows(RejectedParentRepositoryException.class, () -> locator.open(projectRoot));
+
+        assertEquals(GitRepositoryLocator.PARENT_REPOSITORY_REJECTED, rejected.getMessage());
+        assertEquals(2, inspected.size());
+        assertEquals(temporaryDirectory.toRealPath().resolve(".git"), inspected.get(1).toRealPath());
     }
 
     @Test
