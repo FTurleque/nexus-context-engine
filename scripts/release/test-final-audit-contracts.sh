@@ -454,4 +454,29 @@ grep -q 'requireUpperBoundDeps' .claude/skills/nexus-dependency-bump/SKILL.md \
 grep -q 'failOnBlacklist=true' docs/developer/ci-and-supply-chain.md \
   || fail 'ci-and-supply-chain must document the licence whitelist (AUD-DEP-07)'
 
+# --- Sprint 9 : version-from-pom (AUD-QUA-12) ---
+# The product version is written only in the pom files. The Linux CI job and
+# the Windows gate read it from pom.xml; tool versions (pinned actions, Maven
+# wrapper distribution, CycloneDX spec) are not product versions and stay out
+# of this check.
+product_version="$(sed -n 's:^    <version>\([^<]*\)</version>.*:\1:p' pom.xml | head -n 1 | tr -d '\r')"
+[[ -n "$product_version" ]] || fail 'unable to read the product version from pom.xml'
+product_version_files=(
+  .github/workflows/ci.yml
+  scripts/validate-phase-6.ps1
+)
+for path in "${product_version_files[@]}"; do
+  if grep -n -E 'nexus-context-engine-[0-9]+\.[0-9]+\.[0-9]+' "$path"; then
+    fail "literal product version in a deliverable name in $path (read it from pom.xml)"
+  fi
+  if grep -n -F -w -- "$product_version" "$path" \
+      | grep -v -E 'uses: [^@]+@[0-9a-f]{40}|apache-maven-[0-9]'; then
+    fail "literal product version $product_version in $path (read it from pom.xml)"
+  fi
+done
+grep -q 'NEXUS_VERSION=' .github/workflows/ci.yml \
+  || fail 'Linux CI job must export the product version read from pom.xml'
+grep -q 'rootPom.project.version' scripts/validate-phase-6.ps1 \
+  || fail 'Windows gate must read the product version from pom.xml'
+
 echo 'final-audit-contracts=PASS'

@@ -102,6 +102,12 @@ try {
     Write-Host $javaVersion
     Write-Host "Maven compiler release : $compilerRelease"
 
+    $productVersion = ([string]$rootPom.project.version).Trim()
+    if ($productVersion -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$') {
+        throw "Version produit inattendue dans pom.xml : '$productVersion'"
+    }
+    Write-Host "Version produit (pom.xml) : $productVersion"
+
     Write-Host "[2/9] Maven reproductible via le wrapper (repli local hors CI)"
     $wrapperMavenBin = Join-Path $env:USERPROFILE ".m2\wrapper\dists\nexus\apache-maven-3.10.0\apache-maven-3.10.0\bin"
     if (Test-Path -LiteralPath $wrapperMavenBin -PathType Container) {
@@ -118,9 +124,9 @@ try {
         throw "scripts/self-smoke.ps1 a echoue avec le code $LASTEXITCODE"
     }
 
-    Write-Host "[5/9] Livrables 0.2.0 et checksums"
-    $cliJar = Join-Path $repoRoot "target\nexus-context-engine-0.2.0-cli.jar"
-    $distributionZip = Join-Path $repoRoot "target\distribution\nexus-context-engine-0.2.0.zip"
+    Write-Host "[5/9] Livrables $productVersion et checksums"
+    $cliJar = Join-Path $repoRoot "target\nexus-context-engine-$productVersion-cli.jar"
+    $distributionZip = Join-Path $repoRoot "target\distribution\nexus-context-engine-$productVersion.zip"
     foreach ($artifact in @($cliJar, $distributionZip)) {
         if (-not (Test-Path -LiteralPath $artifact -PathType Leaf)) {
             throw "Livrable absent : $artifact"
@@ -142,8 +148,8 @@ try {
     }
     if ($null -eq $sbomJson.metadata.component -or
             $sbomJson.metadata.component.name -ne "nexus-context-engine-parent" -or
-            $sbomJson.metadata.component.version -ne "0.2.0") {
-        throw "Le composant racine du SBOM ne decrit pas NEXUS 0.2.0."
+            $sbomJson.metadata.component.version -ne $productVersion) {
+        throw "Le composant racine du SBOM ne decrit pas NEXUS $productVersion."
     }
     $requiredModules = @(
         "nexus-context-engine",
@@ -152,7 +158,7 @@ try {
         "nexus-assistant-clients"
     )
     $sbomModules = @($sbomJson.components |
-            Where-Object { $_.group -eq "io.github.fturleque" -and $_.version -eq "0.2.0" } |
+            Where-Object { $_.group -eq "io.github.fturleque" -and $_.version -eq $productVersion } |
             ForEach-Object { $_.name })
     foreach ($requiredModule in $requiredModules) {
         if ($sbomModules -notcontains $requiredModule) {
@@ -222,7 +228,7 @@ try {
         throw "Le launcher de distribution a echoue."
     }
     $version = $versionOutput | ConvertFrom-Json
-    if ($version.version -ne "0.2.0") {
+    if ($version.version -ne $productVersion) {
         throw "Version de distribution inattendue : $($version.version)"
     }
 
