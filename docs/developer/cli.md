@@ -119,7 +119,7 @@ Le projet doit être `READY`.
 java -jar .\target\nexus-context-engine-0.2.0-cli.jar search-federated app-api,app-domain "facturation" --limit 20 --explain
 ```
 
-La portée accepte noms uniques ou UUID séparés par des virgules. Chaque projet doit être `READY`. NEXUS sur-récupère localement avant diversification globale par `(projectId,path)` pour éviter un top-K artificiellement sous-rempli.
+La portée accepte noms uniques ou UUID séparés par des virgules. Chaque projet doit être `READY`. NEXUS sur-récupère localement avant diversification globale par `(projectId,path)` pour éviter un top-K artificiellement sous-rempli. Une échéance globale (60 s par défaut, `NEXUS_FEDERATION_DEADLINE_SECONDS`) borne la requête : les projets non commencés sont listés par la clé JSON `unservedProjects` et par la ligne « Projets non servis » du rendu humain, pour la recherche comme pour le contexte fédéré ([détail](large-scale-search.md#vecteur-de-requête-unique-et-échéance-globale)).
 
 ## ContextBundle mono-projet
 

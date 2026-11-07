@@ -102,7 +102,8 @@ final class NexusMcpTools {
                             positiveInteger(arguments, "limit", DEFAULT_LIMIT, ResultLimitPolicy.MAX_RESULT_LIMIT),
                             booleanValue(arguments, "explain", false));
                     return PublicOutputProjection.federatedSearch(operation.projects(), operation.query(),
-                            operation.limit(), operation.explain(), operation.durationMs(), operation.results());
+                            operation.limit(), operation.explain(), operation.durationMs(), operation.results(),
+                            operation.unservedProjects());
                 });
     }
 

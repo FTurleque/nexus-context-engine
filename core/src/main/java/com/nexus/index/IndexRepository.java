@@ -35,6 +35,13 @@ public interface IndexRepository {
     /** Recherche bornée de symboles, filtrée avant matérialisation des résultats. */
     List<IndexedSymbol> searchSymbols(UUID projectId, String query, int limit);
 
+    /**
+     * Recherche bornée de plusieurs requêtes en un nombre de requêtes SQL qui ne croît pas avec leur nombre
+     * (AUD-PRF-09). Rend, dans l'ordre des requêtes distinctes, le résultat de {@link #searchSymbols(UUID, String, int)}
+     * de chacune, limité à {@code limit} par requête ; un symbole trouvé par deux requêtes y figure deux fois.
+     */
+    List<IndexedSymbol> searchSymbols(UUID projectId, List<String> queries, int limit);
+
     List<SymbolRelation> findRelations(UUID projectId);
 
     /** Projection minimale des imports utilisée pour construire le graphe de fichiers. */

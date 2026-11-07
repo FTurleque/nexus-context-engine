@@ -9,6 +9,7 @@ import com.nexus.context.source.skill.SkillSourceProvider;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectRepository;
 import com.nexus.ranking.RankedCandidate;
+import com.nexus.search.SearchQueryContext;
 import com.nexus.search.SearchService;
 import com.nexus.token.TokenEstimator;
 
@@ -136,7 +137,17 @@ public final class DefaultContextBuilder implements ContextBuilder {
             ContextRequest request,
             ContextMaterializationBudget materializationBudget,
             ContextDiscoveryBudget discoveryBudget) {
+        return build(request, materializationBudget, discoveryBudget, SearchQueryContext.create());
+    }
+
+    @Override
+    public ContextBundle build(
+            ContextRequest request,
+            ContextMaterializationBudget materializationBudget,
+            ContextDiscoveryBudget discoveryBudget,
+            SearchQueryContext queryContext) {
         Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(queryContext, "queryContext");
         Objects.requireNonNull(materializationBudget, "materializationBudget");
         Objects.requireNonNull(discoveryBudget, "discoveryBudget");
         ProjectDescriptor project = projectRepository.findById(request.projectId())
@@ -153,7 +164,8 @@ public final class DefaultContextBuilder implements ContextBuilder {
                     project,
                     request.query(),
                     retrievalLimit,
-                    request.explain());
+                    request.explain(),
+                    queryContext);
             List<RankedCandidate> filtered = filterRequestedSources(request, ranked);
             List<Path> targetPaths = targetPaths(project, filtered);
 

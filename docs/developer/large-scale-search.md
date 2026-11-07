@@ -57,7 +57,13 @@ sur disque pendant les insertions avec triggers. Le journal canonique et la
 durabilité restent inchangés. La mémoire temporaire native dépend du travail SQL
 et n'est pas comptée par le gate de heap Java ; voir [ADR-0050](../architecture/adr/DATA-0050-conserver-les-temporaires-sqlite-en-memoire.md).
 
-Les recherches symbole/relation filtrent côté repository avant matérialisation. V005 impose également :
+Les recherches symbole/relation filtrent côté repository avant matérialisation. La recherche de symboles est scopée au projet ciblé (AUD-PRF-09) :
+
+- le préfiltre approché part des fichiers du projet (`UNIQUE (project_id, relative_path)`) puis sonde `idx_symbols_file_fuzzy_prefilter` (V015, première colonne `file_id`) : son plan ne contient aucun parcours de la table ou d'un index des symboles et ne change pas quand la base passe de 25 à 100 projets (`SqliteSymbolSearchScopingTest`) ;
+- les termes d'une requête (jusqu'à 8, plus la requête entière) sont interrogés en lot par `IndexRepository.searchSymbols(projectId, queries, limit)` : au plus une requête SQL par famille (plein texte trigram, préfiltre approché, LIKE des termes de moins de trois points de code) quel que soit le nombre de termes. La requête est composée (`UNION ALL`) : chaque terme porte son propre `LIMIT`, donc SQLite s'arrête tôt par terme, et le préfiltre approché choisit par terme, d'après un comptage plafonné à 10 000, le parcours de l'index scopé ou le parcours ordonné de `idx_symbols_qualified_name`. Une fenêtre `ROW_NUMBER` sur tous les candidats a été écartée : à 100 000 symboles dans un projet, elle portait le p95 de la recherche exacte de 40 à 532 ms. Le résultat est identique aux requêtes par terme d'avant V015 ;
+- l'index plein texte `symbol_search_fts` est contentless, sans colonne de projet : sa correspondance reste globale et le filtre de projet s'applique par les jointures sur la clé primaire. Une restriction par `rowid IN (symboles du projet)` a été mesurée le 2026-11-07 sur 60 projets et 240 000 symboles : 0,67 à 1,0 s contre 3 à 87 ms pour la correspondance globale, donc non retenue.
+
+V005 impose également :
 
 ```text
 start_line >= 1
@@ -82,6 +88,20 @@ Les projections/voisinages sont bornés en nœuds/arêtes et le benchmark vérif
 Le budget de découverte natif de chaque construction est partagé entre instructions, skills, customisations et Git avant le budget final de tokens.
 
 Les limites REST de résultats et de budget contexte fédérés sont alignées sur les politiques centrales ; le REST ne peut pas demander un plafond supérieur au cœur.
+
+## Vecteur de requête unique et échéance globale
+
+Une requête fédérée (recherche ou contexte) crée un `SearchQueryContext` pour toute la requête et le transmet aux stratégies de chaque projet. `SemanticSearchStrategy` y mémorise le vecteur de la requête **redactée** : le fournisseur d'embeddings reçoit au plus un appel `embedQuery`, quel que soit le nombre de projets, et zéro si aucun projet n'a d'index sémantique compatible. Une indisponibilité du fournisseur est mémorisée de la même façon : un seul appel est tenté et chaque projet porte le même diagnostic de dégradation. Le contexte n'est pas conservé entre requêtes.
+
+Une échéance globale (`FederationDeadlinePolicy`, [BE-0064](../architecture/adr/BE-0064-borner-la-federation-par-une-echeance-globale-sans-parallelisme.md)) est vérifiée avant chaque projet, dans l'ordre du scope, sans parallélisme :
+
+| Paramètre | Valeur |
+|---|---|
+| `NEXUS_FEDERATION_DEADLINE_SECONDS` | entier de 1 à 600, défaut 60 ; toute autre valeur est refusée |
+| Projet commencé | jamais interrompu |
+| Délai d'embedding | `min(timeout du fournisseur, temps restant)`, au moins 1 ms |
+
+Les projets non commencés à l'échéance ne sont pas servis et sont nommés, dans l'ordre du scope, par `unservedProjects` (identifiant et nom) : composante des réponses fédérées `FederatedSearch` et `FederatedContext` de la projection publique, donc identique en CLI (clé JSON et ligne « Projets non servis »), REST et MCP. La liste est vide, et les résultats identiques à ceux d'une exécution sans échéance, lorsque tous les projets sont traités à temps. En mode `explain`, le contexte fédéré ajoute une exclusion « projet non servi » par projet concerné. Les tests injectent une horloge (`InstantSource`) et n'affirment rien sur la durée réelle.
 
 ## Providers externes et scale
 

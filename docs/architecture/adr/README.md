@@ -41,7 +41,7 @@ Oui si la décision est **durable et structurante** et tranche entre des options
 
 ## Index
 
-58 ADR actifs : architecture 15, backend 22, data 14, general 4, security 3.
+60 ADR actifs : architecture 15, backend 24, data 14, general 4, security 3.
 
 | ADR | Décision | Date | Statut |
 |---|---|---|---|
@@ -106,6 +106,8 @@ Oui si la décision est **durable et structurante** et tranche entre des options
 | [GEN-0060](GEN-0060-qualifier-la-recherche-semantique-reelle-en-deux-corpus.md) | Qualifier la recherche sémantique réelle en deux corpus, hors du chemin de release | 2026-10-30 | Proposed |
 | [ARCH-0061](ARCH-0061-decider-le-contrat-de-sortie-publique-dans-la-projection-du-coeur.md) | Décider le contrat de sortie publique dans la projection du cœur | 2026-10-30 | Proposed |
 | [DATA-0062](DATA-0062-mettre-en-attente-les-analyses-d-indexation-dans-sqlite.md) | Mettre en attente les analyses d'indexation dans SQLite et committer Lucene une fois | 2026-11-07 | Proposed |
+| [BE-0064](BE-0064-borner-la-federation-par-une-echeance-globale-sans-parallelisme.md) | Borner la fédération par une échéance globale vérifiée entre projets, sans parallélisme | 2026-11-07 | Proposed |
+| [BE-0065](BE-0065-dimensionner-les-caches-git-sur-le-scope-federe.md) | Dimensionner les caches Git des runtimes longue durée sur le scope fédéré | 2026-11-07 | Proposed |
 
 ## Archive
 

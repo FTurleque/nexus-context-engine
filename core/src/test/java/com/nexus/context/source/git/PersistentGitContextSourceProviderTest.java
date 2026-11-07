@@ -1,5 +1,6 @@
 package com.nexus.context.source.git;
 
+import com.nexus.project.FederatedScopePolicy;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;
@@ -10,7 +11,9 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -76,6 +79,57 @@ class PersistentGitContextSourceProviderTest {
         assertEquals(4, delegate.calls);
         assertEquals(2, provider.stats().entries());
         assertTrue(provider.stats().evictions() >= 2);
+    }
+
+    @Test
+    void defaultCapacityCoversTheMaximalFederatedScope() {
+        assertEquals(FederatedScopePolicy.MAX_PROJECTS, PersistentGitContextSourceProvider.DEFAULT_CAPACITY);
+    }
+
+    @Test
+    void servesEveryProjectOfACyclicTwentyProjectScopeFromTheCacheOnTheSecondPass() throws Exception {
+        List<Fixture> fixtures = new ArrayList<>();
+        for (int index = 0; index < 20; index++) {
+            fixtures.add(repository("cycle-" + index));
+        }
+        CountingProvider delegate = new CountingProvider();
+        PersistentGitContextSourceProvider provider = new PersistentGitContextSourceProvider(
+                delegate, PersistentGitContextSourceProvider.DEFAULT_CAPACITY);
+
+        for (Fixture fixture : fixtures) {
+            provider.discover(fixture.query("federated query"));
+        }
+        assertEquals(20, delegate.calls);
+        assertEquals(0, provider.stats().hits());
+
+        for (Fixture fixture : fixtures) {
+            provider.discover(fixture.query("federated query"));
+        }
+
+        // Au-delà de 16 projets : aucune éviction, chaque projet est un hit au second passage.
+        assertEquals(20, delegate.calls);
+        PersistentGitContextSourceProvider.CacheStats stats = provider.stats();
+        assertEquals(20, stats.hits());
+        assertEquals(20, stats.misses());
+        assertEquals(0, stats.evictions());
+        assertEquals(20, stats.entries());
+    }
+
+    @Test
+    void cacheStatisticsExposeCountersAndCapacity() throws Exception {
+        Fixture fixture = repository("cache-statistics");
+        PersistentGitContextSourceProvider provider = new PersistentGitContextSourceProvider(new CountingProvider(), 4);
+
+        provider.discover(fixture.query("same query"));
+        provider.discover(fixture.query("same query"));
+
+        Map<String, Object> statistics = provider.cacheStatistics();
+        assertEquals(4, statistics.get("capacity"));
+        assertEquals(1, statistics.get("entries"));
+        assertEquals(1, statistics.get("hits"));
+        assertEquals(1, statistics.get("misses"));
+        assertEquals(0, statistics.get("evictions"));
+        assertTrue(new LocalGitContextSourceProvider().cacheStatistics().isEmpty());
     }
 
     @Test

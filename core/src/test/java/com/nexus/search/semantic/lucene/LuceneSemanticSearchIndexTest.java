@@ -2,6 +2,7 @@ package com.nexus.search.semantic.lucene;
 
 import com.nexus.config.NexusPaths;
 import com.nexus.index.FileCategory;
+import com.nexus.search.semantic.SemanticIndexProvenance;
 import com.nexus.search.semantic.SemanticSearchHit;
 import com.nexus.search.semantic.SemanticVectorDocument;
 import org.junit.jupiter.api.Test;
@@ -49,6 +50,37 @@ class LuceneSemanticSearchIndexTest {
             assertEquals(List.of(), reader.search(project, new float[]{1, 0, 0}, 1));
         }
         deleteTree(paths.projectSemanticLuceneIndex(project));
+    }
+
+    @Test
+    void compatibilityIsReadOnTheCachedReaderAcrossSuccessiveSearches() throws Exception {
+        NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("cached-compatibility"));
+        UUID project = UUID.randomUUID();
+        SemanticIndexProvenance expected = new SemanticIndexProvenance("fp-1", "provider", "model", 3, "profile", 1);
+        SemanticIndexProvenance other = new SemanticIndexProvenance("fp-2", "provider", "model", 3, "profile", 1);
+        LuceneSemanticSearchIndex writer = new LuceneSemanticSearchIndex(paths, 3);
+        writer.rebuild(project, expected, List.of(document("a.java", FileCategory.SOURCE, "a", 1, 0, 0)));
+        try (var reader = new PersistentLuceneSemanticSearchIndex(paths, 3)) {
+            // Sans reader en cache : lecture du dernier commit, aucun DirectoryReader ouvert.
+            assertTrue(reader.isCompatible(project, expected));
+            assertEquals(0, reader.openedReaderCount());
+
+            reader.search(project, new float[]{1, 0, 0}, 1);
+            assertEquals(1, reader.openedReaderCount());
+            assertTrue(reader.isCompatible(project, expected));
+            reader.search(project, new float[]{1, 0, 0}, 1);
+            assertTrue(reader.isCompatible(project, expected));
+            assertEquals(1, reader.openedReaderCount());
+
+            // Résultat inchangé : provenance différente, incompatible ; index absent, incompatible.
+            assertFalse(reader.isCompatible(project, other));
+            assertFalse(reader.isCompatible(UUID.randomUUID(), expected));
+
+            // Un commit d'un autre writer est vu par le reader en cache, sans nouvelle ouverture.
+            writer.rebuild(project, other, List.of(document("b.java", FileCategory.SOURCE, "b", 1, 0, 0)));
+            assertFalse(reader.isCompatible(project, expected));
+            assertTrue(reader.isCompatible(project, other));
+        }
     }
 
     @Test

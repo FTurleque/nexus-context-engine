@@ -63,6 +63,11 @@ public final class SqliteIndexRepository implements IndexRepository {
     }
 
     @Override
+    public List<IndexedSymbol> searchSymbols(UUID projectId, List<String> queries, int limit) {
+        return symbolSearch.searchSymbols(projectId, queries, limit);
+    }
+
+    @Override
     public List<SymbolRelation> findRelations(UUID projectId) {
         return relationQueries.findRelations(projectId);
     }

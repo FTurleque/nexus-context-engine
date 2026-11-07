@@ -107,6 +107,11 @@ class ProjectGraphBuilderProjectionTest {
         }
 
         @Override
+        public List<IndexedSymbol> searchSymbols(UUID ignored, List<String> queries, int limit) {
+            throw new AssertionError("Graph must not search symbols");
+        }
+
+        @Override
         public List<SymbolRelation> findImportRelations(UUID ignored) {
             throw new AssertionError("Graph must not materialize every import");
         }

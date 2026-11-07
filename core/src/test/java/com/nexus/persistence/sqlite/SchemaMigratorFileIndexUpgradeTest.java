@@ -26,8 +26,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Les migrations d'index (V012 : index par fichier de symbol_relations ; V013 : suppression des index
- * préfixes redondants) créent ou suppriment des index sans toucher aux faits canoniques ni au statut
- * d'indexation des projets (AUD-PRF-01, AUD-PRF-15).
+ * préfixes redondants ; V015 : préfiltre approché des symboles scopé par fichier) créent ou suppriment des
+ * index sans toucher aux faits canoniques ni au statut d'indexation des projets (AUD-PRF-01, AUD-PRF-15,
+ * AUD-PRF-09).
  */
 class SchemaMigratorFileIndexUpgradeTest {
 
@@ -83,6 +84,30 @@ class SchemaMigratorFileIndexUpgradeTest {
             assertEquals("READY", projectStatus(connection));
             assertEquals(7L, projectGeneration(connection));
             assertTrue(appliedVersions(connection).contains(13));
+        }
+    }
+
+    @Test
+    void v015AddsTheFileScopedFuzzyPrefilterWithoutTouchingCanonicalFactsOrProjectStatus() throws Exception {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite::memory:")) {
+            buildPopulatedBase(connection, 14);
+            assertTrue(indexNames(connection, "symbols").contains("idx_symbols_fuzzy_prefilter"));
+            assertFalse(indexNames(connection, "symbols").contains("idx_symbols_file_fuzzy_prefilter"));
+            List<String> before = canonicalSnapshot(connection);
+
+            SchemaMigrator.migrate(connection);
+
+            assertTrue(indexNames(connection, "symbols").contains("idx_symbols_file_fuzzy_prefilter"));
+            // La première colonne identifie le fichier, donc le projet par indexed_files.
+            assertEquals("file_id", indexColumns(connection, "idx_symbols_file_fuzzy_prefilter").getFirst());
+            assertEquals(3, indexColumns(connection, "idx_symbols_file_fuzzy_prefilter").size());
+            // L'ancien index global n'est plus utilisé ; l'index par fichier et fournisseur reste.
+            assertFalse(indexNames(connection, "symbols").contains("idx_symbols_fuzzy_prefilter"));
+            assertTrue(indexNames(connection, "symbols").contains("idx_symbols_file_provider"));
+            assertEquals(before, canonicalSnapshot(connection));
+            assertEquals("READY", projectStatus(connection));
+            assertEquals(7L, projectGeneration(connection));
+            assertTrue(appliedVersions(connection).contains(15));
         }
     }
 

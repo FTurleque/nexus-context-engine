@@ -36,8 +36,8 @@ Limite résiduelle : sur les providers Java ne fournissant pas `SecureDirectoryS
 - les statuts sont filtrés aux cibles ;
 - les diffs utilisent un sink à capacité fixe et sont tronqués déterministiquement ;
 - un test de diff massif empêche le retour à un buffer extensible non borné ;
-- l'enrichisseur de récence de recherche ne scanne plus les diffs complets : il filtre Git aux chemins candidats, refuse plus de 512 chemins candidats et borne les entrées modifiées par commit/cumul avant de dégrader fail-open vers les candidats non enrichis ;
-- les runtimes longue durée REST/MCP utilisent un cache mémoire LRU borné à 16 résultats, validé par HEAD/status/diffs avant chaque hit ;
+- l'enrichisseur de récence de recherche ne scanne plus les diffs complets : il refuse plus de 512 chemins candidats et borne les entrées modifiées par commit/cumul avant de dégrader fail-open vers les candidats non enrichis ; il mémorise les chemins modifiés par (dépôt, HEAD) dans ces bornes et, au-delà, filtre Git aux chemins candidats ([détail](git-context.md#cache-des-runtimes-longue-durée)) ;
+- les runtimes longue durée REST/MCP utilisent un cache mémoire LRU borné à `FederatedScopePolicy.MAX_PROJECTS` résultats, validé par HEAD/status/diffs avant chaque hit ;
 - la CLI et les usages one-shot conservent le recalcul operation-scoped.
 
 ### Recherche et fédération

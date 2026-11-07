@@ -24,7 +24,7 @@ Le provider consomme aussi le `ContextDiscoveryBudget` partagé avec les autres 
 
 ## Cache des runtimes longue durée
 
-REST et MCP utilisent `NexusApplication.createLongLived(...)`. Cette composition enveloppe le provider Git local dans `PersistentGitContextSourceProvider`, un cache **mémoire uniquement** limité à 16 résultats en LRU.
+REST et MCP utilisent `NexusApplication.createLongLived(...)`. Cette composition enveloppe le provider Git local dans `PersistentGitContextSourceProvider`, un cache **mémoire uniquement** limité en LRU à `FederatedScopePolicy.MAX_PROJECTS` résultats (une entrée par projet d'un scope fédéré maximal, [BE-0065](../architecture/adr/BE-0065-dimensionner-les-caches-git-sur-le-scope-federe.md)). Ses compteurs (`capacity`, `entries`, `hits`, `misses`, `evictions`) sont exposés sous la clé `gitContextCache` des métadonnées `explain` des contextes mono-projet et fédérés.
 
 La CLI et les usages one-shot continuent d'utiliser `NexusApplication.create(...)` et `LocalGitContextSourceProvider` sans cache persistant entre requêtes.
 
@@ -43,6 +43,8 @@ Toute variation provoque un miss puis un recalcul via `LocalGitContextSourceProv
 La validation du fingerprint consomme elle aussi le `ContextDiscoveryBudget` via des visites et checkpoints ; le cache n'introduit donc aucun chemin de découverte hors budget. Un résultat `repositoryAvailable=false` n'est jamais conservé afin de retenter automatiquement une indisponibilité transitoire.
 
 Aucun fichier de cache, schéma SQLite, watcher filesystem ou thread de maintenance n'est ajouté. Voir ADR-0046.
+
+`GitRecencyCandidateEnricher` mémorise de même, par répertoire Git et HEAD, les chemins modifiés des 50 derniers commits (au plus 1 024 chemins par commit et 4 096 cumulés, capacité `MAX_PROJECTS`), puis applique le filtre de candidats : tant que HEAD ne change pas, le journal des commits n'est pas relu, et un nouveau HEAD remplace l'entrée du dépôt. Au-delà des bornes de chemins, l'historique n'est pas mémorisé et le parcours filtré par les chemins candidats s'applique, avec le même résultat.
 
 ## Diff local avant allocation
 
