@@ -270,4 +270,79 @@ grep -q 'ne doivent donc pas remonter' docs/developer/branch-governance.md \
 grep -q 'NXA3-14 / #130 est satisfait' docs/architecture/risks/register.md \
   || fail 'risk register must record the effective develop protection state'
 
+# --- Sprint 9 : maven-build (AUD-DEP-05, AUD-DEP-06, AUD-DEP-07) ---
+python3 - <<'PY' || fail 'Sprint 9 maven-build contract drift (see message above)'
+import re
+import sys
+import xml.etree.ElementTree as ET
+
+NS = {"m": "http://maven.apache.org/POM/4.0.0"}
+pom = ET.parse("pom.xml").getroot()
+
+
+def drift(message):
+    print(f"final-audit-contracts: {message}", file=sys.stderr)
+    sys.exit(1)
+
+
+props = pom.find("m:properties", NS)
+timestamp = props.findtext("m:project.build.outputTimestamp", default="", namespaces=NS).strip()
+if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", timestamp):
+    drift("pom.xml must pin project.build.outputTimestamp as an ISO-8601 UTC instant (AUD-DEP-05)")
+
+managed = {}
+for plugin in pom.findall("m:build/m:pluginManagement/m:plugins/m:plugin", NS):
+    managed[plugin.findtext("m:artifactId", namespaces=NS)] = plugin.findtext("m:version", default="", namespaces=NS)
+for artifact in (
+    "maven-clean-plugin",
+    "maven-resources-plugin",
+    "maven-jar-plugin",
+    "maven-install-plugin",
+    "maven-deploy-plugin",
+    "maven-site-plugin",
+):
+    version = managed.get(artifact, "")
+    if not re.fullmatch(r"\$\{[A-Za-z0-9.-]+\}", version):
+        drift(f"pluginManagement must pin {artifact} through a version property (AUD-DEP-06)")
+    value = props.findtext(f"m:{version[2:-1]}", default="", namespaces=NS).strip()
+    if not re.fullmatch(r"\d+(\.\d+)+", value):
+        drift(f"{artifact} must use a stable release version, got {value!r} (AUD-DEP-06)")
+
+rules = None
+for plugin in pom.findall("m:build/m:plugins/m:plugin", NS):
+    if plugin.findtext("m:artifactId", namespaces=NS) == "maven-enforcer-plugin":
+        rules = plugin.find("m:executions/m:execution/m:configuration/m:rules", NS)
+if rules is None:
+    drift("maven-enforcer-plugin rules are missing from pom.xml")
+if rules.findtext("m:requireMavenVersion/m:version", default="", namespaces=NS).strip() != "[3.10.0,)":
+    drift("requireMavenVersion must follow the Maven wrapper: [3.10.0,) (AUD-DEP-06)")
+for rule in ("requirePluginVersions", "requireUpperBoundDeps"):
+    if rules.find(f"m:{rule}", NS) is None:
+        drift(f"maven-enforcer-plugin must enforce {rule} (AUD-DEP-06)")
+
+notices = None
+for execution in pom.iter("{http://maven.apache.org/POM/4.0.0}execution"):
+    if execution.findtext("m:id", namespaces=NS) == "aggregate-third-party-notices":
+        notices = execution.find("m:configuration", NS)
+if notices is None:
+    drift("aggregate-third-party-notices execution is missing from pom.xml")
+if notices.findtext("m:failOnBlacklist", default="", namespaces=NS).strip() != "true":
+    drift("aggregate-third-party-notices must set failOnBlacklist=true (AUD-DEP-07)")
+included = [e.text.strip() for e in notices.findall("m:includedLicenses/m:includedLicense", NS) if e.text and e.text.strip()]
+if not included:
+    drift("aggregate-third-party-notices must declare a non-empty includedLicenses list (AUD-DEP-07)")
+merges = notices.findall("m:licenseMerges/m:licenseMerge", NS)
+if not merges:
+    drift("aggregate-third-party-notices must normalise licence labels through licenseMerges (AUD-DEP-07)")
+for license_name in included:
+    if not any(m.text and m.text.split("|")[0].strip() == license_name for m in merges):
+        drift(f"whitelisted licence {license_name!r} must be the normalised label of a licenseMerge (AUD-DEP-07)")
+PY
+grep -q 'project.build.outputTimestamp' docs/developer/release-and-recovery.md \
+  || fail 'release procedure must document the outputTimestamp update (AUD-DEP-05)'
+grep -q 'requireUpperBoundDeps' .claude/skills/nexus-dependency-bump/SKILL.md \
+  || fail 'nexus-dependency-bump must document the requireUpperBoundDeps failure (AUD-DEP-06)'
+grep -q 'failOnBlacklist=true' docs/developer/ci-and-supply-chain.md \
+  || fail 'ci-and-supply-chain must document the licence whitelist (AUD-DEP-07)'
+
 echo 'final-audit-contracts=PASS'

@@ -45,6 +45,17 @@ Les tags version et SHA sont immuables. Le préflight GHCR est fail-closed sur t
 
 Voir [`immutable-release-publishing.md`](immutable-release-publishing.md).
 
+### Horodatage reproductible
+
+Le pom racine fixe `project.build.outputTimestamp` : les JAR (dont le JAR CLI ombré), le ZIP de distribution et le SBOM CycloneDX portent cet horodatage au lieu de l'heure du build. Deux `./mvnw -B -ntp clean verify -DskipTests` successifs sur le même commit produisent donc les mêmes SHA-256 pour `target/nexus-context-engine-<version>-cli.jar` et `target/distribution/nexus-context-engine-<version>.zip` (le ZIP est assemblé en phase `verify`).
+
+À chaque release, dans le commit qui fixe la version des pom :
+
+1. mettre `project.build.outputTimestamp` à la date UTC de ce commit, au format `AAAA-MM-JJT00:00:00Z` ;
+2. lancer deux fois `./mvnw -B -ntp clean verify -DskipTests` et comparer `sha256sum target/nexus-context-engine-*-cli.jar target/distribution/*.zip` : une empreinte différente bloque la release.
+
+L'image Docker et l'installeur Windows ne sont pas couverts (horodatages des outils tiers).
+
 ## SQLite : autorité, migrations et recovery
 
 SQLite reste l'autorité canonique. Les migrations sont forward-only, enregistrées dans `schema_migrations` et protégées par `script_sha256`.

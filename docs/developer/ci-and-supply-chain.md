@@ -216,6 +216,20 @@ end_line >= start_line
 
 V004 invalide les index historiques incompatibles avant V005. Les tests couvrent base fraîche, upgrade V004, conservation des données valides, idempotence et rejet d'INSERT SQL invalide.
 
+## Outillage Maven épinglé et licences
+
+Le `pluginManagement` du pom racine épingle par propriété chaque plugin du build, y compris ceux du cycle de vie que Maven lierait sinon à sa propre distribution : `maven.clean-plugin.version`, `maven.resources-plugin.version`, `maven.jar-plugin.version`, `maven.install-plugin.version`, `maven.deploy-plugin.version` et `maven.site-plugin.version` (le site n'est pas produit, mais `requirePluginVersions` contrôle aussi ce cycle). Dependabot suit ces propriétés comme les autres.
+
+L'exécution `enforce-nexus-toolchain` de `maven-enforcer-plugin` applique :
+
+- `requireJavaVersion` `[21,)` et `requireMavenVersion` `[3.10.0,)`, aligné sur le wrapper Maven 3.10.0 ;
+- `requirePluginVersions` : un plugin sans version explicite, ou en `LATEST`/`RELEASE`/`SNAPSHOT`, fait échouer le build ;
+- `requireUpperBoundDeps` : un transitif résolu sous la version qu'exige un autre chemin du graphe fait échouer le build en nommant la dépendance et ses chemins. Les exclusions (`org.jctools:jctools-core`, `org.jspecify:jspecify`, fixés par le BOM Quarkus) sont listées et justifiées dans le pom, à revoir à chaque montée de `quarkus.platform.version`. `jna` est géré avec `jna-platform` pour que le BOM Quarkus ne le ramène pas sous la version qu'exige `jna-platform`.
+
+`requireUpperBoundDeps` est préféré à `dependencyConvergence`, trop bruyant avec les BOM Quarkus.
+
+L'exécution `aggregate-third-party-notices` de `license-maven-plugin` produit `target/licenses/THIRD_PARTY_NOTICES.txt` pour les portées `compile` et `runtime`. `licenseMerges` regroupe les variantes de libellé sous un libellé unique (par exemple « The Apache Software License, Version 2.0 » et « Apache-2.0 » sous « Apache License, Version 2.0 »). `includedLicenses` est la liste blanche — Apache 2.0, BSD 2-Clause, BSD 3-Clause, MIT, MIT No Attribution, CC0 1.0, EPL 1.0, EPL 2.0, EDL 1.0 — et `failOnBlacklist=true` fait échouer le build si une dépendance livrée ne porte aucune licence de cette liste. Une dépendance multi-licence est acceptée lorsque l'une de ses licences y figure (cas de JNA, JavaParser et des API Jakarta sous EPL 2.0 ou GPL 2.0 avec exception Classpath). `failOnMissing=true` refuse une dépendance sans licence déclarée. Toute nouvelle licence exige une modification revue du pom.
+
 ## Dependabot
 
 `.github/dependabot.yml` cible explicitement `develop` pour Maven, GitHub Actions et Docker. Une exception urgente vers `main` doit être explicite et qualifiée ; elle n'est jamais le chemin par défaut.
