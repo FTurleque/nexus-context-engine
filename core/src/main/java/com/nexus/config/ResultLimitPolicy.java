@@ -1,4 +1,4 @@
-package com.nexus.search;
+package com.nexus.config;
 
 /**
  * Politique commune pour les limites de résultats NEXUS.

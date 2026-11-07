@@ -7,7 +7,7 @@
 
 ## 2. Cycle index ↔ search (AUD-ARC-02)
 
-- [ ] 2.1 `AUD-ARC-02` — Déplacer `ProjectIndexingService`, `IndexDocumentPublisher` et `ExternalCodeIntelligenceRefresher` dans le package d'orchestration, et `ResultLimitPolicy`, `SearchDocument` dans le package feuille ; retirer de la baseline les cycles `index` ↔ `search` et `index` ↔ `index.scan` ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='*Architecture*,ProjectIndexingService*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
+- [x] 2.1 `AUD-ARC-02` — Déplacer `ProjectIndexingService`, `IndexDocumentPublisher` et `ExternalCodeIntelligenceRefresher` dans le package d'orchestration, et `ResultLimitPolicy`, `SearchDocument` dans le package feuille ; retirer de la baseline les cycles `index` ↔ `search` et `index` ↔ `index.scan` ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='*Architecture*,ProjectIndexingService*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
 - [ ] 2.2 `AUD-ARC-02` — Introduire le port d'indexation sémantique, implémenté par `SemanticIndexingService`, avec une implémentation sans effet à la place de `null` ; retirer de la baseline le cycle `index` ↔ `search.semantic` ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='*Architecture*,ProjectIndexingService*,NexusApplicationSemanticConfigurationTest' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
 
 ## 3. Cycles context ↔ context.source (AUD-ARC-04)

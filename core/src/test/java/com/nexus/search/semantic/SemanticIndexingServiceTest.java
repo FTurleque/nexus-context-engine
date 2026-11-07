@@ -1,7 +1,7 @@
 package com.nexus.search.semantic;
 
 import com.nexus.index.FileCategory;
-import com.nexus.search.SearchDocument;
+import com.nexus.index.SearchDocument;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

@@ -9,17 +9,9 @@ com.nexus.context.source.git -> com.nexus.context
 com.nexus.context.source.git -> com.nexus.context.source
 com.nexus.context.source.skill -> com.nexus.context
 com.nexus.context.source.skill -> com.nexus.context.source
-com.nexus.index -> com.nexus.index.scan
-com.nexus.index -> com.nexus.search
-com.nexus.index -> com.nexus.search.semantic
-com.nexus.index.scan -> com.nexus.index
 com.nexus.ranking -> com.nexus.search
-com.nexus.ranking.graph -> com.nexus.index
 com.nexus.ranking.graph -> com.nexus.search
-com.nexus.search -> com.nexus.index
 com.nexus.search -> com.nexus.ranking
 com.nexus.search -> com.nexus.ranking.graph
-com.nexus.search.semantic -> com.nexus.index
-com.nexus.search.semantic -> com.nexus.search
 com.nexus.search.semantic -> com.nexus.search.semantic.ollama
 com.nexus.search.semantic.ollama -> com.nexus.search.semantic

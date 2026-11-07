@@ -1,6 +1,8 @@
-package com.nexus.index;
+package com.nexus.index.service;
 
-import com.nexus.search.SearchDocument;
+import com.nexus.index.IndexWriteSession;
+import com.nexus.index.IndexedFileUpdate;
+import com.nexus.index.SearchDocument;
 import com.nexus.search.SearchIndexSession;
 import com.nexus.search.semantic.SemanticIndexingService;
 

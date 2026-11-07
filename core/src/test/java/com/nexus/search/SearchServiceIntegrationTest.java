@@ -2,7 +2,7 @@ package com.nexus.search;
 
 import com.nexus.config.NexusPaths;
 import com.nexus.index.IndexRepository;
-import com.nexus.index.ProjectIndexingServices;
+import com.nexus.index.service.ProjectIndexingServices;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.scan.ProjectScanner;
 import com.nexus.persistence.sqlite.SqliteDatabase;

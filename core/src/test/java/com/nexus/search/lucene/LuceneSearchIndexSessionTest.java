@@ -2,7 +2,7 @@ package com.nexus.search.lucene;
 
 import com.nexus.config.NexusPaths;
 import com.nexus.index.FileCategory;
-import com.nexus.search.SearchDocument;
+import com.nexus.index.SearchDocument;
 import com.nexus.search.SearchIndexSession;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.store.Directory;

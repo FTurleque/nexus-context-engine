@@ -6,7 +6,7 @@ import com.nexus.api.ApiModels.SearchRequest;
 import com.nexus.context.ContextBudgetPolicy;
 import com.nexus.exposure.PublicOutput;
 import com.nexus.search.QueryPolicy;
-import com.nexus.search.ResultLimitPolicy;
+import com.nexus.config.ResultLimitPolicy;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;

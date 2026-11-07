@@ -2,6 +2,8 @@ package com.nexus.index;
 
 import com.nexus.config.NexusPaths;
 import com.nexus.index.scan.ProjectScanner;
+import com.nexus.index.service.ProjectIndexingService;
+import com.nexus.index.service.ProjectIndexingServices;
 import com.nexus.persistence.sqlite.SqliteDatabase;
 import com.nexus.persistence.sqlite.SqliteIndexRepository;
 import com.nexus.persistence.sqlite.SqliteProjectRepository;
@@ -9,7 +11,6 @@ import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectRegistry;
 import com.nexus.project.ProjectRepository;
 import com.nexus.search.LexicalSearchHit;
-import com.nexus.search.SearchDocument;
 import com.nexus.search.SearchIndex;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

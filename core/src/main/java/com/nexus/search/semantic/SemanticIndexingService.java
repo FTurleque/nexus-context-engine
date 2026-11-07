@@ -1,7 +1,7 @@
 package com.nexus.search.semantic;
 
 import com.nexus.index.CodeSymbol;
-import com.nexus.search.SearchDocument;
+import com.nexus.index.SearchDocument;
 import com.nexus.security.OversizedSecretException;
 import com.nexus.security.SensitiveContentRedactor;
 

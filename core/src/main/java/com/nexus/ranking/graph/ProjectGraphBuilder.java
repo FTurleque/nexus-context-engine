@@ -1,7 +1,7 @@
 package com.nexus.ranking.graph;
 
 import com.nexus.index.IndexRepository;
-import com.nexus.search.ResultLimitPolicy;
+import com.nexus.config.ResultLimitPolicy;
 
 import java.util.Map;
 import java.util.Objects;

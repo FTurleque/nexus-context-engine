@@ -1,5 +1,6 @@
 package com.nexus.search;
 
+import com.nexus.config.ResultLimitPolicy;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;

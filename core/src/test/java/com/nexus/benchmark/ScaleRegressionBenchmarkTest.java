@@ -16,7 +16,7 @@ import com.nexus.persistence.sqlite.SqliteBatchInsert;
 import com.nexus.persistence.sqlite.SqliteDatabase;
 import com.nexus.persistence.sqlite.SqliteIndexRepository;
 import com.nexus.project.ProjectDescriptor;
-import com.nexus.search.SearchDocument;
+import com.nexus.index.SearchDocument;
 import com.nexus.search.semantic.EmbeddingProvider;
 import com.nexus.search.semantic.SemanticIndexingService;
 import com.nexus.search.semantic.lucene.LuceneSemanticSearchIndex;

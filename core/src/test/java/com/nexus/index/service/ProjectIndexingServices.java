@@ -1,5 +1,10 @@
-package com.nexus.index;
+package com.nexus.index.service;
 
+import com.nexus.index.CodeIndexImporter;
+import com.nexus.index.CodeIntelligenceProvider;
+import com.nexus.index.IndexRepository;
+import com.nexus.index.LanguageAnalyzer;
+import com.nexus.index.ProjectIndexLockManager;
 import com.nexus.index.minos.MinosCodeIndexImporter;
 import com.nexus.index.scan.ProjectScanner;
 import com.nexus.project.ProjectRepository;

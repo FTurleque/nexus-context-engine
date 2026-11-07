@@ -20,7 +20,7 @@ import com.nexus.context.source.skill.LocalAgentSkillsProvider;
 import com.nexus.index.CodeIndexImporter;
 import com.nexus.index.CodeIntelligenceProvider;
 import com.nexus.index.IndexRepository;
-import com.nexus.index.ProjectIndexingService;
+import com.nexus.index.service.ProjectIndexingService;
 import com.nexus.index.ProjectIndexLockManager;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.jdt.JdtLanguageServerCodeIntelligenceProvider;

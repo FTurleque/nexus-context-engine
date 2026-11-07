@@ -1,5 +1,17 @@
-package com.nexus.index;
+package com.nexus.index.service;
 
+import com.nexus.index.CanonicalIndexFingerprint;
+import com.nexus.index.CodeIndexImporter;
+import com.nexus.index.CodeIntelligenceProvider;
+import com.nexus.index.CodeIntelligenceSnapshot;
+import com.nexus.index.ExternalCodeIntelligencePayloadImporter;
+import com.nexus.index.FileCategory;
+import com.nexus.index.IndexRepository;
+import com.nexus.index.IndexedFile;
+import com.nexus.index.IndexingReport;
+import com.nexus.index.LanguageAnalyzer;
+import com.nexus.index.ProjectIndexLockManager;
+import com.nexus.index.ScannedFile;
 import com.nexus.index.scan.ProjectScanResult;
 import com.nexus.index.scan.ProjectScanner;
 import com.nexus.project.IndexStatus;

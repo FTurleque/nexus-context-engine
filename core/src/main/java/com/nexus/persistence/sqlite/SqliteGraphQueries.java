@@ -1,7 +1,7 @@
 package com.nexus.persistence.sqlite;
 
 import com.nexus.index.RelationKind;
-import com.nexus.search.ResultLimitPolicy;
+import com.nexus.config.ResultLimitPolicy;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;

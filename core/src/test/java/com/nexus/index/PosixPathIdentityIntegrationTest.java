@@ -1,5 +1,6 @@
 package com.nexus.index;
 
+import com.nexus.index.service.ProjectIndexingServices;
 import com.nexus.paths.RepositoryPath;
 
 import com.nexus.config.NexusPaths;

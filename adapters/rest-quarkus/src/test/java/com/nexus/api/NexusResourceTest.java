@@ -2,7 +2,7 @@ package com.nexus.api;
 
 import com.nexus.context.ContextBudgetPolicy;
 import com.nexus.search.QueryPolicy;
-import com.nexus.search.ResultLimitPolicy;
+import com.nexus.config.ResultLimitPolicy;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import org.junit.jupiter.api.BeforeEach;

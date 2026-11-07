@@ -1,6 +1,14 @@
-package com.nexus.index;
+package com.nexus.index.service;
 
-import com.nexus.search.SearchDocument;
+import com.nexus.index.AnalysisResult;
+import com.nexus.index.FileCategory;
+import com.nexus.index.FileHasher;
+import com.nexus.index.IndexRepository;
+import com.nexus.index.IndexedFile;
+import com.nexus.index.IndexedFileUpdate;
+import com.nexus.index.LanguageAnalyzer;
+import com.nexus.index.ScannedFile;
+import com.nexus.index.SearchDocument;
 import com.nexus.search.SearchIndex;
 import com.nexus.search.SearchIndexSession;
 import com.nexus.search.semantic.SemanticIndexingService;

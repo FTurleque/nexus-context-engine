@@ -1,9 +1,7 @@
-package com.nexus.search;
+package com.nexus.index;
 
 import com.nexus.paths.RepositoryPath;
 
-import com.nexus.index.CodeSymbol;
-import com.nexus.index.FileCategory;
 
 import java.util.List;
 import java.util.Objects;

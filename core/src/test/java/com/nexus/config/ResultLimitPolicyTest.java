@@ -1,4 +1,4 @@
-package com.nexus.search;
+package com.nexus.config;
 
 import org.junit.jupiter.api.Test;
 

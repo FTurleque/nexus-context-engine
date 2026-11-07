@@ -3,7 +3,7 @@ package com.nexus.search.lucene;
 import com.nexus.config.NexusPaths;
 import com.nexus.index.FileCategory;
 import com.nexus.search.LexicalSearchHit;
-import com.nexus.search.SearchDocument;
+import com.nexus.index.SearchDocument;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

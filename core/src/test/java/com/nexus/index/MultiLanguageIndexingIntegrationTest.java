@@ -2,6 +2,7 @@ package com.nexus.index;
 
 import com.nexus.config.NexusPaths;
 import com.nexus.index.scan.ProjectScanner;
+import com.nexus.index.service.ProjectIndexingServices;
 import com.nexus.persistence.sqlite.SqliteDatabase;
 import com.nexus.persistence.sqlite.SqliteIndexRepository;
 import com.nexus.persistence.sqlite.SqliteProjectRepository;
