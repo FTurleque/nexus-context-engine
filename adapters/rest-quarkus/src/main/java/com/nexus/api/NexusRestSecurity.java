@@ -31,6 +31,7 @@ final class NexusRestSecurity {
             "loopback-forward",
             "reverse-proxy-https",
             "direct-https");
+    private static final Set<String> LITERAL_LOOPBACK_LISTENER_HOSTS = Set.of("127.0.0.1", "localhost", "::1");
     private static final Set<String> NON_LOOPBACK_EXPOSURE_MODES = Set.of(
             "reverse-proxy-https",
             "direct-https");
@@ -168,6 +169,31 @@ final class NexusRestSecurity {
             return InetAddress.getByName(host.trim()).isLoopbackAddress();
         } catch (UnknownHostException unresolved) {
             return false;
+        }
+    }
+
+    /**
+     * Vrai si {@code host} est l'un des hôtes d'écoute loopback littéraux {@code 127.0.0.1},
+     * {@code localhost} ou {@code ::1} (casse ignorée), seuls compatibles avec le contrôle de
+     * transport {@link NexusRestLoopbackTransportFilter}.
+     */
+    static boolean isLiteralLoopbackListenerHost(String host) {
+        return host != null && LITERAL_LOOPBACK_LISTENER_HOSTS.contains(host.trim().toLowerCase(Locale.ROOT));
+    }
+
+    /**
+     * Décide si le contrôle de transport loopback s'applique au listener {@code host}. Il ne s'en
+     * dispense que pour un hôte résolu avec certitude vers une adresse non loopback : un hôte
+     * absent, vide ou dont la résolution échoue garde le contrôle actif.
+     */
+    static boolean requiresLoopbackTransportControl(String host) {
+        if (host == null || host.isBlank() || isLiteralLoopbackListenerHost(host)) {
+            return true;
+        }
+        try {
+            return InetAddress.getByName(host.trim()).isLoopbackAddress();
+        } catch (UnknownHostException unresolved) {
+            return true;
         }
     }
 

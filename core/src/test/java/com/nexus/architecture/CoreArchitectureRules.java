@@ -24,14 +24,25 @@ final class CoreArchitectureRules {
     static final String CONTEXT_SOURCE_WITHOUT_CONTEXT = "context-source-sans-context";
     static final String RANKING_WITHOUT_SEARCH = "ranking-sans-search";
     static final String SEARCH_SEMANTIC_WITHOUT_OLLAMA = "search-semantic-sans-ollama";
+    static final String GETENV_IN_COMPOSITION_ROOT = "getenv-composition-root";
 
     static final List<String> FRAMEWORK_PREFIXES = List.of(
             "io.quarkus.", "jakarta.", "javax.ws.", "org.springframework.", "io.modelcontextprotocol.");
     static final List<String> LUCENE_PREFIXES = List.of("org.apache.lucene.");
     static final List<String> SQLITE_PREFIXES = List.of("org.sqlite.", "java.sql.");
+    /**
+     * Lecture de l'environnement du processus : appel ou référence de méthode, écrit simplement,
+     * pleinement qualifié ou importé en statique.
+     */
+    static final List<String> GETENV_PREFIXES = List.of(
+            "System.getenv", "java.lang.System.getenv", "System::getenv", "java.lang.System::getenv");
 
     /** Préfixes surveillés aussi sous forme de nom pleinement qualifié dans le code. */
-    static final List<String> WATCHED_QUALIFIED_PREFIXES = concat(FRAMEWORK_PREFIXES, LUCENE_PREFIXES, SQLITE_PREFIXES);
+    static final List<String> WATCHED_QUALIFIED_PREFIXES =
+            concat(FRAMEWORK_PREFIXES, LUCENE_PREFIXES, SQLITE_PREFIXES, GETENV_PREFIXES);
+
+    /** Seule classe du cœur autorisée à lire l'environnement du processus (ARCH-0066). */
+    static final String COMPOSITION_ROOT = "com.nexus.application.NexusApplicationFactory";
 
     private static final List<String> LUCENE_PACKAGES = List.of(
             "com.nexus.search.lucene", "com.nexus.search.semantic.lucene");
@@ -46,11 +57,12 @@ final class CoreArchitectureRules {
     private static final String SEMANTIC_PACKAGE = "com.nexus.search.semantic";
     private static final String OLLAMA_PACKAGE = "com.nexus.search.semantic.ollama";
 
-    /** Exceptions fermées de {@value #SQLITE_CONFINED} : classe et nom importé exacts. */
+    /**
+     * Exceptions fermées de {@value #SQLITE_CONFINED} : classe et nom importé exacts. Seule la
+     * composition root ouvre le stockage et enveloppe l'échec JDBC en {@code PersistenceException}.
+     */
     static final Set<String> SQLITE_EXCEPTIONS = Set.of(
-            "com.nexus.application.NexusApplication -> java.sql.SQLException",
-            "com.nexus.application.NexusApplicationFactory -> java.sql.SQLException",
-            "com.nexus.cli.NexusCli -> java.sql.SQLException");
+            "com.nexus.application.NexusApplicationFactory -> java.sql.SQLException");
 
     private CoreArchitectureRules() {
     }
@@ -133,6 +145,17 @@ final class CoreArchitectureRules {
     static List<String> searchSemanticWithoutOllama(JavaSourceGraph graph) {
         return check(graph, SEARCH_SEMANTIC_WITHOUT_OLLAMA, name -> inAny(name, List.of(OLLAMA_PACKAGE)),
                 file -> !file.packageName().equals(SEMANTIC_PACKAGE), edge -> false);
+    }
+
+    /**
+     * {@value #GETENV_IN_COMPOSITION_ROOT} : aucun appel à {@code System.getenv} ni référence
+     * {@code System::getenv} dans le cœur hors de
+     * la composition root {@value #COMPOSITION_ROOT}, qui résout la configuration et l'injecte.
+     */
+    static List<String> getenvInCompositionRoot(JavaSourceGraph graph) {
+        return check(graph, GETENV_IN_COMPOSITION_ROOT,
+                name -> GETENV_PREFIXES.stream().anyMatch(prefix -> name.equals(prefix) || name.startsWith(prefix + ".")),
+                file -> file.className().equals(COMPOSITION_ROOT), edge -> false);
     }
     private static List<String> check(JavaSourceGraph graph, String rule, Predicate<String> forbidden,
                                       Predicate<JavaSourceGraph.SourceFile> exempt, Predicate<String> allowedEdge) {

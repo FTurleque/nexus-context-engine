@@ -36,6 +36,8 @@ public final class DefaultContextBuilder implements ContextBuilder {
     private final TaskContextMaterializer taskMaterializer;
     private final ContextBudgetAllocator budgetAllocator;
     private final ContextBuildMetadata buildMetadata;
+    private final ContextMaterializationLimits materializationLimits;
+    private final ContextDiscoveryLimits discoveryLimits;
 
     public DefaultContextBuilder(
             ProjectRepository projectRepository,
@@ -107,6 +109,35 @@ public final class DefaultContextBuilder implements ContextBuilder {
             List<ContextSourceProvider> sourceProviders,
             List<SkillSourceProvider> skillProviders,
             GitContextSourceProvider gitContextProvider) {
+        this(
+                projectRepository,
+                searchService,
+                fragmentFactory,
+                fragmentMerger,
+                contextSelector,
+                tokenEstimator,
+                sourceProviders,
+                skillProviders,
+                gitContextProvider,
+                ContextMaterializationLimits.defaults(),
+                ContextDiscoveryLimits.defaults());
+    }
+
+    /** Composition de production : bornes de matérialisation et de découverte résolues par la composition root. */
+    public DefaultContextBuilder(
+            ProjectRepository projectRepository,
+            SearchService searchService,
+            ContextFragmentFactory fragmentFactory,
+            FragmentMerger fragmentMerger,
+            BudgetedContextSelector contextSelector,
+            TokenEstimator tokenEstimator,
+            List<ContextSourceProvider> sourceProviders,
+            List<SkillSourceProvider> skillProviders,
+            GitContextSourceProvider gitContextProvider,
+            ContextMaterializationLimits materializationLimits,
+            ContextDiscoveryLimits discoveryLimits) {
+        this.materializationLimits = Objects.requireNonNull(materializationLimits, "materializationLimits");
+        this.discoveryLimits = Objects.requireNonNull(discoveryLimits, "discoveryLimits");
         this.projectRepository = Objects.requireNonNull(projectRepository, "projectRepository");
         this.searchService = Objects.requireNonNull(searchService, "searchService");
         this.nativePipeline = new NativeContextPipeline(sourceProviders, skillProviders, gitContextProvider);
@@ -119,7 +150,7 @@ public final class DefaultContextBuilder implements ContextBuilder {
 
     @Override
     public ContextBundle build(ContextRequest request) {
-        return build(request, ContextMaterializationLimits.fromEnvironment().newBudget());
+        return build(request, materializationLimits.newBudget());
     }
 
     @Override
@@ -129,7 +160,7 @@ public final class DefaultContextBuilder implements ContextBuilder {
         return build(
                 request,
                 materializationBudget,
-                ContextDiscoveryLimits.fromEnvironment().newBudget());
+                discoveryLimits.newBudget());
     }
 
     @Override

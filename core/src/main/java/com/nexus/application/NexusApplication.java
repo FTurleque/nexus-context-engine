@@ -34,7 +34,6 @@ import com.nexus.search.semantic.SemanticSearchIndex;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Path;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
@@ -93,14 +92,14 @@ public final class NexusApplication implements AutoCloseable {
     }
 
     /** Compose NEXUS avec les opt-ins opérationnels explicitement présents dans l'environnement. */
-    public static NexusApplication create(NexusPaths paths) throws SQLException, IOException {
+    public static NexusApplication create(NexusPaths paths) throws IOException {
         return NexusApplicationFactory.create(paths, NexusApplicationFactory.semanticSearchConfigurationFromEnvironment(), false);
     }
 
     /** Compose NEXUS avec une configuration sémantique fournie explicitement par l'appelant. */
     public static NexusApplication create(
             NexusPaths paths,
-            SemanticSearchConfiguration semanticSearchConfiguration) throws SQLException, IOException {
+            SemanticSearchConfiguration semanticSearchConfiguration) throws IOException {
         return NexusApplicationFactory.create(paths, semanticSearchConfiguration, false);
     }
 
@@ -110,14 +109,14 @@ public final class NexusApplication implements AutoCloseable {
      * Les writers Lucene restent operation-scoped afin de préserver les verrous
      * inter-processus existants.
      */
-    public static NexusApplication createLongLived(NexusPaths paths) throws SQLException, IOException {
+    public static NexusApplication createLongLived(NexusPaths paths) throws IOException {
         return NexusApplicationFactory.create(paths, NexusApplicationFactory.semanticSearchConfigurationFromEnvironment(), true);
     }
 
     /** Variante longue durée avec configuration sémantique explicite. */
     public static NexusApplication createLongLived(
             NexusPaths paths,
-            SemanticSearchConfiguration semanticSearchConfiguration) throws SQLException, IOException {
+            SemanticSearchConfiguration semanticSearchConfiguration) throws IOException {
         return NexusApplicationFactory.create(paths, semanticSearchConfiguration, true);
     }
 
@@ -196,28 +195,18 @@ public final class NexusApplication implements AutoCloseable {
     }
 
     public IndexStatistics inspect(UUID projectId) {
-        getProject(projectId);
-        ProjectIndexLockManager.LockHandle readLock = projectIndexLockManager.acquireRead(projectId);
-        try (var reads = indexRepository.openReadSession()) {
-            return indexRepository.statistics(projectId);
-        } finally {
-            closeReadLock(readLock);
-        }
+        return readProject(projectId, (reads, project) -> indexRepository.statistics(projectId));
     }
 
     public SearchOperation search(UUID projectId, String query, int limit, boolean explain) throws IOException {
         String resolvedQuery = requireQuery(query);
         int resolvedLimit = positiveLimit(limit);
         long startedAt = System.nanoTime();
-        requireReadyProject(projectId);
-        try (ProjectIndexLockManager.LockHandle ignored = projectIndexLockManager.acquireRead(projectId);
-             var reads = indexRepository.openReadSession()) {
-            ProjectDescriptor project = requireReadyProject(projectId);
+        return readProject(projectId, (reads, project) -> {
             List<RankedCandidate> results = searchService.search(project, resolvedQuery, resolvedLimit, explain);
-            requireReadyProject(projectId);
             return new SearchOperation(
                     project, resolvedQuery, resolvedLimit, explain, elapsedMillis(startedAt), results);
-        }
+        });
     }
 
     public FederatedSearchOperation searchAcrossProjects(
@@ -229,19 +218,13 @@ public final class NexusApplication implements AutoCloseable {
         String resolvedQuery = requireQuery(query);
         int resolvedLimit = positiveLimit(limit);
         long startedAt = System.nanoTime();
-        requireReadyProjects(scope);
-        List<ProjectIndexLockManager.LockHandle> readLocks = acquireReadLocks(scope);
-        try (var reads = indexRepository.openReadSession()) {
-            List<ProjectDescriptor> projects = requireReadyProjects(scope);
+        return readProjects(scope, (reads, projects) -> {
             FederatedSearchOutcome outcome =
                     federatedSearchService.searchWithDiagnostics(projects, resolvedQuery, resolvedLimit, explain);
-            requireReadyProjects(scope);
             return new FederatedSearchOperation(
                     projects, resolvedQuery, resolvedLimit, explain, elapsedMillis(startedAt),
                     outcome.hits(), outcome.unservedProjects());
-        } finally {
-            closeReadLocks(readLocks);
-        }
+        });
     }
 
     public ContextOperation context(
@@ -253,10 +236,7 @@ public final class NexusApplication implements AutoCloseable {
             boolean explain) {
         String resolvedQuery = requireQuery(query);
         long startedAt = System.nanoTime();
-        requireReadyProject(projectId);
-        ProjectIndexLockManager.LockHandle readLock = projectIndexLockManager.acquireRead(projectId);
-        try (var reads = indexRepository.openReadSession()) {
-            ProjectDescriptor project = requireReadyProject(projectId);
+        return readProject(projectId, (reads, project) -> {
             ContextBundle bundle = contextBuilder.build(new ContextRequest(
                     projectId,
                     resolvedQuery,
@@ -264,11 +244,8 @@ public final class NexusApplication implements AutoCloseable {
                     requestedSources == null ? Set.of() : requestedSources,
                     constraints == null ? Map.of() : constraints,
                     explain));
-            requireReadyProject(projectId);
             return new ContextOperation(project, resolvedQuery, explain, elapsedMillis(startedAt), bundle);
-        } finally {
-            closeReadLock(readLock);
-        }
+        });
     }
 
     public FederatedContextOperation contextAcrossProjects(
@@ -281,10 +258,7 @@ public final class NexusApplication implements AutoCloseable {
         List<UUID> scope = FederatedScopePolicy.normalizeProjectIds(projectIds);
         String resolvedQuery = requireQuery(query);
         long startedAt = System.nanoTime();
-        requireReadyProjects(scope);
-        List<ProjectIndexLockManager.LockHandle> readLocks = acquireReadLocks(scope);
-        try (var reads = indexRepository.openReadSession()) {
-            List<ProjectDescriptor> projects = requireReadyProjects(scope);
+        return readProjects(scope, (reads, projects) -> {
             FederatedContextBundle bundle = federatedContextService.build(
                     projects,
                     resolvedQuery,
@@ -292,41 +266,23 @@ public final class NexusApplication implements AutoCloseable {
                     requestedSources == null ? Set.of() : requestedSources,
                     constraints == null ? Map.of() : constraints,
                     explain);
-            requireReadyProjects(scope);
             return new FederatedContextOperation(
                     projects, resolvedQuery, explain, elapsedMillis(startedAt), bundle);
-        } finally {
-            closeReadLocks(readLocks);
-        }
+        });
     }
 
     public List<IndexedSymbol> findSymbols(UUID projectId, String query, int limit) {
         String resolvedQuery = requireQuery(query);
-        requireReadyProject(projectId);
-        ProjectIndexLockManager.LockHandle readLock = projectIndexLockManager.acquireRead(projectId);
-        try (var reads = indexRepository.openReadSession()) {
-            requireReadyProject(projectId);
-            List<IndexedSymbol> symbols = indexRepository.searchSymbols(projectId, resolvedQuery, positiveLimit(limit));
-            requireReadyProject(projectId);
-            return symbols;
-        } finally {
-            closeReadLock(readLock);
-        }
+        int resolvedLimit = positiveLimit(limit);
+        return readProject(projectId,
+                (reads, project) -> indexRepository.searchSymbols(projectId, resolvedQuery, resolvedLimit));
     }
 
     public List<SymbolRelation> findUsages(UUID projectId, String symbol, int limit) {
         String resolvedSymbol = requireQuery(symbol);
-        requireReadyProject(projectId);
-        ProjectIndexLockManager.LockHandle readLock = projectIndexLockManager.acquireRead(projectId);
-        try (var reads = indexRepository.openReadSession()) {
-            requireReadyProject(projectId);
-            List<SymbolRelation> relations = indexRepository.searchRelations(
-                    projectId, resolvedSymbol, positiveLimit(limit));
-            requireReadyProject(projectId);
-            return relations;
-        } finally {
-            closeReadLock(readLock);
-        }
+        int resolvedLimit = positiveLimit(limit);
+        return readProject(projectId,
+                (reads, project) -> indexRepository.searchRelations(projectId, resolvedSymbol, resolvedLimit));
     }
 
     public ReadinessSnapshot readiness() {
@@ -381,6 +337,51 @@ public final class NexusApplication implements AutoCloseable {
         if (failure != null) {
             throw failure;
         }
+    }
+
+    /**
+     * Lecture cohérente d'un projet (ADR-0052) : READY, verrou partagé, session de
+     * lecture, lecture sur le descripteur revalidé, puis revalidation READY avant de
+     * rendre le résultat. Le verrou est libéré dans tous les cas.
+     */
+    private <T, E extends Exception> T readProject(
+            UUID projectId,
+            ConsistentRead<ProjectDescriptor, T, E> read) throws E {
+        requireReadyProject(projectId);
+        ProjectIndexLockManager.LockHandle readLock = projectIndexLockManager.acquireRead(projectId);
+        try (IndexRepository.ReadSession reads = indexRepository.openReadSession()) {
+            ProjectDescriptor project = requireReadyProject(projectId);
+            T result = read.read(reads, project);
+            requireReadyProject(projectId);
+            return result;
+        } finally {
+            closeReadLock(readLock);
+        }
+    }
+
+    /**
+     * Lecture cohérente fédérée : même séquence que {@link #readProject}, verrous
+     * partagés pris dans l'ordre des identifiants et libérés en ordre inverse.
+     */
+    private <T, E extends Exception> T readProjects(
+            List<UUID> scope,
+            ConsistentRead<List<ProjectDescriptor>, T, E> read) throws E {
+        requireReadyProjects(scope);
+        List<ProjectIndexLockManager.LockHandle> readLocks = acquireReadLocks(scope);
+        try (IndexRepository.ReadSession reads = indexRepository.openReadSession()) {
+            List<ProjectDescriptor> projects = requireReadyProjects(scope);
+            T result = read.read(reads, projects);
+            requireReadyProjects(scope);
+            return result;
+        } finally {
+            closeReadLocks(readLocks);
+        }
+    }
+
+    /** Lecture exécutée sous le gabarit de cohérence, sur les descripteurs revalidés. */
+    @FunctionalInterface
+    private interface ConsistentRead<S, T, E extends Exception> {
+        T read(IndexRepository.ReadSession reads, S scope) throws E;
     }
 
     private ProjectDescriptor requireReadyProject(UUID projectId) {

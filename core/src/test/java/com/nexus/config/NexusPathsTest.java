@@ -1,130 +1,81 @@
 package com.nexus.config;
 
-import com.nexus.testsupport.SymbolicLinks;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.AclEntry;
-import java.nio.file.attribute.AclEntryPermission;
-import java.nio.file.attribute.AclEntryType;
-import java.util.List;
-import java.util.Set;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NexusPathsTest {
-    private static final Set<String> ENGLISH_SYSTEM_NAMES = Set.of(
-            "NT AUTHORITY\\SYSTEM", "BUILTIN\\ADMINISTRATORS", "CREATOR OWNER");
-    private static boolean trusted(String name, String user) {
-        return NexusPaths.isTrustedStoragePrincipal(name, user, ENGLISH_SYSTEM_NAMES);
-    }
 
     @TempDir
     Path temporaryDirectory;
 
     @Test
-    void createsNestedPrivateDirectoryInsideHome() throws Exception {
-        NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("home"));
-        Path index = paths.projectLuceneIndex(UUID.randomUUID());
-
-        paths.ensurePrivateDirectory(index);
-
-        assertTrue(Files.isDirectory(index));
-    }
-
-    @Test
-    void rejectsSymlinkInNestedPersistentPath() throws Exception {
-        NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("home"));
-        paths.ensurePrivateStorage();
-        UUID projectId = UUID.randomUUID();
-        Path projectDirectory = paths.indexesDirectory().resolve(projectId.toString());
-        Path outside = Files.createDirectories(temporaryDirectory.resolve("outside"));
-        SymbolicLinks.createOrSkip(projectDirectory, outside);
-
-        assertThrows(IOException.class, () -> paths.ensurePrivateDirectory(paths.projectLuceneIndex(projectId)));
-    }
-
-    @Test
-    void classifiesOnlyExactExpectedWindowsAclPrincipals() {
-        assertTrue(trusted("WORKSTATION\\alice", "WORKSTATION\\alice"));
-        assertTrue(trusted("NT AUTHORITY\\SYSTEM", "WORKSTATION\\alice"));
-        assertTrue(trusted("BUILTIN\\Administrators", "WORKSTATION\\alice"));
-        assertTrue(trusted("CREATOR OWNER", "WORKSTATION\\alice"));
-
-        assertFalse(trusted("DOMAIN\\alice", "WORKSTATION\\alice"));
-        assertFalse(trusted("CONTOSO\\Administrators", "WORKSTATION\\alice"));
-        assertFalse(trusted("Everyone", "WORKSTATION\\alice"));
-        assertFalse(trusted(
-                "NT AUTHORITY\\Authenticated Users", "WORKSTATION\\alice"));
-        assertFalse(trusted("BUILTIN\\Users", "WORKSTATION\\alice"));
-    }
-
-    @Test
-    void identifiesOnlySensitiveUnexpectedAclPrincipalsAndDeduplicatesThem() {
-        AclEntry currentUser = allow("WORKSTATION\\alice", AclEntryPermission.READ_DATA);
-        AclEntry system = allow("NT AUTHORITY\\SYSTEM", AclEntryPermission.WRITE_DATA);
-        AclEntry everyoneRead = allow("Everyone", AclEntryPermission.READ_DATA);
-        AclEntry everyoneWrite = allow("Everyone", AclEntryPermission.WRITE_DATA);
-        AclEntry harmless = allow("BUILTIN\\Users", AclEntryPermission.READ_ATTRIBUTES);
-        AclEntry deny = AclEntry.newBuilder()
-                .setType(AclEntryType.DENY)
-                .setPrincipal(() -> "Guests")
-                .setPermissions(AclEntryPermission.READ_DATA)
-                .build();
-
-        List<String> unexpected = NexusPaths.unexpectedStoragePrincipals(
-                List.of(currentUser, system, everyoneRead, everyoneWrite, harmless, deny),
-                "WORKSTATION\\alice", ENGLISH_SYSTEM_NAMES);
-
-        assertEquals(List.of("Everyone"), unexpected);
-    }
-
-    @Test
-    void privateStorageRequirementIsStrictAndPropertyOverridesEnvironment() {
-        String previous = System.getProperty(NexusPaths.REQUIRE_PRIVATE_STORAGE_PROPERTY);
+    void resolvesHomeFromInjectedEnvironmentWhenNoPropertyIsSet() {
+        String previous = System.getProperty(NexusPaths.HOME_PROPERTY);
         try {
-            System.setProperty(NexusPaths.REQUIRE_PRIVATE_STORAGE_PROPERTY, "true");
-            assertTrue(NexusPaths.requirePrivateStorage());
+            System.clearProperty(NexusPaths.HOME_PROPERTY);
+            Path configured = temporaryDirectory.resolve("from-env");
 
-            System.setProperty(NexusPaths.REQUIRE_PRIVATE_STORAGE_PROPERTY, "false");
-            assertFalse(NexusPaths.requirePrivateStorage());
+            NexusPaths paths = NexusPaths.fromEnvironment(
+                    Map.of(NexusPaths.HOME_ENVIRONMENT_VARIABLE, configured.toString()));
 
-            System.setProperty(NexusPaths.REQUIRE_PRIVATE_STORAGE_PROPERTY, "yes");
-            assertThrows(IllegalStateException.class, NexusPaths::requirePrivateStorage);
+            assertEquals(configured.toAbsolutePath().normalize(), paths.home());
         } finally {
-            if (previous == null) {
-                System.clearProperty(NexusPaths.REQUIRE_PRIVATE_STORAGE_PROPERTY);
-            } else {
-                System.setProperty(NexusPaths.REQUIRE_PRIVATE_STORAGE_PROPERTY, previous);
-            }
+            restore(NexusPaths.HOME_PROPERTY, previous);
         }
     }
 
     @Test
-    void strictPrivateStoragePolicyFailsClosedOnUnexpectedPrincipal() {
-        IOException failure = assertThrows(
-                IOException.class,
-                () -> NexusPaths.enforceAclPrivacy(
-                        Path.of("nexus-home"),
-                        List.of("Everyone"),
-                        true));
+    void homePropertyOverridesInjectedEnvironment() {
+        String previous = System.getProperty(NexusPaths.HOME_PROPERTY);
+        try {
+            Path property = temporaryDirectory.resolve("from-property");
+            System.setProperty(NexusPaths.HOME_PROPERTY, property.toString());
 
-        assertTrue(failure.getMessage().contains(NexusPaths.REQUIRE_PRIVATE_STORAGE_ENVIRONMENT_VARIABLE));
-        assertTrue(failure.getMessage().contains("Everyone"));
+            NexusPaths paths = NexusPaths.fromEnvironment(
+                    Map.of(NexusPaths.HOME_ENVIRONMENT_VARIABLE, temporaryDirectory.resolve("ignored").toString()));
+
+            assertEquals(property.toAbsolutePath().normalize(), paths.home());
+        } finally {
+            restore(NexusPaths.HOME_PROPERTY, previous);
+        }
     }
 
-    private static AclEntry allow(String principal, AclEntryPermission permission) {
-        return AclEntry.newBuilder()
-                .setType(AclEntryType.ALLOW)
-                .setPrincipal(() -> principal)
-                .setPermissions(permission)
-                .build();
+    @Test
+    void fallsBackToUserHomeWhenNothingIsConfigured() {
+        String previous = System.getProperty(NexusPaths.HOME_PROPERTY);
+        try {
+            System.clearProperty(NexusPaths.HOME_PROPERTY);
+
+            NexusPaths paths = NexusPaths.fromEnvironment(Map.of(NexusPaths.HOME_ENVIRONMENT_VARIABLE, " "));
+
+            assertEquals(Path.of(System.getProperty("user.home"), ".nexus").toAbsolutePath().normalize(), paths.home());
+        } finally {
+            restore(NexusPaths.HOME_PROPERTY, previous);
+        }
+    }
+
+    @Test
+    void derivesPersistentLocationsFromHome() {
+        NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("home"));
+        UUID projectId = UUID.randomUUID();
+
+        assertEquals(paths.home().resolve("nexus.db"), paths.databaseFile());
+        assertEquals(paths.home().resolve("locks").resolve(projectId + ".index.lock"), paths.projectIndexLock(projectId));
+        assertEquals(paths.home().resolve("indexes").resolve(projectId.toString()).resolve("lucene"),
+                paths.projectLuceneIndex(projectId));
+    }
+
+    private static void restore(String property, String previous) {
+        if (previous == null) {
+            System.clearProperty(property);
+        } else {
+            System.setProperty(property, previous);
+        }
     }
 }

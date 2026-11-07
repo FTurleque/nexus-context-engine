@@ -8,7 +8,7 @@
 //   autre source de production ne mentionne forceFallback ; SafeFileIO s'appuie sur SecureDirectoryStream.
 // - Décision : REST direct-https, reverse-proxy-https et loopback avec hardening explicite exigent les deux
 //   politiques NEXUS_REQUIRE_PRIVATE_STORAGE et NEXUS_REQUIRE_STRICT_PATH_IO. Contrôlé :
-//   SecurityPolicy.requireHardenedStorageAndTraversal() teste NexusPaths.requirePrivateStorage() et
+//   SecurityPolicy.requireHardenedStorageAndTraversal() teste SecurityPolicy.requirePrivateStorage() et
 //   requireStrictPathIo(), et NexusRestExposureGuard l'appelle.
 // Ces contrôles complètent SafeFileIOTest, NexusRestExposureGuardTest et scripts/release/test-final-audit-contracts.sh
 // (instantané d'identités du fallback) sans les remplacer.
@@ -193,7 +193,7 @@ export default {
           });
         } else {
           for (const [needle, what] of [
-            [/\brequirePrivateStorage\s*\(\s*\)/, "NEXUS_REQUIRE_PRIVATE_STORAGE (NexusPaths.requirePrivateStorage())"],
+            [/\brequirePrivateStorage\s*\(\s*\)/, "NEXUS_REQUIRE_PRIVATE_STORAGE (SecurityPolicy.requirePrivateStorage())"],
             [/\brequireStrictPathIo\s*\(\s*\)/, "NEXUS_REQUIRE_STRICT_PATH_IO (requireStrictPathIo())"],
           ] as [RegExp, string][]) {
             if (!needle.test(body)) {

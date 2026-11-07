@@ -6,6 +6,7 @@ import com.nexus.project.ProjectSourceType;
 import com.nexus.search.candidate.CandidateType;
 import com.nexus.search.candidate.SearchCandidate;
 import com.nexus.search.candidate.SearchSignals;
+import com.nexus.testsupport.SymbolicLinks;
 import org.eclipse.jgit.api.Git;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -102,6 +103,27 @@ class GitRecencyCandidateEnricherTest {
     }
 
     @Test
+    void resolvesRecencyForANestedProjectRegisteredThroughALinkedRoot() throws Exception {
+        Path monorepo = Files.createDirectories(temporaryDirectory.resolve("monorepo"));
+        Path realTarget = write(monorepo, "backend/order-app/src/OrderService.java", "class OrderService {}\n");
+        try (Git git = Git.init().setDirectory(monorepo.toFile()).call()) {
+            commitAll(git, "initial monorepo");
+            Files.writeString(realTarget, "class OrderService { void changed() {} }\n");
+            commitAll(git, "change nested order service");
+        }
+        Path linkedMonorepo = temporaryDirectory.resolve("linked-monorepo");
+        SymbolicLinks.createOrSkip(linkedMonorepo, monorepo);
+        Path projectRoot = linkedMonorepo.resolve("backend/order-app");
+
+        SearchCandidate candidate = candidate("order", projectRoot.resolve("src/OrderService.java"));
+        List<SearchCandidate> enriched = new GitRecencyCandidateEnricher().enrich(
+                project(projectRoot),
+                List.of(candidate));
+
+        assertEquals(1.0d, enriched.getFirst().signals().get(SearchSignals.GIT_RECENCY), 0.000001d);
+    }
+
+    @Test
     void leavesCandidatesUntouchedOutsideAGitRepository() throws Exception {
         Path file = write(temporaryDirectory, "src/Service.java", "class Service {}\n");
         SearchCandidate candidate = candidate("service", file);
@@ -126,6 +148,31 @@ class GitRecencyCandidateEnricherTest {
 
         assertEquals(List.of(), records);
         assertEquals(List.of(), reasons);
+    }
+
+    @Test
+    void aParentRepositoryOfAnotherAccountGivesNoRecencyAndExplainsWhyWithoutWarning() throws Exception {
+        Path projectRoot = temporaryDirectory.resolve("nested");
+        Path file = write(projectRoot, "src/Service.java", "class Service {}\n");
+        try (Git git = Git.init().setDirectory(temporaryDirectory.toFile()).call()) {
+            commitAll(git, "initial");
+            Files.writeString(file, "class Service { void changed() {} }\n");
+            commitAll(git, "change service");
+        }
+        List<SearchCandidate> candidates = List.of(candidate("service", file));
+        List<String> reasons = new ArrayList<>();
+        List<List<SearchCandidate>> results = new ArrayList<>();
+        GitRecencyCandidateEnricher enricher = new GitRecencyCandidateEnricher(
+                GitRecencyCandidateEnricher.DEFAULT_RECENCY_CACHE_CAPACITY,
+                new GitRepositoryLocator(entry -> GitRepositoryLocator.Ownership.OTHER_ACCOUNT));
+
+        List<LogRecord> records = captureWarnings(() -> results.add(
+                enricher.enrich(project(projectRoot), candidates, reasons::add)));
+
+        assertEquals(candidates, results.getFirst());
+        assertEquals(List.of(), records);
+        assertEquals(List.of(GitRecencyCandidateEnricher.REJECTED_REPOSITORY_REASON), reasons);
+        assertEquals(0, enricher.logScans());
     }
 
     @Test

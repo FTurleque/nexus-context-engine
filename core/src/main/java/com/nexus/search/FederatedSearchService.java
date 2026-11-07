@@ -41,7 +41,7 @@ public final class FederatedSearchService {
     private final FederationDeadlinePolicy deadlinePolicy;
 
     public FederatedSearchService(SearchService searchService) {
-        this(searchService, FederationDeadlinePolicy.fromEnvironment());
+        this(searchService, FederationDeadlinePolicy.defaults());
     }
 
     public FederatedSearchService(SearchService searchService, FederationDeadlinePolicy deadlinePolicy) {

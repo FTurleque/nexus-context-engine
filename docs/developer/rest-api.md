@@ -46,6 +46,7 @@ GET  /api/v1/projects
 POST /api/v1/projects
 GET  /api/v1/projects/{projectId}
 POST /api/v1/projects/{projectId}/index
+GET  /api/v1/projects/{projectId}/index
 POST /api/v1/projects/{projectId}/search
 POST /api/v1/projects/{projectId}/context
 POST /api/v1/federated/search
@@ -62,7 +63,7 @@ GET  /q/metrics
 
 Les endpoints `/q/*` ne sont pas servis par le listener applicatif. Cette séparation évite de publier accidentellement les métriques/health lorsqu'un reverse proxy expose l'API métier.
 
-Les lectures indexées exigent un projet `READY`.
+Les lectures indexées exigent un projet `READY`. C'est le cas de `GET /api/v1/projects/{projectId}/index` (statistiques de l'index) : sur un projet qui n'est pas `READY`, il répond `409` avec l'erreur `project_not_ready`.
 
 ## Contrat de sortie
 
@@ -94,6 +95,18 @@ Une portée valide est ensuite résolue, vérifiée `READY` et traitée par les 
 ### Loopback
 
 Loopback est le défaut sûr. Le contrat distant ne s'applique pas à un listener strictement loopback.
+
+Un listener loopback se déclare par l'un des hôtes littéraux `127.0.0.1`, `localhost` ou `::1` : `NexusRestExposureGuard` refuse au démarrage toute autre adresse ou alias loopback (par exemple `127.0.0.2`), auquel le contrôle d'hôte répondrait `403` à chaque requête.
+
+Sur un listener loopback (trust-local, jeton loopback ou posture locale durcie), le filtre JAX-RS `@PreMatching` `NexusRestLoopbackTransportFilter` contrôle chaque requête avant la résolution de ressource et avant l'authentification :
+
+- l'en-tête `Host` doit désigner littéralement `127.0.0.1`, `localhost` ou `[::1]`, avec ou sans port ; un autre nom, un en-tête absent ou un nom DNS qui se résoudrait vers loopback est refusé ;
+- un en-tête `Origin` n'est accepté que s'il désigne `http://` ou `https://` suivi de l'un de ces hôtes ; `Origin: null` et toute origine distante sont refusés ;
+- une requête sans `Origin` (client en ligne de commande, assistant) est acceptée.
+
+Le refus est une réponse `403` au corps fixe `{"error":"FORBIDDEN","message":"Requête refusée par le contrôle de transport local"}`, sans la valeur reçue ni la configuration attendue. Un client local derrière un alias de nom ou un proxy local doit appeler `127.0.0.1`, ou passer par une exposition non-loopback authentifiée. Le filtre décide une fois, à sa construction, s'il s'applique : il reste actif sauf si `quarkus.http.host` se résout avec certitude vers une adresse non loopback, et un échec de résolution le garde actif. Hors loopback, ce filtre est inactif et seul le garde de démarrage s'applique. Le listener de management (`127.0.0.1:9000`, `/q/health`, `/q/metrics`) n'est pas couvert par ce filtre : voir le risque résiduel décrit dans [`rest-exposure-security.md`](rest-exposure-security.md).
+
+Risque navigateur du mode trust-local : `NEXUS_REST_TRUST_LOCAL=true` supprime l'authentification. Le contrôle d'hôte et d'origine écarte les pages web distantes et le DNS rebinding, mais fait toujours confiance aux processus locaux et aux pages servies depuis une origine loopback (par exemple un autre serveur de développement sur `http://localhost:3000`). Sur un poste qui exécute des applications web locales, préférer le jeton loopback ; si trust-local est conservé, déclarer aussi `NEXUS_REST_ALLOWED_PROJECT_ROOTS` pour borner l'enregistrement de projets à une allowlist de racines. Cette allowlist reste une recommandation en trust-local. Voir [`rest-exposure-security.md`](rest-exposure-security.md).
 
 ### Exposition non-loopback
 

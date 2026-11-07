@@ -61,8 +61,9 @@ public final class ProjectIndexingService {
     /**
      * Seul constructeur public : composition de production. Le gestionnaire de
      * verrou inter-processus est explicite, sans valeur par défaut, et le timeout
-     * des providers vient de l'environnement. Les variantes de commodité des
-     * tests vivent dans une fabrique de test du même paquetage.
+     * des providers est résolu par la composition root ({@link #providerTimeout(Map)}).
+     * Les variantes de commodité des tests vivent dans une fabrique de test du même
+     * paquetage.
      */
     public ProjectIndexingService(
             ProjectRepository projectRepository,
@@ -74,10 +75,11 @@ public final class ProjectIndexingService {
             List<CodeIntelligenceProvider> codeIntelligenceProviders,
             SemanticIndexing semanticIndexingService,
             ExternalCodeIntelligencePayloadImporter payloadImporter,
+            Duration providerTimeout,
             ProjectIndexLockManager projectIndexLockManager) {
         this(projectRepository, indexRepository, scanner, analyzers, searchIndex,
                 codeIndexImporters, codeIntelligenceProviders, semanticIndexingService,
-                payloadImporter, providerTimeoutFromEnvironment(), projectIndexLockManager,
+                payloadImporter, providerTimeout, projectIndexLockManager,
                 DEFAULT_INDEX_DOCUMENT_BATCH_FILES, DEFAULT_INDEX_DOCUMENT_BATCH_BYTES);
     }
 
@@ -431,8 +433,10 @@ public final class ProjectIndexingService {
                 status);
     }
 
-    private static Duration providerTimeoutFromEnvironment() {
-        String configured = System.getenv(PROVIDER_TIMEOUT_ENVIRONMENT_VARIABLE);
+    /** Résout {@value #PROVIDER_TIMEOUT_ENVIRONMENT_VARIABLE} depuis l'environnement fourni par la composition root. */
+    public static Duration providerTimeout(Map<String, String> environment) {
+        String configured = Objects.requireNonNull(environment, "environment")
+                .get(PROVIDER_TIMEOUT_ENVIRONMENT_VARIABLE);
         if (configured == null || configured.isBlank()) {
             return DEFAULT_PROVIDER_TIMEOUT;
         }

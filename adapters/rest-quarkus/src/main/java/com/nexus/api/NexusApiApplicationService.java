@@ -1,7 +1,7 @@
 package com.nexus.api;
 
 import com.nexus.application.NexusApplication;
-import com.nexus.config.NexusPaths;
+import com.nexus.application.NexusConfiguration;
 import com.nexus.index.IndexStatistics;
 import com.nexus.index.IndexingReport;
 import com.nexus.project.ProjectDescriptor;
@@ -12,7 +12,6 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import java.io.IOException;
-import java.sql.SQLException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
@@ -171,8 +170,10 @@ public class NexusApiApplicationService {
 
     private static NexusApplication initializeApplication() {
         try {
-            return NexusApplication.createLongLived(NexusPaths.fromEnvironment());
-        } catch (SQLException | IOException exception) {
+            return NexusApplication.createLongLived(NexusConfiguration.pathsFromEnvironment());
+        } catch (IOException | RuntimeException exception) {
+            // L'échec d'ouverture du stockage arrive en PersistenceException, sans type JDBC ;
+            // l'adaptateur ne nomme pas le package de persistance (ARCH-0039).
             throw new IllegalStateException("Impossible d'initialiser NEXUS pour l'adaptateur REST", exception);
         }
     }

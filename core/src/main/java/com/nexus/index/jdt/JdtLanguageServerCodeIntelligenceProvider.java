@@ -1,5 +1,7 @@
 package com.nexus.index.jdt;
 
+import com.nexus.security.PrivateStoragePolicy;
+
 import com.nexus.index.jdt.JdtSymbolMapper.ProviderSymbol;
 import static com.nexus.index.jdt.JdtSymbolMapper.*;
 
@@ -58,9 +60,15 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
     private final JdtSymbolMapper symbolMapper;
     private final JdtDocumentMessages messages;
     private final JdtRelationCollector relationCollector;
+    private final ProjectScanner scanner;
 
     public JdtLanguageServerCodeIntelligenceProvider(Configuration configuration) {
-        this(configuration, JdtStdioSession::open, new ObjectMapper(), SnapshotLimits.defaults());
+        this(configuration, new ProjectScanner());
+    }
+
+    /** Composition de production : le scanner porte les bornes de scan résolues par la composition root. */
+    public JdtLanguageServerCodeIntelligenceProvider(Configuration configuration, ProjectScanner scanner) {
+        this(configuration, JdtStdioSession::open, new ObjectMapper(), SnapshotLimits.defaults(), scanner);
     }
 
     JdtLanguageServerCodeIntelligenceProvider(
@@ -75,6 +83,16 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
             SessionFactory sessionFactory,
             ObjectMapper objectMapper,
             SnapshotLimits snapshotLimits) {
+        this(configuration, sessionFactory, objectMapper, snapshotLimits, new ProjectScanner());
+    }
+
+    private JdtLanguageServerCodeIntelligenceProvider(
+            Configuration configuration,
+            SessionFactory sessionFactory,
+            ObjectMapper objectMapper,
+            SnapshotLimits snapshotLimits,
+            ProjectScanner scanner) {
+        this.scanner = Objects.requireNonNull(scanner, "scanner");
         this.configuration = Objects.requireNonNull(configuration, "configuration");
         this.sessionFactory = Objects.requireNonNull(sessionFactory, "sessionFactory");
         Objects.requireNonNull(objectMapper, "objectMapper");
@@ -84,24 +102,31 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
         this.relationCollector = new JdtRelationCollector(objectMapper, snapshotLimits);
     }
 
-    public static Optional<JdtLanguageServerCodeIntelligenceProvider> fromEnvironment(NexusPaths paths) {
+    /**
+     * Résout la configuration opt-in du provider depuis l'environnement fourni par la composition
+     * root. Sans {@value #HOME_ENVIRONMENT_VARIABLE}, le provider est absent.
+     */
+    public static Optional<Configuration> configuration(NexusPaths paths, Map<String, String> environment) {
         Objects.requireNonNull(paths, "paths");
-        String configuredHome = System.getenv(HOME_ENVIRONMENT_VARIABLE);
+        Objects.requireNonNull(environment, "environment");
+        String configuredHome = environment.get(HOME_ENVIRONMENT_VARIABLE);
         if (configuredHome == null || configuredHome.isBlank()) {
             return Optional.empty();
         }
-        String javaCommand = environmentOrDefault(JAVA_ENVIRONMENT_VARIABLE, "java");
-        long timeoutSeconds = boundedPositiveLongEnvironment(
-                TIMEOUT_ENVIRONMENT_VARIABLE, DEFAULT_TIMEOUT_SECONDS, MAX_TIMEOUT_SECONDS);
-        int maxSymbols = boundedPositiveIntEnvironment(
-                MAX_SYMBOLS_ENVIRONMENT_VARIABLE, DEFAULT_MAX_SYMBOLS, MAX_SYMBOLS);
-        Configuration configuration = new Configuration(
+        String javaCommand = environmentOrDefault(environment, JAVA_ENVIRONMENT_VARIABLE, "java");
+        long timeoutSeconds = parseBoundedPositiveLong(
+                TIMEOUT_ENVIRONMENT_VARIABLE, environment.get(TIMEOUT_ENVIRONMENT_VARIABLE),
+                DEFAULT_TIMEOUT_SECONDS, MAX_TIMEOUT_SECONDS);
+        int maxSymbols = parseBoundedPositiveInt(
+                MAX_SYMBOLS_ENVIRONMENT_VARIABLE, environment.get(MAX_SYMBOLS_ENVIRONMENT_VARIABLE),
+                DEFAULT_MAX_SYMBOLS, MAX_SYMBOLS);
+        return Optional.of(new Configuration(
                 Path.of(configuredHome),
                 paths.home().resolve("jdtls-workspaces"),
                 javaCommand,
                 Duration.ofSeconds(timeoutSeconds),
-                maxSymbols);
-        return Optional.of(new JdtLanguageServerCodeIntelligenceProvider(configuration));
+                maxSymbols,
+                environment.get(BoundedJdtProcessBuilder.TRUSTED_PROJECT_ROOTS_ENVIRONMENT_VARIABLE)));
     }
 
     @Override
@@ -121,7 +146,7 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
         } catch (IOException ignored) {
             // Project root does not exist yet; ProjectScanner will report a clear error.
         }
-        List<ScannedFile> javaFiles = new ProjectScanner().scan(root).stream()
+        List<ScannedFile> javaFiles = scanner.scan(root).stream()
                 .filter(file -> "java".equalsIgnoreCase(file.language()))
                 .filter(file -> file.relativePath().toLowerCase(Locale.ROOT).endsWith(".java"))
                 .sorted(Comparator.comparing(ScannedFile::relativePath))
@@ -193,17 +218,9 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
                 List.copyOf(relations.values()));
     }
 
-    private static String environmentOrDefault(String name, String defaultValue) {
-        String value = System.getenv(name);
+    private static String environmentOrDefault(Map<String, String> environment, String name, String defaultValue) {
+        String value = environment.get(name);
         return value == null || value.isBlank() ? defaultValue : value;
-    }
-
-    private static int boundedPositiveIntEnvironment(String name, int defaultValue, int maximum) {
-        return parseBoundedPositiveInt(name, System.getenv(name), defaultValue, maximum);
-    }
-
-    private static long boundedPositiveLongEnvironment(String name, long defaultValue, long maximum) {
-        return parseBoundedPositiveLong(name, System.getenv(name), defaultValue, maximum);
     }
 
     static int parseBoundedPositiveInt(String name, String rawValue, int defaultValue, int maximum) {
@@ -248,12 +265,28 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
         }
     }
 
+    /**
+     * Configuration résolue du provider. {@code trustedProjectRoots} reprend la valeur brute de
+     * {@value BoundedJdtProcessBuilder#TRUSTED_PROJECT_ROOTS_ENVIRONMENT_VARIABLE} (racines séparées
+     * par le séparateur de chemins de la plateforme) ; {@code null} n'approuve aucun projet.
+     */
     public record Configuration(
             Path installationDirectory,
             Path workspaceRoot,
             String javaCommand,
             Duration timeout,
-            int maxSymbols) {
+            int maxSymbols,
+            String trustedProjectRoots) {
+
+        /** Configuration sans racine approuvée : JDT LS refusera tout projet. */
+        public Configuration(
+                Path installationDirectory,
+                Path workspaceRoot,
+                String javaCommand,
+                Duration timeout,
+                int maxSymbols) {
+            this(installationDirectory, workspaceRoot, javaCommand, timeout, maxSymbols, null);
+        }
 
         public Configuration {
             Objects.requireNonNull(installationDirectory, "installationDirectory");
@@ -316,11 +349,11 @@ public final class JdtLanguageServerCodeIntelligenceProvider implements CodeInte
                 throw new IOException("Racine de workspaces JDT LS sans parent : " + workspaceRoot);
             }
             NexusPaths storagePaths = new NexusPaths(storageHome);
-            storagePaths.ensurePrivateDirectory(workspaceRoot);
+            PrivateStoragePolicy.ensurePrivateDirectory(storagePaths, workspaceRoot);
             String id = UUID.nameUUIDFromBytes(
                     projectRoot.toAbsolutePath().normalize().toString().getBytes(StandardCharsets.UTF_8)).toString();
             Path workspace = workspaceRoot.resolve(id);
-            storagePaths.ensurePrivateDirectory(workspace);
+            PrivateStoragePolicy.ensurePrivateDirectory(storagePaths, workspace);
             return workspace;
         }
     }

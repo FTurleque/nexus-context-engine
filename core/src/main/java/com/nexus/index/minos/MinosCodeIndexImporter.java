@@ -41,6 +41,16 @@ public final class MinosCodeIndexImporter implements ExternalCodeIntelligencePay
     public static final int MAX_RELATION_FACTS = 500_000;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ProjectScanner scanner;
+
+    public MinosCodeIndexImporter() {
+        this(new ProjectScanner());
+    }
+
+    /** Composition de production : le scanner porte les bornes de scan résolues par la composition root. */
+    public MinosCodeIndexImporter(ProjectScanner scanner) {
+        this.scanner = Objects.requireNonNull(scanner, "scanner");
+    }
 
     /**
      * Compatibilité autonome. La façade NexusApplication utilise la surcharge
@@ -51,7 +61,7 @@ public final class MinosCodeIndexImporter implements ExternalCodeIntelligencePay
     public CodeIntelligenceSnapshot importPayload(Path projectRoot, String payload) throws IOException {
         Path root = Objects.requireNonNull(projectRoot, "projectRoot").toRealPath();
         Set<String> scannedProjectFiles = new LinkedHashSet<>();
-        for (var scannedFile : new ProjectScanner().scan(root)) {
+        for (var scannedFile : scanner.scan(root)) {
             scannedProjectFiles.add(scannedFile.relativePath());
         }
         return importPayload(root, scannedProjectFiles, payload);

@@ -109,7 +109,9 @@ Oui si la décision est **durable et structurante** et tranche entre des options
 | [ARCH-0063](ARCH-0063-casser-les-cycles-de-packages-du-coeur-par-des-packages-de-modele-feuilles.md) | Casser les cycles de packages du cœur par des packages de modèle feuilles | 2026-11-07 | Proposed |
 | [BE-0064](BE-0064-borner-la-federation-par-une-echeance-globale-sans-parallelisme.md) | Borner la fédération par une échéance globale vérifiée entre projets, sans parallélisme | 2026-11-07 | Proposed |
 | [BE-0065](BE-0065-dimensionner-les-caches-git-sur-le-scope-federe.md) | Dimensionner les caches Git des runtimes longue durée sur le scope fédéré | 2026-11-07 | Proposed |
-| [SEC-0066](SEC-0066-publier-les-releases-depuis-un-environnement-protege-avec-des-assets-attestes.md) | Publier les releases depuis un environnement protégé, avec des assets attestés et des tags de pré-version | 2026-11-07 | Proposed |
+| [ARCH-0066](ARCH-0066-resoudre-la-configuration-dans-la-composition-root.md) | Résoudre la configuration NEXUS dans la composition root et l'injecter | 2026-11-07 | Proposed |
+| [BE-0067](BE-0067-plafonner-la-decouverte-du-depot-git-a-la-racine-du-projet.md) | Plafonner la découverte du dépôt Git à la racine du projet, sauf dépôt parent de l'utilisateur courant | 2026-11-07 | Proposed |
+| [SEC-0068](SEC-0068-publier-les-releases-depuis-un-environnement-protege-avec-des-assets-attestes.md) | Publier les releases depuis un environnement protégé, avec des assets attestés et des tags de pré-version | 2026-11-07 | Proposed |
 
 ## Archive
 

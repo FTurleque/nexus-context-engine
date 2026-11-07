@@ -1,5 +1,7 @@
 package com.nexus.search.semantic.lucene;
 
+import com.nexus.security.PrivateStoragePolicy;
+
 import com.nexus.config.NexusPaths;
 import com.nexus.index.FileCategory;
 import com.nexus.search.semantic.SemanticIndexProvenance;
@@ -89,7 +91,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
         if (!Files.exists(indexPath, LinkOption.NOFOLLOW_LINKS)) {
             return false;
         }
-        paths.ensurePrivateDirectory(indexPath);
+        PrivateStoragePolicy.ensurePrivateDirectory(paths, indexPath);
         try (Directory directory = FSDirectory.open(indexPath)) {
             if (!DirectoryReader.indexExists(directory)) {
                 return false;
@@ -121,7 +123,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
         Objects.requireNonNull(documents, "documents");
         Path root = paths.projectSemanticLuceneIndex(projectId);
         Path indexPath = indexPath(projectId);
-        paths.ensurePrivateDirectory(indexPath);
+        PrivateStoragePolicy.ensurePrivateDirectory(paths, indexPath);
         try {
             rebuildDirectory(indexPath, provenance, documents);
             cleanupStaleRecoveryGenerations(root, indexPath);
@@ -130,7 +132,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
             // corrupt commit. Publish recovery elsewhere without deleting files
             // still mapped by independent readers (especially on Windows).
             Path recovery = root.resolve(RECOVERY_GENERATION_PREFIX + UUID.randomUUID());
-            paths.ensurePrivateDirectory(recovery);
+            PrivateStoragePolicy.ensurePrivateDirectory(paths, recovery);
             rebuildDirectory(recovery, provenance, documents);
             publishRecovery(root, recovery);
             cleanupStaleRecoveryGenerations(root, recovery);
@@ -185,7 +187,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
         Objects.requireNonNull(documents, "documents");
         Objects.requireNonNull(removedRelativePaths, "removedRelativePaths");
         Path indexPath = indexPath(projectId);
-        paths.ensurePrivateDirectory(indexPath);
+        PrivateStoragePolicy.ensurePrivateDirectory(paths, indexPath);
         try (Directory directory = FSDirectory.open(indexPath)) {
             IndexWriterConfig configuration = new IndexWriterConfig()
                     .setOpenMode(IndexWriterConfig.OpenMode.CREATE_OR_APPEND);
@@ -260,7 +262,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
 
         private void openForRebuild() throws IOException {
             target = indexPath(projectId);
-            paths.ensurePrivateDirectory(target);
+            PrivateStoragePolicy.ensurePrivateDirectory(paths, target);
             try {
                 openWriter(target, IndexWriterConfig.OpenMode.CREATE);
             } catch (CorruptIndexException | IndexFormatTooOldException | IndexFormatTooNewException
@@ -268,7 +270,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
                 // CREATE préserve les commits sains mais ne sait pas lire un commit corrompu :
                 // la récupération s'écrit ailleurs, sans supprimer de fichiers encore mappés.
                 recovery = root.resolve(RECOVERY_GENERATION_PREFIX + UUID.randomUUID());
-                paths.ensurePrivateDirectory(recovery);
+                PrivateStoragePolicy.ensurePrivateDirectory(paths, recovery);
                 openWriter(recovery, IndexWriterConfig.OpenMode.CREATE);
             }
             dirty = true;
@@ -280,7 +282,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
             }
             if (writer == null) {
                 target = indexPath(projectId);
-                paths.ensurePrivateDirectory(target);
+                PrivateStoragePolicy.ensurePrivateDirectory(paths, target);
                 openWriter(target, IndexWriterConfig.OpenMode.CREATE_OR_APPEND);
             }
             return writer;
@@ -396,7 +398,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
         if (!Files.exists(indexPath, LinkOption.NOFOLLOW_LINKS)) {
             return List.of();
         }
-        paths.ensurePrivateDirectory(indexPath);
+        PrivateStoragePolicy.ensurePrivateDirectory(paths, indexPath);
 
         try (Directory directory = FSDirectory.open(indexPath)) {
             if (!DirectoryReader.indexExists(directory)) {
@@ -442,7 +444,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
         if (!Files.exists(pointer, LinkOption.NOFOLLOW_LINKS)) {
             return root;
         }
-        paths.ensurePrivateDirectory(root);
+        PrivateStoragePolicy.ensurePrivateDirectory(paths, root);
         String generation;
         try (var reader = SafeFileIO.newBufferedReaderNoFollow(pointer, StandardCharsets.UTF_8, 128)) {
             generation = reader.readLine();
@@ -455,13 +457,13 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
         if (!Files.isDirectory(selected, LinkOption.NOFOLLOW_LINKS)) {
             throw new IOException("Génération sémantique absente : " + selected);
         }
-        paths.ensurePrivateDirectory(selected);
+        PrivateStoragePolicy.ensurePrivateDirectory(paths, selected);
         return selected;
     }
 
     private void publishRecovery(Path root, Path recovery) throws IOException {
         Path temporaryPointer = root.resolve("current-generation-" + UUID.randomUUID() + ".tmp");
-        paths.ensurePrivateFile(temporaryPointer);
+        PrivateStoragePolicy.ensurePrivateFile(paths, temporaryPointer);
         try {
             Files.writeString(temporaryPointer, recovery.getFileName().toString(), StandardCharsets.UTF_8,
                     StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING, LinkOption.NOFOLLOW_LINKS);

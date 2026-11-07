@@ -118,9 +118,9 @@ Pour corriger une release dont le contenu doit changer, créer une nouvelle vers
 
 Un rollback de consommation pointe vers un tag SemVer historique ou, de préférence, vers son digest GHCR. Les tags immuables ne sont jamais déplacés pour simuler un rollback.
 
-## Politique de publication cible (SEC-0066, proposée)
+## Politique de publication cible (SEC-0068, proposée)
 
-[SEC-0066](../architecture/adr/SEC-0066-publier-les-releases-depuis-un-environnement-protege-avec-des-assets-attestes.md), au statut `Proposed`, complète [GEN-0031](../architecture/adr/GEN-0031-packager-la-cli-dans-un-jar-autonome.md) et fixe les conditions de publication que met en œuvre le changement OpenSpec `sprint-09-chaine-de-release-executable`. Les workflows et scripts du dépôt portent les règles qui les concernent ; les réglages GitHub (environnement `release`, secrets d'environnement, ruleset de tags) restent à appliquer par le mainteneur et ne sont pas encore en place. L'état constaté avant le changement est relevé dans le contexte de l'ADR.
+[SEC-0068](../architecture/adr/SEC-0068-publier-les-releases-depuis-un-environnement-protege-avec-des-assets-attestes.md), au statut `Proposed`, complète [GEN-0031](../architecture/adr/GEN-0031-packager-la-cli-dans-un-jar-autonome.md) et fixe les conditions de publication que met en œuvre le changement OpenSpec `sprint-09-chaine-de-release-executable`. Les workflows et scripts du dépôt portent les règles qui les concernent ; les réglages GitHub (environnement `release`, secrets d'environnement, ruleset de tags) restent à appliquer par le mainteneur et ne sont pas encore en place. L'état constaté avant le changement est relevé dans le contexte de l'ADR.
 
 - Aucun workflow ne transmet `secrets: inherit` ; un workflow réutilisable ne reçoit, par leur nom, que les secrets qu'il déclare, y compris quand ils n'existent que dans l'environnement `release`.
 - Le job `publish` et la signature de release déclarent `environment: release` : reviewer requis, déploiement limité aux tags `v*`, secrets PFX Authenticode portés par l'environnement. Aucune écriture dans GHCR ni dans les releases avant l'approbation.

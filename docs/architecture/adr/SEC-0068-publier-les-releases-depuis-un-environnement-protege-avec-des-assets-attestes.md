@@ -1,5 +1,5 @@
 ---
-id: SEC-0066
+id: SEC-0068
 title: "Publier les releases depuis un environnement protégé, avec des assets attestés et des tags de pré-version"
 domain: security
 rules: false

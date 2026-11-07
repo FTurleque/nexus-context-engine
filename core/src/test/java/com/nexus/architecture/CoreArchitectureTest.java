@@ -83,6 +83,78 @@ class CoreArchitectureTest {
     }
 
     @Test
+    void processEnvironmentIsReadOnlyByTheCompositionRoot() {
+        assertNoViolation(CoreArchitectureRules.getenvInCompositionRoot(core));
+    }
+
+    @Test
+    void getenvOutsideTheCompositionRootFailsGetenvRule() throws IOException {
+        writeSource("com/nexus/application/NexusApplicationFactory.java", """
+                package com.nexus.application;
+
+                class NexusApplicationFactory {
+                    static java.util.Map<String, String> processEnvironment() {
+                        return System.getenv();
+                    }
+
+                    static java.util.function.Function<String, String> lookup() {
+                        return System::getenv;
+                    }
+                }
+                """);
+        writeSource("com/nexus/index/Limits.java", """
+                package com.nexus.index;
+
+                class Limits {
+                    // System.getenv("IGNORED") dans un commentaire ne compte pas.
+                    String text = "System.getenv";
+                    String value = System.getenv("NEXUS_LIMIT");
+                }
+                """);
+        writeSource("com/nexus/context/Budget.java", """
+                package com.nexus.context;
+
+                class Budget {
+                    String value = java.lang.System.getenv("NEXUS_BUDGET");
+                }
+                """);
+        writeSource("com/nexus/search/Strategy.java", """
+                package com.nexus.search;
+
+                import static java.lang.System.getenv;
+
+                class Strategy {
+                }
+                """);
+        writeSource("com/nexus/project/Deadline.java", """
+                package com.nexus.project;
+
+                import java.util.function.Function;
+
+                class Deadline {
+                    // System::getenv dans un commentaire ne compte pas.
+                    String text = "System::getenv";
+                    Function<String, String> environment = System::getenv;
+                }
+                """);
+        writeSource("com/nexus/index/scan/Scanner.java", """
+                package com.nexus.index.scan;
+
+                class Scanner {
+                    java.util.function.Function<String, String> environment = java.lang.System :: getenv;
+                }
+                """);
+
+        assertEquals(List.of(
+                        "[getenv-composition-root] com.nexus.context.Budget -> java.lang.System.getenv",
+                        "[getenv-composition-root] com.nexus.index.Limits -> System.getenv",
+                        "[getenv-composition-root] com.nexus.index.scan.Scanner -> java.lang.System::getenv",
+                        "[getenv-composition-root] com.nexus.project.Deadline -> System::getenv",
+                        "[getenv-composition-root] com.nexus.search.Strategy -> java.lang.System.getenv"),
+                CoreArchitectureRules.getenvInCompositionRoot(scanFixture()));
+    }
+
+    @Test
     void cycleBaselineIsEmpty() throws IOException {
         assertEquals(List.of(), baselineLines(),
                 "Le graphe des packages du cœur est acyclique : la baseline " + CYCLE_BASELINE + " reste vide");
@@ -186,18 +258,27 @@ class CoreArchitectureTest {
                 class OtherFactory {
                 }
                 """);
+        writeSource("com/nexus/application/NexusApplication.java", """
+                package com.nexus.application;
+
+                import java.sql.SQLException;
+
+                class NexusApplication {
+                }
+                """);
         writeSource("com/nexus/cli/NexusCli.java", """
                 package com.nexus.cli;
 
-                import java.sql.Connection;
+                import java.sql.SQLException;
 
                 class NexusCli {
                 }
                 """);
 
         assertEquals(List.of(
+                        "[sqlite-confine] com.nexus.application.NexusApplication -> java.sql.SQLException",
                         "[sqlite-confine] com.nexus.application.OtherFactory -> java.sql.SQLException",
-                        "[sqlite-confine] com.nexus.cli.NexusCli -> java.sql.Connection"),
+                        "[sqlite-confine] com.nexus.cli.NexusCli -> java.sql.SQLException"),
                 CoreArchitectureRules.sqliteConfined(scanFixture()));
     }
 

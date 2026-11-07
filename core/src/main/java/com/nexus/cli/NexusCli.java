@@ -1,7 +1,7 @@
 package com.nexus.cli;
 
 import com.nexus.application.NexusApplication;
-import com.nexus.config.NexusPaths;
+import com.nexus.application.NexusConfiguration;
 import com.nexus.context.ContextBudgetPolicy;
 import com.nexus.index.CodeIntelligenceSnapshot;
 import com.nexus.project.FederatedScopePolicy;
@@ -13,7 +13,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
 import java.nio.file.Path;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -64,7 +63,7 @@ public final class NexusCli {
         }
     }
 
-    private static void run(String[] args, InputStream input, CliRenderer renderer) throws IOException, SQLException {
+    private static void run(String[] args, InputStream input, CliRenderer renderer) throws IOException {
         if (args.length == 0 || "--help".equals(args[0]) || "help".equals(args[0])) {
             renderer.renderUsage();
             return;
@@ -77,7 +76,7 @@ public final class NexusCli {
             throw new IllegalArgumentException("Commande inconnue : " + args[0]);
         }
 
-        try (NexusApplication application = NexusApplication.create(NexusPaths.fromEnvironment())) {
+        try (NexusApplication application = NexusApplication.create(NexusConfiguration.pathsFromEnvironment())) {
             switch (args[0]) {
                 case "project" -> handleProject(args, application, renderer);
                 case "index" -> handleIndex(args, application, renderer);

@@ -16,16 +16,17 @@ class FederationDeadlinePolicyTest {
 
     @Test
     void defaultsToSixtySecondsWithoutEnvironmentValue() {
-        assertEquals(Duration.ofSeconds(60), FederationDeadlinePolicy.fromEnvironment(name -> null).duration());
-        assertEquals(Duration.ofSeconds(60), FederationDeadlinePolicy.fromEnvironment(name -> "  ").duration());
+        assertEquals(Duration.ofSeconds(60), FederationDeadlinePolicy.from(Map.of()).duration());
+        assertEquals(Duration.ofSeconds(60), policy("  ").duration());
         assertEquals(Duration.ofSeconds(60), FederationDeadlinePolicy.DEFAULT_DURATION);
+        assertEquals(Duration.ofSeconds(60), FederationDeadlinePolicy.defaults().duration());
     }
 
     @Test
     void readsTheEnvironmentValueWithinTheBounds() {
         Map<String, String> environment = Map.of(FederationDeadlinePolicy.ENVIRONMENT_VARIABLE, " 90 ");
 
-        assertEquals(Duration.ofSeconds(90), FederationDeadlinePolicy.fromEnvironment(environment::get).duration());
+        assertEquals(Duration.ofSeconds(90), FederationDeadlinePolicy.from(environment).duration());
     }
 
     @Test
@@ -65,6 +66,6 @@ class FederationDeadlinePolicyTest {
 
     private static FederationDeadlinePolicy policy(String value) {
         Map<String, String> environment = Map.of(FederationDeadlinePolicy.ENVIRONMENT_VARIABLE, value);
-        return FederationDeadlinePolicy.fromEnvironment(environment::get);
+        return FederationDeadlinePolicy.from(environment);
     }
 }
