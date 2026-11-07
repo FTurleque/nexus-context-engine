@@ -32,7 +32,7 @@ on:
   workflow_dispatch:
     inputs:
       require_authenticode:
-        description: Require repository signing secrets for this manual qualification
+        description: Require the release environment signing secrets for this manual qualification
         required: false
         type: boolean
         default: false
@@ -49,11 +49,13 @@ jobs:
     name: Windows self-contained installer
     runs-on: windows-latest
     timeout-minutes: 45
+    # Release signing runs in the protected `release` environment, which holds the Authenticode
+    # secrets; any other run (pull_request, unsigned manual qualification) has no environment.
+    environment:
+      name: ${{ inputs.require_authenticode && 'release' || '' }}
     env:
       NEXUS_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       NEXUS_WINDOWS_REQUIRE_AUTHENTICODE: ${{ inputs.require_authenticode && 'true' || 'false' }}
-      NEXUS_WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.NEXUS_WINDOWS_SIGNING_PFX_BASE64 }}
-      NEXUS_WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.NEXUS_WINDOWS_SIGNING_PFX_PASSWORD }}
     steps:
       - name: Checkout exact head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -67,30 +69,6 @@ jobs:
           distribution: temurin
           java-version: '21.0.12+101.0.LTS'
 
-      - name: Prepare optional or required Authenticode identity
-        shell: powershell
-        run: |
-          $required = $env:NEXUS_WINDOWS_REQUIRE_AUTHENTICODE -eq 'true'
-          if ([string]::IsNullOrWhiteSpace($env:NEXUS_WINDOWS_SIGNING_PFX_BASE64)) {
-            if ($required) {
-              throw 'Release qualification requires NEXUS_WINDOWS_SIGNING_PFX_BASE64.'
-            }
-            Write-Host 'No Authenticode secret configured; PR/manual non-release qualification remains unsigned.' -ForegroundColor DarkYellow
-            exit 0
-          }
-          if ([string]::IsNullOrEmpty($env:NEXUS_WINDOWS_SIGNING_PFX_PASSWORD)) {
-            throw 'NEXUS_WINDOWS_SIGNING_PFX_PASSWORD is required when the PFX secret is configured.'
-          }
-          $pfx = Join-Path $env:RUNNER_TEMP 'nexus-windows-signing.pfx'
-          try {
-            $bytes = [Convert]::FromBase64String($env:NEXUS_WINDOWS_SIGNING_PFX_BASE64)
-          }
-          catch {
-            throw 'NEXUS_WINDOWS_SIGNING_PFX_BASE64 is not valid base64.'
-          }
-          [IO.File]::WriteAllBytes($pfx, $bytes)
-          "NEXUS_WINDOWS_SIGNING_PFX=$pfx" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
       - name: Qualify generated cmd configuration escaping
         shell: powershell
         run: |
@@ -103,8 +81,14 @@ jobs:
           Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
           .\scripts\release\test-windows-sbom-augmentation.ps1
 
+      # Signing step 1/2: the only steps that receive the Authenticode secrets, never on
+      # pull_request. sign-windows-artifact.ps1 decodes the PFX into a directory private to the
+      # call and erases it in a finally block; no path is published to GITHUB_ENV.
       - name: Build self-contained Windows distribution
         shell: powershell
+        env:
+          NEXUS_WINDOWS_SIGNING_PFX_BASE64: ${{ github.event_name != 'pull_request' && secrets.NEXUS_WINDOWS_SIGNING_PFX_BASE64 || '' }}
+          NEXUS_WINDOWS_SIGNING_PFX_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.NEXUS_WINDOWS_SIGNING_PFX_PASSWORD || '' }}
         run: |
           Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
           # Functional tests are qualified independently by NEXUS CI on this exact SHA.
@@ -123,8 +107,12 @@ jobs:
         run: |
           .\scripts\release\test-windows-installer.ps1 -Setup $env:NEXUS_SMOKE_SETUP
 
+      # Signing step 2/2 (same confinement as the distribution step).
       - name: Build production installer
         shell: powershell
+        env:
+          NEXUS_WINDOWS_SIGNING_PFX_BASE64: ${{ github.event_name != 'pull_request' && secrets.NEXUS_WINDOWS_SIGNING_PFX_BASE64 || '' }}
+          NEXUS_WINDOWS_SIGNING_PFX_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.NEXUS_WINDOWS_SIGNING_PFX_PASSWORD || '' }}
         run: |
           $setup = .\scripts\release\build-windows-installer.ps1 | Select-Object -Last 1
           if (-not (Test-Path -LiteralPath $setup -PathType Leaf)) { throw "Production setup missing: $setup" }
@@ -193,9 +181,9 @@ jobs:
         if: always()
         shell: powershell
         run: |
-          if ($env:NEXUS_WINDOWS_SIGNING_PFX -and (Test-Path -LiteralPath $env:NEXUS_WINDOWS_SIGNING_PFX)) {
-            Remove-Item -LiteralPath $env:NEXUS_WINDOWS_SIGNING_PFX -Force
-          }
+          # Defence in depth: each signing call already erases its own directory.
+          Get-ChildItem -LiteralPath $env:RUNNER_TEMP -Directory -Filter 'nexus-windows-signing-*' -ErrorAction SilentlyContinue |
+            Remove-Item -Recurse -Force
 
   windows-security:
     name: Windows payload SBOM and vulnerability gate
