@@ -10,7 +10,7 @@ Sans configuration :
 NexusApplication.create(paths)
 ```
 
-résout `SemanticSearchConfiguration.fromEnvironment()` en mode désactivé. Aucun provider d'embeddings ni index sémantique n'est créé.
+résout la configuration sémantique de l'environnement (`NexusApplicationFactory`) en mode désactivé. Aucun provider d'embeddings ni index sémantique n'est créé.
 
 ## Activation commune
 

@@ -1,4 +1,4 @@
-package com.nexus.search;
+package com.nexus.search.candidate;
 
 public enum CandidateType {
     FILE,

@@ -16,7 +16,6 @@ import com.nexus.persistence.sqlite.SqliteBatchInsert;
 import com.nexus.persistence.sqlite.SqliteDatabase;
 import com.nexus.persistence.sqlite.SqliteIndexRepository;
 import com.nexus.project.ProjectDescriptor;
-import com.nexus.search.SearchDocument;
 import com.nexus.search.semantic.EmbeddingProvider;
 import com.nexus.search.semantic.SemanticIndexingService;
 import com.nexus.search.semantic.lucene.LuceneSemanticSearchIndex;
@@ -25,6 +24,7 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -453,32 +453,65 @@ class ScaleRegressionBenchmarkTest {
         }
     }
 
+    /**
+     * Le harnais s'exécute aussi sur le code de base de la PR (voir {@code scale-benchmark.yml}) : le
+     * type {@code SearchDocument} y est résolu par réflexion, dans le package où le code mesuré le déclare.
+     */
+    private static Class<?> searchDocumentType() {
+        for (String name : List.of("com.nexus.index.SearchDocument", "com.nexus.search.SearchDocument")) {
+            try {
+                return Class.forName(name);
+            } catch (ClassNotFoundException ignored) {
+                // Le package suivant est essayé.
+            }
+        }
+        throw new IllegalStateException("SearchDocument est introuvable");
+    }
+
+    private static Object searchDocument(String relativePath, String content) throws ReflectiveOperationException {
+        return searchDocumentType()
+                .getDeclaredConstructor(String.class, String.class, FileCategory.class, String.class, List.class)
+                .newInstance(relativePath, "java", FileCategory.SOURCE, content, List.of());
+    }
+
+    /** Appelle {@code rebuild} par réflexion : la signature porte un type que le harnais ne nomme pas. */
+    private static void rebuild(SemanticIndexingService service, UUID projectId, String fingerprint,
+                                List<Object> documents) throws Exception {
+        try {
+            SemanticIndexingService.class
+                    .getMethod("rebuild", UUID.class, String.class, List.class)
+                    .invoke(service, projectId, fingerprint, documents);
+        } catch (InvocationTargetException exception) {
+            if (exception.getCause() instanceof Exception cause) {
+                throw cause;
+            }
+            throw exception;
+        }
+    }
+
     private Map<String, Object> benchmarkSemanticRecovery(int documentCount) throws Exception {
         NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("semantic-home"));
         DeterministicEmbeddingProvider provider = new DeterministicEmbeddingProvider(SEMANTIC_DIMENSIONS);
         LuceneSemanticSearchIndex index = new LuceneSemanticSearchIndex(paths, SEMANTIC_DIMENSIONS);
         SemanticIndexingService service = new SemanticIndexingService(provider, index, 2_000, 128);
         UUID projectId = UUID.randomUUID();
-        List<SearchDocument> documents = new ArrayList<>(documentCount);
+        List<Object> documents = new ArrayList<>(documentCount);
         for (int indexNumber = 0; indexNumber < documentCount; indexNumber++) {
-            documents.add(new SearchDocument(
+            documents.add(searchDocument(
                     "src/generated/Doc" + indexNumber + ".java",
-                    "java",
-                    FileCategory.SOURCE,
-                    "synthetic semantic scale document " + indexNumber + " shared recovery context",
-                    List.of()));
+                    "synthetic semantic scale document " + indexNumber + " shared recovery context"));
         }
 
         String firstFingerprint = "synthetic-semantic-fingerprint-v1";
         long firstStarted = System.nanoTime();
-        service.rebuild(projectId, firstFingerprint, documents);
+        rebuild(service, projectId, firstFingerprint, documents);
         long firstMs = elapsedMillis(firstStarted);
         assertTrue(service.isCompatible(projectId, firstFingerprint));
 
         String secondFingerprint = "synthetic-semantic-fingerprint-v2";
         assertFalse(service.isCompatible(projectId, secondFingerprint));
         long recoveryStarted = System.nanoTime();
-        service.rebuild(projectId, secondFingerprint, documents);
+        rebuild(service, projectId, secondFingerprint, documents);
         long recoveryMs = elapsedMillis(recoveryStarted);
         assertTrue(service.isCompatible(projectId, secondFingerprint));
 

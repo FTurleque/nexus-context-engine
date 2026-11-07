@@ -1,9 +1,17 @@
-package com.nexus.index;
+package com.nexus.index.service;
 
-import com.nexus.search.SearchDocument;
+import com.nexus.index.AnalysisResult;
+import com.nexus.index.FileCategory;
+import com.nexus.index.FileHasher;
+import com.nexus.index.IndexRepository;
+import com.nexus.index.IndexedFile;
+import com.nexus.index.IndexedFileUpdate;
+import com.nexus.index.LanguageAnalyzer;
+import com.nexus.index.ScannedFile;
+import com.nexus.index.SearchDocument;
+import com.nexus.index.SemanticIndexing;
 import com.nexus.search.SearchIndex;
 import com.nexus.search.SearchIndexSession;
-import com.nexus.search.semantic.SemanticIndexingService;
 import com.nexus.security.OversizedSecretException;
 import com.nexus.security.SafeFileIO;
 import com.nexus.security.SensitiveContentRedactor;
@@ -13,6 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -21,15 +30,15 @@ final class IndexDocumentPublisher {
     private final List<LanguageAnalyzer> analyzers;
     private final IndexRepository indexRepository;
     private final SearchIndex searchIndex;
-    private final SemanticIndexingService semanticIndexingService;
+    private final SemanticIndexing semanticIndexingService;
     private final int indexDocumentBatchFiles;
     private final long indexDocumentBatchBytes;
     IndexDocumentPublisher(List<LanguageAnalyzer> analyzers, IndexRepository indexRepository,
-            SearchIndex searchIndex, SemanticIndexingService semanticIndexingService, int maxFiles, long maxBytes) {
+            SearchIndex searchIndex, SemanticIndexing semanticIndexingService, int maxFiles, long maxBytes) {
         this.analyzers = List.copyOf(analyzers);
         this.indexRepository = indexRepository;
         this.searchIndex = searchIndex;
-        this.semanticIndexingService = semanticIndexingService;
+        this.semanticIndexingService = Objects.requireNonNull(semanticIndexingService, "semanticIndexingService");
         this.indexDocumentBatchFiles = maxFiles;
         this.indexDocumentBatchBytes = maxBytes;
     }
@@ -54,9 +63,9 @@ final class IndexDocumentPublisher {
             boolean fullRebuild,
             boolean semanticFullRebuild) throws IOException {
         SearchIndexSession lexical = searchIndex.openSession(projectId, fullRebuild);
-        SemanticIndexingService.IndexingSession semantic = null;
+        SemanticIndexing.Session semantic = null;
         try {
-            if (semanticIndexingService != null) {
+            if (semanticIndexingService.enabled()) {
                 semantic = semanticIndexingService.openSession(projectId, canonicalFingerprint, semanticFullRebuild);
             }
             return new IndexPublication(lexical, semantic, indexRepository.openWriteSession(projectId));
@@ -105,7 +114,7 @@ final class IndexDocumentPublisher {
                     || existing == null
                     || !existing.contentHash().equals(scannedFile.contentHash());
             boolean lexicalDocumentRequired = changed && genericSearchEligible;
-            boolean semanticDocumentRequired = semanticIndexingService != null
+            boolean semanticDocumentRequired = semanticIndexingService.enabled()
                     && genericSearchEligible
                     && (semanticFullRebuild || changed);
             if (!changed && !semanticDocumentRequired) {
@@ -183,7 +192,7 @@ final class IndexDocumentPublisher {
         if (!fullRebuild) {
             publication.applyLexical(List.of(), excludedPaths);
         }
-        if (semanticIndexingService != null && !semanticFullRebuild) {
+        if (semanticIndexingService.enabled() && !semanticFullRebuild) {
             publication.applySemantic(List.of(), excludedPaths);
         }
     }
@@ -200,7 +209,7 @@ final class IndexDocumentPublisher {
         if (!fullRebuild && !searchRemovedPaths.isEmpty()) {
             publication.applyLexical(List.of(), searchRemovedPaths);
         }
-        if (semanticIndexingService != null && !semanticFullRebuild && !searchRemovedPaths.isEmpty()) {
+        if (semanticIndexingService.enabled() && !semanticFullRebuild && !searchRemovedPaths.isEmpty()) {
             publication.applySemantic(List.of(), searchRemovedPaths);
         }
     }
@@ -213,7 +222,7 @@ final class IndexDocumentPublisher {
             if (!batch.lexicalDocuments.isEmpty()) {
                 publication.applyLexical(batch.lexicalDocuments, Set.of());
             }
-            if (semanticIndexingService != null && !batch.semanticDocuments.isEmpty()) {
+            if (semanticIndexingService.enabled() && !batch.semanticDocuments.isEmpty()) {
                 publication.applySemantic(batch.semanticDocuments, Set.of());
             }
             batch.clear();

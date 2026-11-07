@@ -1,4 +1,4 @@
-package com.nexus.search;
+package com.nexus.search.candidate;
 
 import com.nexus.project.ProjectDescriptor;
 

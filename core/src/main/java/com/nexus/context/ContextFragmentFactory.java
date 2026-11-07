@@ -1,5 +1,6 @@
 package com.nexus.context;
 
+import com.nexus.context.model.ContextFragment;
 import com.nexus.index.CodeSymbol;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.ranking.RankedCandidate;

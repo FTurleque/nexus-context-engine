@@ -1,25 +1,3 @@
-# Arêtes de cycle du graphe des packages du cœur (CoreArchitectureTest, règle cycles-baseline).
-# Une arête par ligne, au format "source -> cible", triée. La liste ne peut que décroître :
-# une arête nouvelle fait échouer le build, une entrée qui ne forme plus de cycle aussi.
-com.nexus.context -> com.nexus.context.source
-com.nexus.context -> com.nexus.context.source.git
-com.nexus.context -> com.nexus.context.source.skill
-com.nexus.context.source -> com.nexus.context
-com.nexus.context.source.git -> com.nexus.context
-com.nexus.context.source.git -> com.nexus.context.source
-com.nexus.context.source.skill -> com.nexus.context
-com.nexus.context.source.skill -> com.nexus.context.source
-com.nexus.index -> com.nexus.index.scan
-com.nexus.index -> com.nexus.search
-com.nexus.index -> com.nexus.search.semantic
-com.nexus.index.scan -> com.nexus.index
-com.nexus.ranking -> com.nexus.search
-com.nexus.ranking.graph -> com.nexus.index
-com.nexus.ranking.graph -> com.nexus.search
-com.nexus.search -> com.nexus.index
-com.nexus.search -> com.nexus.ranking
-com.nexus.search -> com.nexus.ranking.graph
-com.nexus.search.semantic -> com.nexus.index
-com.nexus.search.semantic -> com.nexus.search
-com.nexus.search.semantic -> com.nexus.search.semantic.ollama
-com.nexus.search.semantic.ollama -> com.nexus.search.semantic
+# Arêtes de cycle tolérées du graphe des packages du cœur (CoreArchitectureTest, règle cycles-baseline).
+# Vide depuis ARCH-0063 : le graphe est acyclique et tout cycle fait échouer le build. Une arête
+# ajoutée ici contredit l'ADR ; le format reste "source -> cible", une arête par ligne, triée.

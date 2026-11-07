@@ -118,8 +118,8 @@ class NexusRestOutputParityTest {
                 com.nexus.project.IndexStatus.READY);
         var symbol = new com.nexus.index.CodeSymbol(com.nexus.index.SymbolKind.TYPE, "TOKEN",
                 "demo.TOKEN password = \"hunter2-rest-secret\"", "String TOKEN = \"" + token + "\"", 1, 1, "scip");
-        var ranked = new com.nexus.ranking.RankedCandidate(new com.nexus.search.SearchCandidate(
-                "symbol:src/main/java/demo/OrderService.java:demo.TOKEN", com.nexus.search.CandidateType.SYMBOL,
+        var ranked = new com.nexus.ranking.RankedCandidate(new com.nexus.search.candidate.SearchCandidate(
+                "symbol:src/main/java/demo/OrderService.java:demo.TOKEN", com.nexus.search.candidate.CandidateType.SYMBOL,
                 root.resolve("src/main/java/demo/OrderService.java"), symbol, "TOKEN", Map.of()),
                 1.0d, Map.of("symbol", 1.0d), List.of());
         String json = objectMapper.writeValueAsString(ApiMapper.search(

@@ -1,5 +1,6 @@
 package com.nexus.index;
 
+import com.nexus.index.service.ProjectIndexingService;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;

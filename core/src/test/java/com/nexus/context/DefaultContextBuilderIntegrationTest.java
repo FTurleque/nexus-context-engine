@@ -1,12 +1,14 @@
 package com.nexus.context;
 
 import com.nexus.config.NexusPaths;
+import com.nexus.context.model.ContextFragment;
+import com.nexus.context.model.ContextItem;
 import com.nexus.context.source.git.GitContextQuery;
 import com.nexus.context.source.git.GitContextResult;
 import com.nexus.context.source.git.GitContextSourceProvider;
 import com.nexus.index.IndexRepository;
-import com.nexus.index.ProjectIndexingService;
-import com.nexus.index.ProjectIndexingServices;
+import com.nexus.index.service.ProjectIndexingService;
+import com.nexus.index.service.ProjectIndexingServices;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.scan.ProjectScanner;
 import com.nexus.persistence.sqlite.SqliteDatabase;
@@ -17,7 +19,7 @@ import com.nexus.project.ProjectRegistry;
 import com.nexus.project.ProjectRepository;
 import com.nexus.ranking.DeterministicContextRanker;
 import com.nexus.ranking.graph.GraphCandidateEnricher;
-import com.nexus.search.CandidateType;
+import com.nexus.search.candidate.CandidateType;
 import com.nexus.search.SearchIndex;
 import com.nexus.search.SearchService;
 import com.nexus.search.SymbolSearchStrategy;

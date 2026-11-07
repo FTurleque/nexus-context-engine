@@ -3,6 +3,8 @@ package com.nexus.index;
 import com.nexus.config.NexusPaths;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.scan.ProjectScanner;
+import com.nexus.index.service.ProjectIndexingService;
+import com.nexus.index.service.ProjectIndexingServices;
 import com.nexus.persistence.sqlite.SqliteDatabase;
 import com.nexus.persistence.sqlite.SqliteIndexRepository;
 import com.nexus.persistence.sqlite.SqliteProjectRepository;
@@ -70,7 +72,7 @@ class ProjectIndexingServiceTimeoutTest {
                 new LuceneSearchIndex(paths),
                 List.of(stubbornImporter),
                 List.of(),
-                null,
+                SemanticIndexing.disabled(),
                 Duration.ofMillis(50));
 
         try {

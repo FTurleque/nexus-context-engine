@@ -4,6 +4,9 @@ import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;
 import com.nexus.ranking.DeterministicContextRanker;
+import com.nexus.search.candidate.CandidateType;
+import com.nexus.search.candidate.SearchCandidate;
+import com.nexus.search.candidate.SearchSignals;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

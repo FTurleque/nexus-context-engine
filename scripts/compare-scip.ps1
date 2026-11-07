@@ -62,7 +62,7 @@ function Measure-Quality {
 $queries = @(
     [pscustomobject]@{
         Query = "ProjectIndexingService"
-        Relevant = @("core/src/main/java/com/nexus/index/ProjectIndexingService.java")
+        Relevant = @("core/src/main/java/com/nexus/index/service/ProjectIndexingService.java")
     },
     [pscustomobject]@{
         Query = "ScipCodeIndexImporter"

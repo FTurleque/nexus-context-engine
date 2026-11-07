@@ -2,7 +2,7 @@ package com.nexus.context.source.git;
 
 import com.nexus.paths.RepositoryPath;
 
-import com.nexus.context.ContextFragment;
+import com.nexus.context.model.ContextFragment;
 import com.nexus.context.source.ContextDiscoveryLimitExceededException;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.diff.DiffEntry;

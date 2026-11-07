@@ -1,5 +1,6 @@
 package com.nexus.search;
 
+import com.nexus.config.ResultLimitPolicy;
 import com.nexus.project.FederatedScopePolicy;
 import com.nexus.project.FederationDeadline;
 import com.nexus.project.FederationDeadlinePolicy;

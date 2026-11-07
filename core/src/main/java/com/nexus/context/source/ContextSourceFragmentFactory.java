@@ -1,6 +1,6 @@
 package com.nexus.context.source;
 
-import com.nexus.context.ContextFragment;
+import com.nexus.context.model.ContextFragment;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

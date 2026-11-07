@@ -1,12 +1,13 @@
 package com.nexus.context;
 
+import com.nexus.context.model.ContextItem;
 import com.nexus.context.source.ContextDiscoveryBudget;
 import com.nexus.context.source.ContextDiscoveryLimits;
 import com.nexus.project.FederatedScopePolicy;
 import com.nexus.project.FederationDeadline;
 import com.nexus.project.FederationDeadlinePolicy;
 import com.nexus.project.ProjectDescriptor;
-import com.nexus.search.CandidateType;
+import com.nexus.search.candidate.CandidateType;
 import com.nexus.search.SearchQueryContext;
 
 import java.util.ArrayList;

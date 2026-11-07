@@ -4,11 +4,11 @@ import com.nexus.paths.RepositoryPath;
 
 import com.nexus.index.FileCategory;
 import com.nexus.project.ProjectDescriptor;
-import com.nexus.search.CandidateType;
+import com.nexus.search.candidate.CandidateType;
 import com.nexus.search.LexicalSearchHit;
-import com.nexus.search.SearchCandidate;
+import com.nexus.search.candidate.SearchCandidate;
 import com.nexus.search.SearchIndex;
-import com.nexus.search.SearchSignals;
+import com.nexus.search.candidate.SearchSignals;
 import com.nexus.search.SearchStrategy;
 
 import java.io.IOException;

@@ -1,6 +1,6 @@
 package com.nexus.context.source.git;
 
-import com.nexus.context.ContextFragment;
+import com.nexus.context.model.ContextFragment;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.Status;
 import org.eclipse.jgit.api.StatusCommand;

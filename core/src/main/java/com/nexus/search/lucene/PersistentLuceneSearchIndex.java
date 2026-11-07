@@ -2,7 +2,7 @@ package com.nexus.search.lucene;
 
 import com.nexus.config.NexusPaths;
 import com.nexus.search.LexicalSearchHit;
-import com.nexus.search.SearchDocument;
+import com.nexus.index.SearchDocument;
 import com.nexus.search.SearchIndex;
 import com.nexus.search.SearchIndexSession;
 

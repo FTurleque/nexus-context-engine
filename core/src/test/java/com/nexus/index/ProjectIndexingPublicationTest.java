@@ -2,6 +2,8 @@ package com.nexus.index;
 
 import com.nexus.config.NexusPaths;
 import com.nexus.index.scan.ProjectScanner;
+import com.nexus.index.service.ProjectIndexingService;
+import com.nexus.index.service.ProjectIndexingServices;
 import com.nexus.persistence.sqlite.SqliteDatabase;
 import com.nexus.persistence.sqlite.SqliteIndexRepository;
 import com.nexus.persistence.sqlite.SqliteProjectRepository;
@@ -70,7 +72,7 @@ class ProjectIndexingPublicationTest {
         IndexRepository recording = recording(env.indexRepository(), stagedSizes, events);
         ProjectDescriptor project = env.registry().register(projectRoot, "staged");
 
-        ProjectIndexingService service = service(env, recording, new FlakyAnalyzer(file -> { }), null);
+        ProjectIndexingService service = service(env, recording, new FlakyAnalyzer(file -> { }), SemanticIndexing.disabled());
         IndexingReport report = service.index(project.id());
 
         assertEquals(23, report.changedFiles());
@@ -168,7 +170,7 @@ class ProjectIndexingPublicationTest {
                 await(release);
             }
         });
-        ProjectIndexingService service = service(env, env.indexRepository(), analyzer, null);
+        ProjectIndexingService service = service(env, env.indexRepository(), analyzer, SemanticIndexing.disabled());
 
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
@@ -218,7 +220,7 @@ class ProjectIndexingPublicationTest {
             Env env,
             IndexRepository repository,
             LanguageAnalyzer analyzer,
-            SemanticIndexingService semantic) {
+            SemanticIndexing semantic) {
         return ProjectIndexingServices.withBatching(
                 env.projectRepository(),
                 repository,

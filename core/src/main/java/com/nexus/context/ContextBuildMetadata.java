@@ -8,7 +8,7 @@ import com.nexus.context.source.skill.SkillActivationResult;
 import com.nexus.context.source.skill.SkillDiscoveryResult;
 import com.nexus.context.source.skill.SkillSourceProvider;
 import com.nexus.ranking.RankedCandidate;
-import com.nexus.search.CandidateType;
+import com.nexus.search.candidate.CandidateType;
 import com.nexus.token.TokenEstimator;
 
 import java.nio.file.Path;

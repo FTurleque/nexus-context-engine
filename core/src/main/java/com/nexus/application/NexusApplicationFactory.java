@@ -20,7 +20,8 @@ import com.nexus.context.source.skill.LocalAgentSkillsProvider;
 import com.nexus.index.CodeIndexImporter;
 import com.nexus.index.CodeIntelligenceProvider;
 import com.nexus.index.IndexRepository;
-import com.nexus.index.ProjectIndexingService;
+import com.nexus.index.SemanticIndexing;
+import com.nexus.index.service.ProjectIndexingService;
 import com.nexus.index.ProjectIndexLockManager;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.jdt.JdtLanguageServerCodeIntelligenceProvider;
@@ -52,13 +53,18 @@ import com.nexus.search.semantic.SemanticSearchIndex;
 import com.nexus.search.semantic.SemanticSearchStrategy;
 import com.nexus.search.semantic.lucene.LuceneSemanticSearchIndex;
 import com.nexus.search.semantic.lucene.PersistentLuceneSemanticSearchIndex;
+import com.nexus.search.semantic.ollama.OllamaEmbeddingProvider;
+import com.nexus.search.semantic.ollama.OllamaEndpointResolver;
 import com.nexus.token.HeuristicTokenEstimator;
 import com.nexus.token.TokenEstimator;
 
 import java.io.IOException;
+import java.net.URI;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 
 /** Composition explicite des ports et adaptateurs locaux de la façade applicative. */
@@ -90,7 +96,7 @@ final class NexusApplicationFactory {
         searchStrategies.add(new LuceneFileSearchStrategy(searchIndex));
         searchStrategies.add(new SymbolSearchStrategy(indexRepository));
 
-        SemanticIndexingService semanticIndexingService = null;
+        SemanticIndexing semanticIndexingService = SemanticIndexing.disabled();
         SemanticSearchIndex semanticSearchIndex = null;
         if (semanticSearchConfiguration.enabled()) {
             EmbeddingProvider embeddingProvider = semanticSearchConfiguration.embeddingProvider()
@@ -165,4 +171,82 @@ final class NexusApplicationFactory {
                 semanticSearchConfiguration.enabled());
     }
 
+    /**
+     * Résout l'opt-in opérationnel commun à tous les adaptateurs.
+     *
+     * <p>Sans {@code NEXUS_SEMANTIC_PROVIDER}, la capacité reste strictement
+     * désactivée. La seule valeur supportée actuellement est {@code ollama}.</p>
+     */
+    static SemanticSearchConfiguration semanticSearchConfigurationFromEnvironment() {
+        String provider = environment(SemanticSearchConfiguration.PROVIDER_ENV, "");
+        if (provider.isBlank() || "disabled".equalsIgnoreCase(provider) || "off".equalsIgnoreCase(provider)) {
+            return SemanticSearchConfiguration.disabled();
+        }
+        if (!"ollama".equals(provider.toLowerCase(Locale.ROOT))) {
+            throw new IllegalArgumentException(
+                    SemanticSearchConfiguration.PROVIDER_ENV + " supporte uniquement 'ollama' ou 'disabled' actuellement");
+        }
+
+        URI configuredBaseUri = URI.create(environment(
+                SemanticSearchConfiguration.OLLAMA_BASE_URL_ENV,
+                OllamaEmbeddingProvider.DEFAULT_BASE_URI.toString()));
+        boolean dockerRuntime = "docker".equalsIgnoreCase(environment(SemanticSearchConfiguration.RUNTIME_ENV, ""));
+        boolean allowInsecureRemote = booleanValue(
+                SemanticSearchConfiguration.ALLOW_INSECURE_REMOTE_OLLAMA_ENV,
+                environment(SemanticSearchConfiguration.ALLOW_INSECURE_REMOTE_OLLAMA_ENV, "false"));
+        URI baseUri = OllamaEndpointResolver.resolveForRuntime(
+                configuredBaseUri,
+                dockerRuntime,
+                allowInsecureRemote);
+        boolean runtimeLoopbackRewrite = dockerRuntime && !baseUri.equals(configuredBaseUri);
+        String model = environment(SemanticSearchConfiguration.OLLAMA_MODEL_ENV, OllamaEmbeddingProvider.DEFAULT_MODEL);
+        int dimensions = SemanticSearchConfiguration.boundedPositiveInt(
+                SemanticSearchConfiguration.OLLAMA_DIMENSIONS_ENV,
+                environment(SemanticSearchConfiguration.OLLAMA_DIMENSIONS_ENV, Integer.toString(OllamaEmbeddingProvider.DEFAULT_DIMENSIONS)),
+                SemanticSearchConfiguration.MAX_OLLAMA_DIMENSIONS);
+        long timeoutSeconds = SemanticSearchConfiguration.boundedPositiveLong(
+                SemanticSearchConfiguration.OLLAMA_TIMEOUT_SECONDS_ENV,
+                environment(SemanticSearchConfiguration.OLLAMA_TIMEOUT_SECONDS_ENV,
+                        Long.toString(OllamaEmbeddingProvider.DEFAULT_TIMEOUT.toSeconds())),
+                SemanticSearchConfiguration.MAX_OLLAMA_TIMEOUT_SECONDS);
+        double weight = positiveDouble(
+                SemanticSearchConfiguration.RRF_WEIGHT_ENV,
+                environment(SemanticSearchConfiguration.RRF_WEIGHT_ENV, Double.toString(SemanticSearchConfiguration.DEFAULT_SEMANTIC_RRF_WEIGHT)));
+
+        OllamaEmbeddingProvider ollama = new OllamaEmbeddingProvider(
+                baseUri,
+                model,
+                dimensions,
+                Duration.ofSeconds(timeoutSeconds),
+                allowInsecureRemote || runtimeLoopbackRewrite);
+        return SemanticSearchConfiguration.enabled(ollama, weight);
+    }
+
+    private static String environment(String name, String defaultValue) {
+        String value = System.getenv(name);
+        return value == null || value.isBlank() ? defaultValue : value.trim();
+    }
+
+    private static boolean booleanValue(String name, String value) {
+        if ("true".equalsIgnoreCase(value)) {
+            return true;
+        }
+        if ("false".equalsIgnoreCase(value)) {
+            return false;
+        }
+        throw new IllegalArgumentException(name + " doit valoir true ou false");
+    }
+
+    private static double positiveDouble(String name, String value) {
+        try {
+            double parsed = Double.parseDouble(value);
+            if (!Double.isFinite(parsed) || parsed <= 0.0d || parsed > SemanticSearchConfiguration.MAX_SEMANTIC_RRF_WEIGHT) {
+                throw new IllegalArgumentException(
+                        name + " doit être > 0 et <= " + SemanticSearchConfiguration.MAX_SEMANTIC_RRF_WEIGHT);
+            }
+            return parsed;
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException(name + " doit être un nombre", exception);
+        }
+    }
 }

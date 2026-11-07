@@ -1,10 +1,15 @@
-package com.nexus.index;
+package com.nexus.index.service;
 
+import com.nexus.index.CodeIndexImporter;
+import com.nexus.index.CodeIntelligenceProvider;
+import com.nexus.index.IndexRepository;
+import com.nexus.index.LanguageAnalyzer;
+import com.nexus.index.ProjectIndexLockManager;
 import com.nexus.index.minos.MinosCodeIndexImporter;
 import com.nexus.index.scan.ProjectScanner;
 import com.nexus.project.ProjectRepository;
 import com.nexus.search.SearchIndex;
-import com.nexus.search.semantic.SemanticIndexingService;
+import com.nexus.index.SemanticIndexing;
 
 import java.time.Duration;
 import java.util.List;
@@ -51,7 +56,7 @@ public final class ProjectIndexingServices {
             List<CodeIndexImporter> codeIndexImporters,
             List<CodeIntelligenceProvider> codeIntelligenceProviders) {
         return withSemantic(projectRepository, indexRepository, scanner, analyzers, searchIndex,
-                codeIndexImporters, codeIntelligenceProviders, null);
+                codeIndexImporters, codeIntelligenceProviders, SemanticIndexing.disabled());
     }
 
     public static ProjectIndexingService withSemantic(
@@ -62,7 +67,7 @@ public final class ProjectIndexingServices {
             SearchIndex searchIndex,
             List<CodeIndexImporter> codeIndexImporters,
             List<CodeIntelligenceProvider> codeIntelligenceProviders,
-            SemanticIndexingService semanticIndexingService) {
+            SemanticIndexing semanticIndexingService) {
         return withProviderTimeout(projectRepository, indexRepository, scanner, analyzers, searchIndex,
                 codeIndexImporters, codeIntelligenceProviders, semanticIndexingService, DEFAULT_TIMEOUT);
     }
@@ -75,7 +80,7 @@ public final class ProjectIndexingServices {
             SearchIndex searchIndex,
             List<CodeIndexImporter> codeIndexImporters,
             List<CodeIntelligenceProvider> codeIntelligenceProviders,
-            SemanticIndexingService semanticIndexingService,
+            SemanticIndexing semanticIndexingService,
             Duration providerTimeout) {
         return withLockManager(projectRepository, indexRepository, scanner, analyzers, searchIndex,
                 codeIndexImporters, codeIntelligenceProviders, semanticIndexingService, providerTimeout,
@@ -90,7 +95,7 @@ public final class ProjectIndexingServices {
             SearchIndex searchIndex,
             List<CodeIndexImporter> codeIndexImporters,
             List<CodeIntelligenceProvider> codeIntelligenceProviders,
-            SemanticIndexingService semanticIndexingService,
+            SemanticIndexing semanticIndexingService,
             Duration providerTimeout,
             ProjectIndexLockManager projectIndexLockManager) {
         return withBatching(projectRepository, indexRepository, scanner, analyzers, searchIndex,
@@ -108,7 +113,7 @@ public final class ProjectIndexingServices {
             SearchIndex searchIndex,
             List<CodeIndexImporter> codeIndexImporters,
             List<CodeIntelligenceProvider> codeIntelligenceProviders,
-            SemanticIndexingService semanticIndexingService,
+            SemanticIndexing semanticIndexingService,
             Duration providerTimeout,
             ProjectIndexLockManager projectIndexLockManager,
             int indexDocumentBatchFiles,

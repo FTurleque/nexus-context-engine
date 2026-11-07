@@ -1,11 +1,12 @@
 package com.nexus.context;
 
+import com.nexus.context.model.ContextItem;
 import com.nexus.project.FederatedScopePolicy;
 import com.nexus.project.FederationDeadlinePolicy;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;
-import com.nexus.search.CandidateType;
+import com.nexus.search.candidate.CandidateType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

@@ -1,10 +1,13 @@
 package com.nexus.search;
 
+import com.nexus.config.ResultLimitPolicy;
 import com.nexus.project.FederationDeadlinePolicy;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;
 import com.nexus.ranking.RankedCandidate;
+import com.nexus.search.candidate.CandidateType;
+import com.nexus.search.candidate.SearchCandidate;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;

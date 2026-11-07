@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.nexus.config.NexusPaths;
 import com.nexus.index.scan.ProjectScanner;
+import com.nexus.index.service.ProjectIndexingService;
+import com.nexus.index.service.ProjectIndexingServices;
 import com.nexus.persistence.sqlite.SqliteDatabase;
 import com.nexus.persistence.sqlite.SqliteIndexRepository;
 import com.nexus.persistence.sqlite.SqliteProjectRepository;
@@ -116,7 +118,7 @@ class ProjectIndexingServiceMinosImportTest {
                 new LuceneSearchIndex(paths),
                 List.of(),
                 List.of(),
-                null,
+                SemanticIndexing.disabled(),
                 Duration.ofSeconds(5),
                 ProjectIndexLockManager.fileBacked(paths));
         return new Fixture(paths, project, service);

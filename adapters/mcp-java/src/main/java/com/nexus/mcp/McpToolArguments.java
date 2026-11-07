@@ -1,6 +1,6 @@
 package com.nexus.mcp;
 
-import com.nexus.search.CandidateType;
+import com.nexus.search.candidate.CandidateType;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;

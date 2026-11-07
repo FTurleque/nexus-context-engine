@@ -3,7 +3,7 @@ package com.nexus.exposure;
 import com.nexus.paths.RepositoryPath;
 
 import com.nexus.context.ContextBundle;
-import com.nexus.context.ContextItem;
+import com.nexus.context.model.ContextItem;
 import com.nexus.context.FederatedContextBundle;
 import com.nexus.context.FederatedContextItem;
 import com.nexus.project.ProjectDescriptor;

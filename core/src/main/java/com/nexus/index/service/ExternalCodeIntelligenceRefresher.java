@@ -1,5 +1,10 @@
-package com.nexus.index;
+package com.nexus.index.service;
 
+import com.nexus.index.CodeIndexImporter;
+import com.nexus.index.CodeIntelligenceProvider;
+import com.nexus.index.CodeIntelligenceSnapshot;
+import com.nexus.index.ExternalTaskRunner;
+import com.nexus.index.IndexRepository;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;

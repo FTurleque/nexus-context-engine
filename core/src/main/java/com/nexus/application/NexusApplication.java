@@ -11,7 +11,7 @@ import com.nexus.index.IndexRepository;
 import com.nexus.index.IndexStatistics;
 import com.nexus.index.IndexedSymbol;
 import com.nexus.index.IndexingReport;
-import com.nexus.index.ProjectIndexingService;
+import com.nexus.index.service.ProjectIndexingService;
 import com.nexus.index.ProjectIndexLockManager;
 import com.nexus.index.SymbolRelation;
 import com.nexus.project.FederatedScopePolicy;
@@ -20,12 +20,12 @@ import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectRegistry;
 import com.nexus.project.ProjectRepository;
 import com.nexus.ranking.RankedCandidate;
-import com.nexus.search.CandidateType;
+import com.nexus.search.candidate.CandidateType;
 import com.nexus.search.FederatedSearchHit;
 import com.nexus.search.FederatedSearchOutcome;
 import com.nexus.search.FederatedSearchService;
 import com.nexus.search.QueryPolicy;
-import com.nexus.search.ResultLimitPolicy;
+import com.nexus.config.ResultLimitPolicy;
 import com.nexus.search.SearchIndex;
 import com.nexus.search.SearchService;
 import com.nexus.search.semantic.SemanticSearchConfiguration;
@@ -94,7 +94,7 @@ public final class NexusApplication implements AutoCloseable {
 
     /** Compose NEXUS avec les opt-ins opérationnels explicitement présents dans l'environnement. */
     public static NexusApplication create(NexusPaths paths) throws SQLException, IOException {
-        return NexusApplicationFactory.create(paths, SemanticSearchConfiguration.fromEnvironment(), false);
+        return NexusApplicationFactory.create(paths, NexusApplicationFactory.semanticSearchConfigurationFromEnvironment(), false);
     }
 
     /** Compose NEXUS avec une configuration sémantique fournie explicitement par l'appelant. */
@@ -111,7 +111,7 @@ public final class NexusApplication implements AutoCloseable {
      * inter-processus existants.
      */
     public static NexusApplication createLongLived(NexusPaths paths) throws SQLException, IOException {
-        return NexusApplicationFactory.create(paths, SemanticSearchConfiguration.fromEnvironment(), true);
+        return NexusApplicationFactory.create(paths, NexusApplicationFactory.semanticSearchConfigurationFromEnvironment(), true);
     }
 
     /** Variante longue durée avec configuration sémantique explicite. */

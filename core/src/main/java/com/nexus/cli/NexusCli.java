@@ -6,7 +6,7 @@ import com.nexus.context.ContextBudgetPolicy;
 import com.nexus.index.CodeIntelligenceSnapshot;
 import com.nexus.project.FederatedScopePolicy;
 import com.nexus.project.ProjectDescriptor;
-import com.nexus.search.ResultLimitPolicy;
+import com.nexus.config.ResultLimitPolicy;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
