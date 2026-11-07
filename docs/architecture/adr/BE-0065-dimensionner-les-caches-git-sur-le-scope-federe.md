@@ -94,5 +94,5 @@ Sprint 6, tâches 5.2, 5.3 et 6.1 : `PersistentGitContextSourceProvider.DEFAULT_
 
 ## References
 
-- `openspec/changes/sprint-06-federation-et-runtimes-longue-duree/design.md` (D5 et D6).
+- `openspec/changes/archive/2026-11-07-sprint-06-federation-et-runtimes-longue-duree/design.md` (D5 et D6).
 - `core/src/main/java/com/nexus/project/FederatedScopePolicy.java`.
