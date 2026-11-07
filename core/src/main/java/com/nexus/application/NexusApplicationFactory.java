@@ -29,7 +29,13 @@ import com.nexus.index.markdown.MarkdownLanguageAnalyzer;
 import com.nexus.index.scan.ProjectScanner;
 import com.nexus.index.minos.MinosCodeIndexImporter;
 import com.nexus.index.scip.ScipCodeIndexImporter;
+import com.nexus.index.scip.ScipIndexLimits;
+import com.nexus.index.scan.ProjectScanLimits;
+import com.nexus.context.ContextMaterializationLimits;
+import com.nexus.context.source.ContextDiscoveryLimits;
+import com.nexus.security.ProjectFileLimits;
 import com.nexus.persistence.sqlite.SqliteDatabase;
+import com.nexus.project.FederationDeadlinePolicy;
 import com.nexus.persistence.sqlite.SqliteIndexRepository;
 import com.nexus.persistence.sqlite.SqliteProjectRepository;
 import com.nexus.project.ProjectRegistry;
@@ -65,9 +71,16 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 
-/** Composition explicite des ports et adaptateurs locaux de la façade applicative. */
+/**
+ * Composition explicite des ports et adaptateurs locaux de la façade applicative.
+ *
+ * <p>Seule classe du cœur qui lit l'environnement du processus ({@link #processEnvironment()}) :
+ * la configuration {@code NEXUS_*} y est résolue en {@link NexusConfiguration}, puis injectée
+ * dans les composants (ARCH-0066).</p>
+ */
 final class NexusApplicationFactory {
     private NexusApplicationFactory() { }
     static NexusApplication create(
@@ -75,8 +88,47 @@ final class NexusApplicationFactory {
             SemanticSearchConfiguration semanticSearchConfiguration,
             boolean persistentReaders) throws SQLException, IOException {
         Objects.requireNonNull(paths, "paths");
-        Objects.requireNonNull(semanticSearchConfiguration, "semanticSearchConfiguration");
+        return create(
+                paths,
+                semanticSearchConfiguration,
+                configuration(paths, processEnvironment()),
+                persistentReaders);
+    }
 
+    /**
+     * Résout la configuration {@code NEXUS_*} depuis {@code environment} (l'environnement du
+     * processus en production, une table en test). Une valeur invalide échoue ici, avec le
+     * message de la classe de limites concernée.
+     */
+    static NexusConfiguration configuration(NexusPaths paths, Map<String, String> environment) {
+        Objects.requireNonNull(paths, "paths");
+        Objects.requireNonNull(environment, "environment");
+        ScipIndexLimits scipIndexLimits = ScipIndexLimits.from(environment);
+        return new NexusConfiguration(
+                ProjectFileLimits.maxFileSize(environment),
+                ProjectScanLimits.from(environment),
+                ContextMaterializationLimits.from(environment),
+                ContextDiscoveryLimits.from(environment),
+                scipIndexLimits.maxIndexBytes(),
+                scipIndexLimits.maxMessageBytes(),
+                ProjectIndexLockManager.maxConcurrentIndexing(environment),
+                ProjectIndexingService.providerTimeout(environment),
+                JdtLanguageServerCodeIntelligenceProvider.configuration(paths, environment),
+                NexusConfiguration.securityPosture(environment));
+    }
+
+    static NexusApplication create(
+            NexusPaths paths,
+            SemanticSearchConfiguration semanticSearchConfiguration,
+            NexusConfiguration configuration,
+            boolean persistentReaders) throws SQLException, IOException {
+        Objects.requireNonNull(paths, "paths");
+        Objects.requireNonNull(semanticSearchConfiguration, "semanticSearchConfiguration");
+        Objects.requireNonNull(configuration, "configuration");
+        configuration.installProcessPolicies();
+
+        ProjectScanner projectScanner = new ProjectScanner(
+                configuration.maxFileSizeBytes(), configuration.projectScanLimits());
         SqliteDatabase database = new SqliteDatabase(paths);
         ProjectRepository projectRepository = new SqliteProjectRepository(database);
         IndexRepository indexRepository = new SqliteIndexRepository(database);
@@ -84,13 +136,16 @@ final class NexusApplicationFactory {
         SearchIndex searchIndex = persistentReaders
                 ? new PersistentLuceneSearchIndex(paths)
                 : new LuceneSearchIndex(paths);
-        ProjectIndexLockManager projectIndexLockManager = ProjectIndexLockManager.fileBacked(paths);
+        ProjectIndexLockManager projectIndexLockManager =
+                ProjectIndexLockManager.fileBacked(paths, configuration.maxConcurrentIndexing());
 
-        List<CodeIntelligenceProvider> codeIntelligenceProviders =
-                JdtLanguageServerCodeIntelligenceProvider.fromEnvironment(paths)
-                        .<List<CodeIntelligenceProvider>>map(List::of)
-                        .orElseGet(List::of);
-        List<CodeIndexImporter> codeIndexImporters = List.of(new ScipCodeIndexImporter());
+        List<CodeIntelligenceProvider> codeIntelligenceProviders = configuration.jdtConfiguration()
+                .<List<CodeIntelligenceProvider>>map(jdt -> List.of(
+                        new JdtLanguageServerCodeIntelligenceProvider(jdt, projectScanner)))
+                .orElseGet(List::of);
+        List<CodeIndexImporter> codeIndexImporters =
+                List.of(new ScipCodeIndexImporter(new ScipIndexLimits(
+                        configuration.maxScipIndexBytes(), configuration.maxScipMessageBytes())));
 
         List<SearchStrategy> searchStrategies = new ArrayList<>();
         searchStrategies.add(new LuceneFileSearchStrategy(searchIndex));
@@ -114,13 +169,14 @@ final class NexusApplicationFactory {
         ProjectIndexingService indexingService = new ProjectIndexingService(
                 projectRepository,
                 indexRepository,
-                new ProjectScanner(),
+                projectScanner,
                 List.of(new JavaParserLanguageAnalyzer(), new MarkdownLanguageAnalyzer()),
                 searchIndex,
                 codeIndexImporters,
                 codeIntelligenceProviders,
                 semanticIndexingService,
-                new MinosCodeIndexImporter(),
+                new MinosCodeIndexImporter(projectScanner),
+                configuration.codeIntelligenceTimeout(),
                 projectIndexLockManager);
 
         ContextRanker contextRanker = semanticSearchConfiguration.enabled()
@@ -141,7 +197,7 @@ final class NexusApplicationFactory {
         ContextBuilder contextBuilder = new DefaultContextBuilder(
                 projectRepository,
                 searchService,
-                new ContextFragmentFactory(tokenEstimator),
+                new ContextFragmentFactory(tokenEstimator, configuration.contextMaterializationLimits()),
                 new FragmentMerger(),
                 new BudgetedContextSelector(tokenEstimator),
                 tokenEstimator,
@@ -153,8 +209,14 @@ final class NexusApplicationFactory {
                 List.of(
                         new LocalAgentSkillsProvider(),
                         new AiSkillsRegistryProvider()),
-                gitContextProvider);
-        FederatedContextService federatedContextService = new FederatedContextService(contextBuilder);
+                gitContextProvider,
+                configuration.contextMaterializationLimits(),
+                configuration.contextDiscoveryLimits());
+        FederatedContextService federatedContextService = new FederatedContextService(
+                contextBuilder,
+                FederationDeadlinePolicy.fromEnvironment(),
+                configuration.contextMaterializationLimits(),
+                configuration.contextDiscoveryLimits());
 
         return new NexusApplication(
                 projectRepository,
@@ -178,7 +240,13 @@ final class NexusApplicationFactory {
      * désactivée. La seule valeur supportée actuellement est {@code ollama}.</p>
      */
     static SemanticSearchConfiguration semanticSearchConfigurationFromEnvironment() {
-        String provider = environment(SemanticSearchConfiguration.PROVIDER_ENV, "");
+        return semanticSearchConfiguration(processEnvironment());
+    }
+
+    /** Résout l'opt-in sémantique depuis l'environnement fourni (table en test). */
+    static SemanticSearchConfiguration semanticSearchConfiguration(Map<String, String> variables) {
+        Objects.requireNonNull(variables, "variables");
+        String provider = environment(variables, SemanticSearchConfiguration.PROVIDER_ENV, "");
         if (provider.isBlank() || "disabled".equalsIgnoreCase(provider) || "off".equalsIgnoreCase(provider)) {
             return SemanticSearchConfiguration.disabled();
         }
@@ -187,31 +255,31 @@ final class NexusApplicationFactory {
                     SemanticSearchConfiguration.PROVIDER_ENV + " supporte uniquement 'ollama' ou 'disabled' actuellement");
         }
 
-        URI configuredBaseUri = URI.create(environment(
+        URI configuredBaseUri = URI.create(environment(variables, 
                 SemanticSearchConfiguration.OLLAMA_BASE_URL_ENV,
                 OllamaEmbeddingProvider.DEFAULT_BASE_URI.toString()));
-        boolean dockerRuntime = "docker".equalsIgnoreCase(environment(SemanticSearchConfiguration.RUNTIME_ENV, ""));
+        boolean dockerRuntime = "docker".equalsIgnoreCase(environment(variables, SemanticSearchConfiguration.RUNTIME_ENV, ""));
         boolean allowInsecureRemote = booleanValue(
                 SemanticSearchConfiguration.ALLOW_INSECURE_REMOTE_OLLAMA_ENV,
-                environment(SemanticSearchConfiguration.ALLOW_INSECURE_REMOTE_OLLAMA_ENV, "false"));
+                environment(variables, SemanticSearchConfiguration.ALLOW_INSECURE_REMOTE_OLLAMA_ENV, "false"));
         URI baseUri = OllamaEndpointResolver.resolveForRuntime(
                 configuredBaseUri,
                 dockerRuntime,
                 allowInsecureRemote);
         boolean runtimeLoopbackRewrite = dockerRuntime && !baseUri.equals(configuredBaseUri);
-        String model = environment(SemanticSearchConfiguration.OLLAMA_MODEL_ENV, OllamaEmbeddingProvider.DEFAULT_MODEL);
+        String model = environment(variables, SemanticSearchConfiguration.OLLAMA_MODEL_ENV, OllamaEmbeddingProvider.DEFAULT_MODEL);
         int dimensions = SemanticSearchConfiguration.boundedPositiveInt(
                 SemanticSearchConfiguration.OLLAMA_DIMENSIONS_ENV,
-                environment(SemanticSearchConfiguration.OLLAMA_DIMENSIONS_ENV, Integer.toString(OllamaEmbeddingProvider.DEFAULT_DIMENSIONS)),
+                environment(variables, SemanticSearchConfiguration.OLLAMA_DIMENSIONS_ENV, Integer.toString(OllamaEmbeddingProvider.DEFAULT_DIMENSIONS)),
                 SemanticSearchConfiguration.MAX_OLLAMA_DIMENSIONS);
         long timeoutSeconds = SemanticSearchConfiguration.boundedPositiveLong(
                 SemanticSearchConfiguration.OLLAMA_TIMEOUT_SECONDS_ENV,
-                environment(SemanticSearchConfiguration.OLLAMA_TIMEOUT_SECONDS_ENV,
+                environment(variables, SemanticSearchConfiguration.OLLAMA_TIMEOUT_SECONDS_ENV,
                         Long.toString(OllamaEmbeddingProvider.DEFAULT_TIMEOUT.toSeconds())),
                 SemanticSearchConfiguration.MAX_OLLAMA_TIMEOUT_SECONDS);
         double weight = positiveDouble(
                 SemanticSearchConfiguration.RRF_WEIGHT_ENV,
-                environment(SemanticSearchConfiguration.RRF_WEIGHT_ENV, Double.toString(SemanticSearchConfiguration.DEFAULT_SEMANTIC_RRF_WEIGHT)));
+                environment(variables, SemanticSearchConfiguration.RRF_WEIGHT_ENV, Double.toString(SemanticSearchConfiguration.DEFAULT_SEMANTIC_RRF_WEIGHT)));
 
         OllamaEmbeddingProvider ollama = new OllamaEmbeddingProvider(
                 baseUri,
@@ -222,8 +290,16 @@ final class NexusApplicationFactory {
         return SemanticSearchConfiguration.enabled(ollama, weight);
     }
 
-    private static String environment(String name, String defaultValue) {
-        String value = System.getenv(name);
+    /**
+     * Environnement du processus : seule lecture de {@code System.getenv} du cœur, contrôlée
+     * par {@code CoreArchitectureTest} (ARCH-0066).
+     */
+    static Map<String, String> processEnvironment() {
+        return System.getenv();
+    }
+
+    private static String environment(Map<String, String> variables, String name, String defaultValue) {
+        String value = variables.get(name);
         return value == null || value.isBlank() ? defaultValue : value.trim();
     }
 

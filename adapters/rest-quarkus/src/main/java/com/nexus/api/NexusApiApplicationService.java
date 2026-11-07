@@ -1,7 +1,7 @@
 package com.nexus.api;
 
 import com.nexus.application.NexusApplication;
-import com.nexus.config.NexusPaths;
+import com.nexus.application.NexusConfiguration;
 import com.nexus.index.IndexStatistics;
 import com.nexus.index.IndexingReport;
 import com.nexus.project.ProjectDescriptor;
@@ -171,7 +171,7 @@ public class NexusApiApplicationService {
 
     private static NexusApplication initializeApplication() {
         try {
-            return NexusApplication.createLongLived(NexusPaths.fromEnvironment());
+            return NexusApplication.createLongLived(NexusConfiguration.pathsFromEnvironment());
         } catch (SQLException | IOException exception) {
             throw new IllegalStateException("Impossible d'initialiser NEXUS pour l'adaptateur REST", exception);
         }

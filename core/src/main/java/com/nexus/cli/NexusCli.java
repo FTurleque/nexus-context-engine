@@ -1,7 +1,7 @@
 package com.nexus.cli;
 
 import com.nexus.application.NexusApplication;
-import com.nexus.config.NexusPaths;
+import com.nexus.application.NexusConfiguration;
 import com.nexus.context.ContextBudgetPolicy;
 import com.nexus.index.CodeIntelligenceSnapshot;
 import com.nexus.project.FederatedScopePolicy;
@@ -77,7 +77,7 @@ public final class NexusCli {
             throw new IllegalArgumentException("Commande inconnue : " + args[0]);
         }
 
-        try (NexusApplication application = NexusApplication.create(NexusPaths.fromEnvironment())) {
+        try (NexusApplication application = NexusApplication.create(NexusConfiguration.pathsFromEnvironment())) {
             switch (args[0]) {
                 case "project" -> handleProject(args, application, renderer);
                 case "index" -> handleIndex(args, application, renderer);

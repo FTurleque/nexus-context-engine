@@ -39,8 +39,9 @@ public final class ProjectScanner {
     private final long maxFileSizeBytes;
     private final ProjectScanLimits scanLimits;
 
+    /** Scanner aux bornes par défaut ; la composition root passe les bornes résolues. */
     public ProjectScanner() {
-        this(ProjectFileLimits.maxFileSizeFromEnvironment(), ProjectScanLimits.fromEnvironment());
+        this(ProjectFileLimits.DEFAULT_MAX_FILE_SIZE_BYTES, ProjectScanLimits.defaults());
     }
 
     public ProjectScanner(long maxFileSizeBytes) {
@@ -51,12 +52,12 @@ public final class ProjectScanner {
         this(maxFileSizeBytes, new ProjectScanLimits(maxFiles, maxTotalBytes));
     }
 
-    private ProjectScanner(long maxFileSizeBytes, ProjectScanLimits scanLimits) {
+    public ProjectScanner(long maxFileSizeBytes, ProjectScanLimits scanLimits) {
         if (maxFileSizeBytes <= 0) {
             throw new IllegalArgumentException("maxFileSizeBytes must be greater than zero");
         }
         this.maxFileSizeBytes = maxFileSizeBytes;
-        this.scanLimits = scanLimits;
+        this.scanLimits = java.util.Objects.requireNonNull(scanLimits, "scanLimits");
     }
 
     public long maxFileSizeBytes() {

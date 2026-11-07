@@ -1,5 +1,7 @@
 package com.nexus.search.lucene;
 
+import com.nexus.security.PrivateStoragePolicy;
+
 import com.nexus.config.NexusPaths;
 import com.nexus.index.CodeSymbol;
 import com.nexus.index.FileCategory;
@@ -165,7 +167,7 @@ public final class LuceneSearchIndex implements SearchIndex {
         if (!Files.exists(indexPath, LinkOption.NOFOLLOW_LINKS)) {
             return List.of();
         }
-        paths.ensurePrivateDirectory(indexPath);
+        PrivateStoragePolicy.ensurePrivateDirectory(paths, indexPath);
 
         try (Directory directory = FSDirectory.open(indexPath)) {
             if (!DirectoryReader.indexExists(directory)) {
@@ -184,7 +186,7 @@ public final class LuceneSearchIndex implements SearchIndex {
         if (!Files.exists(indexPath, LinkOption.NOFOLLOW_LINKS)) {
             return false;
         }
-        paths.ensurePrivateDirectory(indexPath);
+        PrivateStoragePolicy.ensurePrivateDirectory(paths, indexPath);
         try (Directory directory = FSDirectory.open(indexPath)) {
             if (!DirectoryReader.indexExists(directory)) {
                 return false;
@@ -283,7 +285,7 @@ public final class LuceneSearchIndex implements SearchIndex {
     /** Avec {@code commitOnClose} faux, fermer le writer sans commit annule les écritures en attente. */
     private IndexResources open(UUID projectId, boolean commitOnClose) throws IOException {
         Path indexPath = paths.projectLuceneIndex(projectId);
-        paths.ensurePrivateDirectory(indexPath);
+        PrivateStoragePolicy.ensurePrivateDirectory(paths, indexPath);
         Directory directory = FSDirectory.open(indexPath);
         Analyzer analyzer = new StandardAnalyzer();
         IndexWriterConfig configuration = new IndexWriterConfig(analyzer)

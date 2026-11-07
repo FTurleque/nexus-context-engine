@@ -1,5 +1,7 @@
 package com.nexus.search.semantic.lucene;
 
+import com.nexus.security.PrivateStoragePolicy;
+
 import com.nexus.config.NexusPaths;
 import com.nexus.index.FileCategory;
 import com.nexus.search.semantic.SemanticIndexProvenance;
@@ -137,7 +139,7 @@ class LuceneSemanticSearchIndexTest {
         NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("invalid-pointer"));
         UUID project = UUID.randomUUID();
         Path root = paths.projectSemanticLuceneIndex(project);
-        paths.ensurePrivateDirectory(root);
+        PrivateStoragePolicy.ensurePrivateDirectory(paths, root);
         Files.writeString(root.resolve("current-generation"), "../outside");
         LuceneSemanticSearchIndex writer = new LuceneSemanticSearchIndex(paths, 3);
         assertThrows(IOException.class, () -> writer.search(project, new float[]{1, 0, 0}, 1));
@@ -148,16 +150,16 @@ class LuceneSemanticSearchIndexTest {
         NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("recovery-gc"));
         UUID project = UUID.randomUUID();
         Path root = paths.projectSemanticLuceneIndex(project);
-        paths.ensurePrivateDirectory(root);
+        PrivateStoragePolicy.ensurePrivateDirectory(paths, root);
 
         Path active = root.resolve(RECOVERY_GENERATION_PREFIX + UUID.randomUUID());
         Path stale = root.resolve(RECOVERY_GENERATION_PREFIX + UUID.randomUUID());
         Path recent = root.resolve(RECOVERY_GENERATION_PREFIX + UUID.randomUUID());
         Path unrelated = root.resolve("manual-backup");
-        paths.ensurePrivateDirectory(active);
-        paths.ensurePrivateDirectory(stale);
-        paths.ensurePrivateDirectory(recent);
-        paths.ensurePrivateDirectory(unrelated);
+        PrivateStoragePolicy.ensurePrivateDirectory(paths, active);
+        PrivateStoragePolicy.ensurePrivateDirectory(paths, stale);
+        PrivateStoragePolicy.ensurePrivateDirectory(paths, recent);
+        PrivateStoragePolicy.ensurePrivateDirectory(paths, unrelated);
         Files.writeString(stale.resolve("marker"), "stale");
 
         Instant now = Instant.now();

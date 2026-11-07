@@ -24,6 +24,9 @@ public class NexusRestExposureGuard {
 
     @PostConstruct
     void validateExposure() {
+        // L'adaptateur REST est sa propre composition root Quarkus : il installe les postures
+        // de sécurité du processus avant de les vérifier (ARCH-0066).
+        com.nexus.config.SecurityPolicy.configure(System.getenv());
         validateManagementExposure();
         if (NexusRestSecurity.isLoopbackHost(host)) {
             validateLoopback();

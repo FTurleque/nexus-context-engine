@@ -1,4 +1,4 @@
-package com.nexus.config;
+package com.nexus.security;
 
 import com.sun.jna.platform.win32.Advapi32Util;
 import java.nio.file.FileSystems;

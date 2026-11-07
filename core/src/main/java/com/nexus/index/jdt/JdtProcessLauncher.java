@@ -30,7 +30,8 @@ final class JdtProcessLauncher {
         command.add("-data");
         command.add(workspace.toString());
 
-        ProcessBuilder builder = new ProcessBuilder(command);
+        BoundedJdtProcessBuilder builder =
+                new BoundedJdtProcessBuilder(command, configuration.trustedProjectRoots());
         builder.directory(projectRoot.toFile());
         builder.environment().remove("CLIENT_PORT");
         builder.environment().remove("CLIENT_HOST");

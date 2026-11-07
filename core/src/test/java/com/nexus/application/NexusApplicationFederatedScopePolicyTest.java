@@ -1,5 +1,7 @@
 package com.nexus.application;
 
+import com.nexus.security.PrivateStoragePolicy;
+
 import com.nexus.config.NexusPaths;
 import com.nexus.index.ProjectIndexLockManager;
 import com.nexus.persistence.sqlite.SqliteDatabase;
@@ -46,7 +48,7 @@ class NexusApplicationFederatedScopePolicyTest {
             }
             assertEquals(25, application.searchAcrossProjects(ids, "absent", 10, false).projects().size());
             UUID blockedId = ids.getLast();
-            paths.ensurePrivateFile(paths.projectIndexLock(blockedId));
+            PrivateStoragePolicy.ensurePrivateFile(paths, paths.projectIndexLock(blockedId));
             try (FileChannel channel = FileChannel.open(paths.projectIndexLock(blockedId), StandardOpenOption.WRITE);
                  FileLock ignored = channel.lock()) {
                 assertThrows(IllegalStateException.class,

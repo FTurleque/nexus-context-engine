@@ -13,19 +13,20 @@ import java.util.regex.Pattern;
 /**
  * Constructeur de processus JDT LS à environnement explicitement borné.
  *
- * <p>Cette classe package-private porte volontairement le nom simple
- * {@code ProcessBuilder} : le provider JDT du même package l'utilise sans nom
- * qualifié, ce qui centralise la politique d'environnement sans propager les
- * secrets et options JVM arbitraires du processus NEXUS vers JDT LS.</p>
+ * <p>Le lanceur JDT du même package la nomme explicitement : elle centralise la
+ * politique d'environnement sans propager les secrets et options JVM arbitraires
+ * du processus NEXUS vers JDT LS, et se distingue de {@link java.lang.ProcessBuilder}
+ * qu'elle enveloppe.</p>
  *
  * <p>JDT LS importe les métadonnées Maven/Gradle du workspace et constitue donc
  * une frontière d'exécution pour un repository non fiable. Le subprocess ne
  * peut démarrer que lorsque sa racine canonique est explicitement listée dans
- * {@value #TRUSTED_PROJECT_ROOTS_ENVIRONMENT_VARIABLE}. La comparaison porte sur
- * le chemin réel exact : autoriser un parent n'autorise pas implicitement tous
- * ses descendants.</p>
+ * {@value #TRUSTED_PROJECT_ROOTS_ENVIRONMENT_VARIABLE}, valeur résolue par la
+ * composition root et transmise par la configuration du provider. La comparaison
+ * porte sur le chemin réel exact : autoriser un parent n'autorise pas
+ * implicitement tous ses descendants.</p>
  */
-final class ProcessBuilder {
+final class BoundedJdtProcessBuilder {
 
     static final String TRUSTED_PROJECT_ROOTS_ENVIRONMENT_VARIABLE =
             "NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS";
@@ -61,13 +62,15 @@ final class ProcessBuilder {
             "GRADLE_USER_HOME");
 
     private final java.lang.ProcessBuilder delegate;
+    private final String trustedProjectRoots;
 
-    ProcessBuilder(List<String> command) {
+    BoundedJdtProcessBuilder(List<String> command, String trustedProjectRoots) {
         delegate = new java.lang.ProcessBuilder(command);
+        this.trustedProjectRoots = trustedProjectRoots;
         sanitizeEnvironment(delegate.environment());
     }
 
-    ProcessBuilder directory(File directory) {
+    BoundedJdtProcessBuilder directory(File directory) {
         delegate.directory(directory);
         return this;
     }
@@ -80,9 +83,7 @@ final class ProcessBuilder {
         // JDT LS peut importer/évaluer des métadonnées Maven/Gradle. Vérifier la
         // confiance immédiatement avant le démarrage évite qu'une mutation
         // intermédiaire du working directory contourne la frontière.
-        requireTrustedProjectDirectory(
-                delegate.directory(),
-                System.getenv(TRUSTED_PROJECT_ROOTS_ENVIRONMENT_VARIABLE));
+        requireTrustedProjectDirectory(delegate.directory(), trustedProjectRoots);
 
         // Revalide juste avant start() afin qu'aucun appel intermédiaire au Map
         // mutable retourné par environment() ne puisse réintroduire un secret.

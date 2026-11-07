@@ -41,11 +41,8 @@ public record ProjectScanLimits(int maxFiles, long maxTotalBytes) {
         return new ProjectScanLimits(DEFAULT_MAX_FILES, DEFAULT_MAX_TOTAL_BYTES);
     }
 
-    public static ProjectScanLimits fromEnvironment() {
-        return from(System.getenv());
-    }
-
-    static ProjectScanLimits from(Map<String, String> environment) {
+    /** Résout les bornes depuis l'environnement fourni par la composition root. */
+    public static ProjectScanLimits from(Map<String, String> environment) {
         Objects.requireNonNull(environment, "environment");
         return new ProjectScanLimits(
                 positiveInt(
