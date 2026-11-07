@@ -24,6 +24,7 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -473,14 +474,19 @@ class ScaleRegressionBenchmarkTest {
                 .newInstance(relativePath, "java", FileCategory.SOURCE, content, List.of());
     }
 
-    /**
-     * Le type {@code SearchDocument} n'est pas nommable ici : la liste est transmise sans paramètre de type,
-     * ce qui justifie la suppression de {@code rawtypes} et {@code unchecked} sur cette seule méthode.
-     */
-    @SuppressWarnings({"rawtypes", "unchecked"})
+    /** Appelle {@code rebuild} par réflexion : la signature porte un type que le harnais ne nomme pas. */
     private static void rebuild(SemanticIndexingService service, UUID projectId, String fingerprint,
-                                List<Object> documents) throws IOException {
-        service.rebuild(projectId, fingerprint, (List) documents);
+                                List<Object> documents) throws Exception {
+        try {
+            SemanticIndexingService.class
+                    .getMethod("rebuild", UUID.class, String.class, List.class)
+                    .invoke(service, projectId, fingerprint, documents);
+        } catch (InvocationTargetException exception) {
+            if (exception.getCause() instanceof Exception cause) {
+                throw cause;
+            }
+            throw exception;
+        }
     }
 
     private Map<String, Object> benchmarkSemanticRecovery(int documentCount) throws Exception {
