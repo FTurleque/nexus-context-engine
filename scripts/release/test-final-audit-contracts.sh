@@ -479,4 +479,23 @@ grep -q 'NEXUS_VERSION=' .github/workflows/ci.yml \
 grep -q 'rootPom.project.version' scripts/validate-phase-6.ps1 \
   || fail 'Windows gate must read the product version from pom.xml'
 
+# --- Sprint 9 : adr-publication (AUD-DEP-02, tâche 9.2) ---
+# The release publication policy ADR completes GEN-0031 and stays referenced by the
+# immutable release publishing guide and by both ADR indexes.
+PUBLICATION_ADR_NAME="SEC-0066-publier-les-releases-depuis-un-environnement-protege-avec-des-assets-attestes.md"
+PUBLICATION_ADR="docs/architecture/adr/$PUBLICATION_ADR_NAME"
+[[ -f "$PUBLICATION_ADR" ]] \
+  || fail 'release publication policy ADR SEC-0066 is missing'
+grep -q -- '- \*\*Complète\*\* : \[GEN-0031\]' "$PUBLICATION_ADR" \
+  || fail 'SEC-0066 must complete GEN-0031'
+for needle in 'environment: release' 'subject-path' 'gh attestation verify' 'vX.Y.Z-rc.N' 'secrets: inherit'; do
+  grep -q --fixed-strings "$needle" "$PUBLICATION_ADR" \
+    || fail "SEC-0066 publication policy drift: missing $needle"
+done
+for index in docs/architecture/adr/README.md docs/architecture/arc42/09-decisions.md docs/developer/immutable-release-publishing.md; do
+  grep -q --fixed-strings "$PUBLICATION_ADR_NAME" "$index" \
+    || fail "SEC-0066 must be referenced from $index"
+done
+# --- Fin Sprint 9 : adr-publication ---
+
 echo 'final-audit-contracts=PASS'
