@@ -1,4 +1,4 @@
-package com.nexus.context;
+package com.nexus.context.model;
 
 import com.nexus.search.CandidateType;
 
@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Élément effectivement retenu dans un {@link ContextBundle}.
+ * Élément effectivement retenu dans un {@code ContextBundle}.
  *
  * <p>Les lignes sont exprimées en base 1. Une valeur de {@code 0} pour
  * {@code startLine}/{@code endLine} est réservée aux futures sources qui ne

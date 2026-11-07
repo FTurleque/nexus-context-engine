@@ -1,5 +1,6 @@
 package com.nexus.context;
 
+import com.nexus.context.model.ContextItem;
 import com.nexus.project.ProjectDescriptor;
 
 import java.util.Objects;

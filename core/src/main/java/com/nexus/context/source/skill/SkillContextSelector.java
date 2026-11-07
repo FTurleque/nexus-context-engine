@@ -2,8 +2,8 @@ package com.nexus.context.source.skill;
 
 import com.nexus.paths.RepositoryPath;
 
-import com.nexus.context.ContextItem;
-import com.nexus.context.ContextSelectionResult;
+import com.nexus.context.model.ContextItem;
+import com.nexus.context.model.ContextSelectionResult;
 import com.nexus.search.CandidateType;
 import com.nexus.token.TokenEstimator;
 

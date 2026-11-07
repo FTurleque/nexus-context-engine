@@ -12,7 +12,7 @@
 
 ## 3. Cycles context ↔ context.source (AUD-ARC-04)
 
-- [ ] 3.1 `AUD-ARC-04` — Déplacer `ContextFragment`, `ContextItem` et `ContextSelectionResult` dans `context.model`, mettre à jour les imports du cœur et des adaptateurs ; retirer de la baseline les cycles `context` ↔ `context.source`, `.git`, `.skill` ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='*Architecture*,DefaultContextBuilder*,SkillContext*,LocalGitContextSourceProvider*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true` puis `./mvnw -B -ntp clean install`
+- [x] 3.1 `AUD-ARC-04` — Déplacer `ContextFragment`, `ContextItem` et `ContextSelectionResult` dans `context.model`, mettre à jour les imports du cœur et des adaptateurs ; retirer de la baseline les cycles `context` ↔ `context.source`, `.git`, `.skill` ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='*Architecture*,DefaultContextBuilder*,SkillContext*,LocalGitContextSourceProvider*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true` puis `./mvnw -B -ntp clean install`
 
 ## 4. Cycles search ↔ ranking (AUD-ARC-05)
 

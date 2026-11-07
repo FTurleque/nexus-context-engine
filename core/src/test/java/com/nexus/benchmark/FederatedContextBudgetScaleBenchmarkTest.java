@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.nexus.context.ContextBuilder;
 import com.nexus.context.ContextBundle;
-import com.nexus.context.ContextItem;
+import com.nexus.context.model.ContextItem;
 import com.nexus.context.ContextRequest;
 import com.nexus.context.FederatedContextBundle;
 import com.nexus.context.FederatedContextService;

@@ -1,5 +1,7 @@
 package com.nexus.context;
 
+import com.nexus.context.model.ContextFragment;
+import com.nexus.context.model.ContextSelectionResult;
 import com.nexus.search.CandidateType;
 import org.junit.jupiter.api.Test;
 

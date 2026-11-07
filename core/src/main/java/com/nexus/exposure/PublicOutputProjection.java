@@ -200,7 +200,7 @@ public final class PublicOutputProjection {
                 statistics(report.statistics())));
     }
 
-    private static PublicOutput.ContextItem contextItem(ProjectDescriptor project, com.nexus.context.ContextItem item) {
+    private static PublicOutput.ContextItem contextItem(ProjectDescriptor project, com.nexus.context.model.ContextItem item) {
         return new PublicOutput.ContextItem(
                 item.type().name(),
                 PublicProjectPathPolicy.expose(project.rootPath(), item.path()),

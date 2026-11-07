@@ -1,6 +1,8 @@
 package com.nexus.context;
 
 import com.nexus.config.NexusPaths;
+import com.nexus.context.model.ContextFragment;
+import com.nexus.context.model.ContextItem;
 import com.nexus.context.source.git.GitContextQuery;
 import com.nexus.context.source.git.GitContextResult;
 import com.nexus.context.source.git.GitContextSourceProvider;

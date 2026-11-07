@@ -1,6 +1,6 @@
 package com.nexus.context.source.git;
 
-import com.nexus.context.ContextFragment;
+import com.nexus.context.model.ContextFragment;
 import com.nexus.search.CandidateType;
 import org.eclipse.jgit.api.Git;
 

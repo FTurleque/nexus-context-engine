@@ -1,6 +1,6 @@
 package com.nexus.context.source.git;
 
-import com.nexus.context.ContextFragment;
+import com.nexus.context.model.ContextFragment;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;

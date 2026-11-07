@@ -2,7 +2,7 @@ package com.nexus.exposure;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexus.context.ContextBundle;
-import com.nexus.context.ContextItem;
+import com.nexus.context.model.ContextItem;
 import com.nexus.context.FederatedContextBundle;
 import com.nexus.context.FederatedContextItem;
 import com.nexus.index.CodeSymbol;

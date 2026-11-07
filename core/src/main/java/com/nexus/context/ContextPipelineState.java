@@ -1,5 +1,7 @@
 package com.nexus.context;
 
+import com.nexus.context.model.ContextFragment;
+import com.nexus.context.model.ContextSelectionResult;
 import com.nexus.context.source.ContextSourceDiscoveryResult;
 import com.nexus.context.source.git.GitContextResult;
 import com.nexus.context.source.skill.SkillActivationResult;

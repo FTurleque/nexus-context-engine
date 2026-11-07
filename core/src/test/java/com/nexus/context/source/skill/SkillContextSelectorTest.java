@@ -1,6 +1,6 @@
 package com.nexus.context.source.skill;
 
-import com.nexus.context.ContextSelectionResult;
+import com.nexus.context.model.ContextSelectionResult;
 import com.nexus.token.HeuristicTokenEstimator;
 import org.junit.jupiter.api.Test;
 

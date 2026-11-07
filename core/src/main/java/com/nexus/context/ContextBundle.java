@@ -1,5 +1,6 @@
 package com.nexus.context;
 
+import com.nexus.context.model.ContextItem;
 import com.nexus.security.SensitiveContentRedactor;
 
 import java.util.List;

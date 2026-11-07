@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexus.application.NexusApplication;
 import com.nexus.config.NexusPaths;
 import com.nexus.context.ContextBundle;
-import com.nexus.context.ContextItem;
+import com.nexus.context.model.ContextItem;
 import com.nexus.context.FederatedContextBundle;
 import com.nexus.context.FederatedContextItem;
 import com.nexus.exposure.PublicOutputProjection;

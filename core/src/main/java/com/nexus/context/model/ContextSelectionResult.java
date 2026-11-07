@@ -1,4 +1,4 @@
-package com.nexus.context;
+package com.nexus.context.model;
 
 import java.util.List;
 

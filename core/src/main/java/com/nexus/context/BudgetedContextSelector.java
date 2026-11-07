@@ -1,5 +1,8 @@
 package com.nexus.context;
 
+import com.nexus.context.model.ContextFragment;
+import com.nexus.context.model.ContextItem;
+import com.nexus.context.model.ContextSelectionResult;
 import com.nexus.security.OversizedSecretException;
 import com.nexus.security.SensitiveContentRedactor;
 import com.nexus.token.TokenEstimator;

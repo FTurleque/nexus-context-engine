@@ -1,6 +1,7 @@
 package com.nexus.context;
 
 import com.nexus.config.NexusPaths;
+import com.nexus.context.model.ContextItem;
 import com.nexus.context.source.skill.LocalAgentSkillsProvider;
 import com.nexus.index.IndexRepository;
 import com.nexus.index.service.ProjectIndexingService;

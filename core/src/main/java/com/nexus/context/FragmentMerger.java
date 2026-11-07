@@ -1,5 +1,6 @@
 package com.nexus.context;
 
+import com.nexus.context.model.ContextFragment;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;

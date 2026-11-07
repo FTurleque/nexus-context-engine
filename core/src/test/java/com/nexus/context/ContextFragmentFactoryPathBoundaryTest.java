@@ -1,5 +1,7 @@
 package com.nexus.context;
 
+import com.nexus.context.model.ContextItem;
+import com.nexus.context.model.ContextSelectionResult;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;
