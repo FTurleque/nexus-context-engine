@@ -74,6 +74,11 @@ class ProjectGraphBuilderProjectionTest {
         }
 
         @Override
+        public com.nexus.index.IndexWriteSession openWriteSession(UUID ignored) {
+            throw new UnsupportedOperationException("Mutation is outside this read-only graph projection fixture.");
+        }
+
+        @Override
         public void replaceExternalCodeIntelligence(UUID ignored, CodeIntelligenceSnapshot snapshot) {
             // External intelligence mutation is outside this read-only fixture.
         }

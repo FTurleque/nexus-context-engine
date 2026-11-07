@@ -2,6 +2,7 @@ package com.nexus.index;
 
 import com.nexus.search.SearchDocument;
 import com.nexus.search.SearchIndex;
+import com.nexus.search.SearchIndexSession;
 import com.nexus.search.semantic.SemanticIndexingService;
 import com.nexus.security.OversizedSecretException;
 import com.nexus.security.SafeFileIO;
@@ -18,28 +19,80 @@ import java.util.UUID;
 /** Étape interne du pipeline d’indexation. */
 final class IndexDocumentPublisher {
     private final List<LanguageAnalyzer> analyzers;
+    private final IndexRepository indexRepository;
     private final SearchIndex searchIndex;
     private final SemanticIndexingService semanticIndexingService;
     private final int indexDocumentBatchFiles;
     private final long indexDocumentBatchBytes;
-    IndexDocumentPublisher(List<LanguageAnalyzer> analyzers, SearchIndex searchIndex,
-            SemanticIndexingService semanticIndexingService, int maxFiles, long maxBytes) {
+    IndexDocumentPublisher(List<LanguageAnalyzer> analyzers, IndexRepository indexRepository,
+            SearchIndex searchIndex, SemanticIndexingService semanticIndexingService, int maxFiles, long maxBytes) {
         this.analyzers = List.copyOf(analyzers);
+        this.indexRepository = indexRepository;
         this.searchIndex = searchIndex;
         this.semanticIndexingService = semanticIndexingService;
         this.indexDocumentBatchFiles = maxFiles;
         this.indexDocumentBatchBytes = maxBytes;
     }
+
+    /**
+     * Résultat de {@link #publish} : les analyses ne sont plus retenues en mémoire, seul ce résumé
+     * borné l'est.
+     *
+     * @param updatedFiles nombre de fichiers nouveaux ou modifiés dont l'analyse a été mise en attente
+     * @param codeSourcesUpdated au moins un de ces fichiers est une source ou un test
+     */
+    record PublishOutcome(int updatedFiles, boolean codeSourcesUpdated) { }
+
+    /**
+     * Ouvre les écritures de l'indexation : un writer Lucene par index dérivé, vidé si le rebuild
+     * correspondant est demandé, et la session canonique SQLite. En cas d'échec, tout ce qui a déjà
+     * été ouvert est annulé.
+     */
+    IndexPublication openPublication(
+            UUID projectId,
+            String canonicalFingerprint,
+            boolean fullRebuild,
+            boolean semanticFullRebuild) throws IOException {
+        SearchIndexSession lexical = searchIndex.openSession(projectId, fullRebuild);
+        SemanticIndexingService.IndexingSession semantic = null;
+        try {
+            if (semanticIndexingService != null) {
+                semantic = semanticIndexingService.openSession(projectId, canonicalFingerprint, semanticFullRebuild);
+            }
+            return new IndexPublication(lexical, semantic, indexRepository.openWriteSession(projectId));
+        } catch (IOException | RuntimeException failure) {
+            closeQuietly(lexical, failure);
+            if (semantic != null) {
+                closeQuietly(semantic, failure);
+            }
+            throw failure;
+        }
+    }
+
+    private static void closeQuietly(AutoCloseable resource, Exception failure) {
+        try {
+            resource.close();
+        } catch (Exception closeFailure) {
+            failure.addSuppressed(closeFailure);
+        }
+    }
+
     /**
      * Publie les documents dérivés des fichiers modifiés. Un fichier dont une valeur sensible dépasse
      * la borne de redaction reste dans l'index structurel, mais n'entre ni dans l'index lexical ni dans
      * l'index sémantique ; son exclusion est ajoutée à {@code diagnostics} sans valeur ni contenu.
+     *
+     * <p>Les documents et les analyses sont écrits au rythme des lots (128 fichiers ou 16 MiB) :
+     * documents dans les writers Lucene de {@code publication}, analyses dans la mise en attente
+     * SQLite. Ni les uns ni les autres ne sont visibles avant la barrière de publication.</p>
      */
-    List<IndexedFileUpdate> publish(UUID projectId, java.nio.file.Path projectRoot,
+    PublishOutcome publish(IndexPublication publication, java.nio.file.Path projectRoot,
             List<ScannedFile> scannedFiles, Map<String, IndexedFile> existingFiles,
-            String canonicalFingerprint, boolean fullRebuild, boolean semanticFullRebuild,
+            boolean fullRebuild, boolean semanticFullRebuild,
             List<String> diagnostics) throws IOException {
-        List<IndexedFileUpdate> updates = new ArrayList<>();
+        PendingUpdates pendingUpdates = new PendingUpdates(indexDocumentBatchFiles, indexDocumentBatchBytes);
+        int updatedFiles = 0;
+        boolean codeSourcesUpdated = false;
         Set<String> excludedPaths = new java.util.TreeSet<>();
         IndexDocumentBatch documentBatch = new IndexDocumentBatch(
                 indexDocumentBatchFiles,
@@ -61,7 +114,7 @@ final class IndexDocumentPublisher {
 
             if ((lexicalDocumentRequired || semanticDocumentRequired)
                     && documentBatch.shouldFlushBefore(scannedFile.sizeBytes())) {
-                flushDocumentBatch(projectId, canonicalFingerprint, documentBatch);
+                flushBatches(publication, documentBatch, pendingUpdates);
             }
 
             byte[] snapshotBytes = SafeFileIO.readBytesNoFollow(scannedFile.absolutePath());
@@ -74,7 +127,12 @@ final class IndexDocumentPublisher {
             AnalysisResult analysis = analyzeScannedFile(projectRoot, scannedFile, snapshotContent);
 
             if (changed) {
-                updates.add(new IndexedFileUpdate(scannedFile, analysis));
+                updatedFiles++;
+                codeSourcesUpdated |= ProjectIndexingService.isCodeIntelligenceSource(scannedFile.category());
+                pendingUpdates.add(new IndexedFileUpdate(scannedFile, analysis));
+                if (pendingUpdates.reachedLimit()) {
+                    pendingUpdates.stageTo(publication);
+                }
             }
 
             String redactedContent = lexicalDocumentRequired || semanticDocumentRequired
@@ -97,14 +155,14 @@ final class IndexDocumentPublisher {
                         semanticDocumentRequired,
                         scannedFile.sizeBytes());
                 if (documentBatch.reachedLimit()) {
-                    flushDocumentBatch(projectId, canonicalFingerprint, documentBatch);
+                    flushBatches(publication, documentBatch, pendingUpdates);
                 }
             }
         }
-        flushDocumentBatch(projectId, canonicalFingerprint, documentBatch);
-        removeStaleDocuments(projectId, canonicalFingerprint, excludedPaths, fullRebuild, semanticFullRebuild);
+        flushBatches(publication, documentBatch, pendingUpdates);
+        removeStaleDocuments(publication, excludedPaths, fullRebuild, semanticFullRebuild);
 
-        return List.copyOf(updates);
+        return new PublishOutcome(updatedFiles, codeSourcesUpdated);
     }
 
     /** Contenu redigé publié aux index dérivés, ou {@code null} si la redaction refuse le fichier. */
@@ -117,62 +175,50 @@ final class IndexDocumentPublisher {
     }
 
     /** Un document indexé avant que son fichier ne devienne non redigeable ne doit pas rester visible. */
-    private void removeStaleDocuments(UUID projectId, String canonicalFingerprint, Set<String> excludedPaths,
+    private void removeStaleDocuments(IndexPublication publication, Set<String> excludedPaths,
             boolean fullRebuild, boolean semanticFullRebuild) throws IOException {
         if (excludedPaths.isEmpty()) {
             return;
         }
         if (!fullRebuild) {
-            searchIndex.applyChanges(projectId, List.of(), excludedPaths);
+            publication.applyLexical(List.of(), excludedPaths);
         }
         if (semanticIndexingService != null && !semanticFullRebuild) {
-            semanticIndexingService.applyChanges(projectId, canonicalFingerprint, List.of(), excludedPaths);
+            publication.applySemantic(List.of(), excludedPaths);
         }
     }
+
+    /**
+     * Applique aux index dérivés les suppressions de chemins, avant la publication des lots. Les
+     * vidages demandés par un rebuild ont déjà eu lieu à l'ouverture des sessions.
+     */
     void prepareDerivedIndexes(
-            UUID projectId,
-            String canonicalFingerprint,
+            IndexPublication publication,
             boolean fullRebuild,
             boolean semanticFullRebuild,
             Set<String> searchRemovedPaths) throws IOException {
-        if (fullRebuild) {
-            searchIndex.rebuild(projectId, List.of());
-        } else if (!searchRemovedPaths.isEmpty()) {
-            searchIndex.applyChanges(projectId, List.of(), searchRemovedPaths);
+        if (!fullRebuild && !searchRemovedPaths.isEmpty()) {
+            publication.applyLexical(List.of(), searchRemovedPaths);
         }
-
-        if (semanticIndexingService == null) {
-            return;
-        }
-        if (semanticFullRebuild) {
-            semanticIndexingService.rebuild(projectId, canonicalFingerprint, List.of());
-        } else if (!searchRemovedPaths.isEmpty()) {
-            semanticIndexingService.applyChanges(
-                    projectId,
-                    canonicalFingerprint,
-                    List.of(),
-                    searchRemovedPaths);
+        if (semanticIndexingService != null && !semanticFullRebuild && !searchRemovedPaths.isEmpty()) {
+            publication.applySemantic(List.of(), searchRemovedPaths);
         }
     }
 
-    private void flushDocumentBatch(
-            UUID projectId,
-            String canonicalFingerprint,
-            IndexDocumentBatch batch) throws IOException {
-        if (batch.isEmpty()) {
-            return;
+    private void flushBatches(
+            IndexPublication publication,
+            IndexDocumentBatch batch,
+            PendingUpdates pendingUpdates) throws IOException {
+        if (!batch.isEmpty()) {
+            if (!batch.lexicalDocuments.isEmpty()) {
+                publication.applyLexical(batch.lexicalDocuments, Set.of());
+            }
+            if (semanticIndexingService != null && !batch.semanticDocuments.isEmpty()) {
+                publication.applySemantic(batch.semanticDocuments, Set.of());
+            }
+            batch.clear();
         }
-        if (!batch.lexicalDocuments.isEmpty()) {
-            searchIndex.applyChanges(projectId, batch.lexicalDocuments, Set.of());
-        }
-        if (semanticIndexingService != null && !batch.semanticDocuments.isEmpty()) {
-            semanticIndexingService.applyChanges(
-                    projectId,
-                    canonicalFingerprint,
-                    batch.semanticDocuments,
-                    Set.of());
-        }
-        batch.clear();
+        pendingUpdates.stageTo(publication);
     }
 
     private AnalysisResult analyzeScannedFile(
@@ -191,6 +237,40 @@ final class IndexDocumentPublisher {
         return category != FileCategory.INSTRUCTION
                 && category != FileCategory.AGENT_PROFILE
                 && category != FileCategory.SKILL;
+    }
+
+    /**
+     * Analyses des fichiers modifiés pas encore mises en attente en SQLite : bornées par le même lot
+     * que les documents (128 fichiers ou 16 MiB de sources), jamais par le nombre de fichiers modifiés.
+     */
+    private static final class PendingUpdates {
+        private final int maxFiles;
+        private final long maxBytes;
+        private final List<IndexedFileUpdate> updates = new ArrayList<>();
+        private long retainedBytes;
+
+        private PendingUpdates(int maxFiles, long maxBytes) {
+            this.maxFiles = maxFiles;
+            this.maxBytes = maxBytes;
+        }
+
+        private void add(IndexedFileUpdate update) {
+            updates.add(update);
+            retainedBytes += update.file().sizeBytes();
+        }
+
+        private boolean reachedLimit() {
+            return updates.size() >= maxFiles || retainedBytes >= maxBytes;
+        }
+
+        private void stageTo(IndexPublication publication) {
+            if (updates.isEmpty()) {
+                return;
+            }
+            publication.stage(List.copyOf(updates));
+            updates.clear();
+            retainedBytes = 0L;
+        }
     }
 
     private static final class IndexDocumentBatch {

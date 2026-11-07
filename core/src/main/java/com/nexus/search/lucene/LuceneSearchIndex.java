@@ -6,6 +6,7 @@ import com.nexus.index.FileCategory;
 import com.nexus.search.LexicalSearchHit;
 import com.nexus.search.SearchDocument;
 import com.nexus.search.SearchIndex;
+import com.nexus.search.SearchIndexSession;
 import com.nexus.security.OversizedSecretException;
 import com.nexus.security.SensitiveContentRedactor;
 import org.apache.lucene.analysis.Analyzer;
@@ -128,6 +129,34 @@ public final class LuceneSearchIndex implements SearchIndex {
         }
     }
 
+    /**
+     * Un seul {@code IndexWriter} pour toute l'indexation (DATA-0045, design D4) : les lots sont
+     * accumulés sans commit, le commit unique est la barrière de publication et un échec annule les
+     * écritures, de sorte que l'index reste celui de la génération précédente.
+     */
+    @Override
+    public SearchIndexSession openSession(UUID projectId, boolean rebuild) throws IOException {
+        Objects.requireNonNull(projectId, "projectId");
+        LuceneSession session = new LuceneSession(projectId);
+        if (rebuild) {
+            try {
+                session.clear();
+            } catch (IOException | RuntimeException exception) {
+                closeQuietly(session, exception);
+                throw exception;
+            }
+        }
+        return session;
+    }
+
+    private static void closeQuietly(SearchIndexSession session, Exception failure) {
+        try {
+            session.close();
+        } catch (IOException | RuntimeException closeFailure) {
+            failure.addSuppressed(closeFailure);
+        }
+    }
+
     @Override
     public List<LexicalSearchHit> search(UUID projectId, String query, int limit) throws IOException {
         validateSearchRequest(projectId, query, limit);
@@ -244,12 +273,18 @@ public final class LuceneSearchIndex implements SearchIndex {
     }
 
     private IndexResources open(UUID projectId) throws IOException {
+        return open(projectId, true);
+    }
+
+    /** Avec {@code commitOnClose} faux, fermer le writer sans commit annule les écritures en attente. */
+    private IndexResources open(UUID projectId, boolean commitOnClose) throws IOException {
         Path indexPath = paths.projectLuceneIndex(projectId);
         paths.ensurePrivateDirectory(indexPath);
         Directory directory = FSDirectory.open(indexPath);
         Analyzer analyzer = new StandardAnalyzer();
         IndexWriterConfig configuration = new IndexWriterConfig(analyzer)
-                .setOpenMode(IndexWriterConfig.OpenMode.CREATE_OR_APPEND);
+                .setOpenMode(IndexWriterConfig.OpenMode.CREATE_OR_APPEND)
+                .setCommitOnClose(commitOnClose);
         try {
             IndexWriter writer = new IndexWriter(directory, configuration);
             return new IndexResources(directory, analyzer, writer);
@@ -311,6 +346,81 @@ public final class LuceneSearchIndex implements SearchIndex {
 
     private static String documentKey(UUID projectId, String relativePath) {
         return projectId + ":" + relativePath;
+    }
+
+    /**
+     * Écritures d'une indexation. Le writer est ouvert à la première écriture : une indexation sans
+     * changement n'ouvre rien et ne committe rien.
+     */
+    private final class LuceneSession implements SearchIndexSession {
+        private final UUID projectId;
+        private IndexResources resources;
+        private boolean dirty;
+        private boolean closed;
+
+        private LuceneSession(UUID projectId) {
+            this.projectId = projectId;
+        }
+
+        private IndexWriter writer() throws IOException {
+            if (closed) {
+                throw new IllegalStateException("La session d'index lexical est fermée");
+            }
+            if (resources == null) {
+                resources = open(projectId, false);
+            }
+            return resources.writer();
+        }
+
+        /** Vide l'index du projet dans la session ; visible seulement au commit. */
+        private void clear() throws IOException {
+            writer().deleteAll();
+            dirty = true;
+        }
+
+        @Override
+        public void applyChanges(List<SearchDocument> documents, Set<String> removedPaths) throws IOException {
+            Objects.requireNonNull(documents, "documents");
+            Objects.requireNonNull(removedPaths, "removedPaths");
+            if (documents.isEmpty() && removedPaths.isEmpty()) {
+                return;
+            }
+            IndexWriter writer = writer();
+            dirty = true;
+            for (String relativePath : removedPaths) {
+                writer.deleteDocuments(new Term(FIELD_DOCUMENT_KEY, documentKey(projectId, relativePath)));
+            }
+            for (SearchDocument document : documents) {
+                Term key = new Term(FIELD_DOCUMENT_KEY, documentKey(projectId, document.relativePath()));
+                Document lucene = toLuceneDocumentOrNull(projectId, document);
+                if (lucene == null) {
+                    writer.deleteDocuments(key);
+                } else {
+                    writer.updateDocument(key, lucene);
+                }
+            }
+        }
+
+        @Override
+        public void commit() throws IOException {
+            if (dirty) {
+                LuceneSearchIndex.commit(writer());
+                dirty = false;
+            }
+        }
+
+        @Override
+        public void close() throws IOException {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            if (resources != null) {
+                // commitOnClose faux : les écritures non committées sont annulées.
+                resources.close();
+                resources = null;
+            }
+        }
     }
 
     private record IndexResources(Directory directory, Analyzer analyzer, IndexWriter writer)

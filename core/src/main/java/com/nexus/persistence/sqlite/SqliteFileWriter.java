@@ -53,6 +53,108 @@ final class SqliteFileWriter {
         }
     }
 
+    private static final String STAGED_FILES_PAGE_SQL = """
+            SELECT id, relative_path, language, size_bytes, content_hash, modified_at,
+                   estimated_tokens, category
+            FROM index_staged_files
+            WHERE project_id = ? AND id > ?
+            ORDER BY id
+            LIMIT ?
+            """;
+    private static final String STAGED_SYMBOLS_SQL = """
+            SELECT kind, name, qualified_name, signature, start_line, end_line, source_provider
+            FROM index_staged_symbols
+            WHERE staged_file_id = ?
+            ORDER BY id
+            """;
+    private static final String STAGED_RELATIONS_SQL = """
+            SELECT kind, source_ref, target_ref, confidence, source_provider
+            FROM index_staged_relations
+            WHERE staged_file_id = ?
+            ORDER BY id
+            """;
+
+    private record StagedFile(long id, String relativePath, String language, long sizeBytes,
+            String contentHash, String modifiedAt, int estimatedTokens, String category) { }
+
+    /**
+     * Corps de la transaction de publication : applique les analyses mises en attente (V014) aux
+     * tables canoniques par pages d'au plus {@link SqliteBatchInsert#ROW_LIMIT} fichiers, vide la mise
+     * en attente et incrémente la génération. Les faits écrits sont ceux que
+     * {@link #writeChanges} écrirait pour les mêmes analyses. La transaction reste possédée par l'appelant
+     * (ADR-0051).
+     */
+    static void writeStagedChanges(Connection connection, UUID projectId, Set<String> removedPaths)
+            throws SQLException {
+        deleteRemovedFiles(connection, projectId, removedPaths);
+        boolean anyStaged = false;
+        try (FileStatements statements = new FileStatements(connection, projectId);
+                PreparedStatement page = connection.prepareStatement(STAGED_FILES_PAGE_SQL);
+                PreparedStatement stagedSymbols = connection.prepareStatement(STAGED_SYMBOLS_SQL);
+                PreparedStatement stagedRelations = connection.prepareStatement(STAGED_RELATIONS_SQL)) {
+            long lastId = 0L;
+            List<StagedFile> files = readStagedPage(page, projectId, lastId);
+            while (!files.isEmpty()) {
+                anyStaged = true;
+                for (StagedFile file : files) {
+                    long fileId = statements.upsertFile(file.relativePath(), file.language(),
+                            file.sizeBytes(), file.contentHash(), file.modifiedAt(),
+                            file.estimatedTokens(), file.category());
+                    statements.deleteAnalysis(fileId);
+                    copyStagedSymbols(statements, stagedSymbols, file.id(), fileId);
+                    copyStagedRelations(statements, stagedRelations, file.id(), fileId);
+                    lastId = file.id();
+                }
+                files = readStagedPage(page, projectId, lastId);
+            }
+        }
+        SqliteIndexStaging.discard(connection, projectId);
+        if (anyStaged || !removedPaths.isEmpty()) {
+            bumpGeneration(connection, projectId);
+        }
+    }
+
+    private static List<StagedFile> readStagedPage(PreparedStatement page, UUID projectId, long afterId)
+            throws SQLException {
+        page.setString(1, projectId.toString());
+        page.setLong(2, afterId);
+        page.setInt(3, SqliteBatchInsert.ROW_LIMIT);
+        List<StagedFile> files = new java.util.ArrayList<>(SqliteBatchInsert.ROW_LIMIT);
+        try (ResultSet resultSet = page.executeQuery()) {
+            while (resultSet.next()) {
+                files.add(new StagedFile(resultSet.getLong(1), resultSet.getString(2),
+                        resultSet.getString(3), resultSet.getLong(4), resultSet.getString(5),
+                        resultSet.getString(6), resultSet.getInt(7), resultSet.getString(8)));
+            }
+        }
+        return files;
+    }
+
+    private static void copyStagedSymbols(FileStatements statements, PreparedStatement query,
+            long stagedFileId, long fileId) throws SQLException {
+        query.setLong(1, stagedFileId);
+        try (ResultSet resultSet = query.executeQuery()) {
+            while (resultSet.next()) {
+                statements.addSymbol(fileId, resultSet.getString(1), resultSet.getString(2),
+                        resultSet.getString(3), resultSet.getString(4), resultSet.getInt(5),
+                        resultSet.getInt(6), resultSet.getString(7));
+            }
+        }
+        statements.flushSymbols();
+    }
+
+    private static void copyStagedRelations(FileStatements statements, PreparedStatement query,
+            long stagedFileId, long fileId) throws SQLException {
+        query.setLong(1, stagedFileId);
+        try (ResultSet resultSet = query.executeQuery()) {
+            while (resultSet.next()) {
+                statements.addRelation(fileId, resultSet.getString(1), resultSet.getString(2),
+                        resultSet.getString(3), resultSet.getDouble(4), resultSet.getString(5));
+            }
+        }
+        statements.flushRelations();
+    }
+
     static void deleteRemovedFiles(Connection connection, UUID projectId, Set<String> removedPaths)
             throws SQLException {
         if (removedPaths.isEmpty()) {
@@ -122,38 +224,67 @@ final class SqliteFileWriter {
 
         /** Upsert du fichier ; l'identifiant vient de {@code RETURNING id}, sans relecture. */
         long upsertFile(ScannedFile file) throws SQLException {
+            return upsertFile(file.relativePath(), file.language(), file.sizeBytes(), file.contentHash(),
+                    file.modifiedAt().toString(), file.estimatedTokens(), file.category().name());
+        }
+
+        long upsertFile(String relativePath, String language, long sizeBytes, String contentHash,
+                String modifiedAt, int estimatedTokens, String category) throws SQLException {
             upsert.setString(1, projectId);
-            upsert.setString(2, file.relativePath());
-            upsert.setString(3, file.language());
-            upsert.setLong(4, file.sizeBytes());
-            upsert.setString(5, file.contentHash());
-            upsert.setString(6, file.modifiedAt().toString());
-            upsert.setInt(7, file.estimatedTokens());
-            upsert.setString(8, file.category().name());
+            upsert.setString(2, relativePath);
+            upsert.setString(3, language);
+            upsert.setLong(4, sizeBytes);
+            upsert.setString(5, contentHash);
+            upsert.setString(6, modifiedAt);
+            upsert.setInt(7, estimatedTokens);
+            upsert.setString(8, category);
             try (ResultSet resultSet = upsert.executeQuery()) {
                 if (!resultSet.next()) {
-                    throw new SQLException("Fichier indexé sans identifiant après upsert : " + file.relativePath());
+                    throw new SQLException("Fichier indexé sans identifiant après upsert : " + relativePath);
                 }
                 return resultSet.getLong(1);
             }
         }
 
         void replaceAnalysis(long fileId, IndexedFileUpdate update) throws SQLException {
+            deleteAnalysis(fileId);
+            for (CodeSymbol symbol : update.analysis().symbols()) {
+                addSymbol(fileId, symbol.kind().name(), symbol.name(), symbol.qualifiedName(),
+                        symbol.signature(), symbol.startLine(), symbol.endLine(), symbol.sourceProvider());
+            }
+            flushSymbols();
+            for (SymbolRelation relation : update.analysis().relations()) {
+                addRelation(fileId, relation.kind().name(), relation.source(),
+                        relation.target(), relation.confidence(), relation.sourceProvider());
+            }
+            flushRelations();
+        }
+
+        /** Supprime l'analyse embarquée précédente d'un fichier (relations, puis symboles). */
+        void deleteAnalysis(long fileId) throws SQLException {
             deleteRelations.setLong(1, fileId);
             deleteRelations.setString(2, EMBEDDED_SOURCE_PROVIDER);
             deleteRelations.executeUpdate();
             deleteSymbols.setLong(1, fileId);
             deleteSymbols.setString(2, EMBEDDED_SOURCE_PROVIDER);
             deleteSymbols.executeUpdate();
-            for (CodeSymbol symbol : update.analysis().symbols()) {
-                symbols.add(fileId, symbol.kind().name(), symbol.name(), symbol.qualifiedName(),
-                        symbol.signature(), symbol.startLine(), symbol.endLine(), symbol.sourceProvider());
-            }
+        }
+
+        void addSymbol(long fileId, String kind, String name, String qualifiedName, String signature,
+                int startLine, int endLine, String sourceProvider) throws SQLException {
+            symbols.add(fileId, kind, name, qualifiedName, signature, startLine, endLine, sourceProvider);
+        }
+
+        void flushSymbols() throws SQLException {
             symbols.flush();
-            for (SymbolRelation relation : update.analysis().relations()) {
-                relations.add(projectId, fileId, relation.kind().name(), relation.source(),
-                        relation.target(), relation.confidence(), relation.sourceProvider());
-            }
+        }
+
+        void addRelation(long fileId, String kind, String source, String target, double confidence,
+                String sourceProvider) throws SQLException {
+            relations.add(projectId, fileId, kind, source, target, confidence, sourceProvider);
+        }
+
+        void flushRelations() throws SQLException {
             relations.flush();
         }
 

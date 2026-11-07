@@ -117,6 +117,39 @@ public final class SemanticIndexingService {
                 removedRelativePaths);
     }
 
+    /**
+     * Ouvre les écritures d'une indexation : les lots sont vectorisés puis accumulés sans commit,
+     * la provenance n'est publiée qu'au {@link IndexingSession#commit()}.
+     */
+    public IndexingSession openSession(UUID projectId, String canonicalFingerprint, boolean rebuild)
+            throws IOException {
+        return new IndexingSession(semanticSearchIndex.openSession(
+                projectId, provenance(canonicalFingerprint), rebuild));
+    }
+
+    /** Écritures vectorisées d'une indexation ; voir {@link SemanticIndexSession}. */
+    public final class IndexingSession implements AutoCloseable {
+        private final SemanticIndexSession delegate;
+
+        private IndexingSession(SemanticIndexSession delegate) {
+            this.delegate = delegate;
+        }
+
+        public void applyChanges(List<SearchDocument> documents, Set<String> removedRelativePaths)
+                throws IOException {
+            delegate.applyChanges(vectorize(documents), removedRelativePaths);
+        }
+
+        public void commit() throws IOException {
+            delegate.commit();
+        }
+
+        @Override
+        public void close() throws IOException {
+            delegate.close();
+        }
+    }
+
     private SemanticIndexProvenance provenance(String canonicalFingerprint) {
         return SemanticIndexProvenance.current(
                 canonicalFingerprint,

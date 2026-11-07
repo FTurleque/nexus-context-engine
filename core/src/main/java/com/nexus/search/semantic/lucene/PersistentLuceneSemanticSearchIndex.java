@@ -3,6 +3,7 @@ package com.nexus.search.semantic.lucene;
 import com.nexus.config.NexusPaths;
 import com.nexus.search.lucene.PersistentLuceneReaderSupport;
 import com.nexus.search.semantic.SemanticIndexProvenance;
+import com.nexus.search.semantic.SemanticIndexSession;
 import com.nexus.search.semantic.SemanticSearchHit;
 import com.nexus.search.semantic.SemanticSearchIndex;
 import com.nexus.search.semantic.SemanticVectorDocument;
@@ -110,6 +111,36 @@ public final class PersistentLuceneSemanticSearchIndex implements SemanticSearch
             operationScoped.applyChanges(projectId, provenance, documents, removedRelativePaths);
         }
         readers.refreshIfCached(projectId, operationScoped.indexPath(projectId));
+    }
+
+    @Override
+    public SemanticIndexSession openSession(
+            UUID projectId,
+            SemanticIndexProvenance provenance,
+            boolean rebuild) throws IOException {
+        readers.ensureOpen();
+        if (rebuild) {
+            readers.invalidate(projectId);
+        }
+        SemanticIndexSession session = operationScoped.openSession(projectId, provenance, rebuild);
+        return new SemanticIndexSession() {
+            @Override
+            public void applyChanges(List<SemanticVectorDocument> documents, Set<String> removedRelativePaths)
+                    throws IOException {
+                session.applyChanges(documents, removedRelativePaths);
+            }
+
+            @Override
+            public void commit() throws IOException {
+                session.commit();
+                readers.refreshIfCached(projectId, operationScoped.indexPath(projectId));
+            }
+
+            @Override
+            public void close() throws IOException {
+                session.close();
+            }
+        };
     }
 
     @Override
