@@ -1,8 +1,15 @@
 package com.nexus.api;
 
+import jakarta.ws.rs.container.ContainerRequestContext;
+import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Proxy;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Règle pure du contrôle de transport loopback (AUD-SEC-04). */
@@ -57,8 +64,7 @@ class NexusRestLoopbackTransportFilterTest {
 
     @Test
     void filterIsInactiveWhenTheListenerIsNotLoopback() {
-        NexusRestLoopbackTransportFilter filter = new NexusRestLoopbackTransportFilter();
-        filter.host = "0.0.0.0";
+        NexusRestLoopbackTransportFilter filter = new NexusRestLoopbackTransportFilter("0.0.0.0");
         jakarta.ws.rs.container.ContainerRequestContext request =
                 (jakarta.ws.rs.container.ContainerRequestContext) java.lang.reflect.Proxy.newProxyInstance(
                         jakarta.ws.rs.container.ContainerRequestContext.class.getClassLoader(),
@@ -69,5 +75,37 @@ class NexusRestLoopbackTransportFilterTest {
                         });
 
         filter.filter(request);
+    }
+
+    @Test
+    void activationStaysOnForLoopbackBlankOrUnresolvableListenerHosts() {
+        for (String host : new String[]{"127.0.0.1", "localhost", "LOCALHOST", "::1", "127.0.0.2", null, "", " "}) {
+            assertTrue(new NexusRestLoopbackTransportFilter(host).active(), String.valueOf(host));
+        }
+        // Un nom en .invalid ne se résout jamais (RFC 6761) : l'échec de résolution garde le filtre actif.
+        assertTrue(new NexusRestLoopbackTransportFilter("nexus-listener.invalid").active());
+        assertFalse(new NexusRestLoopbackTransportFilter("0.0.0.0").active());
+    }
+
+    @Test
+    void unresolvableListenerHostKeepsRejectingNonLoopbackHostHeaders() {
+        NexusRestLoopbackTransportFilter filter = new NexusRestLoopbackTransportFilter("nexus-listener.invalid");
+        AtomicReference<Object> aborted = new AtomicReference<>();
+        ContainerRequestContext request = (ContainerRequestContext) Proxy.newProxyInstance(
+                ContainerRequestContext.class.getClassLoader(),
+                new Class<?>[]{ContainerRequestContext.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "getHeaderString" -> "Host".equals(args[0]) ? "evil.example" : null;
+                    case "abortWith" -> {
+                        aborted.set(args[0]);
+                        yield null;
+                    }
+                    default -> throw new AssertionError(method.getName());
+                });
+
+        filter.filter(request);
+
+        Response response = assertInstanceOf(Response.class, aborted.get());
+        assertEquals(403, response.getStatus());
     }
 }

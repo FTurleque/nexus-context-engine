@@ -4,7 +4,7 @@ NEXUS treats every REST listener as a privileged deployment boundary. A remote l
 
 ## Loopback
 
-`quarkus.http.host=127.0.0.1`, `localhost` or another loopback address remains the default network posture. The remote-exposure transport checks do not apply to a loopback-only listener, but loopback is no longer treated as an implicit authentication boundary.
+`quarkus.http.host=127.0.0.1` is the default network posture. A loopback listener must be declared with one of the literal hosts `127.0.0.1`, `localhost` or `::1`: `NexusRestExposureGuard` refuses at startup any other loopback address or alias (for example `127.0.0.2`), because the Host control below would then answer `403` to every request. The remote-exposure transport checks do not apply to a loopback-only listener, and loopback is not an implicit authentication boundary.
 
 By default, startup therefore requires a strong Bearer token even on loopback:
 
@@ -47,7 +47,11 @@ Whenever the application listener is loopback (`NEXUS_REST_TRUST_LOCAL=true`, to
 
 A refused request receives `403` with the fixed body `{"error":"FORBIDDEN","message":"Requête refusée par le contrôle de transport local"}`: neither the received value nor the expected configuration is disclosed. Local clients behind a name alias or a local proxy must call `127.0.0.1` directly, or use the authenticated non-loopback exposure modes below.
 
-The comparison is literal and never resolves names, so DNS rebinding (a public name re-pointed to `127.0.0.1`) cannot reach the API from a browser. Outside loopback the filter is inactive and the startup guard below (token, project-root allowlist, effective TLS) remains the only control; the filter never relaxes it.
+The comparison is literal and never resolves names, so DNS rebinding (a public name re-pointed to `127.0.0.1`) cannot reach the API from a browser. Whether the filter applies is decided once, when it is built: it stays active unless `quarkus.http.host` resolves with certainty to a non-loopback address, and a resolution failure keeps it active. Outside loopback the filter is inactive and the startup guard below (token, project-root allowlist, effective TLS) remains the only control; the filter never relaxes it.
+
+### Residual risk of the management listener
+
+The Host and Origin control is a JAX-RS filter of the application listener. It does not cover the separate Quarkus management listener (`quarkus.management.host`, `127.0.0.1:9000` by default), which serves `/q/health`, `/q/health/ready` and `/q/metrics` without authentication and without Host or Origin checks. `NexusRestExposureGuard` only guarantees that this listener stays loopback. A local process, or a browser page reached through DNS rebinding on port 9000, can therefore read health status and metrics. These endpoints expose no project content, but metrics reveal activity counters; keep port 9000 unpublished and filtered from untrusted local users.
 
 ### Residual browser risk of trust-local
 

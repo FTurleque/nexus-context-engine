@@ -9,6 +9,7 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
+import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.util.Locale;
@@ -17,6 +18,13 @@ import java.util.Set;
 
 /**
  * Contrôle de transport du listener REST applicatif lorsqu'il écoute sur loopback.
+ *
+ * <p>L'activation est décidée une seule fois, à la construction, par
+ * {@link NexusRestSecurity#requiresLoopbackTransportControl(String)} : le filtre reste actif
+ * sauf si {@code quarkus.http.host} se résout avec certitude vers une adresse non loopback ; un
+ * échec de résolution le garde actif. {@link NexusRestExposureGuard} refuse au démarrage un
+ * listener loopback dont l'hôte n'est pas littéralement {@code 127.0.0.1}, {@code localhost}
+ * ou {@code ::1}.</p>
  *
  * <p>Actif dès que {@code quarkus.http.host} désigne une adresse loopback, en mode
  * {@code NEXUS_REST_TRUST_LOCAL=true} comme en mode jeton loopback, ce filtre refuse avant
@@ -43,12 +51,22 @@ public class NexusRestLoopbackTransportFilter implements ContainerRequestFilter 
     private static final Set<String> LOOPBACK_HOST_NAMES = Set.of("127.0.0.1", "localhost", "[::1]");
     private static final int MAX_PORT_DIGITS = 5;
 
-    @ConfigProperty(name = "quarkus.http.host", defaultValue = "127.0.0.1")
-    String host = "127.0.0.1";
+    private final boolean active;
+
+    @Inject
+    public NexusRestLoopbackTransportFilter(
+            @ConfigProperty(name = "quarkus.http.host", defaultValue = "127.0.0.1") String host) {
+        this.active = NexusRestSecurity.requiresLoopbackTransportControl(host);
+    }
+
+    /** Vrai si le contrôle de transport s'applique au listener configuré. */
+    boolean active() {
+        return active;
+    }
 
     @Override
     public void filter(ContainerRequestContext requestContext) {
-        if (!NexusRestSecurity.isLoopbackHost(host)) {
+        if (!active) {
             return;
         }
         if (isAcceptedOnLoopbackListener(

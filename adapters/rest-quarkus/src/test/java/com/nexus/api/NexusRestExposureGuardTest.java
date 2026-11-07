@@ -268,9 +268,25 @@ class NexusRestExposureGuardTest {
         rememberAndSet(NexusRestTransportPolicy.TRUSTED_PROXIES_PROPERTY, trustedProxy);
     }
 
+    @Test
+    void loopbackListenerMustUseALiteralLoopbackHost() {
+        rememberAndSet(NexusRestSecurity.LOCAL_TRUST_PROPERTY, "true");
+        for (String host : java.util.List.of("127.0.0.1", "localhost", "LocalHost", "::1")) {
+            assertDoesNotThrow(() -> validateRestHost(host), host);
+        }
+        for (String host : java.util.List.of("127.0.0.2", "0:0:0:0:0:0:0:1")) {
+            IllegalStateException error = assertThrows(IllegalStateException.class, () -> validateRestHost(host), host);
+            assertTrue(error.getMessage().contains("quarkus.http.host=127.0.0.1, localhost ou ::1"), error.getMessage());
+        }
+    }
+
     private void validateLoopbackRestHost() {
+        validateRestHost("127.0.0.1");
+    }
+
+    private static void validateRestHost(String host) {
         NexusRestExposureGuard guard = new NexusRestExposureGuard();
-        guard.host = "127.0.0.1";
+        guard.host = host;
         guard.validateExposure();
     }
 
