@@ -220,6 +220,86 @@ class GitRecencyCandidateEnricherTest {
                 candidate.signals().containsKey(SearchSignals.GIT_RECENCY)));
     }
 
+    @Test
+    void reusesRecentChangedPathsWhileHeadIsUnchangedAndRecomputesAfterANewCommit() throws Exception {
+        Path service = write(temporaryDirectory, "src/Service.java", "class Service {}\n");
+        Path added = temporaryDirectory.resolve("src/Nouveau.java");
+        try (Git git = Git.init().setDirectory(temporaryDirectory.toFile()).call()) {
+            commitAll(git, "initial");
+            Files.writeString(service, "class Service { void changed() {} }\n");
+            commitAll(git, "change service");
+
+            GitRecencyCandidateEnricher enricher = new GitRecencyCandidateEnricher();
+            ProjectDescriptor project = project(temporaryDirectory);
+            List<SearchCandidate> candidates = List.of(candidate("service", service), candidate("nouveau", added));
+
+            List<SearchCandidate> first = enricher.enrich(project, candidates);
+            assertEquals(1, enricher.logScans());
+            List<SearchCandidate> second = enricher.enrich(project, candidates);
+            // HEAD inchangé : le journal des commits n'est pas relu et le résultat est identique.
+            assertEquals(1, enricher.logScans());
+            assertEquals(first, second);
+            assertEquals(1.0d, second.getFirst().signals().get(SearchSignals.GIT_RECENCY), 0.000001d);
+            assertFalse(second.getLast().signals().containsKey(SearchSignals.GIT_RECENCY));
+
+            // Nouveau commit : l'entrée de l'ancien HEAD est invalidée et le nouveau fichier est pris en compte.
+            write(temporaryDirectory, "src/Nouveau.java", "class Nouveau {}\n");
+            commitAll(git, "add nouveau");
+            List<SearchCandidate> third = enricher.enrich(project, candidates);
+            assertEquals(2, enricher.logScans());
+            assertEquals(1.0d, third.getLast().signals().get(SearchSignals.GIT_RECENCY), 0.000001d);
+            assertEquals(Math.max(0.05d, 1.0d - 1.0d / (GitRecencyCandidateEnricher.MAX_COMMITS - 1)),
+                    third.getFirst().signals().get(SearchSignals.GIT_RECENCY), 0.000001d);
+        }
+    }
+
+    @Test
+    void keepsTheFilteredWalkWhenTheHistoryExceedsTheCacheBound() throws Exception {
+        Path target = write(temporaryDirectory, "src/Target.java", "class Target {}\n");
+        try (Git git = Git.init().setDirectory(temporaryDirectory.toFile()).call()) {
+            commitAll(git, "initial");
+            Files.writeString(target, "class Target { void changed() {} }\n");
+            commitAll(git, "change target");
+            // Un commit qui ajoute plus de chemins que la borne par commit.
+            for (int index = 0; index <= GitRecencyCandidateEnricher.MAX_CHANGED_PATHS_PER_COMMIT; index++) {
+                write(temporaryDirectory, "bulk/File" + index + ".txt", "y" + index);
+            }
+            commitAll(git, "add every bulk file");
+        }
+        GitRecencyCandidateEnricher enricher = new GitRecencyCandidateEnricher();
+        List<SearchCandidate> candidates = List.of(candidate("target", target));
+
+        List<SearchCandidate> first = enricher.enrich(project(temporaryDirectory), candidates);
+        List<SearchCandidate> second = enricher.enrich(project(temporaryDirectory), candidates);
+
+        // Résultat identique au parcours filtré historique : seul le chemin candidat compte.
+        assertEquals(first, second);
+        assertTrue(first.getFirst().signals().containsKey(SearchSignals.GIT_RECENCY));
+        // Le marqueur « trop large » est mémorisé : le parcours non filtré n'est pas refait.
+        assertEquals(3, enricher.logScans());
+    }
+
+    @Test
+    void evictsTheOldestRepositoryWhenTheRecencyCacheIsFull() throws Exception {
+        Path firstRoot = temporaryDirectory.resolve("first");
+        Path secondRoot = temporaryDirectory.resolve("second");
+        Path firstFile = write(firstRoot, "A.java", "class A {}\n");
+        Path secondFile = write(secondRoot, "B.java", "class B {}\n");
+        for (Path root : List.of(firstRoot, secondRoot)) {
+            try (Git git = Git.init().setDirectory(root.toFile()).call()) {
+                commitAll(git, "initial");
+            }
+        }
+        GitRecencyCandidateEnricher enricher = new GitRecencyCandidateEnricher(1);
+
+        enricher.enrich(project(firstRoot), List.of(candidate("a", firstFile)));
+        enricher.enrich(project(secondRoot), List.of(candidate("b", secondFile)));
+        enricher.enrich(project(firstRoot), List.of(candidate("a", firstFile)));
+
+        // Capacité 1 : le premier dépôt a été évincé par le second puis relu.
+        assertEquals(3, enricher.logScans());
+    }
+
     private interface Action {
         void run() throws Exception;
     }

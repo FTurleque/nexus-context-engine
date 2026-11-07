@@ -29,7 +29,7 @@
 
 ## 6. Cache de récence Git (AUD-PRF-07)
 
-- [ ] 6.1 `AUD-PRF-07` — Mémoriser dans `GitRecencyCandidateEnricher` les chemins modifiés par (racine du dépôt, HEAD) dans la borne `MAX_CUMULATIVE_CHANGED_PATHS`, invalidés au changement de HEAD ; vérifier par un test (second appel sans parcours de log, nouveau commit pris en compte) : `./mvnw -B -ntp -pl core test -Dtest=GitRecencyCandidateEnricherTest -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
+- [x] 6.1 `AUD-PRF-07` — Mémoriser dans `GitRecencyCandidateEnricher` les chemins modifiés par (racine du dépôt, HEAD) dans la borne `MAX_CUMULATIVE_CHANGED_PATHS`, invalidés au changement de HEAD ; vérifier par un test (second appel sans parcours de log, nouveau commit pris en compte) : `./mvnw -B -ntp -pl core test -Dtest=GitRecencyCandidateEnricherTest -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
 
 ## 7. Recherche de symboles scopée projet (AUD-PRF-09)
 

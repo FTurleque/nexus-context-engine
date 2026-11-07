@@ -2,6 +2,7 @@ package com.nexus.context.source.git;
 
 import com.nexus.paths.RepositoryPath;
 
+import com.nexus.project.FederatedScopePolicy;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.search.CandidateEnricher;
 import com.nexus.search.SearchCandidate;
@@ -11,11 +12,15 @@ import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.diff.DiffFormatter;
 import org.eclipse.jgit.errors.RepositoryNotFoundException;
+import org.eclipse.jgit.lib.Constants;
+import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
+import org.eclipse.jgit.treewalk.TreeWalk;
 import org.eclipse.jgit.treewalk.filter.PathFilterGroup;
+import org.eclipse.jgit.treewalk.filter.TreeFilter;
 import org.eclipse.jgit.util.io.DisabledOutputStream;
 
 import java.io.IOException;
@@ -27,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 /**
@@ -51,6 +57,51 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
     static final int MAX_CANDIDATE_PATHS = 512;
     static final int MAX_CHANGED_PATHS_PER_COMMIT = 1_024;
     static final int MAX_CUMULATIVE_CHANGED_PATHS = 4_096;
+    /** Capacité du cache de récence : une entrée par projet d'un scope fédéré maximal (BE-0065). */
+    static final int DEFAULT_RECENCY_CACHE_CAPACITY = FederatedScopePolicy.MAX_PROJECTS;
+
+    private final int recencyCapacity;
+    private final LinkedHashMap<RecencyKey, RecencyIndex> recencyCache = new LinkedHashMap<>(16, 0.75f, true);
+    private final AtomicInteger logScans = new AtomicInteger();
+
+    public GitRecencyCandidateEnricher() {
+        this(DEFAULT_RECENCY_CACHE_CAPACITY);
+    }
+
+    GitRecencyCandidateEnricher(int recencyCapacity) {
+        if (recencyCapacity <= 0) {
+            throw new IllegalArgumentException("recencyCapacity doit être strictement positive");
+        }
+        this.recencyCapacity = recencyCapacity;
+    }
+
+    /** Nombre de parcours du journal des commits effectués par cette instance (pour les tests). */
+    int logScans() {
+        return logScans.get();
+    }
+
+    /** Clé du cache de récence : dépôt (répertoire Git) et HEAD. */
+    private record RecencyKey(String gitDir, String head) {
+    }
+
+    /**
+     * Récence par chemin Git des derniers commits, ou {@link #TOO_LARGE} quand les bornes de
+     * chemins modifiés interdisent de la mémoriser.
+     */
+    private record RecencyIndex(boolean cacheable, Map<String, Double> scoreByGitPath) {
+        static final RecencyIndex TOO_LARGE = new RecencyIndex(false, Map.of());
+
+        Map<String, Double> scoresFor(Map<String, String> projectPathByGitPath) {
+            Map<String, Double> recency = new HashMap<>();
+            projectPathByGitPath.forEach((gitPath, projectPath) -> {
+                Double score = scoreByGitPath.get(gitPath);
+                if (score != null) {
+                    recency.put(projectPath, score);
+                }
+            });
+            return recency;
+        }
+    }
 
     @Override
     public List<SearchCandidate> enrich(ProjectDescriptor project, List<SearchCandidate> candidates) throws IOException {
@@ -108,23 +159,104 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
      * Score de récence par chemin projet sur les {@value #MAX_COMMITS} derniers commits, ou
      * un résultat vide quand le nombre de chemins modifiés dépasse le budget.
      */
-    private static Optional<Map<String, Double>> recency(Path projectRoot, Set<String> projectPaths)
+    private Optional<Map<String, Double>> recency(Path projectRoot, Set<String> projectPaths)
             throws IOException, GitAPIException {
+        try (Repository repository = openRepository(projectRoot)) {
+            String projectPrefix = projectPrefix(repository, projectRoot);
+            Map<String, String> projectPathByGitPath = new HashMap<>();
+            for (String projectPath : projectPaths) {
+                projectPathByGitPath.put(toGitPath(projectPrefix, projectPath), projectPath);
+            }
+
+            // Cache par (dépôt, HEAD) : tant que HEAD ne change pas, le journal n'est pas relu.
+            ObjectId head = repository.resolve(Constants.HEAD);
+            if (head != null) {
+                RecencyIndex index = recencyIndex(repository, head);
+                if (index.cacheable()) {
+                    return Optional.of(index.scoresFor(projectPathByGitPath));
+                }
+            }
+            // Historique trop large pour être mémorisé : parcours filtré par les chemins candidats.
+            return filteredRecency(repository, projectPathByGitPath);
+        }
+    }
+
+    private RecencyIndex recencyIndex(Repository repository, ObjectId head) throws IOException, GitAPIException {
+        RecencyKey key = new RecencyKey(
+                repository.getDirectory().toPath().toAbsolutePath().normalize().toString(), head.name());
+        synchronized (recencyCache) {
+            RecencyIndex cached = recencyCache.get(key);
+            if (cached != null) {
+                return cached;
+            }
+        }
+        RecencyIndex built = buildRecencyIndex(repository);
+        synchronized (recencyCache) {
+            // Un nouveau HEAD invalide l'entrée précédente du même dépôt.
+            recencyCache.keySet().removeIf(existing -> existing.gitDir().equals(key.gitDir()));
+            if (recencyCache.size() >= recencyCapacity) {
+                var iterator = recencyCache.entrySet().iterator();
+                iterator.next();
+                iterator.remove();
+            }
+            recencyCache.put(key, built);
+        }
+        return built;
+    }
+
+    /**
+     * Chemins modifiés des {@value #MAX_COMMITS} derniers commits, sans filtre de candidats, dans
+     * les bornes {@value #MAX_CHANGED_PATHS_PER_COMMIT} par commit et
+     * {@value #MAX_CUMULATIVE_CHANGED_PATHS} cumulés. Au-delà, l'historique n'est pas mémorisable.
+     */
+    private RecencyIndex buildRecencyIndex(Repository repository) throws IOException, GitAPIException {
+        logScans.incrementAndGet();
+        Map<String, Double> scores = new HashMap<>();
+        try (Git git = new Git(repository);
+             RevWalk revWalk = new RevWalk(repository)) {
+            int position = 0;
+            int cumulativeChangedPaths = 0;
+            for (RevCommit commit : git.log().setMaxCount(MAX_COMMITS).call()) {
+                if (commit.getParentCount() == 0) {
+                    position++;
+                    continue;
+                }
+                RevCommit parent = revWalk.parseCommit(commit.getParent(0).getId());
+                double score = recencyScore(position++);
+                int commitChangedPaths = 0;
+                try (TreeWalk treeWalk = new TreeWalk(repository)) {
+                    // Même parcours que DiffFormatter.scan sans détection de renommage ni filtre.
+                    treeWalk.setRecursive(true);
+                    treeWalk.addTree(parent.getTree());
+                    treeWalk.addTree(commit.getTree());
+                    treeWalk.setFilter(TreeFilter.ANY_DIFF);
+                    while (treeWalk.next()) {
+                        commitChangedPaths++;
+                        cumulativeChangedPaths++;
+                        if (commitChangedPaths > MAX_CHANGED_PATHS_PER_COMMIT
+                                || cumulativeChangedPaths > MAX_CUMULATIVE_CHANGED_PATHS) {
+                            return RecencyIndex.TOO_LARGE;
+                        }
+                        scores.merge(treeWalk.getPathString(), score, Math::max);
+                    }
+                }
+            }
+        }
+        return new RecencyIndex(true, Map.copyOf(scores));
+    }
+
+    private Optional<Map<String, Double>> filteredRecency(
+            Repository repository,
+            Map<String, String> projectPathByGitPath) throws IOException, GitAPIException {
+        logScans.incrementAndGet();
         Map<String, Double> recency = new HashMap<>();
-        try (Repository repository = openRepository(projectRoot);
-             Git git = new Git(repository);
+        try (Git git = new Git(repository);
              RevWalk revWalk = new RevWalk(repository);
              DiffFormatter diffFormatter = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
             diffFormatter.setRepository(repository);
             // La détection de renommage inspecte potentiellement de nombreux blobs sans bénéfice
             // pour ce signal : une modification du chemin courant reste visible comme ADD/DELETE.
             diffFormatter.setDetectRenames(false);
-
-            String projectPrefix = projectPrefix(repository, projectRoot);
-            Map<String, String> projectPathByGitPath = new HashMap<>();
-            for (String projectPath : projectPaths) {
-                projectPathByGitPath.put(toGitPath(projectPrefix, projectPath), projectPath);
-            }
             diffFormatter.setPathFilter(PathFilterGroup.createFromStrings(projectPathByGitPath.keySet()));
 
             int position = 0;
