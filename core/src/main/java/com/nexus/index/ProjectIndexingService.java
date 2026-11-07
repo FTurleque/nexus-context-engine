@@ -204,100 +204,154 @@ public final class ProjectIndexingService {
             }
 
             ProjectScanResult scanResult = scanner.scanWithDiagnostics(project.rootPath());
-            List<ScannedFile> scannedFiles = scanResult.files();
-            String canonicalFingerprint = CanonicalIndexFingerprint.fromScannedFiles(scannedFiles);
             List<String> diagnostics = new ArrayList<>(scanResult.diagnostics());
-            Map<String, Long> providerDurationsMs = new LinkedHashMap<>();
-            Map<String, IndexedFile> existingFiles = indexRepository.findFiles(projectId);
-            Set<String> scannedPaths = scannedFiles.stream()
-                    .map(ScannedFile::relativePath)
-                    .collect(Collectors.toCollection(HashSet::new));
-
-            Set<String> removedPaths = new HashSet<>(existingFiles.keySet());
-            removedPaths.removeAll(scannedPaths);
-            Set<String> searchRemovedPaths = new HashSet<>(removedPaths);
-            scannedFiles.stream()
-                    .filter(file -> !IndexDocumentPublisher.isGenericSearchEligible(file.category()))
-                    .map(ScannedFile::relativePath)
-                    .forEach(searchRemovedPaths::add);
-
+            ScanDiff diff = diffAgainstIndex(projectId, scanResult);
             boolean semanticFullRebuild = semanticIndexingService != null
-                    && (fullRebuild || !semanticIndexingService.isCompatible(projectId, canonicalFingerprint));
+                    && (fullRebuild || !semanticIndexingService.isCompatible(projectId, diff.canonicalFingerprint()));
 
-            int updatedFiles;
-            Set<String> staleExternalProviders;
-            // Un writer Lucene par index dérivé et une session d'écriture SQLite pour toute
-            // l'indexation (DATA-0045, DATA-0062). Les lots sont accumulés sans être visibles ;
-            // fermer la publication sans la publier annule les écritures Lucene et écarte les
-            // analyses en attente, de sorte que la génération précédente reste intacte.
-            try (IndexPublication publication = documentPublisher.openPublication(
-                    projectId, canonicalFingerprint, fullRebuild, semanticFullRebuild)) {
-                documentPublisher.prepareDerivedIndexes(
-                        publication, fullRebuild, semanticFullRebuild, searchRemovedPaths);
+            PublicationOutcome publication = publishDocuments(
+                    projectId, project, diff, fullRebuild, semanticFullRebuild, diagnostics);
 
-                IndexDocumentPublisher.PublishOutcome outcome = documentPublisher.publish(publication,
-                        project.rootPath(), scannedFiles, existingFiles, fullRebuild, semanticFullRebuild,
-                        diagnostics);
-                updatedFiles = outcome.updatedFiles();
+            Map<String, Long> providerDurationsMs = new LinkedHashMap<>();
+            refreshExternalProviders(
+                    projectId, project, diff, publication, includeCodeIntelligenceProviders,
+                    diagnostics, providerDurationsMs);
 
-                boolean codeSourcesChanged = codeIntelligenceSourcesChanged(
-                        fullRebuild, outcome.codeSourcesUpdated(), removedPaths, existingFiles);
-                staleExternalProviders = codeSourcesChanged
-                        ? indexRepository.findExternalProviders(projectId)
-                        : Set.of();
-
-                // Barrière de publication. Les index dérivés sont committés avant la génération
-                // canonique : tout lecteur qui suit la génération voit alors un Lucene déjà
-                // committé. Un échec après le commit Lucene laisse le projet FAILED, donc
-                // reconstruit au prochain passage ; rien n'est servi avant READY.
-                publication.commitDerivedIndexes();
-                publication.publishCanonical(removedPaths);
-            }
-            if (!staleExternalProviders.isEmpty()) {
-                externalRefresher.purgeExternalCodeIntelligence(projectId, staleExternalProviders);
-                diagnostics.add("external code intelligence invalidated: "
-                        + String.join(", ", staleExternalProviders));
-            }
-
-            externalRefresher.refreshImportedCodeIntelligence(
-                    projectId, project.rootPath(), scannedPaths, diagnostics, providerDurationsMs);
-            if (includeCodeIntelligenceProviders) {
-                externalRefresher.refreshActiveCodeIntelligence(
-                        projectId, project.rootPath(), diagnostics, providerDurationsMs);
-            }
-
-            // Le scan final détecte les mutations observables par rapport au fingerprint
-            // ayant servi à construire les index. FAILED interdit l'accès aux dérivés
-            // partiels et force leur reconstruction. Sans snapshot filesystem, ni ce
-            // scan ni save(READY) ne sont atomiques face aux écritures externes : une
-            // mutation après le scan reste possible. READY atteste la génération
-            // indexée, pas l'immuabilité du repository vivant.
-            ProjectScanResult finalScan = scanner.scanWithDiagnostics(project.rootPath());
-            String finalFingerprint = CanonicalIndexFingerprint.fromScannedFiles(finalScan.files());
-            if (!canonicalFingerprint.equals(finalFingerprint)) {
-                throw new IOException("Le repository a changé pendant l'indexation ; un rebuild est requis");
-            }
-
-            Set<String> languages = scannedFiles.stream()
-                    .map(ScannedFile::language)
-                    .collect(Collectors.toUnmodifiableSet());
-            Instant completedAt = Instant.now();
-            projectRepository.save(withState(project, IndexStatus.READY, completedAt, languages));
-            return new IndexingReport(
-                    projectId,
-                    scannedFiles.size(),
-                    updatedFiles,
-                    removedPaths.size(),
-                    fullRebuild,
-                    indexRepository.statistics(projectId),
-                    Duration.between(startedAt, completedAt),
-                    scanResult.skippedFiles(),
-                    diagnostics,
-                    providerDurationsMs);
+            verifyRepositoryUnchanged(project, diff.canonicalFingerprint());
+            return recordStatus(
+                    projectId, project, startedAt, scanResult, diff, publication, fullRebuild,
+                    diagnostics, providerDurationsMs);
         } catch (IOException | RuntimeException exception) {
             markFailed(project, exception);
             throw exception;
         }
+    }
+
+    /** Étape « diff » : confronte le scan à l'index canonique existant. */
+    private ScanDiff diffAgainstIndex(UUID projectId, ProjectScanResult scanResult) {
+        List<ScannedFile> scannedFiles = scanResult.files();
+        String canonicalFingerprint = CanonicalIndexFingerprint.fromScannedFiles(scannedFiles);
+        Map<String, IndexedFile> existingFiles = indexRepository.findFiles(projectId);
+        Set<String> scannedPaths = scannedFiles.stream()
+                .map(ScannedFile::relativePath)
+                .collect(Collectors.toCollection(HashSet::new));
+
+        Set<String> removedPaths = new HashSet<>(existingFiles.keySet());
+        removedPaths.removeAll(scannedPaths);
+        Set<String> searchRemovedPaths = new HashSet<>(removedPaths);
+        scannedFiles.stream()
+                .filter(file -> !IndexDocumentPublisher.isGenericSearchEligible(file.category()))
+                .map(ScannedFile::relativePath)
+                .forEach(searchRemovedPaths::add);
+        return new ScanDiff(
+                scannedFiles, canonicalFingerprint, existingFiles, scannedPaths, removedPaths, searchRemovedPaths);
+    }
+
+    /**
+     * Étape « publication » : un writer Lucene par index dérivé et une session d'écriture SQLite
+     * pour toute l'indexation (DATA-0045, DATA-0062). Les lots sont accumulés sans être visibles ;
+     * fermer la publication sans la publier annule les écritures Lucene et écarte les analyses en
+     * attente, de sorte que la génération précédente reste intacte.
+     */
+    private PublicationOutcome publishDocuments(
+            UUID projectId,
+            ProjectDescriptor project,
+            ScanDiff diff,
+            boolean fullRebuild,
+            boolean semanticFullRebuild,
+            List<String> diagnostics) throws IOException {
+        try (IndexPublication publication = documentPublisher.openPublication(
+                projectId, diff.canonicalFingerprint(), fullRebuild, semanticFullRebuild)) {
+            documentPublisher.prepareDerivedIndexes(
+                    publication, fullRebuild, semanticFullRebuild, diff.searchRemovedPaths());
+
+            IndexDocumentPublisher.PublishOutcome outcome = documentPublisher.publish(publication,
+                    project.rootPath(), diff.scannedFiles(), diff.existingFiles(), fullRebuild,
+                    semanticFullRebuild, diagnostics);
+
+            boolean codeSourcesChanged = codeIntelligenceSourcesChanged(
+                    fullRebuild, outcome.codeSourcesUpdated(), diff.removedPaths(), diff.existingFiles());
+            Set<String> staleExternalProviders = codeSourcesChanged
+                    ? indexRepository.findExternalProviders(projectId)
+                    : Set.of();
+
+            // Barrière de publication. Les index dérivés sont committés avant la génération
+            // canonique : tout lecteur qui suit la génération voit alors un Lucene déjà
+            // committé. Un échec après le commit Lucene laisse le projet FAILED, donc
+            // reconstruit au prochain passage ; rien n'est servi avant READY.
+            publication.commitDerivedIndexes();
+            publication.publishCanonical(diff.removedPaths());
+            return new PublicationOutcome(outcome.updatedFiles(), staleExternalProviders);
+        }
+    }
+
+    /** Étape « providers externes » : purge des providers périmés puis rafraîchissement. */
+    private void refreshExternalProviders(
+            UUID projectId,
+            ProjectDescriptor project,
+            ScanDiff diff,
+            PublicationOutcome publication,
+            boolean includeCodeIntelligenceProviders,
+            List<String> diagnostics,
+            Map<String, Long> providerDurationsMs) throws IOException {
+        if (!publication.staleExternalProviders().isEmpty()) {
+            externalRefresher.purgeExternalCodeIntelligence(projectId, publication.staleExternalProviders());
+            diagnostics.add("external code intelligence invalidated: "
+                    + String.join(", ", publication.staleExternalProviders()));
+        }
+
+        externalRefresher.refreshImportedCodeIntelligence(
+                projectId, project.rootPath(), diff.scannedPaths(), diagnostics, providerDurationsMs);
+        if (includeCodeIntelligenceProviders) {
+            externalRefresher.refreshActiveCodeIntelligence(
+                    projectId, project.rootPath(), diagnostics, providerDurationsMs);
+        }
+    }
+
+    /**
+     * Le scan final détecte les mutations observables par rapport au fingerprint
+     * ayant servi à construire les index. FAILED interdit l'accès aux dérivés
+     * partiels et force leur reconstruction. Sans snapshot filesystem, ni ce
+     * scan ni save(READY) ne sont atomiques face aux écritures externes : une
+     * mutation après le scan reste possible. READY atteste la génération
+     * indexée, pas l'immuabilité du repository vivant.
+     */
+    private void verifyRepositoryUnchanged(ProjectDescriptor project, String canonicalFingerprint)
+            throws IOException {
+        ProjectScanResult finalScan = scanner.scanWithDiagnostics(project.rootPath());
+        String finalFingerprint = CanonicalIndexFingerprint.fromScannedFiles(finalScan.files());
+        if (!canonicalFingerprint.equals(finalFingerprint)) {
+            throw new IOException("Le repository a changé pendant l'indexation ; un rebuild est requis");
+        }
+    }
+
+    /** Étape « statut » : publie READY et construit le rapport. */
+    private IndexingReport recordStatus(
+            UUID projectId,
+            ProjectDescriptor project,
+            Instant startedAt,
+            ProjectScanResult scanResult,
+            ScanDiff diff,
+            PublicationOutcome publication,
+            boolean fullRebuild,
+            List<String> diagnostics,
+            Map<String, Long> providerDurationsMs) {
+        Set<String> languages = diff.scannedFiles().stream()
+                .map(ScannedFile::language)
+                .collect(Collectors.toUnmodifiableSet());
+        Instant completedAt = Instant.now();
+        projectRepository.save(withState(project, IndexStatus.READY, completedAt, languages));
+        return new IndexingReport(
+                projectId,
+                diff.scannedFiles().size(),
+                publication.updatedFiles(),
+                diff.removedPaths().size(),
+                fullRebuild,
+                indexRepository.statistics(projectId),
+                Duration.between(startedAt, completedAt),
+                scanResult.skippedFiles(),
+                diagnostics,
+                providerDurationsMs);
     }
 
     private static boolean codeIntelligenceSourcesChanged(
@@ -381,6 +435,18 @@ public final class ProjectIndexingService {
             throw new IllegalArgumentException(
                     PROVIDER_TIMEOUT_ENVIRONMENT_VARIABLE + " doit être un entier en secondes", exception);
         }
+    }
+
+    private record ScanDiff(
+            List<ScannedFile> scannedFiles,
+            String canonicalFingerprint,
+            Map<String, IndexedFile> existingFiles,
+            Set<String> scannedPaths,
+            Set<String> removedPaths,
+            Set<String> searchRemovedPaths) {
+    }
+
+    private record PublicationOutcome(int updatedFiles, Set<String> staleExternalProviders) {
     }
 
     private static final class LockSlot {
