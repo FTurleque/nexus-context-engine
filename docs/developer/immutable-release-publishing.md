@@ -77,6 +77,32 @@ Git commit SHA
 GHCR digest sha256:...
 ```
 
+## Vérification consommateur
+
+Chaque asset Windows publié (ZIP portable `nexus-context-engine-<version>-windows-x64.zip` et installeur `NEXUS-<version>-windows-x64-setup.exe`) porte une attestation de provenance SLSA produite par `actions/attest` dans le job `publish` de `release.yml`. Le job vérifie chaque attestation par `gh attestation verify` avant tout upload d'asset et avant le déplacement de `latest` : une vérification en échec arrête la publication.
+
+Après téléchargement depuis la release GitHub, un consommateur vérifie l'asset avec la GitHub CLI :
+
+```text
+gh attestation verify <asset> --repo FTurleque/nexus-context-engine
+```
+
+Pour exiger en plus que l'attestation provienne du workflow `Release` :
+
+```text
+gh attestation verify NEXUS-<version>-windows-x64-setup.exe \
+  --repo FTurleque/nexus-context-engine \
+  --signer-workflow FTurleque/nexus-context-engine/.github/workflows/release.yml
+```
+
+L'image se vérifie de la même façon par son digest :
+
+```text
+gh attestation verify oci://ghcr.io/fturleque/nexus-context-engine@sha256:<digest> --repo FTurleque/nexus-context-engine
+```
+
+Le fichier `.sha256` co-localisé contrôle seulement l'intégrité du téléchargement ; l'attestation établit la provenance (dépôt, workflow, commit et tag). Une vérification en échec signifie que l'asset ne doit pas être installé.
+
 ## Échec partiel
 
 La publication est fail-closed. Un retry ne masque jamais une divergence :
