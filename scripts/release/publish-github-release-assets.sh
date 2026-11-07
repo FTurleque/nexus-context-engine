@@ -9,6 +9,13 @@ fi
 TAG="$1"
 shift
 
+# A pre-release tag (vX.Y.Z-rc.N, same grammar as validate-release-tag.sh) publishes
+# a GitHub pre-release that is never marked as the latest release.
+EXPECTED_PRERELEASE=false
+if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*$ ]]; then
+  EXPECTED_PRERELEASE=true
+fi
+
 if ! command -v gh >/dev/null 2>&1; then
   echo "GitHub CLI (gh) is required to publish release assets." >&2
   exit 69
@@ -43,16 +50,29 @@ if gh release view "$TAG" --json isDraft >/dev/null 2>&1; then
     exit 70
   fi
 
+  release_is_prerelease="$(gh release view "$TAG" --json isPrerelease --jq '.isPrerelease')"
+  if [[ "$release_is_prerelease" != "$EXPECTED_PRERELEASE" ]]; then
+    echo "GitHub Release $TAG has pre-release state '$release_is_prerelease', expected '$EXPECTED_PRERELEASE'; refusing to resume." >&2
+    exit 78
+  fi
+
   if [[ "$release_is_draft" == "true" ]]; then
     echo "GitHub Release $TAG already exists as a draft; resuming immutable asset publication."
   else
     echo "GitHub Release $TAG is already published; verifying immutable assets without mutating it."
   fi
 else
-  echo "Creating GitHub Release $TAG as a draft until every asset is verified."
+  CHANNEL_ARGS=()
+  if [[ "$EXPECTED_PRERELEASE" == "true" ]]; then
+    echo "Creating GitHub pre-release $TAG as a draft until every asset is verified."
+    CHANNEL_ARGS=(--prerelease --latest=false)
+  else
+    echo "Creating GitHub Release $TAG as a draft until every asset is verified."
+  fi
   gh release create "$TAG" \
     --verify-tag \
     --draft \
+    ${CHANNEL_ARGS[@]+"${CHANNEL_ARGS[@]}"} \
     --title "NEXUS ${TAG#v}" \
     --notes "Immutable NEXUS release qualified by CI for tag ${TAG}."
   release_exists=true
@@ -127,6 +147,11 @@ if [[ "$release_is_draft" == "true" ]]; then
   if [[ "$final_draft_state" != "false" ]]; then
     echo "GitHub Release $TAG did not transition from draft to published state." >&2
     exit 76
+  fi
+  final_prerelease_state="$(gh release view "$TAG" --json isPrerelease --jq '.isPrerelease')"
+  if [[ "$final_prerelease_state" != "$EXPECTED_PRERELEASE" ]]; then
+    echo "GitHub Release $TAG was published with pre-release state '$final_prerelease_state', expected '$EXPECTED_PRERELEASE'." >&2
+    exit 78
   fi
   echo "Published complete immutable GitHub Release: $TAG"
 fi

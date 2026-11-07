@@ -43,6 +43,16 @@ L'image Docker est **construite une seule fois** dans Docker Distribution, quali
 
 Les tags version et SHA sont immuables. Le préflight GHCR est fail-closed sur toute erreur ambiguë et accepte une reprise idempotente uniquement si le contenu déjà publié correspond à l'image qualifiée. `latest` est le seul pointeur mutable.
 
+### Vérification des assets publiés
+
+L'image, le ZIP Windows et le `setup.exe` portent chacun une attestation de provenance, vérifiée par le job `publish` avant l'upload des assets. Avant d'installer un asset téléchargé depuis une release :
+
+```text
+gh attestation verify <asset> --repo FTurleque/nexus-context-engine
+```
+
+Une vérification en échec signifie que l'asset ne doit pas être installé. Le détail (workflow signataire, image par digest) figure dans [`immutable-release-publishing.md`](immutable-release-publishing.md#vérification-consommateur).
+
 Voir [`immutable-release-publishing.md`](immutable-release-publishing.md).
 
 ## SQLite : autorité, migrations et recovery

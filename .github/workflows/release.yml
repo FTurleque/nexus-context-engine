@@ -184,13 +184,24 @@ jobs:
           ref: ${{ env.NEXUS_HEAD_SHA }}
 
       - name: Revalidate release identity before publication
+        id: channel
         shell: bash
         run: |
           set -euo pipefail
           git fetch --no-tags origin main
           MAIN_SHA="$(git rev-parse origin/main)"
           chmod +x scripts/release/validate-release-tag.sh
-          scripts/release/validate-release-tag.sh "$GITHUB_REF_NAME" "$NEXUS_VERSION" "$NEXUS_HEAD_SHA" "$MAIN_SHA"
+          POLICY="$(scripts/release/validate-release-tag.sh "$GITHUB_REF_NAME" "$NEXUS_VERSION" "$NEXUS_HEAD_SHA" "$MAIN_SHA")"
+          echo "$POLICY"
+          case "$POLICY" in
+            *" prerelease=true") PRERELEASE=true ;;
+            *" prerelease=false") PRERELEASE=false ;;
+            *)
+              echo "::error::Release policy did not classify the tag as final or pre-release: $POLICY"
+              exit 1
+              ;;
+          esac
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
 
       - name: Download exact qualified image
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -365,6 +376,43 @@ jobs:
           sbom-path: target/release/nexus-image.cdx.json
           push-to-registry: true
 
+      - name: Attest Windows portable ZIP provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: target/windows-release/**/nexus-context-engine-*-windows-x64.zip
+
+      - name: Attest Windows setup.exe provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: target/windows-release/**/NEXUS-*-windows-x64-setup.exe
+
+      - name: Verify Windows asset attestations before upload
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mapfile -t ATTESTED < <(
+            find target/windows-release -type f \( \
+              -name 'nexus-context-engine-*-windows-x64.zip' -o \
+              -name 'NEXUS-*-windows-x64-setup.exe' \
+            \) -print | sort
+          )
+          if [[ ${#ATTESTED[@]} -lt 2 ]]; then
+            echo "::error::Expected at least one Windows ZIP and one setup.exe to verify: ${#ATTESTED[@]} file(s)"
+            exit 1
+          fi
+          for asset in "${ATTESTED[@]}"; do
+            if ! gh attestation verify "$asset" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --source-ref "$GITHUB_REF" \
+              --deny-self-hosted-runners; then
+              echo "::error::Provenance attestation verification failed before upload: $asset"
+              exit 1
+            fi
+          done
+
       - name: Publish or resume immutable GitHub Release assets
         shell: bash
         env:
@@ -393,8 +441,23 @@ jobs:
 
       - name: Move latest only after immutable publication attestations and release assets
         shell: bash
+        env:
+          NEXUS_PRERELEASE: ${{ steps.channel.outputs.prerelease }}
         run: |
           set -euo pipefail
+          case "$NEXUS_PRERELEASE" in
+            true)
+              echo "Pre-release tag $GITHUB_REF_NAME: latest is left unchanged."
+              printf 'published-version=%s\npublished-sha=%s\npublished-digest=%s\nlatest=unchanged\n' "$NEXUS_VERSION" "$NEXUS_HEAD_SHA" "${{ steps.publish.outputs.digest }}"
+              exit 0
+              ;;
+            false)
+              ;;
+            *)
+              echo "::error::Unknown release channel '$NEXUS_PRERELEASE'; refusing to move latest."
+              exit 1
+              ;;
+          esac
           VERSION_REF="$NEXUS_IMAGE:$NEXUS_VERSION"
           LATEST_REF="$NEXUS_IMAGE:latest"
           docker buildx imagetools create --prefer-index=false --tag "$LATEST_REF" "$VERSION_REF"

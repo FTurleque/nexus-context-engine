@@ -270,4 +270,46 @@ grep -q 'ne doivent donc pas remonter' docs/developer/branch-governance.md \
 grep -q 'NXA3-14 / #130 est satisfait' docs/architecture/risks/register.md \
   || fail 'risk register must record the effective develop protection state'
 
+
+# --- Sprint 9 : attest-prerelease (AUD-DEP-09, AUD-DEP-02) ---
+# AUD-DEP-09: the publish job attests the Windows ZIP and setup.exe by subject-path with the
+# same pinned actions/attest as the image, then verifies them before any asset upload.
+release_wf=.github/workflows/release.yml
+attest_pins="$(grep -Eo 'uses: actions/attest@[0-9a-f]{40} # v[0-9.]+' "$release_wf" | sort -u)"
+[[ -n "$attest_pins" && "$(printf '%s\n' "$attest_pins" | wc -l)" -eq 1 ]] \
+  || fail 'release.yml must pin every actions/attest step to one single SHA'
+grep -Eq 'subject-path: target/windows-release/\*\*/nexus-context-engine-\*-windows-x64\.zip' "$release_wf" \
+  || fail 'release.yml must attest the Windows ZIP by subject-path'
+grep -Eq 'subject-path: target/windows-release/\*\*/NEXUS-\*-windows-x64-setup\.exe' "$release_wf" \
+  || fail 'release.yml must attest the Windows setup.exe by subject-path'
+grep -Fq 'gh attestation verify "$asset"' "$release_wf" \
+  || fail 'release.yml must verify the Windows asset attestations'
+step_line() {
+  local line
+  line="$(grep -nF -- "- name: $1" "$release_wf" | head -n 1 | cut -d: -f1)"
+  [[ -n "$line" ]] || fail "publish step missing: $1"
+  printf '%s\n' "$line"
+}
+zip_attest="$(step_line 'Attest Windows portable ZIP provenance')"
+setup_attest="$(step_line 'Attest Windows setup.exe provenance')"
+attest_verify="$(step_line 'Verify Windows asset attestations before upload')"
+asset_upload="$(step_line 'Publish or resume immutable GitHub Release assets')"
+latest_move="$(step_line 'Move latest only after immutable publication attestations and release assets')"
+(( zip_attest < attest_verify && setup_attest < attest_verify && attest_verify < asset_upload && asset_upload < latest_move )) \
+  || fail 'Windows attestations must be verified before the asset upload and before latest'
+# The verification step is blocking: no condition and no continue-on-error until the upload step.
+if sed -n "${attest_verify},${asset_upload}p" "$release_wf" | grep -Eq '^ {8}(if|continue-on-error):'; then
+  fail 'attestation verification must be unconditional and blocking'
+fi
+
+# AUD-DEP-02: a vX.Y.Z-rc.N tag publishes a GitHub pre-release and never moves latest.
+grep -Fq -- '-rc\.[1-9][0-9]*' scripts/release/validate-release-tag.sh \
+  || fail 'validate-release-tag.sh must accept vX.Y.Z-rc.N pre-release tags'
+grep -Fq -- '--prerelease --latest=false' scripts/release/publish-github-release-assets.sh \
+  || fail 'publish-github-release-assets.sh must create pre-releases outside latest'
+grep -Fq 'NEXUS_PRERELEASE: ${{ steps.channel.outputs.prerelease }}' "$release_wf" \
+  || fail 'release.yml latest step must read the validated release channel'
+grep -Fq 'latest is left unchanged' "$release_wf" \
+  || fail 'release.yml must leave latest unchanged for a pre-release tag'
+
 echo 'final-audit-contracts=PASS'

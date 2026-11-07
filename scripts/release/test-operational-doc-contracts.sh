@@ -585,3 +585,16 @@ for case in \
     exit 1
   fi
 done
+
+# --- Sprint 9 : attest-prerelease (AUD-DEP-09) ---
+# The consumer verification of published assets stays documented in both release pages.
+for doc in docs/developer/immutable-release-publishing.md docs/developer/release-and-recovery.md; do
+  if ! grep -Fq 'gh attestation verify <asset> --repo FTurleque/nexus-context-engine' "$doc"; then
+    echo "documentation contract drift: $doc must document consumer attestation verification" >&2
+    exit 1
+  fi
+done
+if ! grep -Fq '## Vérification consommateur' docs/developer/immutable-release-publishing.md; then
+  echo "documentation contract drift: immutable-release-publishing.md must keep its consumer verification section" >&2
+  exit 1
+fi
