@@ -8,10 +8,11 @@
 //   Contrôle git-cache-only-in-long-lived-runtime : dans les sources de production, seul
 //   NexusApplicationFactory instancie PersistentGitContextSourceProvider, et dans NexusApplication les
 //   appels NexusApplicationFactory.create(..., true) ne figurent que dans les méthodes createLongLived.
-// - Décision : capacité par défaut de 16 résultats ; aucun fichier, schéma SQLite ou protocole
-//   inter-processus supplémentaire.
-//   Contrôle git-cache-in-memory-sixteen-entries : DEFAULT_CAPACITY vaut 16 et
-//   PersistentGitContextSourceProvider n'écrit aucun fichier ni n'ouvre de connexion SQL ou réseau.
+// - Décision : capacité par défaut alignée sur FederatedScopePolicy.MAX_PROJECTS (BE-0065) ; aucun
+//   fichier, schéma SQLite ou protocole inter-processus supplémentaire.
+//   Contrôle git-cache-in-memory-sixteen-entries (identifiant conservé) : DEFAULT_CAPACITY vaut
+//   FederatedScopePolicy.MAX_PROJECTS et PersistentGitContextSourceProvider n'écrit aucun fichier ni
+//   n'ouvre de connexion SQL ou réseau.
 // Commentaires et littéraux effacés avant la recherche.
 
 const SOURCES = "**/src/main/java/**/*.java";
@@ -130,17 +131,17 @@ export default {
       },
     },
     "git-cache-in-memory-sixteen-entries": {
-      description: "PersistentGitContextSourceProvider garde 16 résultats par défaut, en mémoire seulement",
+      description: "PersistentGitContextSourceProvider garde FederatedScopePolicy.MAX_PROJECTS résultats par défaut, en mémoire seulement",
       severity: "error",
       async check(ctx) {
         const code = masquerJava(await ctx.readFile(CACHE));
-        const capacity = /\bDEFAULT_CAPACITY\s*=\s*([0-9_]+)\s*;/.exec(code);
-        if (!capacity || Number(capacity[1].replace(/_/g, "")) !== 16) {
+        const capacity = /\bDEFAULT_CAPACITY\s*=\s*([^;]+);/.exec(code);
+        if (!capacity || capacity[1].replace(/\s+/g, "") !== "FederatedScopePolicy.MAX_PROJECTS") {
           ctx.report.violation({
-            message: `DEFAULT_CAPACITY vaut ${capacity ? capacity[1] : "(absent)"} ; BE-0046 fixe 16 résultats.`,
+            message: `DEFAULT_CAPACITY vaut ${capacity ? capacity[1].trim() : "(absent)"} ; BE-0065 fixe FederatedScopePolicy.MAX_PROJECTS.`,
             file: CACHE,
             line: capacity ? ligne(code, capacity.index) : undefined,
-            fix: "Rétablir 16, ou remplacer BE-0046 par un nouvel ADR fondé sur une mesure.",
+            fix: "Rétablir FederatedScopePolicy.MAX_PROJECTS, ou remplacer BE-0065 par un nouvel ADR fondé sur une mesure.",
           });
         }
         for (const match of code.matchAll(STORAGE)) {
