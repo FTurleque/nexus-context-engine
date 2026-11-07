@@ -87,7 +87,7 @@ Le champ `constraints` existe encore dans les DTO pour compatibilité de contrat
 
 Les requêtes fédérées acceptent au maximum **100 projets uniques**. La cardinalité canonique est validée avant la résolution/readiness ; une requête contenant 101 UUID uniques échoue donc avec l'erreur de portée avant tout `PROJECT_NOT_FOUND` qui résulterait d'une résolution ultérieure.
 
-Une portée valide est ensuite résolue, vérifiée `READY` et traitée par les services fédérés communs.
+Une portée valide est ensuite résolue, vérifiée `READY` et traitée par les services fédérés communs, sous une échéance globale : les projets non commencés à l'échéance sont nommés par la clé `unservedProjects` des réponses fédérées (voir [Vecteur de requête unique et échéance globale](large-scale-search.md#vecteur-de-requête-unique-et-échéance-globale)).
 
 ## Sécurité REST
 

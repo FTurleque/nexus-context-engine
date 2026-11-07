@@ -83,6 +83,20 @@ Le budget de découverte natif de chaque construction est partagé entre instruc
 
 Les limites REST de résultats et de budget contexte fédérés sont alignées sur les politiques centrales ; le REST ne peut pas demander un plafond supérieur au cœur.
 
+## Vecteur de requête unique et échéance globale
+
+Une requête fédérée (recherche ou contexte) crée un `SearchQueryContext` pour toute la requête et le transmet aux stratégies de chaque projet. `SemanticSearchStrategy` y mémorise le vecteur de la requête **redactée** : le fournisseur d'embeddings reçoit au plus un appel `embedQuery`, quel que soit le nombre de projets, et zéro si aucun projet n'a d'index sémantique compatible. Une indisponibilité du fournisseur est mémorisée de la même façon : un seul appel est tenté et chaque projet porte le même diagnostic de dégradation. Le contexte n'est pas conservé entre requêtes.
+
+Une échéance globale (`FederationDeadlinePolicy`, [BE-0064](../architecture/adr/BE-0064-borner-la-federation-par-une-echeance-globale-sans-parallelisme.md)) est vérifiée avant chaque projet, dans l'ordre du scope, sans parallélisme :
+
+| Paramètre | Valeur |
+|---|---|
+| `NEXUS_FEDERATION_DEADLINE_SECONDS` | entier de 1 à 600, défaut 60 ; toute autre valeur est refusée |
+| Projet commencé | jamais interrompu |
+| Délai d'embedding | `min(timeout du fournisseur, temps restant)`, au moins 1 ms |
+
+Les projets non commencés à l'échéance ne sont pas servis et sont nommés, dans l'ordre du scope, par `unservedProjects` (identifiant et nom) : composante des réponses fédérées `FederatedSearch` et `FederatedContext` de la projection publique, donc identique en CLI (clé JSON et ligne « Projets non servis »), REST et MCP. La liste est vide, et les résultats identiques à ceux d'une exécution sans échéance, lorsque tous les projets sont traités à temps. En mode `explain`, le contexte fédéré ajoute une exclusion « projet non servi » par projet concerné. Les tests injectent une horloge (`InstantSource`) et n'affirment rien sur la durée réelle.
+
 ## Providers externes et scale
 
 Les providers/importers externes utilisent `ExternalTaskRunner` avec timeout et maximum **8 workers réellement actifs**. Un provider qui ignore l'interruption conserve sa place de capacité jusqu'à sa terminaison réelle.

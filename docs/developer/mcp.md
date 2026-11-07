@@ -69,6 +69,8 @@ L'ordre de validation est volontaire :
 
 Ainsi, un scope de 101 UUID uniques inexistants produit l'erreur de portée maximale avant une erreur de projet absent. Les doublons ne consomment qu'une place canonique et l'ordre d'insertion stable est préservé.
 
+Les outils fédérés s'exécutent sous une échéance globale (60 s par défaut, `NEXUS_FEDERATION_DEADLINE_SECONDS`) : les projets non commencés sont nommés par la clé `unservedProjects` de la réponse, identique à celle de la CLI et de REST ([détail](large-scale-search.md#vecteur-de-requête-unique-et-échéance-globale)).
+
 ## Contextes
 
 `build_context` utilise `DefaultContextBuilder`, y compris le budget partagé de découverte native. Les tools fédérés utilisent `FederatedContextService` avec provenance, budget global, fairness, déduplication et travail préparatoire borné.

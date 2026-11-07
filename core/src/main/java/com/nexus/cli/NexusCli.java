@@ -189,7 +189,7 @@ public final class NexusCli {
                 projectIds, parsed.query(), parsed.limit(), parsed.explain());
         renderer.renderFederatedSearch(
                 operation.projects(), operation.query(), operation.limit(), operation.explain(),
-                operation.durationMs(), operation.results());
+                operation.durationMs(), operation.results(), operation.unservedProjects());
     }
 
     private static void handleContext(String[] args, NexusApplication application, CliRenderer renderer)
