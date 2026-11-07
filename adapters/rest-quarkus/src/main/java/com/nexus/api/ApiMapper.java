@@ -38,7 +38,7 @@ final class ApiMapper {
 
     static PublicOutput.FederatedSearch federatedSearch(NexusApplication.FederatedSearchOperation operation) {
         return PublicOutputProjection.federatedSearch(operation.projects(), operation.query(), operation.limit(),
-                operation.explain(), operation.durationMs(), operation.results());
+                operation.explain(), operation.durationMs(), operation.results(), operation.unservedProjects());
     }
 
     static PublicOutput.Context context(NexusApplication.ContextOperation operation) {

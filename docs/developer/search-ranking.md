@@ -51,7 +51,7 @@ Le lifecycle Lucene par opération est conservé tant qu'un benchmark de runtime
 Depuis V008, les recherches substring de **trois points de code Unicode ou plus** passent par `symbol_search_fts`, un index FTS5 utilisant le tokenizer `trigram`. Le pool SQL est l'union de :
 
 - candidats `name` / `qualified_name` issus du trigram index ;
-- candidats fuzzy préfiltrés par `idx_symbols_fuzzy_prefilter` sur première lettre normalisée et longueur.
+- candidats fuzzy préfiltrés, par projet, par `idx_symbols_file_fuzzy_prefilter` (V015) sur première lettre normalisée et longueur.
 
 Le `LIKE` de classement (`prefix`) ne s'applique plus qu'au petit ensemble candidat déjà sélectionné. Les requêtes de un ou deux points de code conservent le chemin `LIKE` historique pour compatibilité : elles restent bornées en résultats, mais constituent volontairement le seul cas de substring pouvant encore nécessiter un scan. Le tokenizer trigram ne peut pas indexer une sous-chaîne plus courte sans ajouter un second index n-gram beaucoup plus coûteux.
 

@@ -73,6 +73,8 @@ Cette section présente un index synthétique avec statut, date et relations de 
 | [ARCH-0061](../adr/ARCH-0061-decider-le-contrat-de-sortie-publique-dans-la-projection-du-coeur.md) | Décider le contrat de sortie publique dans la projection du cœur | Proposed | 2026-10-30 |
 | [DATA-0062](../adr/DATA-0062-mettre-en-attente-les-analyses-d-indexation-dans-sqlite.md) | Mettre en attente les analyses d'indexation dans SQLite et committer Lucene une fois | Proposed | 2026-11-07 |
 | [ARCH-0063](../adr/ARCH-0063-casser-les-cycles-de-packages-du-coeur-par-des-packages-de-modele-feuilles.md) | Casser les cycles de packages du cœur par des packages de modèle feuilles | Proposed | 2026-11-07 |
+| [BE-0064](../adr/BE-0064-borner-la-federation-par-une-echeance-globale-sans-parallelisme.md) | Borner la fédération par une échéance globale vérifiée entre projets, sans parallélisme | Proposed | 2026-11-07 |
+| [BE-0065](../adr/BE-0065-dimensionner-les-caches-git-sur-le-scope-federe.md) | Dimensionner les caches Git des runtimes longue durée sur le scope fédéré | Proposed | 2026-11-07 |
 | [ADR-0000](../adr/archive/0000-adopter-les-adr-madr.md) | Adopter MADR comme format et définir la gouvernance des ADR | Superseded (GEN-0057) | 2026-07-19 |
 | [ADR-0056](../adr/archive/0056-regrouper-le-registre-des-adr-dans-la-documentation-d-architecture.md) | Regrouper le registre des ADR dans la documentation d'architecture | Superseded (GEN-0057) | 2026-10-29 |
 
@@ -115,12 +117,13 @@ CLI, REST, MCP, découplage, packaging.
 
 ### Écosystème et fédération
 
-ARCH-0042, BE-0043 — AI Skills Registry, fédération locale.
+ARCH-0042, BE-0043, BE-0064 — AI Skills Registry, fédération locale, échéance globale de la
+fédération.
 
 ### Robustesse, cohérence et confinement
 
 DATA-0045, BE-0046, SEC-0047, SEC-0048, DATA-0049, DATA-0050, DATA-0051, DATA-0052,
-BE-0053, DATA-0054, DATA-0055, DATA-0062 — cycle de vie Lucene, cache Git, filesystems et
+BE-0053, DATA-0054, DATA-0055, DATA-0062, BE-0065 — cycle de vie Lucene, cache Git, filesystems et
 traversée, identité repository, lots et temporaires SQLite, cohérence des index
 dérivés, lectures fédérées, reconstructions sémantiques, mise en attente des analyses
 d'indexation.

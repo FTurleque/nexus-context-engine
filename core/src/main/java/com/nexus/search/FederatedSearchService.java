@@ -2,6 +2,8 @@ package com.nexus.search;
 
 import com.nexus.config.ResultLimitPolicy;
 import com.nexus.project.FederatedScopePolicy;
+import com.nexus.project.FederationDeadline;
+import com.nexus.project.FederationDeadlinePolicy;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.ranking.RankedCandidate;
 
@@ -36,12 +38,31 @@ public final class FederatedSearchService {
     private static final int LOCAL_OVERFETCH_FACTOR = 4;
 
     private final SearchService searchService;
+    private final FederationDeadlinePolicy deadlinePolicy;
 
     public FederatedSearchService(SearchService searchService) {
+        this(searchService, FederationDeadlinePolicy.fromEnvironment());
+    }
+
+    public FederatedSearchService(SearchService searchService, FederationDeadlinePolicy deadlinePolicy) {
         this.searchService = Objects.requireNonNull(searchService, "searchService");
+        this.deadlinePolicy = Objects.requireNonNull(deadlinePolicy, "deadlinePolicy");
     }
 
     public List<FederatedSearchHit> search(
+            List<ProjectDescriptor> projects,
+            String query,
+            int limit,
+            boolean explain) throws IOException {
+        return searchWithDiagnostics(projects, query, limit, explain).hits();
+    }
+
+    /**
+     * Recherche fédérée sous échéance globale (BE-0064) : l'échéance est vérifiée avant
+     * chaque projet, dans l'ordre du scope, sans parallélisme. Les projets non commencés
+     * à l'échéance sont rendus, dans l'ordre du scope, par {@code unservedProjects}.
+     */
+    public FederatedSearchOutcome searchWithDiagnostics(
             List<ProjectDescriptor> projects,
             String query,
             int limit,
@@ -53,10 +74,19 @@ public final class FederatedSearchService {
 
         int localLimit = localRetrievalLimit(validatedLimit);
         List<OrderedFederatedHit> candidates = new ArrayList<>();
+        // Un seul contexte pour toute la requête : le vecteur de requête est calculé
+        // au plus une fois, quel que soit le nombre de projets (AUD-PRF-02).
+        FederationDeadline deadline = deadlinePolicy.start();
+        SearchQueryContext queryContext = SearchQueryContext.create(deadline);
+        List<ProjectDescriptor> unserved = new ArrayList<>();
         int projectOrder = 0;
         for (ProjectDescriptor project : scope) {
+            if (deadline.expired()) {
+                unserved.add(project);
+                continue;
+            }
             List<RankedCandidate> projectResults = searchService.search(
-                    project, normalizedQuery, localLimit, explain);
+                    project, normalizedQuery, localLimit, explain, queryContext);
             for (int localOrder = 0; localOrder < projectResults.size(); localOrder++) {
                 candidates.add(new OrderedFederatedHit(
                         new FederatedSearchHit(project, projectResults.get(localOrder)),
@@ -84,7 +114,7 @@ public final class FederatedSearchService {
                 break;
             }
         }
-        return List.copyOf(diversified.values());
+        return new FederatedSearchOutcome(List.copyOf(diversified.values()), unserved);
     }
 
     private static int localRetrievalLimit(int limit) {

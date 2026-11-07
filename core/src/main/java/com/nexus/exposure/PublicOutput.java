@@ -76,16 +76,22 @@ public final class PublicOutput {
     public record FederatedSearchResult(Project project, RankedResult result) {
     }
 
+    /**
+     * Recherche fédérée. {@code unservedProjects} nomme, dans l'ordre du scope, les projets que
+     * l'échéance globale de la fédération a empêché de commencer (BE-0064) ; vide sans coupe.
+     */
     public record FederatedSearch(
             List<Project> projects,
             String query,
             int limit,
             boolean explain,
             long durationMs,
-            List<FederatedSearchResult> results) {
+            List<FederatedSearchResult> results,
+            List<Project> unservedProjects) {
         public FederatedSearch {
             projects = List.copyOf(projects);
             results = List.copyOf(results);
+            unservedProjects = List.copyOf(unservedProjects);
         }
     }
 
@@ -128,6 +134,7 @@ public final class PublicOutput {
     public record FederatedContextItem(Project project, ContextItem item) {
     }
 
+    /** Contexte fédéré ; {@code unservedProjects} suit la même règle que {@link FederatedSearch}. */
     public record FederatedContext(
             List<Project> projects,
             String query,
@@ -137,12 +144,14 @@ public final class PublicOutput {
             int estimatedTokens,
             List<FederatedContextItem> items,
             List<String> excluded,
-            SortedMap<String, Object> metadata) {
+            SortedMap<String, Object> metadata,
+            List<Project> unservedProjects) {
         public FederatedContext {
             projects = List.copyOf(projects);
             items = List.copyOf(items);
             excluded = List.copyOf(excluded);
             metadata = sorted(metadata);
+            unservedProjects = List.copyOf(unservedProjects);
         }
     }
 

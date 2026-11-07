@@ -22,6 +22,7 @@ import com.nexus.project.ProjectRepository;
 import com.nexus.ranking.RankedCandidate;
 import com.nexus.search.candidate.CandidateType;
 import com.nexus.search.FederatedSearchHit;
+import com.nexus.search.FederatedSearchOutcome;
 import com.nexus.search.FederatedSearchService;
 import com.nexus.search.QueryPolicy;
 import com.nexus.config.ResultLimitPolicy;
@@ -232,11 +233,12 @@ public final class NexusApplication implements AutoCloseable {
         List<ProjectIndexLockManager.LockHandle> readLocks = acquireReadLocks(scope);
         try (var reads = indexRepository.openReadSession()) {
             List<ProjectDescriptor> projects = requireReadyProjects(scope);
-            List<FederatedSearchHit> results =
-                    federatedSearchService.search(projects, resolvedQuery, resolvedLimit, explain);
+            FederatedSearchOutcome outcome =
+                    federatedSearchService.searchWithDiagnostics(projects, resolvedQuery, resolvedLimit, explain);
             requireReadyProjects(scope);
             return new FederatedSearchOperation(
-                    projects, resolvedQuery, resolvedLimit, explain, elapsedMillis(startedAt), results);
+                    projects, resolvedQuery, resolvedLimit, explain, elapsedMillis(startedAt),
+                    outcome.hits(), outcome.unservedProjects());
         } finally {
             closeReadLocks(readLocks);
         }
@@ -494,10 +496,12 @@ public final class NexusApplication implements AutoCloseable {
             int limit,
             boolean explain,
             long durationMs,
-            List<FederatedSearchHit> results) {
+            List<FederatedSearchHit> results,
+            List<ProjectDescriptor> unservedProjects) {
         public FederatedSearchOperation {
             projects = List.copyOf(projects);
             results = List.copyOf(results);
+            unservedProjects = List.copyOf(unservedProjects);
         }
     }
 

@@ -48,8 +48,12 @@ public final class PersistentLuceneSemanticSearchIndex implements SemanticSearch
 
     @Override
     public boolean isCompatible(UUID projectId, SemanticIndexProvenance provenance) throws IOException {
+        Objects.requireNonNull(projectId, "projectId");
+        Objects.requireNonNull(provenance, "provenance");
         readers.ensureOpen();
-        return operationScoped.isCompatible(projectId, provenance);
+        // Lecture sur le reader en cache (ADR-0045), sans DirectoryReader supplémentaire.
+        return readers.readCommitMetadata(
+                projectId, operationScoped.indexPath(projectId), provenance::matches, false);
     }
 
     @Override
@@ -162,5 +166,9 @@ public final class PersistentLuceneSemanticSearchIndex implements SemanticSearch
 
     int cachedProjectCount() {
         return readers.cachedProjectCount();
+    }
+
+    long openedReaderCount() {
+        return readers.openedReaderCount();
     }
 }

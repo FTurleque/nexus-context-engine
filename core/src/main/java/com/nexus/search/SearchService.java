@@ -46,7 +46,21 @@ public final class SearchService {
             String query,
             int limit,
             boolean explain) throws IOException {
+        return search(project, query, limit, explain, SearchQueryContext.create());
+    }
+
+    /**
+     * Recherche d'un projet avec le contexte de requête d'une requête fédérée :
+     * les coûts qui ne dépendent que de la requête sont mutualisés entre projets.
+     */
+    public List<RankedCandidate> search(
+            ProjectDescriptor project,
+            String query,
+            int limit,
+            boolean explain,
+            SearchQueryContext queryContext) throws IOException {
         Objects.requireNonNull(project, "project");
+        Objects.requireNonNull(queryContext, "queryContext");
         String normalizedQuery = QueryPolicy.normalize(query);
         ResultLimitPolicy.validate(limit);
         com.nexus.project.ProjectReadiness.requireReady(project);
@@ -54,7 +68,7 @@ public final class SearchService {
         int retrievalLimit = Math.clamp((long) limit * 3, 20, ResultLimitPolicy.MAX_RESULT_LIMIT);
         List<SearchCandidate> rawCandidates = new ArrayList<>();
         for (SearchStrategy strategy : strategies) {
-            rawCandidates.addAll(strategy.search(project, normalizedQuery, retrievalLimit));
+            rawCandidates.addAll(strategy.search(project, normalizedQuery, retrievalLimit, queryContext));
         }
 
         List<SearchCandidate> enriched = candidateMerger.merge(rawCandidates);

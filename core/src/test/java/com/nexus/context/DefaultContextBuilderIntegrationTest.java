@@ -179,6 +179,45 @@ class DefaultContextBuilderIntegrationTest {
         assertTrue(((Number) comfortable.metadata().get("gitSelectedItems")).intValue() >= 1);
     }
 
+    @Test
+    void exposesGitCacheCountersInExplainMetadataOnly() throws Exception {
+        Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("git-cache-project"));
+        writeJava(projectRoot, "demo/OrderService.java", """
+                package demo;
+                class OrderService {
+                    void create() {}
+                }
+                """);
+        GitContextSourceProvider provider = new GitContextSourceProvider() {
+            @Override
+            public String id() {
+                return "cached-git";
+            }
+
+            @Override
+            public GitContextResult discover(GitContextQuery query) {
+                return new GitContextResult(List.of(), true, true, 0, 0, 0, List.of());
+            }
+
+            @Override
+            public Map<String, Object> cacheStatistics() {
+                return Map.of("capacity", 100, "entries", 1, "hits", 3, "misses", 1, "evictions", 0);
+            }
+        };
+        Fixture fixture = fixture(projectRoot, "git-cache", provider);
+        fixture.indexingService().index(fixture.project().id());
+
+        ContextBundle explained = fixture.contextBuilder().build(new ContextRequest(
+                fixture.project().id(), "OrderService", 600, Set.of(), Map.of(), true));
+        ContextBundle plain = fixture.contextBuilder().build(new ContextRequest(
+                fixture.project().id(), "OrderService", 600, Set.of(), Map.of(), false));
+
+        assertEquals(
+                Map.of("capacity", 100, "entries", 1, "hits", 3, "misses", 1, "evictions", 0),
+                explained.metadata().get("gitContextCache"));
+        assertFalse(plain.metadata().containsKey("gitContextCache"));
+    }
+
     private Fixture fixture(Path projectRoot, String name) throws Exception {
         return fixture(projectRoot, name, null);
     }

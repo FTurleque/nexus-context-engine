@@ -1,6 +1,7 @@
 package com.nexus.search.semantic;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -41,6 +42,17 @@ public interface EmbeddingProvider {
      */
     default float[] embedQuery(String query) throws IOException {
         return embed(query);
+    }
+
+    /**
+     * Produit le vecteur d'une requête en n'attendant pas plus de {@code maxWait}
+     * (temps restant de l'échéance globale d'une requête fédérée). Le fallback
+     * ignore le plafond pour préserver les providers existants ; les transports
+     * à timeout configurable le surchargent pour utiliser le plus petit des deux.
+     */
+    default float[] embedQuery(String query, Duration maxWait) throws IOException {
+        Objects.requireNonNull(maxWait, "maxWait");
+        return embedQuery(query);
     }
 
     /**

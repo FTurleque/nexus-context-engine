@@ -43,13 +43,13 @@ public final class SymbolSearchStrategy implements SearchStrategy {
         String normalizedQuery = query.toLowerCase(Locale.ROOT).trim();
         int candidatePoolLimit = Math.clamp((long) limit * 20, MIN_CANDIDATE_POOL, MAX_CANDIDATE_POOL);
 
+        // La requête entière puis ses termes sont interrogés en lot : le nombre de requêtes SQL ne
+        // dépend pas du nombre de termes (AUD-PRF-09).
+        List<String> queries = new ArrayList<>();
+        queries.add(normalizedQuery);
+        terms.stream().filter(term -> !term.equals(normalizedQuery)).forEach(queries::add);
         Map<String, IndexedSymbol> symbolPool = new LinkedHashMap<>();
-        collect(symbolPool, indexRepository.searchSymbols(project.id(), normalizedQuery, candidatePoolLimit));
-        terms.stream()
-                .filter(term -> !term.equals(normalizedQuery))
-                .forEach(term -> collect(
-                        symbolPool,
-                        indexRepository.searchSymbols(project.id(), term, candidatePoolLimit)));
+        collect(symbolPool, indexRepository.searchSymbols(project.id(), queries, candidatePoolLimit));
 
         Set<String> symbolPaths = symbolPool.values().stream()
                 .map(IndexedSymbol::relativePath)

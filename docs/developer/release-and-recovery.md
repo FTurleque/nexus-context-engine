@@ -214,3 +214,14 @@ projet écarte d'abord ce qu'une indexation interrompue (arrêt brutal du proces
 aurait laissé. Elles ne contiennent donc rien à sauvegarder ni à restaurer ; une
 base restaurée depuis une sauvegarde prise pendant une indexation reste cohérente,
 le projet étant alors dans un état non `READY` qui impose un rebuild complet.
+
+## Mise à niveau V015 — préfiltre approché des symboles scopé par fichier
+
+`V015__index_symbols_by_file_for_fuzzy_search.sql` crée `idx_symbols_file_fuzzy_prefilter` sur
+`symbols(file_id, SUBSTR(LOWER(name), 1, 1), LENGTH(name))` et supprime
+`idx_symbols_fuzzy_prefilter` (V008), qui n'avait aucune colonne de projet et que plus aucune requête
+n'utilise (AUD-PRF-09). La recherche de symboles part des fichiers du projet ciblé, puis sonde le
+nouvel index : son coût ne dépend plus des autres projets de la base. La migration ne modifie ni les
+faits canoniques, ni la génération, ni le statut des projets : aucun rebuild n'est imposé et les index
+Lucene et sémantiques restent valides. V001 à V014 et leurs empreintes restent inchangées.
+`SchemaMigratorFileIndexUpgradeTest` migre une base peuplée et vérifie les index, les données et le statut.
