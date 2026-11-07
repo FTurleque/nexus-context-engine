@@ -30,8 +30,12 @@ final class CoreArchitectureRules {
             "io.quarkus.", "jakarta.", "javax.ws.", "org.springframework.", "io.modelcontextprotocol.");
     static final List<String> LUCENE_PREFIXES = List.of("org.apache.lucene.");
     static final List<String> SQLITE_PREFIXES = List.of("org.sqlite.", "java.sql.");
-    /** Lecture de l'environnement du processus, écrite simplement, pleinement qualifiée ou importée en statique. */
-    static final List<String> GETENV_PREFIXES = List.of("System.getenv", "java.lang.System.getenv");
+    /**
+     * Lecture de l'environnement du processus : appel ou référence de méthode, écrit simplement,
+     * pleinement qualifié ou importé en statique.
+     */
+    static final List<String> GETENV_PREFIXES = List.of(
+            "System.getenv", "java.lang.System.getenv", "System::getenv", "java.lang.System::getenv");
 
     /** Préfixes surveillés aussi sous forme de nom pleinement qualifié dans le code. */
     static final List<String> WATCHED_QUALIFIED_PREFIXES =
@@ -144,7 +148,8 @@ final class CoreArchitectureRules {
     }
 
     /**
-     * {@value #GETENV_IN_COMPOSITION_ROOT} : aucun appel à {@code System.getenv} dans le cœur hors de
+     * {@value #GETENV_IN_COMPOSITION_ROOT} : aucun appel à {@code System.getenv} ni référence
+     * {@code System::getenv} dans le cœur hors de
      * la composition root {@value #COMPOSITION_ROOT}, qui résout la configuration et l'injecte.
      */
     static List<String> getenvInCompositionRoot(JavaSourceGraph graph) {

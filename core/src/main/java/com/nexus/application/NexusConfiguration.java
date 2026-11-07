@@ -6,6 +6,7 @@ import com.nexus.context.ContextMaterializationLimits;
 import com.nexus.context.source.ContextDiscoveryLimits;
 import com.nexus.index.jdt.JdtLanguageServerCodeIntelligenceProvider;
 import com.nexus.index.scan.ProjectScanLimits;
+import com.nexus.project.FederationDeadlinePolicy;
 import com.nexus.security.ProjectFileLimits;
 
 import java.time.Duration;
@@ -39,6 +40,7 @@ public record NexusConfiguration(
         ProjectScanLimits projectScanLimits,
         ContextMaterializationLimits contextMaterializationLimits,
         ContextDiscoveryLimits contextDiscoveryLimits,
+        FederationDeadlinePolicy federationDeadlinePolicy,
         long maxScipIndexBytes,
         int maxScipMessageBytes,
         int maxConcurrentIndexing,
@@ -50,6 +52,7 @@ public record NexusConfiguration(
         Objects.requireNonNull(projectScanLimits, "projectScanLimits");
         Objects.requireNonNull(contextMaterializationLimits, "contextMaterializationLimits");
         Objects.requireNonNull(contextDiscoveryLimits, "contextDiscoveryLimits");
+        Objects.requireNonNull(federationDeadlinePolicy, "federationDeadlinePolicy");
         Objects.requireNonNull(codeIntelligenceTimeout, "codeIntelligenceTimeout");
         Objects.requireNonNull(jdtConfiguration, "jdtConfiguration");
         securityPosture = Map.copyOf(Objects.requireNonNull(securityPosture, "securityPosture"));

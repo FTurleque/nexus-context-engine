@@ -11,7 +11,13 @@ import java.util.Objects;
  * processus : {@code SafeFileIO} et le stockage privé les consultent à chaque ouverture. La
  * composition root les installe par {@link #configure(Map)} depuis l'environnement qu'elle a
  * résolu ; ce paquet ne lit jamais l'environnement du processus lui-même. La propriété JVM
- * correspondante reste prioritaire, comme avant.</p>
+ * correspondante reste prioritaire.</p>
+ *
+ * <p>Ordre d'initialisation : aucune primitive {@code SafeFileIO} ni {@code PrivateStoragePolicy}
+ * ne doit être appelée avant la composition root ({@code NexusApplicationFactory}, ou
+ * {@code NexusRestExposureGuard} pour l'adaptateur REST). Tant que {@link #configure(Map)} n'a
+ * pas été appelée, seules les propriétés JVM s'appliquent et les postures fixées par
+ * l'environnement sont ignorées.</p>
  */
 public final class SecurityPolicy {
     public static final String STRICT_PATH_IO_PROPERTY = "nexus.requireStrictPathIo";
@@ -23,8 +29,7 @@ public final class SecurityPolicy {
 
     /**
      * Installe les postures de sécurité résolues par la composition root. Seules les deux
-     * variables de posture sont retenues ; leur validation reste faite à la lecture, avec les
-     * mêmes messages qu'avant.
+     * variables de posture sont retenues ; leur validation est faite à la lecture.
      */
     public static void configure(Map<String, String> environment) {
         Objects.requireNonNull(environment, "environment");

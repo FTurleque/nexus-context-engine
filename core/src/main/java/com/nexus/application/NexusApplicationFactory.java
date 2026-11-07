@@ -110,6 +110,7 @@ final class NexusApplicationFactory {
                 ProjectScanLimits.from(environment),
                 ContextMaterializationLimits.from(environment),
                 ContextDiscoveryLimits.from(environment),
+                FederationDeadlinePolicy.from(environment),
                 scipIndexLimits.maxIndexBytes(),
                 scipIndexLimits.maxMessageBytes(),
                 ProjectIndexLockManager.maxConcurrentIndexing(environment),
@@ -189,7 +190,8 @@ final class NexusApplicationFactory {
                         new GraphCandidateEnricher(indexRepository),
                         new GitRecencyCandidateEnricher()),
                 contextRanker);
-        FederatedSearchService federatedSearchService = new FederatedSearchService(searchService);
+        FederatedSearchService federatedSearchService = new FederatedSearchService(
+                searchService, configuration.federationDeadlinePolicy());
 
         TokenEstimator tokenEstimator = new HeuristicTokenEstimator();
         GitContextSourceProvider gitContextProvider = persistentReaders
@@ -215,7 +217,7 @@ final class NexusApplicationFactory {
                 configuration.contextDiscoveryLimits());
         FederatedContextService federatedContextService = new FederatedContextService(
                 contextBuilder,
-                FederationDeadlinePolicy.fromEnvironment(),
+                configuration.federationDeadlinePolicy(),
                 configuration.contextMaterializationLimits(),
                 configuration.contextDiscoveryLimits());
 

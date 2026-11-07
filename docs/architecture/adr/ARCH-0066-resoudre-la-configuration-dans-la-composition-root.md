@@ -14,7 +14,7 @@ rules: false
 
 ## Context
 
-[ARCH-0003](ARCH-0003-conserver-un-coeur-java-sans-framework-applicatif.md) garde le cœur sans framework applicatif : le câblage est manuel, dans `NexusApplicationFactory`, et ARCH-0003 retient le risque « duplication de configuration entre adaptateurs », avec pour mesure un modèle de configuration NEXUS neutre traduit aux frontières. Ce modèle n'existait pas : douze classes du cœur lisaient elles-mêmes les variables `NEXUS_*` par `System.getenv` (`NexusPaths`, `SecurityPolicy`, `ContextMaterializationLimits`, `ContextDiscoveryLimits`, `IndexingCapacityGate`, `ProjectIndexingService`, `JdtLanguageServerCodeIntelligenceProvider`, le constructeur de processus JDT, `ProjectScanLimits`, `ScipIndexLimits`, `ProjectFileLimits` et la lecture sémantique de `NexusApplicationFactory`).
+[ARCH-0003](ARCH-0003-conserver-un-coeur-java-sans-framework-applicatif.md) garde le cœur sans framework applicatif : le câblage est manuel, dans `NexusApplicationFactory`, et ARCH-0003 retient le risque « duplication de configuration entre adaptateurs », avec pour mesure un modèle de configuration NEXUS neutre traduit aux frontières. Ce modèle n'existait pas : treize classes du cœur lisaient elles-mêmes les variables `NEXUS_*` par `System.getenv` ou la référence de méthode `System::getenv` (`NexusPaths`, `SecurityPolicy`, `ContextMaterializationLimits`, `ContextDiscoveryLimits`, `IndexingCapacityGate`, `ProjectIndexingService`, `JdtLanguageServerCodeIntelligenceProvider`, le constructeur de processus JDT, `ProjectScanLimits`, `ScipIndexLimits`, `ProjectFileLimits`, `FederationDeadlinePolicy` et la lecture sémantique de `NexusApplicationFactory`).
 
 Conséquences observées : la configuration effective n'existait nulle part en un seul objet ; une même variable pouvait être relue à chaque requête ; les tests contournaient l'environnement par des constructeurs ou des parseurs package-private ; aucun contrôle n'empêchait une nouvelle lecture dispersée.
 
@@ -30,10 +30,10 @@ La question : **où la configuration d'environnement du cœur est-elle lue, et c
 
 **Option retenue : Option C.**
 
-- `NexusApplicationFactory` est la seule classe de `core/src/main` qui appelle `System.getenv` (méthode `processEnvironment()`).
+- `NexusApplicationFactory` est la seule classe de `core/src/main` qui lit l'environnement du processus (`System.getenv`, `System::getenv`), par `processEnvironment()`.
 - Elle résout la configuration en un record `com.nexus.application.NexusConfiguration` depuis une `Map<String, String>` : l'environnement du processus en production, une table en test (`NexusApplicationFactory.configuration(NexusPaths, Map)`).
-- Chaque classe de limites expose une fabrique pure depuis une `Map` (`from(Map)`, `maxFileSize(Map)`, `providerTimeout(Map)`, `maxConcurrentIndexing(Map)`, `configuration(NexusPaths, Map)`) ; les composants reçoivent leur part par constructeur.
-- Noms de variables, bornes, valeurs par défaut et messages d'erreur ne changent pas.
+- Chaque classe de limites expose une fabrique pure depuis une `Map` (`from(Map)`, `maxFileSize(Map)`, `providerTimeout(Map)`, `maxConcurrentIndexing(Map)`, `configuration(NexusPaths, Map)`) ; les composants reçoivent leur part par constructeur, échéance fédérée comprise (`FederationDeadlinePolicy.from(Map)`).
+- Noms de variables, bornes, défauts et messages d'erreur ne changent pas.
 - Deux parts valent pour tout le processus, parce que des primitives statiques les consultent à chaque ouverture : la borne de taille des lectures sans borne explicite (`ProjectFileLimits.configure`) et les postures `NEXUS_REQUIRE_STRICT_PATH_IO` / `NEXUS_REQUIRE_PRIVATE_STORAGE` (`SecurityPolicy.configure`). La composition root les installe avant d'ouvrir le stockage. La propriété JVM correspondante reste prioritaire.
 - Les points d'entrée (CLI, MCP, REST) obtiennent `NEXUS_HOME` par `NexusConfiguration.pathsFromEnvironment()`. L'adaptateur REST, sa propre composition root Quarkus, installe aussi les postures de sécurité avant son garde d'exposition ; sa configuration propre (`NexusRestSecurity`, `NexusRestProjectRootPolicy`) reste dans l'adaptateur.
 - La configuration sémantique reste un paramètre distinct des fabriques de `NexusApplication`, qui permettent de la fournir explicitement ; elle se résout aussi depuis une `Map`.
@@ -51,7 +51,7 @@ Cette décision ne change ni les variables `NEXUS_*` ni leur priorité (proprié
 
 ### Don't
 
-- Ne pas appeler `System.getenv` ailleurs dans `core/src/main`.
+- Ne pas appeler `System.getenv` ni référencer `System::getenv` ailleurs dans `core/src/main`.
 - Ne pas ajouter de constructeur ou de parseur package-private dont le seul rôle est de contourner l'environnement en test.
 - Ne pas changer un nom de variable, une borne, une valeur par défaut ou un message d'erreur à l'occasion de ce câblage.
 
@@ -65,7 +65,7 @@ Cette décision ne change ni les variables `NEXUS_*` ni leur priorité (proprié
 
 ### Négatives
 
-- Les constructeurs de composition s'allongent (bornes de contexte, scanner, timeout de providers, limites SCIP).
+- Les constructeurs de composition s'allongent (bornes de contexte, scanner, timeout de providers, limites SCIP, échéance fédérée).
 - Deux parts restent des états de processus installés par la composition root (taille de lecture par défaut, postures de sécurité) ; avant leur installation, ce sont les valeurs par défaut et les propriétés JVM qui s'appliquent.
 - Une valeur invalide d'une variable qui n'était lue qu'au besoin (par exemple une borne de contexte) échoue désormais dès la composition.
 
@@ -79,9 +79,9 @@ Cette décision ne change ni les variables `NEXUS_*` ni leur priorité (proprié
 
 ## Compliance and Enforcement
 
-- Test `CoreArchitectureTest#processEnvironmentIsReadOnlyByTheCompositionRoot` (règle `getenv-composition-root` de `CoreArchitectureRules`) : aucun `System.getenv`, écrit simplement, pleinement qualifié ou importé en statique, dans `core/src/main/java` hors de `NexusApplicationFactory` ; cas négatif `#getenvOutsideTheCompositionRootFailsGetenvRule`.
+- Test `CoreArchitectureTest#processEnvironmentIsReadOnlyByTheCompositionRoot` (règle `getenv-composition-root` de `CoreArchitectureRules`) : aucun `System.getenv` ni `System::getenv`, écrit simplement, pleinement qualifié ou importé en statique, dans `core/src/main/java` hors de `NexusApplicationFactory` ; cas négatif `#getenvOutsideTheCompositionRootFailsGetenvRule`, références de méthode comprises.
 - Test `NexusConfigurationTest` : défauts historiques sur une table vide, propagation de chaque part, message d'erreur d'une borne invalide.
-- Tests des classes de limites par `Map` : `ProjectFileLimitsTest`, `ScipIndexLimitsTest`, `ContextMaterializationBudgetTest`, `ProjectScanLimitsTest`, `ContextDiscoveryLimitsTest`, `NexusPathsTest`.
+- Tests des classes de limites par `Map` : `ProjectFileLimitsTest`, `ScipIndexLimitsTest`, `ContextMaterializationBudgetTest`, `ProjectScanLimitsTest`, `ContextDiscoveryLimitsTest`, `NexusPathsTest`, `FederationDeadlinePolicyTest`.
 - Règle Archgate `DATA-0019-stocker-les-donnees-locales-dans-un-nexus-home-configurable.rules.ts` / `nexus-home-resolution-order` : `NexusPaths.fromEnvironment(Map)` garde l'ordre propriété, variable, `user.home`.
 - Revue : une nouvelle variable `NEXUS_*` du cœur passe par `NexusConfiguration`.
 

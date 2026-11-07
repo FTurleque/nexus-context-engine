@@ -96,6 +96,10 @@ class CoreArchitectureTest {
                     static java.util.Map<String, String> processEnvironment() {
                         return System.getenv();
                     }
+
+                    static java.util.function.Function<String, String> lookup() {
+                        return System::getenv;
+                    }
                 }
                 """);
         writeSource("com/nexus/index/Limits.java", """
@@ -122,10 +126,30 @@ class CoreArchitectureTest {
                 class Strategy {
                 }
                 """);
+        writeSource("com/nexus/project/Deadline.java", """
+                package com.nexus.project;
+
+                import java.util.function.Function;
+
+                class Deadline {
+                    // System::getenv dans un commentaire ne compte pas.
+                    String text = "System::getenv";
+                    Function<String, String> environment = System::getenv;
+                }
+                """);
+        writeSource("com/nexus/index/scan/Scanner.java", """
+                package com.nexus.index.scan;
+
+                class Scanner {
+                    java.util.function.Function<String, String> environment = java.lang.System :: getenv;
+                }
+                """);
 
         assertEquals(List.of(
                         "[getenv-composition-root] com.nexus.context.Budget -> java.lang.System.getenv",
                         "[getenv-composition-root] com.nexus.index.Limits -> System.getenv",
+                        "[getenv-composition-root] com.nexus.index.scan.Scanner -> java.lang.System::getenv",
+                        "[getenv-composition-root] com.nexus.project.Deadline -> System::getenv",
                         "[getenv-composition-root] com.nexus.search.Strategy -> java.lang.System.getenv"),
                 CoreArchitectureRules.getenvInCompositionRoot(scanFixture()));
     }

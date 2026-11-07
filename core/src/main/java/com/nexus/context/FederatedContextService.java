@@ -49,7 +49,7 @@ public final class FederatedContextService {
     private final ContextDiscoveryLimits discoveryLimits;
 
     public FederatedContextService(ContextBuilder contextBuilder) {
-        this(contextBuilder, FederationDeadlinePolicy.fromEnvironment());
+        this(contextBuilder, FederationDeadlinePolicy.defaults());
     }
 
     public FederatedContextService(ContextBuilder contextBuilder, FederationDeadlinePolicy deadlinePolicy) {
