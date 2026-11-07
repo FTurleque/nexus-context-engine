@@ -1,5 +1,3 @@
 # Arêtes de cycle du graphe des packages du cœur (CoreArchitectureTest, règle cycles-baseline).
 # Une arête par ligne, au format "source -> cible", triée. La liste ne peut que décroître :
 # une arête nouvelle fait échouer le build, une entrée qui ne forme plus de cycle aussi.
-com.nexus.search.semantic -> com.nexus.search.semantic.ollama
-com.nexus.search.semantic.ollama -> com.nexus.search.semantic

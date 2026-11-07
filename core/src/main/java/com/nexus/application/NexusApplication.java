@@ -93,7 +93,7 @@ public final class NexusApplication implements AutoCloseable {
 
     /** Compose NEXUS avec les opt-ins opérationnels explicitement présents dans l'environnement. */
     public static NexusApplication create(NexusPaths paths) throws SQLException, IOException {
-        return NexusApplicationFactory.create(paths, SemanticSearchConfiguration.fromEnvironment(), false);
+        return NexusApplicationFactory.create(paths, NexusApplicationFactory.semanticSearchConfigurationFromEnvironment(), false);
     }
 
     /** Compose NEXUS avec une configuration sémantique fournie explicitement par l'appelant. */
@@ -110,7 +110,7 @@ public final class NexusApplication implements AutoCloseable {
      * inter-processus existants.
      */
     public static NexusApplication createLongLived(NexusPaths paths) throws SQLException, IOException {
-        return NexusApplicationFactory.create(paths, SemanticSearchConfiguration.fromEnvironment(), true);
+        return NexusApplicationFactory.create(paths, NexusApplicationFactory.semanticSearchConfigurationFromEnvironment(), true);
     }
 
     /** Variante longue durée avec configuration sémantique explicite. */

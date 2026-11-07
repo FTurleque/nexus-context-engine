@@ -20,7 +20,7 @@
 
 ## 5. Cycle search.semantic ↔ ollama (AUD-ARC-06)
 
-- [ ] 5.1 `AUD-ARC-06` — Déplacer `fromEnvironment` et l'instanciation d'`OllamaEmbeddingProvider` de `SemanticSearchConfiguration` vers `NexusApplicationFactory` ; retirer de la baseline le cycle `search.semantic` ↔ `search.semantic.ollama` ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='*Architecture*,SemanticSearchConfiguration*,NexusApplicationSemanticConfigurationTest' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
+- [x] 5.1 `AUD-ARC-06` — Déplacer `fromEnvironment` et l'instanciation d'`OllamaEmbeddingProvider` de `SemanticSearchConfiguration` vers `NexusApplicationFactory` ; retirer de la baseline le cycle `search.semantic` ↔ `search.semantic.ollama` ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='*Architecture*,SemanticSearchConfiguration*,NexusApplicationSemanticConfigurationTest' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
 
 ## 6. Graphe acyclique imposé (AUD-ARC-01)
 
