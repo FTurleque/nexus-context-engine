@@ -91,4 +91,22 @@ Pour corriger une release dont le contenu doit changer, créer une nouvelle vers
 
 Un rollback de consommation pointe vers un tag SemVer historique ou, de préférence, vers son digest GHCR. Les tags immuables ne sont jamais déplacés pour simuler un rollback.
 
+## Politique de publication cible (SEC-0066, proposée)
+
+[SEC-0066](../architecture/adr/SEC-0066-publier-les-releases-depuis-un-environnement-protege-avec-des-assets-attestes.md), au statut `Proposed`, complète [GEN-0031](../architecture/adr/GEN-0031-packager-la-cli-dans-un-jar-autonome.md) et fixe les conditions de publication que met en œuvre le changement OpenSpec `sprint-09-chaine-de-release-executable`. Les règles ci-dessous sont la cible ; chacune s'applique quand la tâche correspondante du changement est fusionnée ou, pour les réglages GitHub, appliquée par le mainteneur. L'état constaté avant le changement est relevé dans le contexte de l'ADR.
+
+- Aucun workflow ne transmet `secrets: inherit` ; un workflow réutilisable ne reçoit que les secrets qu'il déclare, et aucun une fois les secrets portés par l'environnement `release`.
+- Le job `publish` et la signature de release déclarent `environment: release` : reviewer requis, déploiement limité aux tags `v*`, secrets PFX Authenticode portés par l'environnement. Aucune écriture dans GHCR ni dans les releases avant l'approbation.
+- Un ruleset de tags actif cible `refs/tags/v*` et réserve leur création, leur mise à jour et leur suppression au mainteneur.
+- Chaque ZIP et chaque `setup.exe` publiés reçoivent une attestation de provenance (`actions/attest` en `subject-path`, même version épinglée que pour l'image), vérifiée par `gh attestation verify` avant tout upload et avant le déplacement de `latest`.
+- Le tag de release est `vX.Y.Z` ou `vX.Y.Z-rc.N`, égal à la version Maven et posé sur la tête de `main`. Une pré-version publie une release marquée pré-version, sous des tags d'image version et SHA immuables, et ne déplace jamais `latest`.
+- La première exécution de la chaîne est une répétition sur `X.Y.Z-rc.1`, prouvée par un relevé daté sous `docs/project/history/` (run, `gh attestation verify` sur l'image et les assets, signature Authenticode).
+
+Les réglages GitHub (environnement, secrets d'environnement, ruleset de tags) se vérifient en lecture :
+
+```bash
+gh api repos/FTurleque/nexus-context-engine/environments --jq '.environments[] | {name, protection_rules}'
+gh api repos/FTurleque/nexus-context-engine/rulesets --jq '.[] | {name, target, enforcement}'
+```
+
 Voir aussi [`ci-and-supply-chain.md`](ci-and-supply-chain.md) et [`release-and-recovery.md`](release-and-recovery.md).
