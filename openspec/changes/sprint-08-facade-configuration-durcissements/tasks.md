@@ -39,9 +39,9 @@ Les commandes `./mvnw` s'entendent avec `-B -ntp` ; `TEST_CIBLE` désigne `-Dsur
 
 ## 7. Validation du sprint
 
-- [x] 7.1 Contrôler le critère de sortie : `git grep -n "SQLException" -- core/src/main/java/com/nexus/application/NexusApplication.java` sans signature publique, `git grep -n "System.getenv" -- core/src/main` limité à la composition root, tests 5.2 et 6.2 verts ; puis `/nx-validate full` (contrats, `./mvnw clean install`, `scripts/self-smoke.ps1`)
+- [ ] 7.1 Contrôler le critère de sortie : `git grep -n "SQLException" -- core/src/main/java/com/nexus/application/NexusApplication.java` sans signature publique, `git grep -n "System.getenv" -- core/src/main` limité à la composition root, tests 5.2 et 6.2 verts ; puis `/nx-validate full` (contrats, `./mvnw clean install`, `scripts/self-smoke.ps1`)
 
-Les tâches 4.1 et 6.2 sont implémentées et vertes sous Windows (`./mvnw clean install`) ; elles restent non cochées jusqu'au reactor Linux de la PR, que leur vérification exige.
+Les tâches 4.1, 6.2 et 7.1 sont implémentées et vertes sous Windows (`./mvnw clean install`, `scripts/self-smoke.ps1`) ; elles restent non cochées jusqu'au gate Windows et au reactor Linux de la PR, que leur vérification exige.
 
 ## Workflow follow-up
 
