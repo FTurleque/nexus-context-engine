@@ -244,7 +244,7 @@ canonique et Lucene reconstructible. Ce découpage ne remplace aucun ADR accept�
 |---|---|
 | `core-sans-framework` | aucun type `io.quarkus`, `jakarta`, `javax.ws`, `org.springframework`, `io.modelcontextprotocol` |
 | `lucene-confine` | `org.apache.lucene` seulement dans `com.nexus.search.lucene` et `com.nexus.search.semantic.lucene` |
-| `sqlite-confine` | `org.sqlite` et `java.sql` seulement dans `com.nexus.persistence.sqlite`, plus la liste fermée `SQLITE_EXCEPTIONS` de `CoreArchitectureRules` (`java.sql.SQLException` dans `NexusApplication`, `NexusApplicationFactory`, `NexusCli`) |
+| `sqlite-confine` | `org.sqlite` et `java.sql` seulement dans `com.nexus.persistence.sqlite`, plus la liste fermée `SQLITE_EXCEPTIONS` de `CoreArchitectureRules` (`java.sql.SQLException` dans `NexusApplicationFactory`, qui l'enveloppe en `PersistenceException`) |
 | `project-feuille` | `com.nexus.project` n'importe aucun autre package `com.nexus` |
 | `cycles-baseline` | les arêtes de cycle du graphe des packages sont égales à `core/src/test/resources/architecture/package-cycles.txt`, vide depuis [ARCH-0063](../architecture/adr/ARCH-0063-casser-les-cycles-de-packages-du-coeur-par-des-packages-de-modele-feuilles.md) : tout cycle échoue |
 | `index-sans-search` | `com.nexus.index` et ses sous-packages, hors `com.nexus.index.service`, n'importent rien de `com.nexus.search` |
@@ -271,7 +271,7 @@ Spec : [`openspec/specs/core-package-boundaries/spec.md`](../../openspec/specs/c
 | Neuf règles nommées : `core-sans-framework`, `lucene-confine`, `sqlite-confine`, `project-feuille`, `cycles-baseline`, `index-sans-search`, `context-source-sans-context`, `ranking-sans-search`, `search-semantic-sans-ollama`. Une violation est rendue `[règle] classe -> nom importé`. | [Existant vérifié] | `core/src/test/java/com/nexus/architecture/CoreArchitectureRules.java:18-26,103-136` |
 | Le message d'échec est vérifié exactement pour chaque règle de confinement et de sens. | [Existant vérifié] | `CoreArchitectureTest#frameworkImportFailsCoreWithoutFramework`, `#luceneImportOutsideItsPackagesFailsLuceneConfined`, `#jdbcImportInContextFailsSqliteConfined`, `#upwardImportFromProjectFailsProjectLeaf`, `#searchImportFromIndexFailsIndexWithoutSearchButNotFromTheServicePackage`, `#contextImportFromASourceFailsContextSourceWithoutContext`, `#searchImportFromRankingFailsRankingWithoutSearchButNotTheCandidateModel`, `#ollamaImportFromThePortFailsSearchSemanticWithoutOllama` |
 | Une référence pleinement qualifiée sans import compte pour les préfixes surveillés (framework, Lucene, SQLite/JDBC) ; commentaires, chaînes et blocs de texte sont ignorés. | [Existant vérifié] | `CoreArchitectureRules.java:34`, `CoreArchitectureTest#qualifiedLuceneNameWithoutImportFailsLuceneConfined`, `#parserReadsStaticWildcardAndQualifiedNamesAndIgnoresCommentsAndStrings` |
-| La liste fermée de `sqlite-confine` compte trois entrées `java.sql.SQLException` : `NexusApplication`, `NexusApplicationFactory`, `NexusCli`. Une autre classe du même package échoue. | [Existant vérifié] | `CoreArchitectureRules.java:50-53`, `CoreArchitectureTest#closedSqlExceptionListPassesSqliteConfinedButNothingElse` |
+| La liste fermée de `sqlite-confine` compte une seule entrée `java.sql.SQLException` : `NexusApplicationFactory`, qui enveloppe l'échec d'ouverture du stockage en `PersistenceException` (cause conservée). `NexusApplication`, `NexusCli` et toute autre classe qui importe `java.sql` échouent. | [Existant vérifié] | `CoreArchitectureRules.java:49-54`, `CoreArchitectureTest#closedSqlExceptionListPassesSqliteConfinedButNothingElse` |
 | La baseline de cycles ne contient plus aucune arête : son fichier ne porte que trois lignes de commentaire, et un test l'exige vide. Le graphe des packages est acyclique. | [Existant vérifié] | `core/src/test/resources/architecture/package-cycles.txt`, `CoreArchitectureTest#cycleBaselineIsEmpty` |
 | Le graphe des packages n'est construit que depuis les `import` (les références pleinement qualifiées vers `com.nexus` n'y entrent pas) ; une arête de cycle est une arête dont les deux extrémités sont dans une même composante de plus d'un package. | [Existant vérifié] | `core/src/test/java/com/nexus/architecture/JavaSourceGraph.java:100-141` |
 | La baseline doit être triée et sans doublon (test dédié). Une arête nouvelle et une entrée devenue fausse sont deux échecs distincts ; un cycle `ranking` ↔ `search` contre la baseline vide échoue en nommant les deux arêtes. | [Existant vérifié] | `CoreArchitectureTest#cycleBaselineIsSorted`, `#newCycleEdgeFailsTheBaselineAndNamesThePackages`, `#staleBaselineEntryFailsAndAsksForItsRemoval`, `#rankingImportingSearchFailsTheEmptyBaselineAndNamesBothPackages`, `CoreArchitectureRules.java:82-98` |
@@ -320,8 +320,7 @@ flowchart TB
     sqlite --> JDBC
     lucene --> LUC
     semlucene --> LUC
-    application -.->|SQLException seulement| JDBC
-    cli -.->|SQLException seulement| JDBC
+    application -.->|SQLException seulement, NexusApplicationFactory| JDBC
     Coeur -.-x|core-sans-framework| FW
 ```
 

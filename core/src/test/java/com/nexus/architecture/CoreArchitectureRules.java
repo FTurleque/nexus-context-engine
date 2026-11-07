@@ -46,11 +46,12 @@ final class CoreArchitectureRules {
     private static final String SEMANTIC_PACKAGE = "com.nexus.search.semantic";
     private static final String OLLAMA_PACKAGE = "com.nexus.search.semantic.ollama";
 
-    /** Exceptions fermées de {@value #SQLITE_CONFINED} : classe et nom importé exacts. */
+    /**
+     * Exceptions fermées de {@value #SQLITE_CONFINED} : classe et nom importé exacts. Seule la
+     * composition root ouvre le stockage et enveloppe l'échec JDBC en {@code PersistenceException}.
+     */
     static final Set<String> SQLITE_EXCEPTIONS = Set.of(
-            "com.nexus.application.NexusApplication -> java.sql.SQLException",
-            "com.nexus.application.NexusApplicationFactory -> java.sql.SQLException",
-            "com.nexus.cli.NexusCli -> java.sql.SQLException");
+            "com.nexus.application.NexusApplicationFactory -> java.sql.SQLException");
 
     private CoreArchitectureRules() {
     }

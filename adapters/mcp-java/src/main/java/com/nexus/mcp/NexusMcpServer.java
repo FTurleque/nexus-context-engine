@@ -11,7 +11,6 @@ import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 
 import java.io.IOException;
-import java.sql.SQLException;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -29,7 +28,7 @@ public final class NexusMcpServer {
     private NexusMcpServer() {
     }
 
-    public static void main(String[] args) throws SQLException, IOException, InterruptedException {
+    public static void main(String[] args) throws IOException, InterruptedException {
         NexusApplication application = NexusApplication.createLongLived(NexusPaths.fromEnvironment());
         NexusMcpTools tools = new NexusMcpTools(application, new ObjectMapper());
         List<McpServerFeatures.SyncToolSpecification> specifications = tools.specifications();

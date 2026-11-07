@@ -29,6 +29,7 @@ import com.nexus.index.markdown.MarkdownLanguageAnalyzer;
 import com.nexus.index.scan.ProjectScanner;
 import com.nexus.index.minos.MinosCodeIndexImporter;
 import com.nexus.index.scip.ScipCodeIndexImporter;
+import com.nexus.persistence.PersistenceException;
 import com.nexus.persistence.sqlite.SqliteDatabase;
 import com.nexus.persistence.sqlite.SqliteIndexRepository;
 import com.nexus.persistence.sqlite.SqliteProjectRepository;
@@ -73,11 +74,11 @@ final class NexusApplicationFactory {
     static NexusApplication create(
             NexusPaths paths,
             SemanticSearchConfiguration semanticSearchConfiguration,
-            boolean persistentReaders) throws SQLException, IOException {
+            boolean persistentReaders) throws IOException {
         Objects.requireNonNull(paths, "paths");
         Objects.requireNonNull(semanticSearchConfiguration, "semanticSearchConfiguration");
 
-        SqliteDatabase database = new SqliteDatabase(paths);
+        SqliteDatabase database = openDatabase(paths);
         ProjectRepository projectRepository = new SqliteProjectRepository(database);
         IndexRepository indexRepository = new SqliteIndexRepository(database);
         ProjectRegistry projectRegistry = new ProjectRegistry(projectRepository);
@@ -169,6 +170,19 @@ final class NexusApplicationFactory {
                 searchIndex,
                 semanticSearchIndex,
                 semanticSearchConfiguration.enabled());
+    }
+
+    /**
+     * Ouvre le stockage canonique. L'échec JDBC traverse la façade sous
+     * {@link PersistenceException}, cause conservée : les adaptateurs n'importent pas
+     * {@code java.sql}.
+     */
+    private static SqliteDatabase openDatabase(NexusPaths paths) throws IOException {
+        try {
+            return new SqliteDatabase(paths);
+        } catch (SQLException failure) {
+            throw new PersistenceException("Impossible d'ouvrir le stockage SQLite NEXUS", failure);
+        }
     }
 
     /**
