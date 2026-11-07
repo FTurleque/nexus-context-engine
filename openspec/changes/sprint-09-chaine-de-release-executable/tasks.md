@@ -12,7 +12,7 @@ Préalable à la fusion de la PR : les tâches manuelles 3.1 et 3.3 sont faites 
 ## 2. Matériel de signature confiné (AUD-SEC-06)
 
 - [x] 2.1 AUD-SEC-06 — Retirer les secrets PFX de l'`env` du job `windows-installer` et ne les mapper que sur les étapes de signature (distribution, installeur de production), sous condition `github.event_name != 'pull_request'` (design D2) ; vérifier par `bash .claude/scripts/contracts.sh` après ajout du contrat correspondant dans `test-final-audit-contracts.sh`
-- [ ] 2.2 AUD-SEC-06 — Décoder le PFX dans chaque étape de signature, l'effacer dans un `finally` de la même étape et ne plus publier son chemin dans `GITHUB_ENV` (`build-windows-distribution.ps1`, `build-windows-installer.ps1`, `sign-windows-artifact.ps1`) ; vérifier par le check « Windows self-contained installer » de la PR (artefacts non signés, aucun secret exposé, job exécuté sans environnement) ; les assets de release n'étant pas signés, la signature optionnelle n'a pas de preuve en run réel
+- [x] 2.2 AUD-SEC-06 — Décoder le PFX dans chaque étape de signature, l'effacer dans un `finally` de la même étape et ne plus publier son chemin dans `GITHUB_ENV` (`build-windows-distribution.ps1`, `build-windows-installer.ps1`, `sign-windows-artifact.ps1`) ; vérifier par le check « Windows self-contained installer » de la PR (artefacts non signés, aucun secret exposé, job exécuté sans environnement) ; les assets de release n'étant pas signés, la signature optionnelle n'a pas de preuve en run réel
 
 ## 3. Environnement protégé et tags (AUD-DEP-03)
 
@@ -41,7 +41,7 @@ Préalable à la fusion de la PR : les tâches manuelles 3.1 et 3.3 sont faites 
 
 ## 8. Version lue dans le pom (AUD-QUA-12)
 
-- [ ] 8.1 AUD-QUA-12 — Lire la version dans `pom.xml` dans `ci.yml` (job Linux : ZIP, racine de smoke, message du lanceur, artefacts retenus) et dans `scripts/validate-phase-6.ps1` (JAR CLI, ZIP, SBOM, `--version`) (design D8) ; vérifier par `git grep -n "0\.2\.0" -- .github/workflows/ci.yml scripts/validate-phase-6.ps1` (aucun résultat), par le check « Linux reactor Maven build » et par le check « Windows gate » de la PR
+- [x] 8.1 AUD-QUA-12 — Lire la version dans `pom.xml` dans `ci.yml` (job Linux : ZIP, racine de smoke, message du lanceur, artefacts retenus) et dans `scripts/validate-phase-6.ps1` (JAR CLI, ZIP, SBOM, `--version`) (design D8) ; vérifier par `git grep -n "0\.2\.0" -- .github/workflows/ci.yml scripts/validate-phase-6.ps1` (aucun résultat), par le check « Linux reactor Maven build » et par le check « Windows gate » de la PR
 - [x] 8.2 AUD-QUA-12 — Ajouter à `scripts/release/test-final-audit-contracts.sh` le refus d'une version littérale du produit dans ces deux fichiers ; vérifier par `bash .claude/scripts/contracts.sh`
 
 ## 9. Pré-version et répétition de la release (AUD-DEP-02)
