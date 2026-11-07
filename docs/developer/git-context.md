@@ -163,3 +163,44 @@ Exigences : `git-recency-diagnostics › Un incident de récence Git est journal
 - [Proposition] Ajouter à la spec un scénario « Budget de chemins dépassé » (candidats inchangés, raison `récence Git ignorée : budget de chemins dépassé`, aucun `WARNING`) si ce comportement doit devenir contractuel ; les bornes 1 024 et 4 096 resteraient alors à tester.
 - [Proposition] Ajouter un test d'intégration qui fait échouer la récence Git sur un dépôt réel et vérifie la raison dans une explication de contexte demandée par `NexusApplication`.
 - Questions : aucune.
+
+## OpenSpec git-context-cache
+
+Spec : [`openspec/specs/git-context-cache/spec.md`](../../openspec/specs/git-context-cache/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+Cette section décrit les deux caches Git des runtimes longue durée : le cache de contexte (`PersistentGitContextSourceProvider`) et le cache de récence (`GitRecencyCandidateEnricher`).
+
+### Comportement existant vérifié
+
+| Étiquette | Fait | Source |
+|---|---|---|
+| [Existant vérifié] | La capacité par défaut du cache de contexte Git est `FederatedScopePolicy.MAX_PROJECTS`, soit une entrée par projet d'un scope fédéré maximal. | `core/src/main/java/com/nexus/context/source/git/PersistentGitContextSourceProvider.java` (`DEFAULT_CAPACITY`), `core/src/test/java/com/nexus/context/source/git/PersistentGitContextSourceProviderTest#defaultCapacityCoversTheMaximalFederatedScope` |
+| [Existant vérifié] | Deux passages cycliques sur 20 projets inchangés servent chaque projet du cache au second passage. | `core/src/test/java/com/nexus/context/source/git/PersistentGitContextSourceProviderTest#servesEveryProjectOfACyclicTwentyProjectScopeFromTheCacheOnTheSecondPass` |
+| [Existant vérifié] | Les compteurs et la capacité du cache sont exposés, et l'`explain` d'un contexte fédéré porte les derniers compteurs. | `core/src/test/java/com/nexus/context/source/git/PersistentGitContextSourceProviderTest#cacheStatisticsExposeCountersAndCapacity`, `core/src/test/java/com/nexus/context/FederatedContextServiceTest#federatedExplainCarriesTheLatestGitCacheCountersOnly` |
+| [Existant vérifié] | Le cache de récence est indexé par dépôt et HEAD, borné à `FederatedScopePolicy.MAX_PROJECTS` entrées et à `MAX_CUMULATIVE_CHANGED_PATHS` chemins ; un nouveau HEAD recalcule, et un historique au-delà de la borne garde le parcours filtré. | `core/src/main/java/com/nexus/context/source/git/GitRecencyCandidateEnricher.java`, `core/src/test/java/com/nexus/context/source/git/GitRecencyCandidateEnricherTest#reusesRecentChangedPathsWhileHeadIsUnchangedAndRecomputesAfterANewCommit`, `#keepsTheFilteredWalkWhenTheHistoryExceedsTheCacheBound`, `#evictsTheOldestRepositoryWhenTheRecencyCacheIsFull` |
+| [Existant vérifié] | Le workflow `git-context-cache-qualification.yml` couvre un scope de plus de 16 projets ; il est vert sur `develop` après la fusion du sprint 6. | `.github/workflows/git-context-cache-qualification.yml`, `core/src/test/java/com/nexus/benchmark/GitContextCacheQualificationBenchmarkTest.java` |
+
+### Vues
+
+Vue organigramme de composants (non UML, lecture C4 simplifiée) — Quels caches Git une requête répétée réutilise-t-elle, et par quelle clé ? (existant)
+
+```mermaid
+flowchart TB
+    R["Requête fédérée répétée"] --> CC["Cache de contexte Git : une entrée par projet, MAX_PROJECTS entrées"]
+    R --> RC["Cache de récence : clé (dépôt, HEAD), MAX_PROJECTS entrées"]
+    CC --> S["CacheStats : hits, misses, capacité"]
+    S --> X["Métadonnées explain"]
+    RC --> H{"HEAD changé ?"}
+    H -->|oui| W["Recalcul du parcours de log"]
+    H -->|non| U["Réutilisation des chemins modifiés"]
+```
+
+Exigences : `git-context-cache › Le cache de contexte Git couvre le scope fédéré maximal`, `git-context-cache › Les statistiques du cache Git sont exposées`, `git-context-cache › La récence des commits est mise en cache par HEAD`.
+
+### Écarts et limites
+
+- Limite : les tests de cache ne mesurent pas l'ouverture du journal de commits ; ils vérifient la réutilisation et le recalcul par le résultat.
+
+### Propositions et questions ouvertes
+
+- Questions : aucune.

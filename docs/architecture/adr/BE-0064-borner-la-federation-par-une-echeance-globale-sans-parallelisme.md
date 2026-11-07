@@ -107,5 +107,5 @@ Sprint 6, tâches 3.2 et 3.3 : `FederationDeadline` et `FederationDeadlinePolicy
 
 ## References
 
-- `openspec/changes/sprint-06-federation-et-runtimes-longue-duree/design.md` (D3).
+- `openspec/changes/archive/2026-11-07-sprint-06-federation-et-runtimes-longue-duree/design.md` (D3).
 - `core/src/test/java/com/nexus/benchmark/FederatedContextBudgetScaleBenchmarkTest.java`.

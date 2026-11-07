@@ -1,10 +1,10 @@
-# Spec Delta
+# symbol-search-scoping Specification
 
 ## Purpose
-
 Définit le périmètre de travail de la recherche de symboles SQLite, afin que son coût dépende du projet ciblé et du nombre de termes de la requête, et non du nombre total de symboles de la base.
+Documentation durable : docs/developer/large-scale-search.md#openspec-symbol-search-scoping
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: La recherche de symboles est scopée projet avant le tri
 La recherche de symboles SHALL restreindre la recherche plein texte et le préfiltre approché au projet ciblé par un index dont la première colonne identifie le projet, et SHALL NOT parcourir l'index des symboles de tous les projets.
