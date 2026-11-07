@@ -52,10 +52,13 @@ public final class FederatedSearchService {
 
         int localLimit = localRetrievalLimit(validatedLimit);
         List<OrderedFederatedHit> candidates = new ArrayList<>();
+        // Un seul contexte pour toute la requête : le vecteur de requête est calculé
+        // au plus une fois, quel que soit le nombre de projets (AUD-PRF-02).
+        SearchQueryContext queryContext = SearchQueryContext.create();
         int projectOrder = 0;
         for (ProjectDescriptor project : scope) {
             List<RankedCandidate> projectResults = searchService.search(
-                    project, normalizedQuery, localLimit, explain);
+                    project, normalizedQuery, localLimit, explain, queryContext);
             for (int localOrder = 0; localOrder < projectResults.size(); localOrder++) {
                 candidates.add(new OrderedFederatedHit(
                         new FederatedSearchHit(project, projectResults.get(localOrder)),

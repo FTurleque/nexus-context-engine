@@ -5,6 +5,7 @@ import com.nexus.context.source.ContextDiscoveryLimits;
 import com.nexus.project.FederatedScopePolicy;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.search.CandidateType;
+import com.nexus.search.SearchQueryContext;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -114,6 +115,9 @@ public final class FederatedContextService {
         Map<String, Integer> candidateBudgetByProject = new LinkedHashMap<>();
         Map<String, Integer> localTokensByProject = new LinkedHashMap<>();
         Map<String, Integer> localItemsByProject = new LinkedHashMap<>();
+        // Contexte de requête unique : le vecteur de requête est calculé au plus une
+        // fois pour tous les projets du scope (AUD-PRF-02).
+        SearchQueryContext queryContext = SearchQueryContext.create();
 
         for (int index = 0; index < scope.size(); index++) {
             ProjectDescriptor project = scope.get(index);
@@ -128,7 +132,8 @@ public final class FederatedContextService {
                             constraints,
                             explain),
                     materializationBudget,
-                    discoveryBudget);
+                    discoveryBudget,
+                    queryContext);
             List<FederatedContextItem> items = local.items().stream()
                     .map(item -> new FederatedContextItem(project, item))
                     .toList();

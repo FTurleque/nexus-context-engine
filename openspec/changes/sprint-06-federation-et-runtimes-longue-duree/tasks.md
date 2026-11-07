@@ -7,7 +7,7 @@
 
 ## 2. Vecteur de requête unique (AUD-PRF-02)
 
-- [ ] 2.1 `AUD-PRF-02` — Calculer le vecteur de requête une fois dans le chemin fédéré (recherche et contexte) sur la requête redactée, et le transmettre aux `SemanticSearchStrategy` par projet ; vérifier par un test avec un `EmbeddingProvider` qui compte ses appels (1 appel pour 3 projets, requête transmise redactée) : `./mvnw -B -ntp -pl core test -Dtest='SemanticSearchStrategyTest,FederatedSearchService*,FederatedContextServiceTest' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
+- [x] 2.1 `AUD-PRF-02` — Calculer le vecteur de requête une fois dans le chemin fédéré (recherche et contexte) sur la requête redactée, et le transmettre aux `SemanticSearchStrategy` par projet ; vérifier par un test avec un `EmbeddingProvider` qui compte ses appels (1 appel pour 3 projets, requête transmise redactée) : `./mvnw -B -ntp -pl core test -Dtest='SemanticSearchStrategyTest,FederatedSearchService*,FederatedContextServiceTest' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
 - [ ] 2.2 `AUD-PRF-02` — Couvrir l'indisponibilité du provider : un seul appel, tous les projets dégradés avec le même diagnostic ; vérifier par le même test ciblé, puis par le workflow `semantic-search-qualification.yml` (stabilisé par `AUD-DEP-19`)
 
 ## 3. Échéance globale de la fédération (AUD-PRF-03)
