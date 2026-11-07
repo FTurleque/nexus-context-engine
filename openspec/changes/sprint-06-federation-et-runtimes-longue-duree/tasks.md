@@ -23,7 +23,7 @@
 
 ## 5. Cache de contexte Git (AUD-PRF-06)
 
-- [ ] 5.1 `AUD-PRF-06` — Nouvel ADR (skill `nexus-adr`) qui complète ADR-0046 : capacité alignée sur `MAX_PROJECTS`, borne mémoire, cache de récence par (dépôt, HEAD) (couvre aussi la tâche 6.1) ; vérifier par `bash .claude/scripts/contracts.sh`
+- [x] 5.1 `AUD-PRF-06` — Nouvel ADR (skill `nexus-adr`) qui complète ADR-0046 : capacité alignée sur `MAX_PROJECTS`, borne mémoire, cache de récence par (dépôt, HEAD) (couvre aussi la tâche 6.1) ; vérifier par `bash .claude/scripts/contracts.sh`
 - [ ] 5.2 `AUD-PRF-06` — Porter `DEFAULT_CAPACITY` à `FederatedScopePolicy.MAX_PROJECTS` et exposer les compteurs `CacheStats` dans les métadonnées `explain` ; vérifier par un test de 2 passages cycliques sur 20 projets (hits au second passage) : `./mvnw -B -ntp -pl core test -Dtest='PersistentGitContextSourceProvider*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
 - [ ] 5.3 `AUD-PRF-06` — Étendre `git-context-cache-qualification.yml` à un scope de plus de 16 projets ; vérifier par une exécution `workflow_dispatch` verte du workflow
 
