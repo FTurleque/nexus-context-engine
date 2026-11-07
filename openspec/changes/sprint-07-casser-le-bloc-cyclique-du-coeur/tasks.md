@@ -24,7 +24,7 @@
 
 ## 6. Graphe acyclique imposé (AUD-ARC-01)
 
-- [ ] 6.1 `AUD-ARC-01` — Casser les cycles transitifs restants signalés par le test, puis vider la baseline et ajouter les règles de sens nommées (`index` sans `search`, `context.source.*` sans `context`, `ranking` sans `search`, `search.semantic` sans `ollama`) ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='*Architecture*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
+- [x] 6.1 `AUD-ARC-01` — Casser les cycles transitifs restants signalés par le test, puis vider la baseline et ajouter les règles de sens nommées (`index` sans `search`, `context.source.*` sans `context`, `ranking` sans `search`, `search.semantic` sans `ollama`) ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='*Architecture*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
 - [ ] 6.2 `AUD-ARC-01` — Mettre à jour la vue arc42 des building blocks et la documentation d'architecture courante (packages et sens de dépendance) ; vérifier par `bash .claude/scripts/contracts.sh`
 
 ## 7. Intégration
