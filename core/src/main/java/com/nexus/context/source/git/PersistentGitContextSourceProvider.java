@@ -11,7 +11,6 @@ import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.Repository;
-import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 import org.eclipse.jgit.treewalk.filter.PathFilterGroup;
 
 import java.io.IOException;
@@ -42,6 +41,7 @@ public final class PersistentGitContextSourceProvider implements GitContextSourc
     private static final Path CACHE_VALIDATION_WORK = Path.of(".nexus", "git", "cache-validation");
 
     private final GitContextSourceProvider delegate;
+    private final GitRepositoryLocator repositoryLocator;
     private final int capacity;
     private final LinkedHashMap<CacheKey, Entry> entries = new LinkedHashMap<>(16, 0.75f, true);
     private int hits;
@@ -49,11 +49,24 @@ public final class PersistentGitContextSourceProvider implements GitContextSourc
     private int evictions;
 
     public PersistentGitContextSourceProvider() {
-        this(new LocalGitContextSourceProvider(), DEFAULT_CAPACITY);
+        this(GitRepositoryLocator.system());
+    }
+
+    /** Le cache et son délégué local partagent la même règle de découverte du dépôt. */
+    PersistentGitContextSourceProvider(GitRepositoryLocator repositoryLocator) {
+        this(new LocalGitContextSourceProvider(repositoryLocator), DEFAULT_CAPACITY, repositoryLocator);
     }
 
     PersistentGitContextSourceProvider(GitContextSourceProvider delegate, int capacity) {
+        this(delegate, capacity, GitRepositoryLocator.system());
+    }
+
+    PersistentGitContextSourceProvider(
+            GitContextSourceProvider delegate,
+            int capacity,
+            GitRepositoryLocator repositoryLocator) {
         this.delegate = Objects.requireNonNull(delegate, "delegate");
+        this.repositoryLocator = Objects.requireNonNull(repositoryLocator, "repositoryLocator");
         if (capacity <= 0) {
             throw new IllegalArgumentException("capacity doit être strictement positive");
         }
@@ -74,7 +87,7 @@ public final class PersistentGitContextSourceProvider implements GitContextSourc
 
         Fingerprint fingerprint;
         try {
-            fingerprint = Fingerprint.capture(query);
+            fingerprint = Fingerprint.capture(query, repositoryLocator);
         } catch (ContextDiscoveryLimitExceededException limitExceeded) {
             throw limitExceeded;
         } catch (IOException | RuntimeException fingerprintFailure) {
@@ -153,12 +166,10 @@ public final class PersistentGitContextSourceProvider implements GitContextSourc
             String stagedDiff,
             String unstagedDiff) {
 
-        static Fingerprint capture(GitContextQuery query) throws IOException {
+        static Fingerprint capture(GitContextQuery query, GitRepositoryLocator repositoryLocator)
+                throws IOException {
             Path projectRoot = query.project().rootPath().toRealPath();
-            try (Repository repository = new FileRepositoryBuilder()
-                    .findGitDir(projectRoot.toFile())
-                    .setMustExist(true)
-                    .build();
+            try (Repository repository = repositoryLocator.open(projectRoot);
                  Git git = new Git(repository)) {
                 if (repository.isBare()) {
                     throw new IOException("Le cache Git nécessite un worktree local");

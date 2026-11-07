@@ -82,6 +82,29 @@ class PersistentGitContextSourceProviderTest {
     }
 
     @Test
+    void aLongRunningRuntimeNeverUsesAParentRepositoryOfAnotherAccount() throws Exception {
+        Fixture parent = repository("foreign-parent");
+        Path projectRoot = Files.createDirectories(parent.root().resolve("nested"));
+        Files.createDirectories(projectRoot.resolve("src"));
+        Files.writeString(projectRoot.resolve("src/Service.java"), "class Service {}\n");
+        ProjectDescriptor project = project(projectRoot, "nested");
+        GitContextQuery query = new GitContextQuery(project, "service", List.of(Path.of("src/Service.java")), true);
+        PersistentGitContextSourceProvider provider = new PersistentGitContextSourceProvider(
+                new GitRepositoryLocator(entry -> GitRepositoryLocator.Ownership.OTHER_ACCOUNT));
+
+        GitContextResult first = provider.discover(query);
+        GitContextResult second = provider.discover(query);
+
+        for (GitContextResult result : List.of(first, second)) {
+            assertFalse(result.repositoryAvailable());
+            assertEquals(List.of(), result.fragments());
+            assertEquals(List.of(GitRepositoryLocator.PARENT_REPOSITORY_REJECTED), result.diagnostics());
+        }
+        assertEquals(0, provider.stats().entries());
+        assertEquals(0, provider.stats().hits());
+    }
+
+    @Test
     void defaultCapacityCoversTheMaximalFederatedScope() {
         assertEquals(FederatedScopePolicy.MAX_PROJECTS, PersistentGitContextSourceProvider.DEFAULT_CAPACITY);
     }

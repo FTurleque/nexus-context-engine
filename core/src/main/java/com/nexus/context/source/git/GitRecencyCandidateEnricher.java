@@ -17,7 +17,6 @@ import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevWalk;
-import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 import org.eclipse.jgit.treewalk.TreeWalk;
 import org.eclipse.jgit.treewalk.filter.PathFilterGroup;
 import org.eclipse.jgit.treewalk.filter.TreeFilter;
@@ -30,6 +29,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -44,12 +44,16 @@ import java.util.function.Consumer;
  * enregistrement {@code WARNING} qui ne nomme que le type d'exception et, si une explication est
  * demandée, la raison {@value #UNAVAILABLE_REASON}. Un dépassement de budget (chemins candidats ou
  * chemins modifiés) laisse aussi les candidats inchangés, avec la raison {@value #BUDGET_REASON}.
- * Un projet hors Git reste silencieux.</p>
+ * Un projet hors Git reste silencieux. Le dépôt est ouvert par {@link GitRepositoryLocator} : un
+ * dépôt parent d'un autre compte laisse les candidats inchangés, avec la raison
+ * {@value #REJECTED_REPOSITORY_REASON}.</p>
  */
 public final class GitRecencyCandidateEnricher implements CandidateEnricher {
 
     static final String UNAVAILABLE_REASON = "récence Git indisponible";
     static final String BUDGET_REASON = "récence Git ignorée : budget de chemins dépassé";
+    static final String REJECTED_REPOSITORY_REASON =
+            "récence Git ignorée : dépôt Git parent n'appartenant pas à l'utilisateur courant";
 
     private static final System.Logger LOGGER = System.getLogger(GitRecencyCandidateEnricher.class.getName());
 
@@ -61,6 +65,7 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
     static final int DEFAULT_RECENCY_CACHE_CAPACITY = FederatedScopePolicy.MAX_PROJECTS;
 
     private final int recencyCapacity;
+    private final GitRepositoryLocator repositoryLocator;
     private final LinkedHashMap<RecencyKey, RecencyIndex> recencyCache = new LinkedHashMap<>(16, 0.75f, true);
     private final AtomicInteger logScans = new AtomicInteger();
 
@@ -69,6 +74,11 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
     }
 
     GitRecencyCandidateEnricher(int recencyCapacity) {
+        this(recencyCapacity, GitRepositoryLocator.system());
+    }
+
+    GitRecencyCandidateEnricher(int recencyCapacity, GitRepositoryLocator repositoryLocator) {
+        this.repositoryLocator = Objects.requireNonNull(repositoryLocator, "repositoryLocator");
         if (recencyCapacity <= 0) {
             throw new IllegalArgumentException("recencyCapacity doit être strictement positive");
         }
@@ -139,6 +149,11 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
             // Cas normal d'un projet hors Git : pas d'avertissement, une trace de diagnostic.
             LOGGER.log(System.Logger.Level.DEBUG, "Projet hors dépôt Git : récence Git non calculée");
             return candidates;
+        } catch (GitRepositoryLocator.RejectedParentRepositoryException exception) {
+            // Dépôt parent d'un autre compte : ni historique ni configuration ne sont lus.
+            LOGGER.log(System.Logger.Level.DEBUG, "Dépôt Git parent écarté : récence Git non calculée");
+            explanationReasons.accept(REJECTED_REPOSITORY_REASON);
+            return candidates;
         } catch (Exception exception) {
             // La récence Git est un signal optionnel : tout incident reste fail-open pour ne jamais
             // rendre la recherche principale indisponible. Le message de l'exception peut citer le
@@ -161,7 +176,7 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
      */
     private Optional<Map<String, Double>> recency(Path projectRoot, Set<String> projectPaths)
             throws IOException, GitAPIException {
-        try (Repository repository = openRepository(projectRoot)) {
+        try (Repository repository = repositoryLocator.open(projectRoot)) {
             String projectPrefix = projectPrefix(repository, projectRoot);
             Map<String, String> projectPathByGitPath = new HashMap<>();
             for (String projectPath : projectPaths) {
@@ -307,14 +322,6 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
                     signals));
         }
         return List.copyOf(enriched);
-    }
-
-    private static Repository openRepository(Path projectRoot) throws IOException {
-        FileRepositoryBuilder builder = new FileRepositoryBuilder().findGitDir(projectRoot.toFile());
-        if (builder.getGitDir() == null) {
-            throw new RepositoryNotFoundException(projectRoot.toFile());
-        }
-        return builder.setMustExist(true).build();
     }
 
     private static void addScore(
