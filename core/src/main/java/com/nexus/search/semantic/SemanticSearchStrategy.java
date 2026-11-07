@@ -253,8 +253,26 @@ public final class SemanticSearchStrategy implements SearchStrategy {
         };
     }
 
-    /** Résultat mémorisé par requête : un vecteur, ou l'indisponibilité du provider. */
-    private record QueryVector(float[] vector, EmbeddingProviderUnavailableException unavailable) {
+    /**
+     * Résultat mémorisé par requête : un vecteur, ou l'indisponibilité du provider. Classe plutôt que
+     * record : le tableau est partagé tel quel entre projets, sans égalité structurelle.
+     */
+    private static final class QueryVector {
+        private final float[] vector;
+        private final EmbeddingProviderUnavailableException unavailable;
+
+        private QueryVector(float[] vector, EmbeddingProviderUnavailableException unavailable) {
+            this.vector = vector;
+            this.unavailable = unavailable;
+        }
+
+        float[] vector() {
+            return vector;
+        }
+
+        EmbeddingProviderUnavailableException unavailable() {
+            return unavailable;
+        }
     }
 
     private record CachedFingerprint(long generation, String fingerprint) {
