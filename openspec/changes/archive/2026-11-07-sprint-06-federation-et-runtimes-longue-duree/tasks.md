@@ -8,7 +8,7 @@
 ## 2. Vecteur de requête unique (AUD-PRF-02)
 
 - [x] 2.1 `AUD-PRF-02` — Calculer le vecteur de requête une fois dans le chemin fédéré (recherche et contexte) sur la requête redactée, et le transmettre aux `SemanticSearchStrategy` par projet ; vérifier par un test avec un `EmbeddingProvider` qui compte ses appels (1 appel pour 3 projets, requête transmise redactée) : `./mvnw -B -ntp -pl core test -Dtest='SemanticSearchStrategyTest,FederatedSearchService*,FederatedContextServiceTest' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
-- [ ] 2.2 `AUD-PRF-02` — Couvrir l'indisponibilité du provider : un seul appel, tous les projets dégradés avec le même diagnostic ; vérifier par le même test ciblé, puis par le workflow `semantic-search-qualification.yml` (stabilisé par `AUD-DEP-19`)
+- [x] 2.2 `AUD-PRF-02` — Couvrir l'indisponibilité du provider : un seul appel, tous les projets dégradés avec le même diagnostic ; vérifier par le même test ciblé, puis par le workflow `semantic-search-qualification.yml` (stabilisé par `AUD-DEP-19`)
 
 ## 3. Échéance globale de la fédération (AUD-PRF-03)
 
@@ -25,7 +25,7 @@
 
 - [x] 5.1 `AUD-PRF-06` — Nouvel ADR (skill `nexus-adr`) qui complète ADR-0046 : capacité alignée sur `MAX_PROJECTS`, borne mémoire, cache de récence par (dépôt, HEAD) (couvre aussi la tâche 6.1) ; vérifier par `bash .claude/scripts/contracts.sh`
 - [x] 5.2 `AUD-PRF-06` — Porter `DEFAULT_CAPACITY` à `FederatedScopePolicy.MAX_PROJECTS` et exposer les compteurs `CacheStats` dans les métadonnées `explain` ; vérifier par un test de 2 passages cycliques sur 20 projets (hits au second passage) : `./mvnw -B -ntp -pl core test -Dtest='PersistentGitContextSourceProvider*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
-- [ ] 5.3 `AUD-PRF-06` — Étendre `git-context-cache-qualification.yml` à un scope de plus de 16 projets ; vérifier par une exécution `workflow_dispatch` verte du workflow
+- [x] 5.3 `AUD-PRF-06` — Étendre `git-context-cache-qualification.yml` à un scope de plus de 16 projets ; vérifier par une exécution `workflow_dispatch` verte du workflow
 
 ## 6. Cache de récence Git (AUD-PRF-07)
 

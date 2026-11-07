@@ -3,6 +3,7 @@
 ## Purpose
 
 Définit l'usage du cache de readers Lucene des runtimes longue durée pour les lectures de métadonnées d'index, afin qu'aucune requête n'ouvre un index complet pour lire ses métadonnées de commit.
+Documentation durable : docs/developer/lucene-lifecycle-qualification.md#openspec-lucene-reader-cache
 
 ## ADDED Requirements
 

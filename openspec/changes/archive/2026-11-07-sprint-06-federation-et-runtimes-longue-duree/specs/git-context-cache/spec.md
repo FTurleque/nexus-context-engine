@@ -3,6 +3,7 @@
 ## Purpose
 
 Définit les caches Git des runtimes longue durée (contexte Git et récence des commits), dimensionnés pour le scope fédéré maximal et observables, afin qu'une requête répétée ne relise pas l'historique Git.
+Documentation durable : docs/developer/git-context.md#openspec-git-context-cache
 
 ## ADDED Requirements
 

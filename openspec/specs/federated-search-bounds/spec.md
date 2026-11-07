@@ -1,10 +1,10 @@
-# Spec Delta
+# federated-search-bounds Specification
 
 ## Purpose
-
 Définit les bornes de coût et de temps d'une requête fédérée (recherche ou contexte) sur un scope de projets, afin que son coût ne répète pas par projet ce qui ne dépend que de la requête, et que sa latence reste bornée et explicable.
+Documentation durable : docs/developer/large-scale-search.md#openspec-federated-search-bounds
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Le vecteur de requête est calculé une fois par requête fédérée
 Une requête fédérée avec recherche sémantique active SHALL demander au fournisseur d'embeddings au plus un vecteur de requête, quel que soit le nombre de projets du scope, et SHALL transmettre ce vecteur à la recherche sémantique de chaque projet.
