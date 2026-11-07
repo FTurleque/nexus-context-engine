@@ -22,6 +22,7 @@ final class SqliteIndexSql {
     static final String QUALIFIED_NAME_COLUMN = "qualified_name";
     static final String RELATIVE_PATH_COLUMN = "relative_path";
     static final int TRIGRAM_MIN_CODE_POINTS = 3;
+    static final long FUZZY_SMALL_CANDIDATE_THRESHOLD = 10_000L;
     static final ObjectMapper JSON_MAPPER = new ObjectMapper();
 
     static void bumpGeneration(Connection connection, UUID projectId) throws SQLException {

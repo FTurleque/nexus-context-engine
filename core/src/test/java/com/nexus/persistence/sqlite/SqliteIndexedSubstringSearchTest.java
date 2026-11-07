@@ -376,9 +376,12 @@ class SqliteIndexedSubstringSearchTest {
         // Le préfiltre est scopé au projet (V015, AUD-PRF-09) : voir SqliteSymbolSearchScopingTest pour le plan complet.
         try (PreparedStatement statement = connection.prepareStatement(
                 "EXPLAIN QUERY PLAN " + SqliteSymbolSearch.FUZZY_BATCH_SQL)) {
-            statement.setString(1, "[{\"i\":0,\"first\":\"a\",\"min\":2,\"max\":8}]");
+            statement.setInt(1, 0);
             statement.setString(2, "00000000-0000-0000-0000-000000000000");
-            statement.setInt(3, 20);
+            statement.setString(3, "a");
+            statement.setInt(4, 2);
+            statement.setInt(5, 8);
+            statement.setInt(6, 20);
             try (ResultSet resultSet = statement.executeQuery()) {
                 boolean usesIndex = false;
                 while (resultSet.next()) {

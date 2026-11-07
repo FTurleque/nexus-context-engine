@@ -215,9 +215,12 @@ class SqliteSymbolSearchScopingTest {
         List<String> details = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement(
                 "EXPLAIN QUERY PLAN " + SqliteSymbolSearch.FUZZY_BATCH_SQL)) {
-            statement.setString(1, "[{\"i\":0,\"first\":\"o\",\"min\":9,\"max\":15}]");
+            statement.setInt(1, 0);
             statement.setString(2, projectId.toString());
-            statement.setInt(3, LIMIT);
+            statement.setString(3, "o");
+            statement.setInt(4, 9);
+            statement.setInt(5, 15);
+            statement.setInt(6, LIMIT);
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {
                     details.add(resultSet.getString("detail"));
