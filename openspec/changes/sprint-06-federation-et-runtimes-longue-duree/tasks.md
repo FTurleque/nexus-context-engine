@@ -38,7 +38,7 @@
 
 ## 8. Intégration
 
-- [ ] 8.1 Vérifier le critère de sortie du sprint (un vecteur, aucun reader hors cache, échéance qui nomme les projets non servis) sur l'ensemble : `/nx-validate` (contrats, `./mvnw -B -ntp clean install`, `scripts/self-smoke.ps1`)
+- [x] 8.1 Vérifier le critère de sortie du sprint (un vecteur, aucun reader hors cache, échéance qui nomme les projets non servis) sur l'ensemble : `/nx-validate` (contrats, `./mvnw -B -ntp clean install`, `scripts/self-smoke.ps1`)
 
 ## Workflow follow-up
 
