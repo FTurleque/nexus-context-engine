@@ -2,6 +2,8 @@
 
 Ordre interne du sprint : `AUD-DEP-21`, `AUD-SEC-06`, `AUD-DEP-03`, `AUD-DEP-09` et `AUD-QUA-12` débloquent `AUD-DEP-02`, traité en dernier. Les tâches marquées « manuel » sont des réglages GitHub du mainteneur ; leur vérification n'utilise que des lectures `gh`.
 
+Préalable à la fusion de la PR : les tâches manuelles 3.1 et 3.3 sont faites et relevées par `gh api`. GitHub crée sans protection un environnement absent au premier job qui le référence ; fusionner avant 3.1 exposerait `publish` et les secrets PFX à un run non approuvé (premier tag `v*` ou `workflow_dispatch` signé).
+
 ## 1. Secrets explicites (AUD-DEP-21)
 
 - [x] 1.1 AUD-DEP-21 — Remplacer `secrets: inherit` de `release.yml` par la transmission des deux secrets PFX nommés (design D1) ; vérifier par `git grep -n "secrets: inherit" -- .github/workflows` (aucun résultat)
@@ -10,12 +12,12 @@ Ordre interne du sprint : `AUD-DEP-21`, `AUD-SEC-06`, `AUD-DEP-03`, `AUD-DEP-09`
 ## 2. Matériel de signature confiné (AUD-SEC-06)
 
 - [x] 2.1 AUD-SEC-06 — Retirer les secrets PFX de l'`env` du job `windows-installer` et ne les mapper que sur les étapes de signature (distribution, installeur de production), sous condition `github.event_name != 'pull_request'` (design D2) ; vérifier par `bash .claude/scripts/contracts.sh` après ajout du contrat correspondant dans `test-final-audit-contracts.sh`
-- [ ] 2.2 AUD-SEC-06 — Décoder le PFX dans chaque étape de signature, l'effacer dans un `finally` de la même étape et ne plus publier son chemin dans `GITHUB_ENV` (`build-windows-distribution.ps1`, `build-windows-installer.ps1`, `sign-windows-artifact.ps1`) ; vérifier par le check « Windows self-contained installer » de la PR (artefacts non signés, aucun secret exposé) puis par un `workflow_dispatch` de `windows-installer.yml` avec `require_authenticode: true` sur la branche
+- [ ] 2.2 AUD-SEC-06 — Décoder le PFX dans chaque étape de signature, l'effacer dans un `finally` de la même étape et ne plus publier son chemin dans `GITHUB_ENV` (`build-windows-distribution.ps1`, `build-windows-installer.ps1`, `sign-windows-artifact.ps1`) ; vérifier par le check « Windows self-contained installer » de la PR (artefacts non signés, aucun secret exposé, job exécuté sans environnement) ; la preuve signée est produite par la répétition 9.3 et 9.4, la politique de déploiement de `release` (tags `v*`) refusant un `workflow_dispatch` signé sur une branche
 
 ## 3. Environnement protégé et tags (AUD-DEP-03)
 
 - [ ] 3.1 AUD-DEP-03 (manuel) — Créer l'environnement `release` : reviewer requis (mainteneur), politique de déploiement limitée aux tags `v*` ; y créer les deux secrets PFX puis les supprimer des secrets de dépôt ; vérifier par `gh api repos/FTurleque/nexus-context-engine/environments --jq '.environments[] | {name, protection_rules}'`
-- [ ] 3.2 AUD-DEP-03 — Déclarer `environment: release` sur le job `publish` et sur le job Windows appelé avec `require_authenticode: true` ; si l'environnement conditionnel n'est pas accepté dans le workflow réutilisable, appliquer l'alternative du design (job de signature dédiée) ; retirer la transmission de secrets de `release.yml` (design D1, D3) ; vérifier par `bash .claude/scripts/contracts.sh` (contrat : `publish` déclare `environment: release`)
+- [x] 3.2 AUD-DEP-03 — Déclarer `environment: release` sur le job `publish` et sur le job Windows appelé avec `require_authenticode: true` ; si l'environnement conditionnel n'est pas accepté dans le workflow réutilisable, appliquer l'alternative du design (job de signature dédiée) ; garder la transmission nommée des deux secrets PFX dans `release.yml` (design D1, D3) ; vérifier par `bash .claude/scripts/contracts.sh` (contrat : `publish` déclare `environment: release`, environnement conditionnel du job Windows, transmission nommée)
 - [ ] 3.3 AUD-DEP-03 (manuel) — Créer un ruleset de tags ciblant `refs/tags/v*` (création, mise à jour, suppression restreintes au mainteneur) ; vérifier par `gh api repos/FTurleque/nexus-context-engine/rulesets --jq '.[] | {name, target, enforcement}'` (un ruleset `tag` actif)
 
 ## 4. Provenance des assets Windows (AUD-DEP-09)
@@ -25,7 +27,7 @@ Ordre interne du sprint : `AUD-DEP-21`, `AUD-SEC-06`, `AUD-DEP-03`, `AUD-DEP-09`
 
 ## 5. Build reproductible (AUD-DEP-05)
 
-- [x] 5.1 AUD-DEP-05 — Ajouter `project.build.outputTimestamp` au pom racine et sa mise à jour dans la procédure de release de `docs/developer/release-and-recovery.md` (design D5) ; vérifier par deux `./mvnw -B -ntp clean package -DskipTests` successifs puis `sha256sum target/nexus-context-engine-*-cli.jar target/distribution/*.zip` (empreintes identiques)
+- [x] 5.1 AUD-DEP-05 — Ajouter `project.build.outputTimestamp` au pom racine et sa mise à jour dans la procédure de release de `docs/developer/release-and-recovery.md` (design D5) ; vérifier par deux `./mvnw -B -ntp clean verify -DskipTests` successifs (le ZIP est assemblé en phase `verify`) puis `sha256sum target/nexus-context-engine-*-cli.jar target/distribution/*.zip` (empreintes identiques)
 
 ## 6. Outillage Maven épinglé (AUD-DEP-06)
 
@@ -51,5 +53,5 @@ Ordre interne du sprint : `AUD-DEP-21`, `AUD-SEC-06`, `AUD-DEP-03`, `AUD-DEP-09`
 
 ## Workflow follow-up
 
-- Ouvrir la PR depuis une branche issue de `origin/develop` vers `develop` (skill `nexus-pr-workflow`), relue par `/nx-review` (agent `nexus-security-auditor` pour les sections 1 à 4) ; merge exact-head en merge commit (`gh pr merge --merge --match-head-commit <sha>`). Les tâches 9.3 et 9.4 suivent la fusion.
+- Ouvrir la PR depuis une branche issue de `origin/develop` vers `develop` (skill `nexus-pr-workflow`), relue par `/nx-review` (agent `nexus-security-auditor` pour les sections 1 à 4) ; fusionner seulement après les tâches manuelles 3.1 et 3.3 et le check « Windows self-contained installer » vert ; merge exact-head en merge commit (`gh pr merge --merge --match-head-commit <sha>`). Les tâches 9.3 et 9.4 suivent la fusion.
 - Une fois la répétition consignée, archiver le changement OpenSpec (`/opsx:archive sprint-09-chaine-de-release-executable`).

@@ -271,8 +271,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ZIP="$(find target/windows-release -type f -name 'nexus-context-engine-*-windows-x64.zip' -print -quit)"
-          SETUP="$(find target/windows-release -type f -name 'NEXUS-*-windows-x64-setup.exe' -print -quit)"
+          mapfile -t ZIPS < <(find target/windows-release -type f -name 'nexus-context-engine-*-windows-x64.zip' -print)
+          mapfile -t SETUPS < <(find target/windows-release -type f -name 'NEXUS-*-windows-x64-setup.exe' -print)
+          # Exactly one of each: attestation, verification and upload glob the same patterns.
+          if [[ ${#ZIPS[@]} -ne 1 || ${#SETUPS[@]} -ne 1 ]]; then
+            echo "::error::Expected exactly one Windows ZIP and one setup.exe: zip=${#ZIPS[@]} setup=${#SETUPS[@]}"
+            exit 1
+          fi
+          ZIP="${ZIPS[0]}"
+          SETUP="${SETUPS[0]}"
           test -s "$ZIP"
           test -s "$SETUP"
           test -s "$ZIP.sha256"
@@ -404,8 +411,8 @@ jobs:
               -name 'NEXUS-*-windows-x64-setup.exe' \
             \) -print | sort
           )
-          if [[ ${#ATTESTED[@]} -lt 2 ]]; then
-            echo "::error::Expected at least one Windows ZIP and one setup.exe to verify: ${#ATTESTED[@]} file(s)"
+          if [[ ${#ATTESTED[@]} -ne 2 ]]; then
+            echo "::error::Expected exactly one Windows ZIP and one setup.exe to verify: ${#ATTESTED[@]} file(s)"
             exit 1
           fi
           for asset in "${ATTESTED[@]}"; do

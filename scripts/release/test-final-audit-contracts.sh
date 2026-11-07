@@ -473,6 +473,12 @@ for path in "${product_version_files[@]}"; do
       | grep -v -E 'uses: [^@]+@[0-9a-f]{40}|apache-maven-[0-9]'; then
     fail "literal product version $product_version in $path (read it from pom.xml)"
   fi
+  # Any other bare X.Y.Z (a former or future product version) is refused too;
+  # tool versions are recognised by their context and stay allowed.
+  if grep -n -E '(^|[^0-9A-Za-z./@+_-])[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?([^0-9A-Za-z.+_]|$)' "$path" \
+      | grep -v -E 'uses: [^@]+@[0-9a-f]{40}|apache-maven-[0-9]|java-version:|specVersion|maven\.apache\.org/POM'; then
+    fail "literal X.Y.Z version in $path (read the product version from pom.xml)"
+  fi
 done
 grep -q 'NEXUS_VERSION=' .github/workflows/ci.yml \
   || fail 'Linux CI job must export the product version read from pom.xml'

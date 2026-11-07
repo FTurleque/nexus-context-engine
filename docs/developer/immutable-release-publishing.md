@@ -124,6 +124,8 @@ Un rollback de consommation pointe vers un tag SemVer historique ou, de préfér
 
 - Aucun workflow ne transmet `secrets: inherit` ; un workflow réutilisable ne reçoit, par leur nom, que les secrets qu'il déclare, y compris quand ils n'existent que dans l'environnement `release`.
 - Le job `publish` et la signature de release déclarent `environment: release` : reviewer requis, déploiement limité aux tags `v*`, secrets PFX Authenticode portés par l'environnement. Aucune écriture dans GHCR ni dans les releases avant l'approbation.
+- Une release demande deux approbations de l'environnement `release` : le job Windows signé, puis le job `publish`.
+- L'environnement et le ruleset de tags existent avant qu'un workflow référence `release` : GitHub crée sans protection un environnement absent au premier job qui le nomme. Aucun tag `v*` ni `workflow_dispatch` avec `require_authenticode: true` n'est lancé tant que la lecture `gh api` ci-dessous ne montre pas le reviewer requis et le ruleset actif.
 - Un ruleset de tags actif cible `refs/tags/v*` et réserve leur création, leur mise à jour et leur suppression au mainteneur.
 - Chaque ZIP et chaque `setup.exe` publiés reçoivent une attestation de provenance (`actions/attest` en `subject-path`, même version épinglée que pour l'image), vérifiée par `gh attestation verify` avant tout upload et avant le déplacement de `latest`.
 - Le tag de release est `vX.Y.Z` ou `vX.Y.Z-rc.N`, égal à la version Maven et posé sur la tête de `main`. Une pré-version publie une release marquée pré-version, sous des tags d'image version et SHA immuables, et ne déplace jamais `latest`.
