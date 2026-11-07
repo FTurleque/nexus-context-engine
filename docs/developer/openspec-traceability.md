@@ -240,7 +240,7 @@ Un changement actif porte sa traçabilité dans la section « Traçabilité » d
 |---|---|---|---|---|
 | `preciser-bornes-redaction-recence-git` | `git-recency-diagnostics`, `secret-redaction` | 6 | 0 / 5 | [design.md](../../openspec/changes/preciser-bornes-redaction-recence-git/design.md#traçabilité) |
 | `sprint-06-federation-et-runtimes-longue-duree` | `federated-search-bounds`, `git-context-cache`, `lucene-reader-cache`, `symbol-search-scoping` | 18 | 0 / 16 | [design.md](../../openspec/changes/sprint-06-federation-et-runtimes-longue-duree/design.md#traçabilité) |
-| `sprint-07-casser-le-bloc-cyclique-du-coeur` | `core-package-boundaries` | 9 | 0 / 10 | [design.md](../../openspec/changes/sprint-07-casser-le-bloc-cyclique-du-coeur/design.md#traçabilité) |
+| `sprint-07-casser-le-bloc-cyclique-du-coeur` | `core-package-boundaries` | 9 | 10 / 10 | [design.md](../../openspec/changes/sprint-07-casser-le-bloc-cyclique-du-coeur/design.md#traçabilité) |
 | `sprint-08-facade-configuration-durcissements` | `git-context-discovery`, `rest-transport-hardening` | 11 | 0 / 18 | [design.md](../../openspec/changes/sprint-08-facade-configuration-durcissements/design.md#traçabilité) |
 | `sprint-09-chaine-de-release-executable` | `build-reproducibility`, `license-compliance`, `release-pipeline` | 17 | 0 / 20 | [design.md](../../openspec/changes/sprint-09-chaine-de-release-executable/design.md#traçabilité) |
 | `sprint-10-conteneur-et-gouvernance` | `container-image-hardening`, `operational-documentation-contracts`, `repository-governance`, `repository-security-settings` | 16 | 0 / 15 | [design.md](../../openspec/changes/sprint-10-conteneur-et-gouvernance/design.md#traçabilité) |

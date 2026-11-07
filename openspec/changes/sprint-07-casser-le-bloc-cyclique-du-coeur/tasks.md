@@ -29,7 +29,7 @@
 
 ## 7. Intégration
 
-- [ ] 7.1 Vérifier l'absence de changement observable (réponses CLI, REST, MCP, self-smoke) : `/nx-validate` (contrats, `./mvnw -B -ntp clean install`, `scripts/self-smoke.ps1`)
+- [x] 7.1 Vérifier l'absence de changement observable (réponses CLI, REST, MCP, self-smoke) : `/nx-validate` (contrats, `./mvnw -B -ntp clean install`, `scripts/self-smoke.ps1`)
 
 ## Workflow follow-up
 
