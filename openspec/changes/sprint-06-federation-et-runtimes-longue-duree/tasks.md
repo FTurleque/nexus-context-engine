@@ -2,7 +2,7 @@
 
 ## 1. Découpage des méthodes longues (AUD-QUA-10)
 
-- [ ] 1.1 `AUD-QUA-10` — Découper `FederatedContextService.build` en étapes privées nommées (validation, collecte par projet, sélection, métadonnées), sans modifier les tests ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='FederatedContext*,FederatedContextBudgetScaleBenchmarkTest' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
+- [x] 1.1 `AUD-QUA-10` — Découper `FederatedContextService.build` en étapes privées nommées (validation, collecte par projet, sélection, métadonnées), sans modifier les tests ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='FederatedContext*,FederatedContextBudgetScaleBenchmarkTest' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
 - [ ] 1.2 `AUD-QUA-10` — Découper `ProjectIndexingService.indexLocked` en étapes nommées (scan, diff, publication, providers externes, statut), sans modifier les tests ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='ProjectIndexingService*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
 
 ## 2. Vecteur de requête unique (AUD-PRF-02)

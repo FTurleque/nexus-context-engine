@@ -24,6 +24,9 @@ import java.util.regex.Pattern;
  * d'overfetch borné. Le coût de préparation local est donc O(budget global)
  * plutôt que O(nombre de projets × budget global). Après le premier tour
  * équitable et la déduplication, le budget libéré est redistribué globalement.</p>
+ *
+ * <p>{@link #build} enchaîne quatre étapes nommées : validation, collecte par
+ * projet, sélection sous budget, métadonnées.</p>
  */
 public final class FederatedContextService {
 
@@ -49,6 +52,35 @@ public final class FederatedContextService {
             Set<CandidateType> requestedSources,
             Map<String, String> constraints,
             boolean explain) {
+        List<ProjectDescriptor> scope = validate(projects, query, tokenBudget, requestedSources, constraints);
+        ContextMaterializationBudget materializationBudget =
+                ContextMaterializationLimits.fromEnvironment().newBudget();
+        ContextDiscoveryBudget discoveryBudget =
+                ContextDiscoveryLimits.fromEnvironment().newBudget();
+
+        List<String> excluded = new ArrayList<>();
+        ProjectCollection collection = collectPerProject(
+                scope, query, tokenBudget, requestedSources, constraints, explain,
+                materializationBudget, discoveryBudget, excluded);
+        Selection selection = select(scope, collection, tokenBudget, explain, excluded);
+        Map<String, Object> metadata = buildMetadata(
+                scope, collection, selection, tokenBudget, discoveryBudget, materializationBudget);
+
+        return new FederatedContextBundle(
+                selection.selected(),
+                tokenBudget,
+                selection.selectedTokens(),
+                explain ? excluded : List.of(),
+                metadata);
+    }
+
+    /** Étape 1 : validation de la requête, du budget et du scope. */
+    private static List<ProjectDescriptor> validate(
+            List<ProjectDescriptor> projects,
+            String query,
+            int tokenBudget,
+            Set<CandidateType> requestedSources,
+            Map<String, String> constraints) {
         Objects.requireNonNull(query, "query");
         Objects.requireNonNull(requestedSources, "requestedSources");
         Objects.requireNonNull(constraints, "constraints");
@@ -61,15 +93,23 @@ public final class FederatedContextService {
             throw new IllegalArgumentException(
                     "tokenBudget must be at least the number of projects in the federated scope");
         }
-        ContextMaterializationBudget materializationBudget =
-                ContextMaterializationLimits.fromEnvironment().newBudget();
-        ContextDiscoveryBudget discoveryBudget =
-                ContextDiscoveryLimits.fromEnvironment().newBudget();
+        return scope;
+    }
 
+    /** Étape 2 : collecte par projet, dans l'ordre déterministe du scope. */
+    private ProjectCollection collectPerProject(
+            List<ProjectDescriptor> scope,
+            String query,
+            int tokenBudget,
+            Set<CandidateType> requestedSources,
+            Map<String, String> constraints,
+            boolean explain,
+            ContextMaterializationBudget materializationBudget,
+            ContextDiscoveryBudget discoveryBudget,
+            List<String> excluded) {
         int baseBudget = tokenBudget / scope.size();
         int remainder = tokenBudget % scope.size();
         List<List<FederatedContextItem>> perProjectItems = new ArrayList<>();
-        List<String> excluded = new ArrayList<>();
         Map<String, Integer> allocatedByProject = new LinkedHashMap<>();
         Map<String, Integer> candidateBudgetByProject = new LinkedHashMap<>();
         Map<String, Integer> localTokensByProject = new LinkedHashMap<>();
@@ -101,7 +141,21 @@ public final class FederatedContextService {
                 local.excluded().forEach(reason -> excluded.add(project.name() + ": " + reason));
             }
         }
+        return new ProjectCollection(
+                perProjectItems,
+                allocatedByProject,
+                candidateBudgetByProject,
+                localTokensByProject,
+                localItemsByProject);
+    }
 
+    /** Étape 3 : sélection sous budget (fair floor, déduplication, redistribution globale). */
+    private static Selection select(
+            List<ProjectDescriptor> scope,
+            ProjectCollection collection,
+            int tokenBudget,
+            boolean explain,
+            List<String> excluded) {
         List<FederatedContextItem> selected = new ArrayList<>();
         List<FederatedContextItem> deferred = new ArrayList<>();
         Map<ContentKey, UUID> seen = new LinkedHashMap<>();
@@ -110,11 +164,11 @@ public final class FederatedContextService {
         boolean[] fairFloorClosed = new boolean[scope.size()];
         int[] crossProjectDuplicates = {0};
         int selectedTokens = 0;
-        int maxItems = perProjectItems.stream().mapToInt(List::size).max().orElse(0);
+        int maxItems = collection.perProjectItems().stream().mapToInt(List::size).max().orElse(0);
 
         for (int itemIndex = 0; itemIndex < maxItems; itemIndex++) {
             for (int projectIndex = 0; projectIndex < scope.size(); projectIndex++) {
-                List<FederatedContextItem> projectItems = perProjectItems.get(projectIndex);
+                List<FederatedContextItem> projectItems = collection.perProjectItems().get(projectIndex);
                 if (itemIndex >= projectItems.size()) {
                     continue;
                 }
@@ -127,7 +181,7 @@ public final class FederatedContextService {
                     continue;
                 }
 
-                int fairAllocation = allocatedByProject.get(projectId);
+                int fairAllocation = collection.allocatedByProject().get(projectId);
                 int projectTokens = selectedTokensByProject.getOrDefault(projectId, 0);
                 if (projectTokens + item.estimatedTokens() > fairAllocation
                         || selectedTokens + item.estimatedTokens() > tokenBudget) {
@@ -173,42 +227,55 @@ public final class FederatedContextService {
         if (selectedTokens > tokenBudget) {
             throw new IllegalStateException("Le contexte fédéré a dépassé son budget global");
         }
+        return new Selection(
+                selected,
+                selectedTokens,
+                selectedTokensByProject,
+                selectedItemsByProject,
+                refillTokens,
+                refillItems,
+                crossProjectDuplicates[0]);
+    }
 
+    /** Étape 4 : métadonnées de la réponse fédérée. */
+    private static Map<String, Object> buildMetadata(
+            List<ProjectDescriptor> scope,
+            ProjectCollection collection,
+            Selection selection,
+            int tokenBudget,
+            ContextDiscoveryBudget discoveryBudget,
+            ContextMaterializationBudget materializationBudget) {
         List<String> starvedProjects = scope.stream()
-                .filter(project -> selectedItemsByProject.getOrDefault(project.id().toString(), 0) == 0)
+                .filter(project -> selection.selectedItemsByProject()
+                        .getOrDefault(project.id().toString(), 0) == 0)
                 .map(ProjectDescriptor::name)
                 .toList();
 
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("projectCount", scope.size());
         metadata.put("projectIds", scope.stream().map(project -> project.id().toString()).toList());
-        metadata.put("allocationByProject", Map.copyOf(allocatedByProject));
-        metadata.put("candidateBudgetByProject", Map.copyOf(candidateBudgetByProject));
-        metadata.put("candidateBudgetTotal", candidateBudgetByProject.values().stream().mapToInt(Integer::intValue).sum());
+        metadata.put("allocationByProject", Map.copyOf(collection.allocatedByProject()));
+        metadata.put("candidateBudgetByProject", Map.copyOf(collection.candidateBudgetByProject()));
+        metadata.put("candidateBudgetTotal",
+                collection.candidateBudgetByProject().values().stream().mapToInt(Integer::intValue).sum());
         metadata.put("candidateBudgetOverfetchFactor", LOCAL_OVERFETCH_FACTOR);
-        metadata.put("localTokensByProject", Map.copyOf(localTokensByProject));
-        metadata.put("localItemsByProject", Map.copyOf(localItemsByProject));
-        metadata.put("selectedTokensByProject", Map.copyOf(selectedTokensByProject));
-        metadata.put("selectedItemsByProject", Map.copyOf(selectedItemsByProject));
-        metadata.put("refillTokens", refillTokens);
-        metadata.put("refillItems", refillItems);
-        metadata.put("unusedTokens", tokenBudget - selectedTokens);
+        metadata.put("localTokensByProject", Map.copyOf(collection.localTokensByProject()));
+        metadata.put("localItemsByProject", Map.copyOf(collection.localItemsByProject()));
+        metadata.put("selectedTokensByProject", Map.copyOf(selection.selectedTokensByProject()));
+        metadata.put("selectedItemsByProject", Map.copyOf(selection.selectedItemsByProject()));
+        metadata.put("refillTokens", selection.refillTokens());
+        metadata.put("refillItems", selection.refillItems());
+        metadata.put("unusedTokens", tokenBudget - selection.selectedTokens());
         metadata.put("starvedProjects", starvedProjects);
         metadata.put("starvedProjectCount", starvedProjects.size());
-        metadata.put("crossProjectDeduplicatedItems", crossProjectDuplicates[0]);
+        metadata.put("crossProjectDeduplicatedItems", selection.crossProjectDuplicates());
         metadata.put("mergePolicy", "fair-floor-bounded-overfetch-global-refill");
         metadata.put("nativeSourceScope", "project-local");
         metadata.put("nativeDiscoveryLimits", discoveryBudget.limits());
         metadata.put("nativeDiscoveryWork", discoveryBudget.snapshot());
         metadata.put("taskMaterializationLimits", materializationBudget.limits());
         metadata.put("taskMaterializationWork", materializationBudget.snapshot());
-
-        return new FederatedContextBundle(
-                selected,
-                tokenBudget,
-                selectedTokens,
-                explain ? excluded : List.of(),
-                metadata);
+        return metadata;
     }
 
     private static boolean retainUnique(
@@ -238,5 +305,23 @@ public final class FederatedContextService {
     }
 
     private record ContentKey(CandidateType type, String content) {
+    }
+
+    private record ProjectCollection(
+            List<List<FederatedContextItem>> perProjectItems,
+            Map<String, Integer> allocatedByProject,
+            Map<String, Integer> candidateBudgetByProject,
+            Map<String, Integer> localTokensByProject,
+            Map<String, Integer> localItemsByProject) {
+    }
+
+    private record Selection(
+            List<FederatedContextItem> selected,
+            int selectedTokens,
+            Map<String, Integer> selectedTokensByProject,
+            Map<String, Integer> selectedItemsByProject,
+            int refillTokens,
+            int refillItems,
+            int crossProjectDuplicates) {
     }
 }
