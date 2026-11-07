@@ -68,7 +68,7 @@ $queries = @(
     },
     [pscustomobject]@{
         Query = "ProjectIndexingService deep Java"
-        Relevant = @("core/src/main/java/com/nexus/index/ProjectIndexingService.java")
+        Relevant = @("core/src/main/java/com/nexus/index/service/ProjectIndexingService.java")
     },
     [pscustomobject]@{
         Query = "replaceExternalCodeIntelligence"

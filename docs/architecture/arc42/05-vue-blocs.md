@@ -171,3 +171,49 @@ end_line >= start_line
 - `SensitiveContentRedactor` : redaction avant embeddings et fragments retournés.
 - `NexusRestExposureGuard` / transport policy : exposition API hors loopback fail-closed.
 - management Quarkus : loopback-only, distinct du listener API.
+
+## 5.6 Packages du cœur et sens de dépendance
+
+Le graphe des packages de `com.nexus` est acyclique ([ARCH-0063](../adr/ARCH-0063-casser-les-cycles-de-packages-du-coeur-par-des-packages-de-modele-feuilles.md)) ; le test d'architecture le vérifie ([ARCH-0059](../adr/ARCH-0059-verifier-les-frontieres-du-coeur-par-un-test-d-architecture.md)). Une flèche va du package dépendant vers le package dont il dépend ; le diagramme montre les sens nommés par la décision, pas toutes les arêtes.
+
+```mermaid
+flowchart TD
+    app["application (composition root)"]
+    idxsvc["index.service (orchestration de l'indexation)"]
+    idx["index (modèle, ports, SearchDocument, SemanticIndexing)"]
+    scan["index.scan"]
+    srch["search"]
+    cand["search.candidate (SearchCandidate, SearchSignals, CandidateType, CandidateEnricher, CandidateMerger)"]
+    rank["ranking"]
+    rankg["ranking.graph"]
+    sem["search.semantic (port EmbeddingProvider)"]
+    oll["search.semantic.ollama"]
+    ctx["context"]
+    ctxm["context.model (ContextFragment, ContextItem, ContextSelectionResult)"]
+    ctxs["context.source.*"]
+    cfg["config (ResultLimitPolicy)"]
+    app --> idxsvc
+    app --> oll
+    app --> sem
+    idxsvc --> idx
+    idxsvc --> scan
+    idxsvc --> srch
+    scan --> idx
+    sem --> idx
+    sem --> srch
+    srch --> idx
+    srch --> rank
+    srch --> rankg
+    srch --> cand
+    rank --> cand
+    rankg --> cand
+    rankg --> idx
+    oll --> sem
+    ctx --> ctxm
+    ctx --> ctxs
+    ctxs --> ctxm
+    ctxs --> cand
+    idx --> cfg
+```
+
+`index` ne dépend ni de `search` ni de `context`, `ranking` et `context.source.*` ne dépendent pas des packages qui les orchestrent, et `search.semantic` ne construit pas son adaptateur Ollama : `NexusApplicationFactory` le fait. Détail des règles : [architecture-implementation.md](../../developer/architecture-implementation.md#frontières-vérifiées-du-cœur).
