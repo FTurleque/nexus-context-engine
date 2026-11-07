@@ -2,7 +2,7 @@
 
 ## 1. Décision et préalables
 
-- [ ] 1.1 `AUD-ARC-01` — Nouvel ADR (skill `nexus-adr`) qui complète ADR-0004 : graphe de packages du cœur acyclique, packages de modèle feuilles et leurs noms, vérification par le test d'architecture ; vérifier par `bash .claude/scripts/contracts.sh`
+- [x] 1.1 `AUD-ARC-01` — Nouvel ADR (skill `nexus-adr`) qui complète ADR-0004 : graphe de packages du cœur acyclique, packages de modèle feuilles et leurs noms, vérification par le test d'architecture ; vérifier par `bash .claude/scripts/contracts.sh`
 - [ ] 1.2 `AUD-ARC-01` — Vérifier que le test d'architecture d'`AUD-ARC-07` (sprint 3) et la correction d'`AUD-ARC-03` (sprint 4) sont dans `develop`, et relever la baseline de cycles initiale ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='*Architecture*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
 
 ## 2. Cycle index ↔ search (AUD-ARC-02)
