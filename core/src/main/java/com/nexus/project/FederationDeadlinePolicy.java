@@ -2,15 +2,17 @@ package com.nexus.project;
 
 import java.time.Duration;
 import java.time.InstantSource;
+import java.util.Map;
 import java.util.Objects;
-import java.util.function.Function;
 
 /**
  * Politique d'échéance globale d'une requête fédérée (BE-0064) : durée et horloge.
  *
  * <p>La durée par défaut est {@link #DEFAULT_DURATION}, modifiable par
  * {@value #ENVIRONMENT_VARIABLE} dans l'intervalle {@link #MIN_DURATION} à
- * {@link #MAX_DURATION}.</p>
+ * {@link #MAX_DURATION}. La composition root résout cette valeur par {@link #from(Map)} et
+ * transmet la politique aux services fédérés ; la classe ne lit pas l'environnement
+ * (ARCH-0066).</p>
  */
 public final class FederationDeadlinePolicy {
 
@@ -31,15 +33,20 @@ public final class FederationDeadlinePolicy {
         }
     }
 
-    /** Politique par défaut sur l'horloge système, ou la valeur de l'environnement. */
-    public static FederationDeadlinePolicy fromEnvironment() {
-        return fromEnvironment(System::getenv);
+    /** Politique par défaut ({@link #DEFAULT_DURATION}) sur l'horloge système. */
+    public static FederationDeadlinePolicy defaults() {
+        return new FederationDeadlinePolicy(DEFAULT_DURATION, InstantSource.system());
     }
 
-    static FederationDeadlinePolicy fromEnvironment(Function<String, String> environment) {
-        String configured = environment.apply(ENVIRONMENT_VARIABLE);
+    /**
+     * Politique sur l'horloge système, durée lue dans {@code environment} sous
+     * {@value #ENVIRONMENT_VARIABLE} ; valeur absente ou vide : {@link #DEFAULT_DURATION}.
+     */
+    public static FederationDeadlinePolicy from(Map<String, String> environment) {
+        Objects.requireNonNull(environment, "environment");
+        String configured = environment.get(ENVIRONMENT_VARIABLE);
         if (configured == null || configured.isBlank()) {
-            return new FederationDeadlinePolicy(DEFAULT_DURATION, InstantSource.system());
+            return defaults();
         }
         try {
             return new FederationDeadlinePolicy(

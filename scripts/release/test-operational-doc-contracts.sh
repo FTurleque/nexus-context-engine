@@ -276,10 +276,10 @@ for path in (
     require(path, "128 termes")
 
 # NXA4: persistent storage permissions.
-nexus_paths = "core/src/main/java/com/nexus/config/NexusPaths.java"
-require(nexus_paths, 'PosixFilePermissions.fromString("rwx------")')
-require(nexus_paths, 'PosixFilePermissions.fromString("rw-------")')
-require(nexus_paths, "AclFileAttributeView")
+private_storage = "core/src/main/java/com/nexus/security/PrivateStoragePolicy.java"
+require(private_storage, 'PosixFilePermissions.fromString("rwx------")')
+require(private_storage, 'PosixFilePermissions.fromString("rw-------")')
+require(private_storage, "AclFileAttributeView")
 for path in (
     "README.md",
     "docs/architecture/overview.md",

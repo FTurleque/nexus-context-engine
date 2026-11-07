@@ -1,5 +1,7 @@
 package com.nexus.index;
 
+import com.nexus.security.PrivateStoragePolicy;
+
 import com.nexus.config.NexusPaths;
 
 import java.io.IOException;
@@ -11,6 +13,7 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -42,14 +45,35 @@ public final class ProjectIndexLockManager {
             new ConcurrentHashMap<>();
 
     private final NexusPaths paths;
+    private final int maxConcurrentIndexing;
 
-    private ProjectIndexLockManager(NexusPaths paths) {
+    private ProjectIndexLockManager(NexusPaths paths, int maxConcurrentIndexing) {
         this.paths = paths;
+        this.maxConcurrentIndexing = maxConcurrentIndexing;
     }
 
-    /** Active le verrouillage inter-processus dans le NEXUS_HOME fourni. */
+    /** Active le verrouillage inter-processus dans le NEXUS_HOME fourni, avec le budget d'indexation par défaut. */
     public static ProjectIndexLockManager fileBacked(NexusPaths paths) {
-        return new ProjectIndexLockManager(Objects.requireNonNull(paths, "paths"));
+        return fileBacked(paths, IndexingCapacityGate.DEFAULT_MAX_CONCURRENT_INDEXING);
+    }
+
+    /**
+     * Composition de production : verrouillage inter-processus et budget global d'indexations
+     * concurrentes résolu par la composition root ({@link #maxConcurrentIndexing(Map)}).
+     */
+    public static ProjectIndexLockManager fileBacked(NexusPaths paths, int maxConcurrentIndexing) {
+        if (maxConcurrentIndexing <= 0
+                || maxConcurrentIndexing > IndexingCapacityGate.MAX_CONFIGURED_CONCURRENT_INDEXING) {
+            throw new IllegalArgumentException(
+                    "maxConcurrentIndexing doit être compris entre 1 et "
+                            + IndexingCapacityGate.MAX_CONFIGURED_CONCURRENT_INDEXING);
+        }
+        return new ProjectIndexLockManager(Objects.requireNonNull(paths, "paths"), maxConcurrentIndexing);
+    }
+
+    /** Résout {@code NEXUS_MAX_CONCURRENT_INDEXING} depuis l'environnement fourni par la composition root. */
+    public static int maxConcurrentIndexing(Map<String, String> environment) {
+        return IndexingCapacityGate.configuredLimit(environment);
     }
 
     /**
@@ -58,7 +82,7 @@ public final class ProjectIndexLockManager {
      * production fournit explicitement {@link #fileBacked(NexusPaths)}.
      */
     public static ProjectIndexLockManager processLocalOnly() {
-        return new ProjectIndexLockManager(null);
+        return new ProjectIndexLockManager(null, IndexingCapacityGate.DEFAULT_MAX_CONCURRENT_INDEXING);
     }
 
     public LockHandle acquire(UUID projectId) throws IOException {
@@ -67,7 +91,7 @@ public final class ProjectIndexLockManager {
             return LockHandle.noop();
         }
 
-        IndexingCapacityGate.Permit capacityPermit = IndexingCapacityGate.acquireShared();
+        IndexingCapacityGate.Permit capacityPermit = IndexingCapacityGate.acquireShared(maxConcurrentIndexing);
         boolean permitTransferred = false;
         Semaphore processGate = processGate(projectId);
         if (!processGate.tryAcquire(PROCESS_READ_PERMITS)) {
@@ -77,7 +101,7 @@ public final class ProjectIndexLockManager {
         boolean processGateTransferred = false;
         try {
             Path locksDirectory = paths.locksDirectory();
-            paths.ensurePrivateDirectory(locksDirectory);
+            PrivateStoragePolicy.ensurePrivateDirectory(paths, locksDirectory);
 
             Path lockPath = paths.projectIndexLock(projectId);
             FileChannel channel = openHardenedChannel(lockPath);
@@ -111,7 +135,7 @@ public final class ProjectIndexLockManager {
         boolean processGateTransferred = false;
         try {
             Path locksDirectory = paths.locksDirectory();
-            paths.ensurePrivateDirectory(locksDirectory);
+            PrivateStoragePolicy.ensurePrivateDirectory(paths, locksDirectory);
             Path lockPath = paths.projectIndexLock(projectId);
             SharedReadLock sharedReadLock = acquireSharedReadLock(lockPath, projectId);
             LockHandle handle = new LockHandle(sharedReadLock, processGate::release);
@@ -136,7 +160,7 @@ public final class ProjectIndexLockManager {
                 existing.references++;
                 return existing;
             }
-            paths.ensurePrivateFile(lockPath);
+            PrivateStoragePolicy.ensurePrivateFile(paths, lockPath);
             FileChannel channel = FileChannel.open(
                     lockPath,
                     StandardOpenOption.READ,
@@ -173,7 +197,7 @@ public final class ProjectIndexLockManager {
                 StandardOpenOption.WRITE,
                 LinkOption.NOFOLLOW_LINKS);
         try {
-            paths.hardenPrivateFile(lockPath);
+            PrivateStoragePolicy.hardenPrivateFile(paths, lockPath);
             return channel;
         } catch (IOException failure) {
             closeQuietly(channel);

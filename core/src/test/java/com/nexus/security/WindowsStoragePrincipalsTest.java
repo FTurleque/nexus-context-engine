@@ -1,4 +1,4 @@
-package com.nexus.config;
+package com.nexus.security;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
@@ -23,9 +23,9 @@ class WindowsStoragePrincipalsTest {
         var accounts = Map.of("S-1-5-18", "AUTORITE NT\\Système",
                 "S-1-5-32-544", "BUILTIN\\Administrateurs", "S-1-3-0", "CREATEUR PROPRIETAIRE");
         Set<String> names = WindowsStoragePrincipals.resolve(accounts::get);
-        accounts.values().forEach(name -> assertTrue(NexusPaths.isTrustedStoragePrincipal(name, "machine\\alice", names)));
-        assertFalse(NexusPaths.isTrustedStoragePrincipal("DOMAIN\\Administrateurs", "machine\\alice", names));
-        assertFalse(NexusPaths.isTrustedStoragePrincipal("DOMAIN\\alice", "machine\\alice", names));
+        accounts.values().forEach(name -> assertTrue(PrivateStoragePolicy.isTrustedStoragePrincipal(name, "machine\\alice", names)));
+        assertFalse(PrivateStoragePolicy.isTrustedStoragePrincipal("DOMAIN\\Administrateurs", "machine\\alice", names));
+        assertFalse(PrivateStoragePolicy.isTrustedStoragePrincipal("DOMAIN\\alice", "machine\\alice", names));
         assertThrows(IllegalStateException.class, () -> WindowsStoragePrincipals.resolve(sid -> null));
     }
 
@@ -47,8 +47,8 @@ class WindowsStoragePrincipalsTest {
                     .setPermissions(AclEntryPermission.READ_DATA).build());
         }
         view.setAcl(entries);
-        assertEquals(List.of(), NexusPaths.unexpectedStoragePrincipals(view.getAcl(), owner.getName()));
-        assertDoesNotThrow(() -> NexusPaths.enforceAclPrivacy(file,
-                NexusPaths.unexpectedStoragePrincipals(view.getAcl(), owner.getName()), true));
+        assertEquals(List.of(), PrivateStoragePolicy.unexpectedStoragePrincipals(view.getAcl(), owner.getName()));
+        assertDoesNotThrow(() -> PrivateStoragePolicy.enforceAclPrivacy(file,
+                PrivateStoragePolicy.unexpectedStoragePrincipals(view.getAcl(), owner.getName()), true));
     }
 }

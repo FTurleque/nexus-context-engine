@@ -4,7 +4,7 @@ NEXUS treats every REST listener as a privileged deployment boundary. A remote l
 
 ## Loopback
 
-`quarkus.http.host=127.0.0.1`, `localhost` or another loopback address remains the default network posture. The remote-exposure transport checks do not apply to a loopback-only listener, but loopback is no longer treated as an implicit authentication boundary.
+`quarkus.http.host=127.0.0.1` is the default network posture. A loopback listener must be declared with one of the literal hosts `127.0.0.1`, `localhost` or `::1`: `NexusRestExposureGuard` refuses at startup any other loopback address or alias (for example `127.0.0.2`), because the Host control below would then answer `403` to every request. The remote-exposure transport checks do not apply to a loopback-only listener, and loopback is not an implicit authentication boundary.
 
 By default, startup therefore requires a strong Bearer token even on loopback:
 
@@ -36,6 +36,26 @@ When `NEXUS_REST_HARDEN_LOCAL=true`, startup fails closed unless both conditions
 - a non-empty canonical project-root allowlist.
 
 `NEXUS_REST_HARDEN_LOCAL=true` takes precedence over `NEXUS_REST_TRUST_LOCAL=true`: hardened mode can never disable authentication or root confinement.
+
+### Host and Origin control on a loopback listener
+
+Whenever the application listener is loopback (`NEXUS_REST_TRUST_LOCAL=true`, token loopback or hardened local posture), the JAX-RS `@PreMatching` filter `NexusRestLoopbackTransportFilter` checks every request before resource matching and before authentication (AUD-SEC-04):
+
+- the `Host` header must literally be `127.0.0.1`, `localhost` or `[::1]`, with or without a port; any other value, a missing header or a DNS name that would resolve to loopback is refused;
+- a request carrying an `Origin` header is accepted only when that origin is `http://` or `https://` followed by one of those loopback hosts; `Origin: null` and remote origins are refused;
+- a request without `Origin` (command-line clients, assistants, MCP bridges) is accepted.
+
+A refused request receives `403` with the fixed body `{"error":"FORBIDDEN","message":"Requête refusée par le contrôle de transport local"}`: neither the received value nor the expected configuration is disclosed. Local clients behind a name alias or a local proxy must call `127.0.0.1` directly, or use the authenticated non-loopback exposure modes below.
+
+The comparison is literal and never resolves names, so DNS rebinding (a public name re-pointed to `127.0.0.1`) cannot reach the API from a browser. Whether the filter applies is decided once, when it is built: it stays active unless `quarkus.http.host` resolves with certainty to a non-loopback address, and a resolution failure keeps it active. Outside loopback the filter is inactive and the startup guard below (token, project-root allowlist, effective TLS) remains the only control; the filter never relaxes it.
+
+### Residual risk of the management listener
+
+The Host and Origin control is a JAX-RS filter of the application listener. It does not cover the separate Quarkus management listener (`quarkus.management.host`, `127.0.0.1:9000` by default), which serves `/q/health`, `/q/health/ready` and `/q/metrics` without authentication and without Host or Origin checks. `NexusRestExposureGuard` only guarantees that this listener stays loopback. A local process, or a browser page reached through DNS rebinding on port 9000, can therefore read health status and metrics. These endpoints expose no project content, but metrics reveal activity counters; keep port 9000 unpublished and filtered from untrusted local users.
+
+### Residual browser risk of trust-local
+
+`NEXUS_REST_TRUST_LOCAL=true` disables authentication. The Host and Origin control blocks remote web pages and DNS rebinding, but it still trusts every local process and every web page served from a loopback origin (for example another development server on `http://localhost:3000`). Such a page, or any local program, can register a project and read its indexed content. On a workstation that runs local web applications, prefer the token loopback default; when trust-local is kept, also declare `NEXUS_REST_ALLOWED_PROJECT_ROOTS` so that registration stays confined to explicit roots. The allowlist remains a recommendation in trust-local mode, so that the documented single-user local usage keeps working.
 
 ## Docker loopback forward
 
@@ -69,3 +89,48 @@ This prevents arbitrary direct clients from being treated as trusted forwarding 
 The exposure mode is an operator intent, not proof of transport security. NEXUS therefore validates effective Quarkus settings before accepting a non-loopback listener. A missing certificate, an enabled plaintext HTTP listener, or an unbounded proxy trust configuration is a startup error rather than a warning.
 
 Loopback itself is likewise not proof that every local process is trusted. Authentication is now the default local boundary; unauthenticated local access requires the explicit `NEXUS_REST_TRUST_LOCAL=true` opt-out, while `NEXUS_REST_HARDEN_LOCAL=true` adds canonical project-root confinement.
+
+## OpenSpec rest-transport-hardening
+
+Spec : [`openspec/specs/rest-transport-hardening/spec.md`](../../openspec/specs/rest-transport-hardening/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+Cette section décrit le contrôle `Host` et `Origin` du listener loopback ; le contrat est détaillé dans [Host and Origin control on a loopback listener](#host-and-origin-control-on-a-loopback-listener).
+
+### Comportement existant vérifié
+
+| Étiquette | Fait | Source |
+|---|---|---|
+| [Existant vérifié] | Le filtre `@PreMatching` `NexusRestLoopbackTransportFilter` n'accepte, sur un listener loopback, qu'un `Host` littéral `127.0.0.1`, `localhost` ou `[::1]`, avec ou sans port. | `adapters/rest-quarkus/src/main/java/com/nexus/api/NexusRestLoopbackTransportFilter.java`, `adapters/rest-quarkus/src/test/java/com/nexus/api/NexusRestLoopbackTransportFilterTest#acceptsLiteralLoopbackHostsWithOrWithoutPort` |
+| [Existant vérifié] | Une `Origin` non loopback ou opaque est refusée ; une requête sans `Origin` est servie. | `adapters/rest-quarkus/src/test/java/com/nexus/api/NexusRestLoopbackTransportFilterTest#rejectsNonLoopbackOrOpaqueOrigins`, `adapters/rest-quarkus/src/test/java/com/nexus/api/NexusRestLoopbackTransportTrustLocalTest#requestWithoutOriginIsServed` |
+| [Existant vérifié] | Un refus répond 403 avec un corps fixe, avant le routage et avant l'authentification. | `adapters/rest-quarkus/src/test/java/com/nexus/api/NexusRestLoopbackTransportTrustLocalTest#foreignHostIsRefusedWithoutDetailAndRegistersNothing`, `#unknownRoutesAreRefusedBeforeMatching`, `adapters/rest-quarkus/src/test/java/com/nexus/api/NexusRestLoopbackTransportTokenTest#foreignHostIsRefusedBeforeAuthentication` |
+| [Existant vérifié] | L'activation du filtre est décidée une fois ; un échec de résolution la laisse active, et hors loopback `NexusRestExposureGuard` reste le seul contrôle. | `adapters/rest-quarkus/src/test/java/com/nexus/api/NexusRestLoopbackTransportFilterTest#activationStaysOnForLoopbackBlankOrUnresolvableListenerHosts`, `#filterIsInactiveWhenTheListenerIsNotLoopback`, `adapters/rest-quarkus/src/test/java/com/nexus/api/NexusRestExposureGuardTest#loopbackListenerMustUseALiteralLoopbackHost` |
+
+### Vues
+
+Vue organigramme — Quelles requêtes le listener loopback accepte-t-il ou refuse-t-il ? (existant)
+
+```mermaid
+flowchart TD
+    requete["Requête sur le listener applicatif"] --> loopbackListener loopback ?
+    loopback -- "non" --> garde["Garde fail-closed seul : jeton, allowlist, TLS (NexusRestExposureGuard)"]
+    loopback -- "oui" --> hostHost = 127.0.0.1, localhost ou [::1], avec ou sans port ?
+    host -- "non" --> refus["403 sans détail"]
+    host -- "oui" --> originEn-tête Origin présent ?
+    origin -- "non" --> accepte["Requête traitée normalement"]
+    origin -- "oui" --> originLoopbackOrigin loopback ?
+    originLoopback -- "oui" --> accepte
+    originLoopback -- "non" --> refus
+```
+
+Notation : organigramme, pas UML.
+
+Exigences : `rest-transport-hardening › Un listener loopback n'accepte que des hôtes loopback`, `rest-transport-hardening › Un listener loopback refuse les origines web non loopback`, `rest-transport-hardening › Le contrôle de transport ne remplace pas le garde d'exposition`.
+
+### Écarts et limites
+
+- Limite : le listener de management (port 9000) n'est pas couvert par le filtre ; voir [Residual risk of the management listener](#residual-risk-of-the-management-listener).
+- Limite : la validation au démarrage du mode jeton loopback n'a pas de `@QuarkusTest` dédié.
+
+### Propositions et questions ouvertes
+
+- Questions : aucune.

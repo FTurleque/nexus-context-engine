@@ -28,8 +28,26 @@ grep -q 'CSPRNG' "$REST_GUARD" \
 grep -q "ne mesure pas l'entropie cryptographique" "$REST_DOC" \
   || fail 'REST documentation must distinguish structural filtering from entropy'
 
+# AUD-SEC-04: a loopback listener answers only loopback Host values and refuses
+# non-loopback web origins, before resource matching, in trust-local and token loopback.
+REST_LOOPBACK_FILTER="adapters/rest-quarkus/src/main/java/com/nexus/api/NexusRestLoopbackTransportFilter.java"
+REST_EXPOSURE_DOC="docs/developer/rest-exposure-security.md"
+test -f "$REST_LOOPBACK_FILTER" || fail 'loopback Host/Origin transport filter is missing'
+grep -q '^@PreMatching$' "$REST_LOOPBACK_FILTER" \
+  || fail 'loopback transport filter must run before resource matching'
+grep -qF 'Set.of("127.0.0.1", "localhost", "[::1]")' "$REST_LOOPBACK_FILTER" \
+  || fail 'loopback transport filter must compare Host literally against loopback names'
+grep -q 'Response.Status.FORBIDDEN' "$REST_LOOPBACK_FILTER" \
+  || fail 'loopback transport filter must refuse with 403'
+grep -q 'NexusRestLoopbackTransportFilter' "$REST_DOC" \
+  && grep -q 'NexusRestLoopbackTransportFilter' "$REST_EXPOSURE_DOC" \
+  || fail 'loopback Host/Origin control must remain documented'
+grep -q 'Residual browser risk of trust-local' "$REST_EXPOSURE_DOC" \
+  && grep -q 'NEXUS_REST_ALLOWED_PROJECT_ROOTS' "$REST_EXPOSURE_DOC" \
+  || fail 'trust-local browser risk and project-root allowlist recommendation must remain documented'
+
 # Post-audit 2026-09-07: JDT LS must never start on an implicitly trusted repository.
-JDT_PROCESS="core/src/main/java/com/nexus/index/jdt/ProcessBuilder.java"
+JDT_PROCESS="core/src/main/java/com/nexus/index/jdt/BoundedJdtProcessBuilder.java"
 grep -q 'NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS' "$JDT_PROCESS" \
   || fail 'JDT LS trusted-project allowlist is missing'
 grep -q 'requireTrustedProjectDirectory' "$JDT_PROCESS" \
@@ -63,11 +81,11 @@ grep -q 'métadonnées UTF-8 cumulées/snapshot' docs/developer/code-intelligenc
 # Post-audit 2026-09-07: Windows ACL inspection covers every sensitive path,
 # system principals are resolved from well-known SIDs and compared exactly, and
 # operators can require fail-closed privacy without relying on translated names.
-NEXUS_PATHS="core/src/main/java/com/nexus/config/NexusPaths.java"
-WINDOWS_PRINCIPALS="core/src/main/java/com/nexus/config/WindowsStoragePrincipals.java"
-grep -q 'canonicalCurrentUserPrincipal' "$NEXUS_PATHS" \
+PRIVATE_STORAGE="core/src/main/java/com/nexus/security/PrivateStoragePolicy.java"
+WINDOWS_PRINCIPALS="core/src/main/java/com/nexus/security/WindowsStoragePrincipals.java"
+grep -q 'canonicalCurrentUserPrincipal' "$PRIVATE_STORAGE" \
   || fail 'Windows ACL inspection must resolve the current principal canonically'
-grep -q 'trustedSystemNames.contains(principal)' "$NEXUS_PATHS" \
+grep -q 'trustedSystemNames.contains(principal)' "$PRIVATE_STORAGE" \
   || fail 'Windows trusted system principals must be compared exactly after SID resolution'
 for sid in 'S-1-5-18' 'S-1-5-32-544' 'S-1-3-0'; do
   grep -q --fixed-strings "$sid" "$WINDOWS_PRINCIPALS" \
@@ -75,14 +93,14 @@ for sid in 'S-1-5-18' 'S-1-5-32-544' 'S-1-3-0'; do
 done
 grep -q 'getUserPrincipalLookupService' "$WINDOWS_PRINCIPALS" \
   || fail 'Windows well-known SIDs must resolve through the filesystem principal lookup service'
-grep -q 'NEXUS_REQUIRE_PRIVATE_STORAGE' "$NEXUS_PATHS" \
+grep -q 'NEXUS_REQUIRE_PRIVATE_STORAGE' "$PRIVATE_STORAGE" \
   || fail 'private storage fail-closed opt-in is missing'
-grep -q 'enforceAclPrivacy' "$NEXUS_PATHS" \
+grep -q 'enforceAclPrivacy' "$PRIVATE_STORAGE" \
   || fail 'private storage ACL enforcement must remain centralized'
-if grep -q 'endsWith("\\\\ADMINISTRATORS")' "$NEXUS_PATHS" "$WINDOWS_PRINCIPALS"; then
+if grep -q 'endsWith("\\\\ADMINISTRATORS")' "$PRIVATE_STORAGE" "$WINDOWS_PRINCIPALS"; then
   fail 'suffix-based Administrators trust must not return'
 fi
-if grep -q 'endsWith("\\\\" + currentUser)' "$NEXUS_PATHS" "$WINDOWS_PRINCIPALS"; then
+if grep -q 'endsWith("\\\\" + currentUser)' "$PRIVATE_STORAGE" "$WINDOWS_PRINCIPALS"; then
   fail 'suffix-based current-user ACL trust must not return'
 fi
 

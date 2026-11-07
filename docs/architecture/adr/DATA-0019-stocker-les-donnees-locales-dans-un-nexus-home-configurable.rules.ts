@@ -1,23 +1,26 @@
 /// <reference path="../rules.d.ts" />
 
-// Règles de l'ADR DATA-0019 (NEXUS_HOME configurable). Contrôles propres à Archgate : NexusPathsTest couvre le
-// stockage privé, aucun test ne vérifie l'ordre de résolution du home ni sa centralisation.
+// Règles de l'ADR DATA-0019 (NEXUS_HOME configurable). Contrôles propres à Archgate : NexusPathsTest couvre la
+// résolution par l'environnement injecté, PrivateStoragePolicyTest le stockage privé ; aucun test ne vérifie la
+// centralisation du home.
 // - Décision : priorité propriété système nexus.home, puis variable NEXUS_HOME, puis ${user.home}/.nexus.
 //   Contrôle (nexus-home-resolution-order) : NexusPaths déclare HOME_PROPERTY = "nexus.home" et
-//   HOME_ENVIRONMENT_VARIABLE = "NEXUS_HOME", et fromEnvironment() lit, dans cet ordre,
-//   System.getProperty(HOME_PROPERTY), System.getenv(HOME_ENVIRONMENT_VARIABLE), puis user.home avec ".nexus".
+//   HOME_ENVIRONMENT_VARIABLE = "NEXUS_HOME", et fromEnvironment(Map<String, String> environnement) lit, dans cet
+//   ordre, System.getProperty(HOME_PROPERTY), environnement.get(HOME_ENVIRONMENT_VARIABLE), puis user.home avec
+//   ".nexus". L'environnement est celui que la composition root a résolu (ARCH-0066).
 // - Décision (Confirmation) : « NexusPaths centralise la résolution des chemins » ; SQLite et Lucene utilisent des
 //   sous-chemins dérivés de NEXUS_HOME.
 //   Contrôle (nexus-home-resolved-by-nexus-paths) : dans les sources de production, les littéraux "nexus.home",
 //   "NEXUS_HOME" et "nexus.db" n'apparaissent que dans NexusPaths.java, et aucun autre fichier ne lit
-//   NexusPaths.HOME_PROPERTY ou NexusPaths.HOME_ENVIRONMENT_VARIABLE par System.getProperty ou System.getenv.
+//   NexusPaths.HOME_PROPERTY ou NexusPaths.HOME_ENVIRONMENT_VARIABLE par System.getProperty, System.getenv ou
+//   le get d'une table d'environnement.
 // Les commentaires sont effacés ; les littéraux sont conservés, puisque ce sont eux qui sont contrôlés.
 
 const SOURCES = "**/src/main/java/**/*.java";
 const NEXUS_PATHS = "core/src/main/java/com/nexus/config/NexusPaths.java";
 const LITTERAUX_RESERVES = new Set(["nexus.home", "NEXUS_HOME", "nexus.db"]);
 const LECTURE_DETOURNEE =
-  /\bSystem\s*\.\s*(?:getProperty|getenv)\s*\(\s*NexusPaths\s*\.\s*HOME_(?:PROPERTY|ENVIRONMENT_VARIABLE)\b/g;
+  /(?:\bSystem\s*\.\s*(?:getProperty|getenv)|\.\s*get)\s*\(\s*NexusPaths\s*\.\s*HOME_(?:PROPERTY|ENVIRONMENT_VARIABLE)\b/g;
 
 /**
  * Efface les commentaires et garde les littéraux (longueur et sauts de ligne conservés) ; relève au passage
@@ -71,7 +74,7 @@ export default {
   rules: {
     "nexus-home-resolution-order": {
       description:
-        "NexusPaths.fromEnvironment() résout le home par nexus.home, puis NEXUS_HOME, puis ${user.home}/.nexus",
+        "NexusPaths.fromEnvironment(Map) résout le home par nexus.home, puis NEXUS_HOME, puis ${user.home}/.nexus",
       severity: "error",
       async check(ctx) {
         const { code } = analyser(await ctx.readFile(NEXUS_PATHS));
@@ -88,17 +91,24 @@ export default {
             });
           }
         }
-        const debut = code.search(/\bstatic\s+NexusPaths\s+fromEnvironment\s*\(\s*\)/);
-        if (debut < 0) {
+        const signature =
+          /\bstatic\s+NexusPaths\s+fromEnvironment\s*\(\s*Map\s*<\s*String\s*,\s*String\s*>\s+(\w+)\s*\)/.exec(code);
+        if (!signature) {
           ctx.report.violation({
-            message: "NexusPaths.fromEnvironment() introuvable : l'ordre de résolution du home ne peut pas être vérifié.",
+            message:
+              "NexusPaths.fromEnvironment(Map<String, String>) introuvable : l'ordre de résolution du home ne peut pas être vérifié.",
             file: NEXUS_PATHS,
           });
           return;
         }
+        const debut = signature.index;
+        const environnement = signature[1];
         const etapes: [RegExp, string][] = [
           [/\bSystem\s*\.\s*getProperty\s*\(\s*HOME_PROPERTY\s*\)/, "System.getProperty(HOME_PROPERTY)"],
-          [/\bSystem\s*\.\s*getenv\s*\(\s*HOME_ENVIRONMENT_VARIABLE\s*\)/, "System.getenv(HOME_ENVIRONMENT_VARIABLE)"],
+          [
+            new RegExp(`\\b${environnement}\\s*\\.\\s*get\\s*\\(\\s*HOME_ENVIRONMENT_VARIABLE\\s*\\)`),
+            `${environnement}.get(HOME_ENVIRONMENT_VARIABLE)`,
+          ],
           [/\bSystem\s*\.\s*getProperty\s*\(\s*"user\.home"\s*\)\s*,\s*"\.nexus"/, 'System.getProperty("user.home"), ".nexus"'],
         ];
         let position = debut;
@@ -107,7 +117,7 @@ export default {
           const trouve = motif.exec(reste);
           if (!trouve) {
             ctx.report.violation({
-              message: `fromEnvironment() ne lit pas ${attendu} à son rang : l'ordre nexus.home, NEXUS_HOME, \${user.home}/.nexus n'est plus respecté (DATA-0019).`,
+              message: `fromEnvironment(Map) ne lit pas ${attendu} à son rang : l'ordre nexus.home, NEXUS_HOME, \${user.home}/.nexus n'est plus respecté (DATA-0019).`,
               file: NEXUS_PATHS,
               line: ligne(code, debut),
               fix: "Lire la propriété système, puis la variable d'environnement, puis replier sur ${user.home}/.nexus.",
@@ -132,15 +142,15 @@ export default {
               message: `Littéral « ${chaine.valeur} » hors de NexusPaths : la résolution du home et de ses sous-chemins est centralisée (DATA-0019).`,
               file: chemin,
               line: ligne(code, chaine.index),
-              fix: "Obtenir le chemin par NexusPaths.fromEnvironment() puis ses accesseurs (databaseFile(), projectLuceneIndex()…).",
+              fix: "Obtenir le chemin par NexusPaths.fromEnvironment(Map) puis ses accesseurs (databaseFile(), projectLuceneIndex()…).",
             });
           }
           for (const trouve of code.matchAll(LECTURE_DETOURNEE)) {
             ctx.report.violation({
-              message: "Lecture du home hors de NexusPaths : seule NexusPaths.fromEnvironment() résout NEXUS_HOME (DATA-0019).",
+              message: "Lecture du home hors de NexusPaths : seule NexusPaths.fromEnvironment(Map) résout NEXUS_HOME (DATA-0019).",
               file: chemin,
               line: ligne(code, trouve.index ?? 0),
-              fix: "Appeler NexusPaths.fromEnvironment().",
+              fix: "Appeler NexusPaths.fromEnvironment(Map) avec l'environnement de la composition root.",
             });
           }
         }
