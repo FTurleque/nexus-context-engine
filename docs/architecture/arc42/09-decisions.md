@@ -71,6 +71,7 @@ Cette section présente un index synthétique avec statut, date et relations de 
 | [ARCH-0059](../adr/ARCH-0059-verifier-les-frontieres-du-coeur-par-un-test-d-architecture.md) | Vérifier les frontières du cœur par un test d'architecture | Proposed | 2026-10-30 |
 | [GEN-0060](../adr/GEN-0060-qualifier-la-recherche-semantique-reelle-en-deux-corpus.md) | Qualifier la recherche sémantique réelle en deux corpus, hors du chemin de release | Proposed | 2026-10-30 |
 | [ARCH-0061](../adr/ARCH-0061-decider-le-contrat-de-sortie-publique-dans-la-projection-du-coeur.md) | Décider le contrat de sortie publique dans la projection du cœur | Proposed | 2026-10-30 |
+| [DATA-0062](../adr/DATA-0062-mettre-en-attente-les-analyses-d-indexation-dans-sqlite.md) | Mettre en attente les analyses d'indexation dans SQLite et committer Lucene une fois | Proposed | 2026-11-07 |
 | [ADR-0000](../adr/archive/0000-adopter-les-adr-madr.md) | Adopter MADR comme format et définir la gouvernance des ADR | Superseded (GEN-0057) | 2026-07-19 |
 | [ADR-0056](../adr/archive/0056-regrouper-le-registre-des-adr-dans-la-documentation-d-architecture.md) | Regrouper le registre des ADR dans la documentation d'architecture | Superseded (GEN-0057) | 2026-10-29 |
 
@@ -118,9 +119,10 @@ ARCH-0042, BE-0043 — AI Skills Registry, fédération locale.
 ### Robustesse, cohérence et confinement
 
 DATA-0045, BE-0046, SEC-0047, SEC-0048, DATA-0049, DATA-0050, DATA-0051, DATA-0052,
-BE-0053, DATA-0054, DATA-0055 — cycle de vie Lucene, cache Git, filesystems et
+BE-0053, DATA-0054, DATA-0055, DATA-0062 — cycle de vie Lucene, cache Git, filesystems et
 traversée, identité repository, lots et temporaires SQLite, cohérence des index
-dérivés, lectures fédérées, reconstructions sémantiques.
+dérivés, lectures fédérées, reconstructions sémantiques, mise en attente des analyses
+d'indexation.
 
 ### Gouvernance
 

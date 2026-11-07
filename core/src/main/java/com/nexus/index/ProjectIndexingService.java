@@ -102,7 +102,7 @@ public final class ProjectIndexingService {
         if (indexDocumentBatchBytes <= 0) {
             throw new IllegalArgumentException("indexDocumentBatchBytes must be greater than zero");
         }
-        this.documentPublisher = new IndexDocumentPublisher(analyzers, this.searchIndex, semanticIndexingService,
+        this.documentPublisher = new IndexDocumentPublisher(analyzers, indexRepository, this.searchIndex, semanticIndexingService,
                 indexDocumentBatchFiles, indexDocumentBatchBytes);
     }
 
@@ -224,23 +224,35 @@ public final class ProjectIndexingService {
             boolean semanticFullRebuild = semanticIndexingService != null
                     && (fullRebuild || !semanticIndexingService.isCompatible(projectId, canonicalFingerprint));
 
-            documentPublisher.prepareDerivedIndexes(
-                    projectId,
-                    canonicalFingerprint,
-                    fullRebuild,
-                    semanticFullRebuild,
-                    searchRemovedPaths);
+            int updatedFiles;
+            Set<String> staleExternalProviders;
+            // Un writer Lucene par index dérivé et une session d'écriture SQLite pour toute
+            // l'indexation (DATA-0045, DATA-0062). Les lots sont accumulés sans être visibles ;
+            // fermer la publication sans la publier annule les écritures Lucene et écarte les
+            // analyses en attente, de sorte que la génération précédente reste intacte.
+            try (IndexPublication publication = documentPublisher.openPublication(
+                    projectId, canonicalFingerprint, fullRebuild, semanticFullRebuild)) {
+                documentPublisher.prepareDerivedIndexes(
+                        publication, fullRebuild, semanticFullRebuild, searchRemovedPaths);
 
-            List<IndexedFileUpdate> updates = documentPublisher.publish(projectId, project.rootPath(),
-                    scannedFiles, existingFiles, canonicalFingerprint, fullRebuild, semanticFullRebuild, diagnostics);
+                IndexDocumentPublisher.PublishOutcome outcome = documentPublisher.publish(publication,
+                        project.rootPath(), scannedFiles, existingFiles, fullRebuild, semanticFullRebuild,
+                        diagnostics);
+                updatedFiles = outcome.updatedFiles();
 
-            boolean codeSourcesChanged = codeIntelligenceSourcesChanged(
-                    fullRebuild, updates, removedPaths, existingFiles);
-            Set<String> staleExternalProviders = codeSourcesChanged
-                    ? indexRepository.findExternalProviders(projectId)
-                    : Set.of();
+                boolean codeSourcesChanged = codeIntelligenceSourcesChanged(
+                        fullRebuild, outcome.codeSourcesUpdated(), removedPaths, existingFiles);
+                staleExternalProviders = codeSourcesChanged
+                        ? indexRepository.findExternalProviders(projectId)
+                        : Set.of();
 
-            indexRepository.applyChanges(projectId, updates, removedPaths);
+                // Barrière de publication. Les index dérivés sont committés avant la génération
+                // canonique : tout lecteur qui suit la génération voit alors un Lucene déjà
+                // committé. Un échec après le commit Lucene laisse le projet FAILED, donc
+                // reconstruit au prochain passage ; rien n'est servi avant READY.
+                publication.commitDerivedIndexes();
+                publication.publishCanonical(removedPaths);
+            }
             if (!staleExternalProviders.isEmpty()) {
                 externalRefresher.purgeExternalCodeIntelligence(projectId, staleExternalProviders);
                 diagnostics.add("external code intelligence invalidated: "
@@ -274,7 +286,7 @@ public final class ProjectIndexingService {
             return new IndexingReport(
                     projectId,
                     scannedFiles.size(),
-                    updates.size(),
+                    updatedFiles,
                     removedPaths.size(),
                     fullRebuild,
                     indexRepository.statistics(projectId),
@@ -290,17 +302,10 @@ public final class ProjectIndexingService {
 
     private static boolean codeIntelligenceSourcesChanged(
             boolean fullRebuild,
-            List<IndexedFileUpdate> updates,
+            boolean sourceUpdated,
             Set<String> removedPaths,
             Map<String, IndexedFile> existingFiles) {
-        if (fullRebuild) {
-            return true;
-        }
-        boolean sourceUpdated = updates.stream()
-                .map(IndexedFileUpdate::file)
-                .map(ScannedFile::category)
-                .anyMatch(ProjectIndexingService::isCodeIntelligenceSource);
-        if (sourceUpdated) {
+        if (fullRebuild || sourceUpdated) {
             return true;
         }
         return removedPaths.stream()
@@ -310,7 +315,7 @@ public final class ProjectIndexingService {
                 .anyMatch(ProjectIndexingService::isCodeIntelligenceSource);
     }
 
-    private static boolean isCodeIntelligenceSource(FileCategory category) {
+    static boolean isCodeIntelligenceSource(FileCategory category) {
         return category == FileCategory.SOURCE || category == FileCategory.TEST;
     }
 

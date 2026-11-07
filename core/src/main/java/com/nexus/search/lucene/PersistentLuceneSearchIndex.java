@@ -4,6 +4,7 @@ import com.nexus.config.NexusPaths;
 import com.nexus.search.LexicalSearchHit;
 import com.nexus.search.SearchDocument;
 import com.nexus.search.SearchIndex;
+import com.nexus.search.SearchIndexSession;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -52,6 +53,33 @@ public final class PersistentLuceneSearchIndex implements SearchIndex {
         // doit un jour être remplacé plutôt que modifié en place.
         readers.invalidate(projectId);
         operationScoped.rebuild(projectId, documents);
+    }
+
+    @Override
+    public SearchIndexSession openSession(UUID projectId, boolean rebuild) throws IOException {
+        readers.ensureOpen();
+        if (rebuild) {
+            readers.invalidate(projectId);
+        }
+        SearchIndexSession session = operationScoped.openSession(projectId, rebuild);
+        return new SearchIndexSession() {
+            @Override
+            public void applyChanges(List<SearchDocument> documents, Set<String> removedPaths)
+                    throws IOException {
+                session.applyChanges(documents, removedPaths);
+            }
+
+            @Override
+            public void commit() throws IOException {
+                session.commit();
+                readers.refreshIfCached(projectId);
+            }
+
+            @Override
+            public void close() throws IOException {
+                session.close();
+            }
+        };
     }
 
     @Override

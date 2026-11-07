@@ -105,6 +105,7 @@ Oui si la décision est **durable et structurante** et tranche entre des options
 | [ARCH-0059](ARCH-0059-verifier-les-frontieres-du-coeur-par-un-test-d-architecture.md) | Vérifier les frontières du cœur par un test d'architecture | 2026-10-30 | Proposed |
 | [GEN-0060](GEN-0060-qualifier-la-recherche-semantique-reelle-en-deux-corpus.md) | Qualifier la recherche sémantique réelle en deux corpus, hors du chemin de release | 2026-10-30 | Proposed |
 | [ARCH-0061](ARCH-0061-decider-le-contrat-de-sortie-publique-dans-la-projection-du-coeur.md) | Décider le contrat de sortie publique dans la projection du cœur | 2026-10-30 | Proposed |
+| [DATA-0062](DATA-0062-mettre-en-attente-les-analyses-d-indexation-dans-sqlite.md) | Mettre en attente les analyses d'indexation dans SQLite et committer Lucene une fois | 2026-11-07 | Proposed |
 
 ## Archive
 

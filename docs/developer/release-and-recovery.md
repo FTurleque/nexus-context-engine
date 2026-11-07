@@ -197,3 +197,20 @@ sémantiques restent valides. V001 à V011 et leurs empreintes restent inchangé
 `SchemaMigratorFileIndexUpgradeTest` migre une base peuplée et vérifie que les
 données et le statut des projets sont conservés. Une seconde ouverture n'applique
 plus aucune des deux migrations.
+
+## Mise à niveau V014 — mise en attente des analyses d'indexation
+
+`V014__index_staged_analyses.sql` crée trois tables transitoires,
+`index_staged_files`, `index_staged_symbols` et `index_staged_relations`, où une
+indexation met ses analyses en attente par lots avant de les publier (décision
+DATA-0062, [indexing-pipeline.md](indexing-pipeline.md#9-coûts-mesurés-du-pipeline)).
+Elle ne modifie ni les faits canoniques, ni la génération, ni le statut des
+projets : aucun rebuild n'est imposé et les index Lucene et sémantiques restent
+valides. V001 à V013 et leurs empreintes restent inchangées.
+
+Ces tables sont vides hors indexation : la transaction de publication les vide, une
+indexation qui échoue les vide à sa fermeture et toute nouvelle indexation d'un
+projet écarte d'abord ce qu'une indexation interrompue (arrêt brutal du processus) y
+aurait laissé. Elles ne contiennent donc rien à sauvegarder ni à restaurer ; une
+base restaurée depuis une sauvegarde prise pendant une indexation reste cohérente,
+le projet étant alors dans un état non `READY` qui impose un rebuild complet.

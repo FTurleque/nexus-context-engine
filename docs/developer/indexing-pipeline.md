@@ -42,16 +42,26 @@ sequenceDiagram
     Scanner->>Hash: SHA-256
     Scanner-->>SVC: ScannedFile[]
 
+    SVC->>Lucene: openSession (un writer par index dérivé)
+    SVC->>SQLite: openWriteSession
+
     loop fichier nouveau ou modifié
         SVC->>Analyzer: analyze(projectRoot, file) si un analyseur structurel le supporte
         Analyzer-->>SVC: AnalysisResult
+        opt lot de 128 fichiers ou 16 MiB atteint
+            SVC->>Lucene: applyChanges du lot, sans commit
+            SVC->>SQLite: stage(analyses du lot), courte transaction
+        end
     end
 
-    SVC->>SQLite: applyChanges(updates, removedPaths)
-    SVC->>Lucene: applyChanges ou rebuild
+    SVC->>Lucene: commit unique (ou rollback si échec)
+    SVC->>SQLite: publish (faits canoniques + génération), une transaction
+    SVC->>Scanner: scan de contrôle de cohérence
     SVC->>Repo: status READY + lastIndexedAt
     SVC-->>CLI: IndexingReport
 ```
+
+La barrière de publication enchaîne dans cet ordre : commit des index Lucene, publication canonique (qui incrémente la génération), scan de contrôle, puis `READY`. Rien n'est servi avant `READY` : un échec avant le commit Lucene laisse la génération, les faits canoniques et les index dérivés précédents intacts ; un échec après laisse le projet `FAILED`, reconstruit au prochain passage. Voir [§ 9](#9-coûts-mesurés-du-pipeline).
 
 ## 3. Enregistrement d'un projet
 
@@ -287,11 +297,31 @@ Cette section porte les conclusions durables des mesures de coût du pipeline ; 
 
 ### Rétention des analyses et écriture SQLite
 
-`IndexDocumentPublisher.publish` borne les **documents** retenus (128 fichiers ou 16 MiB par lot), mais accumule les `IndexedFileUpdate` de **tous** les fichiers modifiés jusqu'à l'écriture SQLite unique (`indexRepository.applyChanges`). Le heap vivant d'un rebuild complet croît donc linéairement avec le nombre de fichiers modifiés, de l'ordre de quelques Kio par fichier pour des sources Java courants (valeur dans le relevé), et non avec la taille d'un lot. Le plafond de `NEXUS_MAX_INDEX_FILES` (100 000 par défaut, voir [indexing-corpus-limits.md](indexing-corpus-limits.md)) borne cette croissance sans la rendre proportionnelle au lot.
+Avant la tâche 2.2 de `sprint-05-indexation-et-ecriture-sqlite`, `IndexDocumentPublisher.publish` bornait les **documents** retenus (128 fichiers ou 16 MiB par lot) mais accumulait les `IndexedFileUpdate` de **tous** les fichiers modifiés jusqu'à une écriture SQLite unique : le heap vivant d'un rebuild croissait linéairement avec le nombre de fichiers modifiés, de l'ordre de quelques Kio par fichier pour des sources Java courants (valeur dans le relevé). Chaque lot ouvrait en outre un `IndexWriter` Lucene et le committait.
 
-Écrire les analyses dans SQLite au rythme des flushs, **dans la transaction d'indexation unique**, n'est pas viable : la transaction resterait ouverte pendant toute l'indexation (scan, analyse, Lucene) au lieu de la seule écriture finale. SQLite n'admet qu'un écrivain à la fois et la politique de reprise est de 5 s de `busy_timeout` et deux tentatives (voir [sqlite-write-contention.md](sqlite-write-contention.md)) : tout autre écrivain, y compris l'indexation d'un autre projet, échouerait en `SQLITE_BUSY` dès que l'indexation dépasse une dizaine de secondes. La durée de la transaction d'écriture finale d'aujourd'hui représente déjà une fraction mesurable de la durée d'indexation ; la tenir pendant toute l'indexation multiplie le temps de verrou d'un facteur de l'ordre de vingt.
+Écrire les analyses dans SQLite au rythme des flushs, **dans la transaction d'indexation unique**, n'est pas viable : la transaction resterait ouverte pendant toute l'indexation (scan, analyse, Lucene) au lieu de la seule écriture finale. SQLite n'admet qu'un écrivain à la fois et la politique de reprise est de 5 s de `busy_timeout` et deux tentatives (voir [sqlite-write-contention.md](sqlite-write-contention.md)) : tout autre écrivain, y compris l'indexation d'un autre projet, échouerait en `SQLITE_BUSY` dès que l'indexation dépasse une dizaine de secondes. La durée de la transaction d'écriture finale représente déjà une fraction mesurable de la durée d'indexation ; la tenir pendant toute l'indexation multiplie le temps de verrou d'un facteur de l'ordre de vingt.
 
-Conclusion pour la tâche 2.2 de `sprint-05-indexation-et-ecriture-sqlite` : l'alternative du design D2 est retenue, c'est-à-dire une **table de staging** alimentée par de courtes transactions au rythme des flushs, puis vidée dans les tables canoniques par la transaction finale (migration dédiée et ADR complétant ADR-0051 et ADR-0052). La génération reste publiée à la fin et un échec laisse la génération précédente intacte.
+L'alternative du design D2 est donc retenue (décision [DATA-0062](../architecture/adr/DATA-0062-mettre-en-attente-les-analyses-d-indexation-dans-sqlite.md)) : une **table de mise en attente** (migration V014) alimentée par de courtes transactions au rythme des flushs, vidée dans les tables canoniques par la transaction de publication.
+
+### Écritures d'une indexation
+
+`IndexDocumentPublisher.openPublication` ouvre, pour la durée d'une indexation :
+
+- une session lexicale (`SearchIndex.openSession`) et, si la recherche sémantique est composée, une session sémantique (`SemanticIndexingService.openSession`) : **un seul `IndexWriter` par index dérivé**, alimenté à chaque lot sans commit, committé **une seule fois** à la barrière de publication et annulé par `rollback` si l'indexation échoue (design D4, [DATA-0045](../architecture/adr/DATA-0045-conserver-les-writers-operation-scoped-et-mettre-en-cache-les-readers-lucene.md)). Un rebuild vide l'index dans la session : le contenu précédent reste servi par le dernier commit jusqu'à la barrière. Une indexation sans changement n'ouvre ni ne committe aucun writer. Les implémentations de `SearchIndex` et de `SemanticSearchIndex` sans writer propre gardent le comportement historique (chaque lot appliqué immédiatement) par la session de repli ;
+- une session d'écriture canonique (`IndexRepository.openWriteSession`) : les analyses des fichiers modifiés sont mises en attente, au plus 128 fichiers ou 16 MiB de sources par lot, par de courtes transactions (`stage`) qui ne modifient ni les tables canoniques ni la génération. `publish` les applique ensuite aux tables canoniques par pages d'au plus 128 fichiers, supprime les chemins retirés, vide la mise en attente et incrémente la génération, en **une** transaction.
+
+La rétention **des analyses** est donc bornée par le lot de publication, non par le nombre de fichiers modifiés (le heap vivant d'un rebuild reste en revanche croissant avec le nombre de fichiers par des structures que cette tâche ne borne pas et que la mesure n'a pas attribuées : voir le [relevé après mise en attente](../project/history/indexing-staged-writes-measures-2026-11-07.md)) ; `PublishOutcome` ne retient que le nombre de fichiers mis à jour et un indicateur de sources de code modifiées. Fermer la publication sans la publier annule les écritures Lucene non committées et écarte les analyses en attente ; l'ouverture d'une session d'un projet écarte aussi ce qu'une indexation interrompue y aurait laissé.
+
+### Ordre de la barrière de publication
+
+Le design ne fixe pas l'ordre entre le commit Lucene, le contrôle de cohérence et la publication de la génération. Choix retenu, du plus prudent au plus tardif :
+
+1. commit Lucene lexical, puis sémantique ;
+2. publication canonique (faits et génération) ;
+3. imports et providers externes, puis scan de contrôle de cohérence ;
+4. statut `READY`.
+
+Le commit Lucene précède la génération pour que tout lecteur qui suit la génération voie un Lucene déjà committé ; le scan de contrôle reste le dernier garde-fou et son échec laisse le projet `FAILED`. Un échec avant le commit Lucene laisse la génération, les faits canoniques et les deux index dérivés précédents intacts. Un échec ou un arrêt brutal entre le commit Lucene et le statut `READY` laisse le projet non `READY` (`FAILED` ou `INDEXING`), donc reconstruit au prochain passage ; rien n'est servi avant `READY`, les lectures prenant le verrou partagé du projet ([DATA-0052](../architecture/adr/DATA-0052-garantir-la-coherence-des-lectures-et-des-index-derives.md)).
 
 ### Double hachage
 

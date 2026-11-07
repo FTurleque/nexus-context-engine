@@ -3,6 +3,7 @@ package com.nexus.search.semantic.lucene;
 import com.nexus.config.NexusPaths;
 import com.nexus.index.FileCategory;
 import com.nexus.search.semantic.SemanticIndexProvenance;
+import com.nexus.search.semantic.SemanticIndexSession;
 import com.nexus.search.semantic.SemanticSearchHit;
 import com.nexus.search.semantic.SemanticSearchIndex;
 import com.nexus.search.semantic.SemanticVectorDocument;
@@ -199,6 +200,190 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
                     writer.addDocument(toLuceneDocument(document));
                 }
                 applyProvenance(writer, provenance);
+            }
+        }
+    }
+
+    /**
+     * Un seul writer pour toute l'indexation (DATA-0045, design D4) : les lots sont accumulés sans
+     * commit, la provenance et le contenu deviennent visibles au commit unique, et un échec annule
+     * les écritures, de sorte que l'index garde le contenu et la provenance précédents.
+     */
+    @Override
+    public SemanticIndexSession openSession(
+            UUID projectId,
+            SemanticIndexProvenance provenance,
+            boolean rebuild) throws IOException {
+        Objects.requireNonNull(projectId, "projectId");
+        Objects.requireNonNull(provenance, PROVENANCE_ARGUMENT);
+        SemanticSession session = new SemanticSession(projectId, provenance, rebuild);
+        if (rebuild) {
+            try {
+                session.openForRebuild();
+            } catch (IOException | RuntimeException failure) {
+                try {
+                    session.close();
+                } catch (IOException | RuntimeException closeFailure) {
+                    failure.addSuppressed(closeFailure);
+                }
+                throw failure;
+            }
+        }
+        return session;
+    }
+
+    /**
+     * Écritures d'une indexation. Un rebuild ouvre le writer en {@code CREATE} (le commit précédent
+     * reste intact jusqu'au commit de la session) et se replie sur une génération de récupération si
+     * le commit existant est illisible ; sans rebuild, le writer s'ouvre à la première écriture, de
+     * sorte qu'une indexation sans changement ne committe rien.
+     */
+    private final class SemanticSession implements SemanticIndexSession {
+        private final UUID projectId;
+        private final SemanticIndexProvenance provenance;
+        private final boolean rebuild;
+        private final Path root;
+        private Path target;
+        private Path recovery;
+        private Directory directory;
+        private IndexWriter writer;
+        private boolean dirty;
+        private boolean closed;
+
+        private SemanticSession(UUID projectId, SemanticIndexProvenance provenance, boolean rebuild)
+                throws IOException {
+            this.projectId = projectId;
+            this.provenance = provenance;
+            this.rebuild = rebuild;
+            this.root = paths.projectSemanticLuceneIndex(projectId);
+        }
+
+        private void openForRebuild() throws IOException {
+            target = indexPath(projectId);
+            paths.ensurePrivateDirectory(target);
+            try {
+                openWriter(target, IndexWriterConfig.OpenMode.CREATE);
+            } catch (CorruptIndexException | IndexFormatTooOldException | IndexFormatTooNewException
+                    | EOFException failure) {
+                // CREATE préserve les commits sains mais ne sait pas lire un commit corrompu :
+                // la récupération s'écrit ailleurs, sans supprimer de fichiers encore mappés.
+                recovery = root.resolve(RECOVERY_GENERATION_PREFIX + UUID.randomUUID());
+                paths.ensurePrivateDirectory(recovery);
+                openWriter(recovery, IndexWriterConfig.OpenMode.CREATE);
+            }
+            dirty = true;
+        }
+
+        private IndexWriter writer() throws IOException {
+            if (closed) {
+                throw new IllegalStateException("La session d'index sémantique est fermée");
+            }
+            if (writer == null) {
+                target = indexPath(projectId);
+                paths.ensurePrivateDirectory(target);
+                openWriter(target, IndexWriterConfig.OpenMode.CREATE_OR_APPEND);
+            }
+            return writer;
+        }
+
+        private void openWriter(Path path, IndexWriterConfig.OpenMode mode) throws IOException {
+            Directory opened = FSDirectory.open(path);
+            try {
+                writer = new IndexWriter(opened, new IndexWriterConfig()
+                        .setOpenMode(mode)
+                        .setCommitOnClose(false));
+                directory = opened;
+            } catch (IOException | RuntimeException failure) {
+                opened.close();
+                throw failure;
+            }
+        }
+
+        @Override
+        public void applyChanges(List<SemanticVectorDocument> documents, Set<String> removedRelativePaths)
+                throws IOException {
+            Objects.requireNonNull(documents, "documents");
+            Objects.requireNonNull(removedRelativePaths, "removedRelativePaths");
+            if (documents.isEmpty() && removedRelativePaths.isEmpty()) {
+                return;
+            }
+            IndexWriter current = writer();
+            dirty = true;
+            for (String removedPath : removedRelativePaths) {
+                if (removedPath != null && !removedPath.isBlank()) {
+                    current.deleteDocuments(new Term(PATH_FIELD, removedPath));
+                }
+            }
+            for (SemanticVectorDocument document : documents) {
+                if (!rebuild) {
+                    current.deleteDocuments(new Term(PATH_FIELD, document.relativePath()));
+                }
+                current.addDocument(toLuceneDocument(document));
+            }
+        }
+
+        @Override
+        public void commit() throws IOException {
+            if (!dirty) {
+                return;
+            }
+            IndexWriter current = writer();
+            applyProvenance(current, provenance);
+            current.commit();
+            dirty = false;
+            releaseWriter();
+            if (recovery != null) {
+                publishRecovery(root, recovery);
+                cleanupStaleRecoveryGenerations(root, recovery);
+            } else if (rebuild) {
+                cleanupStaleRecoveryGenerations(root, target);
+            }
+        }
+
+        @Override
+        public void close() throws IOException {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            boolean uncommittedRecovery = recovery != null && dirty;
+            // commitOnClose faux : les écritures non committées sont annulées.
+            releaseWriter();
+            if (uncommittedRecovery) {
+                try {
+                    deleteRecoveryGeneration(recovery);
+                } catch (IOException cleanupFailure) {
+                    LOGGER.log(System.Logger.Level.DEBUG,
+                            "Impossible de supprimer la génération de récupération sémantique abandonnée",
+                            cleanupFailure);
+                }
+            }
+        }
+
+        private void releaseWriter() throws IOException {
+            IOException failure = null;
+            if (writer != null) {
+                try {
+                    writer.close();
+                } catch (IOException closeFailure) {
+                    failure = closeFailure;
+                }
+                writer = null;
+            }
+            if (directory != null) {
+                try {
+                    directory.close();
+                } catch (IOException closeFailure) {
+                    if (failure == null) {
+                        failure = closeFailure;
+                    } else {
+                        failure.addSuppressed(closeFailure);
+                    }
+                }
+                directory = null;
+            }
+            if (failure != null) {
+                throw failure;
             }
         }
     }
