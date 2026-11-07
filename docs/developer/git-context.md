@@ -227,3 +227,46 @@ Exigences : `git-context-cache › Le cache de contexte Git couvre le scope féd
 ### Propositions et questions ouvertes
 
 - Questions : aucune.
+
+## OpenSpec git-context-discovery
+
+Spec : [`openspec/specs/git-context-discovery/spec.md`](../../openspec/specs/git-context-discovery/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+Cette section décrit quel dépôt Git alimente le contexte d'un projet ; la règle est détaillée dans [Découverte du dépôt](#découverte-du-dépôt).
+
+### Comportement existant vérifié
+
+| Étiquette | Fait | Source |
+|---|---|---|
+| [Existant vérifié] | `GitRepositoryLocator` est la seule fabrique de dépôt de `LocalGitContextSourceProvider`, `PersistentGitContextSourceProvider` et `GitRecencyCandidateEnricher`. | `core/src/main/java/com/nexus/context/source/git/GitRepositoryLocator.java` |
+| [Existant vérifié] | Un dépôt à la racine du projet est retenu sans contrôle du propriétaire ; la remontée s'arrête au premier `.git`. | `core/src/test/java/com/nexus/context/source/git/GitRepositoryLocatorTest#retainsTheProjectRootRepositoryWithoutOwnershipCheck`, `#stopsAtTheFirstGitEntryInsteadOfSearchingHigher` |
+| [Existant vérifié] | Un dépôt parent n'est retenu que si son `.git`, la cible d'un gitlink et le répertoire ouvert appartiennent à l'utilisateur courant ; sinon il est écarté avant lecture de sa configuration. | `core/src/test/java/com/nexus/context/source/git/GitRepositoryLocatorTest#retainsAParentRepositoryOwnedByTheCurrentUser`, `#checksBothTheGitLinkAndItsTargetForAParentRepository`, `#rejectsAParentRepositoryOfAnotherAccountBeforeReadingItsConfiguration`, `#rejectsAParentRepositoryWhoseOwnerChangesBetweenTheCheckAndTheOpening` |
+| [Existant vérifié] | Le diagnostic d'un dépôt écarté ne contient ni chemin absolu ni nom de compte. | `core/src/test/java/com/nexus/context/source/git/GitRepositoryLocatorTest#theRejectionDiagnosticIsPublicStableAndHasNoAbsolutePathNorAccountName` |
+
+### Vues
+
+Vue organigramme — Quel dépôt Git alimente le contexte d'un projet ? (existant)
+
+```mermaid
+flowchart TD
+    racine["Racine du projet enregistré"] --> propreEntrée .git à la racine ?
+    propre -- "oui" --> retenu["Dépôt retenu : contexte Git produit"]
+    propre -- "non" --> parentEntrée .git dans un répertoire parent ?
+    parent -- "non" --> aucun["Aucun contexte Git"]
+    parent -- "oui" --> proprioRépertoire Git appartenant à l'utilisateur courant ?
+    proprio -- "oui" --> retenu
+    proprio -- "non ou propriétaire non déterminable" --> ecarte["Contexte Git ignoré : diagnostic public sans chemin absolu"]
+```
+
+Notation : organigramme, pas UML.
+
+Exigences : `git-context-discovery › La découverte Git est plafonnée à la racine du projet`, `git-context-discovery › Un dépôt écarté produit un diagnostic public`, `git-context-discovery › Les trois usages de Git appliquent la même règle`.
+
+### Écarts et limites
+
+- Limite : le cas d'un dépôt parent appartenant à un autre compte est simulé par injection du résolveur de propriétaire ; le résolveur réel n'est vérifié que pour l'utilisateur courant.
+- Limite : le diagnostic est vérifié sur `GitContextResult.diagnostics`, sans test de bout en bout `explain` via REST ou MCP.
+
+### Propositions et questions ouvertes
+
+- Questions : aucune.

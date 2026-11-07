@@ -101,5 +101,5 @@ La décision est réévaluée si le cœur adopte un mécanisme de configuration 
 - [ARCH-0059](ARCH-0059-verifier-les-frontieres-du-coeur-par-un-test-d-architecture.md) — test d'architecture du cœur.
 - [DATA-0019](DATA-0019-stocker-les-donnees-locales-dans-un-nexus-home-configurable.md) — résolution de `NEXUS_HOME`.
 - [SEC-0048](SEC-0048-distinguer-traversee-stricte-et-compatibilite-filesystem.md) — postures `NEXUS_REQUIRE_STRICT_PATH_IO` et `NEXUS_REQUIRE_PRIVATE_STORAGE`.
-- Changement OpenSpec `openspec/changes/sprint-08-facade-configuration-durcissements/`.
+- Changement OpenSpec `openspec/changes/archive/2026-11-07-sprint-08-facade-configuration-durcissements/`.
 - [Vue arc42 des décisions](../arc42/09-decisions.md), [architecture-implementation.md](../../developer/architecture-implementation.md).

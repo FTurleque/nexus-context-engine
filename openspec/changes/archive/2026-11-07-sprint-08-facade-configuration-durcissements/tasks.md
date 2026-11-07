@@ -21,7 +21,7 @@ Les commandes `./mvnw` s'entendent avec `-B -ntp` ; `TEST_CIBLE` désigne `-Dsur
 
 ## 4. Hygiène des packages (AUD-ARC-14, AUD-ARC-19)
 
-- [ ] 4.1 AUD-ARC-14 — Déplacer le durcissement POSIX/ACL de `NexusPaths` vers `security.PrivateStoragePolicy` (design D4), appels de la composition root adaptés ; vérifier par `./mvnw -pl core test -Dtest='NexusPathsTest,*PrivateStorage*' TEST_CIBLE` sous Windows et Linux (gate Windows et reactor Linux de la PR)
+- [x] 4.1 AUD-ARC-14 — Déplacer le durcissement POSIX/ACL de `NexusPaths` vers `security.PrivateStoragePolicy` (design D4), appels de la composition root adaptés ; vérifier par `./mvnw -pl core test -Dtest='NexusPathsTest,*PrivateStorage*' TEST_CIBLE` sous Windows et Linux (gate Windows et reactor Linux de la PR)
 - [x] 4.2 AUD-ARC-14 — Déplacer `search.evaluation.SearchQualityMetrics` sous `core/src/test` ; vérifier par `./mvnw -pl core test -Dtest='*GoldenSearchCorpusTest,SearchQualityMetricsTest' TEST_CIBLE` puis, après `./mvnw -pl core package -DskipTests`, `jar tf core/target/nexus-context-engine-*.jar | grep search/evaluation` (aucun résultat)
 - [x] 4.3 AUD-ARC-19 — Renommer la classe JDT `ProcessBuilder` en `BoundedJdtProcessBuilder` et nommer explicitement ses usages (design D5) ; vérifier par `./mvnw -pl core test -Dtest='Jdt*' TEST_CIBLE` et `git ls-files core/src/main | grep -c '/ProcessBuilder.java'` (0)
 
@@ -34,12 +34,12 @@ Les commandes `./mvnw` s'entendent avec `-B -ntp` ; `TEST_CIBLE` désigne `-Dsur
 ## 6. Plafond de la découverte Git (AUD-SEC-05)
 
 - [x] 6.1 AUD-SEC-05 — Introduire une fabrique unique de dépôt Git plafonnée à la racine du projet, avec contrôle du propriétaire pour un dépôt parent (design D7), et l'utiliser dans `LocalGitContextSourceProvider`, `PersistentGitContextSourceProvider` et `GitRecencyCandidateEnricher` ; vérifier par `./mvnw -pl core test -Dtest='*GitContextSourceProvider*,GitRecencyCandidateEnricherTest' TEST_CIBLE`
-- [ ] 6.2 AUD-SEC-05 — Couvrir les scénarios de `specs/git-context-discovery` (dépôt racine, sous-module de l'utilisateur, dépôt parent écarté avec diagnostic sans chemin absolu), le cas de propriétaire non déterminable étant simulé par injection ; vérifier par `./mvnw -pl core test -Dtest='*Git*' TEST_CIBLE` sur le gate Windows et le reactor Linux
+- [x] 6.2 AUD-SEC-05 — Couvrir les scénarios de `specs/git-context-discovery` (dépôt racine, sous-module de l'utilisateur, dépôt parent écarté avec diagnostic sans chemin absolu), le cas de propriétaire non déterminable étant simulé par injection ; vérifier par `./mvnw -pl core test -Dtest='*Git*' TEST_CIBLE` sur le gate Windows et le reactor Linux
 - [x] 6.3 AUD-SEC-05 — Nouvel ADR (skill `nexus-adr`) qui complète ADR-0035 : portée de la découverte du dépôt Git ; mettre à jour `docs/developer/git-context.md`, le registre des ADR et la vue arc42 des décisions ; vérifier par `bash .claude/scripts/contracts.sh`
 
 ## 7. Validation du sprint
 
-- [ ] 7.1 Contrôler le critère de sortie : `git grep -n "SQLException" -- core/src/main/java/com/nexus/application/NexusApplication.java` sans signature publique, `git grep -n "System.getenv" -- core/src/main` limité à la composition root, tests 5.2 et 6.2 verts ; puis `/nx-validate full` (contrats, `./mvnw clean install`, `scripts/self-smoke.ps1`)
+- [x] 7.1 Contrôler le critère de sortie : `git grep -n "SQLException" -- core/src/main/java/com/nexus/application/NexusApplication.java` sans signature publique, `git grep -n "System.getenv" -- core/src/main` limité à la composition root, tests 5.2 et 6.2 verts ; puis `/nx-validate full` (contrats, `./mvnw clean install`, `scripts/self-smoke.ps1`)
 
 Les tâches 4.1, 6.2 et 7.1 sont implémentées et vertes sous Windows (`./mvnw clean install`, `scripts/self-smoke.ps1`) ; elles restent non cochées jusqu'au gate Windows et au reactor Linux de la PR, que leur vérification exige.
 

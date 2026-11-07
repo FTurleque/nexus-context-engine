@@ -95,5 +95,5 @@ La décision est réévaluée si un besoin qualifié de dépôt parent partagé 
 - [BE-0035](BE-0035-integrer-le-contexte-git-local-comme-source-bornee-et-explicable.md) — contexte Git local borné.
 - [BE-0046](BE-0046-mettre-en-cache-le-contexte-git-dans-les-runtimes-longue-duree.md), [BE-0065](BE-0065-dimensionner-les-caches-git-sur-le-scope-federe.md) — caches Git des runtimes longue durée.
 - [ARCH-0061](ARCH-0061-decider-le-contrat-de-sortie-publique-dans-la-projection-du-coeur.md) — projection des diagnostics publics.
-- Changement OpenSpec `openspec/changes/sprint-08-facade-configuration-durcissements` (design D7, spec `git-context-discovery`).
+- Changement OpenSpec `openspec/changes/archive/2026-11-07-sprint-08-facade-configuration-durcissements` (design D7, spec `git-context-discovery`).
 - Git, `safe.directory` : https://git-scm.com/docs/git-config#Documentation/git-config.txt-safedirectory
