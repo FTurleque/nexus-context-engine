@@ -312,6 +312,10 @@ L'alternative du design D2 est donc retenue (décision [DATA-0062](../architectu
 
 La rétention **des analyses** est donc bornée par le lot de publication, non par le nombre de fichiers modifiés (le heap vivant d'un rebuild reste en revanche croissant avec le nombre de fichiers par des structures que cette tâche ne borne pas et que la mesure n'a pas attribuées : voir le [relevé après mise en attente](../project/history/indexing-staged-writes-measures-2026-11-07.md)) ; `PublishOutcome` ne retient que le nombre de fichiers mis à jour et un indicateur de sources de code modifiées. Fermer la publication sans la publier annule les écritures Lucene non committées et écarte les analyses en attente ; l'ouverture d'une session d'un projet écarte aussi ce qu'une indexation interrompue y aurait laissé.
 
+### Import MINOS explicite
+
+L'import d'un export MINOS n'est pas une indexation : il remplace le snapshot externe d'un projet déjà `READY` sans scanner ni analyser. Il emprunte pourtant le même point d'entrée d'écriture que l'indexation : `ProjectIndexingService.importExternalCodeIntelligence` prend le verrou single-flight du projet puis le verrou inter-processus, et refuse une indexation ou un import concurrent du même projet avec le même diagnostic. `NexusApplication` et `NexusCli` ne composent ni n'instancient plus `MinosCodeIndexImporter` (composé par `NexusApplicationFactory`) ; la lecture bornée du payload passe par la façade. Le contrat JSON, la borne de transport et la provenance sont décrits dans [minos-code-intelligence.md](minos-code-intelligence.md).
+
 ### Ordre de la barrière de publication
 
 Le design ne fixe pas l'ordre entre le commit Lucene, le contrôle de cohérence et la publication de la génération. Choix retenu, du plus prudent au plus tardif :
