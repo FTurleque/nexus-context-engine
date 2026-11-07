@@ -141,6 +141,12 @@ jobs:
           assert storage['entries'] <= storage['capacity'], storage
           assert storage['peakEntries'] <= storage['capacity'], storage
 
+          federated = report['federatedScope']
+          assert federated['projects'] > 16, federated
+          assert federated['projects'] <= federated['capacity'], federated
+          assert federated['secondPassHits'] == federated['projects'], federated
+          assert federated['evictions'] == 0, federated
+
           decision = report['decision']
           assert decision['recommendation'] in (
               'retain_recomputation_without_persistent_git_context_cache',
@@ -184,6 +190,14 @@ jobs:
               $report.storage.entries -gt $report.storage.capacity -or
               $report.storage.peakEntries -gt $report.storage.capacity) {
             throw 'Bounded storage qualification failed'
+          }
+
+          $federated = $report.federatedScope
+          if ($federated.projects -le 16 -or
+              $federated.projects -gt $federated.capacity -or
+              $federated.secondPassHits -ne $federated.projects -or
+              $federated.evictions -ne 0) {
+            throw 'Federated scope cache qualification failed'
           }
 
           $recommendations = @(
