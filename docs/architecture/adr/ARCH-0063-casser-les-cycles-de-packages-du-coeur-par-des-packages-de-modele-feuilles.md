@@ -115,5 +115,5 @@ La décision est réévaluée si le cœur est découpé en modules Maven ou reç
 ## References
 
 - [ARCH-0004](ARCH-0004-demarrer-avec-un-seul-module-maven.md), [ARCH-0059](ARCH-0059-verifier-les-frontieres-du-coeur-par-un-test-d-architecture.md), [BE-0010](BE-0010-adopter-un-ranking-hybride-deterministe-et-explicable.md), [BE-0025](BE-0025-normaliser-les-signaux-et-calculer-un-score-compose-explicable.md)
-- Changement OpenSpec `openspec/changes/sprint-07-casser-le-bloc-cyclique-du-coeur/` et spécification `openspec/specs/core-package-boundaries/spec.md`
+- Changement OpenSpec `openspec/changes/archive/2026-11-07-sprint-07-casser-le-bloc-cyclique-du-coeur/` et spécification `openspec/specs/core-package-boundaries/spec.md`
 - [Architecture d'implémentation](../../developer/architecture-implementation.md), section « Frontières vérifiées du cœur »
