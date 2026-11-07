@@ -373,25 +373,19 @@ class SqliteIndexedSubstringSearchTest {
     }
 
     private static void assertFuzzyIndexPlan(Connection connection) throws Exception {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                EXPLAIN QUERY PLAN
-                SELECT id
-                FROM symbols INDEXED BY idx_symbols_fuzzy_prefilter
-                WHERE SUBSTR(LOWER(name), 1, 1) = ?
-                  AND LENGTH(name) BETWEEN ? AND ?
-                ORDER BY qualified_name
-                LIMIT 20
-                """)) {
-            statement.setString(1, "a");
-            statement.setInt(2, 5);
-            statement.setInt(3, 40);
+        // Le préfiltre est scopé au projet (V015, AUD-PRF-09) : voir SqliteSymbolSearchScopingTest pour le plan complet.
+        try (PreparedStatement statement = connection.prepareStatement(
+                "EXPLAIN QUERY PLAN " + SqliteSymbolSearch.FUZZY_BATCH_SQL)) {
+            statement.setString(1, "[{\"i\":0,\"first\":\"a\",\"min\":2,\"max\":8}]");
+            statement.setString(2, "00000000-0000-0000-0000-000000000000");
+            statement.setInt(3, 20);
             try (ResultSet resultSet = statement.executeQuery()) {
                 boolean usesIndex = false;
                 while (resultSet.next()) {
                     String detail = resultSet.getString("detail");
-                    usesIndex |= detail != null && detail.contains("idx_symbols_fuzzy_prefilter");
+                    usesIndex |= detail != null && detail.contains("idx_symbols_file_fuzzy_prefilter");
                 }
-                assertTrue(usesIndex, "Fuzzy prefilter must use idx_symbols_fuzzy_prefilter");
+                assertTrue(usesIndex, "Fuzzy prefilter must use idx_symbols_file_fuzzy_prefilter");
             }
         }
     }

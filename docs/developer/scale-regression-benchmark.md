@@ -94,7 +94,7 @@ Les mutations canoniques sont placées par triggers dans `symbol_search_pending`
 
 Le repository transforme une requête en intersection de trigrams de trois points de code. Comme `detail=none` ne conserve pas les positions, les candidats FTS sont ensuite revalidés contre les valeurs canoniques avec la sémantique `contains`. Cette étape élimine les faux positifs possibles d'une simple intersection de trigrams sans réintroduire un scan complet de la table.
 
-Le préfiltre fuzzy reste compatible avec la sémantique historique (premier caractère + longueur ±3), mais son jeu de candidats est borné **avant** son union avec les candidats FTS. `idx_symbols_fuzzy_prefilter` est ordonné pour permettre cette sélection déterministe sans matérialiser toute une famille de noms à forte cardinalité.
+Le préfiltre fuzzy reste compatible avec la sémantique historique (premier caractère + longueur ±3), mais son jeu de candidats est borné **avant** son union avec les candidats FTS. Depuis V015, le préfiltre part des fichiers du projet et sonde `idx_symbols_file_fuzzy_prefilter` (première colonne `file_id`) ; la sélection reste déterministe (tri par nom qualifié, chemin, ligne, fournisseur) et son coût ne dépend que du projet ciblé ([large-scale-search.md](large-scale-search.md#sqlite-et-symboles)).
 
 Les requêtes de un ou deux points de code gardent volontairement le fallback `LIKE`, car un trigram ne peut pas indexer ces chaînes.
 

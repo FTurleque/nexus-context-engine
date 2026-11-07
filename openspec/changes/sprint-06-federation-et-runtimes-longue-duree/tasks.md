@@ -33,8 +33,8 @@
 
 ## 7. Recherche de symboles scopée projet (AUD-PRF-09)
 
-- [ ] 7.1 `AUD-PRF-09` — Migration `V0NN` (skill `nexus-schema-migration`, numéro suivant après le sprint 5) qui ajoute l'index de préfiltre fuzzy scopé projet, avec test d'upgrade ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='SchemaMigrator*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
-- [ ] 7.2 `AUD-PRF-09` — Scoper le `MATCH` FTS et le préfiltre fuzzy par projet dans `SqliteSymbolSearch` et interroger les termes en lot dans `SymbolSearchStrategy`, résultats identiques ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='*SymbolSearch*,FederatedGoldenSearchCorpusTest' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true` et par un benchmark 25/100 projets peuplés dans la même base (plan `EXPLAIN` sans `SCAN` global)
+- [x] 7.1 `AUD-PRF-09` — Migration `V0NN` (skill `nexus-schema-migration`, numéro suivant après le sprint 5) qui ajoute l'index de préfiltre fuzzy scopé projet, avec test d'upgrade ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='SchemaMigrator*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
+- [x] 7.2 `AUD-PRF-09` — Scoper le `MATCH` FTS et le préfiltre fuzzy par projet dans `SqliteSymbolSearch` et interroger les termes en lot dans `SymbolSearchStrategy`, résultats identiques ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='*SymbolSearch*,FederatedGoldenSearchCorpusTest' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true` et par un benchmark 25/100 projets peuplés dans la même base (plan `EXPLAIN` sans `SCAN` global)
 
 ## 8. Intégration
 

@@ -57,7 +57,13 @@ sur disque pendant les insertions avec triggers. Le journal canonique et la
 durabilité restent inchangés. La mémoire temporaire native dépend du travail SQL
 et n'est pas comptée par le gate de heap Java ; voir [ADR-0050](../architecture/adr/DATA-0050-conserver-les-temporaires-sqlite-en-memoire.md).
 
-Les recherches symbole/relation filtrent côté repository avant matérialisation. V005 impose également :
+Les recherches symbole/relation filtrent côté repository avant matérialisation. La recherche de symboles est scopée au projet ciblé (AUD-PRF-09) :
+
+- le préfiltre approché part des fichiers du projet (`UNIQUE (project_id, relative_path)`) puis sonde `idx_symbols_file_fuzzy_prefilter` (V015, première colonne `file_id`) : son plan ne contient aucun parcours de la table ou d'un index des symboles et ne change pas quand la base passe de 25 à 100 projets (`SqliteSymbolSearchScopingTest`) ;
+- les termes d'une requête (jusqu'à 8, plus la requête entière) sont interrogés en lot par `IndexRepository.searchSymbols(projectId, queries, limit)` : au plus une requête SQL par famille (plein texte trigram, préfiltre approché, LIKE des termes de moins de trois points de code) quel que soit le nombre de termes, avec `json_each` et une fenêtre `ROW_NUMBER` par terme ; le résultat est identique aux requêtes par terme d'avant V015 ;
+- l'index plein texte `symbol_search_fts` est contentless, sans colonne de projet : sa correspondance reste globale et le filtre de projet s'applique par les jointures sur la clé primaire. Une restriction par `rowid IN (symboles du projet)` a été mesurée le 2026-11-07 sur 60 projets et 240 000 symboles : 0,67 à 1,0 s contre 3 à 87 ms pour la correspondance globale, donc non retenue.
+
+V005 impose également :
 
 ```text
 start_line >= 1
