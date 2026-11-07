@@ -77,6 +77,7 @@ Cette section présente un index synthétique avec statut, date et relations de 
 | [BE-0065](../adr/BE-0065-dimensionner-les-caches-git-sur-le-scope-federe.md) | Dimensionner les caches Git des runtimes longue durée sur le scope fédéré | Proposed | 2026-11-07 |
 | [ARCH-0066](../adr/ARCH-0066-resoudre-la-configuration-dans-la-composition-root.md) | Résoudre la configuration NEXUS dans la composition root et l'injecter | Proposed | 2026-11-07 |
 | [BE-0067](../adr/BE-0067-plafonner-la-decouverte-du-depot-git-a-la-racine-du-projet.md) | Plafonner la découverte du dépôt Git à la racine du projet, sauf dépôt parent de l'utilisateur courant | Proposed | 2026-11-07 |
+| [SEC-0068](../adr/SEC-0068-publier-les-releases-depuis-un-environnement-protege-avec-des-assets-attestes.md) | Publier les releases depuis un environnement protégé, avec des assets attestés et des tags de pré-version | Proposed | 2026-11-07 |
 | [ADR-0000](../adr/archive/0000-adopter-les-adr-madr.md) | Adopter MADR comme format et définir la gouvernance des ADR | Superseded (GEN-0057) | 2026-07-19 |
 | [ADR-0056](../adr/archive/0056-regrouper-le-registre-des-adr-dans-la-documentation-d-architecture.md) | Regrouper le registre des ADR dans la documentation d'architecture | Superseded (GEN-0057) | 2026-10-29 |
 
@@ -117,6 +118,11 @@ MINOS.
 
 GEN-0015, BE-0016, ARCH-0017, ARCH-0030, GEN-0031, ARCH-0039, ARCH-0040, ARCH-0041, ARCH-0061 —
 CLI, REST, MCP, découplage, packaging.
+
+### Chaîne de release
+
+GEN-0031, SEC-0068 — packaging de la CLI, publication depuis l'environnement protégé
+`release`, attestation de tous les assets, tags de pré-version.
 
 ### Écosystème et fédération
 

@@ -35,7 +35,7 @@ target\dist\NEXUS-0.2.0-windows-x64-setup.exe.sha256
 
 ## Contrat de release
 
-`develop` est la branche d'intégration ; `main` est la branche de release. Une publication GHCR est déclenchée uniquement par un tag `vX.Y.Z` qui pointe sur le HEAD exact de `main` et dont la version correspond au `pom.xml`.
+`develop` est la branche d'intégration ; `main` est la branche de release. Une publication GHCR est déclenchée uniquement par un tag `vX.Y.Z` (ou `vX.Y.Z-rc.N` pour une pré-version) qui pointe sur le HEAD exact de `main` et dont la version correspond au `pom.xml`.
 
 La release réutilise les gates exécutables : NEXUS CI, Windows Installer, Docker Distribution, Scale Benchmark, Scanner Corpus Benchmark, CodeQL et OSV-Scanner selon le contrat du workflow. SonarCloud reste un Quality Gate PR externe, pas un job de release.
 
@@ -44,6 +44,27 @@ L'image Docker est **construite une seule fois** dans Docker Distribution, quali
 Les tags version et SHA sont immuables. Le préflight GHCR est fail-closed sur toute erreur ambiguë et accepte une reprise idempotente uniquement si le contenu déjà publié correspond à l'image qualifiée. `latest` est le seul pointeur mutable.
 
 Voir [`immutable-release-publishing.md`](immutable-release-publishing.md).
+
+### Vérification des assets publiés
+
+L'image, le ZIP Windows et le `setup.exe` portent chacun une attestation de provenance, vérifiée par le job `publish` avant l'upload des assets. Avant d'installer un asset téléchargé depuis une release :
+
+```text
+gh attestation verify <asset> --repo FTurleque/nexus-context-engine
+```
+
+Une vérification en échec signifie que l'asset ne doit pas être installé. Le détail (workflow signataire, image par digest) figure dans [`immutable-release-publishing.md`](immutable-release-publishing.md#vérification-consommateur).
+
+### Horodatage reproductible
+
+Le pom racine fixe `project.build.outputTimestamp` : les JAR (dont le JAR CLI ombré), le ZIP de distribution et le SBOM CycloneDX portent cet horodatage au lieu de l'heure du build. Deux `./mvnw -B -ntp clean verify -DskipTests` successifs sur le même commit produisent donc les mêmes SHA-256 pour `target/nexus-context-engine-<version>-cli.jar` et `target/distribution/nexus-context-engine-<version>.zip` (le ZIP est assemblé en phase `verify`).
+
+À chaque release, dans le commit qui fixe la version des pom :
+
+1. mettre `project.build.outputTimestamp` à la date UTC de ce commit, au format `AAAA-MM-JJT00:00:00Z` ;
+2. lancer deux fois `./mvnw -B -ntp clean verify -DskipTests` et comparer `sha256sum target/nexus-context-engine-*-cli.jar target/distribution/*.zip` : une empreinte différente bloque la release.
+
+L'image Docker et l'installeur Windows ne sont pas couverts (horodatages des outils tiers).
 
 ## SQLite : autorité, migrations et recovery
 

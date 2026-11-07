@@ -50,6 +50,9 @@ case "$subcommand" in
       isDraft)
         cat "$release_dir/draft"
         ;;
+      isPrerelease)
+        cat "$release_dir/prerelease"
+        ;;
       assets)
         if [[ -d "$release_dir/assets" ]]; then
           find "$release_dir/assets" -maxdepth 1 -type f -printf '%f\n' | sort
@@ -68,10 +71,18 @@ case "$subcommand" in
     [[ ! -e "$release_dir" ]] || exit 1
 
     draft_requested=false
+    prerelease_requested=false
     while [[ $# -gt 0 ]]; do
       case "$1" in
         --draft)
           draft_requested=true
+          shift
+          ;;
+        --prerelease)
+          prerelease_requested=true
+          shift
+          ;;
+        --latest=false)
           shift
           ;;
         --title|--notes)
@@ -91,6 +102,7 @@ case "$subcommand" in
     }
     mkdir -p "$release_dir/assets"
     printf 'true\n' > "$release_dir/draft"
+    printf '%s\n' "$prerelease_requested" > "$release_dir/prerelease"
     ;;
   upload)
     tag="${1:-}"
@@ -184,6 +196,10 @@ cmp -s "$asset_dir/nexus-windows.zip" "$release_dir/assets/nexus-windows.zip" ||
 cmp -s "$asset_dir/nexus-setup.exe" "$release_dir/assets/nexus-setup.exe" || fail "setup bytes differ after publication"
 grep -Fq "release create $TAG --verify-tag --draft" "$FAKE_GH_LOG" || fail "release was not created as draft"
 grep -Fq "release edit $TAG --draft=false" "$FAKE_GH_LOG" || fail "release was not published after verification"
+[[ "$(cat "$release_dir/prerelease")" == "false" ]] || fail "final release was published as a pre-release"
+if grep -E "^release create $TAG .*--prerelease" "$FAKE_GH_LOG" >/dev/null; then
+  fail "final release must not be created with --prerelease"
+fi
 
 # Re-running against an already published, byte-identical release must be read-only and idempotent.
 upload_count_before="$(grep -c '^release upload ' "$FAKE_GH_LOG" || true)"
@@ -210,5 +226,29 @@ mkdir -p "$TEMP/duplicate-a" "$TEMP/duplicate-b"
 printf 'a\n' > "$TEMP/duplicate-a/duplicate.bin"
 printf 'b\n' > "$TEMP/duplicate-b/duplicate.bin"
 expect_failure 65 bash "$SCRIPT" "$TAG" "$TEMP/duplicate-a/duplicate.bin" "$TEMP/duplicate-b/duplicate.bin"
+
+# A pre-release tag publishes a GitHub pre-release that is never marked latest.
+RC_TAG="v0.3.0-rc.1"
+bash "$SCRIPT" "$RC_TAG" "$asset_dir/nexus-windows.zip" "$asset_dir/nexus-setup.exe"
+rc_release_dir="$FAKE_GH_STATE/releases/$RC_TAG"
+[[ "$(cat "$rc_release_dir/draft")" == "false" ]] || fail "pre-release was not published after successful verification"
+[[ "$(cat "$rc_release_dir/prerelease")" == "true" ]] || fail "pre-release tag was not published as a GitHub pre-release"
+grep -Fq "release create $RC_TAG --verify-tag --draft --prerelease --latest=false" "$FAKE_GH_LOG" \
+  || fail "pre-release was not created as a draft pre-release excluded from latest"
+
+# Resuming a pre-release is idempotent and keeps its pre-release state.
+bash "$SCRIPT" "$RC_TAG" "$asset_dir/nexus-windows.zip" "$asset_dir/nexus-setup.exe"
+[[ "$(cat "$rc_release_dir/prerelease")" == "true" ]] || fail "pre-release state changed during idempotent resume"
+
+# An existing release whose pre-release state contradicts its tag must fail closed.
+MISMATCH_TAG="v0.4.0-rc.1"
+mkdir -p "$FAKE_GH_STATE/releases/$MISMATCH_TAG/assets"
+printf 'true\n' > "$FAKE_GH_STATE/releases/$MISMATCH_TAG/draft"
+printf 'false\n' > "$FAKE_GH_STATE/releases/$MISMATCH_TAG/prerelease"
+expect_failure 78 bash "$SCRIPT" "$MISMATCH_TAG" "$asset_dir/nexus-windows.zip" "$asset_dir/nexus-setup.exe"
+[[ -z "$(ls -A "$FAKE_GH_STATE/releases/$MISMATCH_TAG/assets")" ]] || fail "mismatched pre-release state still received assets"
+printf 'true\n' > "$release_dir/prerelease"
+expect_failure 78 bash "$SCRIPT" "$TAG" "$asset_dir/nexus-windows.zip" "$asset_dir/nexus-setup.exe"
+printf 'false\n' > "$release_dir/prerelease"
 
 echo "GitHub Release asset publication qualification passed."

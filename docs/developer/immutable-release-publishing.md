@@ -8,11 +8,12 @@ Ce document décrit le contrat NXA3 courant : **construire une fois, qualifier c
 
 ```text
 v<major>.<minor>.<patch>
+v<major>.<minor>.<patch>-rc.<n>
 ```
 
-Avant toute publication, le workflow vérifie :
+Avant toute publication, le workflow vérifie (`scripts/release/validate-release-tag.sh`) :
 
-- SemVer strict `vX.Y.Z` ;
+- tag `vX.Y.Z` (version finale) ou `vX.Y.Z-rc.N` avec `N >= 1` sans zéro initial (pré-version) ;
 - égalité avec la version racine de `pom.xml` ;
 - commit taggé égal au HEAD courant de `main` ;
 - succès des gates release sur ce commit exact.
@@ -46,7 +47,7 @@ ghcr.io/fturleque/nexus-context-engine:sha-<sha>
 ghcr.io/fturleque/nexus-context-engine:latest
 ```
 
-Les tags version et SHA sont immuables. `latest` est volontairement mutable.
+Les tags version et SHA sont immuables. `latest` est volontairement mutable et ne désigne qu'une version finale : pour un tag `vX.Y.Z-rc.N`, la release GitHub est créée en pré-version (`--prerelease --latest=false`), les tags version et SHA sont publiés et `latest` reste inchangé.
 
 ## Préflight fail-closed et reprise idempotente
 
@@ -77,6 +78,32 @@ Git commit SHA
 GHCR digest sha256:...
 ```
 
+## Vérification consommateur
+
+Chaque asset Windows publié (ZIP portable `nexus-context-engine-<version>-windows-x64.zip` et installeur `NEXUS-<version>-windows-x64-setup.exe`) porte une attestation de provenance SLSA produite par `actions/attest` dans le job `publish` de `release.yml`. Le job vérifie chaque attestation par `gh attestation verify` avant tout upload d'asset et avant le déplacement de `latest` : une vérification en échec arrête la publication.
+
+Après téléchargement depuis la release GitHub, un consommateur vérifie l'asset avec la GitHub CLI :
+
+```text
+gh attestation verify <asset> --repo FTurleque/nexus-context-engine
+```
+
+Pour exiger en plus que l'attestation provienne du workflow `Release` :
+
+```text
+gh attestation verify NEXUS-<version>-windows-x64-setup.exe \
+  --repo FTurleque/nexus-context-engine \
+  --signer-workflow FTurleque/nexus-context-engine/.github/workflows/release.yml
+```
+
+L'image se vérifie de la même façon par son digest :
+
+```text
+gh attestation verify oci://ghcr.io/fturleque/nexus-context-engine@sha256:<digest> --repo FTurleque/nexus-context-engine
+```
+
+Le fichier `.sha256` co-localisé contrôle seulement l'intégrité du téléchargement ; l'attestation établit la provenance (dépôt, workflow, commit et tag). Une vérification en échec signifie que l'asset ne doit pas être installé.
+
 ## Échec partiel
 
 La publication est fail-closed. Un retry ne masque jamais une divergence :
@@ -90,5 +117,25 @@ Pour corriger une release dont le contenu doit changer, créer une nouvelle vers
 ## Rollback
 
 Un rollback de consommation pointe vers un tag SemVer historique ou, de préférence, vers son digest GHCR. Les tags immuables ne sont jamais déplacés pour simuler un rollback.
+
+## Politique de publication cible (SEC-0068, proposée)
+
+[SEC-0068](../architecture/adr/SEC-0068-publier-les-releases-depuis-un-environnement-protege-avec-des-assets-attestes.md), au statut `Proposed`, complète [GEN-0031](../architecture/adr/GEN-0031-packager-la-cli-dans-un-jar-autonome.md) et fixe les conditions de publication que met en œuvre le changement OpenSpec `sprint-09-chaine-de-release-executable`. Les workflows et scripts du dépôt portent les règles qui les concernent ; les réglages GitHub (environnement `release`, ruleset de tags) sont appliqués par le mainteneur et vérifiables en lecture. L'état constaté avant le changement est relevé dans le contexte de l'ADR.
+
+- Aucun workflow ne transmet `secrets: inherit` ; un workflow réutilisable ne reçoit, par leur nom, que les secrets qu'il déclare. `release.yml` ne transmet aucun secret au job Windows.
+- Le job `publish` déclare `environment: release` : reviewer requis, déploiement limité aux tags `v*`. Aucune écriture dans GHCR ni dans les releases avant l'approbation ; une release demande une approbation.
+- Le ZIP et le `setup.exe` Windows ne sont pas signés Authenticode : SmartScreen affiche « éditeur inconnu » à l'installation. Leur provenance se vérifie par `gh attestation verify` (section « Vérification consommateur »).
+- L'environnement et le ruleset de tags existent avant qu'un workflow référence `release` : GitHub crée sans protection un environnement absent au premier job qui le nomme. Aucun tag `v*` n'est poussé tant que la lecture `gh api` ci-dessous ne montre pas le reviewer requis et le ruleset actif.
+- Un ruleset de tags actif cible `refs/tags/v*` et réserve leur création, leur mise à jour et leur suppression au mainteneur.
+- Chaque ZIP et chaque `setup.exe` publiés reçoivent une attestation de provenance (`actions/attest` en `subject-path`, même version épinglée que pour l'image), vérifiée par `gh attestation verify` avant tout upload et avant le déplacement de `latest`.
+- Le tag de release est `vX.Y.Z` ou `vX.Y.Z-rc.N`, égal à la version Maven et posé sur la tête de `main`. Une pré-version publie une release marquée pré-version, sous des tags d'image version et SHA immuables, et ne déplace jamais `latest`.
+- La première exécution de la chaîne est une répétition sur `X.Y.Z-rc.1`, prouvée par un relevé daté sous `docs/project/history/` (run, `gh attestation verify` sur l'image et les assets).
+
+Les réglages GitHub (environnement, ruleset de tags) se vérifient en lecture :
+
+```bash
+gh api repos/FTurleque/nexus-context-engine/environments --jq '.environments[] | {name, protection_rules}'
+gh api repos/FTurleque/nexus-context-engine/rulesets --jq '.[] | {name, target, enforcement}'
+```
 
 Voir aussi [`ci-and-supply-chain.md`](ci-and-supply-chain.md) et [`release-and-recovery.md`](release-and-recovery.md).
