@@ -13,7 +13,7 @@
 ## 3. Échéance globale de la fédération (AUD-PRF-03)
 
 - [x] 3.1 `AUD-PRF-03` — Nouvel ADR (skill `nexus-adr`) qui complète ADR-0043 : échéance globale, vérification entre projets, pas de parallélisme, valeur par défaut et borne ; vérifier par `bash .claude/scripts/contracts.sh`
-- [ ] 3.2 `AUD-PRF-03` — Appliquer l'échéance (horloge injectée) dans l'étape « collecte par projet » de `FederatedContextService` et dans `FederatedSearchService`, plafonner le délai d'embedding par le temps restant, et lister les projets non commencés dans un diagnostic public ; vérifier par un test à horloge simulée (ordre du diagnostic, projets servis inchangés) : `./mvnw -B -ntp -pl core test -Dtest='FederatedContextServiceTest,FederatedSearchServicePolicyTest' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
+- [x] 3.2 `AUD-PRF-03` — Appliquer l'échéance (horloge injectée) dans l'étape « collecte par projet » de `FederatedContextService` et dans `FederatedSearchService`, plafonner le délai d'embedding par le temps restant, et lister les projets non commencés dans un diagnostic public ; vérifier par un test à horloge simulée (ordre du diagnostic, projets servis inchangés) : `./mvnw -B -ntp -pl core test -Dtest='FederatedContextServiceTest,FederatedSearchServicePolicyTest' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
 - [ ] 3.3 `AUD-PRF-03` — Exposer le diagnostic à parité CLI, REST et MCP via la projection publique ; vérifier par `./mvnw -B -ntp clean install` (tests REST et MCP inclus) puis mettre à jour la documentation développeur de la fédération et vérifier `bash .claude/scripts/contracts.sh`
 
 ## 4. Métadonnées Lucene sur le reader en cache (AUD-PRF-04)

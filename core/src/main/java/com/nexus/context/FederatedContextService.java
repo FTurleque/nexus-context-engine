@@ -3,6 +3,8 @@ package com.nexus.context;
 import com.nexus.context.source.ContextDiscoveryBudget;
 import com.nexus.context.source.ContextDiscoveryLimits;
 import com.nexus.project.FederatedScopePolicy;
+import com.nexus.project.FederationDeadline;
+import com.nexus.project.FederationDeadlinePolicy;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.search.CandidateType;
 import com.nexus.search.SearchQueryContext;
@@ -41,9 +43,15 @@ public final class FederatedContextService {
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 
     private final ContextBuilder contextBuilder;
+    private final FederationDeadlinePolicy deadlinePolicy;
 
     public FederatedContextService(ContextBuilder contextBuilder) {
+        this(contextBuilder, FederationDeadlinePolicy.fromEnvironment());
+    }
+
+    public FederatedContextService(ContextBuilder contextBuilder, FederationDeadlinePolicy deadlinePolicy) {
         this.contextBuilder = Objects.requireNonNull(contextBuilder, "contextBuilder");
+        this.deadlinePolicy = Objects.requireNonNull(deadlinePolicy, "deadlinePolicy");
     }
 
     public FederatedContextBundle build(
@@ -72,7 +80,8 @@ public final class FederatedContextService {
                 tokenBudget,
                 selection.selectedTokens(),
                 explain ? excluded : List.of(),
-                metadata);
+                metadata,
+                collection.unservedProjects());
     }
 
     /** Étape 1 : validation de la requête, du budget et du scope. */
@@ -97,7 +106,11 @@ public final class FederatedContextService {
         return scope;
     }
 
-    /** Étape 2 : collecte par projet, dans l'ordre déterministe du scope. */
+    /**
+     * Étape 2 : collecte par projet, dans l'ordre déterministe du scope, sous échéance
+     * globale (BE-0064) : l'échéance est vérifiée avant chaque projet, sans parallélisme ;
+     * un projet non commencé à l'échéance n'est pas servi et est nommé dans le diagnostic.
+     */
     private ProjectCollection collectPerProject(
             List<ProjectDescriptor> scope,
             String query,
@@ -117,12 +130,26 @@ public final class FederatedContextService {
         Map<String, Integer> localItemsByProject = new LinkedHashMap<>();
         // Contexte de requête unique : le vecteur de requête est calculé au plus une
         // fois pour tous les projets du scope (AUD-PRF-02).
-        SearchQueryContext queryContext = SearchQueryContext.create();
+        FederationDeadline deadline = deadlinePolicy.start();
+        SearchQueryContext queryContext = SearchQueryContext.create(deadline);
+        List<ProjectDescriptor> unservedProjects = new ArrayList<>();
 
         for (int index = 0; index < scope.size(); index++) {
             ProjectDescriptor project = scope.get(index);
             int fairAllocation = baseBudget + (index < remainder ? 1 : 0);
             int candidateBudget = Math.min(tokenBudget, fairAllocation * LOCAL_OVERFETCH_FACTOR);
+            if (deadline.expired()) {
+                unservedProjects.add(project);
+                perProjectItems.add(List.of());
+                allocatedByProject.put(project.id().toString(), fairAllocation);
+                candidateBudgetByProject.put(project.id().toString(), 0);
+                localTokensByProject.put(project.id().toString(), 0);
+                localItemsByProject.put(project.id().toString(), 0);
+                if (explain) {
+                    excluded.add(project.name() + ": projet non servi : échéance globale de la fédération atteinte");
+                }
+                continue;
+            }
             ContextBundle local = contextBuilder.build(
                     new ContextRequest(
                             project.id(),
@@ -151,7 +178,8 @@ public final class FederatedContextService {
                 allocatedByProject,
                 candidateBudgetByProject,
                 localTokensByProject,
-                localItemsByProject);
+                localItemsByProject,
+                unservedProjects);
     }
 
     /** Étape 3 : sélection sous budget (fair floor, déduplication, redistribution globale). */
@@ -317,7 +345,8 @@ public final class FederatedContextService {
             Map<String, Integer> allocatedByProject,
             Map<String, Integer> candidateBudgetByProject,
             Map<String, Integer> localTokensByProject,
-            Map<String, Integer> localItemsByProject) {
+            Map<String, Integer> localItemsByProject,
+            List<ProjectDescriptor> unservedProjects) {
     }
 
     private record Selection(

@@ -14,11 +14,13 @@ import com.nexus.search.SearchStrategy;
 import com.nexus.security.SensitiveContentRedactor;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -138,7 +140,7 @@ public final class SemanticSearchStrategy implements SearchStrategy {
         }
 
         QueryVector shared = queryContext.shared(
-                queryVectorKey(), QueryVector.class, () -> embedQuery(query));
+                queryVectorKey(), QueryVector.class, () -> embedQuery(query, queryContext));
         if (shared.unavailable() != null) {
             return degradedProvider(project, shared.unavailable());
         }
@@ -181,12 +183,15 @@ public final class SemanticSearchStrategy implements SearchStrategy {
         return "semantic-query-vector|" + embeddingProvider.providerId() + "|" + embeddingProvider.modelId();
     }
 
-    private QueryVector embedQuery(String query) throws IOException {
+    private QueryVector embedQuery(String query, SearchQueryContext queryContext) throws IOException {
         String embeddingQuery = SensitiveContentRedactor.redact(query);
         try {
-            return new QueryVector(
-                    Objects.requireNonNull(embeddingProvider.embedQuery(embeddingQuery), "embedding vector"),
-                    null);
+            // Le temps restant de l'échéance globale plafonne le délai de l'appel (BE-0064).
+            Optional<Duration> remaining = queryContext.remainingTime();
+            float[] vector = remaining.isPresent()
+                    ? embeddingProvider.embedQuery(embeddingQuery, remaining.get())
+                    : embeddingProvider.embedQuery(embeddingQuery);
+            return new QueryVector(Objects.requireNonNull(vector, "embedding vector"), null);
         } catch (EmbeddingProviderUnavailableException exception) {
             return new QueryVector(null, exception);
         }

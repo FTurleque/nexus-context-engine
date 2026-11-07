@@ -1,6 +1,7 @@
 package com.nexus.context;
 
 import com.nexus.project.FederatedScopePolicy;
+import com.nexus.project.FederationDeadlinePolicy;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;
@@ -9,12 +10,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -196,6 +200,62 @@ class FederatedContextServiceTest {
         assertEquals(later.remainingFiles(), reported.remainingFiles());
         assertTrue(reported.elapsedMillis() <= later.elapsedMillis());
         assertTrue(reported.remainingDurationMillis() >= later.remainingDurationMillis());
+    }
+
+    @Test
+    void stopsStartingProjectsAtTheGlobalDeadlineAndNamesUnservedProjectsInScopeOrder() {
+        List<ProjectDescriptor> scope = fiveProjects();
+        AtomicReference<Instant> now = new AtomicReference<>(Instant.parse("2026-01-01T00:00:00Z"));
+        List<UUID> built = new ArrayList<>();
+        ContextBuilder builder = request -> {
+            built.add(request.projectId());
+            now.updateAndGet(instant -> instant.plusSeconds(10));
+            ProjectDescriptor project = scope.stream()
+                    .filter(candidate -> candidate.id().equals(request.projectId())).findFirst().orElseThrow();
+            return withinBudget(request.tokenBudget(),
+                    List.of(item(project.rootPath().resolve("A.java"), project.name(), 10)));
+        };
+        FederationDeadlinePolicy policy = new FederationDeadlinePolicy(Duration.ofSeconds(15), now::get);
+
+        FederatedContextBundle bundle = new FederatedContextService(builder, policy).build(
+                scope, "task", 500, Set.of(), Map.of(), true);
+
+        assertEquals(List.of(scope.get(0).id(), scope.get(1).id()), built);
+        assertEquals(
+                List.of("c", "d", "e"),
+                bundle.unservedProjects().stream().map(ProjectDescriptor::name).toList());
+        assertEquals(
+                List.of("a", "b"),
+                bundle.items().stream().map(item -> item.project().name()).toList());
+        assertTrue(bundle.excluded().stream().anyMatch(reason -> reason.startsWith("c: projet non servi")));
+    }
+
+    @Test
+    void servesEveryProjectWithoutDiagnosticWhenTheDeadlineIsNotReached() {
+        List<ProjectDescriptor> scope = fiveProjects();
+        AtomicReference<Instant> now = new AtomicReference<>(Instant.parse("2026-01-01T00:00:00Z"));
+        ContextBuilder builder = request -> {
+            ProjectDescriptor project = scope.stream()
+                    .filter(candidate -> candidate.id().equals(request.projectId())).findFirst().orElseThrow();
+            return withinBudget(request.tokenBudget(),
+                    List.of(item(project.rootPath().resolve("A.java"), project.name(), 10)));
+        };
+
+        FederatedContextBundle withDeadline = new FederatedContextService(
+                builder, new FederationDeadlinePolicy(Duration.ofSeconds(15), now::get))
+                .build(scope, "task", 500, Set.of(), Map.of(), false);
+        FederatedContextBundle withoutClockProgress = new FederatedContextService(builder).build(
+                scope, "task", 500, Set.of(), Map.of(), false);
+
+        assertTrue(withDeadline.unservedProjects().isEmpty());
+        assertEquals(withoutClockProgress.items(), withDeadline.items());
+        assertEquals(5, withDeadline.items().size());
+    }
+
+    private List<ProjectDescriptor> fiveProjects() {
+        return List.of("a", "b", "c", "d", "e").stream()
+                .map(name -> project(name, root.resolve(name)))
+                .toList();
     }
 
     private static ContextBundle withinBudget(int tokenBudget, List<ContextItem> candidates) {

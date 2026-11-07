@@ -6,6 +6,7 @@ import com.nexus.context.ContextMaterializationBudget;
 import com.nexus.context.ContextRequest;
 import com.nexus.context.FederatedContextService;
 import com.nexus.context.source.ContextDiscoveryBudget;
+import com.nexus.project.FederationDeadlinePolicy;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -59,6 +61,20 @@ class FederatedQueryVectorTest {
         assertEquals(1, provider.calls.get());
         assertFalse(provider.lastText.contains(SECRET));
         assertTrue(provider.lastText.contains("[REDACTED]"));
+    }
+
+    @Test
+    void embeddingDelayIsCappedByTheRemainingGlobalDeadline() throws Exception {
+        CountingProvider provider = new CountingProvider(false);
+        Instant frozen = Instant.parse("2026-01-01T00:00:00Z");
+        FederatedSearchService federated = new FederatedSearchService(
+                searchService(provider, new ArrayList<>()),
+                new FederationDeadlinePolicy(Duration.ofSeconds(42), () -> frozen));
+
+        federated.search(projects(2), "authentification", 5, false);
+
+        assertEquals(Duration.ofSeconds(42), provider.lastMaxWait);
+        assertEquals(1, provider.calls.get());
     }
 
     @Test
@@ -161,6 +177,7 @@ class FederatedQueryVectorTest {
         private final boolean unavailable;
         private final AtomicInteger calls = new AtomicInteger();
         private volatile String lastText;
+        private volatile Duration lastMaxWait;
 
         private CountingProvider(boolean unavailable) {
             this.unavailable = unavailable;
@@ -174,6 +191,12 @@ class FederatedQueryVectorTest {
         @Override
         public int dimensions() {
             return 2;
+        }
+
+        @Override
+        public float[] embedQuery(String query, Duration maxWait) throws IOException {
+            lastMaxWait = maxWait;
+            return embedQuery(query);
         }
 
         @Override

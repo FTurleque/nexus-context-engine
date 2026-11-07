@@ -1,9 +1,13 @@
 package com.nexus.search;
 
+import com.nexus.project.FederationDeadline;
+
 import java.io.IOException;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Contexte d'une requête de recherche, partagé par les stratégies de tous les
@@ -24,13 +28,28 @@ public final class SearchQueryContext {
     }
 
     private final Map<String, Object> values = new HashMap<>();
+    private final FederationDeadline deadline;
 
-    private SearchQueryContext() {
+    private SearchQueryContext(FederationDeadline deadline) {
+        this.deadline = deadline;
     }
 
-    /** Crée un contexte vide pour une requête. */
+    /** Crée un contexte sans échéance pour une requête mono-projet. */
     public static SearchQueryContext create() {
-        return new SearchQueryContext();
+        return new SearchQueryContext(null);
+    }
+
+    /** Crée le contexte d'une requête fédérée soumise à l'échéance globale (BE-0064). */
+    public static SearchQueryContext create(FederationDeadline deadline) {
+        return new SearchQueryContext(Objects.requireNonNull(deadline, "deadline"));
+    }
+
+    /**
+     * Temps restant avant l'échéance globale, vide sans échéance. Il plafonne les
+     * appels bornables, comme l'embedding de la requête.
+     */
+    public Optional<Duration> remainingTime() {
+        return deadline == null ? Optional.empty() : Optional.of(deadline.remaining());
     }
 
     /**

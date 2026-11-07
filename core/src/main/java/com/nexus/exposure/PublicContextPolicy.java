@@ -35,7 +35,7 @@ public final class PublicContextPolicy {
         return new FederatedContextBundle(bundle.items().stream()
                 .map(value -> new FederatedContextItem(value.project(), item(value.project(), value.item()))).toList(),
                 bundle.tokenBudget(), bundle.estimatedTokens(), diagnostics.texts(bundle.excluded()),
-                metadata(diagnostics, bundle.metadata(), clientQuery));
+                metadata(diagnostics, bundle.metadata(), clientQuery), bundle.unservedProjects());
     }
 
     private static Map<String, Object> metadata(PublicDiagnosticPolicy policy,
