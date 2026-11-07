@@ -186,18 +186,27 @@ class CoreArchitectureTest {
                 class OtherFactory {
                 }
                 """);
+        writeSource("com/nexus/application/NexusApplication.java", """
+                package com.nexus.application;
+
+                import java.sql.SQLException;
+
+                class NexusApplication {
+                }
+                """);
         writeSource("com/nexus/cli/NexusCli.java", """
                 package com.nexus.cli;
 
-                import java.sql.Connection;
+                import java.sql.SQLException;
 
                 class NexusCli {
                 }
                 """);
 
         assertEquals(List.of(
+                        "[sqlite-confine] com.nexus.application.NexusApplication -> java.sql.SQLException",
                         "[sqlite-confine] com.nexus.application.OtherFactory -> java.sql.SQLException",
-                        "[sqlite-confine] com.nexus.cli.NexusCli -> java.sql.Connection"),
+                        "[sqlite-confine] com.nexus.cli.NexusCli -> java.sql.SQLException"),
                 CoreArchitectureRules.sqliteConfined(scanFixture()));
     }
 

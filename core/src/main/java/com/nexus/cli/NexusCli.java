@@ -13,7 +13,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
 import java.nio.file.Path;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -64,7 +63,7 @@ public final class NexusCli {
         }
     }
 
-    private static void run(String[] args, InputStream input, CliRenderer renderer) throws IOException, SQLException {
+    private static void run(String[] args, InputStream input, CliRenderer renderer) throws IOException {
         if (args.length == 0 || "--help".equals(args[0]) || "help".equals(args[0])) {
             renderer.renderUsage();
             return;
