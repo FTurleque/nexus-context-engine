@@ -37,6 +37,22 @@ When `NEXUS_REST_HARDEN_LOCAL=true`, startup fails closed unless both conditions
 
 `NEXUS_REST_HARDEN_LOCAL=true` takes precedence over `NEXUS_REST_TRUST_LOCAL=true`: hardened mode can never disable authentication or root confinement.
 
+### Host and Origin control on a loopback listener
+
+Whenever the application listener is loopback (`NEXUS_REST_TRUST_LOCAL=true`, token loopback or hardened local posture), the JAX-RS `@PreMatching` filter `NexusRestLoopbackTransportFilter` checks every request before resource matching and before authentication (AUD-SEC-04):
+
+- the `Host` header must literally be `127.0.0.1`, `localhost` or `[::1]`, with or without a port; any other value, a missing header or a DNS name that would resolve to loopback is refused;
+- a request carrying an `Origin` header is accepted only when that origin is `http://` or `https://` followed by one of those loopback hosts; `Origin: null` and remote origins are refused;
+- a request without `Origin` (command-line clients, assistants, MCP bridges) is accepted.
+
+A refused request receives `403` with the fixed body `{"error":"FORBIDDEN","message":"Requête refusée par le contrôle de transport local"}`: neither the received value nor the expected configuration is disclosed. Local clients behind a name alias or a local proxy must call `127.0.0.1` directly, or use the authenticated non-loopback exposure modes below.
+
+The comparison is literal and never resolves names, so DNS rebinding (a public name re-pointed to `127.0.0.1`) cannot reach the API from a browser. Outside loopback the filter is inactive and the startup guard below (token, project-root allowlist, effective TLS) remains the only control; the filter never relaxes it.
+
+### Residual browser risk of trust-local
+
+`NEXUS_REST_TRUST_LOCAL=true` disables authentication. The Host and Origin control blocks remote web pages and DNS rebinding, but it still trusts every local process and every web page served from a loopback origin (for example another development server on `http://localhost:3000`). Such a page, or any local program, can register a project and read its indexed content. On a workstation that runs local web applications, prefer the token loopback default; when trust-local is kept, also declare `NEXUS_REST_ALLOWED_PROJECT_ROOTS` so that registration stays confined to explicit roots. The allowlist remains a recommendation in trust-local mode, so that the documented single-user local usage keeps working.
+
 ## Docker loopback forward
 
 `NEXUS_REST_EXPOSURE_MODE=loopback-forward` is reserved for the Docker runtime. It additionally requires `NEXUS_RUNTIME=docker` and an explicit `NEXUS_DOCKER_HOST_FORWARD_ADDRESS` that resolves to loopback. The official Compose wiring must derive this declaration from the same bind address used for Docker port publication.
