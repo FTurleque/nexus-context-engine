@@ -10,7 +10,6 @@ import org.eclipse.jgit.errors.RepositoryNotFoundException;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevWalk;
-import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 import org.eclipse.jgit.treewalk.TreeWalk;
 import org.eclipse.jgit.treewalk.filter.TreeFilter;
 
@@ -46,6 +45,16 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
     private static final Path GIT_HISTORY_WORK = Path.of(NEXUS_DIRECTORY, "git", "history");
     static final Path GIT_DIFF_WORK = Path.of(NEXUS_DIRECTORY, "git", "working-tree-diff");
 
+    private final GitRepositoryLocator repositoryLocator;
+
+    public LocalGitContextSourceProvider() {
+        this(GitRepositoryLocator.system());
+    }
+
+    LocalGitContextSourceProvider(GitRepositoryLocator repositoryLocator) {
+        this.repositoryLocator = Objects.requireNonNull(repositoryLocator, "repositoryLocator");
+    }
+
     @Override
     public String id() {
         return "local-git";
@@ -65,7 +74,7 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
         int commitsInspected = 0;
         int cumulativeChangedPaths = 0;
 
-        try (Repository repository = openRepository(query.project().rootPath());
+        try (Repository repository = repositoryLocator.open(query.project().rootPath());
              Git git = new Git(repository);
              RevWalk revWalk = new RevWalk(repository)) {
             String projectPrefix = projectPrefix(repository, query.project().rootPath());
@@ -153,17 +162,12 @@ public final class LocalGitContextSourceProvider implements GitContextSourceProv
             throw limitExceeded;
         } catch (RepositoryNotFoundException exception) {
             return GitContextResult.unavailable("aucun repository Git local détecté");
+        } catch (GitRepositoryLocator.RejectedParentRepositoryException exception) {
+            return GitContextResult.unavailable(GitRepositoryLocator.PARENT_REPOSITORY_REJECTED);
         } catch (Exception exception) {
             diagnostics.add("contexte Git indisponible : " + safeMessage(exception));
             return new GitContextResult(List.of(), true, false, commitsInspected, 0, 0, diagnostics);
         }
-    }
-
-    private static Repository openRepository(Path projectRoot) throws IOException {
-        return new FileRepositoryBuilder()
-                .findGitDir(projectRoot.toFile())
-                .setMustExist(true)
-                .build();
     }
 
     private static Set<String> changedPaths(

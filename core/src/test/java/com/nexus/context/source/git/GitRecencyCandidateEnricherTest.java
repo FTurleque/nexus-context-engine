@@ -129,6 +129,31 @@ class GitRecencyCandidateEnricherTest {
     }
 
     @Test
+    void aParentRepositoryOfAnotherAccountGivesNoRecencyAndExplainsWhyWithoutWarning() throws Exception {
+        Path projectRoot = temporaryDirectory.resolve("nested");
+        Path file = write(projectRoot, "src/Service.java", "class Service {}\n");
+        try (Git git = Git.init().setDirectory(temporaryDirectory.toFile()).call()) {
+            commitAll(git, "initial");
+            Files.writeString(file, "class Service { void changed() {} }\n");
+            commitAll(git, "change service");
+        }
+        List<SearchCandidate> candidates = List.of(candidate("service", file));
+        List<String> reasons = new ArrayList<>();
+        List<List<SearchCandidate>> results = new ArrayList<>();
+        GitRecencyCandidateEnricher enricher = new GitRecencyCandidateEnricher(
+                GitRecencyCandidateEnricher.DEFAULT_RECENCY_CACHE_CAPACITY,
+                new GitRepositoryLocator(entry -> GitRepositoryLocator.Ownership.OTHER_ACCOUNT));
+
+        List<LogRecord> records = captureWarnings(() -> results.add(
+                enricher.enrich(project(projectRoot), candidates, reasons::add)));
+
+        assertEquals(candidates, results.getFirst());
+        assertEquals(List.of(), records);
+        assertEquals(List.of(GitRecencyCandidateEnricher.REJECTED_REPOSITORY_REASON), reasons);
+        assertEquals(0, enricher.logScans());
+    }
+
+    @Test
     void jgitIncidentKeepsCandidatesLogsOneWarningWithoutPathAndExplainsTheMissingSignal() throws Exception {
         Path file = write(temporaryDirectory, "src/Service.java", "class Service {}\n");
         String branch;

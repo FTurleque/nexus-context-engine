@@ -110,6 +110,7 @@ Oui si la décision est **durable et structurante** et tranche entre des options
 | [BE-0064](BE-0064-borner-la-federation-par-une-echeance-globale-sans-parallelisme.md) | Borner la fédération par une échéance globale vérifiée entre projets, sans parallélisme | 2026-11-07 | Proposed |
 | [BE-0065](BE-0065-dimensionner-les-caches-git-sur-le-scope-federe.md) | Dimensionner les caches Git des runtimes longue durée sur le scope fédéré | 2026-11-07 | Proposed |
 | [ARCH-0066](ARCH-0066-resoudre-la-configuration-dans-la-composition-root.md) | Résoudre la configuration NEXUS dans la composition root et l'injecter | 2026-11-07 | Proposed |
+| [BE-0067](BE-0067-plafonner-la-decouverte-du-depot-git-a-la-racine-du-projet.md) | Plafonner la découverte du dépôt Git à la racine du projet, sauf dépôt parent de l'utilisateur courant | 2026-11-07 | Proposed |
 
 ## Archive
 

@@ -76,6 +76,7 @@ Cette section présente un index synthétique avec statut, date et relations de 
 | [BE-0064](../adr/BE-0064-borner-la-federation-par-une-echeance-globale-sans-parallelisme.md) | Borner la fédération par une échéance globale vérifiée entre projets, sans parallélisme | Proposed | 2026-11-07 |
 | [BE-0065](../adr/BE-0065-dimensionner-les-caches-git-sur-le-scope-federe.md) | Dimensionner les caches Git des runtimes longue durée sur le scope fédéré | Proposed | 2026-11-07 |
 | [ARCH-0066](../adr/ARCH-0066-resoudre-la-configuration-dans-la-composition-root.md) | Résoudre la configuration NEXUS dans la composition root et l'injecter | Proposed | 2026-11-07 |
+| [BE-0067](../adr/BE-0067-plafonner-la-decouverte-du-depot-git-a-la-racine-du-projet.md) | Plafonner la découverte du dépôt Git à la racine du projet, sauf dépôt parent de l'utilisateur courant | Proposed | 2026-11-07 |
 | [ADR-0000](../adr/archive/0000-adopter-les-adr-madr.md) | Adopter MADR comme format et définir la gouvernance des ADR | Superseded (GEN-0057) | 2026-07-19 |
 | [ADR-0056](../adr/archive/0056-regrouper-le-registre-des-adr-dans-la-documentation-d-architecture.md) | Regrouper le registre des ADR dans la documentation d'architecture | Superseded (GEN-0057) | 2026-10-29 |
 
@@ -104,7 +105,8 @@ standards natifs, budget, estimateur de tokens, sélection gloutonne.
 
 ### Sources contextuelles
 
-BE-0032, SEC-0033, BE-0034, BE-0035 — instructions natives, skills, Git.
+BE-0032, SEC-0033, BE-0034, BE-0035, BE-0067 — instructions natives, skills, Git et portée de la
+découverte du dépôt Git.
 
 ### Providers intelligence
 
