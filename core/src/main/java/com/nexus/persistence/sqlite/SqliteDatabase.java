@@ -1,5 +1,7 @@
 package com.nexus.persistence.sqlite;
 
+import com.nexus.security.PrivateStoragePolicy;
+
 import com.nexus.config.NexusPaths;
 import org.sqlite.SQLiteConnection;
 
@@ -36,13 +38,13 @@ public final class SqliteDatabase {
             throw new IllegalArgumentException(
                     "busyTimeoutMillis must be between 0 and " + MAX_BUSY_TIMEOUT_MILLIS);
         }
-        paths.ensurePrivateStorage();
+        PrivateStoragePolicy.ensurePrivateStorage(paths);
         this.databaseFile = paths.databaseFile();
-        paths.ensurePrivateFile(databaseFile);
+        PrivateStoragePolicy.ensurePrivateFile(paths, databaseFile);
         this.busyTimeoutMillis = busyTimeoutMillis;
         this.writeRetryPolicy = Objects.requireNonNull(writeRetryPolicy, "writeRetryPolicy");
         migrateWithRetry();
-        paths.hardenPrivateFile(databaseFile);
+        PrivateStoragePolicy.hardenPrivateFile(paths, databaseFile);
     }
 
     public Connection openConnection() throws SQLException {

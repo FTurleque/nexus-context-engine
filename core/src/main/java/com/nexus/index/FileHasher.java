@@ -19,7 +19,7 @@ public final class FileHasher {
     }
 
     public static String sha256(Path file) throws IOException {
-        return sha256(file, ProjectFileLimits.maxFileSizeFromEnvironment());
+        return sha256(file, ProjectFileLimits.configuredMaxFileSize());
     }
 
     public static String sha256(Path file, long maxBytes) throws IOException {

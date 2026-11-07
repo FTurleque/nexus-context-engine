@@ -1,7 +1,10 @@
 package com.nexus.index.scip;
 
+import java.util.Map;
+import java.util.Objects;
+
 /** Resource limits dedicated to repository-wide SCIP artifacts. */
-final class ScipIndexLimits {
+public record ScipIndexLimits(long maxIndexBytes, int maxMessageBytes) {
 
     static final String MAX_INDEX_BYTES_ENV = "NEXUS_MAX_SCIP_INDEX_BYTES";
     static final String MAX_MESSAGE_BYTES_ENV = "NEXUS_MAX_SCIP_MESSAGE_BYTES";
@@ -15,32 +18,45 @@ final class ScipIndexLimits {
     static final long MAX_CONFIGURABLE_INDEX_BYTES = DEFAULT_MAX_INDEX_BYTES;
     static final int MAX_CONFIGURABLE_MESSAGE_BYTES = DEFAULT_MAX_MESSAGE_BYTES;
 
-    private ScipIndexLimits() {
+    public ScipIndexLimits {
+        if (maxIndexBytes <= 0 || maxIndexBytes > MAX_CONFIGURABLE_INDEX_BYTES) {
+            throw new IllegalArgumentException(
+                    MAX_INDEX_BYTES_ENV + " doit être compris entre 1 et " + MAX_CONFIGURABLE_INDEX_BYTES + " octets");
+        }
+        if (maxMessageBytes <= 0 || maxMessageBytes > MAX_CONFIGURABLE_MESSAGE_BYTES) {
+            throw new IllegalArgumentException(
+                    MAX_MESSAGE_BYTES_ENV + " doit être compris entre 1 et " + MAX_CONFIGURABLE_MESSAGE_BYTES
+                            + " octets");
+        }
     }
 
-    static long maxIndexBytesFromEnvironment() {
-        return boundedPositiveLong(MAX_INDEX_BYTES_ENV, DEFAULT_MAX_INDEX_BYTES, MAX_CONFIGURABLE_INDEX_BYTES);
+    public static ScipIndexLimits defaults() {
+        return new ScipIndexLimits(DEFAULT_MAX_INDEX_BYTES, DEFAULT_MAX_MESSAGE_BYTES);
     }
 
-    static int maxMessageBytesFromEnvironment() {
-        return Math.toIntExact(boundedPositiveLong(
-                MAX_MESSAGE_BYTES_ENV,
-                DEFAULT_MAX_MESSAGE_BYTES,
-                MAX_CONFIGURABLE_MESSAGE_BYTES));
+    /** Résout les bornes depuis l'environnement fourni par la composition root. */
+    public static ScipIndexLimits from(Map<String, String> environment) {
+        Objects.requireNonNull(environment, "environment");
+        return new ScipIndexLimits(
+                boundedPositiveLong(environment, MAX_INDEX_BYTES_ENV, DEFAULT_MAX_INDEX_BYTES,
+                        MAX_CONFIGURABLE_INDEX_BYTES),
+                Math.toIntExact(boundedPositiveLong(
+                        environment,
+                        MAX_MESSAGE_BYTES_ENV,
+                        DEFAULT_MAX_MESSAGE_BYTES,
+                        MAX_CONFIGURABLE_MESSAGE_BYTES)));
     }
 
-    static long boundedPositiveLong(String name, long defaultValue, long maximum) {
-        String configured = System.getenv(name);
+    private static long boundedPositiveLong(
+            Map<String, String> environment, String name, long defaultValue, long maximum) {
+        String configured = environment.get(name);
         if (configured == null || configured.isBlank()) {
             return defaultValue;
         }
         return parseBoundedPositiveLong(name, configured, maximum);
     }
 
-    static long parseBoundedPositiveLong(String name, String configured, long maximum) {
-        if (maximum <= 0) {
-            throw new IllegalArgumentException("maximum must be greater than zero");
-        }
+    private static long parseBoundedPositiveLong(String name, String configured, long maximum) {
         try {
             long value = Long.parseLong(configured.trim());
             if (value <= 0 || value > maximum) {

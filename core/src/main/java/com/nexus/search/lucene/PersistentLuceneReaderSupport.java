@@ -1,5 +1,7 @@
 package com.nexus.search.lucene;
 
+import com.nexus.security.PrivateStoragePolicy;
+
 import com.nexus.config.NexusPaths;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.SegmentInfos;
@@ -48,7 +50,7 @@ public final class PersistentLuceneReaderSupport implements AutoCloseable {
         if (!Files.exists(indexPath, LinkOption.NOFOLLOW_LINKS)) {
             return fallback.get();
         }
-        paths.ensurePrivateDirectory(indexPath);
+        PrivateStoragePolicy.ensurePrivateDirectory(paths, indexPath);
 
         BoundedLuceneSearcherCache.SearchLookup<T> lookup =
                 searcherCache.search(projectId, indexPath, operation);
@@ -74,7 +76,7 @@ public final class PersistentLuceneReaderSupport implements AutoCloseable {
         if (!Files.exists(indexPath, LinkOption.NOFOLLOW_LINKS)) {
             return whenAbsent;
         }
-        paths.ensurePrivateDirectory(indexPath);
+        PrivateStoragePolicy.ensurePrivateDirectory(paths, indexPath);
         Optional<T> cached = searcherCache.searchIfCached(
                 projectId, indexPath, searcher -> reader.apply(commitUserData(searcher)));
         if (cached.isPresent()) {

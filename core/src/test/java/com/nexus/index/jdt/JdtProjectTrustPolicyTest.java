@@ -23,12 +23,12 @@ class JdtProjectTrustPolicyTest {
 
         IOException missing = assertThrows(
                 IOException.class,
-                () -> ProcessBuilder.requireTrustedProjectDirectory(project.toFile(), null));
-        assertTrue(missing.getMessage().contains(ProcessBuilder.TRUSTED_PROJECT_ROOTS_ENVIRONMENT_VARIABLE));
+                () -> BoundedJdtProcessBuilder.requireTrustedProjectDirectory(project.toFile(), null));
+        assertTrue(missing.getMessage().contains(BoundedJdtProcessBuilder.TRUSTED_PROJECT_ROOTS_ENVIRONMENT_VARIABLE));
 
         IOException blank = assertThrows(
                 IOException.class,
-                () -> ProcessBuilder.requireTrustedProjectDirectory(project.toFile(), "   "));
+                () -> BoundedJdtProcessBuilder.requireTrustedProjectDirectory(project.toFile(), "   "));
         assertTrue(blank.getMessage().contains("non approuvé"));
     }
 
@@ -40,11 +40,11 @@ class JdtProjectTrustPolicyTest {
         String configured = other + File.pathSeparator + project;
 
         assertDoesNotThrow(() ->
-                ProcessBuilder.requireTrustedProjectDirectory(project.toFile(), configured));
+                BoundedJdtProcessBuilder.requireTrustedProjectDirectory(project.toFile(), configured));
 
         assertThrows(
                 IOException.class,
-                () -> ProcessBuilder.requireTrustedProjectDirectory(nested.toFile(), configured),
+                () -> BoundedJdtProcessBuilder.requireTrustedProjectDirectory(nested.toFile(), configured),
                 "faire confiance à une racine ne doit pas faire confiance à tous ses descendants");
     }
 
@@ -57,6 +57,6 @@ class JdtProjectTrustPolicyTest {
 
         assertThrows(
                 IOException.class,
-                () -> ProcessBuilder.requireTrustedProjectDirectory(project.toFile(), configured));
+                () -> BoundedJdtProcessBuilder.requireTrustedProjectDirectory(project.toFile(), configured));
     }
 }

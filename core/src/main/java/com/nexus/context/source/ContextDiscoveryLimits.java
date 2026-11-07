@@ -43,10 +43,6 @@ public record ContextDiscoveryLimits(
                 DEFAULT_MAX_ELAPSED_MILLIS);
     }
 
-    public static ContextDiscoveryLimits fromEnvironment() {
-        return from(System.getenv());
-    }
-
     public static ContextDiscoveryLimits from(Map<String, String> environment) {
         Objects.requireNonNull(environment, "environment");
         return new ContextDiscoveryLimits(

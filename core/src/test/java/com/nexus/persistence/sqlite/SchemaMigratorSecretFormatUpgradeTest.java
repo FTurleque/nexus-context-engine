@@ -1,5 +1,7 @@
 package com.nexus.persistence.sqlite;
 
+import com.nexus.security.PrivateStoragePolicy;
+
 import com.nexus.application.NexusApplication;
 import com.nexus.config.NexusPaths;
 import com.nexus.project.IndexStatus;
@@ -33,7 +35,7 @@ class SchemaMigratorSecretFormatUpgradeTest {
     @Test
     void upgradesRealV010SchemaOnceAndRebuildsDerivedIndexesUnderTheNewPolicy() throws Exception {
         var paths = new NexusPaths(temporary.resolve("home"));
-        paths.ensurePrivateStorage();
+        PrivateStoragePolicy.ensurePrivateStorage(paths);
         Path root = Files.createDirectory(temporary.resolve("project"));
         Files.writeString(root.resolve("fixture.md"), "# FormatMarker\ntoken=" + TOKEN_VALUE + "\n");
         UUID id = UUID.randomUUID();
@@ -72,7 +74,7 @@ class SchemaMigratorSecretFormatUpgradeTest {
             }
         }
         // Un index Lucene construit sous secret-redaction-v5 contient le jeton en clair.
-        paths.ensurePrivateDirectory(paths.projectLuceneIndex(id));
+        PrivateStoragePolicy.ensurePrivateDirectory(paths, paths.projectLuceneIndex(id));
         try (var directory = org.apache.lucene.store.FSDirectory.open(paths.projectLuceneIndex(id));
              var analyzer = new org.apache.lucene.analysis.standard.StandardAnalyzer();
              var writer = new org.apache.lucene.index.IndexWriter(directory,

@@ -58,7 +58,7 @@ public final class SafeFileIO {
     }
 
     public static InputStream newInputStreamNoFollow(Path file) throws IOException {
-        return newInputStreamNoFollow(file, ProjectFileLimits.maxFileSizeFromEnvironment());
+        return newInputStreamNoFollow(file, ProjectFileLimits.configuredMaxFileSize());
     }
 
     public static InputStream newInputStreamNoFollow(Path file, long maxBytes) throws IOException {
@@ -80,7 +80,7 @@ public final class SafeFileIO {
     }
 
     public static byte[] readBytesNoFollow(Path file) throws IOException {
-        return readBytesNoFollow(file, ProjectFileLimits.maxFileSizeFromEnvironment());
+        return readBytesNoFollow(file, ProjectFileLimits.configuredMaxFileSize());
     }
 
     public static byte[] readBytesNoFollow(Path file, long maxBytes) throws IOException {
@@ -98,7 +98,7 @@ public final class SafeFileIO {
     }
 
     public static String readStringNoFollow(Path file) throws IOException {
-        return readStringNoFollow(file, ProjectFileLimits.maxFileSizeFromEnvironment());
+        return readStringNoFollow(file, ProjectFileLimits.configuredMaxFileSize());
     }
 
     public static String readStringNoFollow(Path file, long maxBytes) throws IOException {

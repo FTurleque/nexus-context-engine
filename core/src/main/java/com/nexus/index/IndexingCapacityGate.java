@@ -1,5 +1,7 @@
 package com.nexus.index;
 
+import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.Semaphore;
 
 /** Process-wide non-blocking concurrency budget for expensive project indexing runs. */
@@ -23,8 +25,12 @@ final class IndexingCapacityGate {
         this.capacity = new Semaphore(limit, true);
     }
 
-    static Permit acquireShared() {
-        return shared().acquire();
+    /**
+     * Acquiert un permis du budget partagé par le processus. Le premier appel fixe la limite du
+     * sémaphore ; la composition root passe toujours la même valeur résolue pour un processus.
+     */
+    static Permit acquireShared(int configuredLimit) {
+        return shared(configuredLimit).acquire();
     }
 
     Permit acquire() {
@@ -34,21 +40,23 @@ final class IndexingCapacityGate {
         return new Permit(capacity);
     }
 
-    private static IndexingCapacityGate shared() {
+    private static IndexingCapacityGate shared(int configuredLimit) {
         IndexingCapacityGate current = shared;
         if (current != null) {
             return current;
         }
         synchronized (IndexingCapacityGate.class) {
             if (shared == null) {
-                shared = new IndexingCapacityGate(configuredLimit());
+                shared = new IndexingCapacityGate(configuredLimit);
             }
             return shared;
         }
     }
 
-    private static int configuredLimit() {
-        String configured = System.getenv(MAX_CONCURRENT_INDEXING_ENVIRONMENT_VARIABLE);
+    /** Résout {@value #MAX_CONCURRENT_INDEXING_ENVIRONMENT_VARIABLE} depuis l'environnement fourni. */
+    static int configuredLimit(Map<String, String> environment) {
+        String configured = Objects.requireNonNull(environment, "environment")
+                .get(MAX_CONCURRENT_INDEXING_ENVIRONMENT_VARIABLE);
         if (configured == null || configured.isBlank()) {
             return DEFAULT_MAX_CONCURRENT_INDEXING;
         }

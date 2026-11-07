@@ -24,14 +24,21 @@ final class CoreArchitectureRules {
     static final String CONTEXT_SOURCE_WITHOUT_CONTEXT = "context-source-sans-context";
     static final String RANKING_WITHOUT_SEARCH = "ranking-sans-search";
     static final String SEARCH_SEMANTIC_WITHOUT_OLLAMA = "search-semantic-sans-ollama";
+    static final String GETENV_IN_COMPOSITION_ROOT = "getenv-composition-root";
 
     static final List<String> FRAMEWORK_PREFIXES = List.of(
             "io.quarkus.", "jakarta.", "javax.ws.", "org.springframework.", "io.modelcontextprotocol.");
     static final List<String> LUCENE_PREFIXES = List.of("org.apache.lucene.");
     static final List<String> SQLITE_PREFIXES = List.of("org.sqlite.", "java.sql.");
+    /** Lecture de l'environnement du processus, écrite simplement, pleinement qualifiée ou importée en statique. */
+    static final List<String> GETENV_PREFIXES = List.of("System.getenv", "java.lang.System.getenv");
 
     /** Préfixes surveillés aussi sous forme de nom pleinement qualifié dans le code. */
-    static final List<String> WATCHED_QUALIFIED_PREFIXES = concat(FRAMEWORK_PREFIXES, LUCENE_PREFIXES, SQLITE_PREFIXES);
+    static final List<String> WATCHED_QUALIFIED_PREFIXES =
+            concat(FRAMEWORK_PREFIXES, LUCENE_PREFIXES, SQLITE_PREFIXES, GETENV_PREFIXES);
+
+    /** Seule classe du cœur autorisée à lire l'environnement du processus (ARCH-0066). */
+    static final String COMPOSITION_ROOT = "com.nexus.application.NexusApplicationFactory";
 
     private static final List<String> LUCENE_PACKAGES = List.of(
             "com.nexus.search.lucene", "com.nexus.search.semantic.lucene");
@@ -134,6 +141,16 @@ final class CoreArchitectureRules {
     static List<String> searchSemanticWithoutOllama(JavaSourceGraph graph) {
         return check(graph, SEARCH_SEMANTIC_WITHOUT_OLLAMA, name -> inAny(name, List.of(OLLAMA_PACKAGE)),
                 file -> !file.packageName().equals(SEMANTIC_PACKAGE), edge -> false);
+    }
+
+    /**
+     * {@value #GETENV_IN_COMPOSITION_ROOT} : aucun appel à {@code System.getenv} dans le cœur hors de
+     * la composition root {@value #COMPOSITION_ROOT}, qui résout la configuration et l'injecte.
+     */
+    static List<String> getenvInCompositionRoot(JavaSourceGraph graph) {
+        return check(graph, GETENV_IN_COMPOSITION_ROOT,
+                name -> GETENV_PREFIXES.stream().anyMatch(prefix -> name.equals(prefix) || name.startsWith(prefix + ".")),
+                file -> file.className().equals(COMPOSITION_ROOT), edge -> false);
     }
     private static List<String> check(JavaSourceGraph graph, String rule, Predicate<String> forbidden,
                                       Predicate<JavaSourceGraph.SourceFile> exempt, Predicate<String> allowedEdge) {

@@ -49,9 +49,16 @@ public final class ContextFragmentFactory {
     static final int MAX_MATERIALIZED_SOURCE_LINES = 100_000;
 
     private final TokenEstimator tokenEstimator;
+    private final ContextMaterializationLimits materializationLimits;
 
     public ContextFragmentFactory(TokenEstimator tokenEstimator) {
+        this(tokenEstimator, ContextMaterializationLimits.defaults());
+    }
+
+    /** Variante de composition : bornes de matérialisation résolues par la composition root. */
+    public ContextFragmentFactory(TokenEstimator tokenEstimator, ContextMaterializationLimits materializationLimits) {
         this.tokenEstimator = Objects.requireNonNull(tokenEstimator, "tokenEstimator");
+        this.materializationLimits = Objects.requireNonNull(materializationLimits, "materializationLimits");
     }
 
     public List<ContextFragment> create(
@@ -64,7 +71,7 @@ public final class ContextFragmentFactory {
                 query,
                 rankedCandidates,
                 tokenBudget,
-                ContextMaterializationLimits.fromEnvironment().newBudget());
+                materializationLimits.newBudget());
     }
 
     public List<ContextFragment> create(
@@ -91,7 +98,7 @@ public final class ContextFragmentFactory {
                 query,
                 rankedCandidates,
                 tokenBudget,
-                ContextMaterializationLimits.fromEnvironment().newBudget());
+                materializationLimits.newBudget());
     }
 
     MaterializationResult materialize(

@@ -45,14 +45,27 @@ public final class FederatedContextService {
 
     private final ContextBuilder contextBuilder;
     private final FederationDeadlinePolicy deadlinePolicy;
+    private final ContextMaterializationLimits materializationLimits;
+    private final ContextDiscoveryLimits discoveryLimits;
 
     public FederatedContextService(ContextBuilder contextBuilder) {
         this(contextBuilder, FederationDeadlinePolicy.fromEnvironment());
     }
 
     public FederatedContextService(ContextBuilder contextBuilder, FederationDeadlinePolicy deadlinePolicy) {
+        this(contextBuilder, deadlinePolicy, ContextMaterializationLimits.defaults(), ContextDiscoveryLimits.defaults());
+    }
+
+    /** Composition de production : bornes globales de la requête fédérée résolues par la composition root. */
+    public FederatedContextService(
+            ContextBuilder contextBuilder,
+            FederationDeadlinePolicy deadlinePolicy,
+            ContextMaterializationLimits materializationLimits,
+            ContextDiscoveryLimits discoveryLimits) {
         this.contextBuilder = Objects.requireNonNull(contextBuilder, "contextBuilder");
         this.deadlinePolicy = Objects.requireNonNull(deadlinePolicy, "deadlinePolicy");
+        this.materializationLimits = Objects.requireNonNull(materializationLimits, "materializationLimits");
+        this.discoveryLimits = Objects.requireNonNull(discoveryLimits, "discoveryLimits");
     }
 
     public FederatedContextBundle build(
@@ -64,9 +77,9 @@ public final class FederatedContextService {
             boolean explain) {
         List<ProjectDescriptor> scope = validate(projects, query, tokenBudget, requestedSources, constraints);
         ContextMaterializationBudget materializationBudget =
-                ContextMaterializationLimits.fromEnvironment().newBudget();
+                materializationLimits.newBudget();
         ContextDiscoveryBudget discoveryBudget =
-                ContextDiscoveryLimits.fromEnvironment().newBudget();
+                discoveryLimits.newBudget();
 
         List<String> excluded = new ArrayList<>();
         ProjectCollection collection = collectPerProject(

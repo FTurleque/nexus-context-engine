@@ -49,6 +49,21 @@ FederatedContextService
 
 CLI, REST et MCP délèguent à cette façade.
 
+### Configuration résolue en composition root
+
+`NexusApplicationFactory` est la seule classe de `core/src/main` qui lit l'environnement du processus ([ARCH-0066](../architecture/adr/ARCH-0066-resoudre-la-configuration-dans-la-composition-root.md), complète [ARCH-0003](../architecture/adr/ARCH-0003-conserver-un-coeur-java-sans-framework-applicatif.md)). Elle résout les variables `NEXUS_*` du cœur en un record `NexusConfiguration` depuis une `Map<String, String>` (l'environnement en production, une table en test), puis passe à chaque composant sa part par constructeur :
+
+| Part | Résolue par | Injectée dans |
+|---|---|---|
+| taille maximale d'un fichier, bornes du scan | `ProjectFileLimits.maxFileSize(Map)`, `ProjectScanLimits.from(Map)` | `ProjectScanner`, partagé par l'indexation, JDT LS et MINOS |
+| bornes de matérialisation et de découverte du contexte | `ContextMaterializationLimits.from(Map)`, `ContextDiscoveryLimits.from(Map)` | `ContextFragmentFactory`, `DefaultContextBuilder`, `FederatedContextService` |
+| bornes SCIP | `ScipIndexLimits.from(Map)` | `ScipCodeIndexImporter` |
+| indexations concurrentes | `ProjectIndexLockManager.maxConcurrentIndexing(Map)` | `ProjectIndexLockManager.fileBacked(paths, limite)` |
+| timeout des providers | `ProjectIndexingService.providerTimeout(Map)` | `ProjectIndexingService` |
+| JDT LS (opt-in, racines approuvées comprises) | `JdtLanguageServerCodeIntelligenceProvider.configuration(paths, Map)` | provider JDT, puis `BoundedJdtProcessBuilder` |
+
+Deux parts valent pour tout le processus et sont installées par la composition root avant l'ouverture du stockage : la borne de taille des lectures `SafeFileIO` sans borne explicite (`ProjectFileLimits.configure`) et les postures `NEXUS_REQUIRE_STRICT_PATH_IO` / `NEXUS_REQUIRE_PRIVATE_STORAGE` (`SecurityPolicy.configure`, propriété JVM prioritaire). Les points d'entrée obtiennent `NEXUS_HOME` par `NexusConfiguration.pathsFromEnvironment()` ; l'adaptateur REST installe aussi les postures avant `NexusRestExposureGuard`. La configuration sémantique reste un paramètre explicite des fabriques de `NexusApplication`. Noms de variables, bornes, valeurs par défaut et messages d'erreur sont ceux des classes de limites. La règle `getenv-composition-root` du test d'architecture interdit tout autre `System.getenv` dans le cœur.
+
 ## Indexation et persistance
 
 `ProjectIndexingService` orchestre mutex JVM + `FileLock`, scan borné, fingerprint canonique, analyses, SQLite, index dérivés, revalidation puis `READY`. Les lectures de la façade prennent le verrou partagé du projet pendant toute leur exécution afin de ne pas traverser un rebuild.
@@ -66,7 +81,7 @@ Les migrations sont forward-only et enregistrées avec `script_sha256`.
 
 ## Stockage NEXUS
 
-`NexusPaths.ensurePrivateStorage()` précède l'ouverture/migration de SQLite :
+`PrivateStoragePolicy.ensurePrivateStorage(paths)` (package `com.nexus.security` ; `NexusPaths` ne fait que résoudre les chemins) précède l'ouverture/migration de SQLite :
 
 ```text
 home / indexes / locks  -> 0700 sur POSIX
@@ -251,6 +266,7 @@ canonique et Lucene reconstructible. Ce découpage ne remplace aucun ADR accept�
 | `context-source-sans-context` | `com.nexus.context.source` et ses sous-packages n'importent aucun type du package `com.nexus.context` (`context.model` reste permis) |
 | `ranking-sans-search` | `com.nexus.ranking` et `ranking.graph` n'importent aucun type du package `com.nexus.search` (`search.candidate` reste permis) |
 | `search-semantic-sans-ollama` | `com.nexus.search.semantic` n'importe rien de `com.nexus.search.semantic.ollama` |
+| `getenv-composition-root` | aucun `System.getenv` (simple, pleinement qualifié ou importé en statique) hors de `com.nexus.application.NexusApplicationFactory` ([ARCH-0066](../architecture/adr/ARCH-0066-resoudre-la-configuration-dans-la-composition-root.md)) |
 
 Un message d'échec a la forme `[règle] classe -> nom importé`. La baseline de cycles liste une arête `source -> cible` par ligne, triée ; elle est vide : une arête de cycle nouvelle échoue, et une entrée qui ne forme plus de cycle échoue aussi. Lancement ciblé :
 
@@ -268,7 +284,7 @@ Spec : [`openspec/specs/core-package-boundaries/spec.md`](../../openspec/specs/c
 |---|---|---|
 | Le test d'architecture est `CoreArchitectureTest` ; il ne dépend pas d'ArchUnit mais d'un analyseur maison de sources (`JavaSourceGraph`), sans dépendance de test supplémentaire dans le module. | [Existant vérifié] | `core/src/test/java/com/nexus/architecture/CoreArchitectureTest.java:28-43`, `core/src/test/java/com/nexus/architecture/JavaSourceGraph.java:36`, `core/pom.xml` (aucune occurrence d'`archunit`) |
 | Aucun tag, aucune condition d'activation sur le test ; la configuration Surefire du module ne fixe que le répertoire de travail (`..`), que le test suppose en lisant `core/src/main/java`. | [Existant vérifié] | `core/src/test/java/com/nexus/architecture/CoreArchitectureTest.java:30,41`, `core/pom.xml:62-66` |
-| Neuf règles nommées : `core-sans-framework`, `lucene-confine`, `sqlite-confine`, `project-feuille`, `cycles-baseline`, `index-sans-search`, `context-source-sans-context`, `ranking-sans-search`, `search-semantic-sans-ollama`. Une violation est rendue `[règle] classe -> nom importé`. | [Existant vérifié] | `core/src/test/java/com/nexus/architecture/CoreArchitectureRules.java:18-26,103-136` |
+| Dix règles nommées : `core-sans-framework`, `lucene-confine`, `sqlite-confine`, `project-feuille`, `cycles-baseline`, `index-sans-search`, `context-source-sans-context`, `ranking-sans-search`, `search-semantic-sans-ollama`, `getenv-composition-root`. Une violation est rendue `[règle] classe -> nom importé`. | [Existant vérifié] | `core/src/test/java/com/nexus/architecture/CoreArchitectureRules.java:18-27`, `CoreArchitectureTest#getenvOutsideTheCompositionRootFailsGetenvRule` |
 | Le message d'échec est vérifié exactement pour chaque règle de confinement et de sens. | [Existant vérifié] | `CoreArchitectureTest#frameworkImportFailsCoreWithoutFramework`, `#luceneImportOutsideItsPackagesFailsLuceneConfined`, `#jdbcImportInContextFailsSqliteConfined`, `#upwardImportFromProjectFailsProjectLeaf`, `#searchImportFromIndexFailsIndexWithoutSearchButNotFromTheServicePackage`, `#contextImportFromASourceFailsContextSourceWithoutContext`, `#searchImportFromRankingFailsRankingWithoutSearchButNotTheCandidateModel`, `#ollamaImportFromThePortFailsSearchSemanticWithoutOllama` |
 | Une référence pleinement qualifiée sans import compte pour les préfixes surveillés (framework, Lucene, SQLite/JDBC) ; commentaires, chaînes et blocs de texte sont ignorés. | [Existant vérifié] | `CoreArchitectureRules.java:34`, `CoreArchitectureTest#qualifiedLuceneNameWithoutImportFailsLuceneConfined`, `#parserReadsStaticWildcardAndQualifiedNamesAndIgnoresCommentsAndStrings` |
 | La liste fermée de `sqlite-confine` compte une seule entrée `java.sql.SQLException` : `NexusApplicationFactory`, qui enveloppe l'échec d'ouverture du stockage en `PersistenceException` (cause conservée). `NexusApplication`, `NexusCli` et toute autre classe qui importe `java.sql` échouent. | [Existant vérifié] | `CoreArchitectureRules.java:49-54`, `CoreArchitectureTest#closedSqlExceptionListPassesSqliteConfinedButNothingElse` |
@@ -278,9 +294,9 @@ Spec : [`openspec/specs/core-package-boundaries/spec.md`](../../openspec/specs/c
 | `PublicContextPolicy` est dans `com.nexus.exposure` et aucun fichier de `com.nexus.security` n'importe `com.nexus.context` ; les imports `com.nexus` de `security` sont `config` et `paths`. | [Existant vérifié] | `core/src/main/java/com/nexus/exposure/PublicContextPolicy.java:1-14`, relevé des `import` de `core/src/main/java/com/nexus/security/` au HEAD |
 | Le package `com.nexus.project` n'importe aucun autre package `com.nexus` au HEAD (relevé des imports). | [Existant vérifié] | relevé des `import` de `core/src/main/java/com/nexus/project/`, règle `CoreArchitectureRules.java:73-76` |
 | L'orchestration de l'indexation (`ProjectIndexingService`, `IndexDocumentPublisher`, `IndexPublication`, `ExternalCodeIntelligenceRefresher`) est dans `com.nexus.index.service` ; `SearchDocument` est dans `com.nexus.index` et `ResultLimitPolicy` dans `com.nexus.config`. | [Existant vérifié] | `core/src/main/java/com/nexus/index/service/`, `core/src/main/java/com/nexus/index/SearchDocument.java`, `core/src/main/java/com/nexus/config/ResultLimitPolicy.java` |
-| L'indexation sémantique est un port : `SemanticIndexing` (`enabled()`, `isCompatible`, `openSession`), implémenté par `SemanticIndexingService` ; `SemanticIndexing.disabled()` remplace `null`, et l'orchestration teste `enabled()`. | [Existant vérifié] | `core/src/main/java/com/nexus/index/SemanticIndexing.java:18-23`, `core/src/main/java/com/nexus/index/service/ProjectIndexingService.java:236`, `core/src/main/java/com/nexus/index/service/IndexDocumentPublisher.java:68`, `core/src/main/java/com/nexus/application/NexusApplicationFactory.java:99`, `core/src/test/java/com/nexus/index/SemanticIndexingDisabledTest.java` |
+| L'indexation sémantique est un port : `SemanticIndexing` (`enabled()`, `isCompatible`, `openSession`), implémenté par `SemanticIndexingService` ; `SemanticIndexing.disabled()` remplace `null`, et l'orchestration teste `enabled()`. | [Existant vérifié] | `core/src/main/java/com/nexus/index/SemanticIndexing.java:18-23`, `core/src/main/java/com/nexus/index/service/ProjectIndexingService.java:236`, `core/src/main/java/com/nexus/index/service/IndexDocumentPublisher.java:68`, `core/src/main/java/com/nexus/application/NexusApplicationFactory.java:154`, `core/src/test/java/com/nexus/index/SemanticIndexingDisabledTest.java` |
 | Le modèle de contexte (`ContextFragment`, `ContextItem`, `ContextSelectionResult`) est dans `com.nexus.context.model` ; les candidats de recherche (`SearchCandidate`, `SearchSignals`, `CandidateType`, `CandidateEnricher`, `CandidateMerger`) sont dans `com.nexus.search.candidate`. | [Existant vérifié] | `core/src/main/java/com/nexus/context/model/`, `core/src/main/java/com/nexus/search/candidate/` |
-| La lecture de l'environnement sémantique et la construction d'`OllamaEmbeddingProvider` sont dans `NexusApplicationFactory` ; `SemanticSearchConfiguration` ne garde que les valeurs, les noms de variables et les bornes. | [Existant vérifié] | `core/src/main/java/com/nexus/application/NexusApplicationFactory.java:180,216` |
+| La lecture de l'environnement sémantique et la construction d'`OllamaEmbeddingProvider` sont dans `NexusApplicationFactory` ; `SemanticSearchConfiguration` ne garde que les valeurs, les noms de variables et les bornes. | [Existant vérifié] | `core/src/main/java/com/nexus/application/NexusApplicationFactory.java:242,247` |
 
 ### Vues
 

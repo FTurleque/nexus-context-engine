@@ -2,7 +2,7 @@ package com.nexus.mcp;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexus.application.NexusApplication;
-import com.nexus.config.NexusPaths;
+import com.nexus.application.NexusConfiguration;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
@@ -29,7 +29,7 @@ public final class NexusMcpServer {
     }
 
     public static void main(String[] args) throws IOException, InterruptedException {
-        NexusApplication application = NexusApplication.createLongLived(NexusPaths.fromEnvironment());
+        NexusApplication application = NexusApplication.createLongLived(NexusConfiguration.pathsFromEnvironment());
         NexusMcpTools tools = new NexusMcpTools(application, new ObjectMapper());
         List<McpServerFeatures.SyncToolSpecification> specifications = tools.specifications();
         CountDownLatch lifecycle = new CountDownLatch(1);

@@ -51,17 +51,23 @@ public final class ScipCodeIndexImporter implements CodeIndexImporter {
     private final ParseLimits parseLimits;
 
     public ScipCodeIndexImporter() {
-        this(
-                DEFAULT_INDEX_FILE,
-                ScipIndexLimits.maxIndexBytesFromEnvironment(),
-                ScipIndexLimits.maxMessageBytesFromEnvironment());
+        this(ScipIndexLimits.defaults());
+    }
+
+    /** Composition de production : bornes SCIP résolues par la composition root. */
+    public ScipCodeIndexImporter(ScipIndexLimits limits) {
+        this(DEFAULT_INDEX_FILE, limits);
     }
 
     public ScipCodeIndexImporter(String indexFileName) {
+        this(indexFileName, ScipIndexLimits.defaults());
+    }
+
+    public ScipCodeIndexImporter(String indexFileName, ScipIndexLimits limits) {
         this(
                 indexFileName,
-                ScipIndexLimits.maxIndexBytesFromEnvironment(),
-                ScipIndexLimits.maxMessageBytesFromEnvironment());
+                Objects.requireNonNull(limits, "limits").maxIndexBytes(),
+                limits.maxMessageBytes());
     }
 
     ScipCodeIndexImporter(String indexFileName, long maxIndexBytes, int maxMessageBytes) {
