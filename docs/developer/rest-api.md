@@ -95,6 +95,16 @@ Une portée valide est ensuite résolue, vérifiée `READY` et traitée par les 
 
 Loopback est le défaut sûr. Le contrat distant ne s'applique pas à un listener strictement loopback.
 
+Sur un listener loopback (trust-local, jeton loopback ou posture locale durcie), le filtre JAX-RS `@PreMatching` `NexusRestLoopbackTransportFilter` contrôle chaque requête avant la résolution de ressource et avant l'authentification :
+
+- l'en-tête `Host` doit désigner littéralement `127.0.0.1`, `localhost` ou `[::1]`, avec ou sans port ; un autre nom, un en-tête absent ou un nom DNS qui se résoudrait vers loopback est refusé ;
+- un en-tête `Origin` n'est accepté que s'il désigne `http://` ou `https://` suivi de l'un de ces hôtes ; `Origin: null` et toute origine distante sont refusés ;
+- une requête sans `Origin` (client en ligne de commande, assistant) est acceptée.
+
+Le refus est une réponse `403` au corps fixe `{"error":"FORBIDDEN","message":"Requête refusée par le contrôle de transport local"}`, sans la valeur reçue ni la configuration attendue. Un client local derrière un alias de nom ou un proxy local doit appeler `127.0.0.1`, ou passer par une exposition non-loopback authentifiée. Hors loopback, ce filtre est inactif et seul le garde de démarrage s'applique.
+
+Risque navigateur du mode trust-local : `NEXUS_REST_TRUST_LOCAL=true` supprime l'authentification. Le contrôle d'hôte et d'origine écarte les pages web distantes et le DNS rebinding, mais fait toujours confiance aux processus locaux et aux pages servies depuis une origine loopback (par exemple un autre serveur de développement sur `http://localhost:3000`). Sur un poste qui exécute des applications web locales, préférer le jeton loopback ; si trust-local est conservé, déclarer aussi `NEXUS_REST_ALLOWED_PROJECT_ROOTS` pour borner l'enregistrement de projets à une allowlist de racines. Cette allowlist reste une recommandation en trust-local. Voir [`rest-exposure-security.md`](rest-exposure-security.md).
+
 ### Exposition non-loopback
 
 Elle exige simultanément :

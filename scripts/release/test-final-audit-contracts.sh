@@ -28,6 +28,24 @@ grep -q 'CSPRNG' "$REST_GUARD" \
 grep -q "ne mesure pas l'entropie cryptographique" "$REST_DOC" \
   || fail 'REST documentation must distinguish structural filtering from entropy'
 
+# AUD-SEC-04: a loopback listener answers only loopback Host values and refuses
+# non-loopback web origins, before resource matching, in trust-local and token loopback.
+REST_LOOPBACK_FILTER="adapters/rest-quarkus/src/main/java/com/nexus/api/NexusRestLoopbackTransportFilter.java"
+REST_EXPOSURE_DOC="docs/developer/rest-exposure-security.md"
+test -f "$REST_LOOPBACK_FILTER" || fail 'loopback Host/Origin transport filter is missing'
+grep -q '^@PreMatching$' "$REST_LOOPBACK_FILTER" \
+  || fail 'loopback transport filter must run before resource matching'
+grep -qF 'Set.of("127.0.0.1", "localhost", "[::1]")' "$REST_LOOPBACK_FILTER" \
+  || fail 'loopback transport filter must compare Host literally against loopback names'
+grep -q 'Response.Status.FORBIDDEN' "$REST_LOOPBACK_FILTER" \
+  || fail 'loopback transport filter must refuse with 403'
+grep -q 'NexusRestLoopbackTransportFilter' "$REST_DOC" \
+  && grep -q 'NexusRestLoopbackTransportFilter' "$REST_EXPOSURE_DOC" \
+  || fail 'loopback Host/Origin control must remain documented'
+grep -q 'Residual browser risk of trust-local' "$REST_EXPOSURE_DOC" \
+  && grep -q 'NEXUS_REST_ALLOWED_PROJECT_ROOTS' "$REST_EXPOSURE_DOC" \
+  || fail 'trust-local browser risk and project-root allowlist recommendation must remain documented'
+
 # Post-audit 2026-09-07: JDT LS must never start on an implicitly trusted repository.
 JDT_PROCESS="core/src/main/java/com/nexus/index/jdt/ProcessBuilder.java"
 grep -q 'NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS' "$JDT_PROCESS" \
