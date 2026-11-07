@@ -117,3 +117,57 @@ NXA-09 qualification includes:
 - scale/concurrent read-write benchmark;
 - Linux and Windows repository gates;
 - `./mvnw -B clean install`.
+
+## OpenSpec sqlite-index-writes
+
+Spec : [`openspec/specs/sqlite-index-writes/spec.md`](../../openspec/specs/sqlite-index-writes/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+### Comportement existant vérifié
+
+| Étiquette | Fait | Source |
+|---|---|---|
+| [Existant vérifié] | La migration V012 crée `idx_symbol_relations_file_provider` sur `symbol_relations(file_id, source_provider)` ; la suppression par fichier et la sonde de cascade sont servies par `SEARCH ... USING INDEX` ou `USING COVERING INDEX`, jamais par `SCAN`. | `core/src/main/resources/db/migration/V012__index_symbol_relations_by_file.sql` ; `SqliteGraphQueryPlanTest` |
+| [Existant vérifié] | La migration V013 supprime `idx_symbol_relations_project`, `idx_indexed_files_project` et `idx_symbols_file` (`DROP INDEX IF EXISTS`) ; aucun index n'est préfixe strict d'un autre sur `symbol_relations`, `indexed_files` et `symbols`. | `core/src/main/resources/db/migration/V013__drop_redundant_prefix_indexes.sql` ; `SqliteGraphQueryPlanTest` |
+| [Existant vérifié] | V012 et V013 ne touchent ni les faits canoniques ni le statut des projets : aucun rebuild. | `SchemaMigratorFileIndexUpgradeTest` |
+| [Existant vérifié] | `SqliteFileWriter` prépare l'upsert (`RETURNING id`) et les deux suppressions une fois par transaction ; `SqliteBatchInsert` met ses instructions en cache par taille de lot. | `core/src/main/java/com/nexus/persistence/sqlite/SqliteFileWriter.java` ; `SqliteFileWriterTest` |
+| [Existant vérifié] | Les analyses sont mises en attente par lot dans `index_staged_files`, `index_staged_symbols` et `index_staged_relations` (V014, DATA-0062), invisibles jusqu'à la publication qui copie vers les tables canoniques, vide la mise en attente et incrémente la génération ; la fermeture sans publication écarte la mise en attente. | `SqliteIndexWriteSession` ; `SqliteIndexWriteSessionTest` ; `ProjectIndexingPublicationTest` |
+
+### Vues
+
+Vue Diagramme de séquence — Comment les analyses d'un lot passent-elles par la mise en attente avant la publication ? (existant)
+
+```mermaid
+sequenceDiagram
+    participant PIS as ProjectIndexingService
+    participant SES as SqliteIndexWriteSession
+    participant STG as index_staged_*
+    participant CAN as tables canoniques
+    PIS->>SES: openWriteSession (sous verrou d'indexation)
+    SES->>STG: purge la mise en attente du projet
+    loop chaque lot
+        PIS->>SES: stage(analyses du lot)
+        SES->>STG: transaction courte
+    end
+    alt publication
+        PIS->>SES: publish(chemins supprimés)
+        SES->>CAN: une transaction : copie par pages de 128, génération
+        SES->>STG: vide la mise en attente
+    else fermeture sans publication
+        PIS->>SES: close
+        SES->>STG: écarte la mise en attente
+    end
+```
+
+Exigences : `sqlite-index-writes › La suppression des relations d'un fichier utilise un index`, `sqlite-index-writes › Le schéma ne porte pas d'index préfixe redondant`, `sqlite-index-writes › Les migrations d'index conservent les données`, `sqlite-index-writes › L'écriture d'un fichier ne relit pas son identifiant`, `sqlite-index-writes › Les analyses en attente sont bornées par lot`.
+
+### Écarts et limites
+
+- [Écart] 1 — Le scénario de plan accepte `USING INDEX` ou `USING COVERING INDEX` ; SQLite émet `COVERING INDEX` quand l'index suffit, et les tests de plan acceptent les deux.
+- Limite : la transaction de publication copie tout le volume modifié en une fois (jusqu'au corpus entier lors d'un rebuild) ; le verrou d'écriture est tenu pendant cette durée. Le scénario de contention ci-dessus la mesure.
+- Limite : `SqliteIndexWriteSession` purge la mise en attente de tout le projet à l'ouverture, sans identifiant de session : l'ouverture hors du verrou d'indexation du projet effacerait la mise en attente d'une indexation vivante.
+- Limite : après un arrêt brutal, la mise en attente reste jusqu'à la prochaine indexation du même projet ; aucun chemin de lecture ne la consulte.
+
+### Propositions et questions ouvertes
+
+- [Proposition] Documenter l'invariant « session ouverte sous verrou d'indexation » sur `IndexRepository.openWriteSession`, ou porter un identifiant de session dans les tables de mise en attente.
+- [Question] Faut-il purger la mise en attente à l'ouverture de la base plutôt qu'à la prochaine indexation du projet ?
