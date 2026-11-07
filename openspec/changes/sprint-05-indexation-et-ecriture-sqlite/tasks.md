@@ -41,7 +41,7 @@ Commande de test ciblé du cœur : `./mvnw -B -ntp -pl core test -Dtest=<Classe>
 
 ## 9. Validation
 
-- [ ] 9.1 Mettre à jour `docs/developer/indexing-pipeline.md` (writer Lucene par indexation, import MINOS, écriture par lots) et valider l'itération (`/nx-validate full` : contrats, `./mvnw -B -ntp clean install`, `scripts/self-smoke.ps1`) ; faire relire par l'agent `nexus-reviewer`
+- [x] 9.1 Mettre à jour `docs/developer/indexing-pipeline.md` (writer Lucene par indexation, import MINOS, écriture par lots) et valider l'itération (`/nx-validate full` : contrats, `./mvnw -B -ntp clean install`, `scripts/self-smoke.ps1`) ; faire relire par l'agent `nexus-reviewer`
 
 ## Workflow follow-up
 

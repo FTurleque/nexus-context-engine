@@ -213,7 +213,7 @@ Un changement actif porte sa traçabilité dans la section « Traçabilité » d
 | Changement | Capacités | Scénarios | Tâches (cochées / total) | Traçabilité |
 |---|---|---|---|---|
 | `preciser-bornes-redaction-recence-git` | `git-recency-diagnostics`, `secret-redaction` | 6 | 0 / 5 | [design.md](../../openspec/changes/preciser-bornes-redaction-recence-git/design.md#traçabilité) |
-| `sprint-05-indexation-et-ecriture-sqlite` | `project-indexing-pipeline`, `sqlite-index-writes` | 14 | 13 / 14 | [design.md](../../openspec/changes/sprint-05-indexation-et-ecriture-sqlite/design.md#traçabilité) |
+| `sprint-05-indexation-et-ecriture-sqlite` | `project-indexing-pipeline`, `sqlite-index-writes` | 14 | 14 / 14 | [design.md](../../openspec/changes/sprint-05-indexation-et-ecriture-sqlite/design.md#traçabilité) |
 | `sprint-06-federation-et-runtimes-longue-duree` | `federated-search-bounds`, `git-context-cache`, `lucene-reader-cache`, `symbol-search-scoping` | 18 | 0 / 16 | [design.md](../../openspec/changes/sprint-06-federation-et-runtimes-longue-duree/design.md#traçabilité) |
 | `sprint-07-casser-le-bloc-cyclique-du-coeur` | `core-package-boundaries` | 9 | 0 / 10 | [design.md](../../openspec/changes/sprint-07-casser-le-bloc-cyclique-du-coeur/design.md#traçabilité) |
 | `sprint-08-facade-configuration-durcissements` | `git-context-discovery`, `rest-transport-hardening` | 11 | 0 / 18 | [design.md](../../openspec/changes/sprint-08-facade-configuration-durcissements/design.md#traçabilité) |
