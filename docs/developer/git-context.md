@@ -6,6 +6,25 @@ NEXUS utilise Git local comme signal de pertinence et source de contexte **read-
 
 Le provider n'effectue ni fetch, pull, push, checkout ni création de commit. Il travaille uniquement sur le repository local déjà présent et sur les chemins cibles remontés par la recherche.
 
+## Découverte du dépôt
+
+`GitRepositoryLocator` est la seule fabrique qui ouvre le dépôt pour `LocalGitContextSourceProvider`, `PersistentGitContextSourceProvider` et `GitRecencyCandidateEnricher` ([BE-0067](../architecture/adr/BE-0067-plafonner-la-decouverte-du-depot-git-a-la-racine-du-projet.md), qui complète [BE-0035](../architecture/adr/BE-0035-integrer-le-contexte-git-local-comme-source-bornee-et-explicable.md)). Elle remonte depuis la racine réelle du projet jusqu'au premier répertoire qui contient une entrée `.git`, puis :
+
+- retient sans condition un dépôt dont le `.git` est à la racine du projet ;
+- retient un dépôt trouvé dans un répertoire parent (monorepo) seulement si son entrée `.git` et, pour un fichier gitlink, le répertoire Git désigné appartiennent à l'utilisateur courant, à l'image de `safe.directory` de Git ;
+- écarte le dépôt parent si son propriétaire est un autre compte ou n'est pas déterminable, avant toute lecture de sa configuration.
+
+Un `.git` invalide arrête la remontée : aucun dépôt plus haut n'est cherché. L'utilisateur courant est reconnu par son nom de compte et par le propriétaire attribué à un fichier qu'il crée ; sous Windows, un processus élevé attribue ses fichiers au groupe Administrateurs.
+
+Un dépôt parent écarté ne produit ni commit, ni diff, ni signal de récence. Les diagnostics, sans chemin ni nom de compte, sont :
+
+```text
+gitDiagnostics      contexte Git ignoré : dépôt Git parent n'appartenant pas à l'utilisateur courant
+récence (explain)   récence Git ignorée : dépôt Git parent n'appartenant pas à l'utilisateur courant
+```
+
+Le cache des runtimes longue durée ne conserve pas ce résultat (`repositoryAvailable=false`).
+
 ## Bornes structurelles
 
 `LocalGitContextSourceProvider` impose notamment :
@@ -82,6 +101,7 @@ Le contexte Git n'est activé que lorsque le budget global le permet et reçoit 
 - commits/historique/co-changements ciblés ;
 - monorepo et exclusion hors projet ;
 - dégradation hors Git ;
+- dépôt parent d'un autre compte écarté avec diagnostic sans chemin ;
 - diff massif réellement tronqué ;
 - sink fixe qui ne retient jamais plus d'octets que sa capacité.
 
@@ -90,7 +110,10 @@ Le contexte Git n'est activé que lorsque le budget global le permet et reçoit 
 - hit sur état Git stable ;
 - invalidation working tree, index et HEAD ;
 - éviction LRU et capacité stricte ;
-- absence de cache pour un repository indisponible.
+- absence de cache pour un repository indisponible ;
+- aucun usage d'un dépôt parent d'un autre compte par le runtime longue durée.
+
+`GitRepositoryLocatorTest` couvre la règle de découverte : dépôt à la racine sans contrôle de propriétaire, dépôt parent de l'utilisateur, dépôt parent d'un autre compte écarté avant lecture de sa configuration, propriétaire non déterminable simulé par injection, gitlink et cible contrôlés, arrêt au premier `.git`, diagnostic public sans chemin, et résolution réelle du propriétaire sous Windows et Linux.
 
 `GitContextCacheQualificationBenchmarkTest` couvre Linux et Windows sur plusieurs repositories ainsi que HEAD/index/working-tree/rename/rebase/worktrees liés. Les benchmarks et tests exact-head restent l'autorité de qualification.
 
