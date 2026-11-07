@@ -5,7 +5,7 @@ import com.nexus.config.NexusPaths;
 import com.nexus.index.IndexStatistics;
 import com.nexus.index.IndexingReport;
 import com.nexus.project.ProjectDescriptor;
-import com.nexus.search.CandidateType;
+import com.nexus.search.candidate.CandidateType;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;

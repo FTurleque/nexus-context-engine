@@ -1,6 +1,6 @@
 package com.nexus.ranking;
 
-import com.nexus.search.SearchCandidate;
+import com.nexus.search.candidate.SearchCandidate;
 
 import java.util.List;
 

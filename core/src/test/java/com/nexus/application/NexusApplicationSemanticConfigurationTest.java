@@ -4,7 +4,7 @@ import com.nexus.config.NexusPaths;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.ranking.RankedCandidate;
 import com.nexus.ranking.SemanticHybridContextRanker;
-import com.nexus.search.SearchSignals;
+import com.nexus.search.candidate.SearchSignals;
 import com.nexus.search.semantic.EmbeddingProvider;
 import com.nexus.search.semantic.SemanticSearchConfiguration;
 import org.junit.jupiter.api.Test;

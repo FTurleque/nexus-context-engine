@@ -16,7 +16,7 @@
 
 ## 4. Cycles search ↔ ranking (AUD-ARC-05)
 
-- [ ] 4.1 `AUD-ARC-05` — Déplacer `SearchCandidate`, `SearchSignals`, `CandidateType`, `CandidateEnricher` et `CandidateMerger` dans le package de candidats ; retirer de la baseline les cycles `search` ↔ `ranking` et `search` ↔ `ranking.graph` ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='*Architecture*,*Ranker*,GraphCandidateEnricher*,FederatedGoldenSearchCorpusTest' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true` puis `./mvnw -B -ntp clean install`
+- [x] 4.1 `AUD-ARC-05` — Déplacer `SearchCandidate`, `SearchSignals`, `CandidateType`, `CandidateEnricher` et `CandidateMerger` dans le package de candidats ; retirer de la baseline les cycles `search` ↔ `ranking` et `search` ↔ `ranking.graph` ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='*Architecture*,*Ranker*,GraphCandidateEnricher*,FederatedGoldenSearchCorpusTest' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true` puis `./mvnw -B -ntp clean install`
 
 ## 5. Cycle search.semantic ↔ ollama (AUD-ARC-06)
 

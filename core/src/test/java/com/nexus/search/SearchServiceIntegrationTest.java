@@ -14,6 +14,7 @@ import com.nexus.project.ProjectRepository;
 import com.nexus.ranking.DeterministicContextRanker;
 import com.nexus.ranking.RankedCandidate;
 import com.nexus.ranking.graph.GraphCandidateEnricher;
+import com.nexus.search.candidate.SearchSignals;
 import com.nexus.search.lucene.LuceneFileSearchStrategy;
 import com.nexus.search.lucene.LuceneSearchIndex;
 import org.junit.jupiter.api.Test;

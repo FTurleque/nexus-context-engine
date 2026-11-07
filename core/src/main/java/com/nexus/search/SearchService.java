@@ -6,6 +6,9 @@ import com.nexus.ranking.ContextRanker;
 import com.nexus.ranking.RankedCandidate;
 import com.nexus.ranking.RankingRequest;
 import com.nexus.ranking.graph.GraphCandidateEnricher;
+import com.nexus.search.candidate.CandidateEnricher;
+import com.nexus.search.candidate.CandidateMerger;
+import com.nexus.search.candidate.SearchCandidate;
 
 import java.io.IOException;
 import java.util.ArrayList;

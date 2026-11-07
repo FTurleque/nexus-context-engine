@@ -6,11 +6,11 @@ import com.nexus.index.FileCategory;
 import com.nexus.index.IndexRepository;
 import com.nexus.index.IndexedFile;
 import com.nexus.project.ProjectDescriptor;
-import com.nexus.search.CandidateEnricher;
-import com.nexus.search.CandidateMerger;
-import com.nexus.search.CandidateType;
-import com.nexus.search.SearchCandidate;
-import com.nexus.search.SearchSignals;
+import com.nexus.search.candidate.CandidateEnricher;
+import com.nexus.search.candidate.CandidateMerger;
+import com.nexus.search.candidate.CandidateType;
+import com.nexus.search.candidate.SearchCandidate;
+import com.nexus.search.candidate.SearchSignals;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

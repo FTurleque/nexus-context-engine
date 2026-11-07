@@ -20,7 +20,7 @@ import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectRegistry;
 import com.nexus.project.ProjectRepository;
 import com.nexus.ranking.RankedCandidate;
-import com.nexus.search.CandidateType;
+import com.nexus.search.candidate.CandidateType;
 import com.nexus.search.FederatedSearchHit;
 import com.nexus.search.FederatedSearchService;
 import com.nexus.search.QueryPolicy;

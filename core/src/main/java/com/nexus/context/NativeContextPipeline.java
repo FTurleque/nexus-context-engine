@@ -20,7 +20,7 @@ import com.nexus.context.source.skill.SkillSelector;
 import com.nexus.context.source.skill.SkillSourceProvider;
 import com.nexus.context.source.skill.SkillSourceQuery;
 import com.nexus.project.ProjectDescriptor;
-import com.nexus.search.CandidateType;
+import com.nexus.search.candidate.CandidateType;
 
 import java.io.IOException;
 import java.nio.file.Path;

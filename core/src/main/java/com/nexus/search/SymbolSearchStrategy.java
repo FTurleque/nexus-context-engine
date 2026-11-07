@@ -8,6 +8,9 @@ import com.nexus.index.IndexRepository;
 import com.nexus.index.IndexedFile;
 import com.nexus.index.IndexedSymbol;
 import com.nexus.project.ProjectDescriptor;
+import com.nexus.search.candidate.CandidateType;
+import com.nexus.search.candidate.SearchCandidate;
+import com.nexus.search.candidate.SearchSignals;
 
 import java.util.ArrayList;
 import java.util.Comparator;

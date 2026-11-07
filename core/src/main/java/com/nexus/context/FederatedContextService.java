@@ -5,7 +5,7 @@ import com.nexus.context.source.ContextDiscoveryBudget;
 import com.nexus.context.source.ContextDiscoveryLimits;
 import com.nexus.project.FederatedScopePolicy;
 import com.nexus.project.ProjectDescriptor;
-import com.nexus.search.CandidateType;
+import com.nexus.search.candidate.CandidateType;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

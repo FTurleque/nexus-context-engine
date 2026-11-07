@@ -3,9 +3,9 @@ package com.nexus.context.source.git;
 import com.nexus.paths.RepositoryPath;
 
 import com.nexus.project.ProjectDescriptor;
-import com.nexus.search.CandidateEnricher;
-import com.nexus.search.SearchCandidate;
-import com.nexus.search.SearchSignals;
+import com.nexus.search.candidate.CandidateEnricher;
+import com.nexus.search.candidate.SearchCandidate;
+import com.nexus.search.candidate.SearchSignals;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.diff.DiffEntry;

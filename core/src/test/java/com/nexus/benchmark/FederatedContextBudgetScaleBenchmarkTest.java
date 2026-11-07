@@ -11,7 +11,7 @@ import com.nexus.context.FederatedContextService;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;
-import com.nexus.search.CandidateType;
+import com.nexus.search.candidate.CandidateType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;

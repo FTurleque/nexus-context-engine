@@ -69,7 +69,7 @@ class NexusMcpNegativeContractTest {
                     "/var/lib/nexus/private data/index", "C:\\Users\\Alice Smith\\Nexus Project\\src\\App.java",
                     "D:\\Private Build\\cache\\data.bin", "\\\\server\\Private Share\\Nexus Project\\file.java",
                     "file:///home/alice/My%20Project/src/App.java", "file:///C:/Users/Alice%20Smith/Nexus/file.java");
-            var item = new com.nexus.context.model.ContextItem(com.nexus.search.CandidateType.FILE, Path.of("src/App.java"),
+            var item = new com.nexus.context.model.ContextItem(com.nexus.search.candidate.CandidateType.FILE, Path.of("src/App.java"),
                     null, 1, 1, "password=12345678", 1, Map.of(), paths, 10, false);
             var bundle = new com.nexus.context.ContextBundle(List.of(item), 100, 10, paths,
                     Map.of("nestedProvider", List.of(Map.of("diagnostic", paths))));
