@@ -133,6 +133,9 @@ public final class FederatedContextService {
         FederationDeadline deadline = deadlinePolicy.start();
         SearchQueryContext queryContext = SearchQueryContext.create(deadline);
         List<ProjectDescriptor> unservedProjects = new ArrayList<>();
+        // Compteurs du cache de contexte Git : partagés par tous les projets, donc le dernier
+        // relevé du parcours est le plus récent (BE-0065).
+        Object gitContextCache = null;
 
         for (int index = 0; index < scope.size(); index++) {
             ProjectDescriptor project = scope.get(index);
@@ -171,6 +174,10 @@ public final class FederatedContextService {
             localItemsByProject.put(project.id().toString(), local.items().size());
             if (explain) {
                 local.excluded().forEach(reason -> excluded.add(project.name() + ": " + reason));
+                Object projectGitCache = local.metadata().get("gitContextCache");
+                if (projectGitCache != null) {
+                    gitContextCache = projectGitCache;
+                }
             }
         }
         return new ProjectCollection(
@@ -179,7 +186,8 @@ public final class FederatedContextService {
                 candidateBudgetByProject,
                 localTokensByProject,
                 localItemsByProject,
-                unservedProjects);
+                unservedProjects,
+                gitContextCache);
     }
 
     /** Étape 3 : sélection sous budget (fair floor, déduplication, redistribution globale). */
@@ -308,6 +316,9 @@ public final class FederatedContextService {
         metadata.put("nativeDiscoveryWork", discoveryBudget.snapshot());
         metadata.put("taskMaterializationLimits", materializationBudget.limits());
         metadata.put("taskMaterializationWork", materializationBudget.snapshot());
+        if (collection.gitContextCache() != null) {
+            metadata.put("gitContextCache", collection.gitContextCache());
+        }
         return metadata;
     }
 
@@ -346,7 +357,8 @@ public final class FederatedContextService {
             Map<String, Integer> candidateBudgetByProject,
             Map<String, Integer> localTokensByProject,
             Map<String, Integer> localItemsByProject,
-            List<ProjectDescriptor> unservedProjects) {
+            List<ProjectDescriptor> unservedProjects,
+            Object gitContextCache) {
     }
 
     private record Selection(

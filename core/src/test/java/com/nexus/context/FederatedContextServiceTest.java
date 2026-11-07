@@ -252,6 +252,23 @@ class FederatedContextServiceTest {
         assertEquals(5, withDeadline.items().size());
     }
 
+    @Test
+    void federatedExplainCarriesTheLatestGitCacheCountersOnly() {
+        List<ProjectDescriptor> scope = fiveProjects().subList(0, 2);
+        AtomicInteger calls = new AtomicInteger();
+        ContextBuilder builder = request -> new ContextBundle(
+                List.of(), request.tokenBudget(), 0, List.of(),
+                Map.of("gitContextCache", Map.of("hits", calls.incrementAndGet())));
+
+        FederatedContextBundle explained = new FederatedContextService(builder).build(
+                scope, "task", 200, Set.of(), Map.of(), true);
+        FederatedContextBundle plain = new FederatedContextService(builder).build(
+                scope, "task", 200, Set.of(), Map.of(), false);
+
+        assertEquals(Map.of("hits", 2), explained.metadata().get("gitContextCache"));
+        assertTrue(!plain.metadata().containsKey("gitContextCache"));
+    }
+
     private List<ProjectDescriptor> fiveProjects() {
         return List.of("a", "b", "c", "d", "e").stream()
                 .map(name -> project(name, root.resolve(name)))

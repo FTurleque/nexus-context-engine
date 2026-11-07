@@ -4,6 +4,7 @@ import com.nexus.paths.RepositoryPath;
 
 import com.nexus.context.source.ContextDiscoveryBudget;
 import com.nexus.context.source.ContextDiscoveryLimitExceededException;
+import com.nexus.project.FederatedScopePolicy;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.Status;
 import org.eclipse.jgit.api.errors.GitAPIException;
@@ -22,6 +23,7 @@ import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -35,7 +37,8 @@ import java.util.Set;
  */
 public final class PersistentGitContextSourceProvider implements GitContextSourceProvider {
 
-    static final int DEFAULT_CAPACITY = 16;
+    /** Une entrée par projet d'un scope fédéré maximal (BE-0065). */
+    static final int DEFAULT_CAPACITY = FederatedScopePolicy.MAX_PROJECTS;
     private static final Path CACHE_VALIDATION_WORK = Path.of(".nexus", "git", "cache-validation");
 
     private final GitContextSourceProvider delegate;
@@ -109,6 +112,19 @@ public final class PersistentGitContextSourceProvider implements GitContextSourc
         synchronized (entries) {
             return new CacheStats(entries.size(), hits, misses, evictions);
         }
+    }
+
+    /** Compteurs du cache pour les métadonnées {@code explain} (clés triées à la projection publique). */
+    @Override
+    public Map<String, Object> cacheStatistics() {
+        CacheStats stats = stats();
+        Map<String, Object> statistics = new LinkedHashMap<>();
+        statistics.put("capacity", capacity);
+        statistics.put("entries", stats.entries());
+        statistics.put("hits", stats.hits());
+        statistics.put("misses", stats.misses());
+        statistics.put("evictions", stats.evictions());
+        return statistics;
     }
 
     record CacheStats(int entries, int hits, int misses, int evictions) {
