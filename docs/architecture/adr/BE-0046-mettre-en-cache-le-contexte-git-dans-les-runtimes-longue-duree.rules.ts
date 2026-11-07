@@ -138,7 +138,8 @@ export default {
         const capacity = /\bDEFAULT_CAPACITY\s*=\s*([^;]+);/.exec(code);
         if (!capacity || capacity[1].replace(/\s+/g, "") !== "FederatedScopePolicy.MAX_PROJECTS") {
           ctx.report.violation({
-            message: `DEFAULT_CAPACITY vaut ${capacity ? capacity[1].trim() : "(absent)"} ; BE-0065 fixe FederatedScopePolicy.MAX_PROJECTS.`,
+            message: `DEFAULT_CAPACITY vaut ${capacity ? capacity[1].trim() : "(absent)"} ; `
+              + "BE-0065 fixe FederatedScopePolicy.MAX_PROJECTS.",
             file: CACHE,
             line: capacity ? ligne(code, capacity.index) : undefined,
             fix: "Rétablir FederatedScopePolicy.MAX_PROJECTS, ou remplacer BE-0065 par un nouvel ADR fondé sur une mesure.",
