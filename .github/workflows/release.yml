@@ -59,7 +59,12 @@ jobs:
     uses: ./.github/workflows/windows-installer.yml
     with:
       require_authenticode: true
-    secrets: inherit
+    # Only the two declared secrets, never `inherit`. A caller job cannot declare `environment`:
+    # the called job runs in `release`, and GitHub resolves these names to that environment's
+    # secrets even when they no longer exist at repository level.
+    secrets:
+      NEXUS_WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.NEXUS_WINDOWS_SIGNING_PFX_BASE64 }}
+      NEXUS_WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.NEXUS_WINDOWS_SIGNING_PFX_PASSWORD }}
     permissions:
       contents: read
 
@@ -164,6 +169,7 @@ jobs:
       - codeql
       - osv
     runs-on: ubuntu-latest
+    environment: release
     timeout-minutes: 45
     permissions:
       contents: write

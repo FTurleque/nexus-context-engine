@@ -71,6 +71,16 @@ Les scripts actifs de `scripts/` importent `scripts/lib/NexusScript.psm1`, seul 
 
 Une modification Java ordinaire ne peut donc plus contourner le smoke du ZIP self-contained et de l'installateur Windows avant intégration dans `develop`.
 
+Signature Authenticode (`AUD-DEP-21`, `AUD-SEC-06`, `AUD-DEP-03`) :
+
+- `release.yml` transmet à `windows-installer.yml` les deux secrets déclarés (`NEXUS_WINDOWS_SIGNING_PFX_BASE64`, `NEXUS_WINDOWS_SIGNING_PFX_PASSWORD`) par leur nom ; `secrets: inherit` est refusé dans `.github/workflows/` ;
+- le job Windows appelé avec `require_authenticode: true` et le job `publish` s'exécutent dans l'environnement protégé `release`, qui porte les secrets PFX ; le job appelant ne peut pas déclarer `environment`, GitHub résout donc les noms transmis vers les secrets de l'environnement ;
+- seules les étapes « Build self-contained Windows distribution » et « Build production installer » reçoivent les secrets, et jamais sur `pull_request` : une PR produit des artefacts non signés, comme un fork ; l'installeur de smoke n'est jamais signé ;
+- `build-windows-distribution.ps1` et `build-windows-installer.ps1` retirent ces variables de l'environnement du processus avant Maven, jpackage, le smoke CLI et Inno Setup, puis les passent en paramètres à `sign-windows-artifact.ps1` ;
+- `sign-windows-artifact.ps1` décode le PFX dans un répertoire propre à l'appel sous `RUNNER_TEMP` et l'efface dans un bloc `finally` ; aucun chemin n'est publié dans `GITHUB_ENV`, et l'étape `always()` de nettoyage reste en défense en profondeur.
+
+Le contrat `scripts/release/test-final-audit-contracts.sh` (bloc « Sprint 9 : secrets-signature ») vérifie ces règles.
+
 NXA7 a également durci le bootstrap `mvnw.cmd` après qu'un runner Windows a reçu un HTTP 403 via `Invoke-WebRequest` sur Maven Central. Le wrapper :
 
 1. conserve Maven **3.10.0** comme version de bootstrap ;

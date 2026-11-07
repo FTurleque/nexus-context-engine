@@ -14,6 +14,21 @@ if ($env:OS -ne 'Windows_NT') {
     throw 'The NEXUS Windows installer must be built on Windows.'
 }
 
+# Authenticode material reaches only the production installer step on signing runs. In CI it is
+# captured, then removed from the process environment so that Inno Setup never inherits it; only
+# sign-windows-artifact.ps1 receives it, as parameters.
+$signingPfxBase64 = [string]$env:NEXUS_WINDOWS_SIGNING_PFX_BASE64
+$signingPfxPath = [string]$env:NEXUS_WINDOWS_SIGNING_PFX
+$signingPfxPassword = [string]$env:NEXUS_WINDOWS_SIGNING_PFX_PASSWORD
+if ($env:GITHUB_ACTIONS -eq 'true') {
+    foreach ($name in @('NEXUS_WINDOWS_SIGNING_PFX_BASE64', 'NEXUS_WINDOWS_SIGNING_PFX', 'NEXUS_WINDOWS_SIGNING_PFX_PASSWORD')) {
+        [Environment]::SetEnvironmentVariable($name, $null, 'Process')
+    }
+}
+if ($Smoke -and $env:GITHUB_ACTIONS -eq 'true' -and (-not [string]::IsNullOrWhiteSpace($signingPfxBase64) -or -not [string]::IsNullOrWhiteSpace($signingPfxPath))) {
+    throw 'The isolated smoke installer is never signed: run it without Authenticode material.'
+}
+
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 [xml]$pom = Get-Content -LiteralPath (Join-Path $repo 'pom.xml') -Raw
 $projectVersion = [string]$pom.project.version
@@ -167,11 +182,21 @@ try {
         throw "NEXUS setup executable was not produced: $setup"
     }
 
-    $signer = Join-Path $PSScriptRoot 'sign-windows-artifact.ps1'
-    if (-not (Test-Path -LiteralPath $signer -PathType Leaf)) {
-        throw "Windows signing helper missing: $signer"
+    if ($Smoke) {
+        Write-Host 'Smoke installer: Authenticode signing skipped (isolated qualification artifact, never published).' -ForegroundColor DarkYellow
     }
-    & $signer -Path $setup
+    else {
+        $signer = Join-Path $PSScriptRoot 'sign-windows-artifact.ps1'
+        if (-not (Test-Path -LiteralPath $signer -PathType Leaf)) {
+            throw "Windows signing helper missing: $signer"
+        }
+        & $signer -Path $setup `
+            -PfxBase64 $signingPfxBase64 `
+            -PfxPath $signingPfxPath `
+            -PfxPassword $signingPfxPassword
+        $signingPfxBase64 = $null
+        $signingPfxPassword = $null
+    }
 
     $hash = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
     "$hash  $([IO.Path]::GetFileName($setup))" | Set-Content -LiteralPath $checksum -Encoding ascii

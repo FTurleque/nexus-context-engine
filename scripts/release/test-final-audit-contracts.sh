@@ -270,4 +270,72 @@ grep -q 'ne doivent donc pas remonter' docs/developer/branch-governance.md \
 grep -q 'NXA3-14 / #130 est satisfait' docs/architecture/risks/register.md \
   || fail 'risk register must record the effective develop protection state'
 
+# --- Sprint 9 : secrets-signature (AUD-DEP-21, AUD-SEC-06, AUD-DEP-03) ---
+# AUD-DEP-21: reusable workflows only receive the secrets they declare.
+if grep -R -n -E '^[[:space:]]*secrets:[[:space:]]*inherit([[:space:]]|$)' .github/workflows; then
+  fail 'secrets: inherit is forbidden in .github/workflows (pass declared secrets by name)'
+fi
+# AUD-SEC-06 / AUD-DEP-03: Authenticode material is confined to the two signing steps, never on
+# pull_request, never published to GITHUB_ENV; publication and release signing use `release`.
+python3 - <<'PY' || fail 'Authenticode signing confinement or release environment contract drift'
+import re
+import sys
+
+def fail(message):
+    print(f"secrets-signature: {message}", file=sys.stderr)
+    sys.exit(1)
+
+def job_block(lines, job):
+    start = next((i for i, line in enumerate(lines) if line.rstrip() == f"  {job}:"), None)
+    if start is None:
+        fail(f"job {job} not found")
+    end = next((i for i in range(start + 1, len(lines)) if re.match(r"^  \S", lines[i])), len(lines))
+    return lines[start:end]
+
+installer = open(".github/workflows/windows-installer.yml", encoding="utf-8").read().splitlines()
+job = job_block(installer, "windows-installer")
+steps_at = next((i for i, line in enumerate(job) if line.rstrip() == "    steps:"), None)
+if steps_at is None:
+    fail("windows-installer job has no steps")
+if any("secrets." in line for line in job[:steps_at]):
+    fail("job-level configuration of windows-installer must not reference secrets")
+if not any(line.strip() == "name: ${{ inputs.require_authenticode && 'release' || '' }}" for line in job[:steps_at]):
+    fail("windows-installer must run in the release environment when require_authenticode is set")
+
+signing_steps = {"Build self-contained Windows distribution", "Build production installer"}
+current_step = None
+references = {}
+for line in job[steps_at:]:
+    match = re.match(r"^      - name: (.+)$", line)
+    if match:
+        current_step = match.group(1).strip()
+    if "secrets." in line:
+        if current_step not in signing_steps:
+            fail(f"step '{current_step}' must not receive secrets")
+        if "github.event_name != 'pull_request' && secrets.NEXUS_WINDOWS_SIGNING_PFX_" not in line:
+            fail(f"secret reference in '{current_step}' is not excluded from pull_request: {line.strip()}")
+        references[current_step] = references.get(current_step, 0) + 1
+if references != {name: 2 for name in signing_steps}:
+    fail(f"each signing step must map exactly the two PFX secrets: {references}")
+if re.search(r"NEXUS_WINDOWS_SIGNING_PFX[^\n]*GITHUB_ENV|GITHUB_ENV[^\n]*NEXUS_WINDOWS_SIGNING_PFX", "\n".join(installer)):
+    fail("the PFX path must never be published to GITHUB_ENV")
+
+for script in ("scripts/release/sign-windows-artifact.ps1",
+               "scripts/release/build-windows-distribution.ps1",
+               "scripts/release/build-windows-installer.ps1"):
+    if "GITHUB_ENV" in open(script, encoding="utf-8").read():
+        fail(f"{script} must not write to GITHUB_ENV")
+signer = open("scripts/release/sign-windows-artifact.ps1", encoding="utf-8").read()
+if not re.search(r"finally\s*\{[^}]*Remove-Item -LiteralPath \$materialRoot -Recurse -Force", signer):
+    fail("sign-windows-artifact.ps1 must erase the decoded PFX in a finally block")
+
+release = open(".github/workflows/release.yml", encoding="utf-8").read().splitlines()
+if not any(line.rstrip() == "    environment: release" for line in job_block(release, "publish")):
+    fail("the publish job must declare environment: release")
+caller = job_block(release, "windows-installer")
+for name in ("NEXUS_WINDOWS_SIGNING_PFX_BASE64", "NEXUS_WINDOWS_SIGNING_PFX_PASSWORD"):
+    if not any(line.strip() == f"{name}: ${{{{ secrets.{name} }}}}" for line in caller):
+        fail(f"release.yml must pass {name} by name to windows-installer.yml")
+PY
+
 echo 'final-audit-contracts=PASS'
