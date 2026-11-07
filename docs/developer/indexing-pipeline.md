@@ -409,3 +409,79 @@ Exigences : `project-indexing-exclusions › Les worktrees Claude Code sont excl
 - [Proposition] Ajouter un scénario « Casse du nom » (`.Claude/WorkTrees/demo/README.md` exclu) si l'insensibilité à la casse doit devenir contractuelle ; le test existe déjà.
 - [Proposition] Ajouter une exigence sur la découverte native (instructions, skills) si l'exclusion y est voulue, avec un test dédié.
 - [Question] Les exclusions intégrées autres que `.claude/worktrees` (`.git`, `node_modules`, fichiers sensibles…) doivent-elles recevoir leur propre exigence OpenSpec ? Le Purpose parle de contenu « généré, sensible ou dupliqué » alors que les trois exigences ne visent que `.claude/worktrees`.
+
+## OpenSpec project-indexing-pipeline
+
+Spec : [`openspec/specs/project-indexing-pipeline/spec.md`](../../openspec/specs/project-indexing-pipeline/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+### Comportement existant vérifié
+
+| Étiquette | Fait | Source |
+|---|---|---|
+| [Existant vérifié] | `ProjectIndexingService.importExternalCodeIntelligence` prend le `LockSlot` single-flight (refus immédiat, même message qu'une indexation concurrente), puis le verrou inter-processus (même diagnostic « mutation d'index »), vérifie que le projet est `READY`, appelle le port `ExternalCodeIntelligencePayloadImporter` puis `replaceExternalCodeIntelligence`. | `core/src/main/java/com/nexus/index/ProjectIndexingService.java` ; `ProjectIndexingServiceMinosImportTest` |
+| [Existant vérifié] | `MinosCodeIndexImporter` est composé dans `NexusApplicationFactory` ; `NexusCli` lit le payload par `NexusApplication.readMinosPayload`, donc par la façade, et ne référence pas l'importeur. | `core/src/main/java/com/nexus/application/NexusApplicationFactory.java` ; `core/src/main/java/com/nexus/cli/NexusCli.java` |
+| [Existant vérifié] | La borne de transport du payload est `MinosCodeIndexImporter.MAX_EXPORT_BYTES` (128 MiB, ADR-0044), comptée en octets encodés. REST et MCP n'exposent aucun import MINOS en production : la borne commune est cette constante. | `MinosPayloadTransportBoundTest` |
+| [Existant vérifié] | `ProjectIndexingService` n'expose qu'un constructeur public, qui exige un `ProjectIndexLockManager` ; aucun code de production n'appelle `processLocalOnly()`, réservé aux tests (`ProjectIndexingServices`). | `ProjectIndexingServiceCompositionTest` |
+| [Existant vérifié] | Chaque index Lucene (lexical, sémantique) ouvre un `IndexWriter` à la première écriture d'une session (`openSession`), committe une fois à la barrière de publication et annule les écritures non committées à la fermeture sans commit ; une indexation sans changement n'ouvre ni ne committe rien. | `LuceneSearchIndexSessionTest` ; `LuceneSemanticSearchIndexSessionTest` |
+| [Existant vérifié] | Le benchmark d'échelle rapporte `reindexExistingFiles` (réindexation incrémentale et rebuild sur base peuplée, hors `sqliteOnly`). Aucun plafond n'est posé sur ce scénario. | `ScaleRegressionBenchmarkTest#benchmarkReindexExistingFiles` |
+
+### Vues
+
+Vue Diagramme de séquence — Comment un import MINOS prend-il les mêmes verrous qu'une indexation ? (existant)
+
+```mermaid
+sequenceDiagram
+    participant CLI as NexusCli
+    participant APP as NexusApplication
+    participant PIS as ProjectIndexingService
+    participant IMP as ExternalCodeIntelligencePayloadImporter
+    participant REP as IndexRepository
+    CLI->>APP: readMinosPayload (lecture bornée)
+    CLI->>APP: importMinos
+    APP->>PIS: importExternalCodeIntelligence
+    PIS->>PIS: LockSlot single-flight (tryLock)
+    alt indexation du même projet en cours
+        PIS-->>APP: refus, même message qu'une indexation concurrente
+    else projet libre
+        PIS->>PIS: verrou inter-processus
+        PIS->>IMP: importPayload
+        PIS->>REP: replaceExternalCodeIntelligence
+    end
+```
+
+Vue Diagramme de séquence — Comment une indexation enchaîne-t-elle les lots, le commit Lucene et la publication ? (existant)
+
+```mermaid
+sequenceDiagram
+    participant PIS as ProjectIndexingService
+    participant LUC as Index Lucene (lexical, sémantique)
+    participant REP as IndexRepository (session d'écriture)
+    loop chaque lot de 128 fichiers ou 16 MiB
+        PIS->>LUC: ajoute les documents, sans commit
+        PIS->>REP: met les analyses en attente (index_staged_*)
+    end
+    alt indexation réussie
+        PIS->>LUC: commit unique, lexical puis sémantique
+        PIS->>REP: publication canonique et génération
+        PIS->>PIS: imports externes, providers, scan de cohérence
+        PIS->>REP: statut READY
+    else échec avant le commit Lucene
+        PIS->>LUC: rollback
+        PIS->>REP: écarte la mise en attente
+    end
+```
+
+Exigences : `project-indexing-pipeline › Toute écriture d'index passe par ProjectIndexingService`, `project-indexing-pipeline › Le service d'indexation exige un gestionnaire de verrou explicite`, `project-indexing-pipeline › Un writer Lucene par indexation, committé à la publication`, `project-indexing-pipeline › La réindexation sur base peuplée est mesurée`.
+
+### Écarts et limites
+
+- [Écart] 1 — Un échec de la publication canonique après le commit Lucene laisse Lucene sur la nouvelle génération et SQLite sur la précédente ; le projet passe en `FAILED` (non servi) puis subit un rebuild complet. Aucun test n'injecte cet échec (DATA-0062).
+- [Écart] 2 — Les sessions de repli `DirectSearchIndexSession` et `DirectSemanticIndexSession` appliquent chaque lot immédiatement, sans rollback : les garanties « un commit » et « génération précédente servie » ne valent que pour les implémentations qui surchargent `openSession` (les implémentations Lucene de production).
+- Limite : la CLI reconnaît le dépassement de borne par la sous-chaîne « 128 MiB transport limit » du message ; une exception typée portée par le port rendrait ce contrat explicite.
+- Limite : le heap vivant d'un rebuild reste proportionnel au nombre de fichiers (listes du scan, table des fichiers existants, ensemble des chemins) ; mesure dans `docs/project/history/indexing-staged-writes-measures-2026-11-07.md`.
+
+### Propositions et questions ouvertes
+
+- [Proposition] Ajouter un test d'échec injecté de `publishCanonical` après le commit Lucene (statut `FAILED`, rebuild complet au passage suivant).
+- [Proposition] Remplacer la détection par sous-chaîne de la CLI par une exception typée de dépassement de borne.
+- [Question] Faut-il poser un plafond de régression sur `reindexExistingFiles` une fois des mesures répétées disponibles sur le runner CI ?

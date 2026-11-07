@@ -11,7 +11,7 @@ La suppression des relations d'un fichier par `file_id` et `source_provider`, et
 
 #### Scenario: Plan de la suppression par fichier
 - **WHEN** on exécute `EXPLAIN QUERY PLAN DELETE FROM symbol_relations WHERE file_id = ? AND source_provider = ?` sur une base migrée
-- **THEN** le plan contient `SEARCH symbol_relations USING INDEX` et ne contient pas `SCAN symbol_relations`
+- **THEN** le plan contient `SEARCH symbol_relations USING INDEX` ou `USING COVERING INDEX` et ne contient pas `SCAN symbol_relations`
 
 #### Scenario: Plan de la cascade
 - **WHEN** on exécute `EXPLAIN QUERY PLAN SELECT 1 FROM symbol_relations WHERE file_id = ?`
