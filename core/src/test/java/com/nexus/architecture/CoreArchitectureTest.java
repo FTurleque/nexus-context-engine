@@ -298,8 +298,8 @@ class CoreArchitectureTest {
                 """);
 
         assertEquals(List.of(
-                        "[ranking-sans-search] com.nexus.ranking.graph.Enricher -> com.nexus.search.*",
-                        "[ranking-sans-search] com.nexus.ranking.Ranker -> com.nexus.search.SearchService"),
+                        "[ranking-sans-search] com.nexus.ranking.Ranker -> com.nexus.search.SearchService",
+                        "[ranking-sans-search] com.nexus.ranking.graph.Enricher -> com.nexus.search.*"),
                 CoreArchitectureRules.rankingWithoutSearch(scanFixture()));
     }
 

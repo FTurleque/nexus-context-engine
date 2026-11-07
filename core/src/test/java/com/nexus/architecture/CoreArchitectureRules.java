@@ -148,6 +148,8 @@ final class CoreArchitectureRules {
                 }
             }
         }
+        // L'ordre de parcours des fichiers dépend du système de fichiers : la sortie est triée.
+        violations.sort(String::compareTo);
         return violations;
     }
 
