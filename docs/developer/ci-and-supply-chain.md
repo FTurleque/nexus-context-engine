@@ -188,7 +188,7 @@ Pour une release, Docker Distribution exporte ensuite l'image qualifiée avec so
 
 ## Publication GHCR
 
-`.github/workflows/release.yml` est déclenché par un tag `vX.Y.Z` sur le HEAD exact de `main`.
+`.github/workflows/release.yml` est déclenché par un tag `vX.Y.Z` (ou `vX.Y.Z-rc.N` pour une pré-version) sur le HEAD exact de `main`.
 
 Le préflight GHCR :
 

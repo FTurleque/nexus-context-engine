@@ -8,11 +8,12 @@ Ce document décrit le contrat NXA3 courant : **construire une fois, qualifier c
 
 ```text
 v<major>.<minor>.<patch>
+v<major>.<minor>.<patch>-rc.<n>
 ```
 
-Avant toute publication, le workflow vérifie :
+Avant toute publication, le workflow vérifie (`scripts/release/validate-release-tag.sh`) :
 
-- SemVer strict `vX.Y.Z` ;
+- tag `vX.Y.Z` (version finale) ou `vX.Y.Z-rc.N` avec `N >= 1` sans zéro initial (pré-version) ;
 - égalité avec la version racine de `pom.xml` ;
 - commit taggé égal au HEAD courant de `main` ;
 - succès des gates release sur ce commit exact.
@@ -46,7 +47,7 @@ ghcr.io/fturleque/nexus-context-engine:sha-<sha>
 ghcr.io/fturleque/nexus-context-engine:latest
 ```
 
-Les tags version et SHA sont immuables. `latest` est volontairement mutable.
+Les tags version et SHA sont immuables. `latest` est volontairement mutable et ne désigne qu'une version finale : pour un tag `vX.Y.Z-rc.N`, la release GitHub est créée en pré-version (`--prerelease --latest=false`), les tags version et SHA sont publiés et `latest` reste inchangé.
 
 ## Préflight fail-closed et reprise idempotente
 
@@ -119,9 +120,9 @@ Un rollback de consommation pointe vers un tag SemVer historique ou, de préfér
 
 ## Politique de publication cible (SEC-0066, proposée)
 
-[SEC-0066](../architecture/adr/SEC-0066-publier-les-releases-depuis-un-environnement-protege-avec-des-assets-attestes.md), au statut `Proposed`, complète [GEN-0031](../architecture/adr/GEN-0031-packager-la-cli-dans-un-jar-autonome.md) et fixe les conditions de publication que met en œuvre le changement OpenSpec `sprint-09-chaine-de-release-executable`. Les règles ci-dessous sont la cible ; chacune s'applique quand la tâche correspondante du changement est fusionnée ou, pour les réglages GitHub, appliquée par le mainteneur. L'état constaté avant le changement est relevé dans le contexte de l'ADR.
+[SEC-0066](../architecture/adr/SEC-0066-publier-les-releases-depuis-un-environnement-protege-avec-des-assets-attestes.md), au statut `Proposed`, complète [GEN-0031](../architecture/adr/GEN-0031-packager-la-cli-dans-un-jar-autonome.md) et fixe les conditions de publication que met en œuvre le changement OpenSpec `sprint-09-chaine-de-release-executable`. Les workflows et scripts du dépôt portent les règles qui les concernent ; les réglages GitHub (environnement `release`, secrets d'environnement, ruleset de tags) restent à appliquer par le mainteneur et ne sont pas encore en place. L'état constaté avant le changement est relevé dans le contexte de l'ADR.
 
-- Aucun workflow ne transmet `secrets: inherit` ; un workflow réutilisable ne reçoit que les secrets qu'il déclare, et aucun une fois les secrets portés par l'environnement `release`.
+- Aucun workflow ne transmet `secrets: inherit` ; un workflow réutilisable ne reçoit, par leur nom, que les secrets qu'il déclare, y compris quand ils n'existent que dans l'environnement `release`.
 - Le job `publish` et la signature de release déclarent `environment: release` : reviewer requis, déploiement limité aux tags `v*`, secrets PFX Authenticode portés par l'environnement. Aucune écriture dans GHCR ni dans les releases avant l'approbation.
 - Un ruleset de tags actif cible `refs/tags/v*` et réserve leur création, leur mise à jour et leur suppression au mainteneur.
 - Chaque ZIP et chaque `setup.exe` publiés reçoivent une attestation de provenance (`actions/attest` en `subject-path`, même version épinglée que pour l'image), vérifiée par `gh attestation verify` avant tout upload et avant le déplacement de `latest`.

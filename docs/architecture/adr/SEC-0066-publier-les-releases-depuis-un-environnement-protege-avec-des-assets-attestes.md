@@ -38,7 +38,7 @@ La question est : **sous quelles conditions la chaîne de release est-elle autor
 
 **Option retenue : C.**
 
-1. **Aucun héritage de secrets (D1).** Aucun workflow ne transmet `secrets: inherit`. Tant que les secrets PFX sont des secrets de dépôt, `release.yml` transmet les deux secrets nommés ; avec l'environnement `release`, il n'en transmet aucun.
+1. **Aucun héritage de secrets (D1).** Aucun workflow ne transmet `secrets: inherit`. `release.yml` transmet par leur nom les deux secrets PFX que déclare `windows-installer.yml` ; GitHub les résout vers les secrets de l'environnement `release` du job appelé.
 2. **Environnement protégé `release` (D3).** Le job `publish` et la signature de release (job Windows appelé avec `require_authenticode: true`, ou job de signature dédié) déclarent `environment: release` : reviewer requis (le mainteneur), déploiement limité aux tags `v*`, secrets PFX portés par l'environnement. Un ruleset de tags `refs/tags/v*` réserve création, mise à jour et suppression au mainteneur. Rien n'est écrit dans GHCR ni dans les releases avant l'approbation.
 3. **Attestation de tous les assets (D4).** Avant `publish-github-release-assets.sh`, `actions/attest` (même SHA que pour l'image) atteste en `subject-path` chaque ZIP et `setup.exe` ; `gh attestation verify` les vérifie ensuite, et un échec arrête le job avant tout upload et avant `latest`.
 4. **Tags de pré-version (D9).** Le tag est `vX.Y.Z` ou `vX.Y.Z-rc.N`, égal à la version Maven et sur la tête de `main`. Une pré-version publie une release marquée pré-version, sous des tags d'image immuables, sans déplacer `latest`. La première exécution est une répétition sur `X.Y.Z-rc.1`, prouvée par un relevé daté sous `docs/project/history/`.
@@ -49,7 +49,7 @@ Hors décision : build unique et préflight GHCR (inchangés), confinement des s
 
 ### Do
 
-- Transmettre à un workflow réutilisable les seuls secrets qu'il déclare, et aucun une fois les secrets portés par l'environnement `release`.
+- Transmettre à un workflow réutilisable, par leur nom, les seuls secrets qu'il déclare, y compris quand ils n'existent que dans l'environnement `release`.
 - Déclarer `environment: release` sur le job `publish` et sur la signature de release.
 - Garder les secrets PFX Authenticode comme secrets de l'environnement `release`, avec un reviewer requis et une politique de déploiement limitée aux tags `v*`.
 - Protéger `refs/tags/v*` par un ruleset de tags actif.
@@ -85,7 +85,7 @@ Hors décision : build unique et préflight GHCR (inchangés), confinement des s
 
 | Risque | Impact | Mesure de maîtrise |
 |---|---|---|
-| L'environnement conditionnel n'est pas exprimable dans le workflow réutilisable Windows | Moyen | Job de signature dédié dans `release.yml`, en environnement `release`, qui signe les artefacts produits sans secrets (risque du `design.md`, tranché par la tâche 3.2) |
+| L'environnement conditionnel n'est pas exprimable dans le workflow réutilisable Windows | Moyen | Le job `windows-installer` déclare `environment.name: ${{ inputs.require_authenticode && 'release' \|\| '' }}` (tâche 3.2) ; le run sans environnement, pour un nom évalué vide, reste à constater en CI. Repli : job de signature dédié dans `release.yml` |
 | Réglage GitHub supprimé ou modifié hors revue | Élevé | Lecture `gh api …/environments` et `…/rulesets` à chaque répétition et dans le relevé de preuve |
 | Approbation par le seul mainteneur | Moyen | La protection vise l'exécution non sollicitée, pas la revue à deux ; modèle solo de `docs/developer/branch-governance.md` |
 | Pré-version prise pour une version finale | Faible | Release marquée pré-version, `latest` jamais déplacé, tags d'image distincts |
@@ -93,7 +93,7 @@ Hors décision : build unique et préflight GHCR (inchangés), confinement des s
 ## Compliance and Enforcement
 
 - Contrat de `bash .claude/scripts/contracts.sh` (`scripts/release/test-final-audit-contracts.sh`, bloc « Sprint 9 : adr-publication ») : cet ADR existe, complète GEN-0031, et `docs/developer/immutable-release-publishing.md` le référence.
-- Contrats prévus par le changement `sprint-09-chaine-de-release-executable` dans le même script : refus de `secrets: inherit` (tâche 1.2), `environment: release` sur `publish` (tâche 3.2), `subject-path` et vérification des assets (tâche 4.1) ; acceptation et refus des tags de pré-version par `scripts/release/test-release-tag-policy.sh` (tâche 9.1). Ils n'existent pas à la date de cet ADR.
+- Contrats du changement `sprint-09-chaine-de-release-executable` dans le même script : refus de `secrets: inherit` (tâche 1.2), `environment: release` sur `publish` et environnement conditionnel du job Windows (tâche 3.2), `subject-path` et vérification des assets avant upload (tâche 4.1) ; acceptation et refus des tags de pré-version par `scripts/release/test-release-tag-policy.sh` (tâche 9.1).
 - Réglages GitHub : lecture `gh api repos/FTurleque/nexus-context-engine/environments` (environnement `release`, reviewer requis) et `gh api repos/FTurleque/nexus-context-engine/rulesets` (ruleset de cible `tag` actif) ; aucun contrôle automatique.
 - Revue : toute modification de `.github/workflows/release.yml` ou `windows-installer.yml` vérifie qu'aucun secret n'est transmis hors déclaration, que `environment: release` reste sur `publish`, et que la vérification des attestations précède l'upload.
 - Aucune règle Archgate compagnon (`rules: false`).

@@ -233,7 +233,7 @@ Les Actions contrôlées sont épinglées par SHA immuable.
 
 ## Publication Docker
 
-La release est déclenchée uniquement par un tag `vX.Y.Z` sur le HEAD exact de `main`.
+La release est déclenchée uniquement par un tag `vX.Y.Z` (ou `vX.Y.Z-rc.N` pour une pré-version) sur le HEAD exact de `main`.
 
 Docker Distribution construit l'image une fois, la qualifie, puis l'exporte avec hash et ID. `release.yml` charge et vérifie cette **image exacte déjà qualifiée** ; il ne la reconstruit pas.
 
