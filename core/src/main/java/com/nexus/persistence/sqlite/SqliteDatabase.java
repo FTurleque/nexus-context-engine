@@ -16,6 +16,8 @@ import java.util.Objects;
 public final class SqliteDatabase {
 
     public static final int DEFAULT_BUSY_TIMEOUT_MILLIS = 5_000;
+    /** Plafond du cache de pages par connexion, en KiB (valeur négative de {@code PRAGMA cache_size}) : 64 MiB. */
+    static final int PAGE_CACHE_KIB = 65_536;
     private static final int MAX_BUSY_TIMEOUT_MILLIS = 60_000;
     private static final System.Logger LOGGER = System.getLogger(SqliteDatabase.class.getName());
 
@@ -105,6 +107,10 @@ public final class SqliteDatabase {
                 // each canonical row. Keep transient SQL work in memory; the main
                 // database journal and synchronous durability remain unchanged.
                 statement.execute("PRAGMA temp_store = MEMORY");
+                // The default 2 MiB page cache is smaller than the indexes whose keys start with
+                // file_id (V012, V015): bulk indexing inserts into them out of key order and would
+                // reread their pages from disk. Pages are allocated on use, up to this ceiling.
+                statement.execute("PRAGMA cache_size = -" + PAGE_CACHE_KIB);
             }
             if (!(connection instanceof SQLiteConnection sqliteConnection)) {
                 throw new SQLException("Unexpected JDBC connection type for SQLite database");

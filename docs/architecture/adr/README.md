@@ -112,6 +112,7 @@ Oui si la décision est **durable et structurante** et tranche entre des options
 | [ARCH-0066](ARCH-0066-resoudre-la-configuration-dans-la-composition-root.md) | Résoudre la configuration NEXUS dans la composition root et l'injecter | 2026-11-07 | Proposed |
 | [BE-0067](BE-0067-plafonner-la-decouverte-du-depot-git-a-la-racine-du-projet.md) | Plafonner la découverte du dépôt Git à la racine du projet, sauf dépôt parent de l'utilisateur courant | 2026-11-07 | Proposed |
 | [SEC-0068](SEC-0068-publier-les-releases-depuis-un-environnement-protege-avec-des-assets-attestes.md) | Publier les releases depuis un environnement protégé, avec des assets attestés et des tags de pré-version | 2026-11-07 | Proposed |
+| [DATA-0069](DATA-0069-dimensionner-le-cache-de-pages-sqlite-des-connexions.md) | Dimensionner le cache de pages SQLite des connexions | 2026-11-08 | Proposed |
 
 ## Archive
 
