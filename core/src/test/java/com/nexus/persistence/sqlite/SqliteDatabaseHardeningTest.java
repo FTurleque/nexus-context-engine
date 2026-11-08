@@ -49,6 +49,19 @@ class SqliteDatabaseHardeningTest {
     }
 
     @Test
+    void sizesThePageCacheOfEveryConnection() throws Exception {
+        SqliteDatabase database = new SqliteDatabase(new NexusPaths(temporaryDirectory.resolve("cache-home")));
+
+        try (Connection connection = database.openConnection();
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("PRAGMA cache_size")) {
+            result.next();
+            assertEquals(-SqliteDatabase.PAGE_CACHE_KIB, result.getInt(1),
+                    "Le cache de pages SQLite est fixé par DATA-0069");
+        }
+    }
+
+    @Test
     void rejectsDatabaseSymlinkBeforeJdbcCanCreateItsExternalTarget() throws Exception {
         Path home = Files.createDirectories(temporaryDirectory.resolve("symlink-home"));
         Path externalTarget = temporaryDirectory.resolve("external.db");

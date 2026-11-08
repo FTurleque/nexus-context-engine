@@ -78,6 +78,7 @@ Cette section présente un index synthétique avec statut, date et relations de 
 | [ARCH-0066](../adr/ARCH-0066-resoudre-la-configuration-dans-la-composition-root.md) | Résoudre la configuration NEXUS dans la composition root et l'injecter | Proposed | 2026-11-07 |
 | [BE-0067](../adr/BE-0067-plafonner-la-decouverte-du-depot-git-a-la-racine-du-projet.md) | Plafonner la découverte du dépôt Git à la racine du projet, sauf dépôt parent de l'utilisateur courant | Proposed | 2026-11-07 |
 | [SEC-0068](../adr/SEC-0068-publier-les-releases-depuis-un-environnement-protege-avec-des-assets-attestes.md) | Publier les releases depuis un environnement protégé, avec des assets attestés et des tags de pré-version | Proposed | 2026-11-07 |
+| [DATA-0069](../adr/DATA-0069-dimensionner-le-cache-de-pages-sqlite-des-connexions.md) | Dimensionner le cache de pages SQLite des connexions | Proposed | 2026-11-08 |
 | [ADR-0000](../adr/archive/0000-adopter-les-adr-madr.md) | Adopter MADR comme format et définir la gouvernance des ADR | Superseded (GEN-0057) | 2026-07-19 |
 | [ADR-0056](../adr/archive/0056-regrouper-le-registre-des-adr-dans-la-documentation-d-architecture.md) | Regrouper le registre des ADR dans la documentation d'architecture | Superseded (GEN-0057) | 2026-10-29 |
 
@@ -132,8 +133,8 @@ fédération.
 ### Robustesse, cohérence et confinement
 
 DATA-0045, BE-0046, SEC-0047, SEC-0048, DATA-0049, DATA-0050, DATA-0051, DATA-0052,
-BE-0053, DATA-0054, DATA-0055, DATA-0062, BE-0065 — cycle de vie Lucene, cache Git, filesystems et
-traversée, identité repository, lots et temporaires SQLite, cohérence des index
+BE-0053, DATA-0054, DATA-0055, DATA-0062, BE-0065, DATA-0069 — cycle de vie Lucene, cache Git, filesystems et
+traversée, identité repository, lots, temporaires et cache de pages SQLite, cohérence des index
 dérivés, lectures fédérées, reconstructions sémantiques, mise en attente des analyses
 d'indexation.
 

@@ -57,6 +57,12 @@ sur disque pendant les insertions avec triggers. Le journal canonique et la
 durabilité restent inchangés. La mémoire temporaire native dépend du travail SQL
 et n'est pas comptée par le gate de heap Java ; voir [ADR-0050](../architecture/adr/DATA-0050-conserver-les-temporaires-sqlite-en-memoire.md).
 
+Chaque connexion fixe aussi `cache_size` à 64 MiB : les index qui commencent par
+`file_id` (V005, V012, V015) reçoivent des clés hors ordre pendant une indexation de
+nombreux fichiers et dépassent le cache par défaut de 2 MiB au-delà de quelques
+centaines de milliers de lignes. SQLite alloue ces pages à l'usage, hors heap Java ;
+voir [DATA-0069](../architecture/adr/DATA-0069-dimensionner-le-cache-de-pages-sqlite-des-connexions.md).
+
 Les recherches symbole/relation filtrent côté repository avant matérialisation. La recherche de symboles est scopée au projet ciblé (AUD-PRF-09) :
 
 - le préfiltre approché part des fichiers du projet (`UNIQUE (project_id, relative_path)`) puis sonde `idx_symbols_file_fuzzy_prefilter` (V015, première colonne `file_id`) : son plan ne contient aucun parcours de la table ou d'un index des symboles et ne change pas quand la base passe de 25 à 100 projets (`SqliteSymbolSearchScopingTest`) ;
