@@ -112,12 +112,12 @@ La décision est réévaluée si : le projet dispose d'un moyen de signature Aut
 - Release : `release.yml` appelle `windows-installer.yml` avec `require_authenticode: false` et sans secret ; le job Windows s'exécute hors environnement et produit des assets non signés.
 - Signature optionnelle de `windows-installer.yml` (qualification manuelle) : secrets mappés sur les seules étapes « Build self-contained Windows distribution » et « Build production installer », hors `pull_request` ; `sign-windows-artifact.ps1` décode le PFX dans un répertoire propre à l'appel et l'efface dans un `finally` ; `environment.name` conditionnel à `require_authenticode`. L'installeur de smoke n'est jamais signé.
 - Attestations : `actions/attest` en `subject-path` sur le ZIP et le `setup.exe`, exactement un de chaque, puis `gh attestation verify` bloquant avant l'upload et avant `latest`.
-- Preuves de la répétition sur tag de pré-version : à produire (tâches 9.3 et 9.4 du changement).
+- Preuves de la répétition sur tag de pré-version : [relevé du 2026-11-08](../../project/history/release-rehearsal-0.2.0-rc.2-2026-11-08.md) (`v0.2.0-rc.2`, attestations vérifiées sur l'image, le ZIP et le `setup.exe`).
 
 ## References
 
 - [GEN-0031](GEN-0031-packager-la-cli-dans-un-jar-autonome.md) — packaging de la CLI, complété par cet ADR.
-- Changement OpenSpec `openspec/changes/sprint-09-chaine-de-release-executable/` (`design.md`, D1, D3, D4, D9 ; spec `release-pipeline`).
+- Changement OpenSpec archivé `openspec/changes/archive/2026-11-08-sprint-09-chaine-de-release-executable/` (`design.md`, D1, D3, D4, D9) ; spec de référence `openspec/specs/release-pipeline/spec.md`.
 - Audit `docs/project/audits/2026-10-17/sprints.md`, section S9.
 - [`docs/developer/immutable-release-publishing.md`](../../developer/immutable-release-publishing.md), [`docs/developer/release-and-recovery.md`](../../developer/release-and-recovery.md), [`docs/developer/branch-governance.md`](../../developer/branch-governance.md).
 - Section arc42 [09 — Décisions](../arc42/09-decisions.md).
