@@ -59,6 +59,18 @@ public interface SemanticSearchIndex extends AutoCloseable {
     }
 
     /**
+     * Ouvre les écritures d'une indexation. Avec {@code rebuild}, le contenu du projet est remplacé
+     * par celui de la session. Par défaut, chaque lot est appliqué immédiatement ; les index qui
+     * savent différer leur commit (Lucene) le font à {@link SemanticIndexSession#commit()}.
+     */
+    default SemanticIndexSession openSession(
+            UUID projectId,
+            SemanticIndexProvenance provenance,
+            boolean rebuild) throws IOException {
+        return new DirectSemanticIndexSession(this, projectId, provenance, rebuild);
+    }
+
+    /**
      * Recherche les documents sémantiquement les plus proches pour un projet.
      */
     List<SemanticSearchHit> search(UUID projectId, float[] queryVector, int limit) throws IOException;

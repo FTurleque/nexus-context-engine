@@ -13,6 +13,28 @@ argument-hint: "<dépendance> <version>"
 3. Quarkus / SDK MCP : la version est documentée dans `docs/developer/README.md`, `docs/developer/architecture-implementation.md`, `docs/developer/rest-api.md` et vérifiée par `scripts/release/test-operational-doc-contracts.sh`.
 4. `bash .claude/scripts/contracts.sh`, puis validation complète (skill `nexus-validate`).
 
+## Plugin Maven
+
+- Chaque plugin du build a sa propriété de version dans le pom parent et son entrée de `pluginManagement`, y compris les plugins du cycle de vie (`maven.clean-plugin.version`, `maven.resources-plugin.version`, `maven.jar-plugin.version`, `maven.install-plugin.version`, `maven.deploy-plugin.version`, `maven.site-plugin.version`). Un nouveau plugin sans version fait échouer `requirePluginVersions` : ajouter sa propriété et son entrée plutôt qu'une version en ligne dans un module.
+- Ne retenir que des versions stables (pas de `-beta`, `-M`, `-alpha` ni `-rc`), vérifiées sur Maven Central (`maven-metadata.xml` du plugin).
+- Monter `maven-enforcer-plugin` ne doit pas assouplir `requireMavenVersion`, qui suit la version du wrapper.
+
+## Échec `requireUpperBoundDeps`
+
+L'enforcer nomme la dépendance et chaque chemin qui la résout (« Require upper bound dependencies error for g:a:v »). Une montée de dépendance ou du BOM Quarkus peut le déclencher ; l'échec est voulu.
+
+1. Lire les chemins : la version retenue est souvent imposée par un BOM (« version managed from »).
+2. Correction préférée : gérer la dépendance dans `dependencyManagement` du pom parent à la version la plus haute exigée, par la propriété existante quand elle existe (exemple : `jna` suit `jna.version` avec `jna-platform`).
+3. Si la version est fixée par le BOM Quarkus et qu'aucun correctif de sécurité n'est en jeu, ajouter une exclusion à `requireUpperBoundDeps`, avec sa justification (versions en présence) dans le commentaire du pom. À chaque montée de `quarkus.platform.version`, retirer les exclusions devenues inutiles.
+4. Vérifier que `target/licenses/THIRD_PARTY_NOTICES.txt` ne change que de la version attendue.
+
+## Licence hors liste blanche
+
+`failOnBlacklist=true` sur `aggregate-third-party-notices` refuse une dépendance livrée dont aucune licence ne figure dans `includedLicenses` (message « There are N forbidden licenses used »).
+
+- Libellé différent d'une licence déjà acceptée : l'ajouter comme variante dans l'entrée `licenseMerges` correspondante (libellé normalisé en premier).
+- Licence nouvelle : décision revue. Ne l'ajouter à `includedLicenses` que si elle est permissive ou faiblement réciproque et compatible avec la licence propriétaire du produit ; sinon, refuser la dépendance.
+
 ## Wrapper Maven
 
 Les wrappers `mvnw`/`mvnw.cmd` sont **durcis** (ancre SHA-512 versionnée, vérification du cache extrait par `scripts/release/ToolArchiveVerifier.java`). Dependabot les remplace par les scripts Apache standards : ne jamais merger cette version.

@@ -49,6 +49,21 @@ FederatedContextService
 
 CLI, REST et MCP délèguent à cette façade.
 
+### Configuration résolue en composition root
+
+`NexusApplicationFactory` est la seule classe de `core/src/main` qui lit l'environnement du processus ([ARCH-0066](../architecture/adr/ARCH-0066-resoudre-la-configuration-dans-la-composition-root.md), complète [ARCH-0003](../architecture/adr/ARCH-0003-conserver-un-coeur-java-sans-framework-applicatif.md)). Elle résout les variables `NEXUS_*` du cœur en un record `NexusConfiguration` depuis une `Map<String, String>` (l'environnement en production, une table en test), puis passe à chaque composant sa part par constructeur :
+
+| Part | Résolue par | Injectée dans |
+|---|---|---|
+| taille maximale d'un fichier, bornes du scan | `ProjectFileLimits.maxFileSize(Map)`, `ProjectScanLimits.from(Map)` | `ProjectScanner`, partagé par l'indexation, JDT LS et MINOS |
+| bornes de matérialisation et de découverte du contexte | `ContextMaterializationLimits.from(Map)`, `ContextDiscoveryLimits.from(Map)` | `ContextFragmentFactory`, `DefaultContextBuilder`, `FederatedContextService` |
+| bornes SCIP | `ScipIndexLimits.from(Map)` | `ScipCodeIndexImporter` |
+| indexations concurrentes | `ProjectIndexLockManager.maxConcurrentIndexing(Map)` | `ProjectIndexLockManager.fileBacked(paths, limite)` |
+| timeout des providers | `ProjectIndexingService.providerTimeout(Map)` | `ProjectIndexingService` |
+| JDT LS (opt-in, racines approuvées comprises) | `JdtLanguageServerCodeIntelligenceProvider.configuration(paths, Map)` | provider JDT, puis `BoundedJdtProcessBuilder` |
+
+Deux parts valent pour tout le processus et sont installées par la composition root avant l'ouverture du stockage : la borne de taille des lectures `SafeFileIO` sans borne explicite (`ProjectFileLimits.configure`) et les postures `NEXUS_REQUIRE_STRICT_PATH_IO` / `NEXUS_REQUIRE_PRIVATE_STORAGE` (`SecurityPolicy.configure`, propriété JVM prioritaire). Les points d'entrée obtiennent `NEXUS_HOME` par `NexusConfiguration.pathsFromEnvironment()` ; l'adaptateur REST installe aussi les postures avant `NexusRestExposureGuard`. La configuration sémantique reste un paramètre explicite des fabriques de `NexusApplication`. Noms de variables, bornes, valeurs par défaut et messages d'erreur sont ceux des classes de limites. La règle `getenv-composition-root` du test d'architecture interdit tout autre `System.getenv` dans le cœur.
+
 ## Indexation et persistance
 
 `ProjectIndexingService` orchestre mutex JVM + `FileLock`, scan borné, fingerprint canonique, analyses, SQLite, index dérivés, revalidation puis `READY`. Les lectures de la façade prennent le verrou partagé du projet pendant toute leur exécution afin de ne pas traverser un rebuild.
@@ -66,7 +81,7 @@ Les migrations sont forward-only et enregistrées avec `script_sha256`.
 
 ## Stockage NEXUS
 
-`NexusPaths.ensurePrivateStorage()` précède l'ouverture/migration de SQLite :
+`PrivateStoragePolicy.ensurePrivateStorage(paths)` (package `com.nexus.security` ; `NexusPaths` ne fait que résoudre les chemins) précède l'ouverture/migration de SQLite :
 
 ```text
 home / indexes / locks  -> 0700 sur POSIX
@@ -244,11 +259,16 @@ canonique et Lucene reconstructible. Ce découpage ne remplace aucun ADR accept�
 |---|---|
 | `core-sans-framework` | aucun type `io.quarkus`, `jakarta`, `javax.ws`, `org.springframework`, `io.modelcontextprotocol` |
 | `lucene-confine` | `org.apache.lucene` seulement dans `com.nexus.search.lucene` et `com.nexus.search.semantic.lucene` |
-| `sqlite-confine` | `org.sqlite` et `java.sql` seulement dans `com.nexus.persistence.sqlite`, plus la liste fermée `SQLITE_EXCEPTIONS` de `CoreArchitectureRules` (`java.sql.SQLException` dans `NexusApplication`, `NexusApplicationFactory`, `NexusCli`) |
+| `sqlite-confine` | `org.sqlite` et `java.sql` seulement dans `com.nexus.persistence.sqlite`, plus la liste fermée `SQLITE_EXCEPTIONS` de `CoreArchitectureRules` (`java.sql.SQLException` dans `NexusApplicationFactory`, qui l'enveloppe en `PersistenceException`) |
 | `project-feuille` | `com.nexus.project` n'importe aucun autre package `com.nexus` |
-| `cycles-baseline` | les arêtes de cycle du graphe des packages sont égales à `core/src/test/resources/architecture/package-cycles.txt` |
+| `cycles-baseline` | les arêtes de cycle du graphe des packages sont égales à `core/src/test/resources/architecture/package-cycles.txt`, vide depuis [ARCH-0063](../architecture/adr/ARCH-0063-casser-les-cycles-de-packages-du-coeur-par-des-packages-de-modele-feuilles.md) : tout cycle échoue |
+| `index-sans-search` | `com.nexus.index` et ses sous-packages, hors `com.nexus.index.service`, n'importent rien de `com.nexus.search` |
+| `context-source-sans-context` | `com.nexus.context.source` et ses sous-packages n'importent aucun type du package `com.nexus.context` (`context.model` reste permis) |
+| `ranking-sans-search` | `com.nexus.ranking` et `ranking.graph` n'importent aucun type du package `com.nexus.search` (`search.candidate` reste permis) |
+| `search-semantic-sans-ollama` | `com.nexus.search.semantic` n'importe rien de `com.nexus.search.semantic.ollama` |
+| `getenv-composition-root` | aucun `System.getenv` (simple, pleinement qualifié ou importé en statique) hors de `com.nexus.application.NexusApplicationFactory` ([ARCH-0066](../architecture/adr/ARCH-0066-resoudre-la-configuration-dans-la-composition-root.md)) |
 
-Un message d'échec a la forme `[règle] classe -> nom importé`. La baseline de cycles liste une arête `source -> cible` par ligne, triée ; elle ne peut que décroître : une arête nouvelle échoue, une entrée qui ne forme plus de cycle échoue aussi et doit être retirée dans la même PR. Lancement ciblé :
+Un message d'échec a la forme `[règle] classe -> nom importé`. La baseline de cycles liste une arête `source -> cible` par ligne, triée ; elle est vide : une arête de cycle nouvelle échoue, et une entrée qui ne forme plus de cycle échoue aussi. Lancement ciblé :
 
 ```bash
 ./mvnw -B -ntp -pl core test -Dtest='*Architecture*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true
@@ -256,23 +276,27 @@ Un message d'échec a la forme `[règle] classe -> nom importé`. La baseline de
 
 ## OpenSpec core-package-boundaries
 
-Spec : [`openspec/specs/core-package-boundaries/spec.md`](../../openspec/specs/core-package-boundaries/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md). La section « Frontières vérifiées du cœur » ci-dessus décrit les règles ; celle-ci ajoute l'état réel de la baseline, les vues structurelles et les écarts. Le changement actif `sprint-07-casser-le-bloc-cyclique-du-coeur` propose de casser les cycles : ses cibles sont des **propositions**, aucune n'existe au HEAD.
+Spec : [`openspec/specs/core-package-boundaries/spec.md`](../../openspec/specs/core-package-boundaries/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md). La section « Frontières vérifiées du cœur » ci-dessus décrit les règles ; celle-ci ajoute l'état réel de la baseline, les vues structurelles et les écarts. Le changement `sprint-07-casser-le-bloc-cyclique-du-coeur` ([ARCH-0063](../architecture/adr/ARCH-0063-casser-les-cycles-de-packages-du-coeur-par-des-packages-de-modele-feuilles.md)) a cassé les cycles : le graphe est acyclique et la baseline vide. Sa spec n'est pas encore fusionnée dans `openspec/specs/`, qui garde l'exigence « Les cycles de packages ne peuvent que décroître ».
 
 ### Comportement existant vérifié
 
 | Fait | Nature | Source |
 |---|---|---|
 | Le test d'architecture est `CoreArchitectureTest` ; il ne dépend pas d'ArchUnit mais d'un analyseur maison de sources (`JavaSourceGraph`), sans dépendance de test supplémentaire dans le module. | [Existant vérifié] | `core/src/test/java/com/nexus/architecture/CoreArchitectureTest.java:28-43`, `core/src/test/java/com/nexus/architecture/JavaSourceGraph.java:36`, `core/pom.xml` (aucune occurrence d'`archunit`) |
-| Aucun tag, aucune condition d'activation sur le test ; la configuration Surefire du module ne fixe que le répertoire de travail (`..`), que le test suppose en lisant `core/src/main/java`. | [Existant vérifié] | `core/src/test/java/com/nexus/architecture/CoreArchitectureTest.java:30,40`, `core/pom.xml:62-66` |
-| Cinq règles nommées : `core-sans-framework`, `lucene-confine`, `sqlite-confine`, `project-feuille`, `cycles-baseline`. Une violation est rendue `[règle] classe -> nom importé`. | [Existant vérifié] | `core/src/test/java/com/nexus/architecture/CoreArchitectureRules.java:18-22,86-101` |
-| Le message d'échec est vérifié exactement pour chaque règle de confinement. | [Existant vérifié] | `CoreArchitectureTest#frameworkImportFailsCoreWithoutFramework`, `#luceneImportOutsideItsPackagesFailsLuceneConfined`, `#jdbcImportInContextFailsSqliteConfined`, `#upwardImportFromProjectFailsProjectLeaf` |
-| Une référence pleinement qualifiée sans import compte pour les préfixes surveillés (framework, Lucene, SQLite/JDBC) ; commentaires, chaînes et blocs de texte sont ignorés. | [Existant vérifié] | `CoreArchitectureRules.java:29-30`, `CoreArchitectureTest#qualifiedLuceneNameWithoutImportFailsLuceneConfined`, `#parserReadsStaticWildcardAndQualifiedNamesAndIgnoresCommentsAndStrings` |
-| La liste fermée de `sqlite-confine` compte trois entrées `java.sql.SQLException` : `NexusApplication`, `NexusApplicationFactory`, `NexusCli`. Une autre classe du même package échoue. | [Existant vérifié] | `CoreArchitectureRules.java:37-41`, `CoreArchitectureTest#closedSqlExceptionListPassesSqliteConfinedButNothingElse` |
-| La baseline de cycles contient 22 arêtes (lignes 4 à 25), réparties en deux composantes fortement connexes disjointes : 4 packages autour de `context`, 7 autour de `index`, `search` et `ranking`. | [Existant vérifié] | `core/src/test/resources/architecture/package-cycles.txt:4-25` |
+| Aucun tag, aucune condition d'activation sur le test ; la configuration Surefire du module ne fixe que le répertoire de travail (`..`), que le test suppose en lisant `core/src/main/java`. | [Existant vérifié] | `core/src/test/java/com/nexus/architecture/CoreArchitectureTest.java:30,41`, `core/pom.xml:62-66` |
+| Dix règles nommées : `core-sans-framework`, `lucene-confine`, `sqlite-confine`, `project-feuille`, `cycles-baseline`, `index-sans-search`, `context-source-sans-context`, `ranking-sans-search`, `search-semantic-sans-ollama`, `getenv-composition-root`. Une violation est rendue `[règle] classe -> nom importé`. | [Existant vérifié] | `core/src/test/java/com/nexus/architecture/CoreArchitectureRules.java:18-27`, `CoreArchitectureTest#getenvOutsideTheCompositionRootFailsGetenvRule` |
+| Le message d'échec est vérifié exactement pour chaque règle de confinement et de sens. | [Existant vérifié] | `CoreArchitectureTest#frameworkImportFailsCoreWithoutFramework`, `#luceneImportOutsideItsPackagesFailsLuceneConfined`, `#jdbcImportInContextFailsSqliteConfined`, `#upwardImportFromProjectFailsProjectLeaf`, `#searchImportFromIndexFailsIndexWithoutSearchButNotFromTheServicePackage`, `#contextImportFromASourceFailsContextSourceWithoutContext`, `#searchImportFromRankingFailsRankingWithoutSearchButNotTheCandidateModel`, `#ollamaImportFromThePortFailsSearchSemanticWithoutOllama` |
+| Une référence pleinement qualifiée sans import compte pour les préfixes surveillés (framework, Lucene, SQLite/JDBC) ; commentaires, chaînes et blocs de texte sont ignorés. | [Existant vérifié] | `CoreArchitectureRules.java:34`, `CoreArchitectureTest#qualifiedLuceneNameWithoutImportFailsLuceneConfined`, `#parserReadsStaticWildcardAndQualifiedNamesAndIgnoresCommentsAndStrings` |
+| La liste fermée de `sqlite-confine` compte une seule entrée `java.sql.SQLException` : `NexusApplicationFactory`, qui enveloppe l'échec d'ouverture du stockage en `PersistenceException` (cause conservée). `NexusApplication`, `NexusCli` et toute autre classe qui importe `java.sql` échouent. | [Existant vérifié] | `CoreArchitectureRules.java:49-54`, `CoreArchitectureTest#closedSqlExceptionListPassesSqliteConfinedButNothingElse` |
+| La baseline de cycles ne contient plus aucune arête : son fichier ne porte que trois lignes de commentaire, et un test l'exige vide. Le graphe des packages est acyclique. | [Existant vérifié] | `core/src/test/resources/architecture/package-cycles.txt`, `CoreArchitectureTest#cycleBaselineIsEmpty` |
 | Le graphe des packages n'est construit que depuis les `import` (les références pleinement qualifiées vers `com.nexus` n'y entrent pas) ; une arête de cycle est une arête dont les deux extrémités sont dans une même composante de plus d'un package. | [Existant vérifié] | `core/src/test/java/com/nexus/architecture/JavaSourceGraph.java:100-141` |
-| La baseline doit être triée et sans doublon (test dédié). Une arête nouvelle et une entrée devenue fausse sont deux échecs distincts. | [Existant vérifié] | `CoreArchitectureTest#cycleBaselineIsSorted`, `#newCycleEdgeFailsTheBaselineAndNamesThePackages`, `#staleBaselineEntryFailsAndAsksForItsRemoval`, `CoreArchitectureRules.java:70-84` |
+| La baseline doit être triée et sans doublon (test dédié). Une arête nouvelle et une entrée devenue fausse sont deux échecs distincts ; un cycle `ranking` ↔ `search` contre la baseline vide échoue en nommant les deux arêtes. | [Existant vérifié] | `CoreArchitectureTest#cycleBaselineIsSorted`, `#newCycleEdgeFailsTheBaselineAndNamesThePackages`, `#staleBaselineEntryFailsAndAsksForItsRemoval`, `#rankingImportingSearchFailsTheEmptyBaselineAndNamesBothPackages`, `CoreArchitectureRules.java:82-98` |
 | `PublicContextPolicy` est dans `com.nexus.exposure` et aucun fichier de `com.nexus.security` n'importe `com.nexus.context` ; les imports `com.nexus` de `security` sont `config` et `paths`. | [Existant vérifié] | `core/src/main/java/com/nexus/exposure/PublicContextPolicy.java:1-14`, relevé des `import` de `core/src/main/java/com/nexus/security/` au HEAD |
-| Le package `com.nexus.project` n'importe aucun autre package `com.nexus` au HEAD (relevé des imports). | [Existant vérifié] | relevé des `import` de `core/src/main/java/com/nexus/project/`, règle `CoreArchitectureRules.java:61-64` |
+| Le package `com.nexus.project` n'importe aucun autre package `com.nexus` au HEAD (relevé des imports). | [Existant vérifié] | relevé des `import` de `core/src/main/java/com/nexus/project/`, règle `CoreArchitectureRules.java:73-76` |
+| L'orchestration de l'indexation (`ProjectIndexingService`, `IndexDocumentPublisher`, `IndexPublication`, `ExternalCodeIntelligenceRefresher`) est dans `com.nexus.index.service` ; `SearchDocument` est dans `com.nexus.index` et `ResultLimitPolicy` dans `com.nexus.config`. | [Existant vérifié] | `core/src/main/java/com/nexus/index/service/`, `core/src/main/java/com/nexus/index/SearchDocument.java`, `core/src/main/java/com/nexus/config/ResultLimitPolicy.java` |
+| L'indexation sémantique est un port : `SemanticIndexing` (`enabled()`, `isCompatible`, `openSession`), implémenté par `SemanticIndexingService` ; `SemanticIndexing.disabled()` remplace `null`, et l'orchestration teste `enabled()`. | [Existant vérifié] | `core/src/main/java/com/nexus/index/SemanticIndexing.java:18-23`, `core/src/main/java/com/nexus/index/service/ProjectIndexingService.java:236`, `core/src/main/java/com/nexus/index/service/IndexDocumentPublisher.java:68`, `core/src/main/java/com/nexus/application/NexusApplicationFactory.java:154`, `core/src/test/java/com/nexus/index/SemanticIndexingDisabledTest.java` |
+| Le modèle de contexte (`ContextFragment`, `ContextItem`, `ContextSelectionResult`) est dans `com.nexus.context.model` ; les candidats de recherche (`SearchCandidate`, `SearchSignals`, `CandidateType`, `CandidateEnricher`, `CandidateMerger`) sont dans `com.nexus.search.candidate`. | [Existant vérifié] | `core/src/main/java/com/nexus/context/model/`, `core/src/main/java/com/nexus/search/candidate/` |
+| La lecture de l'environnement sémantique et la construction d'`OllamaEmbeddingProvider` sont dans `NexusApplicationFactory` ; `SemanticSearchConfiguration` ne garde que les valeurs, les noms de variables et les bornes. | [Existant vérifié] | `core/src/main/java/com/nexus/application/NexusApplicationFactory.java:242,247` |
 
 ### Vues
 
@@ -290,10 +314,10 @@ flowchart TB
             cli["cli"]
             exposure["exposure"]
         end
-        subgraph Metier["Métier (graphe cyclique, voir la vue suivante)"]
-            context["context, context.source.*"]
-            index["index, index.scan"]
-            search["search, search.semantic"]
+        subgraph Metier["Métier (graphe acyclique, voir la vue suivante)"]
+            context["context, context.model, context.source.*"]
+            index["index, index.scan, index.service"]
+            search["search, search.candidate, search.semantic"]
             ranking["ranking, ranking.graph"]
         end
         subgraph Confines["Adaptateurs confinés"]
@@ -312,48 +336,53 @@ flowchart TB
     sqlite --> JDBC
     lucene --> LUC
     semlucene --> LUC
-    application -.->|SQLException seulement| JDBC
-    cli -.->|SQLException seulement| JDBC
+    application -.->|SQLException seulement, NexusApplicationFactory| JDBC
     Coeur -.-x|core-sans-framework| FW
 ```
 
-Le groupement « Facade, Métier, Confinés, Socle » est une aide de lecture, pas une règle du test. Seules les flèches vers les bibliothèques et la feuille `project` sont imposées ; les autres dépendances entre packages ne sont pas contrôlées, hors cycles. Exigences : `core-package-boundaries › Le cœur ne dépend d'aucun framework applicatif`, `core-package-boundaries › Lucene est confiné à ses adaptateurs`, `core-package-boundaries › SQLite et JDBC sont confinés à la persistance`, `core-package-boundaries › Le package project est une feuille`, `core-package-boundaries › La politique de sortie ne dépend pas du package security`.
+Le groupement « Facade, Métier, Confinés, Socle » est une aide de lecture, pas une règle du test. Les flèches vers les bibliothèques, la feuille `project` et les quatre règles de sens sont imposées ; les autres dépendances entre packages ne sont contrôlées que par l'absence de cycle. Exigences : `core-package-boundaries › Le cœur ne dépend d'aucun framework applicatif`, `core-package-boundaries › Lucene est confiné à ses adaptateurs`, `core-package-boundaries › SQLite et JDBC sont confinés à la persistance`, `core-package-boundaries › Le package project est une feuille`, `core-package-boundaries › La politique de sortie ne dépend pas du package security`.
 
-Vue organigramme (non UML) — quels packages forment les cycles de la baseline et dans quel sens vont les 22 arêtes (existant, `package-cycles.txt` au HEAD) ?
+Vue organigramme (non UML) — quel est le sens de dépendance entre les packages du cœur après les déplacements, et lesquels sont des feuilles de modèle (existant, graphe acyclique) ?
 
 ```mermaid
-flowchart LR
-    subgraph A["Composante A : 4 packages, 8 arêtes"]
-        ctx["context"]
-        ctxSrc["context.source"]
-        ctxGit["context.source.git"]
-        ctxSkill["context.source.skill"]
-    end
-    subgraph B["Composante B : 7 packages, 14 arêtes"]
-        idx["index"]
-        idxScan["index.scan"]
-        srch["search"]
-        srchSem["search.semantic"]
-        srchOll["search.semantic.ollama"]
-        rank["ranking"]
-        rankG["ranking.graph"]
-    end
-    ctx <--> ctxSrc
-    ctx <--> ctxGit
-    ctx <--> ctxSkill
-    ctxGit --> ctxSrc
-    ctxSkill --> ctxSrc
-    idx <--> idxScan
-    idx <--> srch
-    idx <--> srchSem
-    srch <--> rank
-    srch <--> rankG
-    srchSem <--> srchOll
-    rankG --> idx
-    srchSem --> srch
+flowchart TD
+    app["application"]
+    idxsvc["index.service"]
+    idx["index"]
+    scan["index.scan"]
+    srch["search"]
+    cand["search.candidate"]
+    rank["ranking"]
+    rankg["ranking.graph"]
+    sem["search.semantic"]
+    oll["search.semantic.ollama"]
+    ctx["context"]
+    ctxm["context.model"]
+    ctxs["context.source.*"]
+    app --> idxsvc
+    app --> oll
+    app --> sem
+    idxsvc --> idx
+    idxsvc --> scan
+    idxsvc --> srch
+    scan --> idx
+    sem --> idx
+    sem --> srch
+    srch --> idx
+    srch --> rank
+    srch --> rankg
+    srch --> cand
+    rank --> cand
+    rankg --> cand
+    rankg --> idx
+    oll --> sem
+    ctx --> ctxm
+    ctx --> ctxs
+    ctxs --> ctxm
+    ctxs --> cand
 ```
 
-Une flèche double représente deux arêtes de la baseline (une dans chaque sens). Les deux composantes sont disjointes : aucune arête de la baseline ne les relie. Les dépendances de A et de B vers le reste du cœur (par exemple `context` vers `security`) ne sont pas des arêtes de cycle. Exigences : `core-package-boundaries › Les cycles de packages ne peuvent que décroître`.
+Une flèche va du package dépendant vers le package dont il dépend. `index.service` est le seul package d'orchestration de l'indexation ; `index`, `search.candidate` et `context.model` ne dépendent d'aucun package orchestrateur. La vue ne montre que les arêtes que l'ADR nomme ; le graphe complet est vérifié par `cycles-baseline`. Exigences : `core-package-boundaries › Les cycles de packages ne peuvent que décroître`.
 
 Vue organigramme (non UML) — comment le test `cycles-baseline` décide-t-il de l'échec (existant) ?
 
@@ -363,34 +392,29 @@ flowchart TD
     P --> G["graphe des packages com.nexus, sans arête vers soi-même"]
     G --> C["composantes fortement connexes"]
     C --> E["arêtes de cycle : extrémités dans la même composante de plus d'un package"]
-    E --> D{"comparaison avec package-cycles.txt"}
+    E --> D{"comparaison avec package-cycles.txt (vide)"}
     D -- "arête réelle absente de la baseline" --> F1["échec : nouvelle arête de cycle entre packages"]
     D -- "entrée de baseline qui n'est plus une arête de cycle" --> F2["échec : retirer l'entrée de la baseline"]
-    D -- "ensembles égaux" --> OK["règle cycles-baseline satisfaite"]
+    D -- "ensembles égaux (aucune arête)" --> OK["règle cycles-baseline satisfaite"]
 ```
 
 Les deux échecs peuvent survenir ensemble. Une baseline non triée ou avec doublon échoue par un test distinct (`cycleBaselineIsSorted`). Exigences : `core-package-boundaries › Les cycles de packages ne peuvent que décroître`, `core-package-boundaries › Le test d'architecture fait partie de la suite par défaut`.
 
 ### Écarts et limites
 
-- [Écart] La proposition du changement actif `sprint-07-casser-le-bloc-cyclique-du-coeur` décrit un bloc de 12 packages incluant `security` et affirme qu'aucun test d'architecture n'existe. Au HEAD, le test existe, `security` n'est plus dans la baseline et les cycles forment deux composantes (4 et 7 packages). La proposition décrit un état antérieur ; elle n'est pas modifiée ici.
 - [Écart] Le scénario « Nouveau cycle » demande que le test « nomme les packages du cycle ». Le message nomme l'arête (`com.nexus.b -> com.nexus.a`), pas le cycle complet (`CoreArchitectureTest#newCycleEdgeFailsTheBaselineAndNamesThePackages`).
 - [Écart] Le scénario « Contrôle des imports » (aucun `import com.nexus.context` dans `security`) n'a aucune règle ni test : le relevé a été fait à la main au HEAD. La première moitié de l'exigence (politique d'exposition hors de `security`) n'a pas non plus de garde automatisée. `test non écrit`.
 - [Écart] Le scénario « Build standard » (le test s'exécute et passe par `./mvnw -B -ntp -pl core test`) n'est pas démontré par un test : c'est le comportement de la suite par défaut, prouvé par le run CI du reactor (`NEXUS CI`, job « Linux reactor Maven build », `./mvnw -B clean install`, `.github/workflows/ci.yml:105-108`). Rien n'a été exécuté pour cette documentation.
-- [Écart] [ARCH-0059](../architecture/adr/ARCH-0059-verifier-les-frontieres-du-coeur-par-un-test-d-architecture.md) porte le statut `Proposed` alors que le test est livré.
-- Limite : seuls les `import` alimentent le graphe des packages. Une dépendance `com.nexus.*` écrite en nom pleinement qualifié sans import échappe aux règles `project-feuille` et `cycles-baseline` ; la détection des noms qualifiés ne vaut que pour les préfixes framework, Lucene et SQLite/JDBC (`JavaSourceGraph.java:100-114`, `CoreArchitectureRules.java:29-30`).
-- Limite : la baseline est une égalité d'ensembles, pas un plafond. Casser un cycle sans retirer ses entrées fait échouer le test, comme le demande l'exigence ; ajouter une arête dans une composante qui contient déjà ses deux extrémités échoue aussi.
-- Limite : aucune règle ne contrôle le sens des dépendances entre packages hors cycles (par exemple `exposure` vers `context`) ; la vue « composants » ne montre que les confinements imposés.
+- [Écart] [ARCH-0059](../architecture/adr/ARCH-0059-verifier-les-frontieres-du-coeur-par-un-test-d-architecture.md) et [ARCH-0063](../architecture/adr/ARCH-0063-casser-les-cycles-de-packages-du-coeur-par-des-packages-de-modele-feuilles.md) portent le statut `Proposed` alors que leurs contrôles sont livrés.
+- [Écart] Le design du sprint 7 range `ResultLimitPolicy` et `SearchDocument` dans un même package feuille. Impossible : `SearchDocument` dépend de `CodeSymbol` et `FileCategory` (`index`), que `index` ne peut pas importer en retour. `SearchDocument` est donc dans `index` et `ResultLimitPolicy` dans `config`.
+- [Écart] Le design du sprint 7 laissait le package du port sémantique « à fixer » ; le port `SemanticIndexing` est dans `index`, avec `SearchDocument` qu'il manipule.
+- [Écart] La baseline n'a pas été supprimée : le fichier reste, vide, et la règle `cycles-baseline` l'applique ; la spec du changement dit « sans baseline de cycles tolérés ». Ajouter une ligne contredit [ARCH-0063](../architecture/adr/ARCH-0063-casser-les-cycles-de-packages-du-coeur-par-des-packages-de-modele-feuilles.md) et se voit dans le diff.
+- Limite : seuls les `import` alimentent le graphe des packages. Une dépendance `com.nexus.*` écrite en nom pleinement qualifié sans import échappe aux règles `project-feuille`, `cycles-baseline` et aux quatre règles de sens ; la détection des noms qualifiés ne vaut que pour les préfixes framework, Lucene et SQLite/JDBC (`JavaSourceGraph.java:100-114`, `CoreArchitectureRules.java:34`).
+- Limite : la baseline est une égalité d'ensembles, pas un plafond. Ajouter une arête dans une composante qui contient déjà ses deux extrémités échoue aussi.
+- Limite : les règles de sens couvrent quatre sens ; les autres dépendances hors cycles (par exemple `exposure` vers `context`) ne sont pas contrôlées.
 
 ### Propositions et questions ouvertes
 
-Tout ce qui suit vient du changement actif `sprint-07-casser-le-bloc-cyclique-du-coeur` (`proposal.md`, `tasks.md`) et n'existe pas au HEAD.
-
-- [Proposition] Déplacer l'orchestration de l'indexation (`ProjectIndexingService`, `IndexDocumentPublisher`, `ExternalCodeIntelligenceRefresher`) hors de `index`, et `ResultLimitPolicy`, `SearchDocument` dans un package feuille (tâche 2.1 du changement).
-- [Proposition] Introduire un port d'indexation sémantique et une implémentation sans effet à la place de `null` (tâche 2.2).
-- [Proposition] Déplacer `ContextFragment`, `ContextItem` et `ContextSelectionResult` dans `context.model` (tâche 3.1), et les types de candidats de recherche dans un package de candidats (tâche 4.1).
-- [Proposition] Faire construire `OllamaEmbeddingProvider` par `NexusApplicationFactory` plutôt que par `SemanticSearchConfiguration` (tâche 5.1).
-- [Proposition] Vider la baseline et ajouter des règles de sens nommées (`index` sans `search`, `context.source.*` sans `context`, `ranking` sans `search`, `search.semantic` sans `ollama`) (tâche 6.1). Ce serait une évolution de l'exigence « Les cycles de packages ne peuvent que décroître » et de la liste des règles de la spec, à écrire en delta.
-- [Question] La proposition sprint-07 doit-elle être mise à jour avant implémentation (état actuel : deux composantes de 4 et 7 packages, test d'architecture présent, `security` hors baseline) ?
 - [Question] Faut-il une règle automatisée pour la dernière exigence (`security` sans `context`, politique d'exposition hors de `security`) ?
-- [Proposition] Faire détecter par l'analyseur les noms `com.nexus.*` pleinement qualifiés pour que `project-feuille` et la baseline ne dépendent plus de l'usage d'un import.
+- [Question] Faut-il supprimer le fichier de baseline et la règle `cycles-baseline` au profit d'une règle d'acyclicité sans baseline, comme l'énonce la spec du sprint 7 ?
+- [Proposition] Faire détecter par l'analyseur les noms `com.nexus.*` pleinement qualifiés pour que `project-feuille`, `cycles-baseline` et les règles de sens ne dépendent plus de l'usage d'un import.

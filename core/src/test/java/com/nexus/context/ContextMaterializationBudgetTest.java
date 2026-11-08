@@ -5,6 +5,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -72,20 +73,45 @@ class ContextMaterializationBudgetTest {
 
     @Test
     void rejectsConfiguredLimitsAboveTheSecurityCeiling() {
-        assertEquals(64L, ContextMaterializationLimits.parseMaxCumulativeBytes("64"));
-        assertEquals(64, ContextMaterializationLimits.parseMaxOpenedFiles("64"));
-        assertEquals(64L, ContextMaterializationLimits.parseMaxDurationMillis("64"));
+        ContextMaterializationLimits configured = ContextMaterializationLimits.from(Map.of(
+                ContextMaterializationLimits.MAX_CUMULATIVE_BYTES_ENVIRONMENT_VARIABLE, "64",
+                ContextMaterializationLimits.MAX_OPENED_FILES_ENVIRONMENT_VARIABLE, "64",
+                ContextMaterializationLimits.MAX_DURATION_MILLIS_ENVIRONMENT_VARIABLE, "64"));
+        assertEquals(new ContextMaterializationLimits(64L, 64, 64L), configured);
+
+        ContextMaterializationLimits ceiling = ContextMaterializationLimits.from(Map.of(
+                ContextMaterializationLimits.MAX_CUMULATIVE_BYTES_ENVIRONMENT_VARIABLE,
+                Long.toString(ContextMaterializationLimits.MAX_CONFIGURABLE_CUMULATIVE_BYTES),
+                ContextMaterializationLimits.MAX_OPENED_FILES_ENVIRONMENT_VARIABLE,
+                Integer.toString(ContextMaterializationLimits.MAX_CONFIGURABLE_OPENED_FILES),
+                ContextMaterializationLimits.MAX_DURATION_MILLIS_ENVIRONMENT_VARIABLE,
+                Long.toString(ContextMaterializationLimits.MAX_CONFIGURABLE_DURATION_MILLIS)));
+        assertEquals(ContextMaterializationLimits.MAX_CONFIGURABLE_CUMULATIVE_BYTES, ceiling.maxCumulativeBytes());
+
+        IllegalArgumentException bytes = assertThrows(
+                IllegalArgumentException.class,
+                () -> ContextMaterializationLimits.from(Map.of(
+                        ContextMaterializationLimits.MAX_CUMULATIVE_BYTES_ENVIRONMENT_VARIABLE,
+                        Long.toString(ContextMaterializationLimits.MAX_CONFIGURABLE_CUMULATIVE_BYTES + 1L))));
+        assertEquals(ContextMaterializationLimits.MAX_CUMULATIVE_BYTES_ENVIRONMENT_VARIABLE
+                + " doit être compris entre 1 et " + ContextMaterializationLimits.MAX_CONFIGURABLE_CUMULATIVE_BYTES
+                + " octets", bytes.getMessage());
         assertThrows(
                 IllegalArgumentException.class,
-                () -> ContextMaterializationLimits.parseMaxCumulativeBytes(
-                        Long.toString(ContextMaterializationLimits.MAX_CONFIGURABLE_CUMULATIVE_BYTES + 1L)));
+                () -> ContextMaterializationLimits.from(Map.of(
+                        ContextMaterializationLimits.MAX_OPENED_FILES_ENVIRONMENT_VARIABLE,
+                        Integer.toString(ContextMaterializationLimits.MAX_CONFIGURABLE_OPENED_FILES + 1))));
         assertThrows(
                 IllegalArgumentException.class,
-                () -> ContextMaterializationLimits.parseMaxOpenedFiles(
-                        Integer.toString(ContextMaterializationLimits.MAX_CONFIGURABLE_OPENED_FILES + 1)));
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> ContextMaterializationLimits.parseMaxDurationMillis(
-                        Long.toString(ContextMaterializationLimits.MAX_CONFIGURABLE_DURATION_MILLIS + 1L)));
+                () -> ContextMaterializationLimits.from(Map.of(
+                        ContextMaterializationLimits.MAX_DURATION_MILLIS_ENVIRONMENT_VARIABLE,
+                        Long.toString(ContextMaterializationLimits.MAX_CONFIGURABLE_DURATION_MILLIS + 1L))));
+    }
+
+    @Test
+    void absentOrBlankVariablesKeepTheDefaults() {
+        assertEquals(ContextMaterializationLimits.defaults(), ContextMaterializationLimits.from(Map.of()));
+        assertEquals(ContextMaterializationLimits.defaults(), ContextMaterializationLimits.from(Map.of(
+                ContextMaterializationLimits.MAX_OPENED_FILES_ENVIRONMENT_VARIABLE, " ")));
     }
 }

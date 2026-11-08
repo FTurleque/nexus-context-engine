@@ -28,8 +28,26 @@ grep -q 'CSPRNG' "$REST_GUARD" \
 grep -q "ne mesure pas l'entropie cryptographique" "$REST_DOC" \
   || fail 'REST documentation must distinguish structural filtering from entropy'
 
+# AUD-SEC-04: a loopback listener answers only loopback Host values and refuses
+# non-loopback web origins, before resource matching, in trust-local and token loopback.
+REST_LOOPBACK_FILTER="adapters/rest-quarkus/src/main/java/com/nexus/api/NexusRestLoopbackTransportFilter.java"
+REST_EXPOSURE_DOC="docs/developer/rest-exposure-security.md"
+test -f "$REST_LOOPBACK_FILTER" || fail 'loopback Host/Origin transport filter is missing'
+grep -q '^@PreMatching$' "$REST_LOOPBACK_FILTER" \
+  || fail 'loopback transport filter must run before resource matching'
+grep -qF 'Set.of("127.0.0.1", "localhost", "[::1]")' "$REST_LOOPBACK_FILTER" \
+  || fail 'loopback transport filter must compare Host literally against loopback names'
+grep -q 'Response.Status.FORBIDDEN' "$REST_LOOPBACK_FILTER" \
+  || fail 'loopback transport filter must refuse with 403'
+grep -q 'NexusRestLoopbackTransportFilter' "$REST_DOC" \
+  && grep -q 'NexusRestLoopbackTransportFilter' "$REST_EXPOSURE_DOC" \
+  || fail 'loopback Host/Origin control must remain documented'
+grep -q 'Residual browser risk of trust-local' "$REST_EXPOSURE_DOC" \
+  && grep -q 'NEXUS_REST_ALLOWED_PROJECT_ROOTS' "$REST_EXPOSURE_DOC" \
+  || fail 'trust-local browser risk and project-root allowlist recommendation must remain documented'
+
 # Post-audit 2026-09-07: JDT LS must never start on an implicitly trusted repository.
-JDT_PROCESS="core/src/main/java/com/nexus/index/jdt/ProcessBuilder.java"
+JDT_PROCESS="core/src/main/java/com/nexus/index/jdt/BoundedJdtProcessBuilder.java"
 grep -q 'NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS' "$JDT_PROCESS" \
   || fail 'JDT LS trusted-project allowlist is missing'
 grep -q 'requireTrustedProjectDirectory' "$JDT_PROCESS" \
@@ -63,11 +81,11 @@ grep -q 'métadonnées UTF-8 cumulées/snapshot' docs/developer/code-intelligenc
 # Post-audit 2026-09-07: Windows ACL inspection covers every sensitive path,
 # system principals are resolved from well-known SIDs and compared exactly, and
 # operators can require fail-closed privacy without relying on translated names.
-NEXUS_PATHS="core/src/main/java/com/nexus/config/NexusPaths.java"
-WINDOWS_PRINCIPALS="core/src/main/java/com/nexus/config/WindowsStoragePrincipals.java"
-grep -q 'canonicalCurrentUserPrincipal' "$NEXUS_PATHS" \
+PRIVATE_STORAGE="core/src/main/java/com/nexus/security/PrivateStoragePolicy.java"
+WINDOWS_PRINCIPALS="core/src/main/java/com/nexus/security/WindowsStoragePrincipals.java"
+grep -q 'canonicalCurrentUserPrincipal' "$PRIVATE_STORAGE" \
   || fail 'Windows ACL inspection must resolve the current principal canonically'
-grep -q 'trustedSystemNames.contains(principal)' "$NEXUS_PATHS" \
+grep -q 'trustedSystemNames.contains(principal)' "$PRIVATE_STORAGE" \
   || fail 'Windows trusted system principals must be compared exactly after SID resolution'
 for sid in 'S-1-5-18' 'S-1-5-32-544' 'S-1-3-0'; do
   grep -q --fixed-strings "$sid" "$WINDOWS_PRINCIPALS" \
@@ -75,14 +93,14 @@ for sid in 'S-1-5-18' 'S-1-5-32-544' 'S-1-3-0'; do
 done
 grep -q 'getUserPrincipalLookupService' "$WINDOWS_PRINCIPALS" \
   || fail 'Windows well-known SIDs must resolve through the filesystem principal lookup service'
-grep -q 'NEXUS_REQUIRE_PRIVATE_STORAGE' "$NEXUS_PATHS" \
+grep -q 'NEXUS_REQUIRE_PRIVATE_STORAGE' "$PRIVATE_STORAGE" \
   || fail 'private storage fail-closed opt-in is missing'
-grep -q 'enforceAclPrivacy' "$NEXUS_PATHS" \
+grep -q 'enforceAclPrivacy' "$PRIVATE_STORAGE" \
   || fail 'private storage ACL enforcement must remain centralized'
-if grep -q 'endsWith("\\\\ADMINISTRATORS")' "$NEXUS_PATHS" "$WINDOWS_PRINCIPALS"; then
+if grep -q 'endsWith("\\\\ADMINISTRATORS")' "$PRIVATE_STORAGE" "$WINDOWS_PRINCIPALS"; then
   fail 'suffix-based Administrators trust must not return'
 fi
-if grep -q 'endsWith("\\\\" + currentUser)' "$NEXUS_PATHS" "$WINDOWS_PRINCIPALS"; then
+if grep -q 'endsWith("\\\\" + currentUser)' "$PRIVATE_STORAGE" "$WINDOWS_PRINCIPALS"; then
   fail 'suffix-based current-user ACL trust must not return'
 fi
 
@@ -269,5 +287,246 @@ grep -q 'ne doivent donc pas remonter' docs/developer/branch-governance.md \
   || fail 'branch governance must prevent obsolete approval findings from resurfacing'
 grep -q 'NXA3-14 / #130 est satisfait' docs/architecture/risks/register.md \
   || fail 'risk register must record the effective develop protection state'
+
+# --- Sprint 9 : secrets-signature (AUD-DEP-21, AUD-SEC-06, AUD-DEP-03) ---
+# AUD-DEP-21: reusable workflows only receive the secrets they declare.
+if grep -R -n -E '^[[:space:]]*secrets:[[:space:]]*inherit([[:space:]]|$)' .github/workflows; then
+  fail 'secrets: inherit is forbidden in .github/workflows (pass declared secrets by name)'
+fi
+# AUD-SEC-06 / AUD-DEP-03: Authenticode material is confined to the two signing steps, never on
+# pull_request, never published to GITHUB_ENV; publication and release signing use `release`.
+python3 - <<'PY' || fail 'Authenticode signing confinement or release environment contract drift'
+import re
+import sys
+
+def fail(message):
+    print(f"secrets-signature: {message}", file=sys.stderr)
+    sys.exit(1)
+
+def job_block(lines, job):
+    start = next((i for i, line in enumerate(lines) if line.rstrip() == f"  {job}:"), None)
+    if start is None:
+        fail(f"job {job} not found")
+    end = next((i for i in range(start + 1, len(lines)) if re.match(r"^  \S", lines[i])), len(lines))
+    return lines[start:end]
+
+installer = open(".github/workflows/windows-installer.yml", encoding="utf-8").read().splitlines()
+job = job_block(installer, "windows-installer")
+steps_at = next((i for i, line in enumerate(job) if line.rstrip() == "    steps:"), None)
+if steps_at is None:
+    fail("windows-installer job has no steps")
+if any("secrets." in line for line in job[:steps_at]):
+    fail("job-level configuration of windows-installer must not reference secrets")
+if not any(line.strip() == "name: ${{ inputs.require_authenticode && 'release' || '' }}" for line in job[:steps_at]):
+    fail("windows-installer must run in the release environment when require_authenticode is set")
+
+signing_steps = {"Build self-contained Windows distribution", "Build production installer"}
+current_step = None
+references = {}
+for line in job[steps_at:]:
+    match = re.match(r"^      - name: (.+)$", line)
+    if match:
+        current_step = match.group(1).strip()
+    if "secrets." in line:
+        if current_step not in signing_steps:
+            fail(f"step '{current_step}' must not receive secrets")
+        if "github.event_name != 'pull_request' && secrets.NEXUS_WINDOWS_SIGNING_PFX_" not in line:
+            fail(f"secret reference in '{current_step}' is not excluded from pull_request: {line.strip()}")
+        references[current_step] = references.get(current_step, 0) + 1
+if references != {name: 2 for name in signing_steps}:
+    fail(f"each signing step must map exactly the two PFX secrets: {references}")
+if re.search(r"NEXUS_WINDOWS_SIGNING_PFX[^\n]*GITHUB_ENV|GITHUB_ENV[^\n]*NEXUS_WINDOWS_SIGNING_PFX", "\n".join(installer)):
+    fail("the PFX path must never be published to GITHUB_ENV")
+
+for script in ("scripts/release/sign-windows-artifact.ps1",
+               "scripts/release/build-windows-distribution.ps1",
+               "scripts/release/build-windows-installer.ps1"):
+    if "GITHUB_ENV" in open(script, encoding="utf-8").read():
+        fail(f"{script} must not write to GITHUB_ENV")
+signer = open("scripts/release/sign-windows-artifact.ps1", encoding="utf-8").read()
+if not re.search(r"finally\s*\{[^}]*Remove-Item -LiteralPath \$materialRoot -Recurse -Force", signer):
+    fail("sign-windows-artifact.ps1 must erase the decoded PFX in a finally block")
+
+release = open(".github/workflows/release.yml", encoding="utf-8").read().splitlines()
+if not any(line.rstrip() == "    environment: release" for line in job_block(release, "publish")):
+    fail("the publish job must declare environment: release")
+caller = job_block(release, "windows-installer")
+if not any(line.strip() == "require_authenticode: false" for line in caller):
+    fail("release.yml publishes unsigned Windows assets: require_authenticode must be false")
+if any(line.strip().startswith("secrets:") or "NEXUS_WINDOWS_SIGNING_PFX" in line for line in caller):
+    fail("release.yml must not pass any secret to windows-installer.yml")
+PY
+
+# --- Sprint 9 : attest-prerelease (AUD-DEP-09, AUD-DEP-02) ---
+# AUD-DEP-09: the publish job attests the Windows ZIP and setup.exe by subject-path with the
+# same pinned actions/attest as the image, then verifies them before any asset upload.
+release_wf=.github/workflows/release.yml
+attest_pins="$(grep -Eo 'uses: actions/attest@[0-9a-f]{40} # v[0-9.]+' "$release_wf" | sort -u)"
+[[ -n "$attest_pins" && "$(printf '%s\n' "$attest_pins" | wc -l)" -eq 1 ]] \
+  || fail 'release.yml must pin every actions/attest step to one single SHA'
+grep -Eq 'subject-path: target/windows-release/\*\*/nexus-context-engine-\*-windows-x64\.zip' "$release_wf" \
+  || fail 'release.yml must attest the Windows ZIP by subject-path'
+grep -Eq 'subject-path: target/windows-release/\*\*/NEXUS-\*-windows-x64-setup\.exe' "$release_wf" \
+  || fail 'release.yml must attest the Windows setup.exe by subject-path'
+grep -Fq 'gh attestation verify "$asset"' "$release_wf" \
+  || fail 'release.yml must verify the Windows asset attestations'
+step_line() {
+  local line
+  line="$(grep -nF -- "- name: $1" "$release_wf" | head -n 1 | cut -d: -f1)"
+  [[ -n "$line" ]] || fail "publish step missing: $1"
+  printf '%s\n' "$line"
+}
+zip_attest="$(step_line 'Attest Windows portable ZIP provenance')"
+setup_attest="$(step_line 'Attest Windows setup.exe provenance')"
+attest_verify="$(step_line 'Verify Windows asset attestations before upload')"
+asset_upload="$(step_line 'Publish or resume immutable GitHub Release assets')"
+latest_move="$(step_line 'Move latest only after immutable publication attestations and release assets')"
+(( zip_attest < attest_verify && setup_attest < attest_verify && attest_verify < asset_upload && asset_upload < latest_move )) \
+  || fail 'Windows attestations must be verified before the asset upload and before latest'
+# The verification step is blocking: no condition and no continue-on-error until the upload step.
+if sed -n "${attest_verify},${asset_upload}p" "$release_wf" | grep -Eq '^ {8}(if|continue-on-error):'; then
+  fail 'attestation verification must be unconditional and blocking'
+fi
+
+# AUD-DEP-02: a vX.Y.Z-rc.N tag publishes a GitHub pre-release and never moves latest.
+grep -Fq -- '-rc\.[1-9][0-9]*' scripts/release/validate-release-tag.sh \
+  || fail 'validate-release-tag.sh must accept vX.Y.Z-rc.N pre-release tags'
+grep -Fq -- '--prerelease --latest=false' scripts/release/publish-github-release-assets.sh \
+  || fail 'publish-github-release-assets.sh must create pre-releases outside latest'
+grep -Fq 'NEXUS_PRERELEASE: ${{ steps.channel.outputs.prerelease }}' "$release_wf" \
+  || fail 'release.yml latest step must read the validated release channel'
+grep -Fq 'latest is left unchanged' "$release_wf" \
+  || fail 'release.yml must leave latest unchanged for a pre-release tag'
+
+# --- Sprint 9 : maven-build (AUD-DEP-05, AUD-DEP-06, AUD-DEP-07) ---
+python3 - <<'PY' || fail 'Sprint 9 maven-build contract drift (see message above)'
+import re
+import sys
+import xml.etree.ElementTree as ET
+
+NS = {"m": "http://maven.apache.org/POM/4.0.0"}
+pom = ET.parse("pom.xml").getroot()
+
+
+def drift(message):
+    print(f"final-audit-contracts: {message}", file=sys.stderr)
+    sys.exit(1)
+
+
+props = pom.find("m:properties", NS)
+timestamp = props.findtext("m:project.build.outputTimestamp", default="", namespaces=NS).strip()
+if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", timestamp):
+    drift("pom.xml must pin project.build.outputTimestamp as an ISO-8601 UTC instant (AUD-DEP-05)")
+
+managed = {}
+for plugin in pom.findall("m:build/m:pluginManagement/m:plugins/m:plugin", NS):
+    managed[plugin.findtext("m:artifactId", namespaces=NS)] = plugin.findtext("m:version", default="", namespaces=NS)
+for artifact in (
+    "maven-clean-plugin",
+    "maven-resources-plugin",
+    "maven-jar-plugin",
+    "maven-install-plugin",
+    "maven-deploy-plugin",
+    "maven-site-plugin",
+):
+    version = managed.get(artifact, "")
+    if not re.fullmatch(r"\$\{[A-Za-z0-9.-]+\}", version):
+        drift(f"pluginManagement must pin {artifact} through a version property (AUD-DEP-06)")
+    value = props.findtext(f"m:{version[2:-1]}", default="", namespaces=NS).strip()
+    if not re.fullmatch(r"\d+(\.\d+)+", value):
+        drift(f"{artifact} must use a stable release version, got {value!r} (AUD-DEP-06)")
+
+rules = None
+for plugin in pom.findall("m:build/m:plugins/m:plugin", NS):
+    if plugin.findtext("m:artifactId", namespaces=NS) == "maven-enforcer-plugin":
+        rules = plugin.find("m:executions/m:execution/m:configuration/m:rules", NS)
+if rules is None:
+    drift("maven-enforcer-plugin rules are missing from pom.xml")
+if rules.findtext("m:requireMavenVersion/m:version", default="", namespaces=NS).strip() != "[3.10.0,)":
+    drift("requireMavenVersion must follow the Maven wrapper: [3.10.0,) (AUD-DEP-06)")
+for rule in ("requirePluginVersions", "requireUpperBoundDeps"):
+    if rules.find(f"m:{rule}", NS) is None:
+        drift(f"maven-enforcer-plugin must enforce {rule} (AUD-DEP-06)")
+
+notices = None
+for execution in pom.iter("{http://maven.apache.org/POM/4.0.0}execution"):
+    if execution.findtext("m:id", namespaces=NS) == "aggregate-third-party-notices":
+        notices = execution.find("m:configuration", NS)
+if notices is None:
+    drift("aggregate-third-party-notices execution is missing from pom.xml")
+if notices.findtext("m:failOnBlacklist", default="", namespaces=NS).strip() != "true":
+    drift("aggregate-third-party-notices must set failOnBlacklist=true (AUD-DEP-07)")
+included = [e.text.strip() for e in notices.findall("m:includedLicenses/m:includedLicense", NS) if e.text and e.text.strip()]
+if not included:
+    drift("aggregate-third-party-notices must declare a non-empty includedLicenses list (AUD-DEP-07)")
+merges = notices.findall("m:licenseMerges/m:licenseMerge", NS)
+if not merges:
+    drift("aggregate-third-party-notices must normalise licence labels through licenseMerges (AUD-DEP-07)")
+for license_name in included:
+    if not any(m.text and m.text.split("|")[0].strip() == license_name for m in merges):
+        drift(f"whitelisted licence {license_name!r} must be the normalised label of a licenseMerge (AUD-DEP-07)")
+PY
+grep -q 'project.build.outputTimestamp' docs/developer/release-and-recovery.md \
+  || fail 'release procedure must document the outputTimestamp update (AUD-DEP-05)'
+grep -q 'requireUpperBoundDeps' .claude/skills/nexus-dependency-bump/SKILL.md \
+  || fail 'nexus-dependency-bump must document the requireUpperBoundDeps failure (AUD-DEP-06)'
+grep -q 'failOnBlacklist=true' docs/developer/ci-and-supply-chain.md \
+  || fail 'ci-and-supply-chain must document the licence whitelist (AUD-DEP-07)'
+
+# Workflows run Maven only through the verified wrapper: requireMavenVersion follows the
+# wrapper, and a runner's preinstalled mvn is older.
+if grep -R -n -E 'Get-Command mvn\b|command -v mvn\b|(^|[[:space:]&|;(])mvn(\.cmd)?[[:space:]]' .github/workflows; then
+  fail 'workflows must call Maven through ./mvnw or .\mvnw.cmd, never an installed mvn'
+fi
+
+# --- Sprint 9 : version-from-pom (AUD-QUA-12) ---
+# The product version is written only in the pom files. The Linux CI job and
+# the Windows gate read it from pom.xml; tool versions (pinned actions, Maven
+# wrapper distribution, CycloneDX spec) are not product versions and stay out
+# of this check.
+product_version="$(sed -n 's:^    <version>\([^<]*\)</version>.*:\1:p' pom.xml | head -n 1 | tr -d '\r')"
+[[ -n "$product_version" ]] || fail 'unable to read the product version from pom.xml'
+product_version_files=(
+  .github/workflows/ci.yml
+  scripts/validate-phase-6.ps1
+)
+for path in "${product_version_files[@]}"; do
+  if grep -n -E 'nexus-context-engine-[0-9]+\.[0-9]+\.[0-9]+' "$path"; then
+    fail "literal product version in a deliverable name in $path (read it from pom.xml)"
+  fi
+  if grep -n -F -w -- "$product_version" "$path" \
+      | grep -v -E 'uses: [^@]+@[0-9a-f]{40}|apache-maven-[0-9]'; then
+    fail "literal product version $product_version in $path (read it from pom.xml)"
+  fi
+  # Any other bare X.Y.Z (a former or future product version) is refused too;
+  # tool versions are recognised by their context and stay allowed.
+  if grep -n -E '(^|[^0-9A-Za-z./@+_-])[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?([^0-9A-Za-z.+_]|$)' "$path" \
+      | grep -v -E 'uses: [^@]+@[0-9a-f]{40}|apache-maven-[0-9]|java-version:|specVersion|maven\.apache\.org/POM'; then
+    fail "literal X.Y.Z version in $path (read the product version from pom.xml)"
+  fi
+done
+grep -q 'NEXUS_VERSION=' .github/workflows/ci.yml \
+  || fail 'Linux CI job must export the product version read from pom.xml'
+grep -q 'rootPom.project.version' scripts/validate-phase-6.ps1 \
+  || fail 'Windows gate must read the product version from pom.xml'
+
+# --- Sprint 9 : adr-publication (AUD-DEP-02, tâche 9.2) ---
+# The release publication policy ADR completes GEN-0031 and stays referenced by the
+# immutable release publishing guide and by both ADR indexes.
+PUBLICATION_ADR_NAME="SEC-0068-publier-les-releases-depuis-un-environnement-protege-avec-des-assets-attestes.md"
+PUBLICATION_ADR="docs/architecture/adr/$PUBLICATION_ADR_NAME"
+[[ -f "$PUBLICATION_ADR" ]] \
+  || fail 'release publication policy ADR SEC-0068 is missing'
+grep -q -- '- \*\*Complète\*\* : \[GEN-0031\]' "$PUBLICATION_ADR" \
+  || fail 'SEC-0068 must complete GEN-0031'
+for needle in 'environment: release' 'subject-path' 'gh attestation verify' 'vX.Y.Z-rc.N' 'secrets: inherit'; do
+  grep -q --fixed-strings "$needle" "$PUBLICATION_ADR" \
+    || fail "SEC-0068 publication policy drift: missing $needle"
+done
+for index in docs/architecture/adr/README.md docs/architecture/arc42/09-decisions.md docs/developer/immutable-release-publishing.md; do
+  grep -q --fixed-strings "$PUBLICATION_ADR_NAME" "$index" \
+    || fail "SEC-0068 must be referenced from $index"
+done
+# --- Fin Sprint 9 : adr-publication ---
 
 echo 'final-audit-contracts=PASS'

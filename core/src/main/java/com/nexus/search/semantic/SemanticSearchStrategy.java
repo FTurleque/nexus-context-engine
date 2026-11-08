@@ -6,18 +6,21 @@ import com.nexus.index.CanonicalIndexFingerprint;
 import com.nexus.index.FileCategory;
 import com.nexus.index.IndexRepository;
 import com.nexus.project.ProjectDescriptor;
-import com.nexus.search.CandidateType;
-import com.nexus.search.SearchCandidate;
-import com.nexus.search.SearchSignals;
+import com.nexus.search.candidate.CandidateType;
+import com.nexus.search.candidate.SearchCandidate;
+import com.nexus.search.SearchQueryContext;
+import com.nexus.search.candidate.SearchSignals;
 import com.nexus.search.SearchStrategy;
 import com.nexus.security.SensitiveContentRedactor;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -94,8 +97,24 @@ public final class SemanticSearchStrategy implements SearchStrategy {
 
     @Override
     public List<SearchCandidate> search(ProjectDescriptor project, String query, int limit) throws IOException {
+        return search(project, query, limit, SearchQueryContext.create());
+    }
+
+    /**
+     * Le vecteur de requête est demandé au provider une seule fois par contexte de
+     * requête (donc une fois pour tous les projets d'une requête fédérée), sur la
+     * requête redactée ; une indisponibilité du provider est mémorisée de la même
+     * façon et dégrade chaque projet avec le même diagnostic.
+     */
+    @Override
+    public List<SearchCandidate> search(
+            ProjectDescriptor project,
+            String query,
+            int limit,
+            SearchQueryContext queryContext) throws IOException {
         Objects.requireNonNull(project, "project");
         Objects.requireNonNull(query, "query");
+        Objects.requireNonNull(queryContext, "queryContext");
         if (query.isBlank()) {
             throw new IllegalArgumentException("query must not be blank");
         }
@@ -120,15 +139,12 @@ public final class SemanticSearchStrategy implements SearchStrategy {
             }
         }
 
-        final float[] queryVector;
-        try {
-            String embeddingQuery = SensitiveContentRedactor.redact(query);
-            queryVector = Objects.requireNonNull(
-                    embeddingProvider.embedQuery(embeddingQuery),
-                    "embedding vector");
-        } catch (EmbeddingProviderUnavailableException exception) {
-            return degradedProvider(project, exception);
+        QueryVector shared = queryContext.shared(
+                queryVectorKey(), QueryVector.class, () -> embedQuery(query, queryContext));
+        if (shared.unavailable() != null) {
+            return degradedProvider(project, shared.unavailable());
         }
+        final float[] queryVector = shared.vector();
         if (queryVector.length != embeddingProvider.dimensions()) {
             throw new IOException(
                     "Le provider d'embeddings " + embeddingProvider.modelId()
@@ -142,6 +158,12 @@ public final class SemanticSearchStrategy implements SearchStrategy {
         } catch (IOException exception) {
             return degradedIndex(project, exception);
         }
+        return toCandidates(project, hits, limit);
+    }
+
+    /** Candidats éligibles au score positif, dans l'ordre de l'index, bornés à {@code limit}. */
+    private static List<SearchCandidate> toCandidates(
+            ProjectDescriptor project, List<SemanticSearchHit> hits, int limit) {
         List<SearchCandidate> candidates = new ArrayList<>(hits.size());
         for (SemanticSearchHit hit : hits) {
             if (!isGenericSearchEligible(hit.category()) || hit.score() <= 0.0d) {
@@ -161,6 +183,24 @@ public final class SemanticSearchStrategy implements SearchStrategy {
             }
         }
         return List.copyOf(candidates);
+    }
+
+    private String queryVectorKey() {
+        return "semantic-query-vector|" + embeddingProvider.providerId() + "|" + embeddingProvider.modelId();
+    }
+
+    private QueryVector embedQuery(String query, SearchQueryContext queryContext) throws IOException {
+        String embeddingQuery = SensitiveContentRedactor.redact(query);
+        try {
+            // Le temps restant de l'échéance globale plafonne le délai de l'appel (BE-0064).
+            Optional<Duration> remaining = queryContext.remainingTime();
+            float[] vector = remaining.isPresent()
+                    ? embeddingProvider.embedQuery(embeddingQuery, remaining.get())
+                    : embeddingProvider.embedQuery(embeddingQuery);
+            return new QueryVector(Objects.requireNonNull(vector, "embedding vector"), null);
+        } catch (EmbeddingProviderUnavailableException exception) {
+            return new QueryVector(null, exception);
+        }
     }
 
     private List<SearchCandidate> degradedProvider(
@@ -217,6 +257,28 @@ public final class SemanticSearchStrategy implements SearchStrategy {
             case DOCUMENTATION -> CandidateType.DOCUMENTATION;
             default -> CandidateType.FILE;
         };
+    }
+
+    /**
+     * Résultat mémorisé par requête : un vecteur, ou l'indisponibilité du provider. Classe plutôt que
+     * record : le tableau est partagé tel quel entre projets, sans égalité structurelle.
+     */
+    private static final class QueryVector {
+        private final float[] vector;
+        private final EmbeddingProviderUnavailableException unavailable;
+
+        private QueryVector(float[] vector, EmbeddingProviderUnavailableException unavailable) {
+            this.vector = vector;
+            this.unavailable = unavailable;
+        }
+
+        float[] vector() {
+            return vector;
+        }
+
+        EmbeddingProviderUnavailableException unavailable() {
+            return unavailable;
+        }
     }
 
     private record CachedFingerprint(long generation, String fingerprint) {

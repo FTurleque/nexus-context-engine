@@ -1,10 +1,14 @@
 package com.nexus.search;
 
+import com.nexus.config.ResultLimitPolicy;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.ranking.ContextRanker;
 import com.nexus.ranking.RankedCandidate;
 import com.nexus.ranking.RankingRequest;
 import com.nexus.ranking.graph.GraphCandidateEnricher;
+import com.nexus.search.candidate.CandidateEnricher;
+import com.nexus.search.candidate.CandidateMerger;
+import com.nexus.search.candidate.SearchCandidate;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -42,7 +46,21 @@ public final class SearchService {
             String query,
             int limit,
             boolean explain) throws IOException {
+        return search(project, query, limit, explain, SearchQueryContext.create());
+    }
+
+    /**
+     * Recherche d'un projet avec le contexte de requête d'une requête fédérée :
+     * les coûts qui ne dépendent que de la requête sont mutualisés entre projets.
+     */
+    public List<RankedCandidate> search(
+            ProjectDescriptor project,
+            String query,
+            int limit,
+            boolean explain,
+            SearchQueryContext queryContext) throws IOException {
         Objects.requireNonNull(project, "project");
+        Objects.requireNonNull(queryContext, "queryContext");
         String normalizedQuery = QueryPolicy.normalize(query);
         ResultLimitPolicy.validate(limit);
         com.nexus.project.ProjectReadiness.requireReady(project);
@@ -50,7 +68,7 @@ public final class SearchService {
         int retrievalLimit = Math.clamp((long) limit * 3, 20, ResultLimitPolicy.MAX_RESULT_LIMIT);
         List<SearchCandidate> rawCandidates = new ArrayList<>();
         for (SearchStrategy strategy : strategies) {
-            rawCandidates.addAll(strategy.search(project, normalizedQuery, retrievalLimit));
+            rawCandidates.addAll(strategy.search(project, normalizedQuery, retrievalLimit, queryContext));
         }
 
         List<SearchCandidate> enriched = candidateMerger.merge(rawCandidates);

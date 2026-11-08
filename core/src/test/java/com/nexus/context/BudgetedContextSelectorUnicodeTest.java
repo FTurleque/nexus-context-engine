@@ -1,6 +1,8 @@
 package com.nexus.context;
 
-import com.nexus.search.CandidateType;
+import com.nexus.context.model.ContextFragment;
+import com.nexus.context.model.ContextSelectionResult;
+import com.nexus.search.candidate.CandidateType;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;

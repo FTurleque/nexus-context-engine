@@ -35,6 +35,13 @@ public interface IndexRepository {
     /** Recherche bornée de symboles, filtrée avant matérialisation des résultats. */
     List<IndexedSymbol> searchSymbols(UUID projectId, String query, int limit);
 
+    /**
+     * Recherche bornée de plusieurs requêtes en un nombre de requêtes SQL qui ne croît pas avec leur nombre
+     * (AUD-PRF-09). Rend, dans l'ordre des requêtes distinctes, le résultat de {@link #searchSymbols(UUID, String, int)}
+     * de chacune, limité à {@code limit} par requête ; un symbole trouvé par deux requêtes y figure deux fois.
+     */
+    List<IndexedSymbol> searchSymbols(UUID projectId, List<String> queries, int limit);
+
     List<SymbolRelation> findRelations(UUID projectId);
 
     /** Projection minimale des imports utilisée pour construire le graphe de fichiers. */
@@ -53,6 +60,14 @@ public interface IndexRepository {
     List<SymbolRelation> searchRelations(UUID projectId, String symbol, int limit);
 
     void applyChanges(UUID projectId, List<IndexedFileUpdate> updates, Set<String> removedPaths);
+
+    /**
+     * Ouvre les écritures d'une indexation : les analyses sont mises en attente par lots bornés puis
+     * publiées en une transaction, au lieu d'être retenues en mémoire jusqu'à un {@link #applyChanges}
+     * unique. Les analyses en attente laissées par une indexation interrompue sont écartées à
+     * l'ouverture.
+     */
+    IndexWriteSession openWriteSession(UUID projectId);
 
     void replaceExternalCodeIntelligence(UUID projectId, CodeIntelligenceSnapshot snapshot);
 

@@ -1,11 +1,5 @@
 package com.nexus.search.semantic;
 
-import com.nexus.search.semantic.ollama.OllamaEmbeddingProvider;
-import com.nexus.search.semantic.ollama.OllamaEndpointResolver;
-
-import java.net.URI;
-import java.time.Duration;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -64,57 +58,6 @@ public final class SemanticSearchConfiguration {
                 semanticRrfWeight);
     }
 
-    /**
-     * Résout l'opt-in opérationnel commun à tous les adaptateurs.
-     *
-     * <p>Sans {@code NEXUS_SEMANTIC_PROVIDER}, la capacité reste strictement
-     * désactivée. La seule valeur supportée actuellement est {@code ollama}.</p>
-     */
-    public static SemanticSearchConfiguration fromEnvironment() {
-        String provider = environment(PROVIDER_ENV, "");
-        if (provider.isBlank() || "disabled".equalsIgnoreCase(provider) || "off".equalsIgnoreCase(provider)) {
-            return disabled();
-        }
-        if (!"ollama".equals(provider.toLowerCase(Locale.ROOT))) {
-            throw new IllegalArgumentException(
-                    PROVIDER_ENV + " supporte uniquement 'ollama' ou 'disabled' actuellement");
-        }
-
-        URI configuredBaseUri = URI.create(environment(
-                OLLAMA_BASE_URL_ENV,
-                OllamaEmbeddingProvider.DEFAULT_BASE_URI.toString()));
-        boolean dockerRuntime = "docker".equalsIgnoreCase(environment(RUNTIME_ENV, ""));
-        boolean allowInsecureRemote = booleanValue(
-                ALLOW_INSECURE_REMOTE_OLLAMA_ENV,
-                environment(ALLOW_INSECURE_REMOTE_OLLAMA_ENV, "false"));
-        URI baseUri = OllamaEndpointResolver.resolveForRuntime(
-                configuredBaseUri,
-                dockerRuntime,
-                allowInsecureRemote);
-        boolean runtimeLoopbackRewrite = dockerRuntime && !baseUri.equals(configuredBaseUri);
-        String model = environment(OLLAMA_MODEL_ENV, OllamaEmbeddingProvider.DEFAULT_MODEL);
-        int dimensions = boundedPositiveInt(
-                OLLAMA_DIMENSIONS_ENV,
-                environment(OLLAMA_DIMENSIONS_ENV, Integer.toString(OllamaEmbeddingProvider.DEFAULT_DIMENSIONS)),
-                MAX_OLLAMA_DIMENSIONS);
-        long timeoutSeconds = boundedPositiveLong(
-                OLLAMA_TIMEOUT_SECONDS_ENV,
-                environment(OLLAMA_TIMEOUT_SECONDS_ENV,
-                        Long.toString(OllamaEmbeddingProvider.DEFAULT_TIMEOUT.toSeconds())),
-                MAX_OLLAMA_TIMEOUT_SECONDS);
-        double weight = positiveDouble(
-                RRF_WEIGHT_ENV,
-                environment(RRF_WEIGHT_ENV, Double.toString(DEFAULT_SEMANTIC_RRF_WEIGHT)));
-
-        OllamaEmbeddingProvider ollama = new OllamaEmbeddingProvider(
-                baseUri,
-                model,
-                dimensions,
-                Duration.ofSeconds(timeoutSeconds),
-                allowInsecureRemote || runtimeLoopbackRewrite);
-        return enabled(ollama, weight);
-    }
-
     public boolean enabled() {
         return embeddingProvider != null;
     }
@@ -127,22 +70,7 @@ public final class SemanticSearchConfiguration {
         return semanticRrfWeight;
     }
 
-    private static String environment(String name, String defaultValue) {
-        String value = System.getenv(name);
-        return value == null || value.isBlank() ? defaultValue : value.trim();
-    }
-
-    private static boolean booleanValue(String name, String value) {
-        if ("true".equalsIgnoreCase(value)) {
-            return true;
-        }
-        if ("false".equalsIgnoreCase(value)) {
-            return false;
-        }
-        throw new IllegalArgumentException(name + " doit valoir true ou false");
-    }
-
-    static int boundedPositiveInt(String name, String value, int maximum) {
+    public static int boundedPositiveInt(String name, String value, int maximum) {
         if (maximum <= 0) {
             throw new IllegalArgumentException("maximum must be greater than zero");
         }
@@ -157,7 +85,7 @@ public final class SemanticSearchConfiguration {
         }
     }
 
-    static long boundedPositiveLong(String name, String value, long maximum) {
+    public static long boundedPositiveLong(String name, String value, long maximum) {
         if (maximum <= 0L) {
             throw new IllegalArgumentException("maximum must be greater than zero");
         }
@@ -169,19 +97,6 @@ public final class SemanticSearchConfiguration {
             return parsed;
         } catch (NumberFormatException exception) {
             throw new IllegalArgumentException(name + " doit être un entier", exception);
-        }
-    }
-
-    private static double positiveDouble(String name, String value) {
-        try {
-            double parsed = Double.parseDouble(value);
-            if (!Double.isFinite(parsed) || parsed <= 0.0d || parsed > MAX_SEMANTIC_RRF_WEIGHT) {
-                throw new IllegalArgumentException(
-                        name + " doit être > 0 et <= " + MAX_SEMANTIC_RRF_WEIGHT);
-            }
-            return parsed;
-        } catch (NumberFormatException exception) {
-            throw new IllegalArgumentException(name + " doit être un nombre", exception);
         }
     }
 }

@@ -3,7 +3,9 @@ package com.nexus.search.semantic;
 import com.nexus.config.NexusPaths;
 import com.nexus.index.CanonicalIndexFingerprint;
 import com.nexus.index.IndexRepository;
-import com.nexus.index.ProjectIndexingService;
+import com.nexus.index.SemanticIndexing;
+import com.nexus.index.service.ProjectIndexingService;
+import com.nexus.index.service.ProjectIndexingServices;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.scan.ProjectScanner;
 import com.nexus.persistence.sqlite.SqliteDatabase;
@@ -42,14 +44,14 @@ class SemanticIndexProvenanceIntegrationTest {
         var projects = new SqliteProjectRepository(database);
         var files = new SqliteIndexRepository(database);
         var project = new ProjectRegistry(projects).register(root, "scalar");
-        service(paths, projects, files, null).index(project.id());
+        service(paths, projects, files, SemanticIndexing.disabled()).index(project.id());
         var model = new TestEmbeddingProvider("unchanged-model", 3);
         var semantic = new LuceneSemanticSearchIndex(paths, 3);
         String fingerprint = fingerprint(files, project);
         var legacy = SemanticIndexProvenance.current(fingerprint, model,
                 "content-v3;maxEmbeddingChars=12000;excerptChars=320");
         semantic.rebuild(project.id(), legacy, List.of());
-        service(paths, projects, files, null).rebuild(project.id());
+        service(paths, projects, files, SemanticIndexing.disabled()).rebuild(project.id());
         assertEquals(fingerprint, fingerprint(files, project));
         assertFalse(semantic.isCompatible(project.id(), SemanticIndexProvenance.current(fingerprint, model)));
         assertTrue(new SemanticSearchStrategy(model, semantic, files).search(project, "App", 5).isEmpty());
@@ -68,7 +70,7 @@ class SemanticIndexProvenanceIntegrationTest {
         var projects = new SqliteProjectRepository(database);
         var files = new SqliteIndexRepository(database);
         var project = new ProjectRegistry(projects).register(root, "legacy");
-        service(paths, projects, files, null).index(project.id());
+        service(paths, projects, files, SemanticIndexing.disabled()).index(project.id());
         // Reproduire exactement l'ancien hash sur un corpus ordinaire : aucun
         // backslash n'est nécessaire pour rendre le changement de format effectif.
         var digest = java.security.MessageDigest.getInstance("SHA-256");
@@ -124,7 +126,7 @@ class SemanticIndexProvenanceIntegrationTest {
         // Simule un runtime avec NEXUS_SEMANTIC_ENABLED=false pendant que le
         // projet évolue : SQLite/Lucene lexical sont mis à jour, pas les vecteurs.
         Files.writeString(source, "package demo; class App { void run() {} void stop() {} }\n");
-        service(paths, projectRepository, indexRepository, null).index(project.id());
+        service(paths, projectRepository, indexRepository, SemanticIndexing.disabled()).index(project.id());
 
         String changedFingerprint = fingerprint(indexRepository, project);
         assertFalse(semanticIndex.isCompatible(
@@ -217,8 +219,8 @@ class SemanticIndexProvenanceIntegrationTest {
             NexusPaths paths,
             ProjectRepository projectRepository,
             IndexRepository indexRepository,
-            SemanticIndexingService semanticIndexingService) {
-        return new ProjectIndexingService(
+            SemanticIndexing semanticIndexingService) {
+        return ProjectIndexingServices.withSemantic(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),

@@ -24,7 +24,7 @@ class JdtProcessEnvironmentTest {
         environment.put("SSH_AUTH_SOCK", "/tmp/agent.sock");
         environment.put("CLIENT_PORT", "1234");
 
-        ProcessBuilder.sanitizeEnvironment(environment);
+        BoundedJdtProcessBuilder.sanitizeEnvironment(environment);
 
         assertTrue(environment.containsKey("PATH"));
         assertTrue(environment.containsKey("JAVA_HOME"));

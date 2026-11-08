@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.nexus.config.NexusPaths;
 import com.nexus.index.FileCategory;
-import com.nexus.search.SearchDocument;
+import com.nexus.index.SearchDocument;
 import com.nexus.search.lucene.LuceneSearchIndex;
 import com.nexus.search.semantic.SemanticVectorDocument;
 import com.nexus.search.semantic.lucene.LuceneSemanticSearchIndex;

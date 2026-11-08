@@ -71,6 +71,14 @@ Cette section présente un index synthétique avec statut, date et relations de 
 | [ARCH-0059](../adr/ARCH-0059-verifier-les-frontieres-du-coeur-par-un-test-d-architecture.md) | Vérifier les frontières du cœur par un test d'architecture | Proposed | 2026-10-30 |
 | [GEN-0060](../adr/GEN-0060-qualifier-la-recherche-semantique-reelle-en-deux-corpus.md) | Qualifier la recherche sémantique réelle en deux corpus, hors du chemin de release | Proposed | 2026-10-30 |
 | [ARCH-0061](../adr/ARCH-0061-decider-le-contrat-de-sortie-publique-dans-la-projection-du-coeur.md) | Décider le contrat de sortie publique dans la projection du cœur | Proposed | 2026-10-30 |
+| [DATA-0062](../adr/DATA-0062-mettre-en-attente-les-analyses-d-indexation-dans-sqlite.md) | Mettre en attente les analyses d'indexation dans SQLite et committer Lucene une fois | Proposed | 2026-11-07 |
+| [ARCH-0063](../adr/ARCH-0063-casser-les-cycles-de-packages-du-coeur-par-des-packages-de-modele-feuilles.md) | Casser les cycles de packages du cœur par des packages de modèle feuilles | Proposed | 2026-11-07 |
+| [BE-0064](../adr/BE-0064-borner-la-federation-par-une-echeance-globale-sans-parallelisme.md) | Borner la fédération par une échéance globale vérifiée entre projets, sans parallélisme | Proposed | 2026-11-07 |
+| [BE-0065](../adr/BE-0065-dimensionner-les-caches-git-sur-le-scope-federe.md) | Dimensionner les caches Git des runtimes longue durée sur le scope fédéré | Proposed | 2026-11-07 |
+| [ARCH-0066](../adr/ARCH-0066-resoudre-la-configuration-dans-la-composition-root.md) | Résoudre la configuration NEXUS dans la composition root et l'injecter | Proposed | 2026-11-07 |
+| [BE-0067](../adr/BE-0067-plafonner-la-decouverte-du-depot-git-a-la-racine-du-projet.md) | Plafonner la découverte du dépôt Git à la racine du projet, sauf dépôt parent de l'utilisateur courant | Proposed | 2026-11-07 |
+| [SEC-0068](../adr/SEC-0068-publier-les-releases-depuis-un-environnement-protege-avec-des-assets-attestes.md) | Publier les releases depuis un environnement protégé, avec des assets attestés et des tags de pré-version | Proposed | 2026-11-07 |
+| [DATA-0069](../adr/DATA-0069-dimensionner-le-cache-de-pages-sqlite-des-connexions.md) | Dimensionner le cache de pages SQLite des connexions | Proposed | 2026-11-08 |
 | [ADR-0000](../adr/archive/0000-adopter-les-adr-madr.md) | Adopter MADR comme format et définir la gouvernance des ADR | Superseded (GEN-0057) | 2026-07-19 |
 | [ADR-0056](../adr/archive/0056-regrouper-le-registre-des-adr-dans-la-documentation-d-architecture.md) | Regrouper le registre des ADR dans la documentation d'architecture | Superseded (GEN-0057) | 2026-10-29 |
 
@@ -78,8 +86,8 @@ Cette section présente un index synthétique avec statut, date et relations de 
 
 ### Fondations
 
-ARCH-0001, GEN-0002, ARCH-0003, ARCH-0005 — positionnement, technologie de base et
-principe local-first.
+ARCH-0001, GEN-0002, ARCH-0003, ARCH-0005, ARCH-0066 — positionnement, technologie de base,
+principe local-first et configuration résolue par la composition root.
 
 ### Persistance et indexation
 
@@ -99,7 +107,8 @@ standards natifs, budget, estimateur de tokens, sélection gloutonne.
 
 ### Sources contextuelles
 
-BE-0032, SEC-0033, BE-0034, BE-0035 — instructions natives, skills, Git.
+BE-0032, SEC-0033, BE-0034, BE-0035, BE-0067 — instructions natives, skills, Git et portée de la
+découverte du dépôt Git.
 
 ### Providers intelligence
 
@@ -111,18 +120,25 @@ MINOS.
 GEN-0015, BE-0016, ARCH-0017, ARCH-0030, GEN-0031, ARCH-0039, ARCH-0040, ARCH-0041, ARCH-0061 —
 CLI, REST, MCP, découplage, packaging.
 
+### Chaîne de release
+
+GEN-0031, SEC-0068 — packaging de la CLI, publication depuis l'environnement protégé
+`release`, attestation de tous les assets, tags de pré-version.
+
 ### Écosystème et fédération
 
-ARCH-0042, BE-0043 — AI Skills Registry, fédération locale.
+ARCH-0042, BE-0043, BE-0064 — AI Skills Registry, fédération locale, échéance globale de la
+fédération.
 
 ### Robustesse, cohérence et confinement
 
 DATA-0045, BE-0046, SEC-0047, SEC-0048, DATA-0049, DATA-0050, DATA-0051, DATA-0052,
-BE-0053, DATA-0054, DATA-0055 — cycle de vie Lucene, cache Git, filesystems et
-traversée, identité repository, lots et temporaires SQLite, cohérence des index
-dérivés, lectures fédérées, reconstructions sémantiques.
+BE-0053, DATA-0054, DATA-0055, DATA-0062, BE-0065, DATA-0069 — cycle de vie Lucene, cache Git, filesystems et
+traversée, identité repository, lots, temporaires et cache de pages SQLite, cohérence des index
+dérivés, lectures fédérées, reconstructions sémantiques, mise en attente des analyses
+d'indexation.
 
 ### Gouvernance
 
-ARCH-0004, DATA-0018, DATA-0019, GEN-0057, ARCH-0059 — module unique, UUID, NEXUS_HOME,
+ARCH-0004, DATA-0018, DATA-0019, GEN-0057, ARCH-0059, ARCH-0063 — module unique, UUID, NEXUS_HOME,
 registre des ADR au format Archgate (remplace ADR-0000 et ADR-0056, archivés).

@@ -2,7 +2,7 @@ package com.nexus.search;
 
 import com.nexus.config.NexusPaths;
 import com.nexus.index.IndexRepository;
-import com.nexus.index.ProjectIndexingService;
+import com.nexus.index.service.ProjectIndexingServices;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.scan.ProjectScanner;
 import com.nexus.persistence.sqlite.SqliteDatabase;
@@ -14,6 +14,7 @@ import com.nexus.project.ProjectRepository;
 import com.nexus.ranking.DeterministicContextRanker;
 import com.nexus.ranking.RankedCandidate;
 import com.nexus.ranking.graph.GraphCandidateEnricher;
+import com.nexus.search.candidate.SearchSignals;
 import com.nexus.search.lucene.LuceneFileSearchStrategy;
 import com.nexus.search.lucene.LuceneSearchIndex;
 import org.junit.jupiter.api.Test;
@@ -73,7 +74,7 @@ class SearchServiceIntegrationTest {
         ProjectDescriptor project = new ProjectRegistry(projectRepository).register(projectRoot, "demo");
         LuceneSearchIndex searchIndex = new LuceneSearchIndex(paths);
 
-        new ProjectIndexingService(
+        ProjectIndexingServices.of(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),

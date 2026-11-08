@@ -1,5 +1,6 @@
 package com.nexus.context;
 
+import com.nexus.context.model.ContextFragment;
 import com.nexus.context.source.ContextSourceDescriptor;
 import com.nexus.context.source.ContextSourceDiscoveryResult;
 import com.nexus.project.ProjectDescriptor;

@@ -1,11 +1,13 @@
 package com.nexus.context;
 
+import com.nexus.context.model.ContextItem;
+import com.nexus.context.model.ContextSelectionResult;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;
 import com.nexus.ranking.RankedCandidate;
-import com.nexus.search.CandidateType;
-import com.nexus.search.SearchCandidate;
+import com.nexus.search.candidate.CandidateType;
+import com.nexus.search.candidate.SearchCandidate;
 import com.nexus.testsupport.SymbolicLinks;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

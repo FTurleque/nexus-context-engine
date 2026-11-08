@@ -42,16 +42,26 @@ sequenceDiagram
     Scanner->>Hash: SHA-256
     Scanner-->>SVC: ScannedFile[]
 
+    SVC->>Lucene: openSession (un writer par index dérivé)
+    SVC->>SQLite: openWriteSession
+
     loop fichier nouveau ou modifié
         SVC->>Analyzer: analyze(projectRoot, file) si un analyseur structurel le supporte
         Analyzer-->>SVC: AnalysisResult
+        opt lot de 128 fichiers ou 16 MiB atteint
+            SVC->>Lucene: applyChanges du lot, sans commit
+            SVC->>SQLite: stage(analyses du lot), courte transaction
+        end
     end
 
-    SVC->>SQLite: applyChanges(updates, removedPaths)
-    SVC->>Lucene: applyChanges ou rebuild
+    SVC->>Lucene: commit unique (ou rollback si échec)
+    SVC->>SQLite: publish (faits canoniques + génération), une transaction
+    SVC->>Scanner: scan de contrôle de cohérence
     SVC->>Repo: status READY + lastIndexedAt
     SVC-->>CLI: IndexingReport
 ```
+
+La barrière de publication enchaîne dans cet ordre : commit des index Lucene, publication canonique (qui incrémente la génération), scan de contrôle, puis `READY`. Rien n'est servi avant `READY` : un échec avant le commit Lucene laisse la génération, les faits canoniques et les index dérivés précédents intacts ; un échec après laisse le projet `FAILED`, reconstruit au prochain passage. Voir [§ 9](#9-coûts-mesurés-du-pipeline).
 
 ## 3. Enregistrement d'un projet
 
@@ -281,6 +291,66 @@ classDiagram
     AnalysisResult --> SymbolRelation
 ```
 
+## 9. Coûts mesurés du pipeline
+
+Cette section porte les conclusions durables des mesures de coût du pipeline ; les valeurs relevées, leur date, leur environnement et leur protocole sont dans [le relevé du 2026-11-07](../project/history/indexing-heap-and-hashing-measures-2026-11-07.md).
+
+### Rétention des analyses et écriture SQLite
+
+Avant la tâche 2.2 de `sprint-05-indexation-et-ecriture-sqlite`, `IndexDocumentPublisher.publish` bornait les **documents** retenus (128 fichiers ou 16 MiB par lot) mais accumulait les `IndexedFileUpdate` de **tous** les fichiers modifiés jusqu'à une écriture SQLite unique : le heap vivant d'un rebuild croissait linéairement avec le nombre de fichiers modifiés, de l'ordre de quelques Kio par fichier pour des sources Java courants (valeur dans le relevé). Chaque lot ouvrait en outre un `IndexWriter` Lucene et le committait.
+
+Écrire les analyses dans SQLite au rythme des flushs, **dans la transaction d'indexation unique**, n'est pas viable : la transaction resterait ouverte pendant toute l'indexation (scan, analyse, Lucene) au lieu de la seule écriture finale. SQLite n'admet qu'un écrivain à la fois et la politique de reprise est de 5 s de `busy_timeout` et deux tentatives (voir [sqlite-write-contention.md](sqlite-write-contention.md)) : tout autre écrivain, y compris l'indexation d'un autre projet, échouerait en `SQLITE_BUSY` dès que l'indexation dépasse une dizaine de secondes. La durée de la transaction d'écriture finale représente déjà une fraction mesurable de la durée d'indexation ; la tenir pendant toute l'indexation multiplie le temps de verrou d'un facteur de l'ordre de vingt.
+
+L'alternative du design D2 est donc retenue (décision [DATA-0062](../architecture/adr/DATA-0062-mettre-en-attente-les-analyses-d-indexation-dans-sqlite.md)) : une **table de mise en attente** (migration V014) alimentée par de courtes transactions au rythme des flushs, vidée dans les tables canoniques par la transaction de publication.
+
+### Écritures d'une indexation
+
+`IndexDocumentPublisher.openPublication` ouvre, pour la durée d'une indexation :
+
+- une session lexicale (`SearchIndex.openSession`) et, si la recherche sémantique est composée, une session sémantique (`SemanticIndexingService.openSession`) : **un seul `IndexWriter` par index dérivé**, alimenté à chaque lot sans commit, committé **une seule fois** à la barrière de publication et annulé par `rollback` si l'indexation échoue (design D4, [DATA-0045](../architecture/adr/DATA-0045-conserver-les-writers-operation-scoped-et-mettre-en-cache-les-readers-lucene.md)). Un rebuild vide l'index dans la session : le contenu précédent reste servi par le dernier commit jusqu'à la barrière. Une indexation sans changement n'ouvre ni ne committe aucun writer. Les implémentations de `SearchIndex` et de `SemanticSearchIndex` sans writer propre gardent le comportement historique (chaque lot appliqué immédiatement) par la session de repli ;
+- une session d'écriture canonique (`IndexRepository.openWriteSession`) : les analyses des fichiers modifiés sont mises en attente, au plus 128 fichiers ou 16 MiB de sources par lot, par de courtes transactions (`stage`) qui ne modifient ni les tables canoniques ni la génération. `publish` les applique ensuite aux tables canoniques par pages d'au plus 128 fichiers, supprime les chemins retirés, vide la mise en attente et incrémente la génération, en **une** transaction.
+
+La rétention **des analyses** est donc bornée par le lot de publication, non par le nombre de fichiers modifiés (le heap vivant d'un rebuild reste en revanche croissant avec le nombre de fichiers par des structures que cette tâche ne borne pas et que la mesure n'a pas attribuées : voir le [relevé après mise en attente](../project/history/indexing-staged-writes-measures-2026-11-07.md)) ; `PublishOutcome` ne retient que le nombre de fichiers mis à jour et un indicateur de sources de code modifiées. Fermer la publication sans la publier annule les écritures Lucene non committées et écarte les analyses en attente ; l'ouverture d'une session d'un projet écarte aussi ce qu'une indexation interrompue y aurait laissé.
+
+### Import MINOS explicite
+
+L'import d'un export MINOS n'est pas une indexation : il remplace le snapshot externe d'un projet déjà `READY` sans scanner ni analyser. Il emprunte pourtant le même point d'entrée d'écriture que l'indexation : `ProjectIndexingService.importExternalCodeIntelligence` prend le verrou single-flight du projet puis le verrou inter-processus, et refuse une indexation ou un import concurrent du même projet avec le même diagnostic. `NexusApplication` et `NexusCli` ne composent ni n'instancient plus `MinosCodeIndexImporter` (composé par `NexusApplicationFactory`) ; la lecture bornée du payload passe par la façade. Le contrat JSON, la borne de transport et la provenance sont décrits dans [minos-code-intelligence.md](minos-code-intelligence.md).
+
+### Ordre de la barrière de publication
+
+Le design ne fixe pas l'ordre entre le commit Lucene, le contrôle de cohérence et la publication de la génération. Choix retenu, du plus prudent au plus tardif :
+
+1. commit Lucene lexical, puis sémantique ;
+2. publication canonique (faits et génération) ;
+3. imports et providers externes, puis scan de contrôle de cohérence ;
+4. statut `READY`.
+
+Le commit Lucene précède la génération pour que tout lecteur qui suit la génération voie un Lucene déjà committé ; le scan de contrôle reste le dernier garde-fou et son échec laisse le projet `FAILED`. Un échec avant le commit Lucene laisse la génération, les faits canoniques et les deux index dérivés précédents intacts. Un échec ou un arrêt brutal entre le commit Lucene et le statut `READY` laisse le projet non `READY` (`FAILED` ou `INDEXING`), donc reconstruit au prochain passage ; rien n'est servi avant `READY`, les lectures prenant le verrou partagé du projet ([DATA-0052](../architecture/adr/DATA-0052-garantir-la-coherence-des-lectures-et-des-index-derives.md)).
+
+### Double hachage
+
+`ProjectScanner` hache chaque fichier retenu (`FileHasher.sha256`), au scan initial puis au scan final de contrôle de cohérence ; `IndexDocumentPublisher.publish` relit en plus les octets des fichiers modifiés et les hache en mémoire. `ProjectScannerCorpusBudgetBenchmarkTest` rapporte la part du hachage seul dans un scan complet (`hashingSmallFiles`, `hashingMediumFiles`, scan initial et scan final).
+
+Décision du design D3 : **aucun raccourci par taille et date de modification n'est introduit**, ADR-0023 reste inchangé.
+
+- Le coût relevé par fichier est le même pour des fichiers de quelques dizaines d'octets et de 16 Kio : il vient de l'ouverture du fichier (`SafeFileIO.newInputStreamNoFollow` : validation du chemin sans suivi de lien, puis ouverture), pas du calcul SHA-256 dont la durée ne dépend pas mesurablement de la taille jusqu'à 16 Kio.
+- Un raccourci metadata-first supprimerait cette ouverture pour les fichiers inchangés, mais il retirerait aussi au scan final sa propriété de détecter une mutation qui préserve taille et date. Fixer le seuil qui justifie ce compromis exige une mesure sur le runner de référence (Linux, `scanner-corpus-benchmark.yml` en déclenchement manuel, profil `full`), pas sur un poste de développement Windows chargé.
+- Si cette mesure montre que l'ouverture domine un scan de contrôle d'indexation incrémentale sans modification, le raccourci se décide alors par un ADR qui complète ADR-0023 et fixe le seuil ; tant qu'elle n'existe pas, le constat reste fermé par la mesure sans changement de code.
+
+### Reproduire les mesures
+
+Les deux classes sont désactivées par défaut (`nexus.scale.benchmark.enabled`) :
+
+```powershell
+# Pic de heap d'un rebuild complet (corpus synthétique, 20 000 fichiers en profil full)
+./mvnw -B -ntp -pl core test -Dtest=IndexingHeapPeakBenchmarkTest -Dnexus.scale.benchmark.enabled=true -Dnexus.scale.benchmark.profile=full -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true
+
+# Part du hachage dans le scan initial et final
+./mvnw -B -ntp -pl core test -Dtest=ProjectScannerCorpusBudgetBenchmarkTest -Dnexus.scale.benchmark.enabled=true -Dnexus.scale.benchmark.profile=full -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true
+```
+
+`IndexingHeapPeakBenchmarkTest` écrit `target/indexing-heap-benchmark.json` (`nexus.indexing.heap.benchmark.output`). Il relève le heap occupé maximal échantillonné et le heap **vivant** maximal après collection forcée ; le nombre de fichiers se règle par `nexus.scale.benchmark.indexing.files`, la période de la sonde par `nexus.indexing.heap.benchmark.liveProbeMillis` et le heap de la JVM de test par `-DargLine=-Xmx…`. Il n'a pas de workflow : c'est un relevé manuel, à relancer avant et après toute modification de la rétention des analyses. Préférer les rapports (heap vivant par fichier, parts du hachage et de l'écriture) aux durées absolues, très sensibles à la charge de la machine.
+
 ## OpenSpec project-indexing-exclusions
 
 Spec : [`openspec/specs/project-indexing-exclusions/spec.md`](../../openspec/specs/project-indexing-exclusions/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
@@ -339,3 +409,79 @@ Exigences : `project-indexing-exclusions › Les worktrees Claude Code sont excl
 - [Proposition] Ajouter un scénario « Casse du nom » (`.Claude/WorkTrees/demo/README.md` exclu) si l'insensibilité à la casse doit devenir contractuelle ; le test existe déjà.
 - [Proposition] Ajouter une exigence sur la découverte native (instructions, skills) si l'exclusion y est voulue, avec un test dédié.
 - [Question] Les exclusions intégrées autres que `.claude/worktrees` (`.git`, `node_modules`, fichiers sensibles…) doivent-elles recevoir leur propre exigence OpenSpec ? Le Purpose parle de contenu « généré, sensible ou dupliqué » alors que les trois exigences ne visent que `.claude/worktrees`.
+
+## OpenSpec project-indexing-pipeline
+
+Spec : [`openspec/specs/project-indexing-pipeline/spec.md`](../../openspec/specs/project-indexing-pipeline/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+### Comportement existant vérifié
+
+| Étiquette | Fait | Source |
+|---|---|---|
+| [Existant vérifié] | `ProjectIndexingService.importExternalCodeIntelligence` prend le `LockSlot` single-flight (refus immédiat, même message qu'une indexation concurrente), puis le verrou inter-processus (même diagnostic « mutation d'index »), vérifie que le projet est `READY`, appelle le port `ExternalCodeIntelligencePayloadImporter` puis `replaceExternalCodeIntelligence`. | `core/src/main/java/com/nexus/index/service/ProjectIndexingService.java` ; `ProjectIndexingServiceMinosImportTest` |
+| [Existant vérifié] | `MinosCodeIndexImporter` est composé dans `NexusApplicationFactory` ; `NexusCli` lit le payload par `NexusApplication.readMinosPayload`, donc par la façade, et ne référence pas l'importeur. | `core/src/main/java/com/nexus/application/NexusApplicationFactory.java` ; `core/src/main/java/com/nexus/cli/NexusCli.java` |
+| [Existant vérifié] | La borne de transport du payload est `MinosCodeIndexImporter.MAX_EXPORT_BYTES` (128 MiB, ADR-0044), comptée en octets encodés. REST et MCP n'exposent aucun import MINOS en production : la borne commune est cette constante. | `MinosPayloadTransportBoundTest` |
+| [Existant vérifié] | `ProjectIndexingService` n'expose qu'un constructeur public, qui exige un `ProjectIndexLockManager` ; aucun code de production n'appelle `processLocalOnly()`, réservé aux tests (`ProjectIndexingServices`). | `ProjectIndexingServiceCompositionTest` |
+| [Existant vérifié] | Chaque index Lucene (lexical, sémantique) ouvre un `IndexWriter` à la première écriture d'une session (`openSession`), committe une fois à la barrière de publication et annule les écritures non committées à la fermeture sans commit ; une indexation sans changement n'ouvre ni ne committe rien. | `LuceneSearchIndexSessionTest` ; `LuceneSemanticSearchIndexSessionTest` |
+| [Existant vérifié] | Le benchmark d'échelle rapporte `reindexExistingFiles` (réindexation incrémentale et rebuild sur base peuplée, hors `sqliteOnly`). Aucun plafond n'est posé sur ce scénario. | `ScaleRegressionBenchmarkTest#benchmarkReindexExistingFiles` |
+
+### Vues
+
+Vue Diagramme de séquence — Comment un import MINOS prend-il les mêmes verrous qu'une indexation ? (existant)
+
+```mermaid
+sequenceDiagram
+    participant CLI as NexusCli
+    participant APP as NexusApplication
+    participant PIS as ProjectIndexingService
+    participant IMP as ExternalCodeIntelligencePayloadImporter
+    participant REP as IndexRepository
+    CLI->>APP: readMinosPayload (lecture bornée)
+    CLI->>APP: importMinos
+    APP->>PIS: importExternalCodeIntelligence
+    PIS->>PIS: LockSlot single-flight (tryLock)
+    alt indexation du même projet en cours
+        PIS-->>APP: refus, même message qu'une indexation concurrente
+    else projet libre
+        PIS->>PIS: verrou inter-processus
+        PIS->>IMP: importPayload
+        PIS->>REP: replaceExternalCodeIntelligence
+    end
+```
+
+Vue Diagramme de séquence — Comment une indexation enchaîne-t-elle les lots, le commit Lucene et la publication ? (existant)
+
+```mermaid
+sequenceDiagram
+    participant PIS as ProjectIndexingService
+    participant LUC as Index Lucene (lexical, sémantique)
+    participant REP as IndexRepository (session d'écriture)
+    loop chaque lot de 128 fichiers ou 16 MiB
+        PIS->>LUC: ajoute les documents, sans commit
+        PIS->>REP: met les analyses en attente (index_staged_*)
+    end
+    alt indexation réussie
+        PIS->>LUC: commit unique, lexical puis sémantique
+        PIS->>REP: publication canonique et génération
+        PIS->>PIS: imports externes, providers, scan de cohérence
+        PIS->>REP: statut READY
+    else échec avant le commit Lucene
+        PIS->>LUC: rollback
+        PIS->>REP: écarte la mise en attente
+    end
+```
+
+Exigences : `project-indexing-pipeline › Toute écriture d'index passe par ProjectIndexingService`, `project-indexing-pipeline › Le service d'indexation exige un gestionnaire de verrou explicite`, `project-indexing-pipeline › Un writer Lucene par indexation, committé à la publication`, `project-indexing-pipeline › La réindexation sur base peuplée est mesurée`.
+
+### Écarts et limites
+
+- [Écart] 1 — Un échec de la publication canonique après le commit Lucene laisse Lucene sur la nouvelle génération et SQLite sur la précédente ; le projet passe en `FAILED` (non servi) puis subit un rebuild complet. Aucun test n'injecte cet échec (DATA-0062).
+- [Écart] 2 — Les sessions de repli `DirectSearchIndexSession` et `DirectSemanticIndexSession` appliquent chaque lot immédiatement, sans rollback : les garanties « un commit » et « génération précédente servie » ne valent que pour les implémentations qui surchargent `openSession` (les implémentations Lucene de production).
+- Limite : la CLI reconnaît le dépassement de borne par la sous-chaîne « 128 MiB transport limit » du message ; une exception typée portée par le port rendrait ce contrat explicite.
+- Limite : le heap vivant d'un rebuild reste proportionnel au nombre de fichiers (listes du scan, table des fichiers existants, ensemble des chemins) ; mesure dans `docs/project/history/indexing-staged-writes-measures-2026-11-07.md`.
+
+### Propositions et questions ouvertes
+
+- [Proposition] Ajouter un test d'échec injecté de `publishCanonical` après le commit Lucene (statut `FAILED`, rebuild complet au passage suivant).
+- [Proposition] Remplacer la détection par sous-chaîne de la CLI par une exception typée de dépassement de borne.
+- [Question] Faut-il poser un plafond de régression sur `reindexExistingFiles` une fois des mesures répétées disponibles sur le runner CI ?

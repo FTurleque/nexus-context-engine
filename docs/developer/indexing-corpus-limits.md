@@ -68,7 +68,8 @@ Le scanner lève immédiatement une `IOException` précise dès l'entrée `N+1` 
 - profil PR `ci` : 2 000 petits fichiers ;
 - profil manuel `full` : 10 000 petits fichiers ;
 - les limites du scanner sont positionnées exactement sur le corpus mesuré ;
-- le rapport `target/scanner-corpus-benchmark.json` vérifie le nombre de fichiers, le volume exact et un budget de scan de 30 secondes.
+- le rapport `target/scanner-corpus-benchmark.json` vérifie le nombre de fichiers, le volume exact et un budget de scan de 30 secondes ;
+- il rapporte aussi, sans budget, la part du hachage dans le scan initial et dans le scan final (`hashingSmallFiles`, `hashingMediumFiles`) ; voir [indexing-pipeline.md](indexing-pipeline.md#double-hachage).
 
 Les tests unitaires couvrent en plus :
 

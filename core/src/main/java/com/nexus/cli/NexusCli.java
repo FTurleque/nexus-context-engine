@@ -1,20 +1,18 @@
 package com.nexus.cli;
 
 import com.nexus.application.NexusApplication;
-import com.nexus.config.NexusPaths;
+import com.nexus.application.NexusConfiguration;
 import com.nexus.context.ContextBudgetPolicy;
 import com.nexus.index.CodeIntelligenceSnapshot;
-import com.nexus.index.minos.MinosCodeIndexImporter;
 import com.nexus.project.FederatedScopePolicy;
 import com.nexus.project.ProjectDescriptor;
-import com.nexus.search.ResultLimitPolicy;
+import com.nexus.config.ResultLimitPolicy;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
 import java.nio.file.Path;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -65,7 +63,7 @@ public final class NexusCli {
         }
     }
 
-    private static void run(String[] args, InputStream input, CliRenderer renderer) throws IOException, SQLException {
+    private static void run(String[] args, InputStream input, CliRenderer renderer) throws IOException {
         if (args.length == 0 || "--help".equals(args[0]) || "help".equals(args[0])) {
             renderer.renderUsage();
             return;
@@ -78,7 +76,7 @@ public final class NexusCli {
             throw new IllegalArgumentException("Commande inconnue : " + args[0]);
         }
 
-        try (NexusApplication application = NexusApplication.create(NexusPaths.fromEnvironment())) {
+        try (NexusApplication application = NexusApplication.create(NexusConfiguration.pathsFromEnvironment())) {
             switch (args[0]) {
                 case "project" -> handleProject(args, application, renderer);
                 case "index" -> handleIndex(args, application, renderer);
@@ -147,7 +145,7 @@ public final class NexusCli {
         ProjectDescriptor project = application.resolveProject(args[1]);
         String payload;
         try {
-            payload = MinosCodeIndexImporter.readPayload(input);
+            payload = application.readMinosPayload(input);
         } catch (IOException exception) {
             if (exception.getMessage() != null && exception.getMessage().contains("128 MiB transport limit")) {
                 throw new IllegalArgumentException("Le payload MINOS dépasse la limite de 128 MiB", exception);
@@ -190,7 +188,7 @@ public final class NexusCli {
                 projectIds, parsed.query(), parsed.limit(), parsed.explain());
         renderer.renderFederatedSearch(
                 operation.projects(), operation.query(), operation.limit(), operation.explain(),
-                operation.durationMs(), operation.results());
+                operation.durationMs(), operation.results(), operation.unservedProjects());
     }
 
     private static void handleContext(String[] args, NexusApplication application, CliRenderer renderer)

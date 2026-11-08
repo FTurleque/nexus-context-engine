@@ -1,10 +1,10 @@
 package com.nexus.context.source.git;
 
-import com.nexus.context.ContextFragment;
+import com.nexus.context.model.ContextFragment;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;
-import com.nexus.search.CandidateType;
+import com.nexus.search.candidate.CandidateType;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.lib.PersonIdent;
 import org.junit.jupiter.api.Test;
@@ -253,6 +253,58 @@ class LocalGitContextSourceProviderTest {
         assertFalse(result.repositoryAvailable());
         assertTrue(result.fragments().isEmpty());
         assertFalse(result.diagnostics().isEmpty());
+    }
+
+    @Test
+    void ignoresAParentRepositoryOfAnotherAccountWithAPublicDiagnosticWithoutPath() throws Exception {
+        Path projectRoot = temporaryDirectory.resolve("shared/project");
+        Path target = write(projectRoot, "src/OrderService.java", "class OrderService {}\n");
+        try (Git git = Git.init().setDirectory(temporaryDirectory.toFile()).call()) {
+            commitAll(git, "commit d'un autre compte");
+            Files.writeString(target, "class OrderService { String uncommitted = \"FOREIGN\"; }\n");
+        }
+        GitRepositoryLocator foreignParent =
+                new GitRepositoryLocator(entry -> GitRepositoryLocator.Ownership.OTHER_ACCOUNT);
+
+        GitContextResult result = new LocalGitContextSourceProvider(foreignParent).discover(new GitContextQuery(
+                project(projectRoot),
+                "order service",
+                List.of(Path.of("src/OrderService.java")),
+                true));
+
+        assertTrue(result.enabled());
+        assertFalse(result.repositoryAvailable());
+        assertEquals(List.of(), result.fragments());
+        assertEquals(0, result.commitsInspected());
+        assertEquals(List.of(GitRepositoryLocator.PARENT_REPOSITORY_REJECTED), result.diagnostics());
+        for (String forbidden : List.of(
+                temporaryDirectory.toString(),
+                temporaryDirectory.toRealPath().toString(),
+                temporaryDirectory.toAbsolutePath().toString().replace('\\', '/'))) {
+            assertFalse(result.diagnostics().getFirst().contains(forbidden));
+        }
+    }
+
+    @Test
+    void keepsTheContextOfAParentRepositoryOwnedByTheCurrentUser() throws Exception {
+        Path projectRoot = temporaryDirectory.resolve("backend/order-app");
+        Path target = write(projectRoot, "src/OrderService.java", "class OrderService {}\n");
+        try (Git git = Git.init().setDirectory(temporaryDirectory.toFile()).call()) {
+            commitAll(git, "initial monorepo");
+            Files.writeString(target, "class OrderService { void process() {} }\n");
+            commitAll(git, "change order service");
+        }
+        GitRepositoryLocator ownedParent =
+                new GitRepositoryLocator(entry -> GitRepositoryLocator.Ownership.CURRENT_USER);
+
+        GitContextResult result = new LocalGitContextSourceProvider(ownedParent).discover(new GitContextQuery(
+                project(projectRoot),
+                "order service",
+                List.of(Path.of("src/OrderService.java")),
+                true));
+
+        assertTrue(result.repositoryAvailable());
+        assertTrue(result.relatedCommits() >= 1);
     }
 
     private static OutputStream boundedOutput(int capacity) throws Exception {

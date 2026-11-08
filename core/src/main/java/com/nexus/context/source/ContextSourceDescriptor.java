@@ -1,6 +1,6 @@
 package com.nexus.context.source;
 
-import com.nexus.search.CandidateType;
+import com.nexus.search.candidate.CandidateType;
 
 import java.nio.file.Path;
 import java.util.List;

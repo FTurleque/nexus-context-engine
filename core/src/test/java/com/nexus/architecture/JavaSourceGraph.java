@@ -30,12 +30,14 @@ import java.util.stream.Stream;
  * <p>Chaque fichier est réduit à son code (commentaires, chaînes, blocs de texte et littéraux
  * caractère remplacés par des espaces), puis lu pour sa déclaration {@code package}, ses
  * déclarations {@code import} (y compris {@code import static} et les imports à joker) et les
- * références pleinement qualifiées à des préfixes surveillés. Le graphe des packages ne retient
+ * références pleinement qualifiées à des préfixes surveillés, références de méthode
+ * {@code Type::méthode} comprises (espaces autour de {@code ::} ignorés). Le graphe des packages ne retient
  * que les imports entre packages de la racine analysée.</p>
  */
 final class JavaSourceGraph {
 
     private static final Pattern PACKAGE = Pattern.compile("\\bpackage\\s+([\\w.]+)\\s*;");
+    private static final Pattern METHOD_REFERENCE = Pattern.compile("\\s*::\\s*");
     private static final Pattern IMPORT = Pattern.compile("\\bimport\\s+(static\\s+)?([\\w.]+(?:\\s*\\.\\s*\\*)?)\\s*;");
 
     private final List<SourceFile> files;
@@ -79,7 +81,8 @@ final class JavaSourceGraph {
         }
 
         Set<String> qualifiedReferences = new LinkedHashSet<>();
-        String body = IMPORT.matcher(PACKAGE.matcher(code).replaceAll(" ")).replaceAll(" ");
+        String body = METHOD_REFERENCE.matcher(IMPORT.matcher(PACKAGE.matcher(code).replaceAll(" ")).replaceAll(" "))
+                .replaceAll("::");
         for (String prefix : watchedQualifiedPrefixes) {
             Matcher reference = Pattern.compile("(?<![\\w.])" + Pattern.quote(prefix) + "[\\w.]*").matcher(body);
             while (reference.find()) {

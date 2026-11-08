@@ -20,12 +20,16 @@ Les secrets de signature Authenticode SHALL n'être exposés qu'aux étapes qui 
 - **WHEN** le workflow Windows s'exécute sur une `pull_request`
 - **THEN** aucune étape ne reçoit les secrets de signature et les artefacts produits ne sont pas signés
 
-#### Scenario: Étapes de qualification d'un run de release
-- **WHEN** le workflow Windows s'exécute pour une release
+#### Scenario: Qualification manuelle signée
+- **WHEN** le workflow Windows s'exécute par `workflow_dispatch` avec `require_authenticode: true`
 - **THEN** seules les étapes de signature de la distribution et de l'installeur reçoivent les secrets, et aucun chemin vers le PFX n'est publié dans l'environnement du job
 
+#### Scenario: Run de release
+- **WHEN** `release.yml` appelle le workflow Windows
+- **THEN** il l'appelle avec `require_authenticode: false` et sans aucun secret, et les assets Windows publiés ne sont pas signés Authenticode
+
 ### Requirement: La publication s'exécute dans l'environnement protégé
-Le job de publication et la signature de release SHALL s'exécuter dans l'environnement GitHub `release`, qui exige une approbation et n'accepte que des tags `v*` ; les tags `v*` SHALL être protégés par un ruleset.
+Le job de publication SHALL s'exécuter dans l'environnement GitHub `release`, qui exige une approbation et n'accepte que des tags `v*` ; les tags `v*` SHALL être protégés par un ruleset.
 
 #### Scenario: Tag poussé
 - **WHEN** un tag `v*` est poussé

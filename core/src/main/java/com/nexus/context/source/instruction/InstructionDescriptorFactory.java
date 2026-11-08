@@ -5,7 +5,7 @@ import com.nexus.context.source.ContextDiscoveryLimits;
 import com.nexus.context.source.ContextSourceDescriptor;
 import com.nexus.context.source.ContextSourceScope;
 import com.nexus.project.ProjectDescriptor;
-import com.nexus.search.CandidateType;
+import com.nexus.search.candidate.CandidateType;
 
 import java.io.IOException;
 import java.nio.file.Path;

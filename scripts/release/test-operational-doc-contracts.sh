@@ -75,7 +75,7 @@ for stale in ("<sourceDirectory>", "<testSourceDirectory>", "../src/main", "../s
         raise SystemExit(f"core layout drift: core/pom.xml still contains {stale!r}")
 
 migrations = sorted((root / "core/src/main/resources/db/migration").glob("V*.sql"))
-if not migrations or migrations[-1].name != "V011__invalidate_secret_format_indexes.sql":
+if not migrations or migrations[-1].name != "V015__index_symbols_by_file_for_fuzzy_search.sql":
     raise SystemExit(f"schema contract drift: latest migration is {migrations[-1].name if migrations else 'none'}")
 require("docs/developer/release-and-recovery.md", "V005__enforce_symbol_range_constraints.sql")
 require("docs/developer/release-and-recovery.md", "V006__invalidate_unredacted_lexical_indexes.sql")
@@ -209,6 +209,10 @@ require("docs/developer/secret-redaction.md", "secret-redaction-v6")
 require("docs/developer/secret-redaction.md", "INDEX_REDACTION_LIMIT")
 require("docs/developer/secret-redaction.md", "SecretRedactionProbeTest")
 require("docs/developer/release-and-recovery.md", "V011__invalidate_secret_format_indexes.sql")
+require("docs/developer/release-and-recovery.md", "V012__index_symbol_relations_by_file.sql")
+require("docs/developer/release-and-recovery.md", "V013__drop_redundant_prefix_indexes.sql")
+require("docs/developer/release-and-recovery.md", "V014__index_staged_analyses.sql")
+require("docs/developer/release-and-recovery.md", "V015__index_symbols_by_file_for_fuzzy_search.sql")
 require("docs/developer/current-limitations.md", "INDEX_REDACTION_LIMIT")
 
 # NXA4 + audit follow-up: lexical content is redacted before Lucene tokenization.
@@ -272,10 +276,10 @@ for path in (
     require(path, "128 termes")
 
 # NXA4: persistent storage permissions.
-nexus_paths = "core/src/main/java/com/nexus/config/NexusPaths.java"
-require(nexus_paths, 'PosixFilePermissions.fromString("rwx------")')
-require(nexus_paths, 'PosixFilePermissions.fromString("rw-------")')
-require(nexus_paths, "AclFileAttributeView")
+private_storage = "core/src/main/java/com/nexus/security/PrivateStoragePolicy.java"
+require(private_storage, 'PosixFilePermissions.fromString("rwx------")')
+require(private_storage, 'PosixFilePermissions.fromString("rw-------")')
+require(private_storage, "AclFileAttributeView")
 for path in (
     "README.md",
     "docs/architecture/overview.md",
@@ -581,3 +585,16 @@ for case in \
     exit 1
   fi
 done
+
+# --- Sprint 9 : attest-prerelease (AUD-DEP-09) ---
+# The consumer verification of published assets stays documented in both release pages.
+for doc in docs/developer/immutable-release-publishing.md docs/developer/release-and-recovery.md; do
+  if ! grep -Fq 'gh attestation verify <asset> --repo FTurleque/nexus-context-engine' "$doc"; then
+    echo "documentation contract drift: $doc must document consumer attestation verification" >&2
+    exit 1
+  fi
+done
+if ! grep -Fq '## Vérification consommateur' docs/developer/immutable-release-publishing.md; then
+  echo "documentation contract drift: immutable-release-publishing.md must keep its consumer verification section" >&2
+  exit 1
+fi

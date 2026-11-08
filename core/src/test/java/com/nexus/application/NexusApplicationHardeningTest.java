@@ -3,7 +3,7 @@ package com.nexus.application;
 import com.nexus.config.NexusPaths;
 import com.nexus.index.ProjectIndexLockManager;
 import com.nexus.search.QueryPolicy;
-import com.nexus.search.ResultLimitPolicy;
+import com.nexus.config.ResultLimitPolicy;
 import com.nexus.search.semantic.SemanticSearchConfiguration;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

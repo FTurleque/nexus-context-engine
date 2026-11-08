@@ -8,7 +8,7 @@ import com.nexus.exposure.PublicOutputProjection;
 import com.nexus.index.IndexedSymbol;
 import com.nexus.index.SymbolRelation;
 import com.nexus.project.ProjectDescriptor;
-import com.nexus.search.ResultLimitPolicy;
+import com.nexus.config.ResultLimitPolicy;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.spec.McpSchema;
 
@@ -102,7 +102,8 @@ final class NexusMcpTools {
                             positiveInteger(arguments, "limit", DEFAULT_LIMIT, ResultLimitPolicy.MAX_RESULT_LIMIT),
                             booleanValue(arguments, "explain", false));
                     return PublicOutputProjection.federatedSearch(operation.projects(), operation.query(),
-                            operation.limit(), operation.explain(), operation.durationMs(), operation.results());
+                            operation.limit(), operation.explain(), operation.durationMs(), operation.results(),
+                            operation.unservedProjects());
                 });
     }
 

@@ -94,7 +94,7 @@ Les mutations canoniques sont placées par triggers dans `symbol_search_pending`
 
 Le repository transforme une requête en intersection de trigrams de trois points de code. Comme `detail=none` ne conserve pas les positions, les candidats FTS sont ensuite revalidés contre les valeurs canoniques avec la sémantique `contains`. Cette étape élimine les faux positifs possibles d'une simple intersection de trigrams sans réintroduire un scan complet de la table.
 
-Le préfiltre fuzzy reste compatible avec la sémantique historique (premier caractère + longueur ±3), mais son jeu de candidats est borné **avant** son union avec les candidats FTS. `idx_symbols_fuzzy_prefilter` est ordonné pour permettre cette sélection déterministe sans matérialiser toute une famille de noms à forte cardinalité.
+Le préfiltre fuzzy reste compatible avec la sémantique historique (premier caractère + longueur ±3), mais son jeu de candidats est borné **avant** son union avec les candidats FTS. Depuis V015, le préfiltre part des fichiers du projet et sonde `idx_symbols_file_fuzzy_prefilter` (première colonne `file_id`) ; la sélection reste déterministe (tri par nom qualifié, chemin, ligne, fournisseur) et son coût ne dépend que du projet ciblé ([large-scale-search.md](large-scale-search.md#sqlite-et-symboles)).
 
 Les requêtes de un ou deux points de code gardent volontairement le fallback `LIKE`, car un trigram ne peut pas indexer ces chaînes.
 
@@ -146,6 +146,17 @@ Autres plafonds SQLite :
 - lorsque base et candidat sont mesurés avec le même harness compatible, population candidat <= `max(base × 1,20, base + jitter)` avec jitters 0,2 / 0,5 / 1,5 / 3 s.
 
 Le gate dédié PR exige exactement les quatre paliers SQLite dans `scale-benchmark-sqlite-full.json`.
+
+## Réindexation sur base peuplée
+
+Le rapport général (hors `sqliteOnly=true`) porte la clé `reindexExistingFiles`. `ScaleRegressionBenchmarkTest` peuple d'abord un projet de 100 000 symboles et 100 000 relations (1 000 fichiers de 100 symboles), puis réécrit des fichiers **déjà indexés** par `SqliteIndexRepository.applyChanges`, le chemin d'écriture de l'indexation : upsert du fichier, suppression de ses symboles et relations, réinsertion.
+
+- `incremental` : 50 fichiers modifiés ;
+- `rebuild` : les 1 000 fichiers ;
+- chaque variante est répétée trois fois (`samplesMs`) et publie sa médiane (`medianMs`) ;
+- le scénario vérifie que les comptes de fichiers, symboles et relations restent inchangés (aucune duplication).
+
+La suppression des relations d'un fichier est servie par `idx_symbol_relations_file_provider` (migration `V012`) ; sans cet index elle parcourait toute la table à chaque fichier. Le scénario ne porte pas de plafond dans `scripts/verify-scale-budgets.py` : il rend la durée visible et reste hors du protocole de population, dont la version n'change pas. Un plafond ne se fixe qu'après des mesures répétées sur le runner CI.
 
 ## Autres scénarios scale
 

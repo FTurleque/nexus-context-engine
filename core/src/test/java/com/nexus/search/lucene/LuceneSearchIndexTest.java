@@ -3,7 +3,7 @@ package com.nexus.search.lucene;
 import com.nexus.config.NexusPaths;
 import com.nexus.index.FileCategory;
 import com.nexus.search.LexicalSearchHit;
-import com.nexus.search.SearchDocument;
+import com.nexus.index.SearchDocument;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -139,6 +139,38 @@ class LuceneSearchIndexTest {
         index.applyChanges(projectId, List.of(document("small.md", oversized)), java.util.Set.of());
         assertTrue(index.search(projectId, "visibleMarker", 10).isEmpty());
         assertTrue(index.search(projectId, "oversizedMarker", 10).isEmpty());
+    }
+
+    @Test
+    void persistentPresenceProbeOpensNoReaderOutsideTheCache() throws Exception {
+        NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("presence-home"));
+        UUID projectId = UUID.randomUUID();
+        try (PersistentLuceneSearchIndex index = new PersistentLuceneSearchIndex(paths)) {
+            // Répertoire absent : « absent » sans erreur.
+            assertFalse(index.isPresent(projectId));
+            assertFalse(index.isPresent(UUID.randomUUID()));
+
+            index.rebuild(projectId, List.of(document("guide.md", "orchard compass")));
+
+            // Sonde répétée sans reader en cache : dernier commit lu, aucun DirectoryReader ouvert.
+            assertTrue(index.isPresent(projectId));
+            assertTrue(index.isPresent(projectId));
+            assertEquals(0, index.openedReaderCount());
+
+            // Une recherche ouvre le reader en cache une fois ; les sondes suivantes le réutilisent.
+            assertEquals(1, index.search(projectId, "orchard", 5).size());
+            assertEquals(1, index.openedReaderCount());
+            assertTrue(index.isPresent(projectId));
+            assertTrue(index.isPresent(projectId));
+            assertEquals(1, index.openedReaderCount());
+        }
+    }
+
+    @Test
+    void redactionPolicyCheckRejectsMissingOrObsoleteCommitPolicy() {
+        assertFalse(LuceneSearchIndex.hasCurrentRedactionPolicy(java.util.Map.of()));
+        assertFalse(LuceneSearchIndex.hasCurrentRedactionPolicy(
+                java.util.Map.of("nexus.redaction.policy", "obsolete-policy")));
     }
 
     private static SearchDocument document(String relativePath, String content) {

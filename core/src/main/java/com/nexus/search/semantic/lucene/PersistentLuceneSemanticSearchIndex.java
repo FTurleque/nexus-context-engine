@@ -3,6 +3,7 @@ package com.nexus.search.semantic.lucene;
 import com.nexus.config.NexusPaths;
 import com.nexus.search.lucene.PersistentLuceneReaderSupport;
 import com.nexus.search.semantic.SemanticIndexProvenance;
+import com.nexus.search.semantic.SemanticIndexSession;
 import com.nexus.search.semantic.SemanticSearchHit;
 import com.nexus.search.semantic.SemanticSearchIndex;
 import com.nexus.search.semantic.SemanticVectorDocument;
@@ -23,6 +24,8 @@ import java.util.UUID;
  * commits, ou changent de répertoire après récupération d'un commit corrompu.</p>
  */
 public final class PersistentLuceneSemanticSearchIndex implements SemanticSearchIndex {
+
+    private static final String PROVENANCE_ARGUMENT = "provenance";
 
     static final int MAX_CACHED_PROJECTS = 100;
 
@@ -47,8 +50,12 @@ public final class PersistentLuceneSemanticSearchIndex implements SemanticSearch
 
     @Override
     public boolean isCompatible(UUID projectId, SemanticIndexProvenance provenance) throws IOException {
+        Objects.requireNonNull(projectId, "projectId");
+        Objects.requireNonNull(provenance, PROVENANCE_ARGUMENT);
         readers.ensureOpen();
-        return operationScoped.isCompatible(projectId, provenance);
+        // Lecture sur le reader en cache (ADR-0045), sans DirectoryReader supplémentaire.
+        return readers.readCommitMetadata(
+                projectId, operationScoped.indexPath(projectId), provenance::matches, false);
     }
 
     @Override
@@ -61,7 +68,7 @@ public final class PersistentLuceneSemanticSearchIndex implements SemanticSearch
             UUID projectId,
             SemanticIndexProvenance provenance,
             List<SemanticVectorDocument> documents) throws IOException {
-        rebuildInternal(projectId, Objects.requireNonNull(provenance, "provenance"), documents);
+        rebuildInternal(projectId, Objects.requireNonNull(provenance, PROVENANCE_ARGUMENT), documents);
     }
 
     private void rebuildInternal(
@@ -93,7 +100,7 @@ public final class PersistentLuceneSemanticSearchIndex implements SemanticSearch
             Set<String> removedRelativePaths) throws IOException {
         applyChangesInternal(
                 projectId,
-                Objects.requireNonNull(provenance, "provenance"),
+                Objects.requireNonNull(provenance, PROVENANCE_ARGUMENT),
                 documents,
                 removedRelativePaths);
     }
@@ -110,6 +117,36 @@ public final class PersistentLuceneSemanticSearchIndex implements SemanticSearch
             operationScoped.applyChanges(projectId, provenance, documents, removedRelativePaths);
         }
         readers.refreshIfCached(projectId, operationScoped.indexPath(projectId));
+    }
+
+    @Override
+    public SemanticIndexSession openSession(
+            UUID projectId,
+            SemanticIndexProvenance provenance,
+            boolean rebuild) throws IOException {
+        readers.ensureOpen();
+        if (rebuild) {
+            readers.invalidate(projectId);
+        }
+        SemanticIndexSession session = operationScoped.openSession(projectId, provenance, rebuild);
+        return new SemanticIndexSession() {
+            @Override
+            public void applyChanges(List<SemanticVectorDocument> documents, Set<String> removedRelativePaths)
+                    throws IOException {
+                session.applyChanges(documents, removedRelativePaths);
+            }
+
+            @Override
+            public void commit() throws IOException {
+                session.commit();
+                readers.refreshIfCached(projectId, operationScoped.indexPath(projectId));
+            }
+
+            @Override
+            public void close() throws IOException {
+                session.close();
+            }
+        };
     }
 
     @Override
@@ -131,5 +168,9 @@ public final class PersistentLuceneSemanticSearchIndex implements SemanticSearch
 
     int cachedProjectCount() {
         return readers.cachedProjectCount();
+    }
+
+    long openedReaderCount() {
+        return readers.openedReaderCount();
     }
 }

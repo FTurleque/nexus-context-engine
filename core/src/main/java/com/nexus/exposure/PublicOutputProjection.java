@@ -108,13 +108,25 @@ public final class PublicOutputProjection {
             boolean explain,
             long durationMs,
             List<FederatedSearchHit> results) {
+        return federatedSearch(projects, query, limit, explain, durationMs, results, List.of());
+    }
+
+    public static PublicOutput.FederatedSearch federatedSearch(
+            List<ProjectDescriptor> projects,
+            String query,
+            int limit,
+            boolean explain,
+            long durationMs,
+            List<FederatedSearchHit> results,
+            List<ProjectDescriptor> unservedProjects) {
         List<PublicOutput.FederatedSearchResult> projected = new ArrayList<>(results.size());
         for (int index = 0; index < results.size(); index++) {
             FederatedSearchHit hit = results.get(index);
             projected.add(new PublicOutput.FederatedSearchResult(
                     project(hit.project()), rankedResult(hit.project(), hit.rankedCandidate(), index + 1)));
         }
-        return new PublicOutput.FederatedSearch(projects(projects), query, limit, explain, durationMs, projected);
+        return new PublicOutput.FederatedSearch(
+                projects(projects), query, limit, explain, durationMs, projected, projects(unservedProjects));
     }
 
     public static PublicOutput.Context context(
@@ -155,7 +167,8 @@ public final class PublicOutputProjection {
                                 project(federated.project()), contextItem(federated.project(), federated.item())))
                         .toList(),
                 exposed.excluded(),
-                sortedMetadata(exposed.metadata()));
+                sortedMetadata(exposed.metadata()),
+                projects(exposed.unservedProjects()));
     }
 
     public static PublicOutput.SymbolSearch symbolSearch(
@@ -200,7 +213,7 @@ public final class PublicOutputProjection {
                 statistics(report.statistics())));
     }
 
-    private static PublicOutput.ContextItem contextItem(ProjectDescriptor project, com.nexus.context.ContextItem item) {
+    private static PublicOutput.ContextItem contextItem(ProjectDescriptor project, com.nexus.context.model.ContextItem item) {
         return new PublicOutput.ContextItem(
                 item.type().name(),
                 PublicProjectPathPolicy.expose(project.rootPath(), item.path()),

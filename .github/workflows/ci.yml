@@ -72,6 +72,24 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
+      - name: Read product version from pom.xml
+        shell: bash
+        run: |
+          set -euo pipefail
+          NEXUS_VERSION="$(python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('pom.xml').getroot()
+          ns = {'m': 'http://maven.apache.org/POM/4.0.0'}
+          print(root.find('m:version', ns).text.strip())
+          PY
+          )"
+          if [[ ! "$NEXUS_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Unexpected product version in pom.xml: '$NEXUS_VERSION'"
+            exit 1
+          fi
+          echo "Product version: $NEXUS_VERSION"
+          echo "NEXUS_VERSION=$NEXUS_VERSION" >> "$GITHUB_ENV"
+
       - name: Set up Java 21
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
@@ -112,9 +130,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          ZIP="target/distribution/nexus-context-engine-0.2.0.zip"
+          ZIP="target/distribution/nexus-context-engine-${NEXUS_VERSION}.zip"
           SMOKE_DIR="target/linux-distribution-smoke"
-          ROOT="$SMOKE_DIR/nexus-context-engine-0.2.0"
+          ROOT="$SMOKE_DIR/nexus-context-engine-${NEXUS_VERSION}"
           LAUNCHER="$ROOT/bin/nexus"
 
           if [[ ! -s "$ZIP" ]]; then
@@ -153,8 +171,9 @@ jobs:
           }
           printf 'Packaged launcher output: %s\n' "$VERSION_JSON"
 
-          if ! printf '%s\n' "$VERSION_JSON" | grep -Eq '"version"[[:space:]]*:[[:space:]]*"0\.2\.0"'; then
-            echo "::error::Packaged Linux launcher did not report version 0.2.0"
+          VERSION_PATTERN="${NEXUS_VERSION//./\\.}"
+          if ! printf '%s\n' "$VERSION_JSON" | grep -Eq "\"version\"[[:space:]]*:[[:space:]]*\"${VERSION_PATTERN}\""; then
+            echo "::error::Packaged Linux launcher did not report version ${NEXUS_VERSION}"
             exit 1
           fi
 
@@ -203,7 +222,7 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
           path: |
-            target/distribution/nexus-context-engine-0.2.0.zip
+            target/distribution/nexus-context-engine-${{ env.NEXUS_VERSION }}.zip
             target/linux-distribution-smoke/**
 
       - name: Retain SBOM, notices and coverage evidence

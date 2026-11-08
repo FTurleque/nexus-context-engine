@@ -22,6 +22,7 @@ import java.io.PrintStream;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Rendu CLI. Le JSON sérialise les structures de {@link PublicOutputProjection} précédées de la
@@ -132,8 +133,19 @@ final class CliRenderer {
             boolean explain,
             long durationMs,
             List<FederatedSearchHit> results) throws IOException {
-        PublicOutput.FederatedSearch search =
-                PublicOutputProjection.federatedSearch(projects, query, limit, explain, durationMs, results);
+        renderFederatedSearch(projects, query, limit, explain, durationMs, results, List.of());
+    }
+
+    void renderFederatedSearch(
+            List<ProjectDescriptor> projects,
+            String query,
+            int limit,
+            boolean explain,
+            long durationMs,
+            List<FederatedSearchHit> results,
+            List<ProjectDescriptor> unservedProjects) throws IOException {
+        PublicOutput.FederatedSearch search = PublicOutputProjection.federatedSearch(
+                projects, query, limit, explain, durationMs, results, unservedProjects);
         if (json) {
             writeJson(out, command("search-federated", search));
             return;
@@ -145,6 +157,15 @@ final class CliRenderer {
                     result.rank(), result.score(), result.type(), human(hit.project().name()), human(target(result)));
             printReasons(explain, result.reasons());
         }
+        printUnservedProjects(search.unservedProjects());
+    }
+
+    private void printUnservedProjects(List<PublicOutput.Project> unservedProjects) {
+        if (unservedProjects.isEmpty()) {
+            return;
+        }
+        out.println("Projets non servis (échéance globale de la fédération atteinte) : "
+                + unservedProjects.stream().map(project -> human(project.name())).collect(Collectors.joining(", ")));
     }
 
     void renderContext(
@@ -184,6 +205,7 @@ final class CliRenderer {
             PublicOutput.FederatedContextItem federated = context.items().get(index);
             printContextItem(index + 1, federated.project().name(), federated.item(), explain);
         }
+        printUnservedProjects(context.unservedProjects());
         printContextDiagnostics(context.metadata(), context.excluded(), explain);
     }
 

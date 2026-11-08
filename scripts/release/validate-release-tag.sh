@@ -6,12 +6,18 @@ VERSION="${2:-}"
 RELEASE_SHA="${3:-}"
 MAIN_SHA="${4:-}"
 
-if [[ ! "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
-  echo "Invalid release tag '$TAG': expected v<major>.<minor>.<patch>" >&2
+# Final release: v<major>.<minor>.<patch>. Pre-release: v<major>.<minor>.<patch>-rc.<n>,
+# n >= 1 without leading zero. Any other suffix is refused.
+if [[ ! "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+(-rc\.[1-9][0-9]*)?)$ ]]; then
+  echo "Invalid release tag '$TAG': expected v<major>.<minor>.<patch> or v<major>.<minor>.<patch>-rc.<n>" >&2
   exit 1
 fi
 
 TAG_VERSION="${BASH_REMATCH[1]}"
+PRERELEASE=false
+if [[ -n "${BASH_REMATCH[2]:-}" ]]; then
+  PRERELEASE=true
+fi
 if [[ "$TAG_VERSION" != "$VERSION" ]]; then
   echo "Release tag version '$TAG_VERSION' does not match pom.xml version '$VERSION'" >&2
   exit 1
@@ -32,4 +38,4 @@ if [[ "$RELEASE_SHA" != "$MAIN_SHA" ]]; then
   exit 1
 fi
 
-printf 'release-policy=PASS tag=%s version=%s sha=%s\n' "$TAG" "$VERSION" "$RELEASE_SHA"
+printf 'release-policy=PASS tag=%s version=%s sha=%s prerelease=%s\n' "$TAG" "$VERSION" "$RELEASE_SHA" "$PRERELEASE"

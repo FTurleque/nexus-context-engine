@@ -1,8 +1,8 @@
 package com.nexus.ranking;
 
-import com.nexus.search.CandidateType;
-import com.nexus.search.SearchCandidate;
-import com.nexus.search.SearchSignals;
+import com.nexus.search.candidate.CandidateType;
+import com.nexus.search.candidate.SearchCandidate;
+import com.nexus.search.candidate.SearchSignals;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;

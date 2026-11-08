@@ -79,3 +79,38 @@ CI profile:
 Use `nexus.scale.benchmark.profile=full` for the larger corpus.
 
 GitHub Actions runs the same qualification through `.github/workflows/lucene-lifecycle-benchmark.yml`, retains the JSON report for 90 days and prints the decision metrics in the job log.
+
+## OpenSpec lucene-reader-cache
+
+Spec : [`openspec/specs/lucene-reader-cache/spec.md`](../../openspec/specs/lucene-reader-cache/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+Cette section décrit la lecture des métadonnées de commit Lucene sur le reader en cache des runtimes longue durée (`PersistentLuceneSemanticSearchIndex`, `PersistentLuceneSearchIndex`).
+
+### Comportement existant vérifié
+
+| Étiquette | Fait | Source |
+|---|---|---|
+| [Existant vérifié] | La compatibilité d'un index sémantique se lit sur le reader en cache quand il existe, sinon sur le dernier commit, sans ouvrir de `DirectoryReader` supplémentaire ; des recherches successives n'en ouvrent qu'un. | `core/src/test/java/com/nexus/search/semantic/lucene/LuceneSemanticSearchIndexTest#compatibilityIsReadOnTheCachedReaderAcrossSuccessiveSearches` |
+| [Existant vérifié] | Une provenance différente ou un index absent rendent « incompatible » ; le commit d'un autre writer est vu par le reader en cache. | `core/src/test/java/com/nexus/search/semantic/lucene/LuceneSemanticSearchIndexTest#compatibilityIsReadOnTheCachedReaderAcrossSuccessiveSearches` |
+| [Existant vérifié] | La présence de l'index lexical se lit sans reader hors du cache ; un répertoire absent rend « absent » sans erreur. | `core/src/test/java/com/nexus/search/lucene/LuceneSearchIndexTest#persistentPresenceProbeOpensNoReaderOutsideTheCache` |
+
+### Vues
+
+Vue organigramme de composants (non UML, lecture C4 simplifiée) — D'où viennent les métadonnées de commit lues par la compatibilité et la sonde de présence ? (existant)
+
+```mermaid
+flowchart LR
+    Q["Compatibilité sémantique ou sonde de présence"] --> C{"Reader en cache ?"}
+    C -->|oui| U["userData du reader en cache"]
+    C -->|non| L["Dernier commit, sans charger les segments"]
+```
+
+Exigences : `lucene-reader-cache › La compatibilité sémantique est lue sur le reader en cache`, `lucene-reader-cache › La présence de l'index lexical est lue sans ouvrir l'index`.
+
+### Écarts et limites
+
+- Limite : le décompte d'ouvertures (`openedReaderCount`) est un compteur de test des classes persistantes ; il ne couvre pas les readers ouverts par d'autres composants.
+
+### Propositions et questions ouvertes
+
+- Questions : aucune.

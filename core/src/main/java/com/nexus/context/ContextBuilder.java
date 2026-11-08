@@ -1,6 +1,7 @@
 package com.nexus.context;
 
 import com.nexus.context.source.ContextDiscoveryBudget;
+import com.nexus.search.SearchQueryContext;
 
 import java.util.Objects;
 
@@ -34,5 +35,19 @@ public interface ContextBuilder {
         Objects.requireNonNull(materializationBudget, "materializationBudget");
         Objects.requireNonNull(discoveryBudget, "discoveryBudget");
         return build(request, materializationBudget);
+    }
+
+    /**
+     * Builds with the query context shared by every project of a federated
+     * request, so costs that depend only on the query (the query embedding) are
+     * paid once. The compatibility default ignores the context.
+     */
+    default ContextBundle build(
+            ContextRequest request,
+            ContextMaterializationBudget materializationBudget,
+            ContextDiscoveryBudget discoveryBudget,
+            SearchQueryContext queryContext) {
+        Objects.requireNonNull(queryContext, "queryContext");
+        return build(request, materializationBudget, discoveryBudget);
     }
 }

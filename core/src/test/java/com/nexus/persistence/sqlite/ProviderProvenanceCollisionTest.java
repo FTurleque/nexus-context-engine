@@ -8,7 +8,8 @@ import com.nexus.index.IndexedRelation;
 import com.nexus.index.IndexedSymbol;
 import com.nexus.index.RelationKind;
 import com.nexus.index.SymbolKind;
-import com.nexus.index.ProjectIndexingService;
+import com.nexus.index.service.ProjectIndexingService;
+import com.nexus.index.service.ProjectIndexingServices;
 import com.nexus.index.SymbolRelation;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.scan.ProjectScanner;
@@ -57,7 +58,7 @@ class ProviderProvenanceCollisionTest {
         repository = new SqliteIndexRepository(database);
         project = new ProjectRegistry(projectRepository).register(projectRoot, "demo");
 
-        ProjectIndexingService service = new ProjectIndexingService(
+        ProjectIndexingService service = ProjectIndexingServices.of(
                 projectRepository,
                 repository,
                 new ProjectScanner(),

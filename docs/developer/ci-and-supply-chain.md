@@ -71,6 +71,16 @@ Les scripts actifs de `scripts/` importent `scripts/lib/NexusScript.psm1`, seul 
 
 Une modification Java ordinaire ne peut donc plus contourner le smoke du ZIP self-contained et de l'installateur Windows avant intégration dans `develop`.
 
+Signature Authenticode (`AUD-DEP-21`, `AUD-SEC-06`, `AUD-DEP-03`) :
+
+- les assets Windows d'une release ne sont pas signés Authenticode (pas de certificat de signature de code payant, [SEC-0068](../architecture/adr/SEC-0068-publier-les-releases-depuis-un-environnement-protege-avec-des-assets-attestes.md)) : `release.yml` appelle `windows-installer.yml` avec `require_authenticode: false` et sans aucun secret ; leur provenance est l'attestation GitHub vérifiée par le job `publish` ;
+- `secrets: inherit` est refusé dans `.github/workflows/` ; un workflow réutilisable ne reçoit, par leur nom, que les secrets qu'il déclare ;
+- `windows-installer.yml` garde une signature optionnelle pour une qualification manuelle (`workflow_dispatch` avec `require_authenticode: true`) : le job entre alors dans l'environnement `release`, et seules les étapes « Build self-contained Windows distribution » et « Build production installer » reçoivent les secrets PFX, jamais sur `pull_request` ; l'installeur de smoke n'est jamais signé ;
+- `build-windows-distribution.ps1` et `build-windows-installer.ps1` retirent ces variables de l'environnement du processus avant Maven, jpackage, le smoke CLI et Inno Setup, puis les passent en paramètres à `sign-windows-artifact.ps1` ;
+- `sign-windows-artifact.ps1` décode le PFX dans un répertoire propre à l'appel sous `RUNNER_TEMP` et l'efface dans un bloc `finally` ; aucun chemin n'est publié dans `GITHUB_ENV`, et l'étape `always()` de nettoyage reste en défense en profondeur.
+
+Le contrat `scripts/release/test-final-audit-contracts.sh` (bloc « Sprint 9 : secrets-signature ») vérifie ces règles.
+
 NXA7 a également durci le bootstrap `mvnw.cmd` après qu'un runner Windows a reçu un HTTP 403 via `Invoke-WebRequest` sur Maven Central. Le wrapper :
 
 1. conserve Maven **3.10.0** comme version de bootstrap ;
@@ -178,7 +188,7 @@ Pour une release, Docker Distribution exporte ensuite l'image qualifiée avec so
 
 ## Publication GHCR
 
-`.github/workflows/release.yml` est déclenché par un tag `vX.Y.Z` sur le HEAD exact de `main`.
+`.github/workflows/release.yml` est déclenché par un tag `vX.Y.Z` (ou `vX.Y.Z-rc.N` pour une pré-version) sur le HEAD exact de `main`.
 
 Le préflight GHCR :
 
@@ -215,6 +225,20 @@ end_line >= start_line
 ```
 
 V004 invalide les index historiques incompatibles avant V005. Les tests couvrent base fraîche, upgrade V004, conservation des données valides, idempotence et rejet d'INSERT SQL invalide.
+
+## Outillage Maven épinglé et licences
+
+Le `pluginManagement` du pom racine épingle par propriété chaque plugin du build, y compris ceux du cycle de vie que Maven lierait sinon à sa propre distribution : `maven.clean-plugin.version`, `maven.resources-plugin.version`, `maven.jar-plugin.version`, `maven.install-plugin.version`, `maven.deploy-plugin.version` et `maven.site-plugin.version` (le site n'est pas produit, mais `requirePluginVersions` contrôle aussi ce cycle). Dependabot suit ces propriétés comme les autres.
+
+L'exécution `enforce-nexus-toolchain` de `maven-enforcer-plugin` applique :
+
+- `requireJavaVersion` `[21,)` et `requireMavenVersion` `[3.10.0,)`, aligné sur le wrapper Maven 3.10.0 ;
+- `requirePluginVersions` : un plugin sans version explicite, ou en `LATEST`/`RELEASE`/`SNAPSHOT`, fait échouer le build ;
+- `requireUpperBoundDeps` : un transitif résolu sous la version qu'exige un autre chemin du graphe fait échouer le build en nommant la dépendance et ses chemins. Les exclusions (`org.jctools:jctools-core`, `org.jspecify:jspecify`, fixés par le BOM Quarkus) sont listées et justifiées dans le pom, à revoir à chaque montée de `quarkus.platform.version`. `jna` est géré avec `jna-platform` pour que le BOM Quarkus ne le ramène pas sous la version qu'exige `jna-platform`.
+
+`requireUpperBoundDeps` est préféré à `dependencyConvergence`, trop bruyant avec les BOM Quarkus.
+
+L'exécution `aggregate-third-party-notices` de `license-maven-plugin` produit `target/licenses/THIRD_PARTY_NOTICES.txt` pour les portées `compile` et `runtime`. `licenseMerges` regroupe les variantes de libellé sous un libellé unique (par exemple « The Apache Software License, Version 2.0 » et « Apache-2.0 » sous « Apache License, Version 2.0 »). `includedLicenses` est la liste blanche — Apache 2.0, BSD 2-Clause, BSD 3-Clause, MIT, MIT No Attribution, CC0 1.0, EPL 1.0, EPL 2.0, EDL 1.0 — et `failOnBlacklist=true` fait échouer le build si une dépendance livrée ne porte aucune licence de cette liste. Une dépendance multi-licence est acceptée lorsque l'une de ses licences y figure (cas de JNA, JavaParser et des API Jakarta sous EPL 2.0 ou GPL 2.0 avec exception Classpath). `failOnMissing=true` refuse une dépendance sans licence déclarée. Toute nouvelle licence exige une modification revue du pom.
 
 ## Dependabot
 

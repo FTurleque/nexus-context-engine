@@ -183,37 +183,70 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
 
     @Override
     public float[] embedQuery(String query) throws IOException {
+        return embedQuery(query, timeout);
+    }
+
+    /**
+     * Le délai de l'appel est le plus petit du timeout configuré et du temps restant
+     * accordé par l'appelant, avec un minimum d'une milliseconde.
+     */
+    @Override
+    public float[] embedQuery(String query, Duration maxWait) throws IOException {
         Objects.requireNonNull(query, "query");
+        Objects.requireNonNull(maxWait, "maxWait");
         if (query.isBlank()) {
             throw new IllegalArgumentException("embedding query must not be blank");
         }
-        if (!QWEN3_EMBEDDING_MODEL.matcher(model).find()) {
-            return embed(query);
-        }
-        return embed("Instruct: " + QWEN3_RETRIEVAL_INSTRUCTION + "\nQuery:" + query);
+        Duration callTimeout = cappedTimeout(maxWait);
+        String text = QWEN3_EMBEDDING_MODEL.matcher(model).find()
+                ? "Instruct: " + QWEN3_RETRIEVAL_INSTRUCTION + "\nQuery:" + query
+                : query;
+        return embedAll(List.of(text), callTimeout).getFirst();
+    }
+
+    private Duration cappedTimeout(Duration maxWait) {
+        Duration floor = Duration.ofMillis(1);
+        Duration capped = maxWait.compareTo(timeout) < 0 ? maxWait : timeout;
+        return capped.compareTo(floor) < 0 ? floor : capped;
     }
 
     @Override
     public List<float[]> embedAll(List<String> texts) throws IOException {
+        return embedAll(texts, timeout);
+    }
+
+    private List<float[]> embedAll(List<String> texts, Duration callTimeout) throws IOException {
         Objects.requireNonNull(texts, "texts");
         if (texts.isEmpty()) {
             return List.of();
         }
-        for (String text : texts) {
-            if (text == null || text.isBlank()) {
-                throw new IllegalArgumentException("embedding text must not be blank");
-            }
-        }
+        requireNonBlank(texts);
 
         String requestBody = objectMapper.writeValueAsString(Map.of(
                 "model", model,
                 "input", texts));
         HttpRequest request = HttpRequest.newBuilder(embedEndpoint)
-                .timeout(timeout)
+                .timeout(callTimeout)
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
                 .build();
 
+        HttpResponse<byte[]> response = send(request, callTimeout);
+        String responseBody = new String(response.body(), StandardCharsets.UTF_8);
+        requireSuccessfulStatus(response.statusCode(), responseBody);
+        return parseEmbeddings(responseBody, texts.size());
+    }
+
+    private static void requireNonBlank(List<String> texts) {
+        for (String text : texts) {
+            if (text == null || text.isBlank()) {
+                throw new IllegalArgumentException("embedding text must not be blank");
+            }
+        }
+    }
+
+    /** Envoie la requête avec un corps borné et annule l'échange quelle que soit l'issue. */
+    private HttpResponse<byte[]> send(HttpRequest request, Duration callTimeout) throws IOException {
         AtomicReference<BoundedBodySubscriber> subscriber = new AtomicReference<>();
         AtomicBoolean cancelled = new AtomicBoolean();
         var exchange = httpClient.sendAsync(request, info -> {
@@ -222,15 +255,14 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
             if (cancelled.get()) body.cancel();
             return body;
         });
-        HttpResponse<byte[]> response;
         try {
             // Cette future ne termine qu'après le corps entier, contrairement à ofInputStream.
-            response = exchange.get(timeout.toNanos(), TimeUnit.NANOSECONDS);
+            return exchange.get(callTimeout.toNanos(), TimeUnit.NANOSECONDS);
         } catch (TimeoutException exception) {
-            throw timeoutFailure(exception);
+            throw timeoutFailure(exception, callTimeout);
         } catch (ExecutionException exception) {
             Throwable cause = exception.getCause();
-            if (cause instanceof HttpTimeoutException) throw timeoutFailure(cause);
+            if (cause instanceof HttpTimeoutException) throw timeoutFailure(cause, callTimeout);
             if (cause instanceof BoundedBodySubscriber.ResponseLimitException overflow) throw overflow;
             throw new EmbeddingProviderUnavailableException(
                     "Ollama /api/embed indisponible : connexion impossible", cause);
@@ -243,37 +275,40 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
             if (body != null) body.cancel();
             exchange.cancel(true);
         }
-        String responseBody = new String(response.body(), StandardCharsets.UTF_8);
+    }
 
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            String message = "Ollama /api/embed a répondu HTTP " + response.statusCode()
+    private static void requireSuccessfulStatus(int statusCode, String responseBody) throws IOException {
+        if (statusCode < 200 || statusCode >= 300) {
+            String message = "Ollama /api/embed a répondu HTTP " + statusCode
                     + " : " + abbreviate(responseBody, 500);
-            if (response.statusCode() == 429 || response.statusCode() >= 500) {
+            if (statusCode == 429 || statusCode >= 500) {
                 throw new EmbeddingProviderUnavailableException(message);
             }
             throw new IOException(message);
         }
+    }
 
+    private List<float[]> parseEmbeddings(String responseBody, int expectedCount) throws IOException {
         JsonNode root = objectMapper.readTree(responseBody);
         if (root == null) {
             throw new IOException("Réponse Ollama invalide : body JSON vide pour /api/embed");
         }
         JsonNode embeddings = root.path("embeddings");
-        if (!embeddings.isArray() || embeddings.size() != texts.size()) {
+        if (!embeddings.isArray() || embeddings.size() != expectedCount) {
             throw new IOException(
                     "Réponse Ollama invalide : " + embeddings.size()
-                            + " embedding(s) pour " + texts.size() + " entrée(s)");
+                            + " embedding(s) pour " + expectedCount + " entrée(s)");
         }
-        List<float[]> vectors = new ArrayList<>(texts.size());
+        List<float[]> vectors = new ArrayList<>(expectedCount);
         for (int vectorIndex = 0; vectorIndex < embeddings.size(); vectorIndex++) {
             vectors.add(parseVector(embeddings.get(vectorIndex), vectorIndex));
         }
         return List.copyOf(vectors);
     }
 
-    private EmbeddingProviderUnavailableException timeoutFailure(Throwable cause) {
+    private static EmbeddingProviderUnavailableException timeoutFailure(Throwable cause, Duration callTimeout) {
         return new EmbeddingProviderUnavailableException(
-                "Ollama /api/embed indisponible : délai dépassé après " + timeout.toMillis() + " ms", cause);
+                "Ollama /api/embed indisponible : délai dépassé après " + callTimeout.toMillis() + " ms", cause);
     }
 
     private float[] parseVector(JsonNode embedding, int vectorIndex) throws IOException {

@@ -8,7 +8,7 @@ import com.nexus.context.source.skill.SkillActivationResult;
 import com.nexus.context.source.skill.SkillDiscoveryResult;
 import com.nexus.context.source.skill.SkillSourceProvider;
 import com.nexus.ranking.RankedCandidate;
-import com.nexus.search.CandidateType;
+import com.nexus.search.candidate.CandidateType;
 import com.nexus.token.TokenEstimator;
 
 import java.nio.file.Path;
@@ -97,6 +97,13 @@ final class ContextBuildMetadata {
         metadata.put("gitBudget", gitBudget);
         metadata.put("gitSelectedItems", gitSelection.items().size());
         metadata.put("gitSelectedTokens", gitSelection.selectedEstimatedTokens());
+        if (request.explain() && gitContextProvider != null) {
+            // Compteurs du cache de contexte Git des runtimes longue durée (BE-0065).
+            Map<String, Object> gitCache = gitContextProvider.cacheStatistics();
+            if (!gitCache.isEmpty()) {
+                metadata.put("gitContextCache", gitCache);
+            }
+        }
         metadata.put("nativeCustomizationsDetected", nativeCustomizations);
         metadata.put("selectedItems", combined.items().size());
         metadata.put("excludedItems", combined.excluded().size());

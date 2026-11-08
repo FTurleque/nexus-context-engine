@@ -63,6 +63,103 @@ class CoreArchitectureTest {
     }
 
     @Test
+    void indexModelAndPortsDoNotImportSearch() {
+        assertNoViolation(CoreArchitectureRules.indexWithoutSearch(core));
+    }
+
+    @Test
+    void contextSourcesDoNotImportTheContextBuilderPackage() {
+        assertNoViolation(CoreArchitectureRules.contextSourceWithoutContext(core));
+    }
+
+    @Test
+    void rankingDoesNotImportTheSearchPackage() {
+        assertNoViolation(CoreArchitectureRules.rankingWithoutSearch(core));
+    }
+
+    @Test
+    void semanticPortDoesNotImportItsOllamaAdapter() {
+        assertNoViolation(CoreArchitectureRules.searchSemanticWithoutOllama(core));
+    }
+
+    @Test
+    void processEnvironmentIsReadOnlyByTheCompositionRoot() {
+        assertNoViolation(CoreArchitectureRules.getenvInCompositionRoot(core));
+    }
+
+    @Test
+    void getenvOutsideTheCompositionRootFailsGetenvRule() throws IOException {
+        writeSource("com/nexus/application/NexusApplicationFactory.java", """
+                package com.nexus.application;
+
+                class NexusApplicationFactory {
+                    static java.util.Map<String, String> processEnvironment() {
+                        return System.getenv();
+                    }
+
+                    static java.util.function.Function<String, String> lookup() {
+                        return System::getenv;
+                    }
+                }
+                """);
+        writeSource("com/nexus/index/Limits.java", """
+                package com.nexus.index;
+
+                class Limits {
+                    // System.getenv("IGNORED") dans un commentaire ne compte pas.
+                    String text = "System.getenv";
+                    String value = System.getenv("NEXUS_LIMIT");
+                }
+                """);
+        writeSource("com/nexus/context/Budget.java", """
+                package com.nexus.context;
+
+                class Budget {
+                    String value = java.lang.System.getenv("NEXUS_BUDGET");
+                }
+                """);
+        writeSource("com/nexus/search/Strategy.java", """
+                package com.nexus.search;
+
+                import static java.lang.System.getenv;
+
+                class Strategy {
+                }
+                """);
+        writeSource("com/nexus/project/Deadline.java", """
+                package com.nexus.project;
+
+                import java.util.function.Function;
+
+                class Deadline {
+                    // System::getenv dans un commentaire ne compte pas.
+                    String text = "System::getenv";
+                    Function<String, String> environment = System::getenv;
+                }
+                """);
+        writeSource("com/nexus/index/scan/Scanner.java", """
+                package com.nexus.index.scan;
+
+                class Scanner {
+                    java.util.function.Function<String, String> environment = java.lang.System :: getenv;
+                }
+                """);
+
+        assertEquals(List.of(
+                        "[getenv-composition-root] com.nexus.context.Budget -> java.lang.System.getenv",
+                        "[getenv-composition-root] com.nexus.index.Limits -> System.getenv",
+                        "[getenv-composition-root] com.nexus.index.scan.Scanner -> java.lang.System::getenv",
+                        "[getenv-composition-root] com.nexus.project.Deadline -> System::getenv",
+                        "[getenv-composition-root] com.nexus.search.Strategy -> java.lang.System.getenv"),
+                CoreArchitectureRules.getenvInCompositionRoot(scanFixture()));
+    }
+
+    @Test
+    void cycleBaselineIsEmpty() throws IOException {
+        assertEquals(List.of(), baselineLines(),
+                "Le graphe des packages du cœur est acyclique : la baseline " + CYCLE_BASELINE + " reste vide");
+    }
+    @Test
     void packageCyclesMatchTheBaseline() throws IOException {
         assertNoViolation(CoreArchitectureRules.cycleBaseline(core.cycleEdges(), readCycleBaseline()));
     }
@@ -161,18 +258,27 @@ class CoreArchitectureTest {
                 class OtherFactory {
                 }
                 """);
+        writeSource("com/nexus/application/NexusApplication.java", """
+                package com.nexus.application;
+
+                import java.sql.SQLException;
+
+                class NexusApplication {
+                }
+                """);
         writeSource("com/nexus/cli/NexusCli.java", """
                 package com.nexus.cli;
 
-                import java.sql.Connection;
+                import java.sql.SQLException;
 
                 class NexusCli {
                 }
                 """);
 
         assertEquals(List.of(
+                        "[sqlite-confine] com.nexus.application.NexusApplication -> java.sql.SQLException",
                         "[sqlite-confine] com.nexus.application.OtherFactory -> java.sql.SQLException",
-                        "[sqlite-confine] com.nexus.cli.NexusCli -> java.sql.Connection"),
+                        "[sqlite-confine] com.nexus.cli.NexusCli -> java.sql.SQLException"),
                 CoreArchitectureRules.sqliteConfined(scanFixture()));
     }
 
@@ -192,6 +298,140 @@ class CoreArchitectureTest {
                 CoreArchitectureRules.projectLeaf(scanFixture()));
     }
 
+    @Test
+    void searchImportFromIndexFailsIndexWithoutSearchButNotFromTheServicePackage() throws IOException {
+        writeSource("com/nexus/index/Publisher.java", """
+                package com.nexus.index;
+
+                import com.nexus.search.SearchIndex;
+                import com.nexus.project.ProjectDescriptor;
+
+                class Publisher {
+                }
+                """);
+        writeSource("com/nexus/index/scan/Scanner.java", """
+                package com.nexus.index.scan;
+
+                import com.nexus.search.semantic.SemanticIndexingService;
+
+                class Scanner {
+                }
+                """);
+        writeSource("com/nexus/index/service/Service.java", """
+                package com.nexus.index.service;
+
+                import com.nexus.search.SearchIndex;
+
+                class Service {
+                }
+                """);
+
+        assertEquals(List.of(
+                        "[index-sans-search] com.nexus.index.Publisher -> com.nexus.search.SearchIndex",
+                        "[index-sans-search] com.nexus.index.scan.Scanner -> com.nexus.search.semantic.SemanticIndexingService"),
+                CoreArchitectureRules.indexWithoutSearch(scanFixture()));
+    }
+
+    @Test
+    void contextImportFromASourceFailsContextSourceWithoutContext() throws IOException {
+        writeSource("com/nexus/context/source/git/Provider.java", """
+                package com.nexus.context.source.git;
+
+                import com.nexus.context.ContextFragment;
+                import com.nexus.context.model.ContextItem;
+                import com.nexus.context.source.ContextSourceProvider;
+
+                class Provider {
+                }
+                """);
+        writeSource("com/nexus/context/Builder.java", """
+                package com.nexus.context;
+
+                import com.nexus.context.source.ContextSourceProvider;
+
+                class Builder {
+                }
+                """);
+
+        assertEquals(List.of("[context-source-sans-context] com.nexus.context.source.git.Provider"
+                        + " -> com.nexus.context.ContextFragment"),
+                CoreArchitectureRules.contextSourceWithoutContext(scanFixture()));
+    }
+
+    @Test
+    void searchImportFromRankingFailsRankingWithoutSearchButNotTheCandidateModel() throws IOException {
+        writeSource("com/nexus/ranking/Ranker.java", """
+                package com.nexus.ranking;
+
+                import com.nexus.search.SearchService;
+                import com.nexus.search.candidate.SearchCandidate;
+
+                class Ranker {
+                }
+                """);
+        writeSource("com/nexus/ranking/graph/Enricher.java", """
+                package com.nexus.ranking.graph;
+
+                import com.nexus.search.*;
+
+                class Enricher {
+                }
+                """);
+
+        assertEquals(List.of(
+                        "[ranking-sans-search] com.nexus.ranking.Ranker -> com.nexus.search.SearchService",
+                        "[ranking-sans-search] com.nexus.ranking.graph.Enricher -> com.nexus.search.*"),
+                CoreArchitectureRules.rankingWithoutSearch(scanFixture()));
+    }
+
+    @Test
+    void ollamaImportFromThePortFailsSearchSemanticWithoutOllama() throws IOException {
+        writeSource("com/nexus/search/semantic/Configuration.java", """
+                package com.nexus.search.semantic;
+
+                import com.nexus.search.semantic.ollama.OllamaEmbeddingProvider;
+
+                class Configuration {
+                }
+                """);
+        writeSource("com/nexus/search/semantic/ollama/OllamaEmbeddingProvider.java", """
+                package com.nexus.search.semantic.ollama;
+
+                import com.nexus.search.semantic.EmbeddingProvider;
+
+                class OllamaEmbeddingProvider {
+                }
+                """);
+
+        assertEquals(List.of("[search-semantic-sans-ollama] com.nexus.search.semantic.Configuration"
+                        + " -> com.nexus.search.semantic.ollama.OllamaEmbeddingProvider"),
+                CoreArchitectureRules.searchSemanticWithoutOllama(scanFixture()));
+    }
+
+    @Test
+    void rankingImportingSearchFailsTheEmptyBaselineAndNamesBothPackages() throws IOException {
+        writeSource("com/nexus/ranking/Ranker.java", """
+                package com.nexus.ranking;
+
+                import com.nexus.search.SearchService;
+
+                class Ranker {
+                }
+                """);
+        writeSource("com/nexus/search/SearchService.java", """
+                package com.nexus.search;
+
+                import com.nexus.ranking.Ranker;
+
+                class SearchService {
+                }
+                """);
+
+        assertEquals(List.of(
+                        "[cycles-baseline] nouvelle arête de cycle entre packages : com.nexus.ranking -> com.nexus.search",
+                        "[cycles-baseline] nouvelle arête de cycle entre packages : com.nexus.search -> com.nexus.ranking"),
+                CoreArchitectureRules.cycleBaseline(scanFixture().cycleEdges(), new TreeSet<>()));
+    }
     @Test
     void newCycleEdgeFailsTheBaselineAndNamesThePackages() throws IOException {
         writeCycleFixture();

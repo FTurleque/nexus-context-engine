@@ -1,9 +1,11 @@
 package com.nexus.context;
 
 import com.nexus.config.NexusPaths;
+import com.nexus.context.model.ContextItem;
 import com.nexus.context.source.skill.LocalAgentSkillsProvider;
 import com.nexus.index.IndexRepository;
-import com.nexus.index.ProjectIndexingService;
+import com.nexus.index.service.ProjectIndexingService;
+import com.nexus.index.service.ProjectIndexingServices;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.markdown.MarkdownLanguageAnalyzer;
 import com.nexus.index.scan.ProjectScanner;
@@ -15,7 +17,7 @@ import com.nexus.project.ProjectRegistry;
 import com.nexus.project.ProjectRepository;
 import com.nexus.ranking.DeterministicContextRanker;
 import com.nexus.ranking.graph.GraphCandidateEnricher;
-import com.nexus.search.CandidateType;
+import com.nexus.search.candidate.CandidateType;
 import com.nexus.search.SearchIndex;
 import com.nexus.search.SearchService;
 import com.nexus.search.SymbolSearchStrategy;
@@ -125,7 +127,7 @@ class AgentSkillsIntegrationTest {
         IndexRepository indexRepository = new SqliteIndexRepository(database);
         ProjectDescriptor project = new ProjectRegistry(projectRepository).register(projectRoot, "skills-context");
         SearchIndex searchIndex = new LuceneSearchIndex(paths);
-        ProjectIndexingService indexingService = new ProjectIndexingService(
+        ProjectIndexingService indexingService = ProjectIndexingServices.of(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),

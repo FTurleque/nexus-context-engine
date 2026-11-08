@@ -2,8 +2,9 @@ package com.nexus.search.lucene;
 
 import com.nexus.config.NexusPaths;
 import com.nexus.search.LexicalSearchHit;
-import com.nexus.search.SearchDocument;
+import com.nexus.index.SearchDocument;
 import com.nexus.search.SearchIndex;
+import com.nexus.search.SearchIndexSession;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -55,6 +56,33 @@ public final class PersistentLuceneSearchIndex implements SearchIndex {
     }
 
     @Override
+    public SearchIndexSession openSession(UUID projectId, boolean rebuild) throws IOException {
+        readers.ensureOpen();
+        if (rebuild) {
+            readers.invalidate(projectId);
+        }
+        SearchIndexSession session = operationScoped.openSession(projectId, rebuild);
+        return new SearchIndexSession() {
+            @Override
+            public void applyChanges(List<SearchDocument> documents, Set<String> removedPaths)
+                    throws IOException {
+                session.applyChanges(documents, removedPaths);
+            }
+
+            @Override
+            public void commit() throws IOException {
+                session.commit();
+                readers.refreshIfCached(projectId);
+            }
+
+            @Override
+            public void close() throws IOException {
+                session.close();
+            }
+        };
+    }
+
+    @Override
     public List<LexicalSearchHit> search(UUID projectId, String query, int limit) throws IOException {
         readers.ensureOpen();
         LuceneSearchIndex.validateSearchRequest(projectId, query, limit);
@@ -68,8 +96,12 @@ public final class PersistentLuceneSearchIndex implements SearchIndex {
 
     @Override
     public boolean isPresent(UUID projectId) throws IOException {
+        Objects.requireNonNull(projectId, "projectId");
         readers.ensureOpen();
-        return operationScoped.isPresent(projectId);
+        // Sonde de readiness : lecture sur le reader en cache ou sur le dernier commit,
+        // sans DirectoryReader supplémentaire (ADR-0045).
+        return readers.readCommitMetadata(
+                projectId, paths.projectLuceneIndex(projectId), LuceneSearchIndex::hasCurrentRedactionPolicy, false);
     }
 
     @Override
@@ -79,5 +111,9 @@ public final class PersistentLuceneSearchIndex implements SearchIndex {
 
     int cachedProjectCount() {
         return readers.cachedProjectCount();
+    }
+
+    long openedReaderCount() {
+        return readers.openedReaderCount();
     }
 }

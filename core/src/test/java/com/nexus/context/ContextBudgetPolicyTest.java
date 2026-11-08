@@ -1,6 +1,6 @@
 package com.nexus.context;
 
-import com.nexus.search.CandidateType;
+import com.nexus.search.candidate.CandidateType;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;

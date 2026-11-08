@@ -6,7 +6,7 @@
 
     <groupId>io.github.fturleque</groupId>
     <artifactId>nexus-context-engine-parent</artifactId>
-    <version>0.2.0</version>
+    <version>0.2.0-rc.1</version>
     <packaging>pom</packaging>
     <name>NEXUS Context Engine Reactor</name>
     <description>Reactor et gouvernance de build communs au cœur NEXUS et à ses adaptateurs optionnels.</description>
@@ -31,6 +31,9 @@
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <!-- Horodatage des entrées des JAR et du ZIP de distribution (build reproductible).
+             Mis à jour avec la version à chaque release : docs/developer/release-and-recovery.md. -->
+        <project.build.outputTimestamp>2026-11-08T00:00:00Z</project.build.outputTimestamp>
         <argLine></argLine>
         <nexus.runtime.nativeAccessArg>--enable-native-access=ALL-UNNAMED</nexus.runtime.nativeAccessArg>
         <nexus.coverage.line.minimum>0.65</nexus.coverage.line.minimum>
@@ -51,6 +54,12 @@
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.version>3.40.1.1</quarkus.platform.version>
 
+        <maven.clean-plugin.version>3.5.0</maven.clean-plugin.version>
+        <maven.resources-plugin.version>3.5.0</maven.resources-plugin.version>
+        <maven.jar-plugin.version>3.5.1</maven.jar-plugin.version>
+        <maven.install-plugin.version>3.2.0</maven.install-plugin.version>
+        <maven.deploy-plugin.version>3.2.0</maven.deploy-plugin.version>
+        <maven.site-plugin.version>3.22.0</maven.site-plugin.version>
         <maven.compiler-plugin.version>3.16.0</maven.compiler-plugin.version>
         <maven.surefire-plugin.version>3.6.1</maven.surefire-plugin.version>
         <maven.shade-plugin.version>3.6.2</maven.shade-plugin.version>
@@ -65,6 +74,13 @@
 
     <dependencyManagement>
         <dependencies>
+            <!-- jna est géré avec jna-platform : le BOM Quarkus le ramènerait sous la version
+                 qu'exige jna-platform, ce que requireUpperBoundDeps refuse. -->
+            <dependency>
+                <groupId>net.java.dev.jna</groupId>
+                <artifactId>jna</artifactId>
+                <version>${jna.version}</version>
+            </dependency>
             <dependency>
                 <groupId>net.java.dev.jna</groupId>
                 <artifactId>jna-platform</artifactId>
@@ -143,6 +159,39 @@
     <build>
         <pluginManagement>
             <plugins>
+                <!-- Plugins du cycle de vie épinglés : sans entrée ici, Maven choisirait la version
+                     liée à sa propre distribution (requirePluginVersions le refuse). -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-clean-plugin</artifactId>
+                    <version>${maven.clean-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-resources-plugin</artifactId>
+                    <version>${maven.resources-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>${maven.jar-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-install-plugin</artifactId>
+                    <version>${maven.install-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-deploy-plugin</artifactId>
+                    <version>${maven.deploy-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <!-- Le site n'est pas produit, mais requirePluginVersions contrôle aussi le cycle site. -->
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-site-plugin</artifactId>
+                    <version>${maven.site-plugin.version}</version>
+                </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
@@ -259,9 +308,29 @@
                                     <version>[21,)</version>
                                 </requireJavaVersion>
                                 <requireMavenVersion>
-                                    <version>[3.9.0,)</version>
+                                    <!-- Aligné sur le wrapper (.mvn/wrapper/maven-wrapper.properties). -->
+                                    <version>[3.10.0,)</version>
                                 </requireMavenVersion>
                                 <banDuplicatePomDependencyVersions/>
+                                <requirePluginVersions>
+                                    <message>Chaque plugin du build doit avoir une version explicite (pluginManagement du pom racine).</message>
+                                    <banLatest>true</banLatest>
+                                    <banRelease>true</banRelease>
+                                    <banSnapshots>true</banSnapshots>
+                                </requirePluginVersions>
+                                <requireUpperBoundDeps>
+                                    <!-- Exclusions justifiées : versions fixées par le BOM de la plate-forme Quarkus,
+                                         qualifiée comme un ensemble ; la remonter pour le seul transitif
+                                         diverge de la plate-forme sans correctif de sécurité en jeu.
+                                         - org.jctools:jctools-core : 4.0.5 (BOM Quarkus), mutiny demande 4.0.6 ;
+                                         - org.jspecify:jspecify : 1.0.0 (BOM Quarkus), Micrometer demande 1.0.1
+                                           (annotations de nullité seulement).
+                                         Revoir ces exclusions à chaque montée de quarkus.platform.version. -->
+                                    <excludes>
+                                        <exclude>org.jctools:jctools-core</exclude>
+                                        <exclude>org.jspecify:jspecify</exclude>
+                                    </excludes>
+                                </requireUpperBoundDeps>
                             </rules>
                         </configuration>
                     </execution>
@@ -284,6 +353,35 @@
                             <includedScopes>compile,runtime</includedScopes>
                             <excludedGroups>io.github.fturleque</excludedGroups>
                             <failOnMissing>true</failOnMissing>
+                            <!-- Liste blanche (AUD-DEP-07) : une dépendance livrée doit porter au moins une
+                                 licence de cette liste ; une dépendance multi-licence est acceptée si l'une
+                                 de ses licences y figure. Toute nouvelle licence exige une revue du pom. -->
+                            <failOnBlacklist>true</failOnBlacklist>
+                            <includedLicenses>
+                                <includedLicense>Apache License, Version 2.0</includedLicense>
+                                <includedLicense>BSD 2-Clause License</includedLicense>
+                                <includedLicense>BSD 3-Clause License</includedLicense>
+                                <includedLicense>MIT License</includedLicense>
+                                <includedLicense>MIT No Attribution</includedLicense>
+                                <includedLicense>CC0 1.0 Universal</includedLicense>
+                                <includedLicense>Eclipse Public License 1.0</includedLicense>
+                                <includedLicense>Eclipse Public License 2.0</includedLicense>
+                                <includedLicense>Eclipse Distribution License 1.0</includedLicense>
+                            </includedLicenses>
+                            <!-- Libellé normalisé en premier, variantes déclarées par les dépendances ensuite. -->
+                            <licenseMerges>
+                                <licenseMerge>Apache License, Version 2.0|The Apache Software License, Version 2.0|The Apache License, Version 2.0|Apache License 2.0|Apache License Version 2.0|Apache License v2.0|Apache-2.0|Apache 2</licenseMerge>
+                                <licenseMerge>BSD 2-Clause License|BSD-2-Clause</licenseMerge>
+                                <licenseMerge>BSD 3-Clause License|BSD-3-Clause</licenseMerge>
+                                <licenseMerge>MIT License|MIT</licenseMerge>
+                                <licenseMerge>MIT No Attribution|MIT-0</licenseMerge>
+                                <licenseMerge>CC0 1.0 Universal|Public Domain, per Creative Commons CC0</licenseMerge>
+                                <licenseMerge>Eclipse Public License 1.0|Eclipse Public License - v 1.0</licenseMerge>
+                                <licenseMerge>Eclipse Public License 2.0|Eclipse Public License - v 2.0|Eclipse Public License v. 2.0|EPL 2.0|EPL-2.0</licenseMerge>
+                                <licenseMerge>Eclipse Distribution License 1.0|Eclipse Distribution License - v 1.0|EDL 1.0</licenseMerge>
+                                <licenseMerge>GNU General Public License, version 2 with the GNU Classpath Exception|GPL2 w/ CPE|GPL-2.0-with-classpath-exception</licenseMerge>
+                                <licenseMerge>GNU Lesser General Public License 2.1|LGPL, version 2.1|LGPL-2.1-or-later</licenseMerge>
+                            </licenseMerges>
                             <deployMissingFile>false</deployMissingFile>
                             <useRepositoryMissingFiles>false</useRepositoryMissingFiles>
                             <sortArtifactByName>true</sortArtifactByName>

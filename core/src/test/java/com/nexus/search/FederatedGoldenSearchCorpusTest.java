@@ -2,7 +2,8 @@ package com.nexus.search;
 
 import com.nexus.config.NexusPaths;
 import com.nexus.index.IndexRepository;
-import com.nexus.index.ProjectIndexingService;
+import com.nexus.index.service.ProjectIndexingService;
+import com.nexus.index.service.ProjectIndexingServices;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.scan.ProjectScanner;
 import com.nexus.persistence.sqlite.SqliteDatabase;
@@ -88,7 +89,7 @@ class FederatedGoldenSearchCorpusTest {
         ProjectDescriptor projectB = projectRegistry.register(projectBRoot, "project-b");
         ProjectDescriptor projectC = projectRegistry.register(projectCRoot, "project-c");
         LuceneSearchIndex searchIndex = new LuceneSearchIndex(paths);
-        ProjectIndexingService indexingService = new ProjectIndexingService(
+        ProjectIndexingService indexingService = ProjectIndexingServices.of(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),

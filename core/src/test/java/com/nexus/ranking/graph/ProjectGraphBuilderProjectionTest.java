@@ -74,6 +74,11 @@ class ProjectGraphBuilderProjectionTest {
         }
 
         @Override
+        public com.nexus.index.IndexWriteSession openWriteSession(UUID ignored) {
+            throw new UnsupportedOperationException("Mutation is outside this read-only graph projection fixture.");
+        }
+
+        @Override
         public void replaceExternalCodeIntelligence(UUID ignored, CodeIntelligenceSnapshot snapshot) {
             // External intelligence mutation is outside this read-only fixture.
         }
@@ -98,6 +103,11 @@ class ProjectGraphBuilderProjectionTest {
 
         @Override
         public List<IndexedSymbol> searchSymbols(UUID ignored, String query, int limit) {
+            throw new AssertionError("Graph must not search symbols");
+        }
+
+        @Override
+        public List<IndexedSymbol> searchSymbols(UUID ignored, List<String> queries, int limit) {
             throw new AssertionError("Graph must not search symbols");
         }
 

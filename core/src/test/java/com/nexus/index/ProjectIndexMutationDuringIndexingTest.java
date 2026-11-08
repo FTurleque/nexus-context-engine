@@ -2,6 +2,8 @@ package com.nexus.index;
 
 import com.nexus.config.NexusPaths;
 import com.nexus.index.scan.ProjectScanner;
+import com.nexus.index.service.ProjectIndexingService;
+import com.nexus.index.service.ProjectIndexingServices;
 import com.nexus.persistence.sqlite.SqliteDatabase;
 import com.nexus.persistence.sqlite.SqliteIndexRepository;
 import com.nexus.persistence.sqlite.SqliteProjectRepository;
@@ -56,7 +58,7 @@ class ProjectIndexMutationDuringIndexingTest {
             }
         };
 
-        ProjectIndexingService service = new ProjectIndexingService(
+        ProjectIndexingService service = ProjectIndexingServices.of(
                 projects,
                 new SqliteIndexRepository(database),
                 new ProjectScanner(),

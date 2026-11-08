@@ -1,11 +1,14 @@
 package com.nexus.context;
 
 import com.nexus.config.NexusPaths;
+import com.nexus.context.model.ContextFragment;
+import com.nexus.context.model.ContextItem;
 import com.nexus.context.source.git.GitContextQuery;
 import com.nexus.context.source.git.GitContextResult;
 import com.nexus.context.source.git.GitContextSourceProvider;
 import com.nexus.index.IndexRepository;
-import com.nexus.index.ProjectIndexingService;
+import com.nexus.index.service.ProjectIndexingService;
+import com.nexus.index.service.ProjectIndexingServices;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.scan.ProjectScanner;
 import com.nexus.persistence.sqlite.SqliteDatabase;
@@ -16,7 +19,7 @@ import com.nexus.project.ProjectRegistry;
 import com.nexus.project.ProjectRepository;
 import com.nexus.ranking.DeterministicContextRanker;
 import com.nexus.ranking.graph.GraphCandidateEnricher;
-import com.nexus.search.CandidateType;
+import com.nexus.search.candidate.CandidateType;
 import com.nexus.search.SearchIndex;
 import com.nexus.search.SearchService;
 import com.nexus.search.SymbolSearchStrategy;
@@ -176,6 +179,45 @@ class DefaultContextBuilderIntegrationTest {
         assertTrue(((Number) comfortable.metadata().get("gitSelectedItems")).intValue() >= 1);
     }
 
+    @Test
+    void exposesGitCacheCountersInExplainMetadataOnly() throws Exception {
+        Path projectRoot = Files.createDirectories(temporaryDirectory.resolve("git-cache-project"));
+        writeJava(projectRoot, "demo/OrderService.java", """
+                package demo;
+                class OrderService {
+                    void create() {}
+                }
+                """);
+        GitContextSourceProvider provider = new GitContextSourceProvider() {
+            @Override
+            public String id() {
+                return "cached-git";
+            }
+
+            @Override
+            public GitContextResult discover(GitContextQuery query) {
+                return new GitContextResult(List.of(), true, true, 0, 0, 0, List.of());
+            }
+
+            @Override
+            public Map<String, Object> cacheStatistics() {
+                return Map.of("capacity", 100, "entries", 1, "hits", 3, "misses", 1, "evictions", 0);
+            }
+        };
+        Fixture fixture = fixture(projectRoot, "git-cache", provider);
+        fixture.indexingService().index(fixture.project().id());
+
+        ContextBundle explained = fixture.contextBuilder().build(new ContextRequest(
+                fixture.project().id(), "OrderService", 600, Set.of(), Map.of(), true));
+        ContextBundle plain = fixture.contextBuilder().build(new ContextRequest(
+                fixture.project().id(), "OrderService", 600, Set.of(), Map.of(), false));
+
+        assertEquals(
+                Map.of("capacity", 100, "entries", 1, "hits", 3, "misses", 1, "evictions", 0),
+                explained.metadata().get("gitContextCache"));
+        assertFalse(plain.metadata().containsKey("gitContextCache"));
+    }
+
     private Fixture fixture(Path projectRoot, String name) throws Exception {
         return fixture(projectRoot, name, null);
     }
@@ -190,7 +232,7 @@ class DefaultContextBuilderIntegrationTest {
         IndexRepository indexRepository = new SqliteIndexRepository(database);
         ProjectDescriptor project = new ProjectRegistry(projectRepository).register(projectRoot, name);
         SearchIndex searchIndex = new LuceneSearchIndex(paths);
-        ProjectIndexingService indexingService = new ProjectIndexingService(
+        ProjectIndexingService indexingService = ProjectIndexingServices.of(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),

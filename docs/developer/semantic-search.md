@@ -10,7 +10,7 @@ Sans configuration :
 NexusApplication.create(paths)
 ```
 
-résout `SemanticSearchConfiguration.fromEnvironment()` en mode désactivé. Aucun provider d'embeddings ni index sémantique n'est créé.
+résout la configuration sémantique de l'environnement (`NexusApplicationFactory`) en mode désactivé. Aucun provider d'embeddings ni index sémantique n'est créé.
 
 ## Activation commune
 
@@ -261,7 +261,7 @@ Cette section relie les exigences de la spec au workflow, au test de corpus et a
 
 **[Existant vérifié]** Le corpus `pr` est déclaré dans `RealSemanticBenchmarkCorpus` : sept tranches (`docs/developer/**`, ADR `BE-*.md` et `DATA-*.md`, classes de premier niveau de `com.nexus.context` et de `com.nexus.search`, `com.nexus.context.source.git`, `adapters/mcp-java/src/main`) (`core/src/test/java/com/nexus/search/semantic/RealSemanticBenchmarkCorpus.java:33-40`). La copie du corpus refuse un chemin pertinent absent (`:147-153`). Le paquet `com.nexus.search.semantic` lui-même n'est dans aucune tranche : seuls les `*.java` de premier niveau de `com.nexus.search` y sont.
 
-**[Existant vérifié]** Rôle dans la release : le job `publish` de `release.yml` liste treize `needs`, dont aucun n'est la qualification sémantique (`.github/workflows/release.yml:150-165`). Cette règle est écrite dans cette page (« Qualification réelle et release », ligne `La release n'exige pas la qualification sémantique réelle`) et épinglée par le contrat `scripts/release/test-final-audit-contracts.sh:193-211`.
+**[Existant vérifié]** Rôle dans la release : le job `publish` de `release.yml` liste treize `needs`, dont aucun n'est la qualification sémantique (`.github/workflows/release.yml:155-170`). Cette règle est écrite dans cette page (« Qualification réelle et release », ligne `La release n'exige pas la qualification sémantique réelle`) et épinglée par le contrat `scripts/release/test-final-audit-contracts.sh:193-211`.
 
 **[Existant vérifié]** Ce qui s'exécute où :
 

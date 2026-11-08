@@ -20,6 +20,8 @@ nexus --version [--json]
 
 `--json` est global. `stdout` porte les résultats, `stderr` les erreurs.
 
+`inspect` lit les statistiques de l'index et exige un projet `READY` : sur un projet non indexé, en cours d'indexation ou en échec, la commande échoue en erreur runtime (code 1).
+
 Les réponses sont construites par la projection publique du cœur, `com.nexus.exposure.PublicOutputProjection` ([ARCH-0061](../architecture/adr/ARCH-0061-decider-le-contrat-de-sortie-publique-dans-la-projection-du-coeur.md)), commune à la CLI, REST et MCP : mêmes clés, dans le même ordre, sur les trois canaux. Chemins relatifs au projet, aucune clé `rootPath`, `rank`, `id` et `excerpt` redigé sur chaque résultat classé, `qualifiedName`, `signature`, `source` et `target` redigés, `scoreComponents` et `metadata` triés par clé, `languages` et `technologies` en listes triées ; la liste des projets est triée par nom sans tenir compte de la casse, puis par identifiant, et une portée fédérée garde l'ordre demandé. Les résultats fédérés imbriquent `project` et `result` (recherche) ou `project` et `item` (contexte). Les tests `*OutputParityTest` des trois modules comparent chaque canal au contrat de `PublicOutputSchema`.
 
 En JSON, la CLI ajoute la clé `command` en tête de chaque objet de premier niveau : c'est la seule divergence déclarée de ce canal. Le rendu humain lit les mêmes structures, signatures redigées comprises.
@@ -119,7 +121,7 @@ Le projet doit être `READY`.
 java -jar .\target\nexus-context-engine-0.2.0-cli.jar search-federated app-api,app-domain "facturation" --limit 20 --explain
 ```
 
-La portée accepte noms uniques ou UUID séparés par des virgules. Chaque projet doit être `READY`. NEXUS sur-récupère localement avant diversification globale par `(projectId,path)` pour éviter un top-K artificiellement sous-rempli.
+La portée accepte noms uniques ou UUID séparés par des virgules. Chaque projet doit être `READY`. NEXUS sur-récupère localement avant diversification globale par `(projectId,path)` pour éviter un top-K artificiellement sous-rempli. Une échéance globale (60 s par défaut, `NEXUS_FEDERATION_DEADLINE_SECONDS`) borne la requête : les projets non commencés sont listés par la clé JSON `unservedProjects` et par la ligne « Projets non servis » du rendu humain, pour la recherche comme pour le contexte fédéré ([détail](large-scale-search.md#vecteur-de-requête-unique-et-échéance-globale)).
 
 ## ContextBundle mono-projet
 

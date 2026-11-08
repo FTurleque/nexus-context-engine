@@ -25,6 +25,14 @@ target\dist\NEXUS-0.2.0-windows-x64-setup.exe
 target\dist\NEXUS-0.2.0-windows-x64-setup.exe.sha256
 ```
 
+Le ZIP et le `setup.exe` ne portent pas de signature Authenticode : au premier lancement, Windows SmartScreen affiche « Windows a protégé votre ordinateur » avec un éditeur inconnu. Pour vérifier que le fichier vient bien de la chaîne de release du projet avant de l'exécuter, contrôler son empreinte avec le `.sha256` publié, ou son attestation de provenance :
+
+```powershell
+gh attestation verify .\NEXUS-<version>-windows-x64-setup.exe --repo FTurleque/nexus-context-engine
+```
+
+Une fois la vérification faite, cliquer sur « Informations complémentaires » puis « Exécuter quand même ».
+
 Le payload natif embarque son propre runtime Java construit avec `jpackage`. Une JVM système n'est pas requise après installation.
 
 Le payload contient :

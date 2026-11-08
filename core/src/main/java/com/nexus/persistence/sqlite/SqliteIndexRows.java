@@ -47,19 +47,24 @@ final class SqliteIndexRows {
         try (ResultSet resultSet = statement.executeQuery()) {
             List<IndexedSymbol> symbols = new ArrayList<>();
             while (resultSet.next()) {
-                symbols.add(new IndexedSymbol(
-                        resultSet.getString(RELATIVE_PATH_COLUMN),
-                        new CodeSymbol(
-                                SymbolKind.valueOf(resultSet.getString("kind")),
-                                resultSet.getString("name"),
-                                resultSet.getString(QUALIFIED_NAME_COLUMN),
-                                resultSet.getString("signature"),
-                                resultSet.getInt("start_line"),
-                                resultSet.getInt("end_line"),
-                                resultSet.getString("source_provider"))));
+                symbols.add(readSymbol(resultSet));
             }
             return List.copyOf(symbols);
         }
+    }
+
+    /** Lit la ligne courante, qui expose les colonnes standard d'un symbole indexé. */
+    static IndexedSymbol readSymbol(ResultSet resultSet) throws SQLException {
+        return new IndexedSymbol(
+                resultSet.getString(RELATIVE_PATH_COLUMN),
+                new CodeSymbol(
+                        SymbolKind.valueOf(resultSet.getString("kind")),
+                        resultSet.getString("name"),
+                        resultSet.getString(QUALIFIED_NAME_COLUMN),
+                        resultSet.getString("signature"),
+                        resultSet.getInt("start_line"),
+                        resultSet.getInt("end_line"),
+                        resultSet.getString("source_provider")));
     }
 
     static List<SymbolRelation> readRelations(PreparedStatement statement) throws SQLException {

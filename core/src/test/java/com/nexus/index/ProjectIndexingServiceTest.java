@@ -4,6 +4,8 @@ import com.nexus.config.NexusPaths;
 import com.nexus.index.java.JavaParserLanguageAnalyzer;
 import com.nexus.index.markdown.MarkdownLanguageAnalyzer;
 import com.nexus.index.scan.ProjectScanner;
+import com.nexus.index.service.ProjectIndexingService;
+import com.nexus.index.service.ProjectIndexingServices;
 import com.nexus.persistence.sqlite.SqliteDatabase;
 import com.nexus.persistence.sqlite.SqliteIndexRepository;
 import com.nexus.persistence.sqlite.SqliteProjectRepository;
@@ -11,7 +13,6 @@ import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectRegistry;
 import com.nexus.project.ProjectRepository;
-import com.nexus.search.SearchDocument;
 import com.nexus.search.lucene.LuceneSearchIndex;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.store.Directory;
@@ -58,7 +59,7 @@ class ProjectIndexingServiceTest {
         ProjectRegistry registry = new ProjectRegistry(projectRepository);
         ProjectDescriptor project = registry.register(projectRoot, "demo");
 
-        ProjectIndexingService service = new ProjectIndexingService(
+        ProjectIndexingService service = ProjectIndexingServices.of(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),
@@ -125,7 +126,7 @@ class ProjectIndexingServiceTest {
         IndexRepository indexRepository = new SqliteIndexRepository(database);
         ProjectDescriptor project = new ProjectRegistry(projectRepository).register(projectRoot, "skills-demo");
         LuceneSearchIndex searchIndex = new LuceneSearchIndex(paths);
-        ProjectIndexingService service = new ProjectIndexingService(
+        ProjectIndexingService service = ProjectIndexingServices.of(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),
@@ -219,7 +220,7 @@ class ProjectIndexingServiceTest {
             }
         };
 
-        ProjectIndexingService service = new ProjectIndexingService(
+        ProjectIndexingService service = ProjectIndexingServices.withImporters(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),
@@ -296,7 +297,7 @@ class ProjectIndexingServiceTest {
             }
         };
 
-        ProjectIndexingService service = new ProjectIndexingService(
+        ProjectIndexingService service = ProjectIndexingServices.withProviders(
                 projectRepository,
                 indexRepository,
                 new ProjectScanner(),
@@ -349,7 +350,7 @@ class ProjectIndexingServiceTest {
         ProjectRegistry registry = new ProjectRegistry(projectRepository);
         ProjectDescriptor project = registry.register(projectRoot, "oversized");
         LuceneSearchIndex searchIndex = new LuceneSearchIndex(paths);
-        ProjectIndexingService service = new ProjectIndexingService(
+        ProjectIndexingService service = ProjectIndexingServices.of(
                 projectRepository,
                 new SqliteIndexRepository(database),
                 new ProjectScanner(),

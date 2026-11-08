@@ -32,7 +32,11 @@ SQLite → search/ranking/context
 nexus minos-import <id-ou-nom> < export-minos.json [--json]
 ```
 
-Le payload est borné à 128 MiB. La CLI applique cette limite pendant la lecture UTF-8 sans conserver un `byte[]` complet du payload en parallèle. Le projet doit être `READY` avant remplacement du snapshot MINOS, comme les autres opérations dépendant d'un index cohérent.
+Le payload est borné à 128 MiB. La CLI lit stdin par `NexusApplication.readMinosPayload(...)`, qui applique cette limite pendant la lecture UTF-8 sans conserver un `byte[]` complet du payload en parallèle ; la borne est celle de `MinosCodeIndexImporter.MAX_EXPORT_BYTES` (ADR-0044), non une valeur propre à la CLI. Le projet doit être `READY` avant remplacement du snapshot MINOS, comme les autres opérations dépendant d'un index cohérent.
+
+## Verrouillage
+
+L'import est une écriture d'index : `NexusApplication.importMinos(...)` délègue à `ProjectIndexingService.importExternalCodeIntelligence(...)`, qui prend le verrou single-flight du projet puis le verrou inter-processus, comme l'indexation. Un import demandé pendant une indexation du même projet est refusé avec le même diagnostic qu'une indexation concurrente. `MinosCodeIndexImporter` est composé dans `NexusApplicationFactory` ; ni la façade ni la CLI ne l'instancient.
 
 ## Parsing et limites de ressources
 
@@ -72,7 +76,7 @@ Pour chaque `filePath` :
 Le chemin applicatif :
 
 ```java
-NexusApplication.importMinos(...)
+ProjectIndexingService.importExternalCodeIntelligence(...)
 ```
 
 construit désormais l'allow-list depuis :

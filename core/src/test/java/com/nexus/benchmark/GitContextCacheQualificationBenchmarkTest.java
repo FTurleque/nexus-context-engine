@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.nexus.context.source.git.GitContextQuery;
 import com.nexus.context.source.git.GitContextResult;
 import com.nexus.context.source.git.LocalGitContextSourceProvider;
+import com.nexus.context.source.git.PersistentGitContextSourceProvider;
 import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectSourceType;
@@ -58,6 +59,8 @@ class GitContextCacheQualificationBenchmarkTest {
     private static final int FULL_COMMITS = 48;
     private static final int WARM_CYCLES = 5;
     private static final int CACHE_CAPACITY = 16;
+    /** Plus que l'ancienne capacité de 16 : le scope fédéré qualifié sur le cache de production. */
+    private static final int FEDERATED_SCOPE_PROJECTS = 20;
     private static final double MIN_WARM_P95_IMPROVEMENT = 0.25d;
 
     @TempDir
@@ -99,6 +102,8 @@ class GitContextCacheQualificationBenchmarkTest {
                 && (repositories.size() < 4 || bounded.evictions() > 0);
         assertTrue(storageBounded, "le prototype doit rester strictement borné");
 
+        Map<String, Object> federatedScope = qualifyFederatedScope();
+
         double warmP95Improvement = improvementRatio(baselineWarm.p95Micros(), cachedWarm.p95Micros());
         boolean invalidationQualified = invalidation.values().stream().allMatch(Boolean::booleanValue);
         boolean candidate = warmP95Improvement >= MIN_WARM_P95_IMPROVEMENT
@@ -127,6 +132,7 @@ class GitContextCacheQualificationBenchmarkTest {
                 "entries", bounded.entries(),
                 "evictions", bounded.evictions(),
                 "bounded", storageBounded));
+        report.put("federatedScope", federatedScope);
         report.put("decision", Map.of(
                 "minimumWarmP95ImprovementRatio", MIN_WARM_P95_IMPROVEMENT,
                 "persistentCacheCandidate", candidate,
@@ -155,6 +161,36 @@ class GitContextCacheQualificationBenchmarkTest {
                 warmP95Improvement,
                 candidate,
                 output);
+    }
+
+    /**
+     * Scope fédéré de plus de 16 projets sur le cache de production (BE-0065) : au second passage
+     * cyclique, chaque projet est servi par le cache et aucune entrée n'est évincée.
+     */
+    private Map<String, Object> qualifyFederatedScope() throws Exception {
+        int projects = FEDERATED_SCOPE_PROJECTS;
+        List<RepoFixture> fixtures = new ArrayList<>();
+        for (int index = 0; index < projects; index++) {
+            fixtures.add(createRepository("federated-scope-" + index, 3));
+        }
+        PersistentGitContextSourceProvider provider = new PersistentGitContextSourceProvider();
+        for (RepoFixture fixture : fixtures) {
+            provider.discover(fixture.query());
+        }
+        for (RepoFixture fixture : fixtures) {
+            provider.discover(fixture.query());
+        }
+        Map<String, Object> statistics = provider.cacheStatistics();
+        int secondPassHits = ((Number) statistics.get("hits")).intValue();
+        int evictions = ((Number) statistics.get("evictions")).intValue();
+        assertEquals(projects, secondPassHits, "chaque projet doit être servi par le cache au second passage");
+        assertEquals(0, evictions, "un scope sous la capacité ne doit évincer aucune entrée");
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("projects", projects);
+        result.put("capacity", statistics.get("capacity"));
+        result.put("secondPassHits", secondPassHits);
+        result.put("evictions", evictions);
+        return result;
     }
 
     private boolean qualifyHeadInvalidation() throws Exception {

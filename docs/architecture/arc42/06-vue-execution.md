@@ -215,8 +215,8 @@ sequenceDiagram
 
     Agent->>OS: démarrer NexusMcpServer
     OS->>MCP: main(args)
-    MCP->>App: NexusApplication.create(NexusPaths.fromEnvironment())
-    App->>SQLite: ensurePrivateStorage + migrations
+    MCP->>App: NexusApplication.createLongLived(NexusConfiguration.pathsFromEnvironment())
+    App->>SQLite: PrivateStoragePolicy.ensurePrivateStorage + migrations
     App-->>MCP: application prête
     MCP->>MCP: enregistrer tools MCP
     MCP-->>Agent: server_info + capabilities via STDIO

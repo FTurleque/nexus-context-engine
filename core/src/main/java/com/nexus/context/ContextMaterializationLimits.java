@@ -1,5 +1,8 @@
 package com.nexus.context;
 
+import java.util.Map;
+import java.util.Objects;
+
 /** Physical I/O limits for task-context materialization. */
 public record ContextMaterializationLimits(
         long maxCumulativeBytes,
@@ -42,62 +45,41 @@ public record ContextMaterializationLimits(
         }
     }
 
-    public static ContextMaterializationLimits fromEnvironment() {
+    public static ContextMaterializationLimits defaults() {
+        return new ContextMaterializationLimits(
+                DEFAULT_MAX_CUMULATIVE_BYTES, DEFAULT_MAX_OPENED_FILES, DEFAULT_MAX_DURATION_MILLIS);
+    }
+
+    /** Résout les bornes depuis l'environnement fourni par la composition root. */
+    public static ContextMaterializationLimits from(Map<String, String> environment) {
+        Objects.requireNonNull(environment, "environment");
         return new ContextMaterializationLimits(
                 configuredLong(
+                        environment,
                         MAX_CUMULATIVE_BYTES_ENVIRONMENT_VARIABLE,
                         DEFAULT_MAX_CUMULATIVE_BYTES,
                         MAX_CONFIGURABLE_CUMULATIVE_BYTES,
                         "octets"),
-                configuredInt(
+                (int) configuredLong(
+                        environment,
                         MAX_OPENED_FILES_ENVIRONMENT_VARIABLE,
                         DEFAULT_MAX_OPENED_FILES,
                         MAX_CONFIGURABLE_OPENED_FILES,
                         "fichiers"),
                 configuredLong(
+                        environment,
                         MAX_DURATION_MILLIS_ENVIRONMENT_VARIABLE,
                         DEFAULT_MAX_DURATION_MILLIS,
                         MAX_CONFIGURABLE_DURATION_MILLIS,
                         "millisecondes"));
     }
 
-    static long parseMaxCumulativeBytes(String configured) {
-        return parseBoundedLong(
-                MAX_CUMULATIVE_BYTES_ENVIRONMENT_VARIABLE,
-                configured,
-                MAX_CONFIGURABLE_CUMULATIVE_BYTES,
-                "octets");
-    }
-
-    static int parseMaxOpenedFiles(String configured) {
-        long value = parseBoundedLong(
-                MAX_OPENED_FILES_ENVIRONMENT_VARIABLE,
-                configured,
-                MAX_CONFIGURABLE_OPENED_FILES,
-                "fichiers");
-        return (int) value;
-    }
-
-    static long parseMaxDurationMillis(String configured) {
-        return parseBoundedLong(
-                MAX_DURATION_MILLIS_ENVIRONMENT_VARIABLE,
-                configured,
-                MAX_CONFIGURABLE_DURATION_MILLIS,
-                "millisecondes");
-    }
-
-    private static long configuredLong(String name, long defaultValue, long maximum, String unit) {
-        String configured = System.getenv(name);
+    private static long configuredLong(
+            Map<String, String> environment, String name, long defaultValue, long maximum, String unit) {
+        String configured = environment.get(name);
         return configured == null || configured.isBlank()
                 ? defaultValue
                 : parseBoundedLong(name, configured, maximum, unit);
-    }
-
-    private static int configuredInt(String name, int defaultValue, int maximum, String unit) {
-        String configured = System.getenv(name);
-        return configured == null || configured.isBlank()
-                ? defaultValue
-                : (int) parseBoundedLong(name, configured, maximum, unit);
     }
 
     private static long parseBoundedLong(String name, String configured, long maximum, String unit) {

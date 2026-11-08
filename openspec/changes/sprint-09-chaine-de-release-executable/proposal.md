@@ -20,7 +20,7 @@ Critère de sortie du sprint : un tag de pré-version produit, depuis un environ
 
 - Les workflows réutilisables ne reçoivent que les secrets qu'ils déclarent ; `secrets: inherit` disparaît (`AUD-DEP-21`).
 - Le matériel de signature n'existe que dans les étapes qui signent, jamais sur `pull_request`, et il est effacé dans la même étape (`AUD-SEC-06`).
-- La publication et la signature de release s'exécutent dans l'environnement protégé `release` (approbation requise, tags `v*` seuls), qui porte les secrets PFX ; un ruleset protège les tags `v*` (`AUD-DEP-03`, réglages manuels du mainteneur).
+- La publication s'exécute dans l'environnement protégé `release` (approbation requise, tags `v*` seuls) ; un ruleset protège les tags `v*` (`AUD-DEP-03`, réglages manuels du mainteneur). Les assets Windows de release ne sont pas signés Authenticode (pas de certificat payant) ; leur provenance est l'attestation GitHub.
 - Le ZIP et le `setup.exe` Windows reçoivent une attestation de provenance vérifiée avant l'upload, et la vérification consommateur est documentée (`AUD-DEP-09`).
 - Le pom racine fixe `project.build.outputTimestamp` ; deux builds successifs donnent les mêmes empreintes de JAR et de ZIP (`AUD-DEP-05`).
 - Les plugins du cycle de vie sont épinglés et l'enforcer exige des versions de plugins, la cohérence des bornes supérieures de dépendances et Maven `[3.10.0,)` (`AUD-DEP-06`).

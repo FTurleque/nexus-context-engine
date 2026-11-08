@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexus.index.CodeIntelligenceSnapshot;
+import com.nexus.index.ExternalCodeIntelligencePayloadImporter;
 import com.nexus.index.scan.ProjectScanner;
 import com.nexus.security.ProjectPathGuard;
 
@@ -32,7 +33,7 @@ import static com.nexus.index.minos.MinosDocumentParser.requiredParserText;
  * par un, avec des plafonds explicites en plus de la limite de transport.</p>
  */
 
-public final class MinosCodeIndexImporter {
+public final class MinosCodeIndexImporter implements ExternalCodeIntelligencePayloadImporter {
 
     public static final String SOURCE_PROVIDER = "minos";
     public static final long MAX_EXPORT_BYTES = 128L * 1024L * 1024L;
@@ -40,6 +41,16 @@ public final class MinosCodeIndexImporter {
     public static final int MAX_RELATION_FACTS = 500_000;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ProjectScanner scanner;
+
+    public MinosCodeIndexImporter() {
+        this(new ProjectScanner());
+    }
+
+    /** Composition de production : le scanner porte les bornes de scan résolues par la composition root. */
+    public MinosCodeIndexImporter(ProjectScanner scanner) {
+        this.scanner = Objects.requireNonNull(scanner, "scanner");
+    }
 
     /**
      * Compatibilité autonome. La façade NexusApplication utilise la surcharge
@@ -50,12 +61,13 @@ public final class MinosCodeIndexImporter {
     public CodeIntelligenceSnapshot importPayload(Path projectRoot, String payload) throws IOException {
         Path root = Objects.requireNonNull(projectRoot, "projectRoot").toRealPath();
         Set<String> scannedProjectFiles = new LinkedHashSet<>();
-        for (var scannedFile : new ProjectScanner().scan(root)) {
+        for (var scannedFile : scanner.scan(root)) {
             scannedProjectFiles.add(scannedFile.relativePath());
         }
         return importPayload(root, scannedProjectFiles, payload);
     }
 
+    @Override
     public CodeIntelligenceSnapshot importPayload(
             Path projectRoot,
             Set<String> indexedProjectFiles,
@@ -105,6 +117,11 @@ public final class MinosCodeIndexImporter {
      */
     public static String readPayload(InputStream input) throws IOException {
         return MinosPayloadReader.readPayload(input);
+    }
+
+    @Override
+    public String readBoundedPayload(InputStream input) throws IOException {
+        return readPayload(input);
     }
 
 }

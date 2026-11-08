@@ -13,6 +13,18 @@ if ($env:OS -ne 'Windows_NT') {
     throw 'The NEXUS Windows distribution must be built on Windows.'
 }
 
+# Authenticode material reaches this step only on signing runs. In CI it is captured, then
+# removed from the process environment so that Maven, jpackage and the packaged CLI smoke
+# never inherit it; only sign-windows-artifact.ps1 receives it, as parameters.
+$signingPfxBase64 = [string]$env:NEXUS_WINDOWS_SIGNING_PFX_BASE64
+$signingPfxPath = [string]$env:NEXUS_WINDOWS_SIGNING_PFX
+$signingPfxPassword = [string]$env:NEXUS_WINDOWS_SIGNING_PFX_PASSWORD
+if ($env:GITHUB_ACTIONS -eq 'true') {
+    foreach ($name in @('NEXUS_WINDOWS_SIGNING_PFX_BASE64', 'NEXUS_WINDOWS_SIGNING_PFX', 'NEXUS_WINDOWS_SIGNING_PFX_PASSWORD')) {
+        [Environment]::SetEnvironmentVariable($name, $null, 'Process')
+    }
+}
+
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 Import-Module (Join-Path $PSScriptRoot '../lib/NexusScript.psm1') -Force
 if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
@@ -300,7 +312,12 @@ $signer = Join-Path $PSScriptRoot 'sign-windows-artifact.ps1'
 if (-not (Test-Path -LiteralPath $signer -PathType Leaf)) {
     throw "Windows signing helper missing: $signer"
 }
-& $signer -Path (Join-Path $distribution 'app\nexus.exe')
+& $signer -Path (Join-Path $distribution 'app\nexus.exe') `
+    -PfxBase64 $signingPfxBase64 `
+    -PfxPath $signingPfxPath `
+    -PfxPassword $signingPfxPassword
+$signingPfxBase64 = $null
+$signingPfxPassword = $null
 
 $sbomAugmenter = Join-Path $PSScriptRoot 'augment-windows-sbom.ps1'
 if (-not (Test-Path -LiteralPath $sbomAugmenter -PathType Leaf)) {

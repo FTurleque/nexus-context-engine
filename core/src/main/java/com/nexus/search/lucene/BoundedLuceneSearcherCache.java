@@ -12,8 +12,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
@@ -26,11 +28,14 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  */
 public final class BoundedLuceneSearcherCache implements AutoCloseable {
 
+    private static final String INDEX_PATH_ARGUMENT = "indexPath";
+
     private static final String PROJECT_ID_ARGUMENT = "projectId";
 
     private final int capacity;
     private final Map<UUID, ProjectSearcher> searchers = new ConcurrentHashMap<>();
     private final Object lifecycleMonitor = new Object();
+    private final AtomicLong openedReaders = new AtomicLong();
     private volatile boolean closed;
 
     public BoundedLuceneSearcherCache(int capacity) {
@@ -50,7 +55,7 @@ public final class BoundedLuceneSearcherCache implements AutoCloseable {
             Path indexPath,
             SearchOperation<T> operation) throws IOException {
         Objects.requireNonNull(projectId, PROJECT_ID_ARGUMENT);
-        Objects.requireNonNull(indexPath, "indexPath");
+        Objects.requireNonNull(indexPath, INDEX_PATH_ARGUMENT);
         Objects.requireNonNull(operation, "operation");
         ensureOpen();
 
@@ -68,6 +73,27 @@ public final class BoundedLuceneSearcherCache implements AutoCloseable {
         return SearchLookup.hit(searcher.search(operation));
     }
 
+    /**
+     * Exécute l'opération sur le searcher déjà chaud du projet, sans en ouvrir un :
+     * vide si le projet n'a pas de reader en cache pour ce répertoire. Le reader est
+     * rafraîchi avant lecture et acquis puis libéré symétriquement, comme pour une
+     * recherche. Sert aux lectures de métadonnées de commit (ADR-0045).
+     */
+    public <T> Optional<T> searchIfCached(
+            UUID projectId,
+            Path indexPath,
+            SearchOperation<T> operation) throws IOException {
+        Objects.requireNonNull(projectId, PROJECT_ID_ARGUMENT);
+        Objects.requireNonNull(indexPath, INDEX_PATH_ARGUMENT);
+        Objects.requireNonNull(operation, "operation");
+        ensureOpen();
+        ProjectSearcher searcher = searchers.get(projectId);
+        if (searcher == null || !searcher.indexPath.equals(indexPath)) {
+            return Optional.empty();
+        }
+        return Optional.of(searcher.search(operation));
+    }
+
     /** Rafraîchit un reader déjà chaud après un commit local. */
     public void refreshIfCached(UUID projectId) throws IOException {
         Objects.requireNonNull(projectId, PROJECT_ID_ARGUMENT);
@@ -81,7 +107,7 @@ public final class BoundedLuceneSearcherCache implements AutoCloseable {
     /** A recovery may publish a different directory while this cache is idle. */
     public void refreshIfCached(UUID projectId, Path indexPath) throws IOException {
         Objects.requireNonNull(projectId, PROJECT_ID_ARGUMENT);
-        Objects.requireNonNull(indexPath, "indexPath");
+        Objects.requireNonNull(indexPath, INDEX_PATH_ARGUMENT);
         ensureOpen();
         ProjectSearcher searcher = searchers.get(projectId);
         if (searcher != null && !searcher.indexPath.equals(indexPath)) {
@@ -104,6 +130,14 @@ public final class BoundedLuceneSearcherCache implements AutoCloseable {
         if (removed != null) {
             removed.close();
         }
+    }
+
+    /**
+     * Nombre de {@code DirectoryReader} ouverts par ce cache depuis sa création : un
+     * hit de cache n'en ouvre aucun. Visible pour les tests de non-réouverture.
+     */
+    public long openedReaderCount() {
+        return openedReaders.get();
     }
 
     /** Visible pour les tests de borne de ressources. */
@@ -159,6 +193,7 @@ public final class BoundedLuceneSearcherCache implements AutoCloseable {
             if (created == null) {
                 return null;
             }
+            openedReaders.incrementAndGet();
             searchers.put(projectId, created);
             return created;
         }

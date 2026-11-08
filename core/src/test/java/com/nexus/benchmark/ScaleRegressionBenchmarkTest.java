@@ -4,12 +4,18 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.nexus.application.NexusApplication;
 import com.nexus.config.NexusPaths;
+import com.nexus.index.AnalysisResult;
+import com.nexus.index.CodeSymbol;
 import com.nexus.index.FileCategory;
+import com.nexus.index.IndexedFileUpdate;
+import com.nexus.index.RelationKind;
+import com.nexus.index.ScannedFile;
+import com.nexus.index.SymbolKind;
+import com.nexus.index.SymbolRelation;
 import com.nexus.persistence.sqlite.SqliteBatchInsert;
 import com.nexus.persistence.sqlite.SqliteDatabase;
 import com.nexus.persistence.sqlite.SqliteIndexRepository;
 import com.nexus.project.ProjectDescriptor;
-import com.nexus.search.SearchDocument;
 import com.nexus.search.semantic.EmbeddingProvider;
 import com.nexus.search.semantic.SemanticIndexingService;
 import com.nexus.search.semantic.lucene.LuceneSemanticSearchIndex;
@@ -18,6 +24,7 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -63,6 +70,9 @@ class ScaleRegressionBenchmarkTest {
     private static final int PORTFOLIO_FILES_PER_PROJECT = 2;
     private static final int PORTFOLIO_CONTEXT_BUDGET = 2_400;
     private static final int SEMANTIC_DIMENSIONS = 32;
+    private static final int REINDEX_SYMBOLS = 100_000;
+    private static final int REINDEX_INCREMENTAL_FILES = 50;
+    private static final int REINDEX_SAMPLES = 3;
 
     @TempDir
     Path temporaryDirectory;
@@ -107,6 +117,7 @@ class ScaleRegressionBenchmarkTest {
         Map<String, Object> portfolio = sqliteOnly ? Map.of() : benchmarkPortfolio(portfolioTiers);
         Map<String, Object> concurrency = sqliteOnly ? Map.of() : benchmarkJournalModes(concurrencySymbolsPerProject);
         Map<String, Object> semantic = sqliteOnly ? Map.of() : benchmarkSemanticRecovery(semanticDocuments);
+        Map<String, Object> reindex = sqliteOnly ? Map.of() : benchmarkReindexExistingFiles();
 
         long usedHeapAfter = usedHeapBytes();
         Map<String, Object> report = new LinkedHashMap<>();
@@ -132,6 +143,7 @@ class ScaleRegressionBenchmarkTest {
         report.put("portfolio", portfolio);
         report.put("concurrentReadWrite", concurrency);
         report.put("semanticRecovery", semantic);
+        report.put("reindexExistingFiles", reindex);
         report.put("usedHeapBeforeBytes", usedHeapBefore);
         report.put("usedHeapAfterBytes", usedHeapAfter);
         report.put("usedHeapDeltaBytes", usedHeapAfter - usedHeapBefore);
@@ -206,6 +218,86 @@ class ScaleRegressionBenchmarkTest {
         result.put("relationContains", relations.asMap());
         result.put("targeted100Files", targetedFiles.asMap());
         return result;
+    }
+
+    /**
+     * Réindexe des fichiers déjà présents par {@code applyChanges}, le chemin d'écriture de
+     * l'indexation, sur une base peuplée : une réindexation incrémentale (quelques fichiers) puis un
+     * rebuild (tous les fichiers). Chaque fichier supprime puis réécrit ses symboles et relations ;
+     * le coût doit rester proportionnel aux fichiers modifiés, non à la taille de la base.
+     */
+    private Map<String, Object> benchmarkReindexExistingFiles() throws Exception {
+        SqliteDatabase database = new SqliteDatabase(new NexusPaths(temporaryDirectory.resolve("reindex-home")));
+        setJournalMode(database, "DELETE");
+        UUID projectId = UUID.randomUUID();
+        populateProject(database, projectId, "reindex", REINDEX_SYMBOLS, REINDEX_SYMBOLS);
+        SqliteIndexRepository repository = new SqliteIndexRepository(database);
+        int fileCount = Math.max(1, (REINDEX_SYMBOLS + SYMBOLS_PER_FILE - 1) / SYMBOLS_PER_FILE);
+        int incrementalFiles = Math.min(REINDEX_INCREMENTAL_FILES, fileCount);
+
+        List<Long> incrementalSamples = new ArrayList<>();
+        List<Long> rebuildSamples = new ArrayList<>();
+        for (int sample = 0; sample < REINDEX_SAMPLES; sample++) {
+            List<IndexedFileUpdate> incremental = reindexUpdates(fileCount, incrementalFiles, sample);
+            long started = System.nanoTime();
+            repository.applyChanges(projectId, incremental, Set.of());
+            incrementalSamples.add(elapsedMillis(started));
+
+            List<IndexedFileUpdate> rebuild = reindexUpdates(fileCount, fileCount, sample);
+            started = System.nanoTime();
+            repository.applyChanges(projectId, rebuild, Set.of());
+            rebuildSamples.add(elapsedMillis(started));
+        }
+
+        var statistics = repository.statistics(projectId);
+        assertTrue(statistics.files() == fileCount, "La réindexation ne doit ni ajouter ni perdre de fichier");
+        assertTrue(statistics.symbols() == REINDEX_SYMBOLS, "La réindexation remplace les symboles sans les dupliquer");
+        assertTrue(statistics.relations() == REINDEX_SYMBOLS, "La réindexation remplace les relations sans les dupliquer");
+
+        Map<String, Object> incrementalResult = new LinkedHashMap<>();
+        incrementalResult.put("files", incrementalFiles);
+        incrementalResult.put("samplesMs", incrementalSamples);
+        incrementalResult.put("medianMs", percentile(incrementalSamples, 0.5d));
+        Map<String, Object> rebuildResult = new LinkedHashMap<>();
+        rebuildResult.put("files", fileCount);
+        rebuildResult.put("samplesMs", rebuildSamples);
+        rebuildResult.put("medianMs", percentile(rebuildSamples, 0.5d));
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("populatedSymbols", REINDEX_SYMBOLS);
+        result.put("populatedRelations", REINDEX_SYMBOLS);
+        result.put("populatedFiles", fileCount);
+        result.put("symbolsPerFile", SYMBOLS_PER_FILE);
+        result.put("incremental", incrementalResult);
+        result.put("rebuild", rebuildResult);
+        result.put("databaseBytes", sqliteFilesSize(database.databaseFile()));
+        return result;
+    }
+
+    /** Mises à jour de {@code count} fichiers existants, chacun avec ses symboles et relations. */
+    private List<IndexedFileUpdate> reindexUpdates(int fileCount, int count, int generation) {
+        List<IndexedFileUpdate> updates = new ArrayList<>(count);
+        int symbolsPerFile = Math.max(1, REINDEX_SYMBOLS / fileCount);
+        for (int file = 0; file < count; file++) {
+            String relativePath = filePath(file);
+            List<CodeSymbol> symbols = new ArrayList<>(symbolsPerFile);
+            List<SymbolRelation> relations = new ArrayList<>(symbolsPerFile);
+            for (int offset = 0; offset < symbolsPerFile; offset++) {
+                int symbol = file + offset * fileCount;
+                String name = String.format(Locale.ROOT, "BenchSymbol%08d", symbol);
+                symbols.add(new CodeSymbol(SymbolKind.CLASS, name, "bench.generated." + name,
+                        "class " + name, 1, 2));
+                relations.add(new SymbolRelation(RelationKind.USES, "bench.generated." + name,
+                        "bench.target.Target" + symbol));
+            }
+            Path absolute = temporaryDirectory.resolve("reindex-sources").resolve(relativePath);
+            updates.add(new IndexedFileUpdate(
+                    new ScannedFile(absolute, relativePath, "java", 128,
+                            "reindexed-hash-" + generation + "-" + file,
+                            Instant.EPOCH.plusSeconds(1_000L + generation), 32, FileCategory.SOURCE),
+                    new AnalysisResult(absolute, "java", symbols, relations)));
+        }
+        return updates;
     }
 
     private Map<String, Object> benchmarkPortfolio(List<Integer> tiers) throws Exception {
@@ -361,32 +453,65 @@ class ScaleRegressionBenchmarkTest {
         }
     }
 
+    /**
+     * Le harnais s'exécute aussi sur le code de base de la PR (voir {@code scale-benchmark.yml}) : le
+     * type {@code SearchDocument} y est résolu par réflexion, dans le package où le code mesuré le déclare.
+     */
+    private static Class<?> searchDocumentType() {
+        for (String name : List.of("com.nexus.index.SearchDocument", "com.nexus.search.SearchDocument")) {
+            try {
+                return Class.forName(name);
+            } catch (ClassNotFoundException ignored) {
+                // Le package suivant est essayé.
+            }
+        }
+        throw new IllegalStateException("SearchDocument est introuvable");
+    }
+
+    private static Object searchDocument(String relativePath, String content) throws ReflectiveOperationException {
+        return searchDocumentType()
+                .getDeclaredConstructor(String.class, String.class, FileCategory.class, String.class, List.class)
+                .newInstance(relativePath, "java", FileCategory.SOURCE, content, List.of());
+    }
+
+    /** Appelle {@code rebuild} par réflexion : la signature porte un type que le harnais ne nomme pas. */
+    private static void rebuild(SemanticIndexingService service, UUID projectId, String fingerprint,
+                                List<Object> documents) throws Exception {
+        try {
+            SemanticIndexingService.class
+                    .getMethod("rebuild", UUID.class, String.class, List.class)
+                    .invoke(service, projectId, fingerprint, documents);
+        } catch (InvocationTargetException exception) {
+            if (exception.getCause() instanceof Exception cause) {
+                throw cause;
+            }
+            throw exception;
+        }
+    }
+
     private Map<String, Object> benchmarkSemanticRecovery(int documentCount) throws Exception {
         NexusPaths paths = new NexusPaths(temporaryDirectory.resolve("semantic-home"));
         DeterministicEmbeddingProvider provider = new DeterministicEmbeddingProvider(SEMANTIC_DIMENSIONS);
         LuceneSemanticSearchIndex index = new LuceneSemanticSearchIndex(paths, SEMANTIC_DIMENSIONS);
         SemanticIndexingService service = new SemanticIndexingService(provider, index, 2_000, 128);
         UUID projectId = UUID.randomUUID();
-        List<SearchDocument> documents = new ArrayList<>(documentCount);
+        List<Object> documents = new ArrayList<>(documentCount);
         for (int indexNumber = 0; indexNumber < documentCount; indexNumber++) {
-            documents.add(new SearchDocument(
+            documents.add(searchDocument(
                     "src/generated/Doc" + indexNumber + ".java",
-                    "java",
-                    FileCategory.SOURCE,
-                    "synthetic semantic scale document " + indexNumber + " shared recovery context",
-                    List.of()));
+                    "synthetic semantic scale document " + indexNumber + " shared recovery context"));
         }
 
         String firstFingerprint = "synthetic-semantic-fingerprint-v1";
         long firstStarted = System.nanoTime();
-        service.rebuild(projectId, firstFingerprint, documents);
+        rebuild(service, projectId, firstFingerprint, documents);
         long firstMs = elapsedMillis(firstStarted);
         assertTrue(service.isCompatible(projectId, firstFingerprint));
 
         String secondFingerprint = "synthetic-semantic-fingerprint-v2";
         assertFalse(service.isCompatible(projectId, secondFingerprint));
         long recoveryStarted = System.nanoTime();
-        service.rebuild(projectId, secondFingerprint, documents);
+        rebuild(service, projectId, secondFingerprint, documents);
         long recoveryMs = elapsedMillis(recoveryStarted);
         assertTrue(service.isCompatible(projectId, secondFingerprint));
 

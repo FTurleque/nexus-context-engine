@@ -35,7 +35,7 @@ target\dist\NEXUS-0.2.0-windows-x64-setup.exe.sha256
 
 ## Contrat de release
 
-`develop` est la branche d'intégration ; `main` est la branche de release. Une publication GHCR est déclenchée uniquement par un tag `vX.Y.Z` qui pointe sur le HEAD exact de `main` et dont la version correspond au `pom.xml`.
+`develop` est la branche d'intégration ; `main` est la branche de release. Une publication GHCR est déclenchée uniquement par un tag `vX.Y.Z` (ou `vX.Y.Z-rc.N` pour une pré-version) qui pointe sur le HEAD exact de `main` et dont la version correspond au `pom.xml`.
 
 La release réutilise les gates exécutables : NEXUS CI, Windows Installer, Docker Distribution, Scale Benchmark, Scanner Corpus Benchmark, CodeQL et OSV-Scanner selon le contrat du workflow. SonarCloud reste un Quality Gate PR externe, pas un job de release.
 
@@ -44,6 +44,27 @@ L'image Docker est **construite une seule fois** dans Docker Distribution, quali
 Les tags version et SHA sont immuables. Le préflight GHCR est fail-closed sur toute erreur ambiguë et accepte une reprise idempotente uniquement si le contenu déjà publié correspond à l'image qualifiée. `latest` est le seul pointeur mutable.
 
 Voir [`immutable-release-publishing.md`](immutable-release-publishing.md).
+
+### Vérification des assets publiés
+
+L'image, le ZIP Windows et le `setup.exe` portent chacun une attestation de provenance, vérifiée par le job `publish` avant l'upload des assets. Avant d'installer un asset téléchargé depuis une release :
+
+```text
+gh attestation verify <asset> --repo FTurleque/nexus-context-engine
+```
+
+Une vérification en échec signifie que l'asset ne doit pas être installé. Le détail (workflow signataire, image par digest) figure dans [`immutable-release-publishing.md`](immutable-release-publishing.md#vérification-consommateur).
+
+### Horodatage reproductible
+
+Le pom racine fixe `project.build.outputTimestamp` : les JAR (dont le JAR CLI ombré), le ZIP de distribution et le SBOM CycloneDX portent cet horodatage au lieu de l'heure du build. Deux `./mvnw -B -ntp clean verify -DskipTests` successifs sur le même commit produisent donc les mêmes SHA-256 pour `target/nexus-context-engine-<version>-cli.jar` et `target/distribution/nexus-context-engine-<version>.zip` (le ZIP est assemblé en phase `verify`).
+
+À chaque release, dans le commit qui fixe la version des pom :
+
+1. mettre `project.build.outputTimestamp` à la date UTC de ce commit, au format `AAAA-MM-JJT00:00:00Z` ;
+2. lancer deux fois `./mvnw -B -ntp clean verify -DskipTests` et comparer `sha256sum target/nexus-context-engine-*-cli.jar target/distribution/*.zip` : une empreinte différente bloque la release.
+
+L'image Docker et l'installeur Windows ne sont pas couverts (horodatages des outils tiers).
 
 ## SQLite : autorité, migrations et recovery
 
@@ -172,3 +193,56 @@ prochaine indexation reconstruit les dérivés lexicaux, et le profil `content-v
 impose la reconstruction des vecteurs sémantiques. Un index Lucene dont la version
 de politique diffère de `secret-redaction-v6` est traité comme absent et reconstruit.
 V001 à V010 et leurs empreintes restent inchangées.
+
+## Mise à niveau V012 et V013 — index du chemin d'écriture SQLite
+
+Ces deux migrations ne modifient que des index : aucun rebuild n'est imposé. Elles
+ne changent ni les faits canoniques (fichiers, symboles, relations), ni la
+génération, ni le statut d'indexation des projets, et les index Lucene et
+sémantiques restent valides. V001 à V011 et leurs empreintes restent inchangées.
+
+- `V012__index_symbol_relations_by_file.sql` crée
+  `idx_symbol_relations_file_provider` sur `symbol_relations(file_id, source_provider)`.
+  Il sert la suppression des relations d'un fichier par fournisseur et la
+  vérification de la cascade de clé étrangère depuis `indexed_files`, qui
+  parcouraient toute la table. La création de l'index sur une grande base prend un
+  temps proportionnel au nombre de relations, au premier démarrage qui applique la
+  migration.
+- `V013__drop_redundant_prefix_indexes.sql` supprime par `DROP INDEX IF EXISTS`
+  trois index qui sont des préfixes stricts d'autres index :
+  `idx_symbol_relations_project`, `idx_indexed_files_project` et `idx_symbols_file`.
+  Les requêtes qu'ils servaient restent servies par un index plus large, ce que
+  `SqliteGraphQueryPlanTest` vérifie par `EXPLAIN QUERY PLAN`. Un index supprimé se
+  recrée par une migration ultérieure si une requête nouvelle en a besoin.
+
+`SchemaMigratorFileIndexUpgradeTest` migre une base peuplée et vérifie que les
+données et le statut des projets sont conservés. Une seconde ouverture n'applique
+plus aucune des deux migrations.
+
+## Mise à niveau V014 — mise en attente des analyses d'indexation
+
+`V014__index_staged_analyses.sql` crée trois tables transitoires,
+`index_staged_files`, `index_staged_symbols` et `index_staged_relations`, où une
+indexation met ses analyses en attente par lots avant de les publier (décision
+DATA-0062, [indexing-pipeline.md](indexing-pipeline.md#9-coûts-mesurés-du-pipeline)).
+Elle ne modifie ni les faits canoniques, ni la génération, ni le statut des
+projets : aucun rebuild n'est imposé et les index Lucene et sémantiques restent
+valides. V001 à V013 et leurs empreintes restent inchangées.
+
+Ces tables sont vides hors indexation : la transaction de publication les vide, une
+indexation qui échoue les vide à sa fermeture et toute nouvelle indexation d'un
+projet écarte d'abord ce qu'une indexation interrompue (arrêt brutal du processus) y
+aurait laissé. Elles ne contiennent donc rien à sauvegarder ni à restaurer ; une
+base restaurée depuis une sauvegarde prise pendant une indexation reste cohérente,
+le projet étant alors dans un état non `READY` qui impose un rebuild complet.
+
+## Mise à niveau V015 — préfiltre approché des symboles scopé par fichier
+
+`V015__index_symbols_by_file_for_fuzzy_search.sql` crée `idx_symbols_file_fuzzy_prefilter` sur
+`symbols(file_id, SUBSTR(LOWER(name), 1, 1), LENGTH(name))` et supprime
+`idx_symbols_fuzzy_prefilter` (V008), qui n'avait aucune colonne de projet et que plus aucune requête
+n'utilise (AUD-PRF-09). La recherche de symboles part des fichiers du projet ciblé, puis sonde le
+nouvel index : son coût ne dépend plus des autres projets de la base. La migration ne modifie ni les
+faits canoniques, ni la génération, ni le statut des projets : aucun rebuild n'est imposé et les index
+Lucene et sémantiques restent valides. V001 à V014 et leurs empreintes restent inchangées.
+`SchemaMigratorFileIndexUpgradeTest` migre une base peuplée et vérifie les index, les données et le statut.

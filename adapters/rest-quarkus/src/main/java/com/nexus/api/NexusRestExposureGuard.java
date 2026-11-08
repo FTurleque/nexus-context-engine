@@ -24,8 +24,12 @@ public class NexusRestExposureGuard {
 
     @PostConstruct
     void validateExposure() {
+        // L'adaptateur REST est sa propre composition root Quarkus : il installe les postures
+        // de sécurité du processus avant de les vérifier (ARCH-0066).
+        com.nexus.config.SecurityPolicy.configure(System.getenv());
         validateManagementExposure();
         if (NexusRestSecurity.isLoopbackHost(host)) {
+            validateLiteralLoopbackListener();
             validateLoopback();
             return;
         }
@@ -61,6 +65,19 @@ public class NexusRestExposureGuard {
                     "Le listener Quarkus management doit rester strictement loopback. "
                             + "Configurez quarkus.management.host=127.0.0.1 ou ::1; "
                             + "les endpoints health/metrics ne doivent pas être publiés sur le réseau.");
+        }
+    }
+
+    /**
+     * Le contrôle de transport n'accepte que les en-têtes {@code Host} littéralement loopback :
+     * un listener loopback sous un autre nom ou une autre adresse (127.0.0.2, alias) refuserait
+     * toute requête.
+     */
+    private void validateLiteralLoopbackListener() {
+        if (!NexusRestSecurity.isLiteralLoopbackListenerHost(host)) {
+            throw new IllegalStateException(
+                    "Une écoute REST loopback exige quarkus.http.host=127.0.0.1, localhost ou ::1 ; "
+                            + "le contrôle de transport refuserait toute requête adressée à un autre hôte loopback.");
         }
     }
 
