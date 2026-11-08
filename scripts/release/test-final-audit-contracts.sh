@@ -473,6 +473,12 @@ grep -q 'requireUpperBoundDeps' .claude/skills/nexus-dependency-bump/SKILL.md \
 grep -q 'failOnBlacklist=true' docs/developer/ci-and-supply-chain.md \
   || fail 'ci-and-supply-chain must document the licence whitelist (AUD-DEP-07)'
 
+# Workflows run Maven only through the verified wrapper: requireMavenVersion follows the
+# wrapper, and a runner's preinstalled mvn is older.
+if grep -R -n -E 'Get-Command mvn\b|command -v mvn\b|(^|[[:space:]&|;(])mvn(\.cmd)?[[:space:]]' .github/workflows; then
+  fail 'workflows must call Maven through ./mvnw or .\mvnw.cmd, never an installed mvn'
+fi
+
 # --- Sprint 9 : version-from-pom (AUD-QUA-12) ---
 # The product version is written only in the pom files. The Linux CI job and
 # the Windows gate read it from pom.xml; tool versions (pinned actions, Maven
