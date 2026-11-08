@@ -325,7 +325,7 @@ Si l'onboarding Docker Desktop/WSL 2 n'est pas terminé dans ce délai, le scrip
 
 La détection lit la configuration de chaque client sans la modifier. Pour une CLI, elle vérifie aussi que la commande `mcp` répond, avec un délai maximal de 5 secondes par appel. Si la détection échoue, toutes les cases restent actives : chaque script de connexion vérifie lui-même la présence du client pendant l'installation.
 
-Une entrée `nexus` existante n'est jamais écrasée. Pour faire pointer un client vers une nouvelle installation, supprimez d'abord son entrée `nexus`, puis relancez le setup.
+Une entrée `nexus` existante n'est jamais écrasée. Pour faire pointer un client vers une nouvelle installation, supprimez d'abord son entrée `nexus`, puis relancez le setup. Quand une entrée existante lance NEXUS (sa commande mentionne `nexus-mcp.cmd` ou `nexus-mcp.jar`), le setup se l'attribue : la désinstallation la retirera comme une entrée qu'il a écrite. Une entrée `nexus` qui lance un autre programme reste à son propriétaire.
 
 | Ligne | Connexion faite par le setup | Script généré |
 |---|---|---|
@@ -345,7 +345,7 @@ En mode natif, la commande MCP NEXUS est `cmd.exe /d /s /c {installation}\nexus-
 
 Pendant l'installation, sous la barre de copie des fichiers, chaque étape de configuration a sa propre barre : configuration NEXUS, scripts d'intégration, lancement de Docker Desktop s'il vient d'être installé, puis un client coché par ligne. Une barre animée signale l'étape en cours. Une barre pleine verte signale une étape terminée, jaune une entrée `nexus` déjà présente, rouge un échec (client introuvable ou code de sortie). Le libellé de la ligne précise le résultat.
 
-En fin d'installation, une fenêtre liste les clients cochés qui n'ont pas pu être connectés. À la désinstallation, le setup retire uniquement les entrées `nexus` qu'il a lui-même ajoutées.
+En fin d'installation, une fenêtre liste les clients cochés qui n'ont pas pu être connectés. À la désinstallation, le setup retire les entrées `nexus` qu'il a ajoutées ou qu'il s'est attribuées, et aucune autre.
 
 Le profil projet de Claude reste disponible avec `nexus-assistant-clients.cmd`.
 
@@ -550,7 +550,7 @@ La désinstallation :
 
 - arrête le Compose NEXUS géré ;
 - retire l'entrée PATH gérée ;
-- retire uniquement les intégrations Copilot CLI / Claude CLI / Codex ajoutées avec succès par le setup ;
+- retire les entrées `nexus` des clients IA que le setup a ajoutées ou s'est attribuées (celles qui lancent NEXUS), et aucune autre ;
 - supprime les fichiers applicatifs ;
 - conserve `NEXUS_HOME` ;
 - conserve les repositories utilisateur ;

@@ -81,6 +81,7 @@ var
   ClientBoxes: array of TNewCheckBox;
   ClientStatus: array of TNewStaticText;
   ClientConfigured: array of Boolean;
+  ClientOwned: array of Boolean;
   ClientPreflightDone: Boolean;
   IntegrationRuntimePage: TInputOptionWizardPage;
   DockerDesktopInstalledDuringSetup: Boolean;
@@ -766,6 +767,7 @@ begin
   ClientStatus[Index].Height := ScaleY(15);
   ClientStatus[Index].Font.Color := clGray;
   ClientConfigured[Index] := False;
+  ClientOwned[Index] := False;
 end;
 
 procedure CreateAssistantPage;
@@ -778,6 +780,7 @@ begin
   SetArrayLength(ClientBoxes, CLIENT_COUNT);
   SetArrayLength(ClientStatus, CLIENT_COUNT);
   SetArrayLength(ClientConfigured, CLIENT_COUNT);
+  SetArrayLength(ClientOwned, CLIENT_COUNT);
   for I := 0 to CLIENT_COUNT - 1 do
     CreateClientRow(I, ScaleY(2) + I * ScaleY(35));
   ClientBoxes[CLIENT_CODEX_CLI].OnClick := @CodexCliClick;
@@ -817,6 +820,7 @@ begin
     Configured := GetIniString(ClientSection(I), 'Configured', '0', Ini) = '1';
     Reason := GetIniString(ClientSection(I), 'Reason', 'Détection indisponible', Ini);
     ClientConfigured[I] := Available and Configured;
+    ClientOwned[I] := ClientConfigured[I] and (GetIniString(ClientSection(I), 'Owned', '0', Ini) = '1');
     { A connected client is shown ticked and locked: there is nothing left to do. }
     ClientBoxes[I].Enabled := Available and (not Configured);
     ClientBoxes[I].Checked := Available and Configured;
@@ -1550,17 +1554,6 @@ begin
       'Save-CleanJson $mcp $c' + #13#10 +
       'exit 0' + #13#10;
     SaveStringToFile(Dir + '\connect-copilot-jetbrains.ps1', JetBrainsPsScript, False);
-    SaveStringToFile(Dir + '\disconnect-copilot-jetbrains.ps1',
-      '. (Join-Path $PSScriptRoot ''nexus-json.ps1'')' + #13#10 +
-      '$mcp = Join-Path $env:LOCALAPPDATA ''github-copilot\intellij\mcp.json''' + #13#10 +
-      'if (-not (Test-Path $mcp)) { exit 0 }' + #13#10 +
-      '$c = Get-Content $mcp -Raw | ConvertFrom-Json' + #13#10 +
-      'if ($null -eq ($c | Get-Member -Name servers -MemberType NoteProperty)) { exit 0 }' + #13#10 +
-      'if ($null -eq ($c.servers | Get-Member -Name nexus -MemberType NoteProperty)) { exit 0 }' + #13#10 +
-      '$c.servers.PSObject.Properties.Remove(''nexus'')' + #13#10 +
-      'Save-CleanJson $mcp $c' + #13#10 +
-      'exit 0' + #13#10,
-      False);
 
     JetBrainsCmd :=
       '@echo off' + #13#10 +
@@ -1636,20 +1629,6 @@ begin
       'Save-CleanJson $cfg $c' + #13#10 +
       'exit 0' + #13#10;
     SaveStringToFile(Dir + '\connect-claude-desktop.ps1', ClaudeDesktopPsScript, False);
-    SaveStringToFile(Dir + '\disconnect-claude-desktop.ps1',
-      '. (Join-Path $PSScriptRoot ''nexus-json.ps1'')' + #13#10 +
-      '$cfg = $null' + #13#10 +
-      '$pkgs = Join-Path $env:LOCALAPPDATA ''Packages''' + #13#10 +
-      'if (Test-Path $pkgs) { foreach ($p in (Get-ChildItem $pkgs -Directory -Filter ''Claude_*'' -EA SilentlyContinue)) { $cand = Join-Path $p.FullName ''LocalCache\Roaming\Claude\claude_desktop_config.json''; if (Test-Path $cand) { $cfg = $cand; break } } }' + #13#10 +
-      'if (-not $cfg) { $fb = Join-Path $env:APPDATA ''Claude\claude_desktop_config.json''; if (Test-Path $fb) { $cfg = $fb } }' + #13#10 +
-      'if (-not $cfg) { exit 0 }' + #13#10 +
-      '$c = Get-Content $cfg -Raw | ConvertFrom-Json' + #13#10 +
-      'if ($null -eq ($c | Get-Member -Name mcpServers -MemberType NoteProperty)) { exit 0 }' + #13#10 +
-      'if ($null -eq ($c.mcpServers | Get-Member -Name nexus -MemberType NoteProperty)) { exit 0 }' + #13#10 +
-      '$c.mcpServers.PSObject.Properties.Remove(''nexus'')' + #13#10 +
-      'Save-CleanJson $cfg $c' + #13#10 +
-      'exit 0' + #13#10,
-      False);
 
     ClaudeDesktopCmd :=
       '@echo off' + #13#10 +
@@ -1675,11 +1654,6 @@ begin
       '& $exe @addArgs' + #13#10 +
       'exit $LASTEXITCODE' + #13#10,
       False);
-    SaveStringToFile(Dir + '\disconnect-claude-cli.ps1',
-      ClaudeCliResolverPs() +
-      '& $exe mcp remove --scope user nexus *> $null' + #13#10 +
-      'exit 0' + #13#10,
-      False);
     SaveStringToFile(Dir + '\connect-claude-cli.cmd', PowerShellLauncherCmd('connect-claude-cli.ps1'), False);
   end;
 
@@ -1700,12 +1674,6 @@ begin
       '$addArgs = @(''mcp'', ''add'', ''nexus'', ''--'') + $cmd' + #13#10 +
       '& $exe @addArgs' + #13#10 +
       'exit $LASTEXITCODE' + #13#10,
-      False);
-    SaveStringToFile(Dir + '\disconnect-codex-cli.ps1',
-      '$c = Get-Command codex -EA SilentlyContinue | Select-Object -First 1' + #13#10 +
-      'if (-not $c -or ($c.CommandType -notin @(''Application'', ''ExternalScript''))) { exit 0 }' + #13#10 +
-      '& $c.Source mcp remove nexus *> $null' + #13#10 +
-      'exit 0' + #13#10,
       False);
     SaveStringToFile(Dir + '\connect-codex-cli.cmd', PowerShellLauncherCmd('connect-codex-cli.ps1'), False);
   end;
@@ -1735,21 +1703,109 @@ begin
       '"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0connect-codex-desktop.ps1"' + #13#10 +
       'exit /b %ERRORLEVEL%' + #13#10;
     SaveStringToFile(Dir + '\connect-codex-desktop.cmd', CodexCmd, False);
-    SaveStringToFile(Dir + '\disconnect-codex-desktop.ps1',
-      '$cfg = Join-Path $env:USERPROFILE ''.codex\config.toml''' + #13#10 +
-      'if (-not (Test-Path $cfg)) { exit 0 }' + #13#10 +
-      '$begin = ''# BEGIN NEXUS-MCP''' + #13#10 +
-      '$end = ''# END NEXUS-MCP''' + #13#10 +
-      '$text = [System.IO.File]::ReadAllText($cfg, [System.Text.Encoding]::UTF8)' + #13#10 +
-      'if ($text -notmatch [regex]::Escape($begin)) { exit 0 }' + #13#10 +
-      '$pat = ''(?s)'' + [regex]::Escape($begin) + ''.*?'' + [regex]::Escape($end) + ''\r?\n?''' + #13#10 +
-      '$cleaned = ([regex]::Replace($text, $pat, '''')).TrimEnd()' + #13#10 +
-      '$out = ''''' + #13#10 +
-      'if ($cleaned) { $out = $cleaned + [Environment]::NewLine }' + #13#10 +
-      '[System.IO.File]::WriteAllText($cfg, $out, [System.Text.UTF8Encoding]::new($false))' + #13#10 +
-      'exit 0' + #13#10,
-      False);
   end;
+end;
+
+{ Removal scripts for every client, whatever this run selected: uninstall must be
+  able to remove an entry this installer adopted (see AdoptConfiguredClients), not
+  only one it wrote. Each script exits 0 when the client or its entry is absent. }
+procedure WriteDisconnectScripts;
+var
+  Dir: String;
+begin
+  if not AssistantIntegrationAvailable() then exit;
+  Dir := ExpandConstant('{app}\integrations');
+  ForceDirectories(Dir);
+  WriteJsonHelper(Dir);
+
+  { Same resolution as connect-copilot-cli.ps1: `cmd /c copilot` may reach another
+    launcher (an editor shim) first on PATH. }
+  SaveStringToFile(Dir + '\disconnect-copilot-cli.ps1',
+    '$c = Get-Command copilot -EA SilentlyContinue | Select-Object -First 1' + #13#10 +
+    'if (-not $c -or ($c.CommandType -notin @(''Application'', ''ExternalScript''))) { exit 0 }' + #13#10 +
+    '& $c.Source mcp remove nexus *> $null' + #13#10 +
+    'exit 0' + #13#10,
+    False);
+  SaveStringToFile(Dir + '\disconnect-copilot-jetbrains.ps1',
+    '. (Join-Path $PSScriptRoot ''nexus-json.ps1'')' + #13#10 +
+    '$mcp = Join-Path $env:LOCALAPPDATA ''github-copilot\intellij\mcp.json''' + #13#10 +
+    'if (-not (Test-Path $mcp)) { exit 0 }' + #13#10 +
+    '$c = Get-Content $mcp -Raw | ConvertFrom-Json' + #13#10 +
+    'if ($null -eq ($c | Get-Member -Name servers -MemberType NoteProperty)) { exit 0 }' + #13#10 +
+    'if ($null -eq ($c.servers | Get-Member -Name nexus -MemberType NoteProperty)) { exit 0 }' + #13#10 +
+    '$c.servers.PSObject.Properties.Remove(''nexus'')' + #13#10 +
+    'Save-CleanJson $mcp $c' + #13#10 +
+    'exit 0' + #13#10,
+    False);
+  SaveStringToFile(Dir + '\disconnect-claude-desktop.ps1',
+    '. (Join-Path $PSScriptRoot ''nexus-json.ps1'')' + #13#10 +
+    '$cfg = $null' + #13#10 +
+    '$pkgs = Join-Path $env:LOCALAPPDATA ''Packages''' + #13#10 +
+    'if (Test-Path $pkgs) { foreach ($p in (Get-ChildItem $pkgs -Directory -Filter ''Claude_*'' -EA SilentlyContinue)) { $cand = Join-Path $p.FullName ''LocalCache\Roaming\Claude\claude_desktop_config.json''; if (Test-Path $cand) { $cfg = $cand; break } } }' + #13#10 +
+    'if (-not $cfg) { $fb = Join-Path $env:APPDATA ''Claude\claude_desktop_config.json''; if (Test-Path $fb) { $cfg = $fb } }' + #13#10 +
+    'if (-not $cfg) { exit 0 }' + #13#10 +
+    '$c = Get-Content $cfg -Raw | ConvertFrom-Json' + #13#10 +
+    'if ($null -eq ($c | Get-Member -Name mcpServers -MemberType NoteProperty)) { exit 0 }' + #13#10 +
+    'if ($null -eq ($c.mcpServers | Get-Member -Name nexus -MemberType NoteProperty)) { exit 0 }' + #13#10 +
+    '$c.mcpServers.PSObject.Properties.Remove(''nexus'')' + #13#10 +
+    'Save-CleanJson $cfg $c' + #13#10 +
+    'exit 0' + #13#10,
+    False);
+  SaveStringToFile(Dir + '\disconnect-claude-cli.ps1',
+    ClaudeCliResolverPs() +
+    '& $exe mcp remove --scope user nexus *> $null' + #13#10 +
+    'exit 0' + #13#10,
+    False);
+  SaveStringToFile(Dir + '\disconnect-codex-cli.ps1',
+    '$c = Get-Command codex -EA SilentlyContinue | Select-Object -First 1' + #13#10 +
+    'if (-not $c -or ($c.CommandType -notin @(''Application'', ''ExternalScript''))) { exit 0 }' + #13#10 +
+    '& $c.Source mcp remove nexus *> $null' + #13#10 +
+    'exit 0' + #13#10,
+    False);
+  SaveStringToFile(Dir + '\disconnect-codex-desktop.ps1',
+    '$cfg = Join-Path $env:USERPROFILE ''.codex\config.toml''' + #13#10 +
+    'if (-not (Test-Path $cfg)) { exit 0 }' + #13#10 +
+    '$begin = ''# BEGIN NEXUS-MCP''' + #13#10 +
+    '$end = ''# END NEXUS-MCP''' + #13#10 +
+    '$text = [System.IO.File]::ReadAllText($cfg, [System.Text.Encoding]::UTF8)' + #13#10 +
+    'if ($text -notmatch [regex]::Escape($begin)) { exit 0 }' + #13#10 +
+    '$pat = ''(?s)'' + [regex]::Escape($begin) + ''.*?'' + [regex]::Escape($end) + ''\r?\n?''' + #13#10 +
+    '$cleaned = ([regex]::Replace($text, $pat, '''')).TrimEnd()' + #13#10 +
+    '$out = ''''' + #13#10 +
+    'if ($cleaned) { $out = $cleaned + [Environment]::NewLine }' + #13#10 +
+    '[System.IO.File]::WriteAllText($cfg, $out, [System.Text.UTF8Encoding]::new($false))' + #13#10 +
+    'exit 0' + #13#10,
+    False);
+end;
+
+function ClientRegistryName(Index: Integer): String;
+begin
+  case Index of
+    CLIENT_COPILOT_CLI: Result := 'CopilotCliManaged';
+    CLIENT_COPILOT_JETBRAINS: Result := 'CopilotJetBrainsManaged';
+    CLIENT_CLAUDE_CODE: Result := 'ClaudeCliManaged';
+    CLIENT_CLAUDE_DESKTOP: Result := 'ClaudeDesktopManaged';
+    CLIENT_CODEX_CLI: Result := 'CodexCliManaged';
+    CLIENT_CODEX_DESKTOP: Result := 'CodexManaged';
+  else
+    Result := '';
+  end;
+end;
+
+{ A client shown "déjà configuré" whose nexus entry launches NEXUS (nexus-mcp.cmd or
+  nexus-mcp.jar) is marked managed, so uninstall removes it like an entry this run
+  wrote. A nexus entry that launches anything else is left to its owner. }
+procedure AdoptConfiguredClients;
+var
+  I: Integer;
+begin
+  if IsSmokeBuild() or (not AssistantIntegrationAvailable()) then exit;
+  for I := 0 to CLIENT_GENERIC - 1 do
+    if ClientConfigured[I] and ClientOwned[I] then
+    begin
+      RegWriteStringValue(HKCU, InstallerRegistryPath(), ClientRegistryName(I), '1');
+      Log('Existing NEXUS MCP entry adopted for ' + ClientSection(I));
+    end;
 end;
 
 { Returns the connect script's exit code: 0 connected, 20 entry already present,
@@ -2102,6 +2158,8 @@ begin
     AddNexusToUserPath;
     PersistSettings;
     SetSetupStepState('config', 'done', '');
+    WriteDisconnectScripts;
+    AdoptConfiguredClients;
     if HasAssistantSelection() then
     begin
       SetSetupStepState('assets', 'running', '');
@@ -2138,9 +2196,12 @@ var
   PsExe: String;
 begin
   PsExe := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
-  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'CopilotCliManaged', Value) and (Value = '1') and CommandExists('copilot') then
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'CopilotCliManaged', Value) and (Value = '1') then
   begin
-    Exec(ExpandConstant('{cmd}'), '/D /S /C "copilot mcp remove nexus"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    if FileExists(ExpandConstant('{app}\integrations\disconnect-copilot-cli.ps1')) then
+      Exec(PsExe, '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\integrations\disconnect-copilot-cli.ps1') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
+    else if CommandExists('copilot') then
+      Exec(ExpandConstant('{cmd}'), '/D /S /C "copilot mcp remove nexus"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     RegDeleteValue(HKCU, InstallerRegistryPath(), 'CopilotCliManaged');
   end;
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'CopilotJetBrainsManaged', Value) and (Value = '1') and

@@ -129,6 +129,16 @@ foreach ($clientConnector in @('connect-copilot-cli.cmd', 'connect-copilot-jetbr
     Assert-TextContains -Text $installerSource -Needle ", '$clientConnector', '" -Description "client connector $clientConnector"
 }
 
+Write-Host '[contract] uninstall can remove every NEXUS entry, written or adopted'
+foreach ($uninstallFragment in @(
+    'procedure WriteDisconnectScripts;',
+    'procedure AdoptConfiguredClients;',
+    "SaveStringToFile(Dir + '\disconnect-copilot-cli.ps1',",
+    "ExpandConstant('{app}\integrations\disconnect-copilot-cli.ps1')"
+)) {
+    Assert-TextContains -Text $installerSource -Needle $uninstallFragment -Description "client uninstall: $uninstallFragment"
+}
+
 Write-Host '[contract] Docker data live in a named volume and the Ollama URL is resolved by NEXUS'
 Assert-TextContains -Text $installerSource -Needle "'NEXUS_HOME_BIND=nexus-data' + #13#10 +" -Description 'Docker NEXUS_HOME uses the named volume, not a Windows bind mount'
 Assert-TextContains -Text $installerSource -Needle "'NEXUS_OLLAMA_BASE_URL=' + OllamaPage.Values[0] + #13#10 +" -Description 'Docker receives the Ollama URL as entered; NEXUS adapts loopback after its policy check'
@@ -172,6 +182,22 @@ try {
     $probeText = [IO.File]::ReadAllText($probeIni, [Text.Encoding]::Unicode)
     foreach ($section in @('CopilotCli', 'CopilotJetBrains', 'ClaudeCode', 'ClaudeDesktop', 'CodexCli', 'CodexDesktop')) {
         if ($probeText -notmatch "(?ms)^\[$section\]\s*Available=0") { throw "Client detector reports $section on an empty profile." }
+    }
+
+    # Existing nexus entries: one launches NEXUS (adopted), one launches another tool (left alone).
+    New-Item -ItemType Directory -Force -Path (Join-Path $probeHome 'Roaming\Claude'), (Join-Path $probeHome 'Local\github-copilot\intellij') | Out-Null
+    Set-Content -LiteralPath (Join-Path $probeHome 'Roaming\Claude\claude_desktop_config.json') -Encoding ascii `
+        -Value '{"mcpServers":{"nexus":{"command":"cmd.exe","args":["/d","/s","/c","C:\\NEXUS\\nexus-mcp.cmd"]}}}'
+    Set-Content -LiteralPath (Join-Path $probeHome 'Local\github-copilot\intellij\mcp.json') -Encoding ascii `
+        -Value '{"servers":{"nexus":{"type":"stdio","command":"other-tool","args":[]}}}'
+    & (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $detector -OutputPath $probeIni | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Client detector failed with exit code $LASTEXITCODE" }
+    $probeText = [IO.File]::ReadAllText($probeIni, [Text.Encoding]::Unicode)
+    if ($probeText -notmatch '(?ms)^\[ClaudeDesktop\]\s*Available=1\s*Configured=1\s*Owned=1') {
+        throw 'Client detector does not adopt a nexus entry that launches nexus-mcp.cmd.'
+    }
+    if ($probeText -notmatch '(?ms)^\[CopilotJetBrains\]\s*Available=1\s*Configured=1\s*Owned=0') {
+        throw 'Client detector adopts a nexus entry that launches another tool.'
     }
 }
 finally {

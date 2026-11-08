@@ -11,6 +11,7 @@ param(
 # "Clients IA" wizard page and writes one INI section per client:
 #   Available=1|0    the client is installed and can be connected
 #   Configured=1|0   the client already declares an MCP server named "nexus"
+#   Owned=1|0        that "nexus" entry launches NEXUS (nexus-mcp.cmd or nexus-mcp.jar)
 #   Reason=...       status line shown under the checkbox
 # Read-only: it never writes any client configuration.
 
@@ -138,6 +139,35 @@ function Test-JsonServer([object] $Config, [string] $ServersKey) {
     return $null -ne $Servers.Value.PSObject.Properties['nexus']
 }
 
+function Test-LaunchesNexus([string] $Text) {
+    return $Text -match '(?i)nexus-mcp\.(cmd|jar)'
+}
+
+function Get-JsonServerText([object] $Config, [string] $ServersKey) {
+    if (-not (Test-JsonServer $Config $ServersKey)) { return '' }
+    return ($Config.PSObject.Properties[$ServersKey].Value.PSObject.Properties['nexus'].Value | ConvertTo-Json -Depth 10 -Compress)
+}
+
+function Get-CodexConfigText {
+    $Config = Join-Path (Get-UserFolderPath 'USERPROFILE' 'UserProfile') '.codex\config.toml'
+    if (-not (Test-Path -LiteralPath $Config -PathType Leaf)) { return '' }
+    return [System.IO.File]::ReadAllText($Config)
+}
+
+# Text of the [mcp_servers.nexus] table, up to the next table header.
+function Get-CodexNexusSection([string] $Text) {
+    $Match = [regex]::Match($Text, '(?ms)^\s*\[mcp_servers\.nexus\][^\[]*')
+    if ($Match.Success) { return $Match.Value }
+    return ''
+}
+
+# Text between the markers connect-codex-desktop.ps1 writes around its block.
+function Get-CodexMarkedBlock([string] $Text) {
+    $Match = [regex]::Match($Text, '(?s)# BEGIN NEXUS-MCP.*?# END NEXUS-MCP')
+    if ($Match.Success) { return $Match.Value }
+    return ''
+}
+
 function Test-JetBrainsCopilot {
     $LocalAppData = Get-UserFolderPath 'LOCALAPPDATA' 'LocalApplicationData'
     $Roaming = Get-UserFolderPath 'APPDATA' 'ApplicationData'
@@ -188,10 +218,12 @@ function Test-CodexConfigured {
     return [System.IO.File]::ReadAllText($Config) -match '(?m)^\s*\[mcp_servers\.nexus\]'
 }
 
-function New-Result([bool] $Available, [bool] $Configured, [string] $Reason) {
-    return [pscustomobject]@{ Available = $Available; Configured = $Configured; Reason = $Reason }
+function New-Result([bool] $Available, [bool] $Configured, [string] $Reason, [bool] $Owned = $false) {
+    return [pscustomobject]@{ Available = $Available; Configured = $Configured; Owned = ($Configured -and $Owned); Reason = $Reason }
 }
 
+# Returns the CLI result; Owned is filled from the probe output, or by the caller
+# when the CLI does not print the entry command.
 function Get-CliResult([string] $Name, [string] $Label, [string] $Path, [string[]] $ConfiguredProbe) {
     if ([string]::IsNullOrWhiteSpace($Path)) {
         return New-Result $false $false (Ui "Non disponible {dash} $Label introuvable")
@@ -209,7 +241,7 @@ function Get-CliResult([string] $Name, [string] $Label, [string] $Path, [string[
     } else {
         $Probe.ExitCode -eq 0
     }
-    return New-Result $true $Configured (Ui 'D{e}tect{e}')
+    return New-Result $true $Configured (Ui 'D{e}tect{e}') (Test-LaunchesNexus $Probe.Output)
 }
 
 $Results = [ordered]@{}
@@ -219,11 +251,16 @@ if (-not [string]::IsNullOrWhiteSpace($Copilot) -and (Test-VsCodeCopilotShim $Co
     $Results['CopilotCli'] = New-Result $false $false (Ui 'Non disponible {dash} lanceur VS Code d{e}tect{e}, CLI Copilot absente')
 } else {
     $Results['CopilotCli'] = Get-CliResult 'copilot' 'GitHub Copilot CLI' $Copilot @('mcp', 'list')
+    # `copilot mcp list` prints names only: the entry command is in its config file.
+    $CopilotConfig = Read-JsonFile (Join-Path (Get-UserFolderPath 'USERPROFILE' 'UserProfile') '.copilot\mcp-config.json')
+    $Results['CopilotCli'].Owned = $Results['CopilotCli'].Configured -and
+        (Test-LaunchesNexus (Get-JsonServerText $CopilotConfig 'mcpServers'))
 }
 
 if (Test-JetBrainsCopilot) {
-    $Mcp = Join-Path (Get-UserFolderPath 'LOCALAPPDATA' 'LocalApplicationData') 'github-copilot\intellij\mcp.json'
-    $Results['CopilotJetBrains'] = New-Result $true (Test-JsonServer (Read-JsonFile $Mcp) 'servers') (Ui 'D{e}tect{e}')
+    $Mcp = Read-JsonFile (Join-Path (Get-UserFolderPath 'LOCALAPPDATA' 'LocalApplicationData') 'github-copilot\intellij\mcp.json')
+    $Results['CopilotJetBrains'] = New-Result $true (Test-JsonServer $Mcp 'servers') (Ui 'D{e}tect{e}') `
+        (Test-LaunchesNexus (Get-JsonServerText $Mcp 'servers'))
 } else {
     $Results['CopilotJetBrains'] = New-Result $false $false (Ui 'Non disponible {dash} plugin GitHub Copilot JetBrains non d{e}tect{e}')
 }
@@ -234,16 +271,25 @@ $Results['ClaudeCode'] = Get-CliResult 'claude' 'Claude Code' $Claude @('mcp', '
 
 $ClaudeDesktopConfig = Find-ClaudeDesktopConfig
 if (-not [string]::IsNullOrWhiteSpace($ClaudeDesktopConfig)) {
-    $Results['ClaudeDesktop'] = New-Result $true (Test-JsonServer (Read-JsonFile $ClaudeDesktopConfig) 'mcpServers') (Ui 'D{e}tect{e}')
+    $DesktopConfig = Read-JsonFile $ClaudeDesktopConfig
+    $Results['ClaudeDesktop'] = New-Result $true (Test-JsonServer $DesktopConfig 'mcpServers') (Ui 'D{e}tect{e}') `
+        (Test-LaunchesNexus (Get-JsonServerText $DesktopConfig 'mcpServers'))
 } else {
     $Results['ClaudeDesktop'] = New-Result $false $false (Ui 'Non disponible {dash} Claude Desktop non d{e}tect{e}')
 }
 
+# Codex CLI and Codex Desktop share ~/.codex/config.toml. An entry inside the
+# BEGIN/END NEXUS-MCP markers belongs to the Desktop connector (removed by
+# deleting the block); any other nexus table belongs to `codex mcp`.
+$CodexText = Get-CodexConfigText
+$CodexBlock = Get-CodexMarkedBlock $CodexText
 $Codex = Resolve-CommandPath 'codex'
 $Results['CodexCli'] = Get-CliResult 'codex' 'Codex CLI' $Codex @('mcp', 'get', 'nexus')
+$Results['CodexCli'].Owned = $Results['CodexCli'].Configured -and ($CodexBlock -eq '') -and
+    (Test-LaunchesNexus (Get-CodexNexusSection $CodexText))
 
 if (Test-CodexDesktop) {
-    $Results['CodexDesktop'] = New-Result $true (Test-CodexConfigured) (Ui 'D{e}tect{e}')
+    $Results['CodexDesktop'] = New-Result $true (Test-CodexConfigured) (Ui 'D{e}tect{e}') (Test-LaunchesNexus $CodexBlock)
 } else {
     $Results['CodexDesktop'] = New-Result $false $false (Ui 'Non disponible {dash} Codex Desktop non d{e}tect{e}')
 }
@@ -258,6 +304,7 @@ foreach ($Name in $Results.Keys) {
     $Lines.Add("[$Name]")
     $Lines.Add('Available=' + $(if ($Value.Available) { '1' } else { '0' }))
     $Lines.Add('Configured=' + $(if ($Value.Configured) { '1' } else { '0' }))
+    $Lines.Add('Owned=' + $(if ($Value.Owned) { '1' } else { '0' }))
     $Lines.Add('Reason=' + ([string]$Value.Reason).Replace("`r", ' ').Replace("`n", ' '))
     $Lines.Add('')
 }
@@ -265,5 +312,5 @@ foreach ($Name in $Results.Keys) {
 
 foreach ($Name in $Results.Keys) {
     $Value = $Results[$Name]
-    Write-Host ('{0}: available={1} configured={2} reason={3}' -f $Name, $Value.Available, $Value.Configured, $Value.Reason)
+    Write-Host ('{0}: available={1} configured={2} owned={3} reason={4}' -f $Name, $Value.Available, $Value.Configured, $Value.Owned, $Value.Reason)
 }
