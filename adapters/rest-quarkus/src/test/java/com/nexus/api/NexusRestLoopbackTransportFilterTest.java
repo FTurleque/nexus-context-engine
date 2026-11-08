@@ -5,6 +5,8 @@ import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -65,16 +67,20 @@ class NexusRestLoopbackTransportFilterTest {
     @Test
     void filterIsInactiveWhenTheListenerIsNotLoopback() {
         NexusRestLoopbackTransportFilter filter = new NexusRestLoopbackTransportFilter("0.0.0.0");
-        jakarta.ws.rs.container.ContainerRequestContext request =
-                (jakarta.ws.rs.container.ContainerRequestContext) java.lang.reflect.Proxy.newProxyInstance(
-                        jakarta.ws.rs.container.ContainerRequestContext.class.getClassLoader(),
-                        new Class<?>[]{jakarta.ws.rs.container.ContainerRequestContext.class},
-                        (proxy, method, args) -> {
-                            throw new AssertionError("Hors loopback, le filtre ne lit aucun en-tête : "
-                                    + method.getName());
-                        });
+        List<String> invokedMethods = new ArrayList<>();
+        ContainerRequestContext request = (ContainerRequestContext) Proxy.newProxyInstance(
+                ContainerRequestContext.class.getClassLoader(),
+                new Class<?>[]{ContainerRequestContext.class},
+                (proxy, method, args) -> {
+                    invokedMethods.add(method.getName());
+                    return null;
+                });
 
         filter.filter(request);
+
+        // Hors loopback, le filtre ne lit aucun en-tête et n'interrompt pas la requête.
+        assertFalse(filter.active());
+        assertEquals(List.of(), invokedMethods);
     }
 
     @Test

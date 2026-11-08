@@ -83,12 +83,15 @@ import java.util.Objects;
  * dans les composants (ARCH-0066).</p>
  */
 final class NexusApplicationFactory {
+
+    private static final String PATHS_ARGUMENT = "paths";
+
     private NexusApplicationFactory() { }
     static NexusApplication create(
             NexusPaths paths,
             SemanticSearchConfiguration semanticSearchConfiguration,
             boolean persistentReaders) throws IOException {
-        Objects.requireNonNull(paths, "paths");
+        Objects.requireNonNull(paths, PATHS_ARGUMENT);
         return create(
                 paths,
                 semanticSearchConfiguration,
@@ -102,7 +105,7 @@ final class NexusApplicationFactory {
      * message de la classe de limites concernée.
      */
     static NexusConfiguration configuration(NexusPaths paths, Map<String, String> environment) {
-        Objects.requireNonNull(paths, "paths");
+        Objects.requireNonNull(paths, PATHS_ARGUMENT);
         Objects.requireNonNull(environment, "environment");
         ScipIndexLimits scipIndexLimits = ScipIndexLimits.from(environment);
         return new NexusConfiguration(
@@ -124,7 +127,7 @@ final class NexusApplicationFactory {
             SemanticSearchConfiguration semanticSearchConfiguration,
             NexusConfiguration configuration,
             boolean persistentReaders) throws IOException {
-        Objects.requireNonNull(paths, "paths");
+        Objects.requireNonNull(paths, PATHS_ARGUMENT);
         Objects.requireNonNull(semanticSearchConfiguration, "semanticSearchConfiguration");
         Objects.requireNonNull(configuration, "configuration");
         configuration.installProcessPolicies();

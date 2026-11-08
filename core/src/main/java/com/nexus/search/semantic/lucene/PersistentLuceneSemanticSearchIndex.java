@@ -25,6 +25,8 @@ import java.util.UUID;
  */
 public final class PersistentLuceneSemanticSearchIndex implements SemanticSearchIndex {
 
+    private static final String PROVENANCE_ARGUMENT = "provenance";
+
     static final int MAX_CACHED_PROJECTS = 100;
 
     private final int dimensions;
@@ -49,7 +51,7 @@ public final class PersistentLuceneSemanticSearchIndex implements SemanticSearch
     @Override
     public boolean isCompatible(UUID projectId, SemanticIndexProvenance provenance) throws IOException {
         Objects.requireNonNull(projectId, "projectId");
-        Objects.requireNonNull(provenance, "provenance");
+        Objects.requireNonNull(provenance, PROVENANCE_ARGUMENT);
         readers.ensureOpen();
         // Lecture sur le reader en cache (ADR-0045), sans DirectoryReader supplémentaire.
         return readers.readCommitMetadata(
@@ -66,7 +68,7 @@ public final class PersistentLuceneSemanticSearchIndex implements SemanticSearch
             UUID projectId,
             SemanticIndexProvenance provenance,
             List<SemanticVectorDocument> documents) throws IOException {
-        rebuildInternal(projectId, Objects.requireNonNull(provenance, "provenance"), documents);
+        rebuildInternal(projectId, Objects.requireNonNull(provenance, PROVENANCE_ARGUMENT), documents);
     }
 
     private void rebuildInternal(
@@ -98,7 +100,7 @@ public final class PersistentLuceneSemanticSearchIndex implements SemanticSearch
             Set<String> removedRelativePaths) throws IOException {
         applyChangesInternal(
                 projectId,
-                Objects.requireNonNull(provenance, "provenance"),
+                Objects.requireNonNull(provenance, PROVENANCE_ARGUMENT),
                 documents,
                 removedRelativePaths);
     }
