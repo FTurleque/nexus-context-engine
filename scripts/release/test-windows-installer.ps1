@@ -120,6 +120,40 @@ Assert-TextContains -Text $installerSource -Needle 'function Format-Json(' -Desc
 Assert-TextContains -Text $installerSource -Needle 'Save-CleanJson $mcp $c' -Description 'JetBrains config written via clean formatter'
 Assert-TextContains -Text $installerSource -Needle 'Save-CleanJson $cfg $c' -Description 'Claude Desktop config written via clean formatter'
 Assert-TextContains -Text $installerSource -Needle '# END NEXUS-MCP' -Description 'Codex block has a reversible END marker'
+
+Write-Host '[contract] assistant client page runs a preflight and lists each client on its own row'
+Assert-TextContains -Text $installerSource -Needle '\detect-assistant-clients.ps1"; Flags: dontcopy' -Description 'client detector embedded for the wizard preflight'
+Assert-TextContains -Text $installerSource -Needle "ExtractTemporaryFile('detect-assistant-clients.ps1')" -Description 'client detector extracted before the page is shown'
+foreach ($clientConnector in @('connect-copilot-cli.cmd', 'connect-copilot-jetbrains.cmd', 'connect-claude-cli.cmd', 'connect-claude-desktop.cmd', 'connect-codex-cli.cmd', 'connect-codex-desktop.cmd')) {
+    Assert-TextContains -Text $installerSource -Needle "RunManagedIntegration('$clientConnector'" -Description "client connector $clientConnector"
+}
+# Native CLI connectors launch nexus-mcp.cmd, which loads config\nexus-native.env.cmd
+# and passes --enable-native-access=ALL-UNNAMED to the embedded Java runtime.
+Assert-TextContains -Text $installerSource -Needle "PowerShellSingleQuote(ExpandConstant('{app}\nexus-mcp.cmd'))" -Description 'native CLI connectors use the hardened nexus-mcp.cmd launcher'
+$detector = Join-Path $repo 'packaging\windows\detect-assistant-clients.ps1'
+$detectorBytes = [IO.File]::ReadAllBytes($detector)
+if (@($detectorBytes | Where-Object { $_ -gt 127 }).Count -gt 0) {
+    throw 'detect-assistant-clients.ps1 must stay ASCII-only: Windows PowerShell 5.1 parses BOM-less scripts with the ANSI code page.'
+}
+$probeHome = Join-Path ([IO.Path]::GetTempPath()) ('nexus-client-probe-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Force -Path $probeHome | Out-Null
+$savedProfile = @{ USERPROFILE = $env:USERPROFILE; APPDATA = $env:APPDATA; LOCALAPPDATA = $env:LOCALAPPDATA; PATH = $env:PATH }
+try {
+    # An empty profile and a PATH without client CLIs: every client must be reported absent.
+    $env:USERPROFILE = $probeHome; $env:APPDATA = Join-Path $probeHome 'Roaming'; $env:LOCALAPPDATA = Join-Path $probeHome 'Local'
+    $env:PATH = Join-Path $env:SystemRoot 'System32'
+    $probeIni = Join-Path $probeHome 'preflight.ini'
+    & (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $detector -OutputPath $probeIni | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Client detector failed with exit code $LASTEXITCODE" }
+    $probeText = [IO.File]::ReadAllText($probeIni, [Text.Encoding]::Unicode)
+    foreach ($section in @('CopilotCli', 'CopilotJetBrains', 'ClaudeCode', 'ClaudeDesktop', 'CodexCli', 'CodexDesktop')) {
+        if ($probeText -notmatch "(?ms)^\[$section\]\s*Available=0") { throw "Client detector reports $section on an empty profile." }
+    }
+}
+finally {
+    foreach ($name in $savedProfile.Keys) { [Environment]::SetEnvironmentVariable($name, $savedProfile[$name], 'Process') }
+    Remove-Item -LiteralPath $probeHome -Recurse -Force -ErrorAction SilentlyContinue
+}
 foreach ($rawDepth in @('ConvertTo-Json -Depth 5', 'ConvertTo-Json -Depth 10')) {
     if ($installerSource.IndexOf($rawDepth, [StringComparison]::Ordinal) -ge 0) {
         throw "Installer must not write MCP config JSON via raw '$rawDepth' (mangles indentation); use Save-CleanJson."

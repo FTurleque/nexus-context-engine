@@ -309,81 +309,39 @@ Avant `docker compose up -d`, le script :
 
 Si l'onboarding Docker Desktop/WSL 2 n'est pas terminé dans ce délai, le script se termine avec un code non nul et peut être relancé ensuite.
 
-## Écran 9 — Intégrations assistants IA
+## Écran 9 — Clients IA
 
-La même matrice est utilisée partout dans NEXUS : wizard, générateur standalone et documentation.
+À l'arrivée sur l'écran, le setup lance une détection (une dizaine de secondes) et affiche une ligne par client, avec son état en dessous :
 
-### GitHub Copilot CLI
+| État affiché | Case | Effet |
+|---|---|---|
+| `Détecté` | active, décochée | cochez-la pour connecter NEXUS à ce client |
+| `Détecté — déjà configuré` | cochée, grisée | le client déclare déjà un serveur MCP `nexus` : le setup n'y touche pas |
+| `Non disponible — …` | grisée | le client est absent ; la raison est indiquée |
 
-Si `copilot` est détecté et qu'aucune entrée `nexus` n'existe :
+La détection lit la configuration de chaque client sans la modifier. Pour une CLI, elle vérifie aussi que la commande `mcp` répond, avec un délai maximal de 5 secondes par appel. Si la détection échoue, toutes les cases restent actives : chaque script de connexion vérifie lui-même la présence du client pendant l'installation.
 
-```text
-copilot mcp add nexus --tools "*" -- <commande MCP NEXUS>
-```
+Une entrée `nexus` existante n'est jamais écrasée. Pour faire pointer un client vers une nouvelle installation, supprimez d'abord son entrée `nexus`, puis relancez le setup.
 
-Une entrée existante est préservée.
+| Ligne | Connexion faite par le setup | Script généré |
+|---|---|---|
+| GitHub Copilot CLI | `copilot mcp add nexus --tools "*" -- <commande MCP NEXUS>` | `connect-copilot-cli.cmd` |
+| GitHub Copilot — JetBrains / IntelliJ | entrée `nexus` (schéma `servers`) dans `%LOCALAPPDATA%\github-copilot\intellij\mcp.json` | `connect-copilot-jetbrains.cmd`, plus `copilot-jetbrains.mcp.json` pour un import manuel |
+| Claude Code (CLI) | `claude mcp add --scope user nexus -- <commande MCP NEXUS>` ; la CLI est cherchée dans le `PATH`, puis dans la copie embarquée par Claude Desktop | `connect-claude-cli.cmd` |
+| Claude Desktop | entrée `nexus` dans `mcpServers` de `claude_desktop_config.json` (installation Microsoft Store ou `%APPDATA%\Claude`) | `connect-claude-desktop.cmd` |
+| OpenAI Codex CLI | `codex mcp add nexus -- <commande MCP NEXUS>` | `connect-codex-cli.cmd` |
+| OpenAI Codex Desktop | bloc `[mcp_servers.nexus]` entre `# BEGIN NEXUS-MCP` et `# END NEXUS-MCP` dans `~/.codex/config.toml` | `connect-codex-desktop.cmd`, plus `codex-desktop.mcp.toml` |
+| Autre client MCP | aucune ; fichier à importer dans le client | `generic-mcp.json` (schéma `mcpServers`) |
 
-### GitHub Copilot JetBrains
+Les scripts sont générés dans `{installation}\integrations\` et peuvent être relancés après l'installation.
 
-Le setup ne devine pas le chemin de configuration interne de l'IDE. Il génère :
+Codex CLI et Codex Desktop lisent le même fichier `~/.codex/config.toml` : une seule entrée `nexus` sert aux deux. Cocher l'une des deux lignes décoche l'autre.
 
-```text
-{installation}\integrations\copilot-jetbrains.mcp.json
-```
+En mode natif, la commande MCP NEXUS est `cmd.exe /d /s /c {installation}\nexus-mcp.cmd`. En Docker, c'est `docker exec -i <conteneur> java -jar /opt/nexus/lib/nexus-mcp.jar`.
 
-Le fichier utilise le schéma `servers`.
+En fin d'installation, une fenêtre liste les clients cochés qui n'ont pas pu être connectés. À la désinstallation, le setup retire uniquement les entrées `nexus` qu'il a lui-même ajoutées.
 
-### Claude CLI / Claude Code
-
-Si `claude` est détecté et qu'aucune entrée `nexus` n'existe :
-
-```text
-claude mcp add --scope user nexus -- <commande MCP NEXUS>
-```
-
-Le profil projet reste disponible avec `nexus-assistant-clients.cmd`.
-
-Asset géré :
-
-```text
-{installation}\integrations\connect-claude-cli.cmd
-```
-
-### Codex Desktop
-
-Le setup traite Codex Desktop comme un client de la configuration Codex locale partagée.
-
-Si la CLI `codex` est détectée et qu'aucune entrée `nexus` n'existe :
-
-```text
-codex mcp add nexus -- <commande MCP NEXUS>
-```
-
-Le setup génère **également** un snippet TOML :
-
-```text
-{installation}\integrations\codex-desktop.mcp.toml
-```
-
-Structure :
-
-```toml
-[mcp_servers.nexus]
-command = "<java.exe embarqué ou docker>"
-args = ["..."]
-```
-
-Cela permet une configuration manuelle si la CLI `codex` n'est pas présente. Une entrée existante `nexus` n'est pas écrasée.
-
-### Client MCP générique
-
-Le setup génère :
-
-```text
-{installation}\integrations\generic-mcp.json
-```
-
-avec le schéma `mcpServers`.
+Le profil projet de Claude reste disponible avec `nexus-assistant-clients.cmd`.
 
 ### Authentification
 
@@ -521,8 +479,11 @@ Selon les choix :
 
 ```text
 integrations\connect-copilot-cli.cmd
+integrations\connect-copilot-jetbrains.cmd
 integrations\copilot-jetbrains.mcp.json
 integrations\connect-claude-cli.cmd
+integrations\connect-claude-desktop.cmd
+integrations\connect-codex-cli.cmd
 integrations\connect-codex-desktop.cmd
 integrations\codex-desktop.mcp.toml
 integrations\generic-mcp.json
