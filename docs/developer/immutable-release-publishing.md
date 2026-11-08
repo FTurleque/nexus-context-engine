@@ -120,7 +120,7 @@ Un rollback de consommation pointe vers un tag SemVer historique ou, de préfér
 
 ## Politique de publication cible (SEC-0068, proposée)
 
-[SEC-0068](../architecture/adr/SEC-0068-publier-les-releases-depuis-un-environnement-protege-avec-des-assets-attestes.md), au statut `Proposed`, complète [GEN-0031](../architecture/adr/GEN-0031-packager-la-cli-dans-un-jar-autonome.md) et fixe les conditions de publication que met en œuvre le changement OpenSpec `sprint-09-chaine-de-release-executable`. Les workflows et scripts du dépôt portent les règles qui les concernent ; les réglages GitHub (environnement `release`, ruleset de tags) sont appliqués par le mainteneur et vérifiables en lecture. L'état constaté avant le changement est relevé dans le contexte de l'ADR.
+[SEC-0068](../architecture/adr/SEC-0068-publier-les-releases-depuis-un-environnement-protege-avec-des-assets-attestes.md), au statut `Proposed`, complète [GEN-0031](../architecture/adr/GEN-0031-packager-la-cli-dans-un-jar-autonome.md) et fixe les conditions de publication que porte la spec OpenSpec `release-pipeline` (section « OpenSpec release-pipeline » ci-dessous). Les workflows et scripts du dépôt portent les règles qui les concernent ; les réglages GitHub (environnement `release`, ruleset de tags) sont appliqués par le mainteneur et vérifiables en lecture. L'état constaté avant le changement est relevé dans le contexte de l'ADR.
 
 - Aucun workflow ne transmet `secrets: inherit` ; un workflow réutilisable ne reçoit, par leur nom, que les secrets qu'il déclare. `release.yml` ne transmet aucun secret au job Windows.
 - Le job `publish` déclare `environment: release` : reviewer requis, déploiement limité aux tags `v*`. Aucune écriture dans GHCR ni dans les releases avant l'approbation ; une release demande une approbation.
@@ -139,3 +139,57 @@ gh api repos/FTurleque/nexus-context-engine/rulesets --jq '.[] | {name, target, 
 ```
 
 Voir aussi [`ci-and-supply-chain.md`](ci-and-supply-chain.md) et [`release-and-recovery.md`](release-and-recovery.md).
+
+## OpenSpec release-pipeline
+
+Spec : [`openspec/specs/release-pipeline/spec.md`](../../openspec/specs/release-pipeline/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md) ; décision : [SEC-0068](../architecture/adr/SEC-0068-publier-les-releases-depuis-un-environnement-protege-avec-des-assets-attestes.md).
+
+Cette section porte la conception et l'existant vérifié des six exigences de la chaîne de publication déclenchée par tag. La description courante reste celle des sections ci-dessus, en particulier « Vérification consommateur » et « Politique de publication cible (SEC-0068, proposée) » ; ici sont ajoutés les emplacements exacts, la conception et ce qui est prouvé ou non. La répétition de release est relevée dans [Répétition de release 0.2.0-rc.2](../project/history/release-rehearsal-0.2.0-rc.2-2026-11-08.md).
+
+### Conception (release-pipeline)
+
+- **Aucun héritage de secrets.** `release.yml` appelle `windows-installer.yml` avec `require_authenticode: false` et sans secret (`.github/workflows/release.yml:64`). Les assets Windows de release ne sont pas signés Authenticode, le projet n'ayant pas de certificat de signature de code payant ; leur provenance est l'attestation. Un contrat refuse `secrets: inherit` dans `.github/workflows/`.
+- **Matériel de signature confiné.** Aucun secret n'est référencé au niveau du job `windows-installer`. Seules les étapes « Build self-contained Windows distribution » (`.github/workflows/windows-installer.yml:87-91`) et « Build production installer » (`.github/workflows/windows-installer.yml:112-115`) reçoivent les deux secrets PFX, hors `pull_request`. `scripts/release/sign-windows-artifact.ps1` décode le PFX dans un répertoire propre à l'appel et l'efface dans un bloc `finally` (`scripts/release/sign-windows-artifact.ps1:102-105`) ; aucun chemin n'est publié dans `GITHUB_ENV`. Sur `pull_request`, le build produit des artefacts non signés.
+- **Environnement protégé.** Le job `publish` déclare `environment: release` (`.github/workflows/release.yml:169`). Le job Windows n'entre dans cet environnement que s'il est appelé avec `require_authenticode: true`, par `name: ${{ inputs.require_authenticode && 'release' || '' }}` (`.github/workflows/windows-installer.yml:54-55`) ; `release.yml` ne le fait pas. L'environnement exige un reviewer, limite le déploiement aux tags `v*` et ne porte aucun secret ; un ruleset de tags `refs/tags/v*` restreint création, mise à jour et suppression au mainteneur. Ces réglages GitHub sont appliqués par le mainteneur et lus par `gh api`.
+- **Attestation de tous les assets.** Avant l'upload, `actions/attest` (même SHA épinglé que pour l'image) atteste par `subject-path` le ZIP (`.github/workflows/release.yml:389-392`) et le `setup.exe` (`.github/workflows/release.yml:394-397`) ; l'étape « Verify Windows asset attestations before upload » (`.github/workflows/release.yml:399-424`) exécute `gh attestation verify` sur chacun, avec `--signer-workflow` et `--source-ref`, et échoue sinon.
+- **Version lue dans le pom.** `ci.yml` lit la version dans `pom.xml` et l'exporte en `NEXUS_VERSION` (`.github/workflows/ci.yml:79-91`) ; `scripts/validate-phase-6.ps1` la lit par `[xml]` (`scripts/validate-phase-6.ps1:95`, `:105`).
+- **Pré-versions.** `scripts/release/validate-release-tag.sh` accepte `vX.Y.Z` et `vX.Y.Z-rc.N` (`N` entier non nul sans zéro de tête), toujours égal à la version Maven et à la tête de `main` (`scripts/release/validate-release-tag.sh:11`). Pour un tag `-rc`, `scripts/release/publish-github-release-assets.sh` crée la release en `--prerelease --latest=false` (`scripts/release/publish-github-release-assets.sh:68`) et refuse une release existante dont l'état pré-version contredit le tag (code 78) ; l'étape `latest` de `release.yml` laisse `latest` inchangé (`.github/workflows/release.yml:452-467`). Les tags d'image version et SHA restent immuables.
+
+### Vues (release-pipeline)
+
+#### Vue organigramme — Dans quel ordre la chaîne de release valide, approuve, atteste puis publie-t-elle ? (existant)
+
+```mermaid
+flowchart TD
+    tag["Push d'un tag v*.*.* ou vX.Y.Z-rc.N"] --> validate{"validate-release : tag = version Maven et commit = tête de main ?"}
+    validate -- "non" --> stop["Échec : aucune qualification ni publication"]
+    validate -- "oui" --> qualif["Douze workflows réutilisables dont windows-installer"]
+    qualif --> env["Approbation de l'environnement release"]
+    env --> image["Image GHCR sous tags immuables, attestation provenance et SBOM"]
+    image --> attest["actions/attest sur les ZIP et setup.exe, puis gh attestation verify"]
+    attest -- "vérification en échec" --> stop2["Échec avant tout upload et avant latest"]
+    attest -- "vérification réussie" --> assets["publish-github-release-assets.sh : release GitHub"]
+    assets --> rc{"Tag -rc ?"}
+    rc -- "oui" --> pre["Release marquée pré-version, latest inchangé"]
+    rc -- "non" --> latest["latest déplacé"]
+```
+
+Notation : organigramme, pas UML. Exigences portées : « La publication s'exécute dans l'environnement protégé », « Chaque asset publié porte une attestation de provenance », « Un tag de pré-version publie une pré-version ».
+
+### Comportement existant vérifié (release-pipeline)
+
+**[Existant vérifié]** Les contrats `scripts/release/test-final-audit-contracts.sh:291-358` (bloc « Sprint 9 : secrets-signature »), `:360-399` (bloc « Sprint 9 : attest-prerelease »), `:482-511` (bloc « Sprint 9 : version-from-pom ») et `:513-530` (bloc « Sprint 9 : adr-publication ») verrouillent respectivement : `secrets: inherit` refusé et confinement des secrets de signature ; SHA unique de `actions/attest`, les deux `subject-path`, vérification bloquante et ordre attestation, vérification, upload, `latest` ; absence de version littérale dans `ci.yml` et `validate-phase-6.ps1` ; ADR de publication référencé.
+
+**[Existant vérifié]** Les tests `scripts/release/test-release-tag-policy.sh` (cas valides `rc.1` et `rc.12`, cas invalides `rc.0`, `rc.01`, version Maven ou SHA divergents, `-SNAPSHOT`) et `scripts/release/test-publish-github-release-assets.sh` (création en pré-version, reprise idempotente, refus en code 78 d'un état pré-version contradictoire) couvrent la politique de tag et la publication des assets.
+
+**[Existant vérifié]** Le relevé daté de la répétition `0.2.0-rc.2` consigne : run `release.yml` réussi après approbation de l'environnement `release`, release marquée pré-version, `gh attestation verify` réussi sur l'image, le ZIP et le `setup.exe` avec le workflow `release.yml` pour signataire, `latest` inchangé, et la lecture `gh api` de l'environnement et du ruleset de tags.
+
+### Écarts et limites (release-pipeline)
+
+- Les assets Windows de release ne sont pas signés Authenticode : SmartScreen affiche « éditeur inconnu » à l'installation. La vérification par `gh attestation verify` et par le `.sha256` est documentée dans la section « Vérification consommateur ».
+- Aucun run signé de `windows-installer.yml` (`workflow_dispatch` avec `require_authenticode: true`) n'a été exécuté, faute de certificat : le confinement des secrets de la signature est prouvé par contrat, pas par run.
+- Aucun test n'exécute l'échec réel d'une vérification d'attestation avant l'upload ; le contrat verrouille l'ordre des étapes et l'absence de `if` ou de `continue-on-error`.
+- Les réglages GitHub (environnement `release`, ruleset de tags) ne sont relus par aucun contrat : seul le relevé daté les consigne.
+- Un environnement absent est créé sans protection par le premier job qui le référence : l'environnement et le ruleset précèdent tout tag `v*`.
+- La pré-version publie dans le namespace GHCR réel, sous des tags distincts et immuables, jamais `latest`.
+- `build-windows-distribution.ps1` et `build-windows-installer.ps1` sont aussi modifiés par le changement `sprint-10-conteneur-et-gouvernance` (inclusion de `Dockerfile.runtime.dockerignore` dans le payload) ; l'ordre de fusion n'est pas décidé ici.
