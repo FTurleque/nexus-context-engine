@@ -86,22 +86,13 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $maven = Get-Command mvn -ErrorAction SilentlyContinue
-          if ($null -ne $maven) {
-            & $maven.Source -B -pl core `
-              '-Dtest=SmbFilesystemQualificationTest' `
-              '-Dnexus.smb.qualification.required=true' `
-              "-Dnexus.smb.root=$env:NEXUS_SMB_ROOT" `
-              '-Djunit.jupiter.execution.timeout.test.method.default=2m' `
-              test
-          } else {
-            & .\mvnw.cmd -B -pl core `
-              '-Dtest=SmbFilesystemQualificationTest' `
-              '-Dnexus.smb.qualification.required=true' `
-              "-Dnexus.smb.root=$env:NEXUS_SMB_ROOT" `
-              '-Djunit.jupiter.execution.timeout.test.method.default=2m' `
-              test
-          }
+          # Always the verified wrapper: the enforcer requires the Maven version it pins.
+          & .\mvnw.cmd -B -pl core `
+            '-Dtest=SmbFilesystemQualificationTest' `
+            '-Dnexus.smb.qualification.required=true' `
+            "-Dnexus.smb.root=$env:NEXUS_SMB_ROOT" `
+            '-Djunit.jupiter.execution.timeout.test.method.default=2m' `
+            test
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
