@@ -51,7 +51,7 @@ CLI, REST et MCP délèguent à cette façade.
 
 ### Configuration résolue en composition root
 
-`NexusApplicationFactory` est la seule classe de `core/src/main` qui lit l'environnement du processus ([ARCH-0066](../architecture/adr/ARCH-0066-resoudre-la-configuration-dans-la-composition-root.md), complète [ARCH-0003](../architecture/adr/ARCH-0003-conserver-un-coeur-java-sans-framework-applicatif.md)). Elle résout les variables `NEXUS_*` du cœur en un record `NexusConfiguration` depuis une `Map<String, String>` (l'environnement en production, une table en test), puis passe à chaque composant sa part par constructeur :
+`NexusApplicationFactory` est la seule classe de `core/src/main` qui lit l'environnement du processus ([ARCH-0086](../architecture/adr/ARCH-0086-resoudre-la-configuration-et-nexus-home-dans-la-composition-root.md), complète [ARCH-0076](../architecture/adr/ARCH-0076-garder-un-coeur-java-sans-framework-acyclique-et-verifie.md)). Elle résout les variables `NEXUS_*` du cœur en un record `NexusConfiguration` depuis une `Map<String, String>` (l'environnement en production, une table en test), puis passe à chaque composant sa part par constructeur :
 
 | Part | Résolue par | Injectée dans |
 |---|---|---|
@@ -192,7 +192,7 @@ Le profil sémantique est `content-v5`, ce qui rend un index historique incompat
 
 `OllamaEmbeddingProvider` borne la réponse `/api/embed` avant matérialisation JSON et valide dimension/valeurs finies.
 
-`.github/workflows/semantic-search-qualification.yml` apporte la preuve réelle (corpus réduit sur PR, corpus complet sur `develop` après fusion, manuelle et mensuelle ; GEN-0060) : téléchargement Ollama 0.33.3 depuis la release officielle, vérification SHA-256 repository-pinned, endpoint loopback, modèle `qwen3-embedding:0.6b`, `RealSemanticSearchBenchmarkTest`, floors de qualité/non-régression et artefacts de preuve.
+`.github/workflows/semantic-search-qualification.yml` apporte la preuve réelle (corpus réduit sur PR, corpus complet sur `develop` après fusion, manuelle et mensuelle ; BE-0084) : téléchargement Ollama 0.33.3 depuis la release officielle, vérification SHA-256 repository-pinned, endpoint loopback, modèle `qwen3-embedding:0.6b`, `RealSemanticSearchBenchmarkTest`, floors de qualité/non-régression et artefacts de preuve.
 
 ## Git local
 
@@ -253,7 +253,7 @@ canonique et Lucene reconstructible. Ce découpage ne remplace aucun ADR accept�
 
 ## Frontières vérifiées du cœur
 
-`core/src/test/java/com/nexus/architecture/CoreArchitectureTest.java` ([ARCH-0059](../architecture/adr/ARCH-0059-verifier-les-frontieres-du-coeur-par-un-test-d-architecture.md)) lit les sources de `core/src/main/java` sans dépendance de test supplémentaire : déclarations `package` et `import` (dont `import static` et les jokers), plus les noms pleinement qualifiés des préfixes surveillés ; commentaires, chaînes et blocs de texte sont ignorés. Il s'exécute dans la suite par défaut du module `core`.
+`core/src/test/java/com/nexus/architecture/CoreArchitectureTest.java` ([ARCH-0076](../architecture/adr/ARCH-0076-garder-un-coeur-java-sans-framework-acyclique-et-verifie.md)) lit les sources de `core/src/main/java` sans dépendance de test supplémentaire : déclarations `package` et `import` (dont `import static` et les jokers), plus les noms pleinement qualifiés des préfixes surveillés ; commentaires, chaînes et blocs de texte sont ignorés. Il s'exécute dans la suite par défaut du module `core`.
 
 | Règle | Contrainte |
 |---|---|
@@ -261,12 +261,12 @@ canonique et Lucene reconstructible. Ce découpage ne remplace aucun ADR accept�
 | `lucene-confine` | `org.apache.lucene` seulement dans `com.nexus.search.lucene` et `com.nexus.search.semantic.lucene` |
 | `sqlite-confine` | `org.sqlite` et `java.sql` seulement dans `com.nexus.persistence.sqlite`, plus la liste fermée `SQLITE_EXCEPTIONS` de `CoreArchitectureRules` (`java.sql.SQLException` dans `NexusApplicationFactory`, qui l'enveloppe en `PersistenceException`) |
 | `project-feuille` | `com.nexus.project` n'importe aucun autre package `com.nexus` |
-| `cycles-baseline` | les arêtes de cycle du graphe des packages sont égales à `core/src/test/resources/architecture/package-cycles.txt`, vide depuis [ARCH-0063](../architecture/adr/ARCH-0063-casser-les-cycles-de-packages-du-coeur-par-des-packages-de-modele-feuilles.md) : tout cycle échoue |
+| `cycles-baseline` | les arêtes de cycle du graphe des packages sont égales à `core/src/test/resources/architecture/package-cycles.txt`, vide ([ARCH-0076](../architecture/adr/ARCH-0076-garder-un-coeur-java-sans-framework-acyclique-et-verifie.md)) : tout cycle échoue |
 | `index-sans-search` | `com.nexus.index` et ses sous-packages, hors `com.nexus.index.service`, n'importent rien de `com.nexus.search` |
 | `context-source-sans-context` | `com.nexus.context.source` et ses sous-packages n'importent aucun type du package `com.nexus.context` (`context.model` reste permis) |
 | `ranking-sans-search` | `com.nexus.ranking` et `ranking.graph` n'importent aucun type du package `com.nexus.search` (`search.candidate` reste permis) |
 | `search-semantic-sans-ollama` | `com.nexus.search.semantic` n'importe rien de `com.nexus.search.semantic.ollama` |
-| `getenv-composition-root` | aucun `System.getenv` (simple, pleinement qualifié ou importé en statique) hors de `com.nexus.application.NexusApplicationFactory` ([ARCH-0066](../architecture/adr/ARCH-0066-resoudre-la-configuration-dans-la-composition-root.md)) |
+| `getenv-composition-root` | aucun `System.getenv` (simple, pleinement qualifié ou importé en statique) hors de `com.nexus.application.NexusApplicationFactory` ([ARCH-0086](../architecture/adr/ARCH-0086-resoudre-la-configuration-et-nexus-home-dans-la-composition-root.md)) |
 
 Un message d'échec a la forme `[règle] classe -> nom importé`. La baseline de cycles liste une arête `source -> cible` par ligne, triée ; elle est vide : une arête de cycle nouvelle échoue, et une entrée qui ne forme plus de cycle échoue aussi. Lancement ciblé :
 
@@ -276,7 +276,7 @@ Un message d'échec a la forme `[règle] classe -> nom importé`. La baseline de
 
 ## OpenSpec core-package-boundaries
 
-Spec : [`openspec/specs/core-package-boundaries/spec.md`](../../openspec/specs/core-package-boundaries/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md). La section « Frontières vérifiées du cœur » ci-dessus décrit les règles ; celle-ci ajoute l'état réel de la baseline, les vues structurelles et les écarts. Le changement `sprint-07-casser-le-bloc-cyclique-du-coeur` ([ARCH-0063](../architecture/adr/ARCH-0063-casser-les-cycles-de-packages-du-coeur-par-des-packages-de-modele-feuilles.md)) a cassé les cycles : le graphe est acyclique et la baseline vide. Sa spec n'est pas encore fusionnée dans `openspec/specs/`, qui garde l'exigence « Les cycles de packages ne peuvent que décroître ».
+Spec : [`openspec/specs/core-package-boundaries/spec.md`](../../openspec/specs/core-package-boundaries/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md). La section « Frontières vérifiées du cœur » ci-dessus décrit les règles ; celle-ci ajoute l'état réel de la baseline, les vues structurelles et les écarts. Le changement `sprint-07-casser-le-bloc-cyclique-du-coeur` ([ARCH-0076](../architecture/adr/ARCH-0076-garder-un-coeur-java-sans-framework-acyclique-et-verifie.md)) a cassé les cycles : le graphe est acyclique et la baseline vide. Sa spec n'est pas encore fusionnée dans `openspec/specs/`, qui garde l'exigence « Les cycles de packages ne peuvent que décroître ».
 
 ### Comportement existant vérifié
 
@@ -405,10 +405,9 @@ Les deux échecs peuvent survenir ensemble. Une baseline non triée ou avec doub
 - [Écart] Le scénario « Nouveau cycle » demande que le test « nomme les packages du cycle ». Le message nomme l'arête (`com.nexus.b -> com.nexus.a`), pas le cycle complet (`CoreArchitectureTest#newCycleEdgeFailsTheBaselineAndNamesThePackages`).
 - [Écart] Le scénario « Contrôle des imports » (aucun `import com.nexus.context` dans `security`) n'a aucune règle ni test : le relevé a été fait à la main au HEAD. La première moitié de l'exigence (politique d'exposition hors de `security`) n'a pas non plus de garde automatisée. `test non écrit`.
 - [Écart] Le scénario « Build standard » (le test s'exécute et passe par `./mvnw -B -ntp -pl core test`) n'est pas démontré par un test : c'est le comportement de la suite par défaut, prouvé par le run CI du reactor (`NEXUS CI`, job « Linux reactor Maven build », `./mvnw -B clean install`, `.github/workflows/ci.yml:105-108`). Rien n'a été exécuté pour cette documentation.
-- [Écart] [ARCH-0059](../architecture/adr/ARCH-0059-verifier-les-frontieres-du-coeur-par-un-test-d-architecture.md) et [ARCH-0063](../architecture/adr/ARCH-0063-casser-les-cycles-de-packages-du-coeur-par-des-packages-de-modele-feuilles.md) portent le statut `Proposed` alors que leurs contrôles sont livrés.
 - [Écart] Le design du sprint 7 range `ResultLimitPolicy` et `SearchDocument` dans un même package feuille. Impossible : `SearchDocument` dépend de `CodeSymbol` et `FileCategory` (`index`), que `index` ne peut pas importer en retour. `SearchDocument` est donc dans `index` et `ResultLimitPolicy` dans `config`.
 - [Écart] Le design du sprint 7 laissait le package du port sémantique « à fixer » ; le port `SemanticIndexing` est dans `index`, avec `SearchDocument` qu'il manipule.
-- [Écart] La baseline n'a pas été supprimée : le fichier reste, vide, et la règle `cycles-baseline` l'applique ; la spec du changement dit « sans baseline de cycles tolérés ». Ajouter une ligne contredit [ARCH-0063](../architecture/adr/ARCH-0063-casser-les-cycles-de-packages-du-coeur-par-des-packages-de-modele-feuilles.md) et se voit dans le diff.
+- [Écart] La baseline n'a pas été supprimée : le fichier reste, vide, et la règle `cycles-baseline` l'applique ; la spec du changement dit « sans baseline de cycles tolérés ». Ajouter une ligne contredit [ARCH-0076](../architecture/adr/ARCH-0076-garder-un-coeur-java-sans-framework-acyclique-et-verifie.md) et se voit dans le diff.
 - Limite : seuls les `import` alimentent le graphe des packages. Une dépendance `com.nexus.*` écrite en nom pleinement qualifié sans import échappe aux règles `project-feuille`, `cycles-baseline` et aux quatre règles de sens ; la détection des noms qualifiés ne vaut que pour les préfixes framework, Lucene et SQLite/JDBC (`JavaSourceGraph.java:100-114`, `CoreArchitectureRules.java:34`).
 - Limite : la baseline est une égalité d'ensembles, pas un plafond. Ajouter une arête dans une composante qui contient déjà ses deux extrémités échoue aussi.
 - Limite : les règles de sens couvrent quatre sens ; les autres dépendances hors cycles (par exemple `exposure` vers `context`) ne sont pas contrôlées.

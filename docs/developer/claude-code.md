@@ -1,6 +1,6 @@
 # Outillage Claude Code du dépôt
 
-Le dépôt versionne une configuration Claude Code destinée au développement et à la maintenance de NEXUS. Elle n'est pas utilisée par le runtime NEXUS et ne crée aucune dépendance du produit envers un fournisseur d'agent (ADR-0017).
+Le dépôt versionne une configuration Claude Code destinée au développement et à la maintenance de NEXUS. Elle n'est pas utilisée par le runtime NEXUS et ne crée aucune dépendance du produit envers un fournisseur d'agent (ARCH-0077).
 
 ## Contenu
 

@@ -10,7 +10,7 @@ import java.util.Objects;
  * ContextBundle multi-projet respectant un budget global unique.
  *
  * <p>{@code unservedProjects} nomme, dans l'ordre du scope, les projets que
- * l'échéance globale a empêché de commencer (BE-0064) ; elle est vide sans coupe.</p>
+ * l'échéance globale a empêché de commencer (BE-0081) ; elle est vide sans coupe.</p>
  */
 public record FederatedContextBundle(
         List<FederatedContextItem> items,

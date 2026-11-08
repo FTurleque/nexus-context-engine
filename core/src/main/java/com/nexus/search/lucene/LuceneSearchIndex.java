@@ -133,7 +133,7 @@ public final class LuceneSearchIndex implements SearchIndex {
     }
 
     /**
-     * Un seul {@code IndexWriter} pour toute l'indexation (DATA-0045, design D4) : les lots sont
+     * Un seul {@code IndexWriter} pour toute l'indexation (DATA-0074, design D4) : les lots sont
      * accumulés sans commit, le commit unique est la barrière de publication et un échec annule les
      * écritures, de sorte que l'index reste celui de la génération précédente.
      */

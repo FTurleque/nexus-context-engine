@@ -99,7 +99,7 @@ public final class PersistentLuceneSearchIndex implements SearchIndex {
         Objects.requireNonNull(projectId, "projectId");
         readers.ensureOpen();
         // Sonde de readiness : lecture sur le reader en cache ou sur le dernier commit,
-        // sans DirectoryReader supplémentaire (ADR-0045).
+        // sans DirectoryReader supplémentaire (DATA-0074).
         return readers.readCommitMetadata(
                 projectId, paths.projectLuceneIndex(projectId), LuceneSearchIndex::hasCurrentRedactionPolicy, false);
     }

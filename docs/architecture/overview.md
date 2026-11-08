@@ -98,7 +98,7 @@ Les contenus à forte probabilité de secret sont redigés avant les embeddings 
 
 Ollama HTTP est accepté sans opt-in uniquement sur loopback. Une URI distante doit utiliser HTTPS ; HTTP distant exige `NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA=true`. Les credentials intégrés à l'URI sont refusés.
 
-La qualité du chemin sémantique réel est qualifiée sur les PR qui touchent la recherche sémantique (corpus réduit), sur `develop` après fusion (corpus complet), manuellement et chaque mois (GEN-0060), avec un runtime Ollama épinglé et vérifié par SHA-256, `qwen3-embedding:0.6b`, le vrai corpus NEXUS et des seuils explicites de qualité/non-régression. Ce workflow reste séparé des PR ordinaires en raison du coût du runtime et du modèle, et la release ne l'exige pas.
+La qualité du chemin sémantique réel est qualifiée sur les PR qui touchent la recherche sémantique (corpus réduit), sur `develop` après fusion (corpus complet), manuellement et chaque mois (BE-0084), avec un runtime Ollama épinglé et vérifié par SHA-256, `qwen3-embedding:0.6b`, le vrai corpus NEXUS et des seuils explicites de qualité/non-régression. Ce workflow reste séparé des PR ordinaires en raison du coût du runtime et du modèle, et la release ne l'exige pas.
 
 ## Code Intelligence externe
 
@@ -151,7 +151,7 @@ Le listener de management ne doit pas être publié par le reverse proxy.
 
 ## Supply-chain et release
 
-Les gates exact-head comprennent NEXUS CI, CodeQL, OSV, Docker Distribution, Scale Benchmark, Scanner Corpus Benchmark et Windows Installer selon leur périmètre ; SonarCloud fournit en plus le Quality Gate de PR. La qualification sémantique réelle Ollama tourne sur les PR sémantiques et sur `develop` après fusion, hors du chemin de release (GEN-0060), et conserve ses propres preuves.
+Les gates exact-head comprennent NEXUS CI, CodeQL, OSV, Docker Distribution, Scale Benchmark, Scanner Corpus Benchmark et Windows Installer selon leur périmètre ; SonarCloud fournit en plus le Quality Gate de PR. La qualification sémantique réelle Ollama tourne sur les PR sémantiques et sur `develop` après fusion, hors du chemin de release (BE-0084), et conserve ses propres preuves.
 
 Docker Distribution construit et qualifie une image unique. La release charge l'artefact qualifié, vérifie hash/ID et publie ce contenu exact.
 
@@ -167,7 +167,7 @@ Voir aussi [`developer/architecture-implementation.md`](../developer/architectur
 
 ## Contrat de hardening du 9 septembre 2026
 
-Voir [ADR-0048](adr/SEC-0048-distinguer-traversee-stricte-et-compatibilite-filesystem.md)
+Voir [SEC-0082](adr/SEC-0082-borner-le-support-filesystem-et-la-traversee-des-chemins.md)
 pour la distinction entre traversée strict et compatibility. Le fallback sans
 `SecureDirectoryStream` est best-effort : la revalidation ne détecte pas un ABA
 restauré. `NEXUS_REQUIRE_STRICT_PATH_IO=true` le refuse avant ouverture du fichier.

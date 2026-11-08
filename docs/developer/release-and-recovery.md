@@ -224,7 +224,7 @@ plus aucune des deux migrations.
 `V014__index_staged_analyses.sql` crée trois tables transitoires,
 `index_staged_files`, `index_staged_symbols` et `index_staged_relations`, où une
 indexation met ses analyses en attente par lots avant de les publier (décision
-DATA-0062, [indexing-pipeline.md](indexing-pipeline.md#9-coûts-mesurés-du-pipeline)).
+DATA-0074, [indexing-pipeline.md](indexing-pipeline.md#9-coûts-mesurés-du-pipeline)).
 Elle ne modifie ni les faits canoniques, ni la génération, ni le statut des
 projets : aucun rebuild n'est imposé et les index Lucene et sémantiques restent
 valides. V001 à V013 et leurs empreintes restent inchangées.

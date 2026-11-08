@@ -122,7 +122,7 @@ public final class FederatedContextService {
 
     /**
      * Étape 2 : collecte par projet, dans l'ordre déterministe du scope, sous échéance
-     * globale (BE-0064) : l'échéance est vérifiée avant chaque projet, sans parallélisme ;
+     * globale (BE-0081) : l'échéance est vérifiée avant chaque projet, sans parallélisme ;
      * un projet non commencé à l'échéance n'est pas servi et est nommé dans le diagnostic.
      */
     private ProjectCollection collectPerProject(
@@ -148,7 +148,7 @@ public final class FederatedContextService {
         SearchQueryContext queryContext = SearchQueryContext.create(deadline);
         List<ProjectDescriptor> unservedProjects = new ArrayList<>();
         // Compteurs du cache de contexte Git : partagés par tous les projets, donc le dernier
-        // relevé du parcours est le plus récent (BE-0065).
+        // relevé du parcours est le plus récent (BE-0070).
         Object gitContextCache = null;
 
         for (int index = 0; index < scope.size(); index++) {

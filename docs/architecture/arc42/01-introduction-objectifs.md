@@ -20,17 +20,17 @@ génère pas de réponses, n'exécute pas d'agents et ne route pas de modèles.
 
 | # | Objectif | Source |
 |---|----------|--------|
-| M1 | Construire un contexte IA pertinent et minimal pour toute requête sur un repository local, sans appel de modèle | ADR-0001, `docs/architecture/overview.md` |
+| M1 | Construire un contexte IA pertinent et minimal pour toute requête sur un repository local, sans appel de modèle | ARCH-0077, `docs/architecture/overview.md` |
 | M2 | Fonctionner sans dépendance réseau obligatoire (local-first) | ADR-0005 |
 | M3 | Exposer le même moteur à la CLI, à une API REST et aux clients MCP | `docs/architecture/overview.md` § Surfaces |
 | M4 | Permettre la recherche et le contexte fédérés sur plusieurs projets enregistrés | `docs/project/governance/ROADMAP.md` Phase 5 |
-| M5 | Maintenir l'explicabilité complète de chaque sélection, score et exclusion | ADR-0010, ADR-0025 |
+| M5 | Maintenir l'explicabilité complète de chaque sélection, score et exclusion | BE-0071 |
 
 ## 1.3 Parties prenantes
 
 | Partie prenante | Rôle | Attentes vis-à-vis de NEXUS |
 |-----------------|------|------------------------------|
-| Développeur CLI | Utilisateur direct de la CLI | Commandes stables, sorties JSON/humain, codes de sortie fiables (ADR-0030) |
+| Développeur CLI | Utilisateur direct de la CLI | Commandes stables, sorties JSON/humain, codes de sortie fiables (ARCH-0085) |
 | Intégrateur assistant (Copilot, Claude…) | Configure l'assistant pour appeler NEXUS | API MCP ou REST stable, ContextBundle documenté |
 | Administrateur local | Gère le runtime, `NEXUS_HOME`, variables d'environnement | Documentation opérationnelle claire, health checks |
 | Développeur du moteur | Contribue au cœur Java | Frontières ports/adaptateurs respectées, tests reproductibles |
@@ -40,8 +40,8 @@ génère pas de réponses, n'exécute pas d'agents et ne route pas de modèles.
 
 | Priorité | Attribut | Formulation opérationnelle | ADR de référence |
 |----------|----------|---------------------------|------------------|
-| 1 | **Correctness** | Toute sélection, score et exclusion doit être déterministe, reproductible et explicable | ADR-0010, ADR-0025, ADR-0029 |
+| 1 | **Correctness** | Toute sélection, score et exclusion doit être déterministe, reproductible et explicable | BE-0071, BE-0072 |
 | 2 | **Fiabilité / Sécurité locale** | Aucun fichier hors du périmètre projet ne doit être lu ; les ressources (verrou, index) sont protégées contre les redirections symlink | H1, H2 — issue #16 |
-| 3 | **Indépendance fournisseur** | Zéro dépendance obligatoire vers un LLM, un IDE ou un orchestrateur ; tout provider externe est opt-in et borné dans le temps | ADR-0001, ADR-0005, ADR-0017 |
-| 4 | **Opérabilité** | La CLI démarre sans configuration préalable ; le service REST expose liveness/readiness et métriques Micrometer | ADR-0030, ADR-0031 |
-| 5 | **Évolutivité contrôlée** | Les intégrations nouvelles s'ajoutent comme adaptateurs sans modifier le cœur | ADR-0003, ADR-0009, ADR-0011 |
+| 3 | **Indépendance fournisseur** | Zéro dépendance obligatoire vers un LLM, un IDE ou un orchestrateur ; tout provider externe est opt-in et borné dans le temps | ARCH-0077, ADR-0005 |
+| 4 | **Opérabilité** | La CLI démarre sans configuration préalable ; le service REST expose liveness/readiness et métriques Micrometer | ARCH-0085, ADR-0031 |
+| 5 | **Évolutivité contrôlée** | Les intégrations nouvelles s'ajoutent comme adaptateurs sans modifier le cœur | ARCH-0076, ARCH-0080, ARCH-0078 |

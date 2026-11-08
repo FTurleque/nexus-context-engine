@@ -4,11 +4,18 @@ import com.nexus.config.NexusPaths;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -16,8 +23,52 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SqliteBatchInsertTest {
 
+    private static final Path HELPER_SOURCE =
+            Path.of("core/src/main/java/com/nexus/persistence/sqlite/SqliteBatchInsert.java");
+    private static final Pattern SYMBOL_INSERT = Pattern.compile(
+            "\\bINSERT\\s+(?:OR\\s+\\w+\\s+)?INTO\\s+[\"`\\[]?(symbols|symbol_relations)\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern TRANSACTION_CONTROL = Pattern.compile(
+            "\\.\\s*(?:commit|rollback|setAutoCommit|setSavepoint|releaseSavepoint)\\s*\\("
+                    + "|\"\\s*(?:BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE|END)\\b",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern COMMENT = Pattern.compile("(?s)/\\*.*?\\*/|//[^\\n]*");
+
     @TempDir
     Path temporaryDirectory;
+
+    @Test
+    void limitsEachStatementTo128Rows() {
+        assertEquals(128, SqliteBatchInsert.ROW_LIMIT, "Les lots d'écriture SQLite sont bornés à 128 lignes");
+    }
+
+    @Test
+    void symbolInsertsGoOnlyThroughTheHelperWhichOwnsNoTransaction() throws IOException {
+        List<String> violations = new ArrayList<>();
+        List<Path> javaSources = new ArrayList<>();
+        for (Path root : List.of(Path.of("core/src/main/java"), Path.of("adapters"))) {
+            try (Stream<Path> files = Files.walk(root)) {
+                files.filter(file -> file.toString().endsWith(".java"))
+                        .filter(file -> file.toString().replace('\\', '/').contains("/src/main/java/"))
+                        .forEach(javaSources::add);
+            }
+        }
+        assertTrue(javaSources.contains(HELPER_SOURCE), "SqliteBatchInsert.java introuvable : " + HELPER_SOURCE);
+        for (Path source : javaSources) {
+            if (source.equals(HELPER_SOURCE)) {
+                continue;
+            }
+            Matcher insert = SYMBOL_INSERT.matcher(COMMENT.matcher(Files.readString(source)).replaceAll(" "));
+            while (insert.find()) {
+                violations.add(source + " : insertion dans " + insert.group(1) + " hors de SqliteBatchInsert");
+            }
+        }
+        Matcher transaction = TRANSACTION_CONTROL.matcher(
+                COMMENT.matcher(Files.readString(HELPER_SOURCE)).replaceAll(" "));
+        while (transaction.find()) {
+            violations.add(HELPER_SOURCE + " : contrôle de transaction « " + transaction.group().trim() + " »");
+        }
+        assertEquals(List.of(), violations);
+    }
 
     @Test
     void executesFullAndTailRowsWithBoundValues() throws Exception {

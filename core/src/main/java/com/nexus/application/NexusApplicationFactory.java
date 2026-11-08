@@ -80,7 +80,7 @@ import java.util.Objects;
  *
  * <p>Seule classe du cœur qui lit l'environnement du processus ({@link #processEnvironment()}) :
  * la configuration {@code NEXUS_*} y est résolue en {@link NexusConfiguration}, puis injectée
- * dans les composants (ARCH-0066).</p>
+ * dans les composants (ARCH-0086).</p>
  */
 final class NexusApplicationFactory {
 
@@ -311,7 +311,7 @@ final class NexusApplicationFactory {
 
     /**
      * Environnement du processus : seule lecture de {@code System.getenv} du cœur, contrôlée
-     * par {@code CoreArchitectureTest} (ARCH-0066).
+     * par {@code CoreArchitectureTest} (ARCH-0086).
      */
     static Map<String, String> processEnvironment() {
         return System.getenv();

@@ -29,7 +29,7 @@
 | **ProjectPathGuard** | Composant vérifiant que chaque accès filesystem reste dans le périmètre du projet |
 | **SafeFileIO** | Utilitaire ouvrant les fichiers avec `NOFOLLOW_LINKS` pour le composant final |
 | **ExternalTaskRunner** | Exécuteur commun pour les providers externes avec timeout wall-clock et annulation/interruption |
-| **HeuristicTokenEstimator** | Estimateur local de tokens, déterministe et remplaçable (ADR-0027) |
+| **HeuristicTokenEstimator** | Estimateur local de tokens, déterministe et remplaçable (BE-0072) |
 | **DeterministicContextRanker** | Implémentation par défaut du ranking, sans appel réseau |
 | **SemanticHybridContextRanker** | Ranker opt-in combinant signaux lexicaux et vectoriels (Ollama) |
 | **RRF** | Reciprocal Rank Fusion — méthode de fusion des rangs lexicaux et sémantiques |

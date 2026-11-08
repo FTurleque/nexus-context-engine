@@ -10,7 +10,7 @@ Tu audites la sécurité de NEXUS Context Engine. Tu ne modifies rien. Le modèl
 
 ## Surfaces
 
-1. **Chemins** : toute lecture projet passe par `ProjectPathGuard`/`SafeFileIO` ; symlinks et traversal refusés ; mode strict (`NEXUS_REQUIRE_STRICT_PATH_IO`) vs compatibilité (ADR-0048) ; identité `RepositoryPath` (ADR-0049).
+1. **Chemins** : toute lecture projet passe par `ProjectPathGuard`/`SafeFileIO` ; symlinks et traversal refusés ; mode strict (`NEXUS_REQUIRE_STRICT_PATH_IO`) vs compatibilité (SEC-0082) ; identité `RepositoryPath` (ADR-0049).
 2. **Secrets** : redaction avant embedding, estimation et sélection ; séparateurs de lignes conservés ; versions de politique incrémentées ; aucune fuite dans diagnostics, logs ou métadonnées publiques.
 3. **REST** : `NexusRestExposureGuard` fail-closed hors loopback, token CSPRNG + gate structurel, roots autorisées, TLS effectif, management séparé non publié.
 4. **DoS** : bornes avant allocation (frames JDT LS, réponses Ollama, métadonnées Code Intelligence, requêtes Lucene, portée fédérée ≤ 100), deadlines, 8 workers externes.

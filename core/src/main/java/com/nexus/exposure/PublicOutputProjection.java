@@ -19,7 +19,7 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 
 /**
- * Projection publique unique des résultats NEXUS, partagée par la CLI, REST et MCP (ADR-0061).
+ * Projection publique unique des résultats NEXUS, partagée par la CLI, REST et MCP (ARCH-0085).
  *
  * <p>Elle applique en un seul endroit la politique de sortie : chemins relatifs au projet via
  * {@link PublicProjectPathPolicy}, diagnostics filtrés par {@link PublicDiagnosticPolicy},

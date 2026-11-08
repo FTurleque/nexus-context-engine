@@ -166,7 +166,7 @@ public final class ProjectIndexingService {
 
     /**
      * Lit un payload d'export UTF-8 sous la borne de transport de l'adaptateur
-     * (128 MiB pour MINOS, ADR-0044), sans fermer le flux.
+     * (128 MiB pour MINOS, ARCH-0080), sans fermer le flux.
      */
     public String readExternalCodeIntelligencePayload(java.io.InputStream input) throws IOException {
         return payloadImporter.readBoundedPayload(input);
@@ -263,7 +263,7 @@ public final class ProjectIndexingService {
 
     /**
      * Étape « publication » : un writer Lucene par index dérivé et une session d'écriture SQLite
-     * pour toute l'indexation (DATA-0045, DATA-0062). Les lots sont accumulés sans être visibles ;
+     * pour toute l'indexation (DATA-0074). Les lots sont accumulés sans être visibles ;
      * fermer la publication sans la publier annule les écritures Lucene et écarte les analyses en
      * attente, de sorte que la génération précédente reste intacte.
      */

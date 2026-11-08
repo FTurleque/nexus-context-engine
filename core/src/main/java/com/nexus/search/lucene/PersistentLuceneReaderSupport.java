@@ -59,7 +59,7 @@ public final class PersistentLuceneReaderSupport implements AutoCloseable {
 
     /**
      * Lit les métadonnées de commit d'un index sans ouvrir de {@code DirectoryReader}
-     * hors du cache (ADR-0045) : sur le reader déjà en cache s'il existe, sinon sur le
+     * hors du cache (DATA-0074) : sur le reader déjà en cache s'il existe, sinon sur le
      * dernier commit ({@link SegmentInfos#readLatestCommit}), qui ne charge aucun
      * segment. Un répertoire absent ou sans index rend {@code whenAbsent}, sans erreur.
      */

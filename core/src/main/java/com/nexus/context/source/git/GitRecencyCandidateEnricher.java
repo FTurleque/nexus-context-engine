@@ -61,7 +61,7 @@ public final class GitRecencyCandidateEnricher implements CandidateEnricher {
     static final int MAX_CANDIDATE_PATHS = 512;
     static final int MAX_CHANGED_PATHS_PER_COMMIT = 1_024;
     static final int MAX_CUMULATIVE_CHANGED_PATHS = 4_096;
-    /** Capacité du cache de récence : une entrée par projet d'un scope fédéré maximal (BE-0065). */
+    /** Capacité du cache de récence : une entrée par projet d'un scope fédéré maximal (BE-0070). */
     static final int DEFAULT_RECENCY_CACHE_CAPACITY = FederatedScopePolicy.MAX_PROJECTS;
 
     private final int recencyCapacity;

@@ -5,11 +5,11 @@
 | Principe | Formulation | ADR |
 |----------|-------------|-----|
 | **Local-first** | Aucun appel réseau obligatoire ; l'index est entièrement local | ADR-0005 |
-| **Ports / adaptateurs** | Le cœur Java n'a aucune dépendance vers Quarkus, MCP ou un IDE | ADR-0003, ADR-0039, ADR-0040 |
-| **Source de vérité unique** | SQLite est canonique ; tout autre index est dérivé et reconstructible | ADR-0006, ADR-0022 |
-| **Opt-in strict** | Chaque provider externe (Ollama, JDT LS, MINOS, SCIP) doit être activé explicitement | ADR-0005, ADR-0009 |
-| **Déterminisme / explicabilité** | Scores, ranking et sélection doivent être reproductibles et auditables | ADR-0010, ADR-0025, ADR-0029 |
-| **Budget strict** | Le ContextBundle ne peut jamais dépasser le budget déclaré | ADR-0013, ADR-0027 |
+| **Ports / adaptateurs** | Le cœur Java n'a aucune dépendance vers Quarkus, MCP ou un IDE | ARCH-0076, ARCH-0075 |
+| **Source de vérité unique** | SQLite est canonique ; tout autre index est dérivé et reconstructible | DATA-0073 |
+| **Opt-in strict** | Chaque provider externe (Ollama, JDT LS, MINOS, SCIP) doit être activé explicitement | ADR-0005, ARCH-0080 |
+| **Déterminisme / explicabilité** | Scores, ranking et sélection doivent être reproductibles et auditables | BE-0071, BE-0072 |
+| **Budget strict** | Le ContextBundle ne peut jamais dépasser le budget déclaré | BE-0072 |
 | **Fédération isolée** | Le contexte fédéré multi-projets conserve la provenance et n'étend pas implicitement les sources natives | `docs/architecture/overview.md` Invariant 9 |
 
 ## 4.2 Style de décomposition
@@ -88,14 +88,14 @@ flowchart TD
 
 | Décision | ADR |
 |----------|-----|
-| Positionnement comme moteur de contexte indépendant | [ADR-0001](../adr/ARCH-0001-positionner-nexus-comme-moteur-intelligence-contexte.md) |
+| Positionnement comme moteur de contexte indépendant | [ARCH-0077](../adr/ARCH-0077-positionner-nexus-comme-moteur-de-contexte-independant.md) |
 | Java 21 | [ADR-0002](../adr/GEN-0002-compiler-le-coeur-en-java-21.md) |
-| Cœur sans framework | [ADR-0003](../adr/ARCH-0003-conserver-un-coeur-java-sans-framework-applicatif.md) |
+| Cœur sans framework | [ARCH-0076](../adr/ARCH-0076-garder-un-coeur-java-sans-framework-acyclique-et-verifie.md) |
 | Local-first et opt-in | [ADR-0005](../adr/ARCH-0005-adopter-un-fonctionnement-local-first-et-opt-in.md) |
-| SQLite canonique | [ADR-0006](../adr/DATA-0006-utiliser-sqlite-comme-source-de-verite-structurelle.md) |
-| Lucene dérivé | [ADR-0007](../adr/DATA-0007-utiliser-lucene-comme-index-de-recherche-local.md) |
-| Ranking hybride | [ADR-0010](../adr/BE-0010-adopter-un-ranking-hybride-deterministe-et-explicable.md) |
-| ContextBundle sous budget | [ADR-0013](../adr/BE-0013-construire-un-contextbundle-sous-budget-de-tokens.md) |
-| Adaptateur REST Quarkus | [ADR-0039](../adr/ARCH-0039-isoler-l-adaptateur-rest-quarkus-du-coeur-nexus.md) |
-| Adaptateur MCP STDIO | [ADR-0040](../adr/ARCH-0040-exposer-nexus-via-un-adaptateur-mcp-stdio-mince.md) |
-| Fédération locale | [ADR-0043](../adr/BE-0043-federer-la-recherche-locale-par-projet-avant-un-moteur-externe.md) |
+| SQLite canonique | [DATA-0073](../adr/DATA-0073-tenir-sqlite-pour-source-de-verite-et-lucene-pour-index-derive.md) |
+| Lucene dérivé | [DATA-0073](../adr/DATA-0073-tenir-sqlite-pour-source-de-verite-et-lucene-pour-index-derive.md) |
+| Ranking hybride | [BE-0071](../adr/BE-0071-rechercher-et-classer-les-candidats-par-un-score-compose-explicable.md) |
+| ContextBundle sous budget | [BE-0072](../adr/BE-0072-construire-le-contextbundle-sous-budget-de-tokens.md) |
+| Adaptateur REST Quarkus | [ARCH-0075](../adr/ARCH-0075-exposer-le-coeur-par-des-adaptateurs-minces-isoles.md) |
+| Adaptateur MCP STDIO | [ARCH-0075](../adr/ARCH-0075-exposer-le-coeur-par-des-adaptateurs-minces-isoles.md) |
+| Fédération locale | [BE-0081](../adr/BE-0081-federer-la-recherche-locale-par-projet-sous-echeance-globale.md) |

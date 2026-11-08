@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Frontières du cœur {@code com.nexus} (ADR-0004, ADR-0003, ADR-0006, ADR-0007), vérifiées sur
+ * Frontières du cœur {@code com.nexus} (ARCH-0076, DATA-0073), vérifiées sur
  * les sources de production de {@code core/src/main/java}.
  *
  * <p>Chaque règle a un cas négatif sur une fixture de sources écrite dans un répertoire

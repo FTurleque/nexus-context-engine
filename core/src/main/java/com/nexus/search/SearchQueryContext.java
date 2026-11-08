@@ -39,7 +39,7 @@ public final class SearchQueryContext {
         return new SearchQueryContext(null);
     }
 
-    /** Crée le contexte d'une requête fédérée soumise à l'échéance globale (BE-0064). */
+    /** Crée le contexte d'une requête fédérée soumise à l'échéance globale (BE-0081). */
     public static SearchQueryContext create(FederationDeadline deadline) {
         return new SearchQueryContext(Objects.requireNonNull(deadline, "deadline"));
     }
