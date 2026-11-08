@@ -1,17 +1,29 @@
 package com.nexus.context.source.instruction;
 
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 final class RepositoryGlobMatcher {
+
+    /** Borne du cache des motifs compilés ; au-delà, le motif le moins récemment utilisé est évincé. */
+    static final int MAX_CACHED_PATTERNS = 256;
+
+    private static final Map<String, Pattern> COMPILED = new LinkedHashMap<>(64, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Pattern> eldest) {
+            return size() > MAX_CACHED_PATTERNS;
+        }
+    };
 
     private RepositoryGlobMatcher() {
     }
 
     static boolean matchesAny(List<String> patterns, List<Path> targetPaths) {
         for (String pattern : patterns) {
-            Pattern compiled = Pattern.compile(toRegex(pattern));
+            Pattern compiled = compiled(pattern);
             for (Path targetPath : targetPaths) {
                 String normalized = InstructionDiscoverySupport.repositoryPath(targetPath);
                 if (compiled.matcher(normalized).matches()) {
@@ -20,6 +32,19 @@ final class RepositoryGlobMatcher {
             }
         }
         return false;
+    }
+
+    /** Motif compilé pour un glob source, partagé entre requêtes dans un cache LRU borné. */
+    static Pattern compiled(String glob) {
+        synchronized (COMPILED) {
+            return COMPILED.computeIfAbsent(glob, source -> Pattern.compile(toRegex(source)));
+        }
+    }
+
+    static int cachedPatternCount() {
+        synchronized (COMPILED) {
+            return COMPILED.size();
+        }
     }
 
     private static String toRegex(String glob) {
