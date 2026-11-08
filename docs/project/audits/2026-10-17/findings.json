@@ -2575,19 +2575,23 @@
    "sprint": 11,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-09",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé au sprint 11 (tâches 6.1, 6.2)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-11-09",
+    "commit": "853a129b",
+    "verdict": "Fermé",
+    "preuve": "BudgetedContextSelector.truncate cherche le nombre de lignes conservées par dichotomie (O(log n) estimations) ; TokenEstimator documente l'exigence de croissance ; BudgetedContextSelectorTruncationTest compare la dichotomie à la boucle linéaire de référence sur des fragments Unicode multilignes et borne le nombre d'estimations à log2(n) + 2",
     "reserve": null
    }
   },
@@ -2637,19 +2641,23 @@
    "sprint": 11,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-09",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Corrigé au sprint 11 (tâches 8.1, 8.2)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-11-09",
+    "commit": "853a129b",
+    "verdict": "Fermé",
+    "preuve": "RepositoryPath.fromProvider teste la lettre de lecteur par comparaison de caractères, sans regex ; RepositoryGlobMatcher réutilise les motifs compilés dans un cache LRU borné à 256 entrées (RepositoryGlobMatcherTest : réutilisation et borne)",
     "reserve": null
    }
   },
