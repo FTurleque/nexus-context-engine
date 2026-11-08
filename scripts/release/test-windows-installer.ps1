@@ -125,7 +125,19 @@ Write-Host '[contract] assistant client page runs a preflight and lists each cli
 Assert-TextContains -Text $installerSource -Needle '\detect-assistant-clients.ps1"; Flags: dontcopy' -Description 'client detector embedded for the wizard preflight'
 Assert-TextContains -Text $installerSource -Needle "ExtractTemporaryFile('detect-assistant-clients.ps1')" -Description 'client detector extracted before the page is shown'
 foreach ($clientConnector in @('connect-copilot-cli.cmd', 'connect-copilot-jetbrains.cmd', 'connect-claude-cli.cmd', 'connect-claude-desktop.cmd', 'connect-codex-cli.cmd', 'connect-codex-desktop.cmd')) {
-    Assert-TextContains -Text $installerSource -Needle "RunManagedIntegration('$clientConnector'" -Description "client connector $clientConnector"
+    Assert-TextContains -Text $installerSource -Needle ", '$clientConnector', '" -Description "client connector $clientConnector"
+}
+
+Write-Host '[contract] post-install steps report their state on their own progress row'
+foreach ($progressFragment in @(
+    'procedure BuildSetupStepRows;',
+    'Row.Bar.Style := npbstMarquee',
+    'Row.Bar.State := npbsError;',
+    'Row.Bar.State := npbsPaused;',
+    "SetSetupStepState('config', 'running', '');",
+    "SetSetupStepState(ClientSection(Index), 'failed', 'client introuvable')"
+)) {
+    Assert-TextContains -Text $installerSource -Needle $progressFragment -Description "post-install progress row: $progressFragment"
 }
 # Native CLI connectors launch nexus-mcp.cmd, which loads config\nexus-native.env.cmd
 # and passes --enable-native-access=ALL-UNNAMED to the embedded Java runtime.

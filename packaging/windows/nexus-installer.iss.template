@@ -1872,33 +1872,210 @@ begin
       mbInformation, MB_OK);
 end;
 
+{ Post-install progress: one row per configuration step the wizard choices trigger,
+  under Inno's own (already full) file-copy gauge. Every step is a separate call made
+  here, so this code sets each row's state itself around the call. }
+type
+  TSetupStepRow = record
+    Id: String;
+    Caption: String;
+    Detail: String;
+    State: String;
+    StateLabel: TNewStaticText;
+    Bar: TNewProgressBar;
+  end;
+
+var
+  SetupStepRows: array of TSetupStepRow;
+
+function SetupStepRowIndex(Id: String): Integer;
+var
+  I: Integer;
+begin
+  Result := -1;
+  for I := 0 to GetArrayLength(SetupStepRows) - 1 do
+    if SetupStepRows[I].Id = Id then
+    begin
+      Result := I;
+      exit;
+    end;
+end;
+
+procedure AddSetupStepRow(Id, Caption: String);
+var
+  I: Integer;
+begin
+  I := GetArrayLength(SetupStepRows);
+  SetArrayLength(SetupStepRows, I + 1);
+  SetupStepRows[I].Id := Id;
+  SetupStepRows[I].Caption := Caption;
+  SetupStepRows[I].Detail := '';
+  SetupStepRows[I].State := 'pending';
+end;
+
+{ The bar carries the state: running is indeterminate (marquee), done is full and
+  green, skipped is full and paused, failed is full and red, pending and not run
+  are empty. The label names the step, followed by the outcome detail if any. }
+procedure RenderSetupStepRow(Index: Integer);
+var
+  Row: TSetupStepRow;
+begin
+  Row := SetupStepRows[Index];
+  if Row.Bar = nil then exit;
+  Row.Bar.Style := npbstNormal;
+  Row.Bar.State := npbsNormal;
+  if Row.State = 'running' then
+    Row.Bar.Style := npbstMarquee
+  else if Row.State = 'done' then
+    Row.Bar.Position := 100
+  else if Row.State = 'skipped' then
+  begin
+    Row.Bar.Position := 100;
+    Row.Bar.State := npbsPaused;
+  end
+  else if Row.State = 'failed' then
+  begin
+    Row.Bar.Position := 100;
+    Row.Bar.State := npbsError;
+  end
+  else
+    Row.Bar.Position := 0;
+  if Row.Detail <> '' then
+    Row.StateLabel.Caption := Row.Caption + ' — ' + Row.Detail
+  else
+    Row.StateLabel.Caption := Row.Caption;
+end;
+
+procedure SetSetupStepState(Id, State, Detail: String);
+var
+  I: Integer;
+begin
+  I := SetupStepRowIndex(Id);
+  if I < 0 then exit;
+  if SetupStepRows[I].State <> State then Log('Setup progress: ' + Id + ' ' + State);
+  SetupStepRows[I].State := State;
+  SetupStepRows[I].Detail := Detail;
+  RenderSetupStepRow(I);
+  { Paint the new state now: a step without an external process never lets the
+    message loop run before the next one starts. }
+  WizardForm.InstallingPage.Update;
+end;
+
+{ Label on the left, bar on the right; rows shrink when every selected step
+  would not fit at the default height. }
+procedure LayoutSetupStepRows;
+var
+  I: Integer;
+  Count: Integer;
+  Top: Integer;
+  RowHeight: Integer;
+  BarHeight: Integer;
+  LabelWidth: Integer;
+  StateLabel: TNewStaticText;
+  Bar: TNewProgressBar;
+begin
+  Count := GetArrayLength(SetupStepRows);
+  if Count = 0 then exit;
+  Top := WizardForm.ProgressGauge.Top + WizardForm.ProgressGauge.Height + ScaleY(12);
+  RowHeight := ScaleY(20);
+  if RowHeight * Count > WizardForm.InstallingPage.Height - Top then
+    RowHeight := (WizardForm.InstallingPage.Height - Top) div Count;
+  BarHeight := ScaleY(14);
+  if BarHeight > RowHeight - ScaleY(2) then BarHeight := RowHeight - ScaleY(2);
+  LabelWidth := (WizardForm.ProgressGauge.Width * 3) div 5;
+  for I := 0 to Count - 1 do
+  begin
+    StateLabel := TNewStaticText.Create(WizardForm);
+    StateLabel.Parent := WizardForm.InstallingPage;
+    StateLabel.AutoSize := False;
+    StateLabel.WordWrap := False;
+    StateLabel.Left := WizardForm.ProgressGauge.Left;
+    StateLabel.Top := Top + I * RowHeight + (RowHeight - BarHeight) div 2;
+    StateLabel.Width := LabelWidth - ScaleX(8);
+    StateLabel.Height := RowHeight;
+    Bar := TNewProgressBar.Create(WizardForm);
+    Bar.Parent := WizardForm.InstallingPage;
+    Bar.Left := WizardForm.ProgressGauge.Left + LabelWidth;
+    Bar.Top := Top + I * RowHeight + (RowHeight - BarHeight) div 2;
+    Bar.Width := WizardForm.ProgressGauge.Width - LabelWidth;
+    Bar.Height := BarHeight;
+    Bar.Min := 0;
+    Bar.Max := 100;
+    SetupStepRows[I].StateLabel := StateLabel;
+    SetupStepRows[I].Bar := Bar;
+    RenderSetupStepRow(I);
+  end;
+end;
+
+{ One row per step, under the same conditions as the calls in CurStepChanged;
+  none in smoke builds, where assistant integrations never run. }
+procedure BuildSetupStepRows;
+var
+  I: Integer;
+begin
+  if IsSmokeBuild() then exit;
+  AddSetupStepRow('config', 'Configuration NEXUS');
+  if HasAssistantSelection() then
+    AddSetupStepRow('assets', 'Scripts d''intégration des clients IA');
+  if DockerDesktopInstalledDuringSetup then
+    AddSetupStepRow('docker-desktop', 'Lancement de Docker Desktop');
+  for I := 0 to CLIENT_GENERIC - 1 do
+    if ClientSelected(I) then AddSetupStepRow(ClientSection(I), 'Client ' + ClientLabel(I));
+  LayoutSetupStepRows;
+end;
+
+procedure ConnectClient(Index: Integer; ScriptName: String; RegistryName: String; var Failed: String);
+var
+  ExitCode: Integer;
+begin
+  if not ClientSelected(Index) then exit;
+  SetSetupStepState(ClientSection(Index), 'running', '');
+  ExitCode := RunManagedIntegration(ScriptName, RegistryName);
+  if ExitCode = 0 then
+    SetSetupStepState(ClientSection(Index), 'done', 'connecté')
+  else if ExitCode = 20 then
+    SetSetupStepState(ClientSection(Index), 'skipped', 'entrée nexus déjà présente')
+  else if ExitCode = 10 then
+    SetSetupStepState(ClientSection(Index), 'failed', 'client introuvable')
+  else
+    SetSetupStepState(ClientSection(Index), 'failed', 'code ' + IntToStr(ExitCode));
+  ReportIntegration(Index, ExitCode, Failed);
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   Failed: String;
 begin
   if CurStep = ssPostInstall then
   begin
+    BuildSetupStepRows;
+    SetSetupStepState('config', 'running', '');
     WriteNativeConfiguration;
     WriteDockerConfiguration;
-    WriteAssistantAssets;
     AddNexusToUserPath;
     PersistSettings;
-    StartDockerDesktopAfterInstall;
+    SetSetupStepState('config', 'done', '');
+    if HasAssistantSelection() then
+    begin
+      SetSetupStepState('assets', 'running', '');
+      WriteAssistantAssets;
+      SetSetupStepState('assets', 'done', '');
+    end;
+    if DockerDesktopInstalledDuringSetup then
+    begin
+      SetSetupStepState('docker-desktop', 'running', '');
+      StartDockerDesktopAfterInstall;
+      SetSetupStepState('docker-desktop', 'done', '');
+    end;
     if (not IsSmokeBuild()) and HasAssistantSelection() then
     begin
       Failed := '';
-      if ClientSelected(CLIENT_COPILOT_CLI) then
-        ReportIntegration(CLIENT_COPILOT_CLI, RunManagedIntegration('connect-copilot-cli.cmd', 'CopilotCliManaged'), Failed);
-      if ClientSelected(CLIENT_COPILOT_JETBRAINS) then
-        ReportIntegration(CLIENT_COPILOT_JETBRAINS, RunManagedIntegration('connect-copilot-jetbrains.cmd', 'CopilotJetBrainsManaged'), Failed);
-      if ClientSelected(CLIENT_CLAUDE_CODE) then
-        ReportIntegration(CLIENT_CLAUDE_CODE, RunManagedIntegration('connect-claude-cli.cmd', 'ClaudeCliManaged'), Failed);
-      if ClientSelected(CLIENT_CLAUDE_DESKTOP) then
-        ReportIntegration(CLIENT_CLAUDE_DESKTOP, RunManagedIntegration('connect-claude-desktop.cmd', 'ClaudeDesktopManaged'), Failed);
-      if ClientSelected(CLIENT_CODEX_CLI) then
-        ReportIntegration(CLIENT_CODEX_CLI, RunManagedIntegration('connect-codex-cli.cmd', 'CodexCliManaged'), Failed);
-      if ClientSelected(CLIENT_CODEX_DESKTOP) then
-        ReportIntegration(CLIENT_CODEX_DESKTOP, RunManagedIntegration('connect-codex-desktop.cmd', 'CodexManaged'), Failed);
+      ConnectClient(CLIENT_COPILOT_CLI, 'connect-copilot-cli.cmd', 'CopilotCliManaged', Failed);
+      ConnectClient(CLIENT_COPILOT_JETBRAINS, 'connect-copilot-jetbrains.cmd', 'CopilotJetBrainsManaged', Failed);
+      ConnectClient(CLIENT_CLAUDE_CODE, 'connect-claude-cli.cmd', 'ClaudeCliManaged', Failed);
+      ConnectClient(CLIENT_CLAUDE_DESKTOP, 'connect-claude-desktop.cmd', 'ClaudeDesktopManaged', Failed);
+      ConnectClient(CLIENT_CODEX_CLI, 'connect-codex-cli.cmd', 'CodexCliManaged', Failed);
+      ConnectClient(CLIENT_CODEX_DESKTOP, 'connect-codex-desktop.cmd', 'CodexManaged', Failed);
       if (Failed <> '') and (not WizardSilent()) then
         MsgBox('NEXUS est installé, mais ces clients IA n''ont pas pu être connectés :' + #13#10 + Failed + #13#10 +
           'Les scripts de connexion restent dans ' + ExpandConstant('{app}\integrations') + '.' + #13#10 +
