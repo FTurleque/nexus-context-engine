@@ -86,8 +86,10 @@ La valeur de 64 MiB est la plus petite des valeurs mesurées qui supprime la ré
 
 ### Positives
 
-- Le peuplement d'un million de symboles et relations repasse sous la base de `main`
-  dans la sonde locale, avec de la marge sous le plafond relatif.
+- Avec le harnais `ScaleRegressionBenchmarkTest` (courbe SQLite complète, médiane de
+  trois échantillons, même poste, 2026-11-08), le peuplement est à +1,1 % de `main` à
+  un million de lignes (34 945 contre 34 579 ms) et à +10,1 % à 500 000, sous le
+  plafond relatif de +20 %.
 - Les grandes indexations réelles qui écrivent beaucoup de fichiers par transaction
   profitent du même gain.
 
@@ -108,3 +110,8 @@ La valeur de 64 MiB est la plus petite des valeurs mesurées qui supprime la ré
 - Test `SqliteDatabaseHardeningTest.sizesThePageCacheOfEveryConnection` (`core/src/test/java/com/nexus/persistence/sqlite/`) : `PRAGMA cache_size` vaut `-SqliteDatabase.PAGE_CACHE_KIB` sur une connexion ouverte par `SqliteDatabase`, lancé par `mvnw clean install` (workflow `.github/workflows/ci.yml`).
 - Règle Archgate de DATA-0050 (`sqlite-connections-use-memory-temp-store`) : seul `SqliteDatabase.java` ouvre une connexion JDBC, donc aucune connexion n'échappe à ce réglage.
 - Workflow `.github/workflows/scale-benchmark.yml` (`ScaleRegressionBenchmarkTest`) : plafond relatif du peuplement contre la base mesurée sur le même runner.
+- Le Don't « pas d'autre cache de pages ailleurs que dans `SqliteDatabase` » n'a pas de contrôle automatisé : il relève de la revue.
+
+## Conditions de réexamen
+
+La décision est réévaluée si la mémoire du processus d'un runtime longue durée dépasse son budget à cause du cache de pages, si le schéma retire les index qui commencent par `file_id`, ou si le pilote SQLite embarqué change le comportement par défaut du cache. Une autre valeur passe par un nouvel ADR qui remplace celui-ci.
