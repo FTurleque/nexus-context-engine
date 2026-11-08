@@ -128,6 +128,11 @@ foreach ($clientConnector in @('connect-copilot-cli.cmd', 'connect-copilot-jetbr
     Assert-TextContains -Text $installerSource -Needle ", '$clientConnector', '" -Description "client connector $clientConnector"
 }
 
+Write-Host '[contract] reinstalling keeps the managed container port and moves the official image to this version'
+Assert-TextContains -Text $installerSource -Needle 'ManagedContainerPublishesPort(DockerPage.Values[1], DockerPage.Values[2], PortValue)' -Description 'managed NEXUS container port is not relocated on reinstall'
+Assert-TextContains -Text $installerSource -Needle '(not IsOfficialNexusImage(Value)) then DockerPage.Values[0] := Value;' -Description 'saved official image does not override the image of the installed version'
+Assert-TextContains -Text $installerSource -Needle "DockerPage.Values[0] := 'ghcr.io/fturleque/nexus-context-engine:{#NexusVersion}';" -Description 'default image follows the installer version'
+
 Write-Host '[contract] post-install steps report their state on their own progress row'
 foreach ($progressFragment in @(
     'procedure BuildSetupStepRows;',

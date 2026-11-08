@@ -568,6 +568,38 @@ begin
   end;
 end;
 
+{ True when the NEXUS container a previous run of this installer manages already
+  publishes BindAddress:Port on the host. Reinstalling recreates that container,
+  which releases the port and takes it back, so the port is not taken by someone else. }
+function ManagedContainerPublishesPort(Container: String; BindAddress: String; Port: Integer): Boolean;
+var
+  Value: String;
+  Docker: String;
+  OutFile: String;
+  Output: AnsiString;
+  Text: String;
+  ResultCode: Integer;
+begin
+  Result := False;
+  if not (RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerManaged', Value) and (Value = '1')) then exit;
+  if not (RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerContainer', Value) and
+          (CompareText(Trim(Value), Trim(Container)) = 0)) then exit;
+  Docker := DockerCliExecutable();
+  if Docker = '' then exit;
+  OutFile := ExpandConstant('{tmp}\nexus-docker-port.txt');
+  DeleteFile(OutFile);
+  if (not Exec(ExpandConstant('{cmd}'),
+      '/D /S /C ""' + Docker + '" port "' + Trim(Container) + '" > "' + OutFile + '" 2>nul"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode)) or (ResultCode <> 0) then exit;
+  if not LoadStringFromFile(OutFile, Output) then exit;
+  { `docker port` prints one "8080/tcp -> 127.0.0.1:8082" line per published port. }
+  Text := String(Output) + #10;
+  StringChangeEx(Text, #13, '', True);
+  Result := Pos(' ' + Trim(BindAddress) + ':' + IntToStr(Port) + #10, Text) > 0;
+  if Result then
+    Log('Docker REST port ' + IntToStr(Port) + ' is published by the managed NEXUS container ' + Trim(Container) + '; kept.');
+end;
+
 procedure NotifyPortSelection(Description: String; RequestedPort: Integer; SelectedPort: Integer);
 begin
   if RequestedPort <> SelectedPort then
@@ -638,6 +670,15 @@ begin
   RegDeleteValue(HKCU, InstallerRegistryPath(), 'ManagedPath');
 end;
 
+function IsOfficialNexusImage(Value: String): Boolean;
+var
+  Image: String;
+begin
+  Image := Lowercase(Trim(Value));
+  Result := (Pos('ghcr.io/fturleque/nexus-context-engine:', Image) = 1) or
+            (Pos('ghcr.io/fturleque/nexus-context-engine@', Image) = 1);
+end;
+
 procedure LoadPreviousSettings;
 var
   Value: String;
@@ -653,7 +694,10 @@ begin
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'OllamaBaseUrl', Value) then OllamaPage.Values[0] := Value;
   if RegQueryDWordValue(HKCU, InstallerRegistryPath(), 'OllamaAutoInstall', Mode) then OllamaPrereqPage.Values[0] := Mode <> 0;
   if RegQueryDWordValue(HKCU, InstallerRegistryPath(), 'DockerAutoInstall', Mode) then DockerPrereqPage.Values[0] := Mode <> 0;
-  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerImage', Value) then DockerPage.Values[0] := Value;
+  { The official NEXUS image follows the version being installed: a saved official
+    reference keeps the default set in InitializeWizard. Only a custom image is restored. }
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerImage', Value) and
+     (not IsOfficialNexusImage(Value)) then DockerPage.Values[0] := Value;
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerContainer', Value) then DockerPage.Values[1] := Value;
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerBindAddress', Value) then DockerPage.Values[2] := Value;
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerHostPort', Value) then DockerPage.Values[3] := Value;
@@ -1129,7 +1173,10 @@ begin
     ReservedPort := -1;
     if InstallNativeRest() then
       ReservedPort := StrToIntDef(RuntimePage.Values[2], -1);
-    ResolvedPort := FindAvailableTcpPort(DockerPage.Values[2], PortValue, ReservedPort);
+    if (PortValue <> ReservedPort) and ManagedContainerPublishesPort(DockerPage.Values[1], DockerPage.Values[2], PortValue) then
+      ResolvedPort := PortValue
+    else
+      ResolvedPort := FindAvailableTcpPort(DockerPage.Values[2], PortValue, ReservedPort);
     if ResolvedPort < 1 then
     begin
       MsgBox('Aucun port TCP disponible n''a été trouvé pour le REST Docker.', mbError, MB_OK);

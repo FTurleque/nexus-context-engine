@@ -256,8 +256,8 @@ Visible dès que Docker est sélectionné.
 Valeurs par défaut :
 
 ```text
-Image                ghcr.io/fturleque/nexus-context-engine:0.2.0
-Conteneur            nexus
+Image                ghcr.io/fturleque/nexus-context-engine:<version de l'installeur>
+Conteneur            nexus-context-engine
 Adresse hôte         127.0.0.1
 Port REST hôte       8080
 Port REST conteneur  8080
@@ -265,7 +265,9 @@ Repository           %USERPROFILE%
 Restart policy       unless-stopped
 ```
 
-Le port hôte est entièrement personnalisable. Avant de quitter l'écran, le wizard tente réellement de réserver temporairement ce port TCP sur l'adresse hôte choisie. S'il est déjà utilisé, il teste automatiquement les ports suivants jusqu'à trouver le premier disponible, met le champ à jour et informe l'utilisateur du changement.
+Lors d'une réinstallation ou d'une mise à jour, le wizard reprend les valeurs de l'installation précédente, sauf l'image officielle `ghcr.io/fturleque/nexus-context-engine` : elle passe toujours à la version de l'installeur. Une image personnalisée (autre registre ou dépôt) est conservée telle quelle.
+
+Le port hôte est entièrement personnalisable. Avant de quitter l'écran, le wizard tente réellement de réserver temporairement ce port TCP sur l'adresse hôte choisie. S'il est déjà utilisé, il teste automatiquement les ports suivants jusqu'à trouver le premier disponible, met le champ à jour et informe l'utilisateur du changement. Il garde le port demandé quand c'est le conteneur NEXUS de l'installation précédente qui le publie déjà (`docker port`) : ce conteneur est recréé par l'installation et reprend son port.
 
 Exemple :
 
