@@ -31,7 +31,7 @@ class MinosPayloadTransportBoundTest {
 
         IOException failure = assertThrows(IOException.class,
                 () -> MinosPayloadReader.readPayload(streamOf(bound + 1L), bound));
-        assertTrue(failure.getMessage().contains("128 MiB transport limit"), failure.getMessage());
+        assertTrue(failure.getMessage().contains("limite de transport de 128 Mio"), failure.getMessage());
     }
 
     @Test

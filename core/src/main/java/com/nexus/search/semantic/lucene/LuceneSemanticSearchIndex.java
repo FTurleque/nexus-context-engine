@@ -75,7 +75,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
     public LuceneSemanticSearchIndex(NexusPaths paths, int dimensions) {
         this.paths = Objects.requireNonNull(paths, "paths");
         if (dimensions <= 0 || dimensions > 1024) {
-            throw new IllegalArgumentException("dimensions must be between 1 and 1024");
+            throw new IllegalArgumentException("La dimension de l'index sémantique doit être comprise entre 1 et 1024");
         }
         this.dimensions = dimensions;
     }
@@ -416,7 +416,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
         Objects.requireNonNull(projectId, "projectId");
         validateVector(queryVector);
         if (limit <= 0) {
-            throw new IllegalArgumentException("limit must be greater than zero");
+            throw new IllegalArgumentException("limit doit être strictement positif");
         }
     }
 

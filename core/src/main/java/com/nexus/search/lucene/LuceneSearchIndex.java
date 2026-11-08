@@ -214,10 +214,10 @@ public final class LuceneSearchIndex implements SearchIndex {
         Objects.requireNonNull(projectId, PROJECT_ID_ARGUMENT);
         Objects.requireNonNull(query, "query");
         if (query.isBlank()) {
-            throw new IllegalArgumentException("query must not be blank");
+            throw new IllegalArgumentException("La requête ne peut pas être vide");
         }
         if (limit <= 0) {
-            throw new IllegalArgumentException("limit must be greater than zero");
+            throw new IllegalArgumentException("limit doit être strictement positif");
         }
     }
 

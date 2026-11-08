@@ -40,7 +40,7 @@ class ContextBudgetPolicyTest {
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
                 () -> ContextBudgetPolicy.validate(ContextBudgetPolicy.MAX_CONTEXT_TOKEN_BUDGET + 1));
-        assertTrue(exception.getMessage().contains("must not exceed"),
+        assertTrue(exception.getMessage().contains("ne doit pas dépasser"),
                 "message d'erreur explicite sur la borne");
     }
 

@@ -29,11 +29,11 @@ public record ProjectScanLimits(int maxFiles, long maxTotalBytes) {
     public ProjectScanLimits {
         if (maxFiles <= 0 || maxFiles > HARD_MAX_FILES) {
             throw new IllegalArgumentException(
-                    "maxFiles must be between 1 and " + HARD_MAX_FILES);
+                    "maxFiles doit être compris entre 1 et " + HARD_MAX_FILES);
         }
         if (maxTotalBytes <= 0 || maxTotalBytes > HARD_MAX_TOTAL_BYTES) {
             throw new IllegalArgumentException(
-                    "maxTotalBytes must be between 1 and " + HARD_MAX_TOTAL_BYTES);
+                    "maxTotalBytes doit être compris entre 1 et " + HARD_MAX_TOTAL_BYTES);
         }
     }
 

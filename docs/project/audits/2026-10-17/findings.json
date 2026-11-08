@@ -2730,20 +2730,24 @@
    "sprint": 11,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-09",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Frontière de langue écrite dans .claude/rules/java-core.md ; messages atteignables par CLI, REST, MCP ou configuration traduits (requêtes, budgets, scope fédéré, limites, provider Ollama, chemins, imports MINOS et SCIP) ; message des contraintes partagé par ContextRequest.UNSUPPORTED_CONSTRAINTS_MESSAGE et le mapper REST (sprint 11, tâches 5.1 à 5.3)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
-    "reserve": null
+    "date": "2026-11-09",
+    "commit": "de2a066a",
+    "verdict": "Fermé",
+    "preuve": "FederatedContextServiceUserMessageTest (requête vide, budget nul, budget inférieur au scope, scope vide par NexusApplication) et OllamaEmbeddingProviderUserMessageTest (dimension 0 et 1025 par NexusApplicationFactory et par le provider) attendent des messages en français ; tests existants mis à jour sur les messages traduits",
+    "reserve": "Deux messages anglais restent dans des fichiers modifiés par d'autres lots du sprint 11 : BudgetedContextSelector (tokenBudget, précédé de ContextBudgetPolicy) et RepositoryPath (Invalid repository path)"
    }
   },
   {

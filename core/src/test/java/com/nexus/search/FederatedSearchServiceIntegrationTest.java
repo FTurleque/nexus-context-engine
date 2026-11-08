@@ -123,7 +123,7 @@ class FederatedSearchServiceIntegrationTest {
                 IllegalArgumentException.class,
                 () -> federatedSearchService.search(List.of(), "query", 10, false));
 
-        assertEquals("projects must not be empty", exception.getMessage());
+        assertEquals("La liste des projets ne peut pas être vide", exception.getMessage());
     }
 
     private static void write(Path root, String relativePath, String content) throws Exception {
