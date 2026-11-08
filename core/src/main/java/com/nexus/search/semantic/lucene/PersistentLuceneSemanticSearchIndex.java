@@ -53,7 +53,7 @@ public final class PersistentLuceneSemanticSearchIndex implements SemanticSearch
         Objects.requireNonNull(projectId, "projectId");
         Objects.requireNonNull(provenance, PROVENANCE_ARGUMENT);
         readers.ensureOpen();
-        // Lecture sur le reader en cache (ADR-0045), sans DirectoryReader supplémentaire.
+        // Lecture sur le reader en cache (DATA-0074), sans DirectoryReader supplémentaire.
         return readers.readCommitMetadata(
                 projectId, operationScoped.indexPath(projectId), provenance::matches, false);
     }

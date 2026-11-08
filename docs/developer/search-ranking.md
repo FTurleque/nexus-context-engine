@@ -12,7 +12,7 @@ query
           ↓
 CandidateMerger
           ↓
-GraphCandidateEnricher            graphe cache/génération
+GraphCandidateEnricher            voisinage graphe borné
 GitRecencyCandidateEnricher
           ↓
 ContextRanker
@@ -73,24 +73,23 @@ Le runtime SQLite embarqué est qualifié par `SqliteIndexedSubstringSearchTest`
 
 Les index B-tree de V002/V003 restent utilisés pour les parcours exacts du graphe et les projections `project/kind/source/target`; FTS5 ne les remplace pas.
 
-## Graphe dérivé par génération
+## Graphe d'imports projeté à la demande
 
-`ProjectGraphBuilder` construit le graphe à partir des symboles de type et des relations `IMPORTS`. V002 ajoute une génération monotone par projet.
+Le graphe relie des fichiers par les relations `IMPORTS` résolues vers un type défini dans le projet ; un import externe ne crée aucune arête. Il n'est ni matérialisé en entier ni mis en cache : à chaque expansion, `ProjectGraphBuilder` demande à `IndexRepository.findGraphNeighbors` le seul voisinage des chemins courants, borné à `ResultLimitPolicy.MAX_INTERNAL_RETRIEVAL_LIMIT` arêtes quelle que soit la taille de l'index.
 
-```text
-SQLite canonical generation N
-        ↓
-ProjectGraph cache generation N
-```
+`SqliteGraphQueries` projette ce voisinage dans les deux sens :
 
-Tant que la génération ne change pas, le graphe est réutilisé. Lorsqu'elle change, il est reconstruit. `GraphCandidateEnricher` charge ensuite uniquement les `IndexedFile` correspondant aux chemins voisins calculés.
+- sortant : imports du fichier, résolus vers le fichier qui définit le type importé ;
+- entrant : fichiers qui importent un type défini dans le fichier (nom qualifié exact ou membre imbriqué du type).
 
-La propagation reste :
+`GraphCandidateEnricher` part des candidats directs (meilleur signal parmi lexical, symbole exact, symbole approché et chemin), charge uniquement les `IndexedFile` des voisins et ajoute `graphScore` sur deux sauts :
 
 ```text
 premier saut = seedScore × 0.65
 second saut  = seedScore × 0.35
 ```
+
+Les fichiers `INSTRUCTION`, `AGENT_PROFILE` et `SKILL` ne reçoivent pas de signal de graphe.
 
 ## Récence Git
 
@@ -108,7 +107,11 @@ Poids historiques principaux :
 | path | 0.10 |
 | graph | 0.10 |
 
-À score égal, des tie-breakers stables conservent le déterminisme.
+Chaque signal est borné dans `[0,1]` avant pondération ; un candidat de score nul est écarté. Les signaux optionnels s'ajoutent par la même formule : `semanticScore` (poids par défaut 0.15, entre 0 et 1) et `gitRecencyScore` (poids par défaut 0.05, au plus 0.20).
+
+À score égal, l'ordre est stable : type (`SYMBOL`, `TEST`, `FILE`, `DOCUMENTATION`, `INSTRUCTION`, `SKILL`, `GIT`), puis chemin, puis identifiant. Avec `explain=true`, chaque composante non nulle produit une raison de la forme `libellé: valeur normalisée -> +contribution`.
+
+Décision : [BE-0071](../architecture/adr/BE-0071-rechercher-et-classer-les-candidats-par-un-score-compose-explicable.md).
 
 ## Sémantique opt-in
 

@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Écritures d'un index lexical pour la durée d'une indexation (ADR-0045 : l'opération est
+ * Écritures d'un index lexical pour la durée d'une indexation (DATA-0074 : l'opération est
  * l'indexation). Les écritures ne deviennent visibles qu'au {@link #commit()}, la barrière de
  * publication ; {@link #close()} sans commit les annule et l'index reste celui de la génération
  * précédente.

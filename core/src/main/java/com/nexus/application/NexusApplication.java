@@ -186,7 +186,7 @@ public final class NexusApplication implements AutoCloseable {
 
     /**
      * Lit un payload MINOS UTF-8 sur un flux fourni par l'appelant (stdin pour la
-     * CLI), sous la borne de transport de l'import (ADR-0044), sans fermer le flux.
+     * CLI), sous la borne de transport de l'import (ARCH-0080), sans fermer le flux.
      *
      * @throws IOException si le flux dépasse la borne de transport ou ne peut être lu
      */
@@ -340,7 +340,7 @@ public final class NexusApplication implements AutoCloseable {
     }
 
     /**
-     * Lecture cohérente d'un projet (ADR-0052) : READY, verrou partagé, session de
+     * Lecture cohérente d'un projet (DATA-0074) : READY, verrou partagé, session de
      * lecture, lecture sur le descripteur revalidé, puis revalidation READY avant de
      * rendre le résultat. Le verrou est libéré dans tous les cas.
      */

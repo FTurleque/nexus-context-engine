@@ -763,11 +763,10 @@ Ces limites sont intentionnelles pour garder l'Itération 6 locale, déterminist
 
 ## 23. Décisions d'architecture
 
-- ADR-0011 — normaliser les sources de contexte derrière des providers ;
-- ADR-0012 — réutiliser les standards existants ;
-- ADR-0013 — construire le `ContextBundle` sous budget ;
-- ADR-0017 — découpler NEXUS des outils externes ;
-- ADR-0034 — adopter la divulgation progressive pour les Agent Skills.
+- [ARCH-0077](../architecture/adr/ARCH-0077-positionner-nexus-comme-moteur-de-contexte-independant.md) — moteur de contexte indépendant des modèles, des clients et des orchestrateurs ;
+- [ARCH-0078](../architecture/adr/ARCH-0078-normaliser-les-sources-de-contexte-natives-derriere-des-providers.md) — sources de contexte natives derrière des providers, standards existants réutilisés ;
+- [BE-0072](../architecture/adr/BE-0072-construire-le-contextbundle-sous-budget-de-tokens.md) — construire le `ContextBundle` sous budget ;
+- [BE-0079](../architecture/adr/BE-0079-charger-les-agent-skills-par-divulgation-progressive.md) — Agent Skills par divulgation progressive, AI Skills Registry en snapshot local optionnel.
 
 ## 24. Références
 

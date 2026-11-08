@@ -26,7 +26,7 @@ Ce registre décrit l'état courant après les campagnes **NXA3 + NXA4** et les 
 
 Sur Windows/filesystems sans vue POSIX, NEXUS conserve les ACL natives au lieu de les réécrire naïvement. Par défaut, l'inspection ACL avertit lorsqu'un principal inattendu dispose de droits sensibles afin de ne pas retirer par erreur SYSTEM/Administrators ou casser une politique d'entreprise. Les environnements qui exigent une preuve de confidentialité du stockage activent `NEXUS_REQUIRE_PRIVATE_STORAGE=true` et obtiennent alors un refus explicite si cette preuve échoue.
 
-Le contrat de support courant reste volontairement borné aux filesystems locaux qualifiés Linux/Windows. Une fixture **SMB 3.1.1 loopback Windows** est désormais qualifiée comme preuve ciblée (round-trip UNC + lock inter-JVM), mais SMB/CIFS général, NFS, volumes distribués/synchronisés et montages à sémantique spéciale restent non supportés faute de qualification multi-client, panne/reconnexion et stockage complet SQLite/Lucene. Voir [`filesystem-support.md`](filesystem-support.md) et ADR-0047.
+Le contrat de support courant reste volontairement borné aux filesystems locaux qualifiés Linux/Windows. Une fixture **SMB 3.1.1 loopback Windows** est désormais qualifiée comme preuve ciblée (round-trip UNC + lock inter-JVM), mais SMB/CIFS général, NFS, volumes distribués/synchronisés et montages à sémantique spéciale restent non supportés faute de qualification multi-client, panne/reconnexion et stockage complet SQLite/Lucene. Voir [`filesystem-support.md`](filesystem-support.md) et SEC-0082.
 
 Limite résiduelle : sur les providers Java ne fournissant pas `SecureDirectoryStream`, la capture/revalidation de l'identité filesystem réduit encore la fenêtre TOCTOU et détecte les substitutions visibles entre validation et ouverture. Elle ne prétend toutefois pas supprimer mathématiquement un échange puis rétablissement extrêmement rapide par un acteur local hostile, ni les sémantiques particulières de hard-links/points de montage.
 
@@ -109,7 +109,7 @@ Le listener de management est volontairement loopback-only et ne doit pas être 
 - les troncatures embedding/excerpt ne coupent plus une paire surrogate UTF-16 ;
 - le profil sémantique est `content-v5`, ce qui force le rebuild d'un ancien index incompatible ;
 - un fichier dont une valeur sensible dépasse 4 096 caractères est exclu des index lexical et sémantique et des contextes (diagnostics `INDEX_REDACTION_LIMIT` et `CONTEXT_REDACTION_LIMIT`) ; il reste dans l'index structurel ;
-- une indisponibilité provider dégrade la recherche de façon sûre ; un commit sémantique corrompu est reconstruit dans une génération publiée atomiquement, en conservant les anciens fichiers tant que des lecteurs externes peuvent les utiliser (voir ADR-0055 et la procédure de quarantaine) ;
+- une indisponibilité provider dégrade la recherche de façon sûre ; un commit sémantique corrompu est reconstruit dans une génération publiée atomiquement, en conservant les anciens fichiers tant que des lecteurs externes peuvent les utiliser (voir DATA-0074 et la procédure de quarantaine) ;
 - `.github/workflows/semantic-search-qualification.yml` exécute le vrai benchmark (corpus réduit sur PR, corpus complet sur `develop` après fusion, manuel et mensuel) avec Ollama `0.33.3` vérifié par SHA-256 repository-pinned et `qwen3-embedding:0.6b`, puis applique des seuils de qualité/non-régression et conserve le rapport comme artefact.
 
 La redaction conservatrice réduit les fuites accidentelles mais ne remplace pas un scanner de secrets spécialisé.

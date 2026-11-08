@@ -36,7 +36,7 @@ import java.util.Set;
  */
 public final class PersistentGitContextSourceProvider implements GitContextSourceProvider {
 
-    /** Une entrée par projet d'un scope fédéré maximal (BE-0065). */
+    /** Une entrée par projet d'un scope fédéré maximal (BE-0070). */
     static final int DEFAULT_CAPACITY = FederatedScopePolicy.MAX_PROJECTS;
     private static final Path CACHE_VALIDATION_WORK = Path.of(".nexus", "git", "cache-validation");
 

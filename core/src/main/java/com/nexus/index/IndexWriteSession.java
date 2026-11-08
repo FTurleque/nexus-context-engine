@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Écritures canoniques d'une indexation (ADR-0051, ADR-0052). Les analyses sont mises en attente
+ * Écritures canoniques d'une indexation (ADR-0051, DATA-0074). Les analyses sont mises en attente
  * par lots bornés, dans de courtes transactions qui ne rendent aucun fait visible ; {@link #publish}
  * les applique aux tables canoniques et publie la génération en une seule transaction. Fermer la
  * session sans la publier écarte les analyses en attente : la génération précédente reste celle

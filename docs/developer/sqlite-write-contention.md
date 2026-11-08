@@ -78,9 +78,33 @@ External code-intelligence replacement follows the same rule. Importing an ident
 
 ## Indexation par lots mis en attente
 
-Une indexation ne tient jamais une transaction d'écriture ouverte pendant l'analyse : les analyses des fichiers modifiés sont mises en attente par lots dans les tables transitoires `index_staged_*` (V014), chaque lot dans une courte transaction `writeTransaction`, puis publiées avec la génération par **une** transaction finale (décision DATA-0062). Le temps de verrou d'écriture attribuable à une indexation est donc la somme de transactions courtes, et non la durée de l'indexation.
+Une indexation ne tient jamais une transaction d'écriture ouverte pendant l'analyse : les analyses des fichiers modifiés sont mises en attente par lots dans les tables transitoires `index_staged_*` (V014), chaque lot dans une courte transaction `writeTransaction`, puis publiées avec la génération par **une** transaction finale (décision [DATA-0074](../architecture/adr/DATA-0074-garantir-le-cycle-de-vie-et-la-coherence-des-index-derives.md)). Le temps de verrou d'écriture attribuable à une indexation est donc la somme de transactions courtes, et non la durée de l'indexation.
 
 Scénario de contention couvert par `ProjectIndexingPublicationTest#anotherProjectCanWriteWhileAnIndexingIsInProgressBetweenBatches` : l'indexation d'un projet est suspendue en cours d'analyse, après plusieurs lots déjà mis en attente. Un autre projet écrit alors (`applyChanges` et `ProjectRepository.save`) sans attendre le `busy_timeout` ni échouer en `SQLITE_BUSY`, et la génération du projet indexé n'est pas publiée avant la fin. Les tests `SqliteIndexWriteSessionTest` couvrent l'atomicité de la publication et l'écart des analyses en attente d'une indexation qui échoue ou qui a été interrompue.
+
+## Réglages des connexions et lots d'écriture
+
+`SqliteDatabase` est le seul point d'ouverture des connexions SQLite des sources de production (`newConnection`, `DriverManager.getConnection("jdbc:sqlite:" …)`). Chaque connexion y reçoit, avant d'être rendue, `foreign_keys = ON`, le `busy_timeout` ci-dessus et deux réglages de performance :
+
+| Réglage | Valeur | Raison |
+|---|---|---|
+| `PRAGMA temp_store` | `MEMORY` | Les triggers FTS5 (V008) des insertions canoniques créent des structures temporaires SQL ; sur disque, elles dominaient le chargement (run Scale Benchmark `34534070804`, PR #219 : 7 315 ms pour 100 000 symboles et autant de relations, plafond de 5 000 ms). Agrandir le cache de pages ne réduisait pas ce surcoût ; les garder en mémoire le réduit sans retirer les triggers. |
+| `PRAGMA cache_size` | `-SqliteDatabase.PAGE_CACHE_KIB`, soit 64 MiB | Trois index commencent par `file_id` : `idx_symbols_file_provider` (V005), `idx_symbol_relations_file_provider` (V012) et `idx_symbols_file_fuzzy_prefilter` (V015). Une indexation qui écrit de nombreux fichiers par transaction y insère des clés hors ordre ; au-delà de quelques centaines de milliers de lignes, ils dépassent le cache par défaut de 2 MiB et chaque insertion relit des pages sur disque. |
+
+Ces réglages ne touchent ni le fichier canonique, ni son journal, ni `synchronous`, ni les clés étrangères, ni les migrations publiées, ni les seuils du benchmark.
+
+Choix de 64 MiB (sonde locale du 2026-11-08, peuplement d'un million de symboles et de relations, journal `DELETE`) : 42 à 52 s avec le cache par défaut, 38,5 à 39,8 s à 32 MiB, 32,2 à 35,2 s à 64 MiB, 35,4 à 37,3 s à 128 MiB. 64 MiB est la plus petite valeur mesurée qui ramène le peuplement sous le plafond relatif de +20 % du benchmark (run `42440042849`, PR #306 : 32 856 ms pour un plafond de 32 683 ms). Les index V012 et V015 ne peuvent pas être retirés (suppression par fichier, préfiltre approché scopé au projet) ; un cache agrandi pour les seules sessions d'écriture laisserait sans gain une écriture ouverte par `openConnection()` hors session. Toute autre valeur se remesure d'abord au palier d'un million de lignes (`ScaleRegressionBenchmarkTest`).
+
+Coût : la mémoire temporaire et le cache sont de la mémoire native, hors heap Java, que le gate de heap ne mesure pas. Les temporaires n'ont plus de repli disque et dépendent des requêtes ; le cache est alloué à l'usage et peut atteindre 64 MiB par connexion. Une extension majeure de volumétrie qualifie donc aussi la mémoire du processus.
+
+### Lots d'insertion `SqliteBatchInsert`
+
+- Les lignes répétitives de `symbols` et `symbol_relations` (et de leurs tables de mise en attente `index_staged_symbols`, `index_staged_relations`) sont écrites par des `INSERT` multi-lignes paramétrés, au plus `ROW_LIMIT = 128` lignes par instruction. Aucun `INSERT INTO symbols` ni `INSERT INTO symbol_relations` n'existe hors de ce helper.
+- Le SQL de structure est fermé par l'énumération `SqliteBatchInsert.Table` ; les valeurs sont toujours liées. Les instructions préparées sont mises en cache par taille de lot et réutilisées jusqu'à `close()`.
+- Le helper ne possède pas la transaction : ni `commit`, ni `rollback`, ni `setAutoCommit`, ni savepoint, ni instruction `BEGIN`/`COMMIT`. L'appelant (`writeTransaction`, `SqliteIndexWriteSession`) garde les commits, les rollbacks et la visibilité de la génération FTS, ce qui permet de rejouer une transaction entière après une contention (voir plus haut).
+- La borne de 128 limite le nombre de paramètres par instruction (8 colonnes × 128 = 1 024) tout en réduisant les allers-retours : la courbe locale passe d'environ 49,5 s à 35,6 s au palier d'un million de lignes, plafonds absolus inchangés.
+
+Contrôles : `SqliteDatabaseHardeningTest` (`keepsTemporaryStorageOfEveryConnectionInMemory`, `sizesThePageCacheOfEveryConnection`, `onlySqliteDatabaseOpensConnectionsAndNothingElseSetsTempStore`), `SqliteBatchInsertTest` (`limitsEachStatementTo128Rows`, `symbolInsertsGoOnlyThroughTheHelperWhichOwnsNoTransaction`, `executesFullAndTailRowsWithBoundValues`), workflow `.github/workflows/scale-benchmark.yml`. Historique des mesures : ADR archivés [DATA-0050](../architecture/adr/archive/DATA-0050-conserver-les-temporaires-sqlite-en-memoire.md), [DATA-0051](../architecture/adr/archive/DATA-0051-borner-les-lots-d-ecriture-sqlite.md) et [DATA-0069](../architecture/adr/archive/DATA-0069-dimensionner-le-cache-de-pages-sqlite-des-connexions.md).
 
 ## Multi-process behavior
 
@@ -130,7 +154,7 @@ Spec : [`openspec/specs/sqlite-index-writes/spec.md`](../../openspec/specs/sqlit
 | [Existant vérifié] | La migration V013 supprime `idx_symbol_relations_project`, `idx_indexed_files_project` et `idx_symbols_file` (`DROP INDEX IF EXISTS`) ; aucun index n'est préfixe strict d'un autre sur `symbol_relations`, `indexed_files` et `symbols`. | `core/src/main/resources/db/migration/V013__drop_redundant_prefix_indexes.sql` ; `SqliteGraphQueryPlanTest` |
 | [Existant vérifié] | V012 et V013 ne touchent ni les faits canoniques ni le statut des projets : aucun rebuild. | `SchemaMigratorFileIndexUpgradeTest` |
 | [Existant vérifié] | `SqliteFileWriter` prépare l'upsert (`RETURNING id`) et les deux suppressions une fois par transaction ; `SqliteBatchInsert` met ses instructions en cache par taille de lot. | `core/src/main/java/com/nexus/persistence/sqlite/SqliteFileWriter.java` ; `SqliteFileWriterTest` |
-| [Existant vérifié] | Les analyses sont mises en attente par lot dans `index_staged_files`, `index_staged_symbols` et `index_staged_relations` (V014, DATA-0062), invisibles jusqu'à la publication qui copie vers les tables canoniques, vide la mise en attente et incrémente la génération ; la fermeture sans publication écarte la mise en attente. | `SqliteIndexWriteSession` ; `SqliteIndexWriteSessionTest` ; `ProjectIndexingPublicationTest` |
+| [Existant vérifié] | Les analyses sont mises en attente par lot dans `index_staged_files`, `index_staged_symbols` et `index_staged_relations` (V014, DATA-0074), invisibles jusqu'à la publication qui copie vers les tables canoniques, vide la mise en attente et incrémente la génération ; la fermeture sans publication écarte la mise en attente. | `SqliteIndexWriteSession` ; `SqliteIndexWriteSessionTest` ; `ProjectIndexingPublicationTest` |
 
 ### Vues
 

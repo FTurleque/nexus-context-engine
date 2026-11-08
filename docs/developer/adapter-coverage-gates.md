@@ -206,7 +206,6 @@ Aucune : la correspondance endpoint → test et outil → test est donnée par l
 - **[Écart]** « Ni chemin absolu de la machine » : les assertions ne cherchent que les chemins de la fixture (répertoire de classe, racine projet, home NEXUS), pas un chemin absolu quelconque ; la liste des marqueurs de modèle interne est fermée (six en REST, cinq en MCP, listes différentes).
 - **[Limite]** Aucun test ni job CI n'exécute les classes dans un ordre inversé ou aléatoire : l'indépendance d'ordre repose sur la lecture de la conception.
 - **[Limite]** Le rapport Surefire du HEAD courant n'a pas été relu (aucune exécution Maven pour cette documentation) ; les 14 méthodes de chaque classe sont comptées dans les sources.
-- **[Écart]** Les ADR `ARCH-0039` et `ARCH-0040` citent encore `NexusResourceTest.exposesTheNexusFlowThroughRestWithoutLeakingCoreModels` et `NexusMcpServerIntegrationTest.exposesTheSameSearchAndContextResultsThroughARealMcpStdioClient`, méthodes qui n'existent plus depuis le découpage. Les ADR ne sont pas modifiés ici.
 
 ### Propositions et questions ouvertes
 

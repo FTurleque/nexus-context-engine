@@ -7,7 +7,7 @@ import java.util.Set;
 
 /**
  * Port d'import d'un export d'intelligence de code fourni explicitement par
- * l'appelant (aujourd'hui l'export JSON MINOS, ADR-0044). {@code ProjectIndexingService}
+ * l'appelant (aujourd'hui l'export JSON MINOS, ARCH-0080). {@code ProjectIndexingService}
  * en dépend pour prendre les verrous d'indexation sans connaître l'adaptateur de format.
  */
 public interface ExternalCodeIntelligencePayloadImporter {

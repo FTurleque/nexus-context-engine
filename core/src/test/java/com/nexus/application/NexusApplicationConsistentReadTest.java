@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Gabarit de lecture cohérente (ADR-0052) appliqué à {@code inspect} : READY à l'entrée,
+ * Gabarit de lecture cohérente (DATA-0074) appliqué à {@code inspect} : READY à l'entrée,
  * verrou partagé, session de lecture, revalidation READY avant de rendre le résultat.
  */
 class NexusApplicationConsistentReadTest {

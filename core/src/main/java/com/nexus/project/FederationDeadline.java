@@ -6,7 +6,7 @@ import java.time.InstantSource;
 import java.util.Objects;
 
 /**
- * Échéance globale d'une requête fédérée (BE-0064).
+ * Échéance globale d'une requête fédérée (BE-0081).
  *
  * <p>L'échéance est vérifiée entre deux projets : un projet commencé n'est jamais
  * interrompu. L'horloge est injectée afin que les tests simulent le temps sans

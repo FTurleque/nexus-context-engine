@@ -5,14 +5,14 @@
 | ID | Contrainte | Nature | Preuve |
 |----|-----------|--------|--------|
 | T1 | JVM d'exécution ≥ 21 ; bytecode ciblé Java 21 | Imposée | `core/pom.xml`, ADR-0002 |
-| T2 | SQLite est la source de vérité canonique ; Lucene est un index dérivé reconstructible | Imposée | ADR-0006, ADR-0007, ADR-0022 |
-| T3 | Aucune dépendance obligatoire vers un LLM, un IDE ou un orchestrateur externe | Imposée | ADR-0001, ADR-0005 |
-| T4 | Le cœur Java est sans framework applicatif obligatoire (`NexusApplication` instanciée manuellement) | Imposée | ADR-0003 |
+| T2 | SQLite est la source de vérité canonique ; Lucene est un index dérivé reconstructible | Imposée | DATA-0073 |
+| T3 | Aucune dépendance obligatoire vers un LLM, un IDE ou un orchestrateur externe | Imposée | ARCH-0077, ADR-0005 |
+| T4 | Le cœur Java est sans framework applicatif obligatoire (`NexusApplication` instanciée manuellement) | Imposée | ARCH-0076 |
 | T5 | Maven ≥ 3.9 requis pour le build ; Maven Wrapper (SHA-512) fourni | Imposée | `core/pom.xml`, ADR-0020 |
 | T6 | Micrometer (Prometheus) pour les métriques REST | Imposée | `application.properties`, `docs/architecture/overview.md` |
-| T7 | MCP transport : STDIO uniquement (pas de HTTP côté MCP) | Imposée | ADR-0040, `NexusMcpServer.java` |
+| T7 | MCP transport : STDIO uniquement (pas de HTTP côté MCP) | Imposée | ARCH-0075, `NexusMcpServer.java` |
 | T8 | Le schéma SQLite est migré par des scripts SQL embarqués, forward-only | Imposée | ADR-0020 |
-| T9 | Les données locales sont stockées dans `NEXUS_HOME` configurable | Imposée | ADR-0019 |
+| T9 | Les données locales sont stockées dans `NEXUS_HOME` configurable | Imposée | ARCH-0086 |
 | T10 | Toute ouverture de fichier final passe par `SafeFileIO` avec `NOFOLLOW_LINKS` | Imposée (hardening #16) | H1, `docs/project/governance/ROADMAP.md` |
 
 ## 2.2 Contraintes organisationnelles
@@ -37,9 +37,9 @@ Aucune contrainte réglementaire identifiée dans les sources disponibles.
 | Élément | Statut |
 |---------|--------|
 | SQLite comme source canonique | **Contrainte** — tout rebuild Lucene doit repartir de SQLite |
-| Lucene comme index de recherche | **Contrainte** — pas de moteur alternatif sans benchmark (ADR-0043) |
+| Lucene comme index de recherche | **Contrainte** — pas de moteur alternatif sans benchmark (BE-0081) |
 | Ollama pour les embeddings | **Préférence** — opt-in uniquement, `NEXUS_SEMANTIC_PROVIDER=ollama` |
 | JDT Language Server | **Préférence** — opt-in via `NEXUS_JDTLS_HOME`, borné par timeout |
 | MINOS | **Préférence** — enrichissement optionnel via JSON local |
-| Quarkus pour REST | **Contrainte** de l'adaptateur REST (ADR-0039), pas du cœur |
+| Quarkus pour REST | **Contrainte** de l'adaptateur REST (ARCH-0075), pas du cœur |
 | 127.0.0.1 comme adresse d'écoute REST | **Contrainte** de sécurité (H6), configurable mais avec fail-fast |

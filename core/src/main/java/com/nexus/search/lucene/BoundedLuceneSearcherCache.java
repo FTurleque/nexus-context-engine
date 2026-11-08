@@ -77,7 +77,7 @@ public final class BoundedLuceneSearcherCache implements AutoCloseable {
      * Exécute l'opération sur le searcher déjà chaud du projet, sans en ouvrir un :
      * vide si le projet n'a pas de reader en cache pour ce répertoire. Le reader est
      * rafraîchi avant lecture et acquis puis libéré symétriquement, comme pour une
-     * recherche. Sert aux lectures de métadonnées de commit (ADR-0045).
+     * recherche. Sert aux lectures de métadonnées de commit (DATA-0074).
      */
     public <T> Optional<T> searchIfCached(
             UUID projectId,

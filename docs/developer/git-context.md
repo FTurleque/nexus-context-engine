@@ -24,7 +24,7 @@ Le provider consomme aussi le `ContextDiscoveryBudget` partagé avec les autres 
 
 ## Cache des runtimes longue durée
 
-REST et MCP utilisent `NexusApplication.createLongLived(...)`. Cette composition enveloppe le provider Git local dans `PersistentGitContextSourceProvider`, un cache **mémoire uniquement** limité en LRU à `FederatedScopePolicy.MAX_PROJECTS` résultats (une entrée par projet d'un scope fédéré maximal, [BE-0065](../architecture/adr/BE-0065-dimensionner-les-caches-git-sur-le-scope-federe.md)). Ses compteurs (`capacity`, `entries`, `hits`, `misses`, `evictions`) sont exposés sous la clé `gitContextCache` des métadonnées `explain` des contextes mono-projet et fédérés.
+REST et MCP utilisent `NexusApplication.createLongLived(...)`. Cette composition enveloppe le provider Git local dans `PersistentGitContextSourceProvider`, un cache **mémoire uniquement** limité en LRU à `FederatedScopePolicy.MAX_PROJECTS` résultats (une entrée par projet d'un scope fédéré maximal, [BE-0070](../architecture/adr/BE-0070-integrer-le-contexte-git-local-borne-mis-en-cache-et-confine.md)). Ses compteurs (`capacity`, `entries`, `hits`, `misses`, `evictions`) sont exposés sous la clé `gitContextCache` des métadonnées `explain` des contextes mono-projet et fédérés.
 
 La CLI et les usages one-shot continuent d'utiliser `NexusApplication.create(...)` et `LocalGitContextSourceProvider` sans cache persistant entre requêtes.
 
@@ -42,7 +42,7 @@ Toute variation provoque un miss puis un recalcul via `LocalGitContextSourceProv
 
 La validation du fingerprint consomme elle aussi le `ContextDiscoveryBudget` via des visites et checkpoints ; le cache n'introduit donc aucun chemin de découverte hors budget. Un résultat `repositoryAvailable=false` n'est jamais conservé afin de retenter automatiquement une indisponibilité transitoire.
 
-Aucun fichier de cache, schéma SQLite, watcher filesystem ou thread de maintenance n'est ajouté. Voir ADR-0046.
+Aucun fichier de cache, schéma SQLite, watcher filesystem ou thread de maintenance n'est ajouté. Voir [BE-0070](../architecture/adr/BE-0070-integrer-le-contexte-git-local-borne-mis-en-cache-et-confine.md).
 
 `GitRecencyCandidateEnricher` mémorise de même, par répertoire Git et HEAD, les chemins modifiés des 50 derniers commits (au plus 1 024 chemins par commit et 4 096 cumulés, capacité `MAX_PROJECTS`), puis applique le filtre de candidats : tant que HEAD ne change pas, le journal des commits n'est pas relu, et un nouveau HEAD remplace l'entrée du dépôt. Au-delà des bornes de chemins, l'historique n'est pas mémorisé et le parcours filtré par les chemins candidats s'applique, avec le même résultat.
 
@@ -77,7 +77,7 @@ Le contexte Git n'est activé que lorsque le budget global le permet et reçoit 
 
 ## Découverte du dépôt
 
-`GitRepositoryLocator` est la seule fabrique qui ouvre le dépôt pour `LocalGitContextSourceProvider`, `PersistentGitContextSourceProvider` et `GitRecencyCandidateEnricher` ([BE-0067](../architecture/adr/BE-0067-plafonner-la-decouverte-du-depot-git-a-la-racine-du-projet.md), qui complète [BE-0035](../architecture/adr/BE-0035-integrer-le-contexte-git-local-comme-source-bornee-et-explicable.md)). Elle remonte depuis la racine réelle du projet jusqu'au premier répertoire qui contient une entrée `.git`, puis :
+`GitRepositoryLocator` est la seule fabrique qui ouvre le dépôt pour `LocalGitContextSourceProvider`, `PersistentGitContextSourceProvider` et `GitRecencyCandidateEnricher` ([BE-0070](../architecture/adr/BE-0070-integrer-le-contexte-git-local-borne-mis-en-cache-et-confine.md)). Elle remonte depuis la racine réelle du projet jusqu'au premier répertoire qui contient une entrée `.git`, puis :
 
 - retient sans condition un dépôt dont le `.git` est à la racine du projet ;
 - retient un dépôt trouvé dans un répertoire parent (monorepo) seulement si son entrée `.git` et, pour un fichier gitlink, le répertoire Git désigné appartiennent à l'utilisateur courant, à l'image de `safe.directory` de Git ;

@@ -209,7 +209,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
     }
 
     /**
-     * Un seul writer pour toute l'indexation (DATA-0045, design D4) : les lots sont accumulés sans
+     * Un seul writer pour toute l'indexation (DATA-0074, design D4) : les lots sont accumulés sans
      * commit, la provenance et le contenu deviennent visibles au commit unique, et un échec annule
      * les écritures, de sorte que l'index garde le contenu et la provenance précédents.
      */

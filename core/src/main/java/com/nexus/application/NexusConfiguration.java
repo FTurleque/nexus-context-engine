@@ -24,7 +24,7 @@ import java.util.TreeMap;
  * l'environnement. Les noms de variables, les bornes, les valeurs par défaut et les messages
  * d'erreur restent ceux des classes de limites, qui portent chacune leur fabrique
  * {@code from(Map)}. Les bornes SCIP sont portées en valeurs simples : le format SCIP reste
- * confiné à son paquetage et à la composition (BE-0036).</p>
+ * confiné à son paquetage et à la composition (ARCH-0080).</p>
  *
  * <p>Deux parts valent pour tout le processus parce que des primitives statiques les
  * consultent : la borne de taille de fichier des lectures sans borne explicite

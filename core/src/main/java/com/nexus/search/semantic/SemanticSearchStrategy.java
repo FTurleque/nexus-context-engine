@@ -192,7 +192,7 @@ public final class SemanticSearchStrategy implements SearchStrategy {
     private QueryVector embedQuery(String query, SearchQueryContext queryContext) throws IOException {
         String embeddingQuery = SensitiveContentRedactor.redact(query);
         try {
-            // Le temps restant de l'échéance globale plafonne le délai de l'appel (BE-0064).
+            // Le temps restant de l'échéance globale plafonne le délai de l'appel (BE-0081).
             Optional<Duration> remaining = queryContext.remainingTime();
             float[] vector = remaining.isPresent()
                     ? embeddingProvider.embedQuery(embeddingQuery, remaining.get())

@@ -122,7 +122,7 @@ La protection effective de `develop` reste une configuration GitHub externe au c
 
 ## Contrat de hardening du 9 septembre 2026
 
-Voir [ADR-0048](../architecture/adr/SEC-0048-distinguer-traversee-stricte-et-compatibilite-filesystem.md)
+Voir [SEC-0082](../architecture/adr/SEC-0082-borner-le-support-filesystem-et-la-traversee-des-chemins.md)
 pour la distinction entre traversée strict et compatibility. Le fallback sans
 `SecureDirectoryStream` est best-effort : la revalidation ne détecte pas un ABA
 restauré. `NEXUS_REQUIRE_STRICT_PATH_IO=true` le refuse avant ouverture du fichier.

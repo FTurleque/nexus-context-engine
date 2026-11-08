@@ -1,0 +1,72 @@
+---
+id: ARCH-0042
+title: "Consommer AI Skills Registry comme snapshot local optionnel"
+domain: architecture
+rules: false
+---
+
+# Consommer AI Skills Registry comme snapshot local optionnel
+
+> **Archivé le 2026-11-08** : remplacé par [BE-0079](../BE-0079-charger-les-agent-skills-par-divulgation-progressive.md) (Agent Skills par divulgation progressive et AI Skills Registry). Ce document est conservé pour l'historique ; il n'est plus lu par Archgate.
+
+- **Statut** : Superseded
+- **Date** : 2026-07-20
+- **Remplacé par** : [BE-0079](../BE-0079-charger-les-agent-skills-par-divulgation-progressive.md)
+
+## Context
+
+NEXUS sait déjà découvrir des Agent Skills versionnés dans le repository courant via `SkillSourceProvider`. L'Itération 14 doit permettre de réutiliser le dépôt externe AI Skills Registry sans rendre ce dépôt, le réseau ou Git obligatoires pendant la construction d'un `ContextBundle`.
+
+## Decision
+
+NEXUS consomme AI Skills Registry sous la forme d'un snapshot local placé sous `.nexus/registry/skills` dans le projet courant.
+
+`AiSkillsRegistryProvider` découvre uniquement les métadonnées des fichiers `SKILL.md`. Le corps complet reste chargé par `SkillLoader` après sélection, conformément à la divulgation progressive existante.
+
+Les skills locaux du projet conservent une priorité supérieure à ceux du registre. En cas de nom identique, la déduplication existante conserve donc la définition locale.
+
+L'absence du snapshot ne constitue pas une erreur et ne modifie pas le comportement normal de NEXUS.
+
+## Do's and Don'ts
+
+### Do
+
+- Lire AI Skills Registry depuis un snapshot local placé sous `.nexus/registry/skills` dans le projet courant.
+- Ne découvrir par `AiSkillsRegistryProvider` que les métadonnées des `SKILL.md`, le corps complet étant chargé par `SkillLoader` après sélection.
+- Donner la priorité aux skills locaux du projet : à nom identique, la définition locale est conservée.
+
+### Don't
+
+- Ne pas traiter l'absence du snapshot comme une erreur, ni laisser cette absence modifier le comportement normal de NEXUS.
+
+## Consequences
+
+- aucune requête réseau n'est effectuée pendant la construction du contexte ;
+- NEXUS reste utilisable sans AI Skills Registry ;
+- la logique de sélection, de déduplication et de chargement progressif reste commune ;
+- un projet peut surcharger localement un skill partagé ;
+- la synchronisation du snapshot reste une opération externe explicite ;
+- `.nexus/registry` n'est pas versionné avec le projet.
+
+## Confirmation
+
+La décision est respectée si :
+
+- zéro skill de registre est retourné lorsque `.nexus/registry/skills` est absent ;
+- les métadonnées sont découvertes sans charger le corps complet du `SKILL.md` ;
+- le corps complet n'est chargé qu'après sélection ;
+- un skill local de même nom gagne sur le skill du registre ;
+- les tests du cœur et le self-smoke restent verts sans snapshot de registre.
+
+## Compliance and Enforcement
+
+- Tests `AiSkillsRegistryProviderTest.discoversRegistryMetadataBeforeLoadingTheSelectedSkillBody` et `AiSkillsRegistryProviderTest.keepsProjectLocalSkillWhenRegistryContainsTheSameName` (`core/src/test/java/com/nexus/context/source/skill`) ; tests lancés par `./mvnw -B clean install` (job « Linux reactor Maven build » de `.github/workflows/ci.yml`).
+- Règle Archgate `ARCH-0005-adopter-un-fonctionnement-local-first-et-opt-in.rules.ts` / `core-network-only-in-opt-in-providers` : aucun client réseau dans le cœur hors du provider d'embeddings Ollama, donc aucun dans `AiSkillsRegistryProvider`.
+- Revue : absence de snapshot sans erreur.
+
+## Décisions liées
+
+- ADR-0005 — Adopter un fonctionnement local-first et des intégrations externes opt-in.
+- ADR-0012 — Réutiliser les standards existants pour instructions et skills.
+- ADR-0017 — Découpler NEXUS des outils et orchestrateurs externes.
+- ADR-0034 — Adopter la divulgation progressive pour les Agent Skills.
