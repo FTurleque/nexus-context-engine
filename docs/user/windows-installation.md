@@ -339,6 +339,8 @@ Codex CLI et Codex Desktop lisent le même fichier `~/.codex/config.toml` : une 
 
 En mode natif, la commande MCP NEXUS est `cmd.exe /d /s /c {installation}\nexus-mcp.cmd`. En Docker, c'est `docker exec -i <conteneur> java -jar /opt/nexus/lib/nexus-mcp.jar`.
 
+Pendant l'installation, sous la barre de copie des fichiers, chaque étape de configuration a sa propre barre : configuration NEXUS, scripts d'intégration, lancement de Docker Desktop s'il vient d'être installé, puis un client coché par ligne. Une barre animée signale l'étape en cours. Une barre pleine verte signale une étape terminée, jaune une entrée `nexus` déjà présente, rouge un échec (client introuvable ou code de sortie). Le libellé de la ligne précise le résultat.
+
 En fin d'installation, une fenêtre liste les clients cochés qui n'ont pas pu être connectés. À la désinstallation, le setup retire uniquement les entrées `nexus` qu'il a lui-même ajoutées.
 
 Le profil projet de Claude reste disponible avec `nexus-assistant-clients.cmd`.
