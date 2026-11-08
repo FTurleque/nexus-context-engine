@@ -4,6 +4,7 @@
 #define NexusAppId "@@APP_ID@@"
 #define NexusSmokeMode @@SMOKE_MODE@@
 #define NexusSourceDir "@@SOURCE_DIR@@"
+#define NexusPackagingDir "@@PACKAGING_DIR@@"
 #define NexusOutputDir "@@OUTPUT_DIR@@"
 #define NexusOutputBaseFilename "@@OUTPUT_BASENAME@@"
 
@@ -55,6 +56,7 @@ Source: "{#NexusSourceDir}\nexus-assistant-clients.cmd"; DestDir: "{app}"; Flags
 Source: "{#NexusSourceDir}\nexus-docker.cmd"; DestDir: "{app}"; Flags: ignoreversion; Check: InstallDocker
 Source: "{#NexusSourceDir}\nexus-docker-mcp.cmd"; DestDir: "{app}"; Flags: ignoreversion; Check: InstallDocker
 Source: "{#NexusSourceDir}\docker\*"; DestDir: "{app}\docker"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: InstallDocker
+Source: "{#NexusPackagingDir}\detect-assistant-clients.ps1"; Flags: dontcopy
 
 [Icons]
 Name: "{userprograms}\NEXUS\Dossier d'installation NEXUS"; Filename: "{app}"
@@ -75,7 +77,11 @@ var
   OllamaPage: TInputQueryWizardPage;
   DockerPrereqPage: TInputOptionWizardPage;
   DockerPage: TInputQueryWizardPage;
-  AssistantPage: TInputOptionWizardPage;
+  AssistantPage: TWizardPage;
+  ClientBoxes: array of TNewCheckBox;
+  ClientStatus: array of TNewStaticText;
+  ClientConfigured: array of Boolean;
+  ClientPreflightDone: Boolean;
   IntegrationRuntimePage: TInputOptionWizardPage;
   DockerDesktopInstalledDuringSetup: Boolean;
   UninstSilent: Boolean;
@@ -83,6 +89,16 @@ var
 
 const
   BCRYPT_USE_SYSTEM_PREFERRED_RNG = $00000002;
+  { Rows of the "Clients IA" page. ClientSection gives the matching INI section
+    written by detect-assistant-clients.ps1. }
+  CLIENT_COPILOT_CLI = 0;
+  CLIENT_COPILOT_JETBRAINS = 1;
+  CLIENT_CLAUDE_CODE = 2;
+  CLIENT_CLAUDE_DESKTOP = 3;
+  CLIENT_CODEX_CLI = 4;
+  CLIENT_CODEX_DESKTOP = 5;
+  CLIENT_GENERIC = 6;
+  CLIENT_COUNT = 7;
 
 // CSPRNG Windows : remplit un buffer d'octets à partir du générateur cryptographique système.
 // Utilisé pour générer le token Bearer REST avec une entropie forte (>= 256 bits), au lieu du
@@ -153,10 +169,20 @@ begin
   Result := InstallNativeMcp() or InstallDocker();
 end;
 
-function HasAssistantSelection(): Boolean;
+{ A row counts only while it is enabled: a client absent from this machine or
+  already connected to NEXUS is disabled and never configured again. }
+function ClientSelected(Index: Integer): Boolean;
 begin
-  Result := AssistantIntegrationAvailable() and
-    (AssistantPage.Values[0] or AssistantPage.Values[1] or AssistantPage.Values[2] or AssistantPage.Values[3] or AssistantPage.Values[4]);
+  Result := AssistantIntegrationAvailable() and ClientBoxes[Index].Enabled and ClientBoxes[Index].Checked;
+end;
+
+function HasAssistantSelection(): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 0 to CLIENT_COUNT - 1 do
+    if ClientSelected(I) then Result := True;
 end;
 
 function UseDockerForIntegrations(): Boolean;
@@ -636,6 +662,163 @@ begin
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'DockerRestartPolicy', Value) then DockerPage.Values[6] := Value;
 end;
 
+function ClientSection(Index: Integer): String;
+begin
+  case Index of
+    CLIENT_COPILOT_CLI: Result := 'CopilotCli';
+    CLIENT_COPILOT_JETBRAINS: Result := 'CopilotJetBrains';
+    CLIENT_CLAUDE_CODE: Result := 'ClaudeCode';
+    CLIENT_CLAUDE_DESKTOP: Result := 'ClaudeDesktop';
+    CLIENT_CODEX_CLI: Result := 'CodexCli';
+    CLIENT_CODEX_DESKTOP: Result := 'CodexDesktop';
+  else
+    Result := '';
+  end;
+end;
+
+function ClientLabel(Index: Integer): String;
+begin
+  case Index of
+    CLIENT_COPILOT_CLI: Result := 'GitHub Copilot CLI';
+    CLIENT_COPILOT_JETBRAINS: Result := 'GitHub Copilot — JetBrains / IntelliJ';
+    CLIENT_CLAUDE_CODE: Result := 'Claude Code (CLI)';
+    CLIENT_CLAUDE_DESKTOP: Result := 'Claude Desktop';
+    CLIENT_CODEX_CLI: Result := 'OpenAI Codex CLI';
+    CLIENT_CODEX_DESKTOP: Result := 'OpenAI Codex Desktop';
+  else
+    Result := 'Autre client MCP — générer integrations\generic-mcp.json';
+  end;
+end;
+
+{ Codex CLI and Codex Desktop share ~/.codex/config.toml: one NEXUS entry serves
+  both, so ticking one row clears the other. }
+procedure CodexCliClick(Sender: TObject);
+begin
+  if ClientBoxes[CLIENT_CODEX_CLI].Checked and ClientBoxes[CLIENT_CODEX_DESKTOP].Enabled then
+    ClientBoxes[CLIENT_CODEX_DESKTOP].Checked := False;
+end;
+
+procedure CodexDesktopClick(Sender: TObject);
+begin
+  if ClientBoxes[CLIENT_CODEX_DESKTOP].Checked and ClientBoxes[CLIENT_CODEX_CLI].Enabled then
+    ClientBoxes[CLIENT_CODEX_CLI].Checked := False;
+end;
+
+procedure CreateClientRow(Index: Integer; Top: Integer);
+begin
+  ClientBoxes[Index] := TNewCheckBox.Create(AssistantPage);
+  ClientBoxes[Index].Parent := AssistantPage.Surface;
+  ClientBoxes[Index].Left := 0;
+  ClientBoxes[Index].Top := Top;
+  ClientBoxes[Index].Width := AssistantPage.SurfaceWidth;
+  ClientBoxes[Index].Caption := ClientLabel(Index);
+  ClientBoxes[Index].Checked := False;
+  ClientStatus[Index] := TNewStaticText.Create(AssistantPage);
+  ClientStatus[Index].Parent := AssistantPage.Surface;
+  ClientStatus[Index].Left := ScaleX(18);
+  ClientStatus[Index].Top := Top + ScaleY(17);
+  ClientStatus[Index].Width := AssistantPage.SurfaceWidth - ScaleX(18);
+  ClientStatus[Index].AutoSize := False;
+  ClientStatus[Index].Height := ScaleY(15);
+  ClientStatus[Index].Font.Color := clGray;
+  ClientConfigured[Index] := False;
+end;
+
+procedure CreateAssistantPage;
+var
+  I: Integer;
+begin
+  AssistantPage := CreateCustomPage(DockerPage.ID,
+    'Clients IA',
+    'Connecter le serveur MCP NEXUS aux clients IA détectés. Une entrée "nexus" existante n''est jamais écrasée.');
+  SetArrayLength(ClientBoxes, CLIENT_COUNT);
+  SetArrayLength(ClientStatus, CLIENT_COUNT);
+  SetArrayLength(ClientConfigured, CLIENT_COUNT);
+  for I := 0 to CLIENT_COUNT - 1 do
+    CreateClientRow(I, ScaleY(2) + I * ScaleY(35));
+  ClientBoxes[CLIENT_CODEX_CLI].OnClick := @CodexCliClick;
+  ClientBoxes[CLIENT_CODEX_DESKTOP].OnClick := @CodexDesktopClick;
+  for I := 0 to CLIENT_GENERIC - 1 do
+  begin
+    ClientBoxes[I].Enabled := False;
+    ClientStatus[I].Caption := 'Détection en attente';
+  end;
+  ClientStatus[CLIENT_GENERIC].Caption := 'Toujours disponible — fichier JSON STDIO à importer manuellement';
+  ClientPreflightDone := False;
+end;
+
+{ Without a usable preflight, every row stays selectable as before: the connect
+  scripts still check for the client and keep the generated asset when it is absent. }
+procedure EnableClientRowsWithoutDetection(Reason: String);
+var
+  I: Integer;
+begin
+  for I := 0 to CLIENT_GENERIC - 1 do
+  begin
+    ClientBoxes[I].Enabled := True;
+    ClientStatus[I].Caption := Reason;
+  end;
+end;
+
+procedure ApplyClientPreflight(Ini: String);
+var
+  I: Integer;
+  Available: Boolean;
+  Configured: Boolean;
+  Reason: String;
+begin
+  for I := 0 to CLIENT_GENERIC - 1 do
+  begin
+    Available := GetIniString(ClientSection(I), 'Available', '0', Ini) = '1';
+    Configured := GetIniString(ClientSection(I), 'Configured', '0', Ini) = '1';
+    Reason := GetIniString(ClientSection(I), 'Reason', 'Détection indisponible', Ini);
+    ClientConfigured[I] := Available and Configured;
+    { A connected client is shown ticked and locked: there is nothing left to do. }
+    ClientBoxes[I].Enabled := Available and (not Configured);
+    ClientBoxes[I].Checked := Available and Configured;
+    if Available and Configured then
+      ClientStatus[I].Caption := Reason + ' — déjà configuré'
+    else
+      ClientStatus[I].Caption := Reason;
+  end;
+end;
+
+procedure RunClientPreflight;
+var
+  Ini: String;
+  Detector: String;
+  ResultCode: Integer;
+  I: Integer;
+begin
+  ClientPreflightDone := True;
+  for I := 0 to CLIENT_GENERIC - 1 do ClientStatus[I].Caption := 'Détection en cours…';
+  WizardForm.Repaint;
+  Ini := ExpandConstant('{tmp}\nexus-client-preflight.ini');
+  DeleteFile(Ini);
+  try
+    ExtractTemporaryFile('detect-assistant-clients.ps1');
+  except
+    EnableClientRowsWithoutDetection('Détection indisponible — la connexion sera tentée à l''installation');
+    exit;
+  end;
+  Detector := ExpandConstant('{tmp}\detect-assistant-clients.ps1');
+  if (not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+      '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + Detector + '" -OutputPath "' + Ini + '"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode)) or (ResultCode <> 0) or (not FileExists(Ini)) then
+  begin
+    Log('Assistant client preflight failed with exit code ' + IntToStr(ResultCode));
+    EnableClientRowsWithoutDetection('Détection indisponible — la connexion sera tentée à l''installation');
+    exit;
+  end;
+  ApplyClientPreflight(Ini);
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if (CurPageID = AssistantPage.ID) and (not ClientPreflightDone) and (not IsSmokeBuild()) then
+    RunClientPreflight;
+end;
+
 procedure InitializeWizard;
 begin
   DockerDesktopInstalledDuringSetup := False;
@@ -734,21 +917,7 @@ begin
   DockerPage.Values[5] := GetEnv('USERPROFILE');
   DockerPage.Values[6] := 'unless-stopped';
 
-  AssistantPage := CreateInputOptionPage(DockerPage.ID,
-    'Intégrations assistants IA',
-    'Choisissez les clients MCP à préparer ou connecter.',
-    'NEXUS ne gère aucune authentification. Les entrées existantes nommées "nexus" ne sont jamais écrasées.',
-    False, False);
-  AssistantPage.Add('GitHub Copilot CLI — connecter si la CLI est détectée');
-  AssistantPage.Add('GitHub Copilot JetBrains — connecter si le plugin est détecté');
-  AssistantPage.Add('Claude Desktop / Claude Code — connecter si détecté');
-  AssistantPage.Add('Codex Desktop — connecter via la CLI codex si détectée + générer un snippet TOML');
-  AssistantPage.Add('Client MCP générique — générer un JSON STDIO');
-  AssistantPage.Values[0] := False;
-  AssistantPage.Values[1] := False;
-  AssistantPage.Values[2] := False;
-  AssistantPage.Values[3] := False;
-  AssistantPage.Values[4] := False;
+  CreateAssistantPage;
 
   IntegrationRuntimePage := CreateInputOptionPage(AssistantPage.ID,
     'Runtime MCP des assistants',
@@ -765,11 +934,7 @@ begin
     ProfilePage.SelectedValueIndex := 0;
     SemanticPage.Values[0] := False;
     DockerPrereqPage.Values[0] := False;
-    AssistantPage.Values[0] := False;
-    AssistantPage.Values[1] := False;
-    AssistantPage.Values[2] := False;
-    AssistantPage.Values[3] := False;
-    AssistantPage.Values[4] := False;
+    ClientBoxes[CLIENT_GENERIC].Checked := False;
   end
   else
     LoadPreviousSettings;
@@ -1271,31 +1436,48 @@ begin
       PowerShellSingleQuote(ExpandConstant('{app}\nexus-mcp.cmd')) + ''')';
 end;
 
+{ PowerShell prologue that sets $exe to the Claude Code CLI: on PATH first, then
+  the copy Claude Desktop embeds under %APPDATA%\Claude\claude-code\<version>.
+  Exits 10 when neither exists. }
+function ClaudeCliResolverPs(): String;
+begin
+  Result :=
+    '$exe = $null' + #13#10 +
+    '$c = Get-Command claude -EA SilentlyContinue | Select-Object -First 1' + #13#10 +
+    'if ($c -and ($c.CommandType -in @(''Application'', ''ExternalScript''))) { $exe = $c.Source }' + #13#10 +
+    'if (-not $exe) {' + #13#10 +
+    '  $d = Join-Path $env:APPDATA ''Claude\claude-code''' + #13#10 +
+    '  if (Test-Path $d) { $exe = Get-ChildItem $d -Directory -EA SilentlyContinue | Sort-Object LastWriteTime -Descending | ForEach-Object { Join-Path $_.FullName ''claude.exe'' } | Where-Object { Test-Path $_ } | Select-Object -First 1 }' + #13#10 +
+    '}' + #13#10 +
+    'if (-not $exe) { exit 10 }' + #13#10;
+end;
+
+function PowerShellLauncherCmd(ScriptName: String): String;
+begin
+  Result :=
+    '@echo off' + #13#10 +
+    '"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0' + ScriptName + '"' + #13#10 +
+    'exit /b %ERRORLEVEL%' + #13#10;
+end;
+
 procedure WriteAssistantAssets;
 var
   Dir: String;
   CopilotScript: String;
   CopilotCmd: String;
-  ClaudeScript: String;
   ClaudeDesktopPsScript: String;
   ClaudeDesktopCmd: String;
   CodexScript: String;
   CodexCmd: String;
   JetBrainsPsScript: String;
   JetBrainsCmd: String;
-  CommandTail: String;
 begin
   if not HasAssistantSelection() then exit;
   Dir := ExpandConstant('{app}\integrations');
   ForceDirectories(Dir);
   WriteJsonHelper(Dir);
 
-  if UseDockerForIntegrations() then
-    CommandTail := 'docker exec -i "' + DockerPage.Values[1] + '" java -jar /opt/nexus/lib/nexus-mcp.jar'
-  else
-    CommandTail := '"' + ExpandConstant('{app}\app\runtime\bin\java.exe') + '" -jar "' + ExpandConstant('{app}\lib\nexus-mcp.jar') + '"';
-
-  if AssistantPage.Values[1] then
+  if ClientSelected(CLIENT_COPILOT_JETBRAINS) then
   begin
     { Static JSON fallback — restored Docker handling, kept for manual import. }
     if UseDockerForIntegrations() then
@@ -1341,7 +1523,7 @@ begin
     SaveStringToFile(Dir + '\connect-copilot-jetbrains.cmd', JetBrainsCmd, False);
   end;
 
-  if AssistantPage.Values[3] then
+  if ClientSelected(CLIENT_CODEX_DESKTOP) then
   begin
     if UseDockerForIntegrations() then
       SaveStringToFile(Dir + '\codex-desktop.mcp.toml', DockerCodexToml(), False)
@@ -1349,7 +1531,7 @@ begin
       SaveStringToFile(Dir + '\codex-desktop.mcp.toml', NativeCodexToml(), False);
   end;
 
-  if AssistantPage.Values[4] then
+  if ClientSelected(CLIENT_GENERIC) then
   begin
     if UseDockerForIntegrations() then
       SaveStringToFile(Dir + '\generic-mcp.json', DockerMcpCommandJson('mcpServers'), False)
@@ -1357,7 +1539,7 @@ begin
       SaveStringToFile(Dir + '\generic-mcp.json', NativeMcpCommandJson('mcpServers'), False);
   end;
 
-  if AssistantPage.Values[0] then
+  if ClientSelected(CLIENT_COPILOT_CLI) then
   begin
     { PS1: resolve copilot via Get-Command (handles the VS Code copilot.ps1 shim that
       `where copilot` cannot find), then `copilot mcp add nexus -- <cmd> <args...>`.
@@ -1383,7 +1565,7 @@ begin
     SaveStringToFile(Dir + '\connect-copilot-cli.cmd', CopilotCmd, False);
   end;
 
-  if AssistantPage.Values[2] then
+  if ClientSelected(CLIENT_CLAUDE_DESKTOP) then
   begin
     { PS1: merge nexus into Claude Desktop's mcpServers (cmd.exe + nexus-mcp.cmd,
       same pattern as mcp-search-net). Depth 10 preserves the nested preferences.
@@ -1428,17 +1610,60 @@ begin
           ' -File "%~dp0connect-claude-desktop.ps1"' + #13#10 +
       'exit /b %ERRORLEVEL%' + #13#10;
     SaveStringToFile(Dir + '\connect-claude-desktop.cmd', ClaudeDesktopCmd, False);
-
-    { Also keep the Claude Code CLI integration (best-effort; exit 10 if not on PATH) }
-    ClaudeScript := '@echo off' + #13#10 +
-      'where claude >nul 2>nul || exit /b 10' + #13#10 +
-      'claude mcp get nexus >nul 2>nul && exit /b 20' + #13#10 +
-      'claude mcp add --scope user nexus -- ' + CommandTail + #13#10 +
-      'exit /b %ERRORLEVEL%' + #13#10;
-    SaveStringToFile(Dir + '\connect-claude-cli.cmd', ClaudeScript, False);
   end;
 
-  if AssistantPage.Values[3] then
+  if ClientSelected(CLIENT_CLAUDE_CODE) then
+  begin
+    { Claude Code: `claude mcp add --scope user nexus -- <cmd>`, with the CLI
+      resolved on PATH or embedded by Claude Desktop.
+      - exit 10 : Claude Code CLI not resolvable
+      - exit 20 : nexus already present
+      - exit 0  : nexus added }
+    SaveStringToFile(Dir + '\connect-claude-cli.ps1',
+      ClaudeCliResolverPs() +
+      '& $exe mcp get nexus *> $null' + #13#10 +
+      'if ($LASTEXITCODE -eq 0) { exit 20 }' + #13#10 +
+      '$cmd = ' + McpCommandArrayPs() + #13#10 +
+      '$addArgs = @(''mcp'', ''add'', ''--scope'', ''user'', ''nexus'', ''--'') + $cmd' + #13#10 +
+      '& $exe @addArgs' + #13#10 +
+      'exit $LASTEXITCODE' + #13#10,
+      False);
+    SaveStringToFile(Dir + '\disconnect-claude-cli.ps1',
+      ClaudeCliResolverPs() +
+      '& $exe mcp remove --scope user nexus *> $null' + #13#10 +
+      'exit 0' + #13#10,
+      False);
+    SaveStringToFile(Dir + '\connect-claude-cli.cmd', PowerShellLauncherCmd('connect-claude-cli.ps1'), False);
+  end;
+
+  if ClientSelected(CLIENT_CODEX_CLI) then
+  begin
+    { Codex CLI: `codex mcp add nexus -- <cmd>` writes [mcp_servers.nexus] in
+      ~/.codex/config.toml, which Codex Desktop reads too.
+      - exit 10 : codex CLI not resolvable
+      - exit 20 : nexus already present
+      - exit 0  : nexus added }
+    SaveStringToFile(Dir + '\connect-codex-cli.ps1',
+      '$c = Get-Command codex -EA SilentlyContinue | Select-Object -First 1' + #13#10 +
+      'if (-not $c -or ($c.CommandType -notin @(''Application'', ''ExternalScript''))) { exit 10 }' + #13#10 +
+      '$exe = $c.Source' + #13#10 +
+      '& $exe mcp get nexus *> $null' + #13#10 +
+      'if ($LASTEXITCODE -eq 0) { exit 20 }' + #13#10 +
+      '$cmd = ' + McpCommandArrayPs() + #13#10 +
+      '$addArgs = @(''mcp'', ''add'', ''nexus'', ''--'') + $cmd' + #13#10 +
+      '& $exe @addArgs' + #13#10 +
+      'exit $LASTEXITCODE' + #13#10,
+      False);
+    SaveStringToFile(Dir + '\disconnect-codex-cli.ps1',
+      '$c = Get-Command codex -EA SilentlyContinue | Select-Object -First 1' + #13#10 +
+      'if (-not $c -or ($c.CommandType -notin @(''Application'', ''ExternalScript''))) { exit 0 }' + #13#10 +
+      '& $c.Source mcp remove nexus *> $null' + #13#10 +
+      'exit 0' + #13#10,
+      False);
+    SaveStringToFile(Dir + '\connect-codex-cli.cmd', PowerShellLauncherCmd('connect-codex-cli.ps1'), False);
+  end;
+
+  if ClientSelected(CLIENT_CODEX_DESKTOP) then
   begin
     CodexScript :=
       '$scriptDir = Split-Path $MyInvocation.MyCommand.Path -Parent' + #13#10 +
@@ -1448,7 +1673,7 @@ begin
       '$end = ''# END NEXUS-MCP''' + #13#10 +
       '$codexOk = (Test-Path $cfg) -or (Test-Path (Join-Path $env:LOCALAPPDATA ''Programs\Codex\Codex.exe'')) -or (Test-Path (Join-Path $env:LOCALAPPDATA ''Codex\Codex.exe'')) -or ($null -ne (Get-Command codex -EA SilentlyContinue))' + #13#10 +
       'if (-not $codexOk) { exit 10 }' + #13#10 +
-      'if ((Test-Path $cfg) -and ([System.IO.File]::ReadAllText($cfg) -match [regex]::Escape($begin))) { exit 20 }' + #13#10 +
+      'if ((Test-Path $cfg) -and ([System.IO.File]::ReadAllText($cfg) -match ([regex]::Escape($begin) + ''|(?m)^\s*\[mcp_servers\.nexus\]''))) { exit 20 }' + #13#10 +
       'if (-not (Test-Path $tomlSrc)) { exit 10 }' + #13#10 +
       '$toml = [System.IO.File]::ReadAllText($tomlSrc, [System.Text.Encoding]::UTF8).TrimEnd()' + #13#10 +
       '$tomlBlock = $begin + [Environment]::NewLine + $toml + [Environment]::NewLine + $end + [Environment]::NewLine' + #13#10 +
@@ -1480,20 +1705,33 @@ begin
   end;
 end;
 
-procedure RunManagedIntegration(ScriptName: String; RegistryName: String);
+{ Returns the connect script's exit code: 0 connected, 20 entry already present,
+  10 client not found, anything else a failure (-1 when the script cannot run). }
+function RunManagedIntegration(ScriptName: String; RegistryName: String): Integer;
 var
   ResultCode: Integer;
   ScriptPath: String;
 begin
+  Result := -1;
   ScriptPath := ExpandConstant('{app}\integrations\') + ScriptName;
   if not FileExists(ScriptPath) then exit;
   if Exec(ExpandConstant('{cmd}'), '/D /S /C ""' + ScriptPath + '""', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
   begin
+    Result := ResultCode;
     if ResultCode = 0 then RegWriteStringValue(HKCU, InstallerRegistryPath(), RegistryName, '1')
     else if ResultCode = 20 then Log(ScriptName + ': existing NEXUS MCP entry preserved')
-    else if ResultCode = 10 then Log(ScriptName + ': client CLI not detected; generated integration asset kept for later')
+    else if ResultCode = 10 then Log(ScriptName + ': client not detected; generated integration asset kept for later')
     else Log(ScriptName + ': integration command exited with code ' + IntToStr(ResultCode));
   end;
+end;
+
+procedure ReportIntegration(Index: Integer; ExitCode: Integer; var Failed: String);
+begin
+  if (ExitCode = 0) or (ExitCode = 20) then exit;
+  if ExitCode = 10 then
+    Failed := Failed + '  • ' + ClientLabel(Index) + ' — client introuvable' + #13#10
+  else
+    Failed := Failed + '  • ' + ClientLabel(Index) + ' — code ' + IntToStr(ExitCode) + #13#10;
 end;
 
 procedure PersistSettings;
@@ -1551,6 +1789,8 @@ begin
 end;
 
 function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
+var
+  I: Integer;
 begin
   Result := 'RÉCAPITULATIF NEXUS' + NewLine + NewLine +
     'Mode : ' + DeploymentModeLabel() + NewLine +
@@ -1597,18 +1837,21 @@ begin
     if WizardIsTaskSelected('startdocker') then Result := Result + '  - Démarrage Docker après installation' + NewLine;
   end;
 
-  Result := Result + NewLine + 'Assistants MCP :' + NewLine;
-  if HasAssistantSelection() then
+  Result := Result + NewLine + 'Clients IA :' + NewLine;
+  if AssistantIntegrationAvailable() then
   begin
-    if AssistantPage.Values[0] then Result := Result + '  - GitHub Copilot CLI' + NewLine;
-    if AssistantPage.Values[1] then Result := Result + '  - GitHub Copilot JetBrains' + NewLine;
-    if AssistantPage.Values[2] then Result := Result + '  - Claude Desktop / Claude Code' + NewLine;
-    if AssistantPage.Values[3] then Result := Result + '  - Codex Desktop' + NewLine;
-    if AssistantPage.Values[4] then Result := Result + '  - Client MCP générique' + NewLine;
-    Result := Result + '  - Runtime MCP : ' + IntegrationRuntimeLabel() + NewLine;
+    for I := 0 to CLIENT_COUNT - 1 do
+      if ClientSelected(I) then
+        Result := Result + '  - ' + ClientLabel(I) + NewLine
+      else if ClientConfigured[I] then
+        Result := Result + '  - ' + ClientLabel(I) + ' (déjà configuré, inchangé)' + NewLine;
+    if HasAssistantSelection() then
+      Result := Result + '  - Runtime MCP : ' + IntegrationRuntimeLabel() + NewLine
+    else
+      Result := Result + '  - Aucun nouveau client à connecter' + NewLine;
   end
   else
-    Result := Result + '  - Aucune intégration sélectionnée' + NewLine;
+    Result := Result + '  - Indisponible sans serveur MCP installé' + NewLine;
 
   Result := Result + NewLine + 'Cliquez sur Installer pour appliquer exactement cette configuration.';
 end;
@@ -1630,6 +1873,8 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
+var
+  Failed: String;
 begin
   if CurStep = ssPostInstall then
   begin
@@ -1641,11 +1886,23 @@ begin
     StartDockerDesktopAfterInstall;
     if (not IsSmokeBuild()) and HasAssistantSelection() then
     begin
-      if AssistantPage.Values[0] then RunManagedIntegration('connect-copilot-cli.cmd', 'CopilotCliManaged');
-      if AssistantPage.Values[1] then RunManagedIntegration('connect-copilot-jetbrains.cmd', 'CopilotJetBrainsManaged');
-      if AssistantPage.Values[2] then RunManagedIntegration('connect-claude-desktop.cmd', 'ClaudeDesktopManaged');
-      if AssistantPage.Values[2] then RunManagedIntegration('connect-claude-cli.cmd', 'ClaudeCliManaged');
-      if AssistantPage.Values[3] then RunManagedIntegration('connect-codex-desktop.cmd', 'CodexManaged');
+      Failed := '';
+      if ClientSelected(CLIENT_COPILOT_CLI) then
+        ReportIntegration(CLIENT_COPILOT_CLI, RunManagedIntegration('connect-copilot-cli.cmd', 'CopilotCliManaged'), Failed);
+      if ClientSelected(CLIENT_COPILOT_JETBRAINS) then
+        ReportIntegration(CLIENT_COPILOT_JETBRAINS, RunManagedIntegration('connect-copilot-jetbrains.cmd', 'CopilotJetBrainsManaged'), Failed);
+      if ClientSelected(CLIENT_CLAUDE_CODE) then
+        ReportIntegration(CLIENT_CLAUDE_CODE, RunManagedIntegration('connect-claude-cli.cmd', 'ClaudeCliManaged'), Failed);
+      if ClientSelected(CLIENT_CLAUDE_DESKTOP) then
+        ReportIntegration(CLIENT_CLAUDE_DESKTOP, RunManagedIntegration('connect-claude-desktop.cmd', 'ClaudeDesktopManaged'), Failed);
+      if ClientSelected(CLIENT_CODEX_CLI) then
+        ReportIntegration(CLIENT_CODEX_CLI, RunManagedIntegration('connect-codex-cli.cmd', 'CodexCliManaged'), Failed);
+      if ClientSelected(CLIENT_CODEX_DESKTOP) then
+        ReportIntegration(CLIENT_CODEX_DESKTOP, RunManagedIntegration('connect-codex-desktop.cmd', 'CodexManaged'), Failed);
+      if (Failed <> '') and (not WizardSilent()) then
+        MsgBox('NEXUS est installé, mais ces clients IA n''ont pas pu être connectés :' + #13#10 + Failed + #13#10 +
+          'Les scripts de connexion restent dans ' + ExpandConstant('{app}\integrations') + '.' + #13#10 +
+          'Détails : journal d''installation (option /LOG).', mbError, MB_OK);
     end;
   end;
 end;
@@ -1674,10 +1931,19 @@ begin
     Exec(PsExe, '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\integrations\disconnect-claude-desktop.ps1') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     RegDeleteValue(HKCU, InstallerRegistryPath(), 'ClaudeDesktopManaged');
   end;
-  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'ClaudeCliManaged', Value) and (Value = '1') and CommandExists('claude') then
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'ClaudeCliManaged', Value) and (Value = '1') then
   begin
-    Exec(ExpandConstant('{cmd}'), '/D /S /C "claude mcp remove nexus"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    if FileExists(ExpandConstant('{app}\integrations\disconnect-claude-cli.ps1')) then
+      Exec(PsExe, '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\integrations\disconnect-claude-cli.ps1') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
+    else if CommandExists('claude') then
+      Exec(ExpandConstant('{cmd}'), '/D /S /C "claude mcp remove nexus"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     RegDeleteValue(HKCU, InstallerRegistryPath(), 'ClaudeCliManaged');
+  end;
+  if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'CodexCliManaged', Value) and (Value = '1') and
+     FileExists(ExpandConstant('{app}\integrations\disconnect-codex-cli.ps1')) then
+  begin
+    Exec(PsExe, '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\integrations\disconnect-codex-cli.ps1') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    RegDeleteValue(HKCU, InstallerRegistryPath(), 'CodexCliManaged');
   end;
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'CodexManaged', Value) and (Value = '1') and
      FileExists(ExpandConstant('{app}\integrations\disconnect-codex-desktop.ps1')) then

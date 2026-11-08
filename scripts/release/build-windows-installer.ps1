@@ -125,6 +125,7 @@ $iss = $iss.Replace('@@APP_VERSION@@', (Escape-Inno $appVersion))
 $iss = $iss.Replace('@@APP_ID@@', (Escape-Inno $appId))
 $iss = $iss.Replace('@@SMOKE_MODE@@', $smokeMode)
 $iss = $iss.Replace('@@SOURCE_DIR@@', (Escape-Inno $DistributionRoot))
+$iss = $iss.Replace('@@PACKAGING_DIR@@', (Escape-Inno (Split-Path -Parent $template)))
 $iss = $iss.Replace('@@OUTPUT_DIR@@', (Escape-Inno $installerOutput))
 $iss = $iss.Replace('@@OUTPUT_BASENAME@@', (Escape-Inno $outputBase))
 if ($iss -match '@@[A-Z0-9_]+@@') {

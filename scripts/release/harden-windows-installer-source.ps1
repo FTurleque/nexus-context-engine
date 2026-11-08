@@ -232,14 +232,6 @@ end;
 '@
     $Source = Replace-ExactlyOnce $Source $nativeTomlArgument $nativeTomlArgumentReplacement 'native Codex TOML runtime option'
 
-    $nativeCommandTail = @'
-    CommandTail := '"' + ExpandConstant('{app}\app\runtime\bin\java.exe') + '" -jar "' + ExpandConstant('{app}\lib\nexus-mcp.jar') + '"';
-'@
-    $nativeCommandTailReplacement = @'
-    CommandTail := '"' + ExpandConstant('{app}\app\runtime\bin\java.exe') + '" --enable-native-access=ALL-UNNAMED -jar "' + ExpandConstant('{app}\lib\nexus-mcp.jar') + '"';
-'@
-    $Source = Replace-ExactlyOnce $Source $nativeCommandTail $nativeCommandTailReplacement 'native assistant CLI runtime option'
-
     $hashHelperAnchor = @'
 function PowerShellSingleQuote(Value: String): String;
 begin
