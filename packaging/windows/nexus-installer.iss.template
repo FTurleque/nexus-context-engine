@@ -1503,6 +1503,20 @@ begin
     'if (-not $exe) { exit 10 }' + #13#10;
 end;
 
+{ PowerShell prologue that sets $cfgs to every Claude Desktop configuration file:
+  one per Microsoft Store package folder, plus %APPDATA%\Claude for the standard
+  installer. A machine can keep both, only one of them being the running app's;
+  every present folder is listed so that the running app's file is always among them. }
+function ClaudeDesktopConfigsPs(): String;
+begin
+  Result :=
+    '$cfgs = @()' + #13#10 +
+    '$pkgs = Join-Path $env:LOCALAPPDATA ''Packages''' + #13#10 +
+    'if (Test-Path $pkgs) { foreach ($p in (Get-ChildItem $pkgs -Directory -Filter ''Claude_*'' -EA SilentlyContinue)) { $d = Join-Path $p.FullName ''LocalCache\Roaming\Claude''; if (Test-Path $d) { $cfgs += (Join-Path $d ''claude_desktop_config.json'') } } }' + #13#10 +
+    '$fb = Join-Path $env:APPDATA ''Claude''' + #13#10 +
+    'if (Test-Path $fb) { $cfgs += (Join-Path $fb ''claude_desktop_config.json'') }' + #13#10;
+end;
+
 function PowerShellLauncherCmd(ScriptName: String): String;
 begin
   Result :=
@@ -1607,26 +1621,26 @@ begin
 
   if ClientSelected(CLIENT_CLAUDE_DESKTOP) then
   begin
-    { PS1: merge nexus into Claude Desktop's mcpServers (cmd.exe + nexus-mcp.cmd,
-      same pattern as mcp-search-net). Depth 10 preserves the nested preferences.
-      - exit 10 : claude_desktop_config.json absent OR nexus-mcp.cmd not installed
-      - exit 20 : nexus already present (idempotent)
-      - exit 0  : nexus added successfully }
+    { PS1: merge nexus into the mcpServers of every Claude Desktop configuration
+      present (cmd.exe + nexus-mcp.cmd, same pattern as mcp-search-net).
+      - exit 10 : no Claude Desktop configuration folder
+      - exit 20 : nexus already present in each of them (idempotent)
+      - exit 0  : nexus added to at least one of them }
     ClaudeDesktopPsScript :=
       '. (Join-Path $PSScriptRoot ''nexus-json.ps1'')' + #13#10 +
-      '$cfg = $null' + #13#10 +
-      '$pkgs = Join-Path $env:LOCALAPPDATA ''Packages''' + #13#10 +
-      'if (Test-Path $pkgs) { foreach ($p in (Get-ChildItem $pkgs -Directory -Filter ''Claude_*'' -EA SilentlyContinue)) { $cand = Join-Path $p.FullName ''LocalCache\Roaming\Claude\claude_desktop_config.json''; if (Test-Path (Split-Path $cand -Parent)) { $cfg = $cand; break } } }' + #13#10 +
-      'if (-not $cfg) { $fb = Join-Path $env:APPDATA ''Claude''; if (Test-Path $fb) { $cfg = Join-Path $fb ''claude_desktop_config.json'' } }' + #13#10 +
-      'if (-not $cfg) { exit 10 }' + #13#10 +
-      '$c = if (Test-Path $cfg) { Get-Content $cfg -Raw | ConvertFrom-Json } else { [PSCustomObject]@{} }' + #13#10 +
-      'if (($null -ne ($c | Get-Member -Name mcpServers -MemberType NoteProperty)) -and ($null -ne ($c.mcpServers | Get-Member -Name nexus -MemberType NoteProperty))) { exit 20 }' + #13#10 +
+      ClaudeDesktopConfigsPs() +
+      'if ($cfgs.Count -eq 0) { exit 10 }' + #13#10 +
       '$e = ' + McpEntryPsLiteral(False) + #13#10 +
-      'if ($null -eq ($c | Get-Member -Name mcpServers -MemberType NoteProperty)) {' + #13#10 +
-      '    $c | Add-Member -MemberType NoteProperty -Name mcpServers -Value ([PSCustomObject]@{})' + #13#10 +
+      '$added = 0' + #13#10 +
+      'foreach ($cfg in $cfgs) {' + #13#10 +
+      '  $c = if (Test-Path $cfg) { Get-Content $cfg -Raw | ConvertFrom-Json } else { [PSCustomObject]@{} }' + #13#10 +
+      '  if ($null -eq ($c | Get-Member -Name mcpServers -MemberType NoteProperty)) { $c | Add-Member -MemberType NoteProperty -Name mcpServers -Value ([PSCustomObject]@{}) }' + #13#10 +
+      '  if ($null -ne ($c.mcpServers | Get-Member -Name nexus -MemberType NoteProperty)) { continue }' + #13#10 +
+      '  $c.mcpServers | Add-Member -MemberType NoteProperty -Name nexus -Value $e' + #13#10 +
+      '  Save-CleanJson $cfg $c' + #13#10 +
+      '  $added++' + #13#10 +
       '}' + #13#10 +
-      '$c.mcpServers | Add-Member -MemberType NoteProperty -Name nexus -Value $e' + #13#10 +
-      'Save-CleanJson $cfg $c' + #13#10 +
+      'if ($added -eq 0) { exit 20 }' + #13#10 +
       'exit 0' + #13#10;
     SaveStringToFile(Dir + '\connect-claude-desktop.ps1', ClaudeDesktopPsScript, False);
 
@@ -1739,16 +1753,15 @@ begin
     False);
   SaveStringToFile(Dir + '\disconnect-claude-desktop.ps1',
     '. (Join-Path $PSScriptRoot ''nexus-json.ps1'')' + #13#10 +
-    '$cfg = $null' + #13#10 +
-    '$pkgs = Join-Path $env:LOCALAPPDATA ''Packages''' + #13#10 +
-    'if (Test-Path $pkgs) { foreach ($p in (Get-ChildItem $pkgs -Directory -Filter ''Claude_*'' -EA SilentlyContinue)) { $cand = Join-Path $p.FullName ''LocalCache\Roaming\Claude\claude_desktop_config.json''; if (Test-Path $cand) { $cfg = $cand; break } } }' + #13#10 +
-    'if (-not $cfg) { $fb = Join-Path $env:APPDATA ''Claude\claude_desktop_config.json''; if (Test-Path $fb) { $cfg = $fb } }' + #13#10 +
-    'if (-not $cfg) { exit 0 }' + #13#10 +
-    '$c = Get-Content $cfg -Raw | ConvertFrom-Json' + #13#10 +
-    'if ($null -eq ($c | Get-Member -Name mcpServers -MemberType NoteProperty)) { exit 0 }' + #13#10 +
-    'if ($null -eq ($c.mcpServers | Get-Member -Name nexus -MemberType NoteProperty)) { exit 0 }' + #13#10 +
-    '$c.mcpServers.PSObject.Properties.Remove(''nexus'')' + #13#10 +
-    'Save-CleanJson $cfg $c' + #13#10 +
+    ClaudeDesktopConfigsPs() +
+    'foreach ($cfg in $cfgs) {' + #13#10 +
+    '  if (-not (Test-Path $cfg)) { continue }' + #13#10 +
+    '  $c = Get-Content $cfg -Raw | ConvertFrom-Json' + #13#10 +
+    '  if ($null -eq ($c | Get-Member -Name mcpServers -MemberType NoteProperty)) { continue }' + #13#10 +
+    '  if ($null -eq ($c.mcpServers | Get-Member -Name nexus -MemberType NoteProperty)) { continue }' + #13#10 +
+    '  $c.mcpServers.PSObject.Properties.Remove(''nexus'')' + #13#10 +
+    '  Save-CleanJson $cfg $c' + #13#10 +
+    '}' + #13#10 +
     'exit 0' + #13#10,
     False);
   SaveStringToFile(Dir + '\disconnect-claude-cli.ps1',
