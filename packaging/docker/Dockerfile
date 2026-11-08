@@ -13,22 +13,36 @@ RUN chmod +x ./mvnw \
     && ./mvnw -B -DskipTests package
 
 FROM ${RUNTIME_IMAGE} AS runtime
+# Valeurs fournies par la CI (docker-distribution.yml) ; sans valeur, le label reste vide.
+ARG NEXUS_IMAGE_REVISION=""
+ARG NEXUS_IMAGE_VERSION=""
+LABEL org.opencontainers.image.title="nexus-context-engine" \
+      org.opencontainers.image.source="https://github.com/FTurleque/nexus-context-engine" \
+      org.opencontainers.image.licenses="LicenseRef-NEXUS-Proprietary" \
+      org.opencontainers.image.revision="${NEXUS_IMAGE_REVISION}" \
+      org.opencontainers.image.version="${NEXUS_IMAGE_VERSION}"
 USER root
+# Root possède le code et les scripts ; l'UID 10001 ne possède que ses données.
 # Un UID/GID numérique évite d'installer shadow-utils dans l'image minimale tout
 # en conservant un runtime strictement non-root.
 RUN mkdir -p /opt/nexus/lib /opt/nexus/rest /data/nexus /workspace \
-    && chown -R 10001:10001 /opt/nexus /data/nexus /workspace
+    && chown 10001:10001 /data/nexus /workspace
 
 COPY --from=build /workspace/target/nexus-context-engine-*-cli.jar /opt/nexus/lib/nexus-cli.jar
 COPY --from=build /workspace/adapters/mcp-java/target/nexus-mcp-java-*-runner.jar /opt/nexus/lib/nexus-mcp.jar
 COPY --from=build /workspace/adapters/assistant-clients/target/nexus-assistant-clients-*-runner.jar /opt/nexus/lib/nexus-assistant-clients.jar
 COPY --from=build /workspace/adapters/rest-quarkus/target/quarkus-app/ /opt/nexus/rest/
-COPY --chown=10001:10001 packaging/docker/nexus-container-entrypoint.sh /usr/local/bin/nexus-entrypoint
-COPY --chown=10001:10001 packaging/docker/nexus-container-healthcheck.sh /usr/local/bin/nexus-healthcheck
+COPY --from=build /workspace/LICENSE /opt/nexus/LICENSE
+COPY --from=build /workspace/target/licenses/THIRD_PARTY_NOTICES.txt /opt/nexus/THIRD_PARTY_NOTICES.txt
+COPY packaging/docker/nexus-container-entrypoint.sh /usr/local/bin/nexus-entrypoint
+COPY packaging/docker/nexus-container-healthcheck.sh /usr/local/bin/nexus-healthcheck
 
 # A Windows checkout peut matérialiser les scripts avec CRLF. Les normaliser
 # dans l'image conserve des shebangs Linux valides sans paquet supplémentaire.
+# Modes : 0644 pour les fichiers de /opt/nexus, 0755 pour ses répertoires et les scripts.
 RUN sed -i 's/\r$//' /usr/local/bin/nexus-entrypoint /usr/local/bin/nexus-healthcheck \
+    && chmod -R 0644 /opt/nexus \
+    && chmod -R a+X /opt/nexus \
     && chmod 0755 /usr/local/bin/nexus-entrypoint /usr/local/bin/nexus-healthcheck
 
 # NEXUS_DOCKER_HOST_FORWARD_ADDRESS intentionally has no image default. A container cannot infer
@@ -46,6 +60,10 @@ ENV JDK_JAVA_OPTIONS=--enable-native-access=ALL-UNNAMED \
     NEXUS_REST_EXPOSURE_MODE=loopback-forward \
     NEXUS_MAX_SCIP_INDEX_BYTES=268435456 \
     NEXUS_MAX_SCIP_MESSAGE_BYTES=16777216
+
+# Même sonde et mêmes intervalles que docker-compose.yml.template, pour un `docker run` direct.
+HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=6 \
+    CMD ["/usr/local/bin/nexus-healthcheck"]
 
 VOLUME ["/data/nexus", "/workspace"]
 EXPOSE 8080

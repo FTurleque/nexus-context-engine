@@ -2358,20 +2358,24 @@
    "sprint": 10,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-09",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "COPY sans --chown vers /opt/nexus et /usr/local/bin, chmod 0644/0755, chown limité à /data/nexus et /workspace dans les deux Dockerfiles ; refus d'un --chown au contrat test-operational-doc-contracts.sh (sprint 10)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
-    "reserve": null
+    "date": "2026-11-09",
+    "commit": "e8c80507",
+    "verdict": "Fermé",
+    "preuve": "docker run --entrypoint /bin/sh sur l'image construite : test ! -w /opt/nexus/lib/nexus-cli.jar, test ! -w /usr/local/bin/nexus-entrypoint et test -w /data/nexus réussissent ; JAR, notices et scripts root:root ; assertion ajoutée au workflow Docker distribution (image source et image de repli)",
+    "reserve": "Vérifié sur la branche fix/sprint-10-conteneur, base develop e8c80507 ; fermeture effective à la fusion de la PR du sprint 10, preuve CI : workflow Docker distribution exact-head de cette PR"
    }
   },
   {
@@ -2389,20 +2393,24 @@
    "sprint": 10,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-09",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "LICENSE et THIRD_PARTY_NOTICES.txt copiés dans /opt/nexus/ par les deux Dockerfiles ; labels org.opencontainers.image.{source,licenses,revision,version}, revision et version passés en --build-arg par docker-distribution.yml (sprint 10)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "3 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
-    "reserve": null
+    "date": "2026-11-09",
+    "commit": "e8c80507",
+    "verdict": "Fermé",
+    "preuve": "test -s /opt/nexus/LICENSE et test -s /opt/nexus/THIRD_PARTY_NOTICES.txt dans l'image ; docker inspect .Config.Labels : source, licenses LicenseRef-NEXUS-Proprietary, revision = SHA construit, version = version du pom ; assertion ajoutée au workflow Docker distribution",
+    "reserve": "Vérifié sur la branche fix/sprint-10-conteneur, base develop e8c80507 ; fermeture effective à la fusion de la PR du sprint 10, preuve CI : workflow Docker distribution exact-head de cette PR"
    }
   },
   {
@@ -2482,20 +2490,24 @@
    "sprint": 10,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-09",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "HEALTHCHECK sur /usr/local/bin/nexus-healthcheck dans les deux Dockerfiles ; compose : read_only: true, tmpfs /tmp:exec, cap_drop: [ALL], security_opt: [no-new-privileges:true] ; smoke Compose durci ajouté au workflow Docker distribution (sprint 10)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
-    "reserve": null
+    "date": "2026-11-09",
+    "commit": "e8c80507",
+    "verdict": "Fermé",
+    "preuve": "docker inspect .Config.Healthcheck ; conteneur REST lancé par docker run passé healthy ; Compose durci healthy avec racine en lecture seule, projet enregistré, indexé et interrogé ; test-docker-runtime.ps1 PASS (sonde UP et état healthy)",
+    "reserve": "Vérifié sur la branche fix/sprint-10-conteneur, base develop e8c80507 ; fermeture effective à la fusion de la PR du sprint 10, preuve CI : workflow Docker distribution exact-head de cette PR"
    }
   },
   {
@@ -2513,20 +2525,24 @@
    "sprint": 10,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-09",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": ".dockerignore à la racine pour Dockerfile (liste d'exclusion) et packaging/docker/Dockerfile.runtime.dockerignore en liste d'autorisation, livré dans le payload Windows et dans le staging de repli de docker-distribution.yml (sprint 10)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
-    "reserve": null
+    "date": "2026-11-09",
+    "commit": "e8c80507",
+    "verdict": "Fermé",
+    "preuve": "docker build --target build puis test ! -e /workspace/.git (ni .env, ni nexus-data, ni docs/project/audits) dans l'étape build ; sonde de contexte du workflow Docker distribution : docker/.env et le répertoire de données du staging restent hors du contexte de Dockerfile.runtime, et la sonde échoue sans le fichier d'ignore",
+    "reserve": "Vérifié sur la branche fix/sprint-10-conteneur, base develop e8c80507 ; fermeture effective à la fusion de la PR du sprint 10, preuve CI : workflow Docker distribution exact-head de cette PR"
    }
   },
   {

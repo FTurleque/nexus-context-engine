@@ -598,3 +598,110 @@ if ! grep -Fq '## Vérification consommateur' docs/developer/immutable-release-p
   echo "documentation contract drift: immutable-release-publishing.md must keep its consumer verification section" >&2
   exit 1
 fi
+
+# --- Sprint 10 : conteneur (AUD-DEP-04, AUD-SEC-08, AUD-DEP-08, AUD-DEP-18) ---
+python3 - <<'PY'
+import re
+from pathlib import Path
+
+root = Path.cwd()
+
+
+def text(path: str) -> str:
+    target = root / path
+    if not target.is_file():
+        raise SystemExit(f"docker contract drift: {path} is missing")
+    return target.read_text(encoding="utf-8")
+
+
+def fail(message: str) -> None:
+    raise SystemExit(f"docker contract drift: {message}")
+
+
+# Root owns the image code: no COPY --chown towards /opt/nexus or /usr/local/bin, and the
+# runtime UID only owns its data directories.
+chown_copy = re.compile(r"^\s*COPY\b[^\n]*--chown[^\n]*\s/(?:opt/nexus|usr/local/bin)\b", re.MULTILINE)
+for dockerfile in ("packaging/docker/Dockerfile", "packaging/docker/Dockerfile.runtime"):
+    source = text(dockerfile)
+    if chown_copy.search(source):
+        fail(f"{dockerfile} copies into /opt/nexus or /usr/local/bin with --chown")
+    if re.search(r"chown[^\n]*/opt/nexus", source):
+        fail(f"{dockerfile} gives /opt/nexus to the runtime UID")
+    for needle in (
+        "chown 10001:10001 /data/nexus /workspace",
+        "chmod -R 0644 /opt/nexus",
+        "chmod -R a+X /opt/nexus",
+        "/opt/nexus/LICENSE",
+        "/opt/nexus/THIRD_PARTY_NOTICES.txt",
+        'org.opencontainers.image.source="https://github.com/FTurleque/nexus-context-engine"',
+        'org.opencontainers.image.licenses="LicenseRef-NEXUS-Proprietary"',
+        'org.opencontainers.image.revision="${NEXUS_IMAGE_REVISION}"',
+        'org.opencontainers.image.version="${NEXUS_IMAGE_VERSION}"',
+        "HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=6",
+        'CMD ["/usr/local/bin/nexus-healthcheck"]',
+        "USER 10001:10001",
+    ):
+        if needle not in source:
+            fail(f"{dockerfile} must contain {needle!r}")
+
+# The negative fixture proves the --chown check is not vacuous.
+if not chown_copy.search("COPY --chown=10001:10001 lib/nexus-cli.jar /opt/nexus/lib/nexus-cli.jar\n"):
+    fail("the --chown check no longer rejects its negative fixture")
+
+# One ignore file per Dockerfile: a denylist at the root, an allowlist for the runtime image.
+root_ignore = [line.strip() for line in text(".dockerignore").splitlines()]
+for entry in (".git", "**/target", "**/.env", "**/.env.*", "**/nexus-data", "workspace",
+              "docs/project/audits", ".claude/worktrees"):
+    if entry not in root_ignore:
+        fail(f".dockerignore must exclude {entry}")
+for entry in ("pom.xml", "mvnw", ".mvn", "config", "core", "adapters", "distribution", "LICENSE"):
+    if entry in root_ignore:
+        fail(f".dockerignore must not exclude {entry}, read by ./mvnw -B -DskipTests package")
+runtime_ignore = [
+    line.strip()
+    for line in text("packaging/docker/Dockerfile.runtime.dockerignore").splitlines()
+    if line.strip() and not line.lstrip().startswith("#")
+]
+if not runtime_ignore or runtime_ignore[0] != "*":
+    fail("Dockerfile.runtime.dockerignore must start with * (allowlist)")
+if any(line.startswith("!docker/") and not line.endswith(".sh") for line in runtime_ignore) or "!docker/" in runtime_ignore:
+    fail("Dockerfile.runtime.dockerignore must only re-include the two docker/ scripts")
+for entry in ("!lib/nexus-cli.jar", "!rest/", "!LICENSE", "!THIRD_PARTY_NOTICES.txt",
+              "!docker/nexus-container-entrypoint.sh", "!docker/nexus-container-healthcheck.sh"):
+    if entry not in runtime_ignore:
+        fail(f"Dockerfile.runtime.dockerignore must re-include {entry}")
+for script in ("scripts/release/build-windows-distribution.ps1", "scripts/release/build-windows-installer.ps1",
+               ".github/workflows/docker-distribution.yml"):
+    if "Dockerfile.runtime.dockerignore" not in text(script):
+        fail(f"{script} must ship Dockerfile.runtime.dockerignore with the runtime payload")
+
+# CI passes the OCI revision and version labels.
+workflow = text(".github/workflows/docker-distribution.yml")
+for needle in ('--build-arg NEXUS_IMAGE_REVISION="$NEXUS_HEAD_SHA"', '--build-arg NEXUS_IMAGE_VERSION="$NEXUS_IMAGE_VERSION"',
+               "{{.State.Health.Status}}", "- '.dockerignore'", "name: Smoke hardened Compose runtime",
+               "Dockerfile.probe.dockerignore"):
+    if needle not in workflow:
+        fail(f"docker-distribution.yml must contain {needle!r}")
+
+# Compose runtime hardening.
+compose = text("packaging/docker/docker-compose.yml.template")
+for pattern, label in (
+    (r"^\s{4}read_only:\s*true\s*$", "read_only: true"),
+    # exec: SQLite and JNA load their extracted native libraries from /tmp.
+    (r"^\s{4}tmpfs:\s*\n\s+-\s*\"?/tmp:exec\b", "tmpfs: [/tmp:exec]"),
+    (r"^\s{4}cap_drop:\s*\n\s+-\s*ALL\s*$", "cap_drop: [ALL]"),
+    (r"^\s{4}security_opt:\s*\n\s+-\s*\"?no-new-privileges:true\"?\s*$", "security_opt: [no-new-privileges:true]"),
+):
+    if not re.search(pattern, compose, re.MULTILINE):
+        fail(f"docker-compose.yml.template must declare {label}")
+
+# Current Docker documentation describes the image and runtime hardening.
+doc = text("docs/user/docker-installation.md")
+for needle in ("Dockerfile.runtime.dockerignore", ".dockerignore", "read_only: true", "cap_drop",
+               "no-new-privileges:true", "HEALTHCHECK", "/opt/nexus/THIRD_PARTY_NOTICES.txt",
+               "org.opencontainers.image.revision", "appartiennent à root"):
+    if needle not in doc:
+        fail(f"docs/user/docker-installation.md must mention {needle!r}")
+
+print("docker-image-hardening-contracts=PASS")
+PY
