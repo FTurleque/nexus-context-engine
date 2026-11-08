@@ -190,11 +190,11 @@ end;
     'NEXUS_DOCKER_BIND_ADDRESS=' + DockerPage.Values[2] + #13#10 +
     'NEXUS_DOCKER_HOST_PORT=' + DockerPage.Values[3] + #13#10 +
     'NEXUS_DOCKER_CONTAINER_PORT=' + DockerPage.Values[4] + #13#10 +
-    'NEXUS_HOME_BIND=' + DockerPath(RuntimePage.Values[0]) + #13#10 +
+    'NEXUS_HOME_BIND=nexus-data' + #13#10 +
     'NEXUS_REPOSITORY_BIND=' + DockerPath(DockerPage.Values[5]) + #13#10 +
     'NEXUS_RUNTIME=docker' + #13#10 +
     'NEXUS_SEMANTIC_PROVIDER=' + SemanticProviderValue() + #13#10 +
-    'NEXUS_OLLAMA_BASE_URL=' + OllamaUrlForDocker(OllamaPage.Values[0]) + #13#10 +
+    'NEXUS_OLLAMA_BASE_URL=' + OllamaPage.Values[0] + #13#10 +
     'NEXUS_REST_API_TOKEN=' + DockerToken + #13#10;
 '@
     $dockerEnvReplacement = @'
@@ -206,12 +206,14 @@ end;
     '# NEXUS_DOCKER_HOST_FORWARD_ADDRESS is derived by Compose from NEXUS_DOCKER_BIND_ADDRESS' + #13#10 +
     'NEXUS_DOCKER_HOST_PORT=' + DockerPage.Values[3] + #13#10 +
     'NEXUS_DOCKER_CONTAINER_PORT=' + DockerPage.Values[4] + #13#10 +
-    'NEXUS_HOME_BIND=' + DotEnvQuoted(DockerPath(RuntimePage.Values[0])) + #13#10 +
+    '# NEXUS_HOME_BIND names the Docker volume declared by docker-compose.yml: a Windows bind mount refuses chmod' + #13#10 +
+    'NEXUS_HOME_BIND=nexus-data' + #13#10 +
     'NEXUS_REPOSITORY_BIND=' + DotEnvQuoted(DockerPath(DockerPage.Values[5])) + #13#10 +
     'NEXUS_RUNTIME=docker' + #13#10 +
     'NEXUS_REST_EXPOSURE_MODE=loopback-forward' + #13#10 +
     'NEXUS_SEMANTIC_PROVIDER=' + SemanticProviderValue() + #13#10 +
-    'NEXUS_OLLAMA_BASE_URL=' + DotEnvQuoted(OllamaUrlForDocker(OllamaPage.Values[0])) + #13#10 +
+    '# A loopback Ollama URL is adapted to host.docker.internal by NEXUS after its endpoint policy check' + #13#10 +
+    'NEXUS_OLLAMA_BASE_URL=' + DotEnvQuoted(OllamaPage.Values[0]) + #13#10 +
     'NEXUS_REST_API_TOKEN=' + DotEnvQuoted(DockerToken) + #13#10;
 '@
     $Source = Replace-ExactlyOnce $Source $dockerEnv $dockerEnvReplacement 'Docker dotenv escaping and forward declaration contract'

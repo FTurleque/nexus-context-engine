@@ -1302,11 +1302,11 @@ begin
     'NEXUS_DOCKER_BIND_ADDRESS=' + DockerPage.Values[2] + #13#10 +
     'NEXUS_DOCKER_HOST_PORT=' + DockerPage.Values[3] + #13#10 +
     'NEXUS_DOCKER_CONTAINER_PORT=' + DockerPage.Values[4] + #13#10 +
-    'NEXUS_HOME_BIND=' + DockerPath(RuntimePage.Values[0]) + #13#10 +
+    'NEXUS_HOME_BIND=nexus-data' + #13#10 +
     'NEXUS_REPOSITORY_BIND=' + DockerPath(DockerPage.Values[5]) + #13#10 +
     'NEXUS_RUNTIME=docker' + #13#10 +
     'NEXUS_SEMANTIC_PROVIDER=' + SemanticProviderValue() + #13#10 +
-    'NEXUS_OLLAMA_BASE_URL=' + OllamaUrlForDocker(OllamaPage.Values[0]) + #13#10 +
+    'NEXUS_OLLAMA_BASE_URL=' + OllamaPage.Values[0] + #13#10 +
     'NEXUS_REST_API_TOKEN=' + DockerToken + #13#10;
   SaveStringToFile(ExpandConstant('{app}\docker\.env'), EnvContent, False);
 

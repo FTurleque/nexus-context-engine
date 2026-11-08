@@ -296,7 +296,9 @@ Le repository choisi est monté :
 <chemin Windows> -> /workspace:ro
 ```
 
-`NEXUS_HOME` est monté en lecture/écriture sous `/data/nexus`.
+Les données du conteneur (`/data/nexus`) vivent dans le volume Docker nommé `nexus-context-engine-data`, distinct du `NEXUS_HOME` natif. Un dossier Windows monté dans un conteneur refuse le `chmod` avec lequel NEXUS rend son stockage privé, et une base SQLite ne se partage pas sans risque entre Windows et Linux. Les projets indexés en natif ne sont donc pas visibles du conteneur, et inversement. Le volume est conservé à la désinstallation ; `docker volume rm nexus-context-engine-data` le supprime.
+
+Une URL Ollama de bouclage (`http://127.0.0.1:11434`) est écrite telle quelle dans le `.env` : NEXUS la valide puis la redirige lui-même vers `host.docker.internal`.
 
 ### Démarrage Docker généré
 
