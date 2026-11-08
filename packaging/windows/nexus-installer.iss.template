@@ -1517,6 +1517,47 @@ begin
     'if (Test-Path $fb) { $cfgs += (Join-Path $fb ''claude_desktop_config.json'') }' + #13#10;
 end;
 
+{ PowerShell guard that exits 30 while Claude Desktop runs: the app keeps its
+  configuration in memory and rewrites claude_desktop_config.json from that copy,
+  which drops any entry written meanwhile. Claude Code CLI processes live
+  elsewhere and are not matched. }
+function ClaudeDesktopClosedGuardPs(): String;
+begin
+  Result :=
+    '$app = Join-Path $env:LOCALAPPDATA ''AnthropicClaude''' + #13#10 +
+    'if (Get-Process claude -EA SilentlyContinue | Where-Object { $_.Path -and ($_.Path.StartsWith($app, [StringComparison]::OrdinalIgnoreCase) -or ($_.Path -like ''*\WindowsApps\Claude_*'')) }) { Write-Host ''Claude Desktop is running: quit it, then run this script again.''; exit 30 }' + #13#10;
+end;
+
+{ Runs a Claude Desktop script until Claude Desktop is closed or the user gives up:
+  exit 30 shows a Retry/Cancel prompt (never in silent mode). }
+function RunWhileClaudeDesktopClosed(ScriptPath: String; RegistryName: String; Removing: Boolean): Integer;
+var
+  ResultCode: Integer;
+  Action: String;
+begin
+  if Removing then Action := 'retirer NEXUS de' else Action := 'ajouter NEXUS à';
+  repeat
+    Result := -1;
+    if not FileExists(ScriptPath) then exit;
+    if Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+        '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ScriptPath + '"',
+        '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+      Result := ResultCode;
+    if Result <> 30 then break;
+    Log(ScriptPath + ': Claude Desktop is running');
+    if IsUninstaller() then
+    begin
+      if UninstSilent then break;
+    end
+    else if WizardSilent() then break;
+  until MsgBox('Claude Desktop est ouvert. Pour ' + Action + ' sa configuration, quittez-le complètement :' + #13#10 +
+      'clic droit sur l''icône Claude près de l''horloge, puis Quitter.' + #13#10 + #13#10 +
+      'Cliquez ensuite sur Réessayer. Annuler laisse Claude Desktop inchangé.',
+      mbConfirmation, MB_RETRYCANCEL) <> IDRETRY;
+  if (Result = 0) and (RegistryName <> '') then
+    RegWriteStringValue(HKCU, InstallerRegistryPath(), RegistryName, '1');
+end;
+
 function PowerShellLauncherCmd(ScriptName: String): String;
 begin
   Result :=
@@ -1625,10 +1666,14 @@ begin
       present (cmd.exe + nexus-mcp.cmd, same pattern as mcp-search-net).
       - exit 10 : no Claude Desktop configuration folder
       - exit 20 : nexus already present in each of them (idempotent)
+      - exit 30 : Claude Desktop is running (its rewrite would drop the entry)
       - exit 0  : nexus added to at least one of them }
     ClaudeDesktopPsScript :=
       '. (Join-Path $PSScriptRoot ''nexus-json.ps1'')' + #13#10 +
       ClaudeDesktopConfigsPs() +
+      'if ($cfgs.Count -gt 0) {' + #13#10 +
+      ClaudeDesktopClosedGuardPs() +
+      '}' + #13#10 +
       'if ($cfgs.Count -eq 0) { exit 10 }' + #13#10 +
       '$e = ' + McpEntryPsLiteral(False) + #13#10 +
       '$added = 0' + #13#10 +
@@ -1754,6 +1799,7 @@ begin
   SaveStringToFile(Dir + '\disconnect-claude-desktop.ps1',
     '. (Join-Path $PSScriptRoot ''nexus-json.ps1'')' + #13#10 +
     ClaudeDesktopConfigsPs() +
+    ClaudeDesktopClosedGuardPs() +
     'foreach ($cfg in $cfgs) {' + #13#10 +
     '  if (-not (Test-Path $cfg)) { continue }' + #13#10 +
     '  $c = Get-Content $cfg -Raw | ConvertFrom-Json' + #13#10 +
@@ -1846,6 +1892,8 @@ begin
   if (ExitCode = 0) or (ExitCode = 20) then exit;
   if ExitCode = 10 then
     Failed := Failed + '  • ' + ClientLabel(Index) + ' — client introuvable' + #13#10
+  else if ExitCode = 30 then
+    Failed := Failed + '  • ' + ClientLabel(Index) + ' — application restée ouverte ; relancez integrations\connect-claude-desktop.cmd après l''avoir quittée' + #13#10
   else
     Failed := Failed + '  • ' + ClientLabel(Index) + ' — code ' + IntToStr(ExitCode) + #13#10;
 end;
@@ -2146,13 +2194,18 @@ var
 begin
   if not ClientSelected(Index) then exit;
   SetSetupStepState(ClientSection(Index), 'running', '');
-  ExitCode := RunManagedIntegration(ScriptName, RegistryName);
+  if Index = CLIENT_CLAUDE_DESKTOP then
+    ExitCode := RunWhileClaudeDesktopClosed(ExpandConstant('{app}\integrations\connect-claude-desktop.ps1'), RegistryName, False)
+  else
+    ExitCode := RunManagedIntegration(ScriptName, RegistryName);
   if ExitCode = 0 then
     SetSetupStepState(ClientSection(Index), 'done', 'connecté')
   else if ExitCode = 20 then
     SetSetupStepState(ClientSection(Index), 'skipped', 'entrée nexus déjà présente')
   else if ExitCode = 10 then
     SetSetupStepState(ClientSection(Index), 'failed', 'client introuvable')
+  else if ExitCode = 30 then
+    SetSetupStepState(ClientSection(Index), 'failed', 'application ouverte')
   else
     SetSetupStepState(ClientSection(Index), 'failed', 'code ' + IntToStr(ExitCode));
   ReportIntegration(Index, ExitCode, Failed);
@@ -2226,7 +2279,7 @@ begin
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'ClaudeDesktopManaged', Value) and (Value = '1') and
      FileExists(ExpandConstant('{app}\integrations\disconnect-claude-desktop.ps1')) then
   begin
-    Exec(PsExe, '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\integrations\disconnect-claude-desktop.ps1') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    RunWhileClaudeDesktopClosed(ExpandConstant('{app}\integrations\disconnect-claude-desktop.ps1'), '', True);
     RegDeleteValue(HKCU, InstallerRegistryPath(), 'ClaudeDesktopManaged');
   end;
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'ClaudeCliManaged', Value) and (Value = '1') then

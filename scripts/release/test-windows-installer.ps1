@@ -133,6 +133,16 @@ Write-Host '[contract] Claude Desktop is wired in every configuration folder pre
 Assert-TextContains -Text $installerSource -Needle 'function ClaudeDesktopConfigsPs(): String;' -Description 'Claude Desktop configuration folders listed once'
 Assert-TextContains -Text $installerSource -Needle "'if (`$cfgs.Count -eq 0) { exit 10 }'" -Description 'Claude Desktop connector loops over every configuration'
 
+Write-Host '[contract] Claude Desktop configuration is only written while the app is closed'
+foreach ($closedFragment in @(
+    'function ClaudeDesktopClosedGuardPs(): String;',
+    "RunWhileClaudeDesktopClosed(ExpandConstant('{app}\integrations\connect-claude-desktop.ps1'), RegistryName, False)",
+    "RunWhileClaudeDesktopClosed(ExpandConstant('{app}\integrations\disconnect-claude-desktop.ps1'), '', True)",
+    'mbConfirmation, MB_RETRYCANCEL) <> IDRETRY;'
+)) {
+    Assert-TextContains -Text $installerSource -Needle $closedFragment -Description "Claude Desktop closed guard: $closedFragment"
+}
+
 Write-Host '[contract] uninstall can remove every NEXUS entry, written or adopted'
 foreach ($uninstallFragment in @(
     'procedure WriteDisconnectScripts;',

@@ -345,6 +345,8 @@ En mode natif, la commande MCP NEXUS est `cmd.exe /d /s /c {installation}\nexus-
 
 Pendant l'installation, sous la barre de copie des fichiers, chaque étape de configuration a sa propre barre : configuration NEXUS, scripts d'intégration, lancement de Docker Desktop s'il vient d'être installé, puis un client coché par ligne. Une barre animée signale l'étape en cours. Une barre pleine verte signale une étape terminée, jaune une entrée `nexus` déjà présente, rouge un échec (client introuvable ou code de sortie). Le libellé de la ligne précise le résultat.
 
+Claude Desktop garde sa configuration en mémoire et réécrit `claude_desktop_config.json` à partir de cette copie : une entrée ajoutée pendant qu'il tourne est effacée à sa prochaine sauvegarde. Le setup n'écrit donc dans sa configuration, et ne la nettoie à la désinstallation, qu'une fois Claude Desktop fermé. S'il est ouvert, une fenêtre demande de le quitter (clic droit sur l'icône Claude près de l'horloge, puis Quitter), puis de cliquer sur Réessayer. Annuler laisse Claude Desktop inchangé ; `integrations\connect-claude-desktop.cmd` s'arrête de la même façon (code 30) tant que l'application est ouverte, et peut être relancé une fois Claude Desktop fermé.
+
 En fin d'installation, une fenêtre liste les clients cochés qui n'ont pas pu être connectés. À la désinstallation, le setup retire les entrées `nexus` qu'il a ajoutées ou qu'il s'est attribuées, et aucune autre.
 
 Le profil projet de Claude reste disponible avec `nexus-assistant-clients.cmd`.
