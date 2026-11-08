@@ -56,6 +56,8 @@ import java.util.regex.Pattern;
  */
 public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
 
+    private static final String DOCUMENTS_ARGUMENT = "documents";
+
     private static final System.Logger LOGGER = System.getLogger(LuceneSemanticSearchIndex.class.getName());
     private static final String PROVENANCE_ARGUMENT = "provenance";
     private static final String PATH_FIELD = "path";
@@ -120,7 +122,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
             SemanticIndexProvenance provenance,
             List<SemanticVectorDocument> documents) throws IOException {
         Objects.requireNonNull(projectId, "projectId");
-        Objects.requireNonNull(documents, "documents");
+        Objects.requireNonNull(documents, DOCUMENTS_ARGUMENT);
         Path root = paths.projectSemanticLuceneIndex(projectId);
         Path indexPath = indexPath(projectId);
         PrivateStoragePolicy.ensurePrivateDirectory(paths, indexPath);
@@ -184,7 +186,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
             List<SemanticVectorDocument> documents,
             Set<String> removedRelativePaths) throws IOException {
         Objects.requireNonNull(projectId, "projectId");
-        Objects.requireNonNull(documents, "documents");
+        Objects.requireNonNull(documents, DOCUMENTS_ARGUMENT);
         Objects.requireNonNull(removedRelativePaths, "removedRelativePaths");
         Path indexPath = indexPath(projectId);
         PrivateStoragePolicy.ensurePrivateDirectory(paths, indexPath);
@@ -304,7 +306,7 @@ public final class LuceneSemanticSearchIndex implements SemanticSearchIndex {
         @Override
         public void applyChanges(List<SemanticVectorDocument> documents, Set<String> removedRelativePaths)
                 throws IOException {
-            Objects.requireNonNull(documents, "documents");
+            Objects.requireNonNull(documents, DOCUMENTS_ARGUMENT);
             Objects.requireNonNull(removedRelativePaths, "removedRelativePaths");
             if (documents.isEmpty() && removedRelativePaths.isEmpty()) {
                 return;

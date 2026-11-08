@@ -108,34 +108,20 @@ final class IndexDocumentPublisher {
                 indexDocumentBatchBytes);
 
         for (ScannedFile scannedFile : scannedFiles) {
-            boolean genericSearchEligible = isGenericSearchEligible(scannedFile.category());
-            IndexedFile existing = existingFiles.get(scannedFile.relativePath());
-            boolean changed = fullRebuild
-                    || existing == null
-                    || !existing.contentHash().equals(scannedFile.contentHash());
-            boolean lexicalDocumentRequired = changed && genericSearchEligible;
-            boolean semanticDocumentRequired = semanticIndexingService.enabled()
-                    && genericSearchEligible
-                    && (semanticFullRebuild || changed);
-            if (!changed && !semanticDocumentRequired) {
+            DocumentRequirements requirements = requirementsFor(
+                    scannedFile, existingFiles.get(scannedFile.relativePath()), fullRebuild, semanticFullRebuild);
+            if (!requirements.changed() && !requirements.semantic()) {
                 continue;
             }
 
-            if ((lexicalDocumentRequired || semanticDocumentRequired)
-                    && documentBatch.shouldFlushBefore(scannedFile.sizeBytes())) {
+            if (requirements.anyDocument() && documentBatch.shouldFlushBefore(scannedFile.sizeBytes())) {
                 flushBatches(publication, documentBatch, pendingUpdates);
             }
 
-            byte[] snapshotBytes = SafeFileIO.readBytesNoFollow(scannedFile.absolutePath());
-            String snapshotHash = FileHasher.sha256(snapshotBytes);
-            if (!snapshotHash.equals(scannedFile.contentHash())) {
-                throw new IOException(
-                        "Le fichier a changé pendant l'indexation : " + scannedFile.relativePath());
-            }
-            String snapshotContent = new String(snapshotBytes, StandardCharsets.UTF_8);
+            String snapshotContent = readVerifiedSnapshot(scannedFile);
             AnalysisResult analysis = analyzeScannedFile(projectRoot, scannedFile, snapshotContent);
 
-            if (changed) {
+            if (requirements.changed()) {
                 updatedFiles++;
                 codeSourcesUpdated |= ProjectIndexingService.isCodeIntelligenceSource(scannedFile.category());
                 pendingUpdates.add(new IndexedFileUpdate(scannedFile, analysis));
@@ -144,34 +130,82 @@ final class IndexDocumentPublisher {
                 }
             }
 
-            String redactedContent = lexicalDocumentRequired || semanticDocumentRequired
-                    ? redactedOrNull(snapshotContent)
-                    : null;
-            if ((lexicalDocumentRequired || semanticDocumentRequired) && redactedContent == null) {
-                excludedPaths.add(scannedFile.relativePath());
-                diagnostics.add("INDEX_REDACTION_LIMIT: fichier exclu des index lexical et sémantique : "
-                        + scannedFile.relativePath() + " (" + OversizedSecretException.PUBLIC_REASON + ")");
-            } else if (lexicalDocumentRequired || semanticDocumentRequired) {
-                SearchDocument document = new SearchDocument(
-                        scannedFile.relativePath(),
-                        scannedFile.language(),
-                        scannedFile.category(),
-                        redactedContent,
-                        analysis.symbols());
-                documentBatch.add(
-                        document,
-                        lexicalDocumentRequired,
-                        semanticDocumentRequired,
-                        scannedFile.sizeBytes());
-                if (documentBatch.reachedLimit()) {
-                    flushBatches(publication, documentBatch, pendingUpdates);
-                }
+            if (requirements.anyDocument()) {
+                addSearchDocument(new DocumentSink(publication, documentBatch, pendingUpdates),
+                        scannedFile, analysis, snapshotContent, requirements, excludedPaths, diagnostics);
             }
         }
         flushBatches(publication, documentBatch, pendingUpdates);
         removeStaleDocuments(publication, excludedPaths, fullRebuild, semanticFullRebuild);
 
         return new PublishOutcome(updatedFiles, codeSourcesUpdated);
+    }
+
+    /** Documents dérivés qu'un fichier scanné doit produire pour cette publication. */
+    private record DocumentRequirements(boolean changed, boolean lexical, boolean semantic) {
+
+        boolean anyDocument() {
+            return lexical || semantic;
+        }
+    }
+
+    /** Destination des documents d'un lot : writers de la publication et mises à jour SQLite en attente. */
+    private record DocumentSink(
+            IndexPublication publication, IndexDocumentBatch documentBatch, PendingUpdates pendingUpdates) {
+    }
+
+    private DocumentRequirements requirementsFor(ScannedFile scannedFile, IndexedFile existing,
+            boolean fullRebuild, boolean semanticFullRebuild) {
+        boolean genericSearchEligible = isGenericSearchEligible(scannedFile.category());
+        boolean changed = fullRebuild
+                || existing == null
+                || !existing.contentHash().equals(scannedFile.contentHash());
+        boolean lexicalDocumentRequired = changed && genericSearchEligible;
+        boolean semanticDocumentRequired = semanticIndexingService.enabled()
+                && genericSearchEligible
+                && (semanticFullRebuild || changed);
+        return new DocumentRequirements(changed, lexicalDocumentRequired, semanticDocumentRequired);
+    }
+
+    /** Relit le fichier sans suivre de lien et refuse un contenu différent de celui du scan. */
+    private static String readVerifiedSnapshot(ScannedFile scannedFile) throws IOException {
+        byte[] snapshotBytes = SafeFileIO.readBytesNoFollow(scannedFile.absolutePath());
+        String snapshotHash = FileHasher.sha256(snapshotBytes);
+        if (!snapshotHash.equals(scannedFile.contentHash())) {
+            throw new IOException(
+                    "Le fichier a changé pendant l'indexation : " + scannedFile.relativePath());
+        }
+        return new String(snapshotBytes, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * Ajoute le document redigé au lot courant, ou exclut le fichier des index lexical et sémantique
+     * quand la redaction le refuse.
+     */
+    private void addSearchDocument(DocumentSink sink, ScannedFile scannedFile,
+            AnalysisResult analysis, String snapshotContent, DocumentRequirements requirements,
+            Set<String> excludedPaths, List<String> diagnostics) throws IOException {
+        String redactedContent = redactedOrNull(snapshotContent);
+        if (redactedContent == null) {
+            excludedPaths.add(scannedFile.relativePath());
+            diagnostics.add("INDEX_REDACTION_LIMIT: fichier exclu des index lexical et sémantique : "
+                    + scannedFile.relativePath() + " (" + OversizedSecretException.PUBLIC_REASON + ")");
+            return;
+        }
+        SearchDocument document = new SearchDocument(
+                scannedFile.relativePath(),
+                scannedFile.language(),
+                scannedFile.category(),
+                redactedContent,
+                analysis.symbols());
+        sink.documentBatch().add(
+                document,
+                requirements.lexical(),
+                requirements.semantic(),
+                scannedFile.sizeBytes());
+        if (sink.documentBatch().reachedLimit()) {
+            flushBatches(sink.publication(), sink.documentBatch(), sink.pendingUpdates());
+        }
     }
 
     /** Contenu redigé publié aux index dérivés, ou {@code null} si la redaction refuse le fichier. */

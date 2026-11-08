@@ -51,6 +51,7 @@ import java.util.regex.Pattern;
 
 public final class LuceneSearchIndex implements SearchIndex {
     private static final System.Logger LOGGER = System.getLogger(LuceneSearchIndex.class.getName());
+    private static final String PROJECT_ID_ARGUMENT = "projectId";
 
     /**
      * MultiFieldQueryParser expands each analyzed term across the five search fields.
@@ -138,7 +139,7 @@ public final class LuceneSearchIndex implements SearchIndex {
      */
     @Override
     public SearchIndexSession openSession(UUID projectId, boolean rebuild) throws IOException {
-        Objects.requireNonNull(projectId, "projectId");
+        Objects.requireNonNull(projectId, PROJECT_ID_ARGUMENT);
         LuceneSession session = new LuceneSession(projectId);
         if (rebuild) {
             try {
@@ -181,7 +182,7 @@ public final class LuceneSearchIndex implements SearchIndex {
 
     @Override
     public boolean isPresent(UUID projectId) throws IOException {
-        Objects.requireNonNull(projectId, "projectId");
+        Objects.requireNonNull(projectId, PROJECT_ID_ARGUMENT);
         Path indexPath = paths.projectLuceneIndex(projectId);
         if (!Files.exists(indexPath, LinkOption.NOFOLLOW_LINKS)) {
             return false;
@@ -210,7 +211,7 @@ public final class LuceneSearchIndex implements SearchIndex {
     }
 
     static void validateSearchRequest(UUID projectId, String query, int limit) {
-        Objects.requireNonNull(projectId, "projectId");
+        Objects.requireNonNull(projectId, PROJECT_ID_ARGUMENT);
         Objects.requireNonNull(query, "query");
         if (query.isBlank()) {
             throw new IllegalArgumentException("query must not be blank");

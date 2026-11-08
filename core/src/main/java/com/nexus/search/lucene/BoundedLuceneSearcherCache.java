@@ -28,6 +28,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  */
 public final class BoundedLuceneSearcherCache implements AutoCloseable {
 
+    private static final String INDEX_PATH_ARGUMENT = "indexPath";
+
     private static final String PROJECT_ID_ARGUMENT = "projectId";
 
     private final int capacity;
@@ -53,7 +55,7 @@ public final class BoundedLuceneSearcherCache implements AutoCloseable {
             Path indexPath,
             SearchOperation<T> operation) throws IOException {
         Objects.requireNonNull(projectId, PROJECT_ID_ARGUMENT);
-        Objects.requireNonNull(indexPath, "indexPath");
+        Objects.requireNonNull(indexPath, INDEX_PATH_ARGUMENT);
         Objects.requireNonNull(operation, "operation");
         ensureOpen();
 
@@ -82,7 +84,7 @@ public final class BoundedLuceneSearcherCache implements AutoCloseable {
             Path indexPath,
             SearchOperation<T> operation) throws IOException {
         Objects.requireNonNull(projectId, PROJECT_ID_ARGUMENT);
-        Objects.requireNonNull(indexPath, "indexPath");
+        Objects.requireNonNull(indexPath, INDEX_PATH_ARGUMENT);
         Objects.requireNonNull(operation, "operation");
         ensureOpen();
         ProjectSearcher searcher = searchers.get(projectId);
@@ -105,7 +107,7 @@ public final class BoundedLuceneSearcherCache implements AutoCloseable {
     /** A recovery may publish a different directory while this cache is idle. */
     public void refreshIfCached(UUID projectId, Path indexPath) throws IOException {
         Objects.requireNonNull(projectId, PROJECT_ID_ARGUMENT);
-        Objects.requireNonNull(indexPath, "indexPath");
+        Objects.requireNonNull(indexPath, INDEX_PATH_ARGUMENT);
         ensureOpen();
         ProjectSearcher searcher = searchers.get(projectId);
         if (searcher != null && !searcher.indexPath.equals(indexPath)) {

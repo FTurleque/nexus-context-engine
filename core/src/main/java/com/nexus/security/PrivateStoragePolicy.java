@@ -36,6 +36,8 @@ import java.util.Set;
  */
 public final class PrivateStoragePolicy {
 
+    private static final String PATHS_ARGUMENT = "paths";
+
     private static final System.Logger LOGGER = System.getLogger(PrivateStoragePolicy.class.getName());
 
     private static final Set<PosixFilePermission> PRIVATE_DIRECTORY_PERMISSIONS =
@@ -56,7 +58,7 @@ public final class PrivateStoragePolicy {
 
     /** Crée les répertoires persistants NEXUS et les rend privés sur les systèmes POSIX. */
     public static void ensurePrivateStorage(NexusPaths paths) throws IOException {
-        Objects.requireNonNull(paths, "paths");
+        Objects.requireNonNull(paths, PATHS_ARGUMENT);
         ensurePrivateDirectory(paths, paths.home());
         ensurePrivateDirectory(paths, paths.indexesDirectory());
         ensurePrivateDirectory(paths, paths.locksDirectory());
@@ -69,7 +71,7 @@ public final class PrivateStoragePolicy {
      * les écritures Lucene hors du stockage NEXUS.
      */
     public static void ensurePrivateDirectory(NexusPaths paths, Path directory) throws IOException {
-        Path home = Objects.requireNonNull(paths, "paths").home();
+        Path home = Objects.requireNonNull(paths, PATHS_ARGUMENT).home();
         Path normalized = requireInsideHome(home, directory);
         ensureHomeDirectory(home);
         if (normalized.equals(home)) {
@@ -93,7 +95,7 @@ public final class PrivateStoragePolicy {
      * cible.</p>
      */
     public static void ensurePrivateFile(NexusPaths paths, Path file) throws IOException {
-        Path normalized = requireInsideHome(Objects.requireNonNull(paths, "paths").home(), file);
+        Path normalized = requireInsideHome(Objects.requireNonNull(paths, PATHS_ARGUMENT).home(), file);
         Path parent = normalized.getParent();
         if (parent == null) {
             throw new IOException("Parent du fichier NEXUS introuvable : " + normalized);
@@ -114,7 +116,7 @@ public final class PrivateStoragePolicy {
 
     /** Rend un fichier persistant privé lorsque le système de fichiers expose les permissions POSIX. */
     public static void hardenPrivateFile(NexusPaths paths, Path file) throws IOException {
-        Path normalized = requireInsideHome(Objects.requireNonNull(paths, "paths").home(), file);
+        Path normalized = requireInsideHome(Objects.requireNonNull(paths, PATHS_ARGUMENT).home(), file);
         validateRegularFile(normalized);
         applyPosixPermissions(normalized, PRIVATE_FILE_PERMISSIONS);
         verifyAclPrivacy(normalized);

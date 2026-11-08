@@ -12,14 +12,17 @@ final class NoopSemanticIndexing implements SemanticIndexing {
     private static final Session NOOP_SESSION = new Session() {
         @Override
         public void applyChanges(List<SearchDocument> documents, Set<String> removedRelativePaths) {
+            // Indexation sémantique désactivée : les changements ne produisent aucun index dérivé.
         }
 
         @Override
         public void commit() {
+            // Rien à valider : aucune écriture n'a été préparée.
         }
 
         @Override
         public void close() {
+            // Aucune ressource ouverte.
         }
     };
 

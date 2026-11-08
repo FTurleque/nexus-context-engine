@@ -158,6 +158,12 @@ public final class SemanticSearchStrategy implements SearchStrategy {
         } catch (IOException exception) {
             return degradedIndex(project, exception);
         }
+        return toCandidates(project, hits, limit);
+    }
+
+    /** Candidats éligibles au score positif, dans l'ordre de l'index, bornés à {@code limit}. */
+    private static List<SearchCandidate> toCandidates(
+            ProjectDescriptor project, List<SemanticSearchHit> hits, int limit) {
         List<SearchCandidate> candidates = new ArrayList<>(hits.size());
         for (SemanticSearchHit hit : hits) {
             if (!isGenericSearchEligible(hit.category()) || hit.score() <= 0.0d) {

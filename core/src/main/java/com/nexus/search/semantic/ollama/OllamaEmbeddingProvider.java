@@ -220,11 +220,7 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
         if (texts.isEmpty()) {
             return List.of();
         }
-        for (String text : texts) {
-            if (text == null || text.isBlank()) {
-                throw new IllegalArgumentException("embedding text must not be blank");
-            }
-        }
+        requireNonBlank(texts);
 
         String requestBody = objectMapper.writeValueAsString(Map.of(
                 "model", model,
@@ -235,6 +231,22 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
                 .build();
 
+        HttpResponse<byte[]> response = send(request, callTimeout);
+        String responseBody = new String(response.body(), StandardCharsets.UTF_8);
+        requireSuccessfulStatus(response.statusCode(), responseBody);
+        return parseEmbeddings(responseBody, texts.size());
+    }
+
+    private static void requireNonBlank(List<String> texts) {
+        for (String text : texts) {
+            if (text == null || text.isBlank()) {
+                throw new IllegalArgumentException("embedding text must not be blank");
+            }
+        }
+    }
+
+    /** Envoie la requête avec un corps borné et annule l'échange quelle que soit l'issue. */
+    private HttpResponse<byte[]> send(HttpRequest request, Duration callTimeout) throws IOException {
         AtomicReference<BoundedBodySubscriber> subscriber = new AtomicReference<>();
         AtomicBoolean cancelled = new AtomicBoolean();
         var exchange = httpClient.sendAsync(request, info -> {
@@ -243,10 +255,9 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
             if (cancelled.get()) body.cancel();
             return body;
         });
-        HttpResponse<byte[]> response;
         try {
             // Cette future ne termine qu'après le corps entier, contrairement à ofInputStream.
-            response = exchange.get(callTimeout.toNanos(), TimeUnit.NANOSECONDS);
+            return exchange.get(callTimeout.toNanos(), TimeUnit.NANOSECONDS);
         } catch (TimeoutException exception) {
             throw timeoutFailure(exception, callTimeout);
         } catch (ExecutionException exception) {
@@ -264,28 +275,31 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
             if (body != null) body.cancel();
             exchange.cancel(true);
         }
-        String responseBody = new String(response.body(), StandardCharsets.UTF_8);
+    }
 
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            String message = "Ollama /api/embed a répondu HTTP " + response.statusCode()
+    private static void requireSuccessfulStatus(int statusCode, String responseBody) throws IOException {
+        if (statusCode < 200 || statusCode >= 300) {
+            String message = "Ollama /api/embed a répondu HTTP " + statusCode
                     + " : " + abbreviate(responseBody, 500);
-            if (response.statusCode() == 429 || response.statusCode() >= 500) {
+            if (statusCode == 429 || statusCode >= 500) {
                 throw new EmbeddingProviderUnavailableException(message);
             }
             throw new IOException(message);
         }
+    }
 
+    private List<float[]> parseEmbeddings(String responseBody, int expectedCount) throws IOException {
         JsonNode root = objectMapper.readTree(responseBody);
         if (root == null) {
             throw new IOException("Réponse Ollama invalide : body JSON vide pour /api/embed");
         }
         JsonNode embeddings = root.path("embeddings");
-        if (!embeddings.isArray() || embeddings.size() != texts.size()) {
+        if (!embeddings.isArray() || embeddings.size() != expectedCount) {
             throw new IOException(
                     "Réponse Ollama invalide : " + embeddings.size()
-                            + " embedding(s) pour " + texts.size() + " entrée(s)");
+                            + " embedding(s) pour " + expectedCount + " entrée(s)");
         }
-        List<float[]> vectors = new ArrayList<>(texts.size());
+        List<float[]> vectors = new ArrayList<>(expectedCount);
         for (int vectorIndex = 0; vectorIndex < embeddings.size(); vectorIndex++) {
             vectors.add(parseVector(embeddings.get(vectorIndex), vectorIndex));
         }

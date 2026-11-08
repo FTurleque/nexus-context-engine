@@ -211,85 +211,127 @@ public final class FederatedContextService {
             int tokenBudget,
             boolean explain,
             List<String> excluded) {
-        List<FederatedContextItem> selected = new ArrayList<>();
-        List<FederatedContextItem> deferred = new ArrayList<>();
-        Map<ContentKey, UUID> seen = new LinkedHashMap<>();
-        Map<String, Integer> selectedTokensByProject = new LinkedHashMap<>();
-        Map<String, Integer> selectedItemsByProject = new LinkedHashMap<>();
-        boolean[] fairFloorClosed = new boolean[scope.size()];
-        int[] crossProjectDuplicates = {0};
-        int selectedTokens = 0;
-        int maxItems = collection.perProjectItems().stream().mapToInt(List::size).max().orElse(0);
-
-        for (int itemIndex = 0; itemIndex < maxItems; itemIndex++) {
-            for (int projectIndex = 0; projectIndex < scope.size(); projectIndex++) {
-                List<FederatedContextItem> projectItems = collection.perProjectItems().get(projectIndex);
-                if (itemIndex >= projectItems.size()) {
-                    continue;
-                }
-                FederatedContextItem federated = projectItems.get(itemIndex);
-                ContextItem item = federated.item();
-                String projectId = federated.project().id().toString();
-
-                if (fairFloorClosed[projectIndex]) {
-                    deferred.add(federated);
-                    continue;
-                }
-
-                int fairAllocation = collection.allocatedByProject().get(projectId);
-                int projectTokens = selectedTokensByProject.getOrDefault(projectId, 0);
-                if (projectTokens + item.estimatedTokens() > fairAllocation
-                        || selectedTokens + item.estimatedTokens() > tokenBudget) {
-                    fairFloorClosed[projectIndex] = true;
-                    deferred.add(federated);
-                    continue;
-                }
-                if (!retainUnique(federated, seen, excluded, explain, crossProjectDuplicates)) {
-                    continue;
-                }
-
-                selected.add(federated);
-                selectedTokens += item.estimatedTokens();
-                selectedTokensByProject.merge(projectId, item.estimatedTokens(), Integer::sum);
-                selectedItemsByProject.merge(projectId, 1, Integer::sum);
-            }
-        }
+        SelectionAccumulator accumulator = new SelectionAccumulator(explain, excluded);
+        List<FederatedContextItem> deferred = selectFairFloor(scope, collection, tokenBudget, accumulator);
 
         int refillTokens = 0;
         int refillItems = 0;
         for (FederatedContextItem federated : deferred) {
             ContextItem item = federated.item();
-            if (selectedTokens + item.estimatedTokens() > tokenBudget) {
+            if (!accumulator.fitsGlobalBudget(item, tokenBudget)) {
                 if (explain) {
                     excluded.add(federated.project().name() + ": " + item.path()
                             + " différé puis exclu : budget global restant insuffisant");
                 }
                 continue;
             }
-            if (!retainUnique(federated, seen, excluded, explain, crossProjectDuplicates)) {
+            if (!accumulator.retainUnique(federated)) {
                 continue;
             }
 
-            selected.add(federated);
-            selectedTokens += item.estimatedTokens();
+            accumulator.accept(federated);
             refillTokens += item.estimatedTokens();
             refillItems++;
-            String projectId = federated.project().id().toString();
-            selectedTokensByProject.merge(projectId, item.estimatedTokens(), Integer::sum);
-            selectedItemsByProject.merge(projectId, 1, Integer::sum);
         }
 
-        if (selectedTokens > tokenBudget) {
+        if (accumulator.selectedTokens > tokenBudget) {
             throw new IllegalStateException("Le contexte fédéré a dépassé son budget global");
         }
         return new Selection(
-                selected,
-                selectedTokens,
-                selectedTokensByProject,
-                selectedItemsByProject,
+                accumulator.selected,
+                accumulator.selectedTokens,
+                accumulator.selectedTokensByProject,
+                accumulator.selectedItemsByProject,
                 refillTokens,
                 refillItems,
-                crossProjectDuplicates[0]);
+                accumulator.crossProjectDuplicates[0]);
+    }
+
+    /**
+     * Premier passage en tourniquet : chaque projet reçoit ses items dans l'ordre tant que son
+     * plancher équitable et le budget global le permettent. Retourne les items différés.
+     */
+    private static List<FederatedContextItem> selectFairFloor(
+            List<ProjectDescriptor> scope,
+            ProjectCollection collection,
+            int tokenBudget,
+            SelectionAccumulator accumulator) {
+        List<FederatedContextItem> deferred = new ArrayList<>();
+        boolean[] fairFloorClosed = new boolean[scope.size()];
+        int maxItems = collection.perProjectItems().stream().mapToInt(List::size).max().orElse(0);
+
+        for (int itemIndex = 0; itemIndex < maxItems; itemIndex++) {
+            for (int projectIndex = 0; projectIndex < scope.size(); projectIndex++) {
+                List<FederatedContextItem> projectItems = collection.perProjectItems().get(projectIndex);
+                if (itemIndex < projectItems.size()) {
+                    offerFairShare(projectItems.get(itemIndex), projectIndex, fairFloorClosed, deferred,
+                            collection, tokenBudget, accumulator);
+                }
+            }
+        }
+        return deferred;
+    }
+
+    /** Retient un item dans le plancher équitable de son projet, ou le diffère quand ce plancher est fermé. */
+    private static void offerFairShare(
+            FederatedContextItem federated,
+            int projectIndex,
+            boolean[] fairFloorClosed,
+            List<FederatedContextItem> deferred,
+            ProjectCollection collection,
+            int tokenBudget,
+            SelectionAccumulator accumulator) {
+        if (fairFloorClosed[projectIndex]) {
+            deferred.add(federated);
+            return;
+        }
+        ContextItem item = federated.item();
+        String projectId = federated.project().id().toString();
+        int fairAllocation = collection.allocatedByProject().get(projectId);
+        int projectTokens = accumulator.selectedTokensByProject.getOrDefault(projectId, 0);
+        if (projectTokens + item.estimatedTokens() > fairAllocation
+                || !accumulator.fitsGlobalBudget(item, tokenBudget)) {
+            fairFloorClosed[projectIndex] = true;
+            deferred.add(federated);
+            return;
+        }
+        if (accumulator.retainUnique(federated)) {
+            accumulator.accept(federated);
+        }
+    }
+
+    /** État mutable de la sélection fédérée, partagé entre le plancher équitable et la redistribution. */
+    private static final class SelectionAccumulator {
+        private final List<FederatedContextItem> selected = new ArrayList<>();
+        private final Map<ContentKey, UUID> seen = new LinkedHashMap<>();
+        private final Map<String, Integer> selectedTokensByProject = new LinkedHashMap<>();
+        private final Map<String, Integer> selectedItemsByProject = new LinkedHashMap<>();
+        private final int[] crossProjectDuplicates = {0};
+        private final boolean explain;
+        private final List<String> excluded;
+        private int selectedTokens;
+
+        SelectionAccumulator(boolean explain, List<String> excluded) {
+            this.explain = explain;
+            this.excluded = excluded;
+        }
+
+        boolean retainUnique(FederatedContextItem federated) {
+            return FederatedContextService.retainUnique(federated, seen, excluded, explain, crossProjectDuplicates);
+        }
+
+        boolean fitsGlobalBudget(ContextItem item, int tokenBudget) {
+            return selectedTokens + item.estimatedTokens() <= tokenBudget;
+        }
+
+        void accept(FederatedContextItem federated) {
+            int tokens = federated.item().estimatedTokens();
+            String projectId = federated.project().id().toString();
+            selected.add(federated);
+            selectedTokens += tokens;
+            selectedTokensByProject.merge(projectId, tokens, Integer::sum);
+            selectedItemsByProject.merge(projectId, 1, Integer::sum);
+        }
     }
 
     /** Étape 4 : métadonnées de la réponse fédérée. */
