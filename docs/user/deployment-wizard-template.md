@@ -421,7 +421,7 @@ claude_code:
   generator_project_profile_retained: true
 
 claude_desktop:
-  action: "add nexus to mcpServers of claude_desktop_config.json"
+  action: "add nexus to mcpServers of every claude_desktop_config.json present"
   config_lookup: ["%LOCALAPPDATA%/Packages/Claude_*/LocalCache/Roaming/Claude", "%APPDATA%/Claude"]
   existing_entry_policy: preserve
 

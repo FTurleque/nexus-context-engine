@@ -129,6 +129,10 @@ foreach ($clientConnector in @('connect-copilot-cli.cmd', 'connect-copilot-jetbr
     Assert-TextContains -Text $installerSource -Needle ", '$clientConnector', '" -Description "client connector $clientConnector"
 }
 
+Write-Host '[contract] Claude Desktop is wired in every configuration folder present'
+Assert-TextContains -Text $installerSource -Needle 'function ClaudeDesktopConfigsPs(): String;' -Description 'Claude Desktop configuration folders listed once'
+Assert-TextContains -Text $installerSource -Needle "'if (`$cfgs.Count -eq 0) { exit 10 }'" -Description 'Claude Desktop connector loops over every configuration'
+
 Write-Host '[contract] uninstall can remove every NEXUS entry, written or adopted'
 foreach ($uninstallFragment in @(
     'procedure WriteDisconnectScripts;',
@@ -198,6 +202,15 @@ try {
     }
     if ($probeText -notmatch '(?ms)^\[CopilotJetBrains\]\s*Available=1\s*Configured=1\s*Owned=0') {
         throw 'Client detector adopts a nexus entry that launches another tool.'
+    }
+
+    # A leftover Microsoft Store folder without nexus beside the standard one: still to configure.
+    New-Item -ItemType Directory -Force -Path (Join-Path $probeHome 'Local\Packages\Claude_probe\LocalCache\Roaming\Claude') | Out-Null
+    & (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $detector -OutputPath $probeIni | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Client detector failed with exit code $LASTEXITCODE" }
+    $probeText = [IO.File]::ReadAllText($probeIni, [Text.Encoding]::Unicode)
+    if ($probeText -notmatch '(?ms)^\[ClaudeDesktop\]\s*Available=1\s*Configured=0') {
+        throw 'Client detector reports Claude Desktop configured while one of its configuration folders lacks nexus.'
     }
 }
 finally {
