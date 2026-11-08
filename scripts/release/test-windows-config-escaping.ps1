@@ -31,7 +31,7 @@ foreach ($required in @(
     'Le mode loopback-forward exige que',
     '"args": ["--enable-native-access=ALL-UNNAMED", "-jar"',
     'args = ["--enable-native-access=ALL-UNNAMED", "-jar"',
-    ' --enable-native-access=ALL-UNNAMED -jar '
+    "PowerShellSingleQuote(ExpandConstant('{app}\nexus-mcp.cmd'))"
 )) {
     if ($hardened.IndexOf($required, [StringComparison]::Ordinal) -lt 0) {
         throw "Generated installer hardening contract missing: $required"
