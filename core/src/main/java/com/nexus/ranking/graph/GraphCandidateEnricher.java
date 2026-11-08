@@ -25,12 +25,12 @@ public final class GraphCandidateEnricher implements CandidateEnricher {
     private static final double SECOND_HOP_FACTOR = 0.35d;
 
     private final IndexRepository indexRepository;
-    private final ProjectGraphBuilder graphBuilder;
+    private final GraphNeighborhoodProjection neighborhood;
     private final CandidateMerger candidateMerger;
 
     public GraphCandidateEnricher(IndexRepository indexRepository) {
         this.indexRepository = Objects.requireNonNull(indexRepository, "indexRepository");
-        this.graphBuilder = new ProjectGraphBuilder(indexRepository);
+        this.neighborhood = new GraphNeighborhoodProjection(indexRepository);
         this.candidateMerger = new CandidateMerger();
     }
 
@@ -61,7 +61,7 @@ public final class GraphCandidateEnricher implements CandidateEnricher {
             return Map.of();
         }
 
-        Map<String, Set<String>> firstHop = graphBuilder.neighbors(project.id(), seedScores.keySet());
+        Map<String, Set<String>> firstHop = neighborhood.neighbors(project.id(), seedScores.keySet());
         Map<String, Double> firstHopBaseScores = new LinkedHashMap<>();
         Map<String, Double> scores = new LinkedHashMap<>();
         firstHop.forEach((seedPath, neighbors) -> {
@@ -76,7 +76,7 @@ public final class GraphCandidateEnricher implements CandidateEnricher {
             return Map.copyOf(scores);
         }
 
-        Map<String, Set<String>> secondHop = graphBuilder.neighbors(project.id(), firstHopBaseScores.keySet());
+        Map<String, Set<String>> secondHop = neighborhood.neighbors(project.id(), firstHopBaseScores.keySet());
         secondHop.forEach((firstHopPath, neighbors) -> {
             double originatingSeedScore = firstHopBaseScores.getOrDefault(firstHopPath, 0.0d);
             for (String neighbor : neighbors) {

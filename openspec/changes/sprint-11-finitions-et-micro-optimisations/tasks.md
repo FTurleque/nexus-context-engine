@@ -2,9 +2,9 @@
 
 ## 1. Graphe dérivé : documentation, code mort et décision
 
-- [ ] 1.1 `AUD-QUA-02` — Réécrire la section « Graphe dérivé par génération » de `docs/developer/search-ranking.md` (projection bornée `findGraphNeighbors`, `MAX_NEIGHBOR_EDGES`, aucun cache par génération) ; ajouter au contrat documentaire le refus de « ProjectGraph cache » ; vérifier par `bash .claude/scripts/contracts.sh`
-- [ ] 1.2 `AUD-QUA-02` — Supprimer `core/src/main/java/com/nexus/ranking/graph/ProjectGraph.java` et renommer `ProjectGraphBuilder` en `GraphNeighborhoodProjection` (appelants, `NexusApplication`, test `ProjectGraphBuilderProjectionTest` renommé) ; vérifier par `git grep -n "ProjectGraph\b\|ProjectGraphBuilder" -- '*.java'` vide puis `./mvnw -B -ntp -pl core test -Dtest='GraphNeighborhoodProjection*,GraphCandidateEnricher*,SqliteGraphNeighborhoodProjectionTest' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
-- [ ] 1.3 `AUD-QUA-02` — Nouvel ADR (skill `nexus-adr`) qui complète ADR-0026 : voisinage projeté à la demande, borné, sans matérialisation ni cache ; index du registre et vue arc42 des décisions mis à jour ; vérifier par `bash .claude/scripts/contracts.sh`
+- [x] 1.1 `AUD-QUA-02` — Réécrire la section « Graphe dérivé par génération » de `docs/developer/search-ranking.md` (projection bornée `findGraphNeighbors`, `MAX_NEIGHBOR_EDGES`, aucun cache par génération) ; ajouter au contrat documentaire le refus de « ProjectGraph cache » ; vérifier par `bash .claude/scripts/contracts.sh`
+- [x] 1.2 `AUD-QUA-02` — Supprimer `core/src/main/java/com/nexus/ranking/graph/ProjectGraph.java` et renommer `ProjectGraphBuilder` en `GraphNeighborhoodProjection` (appelants, `NexusApplication`, test `ProjectGraphBuilderProjectionTest` renommé) ; vérifier par `git grep -n "ProjectGraph\b\|ProjectGraphBuilder" -- '*.java'` vide puis `./mvnw -B -ntp -pl core test -Dtest='GraphNeighborhoodProjection*,GraphCandidateEnricher*,SqliteGraphNeighborhoodProjectionTest' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
+- [x] 1.3 `AUD-QUA-02` — Nouvel ADR (skill `nexus-adr`) qui complète ADR-0026 : voisinage projeté à la demande, borné, sans matérialisation ni cache ; index du registre et vue arc42 des décisions mis à jour ; vérifier par `bash .claude/scripts/contracts.sh`
 
 ## 2. Watch item FTS5 trigram
 
@@ -32,7 +32,7 @@
 
 ## 7. Voisinage graphe sortant
 
-- [ ] 7.1 `AUD-PRF-16` — Paginer `OUTGOING_GRAPH_SQL` par clé `(r.source_ref, r.target_ref) > (?, ?)` et reprendre la boucle depuis le dernier couple lu ; couvrir un cas de plusieurs pages d'imports non résolus ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='SqliteGraphNeighborhoodProjectionTest,SqliteGraphQueryPlanTest' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true` et `git grep -n "OFFSET" -- core/src/main/java/com/nexus/persistence/sqlite/SqliteGraphQueries.java` vide
+- [x] 7.1 `AUD-PRF-16` — Paginer `OUTGOING_GRAPH_SQL` par clé `(r.source_ref, r.target_ref) > (?, ?)` et reprendre la boucle depuis le dernier couple lu ; couvrir un cas de plusieurs pages d'imports non résolus ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='SqliteGraphNeighborhoodProjectionTest,SqliteGraphQueryPlanTest' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true` et `git grep -n "OFFSET" -- core/src/main/java/com/nexus/persistence/sqlite/SqliteGraphQueries.java` vide
 
 ## 8. Motifs compilés
 
