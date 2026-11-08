@@ -55,7 +55,8 @@ Assert-TextContains -Text $hardenedSource -Needle 'function DotEnvQuoted(Value: 
 Assert-TextContains -Text $hardenedSource -Needle 'function IsLoopbackRestHost(Value: String): Boolean;' -Description 'wizard loopback-only REST policy'
 Assert-TextContains -Text $hardenedSource -Needle 'function VerifyFileSha256(FilePath: String; ExpectedSha256: String): Boolean;' -Description 'external prerequisite SHA-256 verifier'
 Assert-TextContains -Text $hardenedSource -Needle 'CmdEnvEscape(RuntimePage.Values[0])' -Description 'NEXUS_HOME batch escaping'
-Assert-TextContains -Text $hardenedSource -Needle 'DotEnvQuoted(DockerPath(RuntimePage.Values[0]))' -Description 'Docker home path dotenv quoting'
+Assert-TextContains -Text $hardenedSource -Needle "'NEXUS_HOME_BIND=nexus-data' + #13#10 +" -Description 'Docker home uses the named Compose volume'
+Assert-TextContains -Text $hardenedSource -Needle 'DotEnvQuoted(OllamaPage.Values[0])' -Description 'Docker Ollama URL dotenv quoting'
 Assert-TextContains -Text $hardenedSource -Needle 'NEXUS_REST_EXPOSURE_MODE=loopback-forward' -Description 'explicit Docker REST exposure mode'
 if ($hardenedSource.IndexOf("'set `"NEXUS_HOME=' + RuntimePage.Values[0]", [StringComparison]::Ordinal) -ge 0) {
     throw 'Generated installer source still writes raw NEXUS_HOME into batch configuration.'
@@ -127,6 +128,12 @@ Assert-TextContains -Text $installerSource -Needle "ExtractTemporaryFile('detect
 foreach ($clientConnector in @('connect-copilot-cli.cmd', 'connect-copilot-jetbrains.cmd', 'connect-claude-cli.cmd', 'connect-claude-desktop.cmd', 'connect-codex-cli.cmd', 'connect-codex-desktop.cmd')) {
     Assert-TextContains -Text $installerSource -Needle ", '$clientConnector', '" -Description "client connector $clientConnector"
 }
+
+Write-Host '[contract] Docker data live in a named volume and the Ollama URL is resolved by NEXUS'
+Assert-TextContains -Text $installerSource -Needle "'NEXUS_HOME_BIND=nexus-data' + #13#10 +" -Description 'Docker NEXUS_HOME uses the named volume, not a Windows bind mount'
+Assert-TextContains -Text $installerSource -Needle "'NEXUS_OLLAMA_BASE_URL=' + OllamaPage.Values[0] + #13#10 +" -Description 'Docker receives the Ollama URL as entered; NEXUS adapts loopback after its policy check'
+$composeTemplate = [IO.File]::ReadAllText((Join-Path $repo 'packaging\docker\docker-compose.yml.template'), [Text.Encoding]::UTF8)
+Assert-TextContains -Text $composeTemplate -Needle 'name: "${NEXUS_DOCKER_DATA_VOLUME:-nexus-context-engine-data}"' -Description 'Compose declares the nexus-data named volume'
 
 Write-Host '[contract] reinstalling keeps the managed container port and moves the official image to this version'
 Assert-TextContains -Text $installerSource -Needle 'ManagedContainerPublishesPort(DockerPage.Values[1], DockerPage.Values[2], PortValue)' -Description 'managed NEXUS container port is not relocated on reinstall'

@@ -322,9 +322,10 @@ repository_bind:
   access: read-only
 
 nexus_home_bind:
-  source: "runtime.nexus_home"
+  source: "docker volume nexus-data (name: nexus-context-engine-data)"
   container_path: "/data/nexus"
   access: read-write
+  shared_with_native: false
 
 restart_policy:
   type: enum
@@ -602,13 +603,13 @@ integrations\generic-mcp.json
 ## `.env` Docker généré
 
 ```dotenv
-NEXUS_DOCKER_IMAGE=ghcr.io/fturleque/nexus-context-engine:0.2.0
-NEXUS_DOCKER_CONTAINER=nexus
+NEXUS_DOCKER_IMAGE=ghcr.io/fturleque/nexus-context-engine:<version de l'installeur>
+NEXUS_DOCKER_CONTAINER=nexus-context-engine
 NEXUS_DOCKER_RESTART_POLICY=unless-stopped
 NEXUS_DOCKER_BIND_ADDRESS=127.0.0.1
 NEXUS_DOCKER_HOST_PORT=8080
 NEXUS_DOCKER_CONTAINER_PORT=8080
-NEXUS_HOME_BIND=C:/Users/<user>/.nexus
+NEXUS_HOME_BIND=nexus-data
 NEXUS_REPOSITORY_BIND=N:/workspace-dev
 NEXUS_SEMANTIC_PROVIDER=
 NEXUS_OLLAMA_BASE_URL=http://127.0.0.1:11434
