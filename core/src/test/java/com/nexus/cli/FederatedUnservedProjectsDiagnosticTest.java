@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * BE-0064 : le diagnostic des projets non servis sort de la projection publique unique, dans
+ * BE-0081 : le diagnostic des projets non servis sort de la projection publique unique, dans
  * l'ordre du scope ; la CLI le sérialise tel quel (REST et MCP utilisent la même projection et
  * leurs tests de parité vérifient la clé {@code unservedProjects} du contrat).
  */

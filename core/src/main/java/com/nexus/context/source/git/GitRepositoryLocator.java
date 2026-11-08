@@ -25,7 +25,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Fabrique unique des dépôts Git qui alimentent le contexte (BE-0067, complète BE-0035).
+ * Fabrique unique des dépôts Git qui alimentent le contexte (BE-0070).
  *
  * <p>La découverte remonte depuis la racine réelle du projet jusqu'au premier répertoire qui
  * contient une entrée {@code .git}. Un dépôt trouvé à la racine du projet est retenu sans

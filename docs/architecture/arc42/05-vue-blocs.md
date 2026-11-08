@@ -174,7 +174,7 @@ end_line >= start_line
 
 ## 5.6 Packages du cœur et sens de dépendance
 
-Le graphe des packages de `com.nexus` est acyclique ([ARCH-0063](../adr/ARCH-0063-casser-les-cycles-de-packages-du-coeur-par-des-packages-de-modele-feuilles.md)) ; le test d'architecture le vérifie ([ARCH-0059](../adr/ARCH-0059-verifier-les-frontieres-du-coeur-par-un-test-d-architecture.md)). Une flèche va du package dépendant vers le package dont il dépend ; le diagramme montre les sens nommés par la décision, pas toutes les arêtes.
+Le graphe des packages de `com.nexus` est acyclique ([ARCH-0076](../adr/ARCH-0076-garder-un-coeur-java-sans-framework-acyclique-et-verifie.md)) ; le test d'architecture le vérifie ([ARCH-0076](../adr/ARCH-0076-garder-un-coeur-java-sans-framework-acyclique-et-verifie.md)). Une flèche va du package dépendant vers le package dont il dépend ; le diagramme montre les sens nommés par la décision, pas toutes les arêtes.
 
 ```mermaid
 flowchart TD

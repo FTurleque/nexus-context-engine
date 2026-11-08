@@ -256,8 +256,8 @@ Visible dès que Docker est sélectionné.
 Valeurs par défaut :
 
 ```text
-Image                ghcr.io/fturleque/nexus-context-engine:0.2.0
-Conteneur            nexus
+Image                ghcr.io/fturleque/nexus-context-engine:<version de l'installeur>
+Conteneur            nexus-context-engine
 Adresse hôte         127.0.0.1
 Port REST hôte       8080
 Port REST conteneur  8080
@@ -265,7 +265,9 @@ Repository           %USERPROFILE%
 Restart policy       unless-stopped
 ```
 
-Le port hôte est entièrement personnalisable. Avant de quitter l'écran, le wizard tente réellement de réserver temporairement ce port TCP sur l'adresse hôte choisie. S'il est déjà utilisé, il teste automatiquement les ports suivants jusqu'à trouver le premier disponible, met le champ à jour et informe l'utilisateur du changement.
+Lors d'une réinstallation ou d'une mise à jour, le wizard reprend les valeurs de l'installation précédente, sauf l'image officielle `ghcr.io/fturleque/nexus-context-engine` : elle passe toujours à la version de l'installeur. Une image personnalisée (autre registre ou dépôt) est conservée telle quelle.
+
+Le port hôte est entièrement personnalisable. Avant de quitter l'écran, le wizard tente réellement de réserver temporairement ce port TCP sur l'adresse hôte choisie. S'il est déjà utilisé, il teste automatiquement les ports suivants jusqu'à trouver le premier disponible, met le champ à jour et informe l'utilisateur du changement. Il garde le port demandé quand c'est le conteneur NEXUS de l'installation précédente qui le publie déjà (`docker port`) : ce conteneur est recréé par l'installation et reprend son port.
 
 Exemple :
 
@@ -294,7 +296,9 @@ Le repository choisi est monté :
 <chemin Windows> -> /workspace:ro
 ```
 
-`NEXUS_HOME` est monté en lecture/écriture sous `/data/nexus`.
+Les données du conteneur (`/data/nexus`) vivent dans le volume Docker nommé `nexus-context-engine-data`, distinct du `NEXUS_HOME` natif. Un dossier Windows monté dans un conteneur refuse le `chmod` avec lequel NEXUS rend son stockage privé, et une base SQLite ne se partage pas sans risque entre Windows et Linux. Les projets indexés en natif ne sont donc pas visibles du conteneur, et inversement. Le volume est conservé à la désinstallation ; `docker volume rm nexus-context-engine-data` le supprime.
+
+Une URL Ollama de bouclage (`http://127.0.0.1:11434`) est écrite telle quelle dans le `.env` : NEXUS la valide puis la redirige lui-même vers `host.docker.internal`.
 
 ### Démarrage Docker généré
 
@@ -309,81 +313,41 @@ Avant `docker compose up -d`, le script :
 
 Si l'onboarding Docker Desktop/WSL 2 n'est pas terminé dans ce délai, le script se termine avec un code non nul et peut être relancé ensuite.
 
-## Écran 9 — Intégrations assistants IA
+## Écran 9 — Clients IA
 
-La même matrice est utilisée partout dans NEXUS : wizard, générateur standalone et documentation.
+À l'arrivée sur l'écran, le setup lance une détection (une dizaine de secondes) et affiche une ligne par client, avec son état en dessous :
 
-### GitHub Copilot CLI
+| État affiché | Case | Effet |
+|---|---|---|
+| `Détecté` | active, décochée | cochez-la pour connecter NEXUS à ce client |
+| `Détecté — déjà configuré` | cochée, grisée | le client déclare déjà un serveur MCP `nexus` : le setup n'y touche pas |
+| `Non disponible — …` | grisée | le client est absent ; la raison est indiquée |
 
-Si `copilot` est détecté et qu'aucune entrée `nexus` n'existe :
+La détection lit la configuration de chaque client sans la modifier. Pour une CLI, elle vérifie aussi que la commande `mcp` répond, avec un délai maximal de 5 secondes par appel. Si la détection échoue, toutes les cases restent actives : chaque script de connexion vérifie lui-même la présence du client pendant l'installation.
 
-```text
-copilot mcp add nexus --tools "*" -- <commande MCP NEXUS>
-```
+Une entrée `nexus` existante n'est jamais écrasée. Pour faire pointer un client vers une nouvelle installation, supprimez d'abord son entrée `nexus`, puis relancez le setup. Quand une entrée existante lance NEXUS (sa commande mentionne `nexus-mcp.cmd` ou `nexus-mcp.jar`), le setup se l'attribue : la désinstallation la retirera comme une entrée qu'il a écrite. Une entrée `nexus` qui lance un autre programme reste à son propriétaire.
 
-Une entrée existante est préservée.
+| Ligne | Connexion faite par le setup | Script généré |
+|---|---|---|
+| GitHub Copilot CLI | `copilot mcp add nexus --tools "*" -- <commande MCP NEXUS>` | `connect-copilot-cli.cmd` |
+| GitHub Copilot — JetBrains / IntelliJ | entrée `nexus` (schéma `servers`) dans `%LOCALAPPDATA%\github-copilot\intellij\mcp.json` | `connect-copilot-jetbrains.cmd`, plus `copilot-jetbrains.mcp.json` pour un import manuel |
+| Claude Code (CLI) | `claude mcp add --scope user nexus -- <commande MCP NEXUS>` ; la CLI est cherchée dans le `PATH`, puis dans la copie embarquée par Claude Desktop | `connect-claude-cli.cmd` |
+| Claude Desktop | entrée `nexus` dans `mcpServers` de chaque `claude_desktop_config.json` présent : dossier de l'installation Microsoft Store et `%APPDATA%\Claude`, une machine pouvant garder les deux | `connect-claude-desktop.cmd` |
+| OpenAI Codex CLI | `codex mcp add nexus -- <commande MCP NEXUS>` | `connect-codex-cli.cmd` |
+| OpenAI Codex Desktop | bloc `[mcp_servers.nexus]` entre `# BEGIN NEXUS-MCP` et `# END NEXUS-MCP` dans `~/.codex/config.toml` | `connect-codex-desktop.cmd`, plus `codex-desktop.mcp.toml` |
+| Autre client MCP | aucune ; fichier à importer dans le client | `generic-mcp.json` (schéma `mcpServers`) |
 
-### GitHub Copilot JetBrains
+Les scripts sont générés dans `{installation}\integrations\` et peuvent être relancés après l'installation.
 
-Le setup ne devine pas le chemin de configuration interne de l'IDE. Il génère :
+Codex CLI et Codex Desktop lisent le même fichier `~/.codex/config.toml` : une seule entrée `nexus` sert aux deux. Cocher l'une des deux lignes décoche l'autre.
 
-```text
-{installation}\integrations\copilot-jetbrains.mcp.json
-```
+En mode natif, la commande MCP NEXUS est `cmd.exe /d /s /c {installation}\nexus-mcp.cmd`. En Docker, c'est `docker exec -i <conteneur> java -jar /opt/nexus/lib/nexus-mcp.jar`.
 
-Le fichier utilise le schéma `servers`.
+Pendant l'installation, sous la barre de copie des fichiers, chaque étape de configuration a sa propre barre : configuration NEXUS, scripts d'intégration, lancement de Docker Desktop s'il vient d'être installé, puis un client coché par ligne. Une barre animée signale l'étape en cours. Une barre pleine verte signale une étape terminée, jaune une entrée `nexus` déjà présente, rouge un échec (client introuvable ou code de sortie). Le libellé de la ligne précise le résultat.
 
-### Claude CLI / Claude Code
+En fin d'installation, une fenêtre liste les clients cochés qui n'ont pas pu être connectés. À la désinstallation, le setup retire les entrées `nexus` qu'il a ajoutées ou qu'il s'est attribuées, et aucune autre.
 
-Si `claude` est détecté et qu'aucune entrée `nexus` n'existe :
-
-```text
-claude mcp add --scope user nexus -- <commande MCP NEXUS>
-```
-
-Le profil projet reste disponible avec `nexus-assistant-clients.cmd`.
-
-Asset géré :
-
-```text
-{installation}\integrations\connect-claude-cli.cmd
-```
-
-### Codex Desktop
-
-Le setup traite Codex Desktop comme un client de la configuration Codex locale partagée.
-
-Si la CLI `codex` est détectée et qu'aucune entrée `nexus` n'existe :
-
-```text
-codex mcp add nexus -- <commande MCP NEXUS>
-```
-
-Le setup génère **également** un snippet TOML :
-
-```text
-{installation}\integrations\codex-desktop.mcp.toml
-```
-
-Structure :
-
-```toml
-[mcp_servers.nexus]
-command = "<java.exe embarqué ou docker>"
-args = ["..."]
-```
-
-Cela permet une configuration manuelle si la CLI `codex` n'est pas présente. Une entrée existante `nexus` n'est pas écrasée.
-
-### Client MCP générique
-
-Le setup génère :
-
-```text
-{installation}\integrations\generic-mcp.json
-```
-
-avec le schéma `mcpServers`.
+Le profil projet de Claude reste disponible avec `nexus-assistant-clients.cmd`.
 
 ### Authentification
 
@@ -521,8 +485,11 @@ Selon les choix :
 
 ```text
 integrations\connect-copilot-cli.cmd
+integrations\connect-copilot-jetbrains.cmd
 integrations\copilot-jetbrains.mcp.json
 integrations\connect-claude-cli.cmd
+integrations\connect-claude-desktop.cmd
+integrations\connect-codex-cli.cmd
 integrations\connect-codex-desktop.cmd
 integrations\codex-desktop.mcp.toml
 integrations\generic-mcp.json
@@ -583,7 +550,7 @@ La désinstallation :
 
 - arrête le Compose NEXUS géré ;
 - retire l'entrée PATH gérée ;
-- retire uniquement les intégrations Copilot CLI / Claude CLI / Codex ajoutées avec succès par le setup ;
+- retire les entrées `nexus` des clients IA que le setup a ajoutées ou s'est attribuées (celles qui lancent NEXUS), et aucune autre ;
 - supprime les fichiers applicatifs ;
 - conserve `NEXUS_HOME` ;
 - conserve les repositories utilisateur ;

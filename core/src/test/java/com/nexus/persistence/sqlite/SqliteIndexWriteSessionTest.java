@@ -29,7 +29,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Mise en attente des analyses (V014) et publication en une transaction (DATA-0062). */
+/** Mise en attente des analyses (V014) et publication en une transaction (DATA-0074). */
 class SqliteIndexWriteSessionTest {
 
     /** Plus d'un lot complet de 128 lignes, pour exercer l'instruction pleine et l'instruction de fin. */

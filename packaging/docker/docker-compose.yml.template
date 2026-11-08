@@ -41,6 +41,9 @@ services:
     ports:
       - "${NEXUS_DOCKER_BIND_ADDRESS:-127.0.0.1}:${NEXUS_DOCKER_HOST_PORT:-8080}:${NEXUS_DOCKER_CONTAINER_PORT:-8080}"
     volumes:
+      # NEXUS_HOME_BIND is either a host path (bind mount) or "nexus-data", the named volume
+      # declared below. The Windows installer uses the volume: a Windows bind mount refuses the
+      # chmod with which NEXUS makes its storage private.
       - "${NEXUS_HOME_BIND:-./nexus-data}:/data/nexus"
       - "${NEXUS_REPOSITORY_BIND:-./workspace}:/workspace:ro"
     healthcheck:
@@ -51,3 +54,7 @@ services:
       timeout: 5s
       retries: 6
       start_period: 20s
+
+volumes:
+  nexus-data:
+    name: "${NEXUS_DOCKER_DATA_VOLUME:-nexus-context-engine-data}"

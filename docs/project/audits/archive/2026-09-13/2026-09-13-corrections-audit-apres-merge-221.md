@@ -38,7 +38,7 @@ Les rebuilds sains laissent Lucene gérer les générations et les anciens
 segments. Les commits corrompus sont récupérés dans un répertoire distinct,
 publié atomiquement après sa construction complète. Le cache remplace son
 lecteur si le répertoire actif change. Les détails et conséquences de stockage
-sont documentés dans [ADR-0055](../../../../architecture/adr/DATA-0055-preserver-les-lecteurs-lors-des-reconstructions-semantiques.md).
+sont documentés dans [ADR-0055](../../../../architecture/adr/archive/DATA-0055-preserver-les-lecteurs-lors-des-reconstructions-semantiques.md).
 
 Les neuf tests de `LuceneSemanticSearchIndexTest` passent sous Windows et
 Linux. Ils comprennent deux instances indépendantes, des rebuilds répétés,

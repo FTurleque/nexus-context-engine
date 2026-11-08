@@ -58,7 +58,7 @@ public final class FederatedSearchService {
     }
 
     /**
-     * Recherche fédérée sous échéance globale (BE-0064) : l'échéance est vérifiée avant
+     * Recherche fédérée sous échéance globale (BE-0081) : l'échéance est vérifiée avant
      * chaque projet, dans l'ordre du scope, sans parallélisme. Les projets non commencés
      * à l'échéance sont rendus, dans l'ordre du scope, par {@code unservedProjects}.
      */

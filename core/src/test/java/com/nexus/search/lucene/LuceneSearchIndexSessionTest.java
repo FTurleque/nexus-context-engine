@@ -20,7 +20,7 @@ import java.util.stream.IntStream;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Un writer par indexation, un seul commit à la barrière de publication (design D4, DATA-0045). */
+/** Un writer par indexation, un seul commit à la barrière de publication (design D4, DATA-0074). */
 class LuceneSearchIndexSessionTest {
 
     private static final int BATCH_FILES = 128;

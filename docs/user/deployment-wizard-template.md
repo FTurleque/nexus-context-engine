@@ -322,9 +322,10 @@ repository_bind:
   access: read-only
 
 nexus_home_bind:
-  source: "runtime.nexus_home"
+  source: "docker volume nexus-data (name: nexus-context-engine-data)"
   container_path: "/data/nexus"
   access: read-write
+  shared_with_native: false
 
 restart_policy:
   type: enum
@@ -390,39 +391,55 @@ show_if: "native_mcp_stdio == true OR mode in [docker,both]"
 La même matrice doit apparaître dans le wizard, la documentation et le générateur standalone.
 
 ```yaml
+preflight:
+  script: packaging/windows/detect-assistant-clients.ps1
+  runs: "on first display of the page"
+  probe_timeout_seconds: 5
+  per_client: [Available, Configured, Reason]
+  on_failure: "all rows selectable; connect scripts check the client themselves"
+
+row_states:
+  available_not_configured: { enabled: true, checked: false }
+  configured: { enabled: false, checked: true, status_suffix: "déjà configuré" }
+  unavailable: { enabled: false, checked: false, status: "<reason>" }
+
 copilot_cli:
-  default: true
-  action: "connect if CLI detected and nexus entry absent"
+  action: "copilot mcp add nexus --tools * -- <nexus-mcp-command>"
   existing_entry_policy: preserve
 
 copilot_jetbrains:
-  default: true
-  action: "generate integrations/copilot-jetbrains.mcp.json"
+  action: "add nexus to %LOCALAPPDATA%/github-copilot/intellij/mcp.json"
   schema_root: servers
-  auto_modify_ide_config: false
+  also_generates: integrations/copilot-jetbrains.mcp.json
+  existing_entry_policy: preserve
 
-claude_cli:
-  label: "Claude CLI / Claude Code"
-  default: true
-  action: "connect if CLI detected and nexus entry absent"
-  command: "claude mcp add --scope user nexus -- <nexus-mcp-command>"
-  scope: user
+claude_code:
+  label: "Claude Code (CLI)"
+  action: "claude mcp add --scope user nexus -- <nexus-mcp-command>"
+  cli_lookup: [PATH, "%APPDATA%/Claude/claude-code/<version>/claude.exe"]
   existing_entry_policy: preserve
   generator_project_profile_retained: true
 
+claude_desktop:
+  action: "add nexus to mcpServers of every claude_desktop_config.json present"
+  config_lookup: ["%LOCALAPPDATA%/Packages/Claude_*/LocalCache/Roaming/Claude", "%APPDATA%/Claude"]
+  existing_entry_policy: preserve
+
+codex_cli:
+  action: "codex mcp add nexus -- <nexus-mcp-command>"
+  exclusive_with: codex_desktop
+  existing_entry_policy: preserve
+
 codex_desktop:
-  default: true
-  action:
-    - "connect through codex CLI when detected and nexus entry absent"
-    - "generate integrations/codex-desktop.mcp.toml"
-  command: "codex mcp add nexus -- <nexus-mcp-command>"
-  config_snippet_root: "[mcp_servers.nexus]"
+  action: "append [mcp_servers.nexus] between # BEGIN NEXUS-MCP and # END NEXUS-MCP in ~/.codex/config.toml"
+  also_generates: integrations/codex-desktop.mcp.toml
+  exclusive_with: codex_cli
   existing_entry_policy: preserve
 
 generic_mcp:
-  default: true
   action: "generate integrations/generic-mcp.json"
   schema_root: mcpServers
+  always_available: true
 ```
 
 Authentication contract :
@@ -573,8 +590,11 @@ Selon les choix :
 
 ```text
 integrations\connect-copilot-cli.cmd
+integrations\connect-copilot-jetbrains.cmd
 integrations\copilot-jetbrains.mcp.json
 integrations\connect-claude-cli.cmd
+integrations\connect-claude-desktop.cmd
+integrations\connect-codex-cli.cmd
 integrations\connect-codex-desktop.cmd
 integrations\codex-desktop.mcp.toml
 integrations\generic-mcp.json
@@ -583,13 +603,13 @@ integrations\generic-mcp.json
 ## `.env` Docker généré
 
 ```dotenv
-NEXUS_DOCKER_IMAGE=ghcr.io/fturleque/nexus-context-engine:0.2.0
-NEXUS_DOCKER_CONTAINER=nexus
+NEXUS_DOCKER_IMAGE=ghcr.io/fturleque/nexus-context-engine:<version de l'installeur>
+NEXUS_DOCKER_CONTAINER=nexus-context-engine
 NEXUS_DOCKER_RESTART_POLICY=unless-stopped
 NEXUS_DOCKER_BIND_ADDRESS=127.0.0.1
 NEXUS_DOCKER_HOST_PORT=8080
 NEXUS_DOCKER_CONTAINER_PORT=8080
-NEXUS_HOME_BIND=C:/Users/<user>/.nexus
+NEXUS_HOME_BIND=nexus-data
 NEXUS_REPOSITORY_BIND=N:/workspace-dev
 NEXUS_SEMANTIC_PROVIDER=
 NEXUS_OLLAMA_BASE_URL=http://127.0.0.1:11434

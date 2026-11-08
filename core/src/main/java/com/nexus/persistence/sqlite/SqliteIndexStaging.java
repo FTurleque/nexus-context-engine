@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Mise en attente des analyses d'une indexation (V014, ADR DATA-0062). Les écritures sont de
+ * Mise en attente des analyses d'une indexation (V014, ADR DATA-0074). Les écritures sont de
  * courtes transactions possédées par l'appelant ; aucune table canonique ni la génération n'est
  * touchée, de sorte qu'un échec laisse la génération précédente intacte.
  */

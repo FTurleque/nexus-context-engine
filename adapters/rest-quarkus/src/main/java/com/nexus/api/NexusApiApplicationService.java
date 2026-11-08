@@ -173,7 +173,7 @@ public class NexusApiApplicationService {
             return NexusApplication.createLongLived(NexusConfiguration.pathsFromEnvironment());
         } catch (IOException | RuntimeException exception) {
             // L'échec d'ouverture du stockage arrive en PersistenceException, sans type JDBC ;
-            // l'adaptateur ne nomme pas le package de persistance (ARCH-0039).
+            // l'adaptateur ne nomme pas le package de persistance (ARCH-0075).
             throw new IllegalStateException("Impossible d'initialiser NEXUS pour l'adaptateur REST", exception);
         }
     }

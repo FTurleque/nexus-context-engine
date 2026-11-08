@@ -1,4 +1,4 @@
--- AUD-PRF-12 : table de mise en attente des analyses d'une indexation (ADR DATA-0062).
+-- AUD-PRF-12 : table de mise en attente des analyses d'une indexation (ADR DATA-0074).
 -- Les analyses (fichier, symboles, relations) des fichiers modifiés sont écrites par courtes
 -- transactions au rythme des flushs de documents, puis appliquées aux tables canoniques et
 -- publiées avec la génération par la transaction finale, qui vide ces tables. Le heap de

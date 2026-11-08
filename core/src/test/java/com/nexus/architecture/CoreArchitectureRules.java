@@ -41,7 +41,7 @@ final class CoreArchitectureRules {
     static final List<String> WATCHED_QUALIFIED_PREFIXES =
             concat(FRAMEWORK_PREFIXES, LUCENE_PREFIXES, SQLITE_PREFIXES, GETENV_PREFIXES);
 
-    /** Seule classe du cœur autorisée à lire l'environnement du processus (ARCH-0066). */
+    /** Seule classe du cœur autorisée à lire l'environnement du processus (ARCH-0086). */
     static final String COMPOSITION_ROOT = "com.nexus.application.NexusApplicationFactory";
 
     private static final List<String> LUCENE_PACKAGES = List.of(

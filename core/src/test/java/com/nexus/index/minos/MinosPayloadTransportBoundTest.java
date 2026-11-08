@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Borne de transport du payload MINOS (ADR-0044). La CLI lit par la façade, qui
+ * Borne de transport du payload MINOS (ARCH-0080). La CLI lit par la façade, qui
  * délègue à ce lecteur : la borne est celle du contrat, sans valeur propre à la CLI.
  */
 class MinosPayloadTransportBoundTest {

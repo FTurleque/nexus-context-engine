@@ -32,7 +32,7 @@ SQLite → search/ranking/context
 nexus minos-import <id-ou-nom> < export-minos.json [--json]
 ```
 
-Le payload est borné à 128 MiB. La CLI lit stdin par `NexusApplication.readMinosPayload(...)`, qui applique cette limite pendant la lecture UTF-8 sans conserver un `byte[]` complet du payload en parallèle ; la borne est celle de `MinosCodeIndexImporter.MAX_EXPORT_BYTES` (ADR-0044), non une valeur propre à la CLI. Le projet doit être `READY` avant remplacement du snapshot MINOS, comme les autres opérations dépendant d'un index cohérent.
+Le payload est borné à 128 MiB. La CLI lit stdin par `NexusApplication.readMinosPayload(...)`, qui applique cette limite pendant la lecture UTF-8 sans conserver un `byte[]` complet du payload en parallèle ; la borne est celle de `MinosCodeIndexImporter.MAX_EXPORT_BYTES` (ARCH-0080), non une valeur propre à la CLI. Le projet doit être `READY` avant remplacement du snapshot MINOS, comme les autres opérations dépendant d'un index cohérent.
 
 ## Verrouillage
 
@@ -124,7 +124,7 @@ Replay réel : 11 symboles, 6 relations, symbole `GreetingPort` retrouvé avec p
 
 La Phase 6 ne modifie pas le contrat JSON MINOS ; elle modifie uniquement l'utilisation de l'état canonique NEXUS et le gate READY. NXA6 ne modifie pas non plus ce contrat : il borne davantage la consommation mémoire et le nombre de faits.
 
-Décision historique : [ADR-0044](../architecture/adr/ARCH-0044-consommer-minos-via-un-contrat-json-local-versionne.md).
+Décision : [ARCH-0080](../architecture/adr/ARCH-0080-enrichir-l-intelligence-de-code-par-des-providers-et-importers-optionnels.md).
 
 
 ### Exports historiques et composants POSIX contenant un backslash

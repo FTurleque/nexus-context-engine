@@ -13,8 +13,8 @@ import java.util.Set;
 
 /**
  * Écritures d'une indexation : une session lexicale, une session sémantique optionnelle (un seul
- * writer Lucene chacune, DATA-0045) et une session canonique SQLite (mise en attente par lots,
- * ADR DATA-0062). Rien n'est visible avant {@link #commitDerivedIndexes()} et
+ * writer Lucene chacune, DATA-0074) et une session canonique SQLite (mise en attente par lots).
+ * Rien n'est visible avant {@link #commitDerivedIndexes()} et
  * {@link #publishCanonical(Set)} ; {@link #close()} sans publication annule les écritures Lucene
  * non committées et écarte les analyses en attente.
  *

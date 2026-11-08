@@ -116,7 +116,7 @@ nexus index <id-ou-nom> --rebuild
 
 Le Lucene sémantique est dérivé de l'index canonique et des fichiers du repository. Un rebuild normal utilise `OpenMode.CREATE` sans supprimer préalablement les fichiers : Lucene conserve la progression des générations et les lecteurs indépendants voient le nouveau commit. Une erreur pendant la construction ne publie pas les documents partiellement ajoutés.
 
-Si le commit `segments_*` est corrompu ou illisible, NEXUS construit un index complet dans `semantic-lucene/recovery-<uuid>`, puis publie atomiquement ce répertoire via `semantic-lucene/current-generation`. Les lecteurs persistants changent de répertoire à leur prochaine opération. Le pointeur est borné, validé et lu sans suivre de lien symbolique. Voir [ADR-0055](../architecture/adr/DATA-0055-preserver-les-lecteurs-lors-des-reconstructions-semantiques.md).
+Si le commit `segments_*` est corrompu ou illisible, NEXUS construit un index complet dans `semantic-lucene/recovery-<uuid>`, puis publie atomiquement ce répertoire via `semantic-lucene/current-generation`. Les lecteurs persistants changent de répertoire à leur prochaine opération. Le pointeur est borné, validé et lu sans suivre de lien symbolique. Voir [DATA-0074](../architecture/adr/DATA-0074-garantir-le-cycle-de-vie-et-la-coherence-des-index-derives.md).
 
 Les anciennes générations corrompues restent présentes pour préserver les fichiers encore ouverts par d'autres processus. Après des récupérations répétées, la procédure de quarantaine ci-dessous permet de récupérer cet espace, après arrêt de tous les processus NEXUS. Un retour à une version antérieure ne comprenant pas `current-generation` exige également une quarantaine du seul index sémantique et sa reconstruction.
 
@@ -163,7 +163,7 @@ Phase 6 implémente le batching. Les mesures historiques restent une référence
 
 `.github/workflows/semantic-search-qualification.yml` qualifie le chemin complet **runtime Ollama → modèle réel → embeddings → index Lucene sémantique → ranking**.
 
-Le workflow n'est pas exécuté sur les PR sans rapport avec le sémantique. Ses déclencheurs suivent [GEN-0060](../architecture/adr/GEN-0060-qualifier-la-recherche-semantique-reelle-en-deux-corpus.md) :
+Le workflow n'est pas exécuté sur les PR sans rapport avec le sémantique. Ses déclencheurs suivent [BE-0084](../architecture/adr/BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) :
 
 - une PR vers `develop`/`main` qui modifie le workflow, l'ancre Ollama ou le code/test sémantique ciblé exécute le corpus réduit `pr` ;
 - un `push` vers `develop` qui touche ces mêmes chemins, c'est-à-dire la fusion d'une telle PR, exécute le corpus complet `full` sur le SHA de `develop` ; le groupe de concurrence est ce SHA, donc un push ultérieur n'annule pas ce run, et un run en cours n'est jamais annulé (seul un run en attente sur le même SHA peut être remplacé) ;
@@ -223,7 +223,7 @@ Si `throughput.json` montre un corpus ou un débit qui rapproche la durée proje
 
 ### Qualification réelle et release
 
-La release n'exige pas la qualification sémantique réelle (GEN-0060) : `release.yml` ne la place pas dans les `needs` du job `publish`. La recherche sémantique est désactivée par défaut (BE-0014). La preuve de qualité d'une promotion `develop` → `main` est le dernier run `full` réussi sur `develop`, à consulter avant la promotion :
+La release n'exige pas la qualification sémantique réelle ([BE-0084](../architecture/adr/BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md), décision issue de BE-0084) : `release.yml` ne la place pas dans les `needs` du job `publish`. La recherche sémantique est désactivée par défaut (BE-0084). La preuve de qualité d'une promotion `develop` → `main` est le dernier run `full` réussi sur `develop`, à consulter avant la promotion :
 
 ```bash
 gh run list -w semantic-search-qualification.yml --branch develop
@@ -237,7 +237,7 @@ Le mode sémantique respecte les mêmes gates `READY` que le lexical. Si une ind
 
 Spec : [`openspec/specs/semantic-search-qualification/spec.md`](../../openspec/specs/semantic-search-qualification/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
 
-Cette section relie les exigences de la spec au workflow, au test de corpus et aux contrats qui les portent. Elle ne modifie ni les seuils, ni les bornes, ni la décision [GEN-0060](../architecture/adr/GEN-0060-qualifier-la-recherche-semantique-reelle-en-deux-corpus.md) ; les valeurs numériques citées sont celles relues dans le workflow, pas de nouvelles mesures.
+Cette section relie les exigences de la spec au workflow, au test de corpus et aux contrats qui les portent. Elle ne modifie ni les seuils, ni les bornes, ni la décision [BE-0084](../architecture/adr/BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) ; les valeurs numériques citées sont celles relues dans le workflow, pas de nouvelles mesures.
 
 ### Comportement existant vérifié
 
@@ -335,9 +335,8 @@ Exigences : `semantic-search-qualification › Une PR exécute un corpus réduit
 
 ### Écarts et limites
 
-- **[Écart]** Statut de l'ADR. L'exigence « Le rôle de la qualification dans la release est explicite » renvoie à « l'ADR qui complète ADR-0014 ». L'ADR existant est GEN-0060, qui complète `BE-0014` ; son statut est `Proposed` (`docs/architecture/adr/GEN-0060-qualifier-la-recherche-semantique-reelle-en-deux-corpus.md`, en-tête ; index `docs/architecture/adr/README.md:106`, `docs/architecture/arc42/09-decisions.md:72`), alors que `BE-0014` est `Accepted`. Le workflow et cette page appliquent déjà la règle de GEN-0060 : tant que l'ADR n'est pas accepté, la « décision de l'ADR » est une décision proposée.
+- **[Écart]** Renvoi de la spec. L'exigence « Le rôle de la qualification dans la release est explicite » renvoie à « l'ADR qui complète ADR-0014 ». La décision est portée par [BE-0084](../architecture/adr/BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) (`Accepted`), qui réunit la recherche sémantique optionnelle et la qualification en deux corpus ; la spec garde l'ancienne formulation.
 - **[Écart]** Seuils non épinglés par un contrat. Le contrat final d'audit vérifie le nom de l'étape (`scripts/release/test-final-audit-contracts.sh:151`) mais aucune valeur de seuil ; les valeurs 0,25 / 0,33 / 0,20 et 0,10 ne figurent que dans le workflow (`:150-166`), l'ADR et cette page. L'exigence « mêmes seuils » n'a donc pas de test local ; elle découle du fait que le script de contrôle ne dépend pas du corpus.
-- **[Écart]** Chiffre divergent entre ADR et page : au débit le plus lent observé, le corpus `pr` demande « environ 37 minutes » dans l'ADR GEN-0060 (section Decision, puce Pull request) et « environ 35 minutes » dans cette page (« Budget de temps de la qualification réelle »). Les deux restent sous la borne de 45 minutes ; aucun n'est modifié ici.
 - **Limite** Le workflow s'exécute aussi sur les PR vers `main` (`.github/workflows/semantic-search-qualification.yml:8-10`) ; le scénario ne décrit que `develop`.
 - **Limite** « sous-ensemble représentatif » n'a pas de critère mesurable dans la spec : le seul invariant vérifié est que chaque chemin jugé pertinent par les six requêtes est dans le corpus `pr` (`RealSemanticBenchmarkCorpusTest#repositoryPrCorpusContainsEveryRelevantPath`).
 - **Limite** Ce qui s'exécute uniquement en CI n'a pas été rejoué pour cette section : durée réelle du job `pr`, échec effectif sous un seuil, `snapshotCommit` du rapport d'un run `full`. Les chiffres de débit et de durée de « Budget de temps » sont ceux de cette page et ne sont pas re-mesurés.
@@ -345,6 +344,6 @@ Exigences : `semantic-search-qualification › Une PR exécute un corpus réduit
 ### Propositions et questions ouvertes
 
 - **[Proposition]** Épingler dans `scripts/release/test-final-audit-contracts.sh` les trois seuils et la tolérance 0,10 du workflow, pour que l'exigence « mêmes seuils » ait une preuve locale.
-- **[Proposition]** Faire passer GEN-0060 de `Proposed` à `Accepted` (décision du mainteneur, skill `nexus-adr`), puis préciser dans la spec « ADR qui complète BE-0014 » si l'identifiant historique `ADR-0014` doit disparaître.
+- **[Proposition]** Remplacer dans la spec « l'ADR qui complète ADR-0014 » par un renvoi à BE-0084.
 - **[Question]** Un `workflow_dispatch` avec `corpus=pr` doit-il être borné à 45 minutes comme une PR ? Aujourd'hui l'expression de `timeout-minutes` ne dépend que de `github.event_name` (`.github/workflows/semantic-search-qualification.yml:67`).
 - **[Question]** Faut-il un critère mesurable pour « sous-ensemble représentatif » (part de tokens, de fichiers ou de requêtes) plutôt que la seule inclusion des chemins pertinents ?

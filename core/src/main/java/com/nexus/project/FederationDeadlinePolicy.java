@@ -6,13 +6,13 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Politique d'échéance globale d'une requête fédérée (BE-0064) : durée et horloge.
+ * Politique d'échéance globale d'une requête fédérée (BE-0081) : durée et horloge.
  *
  * <p>La durée par défaut est {@link #DEFAULT_DURATION}, modifiable par
  * {@value #ENVIRONMENT_VARIABLE} dans l'intervalle {@link #MIN_DURATION} à
  * {@link #MAX_DURATION}. La composition root résout cette valeur par {@link #from(Map)} et
  * transmet la politique aux services fédérés ; la classe ne lit pas l'environnement
- * (ARCH-0066).</p>
+ * (ARCH-0086).</p>
  */
 public final class FederationDeadlinePolicy {
 

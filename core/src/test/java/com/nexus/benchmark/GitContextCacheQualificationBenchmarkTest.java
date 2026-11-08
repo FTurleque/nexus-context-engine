@@ -164,7 +164,7 @@ class GitContextCacheQualificationBenchmarkTest {
     }
 
     /**
-     * Scope fédéré de plus de 16 projets sur le cache de production (BE-0065) : au second passage
+     * Scope fédéré de plus de 16 projets sur le cache de production (BE-0070) : au second passage
      * cyclique, chaque projet est servi par le cache et aucune entrée n'est évincée.
      */
     private Map<String, Object> qualifyFederatedScope() throws Exception {

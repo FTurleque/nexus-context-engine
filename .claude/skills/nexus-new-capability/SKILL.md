@@ -25,7 +25,7 @@ argument-hint: "<capacité>"
 
 ## 4. Exposition à parité
 
-- CLI (`com.nexus.cli`) : sortie humaine + `--json`, codes de sortie stables (ADR-0030).
+- CLI (`com.nexus.cli`) : sortie humaine + `--json`, codes de sortie stables (ARCH-0085).
 - REST (`adapters/rest-quarkus`) : limites alignées sur les politiques centrales, projection repository-relative, `constraints` non supportées rejetées.
 - MCP (`adapters/mcp-java`) : schéma d'entrée borné, stdout réservé au protocole.
 

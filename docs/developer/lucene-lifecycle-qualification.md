@@ -1,8 +1,10 @@
 # Lucene lifecycle qualification
 
-NEXUS currently keeps Lucene resources **operation-scoped**: readers, writers, analyzers and directories are opened for an operation and closed before returning. This is the conservative default because it minimizes stale-reader state, file-lock lifetime and recovery coupling.
+Les runtimes longue durée (REST, MCP, composés par `NexusApplication.createLongLived(...)`) gardent en cache, par projet chaud, les readers Lucene lexical et sémantique ; les writers restent ouverts le temps d'une indexation ou d'un rebuild, et la CLI (`NexusApplication.create(...)`) reste entièrement operation-scoped. La décision est [DATA-0074](../architecture/adr/DATA-0074-garantir-le-cycle-de-vie-et-la-coherence-des-index-derives.md). Cette page décrit le benchmark qui qualifie ce cycle de vie (issue #50) et ce qu'il a mesuré.
 
-Issue #50 tracks whether a persistent `DirectoryReader` / `IndexWriter` lifecycle would provide enough measurable benefit to justify the additional state and recovery complexity.
+## Résultat de la qualification
+
+La qualification ABBA exact-head de la PR #159 a mesuré, pour le prototype persistant, un gain p95 de recherche d'environ 85 % (lexical) et 87 % (sémantique) sous Linux, 79 % et 92 % sous Windows, et un rollback suivi d'un rebuild de production réussi. Seuls les readers persistants ont été adoptés en production (PR #161) : un `IndexWriter` persistant garderait le `write.lock` Lucene pendant toute la vie du processus et concurrencerait le verrou NEXUS par projet (`ProjectIndexLockManager`), si bien que le gain du prototype sur les micro-écritures n'est pas repris. Le workflow `.github/workflows/lucene-lifecycle-benchmark.yml` rejoue cette qualification sous Linux et Windows ; les sections suivantes décrivent le harnais, qui compare toujours l'implémentation operation-scoped au prototype de test.
 
 ## Qualification harness
 

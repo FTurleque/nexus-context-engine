@@ -55,7 +55,8 @@ Assert-TextContains -Text $hardenedSource -Needle 'function DotEnvQuoted(Value: 
 Assert-TextContains -Text $hardenedSource -Needle 'function IsLoopbackRestHost(Value: String): Boolean;' -Description 'wizard loopback-only REST policy'
 Assert-TextContains -Text $hardenedSource -Needle 'function VerifyFileSha256(FilePath: String; ExpectedSha256: String): Boolean;' -Description 'external prerequisite SHA-256 verifier'
 Assert-TextContains -Text $hardenedSource -Needle 'CmdEnvEscape(RuntimePage.Values[0])' -Description 'NEXUS_HOME batch escaping'
-Assert-TextContains -Text $hardenedSource -Needle 'DotEnvQuoted(DockerPath(RuntimePage.Values[0]))' -Description 'Docker home path dotenv quoting'
+Assert-TextContains -Text $hardenedSource -Needle "'NEXUS_HOME_BIND=nexus-data' + #13#10 +" -Description 'Docker home uses the named Compose volume'
+Assert-TextContains -Text $hardenedSource -Needle 'DotEnvQuoted(OllamaPage.Values[0])' -Description 'Docker Ollama URL dotenv quoting'
 Assert-TextContains -Text $hardenedSource -Needle 'NEXUS_REST_EXPOSURE_MODE=loopback-forward' -Description 'explicit Docker REST exposure mode'
 if ($hardenedSource.IndexOf("'set `"NEXUS_HOME=' + RuntimePage.Values[0]", [StringComparison]::Ordinal) -ge 0) {
     throw 'Generated installer source still writes raw NEXUS_HOME into batch configuration.'
@@ -120,6 +121,102 @@ Assert-TextContains -Text $installerSource -Needle 'function Format-Json(' -Desc
 Assert-TextContains -Text $installerSource -Needle 'Save-CleanJson $mcp $c' -Description 'JetBrains config written via clean formatter'
 Assert-TextContains -Text $installerSource -Needle 'Save-CleanJson $cfg $c' -Description 'Claude Desktop config written via clean formatter'
 Assert-TextContains -Text $installerSource -Needle '# END NEXUS-MCP' -Description 'Codex block has a reversible END marker'
+
+Write-Host '[contract] assistant client page runs a preflight and lists each client on its own row'
+Assert-TextContains -Text $installerSource -Needle '\detect-assistant-clients.ps1"; Flags: dontcopy' -Description 'client detector embedded for the wizard preflight'
+Assert-TextContains -Text $installerSource -Needle "ExtractTemporaryFile('detect-assistant-clients.ps1')" -Description 'client detector extracted before the page is shown'
+foreach ($clientConnector in @('connect-copilot-cli.cmd', 'connect-copilot-jetbrains.cmd', 'connect-claude-cli.cmd', 'connect-claude-desktop.cmd', 'connect-codex-cli.cmd', 'connect-codex-desktop.cmd')) {
+    Assert-TextContains -Text $installerSource -Needle ", '$clientConnector', '" -Description "client connector $clientConnector"
+}
+
+Write-Host '[contract] Claude Desktop is wired in every configuration folder present'
+Assert-TextContains -Text $installerSource -Needle 'function ClaudeDesktopConfigsPs(): String;' -Description 'Claude Desktop configuration folders listed once'
+Assert-TextContains -Text $installerSource -Needle "'if (`$cfgs.Count -eq 0) { exit 10 }'" -Description 'Claude Desktop connector loops over every configuration'
+
+Write-Host '[contract] uninstall can remove every NEXUS entry, written or adopted'
+foreach ($uninstallFragment in @(
+    'procedure WriteDisconnectScripts;',
+    'procedure AdoptConfiguredClients;',
+    "SaveStringToFile(Dir + '\disconnect-copilot-cli.ps1',",
+    "ExpandConstant('{app}\integrations\disconnect-copilot-cli.ps1')"
+)) {
+    Assert-TextContains -Text $installerSource -Needle $uninstallFragment -Description "client uninstall: $uninstallFragment"
+}
+
+Write-Host '[contract] Docker data live in a named volume and the Ollama URL is resolved by NEXUS'
+Assert-TextContains -Text $installerSource -Needle "'NEXUS_HOME_BIND=nexus-data' + #13#10 +" -Description 'Docker NEXUS_HOME uses the named volume, not a Windows bind mount'
+Assert-TextContains -Text $installerSource -Needle "'NEXUS_OLLAMA_BASE_URL=' + OllamaPage.Values[0] + #13#10 +" -Description 'Docker receives the Ollama URL as entered; NEXUS adapts loopback after its policy check'
+$composeTemplate = [IO.File]::ReadAllText((Join-Path $repo 'packaging\docker\docker-compose.yml.template'), [Text.Encoding]::UTF8)
+Assert-TextContains -Text $composeTemplate -Needle 'name: "${NEXUS_DOCKER_DATA_VOLUME:-nexus-context-engine-data}"' -Description 'Compose declares the nexus-data named volume'
+
+Write-Host '[contract] reinstalling keeps the managed container port and moves the official image to this version'
+Assert-TextContains -Text $installerSource -Needle 'ManagedContainerPublishesPort(DockerPage.Values[1], DockerPage.Values[2], PortValue)' -Description 'managed NEXUS container port is not relocated on reinstall'
+Assert-TextContains -Text $installerSource -Needle '(not IsOfficialNexusImage(Value)) then DockerPage.Values[0] := Value;' -Description 'saved official image does not override the image of the installed version'
+Assert-TextContains -Text $installerSource -Needle "DockerPage.Values[0] := 'ghcr.io/fturleque/nexus-context-engine:{#NexusVersion}';" -Description 'default image follows the installer version'
+
+Write-Host '[contract] post-install steps report their state on their own progress row'
+foreach ($progressFragment in @(
+    'procedure BuildSetupStepRows;',
+    'Row.Bar.Style := npbstMarquee',
+    'Row.Bar.State := npbsError;',
+    'Row.Bar.State := npbsPaused;',
+    "SetSetupStepState('config', 'running', '');",
+    "SetSetupStepState(ClientSection(Index), 'failed', 'client introuvable')"
+)) {
+    Assert-TextContains -Text $installerSource -Needle $progressFragment -Description "post-install progress row: $progressFragment"
+}
+# Native CLI connectors launch nexus-mcp.cmd, which loads config\nexus-native.env.cmd
+# and passes --enable-native-access=ALL-UNNAMED to the embedded Java runtime.
+Assert-TextContains -Text $installerSource -Needle "PowerShellSingleQuote(ExpandConstant('{app}\nexus-mcp.cmd'))" -Description 'native CLI connectors use the hardened nexus-mcp.cmd launcher'
+$detector = Join-Path $repo 'packaging\windows\detect-assistant-clients.ps1'
+$detectorBytes = [IO.File]::ReadAllBytes($detector)
+if (@($detectorBytes | Where-Object { $_ -gt 127 }).Count -gt 0) {
+    throw 'detect-assistant-clients.ps1 must stay ASCII-only: Windows PowerShell 5.1 parses BOM-less scripts with the ANSI code page.'
+}
+$probeHome = Join-Path ([IO.Path]::GetTempPath()) ('nexus-client-probe-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Force -Path $probeHome | Out-Null
+$savedProfile = @{ USERPROFILE = $env:USERPROFILE; APPDATA = $env:APPDATA; LOCALAPPDATA = $env:LOCALAPPDATA; PATH = $env:PATH }
+try {
+    # An empty profile and a PATH without client CLIs: every client must be reported absent.
+    $env:USERPROFILE = $probeHome; $env:APPDATA = Join-Path $probeHome 'Roaming'; $env:LOCALAPPDATA = Join-Path $probeHome 'Local'
+    $env:PATH = Join-Path $env:SystemRoot 'System32'
+    $probeIni = Join-Path $probeHome 'preflight.ini'
+    & (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $detector -OutputPath $probeIni | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Client detector failed with exit code $LASTEXITCODE" }
+    $probeText = [IO.File]::ReadAllText($probeIni, [Text.Encoding]::Unicode)
+    foreach ($section in @('CopilotCli', 'CopilotJetBrains', 'ClaudeCode', 'ClaudeDesktop', 'CodexCli', 'CodexDesktop')) {
+        if ($probeText -notmatch "(?ms)^\[$section\]\s*Available=0") { throw "Client detector reports $section on an empty profile." }
+    }
+
+    # Existing nexus entries: one launches NEXUS (adopted), one launches another tool (left alone).
+    New-Item -ItemType Directory -Force -Path (Join-Path $probeHome 'Roaming\Claude'), (Join-Path $probeHome 'Local\github-copilot\intellij') | Out-Null
+    Set-Content -LiteralPath (Join-Path $probeHome 'Roaming\Claude\claude_desktop_config.json') -Encoding ascii `
+        -Value '{"mcpServers":{"nexus":{"command":"cmd.exe","args":["/d","/s","/c","C:\\NEXUS\\nexus-mcp.cmd"]}}}'
+    Set-Content -LiteralPath (Join-Path $probeHome 'Local\github-copilot\intellij\mcp.json') -Encoding ascii `
+        -Value '{"servers":{"nexus":{"type":"stdio","command":"other-tool","args":[]}}}'
+    & (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $detector -OutputPath $probeIni | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Client detector failed with exit code $LASTEXITCODE" }
+    $probeText = [IO.File]::ReadAllText($probeIni, [Text.Encoding]::Unicode)
+    if ($probeText -notmatch '(?ms)^\[ClaudeDesktop\]\s*Available=1\s*Configured=1\s*Owned=1') {
+        throw 'Client detector does not adopt a nexus entry that launches nexus-mcp.cmd.'
+    }
+    if ($probeText -notmatch '(?ms)^\[CopilotJetBrains\]\s*Available=1\s*Configured=1\s*Owned=0') {
+        throw 'Client detector adopts a nexus entry that launches another tool.'
+    }
+
+    # A leftover Microsoft Store folder without nexus beside the standard one: still to configure.
+    New-Item -ItemType Directory -Force -Path (Join-Path $probeHome 'Local\Packages\Claude_probe\LocalCache\Roaming\Claude') | Out-Null
+    & (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $detector -OutputPath $probeIni | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Client detector failed with exit code $LASTEXITCODE" }
+    $probeText = [IO.File]::ReadAllText($probeIni, [Text.Encoding]::Unicode)
+    if ($probeText -notmatch '(?ms)^\[ClaudeDesktop\]\s*Available=1\s*Configured=0') {
+        throw 'Client detector reports Claude Desktop configured while one of its configuration folders lacks nexus.'
+    }
+}
+finally {
+    foreach ($name in $savedProfile.Keys) { [Environment]::SetEnvironmentVariable($name, $savedProfile[$name], 'Process') }
+    Remove-Item -LiteralPath $probeHome -Recurse -Force -ErrorAction SilentlyContinue
+}
 foreach ($rawDepth in @('ConvertTo-Json -Depth 5', 'ConvertTo-Json -Depth 10')) {
     if ($installerSource.IndexOf($rawDepth, [StringComparison]::Ordinal) -ge 0) {
         throw "Installer must not write MCP config JSON via raw '$rawDepth' (mangles indentation); use Save-CleanJson."

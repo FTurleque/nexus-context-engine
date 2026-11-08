@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
- * Scénarios de {@code git-context-discovery} (BE-0067) : plafond de la découverte à la racine du
+ * Scénarios de {@code git-context-discovery} (BE-0070) : plafond de la découverte à la racine du
  * projet et contrôle du propriétaire d'un dépôt parent, simulé par injection.
  */
 class GitRepositoryLocatorTest {

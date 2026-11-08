@@ -98,7 +98,7 @@ final class ContextBuildMetadata {
         metadata.put("gitSelectedItems", gitSelection.items().size());
         metadata.put("gitSelectedTokens", gitSelection.selectedEstimatedTokens());
         if (request.explain() && gitContextProvider != null) {
-            // Compteurs du cache de contexte Git des runtimes longue durée (BE-0065).
+            // Compteurs du cache de contexte Git des runtimes longue durée (BE-0070).
             Map<String, Object> gitCache = gitContextProvider.cacheStatistics();
             if (!gitCache.isEmpty()) {
                 metadata.put("gitContextCache", gitCache);

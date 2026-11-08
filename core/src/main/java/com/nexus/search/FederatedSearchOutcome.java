@@ -8,7 +8,7 @@ import java.util.Objects;
 /**
  * Résultat d'une recherche fédérée : les résultats des projets servis et, dans
  * l'ordre du scope, les projets que l'échéance globale a empêché de commencer
- * (BE-0064). La liste des projets non servis est vide sans coupe.
+ * (BE-0081). La liste des projets non servis est vide sans coupe.
  */
 public record FederatedSearchOutcome(
         List<FederatedSearchHit> hits,

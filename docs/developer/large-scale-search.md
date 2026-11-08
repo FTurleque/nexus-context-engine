@@ -55,13 +55,13 @@ Un test de non-régression utilise une requête de 1 500 termes et vérifie qu'e
 Les connexions utilisent `temp_store=MEMORY` pour éviter le coût des temporaires
 sur disque pendant les insertions avec triggers. Le journal canonique et la
 durabilité restent inchangés. La mémoire temporaire native dépend du travail SQL
-et n'est pas comptée par le gate de heap Java ; voir [ADR-0050](../architecture/adr/DATA-0050-conserver-les-temporaires-sqlite-en-memoire.md).
+et n'est pas comptée par le gate de heap Java ; voir [réglages des connexions SQLite](sqlite-write-contention.md#réglages-des-connexions-et-lots-décriture).
 
 Chaque connexion fixe aussi `cache_size` à 64 MiB : les index qui commencent par
 `file_id` (V005, V012, V015) reçoivent des clés hors ordre pendant une indexation de
 nombreux fichiers et dépassent le cache par défaut de 2 MiB au-delà de quelques
 centaines de milliers de lignes. SQLite alloue ces pages à l'usage, hors heap Java ;
-voir [DATA-0069](../architecture/adr/DATA-0069-dimensionner-le-cache-de-pages-sqlite-des-connexions.md).
+voir [réglages des connexions SQLite](sqlite-write-contention.md#réglages-des-connexions-et-lots-décriture).
 
 Les recherches symbole/relation filtrent côté repository avant matérialisation. La recherche de symboles est scopée au projet ciblé (AUD-PRF-09) :
 
@@ -99,7 +99,7 @@ Les limites REST de résultats et de budget contexte fédérés sont alignées s
 
 Une requête fédérée (recherche ou contexte) crée un `SearchQueryContext` pour toute la requête et le transmet aux stratégies de chaque projet. `SemanticSearchStrategy` y mémorise le vecteur de la requête **redactée** : le fournisseur d'embeddings reçoit au plus un appel `embedQuery`, quel que soit le nombre de projets, et zéro si aucun projet n'a d'index sémantique compatible. Une indisponibilité du fournisseur est mémorisée de la même façon : un seul appel est tenté et chaque projet porte le même diagnostic de dégradation. Le contexte n'est pas conservé entre requêtes.
 
-Une échéance globale (`FederationDeadlinePolicy`, [BE-0064](../architecture/adr/BE-0064-borner-la-federation-par-une-echeance-globale-sans-parallelisme.md)) est vérifiée avant chaque projet, dans l'ordre du scope, sans parallélisme :
+Une échéance globale (`FederationDeadlinePolicy`, [BE-0081](../architecture/adr/BE-0081-federer-la-recherche-locale-par-projet-sous-echeance-globale.md)) est vérifiée avant chaque projet, dans l'ordre du scope, sans parallélisme :
 
 | Paramètre | Valeur |
 |---|---|

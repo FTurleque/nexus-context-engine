@@ -78,7 +78,7 @@ public final class PublicOutput {
 
     /**
      * Recherche fédérée. {@code unservedProjects} nomme, dans l'ordre du scope, les projets que
-     * l'échéance globale de la fédération a empêché de commencer (BE-0064) ; vide sans coupe.
+     * l'échéance globale de la fédération a empêché de commencer (BE-0081) ; vide sans coupe.
      */
     public record FederatedSearch(
             List<Project> projects,
