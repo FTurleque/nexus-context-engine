@@ -3,6 +3,7 @@ set -euo pipefail
 
 python3 - <<'PY'
 from pathlib import Path
+import re
 import xml.etree.ElementTree as ET
 
 root = Path.cwd()
@@ -25,19 +26,27 @@ def forbid(path: str, needle: str) -> None:
         raise SystemExit(f"obsolete documentation contract: {path} still contains {needle!r}")
 
 
-# Keep operational documentation aligned with the dependency actually used by Maven.
+# Dependabot-managed versions live in pom.xml only: the documentation names the property.
 pom = ET.parse(root / "pom.xml").getroot()
-quarkus_version = next(
-    (
-        element.text.strip()
-        for element in pom.iter()
-        if element.tag.rsplit("}", 1)[-1] == "quarkus.platform.version"
-        and element.text
-    ),
-    None,
-)
-if not quarkus_version:
-    raise SystemExit("version contract drift: pom.xml does not declare quarkus.platform.version")
+
+
+def pom_property(name: str) -> str:
+    value = next(
+        (
+            element.text.strip()
+            for element in pom.iter()
+            if element.tag.rsplit("}", 1)[-1] == name and element.text and element.text.strip()
+        ),
+        None,
+    )
+    if not value:
+        raise SystemExit(f"version contract drift: pom.xml does not declare {name}")
+    return value
+
+
+managed_versions = {
+    name: pom_property(name) for name in ("quarkus.platform.version", "mcp.sdk.version")
+}
 
 
 # Toolchain / NXA3 baseline
@@ -121,12 +130,47 @@ require("docs/developer/ci-and-supply-chain.md", "`develop` est la branche d'int
 require("docs/developer/branch-governance.md", "force pushes")
 require("docs/developer/native-context-discovery-limits.md", "NativeContextDiscoveryBudgetBenchmarkTest")
 
-require("docs/developer/README.md", f"Quarkus      {quarkus_version}")
-require("docs/developer/architecture-implementation.md", f"Quarkus est en {quarkus_version}")
-require("docs/developer/rest-api.md", f"Quarkus     {quarkus_version}")
+for path, properties in (
+    ("docs/developer/README.md", ("quarkus.platform.version", "mcp.sdk.version")),
+    ("docs/developer/architecture-implementation.md", ("quarkus.platform.version", "mcp.sdk.version")),
+    ("docs/developer/rest-api.md", ("quarkus.platform.version",)),
+    ("docs/developer/mcp.md", ("mcp.sdk.version",)),
+):
+    for name in properties:
+        require(path, name)
+
+version_literal = re.compile(
+    r"\b(?:Quarkus|MCP SDK|SDK MCP|MCP Java)(?:\s+(?:est\s+)?en)?[\s:`(]+v?\d+\.\d+(?:\.\d+)*",
+    re.IGNORECASE,
+)
+version_docs = [
+    "docs/developer/README.md",
+    "docs/developer/architecture-implementation.md",
+    "docs/developer/rest-api.md",
+    "docs/developer/mcp.md",
+    "docs/architecture/overview.md",
+    *sorted(
+        path.relative_to(root).as_posix()
+        for path in (root / "docs/architecture/arc42").glob("*.md")
+    ),
+]
+for path in version_docs:
+    content = text(path)
+    match = version_literal.search(content)
+    if match:
+        raise SystemExit(
+            f"version contract drift: {path} copies a dependency version ({match.group(0)!r}); "
+            "name the pom.xml property instead"
+        )
+    for name, value in managed_versions.items():
+        if re.search(rf"(?<![\w.]){re.escape(value)}(?!\w|\.\w)", content):
+            raise SystemExit(
+                f"version contract drift: {path} copies {name} value {value!r}; "
+                "name the pom.xml property instead"
+            )
+
 require("docs/developer/rest-api.md", "quarkus.http.insecure-requests")
 require("docs/developer/rest-api.md", "trusted-proxies")
-require("docs/developer/mcp.md", "MCP SDK     2.1.0")
 require("docs/developer/mcp.md", "100 projets uniques")
 
 for path in (
