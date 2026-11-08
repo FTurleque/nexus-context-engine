@@ -475,6 +475,49 @@ for needle in (
 if not (root / "core/src/test/java/com/nexus/security/SensitiveContentRedactorTest.java").is_file():
     raise SystemExit("security contract drift: redaction fixture path cited by SECURITY.md is missing")
 
+# --- Sprint 10 : repository governance (AUD-DEP-16, AUD-DEP-17) ---
+# The merge-commit-only policy is documented with the GitHub settings that enforce it.
+for needle in (
+    "## Méthode d'intégration : merge commit uniquement",
+    'allowed_merge_methods = ["merge"]',
+    "allow_squash_merge = false",
+    "allow_rebase_merge = false",
+    "rulesets/20503835",
+    ".github/CODEOWNERS",
+):
+    require("docs/developer/branch-governance.md", needle)
+for needle in ('allowed_merge_methods = ["merge"]', "jamais squash/rebase", ".github/CODEOWNERS", "SECURITY.md"):
+    require(".claude/skills/nexus-pr-workflow/SKILL.md", needle)
+
+# SECURITY.md opens a private reporting channel, with supported versions and a response delay.
+for needle in (
+    "## Signaler une vulnérabilité",
+    "security/advisories/new",
+    "pas d'issue publique",
+    "### Délai de réponse",
+    "## Versions prises en charge",
+):
+    require("SECURITY.md", needle)
+
+# CODEOWNERS declares an owner for every sensitive path (design D6).
+codeowners = {}
+for line in text(".github/CODEOWNERS").splitlines():
+    fields = line.split("#", 1)[0].split()
+    if len(fields) >= 2:
+        codeowners[fields[0]] = fields[1:]
+for pattern in (
+    "/.github/workflows/",
+    "/scripts/release/",
+    "/config/tool-integrity.properties",
+    "/mvnw",
+    "/mvnw.cmd",
+    "/.mvn/",
+    "/packaging/",
+):
+    owners = codeowners.get(pattern, [])
+    if not owners or not all(owner.startswith("@") for owner in owners):
+        raise SystemExit(f"CODEOWNERS contract drift: {pattern} must have a declared owner")
+
 # Active PowerShell scripts call Maven only through scripts/lib/NexusScript.psm1 (AUD-QUA-05).
 import re
 
