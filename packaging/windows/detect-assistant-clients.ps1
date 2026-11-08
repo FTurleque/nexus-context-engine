@@ -184,24 +184,26 @@ function Test-JetBrainsCopilot {
     return $false
 }
 
-# Claude Desktop config: Microsoft Store (MSIX) sandbox first, then %APPDATA%\Claude.
-function Find-ClaudeDesktopConfig {
+# Every Claude Desktop configuration file: one per Microsoft Store (MSIX) package
+# folder, plus %APPDATA%\Claude for the standard installer. A machine can keep
+# both, only one being the running app's, so the connector writes to all of them.
+function Find-ClaudeDesktopConfigs {
+    $Configs = @()
     $Local = Get-UserFolderPath 'LOCALAPPDATA' 'LocalApplicationData'
     $Packages = Join-Path $Local 'Packages'
     if (Test-Path -LiteralPath $Packages -PathType Container) {
-        foreach ($Dir in @(Get-ChildItem -LiteralPath $Packages -Directory -Filter 'Claude_*' -ErrorAction SilentlyContinue |
-                Sort-Object LastWriteTime -Descending)) {
+        foreach ($Dir in @(Get-ChildItem -LiteralPath $Packages -Directory -Filter 'Claude_*' -ErrorAction SilentlyContinue)) {
             $Candidate = Join-Path $Dir.FullName 'LocalCache\Roaming\Claude'
             if (Test-Path -LiteralPath $Candidate -PathType Container) {
-                return Join-Path $Candidate 'claude_desktop_config.json'
+                $Configs += (Join-Path $Candidate 'claude_desktop_config.json')
             }
         }
     }
     $Roaming = Join-Path (Get-UserFolderPath 'APPDATA' 'ApplicationData') 'Claude'
     if (Test-Path -LiteralPath $Roaming -PathType Container) {
-        return Join-Path $Roaming 'claude_desktop_config.json'
+        $Configs += (Join-Path $Roaming 'claude_desktop_config.json')
     }
-    return ''
+    return , $Configs
 }
 
 function Test-CodexDesktop {
@@ -269,11 +271,18 @@ $Claude = Resolve-CommandPath 'claude'
 if ([string]::IsNullOrWhiteSpace($Claude)) { $Claude = Find-EmbeddedClaudeCli }
 $Results['ClaudeCode'] = Get-CliResult 'claude' 'Claude Code' $Claude @('mcp', 'get', 'nexus')
 
-$ClaudeDesktopConfig = Find-ClaudeDesktopConfig
-if (-not [string]::IsNullOrWhiteSpace($ClaudeDesktopConfig)) {
-    $DesktopConfig = Read-JsonFile $ClaudeDesktopConfig
-    $Results['ClaudeDesktop'] = New-Result $true (Test-JsonServer $DesktopConfig 'mcpServers') (Ui 'D{e}tect{e}') `
-        (Test-LaunchesNexus (Get-JsonServerText $DesktopConfig 'mcpServers'))
+# Configured only when every configuration declares nexus: the connector then has
+# nothing left to write. Owned when one of those entries launches NEXUS.
+$ClaudeDesktopConfigs = Find-ClaudeDesktopConfigs
+if ($ClaudeDesktopConfigs.Count -gt 0) {
+    $DesktopConfigured = $true
+    $DesktopOwned = $false
+    foreach ($ConfigPath in $ClaudeDesktopConfigs) {
+        $DesktopConfig = Read-JsonFile $ConfigPath
+        if (-not (Test-JsonServer $DesktopConfig 'mcpServers')) { $DesktopConfigured = $false }
+        if (Test-LaunchesNexus (Get-JsonServerText $DesktopConfig 'mcpServers')) { $DesktopOwned = $true }
+    }
+    $Results['ClaudeDesktop'] = New-Result $true $DesktopConfigured (Ui 'D{e}tect{e}') $DesktopOwned
 } else {
     $Results['ClaudeDesktop'] = New-Result $false $false (Ui 'Non disponible {dash} Claude Desktop non d{e}tect{e}')
 }

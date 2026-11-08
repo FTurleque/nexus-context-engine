@@ -332,7 +332,7 @@ Une entrée `nexus` existante n'est jamais écrasée. Pour faire pointer un clie
 | GitHub Copilot CLI | `copilot mcp add nexus --tools "*" -- <commande MCP NEXUS>` | `connect-copilot-cli.cmd` |
 | GitHub Copilot — JetBrains / IntelliJ | entrée `nexus` (schéma `servers`) dans `%LOCALAPPDATA%\github-copilot\intellij\mcp.json` | `connect-copilot-jetbrains.cmd`, plus `copilot-jetbrains.mcp.json` pour un import manuel |
 | Claude Code (CLI) | `claude mcp add --scope user nexus -- <commande MCP NEXUS>` ; la CLI est cherchée dans le `PATH`, puis dans la copie embarquée par Claude Desktop | `connect-claude-cli.cmd` |
-| Claude Desktop | entrée `nexus` dans `mcpServers` de `claude_desktop_config.json` (installation Microsoft Store ou `%APPDATA%\Claude`) | `connect-claude-desktop.cmd` |
+| Claude Desktop | entrée `nexus` dans `mcpServers` de chaque `claude_desktop_config.json` présent : dossier de l'installation Microsoft Store et `%APPDATA%\Claude`, une machine pouvant garder les deux | `connect-claude-desktop.cmd` |
 | OpenAI Codex CLI | `codex mcp add nexus -- <commande MCP NEXUS>` | `connect-codex-cli.cmd` |
 | OpenAI Codex Desktop | bloc `[mcp_servers.nexus]` entre `# BEGIN NEXUS-MCP` et `# END NEXUS-MCP` dans `~/.codex/config.toml` | `connect-codex-desktop.cmd`, plus `codex-desktop.mcp.toml` |
 | Autre client MCP | aucune ; fichier à importer dans le client | `generic-mcp.json` (schéma `mcpServers`) |
