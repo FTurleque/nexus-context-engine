@@ -13,7 +13,7 @@ public final class FederatedScopePolicy {
 
     public static final int MAX_PROJECTS = 100;
     public static final String TOO_MANY_PROJECTS_MESSAGE =
-            "federated scope must not exceed " + MAX_PROJECTS + " projects";
+            "Le scope fédéré ne doit pas dépasser " + MAX_PROJECTS + " projets";
 
     private FederatedScopePolicy() {
     }
@@ -21,7 +21,7 @@ public final class FederatedScopePolicy {
     public static List<UUID> normalizeProjectIds(List<UUID> projectIds) {
         Objects.requireNonNull(projectIds, "projectIds");
         if (projectIds.isEmpty()) {
-            throw new IllegalArgumentException("projectIds must not be empty");
+            throw new IllegalArgumentException("La liste projectIds ne peut pas être vide");
         }
         Map<UUID, UUID> unique = new LinkedHashMap<>();
         for (UUID projectId : projectIds) {
@@ -35,7 +35,7 @@ public final class FederatedScopePolicy {
     public static List<ProjectDescriptor> normalizeProjects(List<ProjectDescriptor> projects) {
         Objects.requireNonNull(projects, "projects");
         if (projects.isEmpty()) {
-            throw new IllegalArgumentException("projects must not be empty");
+            throw new IllegalArgumentException("La liste des projets ne peut pas être vide");
         }
         Map<UUID, ProjectDescriptor> unique = new LinkedHashMap<>();
         for (ProjectDescriptor project : projects) {

@@ -54,7 +54,7 @@ final class SqliteRelationQueries {
     List<SymbolRelation> searchRelations(UUID projectId, String symbol, int limit) {
         Objects.requireNonNull(symbol, "symbol");
         if (symbol.isBlank()) {
-            throw new IllegalArgumentException("symbol must not be blank");
+            throw new IllegalArgumentException("Le symbole ne peut pas être vide");
         }
         ResultLimitPolicy.validate(limit);
         String normalized = symbol.trim().toLowerCase(Locale.ROOT);

@@ -87,11 +87,11 @@ public final class SemanticSearchStrategy implements SearchStrategy {
         this.contentProfile = requireText(contentProfile, "contentProfile");
         this.degradationReporter = Objects.requireNonNull(degradationReporter, "degradationReporter");
         if (embeddingProvider.dimensions() <= 0) {
-            throw new IllegalArgumentException("embeddingProvider dimensions must be greater than zero");
+            throw new IllegalArgumentException("La dimension du provider d'embeddings doit être strictement positive");
         }
         if (semanticSearchIndex.dimensions() != embeddingProvider.dimensions()) {
             throw new IllegalArgumentException(
-                    "semantic index dimensions must match embedding provider dimensions");
+                    "La dimension de l'index sémantique doit correspondre à celle du provider d'embeddings");
         }
     }
 
@@ -116,10 +116,10 @@ public final class SemanticSearchStrategy implements SearchStrategy {
         Objects.requireNonNull(query, "query");
         Objects.requireNonNull(queryContext, "queryContext");
         if (query.isBlank()) {
-            throw new IllegalArgumentException("query must not be blank");
+            throw new IllegalArgumentException("La requête ne peut pas être vide");
         }
         if (limit <= 0) {
-            throw new IllegalArgumentException("limit must be greater than zero");
+            throw new IllegalArgumentException("limit doit être strictement positif");
         }
 
         if (indexRepository != null) {

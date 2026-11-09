@@ -21,9 +21,9 @@
 
 ## 5. Langue des messages d'erreur
 
-- [ ] 5.1 `AUD-QUA-11` — Écrire dans `.claude/rules/java-core.md` la frontière de D4 (messages atteignables depuis CLI, REST, MCP ou configuration en français ; préconditions internes dans la langue du fichier) ; vérifier par `bash .claude/scripts/contracts.sh`
-- [ ] 5.2 `AUD-QUA-11` — Traduire les messages concernés (requêtes et budgets de `context`, `search` et `FederatedContextService`, configuration et provider Ollama, limites, chemins) et mettre à jour les tests qui les comparent ; vérifier par `./mvnw -B -ntp clean install`
-- [ ] 5.3 `AUD-QUA-11` — Ajouter un test qui vérifie, pour une requête vide et une dimension Ollama hors bornes, un message en français via la façade ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='FederatedContextService*,OllamaEmbeddingProvider*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
+- [x] 5.1 `AUD-QUA-11` — Écrire dans `.claude/rules/java-core.md` la frontière de D4 (messages atteignables depuis CLI, REST, MCP ou configuration en français ; préconditions internes dans la langue du fichier) ; vérifier par `bash .claude/scripts/contracts.sh`
+- [x] 5.2 `AUD-QUA-11` — Traduire les messages concernés (requêtes et budgets de `context`, `search` et `FederatedContextService`, configuration et provider Ollama, limites, chemins) et mettre à jour les tests qui les comparent ; vérifier par `./mvnw -B -ntp clean install`
+- [x] 5.3 `AUD-QUA-11` — Ajouter un test qui vérifie, pour une requête vide et une dimension Ollama hors bornes, un message en français via la façade ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='FederatedContextService*,OllamaEmbeddingProvider*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
 
 ## 6. Troncature de fragment
 

@@ -47,6 +47,6 @@ public final class PublicProjectPathPolicy {
     }
 
     private static IllegalStateException outsideProject() {
-        return new IllegalStateException("Result path is outside the project root");
+        return new IllegalStateException("Le chemin du résultat sort de la racine du projet");
     }
 }

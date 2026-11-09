@@ -37,7 +37,7 @@ final class NexusRestTransportPolicy {
     static void validateSecureNonLoopbackExposure(String exposureMode, Config config) {
         String normalizedMode = exposureMode == null ? "" : exposureMode.trim().toLowerCase(Locale.ROOT);
         if (!NexusRestSecurity.isSecureNonLoopbackExposureMode(normalizedMode)) {
-            throw new IllegalArgumentException("Unsupported secure REST exposure mode: " + exposureMode);
+            throw new IllegalArgumentException("Mode d'exposition REST sécurisée non pris en charge : " + exposureMode);
         }
 
         String insecureRequests = configured(config, INSECURE_REQUESTS_PROPERTY).orElse("enabled");
