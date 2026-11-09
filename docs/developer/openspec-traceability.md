@@ -33,11 +33,13 @@ Cette matrice cite les preuves lues ; elle n'établit pas qu'elles passent sur l
 | `git-recency-diagnostics` | [docs/developer/git-context.md](git-context.md#openspec-git-recency-diagnostics) |
 | `license-compliance` | [docs/developer/ci-and-supply-chain.md](ci-and-supply-chain.md#openspec-license-compliance) |
 | `lucene-reader-cache` | [docs/developer/lucene-lifecycle-qualification.md](lucene-lifecycle-qualification.md#openspec-lucene-reader-cache) |
+| `operational-documentation-contracts` | [docs/developer/ci-and-supply-chain.md](ci-and-supply-chain.md#openspec-operational-documentation-contracts) |
 | `powershell-script-tooling` | [docs/developer/ci-and-supply-chain.md](ci-and-supply-chain.md#openspec-powershell-script-tooling) |
 | `project-indexing-exclusions` | [docs/developer/indexing-pipeline.md](indexing-pipeline.md#openspec-project-indexing-exclusions) |
 | `project-indexing-pipeline` | [docs/developer/indexing-pipeline.md](indexing-pipeline.md#openspec-project-indexing-pipeline) |
 | `project-path-confinement` | [docs/developer/filesystem-support.md](filesystem-support.md#openspec-project-path-confinement) |
 | `public-output-projection` | [docs/developer/rest-api.md](rest-api.md#openspec-public-output-projection) |
+| `query-path-performance` | [docs/developer/large-scale-search.md](large-scale-search.md#openspec-query-path-performance) |
 | `release-pipeline` | [docs/developer/immutable-release-publishing.md](immutable-release-publishing.md#openspec-release-pipeline) |
 | `repository-security-settings` | [docs/developer/branch-governance.md](branch-governance.md#openspec-repository-security-settings) |
 | `rest-transport-hardening` | [docs/developer/rest-exposure-security.md](rest-exposure-security.md#openspec-rest-transport-hardening) |
@@ -45,9 +47,11 @@ Cette matrice cite les preuves lues ; elle n'établit pas qu'elles passent sur l
 | `secret-redaction` | [docs/developer/secret-redaction.md](secret-redaction.md#openspec-secret-redaction) |
 | `semantic-search-qualification` | [docs/developer/semantic-search.md](semantic-search.md#openspec-semantic-search-qualification) |
 | `sqlite-index-writes` | [docs/developer/sqlite-write-contention.md](sqlite-write-contention.md#openspec-sqlite-index-writes) |
+| `sqlite-journal-policy` | [docs/developer/sqlite-write-contention.md](sqlite-write-contention.md#openspec-sqlite-journal-policy) |
 | `symbol-search-scoping` | [docs/developer/large-scale-search.md](large-scale-search.md#openspec-symbol-search-scoping) |
 | `test-filesystem-isolation` | [docs/developer/reproduce-and-debug.md](reproduce-and-debug.md#openspec-test-filesystem-isolation) |
 | `test-suite-reliability` | [docs/developer/reproduce-and-debug.md](reproduce-and-debug.md#openspec-test-suite-reliability) |
+| `user-facing-error-language` | [docs/developer/architecture-implementation.md](architecture-implementation.md#openspec-user-facing-error-language) |
 
 ## adapter-contract-tests
 
@@ -172,6 +176,16 @@ Cette matrice cite les preuves lues ; elle n'établit pas qu'elles passent sur l
 | La présence de l'index lexical est lue sans ouvrir l'index | Sonde de readiness répétée | [lucene-lifecycle-qualification.md#openspec-lucene-reader-cache](lucene-lifecycle-qualification.md#openspec-lucene-reader-cache) | 2026-11-07-sprint-06-federation-et-runtimes-longue-duree › 4.2 | core/src/test/java/com/nexus/search/lucene/LuceneSearchIndexTest.java#persistentPresenceProbeOpensNoReaderOutsideTheCache | couvert |
 | La présence de l'index lexical est lue sans ouvrir l'index | Index absent | [lucene-lifecycle-qualification.md#openspec-lucene-reader-cache](lucene-lifecycle-qualification.md#openspec-lucene-reader-cache) | 2026-11-07-sprint-06-federation-et-runtimes-longue-duree › 4.2 | core/src/test/java/com/nexus/search/lucene/LuceneSearchIndexTest.java#persistentPresenceProbeOpensNoReaderOutsideTheCache | couvert |
 
+## operational-documentation-contracts
+
+| Exigence | Scénario | Vue ou conception | Tâche | Test ou preuve | Statut |
+|---|---|---|---|---|---|
+| Le voisinage graphe est documenté comme une projection bornée | Ancienne description réintroduite | [ci-and-supply-chain.md#openspec-operational-documentation-contracts](ci-and-supply-chain.md#openspec-operational-documentation-contracts) | 2026-11-09-sprint-11-finitions-et-micro-optimisations › 1.1 | scripts/release/test-operational-doc-contracts.sh:366 | couvert |
+| Le voisinage graphe est documenté comme une projection bornée | Aucun type de graphe orphelin | [ci-and-supply-chain.md#openspec-operational-documentation-contracts](ci-and-supply-chain.md#openspec-operational-documentation-contracts) | 2026-11-09-sprint-11-finitions-et-micro-optimisations › 1.2 | test non écrit : la recherche `git grep` de la tâche 1.2 a été exécutée à la livraison, aucun contrôle permanent | non couvert |
+| Les limites courantes ne présentent pas comme futur un moteur livré | Watch item obsolète | [ci-and-supply-chain.md#openspec-operational-documentation-contracts](ci-and-supply-chain.md#openspec-operational-documentation-contracts) | 2026-11-09-sprint-11-finitions-et-micro-optimisations › 2.1 | scripts/release/test-operational-doc-contracts.sh:804 | couvert |
+| L'instruction primaire des agents n'utilise que le wrapper Maven | Commande Maven directe | [ci-and-supply-chain.md#openspec-operational-documentation-contracts](ci-and-supply-chain.md#openspec-operational-documentation-contracts) | 2026-11-09-sprint-11-finitions-et-micro-optimisations › 3.1 | scripts/release/test-operational-doc-contracts.sh:813 | couvert |
+| L'instruction primaire des agents n'utilise que le wrapper Maven | Contexte construit par NEXUS sur son propre dépôt | [ci-and-supply-chain.md#openspec-operational-documentation-contracts](ci-and-supply-chain.md#openspec-operational-documentation-contracts) | 2026-11-09-sprint-11-finitions-et-micro-optimisations › 3.1 | scripts/self-smoke.ps1:165 | couvert |
+
 ## powershell-script-tooling
 
 | Exigence | Scénario | Vue ou conception | Tâche | Test ou preuve | Statut |
@@ -235,6 +249,17 @@ Cette matrice cite les preuves lues ; elle n'établit pas qu'elles passent sur l
 | Les métadonnées de symbole sont redigées à la sortie | Signature externe porteuse d'un secret | [rest-api.md#openspec-public-output-projection](rest-api.md#openspec-public-output-projection) | 2026-10-31-sprint-04-sortie-publique-et-redaction › 5.1 | core/src/test/java/com/nexus/exposure/PublicOutputProjectionTest.java#symbolMetadataFromExternalProducersIsRedacted<br>core/src/test/java/com/nexus/cli/CliRendererSymbolRedactionTest.java#externalSignaturesAreRedactedOnEveryCliOutput<br>adapters/mcp-java/src/test/java/com/nexus/mcp/NexusMcpOutputParityTest.java#externalSymbolSignaturesAreRedactedBySymbolAndSearchTools<br>adapters/rest-quarkus/src/test/java/com/nexus/api/NexusRestOutputParityTest.java#searchResponseRedactsExternalSymbolSignatures | partiel : SCIP, MINOS et JDT couverts sur la projection et la CLI, MCP seulement avec MINOS, REST sans passer par HTTP |
 | Les métadonnées de symbole sont redigées à la sortie | Signature trop longue pour la redaction | [rest-api.md#openspec-public-output-projection](rest-api.md#openspec-public-output-projection) | 2026-10-31-sprint-04-sortie-publique-et-redaction › 6.1 | core/src/test/java/com/nexus/exposure/PublicOutputProjectionTest.java#anOversizedExternalSignatureIsMaskedWithoutFailingTheResponse | couvert |
 | Le REST réutilise les records d'opération du cœur | Ajout d'un champ côté cœur | [rest-api.md#openspec-public-output-projection](rest-api.md#openspec-public-output-projection) | 2026-10-31-sprint-04-sortie-publique-et-redaction › 1.1 | preuve manquante (vérification ponctuelle par git grep dans la tâche, aucun test) | non couvert |
+
+## query-path-performance
+
+| Exigence | Scénario | Vue ou conception | Tâche | Test ou preuve | Statut |
+|---|---|---|---|---|---|
+| La troncature de fragment ne reconstruit pas le préfixe à chaque ligne | Équivalence de sortie | [large-scale-search.md#openspec-query-path-performance](large-scale-search.md#openspec-query-path-performance) | 2026-11-09-sprint-11-finitions-et-micro-optimisations › 6.1<br>2026-11-09-sprint-11-finitions-et-micro-optimisations › 6.2 | core/src/test/java/com/nexus/context/BudgetedContextSelectorTruncationTest.java#dichotomyMatchesTheLinearReferenceOnUnicodeMultilineFragments | couvert |
+| La troncature de fragment ne reconstruit pas le préfixe à chaque ligne | Gros fragment | [large-scale-search.md#openspec-query-path-performance](large-scale-search.md#openspec-query-path-performance) | 2026-11-09-sprint-11-finitions-et-micro-optimisations › 6.1 | core/src/test/java/com/nexus/context/BudgetedContextSelectorTruncationTest.java#largeFragmentUsesALogarithmicNumberOfEstimations | couvert |
+| Le voisinage sortant est paginé par clé | Nombreux imports non résolus | [large-scale-search.md#openspec-query-path-performance](large-scale-search.md#openspec-query-path-performance) | 2026-11-09-sprint-11-finitions-et-micro-optimisations › 7.1 | core/src/test/java/com/nexus/persistence/sqlite/SqliteGraphNeighborhoodProjectionTest.java#resumesOutgoingScanAfterLastPairAcrossSeveralPagesOfUnresolvedImports<br>core/src/test/java/com/nexus/persistence/sqlite/SqliteGraphNeighborhoodProjectionTest.java#keysetPagesConcatenateToTheFullOrderedOutgoingScan | couvert |
+| Le voisinage sortant est paginé par clé | Plan de requête | [large-scale-search.md#openspec-query-path-performance](large-scale-search.md#openspec-query-path-performance) | 2026-11-09-sprint-11-finitions-et-micro-optimisations › 7.1 | core/src/test/java/com/nexus/persistence/sqlite/SqliteGraphQueryPlanTest.java#outgoingAndOwnerPlansSeekRequestedKeys | couvert |
+| Les motifs ne sont pas compilés à chaque appel | Chemin avec lettre de lecteur | [large-scale-search.md#openspec-query-path-performance](large-scale-search.md#openspec-query-path-performance) | 2026-11-09-sprint-11-finitions-et-micro-optimisations › 8.1 | core/src/test/java/com/nexus/paths/RepositoryPathTest.java#refusesInvalidProviderSyntaxWithoutRepair | couvert |
+| Les motifs ne sont pas compilés à chaque appel | Même glob évalué deux fois | [large-scale-search.md#openspec-query-path-performance](large-scale-search.md#openspec-query-path-performance) | 2026-11-09-sprint-11-finitions-et-micro-optimisations › 8.2 | core/src/test/java/com/nexus/context/source/instruction/RepositoryGlobMatcherTest.java#sameGlobIsCompiledOnceAcrossQueries<br>core/src/test/java/com/nexus/context/source/instruction/RepositoryGlobMatcherTest.java#cacheNeverExceedsItsBoundAndEvictsTheLeastRecentlyUsedGlob | couvert |
 
 ## release-pipeline
 
@@ -317,6 +342,13 @@ Cette matrice cite les preuves lues ; elle n'établit pas qu'elles passent sur l
 | Les analyses en attente sont bornées par lot | Rebuild complet | [sqlite-write-contention.md#openspec-sqlite-index-writes](sqlite-write-contention.md#openspec-sqlite-index-writes) | 2026-11-07-sprint-05-indexation-et-ecriture-sqlite › 2.1, 2.2 | core/src/test/java/com/nexus/index/ProjectIndexingPublicationTest.java#analysesAreStagedAtTheBatchPaceAndPublishedOnce<br>core/src/test/java/com/nexus/persistence/sqlite/SqliteIndexWriteSessionTest.java#stagedAnalysesAreInvisibleUntilPublishAndPublishedFactsEqualApplyChanges | partiel : le heap vivant reste proportionnel au nombre de fichiers, seules les analyses en attente sont bornées |
 | Les analyses en attente sont bornées par lot | Échec en cours d'indexation | [sqlite-write-contention.md#openspec-sqlite-index-writes](sqlite-write-contention.md#openspec-sqlite-index-writes) | 2026-11-07-sprint-05-indexation-et-ecriture-sqlite › 2.2 | core/src/test/java/com/nexus/index/ProjectIndexingPublicationTest.java#aFailureAfterSeveralBatchesLeavesThePreviousGenerationAndDerivedIndexesIntact<br>core/src/test/java/com/nexus/persistence/sqlite/SqliteIndexWriteSessionTest.java#closingWithoutPublishDiscardsTheStagedAnalysesAndKeepsThePreviousGeneration | couvert |
 
+## sqlite-journal-policy
+
+| Exigence | Scénario | Vue ou conception | Tâche | Test ou preuve | Statut |
+|---|---|---|---|---|---|
+| Les bases canoniques utilisent le journal rollback | Lecture du mode de journal | [sqlite-write-contention.md#openspec-sqlite-journal-policy](sqlite-write-contention.md#openspec-sqlite-journal-policy) | 2026-11-09-sprint-11-finitions-et-micro-optimisations › 4.2 | core/src/test/java/com/nexus/persistence/sqlite/SqliteDatabaseHardeningTest.java#keepsTheRollbackJournalOnEveryConnection | couvert |
+| Les bases canoniques utilisent le journal rollback | Changement de mode sans décision | [sqlite-write-contention.md#openspec-sqlite-journal-policy](sqlite-write-contention.md#openspec-sqlite-journal-policy) | 2026-11-09-sprint-11-finitions-et-micro-optimisations › 4.1<br>2026-11-09-sprint-11-finitions-et-micro-optimisations › 4.2 | core/src/test/java/com/nexus/persistence/sqlite/SqliteDatabaseHardeningTest.java#keepsTheRollbackJournalOnEveryConnection (message d'échec citant DATA-0088) | couvert |
+
 ## symbol-search-scoping
 
 | Exigence | Scénario | Vue ou conception | Tâche | Test ou preuve | Statut |
@@ -342,6 +374,14 @@ Cette matrice cite les preuves lues ; elle n'établit pas qu'elles passent sur l
 | Chaque test opt-in a un lanceur automatisé | Intégration MINOS réelle | [reproduce-and-debug.md#openspec-test-suite-reliability](reproduce-and-debug.md#openspec-test-suite-reliability) | sprint-03-filets-de-test-et-traces › 5.3 | scripts/release/test-final-audit-contracts.sh:219-231<br>.github/workflows/measurement-tools.yml:98<br>scripts/validate-minos-integration.ps1:141 | couvert |
 | Chaque test opt-in a un lanceur automatisé | Baselines de mesure | [reproduce-and-debug.md#openspec-test-suite-reliability](reproduce-and-debug.md#openspec-test-suite-reliability) | sprint-03-filets-de-test-et-traces › 5.3 | scripts/release/test-final-audit-contracts.sh:219-223<br>.github/workflows/measurement-tools.yml:136<br>.github/workflows/semantic-search-qualification.yml:283 | couvert |
 
+## user-facing-error-language
+
+| Exigence | Scénario | Vue ou conception | Tâche | Test ou preuve | Statut |
+|---|---|---|---|---|---|
+| Les erreurs provoquées par l'utilisateur sont en français | Requête vide | [architecture-implementation.md#openspec-user-facing-error-language](architecture-implementation.md#openspec-user-facing-error-language) | 2026-11-09-sprint-11-finitions-et-micro-optimisations › 5.2<br>2026-11-09-sprint-11-finitions-et-micro-optimisations › 5.3 | core/src/test/java/com/nexus/application/FederatedContextServiceUserMessageTest.java#blankFederatedQueryIsRejectedInFrenchThroughTheFacade | couvert |
+| Les erreurs provoquées par l'utilisateur sont en français | Configuration Ollama hors bornes | [architecture-implementation.md#openspec-user-facing-error-language](architecture-implementation.md#openspec-user-facing-error-language) | 2026-11-09-sprint-11-finitions-et-micro-optimisations › 5.2<br>2026-11-09-sprint-11-finitions-et-micro-optimisations › 5.3 | core/src/test/java/com/nexus/application/OllamaEmbeddingProviderUserMessageTest.java#outOfRangeConfiguredDimensionsAreRejectedInFrenchByTheComposition<br>core/src/test/java/com/nexus/application/OllamaEmbeddingProviderUserMessageTest.java#outOfRangeProviderDimensionsAreRejectedInFrench | couvert |
+| Les erreurs provoquées par l'utilisateur sont en français | Règle écrite | [architecture-implementation.md#openspec-user-facing-error-language](architecture-implementation.md#openspec-user-facing-error-language) | 2026-11-09-sprint-11-finitions-et-micro-optimisations › 5.1 | .claude/rules/java-core.md | partiel : la règle est écrite, aucun contrat ne la lit |
+
 ## Changements actifs
 
 Un changement actif porte sa traçabilité dans la section « Traçabilité » de son `design.md`. Les preuves y sont « à produire » ou « test non écrit » : un changement actif n'est pas réalisé et n'est jamais déclaré couvert. Le contrat vérifie leurs liens et leurs diagrammes, pas leur complétude.
@@ -349,5 +389,4 @@ Un changement actif porte sa traçabilité dans la section « Traçabilité » d
 | Changement | Capacités | Scénarios | Tâches (cochées / total) | Traçabilité |
 |---|---|---|---|---|
 | `preciser-bornes-redaction-recence-git` | `git-recency-diagnostics`, `secret-redaction` | 6 | 0 / 5 | [design.md](../../openspec/changes/preciser-bornes-redaction-recence-git/design.md#traçabilité) |
-| `sprint-10-conteneur-et-gouvernance` | `container-image-hardening`, `operational-documentation-contracts`, `repository-governance`, `repository-security-settings` | 16 | 0 / 15 | [design.md](../../openspec/changes/sprint-10-conteneur-et-gouvernance/design.md#traçabilité) |
-| `sprint-11-finitions-et-micro-optimisations` | `operational-documentation-contracts`, `query-path-performance`, `sqlite-journal-policy`, `user-facing-error-language` | 16 | 0 / 16 | [design.md](../../openspec/changes/sprint-11-finitions-et-micro-optimisations/design.md#traçabilité) |
+| `sprint-10-conteneur-et-gouvernance` | `container-image-hardening`, `operational-documentation-contracts`, `repository-governance`, `repository-security-settings` | 16 | 13 / 15 | [design.md](../../openspec/changes/sprint-10-conteneur-et-gouvernance/design.md#traçabilité) |

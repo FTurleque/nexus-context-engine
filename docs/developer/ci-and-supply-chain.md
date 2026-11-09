@@ -460,3 +460,22 @@ Exigences : `powershell-script-tooling › Maven est appelé par le wrapper vér
 - **[Proposition]** Ajouter au contrat `test-operational-doc-contracts.sh` une recherche de `0.1.0-SNAPSHOT` dans les scripts actifs, et une vérification de l'import du module par tout script qui appelle `Invoke-Maven`, `Resolve-AbsolutePath` ou `Invoke-NexusJson`.
 - **[Proposition]** Couvrir `Invoke-NexusJson` (code de sortie non nul, sortie vide) dans `Test-NexusScript.ps1`.
 - **[Question]** Le repli local hors CI sur un Maven installé non ancré est-il compatible avec l'intention « Maven est appelé par le wrapper vérifié » ? La spec ne l'interdit pas.
+
+## OpenSpec operational-documentation-contracts
+
+Spec : [`openspec/specs/operational-documentation-contracts/spec.md`](../../openspec/specs/operational-documentation-contracts/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+Cette section décrit ce que `scripts/release/test-operational-doc-contracts.sh` impose à la documentation courante et à l'instruction primaire des agents. Le script tourne dans `bash .claude/scripts/contracts.sh` et dans la CI.
+
+### Comportement existant vérifié (operational-documentation-contracts)
+
+| Étiquette | Fait | Source |
+|---|---|---|
+| [Existant vérifié] | `docs/developer/search-ranking.md` décrit le voisinage graphe comme une projection bornée ; le contrat refuse « ProjectGraph cache », « ProjectGraphBuilder » et « Graphe dérivé par génération ». | `scripts/release/test-operational-doc-contracts.sh:366` |
+| [Existant vérifié] | `docs/developer/current-limitations.md` ne présente pas le moteur FTS5 trigram livré par V008 comme une évolution à venir. | `scripts/release/test-operational-doc-contracts.sh:804` |
+| [Existant vérifié] | `AGENTS.md` prescrit `./mvnw clean install` et ne contient aucune commande `mvn` hors wrapper. | `scripts/release/test-operational-doc-contracts.sh:813` |
+| [Existant vérifié] | L'étape 9 du self-smoke vérifie que le contexte construit sur le dépôt retient le `AGENTS.md` natif. | `scripts/self-smoke.ps1:165` |
+
+### Écarts et limites (operational-documentation-contracts)
+
+- Aucun contrôle permanent ne vérifie l'absence d'un type `ProjectGraph` dans le code : la recherche `git grep` a été exécutée à la livraison du sprint 11.

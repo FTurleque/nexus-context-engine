@@ -34,7 +34,7 @@
 
 ## 7. Clôture
 
-- [ ] 7.1 Mettre à jour le statut des constats du sprint 10 dans `docs/project/audits/2026-10-17/findings.json` (fermés avec la PR ; `AUD-DEP-31` : symptôme fermé par #269, cause fermée par cette PR) ; vérifier par `/nx-validate`
+- [x] 7.1 Mettre à jour le statut des constats du sprint 10 dans `docs/project/audits/2026-10-17/findings.json` (fermés avec la PR ; `AUD-DEP-31` : symptôme fermé par #269, cause fermée par cette PR) ; vérifier par `/nx-validate`
 
 ## Workflow follow-up
 

@@ -195,3 +195,15 @@ Exigences : `sqlite-index-writes › La suppression des relations d'un fichier u
 
 - [Proposition] Documenter l'invariant « session ouverte sous verrou d'indexation » sur `IndexRepository.openWriteSession`, ou porter un identifiant de session dans les tables de mise en attente.
 - [Question] Faut-il purger la mise en attente à l'ouverture de la base plutôt qu'à la prochaine indexation du projet ?
+
+## OpenSpec sqlite-journal-policy
+
+Spec : [`openspec/specs/sqlite-journal-policy/spec.md`](../../openspec/specs/sqlite-journal-policy/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+Les bases SQLite canoniques restent en journal rollback (`delete`). La décision, ses mesures DELETE/WAL et sa condition de réévaluation sont consignées dans [DATA-0088](../architecture/adr/DATA-0088-conserver-le-journal-rollback-sqlite.md).
+
+### Comportement existant vérifié (sqlite-journal-policy)
+
+| Étiquette | Fait | Source |
+|---|---|---|
+| [Existant vérifié] | Une connexion ouverte par `SqliteDatabase` lit `PRAGMA journal_mode` = `delete` ; le message d'échec cite DATA-0088. | `core/src/test/java/com/nexus/persistence/sqlite/SqliteDatabaseHardeningTest.java#keepsTheRollbackJournalOnEveryConnection` |

@@ -417,3 +417,21 @@ Les deux échecs peuvent survenir ensemble. Une baseline non triée ou avec doub
 - [Question] Faut-il une règle automatisée pour la dernière exigence (`security` sans `context`, politique d'exposition hors de `security`) ?
 - [Question] Faut-il supprimer le fichier de baseline et la règle `cycles-baseline` au profit d'une règle d'acyclicité sans baseline, comme l'énonce la spec du sprint 7 ?
 - [Proposition] Faire détecter par l'analyseur les noms `com.nexus.*` pleinement qualifiés pour que `project-feuille`, `cycles-baseline` et les règles de sens ne dépendent plus de l'usage d'un import.
+
+## OpenSpec user-facing-error-language
+
+Spec : [`openspec/specs/user-facing-error-language/spec.md`](../../openspec/specs/user-facing-error-language/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+Un message d'exception atteignable depuis la CLI, REST, MCP, un fichier fourni ou une variable `NEXUS_*` est en français ; les préconditions internes suivent la langue du fichier. La frontière est écrite dans `.claude/rules/java-core.md`.
+
+### Comportement existant vérifié (user-facing-error-language)
+
+| Étiquette | Fait | Source |
+|---|---|---|
+| [Existant vérifié] | Une requête fédérée vide, un budget nul ou inférieur au scope et un scope vide sont refusés en français par la façade. | `core/src/test/java/com/nexus/application/FederatedContextServiceUserMessageTest.java#blankFederatedQueryIsRejectedInFrenchThroughTheFacade` |
+| [Existant vérifié] | Une dimension Ollama hors de 1 à 1024 est refusée en français, par la composition comme par le provider. | `core/src/test/java/com/nexus/application/OllamaEmbeddingProviderUserMessageTest.java#outOfRangeConfiguredDimensionsAreRejectedInFrenchByTheComposition` |
+| [Existant vérifié] | Un chemin fourni invalide et un budget de sélection non positif sont refusés en français. | `core/src/test/java/com/nexus/paths/RepositoryPathTest.java#reportsAnInvalidProviderPathInFrench`, `core/src/test/java/com/nexus/context/BudgetedContextSelectorBudgetMessageTest.java#nonPositiveBudgetIsRejectedInFrench` |
+
+### Écarts et limites (user-facing-error-language)
+
+- Aucun contrat ne lit la règle de `.claude/rules/java-core.md` ; les tests ci-dessus vérifient les messages, pas la règle.
