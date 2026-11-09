@@ -41,7 +41,7 @@
 
 ## 9. Clôture
 
-- [ ] 9.1 Mettre à jour le statut des constats du sprint 11 dans `docs/project/audits/2026-10-17/findings.json` (fermés avec la PR) ; vérifier par `/nx-validate` (contrats, `./mvnw clean install`, `scripts/self-smoke.ps1`)
+- [x] 9.1 Mettre à jour le statut des constats du sprint 11 dans `docs/project/audits/2026-10-17/findings.json` (fermés avec la PR) ; vérifier par `/nx-validate` (contrats, `./mvnw clean install`, `scripts/self-smoke.ps1`)
 
 ## Workflow follow-up
 

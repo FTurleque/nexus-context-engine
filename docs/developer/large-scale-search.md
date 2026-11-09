@@ -216,3 +216,22 @@ Exigences : `symbol-search-scoping › La recherche de symboles est scopée proj
 ### Propositions et questions ouvertes
 
 - Questions : aucune.
+
+## OpenSpec query-path-performance
+
+Spec : [`openspec/specs/query-path-performance/spec.md`](../../openspec/specs/query-path-performance/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+Cette section décrit les coûts admis sur trois chemins de requête et d'import. Les sorties sont identiques à celles des implémentations de référence.
+
+### Comportement existant vérifié (query-path-performance)
+
+| Étiquette | Fait | Source |
+|---|---|---|
+| [Existant vérifié] | `BudgetedContextSelector.truncate` cherche le nombre de lignes conservées par dichotomie ; le résultat est identique à la boucle ligne à ligne de référence, y compris pour l'Unicode hors BMP et les fins de ligne CRLF et CR. | `core/src/test/java/com/nexus/context/BudgetedContextSelectorTruncationTest.java#dichotomyMatchesTheLinearReferenceOnUnicodeMultilineFragments` |
+| [Existant vérifié] | Un fragment de 4 096 lignes demande au plus log2(n) + 2 estimations ; `TokenEstimator` documente l'exigence de croissance avec le préfixe. | `core/src/test/java/com/nexus/context/BudgetedContextSelectorTruncationTest.java#largeFragmentUsesALogarithmicNumberOfEstimations` |
+| [Existant vérifié] | Le voisinage sortant de `SqliteGraphQueries` est paginé par la clé `(source_ref, target_ref)`, sans `OFFSET` ; la concaténation des pages égale le parcours complet ordonné. | `core/src/test/java/com/nexus/persistence/sqlite/SqliteGraphNeighborhoodProjectionTest.java#keysetPagesConcatenateToTheFullOrderedOutgoingScan` |
+| [Existant vérifié] | `RepositoryPath.fromProvider` refuse une lettre de lecteur par comparaison de caractères ; `RepositoryGlobMatcher` garde au plus 256 motifs compilés dans un cache LRU. | `core/src/test/java/com/nexus/context/source/instruction/RepositoryGlobMatcherTest.java#cacheNeverExceedsItsBoundAndEvictsTheLeastRecentlyUsedGlob` |
+
+### Écarts et limites (query-path-performance)
+
+- L'index `(project_id, kind, source_ref)` ne contient pas `target_ref` : chaque page relit les entrées d'index des chemins demandés. BE-0087 fixe la condition de réexamen d'un index couvrant.
