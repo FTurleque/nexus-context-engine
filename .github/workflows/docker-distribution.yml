@@ -59,7 +59,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: docker-distribution-${{ github.event.pull_request.number || github.ref }}
+  # github.workflow names the caller when this workflow is reused, so a PR that triggers
+  # both this workflow and develop-push-docker-distribution.yml runs them in separate groups.
+  group: docker-distribution-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
