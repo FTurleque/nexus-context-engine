@@ -2544,19 +2544,23 @@
    "sprint": 11,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-09",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "ADR DATA-0088 (Proposed) consigne le journal rollback, les mesures DELETE/WAL et la condition de réévaluation ; scale-regression-results.md et scale-regression-benchmark.md y renvoient ; SqliteDatabaseHardeningTest.keepsTheRollbackJournalOnEveryConnection fixe PRAGMA journal_mode = delete (sprint 11, tâches 4.1 et 4.2)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "3 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-11-09",
+    "commit": "42ef8fb1",
+    "verdict": "Fermé",
+    "preuve": "SqliteDatabaseHardeningTest : 8 tests, 0 échec ; archgate check : 50/50 ; contrat documentaire vérifiant l'ADR, ses renvois et le test ; ./mvnw clean install vert",
     "reserve": null
    }
   },
@@ -2699,19 +2703,23 @@
    "sprint": 11,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-09",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "AGENTS.md prescrit ./mvnw clean install (.\\mvnw.cmd sous Windows) ; le contrat refuse toute commande mvn hors wrapper dans AGENTS.md (sprint 11, tâche 3.1)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "5 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-11-09",
+    "commit": "42ef8fb1",
+    "verdict": "Fermé",
+    "preuve": "AGENTS.md sans commande mvn directe ; contrat négatif vérifié sur l'ancienne ligne ; scripts/self-smoke.ps1 : SELF-SMOKE SUCCESS, étape 9 avec AGENTS.md retenu",
     "reserve": null
    }
   },
@@ -2761,19 +2769,23 @@
    "sprint": 11,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-09",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Watch item de current-limitations.md borné à l'évolution au-delà du FTS5 trigram livré par V008 ; refus de l'ancienne formulation dans test-operational-doc-contracts.sh (sprint 11, tâche 2.1)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "5 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
+    "date": "2026-11-09",
+    "commit": "42ef8fb1",
+    "verdict": "Fermé",
+    "preuve": "docs/developer/current-limitations.md ne contient plus « nouveau moteur FTS/trigram » ; le contrat refuse cette formulation et exige la mention de V008 (cas négatif vérifié) ; bash .claude/scripts/contracts.sh vert",
     "reserve": null
    }
   },
