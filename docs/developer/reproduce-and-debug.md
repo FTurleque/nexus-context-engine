@@ -568,7 +568,7 @@ Cette section complète la procédure de test ci-dessus par les propriétés de 
 
 **Port `IndexRepository`** (exigence `Le port IndexRepository ne porte pas de comportement non exécuté`)
 
-- **[Existant vérifié]** `core/src/main/java/com/nexus/index/IndexRepository.java` (66 lignes) ne contient aucune méthode `default` : la recherche du mot-clé `default` y est vide. Le commit `239af54c` (« make every IndexRepository projection abstract ») a rendu abstraites les neuf méthodes `default` jadis en repli mémoire, `SqliteIndexRepository` les implémentant toutes, et a adapté le fake de `core/src/test/java/com/nexus/ranking/graph/ProjectGraphBuilderProjectionTest.java` (`delegatesOnlyToBoundedNeighborhoodProjection`, `:23`).
+- **[Existant vérifié]** `core/src/main/java/com/nexus/index/IndexRepository.java` (66 lignes) ne contient aucune méthode `default` : la recherche du mot-clé `default` y est vide. Le commit `239af54c` (« make every IndexRepository projection abstract ») a rendu abstraites les neuf méthodes `default` jadis en repli mémoire, `SqliteIndexRepository` les implémentant toutes, et a adapté le fake du test de projection du voisinage, `core/src/test/java/com/nexus/ranking/graph/GraphNeighborhoodProjectionTest.java` (`delegatesOnlyToBoundedNeighborhoodProjection`, `:23`).
 - **[Existant vérifié]** Le rapport JaCoCo de `core` est produit par le reactor (`core/target/site/jacoco/jacoco.xml`, `.github/workflows/ci.yml:168`) mais les règles de `jacoco:check` de `core` sont au niveau `BUNDLE` et `PACKAGE` (`core/pom.xml:68-152` ; aucune règle `CLASS` ni mention d'`IndexRepository`).
 
 **Tests opt-in** (exigence `Chaque test opt-in a un lanceur automatisé`)

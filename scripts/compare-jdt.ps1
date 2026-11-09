@@ -75,10 +75,10 @@ $queries = @(
         Relevant = @("core/src/main/java/com/nexus/persistence/sqlite/SqliteIndexRepository.java")
     },
     [pscustomobject]@{
-        Query = "GraphCandidateEnricher ProjectGraphBuilder"
+        Query = "GraphCandidateEnricher GraphNeighborhoodProjection"
         Relevant = @(
             "core/src/main/java/com/nexus/ranking/graph/GraphCandidateEnricher.java",
-            "core/src/main/java/com/nexus/ranking/graph/ProjectGraphBuilder.java"
+            "core/src/main/java/com/nexus/ranking/graph/GraphNeighborhoodProjection.java"
         )
     }
 )

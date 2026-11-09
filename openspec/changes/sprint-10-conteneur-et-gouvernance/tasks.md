@@ -22,15 +22,15 @@
 
 ## 5. Gouvernance du dépôt
 
-- [ ] 5.1 `AUD-DEP-16` — Mettre à jour `docs/developer/branch-governance.md` (méthodes de merge du ruleset) et le skill `nexus-pr-workflow` ; ajouter l'assertion au contrat documentaire ; vérifier par `bash .claude/scripts/contracts.sh`
+- [x] 5.1 `AUD-DEP-16` — Mettre à jour `docs/developer/branch-governance.md` (méthodes de merge du ruleset) et le skill `nexus-pr-workflow` ; ajouter l'assertion au contrat documentaire ; vérifier par `bash .claude/scripts/contracts.sh`
 - [ ] 5.2 `AUD-DEP-16` (mainteneur, après fusion de 5.1) — Restreindre `allowed_merge_methods` à `["merge"]` dans le ruleset « Protect main & develop » et désactiver squash et rebase dans les réglages du dépôt ; vérifier par `gh api repos/FTurleque/nexus-context-engine/rulesets/20503835 --jq '.rules[]|select(.type=="pull_request").parameters.allowed_merge_methods'` (`["merge"]`) et `gh api repos/FTurleque/nexus-context-engine --jq '[.allow_squash_merge,.allow_rebase_merge]'` (`[false,false]`)
-- [ ] 5.3 `AUD-DEP-17` — Créer `SECURITY.md` (ou compléter celui de `sprint-01-cloture-mesures`) : signalement privé GitHub, aucune issue publique, versions prises en charge, délai de réponse ; créer `.github/CODEOWNERS` (D6) ; vérifier par `bash .claude/scripts/contracts.sh` et `gh api repos/FTurleque/nexus-context-engine/community/profile --jq '.files|keys'`
+- [x] 5.3 `AUD-DEP-17` — Créer `SECURITY.md` (ou compléter celui de `sprint-01-cloture-mesures`) : signalement privé GitHub, aucune issue publique, versions prises en charge, délai de réponse ; créer `.github/CODEOWNERS` (D6) ; vérifier par `bash .claude/scripts/contracts.sh` et `gh api repos/FTurleque/nexus-context-engine/community/profile --jq '.files|keys'`
 - [ ] 5.4 `AUD-DEP-17` (mainteneur) — Activer le signalement privé de vulnérabilités ; vérifier par `gh api repos/FTurleque/nexus-context-engine/private-vulnerability-reporting` (`{"enabled":true}`)
 
 ## 6. Versions de dépendances hors de la documentation
 
-- [ ] 6.1 `AUD-DEP-31` — Remplacer dans `docs/developer/README.md`, `docs/developer/mcp.md`, `docs/developer/rest-api.md`, `docs/developer/architecture-implementation.md` et les vues arc42 courantes les numéros Quarkus et SDK MCP par la référence à `quarkus.platform.version` et `mcp.sdk.version` du `pom.xml` (D7) ; faire lire `mcp.sdk.version` au contrat, exiger la mention des propriétés et refuser les littéraux ; vérifier par `bash .claude/scripts/contracts.sh`
-- [ ] 6.2 `AUD-DEP-31` — Vérifier qu'une montée locale simulée (`quarkus.platform.version` et `mcp.sdk.version` modifiés dans une copie de travail jetable) laisse `bash scripts/release/test-operational-doc-contracts.sh` vert, puis restaurer le `pom.xml` ; vérifier par `git status --short pom.xml` vide
+- [x] 6.1 `AUD-DEP-31` — Remplacer dans `docs/developer/README.md`, `docs/developer/mcp.md`, `docs/developer/rest-api.md`, `docs/developer/architecture-implementation.md` et les vues arc42 courantes les numéros Quarkus et SDK MCP par la référence à `quarkus.platform.version` et `mcp.sdk.version` du `pom.xml` (D7) ; faire lire `mcp.sdk.version` au contrat, exiger la mention des propriétés et refuser les littéraux ; vérifier par `bash .claude/scripts/contracts.sh`
+- [x] 6.2 `AUD-DEP-31` — Vérifier qu'une montée locale simulée (`quarkus.platform.version` et `mcp.sdk.version` modifiés dans une copie de travail jetable) laisse `bash scripts/release/test-operational-doc-contracts.sh` vert, puis restaurer le `pom.xml` ; vérifier par `git status --short pom.xml` vide
 
 ## 7. Clôture
 

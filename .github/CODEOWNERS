@@ -1,0 +1,10 @@
+# Propriétaires déclarés des fichiers sensibles de NEXUS (docs/developer/branch-governance.md).
+# La revue code owner n'est pas obligatoire : le modèle à un seul mainteneur reste en vigueur.
+/.github/workflows/                 @FTurleque
+/.github/CODEOWNERS                 @FTurleque
+/scripts/release/                   @FTurleque
+/config/tool-integrity.properties   @FTurleque
+/mvnw                               @FTurleque
+/mvnw.cmd                           @FTurleque
+/.mvn/                              @FTurleque
+/packaging/                         @FTurleque

@@ -45,11 +45,40 @@ Il impose actuellement :
 
 NXA3-14 / #130 est satisfait pour `develop`. Le même ruleset couvre également `main`.
 
+## Méthode d'intégration : merge commit uniquement
+
+Une PR vers `develop` ou `main` s'intègre **uniquement par merge commit**, exact-head (`gh pr merge <n> --merge --match-head-commit <sha>`). Le squash et le rebase sont interdits : ils réécrivent les SHA qualifiés par la CI exact-head, et la promotion `develop` → `main` suppose que `main` ne contient que des commits déjà présents sur `develop`.
+
+La règle est portée par GitHub, pas seulement par le hook local de Claude Code :
+
+- le ruleset `Protect main & develop` (id 20503835) n'autorise que la méthode `merge` : `allowed_merge_methods = ["merge"]` ;
+- les réglages du dépôt désactivent les deux autres méthodes : `allow_squash_merge = false` et `allow_rebase_merge = false` (`allow_merge_commit` reste à `true`).
+
+Ces réglages sont modifiés à la main par le mainteneur dans GitHub. Ils se vérifient en lecture :
+
+```bash
+gh api repos/FTurleque/nexus-context-engine/rulesets/20503835 --jq '.rules[]|select(.type=="pull_request").parameters.allowed_merge_methods'
+gh api repos/FTurleque/nexus-context-engine --jq '[.allow_squash_merge,.allow_rebase_merge]'
+```
+
+Résultats attendus : `["merge"]` puis `[false,false]`.
+
+- **[Écart]** Lecture du 2026-11-09 : le ruleset renvoie `["merge","squash","rebase"]` et les réglages du dépôt `[true,true]`. La restriction attend le réglage du mainteneur (constat `AUD-DEP-16`).
+
+## Propriétaires déclarés
+
+[`.github/CODEOWNERS`](../../.github/CODEOWNERS) désigne le mainteneur comme propriétaire des fichiers qui gouvernent la qualification et la chaîne d'approvisionnement : `.github/workflows/`, `scripts/release/`, `config/tool-integrity.properties`, les wrappers Maven (`mvnw`, `mvnw.cmd`, `.mvn/`) et `packaging/`. GitHub affiche ce propriétaire sur les PR qui touchent ces chemins.
+
+La revue code owner n'est **pas** obligatoire (`require_code_owner_review = false`) : avec un seul mainteneur, elle simulerait une revue à plusieurs personnes qui n'existe pas (voir [Modèle de maintenance](#modèle-de-maintenance)).
+
+Le signalement des vulnérabilités suit [`SECURITY.md`](../../SECURITY.md#signaler-une-vulnérabilité) : signalement privé GitHub, aucune issue publique.
+
 ## Contrat attendu pour `develop`
 
 La configuration GitHub doit conserver :
 
 - passage par pull request avant toute modification de `develop` ;
+- intégration par merge commit uniquement (`allowed_merge_methods = ["merge"]`) ;
 - les checks exact-head permanents définis par la politique du dépôt ;
 - prise en compte des gates distribution/benchmark applicables au diff avant merge ;
 - interdiction des **force pushes** ;
@@ -72,6 +101,7 @@ Cette défense en profondeur intervient **après** l'arrivée du commit sur la b
 `main` reçoit uniquement des promotions qualifiées depuis `develop`. La configuration GitHub doit donc conserver avant merge d'une promotion :
 
 - passage par pull request ;
+- intégration par merge commit uniquement ;
 - succès des checks exact-head permanents ;
 - succès des gates distribution/benchmark applicables au diff lorsqu'ils sont déclenchés ;
 - interdiction des force pushes et de la suppression ;
@@ -91,6 +121,9 @@ required pull request = true
 force push = disabled
 deletion = disabled
 required checks = politique approuvée
+allowed merge methods = ["merge"]
+allow_squash_merge = false
+allow_rebase_merge = false
 ```
 
 Aucune approbation humaine additionnelle ni resynchronisation stricte de branche n'est requise par le modèle solo courant. Si le projet passe un jour à plusieurs mainteneurs, cette section devra être revue explicitement avant de changer les règles GitHub.

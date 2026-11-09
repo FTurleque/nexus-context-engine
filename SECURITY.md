@@ -1,5 +1,25 @@
 # Sécurité
 
+## Signaler une vulnérabilité
+
+Une vulnérabilité de NEXUS se signale **en privé**, par le signalement privé de vulnérabilités de GitHub : onglet Security du dépôt, bouton « Report a vulnerability » (<https://github.com/FTurleque/nexus-context-engine/security/advisories/new>).
+
+N'ouvrez **pas d'issue publique**, de discussion ni de pull request pour une vulnérabilité : le dépôt est public, leur contenu est visible de tous avant toute correction. Un signalement utile indique la version ou le commit concerné, la surface touchée (CLI, REST, MCP, image Docker, installeur Windows), les étapes de reproduction et l'impact observé. N'y joignez aucun secret réel.
+
+### Délai de réponse
+
+Le mainteneur accuse réception d'un signalement dans les **7 jours**. Il indique ensuite si la vulnérabilité est confirmée, la version qui portera la correction et, le cas échéant, l'avis de sécurité GitHub (GHSA) publié avec elle. La correction suit le flux normal du dépôt (PR vers `develop`, promotion vers `main`, release taguée) ; l'avis est publié une fois la release corrigée disponible.
+
+## Versions prises en charge
+
+NEXUS est en pré-version (`0.x`). Seule la dernière version publiée reçoit des correctifs de sécurité, ainsi que la branche `develop` qui prépare la suivante ; une version antérieure n'est pas corrigée, la mise à jour vers la dernière version est la correction.
+
+| Version | Correctifs de sécurité |
+|---|---|
+| Dernière version publiée (release GitHub la plus récente) | Oui |
+| `develop` | Oui |
+| Versions antérieures | Non |
+
 ## Traitement des alertes de sécurité
 
 Le dépôt public a les alertes Dependabot, les mises à jour de sécurité Dependabot, le secret scanning et la push protection activés (onglet Security de GitHub). Ces alertes portent sur l'état fusionné du dépôt ; les gates OSV des PR ne couvrent que le code en cours de revue. Le mainteneur traite chaque alerte selon la procédure ci-dessous.
