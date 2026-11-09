@@ -3987,15 +3987,24 @@
    "sprint": 10,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
-   "changement": "Nouveau",
-   "historique": [],
+   "statut": "Fermé",
+   "changement": "Symptôme fermé par #269 (documentation alignée sur Quarkus 3.40.1.1 et le SDK MCP 2.1.0) ; cause fermée par la PR du lot 6 du sprint 10 : la documentation courante nomme les propriétés quarkus.platform.version et mcp.sdk.version, le contrat documentaire les lit dans pom.xml et refuse les littéraux de version",
+   "historique": [
+    {
+     "date": "2026-10-29",
+     "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-09",
+     "statut": "Fermé"
+    }
+   ],
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Nouveau constat",
-    "preuve": "Observé dans la CI de la PR #262.",
-    "reserve": null
+    "date": "2026-11-09",
+    "commit": "d1851dd1",
+    "verdict": "Fermé",
+    "preuve": "bash .claude/scripts/contracts.sh vert ; montée simulée (quarkus.platform.version 3.41.0, mcp.sdk.version 2.2.7) : test-operational-doc-contracts.sh vert, pom.xml restauré ; propriété mcp.sdk.version retirée du pom, littéraux « SDK MCP 2.1.0 », « Quarkus : 3.41.0 », « le SDK MCP en 2.1.0. » et valeur nue 3.40.1.1 ajoutés à un document contrôlé : échec du contrat nommant le document (tâches 6.1 et 6.2)",
+    "reserve": "Statut définitif à la fusion de la PR dans develop ; preuve applicable : CI exact-head"
    }
   }
  ],

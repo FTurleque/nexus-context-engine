@@ -29,8 +29,8 @@
 
 ## 6. Versions de dépendances hors de la documentation
 
-- [ ] 6.1 `AUD-DEP-31` — Remplacer dans `docs/developer/README.md`, `docs/developer/mcp.md`, `docs/developer/rest-api.md`, `docs/developer/architecture-implementation.md` et les vues arc42 courantes les numéros Quarkus et SDK MCP par la référence à `quarkus.platform.version` et `mcp.sdk.version` du `pom.xml` (D7) ; faire lire `mcp.sdk.version` au contrat, exiger la mention des propriétés et refuser les littéraux ; vérifier par `bash .claude/scripts/contracts.sh`
-- [ ] 6.2 `AUD-DEP-31` — Vérifier qu'une montée locale simulée (`quarkus.platform.version` et `mcp.sdk.version` modifiés dans une copie de travail jetable) laisse `bash scripts/release/test-operational-doc-contracts.sh` vert, puis restaurer le `pom.xml` ; vérifier par `git status --short pom.xml` vide
+- [x] 6.1 `AUD-DEP-31` — Remplacer dans `docs/developer/README.md`, `docs/developer/mcp.md`, `docs/developer/rest-api.md`, `docs/developer/architecture-implementation.md` et les vues arc42 courantes les numéros Quarkus et SDK MCP par la référence à `quarkus.platform.version` et `mcp.sdk.version` du `pom.xml` (D7) ; faire lire `mcp.sdk.version` au contrat, exiger la mention des propriétés et refuser les littéraux ; vérifier par `bash .claude/scripts/contracts.sh`
+- [x] 6.2 `AUD-DEP-31` — Vérifier qu'une montée locale simulée (`quarkus.platform.version` et `mcp.sdk.version` modifiés dans une copie de travail jetable) laisse `bash scripts/release/test-operational-doc-contracts.sh` vert, puis restaurer le `pom.xml` ; vérifier par `git status --short pom.xml` vide
 
 ## 7. Clôture
 
