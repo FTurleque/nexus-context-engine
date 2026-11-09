@@ -2618,20 +2618,24 @@
    "sprint": 11,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-09",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Branche claude/s11-graphe-01c9d0 (90408ac9) : OUTGOING_GRAPH_SQL paginée par clé (source_ref, target_ref) > (?, ?), sans OFFSET ; reprise après le dernier couple lu",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
-    "reserve": null
+    "date": "2026-11-09",
+    "commit": "90408ac9",
+    "verdict": "Fermé",
+    "preuve": "git grep -n \"OFFSET\" -- core/src/main/java/com/nexus/persistence/sqlite/SqliteGraphQueries.java vide ; SqliteGraphNeighborhoodProjectionTest (plusieurs pages d'imports non résolus, concaténation des pages égale au parcours complet) et SqliteGraphQueryPlanTest (première page et pages suivantes servies par idx_symbol_relations_project_kind_source) verts (tâche 7.1)",
+    "reserve": "Une page ne trie ni ne saute plus les couples déjà lus, mais l'index (project_id, kind, source_ref) ne contient pas target_ref : chaque page relit les entrées d'index des chemins demandés. Un parcours linéaire demanderait un index couvrant et une migration (BE-0087, conséquences négatives)"
    }
   },
   {
@@ -2684,20 +2688,24 @@
    "sprint": 11,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-09",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Aucun",
+   "changement": "Branche claude/s11-graphe-01c9d0 (90408ac9) : ProjectGraph supprimé, ProjectGraphBuilder renommé GraphNeighborhoodProjection, section graphe de docs/developer/search-ranking.md réécrite et tenue par le contrat documentaire, décision consignée dans BE-0087 (Proposed, complète BE-0071)",
    "verification": {
-    "date": "2026-10-29",
-    "commit": "0b6828ce",
-    "verdict": "Inchangé",
-    "preuve": "3 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)",
-    "reserve": null
+    "date": "2026-11-09",
+    "commit": "90408ac9",
+    "verdict": "Fermé",
+    "preuve": "git grep -n \"ProjectGraph\\b\\|ProjectGraphBuilder\" -- '*.java' vide ; scripts/release/test-operational-doc-contracts.sh refuse « ProjectGraph cache », « ProjectGraphBuilder » et « Graphe dérivé par génération » dans search-ranking.md ; GraphNeighborhoodProjectionTest, SqliteGraphNeighborhoodProjectionTest verts ; mvnw clean install, self-smoke, contracts.sh et archgate check verts (tâches 1.1 à 1.3)",
+    "reserve": "BE-0087 au statut Proposed jusqu'à validation du mainteneur"
    }
   },
   {

@@ -359,6 +359,12 @@ forbid("docs/developer/code-intelligence.md", "chargent encore des ensembles pro
 forbid("docs/architecture/arc42/06-vue-execution.md", "continuer sans résultats JDT")
 forbid("docs/architecture/arc42/06-vue-execution.md", "indexation réussie sans intelligence profonde")
 
+# Import graph neighbourhood (BE-0087): projected on demand, bounded, never cached.
+require("docs/developer/search-ranking.md", "GraphNeighborhoodProjection.MAX_NEIGHBOR_EDGES")
+require("docs/developer/search-ranking.md", "IndexRepository.findGraphNeighbors")
+for stale in ("ProjectGraph cache", "ProjectGraphBuilder", "Graphe dérivé par génération"):
+    forbid("docs/developer/search-ranking.md", stale)
+
 current_docs = (
     "README.md",
     "docs/project/governance/ROADMAP.md",

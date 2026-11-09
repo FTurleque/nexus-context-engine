@@ -25,16 +25,20 @@ final class SqliteGraphQueries {
     private static final int MIN_OUTGOING_SCAN_PAGE_SIZE = 64;
     private static final int OUTGOING_SCAN_PAGE_SIZE = ResultLimitPolicy.MAX_INTERNAL_RETRIEVAL_LIMIT;
 
+    // Keyset pagination: each page starts strictly after the last (source_ref, target_ref)
+    // pair read. DISTINCT makes the pairs unique, so no row is skipped or repeated.
+    // A null ?4 marks the first page.
     static final String OUTGOING_GRAPH_SQL = """
             WITH requested(path) AS (
-                SELECT value FROM json_each(?)
+                SELECT value FROM json_each(?1)
             )
             SELECT DISTINCT r.source_ref AS seed_path, r.target_ref
             FROM requested q
             CROSS JOIN symbol_relations r
-            WHERE r.project_id = ? AND r.kind = ? AND r.source_ref = q.path
+            WHERE r.project_id = ?2 AND r.kind = ?3 AND r.source_ref = q.path
+              AND (?4 IS NULL OR (r.source_ref, r.target_ref) > (?4, ?5))
             ORDER BY r.source_ref, r.target_ref
-            LIMIT ? OFFSET ?
+            LIMIT ?6
             """;
 
     static final String TARGET_TYPE_OWNERS_SQL = """
@@ -135,7 +139,7 @@ final class SqliteGraphQueries {
             int maxEdges,
             Map<String, Set<String>> neighbors) throws SQLException {
         int pageSize = Math.min(OUTGOING_SCAN_PAGE_SIZE, Math.max(MIN_OUTGOING_SCAN_PAGE_SIZE, maxEdges));
-        int offset = 0;
+        GraphImportTarget lastRead = null;
         int projectedEdges = 0;
         boolean exhausted = false;
 
@@ -145,9 +149,11 @@ final class SqliteGraphQueries {
                     projectId,
                     requestedPaths,
                     pageSize,
-                    offset);
+                    lastRead);
             exhausted = relations.size() < pageSize;
-            offset += relations.size();
+            if (!relations.isEmpty()) {
+                lastRead = relations.get(relations.size() - 1);
+            }
             projectedEdges += projectResolvedOutgoingRelations(
                     connection,
                     projectId,
@@ -163,14 +169,15 @@ final class SqliteGraphQueries {
             UUID projectId,
             String requestedPaths,
             int pageSize,
-            int offset) throws SQLException {
+            GraphImportTarget after) throws SQLException {
         List<GraphImportTarget> relations = new ArrayList<>();
         try (PreparedStatement outgoing = connection.prepareStatement(OUTGOING_GRAPH_SQL)) {
             outgoing.setString(1, requestedPaths);
             outgoing.setString(2, projectId.toString());
             outgoing.setString(3, RelationKind.IMPORTS.name());
-            outgoing.setInt(4, pageSize);
-            outgoing.setInt(5, offset);
+            outgoing.setString(4, after == null ? null : after.seedPath());
+            outgoing.setString(5, after == null ? null : after.targetRef());
+            outgoing.setInt(6, pageSize);
             try (ResultSet resultSet = outgoing.executeQuery()) {
                 while (resultSet.next()) {
                     relations.add(new GraphImportTarget(

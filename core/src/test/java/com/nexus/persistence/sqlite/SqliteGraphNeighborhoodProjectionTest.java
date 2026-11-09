@@ -9,6 +9,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -108,6 +110,111 @@ class SqliteGraphNeighborhoodProjectionTest {
         assertEquals(
                 Map.of(APP_PATH, Set.of("src/Local.java")),
                 repository.findGraphNeighbors(projectId, Set.of(APP_PATH), 1));
+    }
+
+    @Test
+    void resumesOutgoingScanAfterLastPairAcrossSeveralPagesOfUnresolvedImports() throws Exception {
+        SqliteDatabase database = new SqliteDatabase(new NexusPaths(tempDir.resolve("keyset-home")));
+        UUID projectId = UUID.randomUUID();
+        // Plus de trois pages de 64 imports externes triés avant les imports locaux,
+        // répartis sur deux fichiers demandés : la reprise doit franchir la frontière
+        // entre source_ref sans sauter ni répéter de couple.
+        int unresolvedPerSeed = 100;
+        try (Connection connection = database.openConnection()) {
+            connection.setAutoCommit(false);
+            insertProject(connection, projectId);
+            long app = insertFile(connection, projectId, APP_PATH);
+            long other = insertFile(connection, projectId, "src/Other.java");
+            long local = insertFile(connection, projectId, "src/Local.java");
+            long tail = insertFile(connection, projectId, "src/Tail.java");
+            insertType(connection, local, "Local", "zzz.Local");
+            insertType(connection, tail, "Tail", "zzz.Tail");
+            for (int index = 0; index < unresolvedPerSeed; index++) {
+                String suffix = String.format("%03d", index);
+                insertImport(connection, projectId, app, APP_PATH, "aaa.External" + suffix);
+                insertImport(connection, projectId, other, "src/Other.java", "aaa.External" + suffix);
+            }
+            insertImport(connection, projectId, app, APP_PATH, "zzz.Local");
+            insertImport(connection, projectId, other, "src/Other.java", "zzz.Tail");
+            connection.commit();
+        }
+
+        SqliteIndexRepository repository = new SqliteIndexRepository(database);
+
+        assertEquals(
+                Map.of(APP_PATH, Set.of("src/Local.java"), "src/Other.java", Set.of("src/Tail.java")),
+                repository.findGraphNeighbors(projectId, Set.of(APP_PATH, "src/Other.java"), 2));
+        assertEquals(
+                Map.of(APP_PATH, Set.of("src/Local.java")),
+                repository.findGraphNeighbors(projectId, Set.of(APP_PATH, "src/Other.java"), 1));
+    }
+
+    @Test
+    void keysetPagesConcatenateToTheFullOrderedOutgoingScan() throws Exception {
+        SqliteDatabase database = new SqliteDatabase(new NexusPaths(tempDir.resolve("keyset-exact-home")));
+        UUID projectId = UUID.randomUUID();
+        try (Connection connection = database.openConnection()) {
+            connection.setAutoCommit(false);
+            insertProject(connection, projectId);
+            for (String seed : List.of("src/A.java", "src/B.java", "src/C.java")) {
+                long file = insertFile(connection, projectId, seed);
+                // Cibles hautes avant les cibles basses de la source suivante : une clé
+                // réduite à target_ref sauterait les premières lignes de chaque source.
+                for (String target : List.of("a.One", "m.Two", "z.Three", "z.Three.method", "z.Zeta")) {
+                    insertImport(connection, projectId, file, seed, target);
+                }
+                // Doublon : DISTINCT doit garder des couples uniques.
+                insertImport(connection, projectId, file, seed, "m.Two");
+            }
+            connection.commit();
+        }
+
+        String requested = "[\"src/C.java\",\"src/A.java\",\"src/B.java\"]";
+        try (Connection connection = database.openConnection()) {
+            List<String> expected = outgoingPage(connection, projectId, requested, null, null, 1_000);
+            assertEquals(15, expected.size(), expected.toString());
+
+            for (int pageSize = 1; pageSize <= 4; pageSize++) {
+                List<String> paged = new ArrayList<>();
+                String lastSource = null;
+                String lastTarget = null;
+                List<String> page;
+                do {
+                    page = outgoingPage(connection, projectId, requested, lastSource, lastTarget, pageSize);
+                    paged.addAll(page);
+                    if (!page.isEmpty()) {
+                        String[] last = page.get(page.size() - 1).split("\\|", 2);
+                        lastSource = last[0];
+                        lastTarget = last[1];
+                    }
+                } while (page.size() == pageSize);
+                assertEquals(expected, paged, "pages de " + pageSize);
+            }
+        }
+    }
+
+    private static List<String> outgoingPage(
+            Connection connection,
+            UUID projectId,
+            String requested,
+            String afterSource,
+            String afterTarget,
+            int pageSize) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(SqliteGraphQueries.OUTGOING_GRAPH_SQL)) {
+            statement.setString(1, requested);
+            statement.setString(2, projectId.toString());
+            statement.setString(3, "IMPORTS");
+            statement.setString(4, afterSource);
+            statement.setString(5, afterTarget);
+            statement.setInt(6, pageSize);
+            List<String> rows = new ArrayList<>();
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    rows.add(resultSet.getString("seed_path") + "|" + resultSet.getString("target_ref"));
+                }
+            }
+            return rows;
+        }
     }
 
     @Test
