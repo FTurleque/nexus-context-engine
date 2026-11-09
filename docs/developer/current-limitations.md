@@ -146,7 +146,7 @@ Les sujets suivants ne doivent pas être changés sans mesure ou scénario repro
 
 - isolation processus générique uniquement si un provider in-process concret démontre un comportement non coopératif ;
 - extension de support vers un filesystem réseau/distribué précis : elle exige désormais de dépasser la preuve SMB loopback et de qualifier le protocole/configuration réellement visé, idéalement multi-client avec injection de panne ;
-- nouveau moteur FTS/trigram pour les recherches substring ;
+- toute évolution au-delà de l'index FTS5 trigram livré par la migration V008 pour les recherches substring (autre tokenizer, autre moteur, seuil sous 3 caractères) ;
 - réévaluation du Vector API uniquement après nouvelle qualification same-runner.
 
 Le watch item légal #55 reste un gate conditionnel pour toute dépendance ou modalité de redistribution inhabituelle ; il ne déclenche aucune modification tant qu'un candidat concret n'existe pas.

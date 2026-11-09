@@ -160,7 +160,7 @@ La suppression des relations d'un fichier est servie par `idx_symbol_relations_f
 
 ## Autres scénarios scale
 
-Le benchmark général conserve les scénarios #23 : recherche/contexte fédérés, comparaison DELETE/WAL, recovery sémantique déterministe et mesure de graphe. Le mode SQLite de production n'est pas changé : WAL n'est adopté que si des mesures répétées montrent un gain reader p95 >=25 % sans régression writer/recovery.
+Le benchmark général conserve les scénarios #23 : recherche/contexte fédérés, comparaison DELETE/WAL, recovery sémantique déterministe et mesure de graphe. Le journal SQLite de production est le journal rollback (`delete`), fixé par [DATA-0088](../architecture/adr/DATA-0088-conserver-le-journal-rollback-sqlite.md) : WAL n'est réévalué que si une contention lecture/écriture réelle est démontrée et que des mesures répétées montrent, à chaque exécution, un gain reader p95 >=25 % sans régression writer/recovery.
 
 Les budgets graph/fédération/sémantique restent ceux du workflow. Une anomalie d'un de ces domaines doit être traitée dans son chantier propre et ne doit pas être masquée par une modification des plafonds SQLite.
 

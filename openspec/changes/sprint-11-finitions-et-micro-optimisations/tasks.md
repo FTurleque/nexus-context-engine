@@ -8,16 +8,16 @@
 
 ## 2. Watch item FTS5 trigram
 
-- [ ] 2.1 `AUD-QUA-13` — Reformuler dans `docs/developer/current-limitations.md` le watch item en « évolution au-delà du FTS5 trigram livré par V008 » (ou le retirer) ; ajouter au contrat le refus de « nouveau moteur FTS/trigram » ; vérifier par `bash .claude/scripts/contracts.sh`
+- [x] 2.1 `AUD-QUA-13` — Reformuler dans `docs/developer/current-limitations.md` le watch item en « évolution au-delà du FTS5 trigram livré par V008 » (ou le retirer) ; ajouter au contrat le refus de « nouveau moteur FTS/trigram » ; vérifier par `bash .claude/scripts/contracts.sh`
 
 ## 3. Instruction primaire des agents
 
-- [ ] 3.1 `AUD-QUA-03` — Remplacer dans `AGENTS.md` `mvn clean install` par `./mvnw clean install` (`.\mvnw.cmd clean install` sous Windows) ; ajouter au contrat le refus d'une commande `mvn ` hors wrapper dans `AGENTS.md` ; vérifier par `bash .claude/scripts/contracts.sh` puis `pwsh -NoProfile -File scripts/self-smoke.ps1` (étape 9 : `AGENTS.md` retenu)
+- [x] 3.1 `AUD-QUA-03` — Remplacer dans `AGENTS.md` `mvn clean install` par `./mvnw clean install` (`.\mvnw.cmd clean install` sous Windows) ; ajouter au contrat le refus d'une commande `mvn ` hors wrapper dans `AGENTS.md` ; vérifier par `bash .claude/scripts/contracts.sh` puis `pwsh -NoProfile -File scripts/self-smoke.ps1` (étape 9 : `AGENTS.md` retenu)
 
 ## 4. Journal SQLite
 
-- [ ] 4.1 `AUD-PRF-10` — Nouvel ADR (skill `nexus-adr`) qui complète ADR-0052 : journal rollback conservé, mesures DELETE/WAL de `docs/project/history/scale-regression-results.md`, condition de réévaluation de `docs/developer/scale-regression-benchmark.md` ; renvoyer ces deux documents à l'ADR ; vérifier par `bash .claude/scripts/contracts.sh`
-- [ ] 4.2 `AUD-PRF-10` — Ajouter à `SqliteDatabaseHardeningTest` une assertion `PRAGMA journal_mode` = `delete` sur une base ouverte par `SqliteDatabase`, avec message qui cite l'ADR de 4.1 ; vérifier par `./mvnw -B -ntp -pl core test -Dtest=SqliteDatabaseHardeningTest -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
+- [x] 4.1 `AUD-PRF-10` — Nouvel ADR (skill `nexus-adr`) qui complète ADR-0052 : journal rollback conservé, mesures DELETE/WAL de `docs/project/history/scale-regression-results.md`, condition de réévaluation de `docs/developer/scale-regression-benchmark.md` ; renvoyer ces deux documents à l'ADR ; vérifier par `bash .claude/scripts/contracts.sh`
+- [x] 4.2 `AUD-PRF-10` — Ajouter à `SqliteDatabaseHardeningTest` une assertion `PRAGMA journal_mode` = `delete` sur une base ouverte par `SqliteDatabase`, avec message qui cite l'ADR de 4.1 ; vérifier par `./mvnw -B -ntp -pl core test -Dtest=SqliteDatabaseHardeningTest -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
 
 ## 5. Langue des messages d'erreur
 

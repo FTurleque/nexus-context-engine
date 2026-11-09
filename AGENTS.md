@@ -8,7 +8,7 @@ Ces règles s'appliquent à l'ensemble du repository.
 - Pour toute décision architecturale durable, créer ou compléter la chaîne d'ADR sans réécrire rétroactivement une décision acceptée.
 - La documentation du projet est rédigée en français ; les identifiants de code restent en anglais.
 - Toute sélection de contexte, score, troncature ou exclusion doit rester déterministe et explicable.
-- Avant de considérer une itération validée, exécuter `mvn clean install` puis `scripts/self-smoke.ps1`.
+- Avant de considérer une itération validée, exécuter `./mvnw clean install` (`.\mvnw.cmd clean install` sous Windows) puis `scripts/self-smoke.ps1`.
 
 Contexte détaillé à consulter :
 

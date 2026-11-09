@@ -41,6 +41,7 @@ Cette section présente un index synthétique avec statut, date et relations de 
 | [ARCH-0085](../adr/ARCH-0085-stabiliser-le-contrat-de-sortie-publique-cli-rest-mcp.md) | Stabiliser le contrat de sortie publique dans la projection du cœur : CLI humaine ou JSON, codes de sortie, parité REST et MCP | Accepted | 2026-11-08 |
 | [ARCH-0086](../adr/ARCH-0086-resoudre-la-configuration-et-nexus-home-dans-la-composition-root.md) | Résoudre la configuration NEXUS, dont NEXUS_HOME, dans la composition root et l'injecter | Accepted | 2026-11-08 |
 | [BE-0087](../adr/BE-0087-projeter-le-voisinage-du-graphe-d-imports-a-la-demande.md) | Projeter le voisinage du graphe d'imports à la demande depuis SQLite, borné, sans matérialisation ni cache | Proposed | 2026-11-09 |
+| [DATA-0088](../adr/DATA-0088-conserver-le-journal-rollback-sqlite.md) | Conserver le journal rollback SQLite et ne réévaluer WAL que sur mesure répétée | Proposed | 2026-11-09 |
 | [ADR-0000](../adr/archive/0000-adopter-les-adr-madr.md) | Adopter MADR comme format et définir la gouvernance des ADR | Superseded (GEN-0057) | 2026-07-19 |
 | [ARCH-0001](../adr/archive/ARCH-0001-positionner-nexus-comme-moteur-intelligence-contexte.md) | Positionner NEXUS comme moteur d'intelligence de contexte indépendant des modèles | Superseded (ARCH-0077) | 2026-07-19 |
 | [ARCH-0003](../adr/archive/ARCH-0003-conserver-un-coeur-java-sans-framework-applicatif.md) | Conserver un cœur Java sans framework applicatif obligatoire | Superseded (ARCH-0076) | 2026-07-19 |
@@ -109,9 +110,9 @@ opt-in, cœur sans framework aux packages acycliques, configuration résolue par
 
 ### Persistance et indexation
 
-DATA-0073, DATA-0074, DATA-0018, DATA-0020, DATA-0023, DATA-0049, BE-0083 — SQLite canonique et
-Lucene dérivé, cycle de vie et cohérence des index dérivés, identités, migrations, SHA-256,
-identité repository, règles d'exclusion du scan.
+DATA-0073, DATA-0074, DATA-0088, DATA-0018, DATA-0020, DATA-0023, DATA-0049, BE-0083 — SQLite canonique
+et Lucene dérivé, cycle de vie et cohérence des index dérivés, journal rollback SQLite, identités,
+migrations, SHA-256, identité repository, règles d'exclusion du scan.
 
 ### Recherche, ranking et contexte
 
