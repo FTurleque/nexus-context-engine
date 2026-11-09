@@ -53,11 +53,11 @@ public final class SemanticIndexingService implements SemanticIndexing {
         this.embeddingProvider = Objects.requireNonNull(embeddingProvider, "embeddingProvider");
         this.semanticSearchIndex = Objects.requireNonNull(semanticSearchIndex, "semanticSearchIndex");
         if (embeddingProvider.dimensions() <= 0) {
-            throw new IllegalArgumentException("embeddingProvider dimensions must be greater than zero");
+            throw new IllegalArgumentException("La dimension du provider d'embeddings doit être strictement positive");
         }
         if (semanticSearchIndex.dimensions() != embeddingProvider.dimensions()) {
             throw new IllegalArgumentException(
-                    "semantic index dimensions must match embedding provider dimensions");
+                    "La dimension de l'index sémantique doit correspondre à celle du provider d'embeddings");
         }
         if (maxEmbeddingChars <= 0) {
             throw new IllegalArgumentException("maxEmbeddingChars must be greater than zero");

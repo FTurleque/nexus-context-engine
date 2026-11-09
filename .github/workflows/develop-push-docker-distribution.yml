@@ -6,6 +6,7 @@ on:
       - develop
     paths:
       - 'packaging/docker/**'
+      - '.dockerignore'
       - 'scripts/release/build-docker-image.ps1'
       - 'scripts/release/test-docker-runtime.ps1'
       - 'scripts/release/test-docker-dotenv-roundtrip.sh'

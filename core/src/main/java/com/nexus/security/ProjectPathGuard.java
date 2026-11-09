@@ -49,7 +49,7 @@ public final class ProjectPathGuard {
         try {
             return resolve(relativePath.toPath(root.getFileSystem()));
         } catch (IllegalArgumentException exception) {
-            throw new IOException("Invalid repository path", exception);
+            throw new IOException("Chemin repository invalide", exception);
         }
     }
 

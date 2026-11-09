@@ -3,6 +3,7 @@ set -euo pipefail
 
 python3 - <<'PY'
 from pathlib import Path
+import re
 import xml.etree.ElementTree as ET
 
 root = Path.cwd()
@@ -25,19 +26,27 @@ def forbid(path: str, needle: str) -> None:
         raise SystemExit(f"obsolete documentation contract: {path} still contains {needle!r}")
 
 
-# Keep operational documentation aligned with the dependency actually used by Maven.
+# Dependabot-managed versions live in pom.xml only: the documentation names the property.
 pom = ET.parse(root / "pom.xml").getroot()
-quarkus_version = next(
-    (
-        element.text.strip()
-        for element in pom.iter()
-        if element.tag.rsplit("}", 1)[-1] == "quarkus.platform.version"
-        and element.text
-    ),
-    None,
-)
-if not quarkus_version:
-    raise SystemExit("version contract drift: pom.xml does not declare quarkus.platform.version")
+
+
+def pom_property(name: str) -> str:
+    value = next(
+        (
+            element.text.strip()
+            for element in pom.iter()
+            if element.tag.rsplit("}", 1)[-1] == name and element.text and element.text.strip()
+        ),
+        None,
+    )
+    if not value:
+        raise SystemExit(f"version contract drift: pom.xml does not declare {name}")
+    return value
+
+
+managed_versions = {
+    name: pom_property(name) for name in ("quarkus.platform.version", "mcp.sdk.version")
+}
 
 
 # Toolchain / NXA3 baseline
@@ -121,12 +130,47 @@ require("docs/developer/ci-and-supply-chain.md", "`develop` est la branche d'int
 require("docs/developer/branch-governance.md", "force pushes")
 require("docs/developer/native-context-discovery-limits.md", "NativeContextDiscoveryBudgetBenchmarkTest")
 
-require("docs/developer/README.md", f"Quarkus      {quarkus_version}")
-require("docs/developer/architecture-implementation.md", f"Quarkus est en {quarkus_version}")
-require("docs/developer/rest-api.md", f"Quarkus     {quarkus_version}")
+for path, properties in (
+    ("docs/developer/README.md", ("quarkus.platform.version", "mcp.sdk.version")),
+    ("docs/developer/architecture-implementation.md", ("quarkus.platform.version", "mcp.sdk.version")),
+    ("docs/developer/rest-api.md", ("quarkus.platform.version",)),
+    ("docs/developer/mcp.md", ("mcp.sdk.version",)),
+):
+    for name in properties:
+        require(path, name)
+
+version_literal = re.compile(
+    r"\b(?:Quarkus|MCP SDK|SDK MCP|MCP Java)(?:\s+(?:est\s+)?en)?[\s:`(]+v?\d+\.\d+(?:\.\d+)*",
+    re.IGNORECASE,
+)
+version_docs = [
+    "docs/developer/README.md",
+    "docs/developer/architecture-implementation.md",
+    "docs/developer/rest-api.md",
+    "docs/developer/mcp.md",
+    "docs/architecture/overview.md",
+    *sorted(
+        path.relative_to(root).as_posix()
+        for path in (root / "docs/architecture/arc42").glob("*.md")
+    ),
+]
+for path in version_docs:
+    content = text(path)
+    match = version_literal.search(content)
+    if match:
+        raise SystemExit(
+            f"version contract drift: {path} copies a dependency version ({match.group(0)!r}); "
+            "name the pom.xml property instead"
+        )
+    for name, value in managed_versions.items():
+        if re.search(rf"(?<![\w.]){re.escape(value)}(?!\w|\.\w)", content):
+            raise SystemExit(
+                f"version contract drift: {path} copies {name} value {value!r}; "
+                "name the pom.xml property instead"
+            )
+
 require("docs/developer/rest-api.md", "quarkus.http.insecure-requests")
 require("docs/developer/rest-api.md", "trusted-proxies")
-require("docs/developer/mcp.md", "MCP SDK     2.1.0")
 require("docs/developer/mcp.md", "100 projets uniques")
 
 for path in (
@@ -292,7 +336,8 @@ for path in (
 
 # NXA4: unsupported constraints must fail explicitly.
 context_request = "core/src/main/java/com/nexus/context/ContextRequest.java"
-require(context_request, "constraints are not supported yet")
+require(context_request, "Les contraintes ne sont pas encore prises en charge")
+forbid(context_request, "constraints are not supported yet")
 for path in (
     "docs/architecture/overview.md",
     "docs/architecture/arc42/05-vue-blocs.md",
@@ -314,6 +359,12 @@ forbid("docs/developer/code-intelligence.md", "planifié en Itération 19")
 forbid("docs/developer/code-intelligence.md", "chargent encore des ensembles projet-wide")
 forbid("docs/architecture/arc42/06-vue-execution.md", "continuer sans résultats JDT")
 forbid("docs/architecture/arc42/06-vue-execution.md", "indexation réussie sans intelligence profonde")
+
+# Import graph neighbourhood (BE-0087): projected on demand, bounded, never cached.
+require("docs/developer/search-ranking.md", "GraphNeighborhoodProjection.MAX_NEIGHBOR_EDGES")
+require("docs/developer/search-ranking.md", "IndexRepository.findGraphNeighbors")
+for stale in ("ProjectGraph cache", "ProjectGraphBuilder", "Graphe dérivé par génération"):
+    forbid("docs/developer/search-ranking.md", stale)
 
 current_docs = (
     "README.md",
@@ -475,6 +526,49 @@ for needle in (
 if not (root / "core/src/test/java/com/nexus/security/SensitiveContentRedactorTest.java").is_file():
     raise SystemExit("security contract drift: redaction fixture path cited by SECURITY.md is missing")
 
+# --- Sprint 10 : repository governance (AUD-DEP-16, AUD-DEP-17) ---
+# The merge-commit-only policy is documented with the GitHub settings that enforce it.
+for needle in (
+    "## Méthode d'intégration : merge commit uniquement",
+    'allowed_merge_methods = ["merge"]',
+    "allow_squash_merge = false",
+    "allow_rebase_merge = false",
+    "rulesets/20503835",
+    ".github/CODEOWNERS",
+):
+    require("docs/developer/branch-governance.md", needle)
+for needle in ('allowed_merge_methods = ["merge"]', "jamais squash/rebase", ".github/CODEOWNERS", "SECURITY.md"):
+    require(".claude/skills/nexus-pr-workflow/SKILL.md", needle)
+
+# SECURITY.md opens a private reporting channel, with supported versions and a response delay.
+for needle in (
+    "## Signaler une vulnérabilité",
+    "security/advisories/new",
+    "pas d'issue publique",
+    "### Délai de réponse",
+    "## Versions prises en charge",
+):
+    require("SECURITY.md", needle)
+
+# CODEOWNERS declares an owner for every sensitive path (design D6).
+codeowners = {}
+for line in text(".github/CODEOWNERS").splitlines():
+    fields = line.split("#", 1)[0].split()
+    if len(fields) >= 2:
+        codeowners[fields[0]] = fields[1:]
+for pattern in (
+    "/.github/workflows/",
+    "/scripts/release/",
+    "/config/tool-integrity.properties",
+    "/mvnw",
+    "/mvnw.cmd",
+    "/.mvn/",
+    "/packaging/",
+):
+    owners = codeowners.get(pattern, [])
+    if not owners or not all(owner.startswith("@") for owner in owners):
+        raise SystemExit(f"CODEOWNERS contract drift: {pattern} must have a declared owner")
+
 # Active PowerShell scripts call Maven only through scripts/lib/NexusScript.psm1 (AUD-QUA-05).
 import re
 
@@ -596,5 +690,148 @@ for doc in docs/developer/immutable-release-publishing.md docs/developer/release
 done
 if ! grep -Fq '## Vérification consommateur' docs/developer/immutable-release-publishing.md; then
   echo "documentation contract drift: immutable-release-publishing.md must keep its consumer verification section" >&2
+  exit 1
+fi
+
+# --- Sprint 10 : conteneur (AUD-DEP-04, AUD-SEC-08, AUD-DEP-08, AUD-DEP-18) ---
+python3 - <<'PY'
+import re
+from pathlib import Path
+
+root = Path.cwd()
+
+
+def text(path: str) -> str:
+    target = root / path
+    if not target.is_file():
+        raise SystemExit(f"docker contract drift: {path} is missing")
+    return target.read_text(encoding="utf-8")
+
+
+def fail(message: str) -> None:
+    raise SystemExit(f"docker contract drift: {message}")
+
+
+# Root owns the image code: no COPY --chown towards /opt/nexus or /usr/local/bin, and the
+# runtime UID only owns its data directories.
+chown_copy = re.compile(r"^\s*COPY\b[^\n]*--chown[^\n]*\s/(?:opt/nexus|usr/local/bin)\b", re.MULTILINE)
+for dockerfile in ("packaging/docker/Dockerfile", "packaging/docker/Dockerfile.runtime"):
+    source = text(dockerfile)
+    if chown_copy.search(source):
+        fail(f"{dockerfile} copies into /opt/nexus or /usr/local/bin with --chown")
+    if re.search(r"chown[^\n]*/opt/nexus", source):
+        fail(f"{dockerfile} gives /opt/nexus to the runtime UID")
+    for needle in (
+        "chown 10001:10001 /data/nexus /workspace",
+        "chmod -R 0644 /opt/nexus",
+        "chmod -R a+X /opt/nexus",
+        "/opt/nexus/LICENSE",
+        "/opt/nexus/THIRD_PARTY_NOTICES.txt",
+        'org.opencontainers.image.source="https://github.com/FTurleque/nexus-context-engine"',
+        'org.opencontainers.image.licenses="LicenseRef-NEXUS-Proprietary"',
+        'org.opencontainers.image.revision="${NEXUS_IMAGE_REVISION}"',
+        'org.opencontainers.image.version="${NEXUS_IMAGE_VERSION}"',
+        "HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=6",
+        'CMD ["/usr/local/bin/nexus-healthcheck"]',
+        "USER 10001:10001",
+    ):
+        if needle not in source:
+            fail(f"{dockerfile} must contain {needle!r}")
+
+# The negative fixture proves the --chown check is not vacuous.
+if not chown_copy.search("COPY --chown=10001:10001 lib/nexus-cli.jar /opt/nexus/lib/nexus-cli.jar\n"):
+    fail("the --chown check no longer rejects its negative fixture")
+
+# One ignore file per Dockerfile: a denylist at the root, an allowlist for the runtime image.
+root_ignore = [line.strip() for line in text(".dockerignore").splitlines()]
+for entry in (".git", "**/target", "**/.env", "**/.env.*", "**/nexus-data", "workspace",
+              "docs/project/audits", ".claude/worktrees"):
+    if entry not in root_ignore:
+        fail(f".dockerignore must exclude {entry}")
+for entry in ("pom.xml", "mvnw", ".mvn", "config", "core", "adapters", "distribution", "LICENSE"):
+    if entry in root_ignore:
+        fail(f".dockerignore must not exclude {entry}, read by ./mvnw -B -DskipTests package")
+runtime_ignore = [
+    line.strip()
+    for line in text("packaging/docker/Dockerfile.runtime.dockerignore").splitlines()
+    if line.strip() and not line.lstrip().startswith("#")
+]
+if not runtime_ignore or runtime_ignore[0] != "*":
+    fail("Dockerfile.runtime.dockerignore must start with * (allowlist)")
+if any(line.startswith("!docker/") and not line.endswith(".sh") for line in runtime_ignore) or "!docker/" in runtime_ignore:
+    fail("Dockerfile.runtime.dockerignore must only re-include the two docker/ scripts")
+for entry in ("!lib/nexus-cli.jar", "!rest/", "!LICENSE", "!THIRD_PARTY_NOTICES.txt",
+              "!docker/nexus-container-entrypoint.sh", "!docker/nexus-container-healthcheck.sh"):
+    if entry not in runtime_ignore:
+        fail(f"Dockerfile.runtime.dockerignore must re-include {entry}")
+for script in ("scripts/release/build-windows-distribution.ps1", "scripts/release/build-windows-installer.ps1",
+               ".github/workflows/docker-distribution.yml"):
+    if "Dockerfile.runtime.dockerignore" not in text(script):
+        fail(f"{script} must ship Dockerfile.runtime.dockerignore with the runtime payload")
+
+# CI passes the OCI revision and version labels.
+workflow = text(".github/workflows/docker-distribution.yml")
+for needle in ('--build-arg NEXUS_IMAGE_REVISION="$NEXUS_HEAD_SHA"', '--build-arg NEXUS_IMAGE_VERSION="$NEXUS_IMAGE_VERSION"',
+               "{{.State.Health.Status}}", "- '.dockerignore'", "name: Smoke hardened Compose runtime",
+               "Dockerfile.probe.dockerignore"):
+    if needle not in workflow:
+        fail(f"docker-distribution.yml must contain {needle!r}")
+
+# Compose runtime hardening.
+compose = text("packaging/docker/docker-compose.yml.template")
+for pattern, label in (
+    (r"^\s{4}read_only:\s*true\s*$", "read_only: true"),
+    # exec: SQLite and JNA load their extracted native libraries from /tmp.
+    (r"^\s{4}tmpfs:\s*\n\s+-\s*\"?/tmp:exec\b", "tmpfs: [/tmp:exec]"),
+    (r"^\s{4}cap_drop:\s*\n\s+-\s*ALL\s*$", "cap_drop: [ALL]"),
+    (r"^\s{4}security_opt:\s*\n\s+-\s*\"?no-new-privileges:true\"?\s*$", "security_opt: [no-new-privileges:true]"),
+):
+    if not re.search(pattern, compose, re.MULTILINE):
+        fail(f"docker-compose.yml.template must declare {label}")
+
+# Current Docker documentation describes the image and runtime hardening.
+doc = text("docs/user/docker-installation.md")
+for needle in ("Dockerfile.runtime.dockerignore", ".dockerignore", "read_only: true", "cap_drop",
+               "no-new-privileges:true", "HEALTHCHECK", "/opt/nexus/THIRD_PARTY_NOTICES.txt",
+               "org.opencontainers.image.revision", "appartiennent à root"):
+    if needle not in doc:
+        fail(f"docs/user/docker-installation.md must mention {needle!r}")
+
+print("docker-image-hardening-contracts=PASS")
+PY
+# --- Sprint 11 : documentation SQLite et instruction primaire (AUD-QUA-13, AUD-QUA-03, AUD-PRF-10) ---
+# The FTS5 trigram index shipped by V008 must not be described as a future engine.
+if grep -Fq 'nouveau moteur FTS/trigram' docs/developer/current-limitations.md; then
+  echo "obsolete documentation contract: current-limitations.md still describes FTS/trigram as a future engine (V008 ships it)" >&2
+  exit 1
+fi
+if ! grep -Fq 'FTS5 trigram livré par la migration V008' docs/developer/current-limitations.md; then
+  echo "documentation contract drift: current-limitations.md must scope the watch item beyond the V008 FTS5 trigram index" >&2
+  exit 1
+fi
+# AGENTS.md is the primary agent instruction: Maven only through the verified wrapper.
+if grep -Eq '(^|[^A-Za-z0-9_./\-])mvn[[:space:]]' AGENTS.md; then
+  echo "documentation contract drift: AGENTS.md must call Maven through ./mvnw (or .\mvnw.cmd), never mvn directly" >&2
+  exit 1
+fi
+if ! grep -Fq '`./mvnw clean install`' AGENTS.md; then
+  echo "documentation contract drift: AGENTS.md must prescribe ./mvnw clean install" >&2
+  exit 1
+fi
+# The rollback journal decision (DATA-0088) is referenced by its measures, its benchmark rule and its test.
+JOURNAL_ADR='DATA-0088-conserver-le-journal-rollback-sqlite.md'
+if [[ ! -f "docs/architecture/adr/$JOURNAL_ADR" ]]; then
+  echo "documentation contract drift: missing ADR docs/architecture/adr/$JOURNAL_ADR" >&2
+  exit 1
+fi
+for doc in docs/project/history/scale-regression-results.md docs/developer/scale-regression-benchmark.md; do
+  if ! grep -Fq "$JOURNAL_ADR" "$doc"; then
+    echo "documentation contract drift: $doc must link the rollback journal decision $JOURNAL_ADR" >&2
+    exit 1
+  fi
+done
+if ! grep -Fq 'PRAGMA journal_mode' core/src/test/java/com/nexus/persistence/sqlite/SqliteDatabaseHardeningTest.java \
+  || ! grep -Fq 'DATA-0088' core/src/test/java/com/nexus/persistence/sqlite/SqliteDatabaseHardeningTest.java; then
+  echo "documentation contract drift: SqliteDatabaseHardeningTest must assert PRAGMA journal_mode and cite DATA-0088" >&2
   exit 1
 fi

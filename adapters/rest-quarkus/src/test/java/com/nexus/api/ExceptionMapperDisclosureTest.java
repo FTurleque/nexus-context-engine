@@ -1,5 +1,6 @@
 package com.nexus.api;
 
+import com.nexus.context.ContextRequest;
 import com.nexus.index.IndexingCapacityExceededException;
 import com.nexus.search.QueryPolicy;
 import jakarta.ws.rs.core.Response;
@@ -12,8 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class ExceptionMapperDisclosureTest {
 
-    private static final String UNSUPPORTED_CONSTRAINTS =
-            "constraints are not supported yet; omit the field or provide an empty object";
+    private static final String UNSUPPORTED_CONSTRAINTS = ContextRequest.UNSUPPORTED_CONSTRAINTS_MESSAGE;
 
     @Test
     void ioMapperDoesNotExposeInternalExceptionMessage() {

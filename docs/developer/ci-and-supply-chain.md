@@ -184,6 +184,8 @@ Le smoke REST respecte la séparation NXA4 :
 
 Le template Compose réutilise le même probe embarqué : il ne tente plus de lire `/q/health/live` sur le listener applicatif.
 
+Avant les smokes, le workflow vérifie sur l'image construite que l'UID `10001` ne peut écrire ni les JAR ni les scripts d'entrée, que `/opt/nexus/LICENSE` et `/opt/nexus/THIRD_PARTY_NOTICES.txt` sont présents, que les labels `org.opencontainers.image.{source,licenses,revision,version}` portent le SHA testé et la version du `pom.xml` (passés par `--build-arg`), et que l'image déclare son `HEALTHCHECK`. Le smoke REST attend l'état `healthy` de cette sonde sans Compose. Le smoke de l'image de repli reconstruit `Dockerfile.runtime` depuis un staging qui contient aussi un `docker/.env` et un répertoire de données ; une sonde de contexte vérifie que `Dockerfile.runtime.dockerignore` les laisse hors du contexte. Le détail utilisateur (immuabilité, fichiers d'ignore, durcissement Compose) est dans [docs/user/docker-installation.md](../user/docker-installation.md).
+
 Pour une release, Docker Distribution exporte ensuite l'image qualifiée avec son SHA-256 d'archive, son ID Docker et le SHA Git. Le job de publication vérifie ce handoff et **ne reconstruit jamais l'image**.
 
 ## Publication GHCR
@@ -256,6 +258,30 @@ Un résultat rouge ou ambigu n'est pas un PASS :
 - benchmark hors budget : analyser le run exact-head ;
 - qualification sémantique réelle sous les floors ou manifest modèle divergent : analyser modèle/runtime/ranking avant de modifier les seuils ;
 - tag immuable divergent : échec définitif, jamais d'écrasement automatique.
+
+## OpenSpec build-reproducibility
+
+Spec : [`openspec/specs/build-reproducibility/spec.md`](../../openspec/specs/build-reproducibility/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+Cette section porte la conception et l'existant vérifié des quatre exigences de reproductibilité du build et d'épinglage de son outillage. La description courante de l'outillage reste celle de la section « Outillage Maven épinglé et licences » ci-dessus ; la procédure de release (mise à jour de l'horodatage, comparaison des empreintes) est dans [release-and-recovery.md](release-and-recovery.md#horodatage-reproductible).
+
+### Conception (build-reproducibility)
+
+- **Build reproductible.** Le pom racine fixe `project.build.outputTimestamp` (`pom.xml:36`) ; sa valeur est mise à jour avec la version à chaque release. La vérification compare les SHA-256 du JAR CLI et du ZIP de distribution entre deux `./mvnw -B -ntp clean verify -DskipTests` successifs : le ZIP est assemblé en phase `verify`, un `clean package` ne le produit pas. Hors périmètre : l'image Docker et l'installeur Inno Setup, dont les outils tiers écrivent des horodatages.
+- **Outillage épinglé.** `pluginManagement` épingle `maven-clean-plugin`, `maven-resources-plugin`, `maven-jar-plugin`, `maven-install-plugin`, `maven-deploy-plugin` et `maven-site-plugin` par propriétés, suivies par Dependabot. L'exécution `enforce-nexus-toolchain` de `maven-enforcer-plugin` ajoute `requirePluginVersions` (`pom.xml:315`) et `requireUpperBoundDeps` (`pom.xml:321`) et fixe `requireMavenVersion` à `[3.10.0,)` (`pom.xml:310-313`), aligné sur le wrapper.
+- **Bornes supérieures.** `requireUpperBoundDeps` est préféré à `dependencyConvergence`, trop bruyant avec les BOM Quarkus. Les deux exclusions (`org.jctools:jctools-core`, `org.jspecify:jspecify`) sont listées et justifiées dans le pom, à revoir à chaque montée de `quarkus.platform.version`. `jna` est géré à `5.19.1` (`pom.xml:50`) pour que le BOM Quarkus ne le ramène pas sous la version qu'exige `jna-platform`.
+
+### Comportement existant vérifié (build-reproducibility)
+
+**[Existant vérifié]** Le contrat `scripts/release/test-final-audit-contracts.sh:401-468` (bloc « Sprint 9 : maven-build ») lit `pom.xml` et exige : un `project.build.outputTimestamp` ISO-8601 UTC, les six plugins épinglés par propriété en version stable, `requireMavenVersion` à `[3.10.0,)`, `requirePluginVersions` et `requireUpperBoundDeps` présents. La procédure de release documente la mise à jour de l'horodatage (`scripts/release/test-final-audit-contracts.sh:469-470`) et la skill `nexus-dependency-bump` l'échec `requireUpperBoundDeps` (`:471-472`).
+
+**[Existant vérifié]** Le build `./mvnw -B -ntp clean install` passe avec ces règles. Deux `./mvnw -B -ntp clean verify -DskipTests` successifs ont donné les mêmes SHA-256 pour le JAR CLI, le ZIP de distribution, le JAR principal, les JAR des adaptateurs et `bom.json` (mesure manuelle, sans relevé conservé).
+
+### Écarts et limites (build-reproducibility)
+
+- Le scénario de la spec écrit `clean package` ; le ZIP n'existe qu'après `clean verify`. La procédure de release utilise `verify`.
+- Aucun contrat ni job de CI ne lance deux builds pour comparer les empreintes : la comparaison reste une étape de la procédure de release.
+- Le build rouge sur un plugin sans version, sur une borne supérieure violée ou sur un Maven antérieur à 3.10.0 n'est pas exercé : les contrats vérifient la configuration de l'enforcer, pas l'échec qu'elle produit.
 
 ## OpenSpec ci-workflow-tooling
 
@@ -346,6 +372,29 @@ Exigences : `ci-workflow-tooling › Les inputs ne sont jamais interpolés dans 
 - **[Proposition]** Remplacer le dictionnaire `PINNED_RUNNER_JOBS` par une détection (par exemple une marque dans le job) pour qu'un nouveau benchmark ne puisse pas y échapper.
 - **[Question]** Une valeur dérivée d'un input (`steps.<id>.outputs.value`) utilisée dans un bloc `run:` doit-elle aussi être refusée ?
 
+## OpenSpec license-compliance
+
+Spec : [`openspec/specs/license-compliance/spec.md`](../../openspec/specs/license-compliance/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+Cette section porte la conception et l'existant vérifié du contrôle des licences des dépendances livrées. La description courante (liste blanche, multi-licences) reste celle de la section « Outillage Maven épinglé et licences » ci-dessus.
+
+### Conception (license-compliance)
+
+- **Liste blanche.** L'exécution `aggregate-third-party-notices` de `license-maven-plugin` reçoit `includedLicenses` (`pom.xml:360-370`) et `failOnBlacklist=true` (`pom.xml:359`). La liste regroupe les licences permissives et faiblement réciproques compatibles avec la licence propriétaire du produit, établies à partir des notices du build. Toute nouvelle licence exige une modification revue du pom.
+- **Libellés normalisés.** `licenseMerges` (`pom.xml:372-384`) regroupe les variantes d'une même licence sous un libellé unique, placé en premier de chaque entrée ; chaque entrée de la liste blanche est le libellé normalisé d'un `licenseMerge`.
+- **Licence manquante.** `failOnMissing=true` (`pom.xml:355`) refuse une dépendance sans licence déclarée.
+
+### Comportement existant vérifié (license-compliance)
+
+**[Existant vérifié]** Le contrat `scripts/release/test-final-audit-contracts.sh:401-468` (bloc « Sprint 9 : maven-build ») exige `failOnBlacklist=true`, une liste `includedLicenses` non vide, des `licenseMerges`, et que chaque licence de la liste soit le libellé normalisé d'un merge. `scripts/release/test-final-audit-contracts.sh:473-474` exige que `ci-and-supply-chain.md` documente `failOnBlacklist=true`.
+
+**[Existant vérifié]** `./mvnw -B -ntp clean install` passe avec la liste blanche ; `target/licenses/THIRD_PARTY_NOTICES.txt` ne diffère de l'état antérieur que par la normalisation des libellés et par `jna` 5.19.1 au lieu de 5.8.0.
+
+### Écarts et limites (license-compliance)
+
+- Aucun test ne fait échouer le build sur une licence hors liste ou sur une dépendance sans licence : les contrats lisent la configuration du pom, pas le comportement du plugin.
+- Aucun contrat ne vérifie `failOnMissing` ; sa présence est lue dans `pom.xml:355`.
+
 ## OpenSpec powershell-script-tooling
 
 Spec : [`openspec/specs/powershell-script-tooling/spec.md`](../../openspec/specs/powershell-script-tooling/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
@@ -411,3 +460,43 @@ Exigences : `powershell-script-tooling › Maven est appelé par le wrapper vér
 - **[Proposition]** Ajouter au contrat `test-operational-doc-contracts.sh` une recherche de `0.1.0-SNAPSHOT` dans les scripts actifs, et une vérification de l'import du module par tout script qui appelle `Invoke-Maven`, `Resolve-AbsolutePath` ou `Invoke-NexusJson`.
 - **[Proposition]** Couvrir `Invoke-NexusJson` (code de sortie non nul, sortie vide) dans `Test-NexusScript.ps1`.
 - **[Question]** Le repli local hors CI sur un Maven installé non ancré est-il compatible avec l'intention « Maven est appelé par le wrapper vérifié » ? La spec ne l'interdit pas.
+
+## OpenSpec operational-documentation-contracts
+
+Spec : [`openspec/specs/operational-documentation-contracts/spec.md`](../../openspec/specs/operational-documentation-contracts/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+Cette section décrit ce que `scripts/release/test-operational-doc-contracts.sh` impose à la documentation courante et à l'instruction primaire des agents. Le script tourne dans `bash .claude/scripts/contracts.sh` et dans la CI.
+
+### Comportement existant vérifié (operational-documentation-contracts)
+
+| Étiquette | Fait | Source |
+|---|---|---|
+| [Existant vérifié] | `docs/developer/search-ranking.md` décrit le voisinage graphe comme une projection bornée ; le contrat refuse « ProjectGraph cache », « ProjectGraphBuilder » et « Graphe dérivé par génération ». | `scripts/release/test-operational-doc-contracts.sh:366` |
+| [Existant vérifié] | `docs/developer/current-limitations.md` ne présente pas le moteur FTS5 trigram livré par V008 comme une évolution à venir. | `scripts/release/test-operational-doc-contracts.sh:804` |
+| [Existant vérifié] | `AGENTS.md` prescrit `./mvnw clean install` et ne contient aucune commande `mvn` hors wrapper. | `scripts/release/test-operational-doc-contracts.sh:813` |
+| [Existant vérifié] | L'étape 9 du self-smoke vérifie que le contexte construit sur le dépôt retient le `AGENTS.md` natif. | `scripts/self-smoke.ps1:165` |
+| [Existant vérifié] | La documentation courante nomme `quarkus.platform.version` et `mcp.sdk.version` du `pom.xml` ; le contrat lit ces propriétés, refuse leur valeur et tout littéral `Quarkus x.y.z` ou `SDK MCP x.y.z` dans les documents contrôlés. | `scripts/release/test-operational-doc-contracts.sh:28-48`, `scripts/release/test-operational-doc-contracts.sh:133-170` |
+
+### Écarts et limites (operational-documentation-contracts)
+
+- Aucun contrôle permanent ne vérifie l'absence d'un type `ProjectGraph` dans le code : la recherche `git grep` a été exécutée à la livraison du sprint 11.
+
+## OpenSpec container-image-hardening
+
+Spec : [`openspec/specs/container-image-hardening/spec.md`](../../openspec/specs/container-image-hardening/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+Cette section décrit les propriétés de l'image Docker et de son exécution par le compose officiel ; la section « Docker Distribution : construire une fois » plus haut décrit le workflow qui les qualifie.
+
+### Comportement existant vérifié (container-image-hardening)
+
+| Étiquette | Fait | Source |
+|---|---|---|
+| [Existant vérifié] | Root possède `/opt/nexus` et les scripts de `/usr/local/bin` ; l'UID 10001 ne possède que `/data/nexus` et `/workspace`. Le contrat refuse un `COPY --chown` vers ces deux chemins et vérifie qu'il rejette sa fixture négative. | `scripts/release/test-operational-doc-contracts.sh:715-743` |
+| [Existant vérifié] | Le build depuis les sources lit le `.dockerignore` racine (liste d'exclusion) ; le build runtime lit `packaging/docker/Dockerfile.runtime.dockerignore` (liste d'autorisation), livré avec le payload Windows et le staging de repli. | `scripts/release/test-operational-doc-contracts.sh:745-770` |
+| [Existant vérifié] | L'image porte `LICENSE`, `THIRD_PARTY_NOTICES.txt`, les labels OCI `source`, `licenses`, `revision`, `version` et un `HEALTHCHECK` ; le compose déclare `read_only`, `tmpfs: /tmp:exec`, `cap_drop: [ALL]` et `no-new-privileges`. | `scripts/release/test-operational-doc-contracts.sh:772-790` |
+| [Existant vérifié] | Le workflow `Docker distribution` vérifie l'immuabilité, les notices et les labels, attend l'état `healthy` sans compose, teste le compose durci et sonde le contexte de repli. | `.github/workflows/docker-distribution.yml:127-160`, `.github/workflows/docker-distribution.yml:261-321`, `.github/workflows/docker-distribution.yml:323-388` |
+
+### Écarts et limites (container-image-hardening)
+
+- Le tmpfs `/tmp` est monté `exec` : SQLite et JNA chargent depuis `/tmp` les bibliothèques natives qu'ils extraient.
+- L'absence de `/workspace/.git` dans l'étape `build` n'est vérifiée que par le contrat sur `.dockerignore` ; aucun job ne construit cette étape seule.

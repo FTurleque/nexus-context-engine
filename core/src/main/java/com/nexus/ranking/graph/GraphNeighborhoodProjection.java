@@ -11,17 +11,17 @@ import java.util.UUID;
 /**
  * Projection bornée du voisinage graphe nécessaire au ranking.
  *
- * <p>Le graphe projet complet n'est plus matérialisé ni mis en cache. Chaque
- * expansion demande au repository uniquement les arêtes touchant les paths
- * courants, avec une borne globale indépendante de la taille de l'index.</p>
+ * <p>Le graphe projet complet n'est ni matérialisé ni mis en cache (BE-0087).
+ * Chaque expansion demande au repository uniquement les arêtes touchant les
+ * paths courants, avec une borne globale indépendante de la taille de l'index.</p>
  */
-public final class ProjectGraphBuilder {
+public final class GraphNeighborhoodProjection {
 
     public static final int MAX_NEIGHBOR_EDGES = ResultLimitPolicy.MAX_INTERNAL_RETRIEVAL_LIMIT;
 
     private final IndexRepository indexRepository;
 
-    public ProjectGraphBuilder(IndexRepository indexRepository) {
+    public GraphNeighborhoodProjection(IndexRepository indexRepository) {
         this.indexRepository = Objects.requireNonNull(indexRepository, "indexRepository");
     }
 

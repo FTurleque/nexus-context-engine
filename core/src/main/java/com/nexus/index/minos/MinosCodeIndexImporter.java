@@ -93,10 +93,10 @@ public final class MinosCodeIndexImporter implements ExternalCodeIntelligencePay
     private void requireUnambiguousPathFormat(Set<String> files, String payload) throws IOException {
         if (files.stream().noneMatch(path -> path.indexOf('\\') >= 0)) return;
         try (JsonParser parser = objectMapper.createParser(payload)) {
-            if (parser.nextToken() != JsonToken.START_OBJECT) throw new IOException("Invalid MINOS export");
+            if (parser.nextToken() != JsonToken.START_OBJECT) throw new IOException("Export MINOS invalide");
             String encoding = null;
             while (parser.nextToken() != JsonToken.END_OBJECT) {
-                if (parser.currentToken() != JsonToken.FIELD_NAME) throw new IOException("Invalid MINOS export");
+                if (parser.currentToken() != JsonToken.FIELD_NAME) throw new IOException("Export MINOS invalide");
                 String field = parser.currentName();
                 JsonToken token = parser.nextToken();
                 if ("repositoryPathFormat".equals(field)) {
@@ -106,7 +106,8 @@ public final class MinosCodeIndexImporter implements ExternalCodeIntelligencePay
                 }
             }
             if (!"repository-components-v2".equals(encoding)) {
-                throw new IOException("MINOS export requires repositoryPathFormat=repository-components-v2 for this corpus; regenerate with a component-preserving producer");
+                throw new IOException("L'export MINOS exige repositoryPathFormat=repository-components-v2 pour ce corpus ; "
+                        + "régénérez-le avec un producteur qui conserve les composants");
             }
         }
     }

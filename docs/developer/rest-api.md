@@ -7,7 +7,7 @@ L'adaptateur Quarkus expose `NexusApplication` sans introduire Quarkus dans le c
 ```text
 module      adapters/rest-quarkus
 Java        21
-Quarkus     3.40.1.1
+Quarkus     pom.xml, propriété quarkus.platform.version
 version     NEXUS 0.2.0
 ```
 
@@ -199,7 +199,7 @@ Spec : [`openspec/specs/public-output-projection/spec.md`](../../openspec/specs/
 | Les trois canaux appellent cette projection : REST par `ApiMapper`, MCP par `NexusMcpTools`, CLI par `CliRenderer`. | [Existant vérifié] | `adapters/rest-quarkus/src/main/java/com/nexus/api/ApiMapper.java:19-50`, `adapters/mcp-java/src/main/java/com/nexus/mcp/NexusMcpTools.java:58,79,104,125,145,177,212`, `core/src/main/java/com/nexus/cli/CliRenderer.java:62,71,116,136,156,175` |
 | L'ordre des clés JSON est l'ordre des composantes des records de `PublicOutput`. Le contrat de clés se lit sur ces records. | [Existant vérifié] | `core/src/main/java/com/nexus/exposure/PublicOutputSchema.java:14,30-32` |
 | Deux divergences sont déclarées : la clé `command` ajoutée en tête des objets JSON de la CLI, et les outils MCP `find_symbol` et `find_usages`, sans équivalent CLI ni REST. | [Existant vérifié] | `core/src/main/java/com/nexus/exposure/PublicOutputSchema.java:21,24`, `core/src/main/java/com/nexus/cli/CliRenderer.java:302-306` |
-| Les chemins passent par `PublicProjectPathPolicy.expose` pour les résultats classés, les symboles indexés et les éléments de contexte ; un chemin hors de la racine lève `IllegalStateException("Result path is outside the project root")`. | [Existant vérifié] | `core/src/main/java/com/nexus/exposure/PublicOutputProjection.java:82,167,206`, `core/src/main/java/com/nexus/security/PublicProjectPathPolicy.java:26-51`, `core/src/main/java/com/nexus/exposure/PublicContextPolicy.java:51-56` |
+| Les chemins passent par `PublicProjectPathPolicy.expose` pour les résultats classés, les symboles indexés et les éléments de contexte ; un chemin hors de la racine lève `IllegalStateException("Le chemin du résultat sort de la racine du projet")`. | [Existant vérifié] | `core/src/main/java/com/nexus/exposure/PublicOutputProjection.java:82,167,206`, `core/src/main/java/com/nexus/security/PublicProjectPathPolicy.java:26-51`, `core/src/main/java/com/nexus/exposure/PublicContextPolicy.java:51-56` |
 | Le record `Project` n'a pas de racine : aucune clé `rootPath` n'est exposée. | [Existant vérifié] | `core/src/main/java/com/nexus/exposure/PublicOutput.java:22-29`, `core/src/test/java/com/nexus/exposure/PublicOutputProjectionTest.java:58` |
 | `scoreComponents` est copié dans un `TreeMap` par la projection et trié de nouveau par les constructeurs des records ; les `metadata` de contexte sont triées récursivement par clé. | [Existant vérifié] | `core/src/main/java/com/nexus/exposure/PublicOutputProjection.java:85,212,223-239`, `core/src/main/java/com/nexus/exposure/PublicOutput.java:59,106,194-196` |
 | `qualifiedName` et `signature` (symbole) puis `source` et `target` (relation) passent par `SensitiveContentRedactor.redactField` ; `id` et `excerpt` d'un résultat classé aussi. | [Existant vérifié] | `core/src/main/java/com/nexus/exposure/PublicOutputProjection.java:69-70,80,83,181-182` |

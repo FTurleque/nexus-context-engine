@@ -70,9 +70,45 @@ L'image contient les mêmes surfaces applicatives que la distribution Windows :
 /opt/nexus/lib/nexus-mcp.jar
 /opt/nexus/lib/nexus-assistant-clients.jar
 /opt/nexus/rest/quarkus-run.jar
+/opt/nexus/LICENSE
+/opt/nexus/THIRD_PARTY_NOTICES.txt
 ```
 
 Le processus s'exécute avec un utilisateur non-root UID `10001`.
+
+### Image immuable pour son processus
+
+Les JAR, `/opt/nexus/rest/`, les notices et les scripts `/usr/local/bin/nexus-entrypoint` et `/usr/local/bin/nexus-healthcheck` appartiennent à root : fichiers en `0644`, répertoires et scripts en `0755`. L'UID `10001` ne possède que `/data/nexus` et `/workspace`. Un processus compromis ne peut donc réécrire ni le code ni la sonde, même lancé par `docker run` sans Compose.
+
+L'image porte les labels OCI suivants :
+
+```text
+org.opencontainers.image.source    https://github.com/FTurleque/nexus-context-engine
+org.opencontainers.image.licenses  LicenseRef-NEXUS-Proprietary
+org.opencontainers.image.revision  SHA du commit construit
+org.opencontainers.image.version   version du pom.xml
+```
+
+`revision` et `version` sont passés par `--build-arg NEXUS_IMAGE_REVISION=...` et `--build-arg NEXUS_IMAGE_VERSION=...` (le workflow `docker-distribution.yml` les fournit) ; sans valeur, le label reste vide. Lecture :
+
+```bash
+docker inspect --format '{{json .Config.Labels}}' nexus-context-engine:0.2.0
+```
+
+### Sonde de santé intégrée
+
+L'image déclare `HEALTHCHECK` sur `/usr/local/bin/nexus-healthcheck`, avec les intervalles du Compose (10 s, délai 5 s, 6 essais, démarrage 20 s). Un conteneur REST lancé par `docker run` passe donc `healthy` sans Compose. La sonde interroge l'écouteur de management du mode REST : un conteneur lancé en mode `cli`, `mcp` ou `assistant` reste dans l'état `starting` puis `unhealthy`, sans conséquence sur son exécution.
+
+### Contexte de build
+
+Chaque Dockerfile a son fichier d'ignore, lu par BuildKit (builder par défaut de Docker Desktop et de la CI) :
+
+| Dockerfile | Contexte | Fichier d'ignore |
+|---|---|---|
+| `packaging/docker/Dockerfile` | racine du dépôt | `.dockerignore` : exclut `.git`, les `target/`, les fichiers `.env`, les données et espaces de travail locaux, `docs/project/audits/`, les worktrees d'outils |
+| `packaging/docker/Dockerfile.runtime` | racine d'installation Windows, ou staging de la CI | `Dockerfile.runtime.dockerignore`, livré à côté : liste d'autorisation (`lib/`, `rest/`, les deux scripts de `docker/`, `LICENSE`, `THIRD_PARTY_NOTICES.txt`) |
+
+`docker/.env` (token REST) et le répertoire de données de la racine d'installation n'entrent donc pas dans le contexte. Un builder classique sans BuildKit ignore `Dockerfile.runtime.dockerignore` : utiliser `docker compose` ou `docker build` avec BuildKit.
 
 ## Modes de l'entrypoint
 
@@ -164,7 +200,7 @@ Smoke :
   -HostPort 18080
 ```
 
-Le test vérifie CLI, MCP STDIO, REST loopback positif, l'absence de déclaration de forward et le refus d'un forward distant déclaré en `loopback-forward`.
+Le test vérifie CLI, MCP STDIO, REST loopback positif (sonde embarquée, endpoint métier, état `healthy` du `HEALTHCHECK` de l'image), l'absence de déclaration de forward et le refus d'un forward distant déclaré en `loopback-forward`.
 
 ## Persistance
 
@@ -331,6 +367,27 @@ L'assistant Windows génère :
 ```
 
 Le wizard limite la publication Docker à loopback. Le `.env` généré fixe `NEXUS_REST_EXPOSURE_MODE=loopback-forward`; le Compose dérive la déclaration de forward de `NEXUS_DOCKER_BIND_ADDRESS` et la transmet au conteneur.
+
+### Durcissement d'exécution
+
+Le service `nexus` du Compose déclare :
+
+```yaml
+read_only: true
+tmpfs:
+  - "/tmp:exec,mode=1777"
+cap_drop:
+  - ALL
+security_opt:
+  - "no-new-privileges:true"
+```
+
+- `read_only: true` : la racine du conteneur est en lecture seule ; NEXUS n'écrit que dans le volume `/data/nexus` et dans `/tmp`.
+- `tmpfs: /tmp:exec` : SQLite et JNA y extraient puis chargent leurs bibliothèques natives. Le tmpfs Docker est `noexec` par défaut, ce qui empêcherait ce chargement (erreur `failed to map segment from shared object`, HTTP 500 sur l'API) : l'option `exec` est requise. Le contenu de `/tmp` disparaît à l'arrêt du conteneur.
+- `cap_drop: ALL` : aucune capacité Linux ; le processus non-root n'en a pas besoin.
+- `no-new-privileges:true` : aucun binaire setuid ne peut élever les privilèges.
+
+Le repository reste monté en lecture seule (`/workspace:ro`) et la sonde du Compose reprend celle de l'image. Le workflow `docker-distribution.yml` démarre ce Compose durci, attend l'état `healthy`, vérifie que le code n'est pas modifiable puis enregistre, indexe et interroge un projet de test.
 
 ## Sémantique / Ollama
 

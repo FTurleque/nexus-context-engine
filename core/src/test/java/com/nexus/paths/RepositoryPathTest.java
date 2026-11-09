@@ -32,6 +32,12 @@ class RepositoryPathTest {
         assertThrows(IllegalArgumentException.class, () -> RepositoryPath.fromPath(root));
     }
 
+    @Test void reportsAnInvalidProviderPathInFrench() {
+        IllegalArgumentException failure =
+                assertThrows(IllegalArgumentException.class, () -> RepositoryPath.fromProvider("../file"));
+        assertEquals("Chemin repository invalide", failure.getMessage());
+    }
+
     @Test void refusesInvalidProviderSyntaxWithoutRepair() {
         for (String invalid : List.of("", "/etc/file", "../file", "a/../file", "./a", "a/./b",
                 "a//b", "a/", "C:/Users/secret", "D:\\secret", "C:secret", "\\\\server\\share", "a\0b")) {
@@ -39,6 +45,15 @@ class RepositoryPathTest {
         }
         assertEquals("a\\b.java", RepositoryPath.fromProvider("a\\b.java").value());
         assertEquals("a/b.java", RepositoryPath.fromProvider("a/b.java").value());
+    }
+
+    @Test void refusesEveryAsciiDriveLetterPrefixAndKeepsOtherColons() {
+        for (String invalid : List.of("C:", "c:/src/App.java", "z:relative", "A:\\x", "Z:\nfoo")) {
+            assertThrows(IllegalArgumentException.class, () -> RepositoryPath.fromProvider(invalid), invalid);
+        }
+        for (String valid : List.of("é:foo", "1:foo", "ab:c", "a/C:b", "@:x")) {
+            assertEquals(valid, RepositoryPath.fromProvider(valid).value());
+        }
     }
 
 }

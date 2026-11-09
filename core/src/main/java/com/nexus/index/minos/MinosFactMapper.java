@@ -43,13 +43,13 @@ final class MinosFactMapper {
         int startLine = positiveLine(node, "startLine");
         int endLine = positiveLine(node, "endLine");
         if (endLine < startLine) {
-            throw new IOException("MINOS export contains an invalid symbol line range");
+            throw new IOException("L'export MINOS contient une plage de lignes de symbole invalide");
         }
         int sourceLineCount = canonicalLineCount(pathGuard, relativePath, sourceLineCounts);
         if (!CodeSymbol.isWithinLineCount(startLine, endLine, sourceLineCount)) {
-            throw new IOException("MINOS export symbol line range exceeds canonical file '"
+            throw new IOException("La plage de lignes de symbole MINOS dépasse le fichier canonique '"
                     + relativePath + "': " + startLine + "-" + endLine
-                    + " for " + sourceLineCount + " line(s)");
+                    + " pour " + sourceLineCount + " ligne(s)");
         }
         String name = requiredText(node, "name");
         String qualifiedName = optionalText(node, "qualifiedName");
@@ -109,7 +109,7 @@ final class MinosFactMapper {
     static int countLines(String content) throws IOException {
         long lineCount = content.lines().count();
         if (lineCount > Integer.MAX_VALUE) {
-            throw new IOException("Source file contains too many lines to validate a MINOS symbol range");
+            throw new IOException("Le fichier source contient trop de lignes pour valider une plage de symbole MINOS");
         }
         return (int) lineCount;
     }
@@ -151,24 +151,24 @@ final class MinosFactMapper {
         JsonNode confidence = node.get("confidence");
         if (confidence != null && !confidence.isNull()) {
             if (!confidence.isNumber()) {
-                throw new IOException("MINOS export contains a non-numeric relation confidence");
+                throw new IOException("L'export MINOS contient une confiance de relation non numérique");
             }
             double value = confidence.asDouble();
             if (Double.isFinite(value) && value >= 0.0d && value <= 1.0d) {
                 return value;
             }
-            throw new IOException("MINOS export contains an invalid relation confidence");
+            throw new IOException("L'export MINOS contient une confiance de relation invalide");
         }
         if ("FACTUAL".equals(optionalText(node, "nature"))) {
             return 1.0d;
         }
-        throw new IOException("MINOS derived relation is missing confidence");
+        throw new IOException("Une relation MINOS dérivée n'a pas de confiance");
     }
 
     static String requiredText(JsonNode parent, String field) throws IOException {
         String value = optionalText(parent, field);
         if (value == null) {
-            throw new IOException("MINOS export field '" + field + "' must not be blank");
+            throw new IOException("Le champ '" + field + "' de l'export MINOS ne peut pas être vide");
         }
         return value;
     }
@@ -185,11 +185,11 @@ final class MinosFactMapper {
     static int positiveLine(JsonNode parent, String field) throws IOException {
         JsonNode node = parent.get(field);
         if (node == null || !node.canConvertToInt()) {
-            throw new IOException("MINOS export field '" + field + "' must be an integer");
+            throw new IOException("Le champ '" + field + "' de l'export MINOS doit être un entier");
         }
         int value = node.asInt();
         if (value < 1) {
-            throw new IOException("MINOS export field '" + field + "' must be positive");
+            throw new IOException("Le champ '" + field + "' de l'export MINOS doit être strictement positif");
         }
         return value;
     }

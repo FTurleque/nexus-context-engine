@@ -350,9 +350,10 @@ class ProjectIndexingServiceTest {
         ProjectRegistry registry = new ProjectRegistry(projectRepository);
         ProjectDescriptor project = registry.register(projectRoot, "oversized");
         LuceneSearchIndex searchIndex = new LuceneSearchIndex(paths);
+        SqliteIndexRepository indexRepository = new SqliteIndexRepository(database);
         ProjectIndexingService service = ProjectIndexingServices.of(
                 projectRepository,
-                new SqliteIndexRepository(database),
+                indexRepository,
                 new ProjectScanner(),
                 List.of(new MarkdownLanguageAnalyzer()),
                 searchIndex);
@@ -360,6 +361,8 @@ class ProjectIndexingServiceTest {
         IndexingReport report = service.index(project.id());
 
         assertEquals(IndexStatus.READY, registry.get(project.id()).indexStatus());
+        // Le fichier refusé par la redaction reste dans l'index structurel SQLite.
+        assertTrue(indexRepository.findFiles(project.id()).containsKey("leak.md"));
         assertEquals(2, luceneDocumentCount(paths, project));
         assertEquals(1, searchIndex.search(project.id(), "firstMarker", 10).size());
         assertEquals(1, searchIndex.search(project.id(), "secondMarker", 10).size());

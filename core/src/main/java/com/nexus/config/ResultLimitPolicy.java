@@ -27,11 +27,11 @@ public final class ResultLimitPolicy {
 
     private static int validateBounded(int limit, int maximum, String label) {
         if (limit <= 0) {
-            throw new IllegalArgumentException(label + " must be greater than zero");
+            throw new IllegalArgumentException(label + " doit être strictement positif");
         }
         if (limit > maximum) {
             throw new IllegalArgumentException(
-                    label + " must not exceed " + maximum + " (requested " + limit + ")");
+                    label + " ne doit pas dépasser " + maximum + " (demandé : " + limit + ")");
         }
         return limit;
     }

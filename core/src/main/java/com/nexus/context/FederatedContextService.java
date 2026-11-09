@@ -110,12 +110,12 @@ public final class FederatedContextService {
         Objects.requireNonNull(constraints, "constraints");
         List<ProjectDescriptor> scope = FederatedScopePolicy.normalizeProjects(projects);
         if (query.isBlank()) {
-            throw new IllegalArgumentException("query must not be blank");
+            throw new IllegalArgumentException("La requête ne peut pas être vide");
         }
         ContextBudgetPolicy.validate(tokenBudget);
         if (tokenBudget < scope.size()) {
             throw new IllegalArgumentException(
-                    "tokenBudget must be at least the number of projects in the federated scope");
+                    "tokenBudget doit être au moins égal au nombre de projets du scope fédéré");
         }
         return scope;
     }

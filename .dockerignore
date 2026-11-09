@@ -1,0 +1,39 @@
+# Contexte de build de packaging/docker/Dockerfile (racine du dépôt, `COPY . .`).
+# N'exclut que ce que `./mvnw -B -DskipTests package` ne lit pas : historique Git,
+# sorties de build, secrets et données locales, audits datés, outillage local.
+# packaging/docker/Dockerfile.runtime a son propre fichier, en liste d'autorisation :
+# packaging/docker/Dockerfile.runtime.dockerignore.
+
+# Historique Git (répertoire dans un clone, fichier dans un worktree)
+.git
+**/.git
+
+# Sorties de build
+**/target
+**/__pycache__
+
+# Fichiers d'environnement locaux (tokens REST, secrets)
+**/.env
+**/.env.*
+**/*.env
+
+# Données et espaces de travail locaux
+**/nexus-data
+workspace
+.nexus
+index.scip
+
+# Audits datés
+docs/project/audits
+
+# Outillage local et worktrees d'outils
+.claude/worktrees
+.claude/settings.local.json
+.idea
+**/*.iml
+.vscode
+.classpath
+.project
+.settings
+**/.DS_Store
+**/Thumbs.db

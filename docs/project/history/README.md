@@ -15,3 +15,4 @@ Résultats d'itération, de benchmark et de qualification, figés à leur date. 
 | enrichissement des specs OpenSpec (2026-11-04) | [Bilan de couverture OpenSpec](openspec-couverture-2026-11-04.md) |
 | heap, transaction d'écriture et hachage du pipeline d'indexation (2026-11-07) | [Mesures du pipeline d'indexation](indexing-heap-and-hashing-measures-2026-11-07.md) |
 | mise en attente des analyses et writers Lucene par indexation (2026-11-07) | [Mesures après mise en attente](indexing-staged-writes-measures-2026-11-07.md) |
+| répétition de release `0.2.0-rc.2` et attestations (2026-11-08) | [Répétition de release 0.2.0-rc.2](release-rehearsal-0.2.0-rc.2-2026-11-08.md) |

@@ -58,7 +58,7 @@ class CodeIntelligenceMetadataPolicyTest {
         IllegalArgumentException failure = assertThrows(
                 IllegalArgumentException.class,
                 () -> new CodeIntelligenceSnapshot("test", oversized, List.of()));
-        assertTrue(failure.getMessage().contains("symbol limit"));
+        assertTrue(failure.getMessage().contains("limite de symboles"));
     }
 
     @Test
@@ -81,6 +81,6 @@ class CodeIntelligenceMetadataPolicyTest {
         IllegalArgumentException failure = assertThrows(
                 IllegalArgumentException.class,
                 () -> new CodeIntelligenceSnapshot("test", List.of(), oversized));
-        assertTrue(failure.getMessage().contains("decoded metadata limit"));
+        assertTrue(failure.getMessage().contains("limite de métadonnées décodées"));
     }
 }

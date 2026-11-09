@@ -16,9 +16,9 @@ Préalable à la fusion de la PR : les tâches manuelles 3.1 et 3.3 sont faites 
 
 ## 3. Environnement protégé et tags (AUD-DEP-03)
 
-- [ ] 3.1 AUD-DEP-03 (manuel) — Créer l'environnement `release` : reviewer requis (mainteneur), politique de déploiement limitée aux tags `v*`, sans secret ; vérifier par `gh api repos/FTurleque/nexus-context-engine/environments --jq '.environments[] | {name, protection_rules}'`
+- [x] 3.1 AUD-DEP-03 (manuel) — Créer l'environnement `release` : reviewer requis (mainteneur), politique de déploiement limitée aux tags `v*`, sans secret ; vérifier par `gh api repos/FTurleque/nexus-context-engine/environments --jq '.environments[] | {name, protection_rules}'`
 - [x] 3.2 AUD-DEP-03 — Déclarer `environment: release` sur le job `publish` et sur le job Windows appelé avec `require_authenticode: true` ; si l'environnement conditionnel n'est pas accepté dans le workflow réutilisable, appliquer l'alternative du design (job de signature dédiée) ; appeler le job Windows avec `require_authenticode: false` et sans secret (design D1, D3) ; vérifier par `bash .claude/scripts/contracts.sh` (contrat : `publish` déclare `environment: release`, environnement conditionnel du job Windows, aucun secret transmis)
-- [ ] 3.3 AUD-DEP-03 (manuel) — Créer un ruleset de tags ciblant `refs/tags/v*` (création, mise à jour, suppression restreintes au mainteneur) ; vérifier par `gh api repos/FTurleque/nexus-context-engine/rulesets --jq '.[] | {name, target, enforcement}'` (un ruleset `tag` actif)
+- [x] 3.3 AUD-DEP-03 (manuel) — Créer un ruleset de tags ciblant `refs/tags/v*` (création, mise à jour, suppression restreintes au mainteneur) ; vérifier par `gh api repos/FTurleque/nexus-context-engine/rulesets --jq '.[] | {name, target, enforcement}'` (un ruleset `tag` actif)
 
 ## 4. Provenance des assets Windows (AUD-DEP-09)
 
@@ -48,8 +48,8 @@ Préalable à la fusion de la PR : les tâches manuelles 3.1 et 3.3 sont faites 
 
 - [x] 9.1 AUD-DEP-02 — Accepter `vX.Y.Z-rc.N` dans `validate-release-tag.sh`, avec les cas valides et invalides dans `scripts/release/test-release-tag-policy.sh` ; marquer la release GitHub comme pré-version et ne pas déplacer `latest` pour un tag `-rc` (`publish-github-release-assets.sh` et son test, étape `latest` de `release.yml`) (design D9) ; vérifier par `bash scripts/release/test-release-tag-policy.sh`, `bash scripts/release/test-publish-github-release-assets.sh` et `bash .claude/scripts/contracts.sh`
 - [x] 9.2 AUD-DEP-02 — Nouvel ADR (skill `nexus-adr`) qui complète ADR-0031 : politique de publication (environnement protégé, attestations de tous les assets, tags de pré-version) ; mettre à jour le registre des ADR, la vue arc42 des décisions et `docs/developer/immutable-release-publishing.md` ; vérifier par `bash .claude/scripts/contracts.sh`
-- [ ] 9.3 AUD-DEP-02 (manuel) — Après fusion des sections 1 à 9.2 et des tâches manuelles 3.1 et 3.3 : passer la version à `X.Y.Z-rc.1`, promouvoir `develop` vers `main` (`/nx-release`), poser le tag `vX.Y.Z-rc.1` sur la tête de `main`, approuver l'environnement `release` ; vérifier par `gh run list --workflow release.yml --limit 1` (run réussi) et `gh release view vX.Y.Z-rc.1 --json isPrerelease,assets`
-- [ ] 9.4 AUD-DEP-02 — Vérifier la répétition : `gh attestation verify` sur l'image `ghcr.io/fturleque/nexus-context-engine:X.Y.Z-rc.1`, le ZIP et le `setup.exe` ; `latest` inchangé ; consigner la preuve (identifiant de run, sorties de vérification) dans un relevé daté sous `docs/project/history/` ; vérifier par `bash .claude/scripts/contracts.sh`
+- [x] 9.3 AUD-DEP-02 (manuel) — Après fusion des sections 1 à 9.2 et des tâches manuelles 3.1 et 3.3 : passer la version à `X.Y.Z-rc.1`, promouvoir `develop` vers `main` (`/nx-release`), poser le tag `vX.Y.Z-rc.1` sur la tête de `main`, approuver l'environnement `release` ; vérifier par `gh run list --workflow release.yml --limit 1` (run réussi) et `gh release view vX.Y.Z-rc.1 --json isPrerelease,assets`
+- [x] 9.4 AUD-DEP-02 — Vérifier la répétition : `gh attestation verify` sur l'image `ghcr.io/fturleque/nexus-context-engine:X.Y.Z-rc.1`, le ZIP et le `setup.exe` ; `latest` inchangé ; consigner la preuve (identifiant de run, sorties de vérification) dans un relevé daté sous `docs/project/history/` ; vérifier par `bash .claude/scripts/contracts.sh`
 
 ## Workflow follow-up
 

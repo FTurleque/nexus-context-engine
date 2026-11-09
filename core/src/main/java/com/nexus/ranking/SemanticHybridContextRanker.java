@@ -52,13 +52,13 @@ public final class SemanticHybridContextRanker implements ContextRanker {
             double semanticRrfWeight) {
         this.baselineRanker = Objects.requireNonNull(baselineRanker, "baselineRanker");
         if (rrfK <= 0) {
-            throw new IllegalArgumentException("rrfK must be greater than zero");
+            throw new IllegalArgumentException("rrfK doit être strictement positif");
         }
         if (!Double.isFinite(semanticRrfWeight)
                 || semanticRrfWeight <= 0.0d
                 || semanticRrfWeight > MAX_SEMANTIC_RRF_WEIGHT) {
             throw new IllegalArgumentException(
-                    "semanticRrfWeight must be greater than 0.0 and at most " + MAX_SEMANTIC_RRF_WEIGHT);
+                    "semanticRrfWeight doit être strictement supérieur à 0.0 et au plus " + MAX_SEMANTIC_RRF_WEIGHT);
         }
         this.rrfK = rrfK;
         this.semanticRrfWeight = semanticRrfWeight;

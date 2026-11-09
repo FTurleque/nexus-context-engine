@@ -8,6 +8,7 @@ import com.nexus.security.SensitiveContentRedactor;
 import com.nexus.token.TokenEstimator;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -36,7 +37,7 @@ public final class BudgetedContextSelector {
             boolean explain) {
         Objects.requireNonNull(fragments, "fragments");
         if (tokenBudget <= 0) {
-            throw new IllegalArgumentException("tokenBudget must be greater than zero");
+            throw new IllegalArgumentException("tokenBudget doit être strictement positif");
         }
 
         // Redact before token estimation/truncation so secrets never consume artificial
@@ -141,35 +142,55 @@ public final class BudgetedContextSelector {
                 truncated);
     }
 
-    private TruncatedContent truncate(String content, int budget) {
+    /**
+     * Conserve le plus grand préfixe de lignes dont l'estimation, marqueur compris, tient dans le budget.
+     *
+     * <p>Les lignes sont découpées une fois et le nombre de lignes conservées est cherché par
+     * dichotomie : O(log n) estimations au lieu d'une par ligne. Le résultat est celui de la
+     * sélection ligne à ligne tant que {@link TokenEstimator} est croissant avec le préfixe.
+     * Les lignes vides en tête du fragment ne sont pas reproduites dans le préfixe ; elles restent
+     * comptées dans {@code sourceLines}.</p>
+     */
+    TruncatedContent truncate(String content, int budget) {
         String[] lines = LINE_SEPARATOR.split(content, -1);
-        StringBuilder builder = new StringBuilder();
+        int firstNonEmpty = 0;
+        while (firstNonEmpty < lines.length && lines[firstNonEmpty].isEmpty()) {
+            firstNonEmpty++;
+        }
+        int low = 1;
+        int high = lines.length;
         int includedLines = 0;
-
-        for (String line : lines) {
-            String candidate = builder.isEmpty()
-                    ? line
-                    : builder + System.lineSeparator() + line;
-            String withMarker = candidate + System.lineSeparator() + TRUNCATION_MARKER;
-            if (tokenEstimator.estimate(withMarker) > budget) {
-                break;
+        String best = "";
+        int bestTokens = 0;
+        while (low <= high) {
+            int middle = (low + high) >>> 1;
+            String withMarker = joinLines(lines, firstNonEmpty, middle) + System.lineSeparator() + TRUNCATION_MARKER;
+            int tokens = tokenEstimator.estimate(withMarker);
+            if (tokens <= budget) {
+                includedLines = middle;
+                best = withMarker;
+                bestTokens = tokens;
+                low = middle + 1;
+            } else {
+                high = middle - 1;
             }
-            builder.setLength(0);
-            builder.append(candidate);
-            includedLines++;
         }
 
         if (includedLines == lines.length) {
-            String value = builder.toString();
+            String value = joinLines(lines, firstNonEmpty, includedLines);
             return new TruncatedContent(value, tokenEstimator.estimate(value), includedLines);
         }
 
         if (includedLines > 0) {
-            String value = builder + System.lineSeparator() + TRUNCATION_MARKER;
-            return new TruncatedContent(value, tokenEstimator.estimate(value), includedLines);
+            return new TruncatedContent(best, bestTokens, includedLines);
         }
 
         return truncateByCharacters(content, budget);
+    }
+
+    private static String joinLines(String[] lines, int firstNonEmpty, int count) {
+        int from = Math.min(firstNonEmpty, count);
+        return String.join(System.lineSeparator(), Arrays.asList(lines).subList(from, count));
     }
 
     private TruncatedContent truncateByCharacters(String content, int budget) {
@@ -213,6 +234,6 @@ public final class BudgetedContextSelector {
     private record PreparedFragment(ContextFragment fragment, String content) {
     }
 
-    private record TruncatedContent(String content, int estimatedTokens, int sourceLines) {
+    record TruncatedContent(String content, int estimatedTokens, int sourceLines) {
     }
 }

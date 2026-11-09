@@ -31,16 +31,16 @@ public record ContextMaterializationLimits(
     public ContextMaterializationLimits {
         if (maxCumulativeBytes <= 0L || maxCumulativeBytes > MAX_CONFIGURABLE_CUMULATIVE_BYTES) {
             throw new IllegalArgumentException(
-                    "maxCumulativeBytes must be between 1 and "
-                            + MAX_CONFIGURABLE_CUMULATIVE_BYTES + " bytes");
+                    "maxCumulativeBytes doit être compris entre 1 et "
+                            + MAX_CONFIGURABLE_CUMULATIVE_BYTES + " octets");
         }
         if (maxOpenedFiles <= 0 || maxOpenedFiles > MAX_CONFIGURABLE_OPENED_FILES) {
             throw new IllegalArgumentException(
-                    "maxOpenedFiles must be between 1 and " + MAX_CONFIGURABLE_OPENED_FILES);
+                    "maxOpenedFiles doit être compris entre 1 et " + MAX_CONFIGURABLE_OPENED_FILES);
         }
         if (maxDurationMillis <= 0L || maxDurationMillis > MAX_CONFIGURABLE_DURATION_MILLIS) {
             throw new IllegalArgumentException(
-                    "maxDurationMillis must be between 1 and "
+                    "maxDurationMillis doit être compris entre 1 et "
                             + MAX_CONFIGURABLE_DURATION_MILLIS + " milliseconds");
         }
     }

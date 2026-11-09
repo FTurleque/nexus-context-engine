@@ -148,17 +148,17 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
         this.model = Objects.requireNonNull(model, "model").trim();
         this.timeout = Objects.requireNonNull(timeout, "timeout");
         if (this.model.isBlank()) {
-            throw new IllegalArgumentException("model must not be blank");
+            throw new IllegalArgumentException("Le modèle d'embedding Ollama ne peut pas être vide");
         }
         if (dimensions <= 0 || dimensions > 1024) {
-            throw new IllegalArgumentException("dimensions must be between 1 and 1024");
+            throw new IllegalArgumentException("La dimension d'embedding Ollama doit être comprise entre 1 et 1024");
         }
         if (timeout.isZero() || timeout.isNegative()) {
-            throw new IllegalArgumentException("timeout must be greater than zero");
+            throw new IllegalArgumentException("Le timeout Ollama doit être strictement positif");
         }
         if (maxResponseBytes <= 0 || maxResponseBytes > MAX_INTERNAL_RESPONSE_BYTES) {
             throw new IllegalArgumentException(
-                    "maxResponseBytes must be between 1 and " + MAX_INTERNAL_RESPONSE_BYTES);
+                    "maxResponseBytes doit être compris entre 1 et " + MAX_INTERNAL_RESPONSE_BYTES);
         }
         this.dimensions = dimensions;
         this.maxResponseBytes = maxResponseBytes;
@@ -195,7 +195,7 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
         Objects.requireNonNull(query, "query");
         Objects.requireNonNull(maxWait, "maxWait");
         if (query.isBlank()) {
-            throw new IllegalArgumentException("embedding query must not be blank");
+            throw new IllegalArgumentException("La requête à vectoriser ne peut pas être vide");
         }
         Duration callTimeout = cappedTimeout(maxWait);
         String text = QWEN3_EMBEDDING_MODEL.matcher(model).find()
@@ -240,7 +240,7 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
     private static void requireNonBlank(List<String> texts) {
         for (String text : texts) {
             if (text == null || text.isBlank()) {
-                throw new IllegalArgumentException("embedding text must not be blank");
+                throw new IllegalArgumentException("Le texte à vectoriser ne peut pas être vide");
             }
         }
     }

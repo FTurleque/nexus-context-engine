@@ -28,11 +28,17 @@ class SqliteGraphQueryPlanTest {
     void outgoingAndOwnerPlansSeekRequestedKeys() throws Exception {
         SqliteDatabase database = new SqliteDatabase(new NexusPaths(tempDir.resolve("outgoing-plan-home")));
 
-        String outgoingPlan = queryPlan(
+        String firstPagePlan = queryPlan(
                 database,
                 SqliteGraphQueries.OUTGOING_GRAPH_SQL,
-                "[\"src/Seed.java\"]", "project", "IMPORTS", 100);
-        assertTrue(outgoingPlan.contains("project_id=? AND kind=? AND source_ref=?"), outgoingPlan);
+                "[\"src/Seed.java\"]", "project", "IMPORTS", null, null, 100);
+        assertTrue(firstPagePlan.contains("project_id=? AND kind=? AND source_ref=?"), firstPagePlan);
+
+        String nextPagePlan = queryPlan(
+                database,
+                SqliteGraphQueries.OUTGOING_GRAPH_SQL,
+                "[\"src/Seed.java\"]", "project", "IMPORTS", "src/Seed.java", "demo.Last", 100);
+        assertTrue(nextPagePlan.contains("project_id=? AND kind=? AND source_ref=?"), nextPagePlan);
 
         String ownerPlan = queryPlan(
                 database,
