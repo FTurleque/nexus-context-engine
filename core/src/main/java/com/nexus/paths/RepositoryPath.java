@@ -70,6 +70,6 @@ public record RepositoryPath(String value) {
     }
 
     private static IllegalArgumentException invalid() {
-        return new IllegalArgumentException("Invalid repository path");
+        return new IllegalArgumentException("Chemin repository invalide");
     }
 }

@@ -37,7 +37,7 @@ public final class BudgetedContextSelector {
             boolean explain) {
         Objects.requireNonNull(fragments, "fragments");
         if (tokenBudget <= 0) {
-            throw new IllegalArgumentException("tokenBudget must be greater than zero");
+            throw new IllegalArgumentException("tokenBudget doit être strictement positif");
         }
 
         // Redact before token estimation/truncation so secrets never consume artificial
