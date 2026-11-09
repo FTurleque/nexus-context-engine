@@ -34,7 +34,7 @@ final class MinosDocumentParser {
             Set<String> safeProjectFiles,
             JsonParser parser) throws IOException {
         if (parser.nextToken() != JsonToken.START_OBJECT) {
-            throw new IOException("MINOS export root must be a JSON object");
+            throw new IOException("La racine de l'export MINOS doit être un objet JSON");
         }
 
         String contractVersion = null;
@@ -50,7 +50,7 @@ final class MinosDocumentParser {
 
         while (parser.nextToken() != JsonToken.END_OBJECT) {
             if (parser.currentToken() != JsonToken.FIELD_NAME) {
-                throw new IOException("MINOS export root contains malformed JSON fields");
+                throw new IOException("La racine de l'export MINOS contient des champs JSON mal formés");
             }
             String field = parser.currentName();
             JsonToken valueToken = parser.nextToken();
@@ -82,22 +82,22 @@ final class MinosDocumentParser {
             }
         }
         if (parser.nextToken() != null) {
-            throw new IOException("MINOS export contains trailing JSON content");
+            throw new IOException("L'export MINOS contient du contenu JSON après la racine");
         }
 
         requireExpectedValue("contractVersion", contractVersion, CONTRACT_VERSION);
         requireExpectedValue("producer", producer, PRODUCER);
         if (exportedRoot == null) {
-            throw new IOException("MINOS export field 'project' must be an object with a rootPath");
+            throw new IOException("Le champ 'project' de l'export MINOS doit être un objet avec un rootPath");
         }
         if (!root.equals(exportedRoot)) {
-            throw new IOException("MINOS export belongs to another project root: " + exportedRoot);
+            throw new IOException("L'export MINOS appartient à une autre racine de projet : " + exportedRoot);
         }
         if (!symbolsSeen) {
-            throw new IOException("MINOS export field 'symbols' must be an array");
+            throw new IOException("Le champ 'symbols' de l'export MINOS doit être un tableau");
         }
         if (!relationsSeen) {
-            throw new IOException("MINOS export field 'relations' must be an array");
+            throw new IOException("Le champ 'relations' de l'export MINOS doit être un tableau");
         }
 
         return new CodeIntelligenceSnapshot(
@@ -115,15 +115,15 @@ final class MinosDocumentParser {
             Map<ExternalSymbolIdentity, IndexedSymbol> symbols,
             int factsRead) throws IOException {
         if (valueToken != JsonToken.START_ARRAY) {
-            throw new IOException("MINOS export field 'symbols' must be an array");
+            throw new IOException("Le champ 'symbols' de l'export MINOS doit être un tableau");
         }
         while (parser.nextToken() != JsonToken.END_ARRAY) {
             factsRead++;
             if (factsRead > MAX_SYMBOL_FACTS) {
-                throw new IOException("MINOS export exceeds the symbol fact limit of " + MAX_SYMBOL_FACTS);
+                throw new IOException("L'export MINOS dépasse la limite de faits symbole de " + MAX_SYMBOL_FACTS);
             }
             if (parser.currentToken() != JsonToken.START_OBJECT) {
-                throw new IOException("MINOS export symbols must be JSON objects");
+                throw new IOException("Les symboles de l'export MINOS doivent être des objets JSON");
             }
             JsonNode symbolNode = objectMapper.readTree(parser);
             IndexedSymbol symbol = mapSymbol(pathGuard, safeProjectFiles, sourceLineCounts, symbolNode);
@@ -141,15 +141,15 @@ final class MinosDocumentParser {
             List<IndexedRelation> relations,
             int factsRead) throws IOException {
         if (valueToken != JsonToken.START_ARRAY) {
-            throw new IOException("MINOS export field 'relations' must be an array");
+            throw new IOException("Le champ 'relations' de l'export MINOS doit être un tableau");
         }
         while (parser.nextToken() != JsonToken.END_ARRAY) {
             factsRead++;
             if (factsRead > MAX_RELATION_FACTS) {
-                throw new IOException("MINOS export exceeds the relation fact limit of " + MAX_RELATION_FACTS);
+                throw new IOException("L'export MINOS dépasse la limite de faits relation de " + MAX_RELATION_FACTS);
             }
             if (parser.currentToken() != JsonToken.START_OBJECT) {
-                throw new IOException("MINOS export relations must be JSON objects");
+                throw new IOException("Les relations de l'export MINOS doivent être des objets JSON");
             }
             JsonNode relationNode = objectMapper.readTree(parser);
             IndexedRelation relation = mapRelation(safeProjectFiles, relationNode);
@@ -162,12 +162,12 @@ final class MinosDocumentParser {
 
     static Path readProjectRoot(JsonParser parser, JsonToken valueToken) throws IOException {
         if (valueToken != JsonToken.START_OBJECT) {
-            throw new IOException("MINOS export field 'project' must be an object");
+            throw new IOException("Le champ 'project' de l'export MINOS doit être un objet");
         }
         String rootPath = null;
         while (parser.nextToken() != JsonToken.END_OBJECT) {
             if (parser.currentToken() != JsonToken.FIELD_NAME) {
-                throw new IOException("MINOS export project contains malformed JSON fields");
+                throw new IOException("Le projet de l'export MINOS contient des champs JSON mal formés");
             }
             String field = parser.currentName();
             JsonToken projectValue = parser.nextToken();
@@ -178,29 +178,29 @@ final class MinosDocumentParser {
             }
         }
         if (rootPath == null) {
-            throw new IOException("MINOS export field 'rootPath' must not be blank");
+            throw new IOException("Le champ 'rootPath' de l'export MINOS ne peut pas être vide");
         }
         return normalizedAbsolutePath(rootPath, "project root");
     }
 
     static String requiredParserText(JsonParser parser, JsonToken valueToken, String field) throws IOException {
         if (valueToken != JsonToken.VALUE_STRING) {
-            throw new IOException("MINOS export field '" + field + "' must not be blank");
+            throw new IOException("Le champ '" + field + "' de l'export MINOS ne peut pas être vide");
         }
         String value = parser.getValueAsString().trim();
         if (value.isBlank()) {
-            throw new IOException("MINOS export field '" + field + "' must not be blank");
+            throw new IOException("Le champ '" + field + "' de l'export MINOS ne peut pas être vide");
         }
         return value;
     }
 
     static void requireExpectedValue(String field, String value, String expected) throws IOException {
         if (value == null) {
-            throw new IOException("MINOS export field '" + field + "' must not be blank");
+            throw new IOException("Le champ '" + field + "' de l'export MINOS ne peut pas être vide");
         }
         if (!expected.equals(value)) {
             throw new IOException(
-                    "unsupported MINOS export " + field + ": " + value + " (expected " + expected + ")");
+                    "Valeur non prise en charge pour " + field + " de l'export MINOS : " + value + " (attendu : " + expected + ")");
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.nexus.api;
 
 import com.nexus.api.ApiModels.ErrorResponse;
+import com.nexus.context.ContextRequest;
 import com.nexus.search.QueryPolicy;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -10,8 +11,7 @@ import jakarta.ws.rs.ext.Provider;
 @Provider
 public class IllegalArgumentExceptionMapper implements ExceptionMapper<IllegalArgumentException> {
 
-    private static final String UNSUPPORTED_CONSTRAINTS =
-            "constraints are not supported yet; omit the field or provide an empty object";
+    private static final String UNSUPPORTED_CONSTRAINTS = ContextRequest.UNSUPPORTED_CONSTRAINTS_MESSAGE;
     private static final String OVERSIZED_QUERY_PREFIX =
             "La requête dépasse la limite de " + QueryPolicy.MAX_QUERY_UTF8_BYTES
                     + " octets UTF-8 (taille mesurée ou minimale ";

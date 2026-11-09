@@ -59,7 +59,7 @@ final class MinosPayloadReader {
     }
 
     static IOException transportTooLarge() {
-        return new IOException("MINOS export exceeds the 128 MiB transport limit");
+        return new IOException("L'export MINOS dépasse la limite de transport de 128 Mio");
     }
 
     private static final class BoundedPayloadInputStream extends FilterInputStream {

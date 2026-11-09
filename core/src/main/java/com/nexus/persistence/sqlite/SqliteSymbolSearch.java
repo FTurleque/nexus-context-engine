@@ -77,7 +77,7 @@ final class SqliteSymbolSearch {
         for (String query : queries) {
             Objects.requireNonNull(query, "query");
             if (query.isBlank()) {
-                throw new IllegalArgumentException("query must not be blank");
+                throw new IllegalArgumentException("La requête ne peut pas être vide");
             }
             normalizedQueries.add(query.trim().toLowerCase(Locale.ROOT));
         }

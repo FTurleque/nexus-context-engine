@@ -336,7 +336,8 @@ for path in (
 
 # NXA4: unsupported constraints must fail explicitly.
 context_request = "core/src/main/java/com/nexus/context/ContextRequest.java"
-require(context_request, "constraints are not supported yet")
+require(context_request, "Les contraintes ne sont pas encore prises en charge")
+forbid(context_request, "constraints are not supported yet")
 for path in (
     "docs/architecture/overview.md",
     "docs/architecture/arc42/05-vue-blocs.md",

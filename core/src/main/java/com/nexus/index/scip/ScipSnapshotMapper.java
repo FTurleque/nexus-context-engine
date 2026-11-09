@@ -142,19 +142,19 @@ final class ScipSnapshotMapper {
             SourceRange range,
             int sourceLineCount) throws IOException {
         if (range.startLine() < 0 || range.endLine() < range.startLine()) {
-            throw new IOException("SCIP contains an invalid symbol line range for '"
+            throw new IOException("Le SCIP contient une plage de lignes de symbole invalide pour '"
                     + relativePath + "': " + range.startLine() + "-" + range.endLine());
         }
         if (range.startLine() == Integer.MAX_VALUE || range.endLine() == Integer.MAX_VALUE) {
-            throw new IOException("SCIP symbol line range overflows one-based coordinates for '"
+            throw new IOException("La plage de lignes de symbole SCIP dépasse les coordonnées en base 1 pour '"
                     + relativePath + "'");
         }
         int startLine = range.startLine() + 1;
         int endLine = range.endLine() + 1;
         if (!CodeSymbol.isWithinLineCount(startLine, endLine, sourceLineCount)) {
-            throw new IOException("SCIP symbol line range exceeds canonical file '"
+            throw new IOException("La plage de lignes de symbole SCIP dépasse le fichier canonique '"
                     + relativePath + "': " + startLine + "-" + endLine
-                    + " for " + sourceLineCount + " line(s)");
+                    + " pour " + sourceLineCount + " ligne(s)");
         }
         return range;
     }
@@ -170,7 +170,7 @@ final class ScipSnapshotMapper {
         Path source = pathGuard.requireRegularFile(pathGuard.resolve(new RepositoryPath(relativePath)));
         long lineCount = SafeFileIO.readStringNoFollow(source).lines().count();
         if (lineCount > Integer.MAX_VALUE) {
-            throw new IOException("Source file contains too many lines to validate SCIP symbol ranges: "
+            throw new IOException("Le fichier source contient trop de lignes pour valider les plages de symboles SCIP : "
                     + relativePath);
         }
         int result = (int) lineCount;
@@ -231,7 +231,7 @@ final class ScipSnapshotMapper {
             pathGuard.resolve(path);
             return path.value();
         } catch (IllegalArgumentException | NullPointerException exception) {
-            throw new IOException("Invalid SCIP repository path", exception);
+            throw new IOException("Chemin repository SCIP invalide", exception);
         }
     }
 

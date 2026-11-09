@@ -33,7 +33,7 @@ class PublicProjectPathPolicyTest {
                 IllegalStateException.class,
                 () -> PublicProjectPathPolicy.expose(root, outside));
 
-        assertEquals("Result path is outside the project root", exception.getMessage());
+        assertEquals("Le chemin du résultat sort de la racine du projet", exception.getMessage());
     }
 
     @Test

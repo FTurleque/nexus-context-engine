@@ -36,7 +36,7 @@ public final class SemanticSearchConfiguration {
                 || semanticRrfWeight <= 0.0d
                 || semanticRrfWeight > MAX_SEMANTIC_RRF_WEIGHT) {
             throw new IllegalArgumentException(
-                    "semanticRrfWeight must be greater than 0.0 and at most " + MAX_SEMANTIC_RRF_WEIGHT);
+                    "semanticRrfWeight doit être strictement supérieur à 0.0 et au plus " + MAX_SEMANTIC_RRF_WEIGHT);
         }
         this.embeddingProvider = embeddingProvider;
         this.semanticRrfWeight = semanticRrfWeight;
@@ -72,7 +72,7 @@ public final class SemanticSearchConfiguration {
 
     public static int boundedPositiveInt(String name, String value, int maximum) {
         if (maximum <= 0) {
-            throw new IllegalArgumentException("maximum must be greater than zero");
+            throw new IllegalArgumentException("maximum doit être strictement positif");
         }
         try {
             int parsed = Integer.parseInt(value);
@@ -87,7 +87,7 @@ public final class SemanticSearchConfiguration {
 
     public static long boundedPositiveLong(String name, String value, long maximum) {
         if (maximum <= 0L) {
-            throw new IllegalArgumentException("maximum must be greater than zero");
+            throw new IllegalArgumentException("maximum doit être strictement positif");
         }
         try {
             long parsed = Long.parseLong(value);

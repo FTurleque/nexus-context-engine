@@ -50,7 +50,7 @@ class FederatedSearchServicePolicyTest {
                 ResultLimitPolicy.MAX_RESULT_LIMIT + 1,
                 false));
 
-        assertTrue(failure.getMessage().contains("limit must not exceed " + ResultLimitPolicy.MAX_RESULT_LIMIT),
+        assertTrue(failure.getMessage().contains("limit ne doit pas dépasser " + ResultLimitPolicy.MAX_RESULT_LIMIT),
                 failure.getMessage());
     }
 

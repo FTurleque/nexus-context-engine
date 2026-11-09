@@ -241,7 +241,7 @@ class NexusResourceTest {
                 .then()
                 .statusCode(400)
                 .body("error", equalTo("bad_request"))
-                .body("message", containsString("constraints are not supported"))
+                .body("message", containsString("Les contraintes ne sont pas encore prises en charge"))
                 .extract()
                 .asString();
         assertNoLeak(constrained);

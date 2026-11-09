@@ -7,8 +7,10 @@ Ce chapitre décrit les contrats courants de `DefaultContextBuilder` et de la f�
 `ContextRequest` valide le budget, copie défensivement les sources/contraintes et refuse explicitement toute map `constraints` non vide :
 
 ```text
-constraints are not supported yet
+Les contraintes ne sont pas encore prises en charge ; omettez le champ ou fournissez un objet vide
 ```
+
+Le message est la constante `ContextRequest.UNSUPPORTED_CONSTRAINTS_MESSAGE`, que l'adaptateur REST transmet tel quel.
 
 Le champ reste présent pour compatibilité de contrat, mais une contrainte non implémentée n'est jamais ignorée silencieusement.
 

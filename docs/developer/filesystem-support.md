@@ -145,7 +145,7 @@ Spec : [`openspec/specs/project-path-confinement/spec.md`](../../openspec/specs/
 |---|---|---|
 | Constructeur | Canonicalise la racine par `toRealPath`, refuse une racine qui n'est pas un répertoire. Une racine fournie par un lien symbolique est acceptée : sa cible canonique devient la frontière de confiance. | `core/src/main/java/com/nexus/security/ProjectPathGuard.java:11-31`, test `ProjectPathGuardTest#acceptsARootGivenThroughASymbolicLinkAndTrustsItsTarget`, `#rejectsARootThatIsARegularFile` |
 | `resolve(Path)` | Refuse tout chemin absolu (même situé sous la racine), puis exige que le chemin normalisé reste sous la racine. Ne vérifie ni l'existence ni les liens symboliques. | `ProjectPathGuard.java:39-45`, tests `#rejectsAnAbsolutePath`, `#rejectsAnAbsolutePathEvenInsideTheRoot`, `#rejectsADotDotTraversal`, `#rejectsATraversalHiddenBehindAnInsideSegment`, `#resolvesAPathThatDoesNotExistYet` |
-| `resolve(RepositoryPath)` | Décode l'identité NEXUS avec le système de fichiers de la racine ; un composant que ce système réinterpréterait (antislash sous Windows) devient `IOException("Invalid repository path")`. | `ProjectPathGuard.java:47-54`, tests `#resolvesASlashSeparatedRepositoryPathOnEveryPlatform`, `#handlesABackslashComponentAccordingToTheTargetFileSystem` |
+| `resolve(RepositoryPath)` | Décode l'identité NEXUS avec le système de fichiers de la racine ; un composant que ce système réinterpréterait (antislash sous Windows) devient `IOException("Chemin repository invalide")`. | `ProjectPathGuard.java:47-54`, tests `#resolvesASlashSeparatedRepositoryPathOnEveryPlatform`, `#handlesABackslashComponentAccordingToTheTargetFileSystem` |
 | `requireRegularFile` | Ordre : chemin contenu dans la racine, aucun composant lien symbolique sous la racine, chemin réel sous la racine, fichier régulier sans suivre les liens. | `ProjectPathGuard.java:56-71` |
 | `requireDirectory` | Même ordre, avec répertoire sans suivre les liens ; la racine elle-même est acceptée. | `ProjectPathGuard.java:73-88`, test `#acceptsTheRootItselfAsADirectory` |
 | `containsSymbolicLink` | Parcourt chaque composant sous la racine et renvoie `true` au premier lien ; un chemin hors racine lève `IOException`. | `ProjectPathGuard.java:90-101`, tests `#reportsAFinalSymbolicLink`, `#reportsAnIntermediateSymbolicLinkToAFileOutsideTheProject`, `#rejectsALinkQueryOutsideTheRoot` |
@@ -183,7 +183,7 @@ flowchart LR
     A1 -- oui --> X1[IOException : Chemin absolu interdit]
     A1 -- non --> C1[contenance lexicale et réelle sans suivre les liens]
     I2[resolve RepositoryPath] --> D2[décodage selon le système de fichiers]
-    D2 -- composant réinterprété --> X2[IOException : Invalid repository path]
+    D2 -- composant réinterprété --> X2[IOException : Chemin repository invalide]
     D2 -- ok --> A1
     C1 -- hors racine --> X3[IOException : Chemin hors repository]
     C1 -- dans la racine --> OK1[chemin absolu normalisé, existence non vérifiée]

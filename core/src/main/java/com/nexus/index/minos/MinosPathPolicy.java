@@ -18,12 +18,12 @@ final class MinosPathPolicy {
         Set<String> safe = new LinkedHashSet<>();
         for (String value : indexedProjectFiles) {
             if (value == null || value.isBlank()) {
-                throw new IOException("NEXUS canonical indexed file path must not be blank");
+                throw new IOException("Le chemin canonique d'un fichier indexé par NEXUS ne peut pas être vide");
             }
             try {
                 safe.add(new RepositoryPath(value).value());
             } catch (IllegalArgumentException invalid) {
-                throw new IOException("NEXUS canonical indexed file path is invalid", invalid);
+                throw new IOException("Chemin canonique de fichier indexé par NEXUS invalide", invalid);
             }
         }
         return Set.copyOf(safe);
@@ -46,11 +46,11 @@ final class MinosPathPolicy {
         try {
             Path path = Path.of(value);
             if (!path.isAbsolute() || !path.equals(path.normalize())) {
-                throw new IOException("MINOS export " + field + " must be canonical and absolute");
+                throw new IOException("Le champ " + field + " de l'export MINOS doit être canonique et absolu");
             }
             return path;
         } catch (InvalidPathException exception) {
-            throw new IOException("MINOS export contains an invalid " + field, exception);
+            throw new IOException("L'export MINOS contient un champ " + field + " invalide", exception);
         }
     }
 }

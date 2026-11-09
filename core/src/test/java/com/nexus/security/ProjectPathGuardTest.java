@@ -138,7 +138,7 @@ class ProjectPathGuardTest {
 
         if (FileSystems.getDefault().getSeparator().equals("\\")) {
             IOException error = assertThrows(IOException.class, () -> guard.resolve(backslash));
-            assertEquals("Invalid repository path", error.getMessage());
+            assertEquals("Chemin repository invalide", error.getMessage());
             assertTrue(error.getCause() instanceof IllegalArgumentException);
         } else {
             Path resolved = guard.resolve(backslash);

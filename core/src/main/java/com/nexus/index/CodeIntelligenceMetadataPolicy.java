@@ -60,11 +60,11 @@ public final class CodeIntelligenceMetadataPolicy {
         Objects.requireNonNull(relations, "relations");
         if (symbols.size() > MAX_SNAPSHOT_SYMBOLS) {
             throw new IllegalArgumentException(
-                    "code-intelligence snapshot exceeds symbol limit of " + MAX_SNAPSHOT_SYMBOLS);
+                    "Le snapshot de code intelligence dépasse la limite de symboles de " + MAX_SNAPSHOT_SYMBOLS);
         }
         if (relations.size() > MAX_SNAPSHOT_RELATIONS) {
             throw new IllegalArgumentException(
-                    "code-intelligence snapshot exceeds relation limit of " + MAX_SNAPSHOT_RELATIONS);
+                    "Le snapshot de code intelligence dépasse la limite de relations de " + MAX_SNAPSHOT_RELATIONS);
         }
 
         long metadataBytes = 0L;
@@ -106,7 +106,7 @@ public final class CodeIntelligenceMetadataPolicy {
         int bytes = utf8Length(value);
         if (bytes > maximum) {
             throw new IllegalArgumentException(
-                    field + " exceeds UTF-8 metadata limit of " + maximum + " bytes (received " + bytes + ")");
+                    field + " dépasse la limite de métadonnées UTF-8 de " + maximum + " octets (reçu : " + bytes + ")");
         }
     }
 
@@ -132,8 +132,8 @@ public final class CodeIntelligenceMetadataPolicy {
     private static long addBounded(long current, long addition) {
         if (addition > MAX_SNAPSHOT_METADATA_UTF8_BYTES - current) {
             throw new IllegalArgumentException(
-                    "code-intelligence snapshot exceeds decoded metadata limit of "
-                            + MAX_SNAPSHOT_METADATA_UTF8_BYTES + " UTF-8 bytes");
+                    "Le snapshot de code intelligence dépasse la limite de métadonnées décodées de "
+                            + MAX_SNAPSHOT_METADATA_UTF8_BYTES + " octets UTF-8");
         }
         return current + addition;
     }

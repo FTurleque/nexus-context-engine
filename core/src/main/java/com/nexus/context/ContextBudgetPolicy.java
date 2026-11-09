@@ -40,12 +40,12 @@ public final class ContextBudgetPolicy {
      */
     public static int validate(int tokenBudget) {
         if (tokenBudget <= 0) {
-            throw new IllegalArgumentException("tokenBudget must be greater than zero");
+            throw new IllegalArgumentException("tokenBudget doit être strictement positif");
         }
         if (tokenBudget > MAX_CONTEXT_TOKEN_BUDGET) {
             throw new IllegalArgumentException(
-                    "tokenBudget must not exceed " + MAX_CONTEXT_TOKEN_BUDGET
-                            + " (requested " + tokenBudget + ")");
+                    "tokenBudget ne doit pas dépasser " + MAX_CONTEXT_TOKEN_BUDGET
+                            + " (demandé : " + tokenBudget + ")");
         }
         return tokenBudget;
     }
