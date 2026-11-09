@@ -43,7 +43,7 @@
         <javaparser.version>3.28.2</javaparser.version>
         <sqlite-jdbc.version>3.54.1.0</sqlite-jdbc.version>
         <lucene.version>10.6.0</lucene.version>
-        <jgit.version>7.8.0.202609011348-r</jgit.version>
+        <jgit.version>7.8.1.202611041320-r</jgit.version>
         <jackson.version>2.22.4</jackson.version>
         <micrometer.version>1.17.2</micrometer.version>
         <snakeyaml-engine.version>3.2</snakeyaml-engine.version>
