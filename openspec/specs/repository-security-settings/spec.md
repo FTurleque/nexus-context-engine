@@ -26,3 +26,14 @@ Le dépôt SHALL avoir le secret scanning et la push protection activés.
 #### Scenario: Faux positif d'une fixture de redaction
 - **WHEN** le secret scanning signale une valeur d'une fixture de test de redaction
 - **THEN** la procédure de `SECURITY.md` indique de fermer l'alerte comme utilisée en test, avec le chemin de la fixture
+
+### Requirement: Un canal privé de signalement est ouvert et documenté
+Le dépôt SHALL avoir le signalement privé de vulnérabilités activé, et `SECURITY.md` SHALL indiquer ce canal, les versions prises en charge et le délai de première réponse, en demandant de ne pas ouvrir d'issue publique.
+
+#### Scenario: Lecture du réglage
+- **WHEN** le mainteneur lit `private-vulnerability-reporting` avec `gh api`
+- **THEN** la réponse vaut `{"enabled":true}`
+
+#### Scenario: Profil communautaire
+- **WHEN** le profil communautaire du dépôt est lu
+- **THEN** il référence un fichier de politique de sécurité

@@ -23,9 +23,9 @@
 ## 5. Gouvernance du dépôt
 
 - [x] 5.1 `AUD-DEP-16` — Mettre à jour `docs/developer/branch-governance.md` (méthodes de merge du ruleset) et le skill `nexus-pr-workflow` ; ajouter l'assertion au contrat documentaire ; vérifier par `bash .claude/scripts/contracts.sh`
-- [ ] 5.2 `AUD-DEP-16` (mainteneur, après fusion de 5.1) — Restreindre `allowed_merge_methods` à `["merge"]` dans le ruleset « Protect main & develop » et désactiver squash et rebase dans les réglages du dépôt ; vérifier par `gh api repos/FTurleque/nexus-context-engine/rulesets/20503835 --jq '.rules[]|select(.type=="pull_request").parameters.allowed_merge_methods'` (`["merge"]`) et `gh api repos/FTurleque/nexus-context-engine --jq '[.allow_squash_merge,.allow_rebase_merge]'` (`[false,false]`)
+- [x] 5.2 `AUD-DEP-16` (mainteneur, après fusion de 5.1) — Restreindre `allowed_merge_methods` à `["merge"]` dans le ruleset « Protect main & develop » et désactiver squash et rebase dans les réglages du dépôt ; vérifier par `gh api repos/FTurleque/nexus-context-engine/rulesets/20503835 --jq '.rules[]|select(.type=="pull_request").parameters.allowed_merge_methods'` (`["merge"]`) et `gh api repos/FTurleque/nexus-context-engine --jq '[.allow_squash_merge,.allow_rebase_merge]'` (`[false,false]`)
 - [x] 5.3 `AUD-DEP-17` — Créer `SECURITY.md` (ou compléter celui de `sprint-01-cloture-mesures`) : signalement privé GitHub, aucune issue publique, versions prises en charge, délai de réponse ; créer `.github/CODEOWNERS` (D6) ; vérifier par `bash .claude/scripts/contracts.sh` et `gh api repos/FTurleque/nexus-context-engine/community/profile --jq '.files|keys'`
-- [ ] 5.4 `AUD-DEP-17` (mainteneur) — Activer le signalement privé de vulnérabilités ; vérifier par `gh api repos/FTurleque/nexus-context-engine/private-vulnerability-reporting` (`{"enabled":true}`)
+- [x] 5.4 `AUD-DEP-17` (mainteneur) — Activer le signalement privé de vulnérabilités ; vérifier par `gh api repos/FTurleque/nexus-context-engine/private-vulnerability-reporting` (`{"enabled":true}`)
 
 ## 6. Versions de dépendances hors de la documentation
 
