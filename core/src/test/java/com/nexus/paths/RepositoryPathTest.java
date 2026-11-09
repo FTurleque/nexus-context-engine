@@ -41,4 +41,13 @@ class RepositoryPathTest {
         assertEquals("a/b.java", RepositoryPath.fromProvider("a/b.java").value());
     }
 
+    @Test void refusesEveryAsciiDriveLetterPrefixAndKeepsOtherColons() {
+        for (String invalid : List.of("C:", "c:/src/App.java", "z:relative", "A:\\x", "Z:\nfoo")) {
+            assertThrows(IllegalArgumentException.class, () -> RepositoryPath.fromProvider(invalid), invalid);
+        }
+        for (String valid : List.of("é:foo", "1:foo", "ab:c", "a/C:b", "@:x")) {
+            assertEquals(valid, RepositoryPath.fromProvider(valid).value());
+        }
+    }
+
 }

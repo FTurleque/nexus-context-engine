@@ -27,8 +27,8 @@
 
 ## 6. Troncature de fragment
 
-- [ ] 6.1 `AUD-PRF-13` — Remplacer dans `BudgetedContextSelector.truncate` la boucle de reconstruction par une dichotomie sur le nombre de lignes (D5) ; documenter dans `TokenEstimator` l'exigence de croissance ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='BudgetedContextSelector*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
-- [ ] 6.2 `AUD-PRF-13` — Ajouter un test qui compare, sur des fragments multilignes Unicode et des budgets variés, le résultat de la dichotomie à celui de la boucle linéaire de référence ; vérifier par la même commande
+- [x] 6.1 `AUD-PRF-13` — Remplacer dans `BudgetedContextSelector.truncate` la boucle de reconstruction par une dichotomie sur le nombre de lignes (D5) ; documenter dans `TokenEstimator` l'exigence de croissance ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='BudgetedContextSelector*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
+- [x] 6.2 `AUD-PRF-13` — Ajouter un test qui compare, sur des fragments multilignes Unicode et des budgets variés, le résultat de la dichotomie à celui de la boucle linéaire de référence ; vérifier par la même commande
 
 ## 7. Voisinage graphe sortant
 
@@ -36,8 +36,8 @@
 
 ## 8. Motifs compilés
 
-- [ ] 8.1 `AUD-PRF-17` — Remplacer `slashPath.matches("^[A-Za-z]:.*")` dans `RepositoryPath.fromProvider` par un test de caractères ; vérifier par `./mvnw -B -ntp -pl core test -Dtest=RepositoryPathTest -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true` et `git grep -n "\.matches(\"" -- core/src/main/java/com/nexus/paths/RepositoryPath.java` vide
-- [ ] 8.2 `AUD-PRF-17` — Ajouter à `RepositoryGlobMatcher` un cache borné des motifs compilés (D7) et un test de borne et de réutilisation ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='InstructionDiscoverySupportTest,RepositoryGlobMatcher*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
+- [x] 8.1 `AUD-PRF-17` — Remplacer `slashPath.matches("^[A-Za-z]:.*")` dans `RepositoryPath.fromProvider` par un test de caractères ; vérifier par `./mvnw -B -ntp -pl core test -Dtest=RepositoryPathTest -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true` et `git grep -n "\.matches(\"" -- core/src/main/java/com/nexus/paths/RepositoryPath.java` vide
+- [x] 8.2 `AUD-PRF-17` — Ajouter à `RepositoryGlobMatcher` un cache borné des motifs compilés (D7) et un test de borne et de réutilisation ; vérifier par `./mvnw -B -ntp -pl core test -Dtest='InstructionDiscoverySupportTest,RepositoryGlobMatcher*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`
 
 ## 9. Clôture
 

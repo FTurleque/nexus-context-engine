@@ -39,8 +39,14 @@ public record RepositoryPath(String value) {
     /** SCIP, Git et export MINOS : composants séparés par '/', même sous Windows. */
     public static RepositoryPath fromProvider(String slashPath) {
         Objects.requireNonNull(slashPath, "slashPath");
-        if (slashPath.matches("^[A-Za-z]:.*") || slashPath.startsWith("\\\\")) throw invalid();
+        if (startsWithDriveLetter(slashPath) || slashPath.startsWith("\\\\")) throw invalid();
         return new RepositoryPath(slashPath);
+    }
+
+    private static boolean startsWithDriveLetter(String path) {
+        if (path.length() < 2 || path.charAt(1) != ':') return false;
+        char letter = path.charAt(0);
+        return (letter >= 'A' && letter <= 'Z') || (letter >= 'a' && letter <= 'z');
     }
 
     /** Refuse un composant non représentable tel quel sur le filesystem cible. */
