@@ -41,7 +41,7 @@ Oui si la décision est **durable et structurante** et tranche entre des options
 
 ## Index
 
-29 ADR actifs : architecture 8, backend 9, data 6, general 3, security 3.
+30 ADR actifs : architecture 8, backend 9, data 7, general 3, security 3.
 
 | ADR | Décision | Date | Statut |
 |---|---|---|---|
@@ -74,6 +74,7 @@ Oui si la décision est **durable et structurante** et tranche entre des options
 | [BE-0084](BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) | Garder la recherche sémantique optionnelle et la qualifier en deux corpus, hors du chemin de release | 2026-11-08 | Accepted |
 | [ARCH-0085](ARCH-0085-stabiliser-le-contrat-de-sortie-publique-cli-rest-mcp.md) | Stabiliser le contrat de sortie publique dans la projection du cœur : CLI humaine ou JSON, codes de sortie, parité REST et MCP | 2026-11-08 | Accepted |
 | [ARCH-0086](ARCH-0086-resoudre-la-configuration-et-nexus-home-dans-la-composition-root.md) | Résoudre la configuration NEXUS, dont NEXUS_HOME, dans la composition root et l'injecter | 2026-11-08 | Accepted |
+| [DATA-0088](DATA-0088-conserver-le-journal-rollback-sqlite.md) | Conserver le journal rollback SQLite et ne réévaluer WAL que sur mesure répétée | 2026-11-09 | Proposed |
 
 ## Archive
 

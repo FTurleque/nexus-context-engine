@@ -76,6 +76,19 @@ class SqliteDatabaseHardeningTest {
     }
 
     @Test
+    void keepsTheRollbackJournalOnEveryConnection() throws Exception {
+        SqliteDatabase database = new SqliteDatabase(new NexusPaths(temporaryDirectory.resolve("journal-home")));
+
+        try (Connection connection = database.openConnection();
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("PRAGMA journal_mode")) {
+            result.next();
+            assertEquals("delete", result.getString(1).toLowerCase(java.util.Locale.ROOT),
+                    "Le journal rollback (delete) est fixé par DATA-0088 : un autre mode, dont WAL, exige un ADR qui le remplace");
+        }
+    }
+
+    @Test
     void keepsTemporaryStorageOfEveryConnectionInMemory() throws Exception {
         SqliteDatabase database = new SqliteDatabase(new NexusPaths(temporaryDirectory.resolve("temp-home")));
 

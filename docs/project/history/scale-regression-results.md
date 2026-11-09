@@ -92,6 +92,8 @@ La règle préalable demandait une amélioration reader p95 répétée d'au moin
 
 Le mode SQLite courant reste donc inchangé. WAL pourra être réévalué si une charge réelle démontre un problème de contention write/read.
 
+Décision consignée : [DATA-0088](../../architecture/adr/DATA-0088-conserver-le-journal-rollback-sqlite.md).
+
 ## 4. Recovery sémantique
 
 Fixture : 20 000 documents, vecteurs déterministes 32 dimensions, batch 128, aucun réseau/Ollama.

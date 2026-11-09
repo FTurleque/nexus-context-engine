@@ -598,3 +598,40 @@ if ! grep -Fq '## Vérification consommateur' docs/developer/immutable-release-p
   echo "documentation contract drift: immutable-release-publishing.md must keep its consumer verification section" >&2
   exit 1
 fi
+
+# --- Sprint 11 : documentation SQLite et instruction primaire (AUD-QUA-13, AUD-QUA-03, AUD-PRF-10) ---
+# The FTS5 trigram index shipped by V008 must not be described as a future engine.
+if grep -Fq 'nouveau moteur FTS/trigram' docs/developer/current-limitations.md; then
+  echo "obsolete documentation contract: current-limitations.md still describes FTS/trigram as a future engine (V008 ships it)" >&2
+  exit 1
+fi
+if ! grep -Fq 'FTS5 trigram livré par la migration V008' docs/developer/current-limitations.md; then
+  echo "documentation contract drift: current-limitations.md must scope the watch item beyond the V008 FTS5 trigram index" >&2
+  exit 1
+fi
+# AGENTS.md is the primary agent instruction: Maven only through the verified wrapper.
+if grep -Eq '(^|[^A-Za-z0-9_./\-])mvn[[:space:]]' AGENTS.md; then
+  echo "documentation contract drift: AGENTS.md must call Maven through ./mvnw (or .\mvnw.cmd), never mvn directly" >&2
+  exit 1
+fi
+if ! grep -Fq '`./mvnw clean install`' AGENTS.md; then
+  echo "documentation contract drift: AGENTS.md must prescribe ./mvnw clean install" >&2
+  exit 1
+fi
+# The rollback journal decision (DATA-0088) is referenced by its measures, its benchmark rule and its test.
+JOURNAL_ADR='DATA-0088-conserver-le-journal-rollback-sqlite.md'
+if [[ ! -f "docs/architecture/adr/$JOURNAL_ADR" ]]; then
+  echo "documentation contract drift: missing ADR docs/architecture/adr/$JOURNAL_ADR" >&2
+  exit 1
+fi
+for doc in docs/project/history/scale-regression-results.md docs/developer/scale-regression-benchmark.md; do
+  if ! grep -Fq "$JOURNAL_ADR" "$doc"; then
+    echo "documentation contract drift: $doc must link the rollback journal decision $JOURNAL_ADR" >&2
+    exit 1
+  fi
+done
+if ! grep -Fq 'PRAGMA journal_mode' core/src/test/java/com/nexus/persistence/sqlite/SqliteDatabaseHardeningTest.java \
+  || ! grep -Fq 'DATA-0088' core/src/test/java/com/nexus/persistence/sqlite/SqliteDatabaseHardeningTest.java; then
+  echo "documentation contract drift: SqliteDatabaseHardeningTest must assert PRAGMA journal_mode and cite DATA-0088" >&2
+  exit 1
+fi
