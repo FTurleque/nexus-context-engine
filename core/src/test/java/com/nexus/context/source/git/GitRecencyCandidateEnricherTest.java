@@ -8,9 +8,19 @@ import com.nexus.search.candidate.SearchCandidate;
 import com.nexus.search.candidate.SearchSignals;
 import com.nexus.testsupport.SymbolicLinks;
 import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.lib.CommitBuilder;
+import org.eclipse.jgit.lib.Constants;
+import org.eclipse.jgit.lib.FileMode;
+import org.eclipse.jgit.lib.ObjectId;
+import org.eclipse.jgit.lib.ObjectInserter;
+import org.eclipse.jgit.lib.PersonIdent;
+import org.eclipse.jgit.lib.RefUpdate;
+import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.lib.TreeFormatter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -18,6 +28,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.logging.Handler;
 import java.util.logging.Level;
@@ -230,14 +241,17 @@ class GitRecencyCandidateEnricherTest {
                     temporaryDirectory.resolve("generated/Candidate" + index + ".java")));
         }
         List<String> reasons = new ArrayList<>();
+        List<List<SearchCandidate>> results = new ArrayList<>();
 
-        List<SearchCandidate> enriched = new GitRecencyCandidateEnricher().enrich(
+        List<LogRecord> records = captureWarnings(() -> results.add(new GitRecencyCandidateEnricher().enrich(
                 project(temporaryDirectory),
                 candidates,
-                reasons::add);
+                reasons::add)));
 
+        List<SearchCandidate> enriched = results.getFirst();
         assertEquals(GitRecencyCandidateEnricher.MAX_CANDIDATE_PATHS, enriched.size());
         assertEquals(List.of(), reasons);
+        assertEquals(List.of(), records);
         assertEquals(1.0d, enriched.getFirst().signals().get(SearchSignals.GIT_RECENCY), 0.000001d);
     }
 
@@ -256,15 +270,201 @@ class GitRecencyCandidateEnricherTest {
         }
 
         List<String> reasons = new ArrayList<>();
-        List<SearchCandidate> enriched = new GitRecencyCandidateEnricher().enrich(
+        List<List<SearchCandidate>> results = new ArrayList<>();
+        GitRecencyCandidateEnricher enricher = new GitRecencyCandidateEnricher();
+
+        List<LogRecord> records = captureWarnings(() -> results.add(enricher.enrich(
                 project(temporaryDirectory),
                 candidates,
-                reasons::add);
+                reasons::add)));
 
+        List<SearchCandidate> enriched = results.getFirst();
         assertEquals(candidates, enriched);
         assertEquals(List.of(GitRecencyCandidateEnricher.BUDGET_REASON), reasons);
+        assertEquals(List.of(), records);
         assertTrue(enriched.stream().noneMatch(candidate ->
                 candidate.signals().containsKey(SearchSignals.GIT_RECENCY)));
+        // Le budget de candidats est contrôlé avant toute lecture de l'historique.
+        assertEquals(0, enricher.logScans());
+    }
+
+    @Test
+    void computesRecencyFromTheCacheAtExactlyTheChangedPathsPerCommitBudget() throws Exception {
+        Path target = temporaryDirectory.resolve("src/Target.java");
+        // Target modifié + 1 023 ajouts = exactement 1 024 chemins modifiés par ce commit.
+        bulkHistory(GitRecencyCandidateEnricher.MAX_CHANGED_PATHS_PER_COMMIT - 1);
+        List<SearchCandidate> candidates = List.of(candidate("target", target));
+        List<String> reasons = new ArrayList<>();
+        List<List<SearchCandidate>> results = new ArrayList<>();
+        GitRecencyCandidateEnricher enricher = new GitRecencyCandidateEnricher();
+
+        List<LogRecord> records = captureWarnings(() -> results.add(enricher.enrich(
+                project(temporaryDirectory), candidates, reasons::add)));
+
+        assertEquals(1.0d, results.getFirst().getFirst().signals().get(SearchSignals.GIT_RECENCY), 0.000001d);
+        assertEquals(List.of(), reasons);
+        assertEquals(List.of(), records);
+        // Historique dans les bornes : un seul parcours, celui qui alimente le cache.
+        assertEquals(1, enricher.logScans());
+    }
+
+    /**
+     * Comportement réel au-delà de la borne par commit : l'index non filtré n'est pas mémorisable,
+     * puis le parcours filtré par les chemins candidats calcule la récence. Aucune raison de budget
+     * n'est ajoutée, contrairement au scénario « Commit au-delà de 1 024 chemins » du delta
+     * {@code preciser-bornes-redaction-recence-git}.
+     */
+    @Test
+    void aCommitBeyondTheChangedPathsPerCommitBudgetFallsBackToTheFilteredWalkWithoutBudgetReason()
+            throws Exception {
+        Path target = temporaryDirectory.resolve("src/Target.java");
+        // Target modifié + 1 024 ajouts = 1 025 chemins modifiés par ce commit.
+        bulkHistory(GitRecencyCandidateEnricher.MAX_CHANGED_PATHS_PER_COMMIT);
+        List<SearchCandidate> candidates = List.of(candidate("target", target));
+        List<String> reasons = new ArrayList<>();
+        List<List<SearchCandidate>> results = new ArrayList<>();
+        GitRecencyCandidateEnricher enricher = new GitRecencyCandidateEnricher();
+
+        List<LogRecord> records = captureWarnings(() -> results.add(enricher.enrich(
+                project(temporaryDirectory), candidates, reasons::add)));
+
+        assertEquals(1.0d, results.getFirst().getFirst().signals().get(SearchSignals.GIT_RECENCY), 0.000001d);
+        assertEquals(List.of(), reasons);
+        assertEquals(List.of(), records);
+        // Parcours non filtré interrompu à la borne, puis parcours filtré.
+        assertEquals(2, enricher.logScans());
+    }
+
+    @Test
+    void computesRecencyAtExactlyTheCumulativeChangedPathsBudget() throws Exception {
+        int fullRewrites = GitRecencyCandidateEnricher.MAX_CUMULATIVE_CHANGED_PATHS
+                / GitRecencyCandidateEnricher.MAX_CANDIDATE_PATHS;
+        List<SearchCandidate> candidates = candidateHistory(fullRewrites, false);
+        List<String> reasons = new ArrayList<>();
+        List<List<SearchCandidate>> results = new ArrayList<>();
+        GitRecencyCandidateEnricher enricher = new GitRecencyCandidateEnricher();
+
+        List<LogRecord> records = captureWarnings(() -> results.add(enricher.enrich(
+                project(temporaryDirectory), candidates, reasons::add)));
+
+        List<SearchCandidate> enriched = results.getFirst();
+        assertEquals(candidates.size(), enriched.size());
+        assertTrue(enriched.stream().allMatch(candidate ->
+                candidate.signals().get(SearchSignals.GIT_RECENCY) == 1.0d));
+        assertEquals(List.of(), reasons);
+        assertEquals(List.of(), records);
+        assertEquals(1, enricher.logScans());
+    }
+
+    @Test
+    void failsOpenWhenCumulativeChangedPathsBudgetIsExceeded() throws Exception {
+        int fullRewrites = GitRecencyCandidateEnricher.MAX_CUMULATIVE_CHANGED_PATHS
+                / GitRecencyCandidateEnricher.MAX_CANDIDATE_PATHS;
+        // Chaque commit reste sous la borne par commit ; le dernier porte le cumul à 4 097.
+        List<SearchCandidate> candidates = candidateHistory(fullRewrites, true);
+        List<String> reasons = new ArrayList<>();
+        List<List<SearchCandidate>> results = new ArrayList<>();
+        GitRecencyCandidateEnricher enricher = new GitRecencyCandidateEnricher();
+
+        List<LogRecord> records = captureWarnings(() -> results.add(enricher.enrich(
+                project(temporaryDirectory), candidates, reasons::add)));
+
+        List<SearchCandidate> enriched = results.getFirst();
+        assertEquals(candidates, enriched);
+        assertTrue(enriched.stream().noneMatch(candidate ->
+                candidate.signals().containsKey(SearchSignals.GIT_RECENCY)));
+        assertEquals(List.of(GitRecencyCandidateEnricher.BUDGET_REASON), reasons);
+        assertEquals("récence Git ignorée : budget de chemins dépassé", GitRecencyCandidateEnricher.BUDGET_REASON);
+        assertEquals(List.of(), records);
+        // Parcours non filtré puis parcours filtré, tous deux interrompus par la borne cumulée.
+        assertEquals(2, enricher.logScans());
+    }
+
+    /**
+     * Dépôt de {@value GitRecencyCandidateEnricher#MAX_CANDIDATE_PATHS} fichiers candidats : un
+     * commit initial (sans parent, non compté), puis {@code fullRewrites} commits qui modifient tous
+     * les candidats, puis éventuellement un commit qui ne modifie que le premier candidat.
+     */
+    private List<SearchCandidate> candidateHistory(int fullRewrites, boolean extraSingleChange) throws Exception {
+        int count = GitRecencyCandidateEnricher.MAX_CANDIDATE_PATHS;
+        // Les commits sont écrits directement dans la base d'objets : la récence ne lit que
+        // l'historique, et « git add » de 512 fichiers par commit serait inutilement lent.
+        Map<String, String> contents = new TreeMap<>();
+        for (int index = 0; index < count; index++) {
+            contents.put("C" + index + ".java", "class C" + index + " {}\n");
+        }
+        try (Git git = Git.init().setDirectory(temporaryDirectory.toFile()).call()) {
+            Repository repository = git.getRepository();
+            ObjectId head = commitTree(repository, null, contents, "initial");
+            for (int round = 1; round <= fullRewrites; round++) {
+                for (int index = 0; index < count; index++) {
+                    contents.put("C" + index + ".java", "class C" + index + " { int v = " + round + "; }\n");
+                }
+                head = commitTree(repository, head, contents, "rewrite " + round);
+            }
+            if (extraSingleChange) {
+                contents.put("C0.java", "class C0 { int extra; }\n");
+                commitTree(repository, head, contents, "single change");
+            }
+        }
+        List<SearchCandidate> candidates = new ArrayList<>(count);
+        for (int index = 0; index < count; index++) {
+            candidates.add(candidate("c-" + index, temporaryDirectory.resolve("src/C" + index + ".java")));
+        }
+        return List.copyOf(candidates);
+    }
+
+    /** Écrit un commit dont l'arbre contient {@code src/<nom>} pour chaque entrée, puis y avance HEAD. */
+    private static ObjectId commitTree(
+            Repository repository,
+            ObjectId parent,
+            Map<String, String> sortedContents,
+            String message) throws Exception {
+        ObjectId commitId;
+        try (ObjectInserter inserter = repository.newObjectInserter()) {
+            TreeFormatter src = new TreeFormatter();
+            for (Map.Entry<String, String> entry : sortedContents.entrySet()) {
+                src.append(entry.getKey(), FileMode.REGULAR_FILE,
+                        inserter.insert(Constants.OBJ_BLOB, entry.getValue().getBytes(StandardCharsets.UTF_8)));
+            }
+            TreeFormatter root = new TreeFormatter();
+            root.append("src", FileMode.TREE, inserter.insert(src));
+            CommitBuilder commit = new CommitBuilder();
+            commit.setTreeId(inserter.insert(root));
+            if (parent != null) {
+                commit.setParentId(parent);
+            }
+            PersonIdent ident = new PersonIdent("NEXUS Test", "nexus@example.test");
+            commit.setAuthor(ident);
+            commit.setCommitter(ident);
+            commit.setMessage(message);
+            commitId = inserter.insert(commit);
+            inserter.flush();
+        }
+        RefUpdate update = repository.updateRef(Constants.HEAD);
+        update.setNewObjectId(commitId);
+        update.setForceUpdate(true);
+        RefUpdate.Result result = update.update();
+        assertTrue(result == RefUpdate.Result.NEW || result == RefUpdate.Result.FORCED, result.name());
+        return commitId;
+    }
+
+    /**
+     * Dépôt à deux commits : {@code src/Target.java} seul, puis Target modifié avec
+     * {@code addedFiles} fichiers ajoutés, soit {@code addedFiles + 1} chemins modifiés.
+     */
+    private void bulkHistory(int addedFiles) throws Exception {
+        Map<String, String> contents = new TreeMap<>();
+        contents.put("Target.java", "class Target {}\n");
+        try (Git git = Git.init().setDirectory(temporaryDirectory.toFile()).call()) {
+            Repository repository = git.getRepository();
+            ObjectId initial = commitTree(repository, null, contents, "initial");
+            contents.put("Target.java", "class Target { void changed() {} }\n");
+            for (int index = 0; index < addedFiles; index++) {
+                contents.put("Bulk" + index + ".txt", "bulk " + index + "\n");
+            }
+            commitTree(repository, initial, contents, "change target and add bulk files");
+        }
     }
 
     @Test

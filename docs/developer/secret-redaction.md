@@ -115,7 +115,7 @@ sequenceDiagram
     Note over Pub,Rep: le projet reste READY, les autres fichiers restent recherchables
 ```
 
-Le fichier fautif n'entre ni dans le lot lexical ni dans le lot sémantique et son éventuelle ancienne version en est retirée ; les autres fichiers sont indexés normalement. Il reste dans l'index structurel (voir l'écart 2). Les index lexical et sémantique rejouent la redaction sur un texte déjà redigé : c'est la seconde barrière volontaire décrite dans [semantic-search.md](semantic-search.md).
+Le fichier fautif n'entre ni dans le lot lexical ni dans le lot sémantique et son éventuelle ancienne version en est retirée ; les autres fichiers sont indexés normalement. Il reste dans l'index structurel. Les index lexical et sémantique rejouent la redaction sur un texte déjà redigé : c'est la seconde barrière volontaire décrite dans [semantic-search.md](semantic-search.md).
 
 Exigences : `secret-redaction › Une valeur sensible trop longue n'exclut que son fichier`, `secret-redaction › Chaque document est redigé une fois avant l'embedding`.
 
@@ -142,7 +142,7 @@ flowchart TD
 
 Le refus du contenu entier évite de publier le suffixe d'un secret trop long ; chaque appelant le transforme en exclusion locale plutôt qu'en échec global. Le test de bornes `SensitiveContentRedactorTest#boundedFormsAreRedactedAtTheBoundAndRefusedJustAbove` épingle N et N+1 pour `Bearer`, `--password`, `<password>` et la partie utilisateur d'une URL.
 
-Exigences : `secret-redaction › Une valeur sensible trop longue n'exclut que son fichier`, `secret-redaction › Les formats de secrets courants sont redigés`.
+Exigences : `secret-redaction › Une valeur sensible trop longue n'exclut que son fichier`, `secret-redaction › Les formats de secrets courants sont redigés`, `secret-redaction › Les bornes étroites de redaction refusent le contenu`.
 
 Vue Organigramme — Comment un changement de politique invalide-t-il les index dérivés ? (existant)
 
@@ -159,25 +159,21 @@ flowchart TD
     T -- oui --> W["vecteurs réutilisables"]
 ```
 
-Trois mécanismes se complètent : la migration `V011` invalide les projets déjà enregistrés, la donnée de commit Lucene invalide un index d'une autre politique, et le profil sémantique rend incompatible un index d'un autre profil. Aucun test n'exerce le second mécanisme (écart 3).
+Trois mécanismes se complètent : la migration `V011` invalide les projets déjà enregistrés, la donnée de commit Lucene invalide un index d'une autre politique, et le profil sémantique rend incompatible un index d'un autre profil. Aucun test n'exerce le second mécanisme (écart 1).
 
 Exigences : `secret-redaction › Un changement de politique invalide les index dérivés`.
 
 ### Écarts et limites
 
-- [Écart] 1 — Seuil de 4 096 caractères. La spec énonce un seul seuil (« plus de 4 096 caractères »). Le code applique 4 096 aux valeurs d'assignation, `Bearer`, option, XML, JWT et mot de passe d'URL, mais 1 024 à la partie utilisateur d'une URL et 255 caractères de corps aux jetons à préfixe (`ghp_`, `github_pat_`, `sk-`, `xox?-`, `glpat-`, `sk_live_`) : `SensitiveContentRedactor.java:26-27`, `:77-91`. Tests : `SensitiveContentRedactorTest#valuesAboveTheirBoundAreRefusedInsteadOfPublished`, `#boundedFormsAreRedactedAtTheBoundAndRefusedJustAbove`. La page courante [Redaction des contenus sensibles](#redaction-des-contenus-sensibles) documente déjà ces trois bornes.
-- [Écart] 2 — « exclure du traitement le seul fichier ». Le code exclut le fichier des seuls index lexical et sémantique ; il reste analysé et enregistré dans l'index structurel SQLite (`IndexDocumentPublisher.java:73-77` avant `:81`). Le texte de l'exigence ne le dit pas.
-- [Écart] 3 — Index lexical d'une ancienne politique : le code invalide et reconstruit (`LuceneSearchIndex.java:163-165`, `ProjectIndexingService.java:242-244`) mais aucun test ne fait varier la donnée de commit `nexus.redaction.policy` (recherche dans `core/src/test` et `adapters` : aucune occurrence). Scénario sans preuve.
-- [Écart] 4 — « redigé une seule fois ». Vrai à l'intérieur de `SemanticIndexingService` (`:197`), mais sur le chemin d'indexation le texte a déjà été redigé par `IndexDocumentPublisher` (`:111-115`) et l'est encore par `LuceneSearchIndex` (`:275`). Aucun test ne compte les appels à `redact` ; la tâche archivée 8.1 prouvait ce point par une commande (`git grep -c`), pas par un test.
-- [Écart] 5 — Profil `content-vN`. L'exigence demande d'incrémenter le profil sémantique à chaque changement de politique ; le profil inclut déjà `redactionPolicy=<POLICY_VERSION>` (`SemanticIndexingService.java:127-132`), donc il change de toute façon. L'incrément manuel de `CONTENT_PROFILE_VERSION` (règle de `.claude/rules/search-and-redaction.md`) n'est vérifié par aucun test ; seuls les contrats de documentation épinglent `secret-redaction-v6` et `content-v5` (`scripts/release/test-operational-doc-contracts.sh:204-210`).
-- [Écart] 6 — Le motif « chaque modification de redaction s'accompagne d'une migration » est une règle de processus : aucun test ne détecte une évolution de `SensitiveContentRedactor` sans nouvelle migration (preuve manquante).
+- [Écart] 1 — Index lexical d'une ancienne politique : le code invalide et reconstruit (`LuceneSearchIndex.java:163-165`, `ProjectIndexingService.java:242-244`) mais aucun test ne fait varier la donnée de commit `nexus.redaction.policy` (recherche dans `core/src/test` et `adapters` : aucune occurrence). Scénario sans preuve.
+- [Écart] 2 — « redigé une seule fois ». Vrai à l'intérieur de `SemanticIndexingService` (`:197`), mais sur le chemin d'indexation le texte a déjà été redigé par `IndexDocumentPublisher` (`:111-115`) et l'est encore par `LuceneSearchIndex` (`:275`). Aucun test ne compte les appels à `redact` ; la tâche archivée 8.1 prouvait ce point par une commande (`git grep -c`), pas par un test.
+- [Écart] 3 — Profil `content-vN`. L'exigence demande d'incrémenter le profil sémantique à chaque changement de politique ; le profil inclut déjà `redactionPolicy=<POLICY_VERSION>` (`SemanticIndexingService.java:127-132`), donc il change de toute façon. L'incrément manuel de `CONTENT_PROFILE_VERSION` (règle de `.claude/rules/search-and-redaction.md`) n'est vérifié par aucun test ; seuls les contrats de documentation épinglent `secret-redaction-v6` et `content-v5` (`scripts/release/test-operational-doc-contracts.sh:204-210`).
+- [Écart] 4 — Le motif « chaque modification de redaction s'accompagne d'une migration » est une règle de processus : aucun test ne détecte une évolution de `SensitiveContentRedactor` sans nouvelle migration (preuve manquante).
 - Limites vérifiées : les 19 formats de la spec sont les 19 cas `auditFormat` de la sonde de 35 cas ; `SecretRedactionProbeTest#probeHasThirtyFiveCasesIncludingTheNineteenAuditFormats` affirme 35, 19 et 2 limites connues. Les valeurs `secret-redaction-v5` (scénario de migration) et `secret-redaction-v6` (courante) correspondent à `SchemaMigratorSecretFormatUpgradeTest` (`:25`, `:74`) et à `POLICY_VERSION`. Aucun écart sur ces trois points.
 - Limite : seul le chemin lexical est couvert de bout en bout pour l'indexation d'un fichier trop long ; `ProjectIndexingServiceTest#anOversizedSecretExcludesOnlyItsFileFromDerivedIndexes` n'active pas l'index sémantique, le test sémantique `SemanticIndexingServiceTest#excludesOnlyTheDocumentWhoseSecretExceedsTheRedactionBound` reste au niveau du service.
 
 ### Propositions et questions ouvertes
 
-- [Proposition] Ajouter à l'exigence « Une valeur sensible trop longue n'exclut que son fichier » les bornes réelles (1 024 pour la partie utilisateur d'une URL, 255 pour le corps d'un jeton à préfixe) ou une exigence distincte, pour accorder la spec au code (changement de texte d'exigence : delta OpenSpec).
-- [Proposition] Préciser dans la spec que le fichier exclu reste dans l'index structurel (symboles, empreinte) et n'est exclu que des index lexical et sémantique.
 - [Proposition] Écrire un test qui ouvre un index Lucene dont `nexus.redaction.policy` diffère de `POLICY_VERSION` et vérifie `isPresent == false` puis la reconstruction complète.
 - [Proposition] Écrire un test d'indexation sémantique de bout en bout (fichier de 5 000 caractères dans un projet de trois fichiers, index sémantique activé).
 - [Question] « redigé une seule fois » vise-t-il `SemanticIndexingService` seul, ou l'ensemble du chemin d'indexation (trois appels de `redact` au total, dont deux volontaires) ?

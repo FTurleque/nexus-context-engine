@@ -97,6 +97,64 @@ class SensitiveContentRedactorTest {
     }
 
     @Test
+    void masksUriUserPartAtExactly1024Characters() {
+        String user = syntheticAlphanumeric(1024);
+        String content = "clone https://" + user + "@host/repo done";
+        String redacted = SensitiveContentRedactor.redact(content);
+        assertEquals("clone https://[REDACTED]@host/repo done", redacted);
+        assertNoFragmentOf(user, redacted);
+    }
+
+    @Test
+    void refusesUriUserPartOf1025CharactersWithoutPublishingAnyPartOfIt() {
+        String user = syntheticAlphanumeric(1025);
+        String content = "clone https://" + user + "@host/repo done\npassword: other-secret-value";
+        var failure = org.junit.jupiter.api.Assertions.assertThrows(OversizedSecretException.class,
+                () -> SensitiveContentRedactor.redact(content));
+        assertFalse(failure.getMessage().contains(user.substring(500, 532)), failure.getMessage());
+        assertNoFragmentOf(user, failure.getMessage());
+        // Aucun contenu partiellement redigé : un champ public refusé devient [REDACTED] en entier.
+        assertEquals("[REDACTED]", SensitiveContentRedactor.redactField(content));
+    }
+
+    @Test
+    void masksGithubTokenWhoseBodyHas255Characters() {
+        String token = "gh" + "p_" + syntheticAlphanumeric(255);
+        String redacted = SensitiveContentRedactor.redact("x " + token + " y");
+        assertEquals("x [REDACTED] y", redacted);
+        assertNoFragmentOf(token.substring(4), redacted);
+    }
+
+    @Test
+    void refusesGithubTokenWhoseBodyHas256CharactersWithoutPublishingAnyPartOfIt() {
+        String token = "gh" + "p_" + syntheticAlphanumeric(256);
+        String content = "x " + token + " y";
+        var failure = org.junit.jupiter.api.Assertions.assertThrows(OversizedSecretException.class,
+                () -> SensitiveContentRedactor.redact(content));
+        assertFalse(failure.getMessage().contains(token.substring(100, 132)), failure.getMessage());
+        assertNoFragmentOf(token, failure.getMessage());
+        assertEquals("[REDACTED]", SensitiveContentRedactor.redactField(content));
+    }
+
+    /** Valeur alphanumérique synthétique, construite par code (suites de l'alphabet décalées par bloc). */
+    private static String syntheticAlphanumeric(int length) {
+        String alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        StringBuilder value = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            value.append(alphabet.charAt((i + i / alphabet.length()) % alphabet.length()));
+        }
+        return value.toString();
+    }
+
+    /** Aucune fenêtre de 8 caractères de la valeur n'apparaît dans le texte publié. */
+    private static void assertNoFragmentOf(String value, String published) {
+        for (int start = 0; start + 8 <= value.length(); start++) {
+            String fragment = value.substring(start, start + 8);
+            assertFalse(published.contains(fragment), () -> "fragment publié : " + fragment);
+        }
+    }
+
+    @Test
     void historicalTokensFollowedByAHyphenStayRedacted() {
         String github = "gh" + "p_" + "abcdefghijklmnopqrstuvwxyz0123456789";
         String aws = "AK" + "IA" + "ABCDEFGHIJKLMNOP";
