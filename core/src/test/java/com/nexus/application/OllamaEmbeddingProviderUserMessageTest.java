@@ -36,13 +36,15 @@ class OllamaEmbeddingProviderUserMessageTest {
 
     @Test
     void outOfRangeProviderDimensionsAreRejectedInFrench() {
+        Duration timeout = Duration.ofSeconds(5);
+
         IllegalArgumentException failure = assertThrows(
                 IllegalArgumentException.class,
                 () -> new OllamaEmbeddingProvider(
                         OllamaEmbeddingProvider.DEFAULT_BASE_URI,
                         OllamaEmbeddingProvider.DEFAULT_MODEL,
                         1025,
-                        Duration.ofSeconds(5)));
+                        timeout));
 
         assertEquals("La dimension d'embedding Ollama doit être comprise entre 1 et 1024", failure.getMessage());
     }
