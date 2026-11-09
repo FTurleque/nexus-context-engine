@@ -15,7 +15,7 @@ Commit audité : `origin/develop` @ `98b1f3f0`. Constats triés par sévérité 
 
 - **Axe** : Architecture · **Effort** : L · **Sprint** : S7 · Casser le bloc cyclique du cœur
 - **Dépend de** : `AUD-ARC-02`, `AUD-ARC-03`, `AUD-ARC-04`, `AUD-ARC-05`, `AUD-ARC-06`, `AUD-ARC-07` · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 4 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Les cinq cycles bilatéraux sont cassés par l'extraction des packages feuilles (index.service, context.model, search.candidate) et la remontée de la construction Ollama dans le composition root ; le graphe des packages du cœur est acyclique, décision ARCH-0076, verrouillée par CoreArchitectureTest avec une baseline de cycles vide (PR #300) · **Vérification du 2026-11-09** (`fc701668`) : Fermé — Recalcul des imports com.nexus.* des fichiers de core/src/main/java/com/nexus + Tarjan (scratchpad scc7.py) : 32 packages, aucune composante fortement connexe de taille > 1 (contre une SCC de 12 à l'audit) ; core/src/test/resources/architecture/package-cycles.txt ne contient que des commentaires ; core/src/test/java/com/nexus/architecture/CoreArchitectureTest.java:157-165 (cycleBaselineIsEmpty, packageCyclesMatchTheBaseline) ; ./mvnw -B -ntp -pl core test -Dtest='*Architecture*' -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true → CoreArchitectureTest 28 tests, 0 échec, BUILD SUCCESS (09/11/2026) ; ADR docs/architecture/adr/ARCH-0076-garder-un-coeur-java-sans-framework-acyclique-et-verifie.md
 
 **Preuve**
 
@@ -31,7 +31,7 @@ Commande : graphe des `import com.nexus.*` des 243 fichiers main + Tarjan (scrat
 
 - **Axe** : Architecture · **Effort** : M · **Sprint** : S7 · Casser le bloc cyclique du cœur
 - **Dépend de** : `AUD-ARC-07` · **Débloque** : `AUD-ARC-01`
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 3 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : ProjectIndexingService, IndexDocumentPublisher et ExternalCodeIntelligenceRefresher passent dans le package d'orchestration index.service, ResultLimitPolicy dans config et SearchDocument dans index, et le port SemanticIndexing (implémenté par SemanticIndexingService, NoopSemanticIndexing à la place de null) remplace la classe concrète (PR #300) · **Vérification du 2026-11-09** (`fc701668`) : Fermé — core/src/main/java/com/nexus/index/service/ProjectIndexingService.java:15 `import com.nexus.index.SemanticIndexing;` ; core/src/main/java/com/nexus/config/ResultLimitPolicy.java ; core/src/main/java/com/nexus/index/SearchDocument.java ; core/src/main/java/com/nexus/index/NoopSemanticIndexing.java:8 ; core/src/main/java/com/nexus/search/semantic/SemanticIndexingService.java:21 `implements SemanticIndexing` ; graphe recalculé : index → search 0 import, index → search.semantic 0 import (search → index 9, sens permis) ; règle index-sans-search, CoreArchitectureTest.indexModelAndPortsDoNotImportSearch (l. 65-68), au vert
 
 **Preuve**
 
@@ -144,7 +144,7 @@ core/src/main/java/com/nexus/cli/CliResultMapper.java:49-62 contextItemMap : `"p
 
 - **Axe** : Qualité · **Effort** : M 1-3j · **Sprint** : S6 · Fédération et runtimes longue durée
 - **Dépend de** : aucun · **Débloque** : `AUD-PRF-03`
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 3 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : FederatedContextService.build et ProjectIndexingService.indexLocked sont découpés en étapes privées nommées (validation, collecte par projet, sélection, métadonnées ; diff, publication, providers externes, vérification, statut) sans changement de comportement ; NexusApplicationFactory.create reste linéaire comme le demandait l'action (sprint 6, tâches 1.1 et 1.2, PR #299) · **Vérification du 2026-11-09** (`1388a642`) : Fermé — core/src/main/java/com/nexus/context/FederatedContextService.java:71 build (environ 30 lignes, contre 168) délègue à validate:102, collectPerProject:128, select:208, buildMetadata:338 ; core/src/main/java/com/nexus/index/service/ProjectIndexingService.java:193-244 indexLocked (environ 50 lignes, contre 111) appelle diffAgainstIndex:245, publishDocuments:270, refreshExternalProviders:303, verifyRepositoryUnchanged:333, recordStatus:343 ; FederatedContextServiceTest (8), ProjectIndexingServiceTest (5), ProjectIndexingPublicationTest (4), ProjectIndexingServiceTimeoutTest, ProjectIndexingServiceMinosImportTest, ProjectIndexingServiceCompositionTest : 0 échec (./mvnw -pl core test ciblé, 2026-11-09)
 
 **Preuve**
 
@@ -192,7 +192,7 @@ core/src/main/java/com/nexus/security/SecretAssignmentScanner.java:126-129 — `
 
 - **Axe** : Sécurité · **Effort** : S<1j · **Sprint** : S8 · Façade, configuration et durcissements locaux
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Le filtre JAX-RS NexusRestLoopbackTransportFilter (PR #303) refuse en 403 sans détail, en trust-local comme en mode jeton loopback, toute requête dont le Host n'est pas littéralement 127.0.0.1, localhost ou [::1] ou dont l'Origin n'est pas loopback ; le risque navigateur résiduel du trust-local et la recommandation d'allowlist de racines sont documentés. · **Vérification du 2026-11-09** (`eecd7556`) : Fermé — adapters/rest-quarkus/src/main/java/com/nexus/api/NexusRestLoopbackTransportFilter.java:29-46 (javadoc : actif en trust-local, comparaison littérale sans résolution DNS), :43 @PreMatching, :59 activation via NexusRestSecurity.requiresLoopbackTransportControl, :77-81 abortWith 403 FORBIDDEN ; docs/developer/rest-exposure-security.md:40-58 (contrôle Host/Origin, rebinding, « Residual browser risk of trust-local », allowlist recommandée) ; scripts/release/test-final-audit-contracts.sh:33-42 ; ./mvnw -pl adapters/rest-quarkus -am clean test -Dtest='NexusRestLoopbackTransport*,NexusRestExposureGuardTest,NexusResourceTest' → 57 tests, 0 échec (NexusRestLoopbackTransportTrustLocalTest 6, NexusRestLoopbackTransportTokenTest 6, NexusRestLoopbackTransportFilterTest 8, NexusRestExposureGuardTest 23). L'allowlist reste une recommandation en trust-local (option de l'action, choix documenté) ; le listener de management :9000 n'est pas filtré mais n'expose aucun contenu de projet (documenté, rest-exposure-security.md:54).
 
 **Preuve**
 
@@ -209,7 +209,7 @@ adapters/rest-quarkus/src/main/java/com/nexus/api/NexusRestExposureGuard.java:79
 - **Axe** : Sécurité, Dépendances · **Effort** : S<1j · **Sprint** : S9 · Chaîne de release exécutable
 - **Dépend de** : aucun · **Débloque** : `AUD-DEP-02`
 - **Fusionne** : `AUD-DEP-01`
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Fermé par #304 (tâches 2.1 et 2.2) : les secrets PFX ne figurent plus dans l'env du job windows-installer ; ils ne sont mappés que sur les deux étapes de signature, vides sur pull_request, et le PFX est décodé puis effacé dans la même étape sans que son chemin soit publié · **Vérification du 2026-11-09** (`513d459d`) : Fermé — .github/workflows/windows-installer.yml:56-58 : env du job réduit à NEXUS_HEAD_SHA et NEXUS_WINDOWS_REQUIRE_AUTHENTICODE ; :90-91 et :114-115 : `NEXUS_WINDOWS_SIGNING_PFX_*: ${{ github.event_name != 'pull_request' && secrets.… || '' }}` sur les seules étapes distribution et installeur ; :54-55 : environment release seulement si require_authenticode ; scripts/release/sign-windows-artifact.ps1:6-11 et finally :55 (PFX décodé dans un dossier privé à l'invocation puis effacé, chemin jamais publié) ; aucune écriture du PFX dans GITHUB_ENV (git grep GITHUB_ENV dans scripts/release/*.ps1 et windows-installer.yml filtré sur PFX → aucun résultat) ; contrat scripts/release/test-final-audit-contracts.sh:333 ; check « Windows self-contained installer » de #304 = SUCCESS
 
 **Preuve**
 
@@ -274,7 +274,7 @@ pom.xml:228 « <element>BUNDLE</element> » (idem core/pom.xml, adapters/*/pom.x
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S5 · Indexation et écriture SQLite
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : La migration V012 crée idx_symbol_relations_file_provider (file_id, source_provider), qui sert la suppression par fichier et la sonde de cascade, et le benchmark d'échelle réindexe des fichiers existants par applyChanges (PR #297, sprint 5, tâches 1.1 à 1.3 et 6.2) · **Vérification du 2026-11-09** (`bc902ad5`) : Fermé — core/src/main/resources/db/migration/V012__index_symbol_relations_by_file.sql:7-8 ; SqliteGraphQueryPlanTest.perFileRelationDeletionSeeksByFileAndProvider (:63) et foreignKeyCascadeProbeSeeksByFile (:76) exigent un SEARCH par index ; ScaleRegressionBenchmarkTest.benchmarkReindexExistingFiles (:229, scénarios incrémental et rebuild sur base peuplée) ; ./mvnw -pl core test -Dtest=SqliteGraphQueryPlanTest,SchemaMigrator*,... : SqliteGraphQueryPlanTest 7 tests, SchemaMigrator* 19 tests, 0 échec (2026-11-09)
 
 **Preuve**
 
@@ -290,7 +290,7 @@ core/src/main/java/com/nexus/persistence/sqlite/SqliteFileWriter.java:100-101 : 
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S6 · Fédération et runtimes longue durée
 - **Dépend de** : `AUD-DEP-19` · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Un SearchQueryContext unique par requête fédérée (recherche et contexte) mémorise le vecteur de la requête redactée, clé (provider, modèle) : le fournisseur d'embeddings reçoit au plus un appel quel que soit le nombre de projets, et une indisponibilité est elle aussi mémorisée et partagée (sprint 6, tâches 2.1 et 2.2, PR #299) · **Vérification du 2026-11-09** (`1388a642`) : Fermé — core/src/main/java/com/nexus/search/semantic/SemanticSearchStrategy.java:142-147 (queryContext.shared(queryVectorKey(), ...)) et :192-199 (embedQuery sur SensitiveContentRedactor.redact(query)) ; FederatedSearchService.java:80 et FederatedContextService.java:148 créent un seul SearchQueryContext pour toute la boucle ; FederatedQueryVectorTest (federatedSearchEmbedsTheQueryOnceForThreeProjects, federatedSearchTransmitsTheRedactedQueryToTheProvider, unavailableProviderIsCalledOnceAndDegradesEveryProjectWithTheSameDiagnostic, federatedContextSharesOneQueryContextAcrossProjects) : 6 tests, 0 échec (./mvnw -pl core test ciblé, 2026-11-09) ; workflow semantic-search-qualification vert sur develop (run pull_request du 2026-11-08)
 
 **Preuve**
 
@@ -307,7 +307,7 @@ core/src/main/java/com/nexus/search/semantic/SemanticSearchStrategy.java:125-127
 - **Axe** : Performance · **Effort** : S · **Sprint** : S6 · Fédération et runtimes longue durée
 - **Dépend de** : aucun · **Débloque** : aucun
 - **Fusionne** : `AUD-PRF-05`
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Les métadonnées de commit Lucene (compatibilité sémantique et sonde de readiness lexicale) sont lues sur le reader en cache, avec repli SegmentInfos.readLatestCommit sans DirectoryReader quand aucun reader n'est en cache (sprint 6, tâches 4.1 et 4.2, PR #299) · **Vérification du 2026-11-09** (`1388a642`) : Fermé — core/src/main/java/com/nexus/search/lucene/PersistentLuceneReaderSupport.java:66-91 (readCommitMetadata : searcherCache.searchIfCached puis SegmentInfos.readLatestCommit) ; PersistentLuceneSemanticSearchIndex.java:52-58 (isCompatible) et PersistentLuceneSearchIndex.java:98-104 (isPresent) y délèguent ; LuceneSemanticSearchIndexTest.compatibilityIsReadOnTheCachedReaderAcrossSuccessiveSearches et LuceneSearchIndexTest.persistentPresenceProbeOpensNoReaderOutsideTheCache : 11 et 10 tests, 0 échec (./mvnw -pl core test ciblé, 2026-11-09)
 
 **Preuve**
 
@@ -323,7 +323,7 @@ core/src/main/java/com/nexus/search/semantic/lucene/PersistentLuceneSemanticSear
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S6 · Fédération et runtimes longue durée
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : GitRecencyCandidateEnricher mémorise par (répertoire Git, HEAD) les chemins modifiés des 50 derniers commits dans les bornes existantes, invalide l'entrée au changement de HEAD et borne le cache à MAX_PROJECTS entrées LRU, décision portée par BE-0070 (sprint 6, tâche 6.1, PR #299) · **Vérification du 2026-11-09** (`1388a642`) : Fermé — core/src/main/java/com/nexus/context/source/git/GitRecencyCandidateEnricher.java:65 (DEFAULT_RECENCY_CACHE_CAPACITY = FederatedScopePolicy.MAX_PROJECTS), :94 (RecencyKey(gitDir, head)), :186-217 (lookup, invalidation du HEAD précédent, éviction) ; docs/architecture/adr/BE-0070-integrer-le-contexte-git-local-borne-mis-en-cache-et-confine.md:72-74 (cache du signal de récence, ex-BE-0065 archivé) ; GitRecencyCandidateEnricherTest.reusesRecentChangedPathsWhileHeadIsUnchangedAndRecomputesAfterANewCommit, keepsTheFilteredWalkWhenTheHistoryExceedsTheCacheBound, evictsTheOldestRepositoryWhenTheRecencyCacheIsFull : 13 tests, 0 échec, 1 ignoré (./mvnw -pl core test ciblé, 2026-11-09)
 
 **Preuve**
 
@@ -339,7 +339,7 @@ core/src/main/java/com/nexus/context/source/git/GitRecencyCandidateEnricher.java
 
 - **Axe** : Dépendances · **Effort** : M · **Sprint** : S9 · Chaîne de release exécutable
 - **Dépend de** : `AUD-DEP-03`, `AUD-DEP-09`, `AUD-DEP-21`, `AUD-QUA-12`, `AUD-SEC-06` · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé (vérifié en direct) — gh run list --workflow release.yml → 0 run ; gh api …/tags → 0.
+- **Statut** : Fermé · **Changement** : Fermé par #304 (tags de pré-version vX.Y.Z-rc.N, release marquée pré-version sans déplacer latest, ADR de politique de publication) puis par la répétition 0.2.0-rc.2 : version passée par #315 (0018cf3e), promotion vers main par #318 (38e1b95b), tag v0.2.0-rc.2 publié par un run Release réussi après approbation de l'environnement release, relevé consigné par #319 (de2a066a) · **Vérification du 2026-11-09** (`513d459d`) : Fermé — gh run list --workflow release.yml → 42529376520 (v0.2.0-rc.2, push, 2026-11-08T22:16Z) conclusion success, dont « Publish immutable release » success ; gh release list → « NEXUS 0.2.0-rc.2 Pre-release v0.2.0-rc.2 2026-11-08T22:37:12Z » ; gh release view v0.2.0-rc.2 → isPrerelease true, 9 assets (setup.exe, ZIP, .sha256, SBOM, rapports Trivy) ; gh api …/tags → v0.2.0-rc.2, v0.2.0-rc.1 ; gh api …/attestations/sha256:014bdc0a… (image 0.2.0-rc.2) → 2 attestations ; gh api …/releases/latest → 404 (latest non déplacé) ; relevé docs/project/history/release-rehearsal-0.2.0-rc.2-2026-11-08.md (gh attestation verify code 0 sur l'image, le ZIP et le setup.exe)
 
 **Preuve**
 
@@ -373,7 +373,7 @@ gh api repos/FTurleque/nexus-context-engine/dependabot/alerts → 403 « Dependa
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : S7 · Casser le bloc cyclique du cœur
 - **Dépend de** : `AUD-ARC-07` · **Débloque** : `AUD-ARC-01`
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 4 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : ContextFragment, ContextItem et ContextSelectionResult passent dans le package context.model, dont dépendent à la fois context et context.source.* (PR #300) · **Vérification du 2026-11-09** (`fc701668`) : Fermé — core/src/main/java/com/nexus/context/model/{ContextFragment,ContextItem,ContextSelectionResult}.java ; core/src/main/java/com/nexus/context/source/ContextSourceFragmentFactory.java:3 `import com.nexus.context.model.ContextFragment;` ; graphe recalculé : context.source, context.source.git, context.source.skill → context 0 import (context → context.source 17, sens permis) ; règle context-source-sans-context, CoreArchitectureTest.contextSourcesDoNotImportTheContextBuilderPackage (l. 70-73), au vert
 
 **Preuve**
 
@@ -389,7 +389,7 @@ core/src/main/java/com/nexus/context/source/ContextSourceFragmentFactory.java:3 
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : S7 · Casser le bloc cyclique du cœur
 - **Dépend de** : `AUD-ARC-07` · **Débloque** : `AUD-ARC-01`
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : SearchCandidate, SearchSignals, CandidateType, CandidateEnricher et CandidateMerger passent dans le package search.candidate, et ranking comme ranking.graph ne dépendent plus de search (PR #300) · **Vérification du 2026-11-09** (`fc701668`) : Fermé — core/src/main/java/com/nexus/search/candidate/ (5 types) ; core/src/main/java/com/nexus/ranking/DeterministicContextRanker.java:3-5 `import com.nexus.search.candidate.*` ; graphe recalculé : ranking → search 0 import, ranking.graph → search 0 import (search → ranking 5, sens permis) ; règle ranking-sans-search, CoreArchitectureTest.rankingDoesNotImportTheSearchPackage (l. 75-78), au vert
 
 **Preuve**
 
@@ -405,7 +405,7 @@ core/src/main/java/com/nexus/ranking/DeterministicContextRanker.java:3-5 `import
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : S7 · Casser le bloc cyclique du cœur
 - **Dépend de** : `AUD-ARC-07` · **Débloque** : `AUD-ARC-01`
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : La lecture d'environnement et l'instanciation d'OllamaEmbeddingProvider quittent SemanticSearchConfiguration pour NexusApplicationFactory, composition root seule autorisée à lire l'environnement (PR #300) · **Vérification du 2026-11-09** (`fc701668`) : Fermé — core/src/main/java/com/nexus/search/semantic/SemanticSearchConfiguration.java : plus aucun import com.nexus.search.semantic.ollama ni System.getenv ; core/src/main/java/com/nexus/application/NexusApplicationFactory.java:63-64 (imports Ollama), :284-303 (résolution d'environnement et `new OllamaEmbeddingProvider(`) ; graphe recalculé : search.semantic → search.semantic.ollama 0 import (ollama → search.semantic 2, sens permis) ; règles search-semantic-sans-ollama et getenv-composition-root, CoreArchitectureTest l. 80-88, au vert
 
 **Preuve**
 
@@ -421,7 +421,7 @@ core/src/main/java/com/nexus/search/semantic/SemanticSearchConfiguration.java:3-
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : S8 · Façade, configuration et durcissements locaux
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Les gabarits readProject et readProjects de NexusApplication (PR #303) portent seuls la séquence READY → verrou partagé → session → revalidation READY, et les sept lectures indexées, inspect compris, passent par eux. · **Vérification du 2026-11-09** (`eecd7556`) : Fermé — core/src/main/java/com/nexus/application/NexusApplication.java:347-361 (readProject), :366-379 (readProjects) ; inspect :198, search :205, searchAcrossProjects :221, context :239, contextAcrossProjects :261, findSymbols :277, findUsages :284 délèguent aux gabarits ; acquireRead n'apparaît plus qu'aux lignes 351 et 413 (gabarits) ; core/src/test/java/com/nexus/application/NexusApplicationConsistentReadTest.java:36 et :49 (inspect refusé hors READY, y compris pendant la lecture) ; ./mvnw -pl core test -Dtest='NexusApplication*,…' → vert (121 tests du lot core, 0 échec).
 
 **Preuve**
 
@@ -437,7 +437,7 @@ core/src/main/java/com/nexus/application/NexusApplication.java:209-214 (search),
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : S5 · Indexation et écriture SQLite
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : ProjectIndexingService.importExternalCodeIntelligence porte l'import MINOS sous le même verrou single-flight puis inter-processus que l'indexation, MinosCodeIndexImporter est composé par NexusApplicationFactory et la CLI lit le payload borné par la façade (PR #297, sprint 5, tâche 7.1) · **Vérification du 2026-11-09** (`bc902ad5`) : Fermé — core/src/main/java/com/nexus/index/service/ProjectIndexingService.java:144-165 (LockSlot.tryLock puis projectIndexLockManager.acquire) et :171 (readExternalCodeIntelligencePayload) ; NexusApplication.java:183-195 délègue à indexingService ; NexusApplicationFactory.java:183 `new MinosCodeIndexImporter(projectScanner)` ; NexusCli.java:148 `application.readMinosPayload(input)` ; git grep -n "MinosCodeIndexImporter" -- core/src/main/java/com/nexus/cli/ core/src/main/java/com/nexus/application/NexusApplication.java vide ; ProjectIndexingServiceMinosImportTest.refusesAnImportWhileTheSameProjectIsBeingIndexed (:45) : 3 tests, 0 échec (2026-11-09)
 
 **Preuve**
 
@@ -453,7 +453,7 @@ core/src/main/java/com/nexus/application/NexusApplication.java:185-190 `projectI
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : S8 · Façade, configuration et durcissements locaux
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 4 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : NexusApplicationFactory enveloppe l'échec d'ouverture SQLite dans PersistenceException, cause conservée (PR #303), si bien que la façade et les trois adaptateurs n'exposent ni n'importent plus java.sql. · **Vérification du 2026-11-09** (`eecd7556`) : Fermé — core/src/main/java/com/nexus/application/NexusApplication.java:95 et :112 `create(...) throws IOException` (plus de SQLException) ; core/src/main/java/com/nexus/application/NexusApplicationFactory.java:250-251 `catch (SQLException failure) { throw new PersistenceException("Impossible d'ouvrir le stockage SQLite NEXUS", failure); }` ; git grep -n "SQLException" -- core/src/main/java/com/nexus/application/NexusApplication.java → 0 ; git grep -n "java.sql" -- core/src/main/java/com/nexus/cli 'adapters/*/src/main' → 0 (NexusCli, NexusMcpServer, NexusApiApplicationService).
 
 **Preuve**
 
@@ -469,7 +469,7 @@ core/src/main/java/com/nexus/application/NexusApplication.java:95 `public static
 
 - **Axe** : Architecture · **Effort** : M · **Sprint** : S8 · Façade, configuration et durcissements locaux
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 5 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Le record NexusConfiguration, résolu une fois par NexusApplicationFactory depuis une Map et injecté dans les classes qui lisaient l'environnement (PR #303), remplace les 16 appels à System.getenv du cœur ; une règle du test d'architecture interdit tout nouvel appel hors composition root (ARCH-0086). · **Vérification du 2026-11-09** (`eecd7556`) : Fermé — git grep -n "System.getenv" -- core/src/main → 1 seul appel, core/src/main/java/com/nexus/application/NexusApplicationFactory.java:317 (processEnvironment(), commenté :313) contre 16 dans 12 fichiers à l'audit ; core/src/main/java/com/nexus/application/NexusConfiguration.java:38 ; core/src/test/java/com/nexus/architecture/CoreArchitectureRules.java:27,151-155 règle getenv-composition-root, CoreArchitectureTest.java:87 et :91-154 (cas négatifs) → vert ; décision docs/architecture/adr/ARCH-0086-resoudre-la-configuration-et-nexus-home-dans-la-composition-root.md (remplace ARCH-0066, ADR du sprint consolidé par 11164d14).
 
 **Preuve**
 
@@ -485,7 +485,7 @@ Commande : `grep -rn 'System.getenv' core/src/main` → 16 occurrences dans 12 f
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : S5 · Indexation et écriture SQLite
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : ProjectIndexingService n'a plus qu'un constructeur public complet, sans valeur par défaut du ProjectIndexLockManager ; les variantes de commodité vivent dans la fabrique de test ProjectIndexingServices (PR #297, sprint 5, tâche 8.1) · **Vérification du 2026-11-09** (`bc902ad5`) : Fermé — git grep -n "public ProjectIndexingService(" -- core/src/main : une seule occurrence, core/src/main/java/com/nexus/index/service/ProjectIndexingService.java:68 (le second constructeur, :86, est package-private) ; git grep -n "processLocalOnly" -- core/src/main : seule la définition ProjectIndexLockManager.java:84, aucun repli dans ProjectIndexingService ; core/src/test/java/com/nexus/index/service/ProjectIndexingServices.java:23 ; ProjectIndexingServiceTest 5 tests, 0 échec (2026-11-09)
 
 **Preuve**
 
@@ -501,7 +501,7 @@ core/src/main/java/com/nexus/index/ProjectIndexingService.java:45,54,64,76,94 `p
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : S8 · Façade, configuration et durcissements locaux
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 3 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Le durcissement POSIX/ACL du stockage quitte NexusPaths pour security.PrivateStoragePolicy et SearchQualityMetrics passe sous core/src/test (PR #303). · **Vérification du 2026-11-09** (`eecd7556`) : Fermé — core/src/main/java/com/nexus/security/PrivateStoragePolicy.java (nouvelle classe) ; core/src/main/java/com/nexus/config/NexusPaths.java:11-12 « Ce record ne fait que résoudre des chemins », aucune API Posix/Acl restante (grep Posix|Acl → seule la javadoc :11) ; git ls-files : core/src/test/java/com/nexus/search/evaluation/SearchQualityMetrics.java, aucun fichier search/evaluation sous core/src/main ; PrivateStoragePolicyTest 7 tests et NexusPathsTest verts.
 
 **Preuve**
 
@@ -518,7 +518,7 @@ core/src/main/java/com/nexus/config/NexusPaths.java:78-134 `ensurePrivateStorage
 - **Axe** : Architecture, Qualité · **Effort** : S · **Sprint** : S8 · Façade, configuration et durcissements locaux
 - **Dépend de** : aucun · **Débloque** : aucun
 - **Fusionne** : `AUD-QUA-14`
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : La classe JDT ProcessBuilder est renommée BoundedJdtProcessBuilder et ses usages la nomment explicitement (PR #303). · **Vérification du 2026-11-09** (`eecd7556`) : Fermé — core/src/main/java/com/nexus/index/jdt/BoundedJdtProcessBuilder.java:29 `final class BoundedJdtProcessBuilder {` ; git ls-files | grep -i processbuilder → seul BoundedJdtProcessBuilder.java (0 fichier /ProcessBuilder.java) ; JdtLanguageServerCodeIntelligenceProvider.java:129 référence BoundedJdtProcessBuilder ; tests Jdt* verts.
 
 **Preuve**
 
@@ -534,7 +534,7 @@ core/src/main/java/com/nexus/index/jdt/ProcessBuilder.java:15-18 « Cette classe
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : S11 · Finitions documentaires et micro-optimisations
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 3 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Branche claude/s11-graphe-01c9d0 (90408ac9) : ProjectGraph supprimé, ProjectGraphBuilder renommé GraphNeighborhoodProjection, section graphe de docs/developer/search-ranking.md réécrite et tenue par le contrat documentaire, décision consignée dans BE-0087 (Proposed, complète BE-0071) · **Vérification du 2026-11-09** (`90408ac9`) : Fermé — git grep -n "ProjectGraph\b\|ProjectGraphBuilder" -- '*.java' vide ; scripts/release/test-operational-doc-contracts.sh refuse « ProjectGraph cache », « ProjectGraphBuilder » et « Graphe dérivé par génération » dans search-ranking.md ; GraphNeighborhoodProjectionTest, SqliteGraphNeighborhoodProjectionTest verts ; mvnw clean install, self-smoke, contracts.sh et archgate check verts (tâches 1.1 à 1.3) · **Réserve** : BE-0087 au statut Proposed jusqu'à validation du mainteneur
 
 **Preuve**
 
@@ -550,7 +550,7 @@ docs/developer/search-ranking.md:79-86 « ProjectGraphBuilder construit le graph
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : S11 · Finitions documentaires et micro-optimisations
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 5 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : AGENTS.md prescrit ./mvnw clean install (.\mvnw.cmd sous Windows) ; le contrat refuse toute commande mvn hors wrapper dans AGENTS.md (sprint 11, tâche 3.1) · **Vérification du 2026-11-09** (`42ef8fb1`) : Fermé — AGENTS.md sans commande mvn directe ; contrat négatif vérifié sur l'ancienne ligne ; scripts/self-smoke.ps1 : SELF-SMOKE SUCCESS, étape 9 avec AGENTS.md retenu
 
 **Preuve**
 
@@ -614,7 +614,7 @@ Détection par fenêtres de 8 lignes normalisées : 27 fenêtres communes entre 
 
 - **Axe** : Qualité · **Effort** : M 1-3j · **Sprint** : S11 · Finitions documentaires et micro-optimisations
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Frontière de langue écrite dans .claude/rules/java-core.md ; messages atteignables par CLI, REST, MCP ou configuration traduits (requêtes, budgets, scope fédéré, limites, provider Ollama, chemins, imports MINOS et SCIP) ; message des contraintes partagé par ContextRequest.UNSUPPORTED_CONSTRAINTS_MESSAGE et le mapper REST (sprint 11, tâches 5.1 à 5.3) ; derniers messages traduits : RepositoryPath (« Chemin repository invalide ») et BudgetedContextSelector (texte de ContextBudgetPolicy), PR de clôture des sprints 10 et 11 · **Vérification du 2026-11-09** (`21fb31eb`) : Fermé — FederatedContextServiceUserMessageTest et OllamaEmbeddingProviderUserMessageTest (façade et composition) ; RepositoryPathTest#reportsAnInvalidProviderPathInFrench et BudgetedContextSelectorBudgetMessageTest#nonPositiveBudgetIsRejectedInFrench attendent les deux derniers messages en français
 
 **Preuve**
 
@@ -630,7 +630,7 @@ Heuristique sur 316 messages littéraux `new (IllegalArgumentException|IllegalSt
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : S9 · Chaîne de release exécutable
 - **Dépend de** : aucun · **Débloque** : `AUD-DEP-02`
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Fermé par #304 (tâches 8.1 et 8.2) : ci.yml et scripts/validate-phase-6.ps1 lisent la version produit dans pom.xml et la propagent en variable ; le contrat final refuse une version littérale dans ces deux fichiers · **Vérification du 2026-11-09** (`513d459d`) : Fermé — git grep -nE '0\.2\.0' -- .github/workflows/ci.yml scripts/validate-phase-6.ps1 → aucun résultat (code 1) ; .github/workflows/ci.yml:79-91 (NEXUS_VERSION lu dans pom.xml, exporté dans GITHUB_ENV) puis :133, :135, :174, :225 ; scripts/validate-phase-6.ps1:95 et :105-109 ($productVersion lu dans pom.xml), :231 ; le passage à 0.2.0-rc.2 (#315, pom.xml:9) n'a touché aucun de ces deux fichiers ; checks « Linux reactor Maven build » et « Windows gate » de #304 = SUCCESS
 
 **Preuve**
 
@@ -646,7 +646,7 @@ Heuristique sur 316 messages littéraux `new (IllegalArgumentException|IllegalSt
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : S11 · Finitions documentaires et micro-optimisations
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 5 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Watch item de current-limitations.md borné à l'évolution au-delà du FTS5 trigram livré par V008 ; refus de l'ancienne formulation dans test-operational-doc-contracts.sh (sprint 11, tâche 2.1) · **Vérification du 2026-11-09** (`42ef8fb1`) : Fermé — docs/developer/current-limitations.md ne contient plus « nouveau moteur FTS/trigram » ; le contrat refuse cette formulation et exige la mention de V008 (cas négatif vérifié) ; bash .claude/scripts/contracts.sh vert
 
 **Preuve**
 
@@ -678,7 +678,7 @@ adapters/mcp-java/src/main/java/com/nexus/mcp/McpResultMapper.java:89 `result.pu
 
 - **Axe** : Sécurité · **Effort** : S<1j · **Sprint** : S8 · Façade, configuration et durcissements locaux
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : La fabrique unique GitRepositoryLocator (PR #303) retient le dépôt de la racine du projet et n'accepte un dépôt parent que s'il appartient à l'utilisateur courant, à l'image de safe.directory, sinon le contexte Git est ignoré avec un diagnostic sans chemin ; ce contrôle de propriétaire remplace délibérément un plafond strict pour préserver le monorepo (décision BE-0070, option C). · **Vérification du 2026-11-09** (`eecd7556`) : Fermé — core/src/main/java/com/nexus/context/source/git/GitRepositoryLocator.java:88-97 (open, remontée depuis la racine réelle), :99-124 (contrôle du propriétaire du .git parent, de la cible gitlink et revérification après ouverture), :155 refus si non CURRENT_USER ; utilisée par LocalGitContextSourceProvider.java:48-54,165-166, PersistentGitContextSourceProvider.java:44-67 et GitRecencyCandidateEnricher.java:68-80,152 ; plus aucun findGitDir dans core/src/main ; GitRepositoryLocatorTest.java:36,67,99,168 (racine sans contrôle, propriétaire changé entre contrôle et ouverture, propriétaire indéterminable refusé) → vert ; docs/architecture/adr/BE-0070-integrer-le-contexte-git-local-borne-mis-en-cache-et-confine.md:22,31,59-61 (choix C contre plafond strict ou configurable ; reprend BE-0067 archivé). Pas de setCeilingDirectories : traitement alternatif prévu par l'action (« ou exiger que le gitdir … appartienne à l'utilisateur courant »).
 
 **Preuve**
 
@@ -711,7 +711,7 @@ core/src/main/java/com/nexus/context/source/git/LocalGitContextSourceProvider.ja
 
 - **Axe** : Sécurité · **Effort** : S<1j · **Sprint** : S10 · Conteneur et gouvernance du dépôt
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : .dockerignore à la racine pour Dockerfile (liste d'exclusion) et packaging/docker/Dockerfile.runtime.dockerignore en liste d'autorisation, livré dans le payload Windows et dans le staging de repli de docker-distribution.yml (sprint 10) · **Vérification du 2026-11-09** (`e8c80507`) : Fermé — docker build --target build puis test ! -e /workspace/.git (ni .env, ni nexus-data, ni docs/project/audits) dans l'étape build ; sonde de contexte du workflow Docker distribution : docker/.env et le répertoire de données du staging restent hors du contexte de Dockerfile.runtime, et la sonde échoue sans le fichier d'ignore · **Réserve** : Vérifié sur la branche fix/sprint-10-conteneur, base develop e8c80507 ; fermeture effective à la fusion de la PR du sprint 10, preuve CI : workflow Docker distribution exact-head de cette PR
 
 **Preuve**
 
@@ -823,7 +823,7 @@ core/src/test/java/com/nexus/security/SafeFileIOTest.java:54-55 « Assumptions.a
 
 - **Axe** : Performance · **Effort** : M · **Sprint** : S6 · Fédération et runtimes longue durée
 - **Dépend de** : `AUD-QUA-10` · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 2 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : La recherche et le contexte fédérés démarrent une échéance globale (FederationDeadlinePolicy, 60 s par défaut, NEXUS_FEDERATION_DEADLINE_SECONDS borné à 1-600 s) vérifiée avant chaque projet sans parallélisme, plafonnent le délai d'embedding par le temps restant et nomment les projets non commencés dans unservedProjects à parité CLI, REST et MCP ; décision BE-0064, consolidée depuis dans BE-0081 (sprint 6, tâches 3.1 à 3.3, PR #299) · **Vérification du 2026-11-09** (`1388a642`) : Fermé — core/src/main/java/com/nexus/search/FederatedSearchService.java:79-87 (deadline.expired() avant chaque projet, liste unserved) ; FederatedContextService.java:147-160 ; core/src/main/java/com/nexus/project/FederationDeadlinePolicy.java ; SemanticSearchStrategy.java:195-198 (embedQuery avec le temps restant) ; PublicOutputProjection.java:121-129 et :171 (unservedProjects), consommé par adapters/rest-quarkus/src/main/java/com/nexus/api/ApiMapper.java et adapters/mcp-java/src/main/java/com/nexus/mcp/NexusMcpTools.java ; docs/architecture/adr/BE-0081-federer-la-recherche-locale-par-projet-sous-echeance-globale.md:59-67 (échéance globale sans parallélisme, BE-0064 archivé) ; docs/developer/large-scale-search.md:102-110 ; FederatedSearchServicePolicyTest.stopsStartingProjectsAtTheGlobalDeadlineAndNamesUnservedProjectsInScopeOrder, FederatedContextServiceTest.stopsStartingProjectsAtTheGlobalDeadlineAndNamesUnservedProjectsInScopeOrder, FederationDeadlinePolicyTest (5), FederatedUnservedProjectsDiagnosticTest (3), FederatedQueryVectorTest.embeddingDelayIsCappedByTheRemainingGlobalDeadline : 0 échec (./mvnw -pl core test ciblé, 2026-11-09)
 
 **Preuve**
 
@@ -839,7 +839,7 @@ core/src/main/java/com/nexus/search/FederatedSearchService.java:56-66 boucle `fo
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S6 · Fédération et runtimes longue durée
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : La capacité du cache de contexte Git est alignée sur FederatedScopePolicy.MAX_PROJECTS (100) et ses compteurs CacheStats sont exposés sous gitContextCache dans les métadonnées explain, mono-projet et fédéré ; le workflow git-context-cache-qualification vérifie un scope de plus de 16 projets sans éviction ; décision BE-0065, consolidée depuis dans BE-0070 (sprint 6, tâches 5.1 à 5.3, PR #299) · **Vérification du 2026-11-09** (`1388a642`) : Fermé — core/src/main/java/com/nexus/context/source/git/PersistentGitContextSourceProvider.java:40 (DEFAULT_CAPACITY = FederatedScopePolicy.MAX_PROJECTS), :124-143 (CacheStats) ; core/src/main/java/com/nexus/context/ContextBuildMetadata.java:104 (gitContextCache) ; docs/architecture/adr/BE-0070-integrer-le-contexte-git-local-borne-mis-en-cache-et-confine.md:68-69 ; .github/workflows/git-context-cache-qualification.yml (assertions federatedScope.projects > 16, secondPassHits == projects, evictions == 0), vert sur develop (push du 2026-11-08) ; PersistentGitContextSourceProviderTest.defaultCapacityCoversTheMaximalFederatedScope, servesEveryProjectOfACyclicTwentyProjectScopeFromTheCacheOnTheSecondPass, cacheStatisticsExposeCountersAndCapacity : 7 tests, 0 échec ; FederatedContextServiceTest.federatedExplainCarriesTheLatestGitCacheCountersOnly (./mvnw -pl core test ciblé, 2026-11-09)
 
 **Preuve**
 
@@ -855,7 +855,7 @@ core/src/main/java/com/nexus/context/source/git/PersistentGitContextSourceProvid
 
 - **Axe** : Performance · **Effort** : M · **Sprint** : S5 · Indexation et écriture SQLite
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Le benchmark scanner rapporte la part du hachage au scan initial et au scan final ; la mesure montre que le coût vient de l'ouverture du fichier et non du SHA-256, et le design D3 décide de ne pas introduire de raccourci taille/date, DATA-0023 restant inchangé (PR #297, sprint 5, tâches 3.1 et 3.2) · **Vérification du 2026-11-09** (`bc902ad5`) : Fermé — core/src/test/java/com/nexus/benchmark/ProjectScannerCorpusBudgetBenchmarkTest.java:98-99 (hashingSmallFiles, hashingMediumFiles, hashShare) ; docs/developer/indexing-pipeline.md:330-338 (décision documentée et condition de réévaluation) ; relevé docs/project/history/indexing-heap-and-hashing-measures-2026-11-07.md §3 (3,7 ms par fichier de 44 octets contre 4,5 ms pour 16 Kio) ; réserve : relevé pris sur un poste Windows chargé, la mesure de seuil sur le runner Linux de référence (scanner-corpus-benchmark.yml, profil full) reste la condition d'un éventuel ADR complétant DATA-0023
 
 **Preuve**
 
@@ -871,7 +871,7 @@ core/src/main/java/com/nexus/index/scan/ProjectScanner.java:158 `FileHasher.sha2
 
 - **Axe** : Performance · **Effort** : M · **Sprint** : S6 · Fédération et runtimes longue durée
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — preuve par commande ou mesure ; aucun fichier de code modifié entre 98b1f3f0 et 0b6828ce
+- **Statut** : Fermé · **Changement** : La migration V015 remplace le préfiltre fuzzy global par idx_symbols_file_fuzzy_prefilter (file_id en tête, sondé depuis les fichiers du projet) et SymbolSearchStrategy interroge tous les termes en lot (une requête SQL par famille) ; le MATCH FTS trigram reste global par décision mesurée et documentée, la restriction par rowid IN étant 10 à 300 fois plus lente (sprint 6, tâches 7.1 et 7.2, PR #299) · **Vérification du 2026-11-09** (`1388a642`) : Fermé — core/src/main/resources/db/migration/V015__index_symbols_by_file_for_fuzzy_search.sql (CREATE INDEX idx_symbols_file_fuzzy_prefilter ON symbols(file_id, ...), DROP INDEX idx_symbols_fuzzy_prefilter) ; core/src/main/java/com/nexus/persistence/sqlite/SqliteSymbolSearch.java:158 et :188 (INDEXED BY idx_symbols_file_fuzzy_prefilter, WHERE f.project_id = ?), :136-137 (MATCH global filtré par projet) ; SymbolSearchStrategy.java:52 (indexRepository.searchSymbols(project.id(), queries, limit)) ; docs/developer/large-scale-search.md:66-70 (plan sans parcours global à 25 et 100 projets ; mesure du 2026-11-07, 60 projets et 240 000 symboles : rowid IN 0,67-1,0 s contre 3-87 ms) ; SqliteSymbolSearchScopingTest (fuzzyPrefilterPlanUsesTheFileScopedIndexWithoutAnyFullSymbolScanAt25And100Projects, batchedResultsAreIdenticalToThePerTermQueriesOfBeforeV015, numberOfSqlStatementsDoesNotGrowWithTheNumberOfTerms) : 4 tests, 0 échec ; SchemaMigratorFileIndexUpgradeTest : 4 tests, 0 échec (./mvnw -pl core test ciblé, 2026-11-09)
 
 **Preuve**
 
@@ -887,7 +887,7 @@ V008__indexed_substring_search.sql:20-21 `idx_symbols_fuzzy_prefilter ON symbols
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S11 · Finitions documentaires et micro-optimisations
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 3 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : ADR DATA-0088 (Proposed) consigne le journal rollback, les mesures DELETE/WAL et la condition de réévaluation ; scale-regression-results.md et scale-regression-benchmark.md y renvoient ; SqliteDatabaseHardeningTest.keepsTheRollbackJournalOnEveryConnection fixe PRAGMA journal_mode = delete (sprint 11, tâches 4.1 et 4.2) · **Vérification du 2026-11-09** (`42ef8fb1`) : Fermé — SqliteDatabaseHardeningTest : 8 tests, 0 échec ; archgate check : 50/50 ; contrat documentaire vérifiant l'ADR, ses renvois et le test ; ./mvnw clean install vert
 
 **Preuve**
 
@@ -903,7 +903,7 @@ core/src/main/java/com/nexus/persistence/sqlite/SqliteDatabase.java:100-110 (auc
 
 - **Axe** : Performance · **Effort** : M · **Sprint** : S5 · Indexation et écriture SQLite
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Une session d'écriture par indexation garde un seul IndexWriter lexical et un seul sémantique, alimentés à chaque lot, committés une fois à la barrière de publication et annulés si l'indexation échoue (PR #297, sprint 5, tâche 4.1) · **Vérification du 2026-11-09** (`bc902ad5`) : Fermé — core/src/main/java/com/nexus/index/service/IndexDocumentPublisher.java:65-69 (searchIndex.openSession, semanticIndexingService.openSession) ; core/src/main/java/com/nexus/search/lucene/LuceneSearchIndex.java:388-430 (applyChanges sans commit, commit unique, close sans commitOnClose) ; LuceneSearchIndexSessionTest.commitsOnceForMoreThanOneBatchOfFilesAndNothingIsVisibleBeforeTheCommit (:32) et closingWithoutCommitRollsBackAndKeepsThePreviousIndex (:71) ; LuceneSemanticSearchIndexSessionTest (:34, :56) ; 4 + 3 tests, 0 échec (2026-11-09)
 
 **Preuve**
 
@@ -919,7 +919,7 @@ core/src/main/java/com/nexus/search/lucene/LuceneSearchIndex.java:96-108 `applyC
 
 - **Axe** : Performance · **Effort** : M · **Sprint** : S5 · Indexation et écriture SQLite
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Les analyses des fichiers modifiés sont mises en attente dans les tables index_staged_* (V014) par courtes transactions au rythme des flushs, puis appliquées et publiées avec la génération en une transaction finale (PR #297, sprint 5, tâches 2.1 et 2.2, DATA-0074) · **Vérification du 2026-11-09** (`bc902ad5`) : Fermé — core/src/main/resources/db/migration/V014__index_staged_analyses.sql:10-52 ; IndexDocumentPublisher.java:129 et :309-313 (stageTo vide le lot courant dans la publication) ; SqliteIndexWriteSessionTest.closingWithoutPublishDiscardsTheStagedAnalysesAndKeepsThePreviousGeneration (:78) ; ProjectIndexingPublicationTest.aFailureAfterSeveralBatchesLeavesThePreviousGenerationAndDerivedIndexesIntact (:113) ; 4 + 4 tests, 0 échec (2026-11-09) ; docs/developer/indexing-pipeline.md:298-313 ; pic de heap mesuré par IndexingHeapPeakBenchmarkTest (relevés du 2026-11-07). Le heap vivant d'un rebuild reste proportionnel au nombre de fichiers par les listes du scan et la table des fichiers existants, hors du périmètre du constat (indexing-pipeline.md:481)
 
 **Preuve**
 
@@ -935,7 +935,7 @@ core/src/main/java/com/nexus/index/IndexDocumentPublisher.java:24 `List<IndexedF
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S11 · Finitions documentaires et micro-optimisations
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé au sprint 11 (tâches 6.1, 6.2) · **Vérification du 2026-11-09** (`853a129b`) : Fermé — BudgetedContextSelector.truncate cherche le nombre de lignes conservées par dichotomie (O(log n) estimations) ; TokenEstimator documente l'exigence de croissance ; BudgetedContextSelectorTruncationTest compare la dichotomie à la boucle linéaire de référence sur des fragments Unicode multilignes et borne le nombre d'estimations à log2(n) + 2
 
 **Preuve**
 
@@ -951,7 +951,7 @@ core/src/main/java/com/nexus/context/BudgetedContextSelector.java:135-147 : `for
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S5 · Indexation et écriture SQLite
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : SqliteFileWriter prépare l'upsert et les deux DELETE une fois par transaction, obtient l'identifiant par RETURNING id sans relecture, et SqliteBatchInsert met en cache l'instruction de fin de lot par taille (PR #297, sprint 5, tâche 5.1) · **Vérification du 2026-11-09** (`bc902ad5`) : Fermé — core/src/main/java/com/nexus/persistence/sqlite/SqliteFileWriter.java:174-186 (UPSERT ... RETURNING id), :204-222 (FileStatements prépare les instructions une fois), :226-245 (executeQuery sur l'upsert) ; SqliteBatchInsert.java:41 et :67-74 (statementsBySize) ; git grep "SELECT id FROM indexed_files WHERE project_id = ? AND relative_path = ?" -- SqliteFileWriter.java vide ; SqliteFileWriterTest 3 tests, 0 échec (2026-11-09)
 
 **Preuve**
 
@@ -967,7 +967,7 @@ core/src/main/java/com/nexus/persistence/sqlite/SqliteFileWriter.java:58-92 (INS
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S5 · Indexation et écriture SQLite
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — preuve par commande ou mesure ; aucun fichier de code modifié entre 98b1f3f0 et 0b6828ce
+- **Statut** : Fermé · **Changement** : La migration V013 supprime idx_symbol_relations_project, idx_indexed_files_project et idx_symbols_file après vérification par EXPLAIN QUERY PLAN qu'un index plus large sert chaque requête (PR #297, sprint 5, tâches 6.1 et 6.2) · **Vérification du 2026-11-09** (`bc902ad5`) : Fermé — core/src/main/resources/db/migration/V013__drop_redundant_prefix_indexes.sql:9-11 ; SqliteGraphQueryPlanTest.redundantPrefixIndexesAreAbsentFromTheMigratedSchema (:146), noIndexIsAStrictPrefixOfAnotherIndexOfTheSameTable (:160) et projectAndFileQueriesStayIndexedOnceThePrefixIndexesAreDropped (:178) : 7 tests, 0 échec (2026-11-09) ; la migration ultérieure V015 (sprint 6) ajoute idx_symbols_file_fuzzy_prefilter (file_id, expressions), qui n'est préfixe d'aucun autre index et passe le test :160
 
 **Preuve**
 
@@ -983,7 +983,7 @@ V001__initial_schema.sql:79-80 `idx_symbol_relations_project ON symbol_relations
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S11 · Finitions documentaires et micro-optimisations
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Branche claude/s11-graphe-01c9d0 (90408ac9) : OUTGOING_GRAPH_SQL paginée par clé (source_ref, target_ref) > (?, ?), sans OFFSET ; reprise après le dernier couple lu · **Vérification du 2026-11-09** (`90408ac9`) : Fermé — git grep -n "OFFSET" -- core/src/main/java/com/nexus/persistence/sqlite/SqliteGraphQueries.java vide ; SqliteGraphNeighborhoodProjectionTest (plusieurs pages d'imports non résolus, concaténation des pages égale au parcours complet) et SqliteGraphQueryPlanTest (première page et pages suivantes servies par idx_symbol_relations_project_kind_source) verts (tâche 7.1) · **Réserve** : Une page ne trie ni ne saute plus les couples déjà lus, mais l'index (project_id, kind, source_ref) ne contient pas target_ref : chaque page relit les entrées d'index des chemins demandés. Un parcours linéaire demanderait un index couvrant et une migration (BE-0087, conséquences négatives)
 
 **Preuve**
 
@@ -999,7 +999,7 @@ core/src/main/java/com/nexus/persistence/sqlite/SqliteGraphQueries.java:20 `LIMI
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S11 · Finitions documentaires et micro-optimisations
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Corrigé au sprint 11 (tâches 8.1, 8.2) · **Vérification du 2026-11-09** (`853a129b`) : Fermé — RepositoryPath.fromProvider teste la lettre de lecteur par comparaison de caractères, sans regex ; RepositoryGlobMatcher réutilise les motifs compilés dans un cache LRU borné à 256 entrées (RepositoryGlobMatcherTest : réutilisation et borne)
 
 **Preuve**
 
@@ -1031,7 +1031,7 @@ core/src/main/java/com/nexus/search/semantic/SemanticIndexingService.java:202 et
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S9 · Chaîne de release exécutable
 - **Dépend de** : aucun · **Débloque** : `AUD-DEP-02`
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé (vérifié en direct) — gh api …/environments → total_count 0.
+- **Statut** : Fermé · **Changement** : Fermé par #304 (tâche 3.2) : le job publish déclare environment: release ; le mainteneur a créé l'environnement release (reviewer requis, déploiement limité aux tags v*, sans secret) et le ruleset de tags « Protect tags » sur refs/tags/v* (tâches manuelles 3.1 et 3.3) · **Vérification du 2026-11-09** (`513d459d`) : Fermé — .github/workflows/release.yml:169 `environment: release` sur publish ; contrat scripts/release/test-final-audit-contracts.sh:351-352 ; gh api repos/FTurleque/nexus-context-engine/environments → release, protection_rules [branch_policy, required_reviewers FTurleque], custom_branch_policies true ; …/environments/release/deployment-branch-policies → [{name v*, type tag}] ; …/environments/release/secrets → total_count 0 ; gh api …/rulesets → « Protect tags » target tag, enforcement active (id 26777159) ; …/rulesets/26777159 → include refs/tags/v*, règles deletion, non_fast_forward, creation, update, contournement réservé au rôle Admin ; run 42529376520 approuvé sur l'environnement release
 
 **Preuve**
 
@@ -1047,7 +1047,7 @@ core/src/main/java/com/nexus/search/semantic/SemanticIndexingService.java:202 et
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S10 · Conteneur et gouvernance du dépôt
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : COPY sans --chown vers /opt/nexus et /usr/local/bin, chmod 0644/0755, chown limité à /data/nexus et /workspace dans les deux Dockerfiles ; refus d'un --chown au contrat test-operational-doc-contracts.sh (sprint 10) · **Vérification du 2026-11-09** (`e8c80507`) : Fermé — docker run --entrypoint /bin/sh sur l'image construite : test ! -w /opt/nexus/lib/nexus-cli.jar, test ! -w /usr/local/bin/nexus-entrypoint et test -w /data/nexus réussissent ; JAR, notices et scripts root:root ; assertion ajoutée au workflow Docker distribution (image source et image de repli) · **Réserve** : Vérifié sur la branche fix/sprint-10-conteneur, base develop e8c80507 ; fermeture effective à la fusion de la PR du sprint 10, preuve CI : workflow Docker distribution exact-head de cette PR
 
 **Preuve**
 
@@ -1063,7 +1063,7 @@ packaging/docker/Dockerfile:19-20 `chown -R 10001:10001 /opt/nexus …` ; :26-27
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S9 · Chaîne de release exécutable
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Fermé par #304 (tâche 5.1) : le pom racine fixe project.build.outputTimestamp et la procédure de release prescrit sa mise à jour à chaque version · **Vérification du 2026-11-09** (`513d459d`) : Fermé — pom.xml:36 `<project.build.outputTimestamp>2026-11-08T00:00:00Z</project.build.outputTimestamp>` ; docs/developer/release-and-recovery.md:60-64 (deux clean verify successifs → mêmes SHA-256 du JAR CLI et du ZIP ; mise à jour de la propriété à chaque release) ; contrats test-final-audit-contracts.sh:417-419 et :469-470 ; double build non rejoué lors de cette vérification (tâche 5.1 cochée dans le changement archivé)
 
 **Preuve**
 
@@ -1079,7 +1079,7 @@ grep -rn outputTimestamp --include=pom.xml . → aucun résultat (pom.xml racine
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S9 · Chaîne de release exécutable
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Fermé par #304 (tâches 6.1 et 6.2) : les plugins clean, resources, jar, install et deploy sont épinglés en pluginManagement ; l'enforcer ajoute requirePluginVersions et requireUpperBoundDeps et exige Maven [3.10.0,) · **Vérification du 2026-11-09** (`513d459d`) : Fermé — pom.xml:163-190 : maven-clean-plugin, maven-resources-plugin, maven-jar-plugin, maven-install-plugin, maven-deploy-plugin en pluginManagement ; :310-313 requireMavenVersion `[3.10.0,)` ; :315-320 requirePluginVersions ; :321-333 requireUpperBoundDeps (exclusion justifiée :78) ; builds Maven de #304 et du run Release 42529376520 verts
 
 **Preuve**
 
@@ -1095,7 +1095,7 @@ pom.xml:257-265 règles = requireJavaVersion [21,), requireMavenVersion [3.9.0,)
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S9 · Chaîne de release exécutable
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Fermé par #304 (tâches 7.1 et 7.2) : l'exécution aggregate-third-party-notices applique une liste blanche includedLicenses avec failOnBlacklist=true et normalise les libellés par licenseMerges ; le contrat final exige ces réglages · **Vérification du 2026-11-09** (`513d459d`) : Fermé — pom.xml:346 exécution aggregate-third-party-notices ; :359 `<failOnBlacklist>true</failOnBlacklist>` ; :360-370 includedLicenses ; :372-384 licenseMerges ; scripts/release/test-final-audit-contracts.sh:457-461 (failOnBlacklist=true et includedLicenses non vide) et :473 (documentation ci-and-supply-chain.md) ; build Maven du run Release 42529376520 vert
 
 **Preuve**
 
@@ -1111,7 +1111,7 @@ pom.xml:282-292 : aggregate-add-third-party avec `failOnMissing=true`, sans incl
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S10 · Conteneur et gouvernance du dépôt
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 3 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : LICENSE et THIRD_PARTY_NOTICES.txt copiés dans /opt/nexus/ par les deux Dockerfiles ; labels org.opencontainers.image.{source,licenses,revision,version}, revision et version passés en --build-arg par docker-distribution.yml (sprint 10) · **Vérification du 2026-11-09** (`e8c80507`) : Fermé — test -s /opt/nexus/LICENSE et test -s /opt/nexus/THIRD_PARTY_NOTICES.txt dans l'image ; docker inspect .Config.Labels : source, licenses LicenseRef-NEXUS-Proprietary, revision = SHA construit, version = version du pom ; assertion ajoutée au workflow Docker distribution · **Réserve** : Vérifié sur la branche fix/sprint-10-conteneur, base develop e8c80507 ; fermeture effective à la fusion de la PR du sprint 10, preuve CI : workflow Docker distribution exact-head de cette PR
 
 **Preuve**
 
@@ -1127,7 +1127,7 @@ packaging/docker/Dockerfile:22-27 et Dockerfile.runtime:10-15 : seuls JAR, quark
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S9 · Chaîne de release exécutable
 - **Dépend de** : aucun · **Débloque** : `AUD-DEP-02`
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Fermé par #304 (tâches 4.1 et 4.2) : le job publish atteste par subject-path le ZIP et le setup.exe Windows, vérifie chaque attestation par gh attestation verify avant l'upload, et la documentation décrit la vérification consommateur · **Vérification du 2026-11-09** (`513d459d`) : Fermé — .github/workflows/release.yml:389-397 : deux actions/attest@1e69f48a (v4.2.2) en subject-path sur nexus-context-engine-*-windows-x64.zip et NEXUS-*-windows-x64-setup.exe ; :399-424 : « Verify Windows asset attestations before upload » (gh attestation verify --signer-workflow --source-ref, échec bloquant) ; docs/developer/immutable-release-publishing.md:83-102 (vérification consommateur) ; contrats test-final-audit-contracts.sh:361-370 ; run Release 42529376520 : « Publish immutable release » success ; relevé docs/project/history/release-rehearsal-0.2.0-rc.2-2026-11-08.md : gh attestation verify code 0 sur le setup.exe, le ZIP et l'image, signataire release.yml@refs/tags/v0.2.0-rc.2
 
 **Preuve**
 
@@ -1223,7 +1223,7 @@ Analyse YAML : ci.yml windows-gate/linux-reactor, codeql.yml analyze, release.ym
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S10 · Conteneur et gouvernance du dépôt
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé (vérifié en direct) — gh api …/rulesets/20503835 : allowed_merge_methods = [merge, squash, rebase] ; allow_squash_merge et allow_rebase_merge = true.
+- **Statut** : Fermé · **Changement** : Documentation de la méthode merge commit seule (docs/developer/branch-governance.md, skill nexus-pr-workflow) et assertion du contrat documentaire (sprint 10, tâche 5.1) ; restriction du ruleset 20503835 et désactivation de squash/rebase à faire par le mainteneur (tâche 5.2) ; réglages GitHub appliqués par le mainteneur (sprint 10, tâches 5.2 et 5.4) · **Vérification du 2026-11-09** (`3215087c`) : Fermé — gh api …/rulesets/20503835 : allowed_merge_methods = ["merge"] ; gh api repos/FTurleque/nexus-context-engine : [allow_squash_merge, allow_rebase_merge] = [false,false] (lecture du 2026-11-09) ; politique documentée dans branch-governance.md et le skill nexus-pr-workflow, exigée par test-operational-doc-contracts.sh
 
 **Preuve**
 
@@ -1239,7 +1239,7 @@ gh api repos/FTurleque/nexus-context-engine/rulesets/20503835 (17/10/2026) : pul
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S10 · Conteneur et gouvernance du dépôt
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : SECURITY.md complété (signalement privé GitHub, aucune issue publique, versions prises en charge, délai de réponse) et .github/CODEOWNERS créé, vérifiés par le contrat documentaire (sprint 10, tâche 5.3) ; activation du signalement privé à faire par le mainteneur (tâche 5.4) ; réglages GitHub appliqués par le mainteneur (sprint 10, tâches 5.2 et 5.4) · **Vérification du 2026-11-09** (`3215087c`) : Fermé — gh api …/private-vulnerability-reporting : {"enabled":true} (lecture du 2026-11-09) ; SECURITY.md (signalement privé, versions prises en charge, délai de réponse) et .github/CODEOWNERS exigés par test-operational-doc-contracts.sh
 
 **Preuve**
 
@@ -1255,7 +1255,7 @@ ls .github → dependabot.yml, workflows ; `ls SECURITY.md .github/SECURITY.md` 
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S10 · Conteneur et gouvernance du dépôt
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : HEALTHCHECK sur /usr/local/bin/nexus-healthcheck dans les deux Dockerfiles ; compose : read_only: true, tmpfs /tmp:exec, cap_drop: [ALL], security_opt: [no-new-privileges:true] ; smoke Compose durci ajouté au workflow Docker distribution (sprint 10) · **Vérification du 2026-11-09** (`e8c80507`) : Fermé — docker inspect .Config.Healthcheck ; conteneur REST lancé par docker run passé healthy ; Compose durci healthy avec racine en lecture seule, projet enregistré, indexé et interrogé ; test-docker-runtime.ps1 PASS (sonde UP et état healthy) · **Réserve** : Vérifié sur la branche fix/sprint-10-conteneur, base develop e8c80507 ; fermeture effective à la fusion de la PR du sprint 10, preuve CI : workflow Docker distribution exact-head de cette PR
 
 **Preuve**
 
@@ -1303,7 +1303,7 @@ WebFetch …/actions/workflows/semantic-search-qualification.yml → runs #40-#6
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S9 · Chaîne de release exécutable
 - **Dépend de** : aucun · **Débloque** : `AUD-DEP-02`
-- **Statut** : Ouvert · **Changement** : Aucun · **Vérification du 2026-10-29** (`0b6828ce`) : Inchangé — 1 fichier(s) cité(s), aucun modifié entre 98b1f3f0 et 0b6828ce (git diff --name-only : 4 fichiers de configuration)
+- **Statut** : Fermé · **Changement** : Fermé par #304 (tâches 1.1 et 1.2) : release.yml n'utilise plus secrets: inherit et appelle le job Windows avec require_authenticode: false sans transmettre aucun secret ; le contrat final refuse secrets: inherit dans .github/workflows · **Vérification du 2026-11-09** (`513d459d`) : Fermé — git grep -n "secrets: inherit" -- .github/workflows → aucun résultat (code 1) ; .github/workflows/release.yml:55-65 : job windows-installer avec `with: require_authenticode: false`, aucune clé secrets ; grep NEXUS_WINDOWS_SIGNING release.yml → aucun résultat ; scripts/release/test-final-audit-contracts.sh:294 refuse « secrets: inherit is forbidden in .github/workflows » ; run Release 42529376520 : « Windows installer release gate / Windows self-contained installer » success
 
 **Preuve**
 
@@ -1335,7 +1335,7 @@ grep -ho 'runs-on: .*' → 13 ubuntu-latest, 4 windows-latest, 3 matrices sur *-
 
 - **Axe** : Dépendances, Qualité · **Effort** : S · **Sprint** : S10 · Conteneur et gouvernance du dépôt
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Nouveau · **Vérification du 2026-10-29** (`0b6828ce`) : Nouveau constat — Observé dans la CI de la PR #262.
+- **Statut** : Fermé · **Changement** : Symptôme fermé par #269 (documentation alignée sur Quarkus 3.40.1.1 et le SDK MCP 2.1.0) ; cause fermée par la PR du lot 6 du sprint 10 : la documentation courante nomme les propriétés quarkus.platform.version et mcp.sdk.version, le contrat documentaire les lit dans pom.xml et refuse les littéraux de version · **Vérification du 2026-11-09** (`d1851dd1`) : Fermé — bash .claude/scripts/contracts.sh vert ; montée simulée (quarkus.platform.version 3.41.0, mcp.sdk.version 2.2.7) : test-operational-doc-contracts.sh vert, pom.xml restauré ; propriété mcp.sdk.version retirée du pom, littéraux « SDK MCP 2.1.0 », « Quarkus : 3.41.0 », « le SDK MCP en 2.1.0. » et valeur nue 3.40.1.1 ajoutés à un document contrôlé : échec du contrat nommant le document (tâches 6.1 et 6.2) · **Réserve** : Statut définitif à la fusion de la PR dans develop ; preuve applicable : CI exact-head
 
 **Preuve**
 
