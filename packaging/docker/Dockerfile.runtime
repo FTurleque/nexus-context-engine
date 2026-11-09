@@ -3,18 +3,34 @@
 ARG RUNTIME_IMAGE=eclipse-temurin:21.0.12_8-jre-ubi10-minimal@sha256:c7feea7f2dce5cf29e0ffa94e386b0a12ab44c029ad66bcb59eacc4da572ccf4
 FROM ${RUNTIME_IMAGE}
 
+# Valeurs fournies par la CI (docker-distribution.yml) ; sans valeur, le label reste vide.
+ARG NEXUS_IMAGE_REVISION=""
+ARG NEXUS_IMAGE_VERSION=""
+LABEL org.opencontainers.image.title="nexus-context-engine" \
+      org.opencontainers.image.source="https://github.com/FTurleque/nexus-context-engine" \
+      org.opencontainers.image.licenses="LicenseRef-NEXUS-Proprietary" \
+      org.opencontainers.image.revision="${NEXUS_IMAGE_REVISION}" \
+      org.opencontainers.image.version="${NEXUS_IMAGE_VERSION}"
+
 USER root
+# Root possède le code et les scripts ; l'UID 10001 ne possède que ses données.
 RUN mkdir -p /opt/nexus/lib /opt/nexus/rest /data/nexus /workspace \
-    && chown -R 10001:10001 /opt/nexus /data/nexus /workspace
+    && chown 10001:10001 /data/nexus /workspace
 
-COPY --chown=10001:10001 lib/nexus-cli.jar /opt/nexus/lib/nexus-cli.jar
-COPY --chown=10001:10001 lib/nexus-mcp.jar /opt/nexus/lib/nexus-mcp.jar
-COPY --chown=10001:10001 lib/nexus-assistant-clients.jar /opt/nexus/lib/nexus-assistant-clients.jar
-COPY --chown=10001:10001 rest/ /opt/nexus/rest/
-COPY --chown=10001:10001 docker/nexus-container-entrypoint.sh /usr/local/bin/nexus-entrypoint
-COPY --chown=10001:10001 docker/nexus-container-healthcheck.sh /usr/local/bin/nexus-healthcheck
+# Le contexte est filtré par Dockerfile.runtime.dockerignore (liste d'autorisation).
+COPY lib/nexus-cli.jar /opt/nexus/lib/nexus-cli.jar
+COPY lib/nexus-mcp.jar /opt/nexus/lib/nexus-mcp.jar
+COPY lib/nexus-assistant-clients.jar /opt/nexus/lib/nexus-assistant-clients.jar
+COPY rest/ /opt/nexus/rest/
+COPY LICENSE /opt/nexus/LICENSE
+COPY THIRD_PARTY_NOTICES.txt /opt/nexus/THIRD_PARTY_NOTICES.txt
+COPY docker/nexus-container-entrypoint.sh /usr/local/bin/nexus-entrypoint
+COPY docker/nexus-container-healthcheck.sh /usr/local/bin/nexus-healthcheck
 
+# Modes : 0644 pour les fichiers de /opt/nexus, 0755 pour ses répertoires et les scripts.
 RUN sed -i 's/\r$//' /usr/local/bin/nexus-entrypoint /usr/local/bin/nexus-healthcheck \
+    && chmod -R 0644 /opt/nexus \
+    && chmod -R a+X /opt/nexus \
     && chmod 0755 /usr/local/bin/nexus-entrypoint /usr/local/bin/nexus-healthcheck
 
 # NEXUS_DOCKER_HOST_FORWARD_ADDRESS intentionally has no image default. A container cannot infer
@@ -32,6 +48,10 @@ ENV JDK_JAVA_OPTIONS=--enable-native-access=ALL-UNNAMED \
     NEXUS_REST_EXPOSURE_MODE=loopback-forward \
     NEXUS_MAX_SCIP_INDEX_BYTES=268435456 \
     NEXUS_MAX_SCIP_MESSAGE_BYTES=16777216
+
+# Même sonde et mêmes intervalles que docker-compose.yml.template, pour un `docker run` direct.
+HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=6 \
+    CMD ["/usr/local/bin/nexus-healthcheck"]
 
 VOLUME ["/data/nexus", "/workspace"]
 EXPOSE 8080

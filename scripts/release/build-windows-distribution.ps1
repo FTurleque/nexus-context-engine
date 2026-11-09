@@ -100,6 +100,7 @@ foreach ($artifact in @($cliJar, $mcpJar, $assistantJar, (Join-Path $restRoot 'q
 $dockerPayloadSources = @(
     (Join-Path $repo 'packaging\docker\docker-compose.yml.template'),
     (Join-Path $repo 'packaging\docker\Dockerfile.runtime'),
+    (Join-Path $repo 'packaging\docker\Dockerfile.runtime.dockerignore'),
     (Join-Path $repo 'packaging\docker\nexus-container-entrypoint.sh'),
     (Join-Path $repo 'packaging\docker\nexus-container-healthcheck.sh')
 )

@@ -66,6 +66,7 @@ foreach ($required in @(
     'rest\quarkus-run.jar',
     'docker\docker-compose.yml.template',
     'docker\Dockerfile.runtime',
+    'docker\Dockerfile.runtime.dockerignore',
     'docker\nexus-container-entrypoint.sh',
     'docker\nexus-container-healthcheck.sh'
 )) {

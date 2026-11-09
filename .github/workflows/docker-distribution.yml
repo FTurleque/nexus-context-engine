@@ -19,6 +19,7 @@ on:
     branches: [develop, main]
     paths:
       - 'packaging/docker/**'
+      - '.dockerignore'
       - 'scripts/release/build-docker-image.ps1'
       - 'scripts/release/test-docker-runtime.ps1'
       - 'scripts/release/test-docker-dotenv-roundtrip.sh'
@@ -37,6 +38,7 @@ on:
     branches: [main]
     paths:
       - 'packaging/docker/**'
+      - '.dockerignore'
       - 'scripts/release/build-docker-image.ps1'
       - 'scripts/release/test-docker-runtime.ps1'
       - 'scripts/release/test-docker-dotenv-roundtrip.sh'
@@ -57,7 +59,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: docker-distribution-${{ github.event.pull_request.number || github.ref }}
+  # github.workflow names the caller when this workflow is reused, so a PR that triggers
+  # both this workflow and develop-push-docker-distribution.yml runs them in separate groups.
+  group: docker-distribution-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -112,17 +116,63 @@ jobs:
 
       - name: Build Docker image once
         shell: bash
-        run: docker build --pull --file packaging/docker/Dockerfile --tag nexus-context-engine:${NEXUS_HEAD_SHA} .
+        env:
+          NEXUS_IMAGE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          docker build --pull --file packaging/docker/Dockerfile \
+            --build-arg NEXUS_IMAGE_REVISION="$NEXUS_HEAD_SHA" \
+            --build-arg NEXUS_IMAGE_VERSION="$NEXUS_IMAGE_VERSION" \
+            --tag nexus-context-engine:${NEXUS_HEAD_SHA} .
+
+      - name: Assert image immutability notices labels and healthcheck
+        shell: bash
+        env:
+          NEXUS_IMAGE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          IMAGE="nexus-context-engine:${NEXUS_HEAD_SHA}"
+          # Root owns the code; UID 10001 can only write its data.
+          docker run --rm --entrypoint /bin/sh "$IMAGE" -c '
+            set -e
+            test ! -w /opt/nexus/lib/nexus-cli.jar
+            test ! -w /opt/nexus/rest/quarkus-run.jar
+            test ! -w /usr/local/bin/nexus-entrypoint
+            test ! -w /usr/local/bin/nexus-healthcheck
+            test -w /data/nexus
+            test -s /opt/nexus/LICENSE
+            test -s /opt/nexus/THIRD_PARTY_NOTICES.txt'
+          docker image inspect --format '{{json .Config.Labels}}' "$IMAGE" > /tmp/nexus-labels.json
+          docker image inspect --format '{{json .Config.Healthcheck}}' "$IMAGE" > /tmp/nexus-healthcheck.json
+          python3 - <<'PY'
+          import json
+          import os
+          with open('/tmp/nexus-labels.json', encoding='utf-8') as handle:
+              labels = json.load(handle)
+          expected = {
+              'org.opencontainers.image.source': 'https://github.com/FTurleque/nexus-context-engine',
+              'org.opencontainers.image.licenses': 'LicenseRef-NEXUS-Proprietary',
+              'org.opencontainers.image.revision': os.environ['NEXUS_HEAD_SHA'],
+              'org.opencontainers.image.version': os.environ['NEXUS_IMAGE_VERSION'],
+          }
+          for key, value in expected.items():
+              assert labels.get(key) == value, (key, labels.get(key), value)
+          with open('/tmp/nexus-healthcheck.json', encoding='utf-8') as handle:
+              health = json.load(handle)
+          assert health and health['Test'] == ['CMD', '/usr/local/bin/nexus-healthcheck'], health
+          PY
 
       - name: Smoke CLI
         shell: bash
+        env:
+          NEXUS_IMAGE_VERSION: ${{ steps.version.outputs.version }}
         run: |
           docker run --rm nexus-context-engine:${NEXUS_HEAD_SHA} cli --version --json | tee /tmp/nexus-version.json
           python3 - <<'PY'
           import json
+          import os
           with open('/tmp/nexus-version.json', encoding='utf-8') as handle:
               data = json.load(handle)
-          assert data['version'] == '${{ steps.version.outputs.version }}', data
+          assert data['version'] == os.environ['NEXUS_IMAGE_VERSION'], data
           PY
 
       - name: Smoke MCP STDIO
@@ -149,10 +199,22 @@ jobs:
               curl --fail --silent \
                 -H "Authorization: Bearer $NEXUS_REST_API_TOKEN" \
                 http://127.0.0.1:18080/api/v1/projects >/dev/null
-              exit 0
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              docker logs "$CID"
+              exit 1
             fi
             sleep 1
           done
+          # The image HEALTHCHECK alone (no Compose) must report the container healthy.
+          for attempt in $(seq 1 45); do
+            if [ "$(docker inspect -f '{{.State.Health.Status}}' "$CID")" = healthy ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker inspect -f '{{json .State.Health}}' "$CID"
           docker logs "$CID"
           exit 1
 
@@ -196,8 +258,72 @@ jobs:
           docker logs "$CID" 2>&1 | tee /tmp/nexus-remote-loopback-forward.log
           grep -q 'NEXUS_DOCKER_HOST_FORWARD_ADDRESS' /tmp/nexus-remote-loopback-forward.log
 
+      - name: Smoke hardened Compose runtime
+        shell: bash
+        env:
+          NEXUS_REST_API_TOKEN: 6df1462d571a6925e3bc3934ee10c6c55a965116fb47e2bc4db77ac7a5d69d34
+        run: |
+          set -euo pipefail
+          WORKSPACE_FIXTURE="$RUNNER_TEMP/nexus-compose-workspace"
+          rm -rf "$WORKSPACE_FIXTURE"
+          mkdir -p "$WORKSPACE_FIXTURE"
+          printf 'class ComposeSmoke {}\n' > "$WORKSPACE_FIXTURE/ComposeSmoke.java"
+          export NEXUS_DOCKER_IMAGE="nexus-context-engine:${NEXUS_HEAD_SHA}"
+          export NEXUS_DOCKER_CONTAINER="nexus-hardened-${NEXUS_HEAD_SHA:0:12}"
+          export NEXUS_DOCKER_HOST_PORT="18082"
+          export NEXUS_DOCKER_RESTART_POLICY="no"
+          export NEXUS_HOME_BIND="nexus-data"
+          export NEXUS_DOCKER_DATA_VOLUME="nexus-hardened-${NEXUS_HEAD_SHA:0:12}"
+          export NEXUS_REPOSITORY_BIND="$WORKSPACE_FIXTURE"
+          COMPOSE_FILE="packaging/docker/docker-compose.yml.template"
+
+          cleanup() {
+            docker compose -f "$COMPOSE_FILE" down --volumes --remove-orphans >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker compose -f "$COMPOSE_FILE" up -d --no-build --pull never nexus
+          CID="$(docker compose -f "$COMPOSE_FILE" ps -q nexus)"
+          test "$(docker inspect -f '{{.HostConfig.ReadonlyRootfs}}' "$CID")" = true
+          test "$(docker inspect -f '{{json .HostConfig.CapDrop}}' "$CID")" = '["ALL"]'
+          test "$(docker inspect -f '{{json .HostConfig.SecurityOpt}}' "$CID")" = '["no-new-privileges:true"]'
+
+          STATUS=""
+          for attempt in $(seq 1 45); do
+            STATUS="$(docker inspect -f '{{.State.Health.Status}}' "$CID")"
+            if [ "$STATUS" = healthy ]; then
+              break
+            fi
+            sleep 2
+          done
+          if [ "$STATUS" != healthy ]; then
+            docker logs "$CID"
+            exit 1
+          fi
+
+          # Read-only root: neither the code nor the probe can be rewritten at runtime.
+          docker exec "$CID" /bin/sh -c 'if touch /opt/nexus/lib/probe 2>/dev/null; then exit 1; fi; if touch /usr/local/bin/probe 2>/dev/null; then exit 1; fi; touch /data/nexus/probe'
+
+          # SQLite and Lucene must work on the hardened runtime (native libraries load from /tmp).
+          API="http://127.0.0.1:18082/api/v1"
+          AUTH="Authorization: Bearer $NEXUS_REST_API_TOKEN"
+          PROJECT_ID="$(curl --fail --silent -H "$AUTH" -H 'Content-Type: application/json' \
+            -d '{"name":"compose-smoke","rootPath":"/workspace"}' "$API/projects" \
+            | python3 -c 'import json, sys; print(json.load(sys.stdin)["id"])')"
+          curl --fail --silent -X POST -H "$AUTH" "$API/projects/$PROJECT_ID/index" >/dev/null
+          curl --fail --silent -H "$AUTH" -H 'Content-Type: application/json' \
+            -d '{"query":"ComposeSmoke"}' "$API/projects/$PROJECT_ID/search" > /tmp/nexus-compose-search.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/nexus-compose-search.json', encoding='utf-8') as handle:
+              data = json.load(handle)
+          assert data['results'], data
+          PY
+
       - name: Smoke installed-payload fallback image
         shell: bash
+        env:
+          NEXUS_IMAGE_VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
           STAGE="$RUNNER_TEMP/nexus-runtime-fallback"
@@ -208,21 +334,57 @@ jobs:
           trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
           docker cp "$CID:/opt/nexus/lib/." "$STAGE/lib/"
           docker cp "$CID:/opt/nexus/rest/." "$STAGE/rest/"
+          docker cp "$CID:/opt/nexus/LICENSE" "$STAGE/LICENSE"
+          docker cp "$CID:/opt/nexus/THIRD_PARTY_NOTICES.txt" "$STAGE/THIRD_PARTY_NOTICES.txt"
           docker rm "$CID" >/dev/null
           trap - EXIT
 
           cp packaging/docker/Dockerfile.runtime "$STAGE/docker/Dockerfile.runtime"
+          cp packaging/docker/Dockerfile.runtime.dockerignore "$STAGE/docker/Dockerfile.runtime.dockerignore"
           cp packaging/docker/nexus-container-entrypoint.sh "$STAGE/docker/nexus-container-entrypoint.sh"
           cp packaging/docker/nexus-container-healthcheck.sh "$STAGE/docker/nexus-container-healthcheck.sh"
 
+          # Installation files outside the allowlist must stay out of the build context.
+          printf 'NEXUS_REST_API_TOKEN=must-not-enter-the-context\n' > "$STAGE/docker/.env"
+          mkdir -p "$STAGE/nexus-data"
+          printf 'local data\n' > "$STAGE/nexus-data/marker"
+
           FALLBACK_IMAGE="nexus-context-engine:fallback-${NEXUS_HEAD_SHA}"
-          docker build --pull --file "$STAGE/docker/Dockerfile.runtime" --tag "$FALLBACK_IMAGE" "$STAGE"
+          docker build --pull --file "$STAGE/docker/Dockerfile.runtime" \
+            --build-arg NEXUS_IMAGE_REVISION="$NEXUS_HEAD_SHA" \
+            --build-arg NEXUS_IMAGE_VERSION="$NEXUS_IMAGE_VERSION" \
+            --tag "$FALLBACK_IMAGE" "$STAGE"
+          docker run --rm --entrypoint /bin/sh "$FALLBACK_IMAGE" -c '
+            set -e
+            test ! -w /opt/nexus/lib/nexus-cli.jar
+            test ! -w /usr/local/bin/nexus-entrypoint
+            test -w /data/nexus
+            test -s /opt/nexus/LICENSE
+            test -s /opt/nexus/THIRD_PARTY_NOTICES.txt'
+          test "$(docker image inspect --format '{{json .Config.Healthcheck.Test}}' "$FALLBACK_IMAGE")" = '["CMD","/usr/local/bin/nexus-healthcheck"]'
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$FALLBACK_IMAGE")" = "$NEXUS_HEAD_SHA"
+
+          # Context probe: the same allowlist, applied to the same staging directory, keeps
+          # the payload entries and drops the installation .env and the data directory.
+          PROBE="$RUNNER_TEMP/nexus-context-probe"
+          rm -rf "$PROBE"
+          mkdir -p "$PROBE"
+          cp packaging/docker/Dockerfile.runtime.dockerignore "$PROBE/Dockerfile.probe.dockerignore"
+          {
+            echo "FROM $FALLBACK_IMAGE"
+            echo 'USER root'
+            echo 'COPY . /context-probe/'
+            echo 'RUN test -f /context-probe/lib/nexus-cli.jar && test -f /context-probe/LICENSE && test ! -e /context-probe/docker/.env && test ! -e /context-probe/nexus-data && test ! -e /context-probe/docker/Dockerfile.runtime'
+          } > "$PROBE/Dockerfile.probe"
+          docker build --file "$PROBE/Dockerfile.probe" --tag "nexus-context-probe:${NEXUS_HEAD_SHA}" "$STAGE"
+          docker image rm "nexus-context-probe:${NEXUS_HEAD_SHA}" >/dev/null
           docker run --rm "$FALLBACK_IMAGE" cli --version --json | tee /tmp/nexus-fallback-version.json
           python3 - <<'PY'
           import json
+          import os
           with open('/tmp/nexus-fallback-version.json', encoding='utf-8') as handle:
               data = json.load(handle)
-          assert data['version'] == '${{ steps.version.outputs.version }}', data
+          assert data['version'] == os.environ['NEXUS_IMAGE_VERSION'], data
           PY
 
       - name: Prepare image security evidence

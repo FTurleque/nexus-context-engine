@@ -8,6 +8,17 @@ services:
       dockerfile: docker/Dockerfile.runtime
     container_name: "${NEXUS_DOCKER_CONTAINER:-nexus-context-engine}"
     restart: "${NEXUS_DOCKER_RESTART_POLICY:-unless-stopped}"
+    # Durcissement d'exécution : racine en lecture seule (NEXUS n'écrit que dans /data/nexus et
+    # /tmp), aucune capacité Linux, aucune élévation de privilèges. L'image appartient à root ;
+    # le processus tourne en UID 10001. /tmp est monté `exec` : SQLite et JNA y extraient puis
+    # chargent leurs bibliothèques natives, ce qu'un tmpfs `noexec` (défaut Docker) refuse.
+    read_only: true
+    tmpfs:
+      - "/tmp:exec,mode=1777"
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
     environment:
       NEXUS_HOME: /data/nexus
       NEXUS_MODE: rest

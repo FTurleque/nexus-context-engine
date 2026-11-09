@@ -63,21 +63,35 @@ try {
         -p "127.0.0.1:${HostPort}:8080" $Image rest | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Unable to start the REST container.' }
 
+    # La santé vit sur l'écouteur de management, limité à 127.0.0.1:9000 dans le conteneur :
+    # la sonde embarquée la lit (HTTP 200 = UP), puis l'endpoint métier est vérifié par le port publié.
     $healthy = $false
     $headers = @{ Authorization = "Bearer $restToken" }
     for ($attempt = 0; $attempt -lt 30; $attempt++) {
+        # Pendant le démarrage, la sonde écrit « Connection refused » sur stderr : seul le code
+        # de sortie compte, y compris sous Windows PowerShell 5.1 avec ErrorActionPreference Stop.
         try {
-            $response = Invoke-RestMethod -Uri "http://127.0.0.1:$HostPort/q/health/live" -Headers $headers -TimeoutSec 2
-            if ($response.status -eq 'UP') { $healthy = $true; break }
+            & $docker.Source exec $restName /usr/local/bin/nexus-healthcheck *> $null
+            if ($LASTEXITCODE -eq 0) { $healthy = $true; break }
         }
         catch {
-            Start-Sleep -Seconds 1
         }
+        Start-Sleep -Seconds 1
     }
     if (-not $healthy) {
         $logs = (& $docker.Source logs $restName 2>&1 | Out-String)
         throw "Docker REST health smoke failed: $logs"
     }
+    Invoke-RestMethod -Uri "http://127.0.0.1:$HostPort/api/v1/projects" -Headers $headers -TimeoutSec 5 | Out-Null
+
+    # Le HEALTHCHECK de l'image, sans Compose, doit amener le conteneur à l'état healthy.
+    $status = ''
+    for ($attempt = 0; $attempt -lt 45; $attempt++) {
+        $status = (& $docker.Source inspect -f '{{.State.Health.Status}}' $restName | Select-Object -First 1)
+        if ($status -eq 'healthy') { break }
+        Start-Sleep -Seconds 2
+    }
+    if ($status -ne 'healthy') { throw "Docker image HEALTHCHECK did not report healthy (last status: $status)." }
 
     Write-Host 'Docker REST missing-forward negative smoke...' -ForegroundColor Cyan
     Assert-RestContainerRejected `

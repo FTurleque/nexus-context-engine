@@ -184,6 +184,8 @@ Le smoke REST respecte la séparation NXA4 :
 
 Le template Compose réutilise le même probe embarqué : il ne tente plus de lire `/q/health/live` sur le listener applicatif.
 
+Avant les smokes, le workflow vérifie sur l'image construite que l'UID `10001` ne peut écrire ni les JAR ni les scripts d'entrée, que `/opt/nexus/LICENSE` et `/opt/nexus/THIRD_PARTY_NOTICES.txt` sont présents, que les labels `org.opencontainers.image.{source,licenses,revision,version}` portent le SHA testé et la version du `pom.xml` (passés par `--build-arg`), et que l'image déclare son `HEALTHCHECK`. Le smoke REST attend l'état `healthy` de cette sonde sans Compose. Le smoke de l'image de repli reconstruit `Dockerfile.runtime` depuis un staging qui contient aussi un `docker/.env` et un répertoire de données ; une sonde de contexte vérifie que `Dockerfile.runtime.dockerignore` les laisse hors du contexte. Le détail utilisateur (immuabilité, fichiers d'ignore, durcissement Compose) est dans [docs/user/docker-installation.md](../user/docker-installation.md).
+
 Pour une release, Docker Distribution exporte ensuite l'image qualifiée avec son SHA-256 d'archive, son ID Docker et le SHA Git. Le job de publication vérifie ce handoff et **ne reconstruit jamais l'image**.
 
 ## Publication GHCR

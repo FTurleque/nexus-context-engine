@@ -1,0 +1,14 @@
+# Contexte de build de Dockerfile.runtime : racine d'installation Windows (compose,
+# `context: ..`) ou répertoire de staging de la CI. Liste d'autorisation : seules les
+# entrées copiées par le Dockerfile entrent dans le contexte. docker/.env (token REST),
+# le répertoire de données et les autres fichiers d'installation restent dehors.
+# Lu par BuildKit, builder par défaut de Docker Desktop et de la CI.
+*
+!lib/nexus-cli.jar
+!lib/nexus-mcp.jar
+!lib/nexus-assistant-clients.jar
+!rest/
+!docker/nexus-container-entrypoint.sh
+!docker/nexus-container-healthcheck.sh
+!LICENSE
+!THIRD_PARTY_NOTICES.txt
