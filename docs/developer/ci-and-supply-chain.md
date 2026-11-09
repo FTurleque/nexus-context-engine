@@ -475,7 +475,28 @@ Cette section décrit ce que `scripts/release/test-operational-doc-contracts.sh`
 | [Existant vérifié] | `docs/developer/current-limitations.md` ne présente pas le moteur FTS5 trigram livré par V008 comme une évolution à venir. | `scripts/release/test-operational-doc-contracts.sh:804` |
 | [Existant vérifié] | `AGENTS.md` prescrit `./mvnw clean install` et ne contient aucune commande `mvn` hors wrapper. | `scripts/release/test-operational-doc-contracts.sh:813` |
 | [Existant vérifié] | L'étape 9 du self-smoke vérifie que le contexte construit sur le dépôt retient le `AGENTS.md` natif. | `scripts/self-smoke.ps1:165` |
+| [Existant vérifié] | La documentation courante nomme `quarkus.platform.version` et `mcp.sdk.version` du `pom.xml` ; le contrat lit ces propriétés, refuse leur valeur et tout littéral `Quarkus x.y.z` ou `SDK MCP x.y.z` dans les documents contrôlés. | `scripts/release/test-operational-doc-contracts.sh:28-48`, `scripts/release/test-operational-doc-contracts.sh:133-170` |
 
 ### Écarts et limites (operational-documentation-contracts)
 
 - Aucun contrôle permanent ne vérifie l'absence d'un type `ProjectGraph` dans le code : la recherche `git grep` a été exécutée à la livraison du sprint 11.
+
+## OpenSpec container-image-hardening
+
+Spec : [`openspec/specs/container-image-hardening/spec.md`](../../openspec/specs/container-image-hardening/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+Cette section décrit les propriétés de l'image Docker et de son exécution par le compose officiel ; la section « Docker Distribution : construire une fois » plus haut décrit le workflow qui les qualifie.
+
+### Comportement existant vérifié (container-image-hardening)
+
+| Étiquette | Fait | Source |
+|---|---|---|
+| [Existant vérifié] | Root possède `/opt/nexus` et les scripts de `/usr/local/bin` ; l'UID 10001 ne possède que `/data/nexus` et `/workspace`. Le contrat refuse un `COPY --chown` vers ces deux chemins et vérifie qu'il rejette sa fixture négative. | `scripts/release/test-operational-doc-contracts.sh:715-743` |
+| [Existant vérifié] | Le build depuis les sources lit le `.dockerignore` racine (liste d'exclusion) ; le build runtime lit `packaging/docker/Dockerfile.runtime.dockerignore` (liste d'autorisation), livré avec le payload Windows et le staging de repli. | `scripts/release/test-operational-doc-contracts.sh:745-770` |
+| [Existant vérifié] | L'image porte `LICENSE`, `THIRD_PARTY_NOTICES.txt`, les labels OCI `source`, `licenses`, `revision`, `version` et un `HEALTHCHECK` ; le compose déclare `read_only`, `tmpfs: /tmp:exec`, `cap_drop: [ALL]` et `no-new-privileges`. | `scripts/release/test-operational-doc-contracts.sh:772-790` |
+| [Existant vérifié] | Le workflow `Docker distribution` vérifie l'immuabilité, les notices et les labels, attend l'état `healthy` sans compose, teste le compose durci et sonde le contexte de repli. | `.github/workflows/docker-distribution.yml:127-160`, `.github/workflows/docker-distribution.yml:261-321`, `.github/workflows/docker-distribution.yml:323-388` |
+
+### Écarts et limites (container-image-hardening)
+
+- Le tmpfs `/tmp` est monté `exec` : SQLite et JNA chargent depuis `/tmp` les bibliothèques natives qu'ils extraient.
+- L'absence de `/workspace/.git` dans l'étape `build` n'est vérifiée que par le contrat sur `.dockerignore` ; aucun job ne construit cette étape seule.

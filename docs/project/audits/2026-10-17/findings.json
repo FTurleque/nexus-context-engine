@@ -2428,7 +2428,7 @@
    "sprint": 10,
    "depends_on": [],
    "bloque": [],
-   "statut": "Partiel",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
@@ -2437,15 +2437,19 @@
     {
      "date": "2026-11-09",
      "statut": "Partiel"
+    },
+    {
+     "date": "2026-11-09",
+     "statut": "Fermé"
     }
    ],
-   "changement": "Documentation de la méthode merge commit seule (docs/developer/branch-governance.md, skill nexus-pr-workflow) et assertion du contrat documentaire (sprint 10, tâche 5.1) ; restriction du ruleset 20503835 et désactivation de squash/rebase à faire par le mainteneur (tâche 5.2)",
+   "changement": "Documentation de la méthode merge commit seule (docs/developer/branch-governance.md, skill nexus-pr-workflow) et assertion du contrat documentaire (sprint 10, tâche 5.1) ; restriction du ruleset 20503835 et désactivation de squash/rebase à faire par le mainteneur (tâche 5.2) ; réglages GitHub appliqués par le mainteneur (sprint 10, tâches 5.2 et 5.4)",
    "verification": {
     "date": "2026-11-09",
-    "commit": "de2a066a",
-    "verdict": "Partiel",
-    "preuve": "Doc et contrat en place ; gh api …/rulesets/20503835 renvoie encore allowed_merge_methods = [merge, squash, rebase] et allow_squash_merge/allow_rebase_merge = true (lecture du 2026-11-09) : réglages mainteneur restant à faire (tâche 5.2)",
-    "reserve": "Réglages GitHub du mainteneur non faits"
+    "commit": "3215087c",
+    "verdict": "Fermé",
+    "preuve": "gh api …/rulesets/20503835 : allowed_merge_methods = [\"merge\"] ; gh api repos/FTurleque/nexus-context-engine : [allow_squash_merge, allow_rebase_merge] = [false,false] (lecture du 2026-11-09) ; politique documentée dans branch-governance.md et le skill nexus-pr-workflow, exigée par test-operational-doc-contracts.sh",
+    "reserve": null
    }
   },
   {
@@ -2463,7 +2467,7 @@
    "sprint": 10,
    "depends_on": [],
    "bloque": [],
-   "statut": "Partiel",
+   "statut": "Fermé",
    "historique": [
     {
      "date": "2026-10-17",
@@ -2472,15 +2476,19 @@
     {
      "date": "2026-11-09",
      "statut": "Partiel"
+    },
+    {
+     "date": "2026-11-09",
+     "statut": "Fermé"
     }
    ],
-   "changement": "SECURITY.md complété (signalement privé GitHub, aucune issue publique, versions prises en charge, délai de réponse) et .github/CODEOWNERS créé, vérifiés par le contrat documentaire (sprint 10, tâche 5.3) ; activation du signalement privé à faire par le mainteneur (tâche 5.4)",
+   "changement": "SECURITY.md complété (signalement privé GitHub, aucune issue publique, versions prises en charge, délai de réponse) et .github/CODEOWNERS créé, vérifiés par le contrat documentaire (sprint 10, tâche 5.3) ; activation du signalement privé à faire par le mainteneur (tâche 5.4) ; réglages GitHub appliqués par le mainteneur (sprint 10, tâches 5.2 et 5.4)",
    "verification": {
     "date": "2026-11-09",
-    "commit": "de2a066a",
-    "verdict": "Partiel",
-    "preuve": "SECURITY.md et .github/CODEOWNERS présents, assertions de scripts/release/test-operational-doc-contracts.sh vertes ; gh api …/private-vulnerability-reporting renvoie {\"enabled\":false} (lecture du 2026-11-09) : réglage mainteneur restant à faire (tâche 5.4)",
-    "reserve": "Réglages GitHub du mainteneur non faits"
+    "commit": "3215087c",
+    "verdict": "Fermé",
+    "preuve": "gh api …/private-vulnerability-reporting : {\"enabled\":true} (lecture du 2026-11-09) ; SECURITY.md (signalement privé, versions prises en charge, délai de réponse) et .github/CODEOWNERS exigés par test-operational-doc-contracts.sh",
+    "reserve": null
    }
   },
   {
@@ -4061,5 +4069,5 @@
   }
  ],
  "date_maj": "2026-11-09",
- "commit_maj": "21fb31eb"
+ "commit_maj": "3215087c"
 }

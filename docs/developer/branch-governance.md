@@ -63,7 +63,7 @@ gh api repos/FTurleque/nexus-context-engine --jq '[.allow_squash_merge,.allow_re
 
 Résultats attendus : `["merge"]` puis `[false,false]`.
 
-- **[Écart]** Lecture du 2026-11-09 : le ruleset renvoie `["merge","squash","rebase"]` et les réglages du dépôt `[true,true]`. La restriction attend le réglage du mainteneur (constat `AUD-DEP-16`).
+- **[Existant vérifié]** Lecture du 2026-11-09 : le ruleset renvoie `["merge"]` et les réglages du dépôt `[false,false]`.
 
 ## Propriétaires déclarés
 
@@ -139,6 +139,24 @@ Le dépôt public est surveillé en continu, indépendamment des PR : les gates 
 - **[Existant vérifié]** `gh api repos/FTurleque/nexus-context-engine --jq '.security_and_analysis'` renvoie `dependabot_security_updates`, `secret_scanning` et `secret_scanning_push_protection` à `enabled`, et `gh api repos/FTurleque/nexus-context-engine/vulnerability-alerts -i` répond `204` (lecture du 2026-11-05). Aucune alerte Dependabot ni secret scanning n'est ouverte à cette date.
 - **[Existant vérifié]** La procédure de traitement (délai de 7 jours, triage, fermeture `used_in_tests` d'une fixture de redaction avec son chemin) vit dans [`SECURITY.md`](../../SECURITY.md#traitement-des-alertes-de-sécurité) ; `scripts/release/test-operational-doc-contracts.sh:460-472` exige ses sections, le motif `used_in_tests` et l'existence de la fixture citée.
 
+- **[Existant vérifié]** `gh api repos/FTurleque/nexus-context-engine/private-vulnerability-reporting` renvoie `{"enabled":true}` (lecture du 2026-11-09) ; `SECURITY.md` décrit ce canal, les versions prises en charge et le délai de réponse, exigés par `scripts/release/test-operational-doc-contracts.sh:543-550`.
+
 ### Écarts et limites
 
 - **[Limite]** Les réglages sont modifiés à la main par le mainteneur ; aucun contrôle automatique du dépôt ne détecte leur désactivation. La vérification reste la lecture `gh api` ci-dessus.
+
+## OpenSpec repository-governance
+
+Spec : [`openspec/specs/repository-governance/spec.md`](../../openspec/specs/repository-governance/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+Cette section reprend les règles des sections « Méthode d'intégration : merge commit uniquement » et « Propriétaires déclarés » ci-dessus.
+
+### Comportement existant vérifié (repository-governance)
+
+- **[Existant vérifié]** Lecture du 2026-11-09 : `allowed_merge_methods` du ruleset 20503835 vaut `["merge"]` et `[allow_squash_merge, allow_rebase_merge]` vaut `[false,false]`.
+- **[Existant vérifié]** `scripts/release/test-operational-doc-contracts.sh:529-570` exige la politique merge commit dans cette page et dans le skill `nexus-pr-workflow`, et un propriétaire pour chaque chemin sensible de `.github/CODEOWNERS`.
+
+### Écarts et limites (repository-governance)
+
+- **[Limite]** Les réglages GitHub se modifient à la main ; aucun contrôle automatique ne détecte leur retour en arrière. La vérification reste la lecture `gh api` de la section « Méthode d'intégration ».
+- **[Limite]** L'affichage du code owner par GitHub sur une PR n'est vérifié par aucun test.
