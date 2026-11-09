@@ -122,7 +122,7 @@ Chaque `RankedCandidate` expose son score final, ses composantes, des raisons te
 
 ## Compliance and Enforcement
 
-- Tests `DeterministicContextRankerValidationTest`, `DeterministicContextRankerGitTest`, `SemanticRankingTest` (`core/src/test/java/com/nexus/ranking/`), `ProjectGraphBuilderProjectionTest` (`core/src/test/java/com/nexus/ranking/graph/`), `SearchServiceIntegrationTest` (`combinesLexicalSymbolAndGraphSignalsDeterministically`), `GoldenSearchCorpusTest` (`core/src/test/java/com/nexus/search/`) et `SearchCandidateValidationTest` (`core/src/test/java/com/nexus/search/candidate/`), lancés par `mvnw verify`.
+- Tests `DeterministicContextRankerValidationTest`, `DeterministicContextRankerGitTest`, `SemanticRankingTest` (`core/src/test/java/com/nexus/ranking/`), `GraphNeighborhoodProjectionTest` (`core/src/test/java/com/nexus/ranking/graph/`), `SearchServiceIntegrationTest` (`combinesLexicalSymbolAndGraphSignalsDeterministically`), `GoldenSearchCorpusTest` (`core/src/test/java/com/nexus/search/`) et `SearchCandidateValidationTest` (`core/src/test/java/com/nexus/search/candidate/`), lancés par `mvnw verify`.
 - Règle Archgate `BE-0071-rechercher-et-classer-les-candidats-par-un-score-compose-explicable.rules.ts` :
   - `ranking-has-no-network-or-llm-call` : refuse dans `core/src/main/java/com/nexus/ranking/` tout accès réseau (`java.net`, client HTTP, socket), tout lancement de processus et toute référence à `EmbeddingProvider` ou à Ollama ;
   - `lucene-search-does-not-touch-sqlite` : refuse dans `core/src/main/java/com/nexus/search/lucene/` toute référence à `com.nexus.persistence`, `java.sql`, `org.sqlite` ou `IndexRepository`.
@@ -146,7 +146,7 @@ Le déterminisme et l'explicabilité du ranking par défaut restent à préserve
 - Orchestration : `core/src/main/java/com/nexus/search/SearchService.java` (stratégies, fusion, enrichisseurs, ranker).
 - Stratégies : `core/src/main/java/com/nexus/search/lucene/LuceneFileSearchStrategy.java`, `core/src/main/java/com/nexus/search/SymbolSearchStrategy.java`.
 - Fusion et signaux : `core/src/main/java/com/nexus/search/candidate/CandidateMerger.java` (maximum par signal), `SearchSignals.java`.
-- Graphe : `core/src/main/java/com/nexus/ranking/graph/ProjectGraphBuilder.java` (voisinage borné projeté depuis SQLite), `GraphCandidateEnricher.java` (propagation sur deux sauts) ; requêtes dans `core/src/main/java/com/nexus/persistence/sqlite/SqliteGraphQueries.java`.
+- Graphe : `core/src/main/java/com/nexus/ranking/graph/GraphNeighborhoodProjection.java` (voisinage borné projeté depuis SQLite, [BE-0087](BE-0087-projeter-le-voisinage-du-graphe-d-imports-a-la-demande.md)), `GraphCandidateEnricher.java` (propagation sur deux sauts) ; requêtes dans `core/src/main/java/com/nexus/persistence/sqlite/SqliteGraphQueries.java`.
 - Ranking : `core/src/main/java/com/nexus/ranking/DeterministicContextRanker.java` (poids centralisés, raisons, tri secondaire), `RankedCandidate.java`.
 - Détail technique : [`docs/developer/search-ranking.md`](../../developer/search-ranking.md).
 

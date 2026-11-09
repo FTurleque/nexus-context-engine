@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-class ProjectGraphBuilderProjectionTest {
+class GraphNeighborhoodProjectionTest {
 
     @Test
     void delegatesOnlyToBoundedNeighborhoodProjection() {
@@ -26,10 +26,10 @@ class ProjectGraphBuilderProjectionTest {
                 Map.of("src/App.java", Set.of("src/Dependency.java")));
 
         Map<String, Set<String>> neighbors =
-                new ProjectGraphBuilder(repository).neighbors(projectId, Set.of("src/App.java"));
+                new GraphNeighborhoodProjection(repository).neighbors(projectId, Set.of("src/App.java"));
 
         assertEquals(Set.of("src/App.java"), repository.requestedPaths.get());
-        assertEquals(ProjectGraphBuilder.MAX_NEIGHBOR_EDGES, repository.requestedLimit.get());
+        assertEquals(GraphNeighborhoodProjection.MAX_NEIGHBOR_EDGES, repository.requestedLimit.get());
         assertEquals(Set.of("src/Dependency.java"), neighbors.get("src/App.java"));
     }
 
