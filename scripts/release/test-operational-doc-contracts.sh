@@ -3,6 +3,7 @@ set -euo pipefail
 
 python3 - <<'PY'
 from pathlib import Path
+import re
 import xml.etree.ElementTree as ET
 
 root = Path.cwd()
@@ -25,19 +26,27 @@ def forbid(path: str, needle: str) -> None:
         raise SystemExit(f"obsolete documentation contract: {path} still contains {needle!r}")
 
 
-# Keep operational documentation aligned with the dependency actually used by Maven.
+# Dependabot-managed versions live in pom.xml only: the documentation names the property.
 pom = ET.parse(root / "pom.xml").getroot()
-quarkus_version = next(
-    (
-        element.text.strip()
-        for element in pom.iter()
-        if element.tag.rsplit("}", 1)[-1] == "quarkus.platform.version"
-        and element.text
-    ),
-    None,
-)
-if not quarkus_version:
-    raise SystemExit("version contract drift: pom.xml does not declare quarkus.platform.version")
+
+
+def pom_property(name: str) -> str:
+    value = next(
+        (
+            element.text.strip()
+            for element in pom.iter()
+            if element.tag.rsplit("}", 1)[-1] == name and element.text and element.text.strip()
+        ),
+        None,
+    )
+    if not value:
+        raise SystemExit(f"version contract drift: pom.xml does not declare {name}")
+    return value
+
+
+managed_versions = {
+    name: pom_property(name) for name in ("quarkus.platform.version", "mcp.sdk.version")
+}
 
 
 # Toolchain / NXA3 baseline
@@ -121,12 +130,47 @@ require("docs/developer/ci-and-supply-chain.md", "`develop` est la branche d'int
 require("docs/developer/branch-governance.md", "force pushes")
 require("docs/developer/native-context-discovery-limits.md", "NativeContextDiscoveryBudgetBenchmarkTest")
 
-require("docs/developer/README.md", f"Quarkus      {quarkus_version}")
-require("docs/developer/architecture-implementation.md", f"Quarkus est en {quarkus_version}")
-require("docs/developer/rest-api.md", f"Quarkus     {quarkus_version}")
+for path, properties in (
+    ("docs/developer/README.md", ("quarkus.platform.version", "mcp.sdk.version")),
+    ("docs/developer/architecture-implementation.md", ("quarkus.platform.version", "mcp.sdk.version")),
+    ("docs/developer/rest-api.md", ("quarkus.platform.version",)),
+    ("docs/developer/mcp.md", ("mcp.sdk.version",)),
+):
+    for name in properties:
+        require(path, name)
+
+version_literal = re.compile(
+    r"\b(?:Quarkus|MCP SDK|SDK MCP|MCP Java)(?:\s+(?:est\s+)?en)?[\s:`(]+v?\d+\.\d+(?:\.\d+)*",
+    re.IGNORECASE,
+)
+version_docs = [
+    "docs/developer/README.md",
+    "docs/developer/architecture-implementation.md",
+    "docs/developer/rest-api.md",
+    "docs/developer/mcp.md",
+    "docs/architecture/overview.md",
+    *sorted(
+        path.relative_to(root).as_posix()
+        for path in (root / "docs/architecture/arc42").glob("*.md")
+    ),
+]
+for path in version_docs:
+    content = text(path)
+    match = version_literal.search(content)
+    if match:
+        raise SystemExit(
+            f"version contract drift: {path} copies a dependency version ({match.group(0)!r}); "
+            "name the pom.xml property instead"
+        )
+    for name, value in managed_versions.items():
+        if re.search(rf"(?<![\w.]){re.escape(value)}(?!\w|\.\w)", content):
+            raise SystemExit(
+                f"version contract drift: {path} copies {name} value {value!r}; "
+                "name the pom.xml property instead"
+            )
+
 require("docs/developer/rest-api.md", "quarkus.http.insecure-requests")
 require("docs/developer/rest-api.md", "trusted-proxies")
-require("docs/developer/mcp.md", "MCP SDK     2.1.0")
 require("docs/developer/mcp.md", "100 projets uniques")
 
 for path in (
@@ -315,6 +359,12 @@ forbid("docs/developer/code-intelligence.md", "chargent encore des ensembles pro
 forbid("docs/architecture/arc42/06-vue-execution.md", "continuer sans résultats JDT")
 forbid("docs/architecture/arc42/06-vue-execution.md", "indexation réussie sans intelligence profonde")
 
+# Import graph neighbourhood (BE-0087): projected on demand, bounded, never cached.
+require("docs/developer/search-ranking.md", "GraphNeighborhoodProjection.MAX_NEIGHBOR_EDGES")
+require("docs/developer/search-ranking.md", "IndexRepository.findGraphNeighbors")
+for stale in ("ProjectGraph cache", "ProjectGraphBuilder", "Graphe dérivé par génération"):
+    forbid("docs/developer/search-ranking.md", stale)
+
 current_docs = (
     "README.md",
     "docs/project/governance/ROADMAP.md",
@@ -474,6 +524,49 @@ for needle in (
     require("SECURITY.md", needle)
 if not (root / "core/src/test/java/com/nexus/security/SensitiveContentRedactorTest.java").is_file():
     raise SystemExit("security contract drift: redaction fixture path cited by SECURITY.md is missing")
+
+# --- Sprint 10 : repository governance (AUD-DEP-16, AUD-DEP-17) ---
+# The merge-commit-only policy is documented with the GitHub settings that enforce it.
+for needle in (
+    "## Méthode d'intégration : merge commit uniquement",
+    'allowed_merge_methods = ["merge"]',
+    "allow_squash_merge = false",
+    "allow_rebase_merge = false",
+    "rulesets/20503835",
+    ".github/CODEOWNERS",
+):
+    require("docs/developer/branch-governance.md", needle)
+for needle in ('allowed_merge_methods = ["merge"]', "jamais squash/rebase", ".github/CODEOWNERS", "SECURITY.md"):
+    require(".claude/skills/nexus-pr-workflow/SKILL.md", needle)
+
+# SECURITY.md opens a private reporting channel, with supported versions and a response delay.
+for needle in (
+    "## Signaler une vulnérabilité",
+    "security/advisories/new",
+    "pas d'issue publique",
+    "### Délai de réponse",
+    "## Versions prises en charge",
+):
+    require("SECURITY.md", needle)
+
+# CODEOWNERS declares an owner for every sensitive path (design D6).
+codeowners = {}
+for line in text(".github/CODEOWNERS").splitlines():
+    fields = line.split("#", 1)[0].split()
+    if len(fields) >= 2:
+        codeowners[fields[0]] = fields[1:]
+for pattern in (
+    "/.github/workflows/",
+    "/scripts/release/",
+    "/config/tool-integrity.properties",
+    "/mvnw",
+    "/mvnw.cmd",
+    "/.mvn/",
+    "/packaging/",
+):
+    owners = codeowners.get(pattern, [])
+    if not owners or not all(owner.startswith("@") for owner in owners):
+        raise SystemExit(f"CODEOWNERS contract drift: {pattern} must have a declared owner")
 
 # Active PowerShell scripts call Maven only through scripts/lib/NexusScript.psm1 (AUD-QUA-05).
 import re

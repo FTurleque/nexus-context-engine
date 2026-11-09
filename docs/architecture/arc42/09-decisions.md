@@ -40,6 +40,7 @@ Cette section présente un index synthétique avec statut, date et relations de 
 | [BE-0084](../adr/BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) | Garder la recherche sémantique optionnelle et la qualifier en deux corpus, hors du chemin de release | Accepted | 2026-11-08 |
 | [ARCH-0085](../adr/ARCH-0085-stabiliser-le-contrat-de-sortie-publique-cli-rest-mcp.md) | Stabiliser le contrat de sortie publique dans la projection du cœur : CLI humaine ou JSON, codes de sortie, parité REST et MCP | Accepted | 2026-11-08 |
 | [ARCH-0086](../adr/ARCH-0086-resoudre-la-configuration-et-nexus-home-dans-la-composition-root.md) | Résoudre la configuration NEXUS, dont NEXUS_HOME, dans la composition root et l'injecter | Accepted | 2026-11-08 |
+| [BE-0087](../adr/BE-0087-projeter-le-voisinage-du-graphe-d-imports-a-la-demande.md) | Projeter le voisinage du graphe d'imports à la demande depuis SQLite, borné, sans matérialisation ni cache | Proposed | 2026-11-09 |
 | [DATA-0088](../adr/DATA-0088-conserver-le-journal-rollback-sqlite.md) | Conserver le journal rollback SQLite et ne réévaluer WAL que sur mesure répétée | Proposed | 2026-11-09 |
 | [ADR-0000](../adr/archive/0000-adopter-les-adr-madr.md) | Adopter MADR comme format et définir la gouvernance des ADR | Superseded (GEN-0057) | 2026-07-19 |
 | [ARCH-0001](../adr/archive/ARCH-0001-positionner-nexus-comme-moteur-intelligence-contexte.md) | Positionner NEXUS comme moteur d'intelligence de contexte indépendant des modèles | Superseded (ARCH-0077) | 2026-07-19 |
@@ -115,8 +116,9 @@ migrations, SHA-256, identité repository, règles d'exclusion du scan.
 
 ### Recherche, ranking et contexte
 
-BE-0071, BE-0072, BE-0084 — recherche de candidats et score composé, ContextBundle sous budget,
-recherche sémantique optionnelle et sa qualification.
+BE-0071, BE-0087, BE-0072, BE-0084 — recherche de candidats et score composé, voisinage du graphe
+d'imports projeté à la demande, ContextBundle sous budget, recherche sémantique optionnelle et sa
+qualification.
 
 ### Sources contextuelles
 

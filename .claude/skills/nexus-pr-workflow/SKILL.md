@@ -10,7 +10,9 @@ argument-hint: "[open|merge <pr>|promote|sync]"
 
 - `develop` = intégration, `main` = release. Les deux sont protégées par le ruleset « Protect main & develop » : PR obligatoire, pas de force-push ni de suppression, checks obligatoires.
 - Mainteneur unique : pas de seconde approbation humaine requise, pas d'obligation d'être à jour avec la base avant merge.
-- Intégration par **merge commit** (`--merge`), jamais squash/rebase, toujours **exact-head** (`--match-head-commit`).
+- Intégration par **merge commit** (`--merge`), jamais squash/rebase, toujours **exact-head** (`--match-head-commit`). GitHub porte la règle : le ruleset n'autorise que `allowed_merge_methods = ["merge"]` et le dépôt désactive squash et rebase (`allow_squash_merge`, `allow_rebase_merge` à `false`) ; ces réglages appartiennent au mainteneur et se vérifient en lecture (`docs/developer/branch-governance.md`, section « Méthode d'intégration »). Ne jamais proposer `--squash` ni `--rebase`, même si l'interface GitHub les offre.
+- Fichiers sensibles (`.github/workflows/`, `scripts/release/`, `config/tool-integrity.properties`, wrappers Maven, `packaging/`) : propriétaire déclaré dans `.github/CODEOWNERS`, revue code owner non obligatoire.
+- Vulnérabilité découverte : signalement privé GitHub selon `SECURITY.md`, jamais d'issue ni de PR publique qui la décrit avant la release corrigée.
 
 Checks obligatoires sur `develop` : `Windows gate`, `Linux reactor Maven build`, `CodeQL Java analysis`, `OSV new-vulnerability delta gate / osv-scan`, `Build aggregate reactor SBOM`, `OSV aggregate SBOM vulnerability gate / osv-scan`, `SonarCloud Code Analysis` et `Hermetic scale benchmark` (produit sur toute PR, succès sans mesure hors des chemins surveillés). `Real Ollama semantic retrieval` est long et non obligatoire.
 

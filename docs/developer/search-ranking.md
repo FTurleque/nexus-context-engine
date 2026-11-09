@@ -75,12 +75,14 @@ Les index B-tree de V002/V003 restent utilisés pour les parcours exacts du grap
 
 ## Graphe d'imports projeté à la demande
 
-Le graphe relie des fichiers par les relations `IMPORTS` résolues vers un type défini dans le projet ; un import externe ne crée aucune arête. Il n'est ni matérialisé en entier ni mis en cache : à chaque expansion, `ProjectGraphBuilder` demande à `IndexRepository.findGraphNeighbors` le seul voisinage des chemins courants, borné à `ResultLimitPolicy.MAX_INTERNAL_RETRIEVAL_LIMIT` arêtes quelle que soit la taille de l'index.
+Le graphe relie des fichiers par les relations `IMPORTS` résolues vers un type défini dans le projet ; un import externe ne crée aucune arête. Il n'est ni matérialisé en entier ni mis en cache, par génération d'index ou autrement ([BE-0087](../architecture/adr/BE-0087-projeter-le-voisinage-du-graphe-d-imports-a-la-demande.md)) : à chaque expansion, `GraphNeighborhoodProjection` demande à `IndexRepository.findGraphNeighbors` le seul voisinage des chemins courants, borné à `GraphNeighborhoodProjection.MAX_NEIGHBOR_EDGES` arêtes (`ResultLimitPolicy.MAX_INTERNAL_RETRIEVAL_LIMIT`) quelle que soit la taille de l'index. Un ensemble de chemins vide ne déclenche aucune requête.
 
-`SqliteGraphQueries` projette ce voisinage dans les deux sens :
+`SqliteGraphQueries` projette ce voisinage dans les deux sens, sous une seule borne :
 
-- sortant : imports du fichier, résolus vers le fichier qui définit le type importé ;
-- entrant : fichiers qui importent un type défini dans le fichier (nom qualifié exact ou membre imbriqué du type).
+- sortant : imports du fichier, résolus vers le fichier qui définit le type importé. Les imports sont lus par pages triées sur `(source_ref, target_ref)` ; chaque page reprend strictement après le dernier couple lu (pagination par clé, sans `OFFSET`). L'index `(project_id, kind, source_ref)` ne contenant pas `target_ref`, chaque page relit les entrées d'index des chemins demandés et écarte les couples déjà lus avant tri. Seules les arêtes résolues comptent dans la borne : un import externe est parcouru puis écarté ;
+- entrant : fichiers qui importent un type défini dans le fichier (nom qualifié exact ou membre imbriqué du type), dans la part de la borne laissée par le sens sortant.
+
+`SqliteGraphQueryPlanTest` vérifie que ces requêtes cherchent par les index `(project_id, kind, source_ref)` et `(project_id, kind, target_ref)` de `symbol_relations`.
 
 `GraphCandidateEnricher` part des candidats directs (meilleur signal parmi lexical, symbole exact, symbole approché et chemin), charge uniquement les `IndexedFile` des voisins et ajoute `graphScore` sur deux sauts :
 
