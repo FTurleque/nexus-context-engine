@@ -7,7 +7,7 @@
     <parent>
         <groupId>io.github.fturleque</groupId>
         <artifactId>nexus-context-engine-parent</artifactId>
-        <version>0.2.0-rc.2</version>
+        <version>0.2.0-rc.3</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
