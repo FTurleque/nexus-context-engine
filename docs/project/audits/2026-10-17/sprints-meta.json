@@ -23,7 +23,13 @@
    "Faible": 4
   },
   "ordre_interne": [],
-  "prerequis_anterieurs": []
+  "prerequis_anterieurs": [],
+  "fermes": 7,
+  "etat": "Entamé",
+  "reste_jours": [
+   0.25,
+   1
+  ]
  },
  {
   "numero": 2,
@@ -55,7 +61,13 @@
     "AUD-QUA-04"
    ]
   ],
-  "prerequis_anterieurs": []
+  "prerequis_anterieurs": [],
+  "fermes": 9,
+  "etat": "Clôturé",
+  "reste_jours": [
+   0,
+   0
+  ]
  },
  {
   "numero": 3,
@@ -80,7 +92,13 @@
    "Faible": 5
   },
   "ordre_interne": [],
-  "prerequis_anterieurs": []
+  "prerequis_anterieurs": [],
+  "fermes": 7,
+  "etat": "Clôturé",
+  "reste_jours": [
+   0,
+   0
+  ]
  },
  {
   "numero": 4,
@@ -114,6 +132,12 @@
   "prerequis_anterieurs": [
    "AUD-TST-01",
    "AUD-TST-07"
+  ],
+  "fermes": 8,
+  "etat": "Clôturé",
+  "reste_jours": [
+   0,
+   0
   ]
  },
  {
@@ -140,7 +164,13 @@
    "Faible": 7
   },
   "ordre_interne": [],
-  "prerequis_anterieurs": []
+  "prerequis_anterieurs": [],
+  "fermes": 8,
+  "etat": "Clôturé",
+  "reste_jours": [
+   0,
+   0
+  ]
  },
  {
   "numero": 6,
@@ -154,15 +184,19 @@
    "AUD-PRF-04",
    "AUD-PRF-06",
    "AUD-PRF-07",
-   "AUD-PRF-09"
+   "AUD-PRF-09",
+   "AUD-PRF-27",
+   "AUD-PRF-28",
+   "AUD-PRF-29",
+   "AUD-QUA-23"
   ],
   "charge_jours": [
-   4.0,
-   13
+   5.0,
+   17
   ],
   "composition": {
-   "Moyenne": 4,
-   "Faible": 3
+   "Moyenne": 6,
+   "Faible": 5
   },
   "ordre_interne": [
    [
@@ -172,6 +206,12 @@
   ],
   "prerequis_anterieurs": [
    "AUD-DEP-19"
+  ],
+  "fermes": 7,
+  "etat": "Entamé",
+  "reste_jours": [
+   1.0,
+   4
   ]
  },
  {
@@ -180,19 +220,21 @@
   "pourquoi": "Les cycles se cassent un par un sous la protection du test d'architecture (sprint 3), après les sprints qui modifient context, security et search.",
   "sortie": "Le graphe des packages du cœur est acyclique et le test d'architecture l'impose (AUD-ARC-01, constat chapeau).",
   "constats": [
+   "AUD-ARC-20",
    "AUD-ARC-02",
    "AUD-ARC-04",
    "AUD-ARC-05",
    "AUD-ARC-06",
-   "AUD-ARC-01"
+   "AUD-ARC-01",
+   "AUD-TST-16"
   ],
   "charge_jours": [
-   4.75,
-   14
+   5.25,
+   16
   ],
   "composition": {
-   "Moyenne": 2,
-   "Faible": 3
+   "Faible": 5,
+   "Moyenne": 2
   },
   "ordre_interne": [
    [
@@ -210,11 +252,21 @@
    [
     "AUD-ARC-01",
     "AUD-ARC-06"
+   ],
+   [
+    "AUD-ARC-01",
+    "AUD-ARC-20"
    ]
   ],
   "prerequis_anterieurs": [
    "AUD-ARC-03",
    "AUD-ARC-07"
+  ],
+  "fermes": 5,
+  "etat": "Entamé",
+  "reste_jours": [
+   0.5,
+   2
   ]
  },
  {
@@ -229,18 +281,25 @@
    "AUD-ARC-14",
    "AUD-ARC-19",
    "AUD-SEC-04",
-   "AUD-SEC-05"
+   "AUD-SEC-05",
+   "AUD-SEC-20"
   ],
   "charge_jours": [
-   2.5,
-   9
+   2.75,
+   10
   ],
   "composition": {
-   "Faible": 6,
+   "Faible": 7,
    "Moyenne": 1
   },
   "ordre_interne": [],
-  "prerequis_anterieurs": []
+  "prerequis_anterieurs": [],
+  "fermes": 7,
+  "etat": "Entamé",
+  "reste_jours": [
+   0.25,
+   1
+  ]
  },
  {
   "numero": 9,
@@ -269,14 +328,6 @@
   "ordre_interne": [
    [
     "AUD-DEP-02",
-    "AUD-DEP-21"
-   ],
-   [
-    "AUD-DEP-02",
-    "AUD-SEC-06"
-   ],
-   [
-    "AUD-DEP-02",
     "AUD-DEP-03"
    ],
    [
@@ -285,10 +336,24 @@
    ],
    [
     "AUD-DEP-02",
+    "AUD-DEP-21"
+   ],
+   [
+    "AUD-DEP-02",
     "AUD-QUA-12"
+   ],
+   [
+    "AUD-DEP-02",
+    "AUD-SEC-06"
    ]
   ],
-  "prerequis_anterieurs": []
+  "prerequis_anterieurs": [],
+  "fermes": 9,
+  "etat": "Clôturé",
+  "reste_jours": [
+   0,
+   0
+  ]
  },
  {
   "numero": 10,
@@ -312,7 +377,13 @@
    "Faible": 7
   },
   "ordre_interne": [],
-  "prerequis_anterieurs": []
+  "prerequis_anterieurs": [],
+  "fermes": 7,
+  "etat": "Clôturé",
+  "reste_jours": [
+   0,
+   0
+  ]
  },
  {
   "numero": 11,
@@ -337,6 +408,69 @@
    "Faible": 8
   },
   "ordre_interne": [],
-  "prerequis_anterieurs": []
+  "prerequis_anterieurs": [],
+  "fermes": 8,
+  "etat": "Clôturé",
+  "reste_jours": [
+   0,
+   0
+  ]
+ },
+ {
+  "numero": 12,
+  "titre": "Durcir les gates ajoutés",
+  "pourquoi": "Les gates livrés aux sprints 1 et 2 tiennent sur les cas d'origine mais se contournent sur des variantes. Sans dépendance avec les sprints 6 à 11 : à mener tôt, numéroté 12 pour ne pas renuméroter les changements OpenSpec existants.",
+  "sortie": "Chaque gate ajouté échoue sur les variantes relevées (fixtures workflow_hygiene, mutations du contrat Maven, tag amont faux) ; les règles Archgate tournent en CI ; les planchers JaCoCo sont à moins de 3 points de la mesure.",
+  "constats": [
+   "AUD-TST-15",
+   "AUD-TST-17",
+   "AUD-QUA-21",
+   "AUD-DEP-32",
+   "AUD-DEP-33"
+  ],
+  "charge_jours": [
+   1.25,
+   5
+  ],
+  "composition": {
+   "Faible": 5
+  },
+  "ordre_interne": [],
+  "prerequis_anterieurs": [],
+  "fermes": 0,
+  "etat": "À faire",
+  "reste_jours": [
+   1.25,
+   5
+  ]
+ },
+ {
+  "numero": 13,
+  "titre": "Installateur et release finale",
+  "pourquoi": "Défauts relevés le 09/11 sur l'installateur Windows et la publication, à corriger avant la promotion vers main (PR #332) et la release finale v0.2.0.",
+  "sortie": "Connecter puis déconnecter NEXUS laisse intacts octet pour octet les autres serveurs d'une configuration UTF-8 contenant des chemins accentués, et refuse d'écrire sur un JSON invalide (tests de l'installateur) ; aucun tag GHCR hors chaîne de release ; labels OCI renseignés.",
+  "constats": [
+   "AUD-QUA-22",
+   "AUD-DEP-34",
+   "AUD-QUA-24",
+   "AUD-DEP-35",
+   "AUD-QUA-25"
+  ],
+  "charge_jours": [
+   1.25,
+   5
+  ],
+  "composition": {
+   "Élevée": 1,
+   "Faible": 4
+  },
+  "ordre_interne": [],
+  "prerequis_anterieurs": [],
+  "fermes": 0,
+  "etat": "À faire",
+  "reste_jours": [
+   1.25,
+   5
+  ]
  }
 ]
