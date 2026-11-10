@@ -8,16 +8,8 @@ SELECT id, 0 FROM projects;
 
 UPDATE project_index_generations
 SET generation = generation + 1
-WHERE EXISTS (
-    SELECT 1
-    FROM projects
-    WHERE projects.id = project_index_generations.project_id
-);
+WHERE project_id IN (SELECT id FROM projects);
 
 UPDATE projects
 SET index_status = 'NOT_INDEXED', last_indexed_at = NULL
-WHERE EXISTS (
-    SELECT 1
-    FROM project_index_generations
-    WHERE project_index_generations.project_id = projects.id
-);
+WHERE id IN (SELECT project_id FROM project_index_generations);

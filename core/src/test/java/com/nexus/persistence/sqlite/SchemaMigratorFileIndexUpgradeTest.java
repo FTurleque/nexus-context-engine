@@ -204,13 +204,13 @@ class SchemaMigratorFileIndexUpgradeTest {
      */
     private static void markLaterInvalidationsApplied(Connection connection, int lastVersion)
             throws SQLException, IOException {
-        for (Map.Entry<Integer, Path> migration : migrationsUpTo(Integer.MAX_VALUE, false).entrySet()) {
-            String name = migration.getValue().getFileName().toString();
-            if (migration.getKey() <= lastVersion || !name.contains("__invalidate_")) {
-                continue;
-            }
-            try (PreparedStatement insert = connection.prepareStatement(
-                    "INSERT INTO schema_migrations(version, script_name, applied_at) VALUES (?, ?, ?)")) {
+        try (PreparedStatement insert = connection.prepareStatement(
+                "INSERT INTO schema_migrations(version, script_name, applied_at) VALUES (?, ?, ?)")) {
+            for (Map.Entry<Integer, Path> migration : migrationsUpTo(Integer.MAX_VALUE, false).entrySet()) {
+                String name = migration.getValue().getFileName().toString();
+                if (migration.getKey() <= lastVersion || !name.contains("__invalidate_")) {
+                    continue;
+                }
                 insert.setInt(1, migration.getKey());
                 insert.setString(2, "db/migration/" + name);
                 insert.setString(3, "2026-01-01T00:00:00Z");
