@@ -123,7 +123,7 @@ Le protocole 4 a introduit le regroupement des écritures canoniques en lots SQL
 
 Les plafonds absolus de latence et de population restent inchangés. Le stockage est comparé à la base de la PR sur le même runner.
 
-Le gate vérifie que les deux durées d'échauffement sont présentes, finies et positives ou nulles. Le plafond 10k de 1,4 s et la comparaison relative s'appliquent à la médiane des trois peuplements suivants. La durée globale du profil `full` et les timeouts du job bornent toujours l'exécution complète, échauffement compris.
+Le gate vérifie que les deux durées d'échauffement sont présentes, finies et positives ou nulles. Le plafond 10k de 1,4 s et la comparaison relative s'appliquent à la médiane des trois peuplements suivants. La durée globale du profil `full` (au plus 240 s, tous scénarios du rapport général compris : `stagedPublication` et `singleProjectFuzzy` y comptent pour une cinquantaine de secondes) et les timeouts du job bornent toujours l'exécution complète, échauffement compris.
 
 La médiane de trois peuplements à 1M reste soumise au plafond absolu de 40 s. Un unique échantillon perturbé est conservé dans le rapport ; un ralentissement présent dans au moins deux échantillons reste détecté. La courbe dédiée, plus longue, est exécutée séparément du rapport général et demeure soumise au timeout JUnit de 20 minutes et au timeout du job de 45 minutes.
 
