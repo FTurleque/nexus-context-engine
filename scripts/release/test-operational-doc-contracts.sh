@@ -582,14 +582,27 @@ SHARED_SCRIPT_FUNCTION = re.compile(
     r"^\s*function\s+(Invoke-Maven|Resolve-AbsolutePath|Invoke-NexusJson|Select-MavenCommand)\b",
     re.IGNORECASE,
 )
-MAVEN_TOKEN = r"(?:\.\.?[\\/])?(?:[\w$:.\\/-]*[\\/])?mvnw?(?:\.cmd)?"
+MAVEN_TOKEN = r"(?:\.\.?[\\/])?(?:[\w${}:.\\/-]*[\\/])?mvnw?(?:\.cmd)?"
 DIRECT_MAVEN_CALL = (
     re.compile(r"&\s*['\"]?" + MAVEN_TOKEN + r"['\"]?(?:\s|$)", re.IGNORECASE),
     re.compile(r"^\s*" + MAVEN_TOKEN + r"\s", re.IGNORECASE),
     re.compile(r"Get-Command\s+(?:-Name\s+)?['\"]?mvn", re.IGNORECASE),
     re.compile(r"Start-Process\b.*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE),
-    re.compile(r"Join-Path\b.*['\"](?:\.\.[\\/])*mvnw?(?:\.cmd)?['\"]", re.IGNORECASE),
+    re.compile(r"Join-Path\b.*['\"\s\\/](?:\.\.[\\/])*mvnw?(?:\.cmd)?(?:['\")\s]|$)", re.IGNORECASE),
+    # Indirection (AUD-QUA-21): a variable holding exactly a Maven command name,
+    # cmd /c (options and $env:ComSpec included), and Invoke-Expression/iex of a
+    # string that names Maven. A message that quotes the wrapper inside a sentence
+    # is not a whole-string literal; a message naming both cmd /c and mvn is
+    # flagged and belongs in MAVEN_CALL_EXCEPTIONS.
+    re.compile(r"\$\{?[\w:]+\}?\s*=\s*(['\"])" + MAVEN_TOKEN + r"\1", re.IGNORECASE),
+    re.compile(
+        r"(?:\bcmd(?:\.exe)?['\"]?|\$env:ComSpec)(?:\s+/\w+)*\s+/c\b.*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE
+    ),
+    re.compile(r"(?:\bInvoke-Expression\b|(?<![\w-])iex\b).*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE),
 )
+# Explicit exceptions: (script path, exact trimmed line). Each entry must still
+# match a line of its script, so a stale exception fails the contract.
+MAVEN_CALL_EXCEPTIONS: set[tuple[str, str]] = set()
 
 
 def powershell_maven_violations(relative: str, source: str) -> list[str]:
@@ -600,6 +613,8 @@ def powershell_maven_violations(relative: str, source: str) -> list[str]:
             continue
         if SHARED_SCRIPT_FUNCTION.search(code):
             violations.append(f"{relative}:{number}: redefines a NexusScript.psm1 function")
+        if (relative, code.strip()) in MAVEN_CALL_EXCEPTIONS:
+            continue
         if any(pattern.search(code) for pattern in DIRECT_MAVEN_CALL):
             violations.append(f"{relative}:{number}: calls Maven directly instead of Invoke-Maven")
     return violations
@@ -623,6 +638,10 @@ for script in active_powershell_scripts():
     )
 if maven_violations:
     raise SystemExit("powershell maven contract drift:\n" + "\n".join(maven_violations))
+for excepted_script, excepted_line in sorted(MAVEN_CALL_EXCEPTIONS):
+    lines = [line.strip() for line in text(excepted_script).splitlines()]
+    if excepted_line not in lines:
+        raise SystemExit(f"powershell maven contract drift: stale exception {excepted_script}: {excepted_line}")
 for label, fixture in (
     ("installed mvn call", "Push-Location $root\n& mvn @arguments\n"),
     ("installed mvn.cmd call", "    & mvn.cmd -q package\n"),
@@ -633,6 +652,17 @@ for label, fixture in (
     ("installed lookup", "$m = Get-Command mvn -ErrorAction SilentlyContinue\n"),
     ("local Invoke-Maven", "function Invoke-Maven {\n}\n"),
     ("local Resolve-AbsolutePath", "function Resolve-AbsolutePath {\n}\n"),
+    ("command in a variable", '$m = "mvn"; & $m clean install\n'),
+    ("wrapper in a variable", "    $wrapper = '.\\mvnw.cmd'\n"),
+    ("cmd /c", "cmd /c mvn clean install\n"),
+    ("cmd /d /c", "cmd /d /c mvn verify\n"),
+    ("ComSpec", "& $env:ComSpec /c mvn verify\n"),
+    ("braced root in a variable", '$m = "${root}/mvnw"\n'),
+    ("braced variable name", "${m} = 'mvn'\n"),
+    ("unquoted Join-Path", "$m = Join-Path $root mvnw.cmd\n"),
+    ("cmd.exe /c", "& cmd.exe /c \"mvnw.cmd -B verify\"\n"),
+    ("Invoke-Expression", 'Invoke-Expression "mvn clean install"\n'),
+    ("iex", "iex \"$PSScriptRoot\\..\\mvnw.cmd test\"\n"),
 ):
     if not powershell_maven_violations(f"fixture/{label}.ps1", fixture):
         raise SystemExit(f"powershell maven contract self-test: {label} was not detected")
@@ -640,6 +670,8 @@ for label, fixture in (
     ("module call", "Invoke-Maven -Arguments @('-q', 'package')\n"),
     ("comment", "# & mvn clean install\n"),
     ("message", 'Write-Error "Lancez d\'abord : .\\\\mvnw.cmd clean package"\n'),
+    ("message in a variable", '$hint = "Lancez d\'abord : .\\\\mvnw.cmd clean package"\n'),
+    ("test fixture name", "Write-FakeMaven -Directory $root -BaseName 'mvnw' -VersionExitCode 0\n"),
 ):
     if powershell_maven_violations(f"fixture/{label}.ps1", fixture):
         raise SystemExit(f"powershell maven contract self-test: {label} was rejected")
@@ -665,14 +697,30 @@ PY
 # also reject its negative fixture.
 HYGIENE="scripts/release/workflow_hygiene.py"
 HYGIENE_FIXTURES="scripts/release/fixtures/workflow-hygiene"
-for check in inputs timeouts runners; do
-  python3 "$HYGIENE" "$check" .github/workflows
+for check in forms inputs timeouts runners; do
+  python3 "$HYGIENE" "$check" .github/workflows .github/actions
+done
+# Valid forms that must stay accepted: defaults.run as a mapping, env: beside a run: block.
+for check in pins forms inputs timeouts; do
+  python3 "$HYGIENE" "$check" "$HYGIENE_FIXTURES/valid-defaults-and-env.yml" >/dev/null
 done
 # A fixture counts as rejected only with exit code 1 and the message of its rule.
 for case in \
+  "forms|forms-flow-mapping-job.yml|forms-flow-mapping-job.yml:9: unsupported YAML form: job 'b' is not a block mapping" \
+  "forms|forms-quoted-key.yml|forms-quoted-key.yml:6: unsupported YAML form: quoted key 'runs-on'" \
+  "forms|forms-run-plain-next-line.yml|forms-run-plain-next-line.yml:14: unsupported YAML form: run: followed by a plain scalar" \
+  "forms|forms-flow-step.yml|forms-flow-step.yml:13: unsupported YAML form: flow collection" \
+  "forms|forms-anchor-alias.yml|forms-anchor-alias.yml:14: unsupported YAML form: anchor, alias or merge key" \
+  "forms|forms-run-plain-continuation.yml|forms-run-plain-continuation.yml:13: unsupported YAML form: run: plain scalar continued" \
+  "forms|forms-run-quoted-continuation.yml|forms-run-quoted-continuation.yml:13: unsupported YAML form: run: quoted scalar continued" \
+  "pins|forms-flow-step.yml|forms-flow-step.yml:13: unsupported YAML form: flow collection" \
+  "inputs|inputs-format-braces.yml|inputs-format-braces.yml:13: an input is interpolated" \
+  "inputs|inputs-nested-action|inputs-nested-action/group/tool/action.yml:12: an input is interpolated" \
   "inputs|inputs-in-run.yml|interpolated inside a run" \
   "inputs|inputs-inline-run.yml|interpolated inside a run" \
   "inputs|inputs-event-inputs.yml|interpolated inside a run" \
+  "inputs|inputs-github-script.yml|inputs-github-script.yml:17: an input is interpolated" \
+  "inputs|inputs-composite-action|inputs-composite-action/action.yml:14: an input is interpolated" \
   "timeouts|timeout-missing.yml|no timeout-minutes" \
   "runners|runners/scale-benchmark.yml|unpinned image"; do
   IFS='|' read -r check fixture message <<< "$case"

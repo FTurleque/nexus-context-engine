@@ -1,0 +1,15 @@
+# Fixture négative : scalaire simple de run: continué à la ligne suivante.
+name: fixture
+on:
+  workflow_call:
+    inputs:
+      x:
+        type: string
+jobs:
+  j:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - run: echo start
+          ${{ inputs.x }}
+        shell: bash

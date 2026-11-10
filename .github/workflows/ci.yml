@@ -268,3 +268,30 @@ jobs:
             adapters/assistant-clients/target/site/jacoco/jacoco.xml
             adapters/assistant-clients/target/site/jacoco/jacoco.csv
             adapters/assistant-clients/target/site/jacoco/index.html
+
+  archgate:
+    name: Archgate ADR rules
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Install pinned and verified Archgate
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh scripts/release/install-archgate.sh "$RUNNER_TEMP/archgate-bin"
+          echo "$RUNNER_TEMP/archgate-bin" >> "$GITHUB_PATH"
+
+      - name: Run ADR rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          archgate --version
+          # --base HEAD: no changed file, so every rule of every ADR runs, not only
+          # the ADRs whose files the PR touches.
+          archgate check --base HEAD --output github

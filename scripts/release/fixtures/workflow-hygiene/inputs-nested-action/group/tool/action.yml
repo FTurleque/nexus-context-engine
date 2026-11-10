@@ -1,0 +1,12 @@
+# Fixture négative : action composite à deux niveaux sous le répertoire contrôlé.
+name: Fixture
+description: Action composite imbriquée.
+inputs:
+  model:
+    description: Modèle
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: echo "${{ inputs.model }}"
