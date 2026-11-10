@@ -90,6 +90,13 @@ class ScaleBudgetsTest(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, '25.*search.*168.577.*160'):
             self.verify()
 
+    def test_full_profile_total_duration_budget(self):
+        self.report['totalDurationMs'] = 240_000
+        self.verify()
+        self.report['totalDurationMs'] = 240_001
+        with self.assertRaisesRegex(AssertionError, 'full-total-duration.*240001'):
+            self.verify()
+
     def test_incorrect_median_fails(self):
         self.report['sqliteTiers'][0]['populationMs'] = 1
         with self.assertRaisesRegex(AssertionError, 'population-median'):

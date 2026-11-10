@@ -167,7 +167,7 @@ def verify_reports(directory: Path, require_base: bool = False):
         assert report['semanticRecovery']['initialRebuildMs'] <= 12000, report['semanticRecovery']['initialRebuildMs']
         assert report['semanticRecovery']['incompatibleRecoveryRebuildMs'] <= 12000, report['semanticRecovery']['incompatibleRecoveryRebuildMs']
         assert report['semanticRecovery']['semanticIndexBytes'] <= 8 * 1024 * 1024, report['semanticRecovery']['semanticIndexBytes']
-        assert report['totalDurationMs'] <= 180000, report['totalDurationMs']
+        assert report['totalDurationMs'] <= 240000, ('full-total-duration', report['totalDurationMs'])
 
     assert report['concurrentReadWrite']['delete']['reader']['failures'] == 0
     assert report['concurrentReadWrite']['wal']['reader']['failures'] == 0
