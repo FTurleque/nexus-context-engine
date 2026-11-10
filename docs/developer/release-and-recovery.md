@@ -115,9 +115,9 @@ Un backup/restauration doit conserver les protections adaptées au système cibl
 
 Avant une migration de production, sauvegarder SQLite service arrêté. Ne jamais restaurer uniquement un index Lucene en ignorant SQLite.
 
-## Recovery sémantique / `content-v6`
+## Recovery sémantique / `content-v7`
 
-Le profil de contenu sémantique courant est `content-v6`, lié à la politique de redaction `secret-redaction-v7`. Un index créé sous l'ancien profil est considéré incompatible et doit être reconstruit ; NEXUS ne réutilise pas silencieusement les vecteurs historiques.
+Le profil de contenu sémantique courant est `content-v7`, lié à la politique de redaction `secret-redaction-v8`. Un index créé sous l'ancien profil est considéré incompatible et doit être reconstruit ; NEXUS ne réutilise pas silencieusement les vecteurs historiques.
 
 La redaction de secrets réduit la fuite accidentelle de tokens/clés/mots de passe structurés, mais n'est pas une sauvegarde ni un scanner de secrets complet.
 
@@ -294,3 +294,28 @@ migrations qu'il ne connaît pas ; il ouvre donc la base et reconstruit ses dér
 sous `secret-redaction-v6`, qui ne masque ni ne refuse un jeton `sk-` de 256 à 260
 caractères de corps. Pour revenir en arrière sans rouvrir cette fenêtre, restaurer
 la sauvegarde de `NEXUS_HOME` prise avant la mise à niveau.
+
+## Mise à niveau V019 — voisinage et classe des jetons à préfixe
+
+`V019__invalidate_token_context_bound_indexes.sql` accompagne la politique
+`secret-redaction-v8` : le refus d'un jeton trop long lit le même texte que le
+masquage, après remplacement des blocs de clé privée, et le corps des jetons
+`xox?-`, `gh?_`, `sk_` et `rk_` est compté sur la même classe de caractères au
+masquage et au refus. Sous `secret-redaction-v7`, un jeton `sk-`, `glpat-` ou
+`xox?-` de plus de 255 caractères de corps collé à la ligne de fin d'un bloc de clé
+privée, ou un jeton `xox?-`, `gh?_`, `sk_` ou `rk_` contenant un `_`, n'était ni
+masqué ni refusé : les dérivés existants peuvent le contenir en clair. Comme V018,
+la migration incrémente la génération de chaque projet, le passe à `NOT_INDEXED`
+et efface `last_indexed_at` ; le registre et les faits canoniques sont conservés.
+La prochaine indexation reconstruit les dérivés lexicaux, et le profil `content-v7`
+impose la reconstruction des vecteurs sémantiques. Un fichier qui porte un jeton
+refusé est exclu des index lexical et sémantique avec le diagnostic
+`INDEX_REDACTION_LIMIT`. V001 à V018 et leurs empreintes restent inchangées.
+`SchemaMigratorTokenContextBoundUpgradeTest` migre une base V018 dont l'index
+Lucene contient ces deux formes de jeton et vérifie la génération, le statut, le
+registre, le diagnostic et la reconstruction.
+
+Retour arrière : V019 ne change pas le schéma ; un binaire antérieur ouvre la base
+et reconstruit ses dérivés sous sa propre politique, qui laisse passer ces jetons.
+Pour revenir en arrière sans rouvrir ces cas, restaurer la sauvegarde de
+`NEXUS_HOME` prise avant la mise à niveau.

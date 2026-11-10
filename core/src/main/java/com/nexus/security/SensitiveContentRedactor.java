@@ -16,7 +16,7 @@ import java.util.regex.Pattern;
 public final class SensitiveContentRedactor {
 
     /** Version persistée dans les index dérivés ; toute évolution impose leur reconstruction. */
-    public static final String POLICY_VERSION = "secret-redaction-v7";
+    public static final String POLICY_VERSION = "secret-redaction-v8";
 
     private static final String REDACTED = "[REDACTED]";
     private static final String PRIVATE_KEY_BEGIN = "-----BEGIN ";
@@ -39,13 +39,14 @@ public final class SensitiveContentRedactor {
      * Jetons à préfixe fixe. GitHub, AWS, npm et Stripe ont une classe de caractères sans
      * {@code -} et finissent sur une frontière de mot ; {@code sk-}, {@code xox?-},
      * {@code glpat-} et {@code AIza} incluent {@code -} et ne commencent ni ne finissent au
-     * milieu d'un identifiant à tirets. Chaque motif borne sa longueur et reste possessif.
+     * milieu d'un identifiant à tirets. Chaque motif borne sa longueur et reste possessif ; le
+     * corps d'une famille bornée utilise la classe de sa garde de fin et de {@link #OVERSIZED_TOKEN}.
      */
     private static final Pattern STRUCTURED_TOKEN = Pattern.compile(
-            "\\b(?:gh[pousr]_[A-Za-z0-9]{20,255}+|github_pat_\\w{20,255}+|(?:AKIA|ASIA)[0-9A-Z]{16}"
-                    + "|npm_[A-Za-z0-9]{36}|(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,255}+)\\b"
+            "\\b(?:gh[pousr]_\\w{20,255}+|github_pat_\\w{20,255}+|(?:AKIA|ASIA)[0-9A-Z]{16}"
+                    + "|npm_[A-Za-z0-9]{36}|(?:sk|rk)_(?:live|test)_\\w{16,255}+)\\b"
                     + "|(?<![A-Za-z0-9_-])(?:sk-(?:proj-|ant-)?+[A-Za-z0-9_-]{20,255}+"
-                    + "|xox[abposr]-[A-Za-z0-9-]{10,255}+|AIza[0-9A-Za-z_-]{35}"
+                    + "|xox[abposr]-[A-Za-z0-9_-]{10,255}+|AIza[0-9A-Za-z_-]{35}"
                     + "|glpat-[A-Za-z0-9_-]{20,255}+)(?![A-Za-z0-9_-])");
     /** Schéma {@code Bearer} d'un en-tête HTTP, quelle que soit la clé qui le porte. */
     private static final Pattern BEARER = Pattern.compile(
@@ -87,11 +88,15 @@ public final class SensitiveContentRedactor {
                     + "|[^\\s/:@]{1," + MAX_URI_USER_CHARS + "}+:[^\\s/@]{" + (MAX_SECRET_CHARS + 1) + ",}+@)");
     /**
      * Jeton structuré plus long que sa borne : refusé, jamais tronqué ni publié en clair. Pour
-     * {@code sk-}, la borne de refus vaut la borne de masquage plus un, sur le même corps compté
-     * après le préfixe {@code proj-} ou {@code ant-} optionnel, consommé de façon possessive.
+     * chaque famille bornée de {@link #STRUCTURED_TOKEN}, la borne de refus vaut la borne de
+     * masquage plus un, sur le même corps, la même classe de caractères et le même ancrage :
+     * {@code \w} après {@code gh?_}, {@code github_pat_}, {@code sk_} et {@code rk_} ;
+     * {@code [A-Za-z0-9_-]} après {@code sk-}, {@code glpat-} et {@code xox?-}, dont le corps est
+     * compté, pour {@code sk-}, après le préfixe {@code proj-} ou {@code ant-} optionnel consommé
+     * de façon possessive.
      */
     private static final Pattern OVERSIZED_TOKEN = Pattern.compile(
-            "\\b(?:gh[pousr]_[A-Za-z0-9]|github_pat_\\w|(?:sk|rk)_(?:live|test)_[A-Za-z0-9])\\w{255}"
+            "\\b(?:gh[pousr]_|github_pat_|(?:sk|rk)_(?:live|test)_)\\w{256}"
                     + "|(?<![A-Za-z0-9_-])(?:sk-(?:proj-|ant-)?+[A-Za-z0-9_-]{256}"
                     + "|(?:glpat-|xox[abposr]-)[A-Za-z0-9_-]{256})");
 
@@ -100,13 +105,15 @@ public final class SensitiveContentRedactor {
 
     public static String redact(String content) {
         Objects.requireNonNull(content, "content");
+        // Le refus lit le même texte que le masquage : un jeton collé à un bloc de clé privée y a
+        // le même voisinage dans les deux contrôles.
+        String redacted = replacePrivateKeyBlocks(content);
         // Les motifs d'URL ne tournent que sur un contenu qui contient un schéma.
-        boolean uri = content.contains("://");
-        if (OVERSIZED_TOKEN.matcher(content).find() || OVERSIZED_VALUE.matcher(content).find()
-                || uri && OVERSIZED_URI.matcher(content).find()) {
+        boolean uri = redacted.contains("://");
+        if (OVERSIZED_TOKEN.matcher(redacted).find() || OVERSIZED_VALUE.matcher(redacted).find()
+                || uri && OVERSIZED_URI.matcher(redacted).find()) {
             throw new OversizedSecretException();
         }
-        String redacted = replacePrivateKeyBlocks(content);
         redacted = STRUCTURED_TOKEN.matcher(redacted).replaceAll(REDACTED);
         redacted = JWT.matcher(redacted).replaceAll(REDACTED);
         redacted = BEARER.matcher(redacted).replaceAll("$1" + REDACTED);

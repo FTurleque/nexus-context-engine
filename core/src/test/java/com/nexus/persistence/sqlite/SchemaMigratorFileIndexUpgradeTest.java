@@ -196,8 +196,8 @@ class SchemaMigratorFileIndexUpgradeTest {
 
     /**
      * Enregistre comme déjà appliquées, sans les exécuter, les migrations d'invalidation postérieures
-     * à {@code lastVersion} (V018 : borne des jetons sk-) : elles repassent les projets en
-     * {@code NOT_INDEXED} par construction, alors que ces tests isolent les migrations d'index.
+     * à {@code lastVersion} (V018 et V019 : bornes des jetons à préfixe) : elles repassent les
+     * projets en {@code NOT_INDEXED} par construction, alors que ces tests isolent les migrations d'index.
      * L'empreinte vide est complétée par le migrateur sans réappliquer le script. Une migration
      * {@code __invalidate_} ne touche que les générations et le statut des projets, jamais le
      * schéma : sinon ce raccourci masquerait son effet sur les index.
