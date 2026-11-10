@@ -100,6 +100,20 @@ class SecretRedactionProbeTest {
         }
     }
 
+    /**
+     * Le format {@code sk-} de la sonde reste couvert à sa borne : corps de 255 caractères masqué,
+     * de 256 refusé. Hors de la liste des 35 cas, qui échantillonne des longueurs nominales.
+     */
+    @Test
+    void skTokenFormatIsRedactedAtItsBoundAndRefusedAboveIt() {
+        String atBound = synthetic("sk-", "proj-", "a".repeat(255));
+        String redacted = SensitiveContentRedactor.redact("key = '" + atBound + "'");
+        assertEquals("key = '" + REDACTED + "'", redacted);
+        String aboveBound = synthetic("sk-", "", "a".repeat(256));
+        org.junit.jupiter.api.Assertions.assertThrows(OversizedSecretException.class,
+                () -> SensitiveContentRedactor.redact("key = '" + aboveBound + "'"));
+    }
+
     /** {@code template} contient la valeur en clair ou le marqueur {@code %s} qui la reçoit. */
     private static Probe format(String name, String template, String secret) {
         return new Probe(name, template.replace("%s", secret), secret, Expectation.REDACTED, true);

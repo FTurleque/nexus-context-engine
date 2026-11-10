@@ -136,6 +136,37 @@ class SensitiveContentRedactorTest {
         assertEquals("[REDACTED]", SensitiveContentRedactor.redactField(content));
     }
 
+    @org.junit.jupiter.params.ParameterizedTest(name = "sk-{0}")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"", "proj-", "ant-"})
+    void masksSkTokenWhoseBodyHas255CharactersAfterItsPrefix(String marker) {
+        String body = syntheticAlphanumeric(255);
+        String token = "sk-" + marker + body;
+        String redacted = SensitiveContentRedactor.redact("x " + token + " y");
+        assertEquals("x [REDACTED] y", redacted);
+        assertNoFragmentOf(body, redacted);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "sk-{0}")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"", "proj-", "ant-"})
+    void refusesSkTokenWhoseBodyHas256CharactersWithoutPublishingAnyPartOfIt(String marker) {
+        assertSkTokenRefused(marker, 256);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "corps de {0} caractères")
+    @org.junit.jupiter.params.provider.ValueSource(ints = {256, 257, 258, 259, 260})
+    void refusesSkTokensWhoseBodyHas256To260Characters(int bodyLength) {
+        assertSkTokenRefused("", bodyLength);
+    }
+
+    private static void assertSkTokenRefused(String marker, int bodyLength) {
+        String token = "sk-" + marker + syntheticAlphanumeric(bodyLength);
+        String content = "x " + token + " y";
+        var failure = org.junit.jupiter.api.Assertions.assertThrows(OversizedSecretException.class,
+                () -> SensitiveContentRedactor.redact(content));
+        assertNoFragmentOf(token, failure.getMessage());
+        assertEquals("[REDACTED]", SensitiveContentRedactor.redactField(content));
+    }
+
     /** Valeur alphanumérique synthétique, construite par code (suites de l'alphabet décalées par bloc). */
     private static String syntheticAlphanumeric(int length) {
         String alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";

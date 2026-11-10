@@ -3230,7 +3230,7 @@
    "depends_on": [],
    "bloque": [],
    "statut": "Ouvert",
-   "changement": "Nouveau",
+   "changement": "Refus OVERSIZED_TOKEN aligné sur le masquage pour sk-, sk-proj- et sk-ant- (corps compté après le préfixe), politique secret-redaction-v7, content-v6 et migration V018 (PR #348, sprint 8).",
    "historique": [
     {
      "date": "2026-11-07",
@@ -3246,6 +3246,13 @@
     "commit": "7bbfe675",
     "verdict": "Ouvert — constat ajouté le 07/11, absent du suivi du mainteneur",
     "preuve": "core/src/main/java/com/nexus/security/SensitiveContentRedactor.java identique au 07/11 (diff nul avec nexus-1107) : :47 `sk-(?:proj-|ant-)?+[A-Za-z0-9_-]{20,255}+` + garde négative :49 ; :89-91 OVERSIZED_TOKEN `sk-[A-Za-z0-9_-]{261}` ; POLICY_VERSION toujours secret-redaction-v6 (:19). Sonde java 21 sur une copie (SensitiveContentRedactor + SecretAssignmentScanner + OversizedSecretException stubée) : sk- corps 255 masqué, 256/257/258/260 en clair (LEAK), 261 refusé ; sk-ant- corps 256 en clair, 257+ refusé ; sk-proj- 256 refusé ; ghp_ et glpat- 255 masqué, 256 refusé. La PR #331 (archive 2026-11-09-preciser-bornes-redaction-recence-git) n'ajoute que le test ghp_ 255/256 (tasks.md:11) et écarte explicitement sk- : design.md:80 « sk- a une borne composée », proposal.md:50. Test sk- existant : SensitiveContentRedactorTest.java:187 (300 caractères seulement). docs/developer/secret-redaction.md:42,75 promet toujours « 255 pour le corps d'un jeton à préfixe » avec refus au-delà. | Test actif : Non : aucun test de borne sk-, sk-ant-, sk-proj- à 255/256.",
+    "reserve": null
+   },
+   "verification_mainteneur": {
+    "date": "2026-11-10",
+    "commit": "4f33bf51",
+    "verdict": "Fermé",
+    "preuve": "PR #348 (change sprint-08-suite-borne-sk) : SensitiveContentRedactor OVERSIZED_TOKEN `sk-(?:proj-|ant-)?+[A-Za-z0-9_-]{256}`, même corps que le masquage (255 masqué, 256 refusé) ; POLICY_VERSION secret-redaction-v7, content-v6, migration V018__invalidate_sk_token_bound_indexes.sql ; SensitiveContentRedactorTest#masksSkTokenWhoseBodyHas255CharactersAfterItsPrefix, #refusesSkTokenWhoseBodyHas256CharactersWithoutPublishingAnyPartOfIt (sk-, sk-proj-, sk-ant-), #refusesSkTokensWhoseBodyHas256To260Characters (en échec avec l'ancien motif), SchemaMigratorSkTokenBoundUpgradeTest ; ./mvnw clean install, self-smoke et contrats verts.",
     "reserve": null
    },
    "absent_du_suivi": true

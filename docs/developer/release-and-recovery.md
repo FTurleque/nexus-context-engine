@@ -115,9 +115,9 @@ Un backup/restauration doit conserver les protections adaptées au système cibl
 
 Avant une migration de production, sauvegarder SQLite service arrêté. Ne jamais restaurer uniquement un index Lucene en ignorant SQLite.
 
-## Recovery sémantique / `content-v5`
+## Recovery sémantique / `content-v6`
 
-Le profil de contenu sémantique courant est `content-v5`, lié à la politique de redaction `secret-redaction-v6`. Un index créé sous l'ancien profil est considéré incompatible et doit être reconstruit ; NEXUS ne réutilise pas silencieusement les vecteurs historiques.
+Le profil de contenu sémantique courant est `content-v6`, lié à la politique de redaction `secret-redaction-v7`. Un index créé sous l'ancien profil est considéré incompatible et doit être reconstruit ; NEXUS ne réutilise pas silencieusement les vecteurs historiques.
 
 La redaction de secrets réduit la fuite accidentelle de tokens/clés/mots de passe structurés, mais n'est pas une sauvegarde ni un scanner de secrets complet.
 
@@ -270,3 +270,27 @@ Lucene et sémantiques restent valides. Sa création parcourt une fois la table 
 démarrage ; chaque écriture de symbole maintient ensuite un index de plus. V001 à V016 et leurs
 empreintes restent inchangées. `SchemaMigratorFileIndexUpgradeTest` migre une base V016 peuplée et
 vérifie les deux index, les données et le statut.
+
+## Mise à niveau V018 — borne des jetons sk-
+
+`V018__invalidate_sk_token_bound_indexes.sql` accompagne la politique
+`secret-redaction-v7` : un jeton `sk-`, `sk-proj-` ou `sk-ant-` est masqué jusqu'à
+255 caractères de corps, compté après le préfixe, et refusé dès 256. Sous
+`secret-redaction-v6`, un jeton `sk-` de 256 à 260 caractères de corps (`sk-ant-` à
+256) n'était ni masqué ni refusé : les dérivés existants peuvent le contenir en
+clair. Comme V011, la migration incrémente la génération de chaque projet, le passe
+à `NOT_INDEXED` et efface `last_indexed_at` ; le registre et les faits canoniques
+sont conservés. La prochaine indexation reconstruit les dérivés lexicaux, et le
+profil `content-v6` impose la reconstruction des vecteurs sémantiques. Un index
+Lucene dont la version de politique diffère de `secret-redaction-v7` est traité
+comme absent et reconstruit. Un fichier qui porte un jeton refusé est exclu des
+index lexical et sémantique avec le diagnostic `INDEX_REDACTION_LIMIT`. V001 à V017
+et leurs empreintes restent inchangées. `SchemaMigratorSkTokenBoundUpgradeTest`
+migre une base V017 dont l'index Lucene contient un tel jeton et vérifie la
+génération, le statut, le registre et la reconstruction.
+
+Retour arrière : V018 ne change pas le schéma et un binaire antérieur ignore les
+migrations qu'il ne connaît pas ; il ouvre donc la base et reconstruit ses dérivés
+sous `secret-redaction-v6`, qui ne masque ni ne refuse un jeton `sk-` de 256 à 260
+caractères de corps. Pour revenir en arrière sans rouvrir cette fenêtre, restaurer
+la sauvegarde de `NEXUS_HOME` prise avant la mise à niveau.
