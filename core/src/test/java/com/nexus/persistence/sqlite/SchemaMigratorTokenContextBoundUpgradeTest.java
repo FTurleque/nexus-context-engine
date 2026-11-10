@@ -53,7 +53,9 @@ class SchemaMigratorTokenContextBoundUpgradeTest {
         String underscore = "xo" + "xb-" + LEAK_TERM + "-abcdefghijkl_mnopqrstuv";
         Files.writeString(root.resolve("fixture.md"), "# TokenContextMarker\nLes clés sont dans secret.md et slack.md.\n");
         // Bloc de clé privée synthétique, marqueurs assemblés à l'exécution, sans corps de clé réel.
-        String keyBlock = "-----" + "BEGIN RSA PRIVATE" + " KEY-----\nMII\n" + "-----" + "END RSA PRIVATE" + " KEY-----";
+        String dashes = "-".repeat(5);
+        String keyBlock = String.join("\n", dashes + "BEGIN RSA PRIVATE KEY" + dashes, "MII",
+                dashes + "END RSA PRIVATE KEY" + dashes);
         Files.writeString(root.resolve("secret.md"), keyBlock + glued + "\n");
         Files.writeString(root.resolve("slack.md"), "SLACK = " + underscore + "\n");
         UUID id = UUID.randomUUID();

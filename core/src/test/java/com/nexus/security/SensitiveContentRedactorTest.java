@@ -168,8 +168,13 @@ class SensitiveContentRedactorTest {
     }
 
     /** Bloc de clé privée synthétique, marqueurs assemblés à l'exécution, sans corps de clé réel. */
-    private static final String PRIVATE_KEY_BLOCK = "-----" + "BEGIN RSA PRIVATE" + " KEY-----\nMII\n"
-            + "-----" + "END RSA PRIVATE" + " KEY-----";
+    private static final String PRIVATE_KEY_BLOCK = rsaPrivateKeyBlock();
+
+    private static String rsaPrivateKeyBlock() {
+        String dashes = "-".repeat(5);
+        String type = "RSA PRIVATE KEY";
+        return String.join("\n", dashes + "BEGIN " + type + dashes, "MII", dashes + "END " + type + dashes);
+    }
 
     @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
     @org.junit.jupiter.params.provider.ValueSource(strings = {"sk-", "sk-ant-", "glpat-", "xoxb-"})
