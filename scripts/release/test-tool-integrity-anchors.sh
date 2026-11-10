@@ -39,7 +39,8 @@ ARCHGATE_VERSION="$(awk -F= '$1 == "archgate.version" { sub(/\r$/, "", $2); prin
 printf '%s\n' "$ARCHGATE_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'
 tr -d '\r' < "$INTEGRITY" | grep -Eq "^archgate\\.${ARCHGATE_VERSION}\\.linux-x64\\.sha256=[0-9a-f]{64}\$"
 grep -qF 'scripts/release/install-archgate.sh' "$ROOT/.github/workflows/ci.yml"
-grep -qF 'archgate check' "$ROOT/.github/workflows/ci.yml"
+# --base HEAD runs every rule; the default base would run only the ADRs touched by the diff.
+grep -qF 'archgate check --base HEAD' "$ROOT/.github/workflows/ci.yml"
 INSTALL_ARCHGATE="${SCRIPT_DIR}/install-archgate.sh"
 mkdir -p "$TMP/archgate-src"
 printf '#!/bin/sh\necho fake-archgate\n' > "$TMP/archgate-src/archgate"

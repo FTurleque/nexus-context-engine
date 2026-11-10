@@ -292,4 +292,6 @@ jobs:
         run: |
           set -euo pipefail
           archgate --version
-          archgate check --output github
+          # --base HEAD: no changed file, so every rule of every ADR runs, not only
+          # the ADRs whose files the PR touches.
+          archgate check --base HEAD --output github
