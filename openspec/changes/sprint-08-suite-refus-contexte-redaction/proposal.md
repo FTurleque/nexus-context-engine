@@ -9,7 +9,7 @@ Deux défauts de `SensitiveContentRedactor`, antérieurs à `secret-redaction-v7
 
 Le jeton part alors en clair dans Lucene, les embeddings et les sorties CLI/REST/MCP. Les formats réels connus n'ont pas cette forme ; la gravité est faible, mais la garantie « jamais publié en clair » est fausse pour ces familles.
 
-Source : revue `nexus-security-auditor` du change `sprint-08-suite-borne-sk` (`AUD-SEC-20`), sonde du 10/11/2026 (java 21, classes de `d193fb05`).
+Source : revue `nexus-security-auditor` du change `2026-11-10-sprint-08-suite-borne-sk` (`AUD-SEC-20`), sonde du 10/11/2026 (java 21, classes de `d193fb05`).
 
 ## What Changes
 

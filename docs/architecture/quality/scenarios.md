@@ -52,7 +52,7 @@ Une modification de ces valeurs doit mettre à jour code, tests, documentation e
 
 ## Critères supply-chain actifs
 
-- régression de couverture core sous 70 % lignes ou 50 % branches ⇒ build en échec ;
+- régression de couverture sous un plancher JaCoCo de module, de paquet ou de classe ⇒ build en échec (planchers et mesure de référence : [adapter-coverage-gates.md](../../developer/adapter-coverage-gates.md#seuils-bloquants)) ;
 - nouvelle vulnérabilité introduite en PR ⇒ gate OSV delta ;
 - vulnérabilité dans le SBOM CycloneDX agrégé ⇒ OSV gate bloquant ;
 - analyse statique Java/Kotlin ⇒ CodeQL `security-extended` ;
