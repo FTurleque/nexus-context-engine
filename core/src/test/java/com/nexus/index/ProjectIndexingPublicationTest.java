@@ -184,7 +184,8 @@ class ProjectIndexingPublicationTest {
         writeDocuments("project", 20, "newmarker");
         failPublish.set(true);
         events.clear();
-        IllegalStateException failure = assertThrows(IllegalStateException.class, () -> service.index(project.id()));
+        var projectId = project.id();
+        IllegalStateException failure = assertThrows(IllegalStateException.class, () -> service.index(projectId));
 
         assertEquals(PUBLISH_FAILURE, failure.getMessage(), "l'exception de publication est propagée");
         assertTrue(events.contains("publish"), "la publication canonique a été tentée : " + events);
