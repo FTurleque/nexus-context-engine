@@ -557,3 +557,6 @@ if (-not (Test-Path -LiteralPath $sentinel -PathType Leaf)) {
 
 Write-Host 'NEXUS Windows installer hardened source + pinned prerequisite provenance + install/CLI/MCP/Claude/Codex payload/uninstall smoke PASS' -ForegroundColor Green
 Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+# The client smoke expects failing exit codes from the scripts it runs; GitHub's powershell shell
+# ends the step with `exit $LASTEXITCODE`, so the script states its own success.
+exit 0
