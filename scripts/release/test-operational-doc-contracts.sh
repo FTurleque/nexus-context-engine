@@ -693,9 +693,9 @@ for check in forms inputs timeouts runners; do
 done
 # A fixture counts as rejected only with exit code 1 and the message of its rule.
 for case in \
-  "forms|forms-flow-mapping-job.yml|job 'b' is not a block mapping" \
-  "forms|forms-quoted-key.yml|quoted key 'runs-on'" \
-  "forms|forms-run-plain-next-line.yml|run: followed by a plain scalar" \
+  "forms|forms-flow-mapping-job.yml|forms-flow-mapping-job.yml:9: unsupported YAML form: job 'b' is not a block mapping" \
+  "forms|forms-quoted-key.yml|forms-quoted-key.yml:6: unsupported YAML form: quoted key 'runs-on'" \
+  "forms|forms-run-plain-next-line.yml|forms-run-plain-next-line.yml:14: unsupported YAML form: run: followed by a plain scalar" \
   "inputs|inputs-in-run.yml|interpolated inside a run" \
   "inputs|inputs-inline-run.yml|interpolated inside a run" \
   "inputs|inputs-event-inputs.yml|interpolated inside a run" \

@@ -152,8 +152,8 @@ for fixture in match annotated; do
   python3 "$HYGIENE" upstream --recorded "$UPSTREAM/recorded" "$UPSTREAM/${fixture}.yml" >/dev/null
 done
 for case in \
-  'sha-changed|is not the commit of upstream tag v7.0.1 (3d3c42e5aac5ba805825da76410c181273ba90b1)' \
-  'annotated-tag-object|is not the commit of upstream tag v9.0.0 (3a2844b7e9c422d3c10d287c895573f7108da1b3)' \
+  'sha-changed|actions/checkout@0000000000000000000000000000000000000001 is not the commit of upstream tag v7.0.1 (3d3c42e5aac5ba805825da76410c181273ba90b1)' \
+  'annotated-tag-object|actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 is not the commit of upstream tag v9.0.0 (3a2844b7e9c422d3c10d287c895573f7108da1b3)' \
   'tag-missing|tag v7.9.9 not found upstream'; do
   fixture="${case%%|*}"
   message="${case#*|}"
