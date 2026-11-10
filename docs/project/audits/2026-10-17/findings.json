@@ -4676,7 +4676,7 @@
    "depends_on": [],
    "bloque": [],
    "statut": "Ouvert",
-   "changement": "Nouveau",
+   "changement": "Lecture UTF-8 par Read-ClientJson, contrôle de tous les fichiers avant écriture, sauvegarde <fichier>.nexus-backup-<horodatage> puis File.Replace, arrêt sur erreur avec trap qui nomme le fichier, désinstallation qui continue après un fichier illisible et garde le drapeau *Managed (PR #354, sprint 13).",
    "historique": [
     {
      "date": "2026-11-09",
@@ -4688,6 +4688,13 @@
     "commit": "7bbfe675",
     "verdict": "Nouveau constat",
     "preuve": "Rejoué le 09/11 sous Windows PowerShell 5.1.19041 sur la machine de l'utilisateur, avec le nexus-json.ps1 extrait du gabarit et la séquence de connect-claude-desktop.ps1 : \"C:\\Users\\Hélène\\outil.exe\" ressort corrompu après Save-CleanJson ; un fichier JSON invalide est réécrit en 2 octets (ConvertFrom-Json, Get-Member et Add-Member échouent sans arrêter le script).",
+    "reserve": null
+   },
+   "verification_mainteneur": {
+    "date": "2026-11-10",
+    "commit": "2050edb6",
+    "verdict": "Fermé",
+    "preuve": "PR #354 (change sprint-13-installateur-et-release-finale, tâches 1.1 à 1.5) : nexus-json.ps1 (Read-ClientJson, Get-ClientSection, Save-CleanJson avec File.Replace et restauration, Add-NexusServerEntry en deux phases, Remove-NexusServerEntry) ; scripts JSON en ErrorActionPreference Stop avec trap ; scripts .ps1 écrits en UTF-8 avec BOM ; scripts/release/test-windows-installer.ps1 exécute nexus-json.ps1 et les scripts de déconnexion installés sous Windows PowerShell 5.1 : C:\\Users\\Hélène\\outil.exe intact après connexion et désinstallation, JSON invalide et section non objet inchangés avec code non nul, deux configurations dont une invalide inchangées, sauvegarde aux octets d'origine, remplacement refusé sans perte ; smoke vert sous PS 5.1 et pwsh.",
     "reserve": null
    }
   },
@@ -4708,7 +4715,7 @@
    "depends_on": [],
    "bloque": [],
    "statut": "Ouvert",
-   "changement": "Nouveau",
+   "changement": "docs/user/docker-installation.md attribue la publication GHCR à release.yml ; contrat test-operational-doc-contracts.sh : aucune publication dans les workflows de distribution, packages: write réservé à release.yml (PR #354, tâche 4.1). Tâches mainteneur 4.2 (état du registre avant la promotion de main) et 4.3 (provenance après la release finale) ouvertes.",
    "historique": [
     {
      "date": "2026-11-09",
@@ -4725,6 +4732,13 @@
     "verdict": "Ouvert — titre corrigé : les tags sont attestés par l'ancienne chaîne, pas « sans attestation »",
     "preuve": "docker buildx imagetools inspect et gh attestation verify, 09/11 vers 22 h.",
     "reserve": null
+   },
+   "verification_mainteneur": {
+    "date": "2026-11-10",
+    "commit": "2050edb6",
+    "verdict": "Partiel",
+    "preuve": "PR #354 (tâche 4.1) : section « Publication GHCR » réécrite, contrat en échec sur deux mutations locales de la page et sur un packages: write ajouté à docker-distribution.yml.",
+    "reserve": "Tâches 4.2 et 4.3 du change sprint-13-installateur-et-release-finale non faites : versions de paquet 0.2.0 et latest d'origine antérieure à release.yml toujours au registre."
    }
   },
   {
@@ -4743,7 +4757,7 @@
    "depends_on": [],
    "bloque": [],
    "statut": "Ouvert",
-   "changement": "Nouveau",
+   "changement": "Compose généré et repli docker build passent NEXUS_IMAGE_VERSION et NEXUS_IMAGE_REVISION écrits dans .env par l'installateur ; label revision « unknown » sans révision, l'image de base UBI portant son propre label (PR #354, sprint 13).",
    "historique": [
     {
      "date": "2026-11-09",
@@ -4755,6 +4769,13 @@
     "commit": "7bbfe675",
     "verdict": "Nouveau constat",
     "preuve": "Relevé à la vérification du 09/11.",
+    "reserve": null
+   },
+   "verification_mainteneur": {
+    "date": "2026-11-10",
+    "commit": "2050edb6",
+    "verdict": "Fermé",
+    "preuve": "PR #354 (tâche 3.1) : docker compose build sur la distribution construite, label version 0.2.0-rc.3, revision égal à la valeur fournie ou « unknown » sans révision (relevé local du 10/11) ; docker-distribution.yml vérifie version et « unknown » sur l'image de repli ; test-docker-runtime.ps1 refuse une version différente du pom ou une revision vide.",
     "reserve": null
    }
   },
@@ -4774,7 +4795,7 @@
    "depends_on": [],
    "bloque": [],
    "statut": "Ouvert",
-   "changement": "Nouveau",
+   "changement": "PowerShellSingleQuote double U+0027 et U+2018 à U+201B ; scripts PowerShell générés écrits en UTF-8 avec BOM (SavePowerShellScript), la conversion ANSI best-fit de SaveStringToFile changeant U+FF07 et U+02BC en apostrophe (PR #354, sprint 13).",
    "historique": [
     {
      "date": "2026-11-09",
@@ -4786,6 +4807,13 @@
     "commit": "7bbfe675",
     "verdict": "Nouveau constat",
     "preuve": "Relevé à la vérification du 09/11.",
+    "reserve": null
+   },
+   "verification_mainteneur": {
+    "date": "2026-11-10",
+    "commit": "2050edb6",
+    "verdict": "Fermé",
+    "preuve": "PR #354 (tâche 2.1) : scripts/release/test-windows-config-escaping.ps1 rejoue les règles de PowerShellSingleQuote, analyse par Parser::ParseInput la ligne MCP pour C:\\Outils\\Jean’s NEXUS sans erreur et retrouve le chemin, contrôle négatif sans les guillemets typographiques ; test-windows-installer.ps1 refuse un .ps1 écrit par SaveStringToFile et vérifie le BOM des scripts installés. Injection U+FF07 relevée par la revue nexus-security-auditor de la PR et fermée par l'écriture UTF-8 avec BOM.",
     "reserve": null
    }
   },
@@ -4805,7 +4833,7 @@
    "depends_on": [],
    "bloque": [],
    "statut": "Ouvert",
-   "changement": "Nouveau",
+   "changement": "Liens de l'archive 2026-11-09-preciser-bornes-redaction-recence-git corrigés ; check_change_links contrôle tous les Markdown de openspec/changes/, archives comprises, avec fixtures négatives (PR #354, sprint 13).",
    "historique": [
     {
      "date": "2026-11-09",
@@ -4817,6 +4845,13 @@
     "commit": "7bbfe675",
     "verdict": "Nouveau constat",
     "preuve": "Relevé à la vérification du 09/11.",
+    "reserve": null
+   },
+   "verification_mainteneur": {
+    "date": "2026-11-10",
+    "commit": "2050edb6",
+    "verdict": "Fermé",
+    "preuve": "PR #354 (tâches 5.1 et 5.2) : scripts/release/test-openspec-doc-contracts.sh passe sur le dépôt et échoue sur les fixtures lien cassé et ancre absente en nommant le fichier et le lien ; les 9 liens corrigés en ../../../../docs/developer/.",
     "reserve": null
    }
   },

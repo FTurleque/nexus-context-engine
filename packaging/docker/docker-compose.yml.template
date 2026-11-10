@@ -6,6 +6,11 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.runtime
+      # Labels OCI de l'image construite sur le poste, valeurs écrites dans .env par l'installateur.
+      # Sans révision, le label org.opencontainers.image.revision vaut « unknown ».
+      args:
+        NEXUS_IMAGE_VERSION: "${NEXUS_IMAGE_VERSION:-}"
+        NEXUS_IMAGE_REVISION: "${NEXUS_IMAGE_REVISION:-}"
     container_name: "${NEXUS_DOCKER_CONTAINER:-nexus-context-engine}"
     restart: "${NEXUS_DOCKER_RESTART_POLICY:-unless-stopped}"
     # Durcissement d'exécution : racine en lecture seule (NEXUS n'écrit que dans /data/nexus et

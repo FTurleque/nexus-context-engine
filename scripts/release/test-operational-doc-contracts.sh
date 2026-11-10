@@ -806,7 +806,7 @@ for dockerfile in ("packaging/docker/Dockerfile", "packaging/docker/Dockerfile.r
         "/opt/nexus/THIRD_PARTY_NOTICES.txt",
         'org.opencontainers.image.source="https://github.com/FTurleque/nexus-context-engine"',
         'org.opencontainers.image.licenses="LicenseRef-NEXUS-Proprietary"',
-        'org.opencontainers.image.revision="${NEXUS_IMAGE_REVISION}"',
+        'org.opencontainers.image.revision="${NEXUS_IMAGE_REVISION',
         'org.opencontainers.image.version="${NEXUS_IMAGE_VERSION}"',
         "HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=6",
         'CMD ["/usr/local/bin/nexus-healthcheck"]',
@@ -875,6 +875,51 @@ for needle in ("Dockerfile.runtime.dockerignore", ".dockerignore", "read_only: t
         fail(f"docs/user/docker-installation.md must mention {needle!r}")
 
 print("docker-image-hardening-contracts=PASS")
+PY
+# --- Sprint 13 : seul le workflow de release publie dans GHCR (AUD-DEP-34) ---
+python3 - <<'PY'
+import re
+from pathlib import Path
+
+
+def fail(message: str) -> None:
+    raise SystemExit(f"ghcr publication contract drift: {message}")
+
+
+for workflow in (".github/workflows/docker-distribution.yml", ".github/workflows/develop-push-docker-distribution.yml"):
+    source = Path(workflow).read_text(encoding="utf-8")
+    for forbidden in ("docker push", "ghcr.io", "docker login", "imagetools create", "--push"):
+        if forbidden in source:
+            fail(f"{workflow} must not publish to GHCR ({forbidden!r})")
+
+# The real barrier: only release.yml may hold the packages: write permission.
+granting = sorted(
+    str(path).replace("\\", "/")
+    for pattern in (".github/workflows/*.yml", ".github/workflows/*.yaml", ".github/actions/**/*.yml", ".github/actions/**/*.yaml")
+    for path in Path(".").glob(pattern)
+    if re.search(r"^\s*packages:\s*write\b", path.read_text(encoding="utf-8"), re.MULTILINE)
+)
+if granting != [".github/workflows/release.yml"]:
+    fail(f"only .github/workflows/release.yml may declare packages: write, found {granting}")
+
+page = "docs/user/docker-installation.md"
+doc = Path(page).read_text(encoding="utf-8")
+match = re.search(r"^## Publication GHCR\s*$(.*?)(?=^## |\Z)", doc, re.MULTILINE | re.DOTALL)
+if not match:
+    fail(f"{page} must keep a '## Publication GHCR' section")
+section = match.group(1)
+latest = section.find("ghcr.io/fturleque/nexus-context-engine:latest")
+if latest < 0:
+    fail(f"{page} must list the GHCR latest tag in '## Publication GHCR'")
+workflows = re.findall(r"\.github/workflows/[\w.-]+\.yml", section[:latest])
+if not workflows or workflows[-1] != ".github/workflows/release.yml":
+    fail(f"{page} must attribute the GHCR <version> and latest tags to .github/workflows/release.yml")
+for sentence in re.split(r"(?<=[.:])\s", section):
+    if "docker-distribution.yml" in sentence and re.search(r"\bpublie\b", sentence) \
+            and "sans rien publier" not in sentence and "ne publie" not in sentence:
+        fail(f"{page} attributes GHCR publication to docker-distribution.yml")
+
+print("ghcr-publication-contracts=PASS")
 PY
 # --- Sprint 11 : documentation SQLite et instruction primaire (AUD-QUA-13, AUD-QUA-03, AUD-PRF-10) ---
 # The FTS5 trigram index shipped by V008 must not be described as a future engine.

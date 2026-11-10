@@ -288,6 +288,12 @@ def check_specs_and_matrix() -> None:
             fail(f"matrice: section « {title} » sans spec correspondante")
 
 
+def check_change_links(changes_dir: Path) -> None:
+    """Liens relatifs de tous les Markdown d'un dossier de changements, archives comprises."""
+    for page in sorted(changes_dir.rglob("*.md")):
+        check_links(page)
+
+
 def check_docs() -> None:
     for p in (MATRIX, GUIDE):
         if not p.is_file():
@@ -295,9 +301,9 @@ def check_docs() -> None:
             continue
         check_links(p)
         check_mermaid(p)
+    check_change_links(CHANGES_DIR)
     for design in sorted(CHANGES_DIR.glob("*/design.md")):
         if design.parent.name != "archive":
-            check_links(design)
             check_mermaid(design)
     seen: set[Path] = set()
     for spec in sorted(SPECS_DIR.glob("*/spec.md")):
@@ -314,9 +320,13 @@ def check_docs() -> None:
 
 
 def main() -> int:
-    check_schema_and_config()
-    check_specs_and_matrix()
-    check_docs()
+    if len(sys.argv) == 3 and sys.argv[1] == "--links-under":
+        # Fixtures de test-openspec-doc-contracts.sh : contrôle des liens seul, sous ROOT.
+        check_change_links(Path(sys.argv[2]).resolve())
+    else:
+        check_schema_and_config()
+        check_specs_and_matrix()
+        check_docs()
     if errors:
         for e in errors:
             print(f"openspec-doc-contracts: {e}", file=sys.stderr)

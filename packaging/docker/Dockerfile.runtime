@@ -3,13 +3,15 @@
 ARG RUNTIME_IMAGE=eclipse-temurin:21.0.12_8-jre-ubi10-minimal@sha256:c7feea7f2dce5cf29e0ffa94e386b0a12ab44c029ad66bcb59eacc4da572ccf4
 FROM ${RUNTIME_IMAGE}
 
-# Valeurs fournies par la CI (docker-distribution.yml) ; sans valeur, le label reste vide.
+# Révision et version : fournies par la CI (docker-distribution.yml) ou par build.args du compose
+# généré par l'installateur Windows. L'image de base porte son propre label revision : sans
+# révision connue, le label vaut « unknown » plutôt que le commit de l'image de base.
 ARG NEXUS_IMAGE_REVISION=""
 ARG NEXUS_IMAGE_VERSION=""
 LABEL org.opencontainers.image.title="nexus-context-engine" \
       org.opencontainers.image.source="https://github.com/FTurleque/nexus-context-engine" \
       org.opencontainers.image.licenses="LicenseRef-NEXUS-Proprietary" \
-      org.opencontainers.image.revision="${NEXUS_IMAGE_REVISION}" \
+      org.opencontainers.image.revision="${NEXUS_IMAGE_REVISION:-unknown}" \
       org.opencontainers.image.version="${NEXUS_IMAGE_VERSION}"
 
 USER root

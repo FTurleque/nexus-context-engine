@@ -118,8 +118,33 @@ Assert-TextContains -Text $installerSource -Needle 'host.docker.internal' -Descr
 
 Write-Host '[contract] assistant MCP wiring writes clean JSON and reversible markers'
 Assert-TextContains -Text $installerSource -Needle 'function Format-Json(' -Description 'clean 2-space JSON formatter helper'
-Assert-TextContains -Text $installerSource -Needle 'Save-CleanJson $mcp $c' -Description 'JetBrains config written via clean formatter'
-Assert-TextContains -Text $installerSource -Needle 'Save-CleanJson $cfg $c' -Description 'Claude Desktop config written via clean formatter'
+Assert-TextContains -Text $installerSource -Needle 'Save-CleanJson $cfg $c' -Description 'client configurations written via the clean formatter'
+foreach ($jsonFragment in @(
+    "'function Read-ClientJson([string]`$Path) {'",
+    '[System.IO.File]::ReadAllText($Path, [System.Text.UTF8Encoding]::new($false))',
+    '[System.IO.File]::Replace($tmp, $Path, $candidate)',
+    "'`$added = Add-NexusServerEntry @(`$mcp) ''servers'' `$e'",
+    "'`$added = Add-NexusServerEntry `$cfgs ''mcpServers'' `$e'",
+    "'Remove-NexusServerEntry @(`$mcp) ''servers''' + #13#10 +",
+    "'Remove-NexusServerEntry `$cfgs ''mcpServers''' + #13#10 +",
+    'procedure SavePowerShellScript(Path: String; Text: String);',
+    'if not SaveStringsToUTF8File(Path, Lines, False) then'
+)) {
+    Assert-TextContains -Text $installerSource -Needle $jsonFragment -Description "client JSON read/write: $jsonFragment"
+}
+foreach ($scriptGuard in @("'`$ErrorActionPreference = ''Stop''' + #13#10 +",
+        "'trap { Write-Host (''NEXUS: '' + `$_.Exception.Message); exit 1 }' + #13#10 +")) {
+    if (([regex]::Matches($installerSource, [regex]::Escape($scriptGuard))).Count -lt 4) {
+        throw "Every generated JSON client script must carry: $scriptGuard"
+    }
+}
+# SaveStringToFile writes the ANSI code page with best-fit mapping (U+FF07 becomes an apostrophe).
+if ($installerSource -match "SaveStringToFile\(Dir \+ '\\[\w-]+\.ps1'") {
+    throw 'Generated PowerShell scripts must be written by SavePowerShellScript (UTF-8 with BOM).'
+}
+if ($installerSource -match 'Get-Content \$(mcp|cfg) -Raw \| ConvertFrom-Json') {
+    throw 'Client configurations must be read by Read-ClientJson (UTF-8), not Get-Content.'
+}
 Assert-TextContains -Text $installerSource -Needle '# END NEXUS-MCP' -Description 'Codex block has a reversible END marker'
 
 Write-Host '[contract] assistant client page runs a preflight and lists each client on its own row'
@@ -147,7 +172,7 @@ Write-Host '[contract] uninstall can remove every NEXUS entry, written or adopte
 foreach ($uninstallFragment in @(
     'procedure WriteDisconnectScripts;',
     'procedure AdoptConfiguredClients;',
-    "SaveStringToFile(Dir + '\disconnect-copilot-cli.ps1',",
+    "SavePowerShellScript(Dir + '\disconnect-copilot-cli.ps1',",
     "ExpandConstant('{app}\integrations\disconnect-copilot-cli.ps1')"
 )) {
     Assert-TextContains -Text $installerSource -Needle $uninstallFragment -Description "client uninstall: $uninstallFragment"
@@ -158,6 +183,13 @@ Assert-TextContains -Text $installerSource -Needle "'NEXUS_HOME_BIND=nexus-data'
 Assert-TextContains -Text $installerSource -Needle "'NEXUS_OLLAMA_BASE_URL=' + OllamaPage.Values[0] + #13#10 +" -Description 'Docker receives the Ollama URL as entered; NEXUS adapts loopback after its policy check'
 $composeTemplate = [IO.File]::ReadAllText((Join-Path $repo 'packaging\docker\docker-compose.yml.template'), [Text.Encoding]::UTF8)
 Assert-TextContains -Text $composeTemplate -Needle 'name: "${NEXUS_DOCKER_DATA_VOLUME:-nexus-context-engine-data}"' -Description 'Compose declares the nexus-data named volume'
+
+Write-Host '[contract] the image built on the workstation carries its version label'
+Assert-TextContains -Text $composeTemplate -Needle 'NEXUS_IMAGE_VERSION: "${NEXUS_IMAGE_VERSION:-}"' -Description 'Compose passes the image version build argument'
+Assert-TextContains -Text $composeTemplate -Needle 'NEXUS_IMAGE_REVISION: "${NEXUS_IMAGE_REVISION:-}"' -Description 'Compose passes the image revision build argument'
+Assert-TextContains -Text $installerSource -Needle "EnvContent := EnvContent + 'NEXUS_IMAGE_VERSION={#NexusVersion}' + #13#10;" -Description 'installer writes the image version to .env'
+Assert-TextContains -Text $installerSource -Needle "'--build-arg NEXUS_IMAGE_VERSION={#NexusVersion} '" -Description 'local image fallback passes the image version'
+Assert-TextContains -Text $builderSource -Needle "`$iss.Replace('@@REVISION@@', `$revision)" -Description 'packaging resolves the revision token'
 
 Write-Host '[contract] reinstalling keeps the managed container port and moves the official image to this version'
 Assert-TextContains -Text $installerSource -Needle 'ManagedContainerPublishesPort(DockerPage.Values[1], DockerPage.Values[2], PortValue)' -Description 'managed NEXUS container port is not relocated on reinstall'
@@ -341,6 +373,176 @@ finally {
     $env:NEXUS_HOME = $previousHome
 }
 
+Write-Host '[smoke] generated client scripts read and write UTF-8, never rewrite an unreadable file, back up before rewriting'
+# The smoke installer writes nexus-json.ps1 and the disconnect scripts (connect scripts need a
+# detected client). The connect scripts call Add-NexusServerEntry exactly as the probe below does;
+# every script runs under Windows PowerShell 5.1, the interpreter the installer uses.
+$integrations = Join-Path $install 'integrations'
+$jsonHelper = Join-Path $integrations 'nexus-json.ps1'
+foreach ($generated in @(Get-ChildItem -LiteralPath $integrations -Filter '*.ps1' -File)) {
+    $head = [IO.File]::ReadAllBytes($generated.FullName)
+    if ($head.Length -lt 3 -or $head[0] -ne 0xEF -or $head[1] -ne 0xBB -or $head[2] -ne 0xBF) {
+        throw "integrations\$($generated.Name) must be UTF-8 with BOM: Windows PowerShell 5.1 reads a BOM-less script in the ANSI code page."
+    }
+}
+foreach ($generated in @('nexus-json.ps1', 'disconnect-claude-desktop.ps1', 'disconnect-copilot-jetbrains.ps1')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $integrations $generated) -PathType Leaf)) {
+        throw "Installed NEXUS is missing integrations\$generated"
+    }
+}
+$ps51 = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$clientHome = Join-Path $root 'client-profile'
+$probeScript = Join-Path $root 'client-probe.ps1'
+[IO.File]::WriteAllText($probeScript, @'
+param([string]$Helper, [string]$Paths, [string]$Section, [string]$Mode)
+$ErrorActionPreference = 'Stop'
+. $Helper
+$list = @($Paths -split '\|')
+if ($Mode -eq 'remove') { Remove-NexusServerEntry $list $Section | Out-Null; exit 0 }
+$e = [PSCustomObject]@{ command = 'cmd.exe'; args = @('/d', '/s', '/c', 'C:\NEXUS\nexus-mcp.cmd') }
+$added = Add-NexusServerEntry $list $Section $e
+if ($added -eq 0) { exit 20 }
+exit 0
+'@, [Text.Encoding]::ASCII)
+
+# A failing script writes its exception on stderr: under Windows PowerShell 5.1, redirecting it
+# with ErrorActionPreference Stop would throw here instead of returning the exit code.
+function Invoke-ClientProbe([string[]]$Paths, [string]$Section, [string]$Mode = 'add') {
+    $ErrorActionPreference = 'Continue'
+    & $ps51 -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $probeScript `
+        -Helper $jsonHelper -Paths ($Paths -join '|') -Section $Section -Mode $Mode *> $null
+    return $LASTEXITCODE
+}
+function Invoke-InstalledScript([string]$Name) {
+    $ErrorActionPreference = 'Continue'
+    $script:installedOutput = (& $ps51 -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $integrations $Name) *>&1 | Out-String)
+    return $LASTEXITCODE
+}
+function Write-ClientFile([string]$Path, [string]$Content) {
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Path) | Out-Null
+    [IO.File]::WriteAllText($Path, $Content, $utf8NoBom)
+}
+function Read-ClientFile([string]$Path) { return ([IO.File]::ReadAllText($Path, $utf8NoBom) | ConvertFrom-Json) }
+function Assert-BytesUnchanged([string]$Path, [byte[]]$Expected, [string]$Description) {
+    $actual = [IO.File]::ReadAllBytes($Path)
+    if ([Convert]::ToBase64String($actual) -ne [Convert]::ToBase64String($Expected)) {
+        throw "Client configuration rewritten: $Description"
+    }
+}
+function Get-NexusSideFiles([string]$Path) {
+    return @(Get-ChildItem -LiteralPath (Split-Path -Parent $Path) -File |
+        Where-Object { $_.Name -like ((Split-Path -Leaf $Path) + '.nexus-*') })
+}
+
+$savedClientProfile = @{ APPDATA = $env:APPDATA; LOCALAPPDATA = $env:LOCALAPPDATA }
+Remove-Item -LiteralPath $clientHome -Recurse -Force -ErrorAction SilentlyContinue
+try {
+    $env:APPDATA = Join-Path $clientHome 'Roaming'
+    $env:LOCALAPPDATA = Join-Path $clientHome 'Local'
+    $accented = 'C:\Users\H' + [char]0x00E9 + 'l' + [char]0x00E8 + 'ne\outil.exe'
+    $outilJson = '{"mcpServers":{"outil":{"command":"' + $accented.Replace('\', '\\') + '","args":[]}}}'
+    $claudeCfg = Join-Path $env:APPDATA 'Claude\claude_desktop_config.json'
+
+    # UTF-8 without BOM, accented path in another entry: connect, then uninstall.
+    Write-ClientFile $claudeCfg $outilJson
+    $original = [IO.File]::ReadAllBytes($claudeCfg)
+    if ((Invoke-ClientProbe @($claudeCfg) 'mcpServers') -ne 0) { throw 'Client connection failed on a valid UTF-8 configuration.' }
+    $connected = Read-ClientFile $claudeCfg
+    if ($connected.mcpServers.outil.command -cne $accented) { throw "Connection altered another entry: $($connected.mcpServers.outil.command)" }
+    if ($null -eq $connected.mcpServers.PSObject.Properties['nexus']) { throw 'Connection did not add the nexus entry.' }
+    $backups = @(Get-NexusSideFiles $claudeCfg)
+    if ($backups.Count -ne 1 -or $backups[0].Name -notmatch '\.nexus-backup-\d{14}(-\d+)?$') { throw 'Connection did not keep exactly one dated backup.' }
+    Assert-BytesUnchanged $backups[0].FullName $original 'the backup must hold the original bytes'
+    if ((Invoke-ClientProbe @($claudeCfg) 'mcpServers') -ne 20) { throw 'A second connection must exit 20 without rewriting.' }
+    if (@(Get-NexusSideFiles $claudeCfg).Count -ne 1) { throw 'An idempotent connection created another backup or a temporary file.' }
+    if ((Invoke-InstalledScript 'disconnect-claude-desktop.ps1') -ne 0) { throw 'disconnect-claude-desktop.ps1 failed on a valid configuration.' }
+    $disconnected = Read-ClientFile $claudeCfg
+    if ($null -ne $disconnected.mcpServers.PSObject.Properties['nexus']) { throw 'Uninstall did not remove the nexus entry.' }
+    if ($disconnected.mcpServers.outil.command -cne $accented) { throw "Uninstall altered another entry: $($disconnected.mcpServers.outil.command)" }
+
+    # Invalid JSON: non-zero exit, original bytes, no backup or temporary file, on connect and uninstall.
+    Remove-Item -LiteralPath $clientHome -Recurse -Force
+    Write-ClientFile $claudeCfg '{"mcpServers": {'
+    $invalid = [IO.File]::ReadAllBytes($claudeCfg)
+    if ((Invoke-ClientProbe @($claudeCfg) 'mcpServers') -eq 0) { throw 'Connection must fail on invalid JSON.' }
+    Assert-BytesUnchanged $claudeCfg $invalid 'invalid JSON on connect'
+    if ((Invoke-InstalledScript 'disconnect-claude-desktop.ps1') -eq 0) { throw 'Uninstall must report invalid JSON.' }
+    Assert-BytesUnchanged $claudeCfg $invalid 'invalid JSON on uninstall'
+    if ($installedOutput.IndexOf("NEXUS: Invalid JSON: $claudeCfg", [StringComparison]::Ordinal) -lt 0) {
+        throw "Uninstall does not name the unreadable file: $installedOutput"
+    }
+    foreach ($shape in @('{"mcpServers":[{"x":1}]}', '{"mcpServers":"text"}')) {
+        Write-ClientFile $claudeCfg $shape
+        $shapeBytes = [IO.File]::ReadAllBytes($claudeCfg)
+        if ((Invoke-ClientProbe @($claudeCfg) 'mcpServers') -eq 0) { throw "Connection must fail on a non-object section: $shape" }
+        Assert-BytesUnchanged $claudeCfg $shapeBytes "non-object section $shape"
+    }
+    if (@(Get-NexusSideFiles $claudeCfg).Count -ne 0) { throw 'A failed read left a backup or a temporary file.' }
+
+    # Two Claude Desktop configurations, one invalid: connection checks both before writing either.
+    $storeCfg = Join-Path $env:LOCALAPPDATA 'Packages\Claude_probe\LocalCache\Roaming\Claude\claude_desktop_config.json'
+    Write-ClientFile $storeCfg '{"mcpServers": {'
+    Write-ClientFile $claudeCfg '{"mcpServers":{"autre":{"command":"autre.exe","args":[]}}}'
+    $storeBytes = [IO.File]::ReadAllBytes($storeCfg)
+    $claudeBytes = [IO.File]::ReadAllBytes($claudeCfg)
+    if ((Invoke-ClientProbe @($storeCfg, $claudeCfg) 'mcpServers') -eq 0) {
+        throw 'Connection must fail when the first configuration is invalid.'
+    }
+    Assert-BytesUnchanged $storeCfg $storeBytes 'first configuration invalid'
+    Assert-BytesUnchanged $claudeCfg $claudeBytes 'configuration following an invalid one'
+    Write-ClientFile $storeCfg $outilJson
+    Write-ClientFile $claudeCfg '{"mcpServers": {'
+    $storeBytes = [IO.File]::ReadAllBytes($storeCfg)
+    $claudeBytes = [IO.File]::ReadAllBytes($claudeCfg)
+    if ((Invoke-ClientProbe @($storeCfg, $claudeCfg) 'mcpServers') -eq 0) {
+        throw 'Connection must fail when the second configuration is invalid.'
+    }
+    Assert-BytesUnchanged $storeCfg $storeBytes 'valid configuration preceding an invalid one'
+    Assert-BytesUnchanged $claudeCfg $claudeBytes 'second configuration invalid after a valid first one'
+
+    # Uninstall goes past an unreadable configuration: the readable one loses its nexus entry.
+    Write-ClientFile $storeCfg '{"mcpServers": {'
+    Write-ClientFile $claudeCfg '{"mcpServers":{"nexus":{"command":"cmd.exe","args":[]},"autre":{"command":"autre.exe","args":[]}}}'
+    $storeBytes = [IO.File]::ReadAllBytes($storeCfg)
+    if ((Invoke-InstalledScript 'disconnect-claude-desktop.ps1') -eq 0) { throw 'Uninstall must report the unreadable configuration.' }
+    Assert-BytesUnchanged $storeCfg $storeBytes 'unreadable configuration on uninstall'
+    $remaining = Read-ClientFile $claudeCfg
+    if ($null -ne $remaining.mcpServers.PSObject.Properties['nexus'] -or $remaining.mcpServers.autre.command -cne 'autre.exe') {
+        throw 'Uninstall did not remove the nexus entry of the readable configuration that follows an unreadable one.'
+    }
+
+    # Copilot JetBrains: backup beside mcp.json, valid final JSON, removal by the uninstall script.
+    $jetbrainsCfg = Join-Path $env:LOCALAPPDATA 'github-copilot\intellij\mcp.json'
+    Write-ClientFile $jetbrainsCfg '{"servers":{"outil":{"type":"stdio","command":"outil.exe","args":[]}}}'
+    $jetbrainsBytes = [IO.File]::ReadAllBytes($jetbrainsCfg)
+    if ((Invoke-ClientProbe @($jetbrainsCfg) 'servers') -ne 0) { throw 'Copilot JetBrains connection failed.' }
+    $jetbrainsBackups = @(Get-NexusSideFiles $jetbrainsCfg | Where-Object { $_.Name -match '\.nexus-backup-\d{14}(-\d+)?$' })
+    if ($jetbrainsBackups.Count -ne 1) { throw 'Copilot JetBrains connection did not keep a backup of mcp.json.' }
+    Assert-BytesUnchanged $jetbrainsBackups[0].FullName $jetbrainsBytes 'mcp.json backup'
+    if ($null -eq (Read-ClientFile $jetbrainsCfg).servers.PSObject.Properties['nexus']) { throw 'mcp.json did not receive the nexus entry.' }
+    if ((Invoke-InstalledScript 'disconnect-copilot-jetbrains.ps1') -ne 0) { throw 'disconnect-copilot-jetbrains.ps1 failed.' }
+    $jetbrainsFinal = Read-ClientFile $jetbrainsCfg
+    if ($null -ne $jetbrainsFinal.servers.PSObject.Properties['nexus'] -or $jetbrainsFinal.servers.outil.command -cne 'outil.exe') {
+        throw 'Copilot JetBrains uninstall did not restore the other entries only.'
+    }
+
+    # A failed replacement (file held open without delete sharing) leaves the original in place.
+    Write-ClientFile $jetbrainsCfg '{"servers":{}}'
+    $lockedBytes = [IO.File]::ReadAllBytes($jetbrainsCfg)
+    $lock = [IO.File]::Open($jetbrainsCfg, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try { $lockedExit = Invoke-ClientProbe @($jetbrainsCfg) 'servers' } finally { $lock.Dispose() }
+    if ($lockedExit -eq 0) { throw 'Connection must fail when the configuration cannot be replaced.' }
+    Assert-BytesUnchanged $jetbrainsCfg $lockedBytes 'failed replacement'
+    if (@(Get-NexusSideFiles $jetbrainsCfg | Where-Object { $_.Name -like '*.tmp' }).Count -ne 0) {
+        throw 'A failed replacement left its temporary file.'
+    }
+}
+finally {
+    foreach ($name in $savedClientProfile.Keys) { [Environment]::SetEnvironmentVariable($name, $savedClientProfile[$name], 'Process') }
+    Remove-Item -LiteralPath $clientHome -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 $uninstaller = Get-ChildItem -LiteralPath $install -Filter 'unins*.exe' -File | Select-Object -First 1
 if ($null -eq $uninstaller) { throw 'Inno Setup uninstaller was not installed.' }
 $uninstallProcess = Start-Process -FilePath $uninstaller.FullName -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait -PassThru
@@ -355,3 +557,6 @@ if (-not (Test-Path -LiteralPath $sentinel -PathType Leaf)) {
 
 Write-Host 'NEXUS Windows installer hardened source + pinned prerequisite provenance + install/CLI/MCP/Claude/Codex payload/uninstall smoke PASS' -ForegroundColor Green
 Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+# The client smoke expects failing exit codes from the scripts it runs; GitHub's powershell shell
+# ends the step with `exit $LASTEXITCODE`, so the script states its own success.
+exit 0
