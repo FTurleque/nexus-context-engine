@@ -4,7 +4,6 @@ import com.nexus.index.CodeIntelligenceSnapshot;
 import com.nexus.index.IndexRepository;
 import com.nexus.index.IndexStatistics;
 import com.nexus.index.IndexedFile;
-import com.nexus.index.IndexedFileUpdate;
 import com.nexus.index.IndexedSymbol;
 import com.nexus.index.SymbolRelation;
 import org.junit.jupiter.api.Test;
@@ -67,11 +66,6 @@ class GraphNeighborhoodProjectionTest {
             throw new AssertionError("Graph must not materialize every relation");
         }
 
-
-        @Override
-        public void applyChanges(UUID ignored, List<IndexedFileUpdate> updates, Set<String> removedPaths) {
-            // Mutation is outside this read-only graph projection fixture.
-        }
 
         @Override
         public com.nexus.index.IndexWriteSession openWriteSession(UUID ignored) {

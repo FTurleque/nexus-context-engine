@@ -55,6 +55,8 @@ public final class SearchQueryContext {
     /**
      * Rend la valeur associée à la clé, en la calculant au premier appel. Un
      * calcul qui échoue n'est pas mémorisé : l'exception se propage à l'appelant.
+     * La clé doit inclure toute entrée dont dépend la valeur (par exemple le texte
+     * de la requête) : une valeur déjà calculée est rendue pour toute clé égale.
      */
     public synchronized <T> T shared(String key, Class<T> type, Computation<T> computation)
             throws IOException {

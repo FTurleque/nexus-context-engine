@@ -96,11 +96,6 @@ public final class SqliteIndexRepository implements IndexRepository {
     }
 
     @Override
-    public void applyChanges(UUID projectId, List<IndexedFileUpdate> updates, Set<String> removedPaths) {
-        fileWriter.applyChanges(projectId, updates, removedPaths);
-    }
-
-    @Override
     public IndexWriteSession openWriteSession(UUID projectId) {
         return new SqliteIndexWriteSession(database, projectId);
     }

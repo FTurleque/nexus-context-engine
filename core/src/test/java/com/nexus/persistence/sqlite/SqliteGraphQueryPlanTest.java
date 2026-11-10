@@ -60,6 +60,17 @@ class SqliteGraphQueryPlanTest {
     }
 
     @Test
+    void stagedFilesPageSeeksTheProjectAndPaginationKeyWithoutTemporarySort() throws Exception {
+        SqliteDatabase database = new SqliteDatabase(new NexusPaths(tempDir.resolve("staged-page-plan-home")));
+
+        String plan = queryPlan(database, SqliteFileWriter.STAGED_FILES_PAGE_SQL, "project", 0L, 128);
+
+        assertSeeksByIndex(plan, "index_staged_files");
+        assertTrue(plan.contains("idx_index_staged_files_project_id (project_id=? AND id>?)"), plan);
+        assertFalse(plan.contains("USE TEMP B-TREE"), plan);
+    }
+
+    @Test
     void perFileRelationDeletionSeeksByFileAndProvider() throws Exception {
         SqliteDatabase database = new SqliteDatabase(new NexusPaths(tempDir.resolve("delete-plan-home")));
 
@@ -160,7 +171,7 @@ class SqliteGraphQueryPlanTest {
     void noIndexIsAStrictPrefixOfAnotherIndexOfTheSameTable() throws Exception {
         SqliteDatabase database = new SqliteDatabase(new NexusPaths(tempDir.resolve("prefix-scan-home")));
         try (Connection connection = database.openConnection()) {
-            for (String table : List.of("symbol_relations", "indexed_files", "symbols")) {
+            for (String table : List.of("symbol_relations", "indexed_files", "symbols", "index_staged_files")) {
                 Map<String, List<String>> columnsByIndex = new LinkedHashMap<>();
                 for (String index : SchemaMigratorFileIndexUpgradeTest.indexNames(connection, table)) {
                     columnsByIndex.put(index, SchemaMigratorFileIndexUpgradeTest.indexColumns(connection, index));
