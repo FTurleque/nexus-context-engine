@@ -167,6 +167,63 @@ class SensitiveContentRedactorTest {
         assertEquals("[REDACTED]", SensitiveContentRedactor.redactField(content));
     }
 
+    /** Bloc de clé privée synthétique, marqueurs assemblés à l'exécution, sans corps de clé réel. */
+    private static final String PRIVATE_KEY_BLOCK = rsaPrivateKeyBlock();
+
+    private static String rsaPrivateKeyBlock() {
+        String dashes = "-".repeat(5);
+        String type = "RSA PRIVATE KEY";
+        return String.join("\n", dashes + "BEGIN " + type + dashes, "MII", dashes + "END " + type + dashes);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"sk-", "sk-ant-", "glpat-", "xoxb-"})
+    void masksTokenGluedToAPrivateKeyBlockWhoseBodyHas255Characters(String prefix) {
+        String body = syntheticAlphanumeric(255);
+        String redacted = SensitiveContentRedactor.redact(PRIVATE_KEY_BLOCK + prefix + body + " y");
+        assertEquals("[REDACTED]\n\n[REDACTED] y", redacted);
+        assertNoFragmentOf(body, redacted);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"sk-", "sk-ant-", "glpat-", "xoxb-"})
+    void refusesTokenGluedToAPrivateKeyBlockWhoseBodyHas256Characters(String prefix) {
+        assertTokenRefused(PRIVATE_KEY_BLOCK + prefix, syntheticAlphanumeric(256));
+        assertTokenRefused(PRIVATE_KEY_BLOCK + prefix, syntheticAlphanumeric(300));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"xoxb-", "gh" + "p_", "sk" + "_live_"})
+    void masksShortTokenContainingAnUnderscore(String prefix) {
+        String body = syntheticAlphanumeric(25) + "_" + syntheticAlphanumeric(10);
+        String redacted = SensitiveContentRedactor.redact("x " + prefix + body + " y");
+        assertEquals("x [REDACTED] y", redacted);
+        assertNoFragmentOf(body, redacted);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"xoxb-", "gh" + "p_", "sk" + "_live_"})
+    void masksTokenWhoseBodyHas255CharactersIncludingAnUnderscore(String prefix) {
+        String body = syntheticAlphanumeric(127) + "_" + syntheticAlphanumeric(127);
+        String redacted = SensitiveContentRedactor.redact("x " + prefix + body + " y");
+        assertEquals("x [REDACTED] y", redacted);
+        assertNoFragmentOf(body, redacted);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"xoxb-", "gh" + "p_", "sk" + "_live_"})
+    void refusesTokenWhoseBodyHas256CharactersIncludingAnUnderscore(String prefix) {
+        assertTokenRefused("x " + prefix, syntheticAlphanumeric(127) + "_" + syntheticAlphanumeric(128));
+    }
+
+    private static void assertTokenRefused(String before, String body) {
+        String content = before + body + " y";
+        var failure = org.junit.jupiter.api.Assertions.assertThrows(OversizedSecretException.class,
+                () -> SensitiveContentRedactor.redact(content));
+        assertNoFragmentOf(body, failure.getMessage());
+        assertEquals("[REDACTED]", SensitiveContentRedactor.redactField(content));
+    }
+
     /** Valeur alphanumérique synthétique, construite par code (suites de l'alphabet décalées par bloc). */
     private static String syntheticAlphanumeric(int length) {
         String alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";

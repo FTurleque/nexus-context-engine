@@ -80,7 +80,7 @@ Décision : [BE-0072](../architecture/adr/BE-0072-construire-le-contextbundle-so
 
 ## Recherche sémantique
 
-Lorsque le sémantique est activé, `SemanticIndexingService` applique la même redaction, une fois par document, avant l'appel au provider d'embeddings. Le profil `content-v6` force la reconstruction d'un index historique incompatible.
+Lorsque le sémantique est activé, `SemanticIndexingService` applique la même redaction, une fois par document, avant l'appel au provider d'embeddings. Le profil `content-v7` force la reconstruction d'un index historique incompatible.
 
 Voir [`semantic-search.md`](semantic-search.md).
 
