@@ -25,12 +25,17 @@ allowed-tools: Bash(./mvnw *) Bash(bash .claude/scripts/contracts.sh) PowerShell
 2. Build complet, en arrière-plan car il dure plusieurs minutes :
    - Windows : `.\mvnw.cmd -B -ntp clean install`
    - POSIX : `./mvnw -B -ntp clean install`
-3. Self-smoke (13 étapes, doit finir par `SELF-SMOKE SUCCESS`) :
+3. Planchers de couverture contre la mesure du build (après le build complet, depuis Git Bash ; `python` sous Windows) :
+   ```bash
+   python3 scripts/release/coverage_floors.py
+   ```
+   Un échec nomme la cible, le plancher et la mesure : remonter le plancher et la table « Mesure de référence » de `docs/developer/adapter-coverage-gates.md` quand la couverture s'améliore durablement, jamais abaisser un plancher sans décision explicite.
+4. Self-smoke (13 étapes, doit finir par `SELF-SMOKE SUCCESS`) :
    ```powershell
    .\scripts\self-smoke.ps1
    ```
    Sortie volumineuse : ne retenir que les lignes `[n/13]`, `SELF-SMOKE` et les exceptions.
-4. Rapporter précisément : commandes lancées, résultat de chacune, ce qui n'a pas été exécuté (workflows de qualification, benchmarks, Docker, Windows installer) et que la preuve applicable reste la CI exact-head.
+5. Rapporter précisément : commandes lancées, résultat de chacune, ce qui n'a pas été exécuté (workflows de qualification, benchmarks, Docker, Windows installer) et que la preuve applicable reste la CI exact-head.
 
 ## Pièges connus
 
