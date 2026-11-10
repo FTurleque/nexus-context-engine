@@ -37,9 +37,12 @@ final class CoreArchitectureRules {
     static final List<String> GETENV_PREFIXES = List.of(
             "System.getenv", "java.lang.System.getenv", "System::getenv", "java.lang.System::getenv");
 
+    /** Racine analysée : ses références pleinement qualifiées entrent dans le graphe et les règles de sens. */
+    static final String CORE_ROOT_PREFIX = "com.nexus.";
+
     /** Préfixes surveillés aussi sous forme de nom pleinement qualifié dans le code. */
     static final List<String> WATCHED_QUALIFIED_PREFIXES =
-            concat(FRAMEWORK_PREFIXES, LUCENE_PREFIXES, SQLITE_PREFIXES, GETENV_PREFIXES);
+            concat(FRAMEWORK_PREFIXES, LUCENE_PREFIXES, SQLITE_PREFIXES, GETENV_PREFIXES, List.of(CORE_ROOT_PREFIX));
 
     /** Seule classe du cœur autorisée à lire l'environnement du processus (ARCH-0086). */
     static final String COMPOSITION_ROOT = "com.nexus.application.NexusApplicationFactory";
