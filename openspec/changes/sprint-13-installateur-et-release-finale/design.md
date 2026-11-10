@@ -7,7 +7,7 @@
 - [Existant vérifié] Les scripts de connexion sont du texte PowerShell assemblé en Pascal par `packaging/windows/nexus-installer.iss.template` et écrits au premier lancement (`SaveStringToFile`, `:1459`, `:1689`). Ils chargent `nexus-json.ps1` (`Format-Json`, `Save-CleanJson`, `:1453-1458`) et sont exécutés par `{sys}\WindowsPowerShell\v1.0\powershell.exe` (`:1542`), donc Windows PowerShell 5.1.
 - [Existant vérifié] Sous Windows PowerShell 5.1, `Get-Content` sans `-Encoding` lit un fichier UTF-8 sans BOM dans la page de code ANSI ; `Save-CleanJson` réécrit en UTF-8 : les caractères non ASCII sont doublement encodés.
 - [Existant vérifié] Sans `$ErrorActionPreference = 'Stop'`, l'échec de `ConvertFrom-Json` laisse `$c` à `$null` ou, dans la boucle `foreach ($cfg in $cfgs)` (`:1680`), à l'objet du fichier précédent ; le script écrit ce contenu puis sort en 0.
-- [Existant vérifié] `scripts/release/test-windows-installer.ps1:184` impose que le détecteur de clients reste ASCII, car Windows PowerShell 5.1 lit un script sans BOM en ANSI. Contrainte retenue pour les scripts générés : leur source reste ASCII ; les données non ASCII des tests vivent dans les fichiers JSON de test, jamais dans le texte des scripts.
+- [Existant vérifié] `scripts/release/test-windows-installer.ps1:184` impose que le détecteur de clients reste ASCII, car Windows PowerShell 5.1 lit un script sans BOM en ANSI. Contrainte retenue pour les scripts générés : ils sont écrits en UTF-8 avec BOM (`SaveStringsToUTF8File`), car `SaveStringToFile` convertit vers la page ANSI avec correspondance « best-fit » (U+FF07 et U+02BC y deviennent une apostrophe ASCII que `PowerShellSingleQuote` n'a pas doublée) ; les données non ASCII des tests vivent dans les fichiers JSON de test.
 - [Existant vérifié] `PowerShellSingleQuote` (`:388-392`) ; `test-windows-config-escaping.ps1` vérifie la présence des fonctions d'échappement dans la source durcie (`:19-38`) mais n'exécute aucun script généré.
 - [Existant vérifié] Le compose (`packaging/docker/docker-compose.yml.template:3-8`) construit l'image depuis `docker/Dockerfile.runtime` sans `args:` ; l'installateur écrit le `.env` lu par Compose (`NEXUS_DOCKER_IMAGE`, `NEXUS_DOCKER_CONTAINER`).
 - [Existant vérifié] `scripts/release/openspec_doc_contracts.py:73-84` (`check_links`) sait contrôler fichier et ancre ; `check_docs` (`:291-313`) ne l'applique qu'aux `design.md` actifs.
@@ -59,7 +59,7 @@ sequenceDiagram
     end
 ```
 
-Lecture : la variable `$c` est réinitialisée à chaque tour de boucle ; une exception arrête le script, même au milieu de la liste. [Décision] Arrêt global plutôt que « continuer avec le fichier suivant » : l'installateur affiche déjà un échec de connexion par client, et un arrêt laisse les fichiers suivants intacts.
+Lecture : la variable `$c` est réinitialisée à chaque tour de boucle. [Décision] À la connexion, `Add-NexusServerEntry` lit et contrôle tous les fichiers, sections comprises, avant d'en écrire un : un fichier invalide laisse tous les fichiers intacts et le script sort en 1, sans connexion partielle que le drapeau de désinstallation ignorerait. À la désinstallation, `Remove-NexusServerEntry` continue après un fichier illisible, retire l'entrée des fichiers lisibles et sort en 1 ; l'installateur conserve alors le drapeau `*Managed` pour qu'une désinstallation ultérieure réessaie.
 
 ## États et transitions
 
@@ -69,7 +69,7 @@ Non applicable : aucun cycle de vie persistant ; un fichier est soit inchangé, 
 
 - Codes de sortie des scripts de connexion : `0` (entrée ajoutée), `10` (aucun fichier), `20` (déjà connecté) existent (`:1677`, `:1688`). [Proposition] Toute exception rend un code non nul distinct de ces trois valeurs (comportement par défaut de `powershell.exe -File` sur une exception non interceptée : code 1).
 - [Décision] Nom de sauvegarde : `<fichier>.nexus-backup-<yyyyMMddHHmmss>`, dans le même dossier. Un dossier différent changerait les ACL héritées du profil.
-- Compose : [Proposition] `build.args: { NEXUS_IMAGE_VERSION: "${NEXUS_IMAGE_VERSION}", NEXUS_IMAGE_REVISION: "${NEXUS_IMAGE_REVISION}" }`, valeurs écrites dans le `.env` par l'installateur depuis `{#NexusVersion}` et la révision connue au packaging. Si la révision n'est pas connue, la ligne est omise et le `Dockerfile.runtime` ne pose le label que si l'argument est non vide.
+- Compose : [Proposition] `build.args: { NEXUS_IMAGE_VERSION: "${NEXUS_IMAGE_VERSION}", NEXUS_IMAGE_REVISION: "${NEXUS_IMAGE_REVISION}" }`, valeurs écrites dans le `.env` par l'installateur depuis `{#NexusVersion}` et la révision connue au packaging. Si la révision n'est pas connue, la ligne est omise et le `Dockerfile.runtime` pose le label `unknown` : l'image de base UBI porte son propre label `revision`, qu'aucune instruction Dockerfile ne retire.
 - [Question] Le préprocesseur Inno Setup dispose-t-il du SHA au packaging (`scripts/release/build-windows-installer.ps1`) ? Sinon, le scénario « Révision inconnue sur le poste » s'applique (label absent).
 
 ## Persistance et intégrité
@@ -90,12 +90,12 @@ Non applicable : aucun cycle de vie persistant ; un fichier est soit inchangé, 
 
 ## Erreurs et reprise
 
-- JSON invalide : arrêt, code non nul, fichier intact ; l'utilisateur corrige son fichier puis relance la reconfiguration (`docs/user/windows-installation.md`, section « Upgrade / reconfiguration »).
-- Échec de `Replace` : le fichier temporaire est supprimé dans un `finally` ; l'original reste en place.
+- JSON invalide : code 1, fichier intact ; l'utilisateur corrige son fichier puis relance la reconfiguration (`docs/user/windows-installation.md`, section « Upgrade / reconfiguration »).
+- Échec de `Replace` : le fichier temporaire est supprimé dans un `finally` ; si `ReplaceFile` a déjà renommé l'original en sauvegarde, le `catch` le remet à sa place avant de relancer l'exception.
 
 ## Observabilité
 
-L'installateur signale déjà l'échec d'un script de client ; [Proposition] le message d'échec nomme le fichier en cause sans en afficher le contenu.
+L'installateur signale déjà l'échec d'un script de client. Un `trap` des scripts JSON affiche `NEXUS: <message>`, qui nomme le fichier en cause sans en afficher le contenu ; relancer le `.cmd` du client depuis `{app}\integrations\` le montre.
 
 ## Performance et mesure
 

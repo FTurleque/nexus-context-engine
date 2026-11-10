@@ -45,3 +45,15 @@ L'image SHALL déclarer un `HEALTHCHECK` qui appelle `/usr/local/bin/nexus-healt
 #### Scenario: Conteneur lancé par le compose
 - **WHEN** le service est démarré par le compose officiel
 - **THEN** la sonde rapporte `UP` alors que la racine du conteneur est en lecture seule et qu'aucune capacité n'est conservée
+
+### Requirement: L'image construite par le compose porte sa version
+L'image construite sur le poste par le compose généré par l'installateur SHALL porter dans `org.opencontainers.image.version` la version de NEXUS installée et SHALL NOT laisser ce label vide.
+
+#### Scenario: Construction locale après installation Docker
+- **GIVEN** une installation Docker de NEXUS dont le compose construit l'image (`pull_policy: build`)
+- **WHEN** l'image est construite par `docker compose build`
+- **THEN** `docker inspect` de l'image rend `org.opencontainers.image.version` égal à la version de l'installateur
+
+#### Scenario: Révision inconnue sur le poste
+- **WHEN** la construction locale n'a pas accès au SHA du commit source
+- **THEN** `org.opencontainers.image.revision` porte la révision écrite par l'installateur au packaging, ou `unknown` ; il n'est jamais une chaîne vide ni la révision héritée de l'image de base

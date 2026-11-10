@@ -12,4 +12,4 @@ L'image construite sur le poste par le compose généré par l'installateur SHAL
 
 #### Scenario: Révision inconnue sur le poste
 - **WHEN** la construction locale n'a pas accès au SHA du commit source
-- **THEN** `org.opencontainers.image.revision` porte la révision écrite par l'installateur au packaging, ou le label est absent ; il n'est jamais une chaîne vide
+- **THEN** `org.opencontainers.image.revision` porte la révision écrite par l'installateur au packaging, ou `unknown` ; il n'est jamais une chaîne vide ni la révision héritée de l'image de base

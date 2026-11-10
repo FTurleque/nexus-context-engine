@@ -363,6 +363,17 @@ jobs:
             test -s /opt/nexus/THIRD_PARTY_NOTICES.txt'
           test "$(docker image inspect --format '{{json .Config.Healthcheck.Test}}' "$FALLBACK_IMAGE")" = '["CMD","/usr/local/bin/nexus-healthcheck"]'
           test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$FALLBACK_IMAGE")" = "$NEXUS_HEAD_SHA"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$FALLBACK_IMAGE")" = "$NEXUS_IMAGE_VERSION"
+
+          # Without a known revision (Compose build on a workstation), the revision label is "unknown": never
+          # empty, never the revision label inherited from the base image.
+          NOREV_IMAGE="nexus-context-engine:fallback-norev-${NEXUS_HEAD_SHA}"
+          docker build --file "$STAGE/docker/Dockerfile.runtime" \
+            --build-arg NEXUS_IMAGE_VERSION="$NEXUS_IMAGE_VERSION" \
+            --tag "$NOREV_IMAGE" "$STAGE"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$NOREV_IMAGE")" = "$NEXUS_IMAGE_VERSION"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$NOREV_IMAGE")" = "unknown"
+          docker image rm "$NOREV_IMAGE" >/dev/null
 
           # Context probe: the same allowlist, applied to the same staging directory, keeps
           # the payload entries and drops the installation .env and the data directory.

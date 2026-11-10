@@ -41,6 +41,19 @@ function Assert-RestContainerRejected([string]$Name, [string[]]$DockerArgs, [str
 }
 
 try {
+    Write-Host 'Docker image OCI labels...' -ForegroundColor Cyan
+    $labelsJson = (& $docker.Source image inspect --format '{{json .Config.Labels}}' $Image | Out-String)
+    if ($LASTEXITCODE -ne 0) { throw "Unable to inspect image $Image." }
+    $labels = $labelsJson | ConvertFrom-Json
+    $imageVersion = [string]$labels.'org.opencontainers.image.version'
+    if ($imageVersion -ne $version) {
+        throw "Image label org.opencontainers.image.version is '$imageVersion', expected '$version'."
+    }
+    $revisionLabel = $labels.PSObject.Properties['org.opencontainers.image.revision']
+    if ($null -ne $revisionLabel -and [string]::IsNullOrWhiteSpace([string]$revisionLabel.Value)) {
+        throw 'Image label org.opencontainers.image.revision is present but empty.'
+    }
+
     Write-Host 'Docker CLI smoke...' -ForegroundColor Cyan
     $versionJson = (& $docker.Source run --rm $Image cli --version --json | Out-String)
     if ($LASTEXITCODE -ne 0) { throw 'Docker CLI smoke failed.' }
