@@ -1,5 +1,6 @@
 package com.nexus.persistence.sqlite;
 
+import com.nexus.index.IndexRepositoryWrites;
 import com.nexus.config.NexusPaths;
 import com.nexus.index.AnalysisResult;
 import com.nexus.index.CodeSymbol;
@@ -40,12 +41,12 @@ class SqliteIndexWriteSessionTest {
     Path temporaryDirectory;
 
     @Test
-    void stagedAnalysesAreInvisibleUntilPublishAndPublishedFactsEqualApplyChanges() throws Exception {
+    void stagedAnalysesAreInvisibleUntilPublishAndPublishedFactsDoNotDependOnTheBatchSize() throws Exception {
         UUID projectId = UUID.randomUUID();
         List<IndexedFileUpdate> updates = updates(150, "file");
 
         Fixture direct = fixture("direct", projectId);
-        direct.repository().applyChanges(projectId, updates, Set.of());
+        IndexRepositoryWrites.apply(direct.repository(), projectId, updates, Set.of());
 
         Fixture staged = fixture("staged", projectId);
         try (IndexWriteSession session = staged.repository().openWriteSession(projectId)) {
@@ -78,7 +79,7 @@ class SqliteIndexWriteSessionTest {
     void closingWithoutPublishDiscardsTheStagedAnalysesAndKeepsThePreviousGeneration() throws Exception {
         UUID projectId = UUID.randomUUID();
         Fixture fixture = fixture("failure", projectId);
-        fixture.repository().applyChanges(projectId, updates(2, "previous"), Set.of());
+        IndexRepositoryWrites.apply(fixture.repository(), projectId, updates(2, "previous"), Set.of());
         long generation = fixture.repository().generation(projectId);
         var statistics = fixture.repository().statistics(projectId);
 
@@ -120,7 +121,7 @@ class SqliteIndexWriteSessionTest {
     void publishAppliesRemovalsAndOnlyBumpsTheGenerationWhenSomethingChanged() throws Exception {
         UUID projectId = UUID.randomUUID();
         Fixture fixture = fixture("removals", projectId);
-        fixture.repository().applyChanges(projectId, updates(3, "seed"), Set.of());
+        IndexRepositoryWrites.apply(fixture.repository(), projectId, updates(3, "seed"), Set.of());
         long generation = fixture.repository().generation(projectId);
 
         try (IndexWriteSession noChange = fixture.repository().openWriteSession(projectId)) {

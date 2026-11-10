@@ -84,7 +84,7 @@ for stale in ("<sourceDirectory>", "<testSourceDirectory>", "../src/main", "../s
         raise SystemExit(f"core layout drift: core/pom.xml still contains {stale!r}")
 
 migrations = sorted((root / "core/src/main/resources/db/migration").glob("V*.sql"))
-if not migrations or migrations[-1].name != "V015__index_symbols_by_file_for_fuzzy_search.sql":
+if not migrations or migrations[-1].name != "V017__index_symbols_for_dominant_project_fuzzy_search.sql":
     raise SystemExit(f"schema contract drift: latest migration is {migrations[-1].name if migrations else 'none'}")
 require("docs/developer/release-and-recovery.md", "V005__enforce_symbol_range_constraints.sql")
 require("docs/developer/release-and-recovery.md", "V006__invalidate_unredacted_lexical_indexes.sql")
@@ -257,6 +257,8 @@ require("docs/developer/release-and-recovery.md", "V012__index_symbol_relations_
 require("docs/developer/release-and-recovery.md", "V013__drop_redundant_prefix_indexes.sql")
 require("docs/developer/release-and-recovery.md", "V014__index_staged_analyses.sql")
 require("docs/developer/release-and-recovery.md", "V015__index_symbols_by_file_for_fuzzy_search.sql")
+require("docs/developer/release-and-recovery.md", "V016__index_staged_files_by_project.sql")
+require("docs/developer/release-and-recovery.md", "V017__index_symbols_for_dominant_project_fuzzy_search.sql")
 require("docs/developer/current-limitations.md", "INDEX_REDACTION_LIMIT")
 
 # NXA4 + audit follow-up: lexical content is redacted before Lucene tokenization.

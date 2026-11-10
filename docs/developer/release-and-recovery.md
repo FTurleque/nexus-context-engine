@@ -246,3 +246,27 @@ nouvel index : son coût ne dépend plus des autres projets de la base. La migra
 faits canoniques, ni la génération, ni le statut des projets : aucun rebuild n'est imposé et les index
 Lucene et sémantiques restent valides. V001 à V014 et leurs empreintes restent inchangées.
 `SchemaMigratorFileIndexUpgradeTest` migre une base peuplée et vérifie les index, les données et le statut.
+
+## Mise à niveau V016 — pagination indexée de la mise en attente
+
+`V016__index_staged_files_by_project.sql` crée `idx_index_staged_files_project_id` sur
+`index_staged_files(project_id, id)` (AUD-PRF-27). La transaction de publication d'une indexation lit
+la mise en attente par pages de 128 fichiers ordonnées par `id` : l'index fournit l'intervalle et
+l'ordre de chaque page, sans arbre temporaire de tri. La migration ne modifie ni les analyses en
+attente, ni les faits canoniques, ni la génération, ni le statut des projets : aucun rebuild n'est
+imposé et les index Lucene et sémantiques restent valides. V001 à V015 et leurs empreintes restent
+inchangées. `SchemaMigratorFileIndexUpgradeTest` migre une base V015 qui contient des analyses en
+attente et vérifie l'index, les données et le statut.
+
+## Mise à niveau V017 — préfiltre approché global d'un projet dominant
+
+`V017__index_symbols_for_dominant_project_fuzzy_search.sql` recrée `idx_symbols_fuzzy_prefilter` sur
+`symbols(SUBSTR(LOWER(name), 1, 1), LENGTH(name))` à côté de `idx_symbols_file_fuzzy_prefilter`
+(AUD-PRF-29). La recherche de symboles parcourt l'index global pour un projet qui possède au moins la
+moitié des fichiers indexés de la base, et l'index scopé par fichier sinon (voir
+[large-scale-search.md](large-scale-search.md#sqlite-et-symboles)). La migration ne modifie ni les
+faits canoniques, ni la génération, ni le statut des projets : aucun rebuild n'est imposé et les index
+Lucene et sémantiques restent valides. Sa création parcourt une fois la table `symbols` au premier
+démarrage ; chaque écriture de symbole maintient ensuite un index de plus. V001 à V016 et leurs
+empreintes restent inchangées. `SchemaMigratorFileIndexUpgradeTest` migre une base V016 peuplée et
+vérifie les deux index, les données et le statut.

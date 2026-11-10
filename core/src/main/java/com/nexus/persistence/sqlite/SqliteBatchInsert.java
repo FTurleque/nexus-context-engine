@@ -34,7 +34,8 @@ public final class SqliteBatchInsert implements AutoCloseable {
         }
     }
 
-    static final int ROW_LIMIT = 128;
+    /** Lignes par instruction (ADR-0051) ; borne aussi les lots de mise en attente d'une session d'écriture. */
+    public static final int ROW_LIMIT = 128;
     private final Connection connection;
     private final Table table;
     private final List<Object[]> rows = new ArrayList<>(ROW_LIMIT);

@@ -21,7 +21,6 @@ The timeout was bounded, but there was no application-level recovery after that 
 `SqliteDatabase.writeTransaction(...)` is now the single transaction-retry boundary used by:
 
 - `SqliteProjectRepository.save`;
-- `SqliteIndexRepository.applyChanges`;
 - `SqliteIndexWriteSession` (mise en attente, publication et nettoyage des analyses d'une indexation, voir [Indexation](#indexation-par-lots-mis-en-attente)) ;
 - `SqliteIndexRepository.replaceExternalCodeIntelligence`.
 
@@ -72,7 +71,7 @@ There is no infinite retry loop. Internal/package-private constructor seams allo
 
 A failed attempt is rolled back before a retry. Tests deliberately insert a row and then raise a synthetic official `SQLITE_BUSY`; the second attempt can insert the same primary key successfully only if the first attempt was fully rolled back.
 
-For index mutations the whole `applyChanges` transaction, including `project_index_generations`, is replayed atomically. A recovered transient contention therefore produces one committed file state and exactly one generation increment.
+For index mutations each transaction of a write session is replayed atomically: a staging batch, and the publication including `project_index_generations`. A recovered transient contention therefore produces one committed file state and exactly one generation increment.
 
 External code-intelligence replacement follows the same rule. Importing an identical external snapshot remains a true no-op and does not increment generation.
 
@@ -80,7 +79,7 @@ External code-intelligence replacement follows the same rule. Importing an ident
 
 Une indexation ne tient jamais une transaction d'écriture ouverte pendant l'analyse : les analyses des fichiers modifiés sont mises en attente par lots dans les tables transitoires `index_staged_*` (V014), chaque lot dans une courte transaction `writeTransaction`, puis publiées avec la génération par **une** transaction finale (décision [DATA-0074](../architecture/adr/DATA-0074-garantir-le-cycle-de-vie-et-la-coherence-des-index-derives.md)). Le temps de verrou d'écriture attribuable à une indexation est donc la somme de transactions courtes, et non la durée de l'indexation.
 
-Scénario de contention couvert par `ProjectIndexingPublicationTest#anotherProjectCanWriteWhileAnIndexingIsInProgressBetweenBatches` : l'indexation d'un projet est suspendue en cours d'analyse, après plusieurs lots déjà mis en attente. Un autre projet écrit alors (`applyChanges` et `ProjectRepository.save`) sans attendre le `busy_timeout` ni échouer en `SQLITE_BUSY`, et la génération du projet indexé n'est pas publiée avant la fin. Les tests `SqliteIndexWriteSessionTest` couvrent l'atomicité de la publication et l'écart des analyses en attente d'une indexation qui échoue ou qui a été interrompue.
+Scénario de contention couvert par `ProjectIndexingPublicationTest#anotherProjectCanWriteWhileAnIndexingIsInProgressBetweenBatches` : l'indexation d'un projet est suspendue en cours d'analyse, après plusieurs lots déjà mis en attente. Un autre projet écrit alors (une session d'écriture publiée et `ProjectRepository.save`) sans attendre le `busy_timeout` ni échouer en `SQLITE_BUSY`, et la génération du projet indexé n'est pas publiée avant la fin. Les tests `SqliteIndexWriteSessionTest` couvrent l'atomicité de la publication et l'écart des analyses en attente d'une indexation qui échoue ou qui a été interrompue.
 
 ## Réglages des connexions et lots d'écriture
 
@@ -154,7 +153,8 @@ Spec : [`openspec/specs/sqlite-index-writes/spec.md`](../../openspec/specs/sqlit
 | [Existant vérifié] | La migration V013 supprime `idx_symbol_relations_project`, `idx_indexed_files_project` et `idx_symbols_file` (`DROP INDEX IF EXISTS`) ; aucun index n'est préfixe strict d'un autre sur `symbol_relations`, `indexed_files` et `symbols`. | `core/src/main/resources/db/migration/V013__drop_redundant_prefix_indexes.sql` ; `SqliteGraphQueryPlanTest` |
 | [Existant vérifié] | V012 et V013 ne touchent ni les faits canoniques ni le statut des projets : aucun rebuild. | `SchemaMigratorFileIndexUpgradeTest` |
 | [Existant vérifié] | `SqliteFileWriter` prépare l'upsert (`RETURNING id`) et les deux suppressions une fois par transaction ; `SqliteBatchInsert` met ses instructions en cache par taille de lot. | `core/src/main/java/com/nexus/persistence/sqlite/SqliteFileWriter.java` ; `SqliteFileWriterTest` |
-| [Existant vérifié] | Les analyses sont mises en attente par lot dans `index_staged_files`, `index_staged_symbols` et `index_staged_relations` (V014, DATA-0074), invisibles jusqu'à la publication qui copie vers les tables canoniques, vide la mise en attente et incrémente la génération ; la fermeture sans publication écarte la mise en attente. | `SqliteIndexWriteSession` ; `SqliteIndexWriteSessionTest` ; `ProjectIndexingPublicationTest` |
+| [Existant vérifié] | Les analyses sont mises en attente par lot dans `index_staged_files`, `index_staged_symbols` et `index_staged_relations` (V014, DATA-0074), invisibles jusqu'à la publication qui copie vers les tables canoniques, vide la mise en attente et incrémente la génération ; la fermeture sans publication écarte la mise en attente. La publication est l'unique chemin d'écriture des analyses de fichiers (`SqliteFileWriter.writeStagedChanges`). | `SqliteIndexWriteSession` ; `SqliteIndexWriteSessionTest` ; `ProjectIndexingPublicationTest` |
+| [Existant vérifié] | La publication relit la mise en attente par pages de 128 fichiers (`STAGED_FILES_PAGE_SQL` : `project_id = ? AND id > ? ORDER BY id LIMIT ?`) ; la migration V016 crée `idx_index_staged_files_project_id` sur `index_staged_files(project_id, id)`, qui sert l'intervalle et l'ordre de chaque page sans arbre temporaire de tri, sans `ANALYZE`. `(project_id)` seul serait un préfixe strict de la contrainte `UNIQUE (project_id, relative_path)`. | `core/src/main/resources/db/migration/V016__index_staged_files_by_project.sql` ; `SqliteGraphQueryPlanTest#stagedFilesPageSeeksTheProjectAndPaginationKeyWithoutTemporarySort` ; `SchemaMigratorFileIndexUpgradeTest` |
 
 ### Vues
 
@@ -182,12 +182,27 @@ sequenceDiagram
     end
 ```
 
-Exigences : `sqlite-index-writes › La suppression des relations d'un fichier utilise un index`, `sqlite-index-writes › Le schéma ne porte pas d'index préfixe redondant`, `sqlite-index-writes › Les migrations d'index conservent les données`, `sqlite-index-writes › L'écriture d'un fichier ne relit pas son identifiant`, `sqlite-index-writes › Les analyses en attente sont bornées par lot`.
+Vue Organigramme — Comment la publication parcourt-elle la mise en attente d'un projet ? (existant)
+
+```mermaid
+flowchart TD
+    A[publish removedPaths] --> B[BEGIN IMMEDIATE]
+    B --> C{page suivante : project_id = ? AND id > dernier ORDER BY id LIMIT 128}
+    C -- via idx_index_staged_files_project_id --> D[écrire fichiers, symboles, relations]
+    D --> C
+    C -- page vide --> E[supprimer removedPaths]
+    E --> F[incrémenter la génération]
+    F --> G[COMMIT]
+```
+
+Chaque page est une recherche d'intervalle dans `idx_index_staged_files_project_id`, de coût proportionnel à sa taille ; sans cet index, chaque page relirait et trierait toutes les lignes en attente du projet.
+
+Exigences : `sqlite-index-writes › La suppression des relations d'un fichier utilise un index`, `sqlite-index-writes › Le schéma ne porte pas d'index préfixe redondant`, `sqlite-index-writes › Les migrations d'index conservent les données`, `sqlite-index-writes › L'écriture d'un fichier ne relit pas son identifiant`, `sqlite-index-writes › Les analyses en attente sont bornées par lot`, `sqlite-index-writes › La publication du staging pagine par un index`.
 
 ### Écarts et limites
 
 - [Écart] 1 — Le scénario de plan accepte `USING INDEX` ou `USING COVERING INDEX` ; SQLite émet `COVERING INDEX` quand l'index suffit, et les tests de plan acceptent les deux.
-- Limite : la transaction de publication copie tout le volume modifié en une fois (jusqu'au corpus entier lors d'un rebuild) ; le verrou d'écriture est tenu pendant cette durée. Le scénario de contention ci-dessus la mesure.
+- Limite : la transaction de publication copie tout le volume modifié en une fois (jusqu'au corpus entier lors d'un rebuild) ; le verrou d'écriture est tenu pendant cette durée. Le scénario de contention ci-dessus la couvre et le scénario `stagedPublication` du [benchmark d'échelle](scale-regression-benchmark.md) mesure sa durée.
 - Limite : `SqliteIndexWriteSession` purge la mise en attente de tout le projet à l'ouverture, sans identifiant de session : l'ouverture hors du verrou d'indexation du projet effacerait la mise en attente d'une indexation vivante.
 - Limite : après un arrêt brutal, la mise en attente reste jusqu'à la prochaine indexation du même projet ; aucun chemin de lecture ne la consulte.
 

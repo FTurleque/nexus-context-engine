@@ -1,5 +1,6 @@
 package com.nexus.persistence.sqlite;
 
+import com.nexus.index.IndexRepositoryWrites;
 import com.nexus.config.NexusPaths;
 import com.nexus.index.AnalysisResult;
 import com.nexus.index.FileCategory;
@@ -42,12 +43,12 @@ class SqliteTargetedFileLookupTest {
         String injectionLikePath = "src/a') OR 1=1 --.java";
         String jsonSensitivePath = "src/quoted-\"name.java";
 
-        index.applyChanges(firstProject, List.of(
+        IndexRepositoryWrites.apply(index, firstProject, List.of(
                 update("src/alpha.java"),
                 update(injectionLikePath),
                 update(jsonSensitivePath),
                 update("src/zeta.java")), Set.of());
-        index.applyChanges(secondProject, List.of(update("src/alpha.java")), Set.of());
+        IndexRepositoryWrites.apply(index, secondProject, List.of(update("src/alpha.java")), Set.of());
 
         Set<String> requestedPaths = new LinkedHashSet<>();
         for (int indexValue = 0; indexValue < 1_100; indexValue++) {

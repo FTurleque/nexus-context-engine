@@ -1,5 +1,6 @@
 package com.nexus.persistence.sqlite;
 
+import com.nexus.index.IndexRepositoryWrites;
 import com.nexus.config.NexusPaths;
 import com.nexus.index.AnalysisResult;
 import com.nexus.index.CodeIntelligenceSnapshot;
@@ -148,11 +149,11 @@ class SqliteWriteContentionIntegrationTest {
             Future<?> firstHolder = holdWriter(database, projectA.id(), firstLockHeld, firstRelease, executor);
             assertTrue(firstLockHeld.await(1, TimeUnit.SECONDS));
 
-            index.applyChanges(projectB.id(), List.of(update), Set.of());
+            IndexRepositoryWrites.apply(index, projectB.id(), List.of(update), Set.of());
             firstHolder.get(1, TimeUnit.SECONDS);
 
             assertEquals(1L, index.generation(projectB.id()),
-                    "Le retry de applyChanges ne doit incrémenter la génération qu'une fois");
+                    "Le retry de l'écriture par session ne doit incrémenter la génération qu'une fois");
             assertEquals(1, index.findFiles(projectB.id()).size(),
                     "Le retry ne doit pas dupliquer la ligne de fichier");
             assertEquals(1L, database.writeRetryCount());
@@ -232,7 +233,7 @@ class SqliteWriteContentionIntegrationTest {
             Set<String> removedPaths = Set.of();
             PersistenceException failure = assertThrows(
                     PersistenceException.class,
-                    () -> index.applyChanges(projectBId, updates, removedPaths));
+                    () -> IndexRepositoryWrites.apply(index, projectBId, updates, removedPaths));
 
             SQLiteException sqliteFailure = sqliteFailure(failure);
             assertNotNull(sqliteFailure);
@@ -278,7 +279,7 @@ class SqliteWriteContentionIntegrationTest {
                          "SELECT COUNT(*) FROM schema_migrations");
                  ResultSet resultSet = statement.executeQuery()) {
                 assertTrue(resultSet.next());
-                assertEquals(15L, resultSet.getLong(1));
+                assertEquals(17L, resultSet.getLong(1));
             }
         } finally {
             executor.shutdownNow();

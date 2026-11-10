@@ -65,8 +65,8 @@ voir [réglages des connexions SQLite](sqlite-write-contention.md#réglages-des-
 
 Les recherches symbole/relation filtrent côté repository avant matérialisation. La recherche de symboles est scopée au projet ciblé (AUD-PRF-09) :
 
-- le préfiltre approché part des fichiers du projet (`UNIQUE (project_id, relative_path)`) puis sonde `idx_symbols_file_fuzzy_prefilter` (V015, première colonne `file_id`) : son plan ne contient aucun parcours de la table ou d'un index des symboles et ne change pas quand la base passe de 25 à 100 projets (`SqliteSymbolSearchScopingTest`) ;
-- les termes d'une requête (jusqu'à 8, plus la requête entière) sont interrogés en lot par `IndexRepository.searchSymbols(projectId, queries, limit)` : au plus une requête SQL par famille (plein texte trigram, préfiltre approché, LIKE des termes de moins de trois points de code) quel que soit le nombre de termes. La requête est composée (`UNION ALL`) : chaque terme porte son propre `LIMIT`, donc SQLite s'arrête tôt par terme, et le préfiltre approché choisit par terme, d'après un comptage plafonné à 10 000, le parcours de l'index scopé ou le parcours ordonné de `idx_symbols_qualified_name`. Une fenêtre `ROW_NUMBER` sur tous les candidats a été écartée : à 100 000 symboles dans un projet, elle portait le p95 de la recherche exacte de 40 à 532 ms. Le résultat est identique aux requêtes par terme d'avant V015 ;
+- le préfiltre approché choisit son index selon la part du projet dans la base (AUD-PRF-29). Pour un projet qui possède moins de la moitié des fichiers indexés, il part des fichiers du projet (`UNIQUE (project_id, relative_path)`) puis sonde `idx_symbols_file_fuzzy_prefilter` (V015, première colonne `file_id`) : son plan ne contient aucun parcours de la table ou d'un index des symboles et ne change pas quand la base passe de 25 à 100 projets (`SqliteSymbolSearchScopingTest`). Pour un projet qui en possède au moins la moitié, dont un projet seul dans sa base, il parcourt l'intervalle (premier caractère, longueur) de l'index global `idx_symbols_fuzzy_prefilter` (V017) puis vérifie le projet par la clé du fichier : sonder chacun de ses fichiers coûterait plus. Une requête de deux comptages de fichiers (`PROJECT_FILE_SHARE_SQL`) fait ce choix une fois par recherche. Sur un projet seul de 100 000 fichiers, l'index scopé comptait 2,3 fois et récupérait 5,6 fois plus lentement que l'index global ; mesure et décision dans [le relevé du 2026-11-10](../project/history/recherche-approchee-projet-seul-2026-11-10.md), scénario `singleProjectFuzzy` du [benchmark d'échelle](scale-regression-benchmark.md#recherche-approchée-dun-projet-seul) ;
+- les termes d'une requête (jusqu'à 8, plus la requête entière) sont interrogés en lot par `IndexRepository.searchSymbols(projectId, queries, limit)` : au plus une requête SQL par famille (plein texte trigram, préfiltre approché, LIKE des termes de moins de trois points de code) quel que soit le nombre de termes. La requête est composée (`UNION ALL`) : chaque terme porte son propre `LIMIT`, donc SQLite s'arrête tôt par terme, et le préfiltre approché choisit par terme, d'après un comptage plafonné à 10 000, le parcours de l'index retenu ci-dessus ou le parcours ordonné de `idx_symbols_qualified_name`. Une fenêtre `ROW_NUMBER` sur tous les candidats a été écartée : à 100 000 symboles dans un projet, elle portait le p95 de la recherche exacte de 40 à 532 ms. Le résultat est identique aux requêtes par terme d'avant V015 ;
 - l'index plein texte `symbol_search_fts` est contentless, sans colonne de projet : sa correspondance reste globale et le filtre de projet s'applique par les jointures sur la clé primaire. Une restriction par `rowid IN (symboles du projet)` a été mesurée le 2026-11-07 sur 60 projets et 240 000 symboles : 0,67 à 1,0 s contre 3 à 87 ms pour la correspondance globale, donc non retenue.
 
 V005 impose également :
@@ -97,7 +97,7 @@ Les limites REST de résultats et de budget contexte fédérés sont alignées s
 
 ## Vecteur de requête unique et échéance globale
 
-Une requête fédérée (recherche ou contexte) crée un `SearchQueryContext` pour toute la requête et le transmet aux stratégies de chaque projet. `SemanticSearchStrategy` y mémorise le vecteur de la requête **redactée** : le fournisseur d'embeddings reçoit au plus un appel `embedQuery`, quel que soit le nombre de projets, et zéro si aucun projet n'a d'index sémantique compatible. Une indisponibilité du fournisseur est mémorisée de la même façon : un seul appel est tenté et chaque projet porte le même diagnostic de dégradation. Le contexte n'est pas conservé entre requêtes.
+Une requête fédérée (recherche ou contexte) crée un `SearchQueryContext` pour toute la requête et le transmet aux stratégies de chaque projet. `SemanticSearchStrategy` y mémorise le vecteur de la requête **redactée** sous une clé qui nomme le fournisseur, le modèle et le texte redacté (AUD-QUA-23) : un autre texte servi par le même contexte déclenche un nouveau calcul. Le fournisseur d'embeddings reçoit au plus un appel `embedQuery`, quel que soit le nombre de projets, et zéro si aucun projet n'a d'index sémantique compatible. Une indisponibilité du fournisseur est mémorisée de la même façon : un seul appel est tenté et chaque projet porte le même diagnostic de dégradation. Le contexte n'est pas conservé entre requêtes.
 
 Une échéance globale (`FederationDeadlinePolicy`, [BE-0081](../architecture/adr/BE-0081-federer-la-recherche-locale-par-projet-sous-echeance-globale.md)) est vérifiée avant chaque projet, dans l'ordre du scope, sans parallélisme :
 
@@ -143,6 +143,7 @@ Cette section décrit les bornes de coût et de temps d'une requête fédérée 
 |---|---|---|
 | [Existant vérifié] | Le vecteur de requête est calculé une seule fois par requête fédérée, sur la requête redactée, puis partagé par les `SemanticSearchStrategy` de chaque projet ; un échec n'est pas mémorisé au-delà de la requête. | `core/src/test/java/com/nexus/search/semantic/FederatedQueryVectorTest#federatedSearchEmbedsTheQueryOnceForThreeProjects`, `#federatedSearchTransmitsTheRedactedQueryToTheProvider`, `#sharedComputationRunsOnceAndFailuresAreNotMemoized` |
 | [Existant vérifié] | Un fournisseur d'embeddings indisponible n'est appelé qu'une fois et dégrade chaque projet avec le même diagnostic. | `core/src/test/java/com/nexus/search/semantic/FederatedQueryVectorTest#unavailableProviderIsCalledOnceAndDegradesEveryProjectWithTheSameDiagnostic` |
+| [Existant vérifié] | La clé du vecteur partagé nomme le fournisseur, le modèle et le texte redacté (`SemanticSearchStrategy.queryVectorKey`) : un même contexte qui sert deux textes calcule deux vecteurs et rend à chaque texte ses propres résultats ; la même requête sur 3 projets n'appelle le fournisseur qu'une fois. | `core/src/test/java/com/nexus/search/semantic/SemanticQueryVectorKeyTest#aContextReusedForTwoQueriesEmbedsEachQueryAndReturnsItsOwnResults`, `#theSameQueryOverThreeProjectsEmbedsOnce`, `#theKeyNamesTheProviderTheModelAndTheRedactedText` |
 | [Existant vérifié] | Le délai d'embedding est plafonné par le temps restant de l'échéance globale. | `core/src/test/java/com/nexus/search/semantic/FederatedQueryVectorTest#embeddingDelayIsCappedByTheRemainingGlobalDeadline` |
 | [Existant vérifié] | L'échéance globale (`FederationDeadlinePolicy`, variable `NEXUS_FEDERATION_DEADLINE_SECONDS`, 60 s par défaut, bornée entre 1 s et 600 s) est vérifiée avant chaque projet, sans parallélisme ; les projets non commencés sont nommés dans l'ordre du scope. | `core/src/main/java/com/nexus/project/FederationDeadlinePolicy.java`, `core/src/test/java/com/nexus/context/FederatedContextServiceTest#stopsStartingProjectsAtTheGlobalDeadlineAndNamesUnservedProjectsInScopeOrder`, `core/src/test/java/com/nexus/search/FederatedSearchServicePolicyTest#stopsStartingProjectsAtTheGlobalDeadlineAndNamesUnservedProjectsInScopeOrder` |
 | [Existant vérifié] | Sans échéance atteinte, aucun diagnostic de projet non servi n'est produit et les résultats sont ceux d'une exécution sans échéance. | `core/src/test/java/com/nexus/context/FederatedContextServiceTest#servesEveryProjectWithoutDiagnosticWhenTheDeadlineIsNotReached`, `core/src/test/java/com/nexus/search/FederatedSearchServicePolicyTest#servesEveryProjectWithoutDiagnosticAndSameHitsWhenTheDeadlineIsNotReached` |
@@ -168,7 +169,7 @@ sequenceDiagram
     end
 ```
 
-Exigences : `federated-search-bounds › Le vecteur de requête est calculé une fois par requête fédérée`, `federated-search-bounds › La fédération respecte une échéance globale`, `federated-search-bounds › Les projets non servis sont nommés`.
+Exigences : `federated-search-bounds › Le vecteur de requête est calculé une fois par requête fédérée`, `federated-search-bounds › La fédération respecte une échéance globale`, `federated-search-bounds › Les projets non servis sont nommés`, `federated-search-bounds › Un vecteur de requête partagé n'est réutilisé que pour la même requête`.
 
 ### Écarts et limites
 
@@ -190,7 +191,9 @@ Cette section décrit le périmètre de travail de la recherche de symboles SQLi
 
 | Étiquette | Fait | Source |
 |---|---|---|
-| [Existant vérifié] | La migration `V015` remplace l'index de préfiltre fuzzy global par un index dont la première colonne est `file_id` : le projet fournit ses fichiers, puis chaque fichier est sondé dans l'index. | `core/src/main/resources/db/migration/V015__index_symbols_by_file_for_fuzzy_search.sql` |
+| [Existant vérifié] | La migration `V015` crée un index de préfiltre approché dont la première colonne est `file_id` : le projet fournit ses fichiers, puis chaque fichier est sondé dans l'index. La migration `V017` recrée l'index global (premier caractère, longueur) à côté. | `core/src/main/resources/db/migration/V015__index_symbols_by_file_for_fuzzy_search.sql` ; `core/src/main/resources/db/migration/V017__index_symbols_for_dominant_project_fuzzy_search.sql` |
+| [Existant vérifié] | Le préfiltre force l'index global quand le projet possède au moins la moitié des fichiers indexés (seuil exact compris, un fichier de moins exclu), l'index scopé sinon ; un projet seul parcourt l'intervalle de l'index global sans parcours complet des symboles, avec des résultats identiques aux requêtes par terme. | `core/src/test/java/com/nexus/persistence/sqlite/SqliteSymbolSearchScopingTest#theGlobalPrefilterIsChosenFromHalfOfTheIndexedFilesAndNotBelow`, `#aProjectAloneInItsBaseUsesTheGlobalPrefilterRangeWithoutAnyFullSymbolScan`, `#aProjectAmongManyKeepsTheFileScopedPrefilter`, `#globalPrefilterResultsAreIdenticalToThePerTermQueriesForAProjectAloneInItsBase` |
+| [Existant vérifié] | Le benchmark d'échelle mesure la recherche approchée d'un projet seul (`singleProjectFuzzy` : 100 000 fichiers en `full`, 20 000 en `ci`) avec l'index scopé et sur le schéma d'avant V015. | `core/src/test/java/com/nexus/benchmark/ScaleRegressionBenchmarkTest.java` ; [relevé du 2026-11-10](../project/history/recherche-approchee-projet-seul-2026-11-10.md) |
 | [Existant vérifié] | Le plan `EXPLAIN QUERY PLAN` du préfiltre approché utilise l'index scopé et ne contient aucun parcours complet des symboles sur une base de 25 et de 100 projets. | `core/src/test/java/com/nexus/persistence/sqlite/SqliteSymbolSearchScopingTest#fuzzyPrefilterPlanUsesTheFileScopedIndexWithoutAnyFullSymbolScanAt25And100Projects` |
 | [Existant vérifié] | Les termes sont interrogés en lot par une requête composée dont chaque bras porte son `LIMIT` ; le nombre de requêtes SQL ne dépend pas du nombre de termes, et la borne de lot est `MAX_QUERIES_PER_BATCH` (16). | `core/src/test/java/com/nexus/persistence/sqlite/SqliteSymbolSearchScopingTest#numberOfSqlStatementsDoesNotGrowWithTheNumberOfTerms`, `#rejectsMoreQueriesThanTheBatchBoundAndAcceptsExactlyTheBound` |
 | [Existant vérifié] | Les symboles rendus par le lot et leur ordre sont identiques à ceux des requêtes par terme d'avant `V015`. | `core/src/test/java/com/nexus/persistence/sqlite/SqliteSymbolSearchScopingTest#batchedResultsAreIdenticalToThePerTermQueriesOfBeforeV015` |
@@ -202,16 +205,21 @@ Vue organigramme de composants (non UML, lecture C4 simplifiée) — Comment une
 ```mermaid
 flowchart LR
     Q["Termes de la requête (16 au plus)"] --> L["Requête composée, un bras par terme"]
-    L --> F["Fichiers du projet (UNIQUE project_id, relative_path)"]
+    L --> P{"Le projet possède-t-il au moins la moitié des fichiers ?"}
+    P -- non --> F["Fichiers du projet (UNIQUE project_id, relative_path)"]
     F --> I["idx_symbols_file_fuzzy_prefilter (file_id en tête)"]
+    P -- oui --> G["idx_symbols_fuzzy_prefilter (premier caractère, longueur)"]
+    G --> K["Projet vérifié par la clé du fichier"]
     I --> R["Symboles triés, LIMIT par terme"]
+    K --> R
 ```
 
-Exigences : `symbol-search-scoping › La recherche de symboles est scopée projet avant le tri`, `symbol-search-scoping › Les termes d'une requête sont interrogés en lot`.
+Exigences : `symbol-search-scoping › La recherche de symboles est scopée projet avant le tri`, `symbol-search-scoping › Les termes d'une requête sont interrogés en lot`, `symbol-search-scoping › La recherche approchée d'un projet seul est mesurée`.
 
 ### Écarts et limites
 
 - Limite : la mesure de latence à 100 000 symboles relève du benchmark de scale (`docs/developer/scale-regression-benchmark.md`), pas de ces tests.
+- Limite : le seuil de la moitié des fichiers vient du cas mesuré (projet seul) ; une base partagée par deux gros projets de taille voisine n'a pas été mesurée.
 
 ### Propositions et questions ouvertes
 

@@ -314,7 +314,7 @@ class ProjectIndexingPublicationTest {
             Path absolute = Path.of("other.md").toAbsolutePath();
             ScannedFile file = new ScannedFile(absolute, "other.md", "MARKDOWN", 5, "hash-other",
                     java.time.Instant.EPOCH, 1, FileCategory.DOCUMENTATION);
-            repository.applyChanges(projectId,
+            IndexRepositoryWrites.apply(repository, projectId,
                     List.of(new IndexedFileUpdate(file,
                             new AnalysisResult(absolute, "MARKDOWN", List.of(), List.of()))),
                     Set.of());

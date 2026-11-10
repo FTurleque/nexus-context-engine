@@ -1,5 +1,6 @@
 package com.nexus.persistence.sqlite;
 
+import com.nexus.index.IndexRepositoryWrites;
 import com.nexus.config.NexusPaths;
 import com.nexus.index.AnalysisResult;
 import com.nexus.index.CodeIntelligenceSnapshot;
@@ -65,7 +66,8 @@ class SqliteIndexGenerationTest {
                 Instant.parse("2026-08-08T00:00:00Z"),
                 3,
                 FileCategory.SOURCE);
-        index.applyChanges(
+        IndexRepositoryWrites.apply(
+                index,
                 projectId,
                 List.of(new IndexedFileUpdate(
                         file,

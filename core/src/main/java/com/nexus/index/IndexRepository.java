@@ -59,13 +59,10 @@ public interface IndexRepository {
     /** Recherche bornée des relations portant sur un symbole. */
     List<SymbolRelation> searchRelations(UUID projectId, String symbol, int limit);
 
-    void applyChanges(UUID projectId, List<IndexedFileUpdate> updates, Set<String> removedPaths);
-
     /**
-     * Ouvre les écritures d'une indexation : les analyses sont mises en attente par lots bornés puis
-     * publiées en une transaction, au lieu d'être retenues en mémoire jusqu'à un {@link #applyChanges}
-     * unique. Les analyses en attente laissées par une indexation interrompue sont écartées à
-     * l'ouverture.
+     * Seule écriture des analyses de fichiers d'un projet : les analyses sont mises en attente par lots
+     * bornés puis publiées avec la génération en une transaction (DATA-0074). Les analyses en attente
+     * laissées par une indexation interrompue sont écartées à l'ouverture.
      */
     IndexWriteSession openWriteSession(UUID projectId);
 
