@@ -121,6 +121,20 @@ $smokeMode = if ($Smoke) { '1' } else { '0' }
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 $iss = [IO.File]::ReadAllText($template, $utf8)
 
+# Packaged commit, written to the Docker .env as the OCI revision label of an image built
+# on the user's machine. CI provides NEXUS_HEAD_SHA; otherwise Git, if it answers. Anything
+# but a full lowercase SHA-1 leaves the revision empty and the label absent.
+$revision = [string]$env:NEXUS_HEAD_SHA
+if ([string]::IsNullOrWhiteSpace($revision)) {
+    $git = Get-Command git -ErrorAction SilentlyContinue
+    if ($null -ne $git) {
+        try { $revision = [string](& $git.Source -C $repo rev-parse HEAD 2>$null | Select-Object -First 1) }
+        catch { $revision = '' }
+    }
+}
+$revision = $revision.Trim()
+if ($revision -cnotmatch '^[0-9a-f]{40}$') { $revision = '' }
+$iss = $iss.Replace('@@REVISION@@', $revision)
 $iss = $iss.Replace('@@VERSION@@', (Escape-Inno $Version))
 $iss = $iss.Replace('@@APP_VERSION@@', (Escape-Inno $appVersion))
 $iss = $iss.Replace('@@APP_ID@@', (Escape-Inno $appId))

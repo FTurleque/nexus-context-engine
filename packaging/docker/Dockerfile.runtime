@@ -1,15 +1,16 @@
 # Base runtime épinglée par digest. UBI 10 minimal réduit la surface OS tout en
 # conservant Java 21.0.12+8 ; aucun paquet réseau n'est ajouté à l'image finale.
 ARG RUNTIME_IMAGE=eclipse-temurin:21.0.12_8-jre-ubi10-minimal@sha256:c7feea7f2dce5cf29e0ffa94e386b0a12ab44c029ad66bcb59eacc4da572ccf4
-FROM ${RUNTIME_IMAGE}
-
-# Valeurs fournies par la CI (docker-distribution.yml) ; sans valeur, le label reste vide.
+# Révision du commit source : fournie par la CI (docker-distribution.yml) ou par le .env que
+# l'installateur Windows écrit au packaging. Vide, elle choisit l'étape finale sans label revision.
 ARG NEXUS_IMAGE_REVISION=""
+FROM ${RUNTIME_IMAGE} AS runtime
+
+# Version : fournie par la CI ou par build.args du compose généré par l'installateur.
 ARG NEXUS_IMAGE_VERSION=""
 LABEL org.opencontainers.image.title="nexus-context-engine" \
       org.opencontainers.image.source="https://github.com/FTurleque/nexus-context-engine" \
       org.opencontainers.image.licenses="LicenseRef-NEXUS-Proprietary" \
-      org.opencontainers.image.revision="${NEXUS_IMAGE_REVISION}" \
       org.opencontainers.image.version="${NEXUS_IMAGE_VERSION}"
 
 USER root
@@ -59,3 +60,11 @@ USER 10001:10001
 WORKDIR /workspace
 ENTRYPOINT ["/usr/local/bin/nexus-entrypoint"]
 CMD ["rest"]
+
+# Le label revision n'est posé que pour une valeur non vide : l'étape finale est runtime
+# ou runtime-revision selon NEXUS_IMAGE_REVISION (BuildKit ignore l'étape non retenue).
+FROM runtime AS runtime-revision
+ARG NEXUS_IMAGE_REVISION
+LABEL org.opencontainers.image.revision="${NEXUS_IMAGE_REVISION}"
+
+FROM runtime${NEXUS_IMAGE_REVISION:+-revision}

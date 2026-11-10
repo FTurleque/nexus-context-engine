@@ -89,7 +89,7 @@ org.opencontainers.image.revision  SHA du commit construit
 org.opencontainers.image.version   version du pom.xml
 ```
 
-`revision` et `version` sont passés par `--build-arg NEXUS_IMAGE_REVISION=...` et `--build-arg NEXUS_IMAGE_VERSION=...` (le workflow `docker-distribution.yml` les fournit) ; sans valeur, le label reste vide. Lecture :
+`revision` et `version` sont passés par `--build-arg NEXUS_IMAGE_REVISION=...` et `--build-arg NEXUS_IMAGE_VERSION=...`. La CI et `scripts/release/build-docker-image.ps1` les fournissent ; sur un poste installé par le setup Windows, le Compose les lit dans `docker\.env` (`NEXUS_IMAGE_VERSION`, version de l'installeur, et `NEXUS_IMAGE_REVISION`, commit empaqueté s'il est connu). Sans révision, le label `revision` est absent, jamais vide. Lecture :
 
 ```bash
 docker inspect --format '{{json .Config.Labels}}' nexus-context-engine:0.2.0
@@ -446,17 +446,23 @@ La désinstallation NEXUS :
 
 ## Publication GHCR
 
-Le workflow :
+Seul le workflow de release, déclenché par un tag `v*.*.*`, publie dans GHCR :
 
 ```text
-.github/workflows/docker-distribution.yml
+.github/workflows/release.yml
 ```
 
-construit et smoke l'image sur les PR concernées. Il vérifie aussi que le Compose par défaut publie sur `127.0.0.1`, que la déclaration interne correspond au bind, et qu'un Compose explicitement distant en `loopback-forward` est rejeté. Sur `main`, il publie :
+Il pousse l'image qualifiée sous ces tags, avec une attestation de provenance signée par ce workflow :
 
 ```text
 ghcr.io/fturleque/nexus-context-engine:<version>
 ghcr.io/fturleque/nexus-context-engine:latest
 ```
 
-Le setup utilise l'image versionnée par défaut.
+Le workflow `.github/workflows/docker-distribution.yml` construit et smoke l'image sur les PR concernées et sur `main`, sans rien publier. Il vérifie aussi que le Compose par défaut publie sur `127.0.0.1`, que la déclaration interne correspond au bind, et qu'un Compose explicitement distant en `loopback-forward` est rejeté.
+
+Le setup utilise l'image versionnée par défaut. Vérifier la provenance d'un tag :
+
+```bash
+gh attestation verify oci://ghcr.io/fturleque/nexus-context-engine:<version> --repo FTurleque/nexus-context-engine --signer-workflow FTurleque/nexus-context-engine/.github/workflows/release.yml
+```

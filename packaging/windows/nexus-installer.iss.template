@@ -1,5 +1,6 @@
 #define NexusName "NEXUS Context Engine"
 #define NexusVersion "@@VERSION@@"
+#define NexusRevision "@@REVISION@@"
 #define NexusAppVersion "@@APP_VERSION@@"
 #define NexusAppId "@@APP_ID@@"
 #define NexusSmokeMode @@SMOKE_MODE@@
@@ -385,10 +386,16 @@ begin
   Result := InstallDocker() and DockerPrereqPage.Values[0];
 end;
 
+{ PowerShell ends a single-quoted string on U+0027 and on the typographic quotes
+  U+2018, U+2019, U+201A and U+201B: each is doubled to stay literal. }
 function PowerShellSingleQuote(Value: String): String;
 begin
   Result := Value;
   StringChangeEx(Result, '''', '''''', True);
+  StringChangeEx(Result, #$2018, #$2018#$2018, True);
+  StringChangeEx(Result, #$2019, #$2019#$2019, True);
+  StringChangeEx(Result, #$201A, #$201A#$201A, True);
+  StringChangeEx(Result, #$201B, #$201B#$201B, True);
 end;
 
 function VerifyDockerDesktopInstaller(InstallerPath: String): Boolean;
@@ -1286,6 +1293,15 @@ begin
   SaveStringToFile(ExpandConstant('{app}\config\nexus-native.env.cmd'), Content, False);
 end;
 
+{ Build arguments of the local runtime-image fallback: the same OCI labels as the
+  Compose build. The revision is the packaged commit, omitted when unknown. }
+function ImageBuildArgs(): String;
+begin
+  Result := '--build-arg NEXUS_IMAGE_VERSION={#NexusVersion} ';
+  if '{#NexusRevision}' <> '' then
+    Result := Result + '--build-arg NEXUS_IMAGE_REVISION={#NexusRevision} ';
+end;
+
 procedure WriteDockerConfiguration;
 var
   EnvContent: String;
@@ -1312,6 +1328,10 @@ begin
     'NEXUS_SEMANTIC_PROVIDER=' + SemanticProviderValue() + #13#10 +
     'NEXUS_OLLAMA_BASE_URL=' + OllamaPage.Values[0] + #13#10 +
     'NEXUS_REST_API_TOKEN=' + DockerToken + #13#10;
+  { OCI labels of the image built on this machine (docker-compose.yml build.args). }
+  EnvContent := EnvContent + 'NEXUS_IMAGE_VERSION={#NexusVersion}' + #13#10;
+  if '{#NexusRevision}' <> '' then
+    EnvContent := EnvContent + 'NEXUS_IMAGE_REVISION={#NexusRevision}' + #13#10;
   SaveStringToFile(ExpandConstant('{app}\docker\.env'), EnvContent, False);
 
   if not LoadStringFromFile(ExpandConstant('{app}\docker\docker-compose.yml.template'), ComposeTemplate) then
@@ -1344,7 +1364,7 @@ begin
     'echo [NEXUS] Image registre indisponible ou privee; construction locale depuis le payload installe...' + #13#10 +
     'if not exist "%~dp0docker\Dockerfile.runtime" echo [NEXUS] Dockerfile.runtime introuvable. & if not exist "%~dp0docker\Dockerfile.runtime" exit /b 32' + #13#10 +
     'if not exist "%~dp0docker\nexus-container-entrypoint.sh" echo [NEXUS] Entrypoint Docker introuvable. & if not exist "%~dp0docker\nexus-container-entrypoint.sh" exit /b 33' + #13#10 +
-    '"%DOCKER_EXE%" build --pull --file "%~dp0docker\Dockerfile.runtime" --tag "%NEXUS_DOCKER_IMAGE%" "%~dp0."' + #13#10 +
+    '"%DOCKER_EXE%" build --pull --file "%~dp0docker\Dockerfile.runtime" --tag "%NEXUS_DOCKER_IMAGE%" ' + ImageBuildArgs() + '"%~dp0."' + #13#10 +
     'if errorlevel 1 echo [NEXUS] Construction locale de l''image NEXUS echouee. & if errorlevel 1 exit /b 34' + #13#10 +
     ':nexus_image_ready' + #13#10 +
     '"%DOCKER_EXE%" compose --env-file "%~dp0docker\.env" -f "%~dp0docker\docker-compose.yml" up -d' + #13#10 +
@@ -1414,11 +1434,17 @@ begin
     'args = ["exec", "-i", "' + TomlEscape(DockerPage.Values[1]) + '", "java", "-jar", "/opt/nexus/lib/nexus-mcp.jar"]' + #13#10;
 end;
 
-{ Emit a shared PowerShell helper (integrations\nexus-json.ps1) that re-serializes
-  JSON with clean 2-space indentation. Windows PowerShell 5.1's ConvertTo-Json emits
-  a deep-aligned layout that mangles third-party config files; this walks the
-  compressed JSON and re-indents it properly. Written with [char] codes and
-  double-quoted strings only, so there are no single quotes to escape through Pascal. }
+{ Emit the shared PowerShell helper (integrations\nexus-json.ps1), the only reader and
+  writer of the assistant clients' JSON configurations:
+  - Read-ClientJson reads UTF-8 (Windows PowerShell 5.1's Get-Content would use the
+    ANSI code page) and throws unless the file holds a JSON object;
+  - Save-CleanJson re-indents with 2 spaces (5.1's ConvertTo-Json emits a deep-aligned
+    layout), writes a temporary file of the same folder, then File.Replace keeps the
+    original as <file>.nexus-backup-<yyyyMMddHHmmss>, never overwriting a backup;
+  - Add-NexusServerEntry / Remove-NexusServerEntry edit the nexus entry of each file,
+    starting from an empty state for every file.
+  Callers set $ErrorActionPreference = 'Stop': an unreadable file stops the script
+  with exit code 1 before it is written. The script text stays ASCII. }
 procedure WriteJsonHelper(Dir: String);
 var
   S: String;
@@ -1450,12 +1476,58 @@ begin
     '  }' + #13#10 +
     '  return $sb.ToString()' + #13#10 +
     '}' + #13#10 +
+    'function Read-ClientJson([string]$Path) {' + #13#10 +
+    '  $text = [System.IO.File]::ReadAllText($Path, [System.Text.UTF8Encoding]::new($false))' + #13#10 +
+    '  try { $data = $text | ConvertFrom-Json } catch { throw (''Invalid JSON: '' + $Path) }' + #13#10 +
+    '  if (-not ($data -is [System.Management.Automation.PSCustomObject])) { throw (''Not a JSON object: '' + $Path) }' + #13#10 +
+    '  return $data' + #13#10 +
+    '}' + #13#10 +
     'function Save-CleanJson([string]$Path, [object]$Data) {' + #13#10 +
     '  $compressed = $Data | ConvertTo-Json -Depth 30 -Compress' + #13#10 +
     '  $pretty = Format-Json $compressed' + #13#10 +
     '  $dir = Split-Path $Path -Parent' + #13#10 +
-    '  if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }' + #13#10 +
-    '  [System.IO.File]::WriteAllText($Path, $pretty + "`r`n", [System.Text.UTF8Encoding]::new($false))' + #13#10 +
+    '  if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }' + #13#10 +
+    '  $tmp = $Path + ''.nexus-'' + [guid]::NewGuid().ToString(''N'') + ''.tmp''' + #13#10 +
+    '  try {' + #13#10 +
+    '    [System.IO.File]::WriteAllText($tmp, $pretty + "`r`n", [System.Text.UTF8Encoding]::new($false))' + #13#10 +
+    '    if (Test-Path -LiteralPath $Path) {' + #13#10 +
+    '      $backup = $Path + ''.nexus-backup-'' + (Get-Date -Format ''yyyyMMddHHmmss'')' + #13#10 +
+    '      $candidate = $backup; $n = 1' + #13#10 +
+    '      while (Test-Path -LiteralPath $candidate) { $candidate = $backup + ''-'' + $n; $n++ }' + #13#10 +
+    '      [System.IO.File]::Replace($tmp, $Path, $candidate)' + #13#10 +
+    '    } else {' + #13#10 +
+    '      [System.IO.File]::Move($tmp, $Path)' + #13#10 +
+    '    }' + #13#10 +
+    '  } finally {' + #13#10 +
+    '    if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force }' + #13#10 +
+    '  }' + #13#10 +
+    '}' + #13#10 +
+    'function Add-NexusServerEntry([string[]]$Paths, [string]$Section, [object]$Entry) {' + #13#10 +
+    '  $added = 0' + #13#10 +
+    '  foreach ($cfg in $Paths) {' + #13#10 +
+    '    $c = $null' + #13#10 +
+    '    if (Test-Path -LiteralPath $cfg) { $c = Read-ClientJson $cfg } else { $c = [PSCustomObject]@{} }' + #13#10 +
+    '    if ($null -eq ($c | Get-Member -Name $Section -MemberType NoteProperty)) { $c | Add-Member -MemberType NoteProperty -Name $Section -Value ([PSCustomObject]@{}) }' + #13#10 +
+    '    if ($null -ne ($c.$Section | Get-Member -Name nexus -MemberType NoteProperty)) { continue }' + #13#10 +
+    '    $c.$Section | Add-Member -MemberType NoteProperty -Name nexus -Value $Entry' + #13#10 +
+    '    Save-CleanJson $cfg $c' + #13#10 +
+    '    $added++' + #13#10 +
+    '  }' + #13#10 +
+    '  return $added' + #13#10 +
+    '}' + #13#10 +
+    'function Remove-NexusServerEntry([string[]]$Paths, [string]$Section) {' + #13#10 +
+    '  $removed = 0' + #13#10 +
+    '  foreach ($cfg in $Paths) {' + #13#10 +
+    '    $c = $null' + #13#10 +
+    '    if (-not (Test-Path -LiteralPath $cfg)) { continue }' + #13#10 +
+    '    $c = Read-ClientJson $cfg' + #13#10 +
+    '    if ($null -eq ($c | Get-Member -Name $Section -MemberType NoteProperty)) { continue }' + #13#10 +
+    '    if ($null -eq ($c.$Section | Get-Member -Name nexus -MemberType NoteProperty)) { continue }' + #13#10 +
+    '    $c.$Section.PSObject.Properties.Remove(''nexus'')' + #13#10 +
+    '    Save-CleanJson $cfg $c' + #13#10 +
+    '    $removed++' + #13#10 +
+    '  }' + #13#10 +
+    '  return $removed' + #13#10 +
     '}' + #13#10;
   SaveStringToFile(Dir + '\nexus-json.ps1', S, False);
 end;
@@ -1595,18 +1667,17 @@ begin
       same cmd.exe + nexus-mcp.cmd pattern as mcp-search-net.
       - exit 10 : mcp.json absent OR nexus-mcp.cmd not installed
       - exit 20 : nexus key already present (idempotent)
-      - exit 0  : nexus added successfully }
+      - exit 0  : nexus added successfully
+      - exit 1  : mcp.json unreadable as a JSON object, left unchanged }
     JetBrainsPsScript :=
+      '$ErrorActionPreference = ''Stop''' + #13#10 +
       '. (Join-Path $PSScriptRoot ''nexus-json.ps1'')' + #13#10 +
       '$dir = Join-Path $env:LOCALAPPDATA ''github-copilot\intellij''' + #13#10 +
       'if (-not (Test-Path $dir)) { exit 10 }' + #13#10 +
       '$mcp = Join-Path $dir ''mcp.json''' + #13#10 +
-      '$c = if (Test-Path $mcp) { Get-Content $mcp -Raw | ConvertFrom-Json } else { [PSCustomObject]@{ servers = [PSCustomObject]@{} } }' + #13#10 +
-      'if ($null -eq ($c | Get-Member -Name servers -MemberType NoteProperty)) { $c | Add-Member -MemberType NoteProperty -Name servers -Value ([PSCustomObject]@{}) }' + #13#10 +
-      'if ($null -ne ($c.servers | Get-Member -Name nexus -MemberType NoteProperty)) { exit 20 }' + #13#10 +
       '$e = ' + McpEntryPsLiteral(True) + #13#10 +
-      '$c.servers | Add-Member -MemberType NoteProperty -Name nexus -Value $e' + #13#10 +
-      'Save-CleanJson $mcp $c' + #13#10 +
+      '$added = Add-NexusServerEntry @($mcp) ''servers'' $e' + #13#10 +
+      'if ($added -eq 0) { exit 20 }' + #13#10 +
       'exit 0' + #13#10;
     SaveStringToFile(Dir + '\connect-copilot-jetbrains.ps1', JetBrainsPsScript, False);
 
@@ -1667,8 +1738,11 @@ begin
       - exit 10 : no Claude Desktop configuration folder
       - exit 20 : nexus already present in each of them (idempotent)
       - exit 30 : Claude Desktop is running (its rewrite would drop the entry)
-      - exit 0  : nexus added to at least one of them }
+      - exit 0  : nexus added to at least one of them
+      - exit 1  : a configuration is unreadable as a JSON object; it and the
+                  following ones are left unchanged }
     ClaudeDesktopPsScript :=
+      '$ErrorActionPreference = ''Stop''' + #13#10 +
       '. (Join-Path $PSScriptRoot ''nexus-json.ps1'')' + #13#10 +
       ClaudeDesktopConfigsPs() +
       'if ($cfgs.Count -gt 0) {' + #13#10 +
@@ -1676,15 +1750,7 @@ begin
       '}' + #13#10 +
       'if ($cfgs.Count -eq 0) { exit 10 }' + #13#10 +
       '$e = ' + McpEntryPsLiteral(False) + #13#10 +
-      '$added = 0' + #13#10 +
-      'foreach ($cfg in $cfgs) {' + #13#10 +
-      '  $c = if (Test-Path $cfg) { Get-Content $cfg -Raw | ConvertFrom-Json } else { [PSCustomObject]@{} }' + #13#10 +
-      '  if ($null -eq ($c | Get-Member -Name mcpServers -MemberType NoteProperty)) { $c | Add-Member -MemberType NoteProperty -Name mcpServers -Value ([PSCustomObject]@{}) }' + #13#10 +
-      '  if ($null -ne ($c.mcpServers | Get-Member -Name nexus -MemberType NoteProperty)) { continue }' + #13#10 +
-      '  $c.mcpServers | Add-Member -MemberType NoteProperty -Name nexus -Value $e' + #13#10 +
-      '  Save-CleanJson $cfg $c' + #13#10 +
-      '  $added++' + #13#10 +
-      '}' + #13#10 +
+      '$added = Add-NexusServerEntry $cfgs ''mcpServers'' $e' + #13#10 +
       'if ($added -eq 0) { exit 20 }' + #13#10 +
       'exit 0' + #13#10;
     SaveStringToFile(Dir + '\connect-claude-desktop.ps1', ClaudeDesktopPsScript, False);
@@ -1767,7 +1833,8 @@ end;
 
 { Removal scripts for every client, whatever this run selected: uninstall must be
   able to remove an entry this installer adopted (see AdoptConfiguredClients), not
-  only one it wrote. Each script exits 0 when the client or its entry is absent. }
+  only one it wrote. Each script exits 0 when the client or its entry is absent; the
+  JSON ones exit 1 and leave a configuration unchanged when it is not a JSON object. }
 procedure WriteDisconnectScripts;
 var
   Dir: String;
@@ -1786,28 +1853,18 @@ begin
     'exit 0' + #13#10,
     False);
   SaveStringToFile(Dir + '\disconnect-copilot-jetbrains.ps1',
+    '$ErrorActionPreference = ''Stop''' + #13#10 +
     '. (Join-Path $PSScriptRoot ''nexus-json.ps1'')' + #13#10 +
     '$mcp = Join-Path $env:LOCALAPPDATA ''github-copilot\intellij\mcp.json''' + #13#10 +
-    'if (-not (Test-Path $mcp)) { exit 0 }' + #13#10 +
-    '$c = Get-Content $mcp -Raw | ConvertFrom-Json' + #13#10 +
-    'if ($null -eq ($c | Get-Member -Name servers -MemberType NoteProperty)) { exit 0 }' + #13#10 +
-    'if ($null -eq ($c.servers | Get-Member -Name nexus -MemberType NoteProperty)) { exit 0 }' + #13#10 +
-    '$c.servers.PSObject.Properties.Remove(''nexus'')' + #13#10 +
-    'Save-CleanJson $mcp $c' + #13#10 +
+    'Remove-NexusServerEntry @($mcp) ''servers'' | Out-Null' + #13#10 +
     'exit 0' + #13#10,
     False);
   SaveStringToFile(Dir + '\disconnect-claude-desktop.ps1',
+    '$ErrorActionPreference = ''Stop''' + #13#10 +
     '. (Join-Path $PSScriptRoot ''nexus-json.ps1'')' + #13#10 +
     ClaudeDesktopConfigsPs() +
     ClaudeDesktopClosedGuardPs() +
-    'foreach ($cfg in $cfgs) {' + #13#10 +
-    '  if (-not (Test-Path $cfg)) { continue }' + #13#10 +
-    '  $c = Get-Content $cfg -Raw | ConvertFrom-Json' + #13#10 +
-    '  if ($null -eq ($c | Get-Member -Name mcpServers -MemberType NoteProperty)) { continue }' + #13#10 +
-    '  if ($null -eq ($c.mcpServers | Get-Member -Name nexus -MemberType NoteProperty)) { continue }' + #13#10 +
-    '  $c.mcpServers.PSObject.Properties.Remove(''nexus'')' + #13#10 +
-    '  Save-CleanJson $cfg $c' + #13#10 +
-    '}' + #13#10 +
+    'Remove-NexusServerEntry $cfgs ''mcpServers'' | Out-Null' + #13#10 +
     'exit 0' + #13#10,
     False);
   SaveStringToFile(Dir + '\disconnect-claude-cli.ps1',
@@ -2273,13 +2330,16 @@ begin
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'CopilotJetBrainsManaged', Value) and (Value = '1') and
      FileExists(ExpandConstant('{app}\integrations\disconnect-copilot-jetbrains.ps1')) then
   begin
-    Exec(PsExe, '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\integrations\disconnect-copilot-jetbrains.ps1') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    if Exec(PsExe, '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\integrations\disconnect-copilot-jetbrains.ps1') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode <> 0) then
+      Log('disconnect-copilot-jetbrains.ps1: mcp.json left unchanged, exit code ' + IntToStr(ResultCode));
     RegDeleteValue(HKCU, InstallerRegistryPath(), 'CopilotJetBrainsManaged');
   end;
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'ClaudeDesktopManaged', Value) and (Value = '1') and
      FileExists(ExpandConstant('{app}\integrations\disconnect-claude-desktop.ps1')) then
   begin
-    RunWhileClaudeDesktopClosed(ExpandConstant('{app}\integrations\disconnect-claude-desktop.ps1'), '', True);
+    ResultCode := RunWhileClaudeDesktopClosed(ExpandConstant('{app}\integrations\disconnect-claude-desktop.ps1'), '', True);
+    if ResultCode <> 0 then
+      Log('disconnect-claude-desktop.ps1: Claude Desktop configuration left unchanged, exit code ' + IntToStr(ResultCode));
     RegDeleteValue(HKCU, InstallerRegistryPath(), 'ClaudeDesktopManaged');
   end;
   if RegQueryStringValue(HKCU, InstallerRegistryPath(), 'ClaudeCliManaged', Value) and (Value = '1') then

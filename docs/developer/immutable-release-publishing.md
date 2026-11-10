@@ -184,6 +184,8 @@ Notation : organigramme, pas UML. Exigences portées : « La publication s'exéc
 
 **[Existant vérifié]** Le relevé daté de la répétition `0.2.0-rc.2` consigne : run `release.yml` réussi après approbation de l'environnement `release`, release marquée pré-version, `gh attestation verify` réussi sur l'image, le ZIP et le `setup.exe` avec le workflow `release.yml` pour signataire, `latest` inchangé, et la lecture `gh api` de l'environnement et du ruleset de tags.
 
+**[Existant vérifié]** Seul `release.yml` pousse sur GHCR : `docker push` et `docker buildx imagetools create` des tags version, SHA et `latest` (`.github/workflows/release.yml:335-340`, `:473`). `docker-distribution.yml` et `develop-push-docker-distribution.yml` construisent et qualifient l'image sans publier ; le contrat `scripts/release/test-operational-doc-contracts.sh:831-865` refuse tout `docker push`, `ghcr.io`, `docker login`, `imagetools create` ou `--push` dans ces deux workflows, et toute attribution de la publication à `docker-distribution.yml` dans `docs/user/docker-installation.md`.
+
 ### Écarts et limites (release-pipeline)
 
 - Les assets Windows de release ne sont pas signés Authenticode : SmartScreen affiche « éditeur inconnu » à l'installation. La vérification par `gh attestation verify` et par le `.sha256` est documentée dans la section « Vérification consommateur ».
@@ -192,4 +194,5 @@ Notation : organigramme, pas UML. Exigences portées : « La publication s'exéc
 - Les réglages GitHub (environnement `release`, ruleset de tags) ne sont relus par aucun contrat : seul le relevé daté les consigne.
 - Un environnement absent est créé sans protection par le premier job qui le référence : l'environnement et le ruleset précèdent tout tag `v*`.
 - La pré-version publie dans le namespace GHCR réel, sous des tags distincts et immuables, jamais `latest`.
+- Le registre peut porter des versions de paquet poussées avant que `release.yml` soit le seul publieur : leur origine se relève par `gh api /user/packages/container/nexus-context-engine/versions` et `gh attestation verify --signer-workflow FTurleque/nexus-context-engine/.github/workflows/release.yml`. Le préflight immuable refuse un tag de version déjà présent sur un autre digest ; la remise en conformité avant une release finale est un geste du mainteneur, consigné dans le relevé de release de `docs/project/history/`.
 - `build-windows-distribution.ps1` et `build-windows-installer.ps1` sont aussi modifiés par le changement `sprint-10-conteneur-et-gouvernance` (inclusion de `Dockerfile.runtime.dockerignore` dans le payload) ; l'ordre de fusion n'est pas décidé ici.

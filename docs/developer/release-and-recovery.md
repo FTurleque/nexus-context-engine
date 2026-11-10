@@ -319,3 +319,53 @@ Retour arrière : V019 ne change pas le schéma ; un binaire antérieur ouvre la
 et reconstruit ses dérivés sous sa propre politique, qui laisse passer ces jetons.
 Pour revenir en arrière sans rouvrir ces cas, restaurer la sauvegarde de
 `NEXUS_HOME` prise avant la mise à niveau.
+
+## OpenSpec installer-client-configuration
+
+Spec : [`openspec/specs/installer-client-configuration/spec.md`](../../openspec/specs/installer-client-configuration/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md). Le comportement vu de l'utilisateur est décrit dans [Installation Windows](../user/windows-installation.md) (« Écran 9 — Clients IA » et « Désinstallation »).
+
+### Comportement existant vérifié (installer-client-configuration)
+
+| Étiquette | Fait | Source |
+|---|---|---|
+| [Existant vérifié] | Les scripts de connexion et de déconnexion sont du texte PowerShell assemblé par l'installateur, écrit dans `{app}\integrations\` et exécuté par `{sys}\WindowsPowerShell\v1.0\powershell.exe` (Windows PowerShell 5.1). Leur texte reste ASCII : 5.1 lit un script sans BOM dans la page de code ANSI. | `packaging/windows/nexus-installer.iss.template:1448`, `:1682`, `:1756` |
+| [Existant vérifié] | `nexus-json.ps1` est le seul lecteur et écrivain des fichiers JSON des clients : `Read-ClientJson` lit en UTF-8 et lève une exception si le contenu n'est pas un objet JSON ; `Save-CleanJson` écrit un fichier temporaire du même dossier puis appelle `[System.IO.File]::Replace`, qui garde l'original sous `<fichier>.nexus-backup-<yyyyMMddHHmmss>` (suffixe `-N` si ce nom existe) ; `Add-NexusServerEntry` et `Remove-NexusServerEntry` repartent d'un état vide pour chaque fichier. | `packaging/windows/nexus-installer.iss.template:1479-1531` |
+| [Existant vérifié] | Les quatre scripts JSON (`connect-copilot-jetbrains.ps1`, `connect-claude-desktop.ps1`, `disconnect-copilot-jetbrains.ps1`, `disconnect-claude-desktop.ps1`) commencent par `$ErrorActionPreference = 'Stop'`. | `packaging/windows/nexus-installer.iss.template:1672-1682`, `:1744-1756`, `:1855-1868` |
+| [Existant vérifié] | `PowerShellSingleQuote` double U+0027, U+2018, U+2019, U+201A et U+201B, que PowerShell traite tous comme délimiteurs de chaîne simple. | `packaging/windows/nexus-installer.iss.template:391` |
+| [Existant vérifié] | La désinstallation journalise le code non nul d'un script de déconnexion JSON. | `packaging/windows/nexus-installer.iss.template:2334`, `:2342` |
+
+### Vue (installer-client-configuration)
+
+#### Vue UML de séquence — Comment un script de connexion modifie-t-il un fichier de configuration de client ? (existant)
+
+```mermaid
+sequenceDiagram
+    participant S as connect-claude-desktop.ps1
+    participant J as nexus-json.ps1
+    participant F as Fichier de configuration
+    S->>J: Add-NexusServerEntry(fichiers, mcpServers, entrée)
+    loop chaque fichier, état remis à vide
+        J->>F: ReadAllText(fichier, UTF-8)
+        alt JSON invalide ou non objet
+            J-->>S: exception (ErrorActionPreference Stop)
+            S-->>S: code de sortie 1, fichier et suivants inchangés
+        else entrée nexus déjà présente
+            J-->>J: fichier suivant, aucune écriture
+        else objet lu sans entrée nexus
+            J->>F: WriteAllText(fichier.nexus-guid.tmp, UTF-8 sans BOM)
+            J->>F: File.Replace(tmp, fichier, fichier.nexus-backup-horodatage)
+        end
+    end
+    J-->>S: nombre d'entrées ajoutées
+```
+
+Notation : UML de séquence. Exigences portées : « Les configurations des clients sont lues et écrites en UTF-8 », « Un fichier de configuration illisible n'est jamais réécrit », « Une sauvegarde précède toute réécriture d'une configuration existante ».
+
+Codes de sortie des scripts JSON : `0` entrée ajoutée (connexion) ou script terminé (déconnexion), `10` client absent, `20` entrée déjà présente partout, `30` Claude Desktop ouvert, `1` fichier illisible ou remplacement impossible. Un échec de remplacement supprime le fichier temporaire dans un `finally` ; l'original reste en place.
+
+### Écarts et limites (installer-client-configuration)
+
+- Un fichier déjà corrompu par une version antérieure de l'installateur n'est pas réparé.
+- Les sauvegardes ne sont jamais supprimées ni relues par NEXUS ; leur nettoyage revient à l'utilisateur.
+- Un client ouvert peut réécrire son fichier entre la lecture et le remplacement ; Claude Desktop est attendu fermé (code 30), pas Copilot JetBrains.
+- Le smoke `scripts/release/test-windows-installer.ps1` exécute `nexus-json.ps1` et les scripts de déconnexion installés ; les scripts de connexion ne sont générés que pour un client détecté, ce que l'installateur smoke ne fait pas : le smoke appelle `Add-NexusServerEntry` comme eux.
