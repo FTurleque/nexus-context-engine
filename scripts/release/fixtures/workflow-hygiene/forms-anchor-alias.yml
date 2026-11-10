@@ -1,0 +1,14 @@
+# Fixture négative : commande définie par une ancre et lue par un alias.
+x-cmd: &cmd "echo ${{ inputs.x }}"
+name: fixture
+on:
+  workflow_call:
+    inputs:
+      x:
+        type: string
+jobs:
+  j:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - run: *cmd

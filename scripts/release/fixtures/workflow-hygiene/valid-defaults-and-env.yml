@@ -1,0 +1,24 @@
+# Fixture positive : defaults.run est un mapping, et env: frère d un run: | reçoit un input.
+name: fixture
+on:
+  workflow_call:
+    inputs:
+      dir:
+        type: string
+defaults:
+  run:
+    shell: bash
+    working-directory: ${{ inputs.dir }}
+jobs:
+  j:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - run: |
+          echo "$DIR"
+        env:
+          DIR: ${{ inputs.dir }}
+      - run: echo done

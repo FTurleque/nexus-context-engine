@@ -582,18 +582,22 @@ SHARED_SCRIPT_FUNCTION = re.compile(
     r"^\s*function\s+(Invoke-Maven|Resolve-AbsolutePath|Invoke-NexusJson|Select-MavenCommand)\b",
     re.IGNORECASE,
 )
-MAVEN_TOKEN = r"(?:\.\.?[\\/])?(?:[\w$:.\\/-]*[\\/])?mvnw?(?:\.cmd)?"
+MAVEN_TOKEN = r"(?:\.\.?[\\/])?(?:[\w${}:.\\/-]*[\\/])?mvnw?(?:\.cmd)?"
 DIRECT_MAVEN_CALL = (
     re.compile(r"&\s*['\"]?" + MAVEN_TOKEN + r"['\"]?(?:\s|$)", re.IGNORECASE),
     re.compile(r"^\s*" + MAVEN_TOKEN + r"\s", re.IGNORECASE),
     re.compile(r"Get-Command\s+(?:-Name\s+)?['\"]?mvn", re.IGNORECASE),
     re.compile(r"Start-Process\b.*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE),
-    re.compile(r"Join-Path\b.*['\"](?:\.\.[\\/])*mvnw?(?:\.cmd)?['\"]", re.IGNORECASE),
+    re.compile(r"Join-Path\b.*['\"\s\\/](?:\.\.[\\/])*mvnw?(?:\.cmd)?(?:['\")\s]|$)", re.IGNORECASE),
     # Indirection (AUD-QUA-21): a variable holding exactly a Maven command name,
-    # cmd /c, and Invoke-Expression/iex of a string that names Maven. A message
-    # that quotes the wrapper inside a sentence is not a whole-string literal.
-    re.compile(r"\$[\w:]+\s*=\s*(['\"])" + MAVEN_TOKEN + r"\1", re.IGNORECASE),
-    re.compile(r"\bcmd(?:\.exe)?['\"]?\s+/c\b.*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE),
+    # cmd /c (options and $env:ComSpec included), and Invoke-Expression/iex of a
+    # string that names Maven. A message that quotes the wrapper inside a sentence
+    # is not a whole-string literal; a message naming both cmd /c and mvn is
+    # flagged and belongs in MAVEN_CALL_EXCEPTIONS.
+    re.compile(r"\$\{?[\w:]+\}?\s*=\s*(['\"])" + MAVEN_TOKEN + r"\1", re.IGNORECASE),
+    re.compile(
+        r"(?:\bcmd(?:\.exe)?['\"]?|\$env:ComSpec)(?:\s+/\w+)*\s+/c\b.*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE
+    ),
     re.compile(r"(?:\bInvoke-Expression\b|(?<![\w-])iex\b).*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE),
 )
 # Explicit exceptions: (script path, exact trimmed line). Each entry must still
@@ -651,6 +655,11 @@ for label, fixture in (
     ("command in a variable", '$m = "mvn"; & $m clean install\n'),
     ("wrapper in a variable", "    $wrapper = '.\\mvnw.cmd'\n"),
     ("cmd /c", "cmd /c mvn clean install\n"),
+    ("cmd /d /c", "cmd /d /c mvn verify\n"),
+    ("ComSpec", "& $env:ComSpec /c mvn verify\n"),
+    ("braced root in a variable", '$m = "${root}/mvnw"\n'),
+    ("braced variable name", "${m} = 'mvn'\n"),
+    ("unquoted Join-Path", "$m = Join-Path $root mvnw.cmd\n"),
     ("cmd.exe /c", "& cmd.exe /c \"mvnw.cmd -B verify\"\n"),
     ("Invoke-Expression", 'Invoke-Expression "mvn clean install"\n'),
     ("iex", "iex \"$PSScriptRoot\\..\\mvnw.cmd test\"\n"),
@@ -691,11 +700,22 @@ HYGIENE_FIXTURES="scripts/release/fixtures/workflow-hygiene"
 for check in forms inputs timeouts runners; do
   python3 "$HYGIENE" "$check" .github/workflows .github/actions
 done
+# Valid forms that must stay accepted: defaults.run as a mapping, env: beside a run: block.
+for check in pins forms inputs timeouts; do
+  python3 "$HYGIENE" "$check" "$HYGIENE_FIXTURES/valid-defaults-and-env.yml" >/dev/null
+done
 # A fixture counts as rejected only with exit code 1 and the message of its rule.
 for case in \
   "forms|forms-flow-mapping-job.yml|forms-flow-mapping-job.yml:9: unsupported YAML form: job 'b' is not a block mapping" \
   "forms|forms-quoted-key.yml|forms-quoted-key.yml:6: unsupported YAML form: quoted key 'runs-on'" \
   "forms|forms-run-plain-next-line.yml|forms-run-plain-next-line.yml:14: unsupported YAML form: run: followed by a plain scalar" \
+  "forms|forms-flow-step.yml|forms-flow-step.yml:13: unsupported YAML form: flow collection" \
+  "forms|forms-anchor-alias.yml|forms-anchor-alias.yml:14: unsupported YAML form: anchor, alias or merge key" \
+  "forms|forms-run-plain-continuation.yml|forms-run-plain-continuation.yml:13: unsupported YAML form: run: plain scalar continued" \
+  "forms|forms-run-quoted-continuation.yml|forms-run-quoted-continuation.yml:13: unsupported YAML form: run: quoted scalar continued" \
+  "pins|forms-flow-step.yml|forms-flow-step.yml:13: unsupported YAML form: flow collection" \
+  "inputs|inputs-format-braces.yml|inputs-format-braces.yml:13: an input is interpolated" \
+  "inputs|inputs-nested-action|inputs-nested-action/group/tool/action.yml:12: an input is interpolated" \
   "inputs|inputs-in-run.yml|interpolated inside a run" \
   "inputs|inputs-inline-run.yml|interpolated inside a run" \
   "inputs|inputs-event-inputs.yml|interpolated inside a run" \

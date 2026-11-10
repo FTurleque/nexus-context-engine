@@ -5,10 +5,14 @@ Usage: workflow_hygiene.py <check> <workflow-or-directory>...
 
 Checks:
   pins      every external `uses:` is pinned by a full SHA with a `# vX.Y.Z`
-            comment; one SHA carries one comment; one major version per action
-  forms     rejects the YAML forms the line parser cannot read: a job written
-            as a flow mapping, a quoted `runs-on`, `timeout-minutes`, `run`,
-            `uses` or `with` key, an empty `run:` followed by a plain scalar
+            comment; one SHA carries one comment; one major version per action;
+            runs `forms` first
+  forms     rejects the YAML forms the line parser cannot read: a job with an
+            inline value (flow mapping), a flow collection as a sequence item
+            or as the value of a key the checks read, an anchor, alias or merge
+            key, a quoted `jobs`, `steps`, `runs-on`, `timeout-minutes`, `run`,
+            `uses`, `with` or `script` key, and a `run:`/`script:` scalar that
+            is not a `|`/`>` block yet continues on the next lines
   inputs    no expression reading `inputs` (or `github.event.inputs`) inside a
             `run:` block or a `script:` parameter; runs `forms` first
   timeouts  every job with `runs-on:` declares `timeout-minutes`; runs `forms`
@@ -18,7 +22,7 @@ Checks:
             named by its version comment, annotated tags dereferenced
 
 A directory argument covers its `*.yml`/`*.yaml` files and the composite
-actions `*/action.yml` below it (`.github/actions`).
+actions `action.yml` in its subdirectories, at any depth (`.github/actions`).
 
 The parser is line based on purpose: it needs no third-party YAML library and
 only reads the subset of YAML the repository workflows use (block mappings, one
@@ -28,6 +32,7 @@ runners check.
 """
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -36,12 +41,22 @@ from pathlib import Path
 USES = re.compile(r"^\s*(?:-\s+)?uses:\s*['\"]?(?P<ref>[^'\"\s#]+)['\"]?\s*(?:#\s*(?P<comment>.*?))?\s*$")
 PINNED = re.compile(r"^(?P<action>[\w.-]+/[\w.-]+(?:/[^@\s]+)?)@(?P<sha>[0-9a-f]{40})$")
 VERSION_COMMENT = re.compile(r"^v(?P<major>\d+)(?:\.\d+){0,2}$")
-RUN = re.compile(r"^(?P<indent>\s*)(?:-\s+)?(?P<key>run|script):\s*(?P<value>.*)$")
-QUOTED_KEY = re.compile(r"^\s*(?:-\s+)?(['\"])(?P<key>runs-on|timeout-minutes|run|uses|with)\1\s*:")
+RUN = re.compile(r"^(?P<indent>\s*)(?P<dash>-\s+)?(?P<key>run|script):\s*(?P<value>.*)$")
+QUOTED_KEY = re.compile(
+    r"^\s*(?:-\s+)?(['\"])(?P<key>jobs|steps|runs-on|timeout-minutes|run|uses|with|script)\1\s*:"
+)
 EMPTY_VALUE = re.compile(r"^\s*(?:#.*)?$")
-INPUT_EXPRESSION = re.compile(r"\$\{\{[^}]*\b(?:github\.event\.)?inputs\b")
+EXPRESSION = re.compile(r"\$\{\{(?P<body>.*?)(?:\}\}|$)")
+INPUTS_WORD = re.compile(r"\binputs\b")
+# Anchor, alias or merge key: the value is defined elsewhere in the file.
+ALIAS = re.compile(r"^\s*(?:-\s+(?:[\w\"'-]+:\s+)?|[\w\"'-]+:\s+)[&*][\w-]+|^\s*(?:-\s+)?<<\s*:")
+# Flow collection as a sequence item, or as the value of a key the checks read.
+FLOW = re.compile(
+    r"^\s*-\s+[\[{]|^\s*(?:-\s+)?(?:jobs|steps|with|env|run|uses|script|runs-on|timeout-minutes):\s*[\[{]"
+)
 TOP_LEVEL_KEY = re.compile(r"^[A-Za-z_][\w-]*:")
 KEY = re.compile(r"^(?P<indent> *)(?P<key>[A-Za-z_][\w-]*):(?:\s|$)")
+MAPPING_KEY = re.compile(r"^\s*[A-Za-z_][\w-]*:(?:\s|$)")
 
 # Benchmark and performance qualification jobs measured against budgets.
 PINNED_RUNNER_JOBS = {
@@ -60,9 +75,13 @@ def workflow_files(arguments: list[str]) -> list[Path]:
     files: list[Path] = []
     for argument in arguments:
         path = Path(argument)
+        if not path.exists():
+            raise SystemExit(f"workflow hygiene: {argument} does not exist")
         if path.is_dir():
             files.extend(sorted(p for p in path.iterdir() if p.is_file() and p.suffix in (".yml", ".yaml")))
-            files.extend(sorted(p for p in path.glob("*/action.y*ml") if p.suffix in (".yml", ".yaml")))
+            files.extend(
+                sorted(p for p in path.rglob("action.y*ml") if p.parent != path and p.suffix in (".yml", ".yaml"))
+            )
         else:
             files.append(path)
     return files
@@ -100,7 +119,7 @@ def first_conflict(seen: dict, key, value: str, where: str):
 
 
 def check_pins(files: list[Path]) -> list[str]:
-    errors: list[str] = []
+    errors: list[str] = check_forms(files)
     comments_by_sha: dict = {}
     shas_by_version: dict = {}
     majors_by_action: dict[str, dict[str, str]] = {}
@@ -137,9 +156,10 @@ def run_blocks(lines: list[str]):
             continue
         block = [(index, match.group("value"))]
         value = match.group("value").strip()
-        if value[:1] in ("|", ">") or EMPTY_VALUE.match(value):
-            key_indent = len(match.group("indent"))
-            while index < len(lines) and not ending_block(lines[index], key_indent):
+        scalar = value[:1] in ("|", ">") or (EMPTY_VALUE.match(value) and not opens_mapping(lines, index))
+        if scalar:
+            column = key_column(match)
+            while index < len(lines) and not ending_block(lines[index], column):
                 block.append((index + 1, lines[index]))
                 index += 1
         yield block
@@ -149,29 +169,86 @@ def ending_block(line: str, key_indent: int) -> bool:
     return bool(line.strip()) and len(line) - len(line.lstrip()) <= key_indent
 
 
+def key_column(match: re.Match) -> int:
+    """Column of the `run`/`script` key itself, after a sequence dash."""
+    return len(match.group("indent")) + len(match.group("dash") or "")
+
+
+def next_content(lines: list[str], start: int) -> str | None:
+    """First non-blank, non-comment line from index `start`, or None at the end of the file."""
+    return next((text for text in lines[start:] if text.strip() and not text.lstrip().startswith("#")), None)
+
+
+def opens_mapping(lines: list[str], start: int) -> bool:
+    """True when the line after an empty `run:` is a mapping key (`defaults: run: shell:`)."""
+    following = next_content(lines, start)
+    return following is not None and bool(MAPPING_KEY.match(following))
+
+
+def has_input_expression(text: str) -> bool:
+    """True when an expression `${{ ... }}` of the line reads `inputs` (braces inside it included)."""
+    return any(INPUTS_WORD.search(match.group("body")) for match in EXPRESSION.finditer(text))
+
+
+def unclosed_quote(value: str) -> bool:
+    """True for a quoted scalar that does not end on its own line."""
+    text = value.strip()
+    if text[:1] not in ("'", '"'):
+        return False
+    quote = text[0]
+    rest = text[1:].replace("\\\\", "").replace("\\" + quote, "") if quote == '"' else text[1:].replace("''", "")
+    return quote not in rest
+
+
+def scalar_form(lines: list[str], number: int, run: re.Match) -> str | None:
+    """Unsupported form of a `run:`/`script:` value starting on line `number`."""
+    key = run.group("key")
+    value = run.group("value").strip()
+    if value[:1] in ("|", ">"):
+        return None
+    if unclosed_quote(value):
+        return f"{key}: quoted scalar continued on the next line, use a | block"
+    following = next_content(lines, number)
+    if following is None or ending_block(following, key_column(run)):
+        return None
+    if EMPTY_VALUE.match(value):
+        if MAPPING_KEY.match(following):
+            return None
+        return f"{key}: followed by a plain scalar, use a | block"
+    return f"{key}: plain scalar continued on the next line, use a | block"
+
+
+def unread_line_form(lines: list[str], number: int) -> str | None:
+    """Describe the unsupported form of line `number` (1-based), or None."""
+    line = lines[number - 1]
+    if line.lstrip().startswith("#"):
+        return None
+    quoted = QUOTED_KEY.match(line)
+    if quoted:
+        return f"quoted key {quoted.group('key')!r}"
+    if ALIAS.match(line):
+        return "anchor, alias or merge key"
+    if FLOW.match(line):
+        return "flow collection"
+    run = RUN.match(line)
+    return scalar_form(lines, number, run) if run else None
+
+
 def check_forms(files: list[Path]) -> list[str]:
     """Reject the YAML forms the other checks cannot read (fail closed)."""
     errors: list[str] = []
     for path in files:
         lines = lines_of(path)
         where = path.as_posix()
-        for job, number, keys in jobs_of(lines):
-            if keys.get("__inline__"):
-                errors.append(f"{where}:{number}: unsupported YAML form: job '{job}' is not a block mapping")
-        for number, line in enumerate(lines, 1):
-            if line.lstrip().startswith("#"):
-                continue
-            quoted = QUOTED_KEY.match(line)
-            if quoted:
-                errors.append(f"{where}:{number}: unsupported YAML form: quoted key {quoted.group('key')!r}")
-            run = RUN.match(line)
-            if run and run.group("key") == "run" and EMPTY_VALUE.match(run.group("value")):
-                following = next((text for text in lines[number:] if text.strip()), "")
-                if not ending_block(following, len(run.group("indent"))):
-                    errors.append(
-                        f"{where}:{number}: unsupported YAML form: run: followed by a plain scalar,"
-                        " use a | block"
-                    )
+        errors.extend(
+            f"{where}:{number}: unsupported YAML form: job '{job}' is not a block mapping"
+            for job, number, keys in jobs_of(lines)
+            if keys.get("__inline__")
+        )
+        for number in range(1, len(lines) + 1):
+            form = unread_line_form(lines, number)
+            if form:
+                errors.append(f"{where}:{number}: unsupported YAML form: {form}")
     return errors
 
 
@@ -182,7 +259,7 @@ def check_inputs(files: list[Path]) -> list[str]:
             errors.extend(
                 f"{path.as_posix()}:{number}: an input is interpolated inside a run: or script: block"
                 for number, text in block
-                if INPUT_EXPRESSION.search(text)
+                if has_input_expression(text)
             )
     return errors
 
@@ -292,10 +369,18 @@ def compare_upstream(where: str, action: str, sha: str, tag: str, refs: dict[str
 
 
 def live_ls_remote(repository: str, tag: str) -> str:
+    # Isolated from the local git configuration (insteadOf rewrites, credential
+    # helpers) and never prompting: a missing repository fails instead of waiting.
+    environment = {
+        **os.environ,
+        "GIT_TERMINAL_PROMPT": "0",
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
+    }
     result = subprocess.run(
-        ["git", "ls-remote", "--tags", f"https://github.com/{repository}.git",
+        ["git", "-c", "credential.helper=", "ls-remote", "--tags", f"https://github.com/{repository}.git",
          f"refs/tags/{tag}", f"refs/tags/{tag}^{{}}"],
-        capture_output=True, text=True, timeout=60, check=False,
+        capture_output=True, text=True, timeout=60, check=False, env=environment,
     )
     if result.returncode != 0:
         raise RuntimeError(f"git ls-remote {repository} {tag} failed: {result.stderr.strip()}")
