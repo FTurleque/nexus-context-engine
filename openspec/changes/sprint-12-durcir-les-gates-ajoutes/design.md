@@ -114,9 +114,9 @@ Non applicable : contrôles de quelques secondes ; le job Archgate est borné pa
 
 | Exigence (`capacité › titre`) | Scénario | Conception ou diagramme | Tâche | Test ou preuve |
 |---|---|---|---|---|
-| `coverage-gates › Un plancher de couverture suit la mesure de référence` | Plancher trop bas | Composants (`coverage_floors.py`) | 1.2 | test non écrit |
-| `coverage-gates › Un plancher de couverture suit la mesure de référence` | Plancher dans l'écart admis | Composants | 1.1, 1.2 | test non écrit |
-| `coverage-gates › La page de couverture publie la mesure de référence des planchers` | Plancher sans mesure publiée | Composants | 1.2, 1.3 | test non écrit |
+| `coverage-gates › Un plancher de couverture suit la mesure de référence` | Plancher trop bas | Composants (`coverage_floors.py`) | 1.2 | `scripts/release/coverage_floors.py` ; fixture `scripts/release/fixtures/coverage-floors/floor-too-low` rejetée par `scripts/release/test-operational-doc-contracts.sh` ; étapes « Check coverage floors against the measure » des jobs Linux et Windows de `.github/workflows/ci.yml` |
+| `coverage-gates › Un plancher de couverture suit la mesure de référence` | Plancher dans l'écart admis | Composants | 1.1, 1.2 | planchers de `core/pom.xml`, `adapters/rest-quarkus/pom.xml`, `adapters/mcp-java/pom.xml`, `adapters/assistant-clients/pom.xml` ; `scripts/release/coverage_floors.py` vert sur le dépôt (`--skip-reports` dans les contrats, rapports des builds Linux et Windows en CI) |
+| `coverage-gates › La page de couverture publie la mesure de référence des planchers` | Plancher sans mesure publiée | Composants | 1.2, 1.3 | table « Mesure de référence » de `docs/developer/adapter-coverage-gates.md` ; fixture `scripts/release/fixtures/coverage-floors/floor-without-measure` rejetée par `scripts/release/test-operational-doc-contracts.sh` |
 | `adr-rule-enforcement › Les règles des ADR s'exécutent en CI` | Violation d'une règle | Composants (job `archgate`) | 2.2, 2.3 | test non écrit |
 | `adr-rule-enforcement › Les règles des ADR s'exécutent en CI` | Aucune violation | Composants | 2.3 | test non écrit |
 | `adr-rule-enforcement › La version d'Archgate exécutée en CI est épinglée et vérifiée` | Empreinte divergente | Persistance et intégrité | 2.1 | test non écrit |

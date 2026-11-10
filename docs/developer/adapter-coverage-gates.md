@@ -46,60 +46,76 @@ Le nouveau plancher `assistant-clients` est volontairement inférieur à cette m
 
 ## Seuils bloquants
 
-Chaque module exécute deux `jacoco:check` : `jacoco-check`, hérité du `pom.xml` racine (`BUNDLE`, 65 % des lignes, 55 % des branches, propriétés `nexus.coverage.line.minimum` et `nexus.coverage.branch.minimum`), et l'exécution propre au module. Le seuil effectif est le plus strict des deux ; les valeurs du `pom.xml` de module sont égales à ce seuil effectif.
+Chaque module exécute deux `jacoco:check` : `jacoco-check`, hérité du `pom.xml` racine (`BUNDLE`, 65 % des lignes, 55 % des branches, propriétés `nexus.coverage.line.minimum` et `nexus.coverage.branch.minimum`), et l'exécution propre au module. Le seuil effectif est le plus strict des deux ; les tableaux ci-dessous donnent ce seuil effectif.
 
 ### Niveau module (`BUNDLE`)
 
 | Module | Exécution | Minimum lignes | Minimum branches |
 |---|---|---:|---:|
-| core | `jacoco-check-core` | 70 % | 55 % |
-| REST | `jacoco-check-rest` | 65 % | 60 % |
-| MCP | `jacoco-check-mcp` | 80 % | 55 % |
-| assistant-clients | `jacoco-check-assistant-clients` | **90 %** | **75 %** |
+| core | `jacoco-check-core` | 84 % | 69 % |
+| REST | `jacoco-check-rest` | 87 % | 75 % |
+| MCP | `jacoco-check-mcp` | 86 % | 75 % |
+| assistant-clients | `jacoco-check-assistant-clients` | 92 % | 84 % |
 
 ### Niveau paquet et classe
 
-Le niveau `BUNDLE` laisse une marge de plusieurs centaines de lignes dans le core : une régression concentrée sur un paquet de confinement ou sur un importeur de code intelligence ne le fait pas échouer. De même, une règle `PACKAGE` reste verte quand une seule classe de bornes perd ses tests. Des règles `PACKAGE` et `CLASS` fixent donc un plancher proche de la mesure pour ces zones :
+Le niveau `BUNDLE` laisse une marge de plusieurs centaines de lignes dans le core : une régression concentrée sur un paquet de confinement ou sur un importeur de code intelligence ne le fait pas échouer. De même, une règle `PACKAGE` reste verte quand une seule classe de bornes perd ses tests. Des règles `PACKAGE` et `CLASS` fixent donc un plancher pour ces zones :
 
 | Module | Élément | Cible | Minimum lignes | Minimum branches |
 |---|---|---|---:|---:|
-| core | `PACKAGE` | `com.nexus.security` | 85 % | 77 % |
-| core | `PACKAGE` | `com.nexus.index.jdt` | 66 % | 52 % |
-| core | `PACKAGE` | `com.nexus.index.minos` | 73 % | 59 % |
-| core | `PACKAGE` | `com.nexus.index.scip` | 79 % | 60 % |
-| REST | `PACKAGE` | `com.nexus.api` | 78 % | 67 % |
+| core | `PACKAGE` | `com.nexus.security` | 85 % | 79 % |
+| core | `PACKAGE` | `com.nexus.index.jdt` | 67 % | 53 % |
+| core | `PACKAGE` | `com.nexus.index.minos` | 74 % | 60 % |
+| core | `PACKAGE` | `com.nexus.index.scip` | 80 % | 60 % |
+| REST | `PACKAGE` | `com.nexus.api` | 87 % | 75 % |
 | core | `CLASS` | `com.nexus.index.jdt.JdtStdioSession` | 40 % | 16 % |
 | core | `CLASS` | `com.nexus.index.minos.MinosPayloadReader` | 60 % | 36 % |
 | core | `CLASS` | `com.nexus.search.semantic.SemanticSearchConfiguration` | 74 % | 68 % |
-| REST | `CLASS` | `com.nexus.api.NexusApiApplicationService` | 60 % | 38 % |
+| REST | `CLASS` | `com.nexus.api.NexusApiApplicationService` | 82 % | 58 % |
 | REST | `CLASS` | `com.nexus.api.NexusRestTransportPolicy` | 77 % | 49 % |
-
-Ces planchers sont deux à trois points sous la mesure Windows du reactor complet, arrondis au centième inférieur :
-
-| Cible | Lignes couvertes | Lignes | Branches couvertes | Branches |
-|---|---:|---:|---:|---:|
-| core (`BUNDLE`) | 8 378 / 9 997 | 83,81 % | 2 926 / 4 321 | 67,72 % |
-| `com.nexus.security` | 360 / 413 | 87,17 % | 260 / 326 | 79,75 % |
-| `com.nexus.index.jdt` | 550 / 804 | 68,41 % | 204 / 375 | 54,40 % |
-| `com.nexus.index.minos` | 224 / 296 | 75,68 % | 120 / 195 | 61,54 % |
-| `com.nexus.index.scip` | 373 / 459 | 81,26 % | 159 / 255 | 62,35 % |
-| REST (`BUNDLE`, `com.nexus.api`) | 496 / 612 | 81,05 % | 183 / 261 | 70,11 % |
-| `NexusApiApplicationService` | 60 / 95 | 63,16 % | 4 / 10 | 40,00 % |
-| MCP | 392 / 437 | 89,70 % | 89 / 113 | 78,76 % |
-| assistant-clients | 121 / 128 | 94,53 % | 79 / 89 | 88,76 % |
-
-Les quatre classes de bornes sont mesurées sur `./mvnw -B -ntp clean install` au commit `9adbab2c` (Windows) :
-
-| Classe | Lignes couvertes | Lignes | Branches couvertes | Branches |
-|---|---:|---:|---:|---:|
-| `JdtStdioSession` | 76 / 177 | 42,94 % | 13 / 70 | 18,57 % |
-| `MinosPayloadReader` | 17 / 27 | 62,96 % | 7 / 18 | 38,89 % |
-| `SemanticSearchConfiguration` | 23 / 30 | 76,67 % | 14 / 20 | 70,00 % |
-| `NexusRestTransportPolicy` | 49 / 62 | 79,03 % | 28 / 54 | 51,85 % |
 
 Le plancher de branches de `JdtStdioSession` (16 %) est une garde contre la régression, pas un objectif de couverture : la classe pilote le processus JDT LS, que la suite par défaut n'exécute pas de bout en bout.
 
-Un `./mvnw -B clean install` échoue si l'un des planchers n'est plus respecté. Une hausse durable de la mesure justifie de remonter le plancher correspondant ; une baisse ne justifie jamais de l'abaisser sans décision explicite.
+### Règle d'écart
+
+Un plancher est au plus 3 points sous la mesure de référence de sa cible, et jamais au-dessus. La mesure de référence est la plus basse des mesures du reactor complet dans les jobs `Linux reactor Maven build` et `Windows gate` de NEXUS CI, car le même plancher s'applique aux deux builds. Un plancher se fixe à la partie entière de la mesure de référence moins 2 points ; il n'est jamais abaissé sans décision explicite, et un plancher déjà au-dessus de cette valeur reste en place tant qu'il respecte l'écart (`com.nexus.security`, lignes 85 %).
+
+La PR qui améliore durablement la couverture d'une cible remonte son plancher et met à jour la table ci-dessous. Une PR qui fait varier la mesure d'une cible de plus de 3 points sur sa plateforme, ou d'une ligne ou d'une branche quand cette unité dépasse 3 points (`MinosPayloadReader`, `SemanticSearchConfiguration`, branches de `NexusApiApplicationService`), met elle aussi la table à jour. La table est remesurée en entier sur les deux plateformes au commit qu'elle cite.
+
+`scripts/release/coverage_floors.py` vérifie ces règles :
+
+- chaque plancher des `pom.xml` (seuil effectif par module, élément, cible et compteur) a une ligne dans la table, et chaque ligne a un plancher ;
+- chaque plancher est au plus 3 points sous la mesure de référence publiée ;
+- chaque règle `CLASS` ou `PACKAGE` désigne une classe ou un paquet présent dans le `jacoco.csv` du module, car JaCoCo accepte une inclusion qui ne correspond à rien et laisse la règle vide ;
+- la mesure du build courant n'est ni sous le plancher, ni plus loin de la mesure publiée pour sa plateforme que 3 points ou une unité du compteur, la plus grande des deux ;
+- les formes de configuration qu'il ne lit pas (inclusion à joker, exclusions, règles au niveau du plugin, exécutions JaCoCo hors de `build/plugins`) le font échouer.
+
+NEXUS CI l'exécute après le build du reactor dans les jobs `Linux reactor Maven build` et `Windows gate`, qui conservent les `jacoco.csv` en artefact (`nexus-ci-evidence-<sha>`, `nexus-windows-coverage-<sha>`) ; `/nx-validate` l'exécute après le build local (plateforme détectée, `--platform` pour la forcer). `bash .claude/scripts/contracts.sh` le lance sans rapports (`--skip-reports`, comparaison des `pom.xml` à la table) et vérifie qu'il rejette ses fixtures négatives (`scripts/release/fixtures/coverage-floors/`).
+
+### Mesure de référence
+
+Mesure du reactor complet au commit `f8a27f89` : Linux dans l'artefact `nexus-ci-evidence` de NEXUS CI, Windows sur `./mvnw -B -ntp clean install`.
+
+| Module | Élément | Cible | Lignes Linux | Branches Linux | Lignes Windows | Branches Windows |
+|---|---|---|---:|---:|---:|---:|
+| `core` | `BUNDLE` | — | 9 635 / 11 099 (86,81 %) | 3 336 / 4 639 (71,91 %) | 9 643 / 11 099 (86,88 %) | 3 324 / 4 639 (71,65 %) |
+| `core` | `PACKAGE` | `com.nexus.security` | 503 / 580 (86,72 %) | 328 / 400 (82,00 %) | 516 / 580 (88,97 %) | 325 / 400 (81,25 %) |
+| `core` | `PACKAGE` | `com.nexus.index.jdt` | 568 / 812 (69,95 %) | 208 / 375 (55,47 %) | 568 / 812 (69,95 %) | 208 / 375 (55,47 %) |
+| `core` | `PACKAGE` | `com.nexus.index.minos` | 247 / 303 (81,52 %) | 131 / 195 (67,18 %) | 233 / 303 (76,90 %) | 121 / 195 (62,05 %) |
+| `core` | `PACKAGE` | `com.nexus.index.scip` | 387 / 468 (82,69 %) | 167 / 261 (63,98 %) | 386 / 468 (82,48 %) | 164 / 261 (62,84 %) |
+| `core` | `CLASS` | `com.nexus.index.jdt.JdtStdioSession` | 76 / 177 (42,94 %) | 13 / 70 (18,57 %) | 76 / 177 (42,94 %) | 13 / 70 (18,57 %) |
+| `core` | `CLASS` | `com.nexus.index.minos.MinosPayloadReader` | 17 / 27 (62,96 %) | 7 / 18 (38,89 %) | 17 / 27 (62,96 %) | 7 / 18 (38,89 %) |
+| `core` | `CLASS` | `com.nexus.search.semantic.SemanticSearchConfiguration` | 23 / 30 (76,67 %) | 14 / 20 (70,00 %) | 23 / 30 (76,67 %) | 14 / 20 (70,00 %) |
+| `rest-quarkus` | `BUNDLE` | — | 488 / 544 (89,71 %) | 241 / 311 (77,49 %) | 488 / 544 (89,71 %) | 241 / 311 (77,49 %) |
+| `rest-quarkus` | `PACKAGE` | `com.nexus.api` | 488 / 544 (89,71 %) | 241 / 311 (77,49 %) | 488 / 544 (89,71 %) | 241 / 311 (77,49 %) |
+| `rest-quarkus` | `CLASS` | `com.nexus.api.NexusApiApplicationService` | 69 / 82 (84,15 %) | 6 / 10 (60,00 %) | 69 / 82 (84,15 %) | 6 / 10 (60,00 %) |
+| `rest-quarkus` | `CLASS` | `com.nexus.api.NexusRestTransportPolicy` | 49 / 62 (79,03 %) | 28 / 54 (51,85 %) | 49 / 62 (79,03 %) | 28 / 54 (51,85 %) |
+| `mcp-java` | `BUNDLE` | — | 297 / 336 (88,39 %) | 85 / 109 (77,98 %) | 297 / 336 (88,39 %) | 85 / 109 (77,98 %) |
+| `assistant-clients` | `BUNDLE` | — | 121 / 128 (94,53 %) | 77 / 89 (86,52 %) | 121 / 128 (94,53 %) | 79 / 89 (88,76 %) |
+
+`MinosCodeIndexImporter` est mieux couvert sous Linux : `MinosProjectPathGuardTest` ne s'exécute que sur un système de fichiers à séparateur `/`. Les écarts de `com.nexus.security` viennent des tests propres à chaque système (`WindowsStoragePrincipalsTest`, `SafeFileIOTest`).
+
+Un `./mvnw -B clean install` échoue si l'un des planchers n'est plus respecté.
 
 ## Chemins critiques couverts
 
@@ -170,15 +186,16 @@ Cette section décrit les planchers JaCoCo bloquants par classe. Elle ne contien
 
 ### Comportement existant vérifié
 
-- **[Existant vérifié]** L'exécution `jacoco-check-core` de `core/pom.xml` porte une règle `CLASS` lignes et branches pour `JdtStdioSession`, `MinosPayloadReader` et `SemanticSearchConfiguration` ; l'exécution `jacoco-check-rest` de `adapters/rest-quarkus/pom.xml` en porte une pour `NexusApiApplicationService` et une pour `NexusRestTransportPolicy`. Seuils et mesures : section « Niveau paquet et classe ».
+- **[Existant vérifié]** L'exécution `jacoco-check-core` de `core/pom.xml` porte une règle `CLASS` lignes et branches pour `JdtStdioSession`, `MinosPayloadReader` et `SemanticSearchConfiguration` ; l'exécution `jacoco-check-rest` de `adapters/rest-quarkus/pom.xml` en porte une pour `NexusApiApplicationService` et une pour `NexusRestTransportPolicy`. Seuils : section « Niveau paquet et classe » ; mesures : section « Mesure de référence ».
 - **[Existant vérifié]** Une règle `CLASS` non respectée fait échouer `jacoco:check` avec un message qui nomme la classe. Preuve unique : avec les trois tests `rejectsReverseProxyHttps*` de `NexusRestExposureGuardTest` désactivés, `./mvnw -B -ntp -pl adapters/rest-quarkus -am clean verify` échoue sur `jacoco-check-rest` (« Rule violated for class com.nexus.api.NexusRestTransportPolicy: branches covered ratio is 0.48, but expected minimum is 0.49 », lignes 0,75 pour 0,77) alors que `com.nexus.api` reste à 239 / 311 branches (76,85 %), au-dessus de son plancher de paquet.
+- **[Existant vérifié]** `scripts/release/coverage_floors.py` refuse une règle `CLASS` ou `PACKAGE` dont l'inclusion ne correspond à aucune classe ni aucun paquet du `jacoco.csv` du module, en nommant la règle : la fixture `scripts/release/fixtures/coverage-floors/rule-typo` (inclusion `com.nexus.api.NexusRestTransportPolicyTypo`) est rejetée par `scripts/release/test-operational-doc-contracts.sh`, et NEXUS CI exécute le contrôle sur les rapports des builds Linux et Windows.
+- **[Existant vérifié]** Le même script vérifie l'écart de chaque plancher à la mesure de référence publiée et la présence d'une ligne de mesure pour chaque plancher (section « Règle d'écart ») ; ses fixtures `floor-too-low` et `floor-without-measure` sont rejetées par le même contrat.
 - **[Existant vérifié]** Le module REST ajoute ses données d'exécution à `target/jacoco.exec` (`append`) : un `verify` sans `clean` relit les données d'une exécution précédente et peut masquer la perte d'un test. La mesure et la preuve d'une règle se font après `clean`.
 
 ### Écarts et limites
 
-- **[Écart]** Le scénario « Règle mal nommée » n'a pas de contrôle : JaCoCo accepte une règle dont l'inclusion ne correspond à aucune classe compilée, et la règle reste vide. Le contrôle est prévu dans `coverage_floors.py` (changement `sprint-12-durcir-les-gates-ajoutes`).
 - **[Limite]** La preuve de régression est manuelle et n'est rejouée par aucun test ni job CI.
-- **[Limite]** Les mesures viennent du reactor Windows ; le reactor Linux de la CI n'a pas été relu pour ces quatre classes.
+- **[Limite]** Sous Linux, `com.nexus.index.minos` dépasse de plus de 3 points sa mesure de référence, prise sous Windows : le plancher commun aux deux builds y laisse une marge plus large, que seul le contrôle de la mesure du build contre la colonne Linux borne.
 
 ## OpenSpec adapter-contract-tests
 
