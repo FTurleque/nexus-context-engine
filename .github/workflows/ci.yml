@@ -61,6 +61,23 @@ jobs:
           Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
           .\scripts\validate-phase-6.ps1
 
+      - name: Check coverage floors against the measure
+        shell: pwsh
+        run: python scripts/release/coverage_floors.py --platform windows
+
+      - name: Retain Windows coverage evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nexus-windows-coverage-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            core/target/site/jacoco/jacoco.csv
+            adapters/rest-quarkus/target/site/jacoco/jacoco.csv
+            adapters/mcp-java/target/site/jacoco/jacoco.csv
+            adapters/assistant-clients/target/site/jacoco/jacoco.csv
+
   linux-reactor:
     name: Linux reactor Maven build
     runs-on: ubuntu-latest
@@ -214,6 +231,10 @@ jobs:
                   print(f'jacoco-{name}-{counter_name.lower()}={ratio:.6f} ({covered}/{total})')
           PY
 
+      - name: Check coverage floors against the measure
+        shell: bash
+        run: python3 scripts/release/coverage_floors.py --platform linux
+
       - name: Retain Linux smoke diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -236,10 +257,14 @@ jobs:
             target/sbom/bom.json
             target/licenses/THIRD_PARTY_NOTICES.txt
             core/target/site/jacoco/jacoco.xml
+            core/target/site/jacoco/jacoco.csv
             core/target/site/jacoco/index.html
             adapters/rest-quarkus/target/site/jacoco/jacoco.xml
+            adapters/rest-quarkus/target/site/jacoco/jacoco.csv
             adapters/rest-quarkus/target/site/jacoco/index.html
             adapters/mcp-java/target/site/jacoco/jacoco.xml
+            adapters/mcp-java/target/site/jacoco/jacoco.csv
             adapters/mcp-java/target/site/jacoco/index.html
             adapters/assistant-clients/target/site/jacoco/jacoco.xml
+            adapters/assistant-clients/target/site/jacoco/jacoco.csv
             adapters/assistant-clients/target/site/jacoco/index.html

@@ -684,6 +684,29 @@ for case in \
   fi
 done
 
+# Coverage floors (coverage-gates): every JaCoCo floor has a published reference
+# measure and sits at most 3 points under it. The build reports are checked by
+# NEXUS CI after the Linux and Windows reactor builds; here only the pom.xml files and the
+# page are compared, and each negative fixture must be rejected by its own rule.
+COVERAGE_FLOORS="scripts/release/coverage_floors.py"
+COVERAGE_FIXTURES="scripts/release/fixtures/coverage-floors"
+python3 "$COVERAGE_FLOORS" --skip-reports
+for case in \
+  "floor-too-low|points under the reference measure" \
+  "floor-without-measure|has no row in the reference measure table" \
+  "rule-typo|com.nexus.api.NexusRestTransportPolicyTypo: the rule matches no class"; do
+  IFS='|' read -r fixture message <<< "$case"
+  set +e
+  output="$(python3 "$COVERAGE_FLOORS" --root "$COVERAGE_FIXTURES/$fixture" --modules adapters/rest-quarkus \
+    --doc coverage.md --platform linux --reports-dir "$COVERAGE_FIXTURES/reports" 2>&1)"
+  status=$?
+  set -e
+  if [[ "$status" -ne 1 ]] || ! grep -qF "$message" <<< "$output"; then
+    echo "coverage floors fixture $fixture was not rejected for '$message' (exit $status)" >&2
+    exit 1
+  fi
+done
+
 # --- Sprint 9 : attest-prerelease (AUD-DEP-09) ---
 # The consumer verification of published assets stays documented in both release pages.
 for doc in docs/developer/immutable-release-publishing.md docs/developer/release-and-recovery.md; do
