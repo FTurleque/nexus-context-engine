@@ -69,7 +69,7 @@ Spec : [`openspec/specs/secret-redaction/spec.md`](../../openspec/specs/secret-r
 
 ### Comportement existant vérifié
 
-Les sources sont relues au HEAD courant de la branche `docs/openspec-detailed-uml`.
+Les références renvoient aux méthodes et aux tests ; les numéros de ligne cités le sont pour les fichiers de redaction relus le 2026-11-10.
 
 | Étiquette | Fait | Source |
 |---|---|---|
@@ -78,14 +78,14 @@ Les sources sont relues au HEAD courant de la branche `docs/openspec-detailed-um
 | [Existant vérifié] | `redact` commence par refuser le contenu entier (`OversizedSecretException`) si une valeur dépasse sa borne, puis masque dans l'ordre : blocs de clés privées, jetons à préfixe, JWT, `Bearer`, option `--password`, éléments XML, assignations, puis (si le texte contient `://`) jeton et mot de passe d'URL. | `SensitiveContentRedactor.java:101-121` |
 | [Existant vérifié] | À 4 096 caractères la valeur est masquée ; à 4 097 le contenu est refusé et le message de l'exception ne contient pas la valeur. | `SecretAssignmentScanner.java:116-137` ; `SensitiveContentRedactorTest#rejectsOversizedValuesWithoutPublishingAnySuffix` |
 | [Existant vérifié] | `redactField` convertit un refus en `[REDACTED]` pour un champ court de sortie publique (signature, nom qualifié) au lieu de faire échouer la réponse. | `SensitiveContentRedactor.java:127-136` ; `PublicContextPolicy.java:55`, `:64` |
-| [Existant vérifié] | À l'indexation, le fichier fautif est exclu des index lexical et sémantique, reçoit le diagnostic `INDEX_REDACTION_LIMIT` (chemin relatif et `valeur sensible dépassant la limite de redaction`, jamais la valeur) et reste analysé pour l'index structurel (la mise à jour SQLite est enregistrée avant la redaction). | `core/src/main/java/com/nexus/index/service/IndexDocumentPublisher.java:73-86`, `:111-117` |
-| [Existant vérifié] | Un fichier indexé puis devenu non redigeable est retiré des index lexical et sémantique (`removeStaleDocuments`) ; en reconstruction complète, il n'est simplement pas réécrit. | `IndexDocumentPublisher.java:105`, `:120-131` ; `ProjectIndexingServiceTest#anOversizedSecretExcludesOnlyItsFileFromDerivedIndexes` (partie lexicale) |
-| [Existant vérifié] | `LuceneSearchIndex` et `SemanticIndexingService` écartent aussi, document par document, un contenu refusé (`WARNING` sur `System.Logger`, chemin relatif). | `LuceneSearchIndex.java:264-272` ; `SemanticIndexingService.java:193-205` |
+| [Existant vérifié] | À l'indexation, le fichier fautif est exclu des index lexical et sémantique, reçoit le diagnostic `INDEX_REDACTION_LIMIT` (chemin relatif et `valeur sensible dépassant la limite de redaction`, jamais la valeur) et reste analysé pour l'index structurel (la mise à jour SQLite est enregistrée avant la redaction). | `core/src/main/java/com/nexus/index/service/IndexDocumentPublisher.java` (`redactedOrNull` et son appelant, qui ajoute le chemin à `excludedPaths` et le diagnostic) |
+| [Existant vérifié] | Un fichier indexé puis devenu non redigeable est retiré des index lexical et sémantique (`removeStaleDocuments`) ; en reconstruction complète, il n'est simplement pas réécrit. | `IndexDocumentPublisher.removeStaleDocuments` ; `ProjectIndexingServiceTest#anOversizedSecretExcludesOnlyItsFileFromDerivedIndexes` (partie lexicale) |
+| [Existant vérifié] | `LuceneSearchIndex` et `SemanticIndexingService` écartent aussi, document par document, un contenu refusé (`WARNING` sur `System.Logger`, chemin relatif). | `LuceneSearchIndex.toLuceneDocumentOrNull` ; `SemanticIndexingService.redactOnce` |
 | [Existant vérifié] | Construction de contexte : le fragment refusé est écarté seul, par `BudgetedContextSelector` (exclusion `<chemin> exclu : …`), `ContextBundle`, `ContextBudgetAllocator`, `SkillContextSelector` et, à la matérialisation, `ContextFragmentFactory` (diagnostic `CONTEXT_REDACTION_LIMIT`). | `BudgetedContextSelector.java:45-50` ; `ContextBundle.java:22-28` ; `ContextBudgetAllocator.java:96-102` ; `SkillContextSelector.java:38-44` ; `ContextFragmentFactory.java:143-151` |
-| [Existant vérifié] | Un index Lucene n'est « présent » que si la donnée de commit `nexus.redaction.policy` égale `POLICY_VERSION` ; sinon l'indexation force une reconstruction complète. | `LuceneSearchIndex.java:152-166`, `:170-174` ; `ProjectIndexingService.java:242-244` |
+| [Existant vérifié] | Un index Lucene n'est « présent » que si la donnée de commit `nexus.redaction.policy` égale `POLICY_VERSION` ; sinon l'indexation force une reconstruction complète. | `LuceneSearchIndex.isPresent`, `hasCurrentRedactionPolicy` ; `ProjectIndexingService` (`!searchIndex.isPresent(projectId)` force `fullRebuild`) ; `LuceneSearchIndexTest#redactionPolicyCheckRejectsMissingOrObsoleteCommitPolicy` |
 | [Existant vérifié] | Les migrations `V011` et `V018` incrémentent `generation` de tous les projets et les repassent en `NOT_INDEXED` (`last_indexed_at = NULL`) ; le registre `projects` est conservé. | `core/src/main/resources/db/migration/V011__invalidate_secret_format_indexes.sql:6-21` ; `V018__invalidate_sk_token_bound_indexes.sql:6-23` ; `SchemaMigratorSkTokenBoundUpgradeTest` |
 | [Existant vérifié] | Le profil sémantique est `content-v` + `CONTENT_PROFILE_VERSION` (6) + `;redactionPolicy=` + `POLICY_VERSION` + bornes d'embedding ; un changement de `POLICY_VERSION` modifie donc le profil même sans toucher `CONTENT_PROFILE_VERSION`. | `SemanticIndexingService.java:27`, `:170-175` |
-| [Existant vérifié] | `SemanticIndexingService.vectorize` redige chaque document une fois (`redactOnce`) puis part de ce texte pour l'embedding et l'extrait. | `SemanticIndexingService.java:140-141`, `:193-205` |
+| [Existant vérifié] | `SemanticIndexingService.vectorize` redige chaque document une fois (`redactOnce`) puis part de ce texte pour l'embedding et l'extrait. | `SemanticIndexingService.vectorize`, `redactOnce` |
 
 ### Vues
 
@@ -176,14 +176,14 @@ flowchart TD
     T -- oui --> W["vecteurs réutilisables"]
 ```
 
-Trois mécanismes se complètent : la dernière migration d'invalidation (`V018`) invalide les projets déjà enregistrés, la donnée de commit Lucene invalide un index d'une autre politique, et le profil sémantique rend incompatible un index d'un autre profil. Aucun test n'exerce le second mécanisme (écart 1).
+Trois mécanismes se complètent : la dernière migration d'invalidation (`V018`) invalide les projets déjà enregistrés, la donnée de commit Lucene invalide un index d'une autre politique, et le profil sémantique rend incompatible un index d'un autre profil. Le second mécanisme est testé sur son prédicat, pas de bout en bout (écart 1).
 
 Exigences : `secret-redaction › Un changement de politique invalide les index dérivés`.
 
 ### Écarts et limites
 
-- [Écart] 1 — Index lexical d'une ancienne politique : le code invalide et reconstruit (`LuceneSearchIndex.java:163-165`, `ProjectIndexingService.java:242-244`) mais aucun test ne fait varier la donnée de commit `nexus.redaction.policy` (recherche dans `core/src/test` et `adapters` : aucune occurrence). Scénario sans preuve.
-- [Écart] 2 — « redigé une seule fois ». Vrai à l'intérieur de `SemanticIndexingService` (`:197`), mais sur le chemin d'indexation le texte a déjà été redigé par `IndexDocumentPublisher` (`:111-115`) et l'est encore par `LuceneSearchIndex` (`:275`). Aucun test ne compte les appels à `redact` ; la tâche archivée 8.1 prouvait ce point par une commande (`git grep -c`), pas par un test.
+- [Écart] 1 — Index lexical d'une ancienne politique : le code invalide et reconstruit (`LuceneSearchIndex.isPresent`, `ProjectIndexingService`). `LuceneSearchIndexTest#redactionPolicyCheckRejectsMissingOrObsoleteCommitPolicy` prouve qu'une donnée de commit `nexus.redaction.policy` absente ou différente de `POLICY_VERSION` est rejetée ; aucun test n'enchaîne ce rejet et la reconstruction complète dans `ProjectIndexingService`. Scénario partiellement prouvé.
+- [Écart] 2 — « redigé une seule fois ». Vrai à l'intérieur de `SemanticIndexingService` (`redactOnce`), mais sur le chemin d'indexation le texte a déjà été redigé par `IndexDocumentPublisher` (`redactedOrNull`) et l'est encore par `LuceneSearchIndex` (`toLuceneDocument`). Aucun test ne compte les appels à `redact` ; la tâche archivée 8.1 prouvait ce point par une commande (`git grep -c`), pas par un test.
 - [Écart] 3 — Profil `content-vN`. L'exigence demande d'incrémenter le profil sémantique à chaque changement de politique ; le profil inclut déjà `redactionPolicy=<POLICY_VERSION>` (`SemanticIndexingService.java:170-175`), donc il change de toute façon. L'incrément manuel de `CONTENT_PROFILE_VERSION` (règle de `.claude/rules/search-and-redaction.md`) n'est vérifié par aucun test ; seuls les contrats de documentation épinglent `secret-redaction-v7` et `content-v6` (`scripts/release/test-operational-doc-contracts.sh:240-253`).
 - [Écart] 4 — Le motif « chaque modification de redaction s'accompagne d'une migration » est une règle de processus : aucun test ne détecte une évolution de `SensitiveContentRedactor` sans nouvelle migration (preuve manquante).
 - Limites vérifiées : les 19 formats de la spec sont les 19 cas `auditFormat` de la sonde de 35 cas ; `SecretRedactionProbeTest#probeHasThirtyFiveCasesIncludingTheNineteenAuditFormats` affirme 35, 19 et 2 limites connues. Les valeurs `secret-redaction-v5` et `secret-redaction-v6` (scénarios de migration) et `secret-redaction-v7` (courante) correspondent à `SchemaMigratorSecretFormatUpgradeTest`, `SchemaMigratorSkTokenBoundUpgradeTest` et à `POLICY_VERSION`. Aucun écart sur ces trois points.
@@ -191,7 +191,7 @@ Exigences : `secret-redaction › Un changement de politique invalide les index 
 
 ### Propositions et questions ouvertes
 
-- [Proposition] Écrire un test qui ouvre un index Lucene dont `nexus.redaction.policy` diffère de `POLICY_VERSION` et vérifie `isPresent == false` puis la reconstruction complète.
+- [Proposition] Écrire un test d'indexation qui part d'un index Lucene dont `nexus.redaction.policy` diffère de `POLICY_VERSION`, sur un projet `READY`, et vérifie la reconstruction complète.
 - [Proposition] Écrire un test d'indexation sémantique de bout en bout (fichier de 5 000 caractères dans un projet de trois fichiers, index sémantique activé).
 - [Question] « redigé une seule fois » vise-t-il `SemanticIndexingService` seul, ou l'ensemble du chemin d'indexation (trois appels de `redact` au total, dont deux volontaires) ?
 - [Question] Faut-il un test d'architecture ou de contrat qui impose migration, `POLICY_VERSION` et `CONTENT_PROFILE_VERSION` ensemble ?

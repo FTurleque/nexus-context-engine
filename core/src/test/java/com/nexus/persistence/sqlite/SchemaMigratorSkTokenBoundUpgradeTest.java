@@ -4,12 +4,21 @@ import com.nexus.application.NexusApplication;
 import com.nexus.config.NexusPaths;
 import com.nexus.project.IndexStatus;
 import com.nexus.security.PrivateStoragePolicy;
+import org.apache.lucene.analysis.standard.StandardAnalyzer;
+import org.apache.lucene.document.Document;
+import org.apache.lucene.document.Field;
+import org.apache.lucene.document.StringField;
+import org.apache.lucene.document.TextField;
+import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.store.FSDirectory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +37,7 @@ class SchemaMigratorSkTokenBoundUpgradeTest {
 
     /** Terme lexical distinctif porté par le corps du jeton. */
     private static final String LEAK_TERM = "skleakmarker";
+    private static final int LEGACY_GENERATION = 7;
 
     @TempDir
     Path temporary;
@@ -42,53 +52,8 @@ class SchemaMigratorSkTokenBoundUpgradeTest {
         Files.writeString(root.resolve("fixture.md"), "# SkBoundMarker\nLa clé est dans secret.md.\n");
         Files.writeString(root.resolve("secret.md"), "key = " + token + "\n");
         UUID id = UUID.randomUUID();
-        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + paths.databaseFile());
-             var statement = connection.createStatement()) {
-            statement.execute("CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY, script_name TEXT NOT NULL, applied_at TEXT NOT NULL)");
-            List<Path> migrations;
-            var migrationResource = Objects.requireNonNull(
-                    getClass().getResource("/db/migration"), "Missing /db/migration test resource");
-            try (var files = Files.list(Path.of(migrationResource.toURI()))) {
-                migrations = files.filter(path -> path.getFileName().toString().matches("V0(?:0[1-9]|1[0-7])__.*\\.sql"))
-                        .sorted().toList();
-            }
-            assertEquals(17, migrations.size());
-            try (var insert = connection.prepareStatement("INSERT INTO schema_migrations VALUES (?, ?, ?)")) {
-                for (int index = 0; index < migrations.size(); index++) {
-                    for (String sql : SqlScriptSplitter.split(Files.readString(migrations.get(index), StandardCharsets.UTF_8))) {
-                        statement.execute(sql);
-                    }
-                    insert.setInt(1, index + 1);
-                    insert.setString(2, "db/migration/" + migrations.get(index).getFileName());
-                    insert.setString(3, "2026-01-01T00:00:00Z");
-                    insert.executeUpdate();
-                }
-            }
-            try (var insert = connection.prepareStatement(
-                    "INSERT INTO projects VALUES (?, 'sk-bound', ?, 'LOCAL', '2026-01-01T00:00:00Z', 'READY')")) {
-                insert.setString(1, id.toString());
-                insert.setString(2, root.toRealPath().toString());
-                insert.executeUpdate();
-            }
-            try (var generation = connection.prepareStatement("INSERT INTO project_index_generations VALUES (?, ?)")) {
-                generation.setString(1, id.toString());
-                generation.setInt(2, 7);
-                generation.executeUpdate();
-            }
-        }
-        // Un index Lucene construit sous secret-redaction-v6 contient le jeton en clair.
-        PrivateStoragePolicy.ensurePrivateDirectory(paths, paths.projectLuceneIndex(id));
-        try (var directory = org.apache.lucene.store.FSDirectory.open(paths.projectLuceneIndex(id));
-             var analyzer = new org.apache.lucene.analysis.standard.StandardAnalyzer();
-             var writer = new org.apache.lucene.index.IndexWriter(directory,
-                     new org.apache.lucene.index.IndexWriterConfig(analyzer))) {
-            var document = new org.apache.lucene.document.Document();
-            document.add(new org.apache.lucene.document.StringField("path", "secret.md", org.apache.lucene.document.Field.Store.YES));
-            document.add(new org.apache.lucene.document.StringField("language", "markdown", org.apache.lucene.document.Field.Store.YES));
-            document.add(new org.apache.lucene.document.StringField("category", "DOCUMENTATION", org.apache.lucene.document.Field.Store.YES));
-            document.add(new org.apache.lucene.document.TextField("content", token, org.apache.lucene.document.Field.Store.NO));
-            writer.addDocument(document);
-        }
+        createV017DatabaseWithReadyProject(paths, id, root);
+        writeLegacyLuceneIndexContaining(paths, id, token);
         var lexical = new com.nexus.search.lucene.LuceneSearchIndex(paths);
         assertFalse(lexical.search(id, LEAK_TERM, 10).isEmpty());
 
@@ -98,10 +63,14 @@ class SchemaMigratorSkTokenBoundUpgradeTest {
             assertEquals("sk-bound", app.getProject(id).name());
             assertThrows(IllegalStateException.class, () -> app.search(id, "SkBoundMarker", 10, false));
             var repository = new SqliteIndexRepository(new SqliteDatabase(paths));
-            assertEquals(8, repository.generation(id));
+            assertEquals(LEGACY_GENERATION + 1, repository.generation(id));
 
-            app.index(id, false, false);
+            var report = app.index(id, false, false).report();
 
+            assertTrue(report.diagnostics().stream().anyMatch(diagnostic ->
+                    diagnostic.startsWith("INDEX_REDACTION_LIMIT") && diagnostic.contains("secret.md")),
+                    report.diagnostics().toString());
+            assertFalse(report.diagnostics().toString().contains(LEAK_TERM));
             assertTrue(lexical.search(id, LEAK_TERM, 10).isEmpty());
             assertTrue(app.search(id, LEAK_TERM, 10, false).results().isEmpty());
             var context = app.context(id, "SkBoundMarker", 2000, Set.of(), Map.of(), true);
@@ -121,6 +90,67 @@ class SchemaMigratorSkTokenBoundUpgradeTest {
             assertTrue(rows.next());
             assertEquals("db/migration/V018__invalidate_sk_token_bound_indexes.sql", rows.getString(1));
             assertEquals(64, rows.getString(2).length());
+        }
+    }
+
+    /** Base au schéma V017 réel, historique inclus, avec un projet {@code READY}. */
+    private static void createV017DatabaseWithReadyProject(NexusPaths paths, UUID id, Path root) throws Exception {
+        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + paths.databaseFile())) {
+            applyMigrationsUpToV017(connection);
+            try (var insert = connection.prepareStatement(
+                    "INSERT INTO projects VALUES (?, 'sk-bound', ?, 'LOCAL', '2026-01-01T00:00:00Z', 'READY')")) {
+                insert.setString(1, id.toString());
+                insert.setString(2, root.toRealPath().toString());
+                insert.executeUpdate();
+            }
+            try (var generation = connection.prepareStatement("INSERT INTO project_index_generations VALUES (?, ?)")) {
+                generation.setString(1, id.toString());
+                generation.setInt(2, LEGACY_GENERATION);
+                generation.executeUpdate();
+            }
+        }
+    }
+
+    private static void applyMigrationsUpToV017(Connection connection) throws Exception {
+        List<Path> migrations;
+        var migrationResource = Objects.requireNonNull(
+                SchemaMigratorSkTokenBoundUpgradeTest.class.getResource("/db/migration"),
+                "Missing /db/migration test resource");
+        try (var files = Files.list(Path.of(migrationResource.toURI()))) {
+            migrations = files.filter(path -> path.getFileName().toString().matches("V0(?:0[1-9]|1[0-7])__.*\\.sql"))
+                    .sorted().toList();
+        }
+        assertEquals(17, migrations.size());
+        try (var statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE schema_migrations("
+                    + "version INTEGER PRIMARY KEY, script_name TEXT NOT NULL, applied_at TEXT NOT NULL)");
+        }
+        try (var statement = connection.createStatement();
+             var insert = connection.prepareStatement("INSERT INTO schema_migrations VALUES (?, ?, ?)")) {
+            for (int index = 0; index < migrations.size(); index++) {
+                for (String sql : SqlScriptSplitter.split(Files.readString(migrations.get(index), StandardCharsets.UTF_8))) {
+                    statement.execute(sql);
+                }
+                insert.setInt(1, index + 1);
+                insert.setString(2, "db/migration/" + migrations.get(index).getFileName());
+                insert.setString(3, "2026-01-01T00:00:00Z");
+                insert.executeUpdate();
+            }
+        }
+    }
+
+    /** Index Lucene construit sous {@code secret-redaction-v6} : le jeton y figure en clair. */
+    private static void writeLegacyLuceneIndexContaining(NexusPaths paths, UUID id, String token) throws Exception {
+        PrivateStoragePolicy.ensurePrivateDirectory(paths, paths.projectLuceneIndex(id));
+        try (var directory = FSDirectory.open(paths.projectLuceneIndex(id));
+             var analyzer = new StandardAnalyzer();
+             var writer = new IndexWriter(directory, new IndexWriterConfig(analyzer))) {
+            var document = new Document();
+            document.add(new StringField("path", "secret.md", Field.Store.YES));
+            document.add(new StringField("language", "markdown", Field.Store.YES));
+            document.add(new StringField("category", "DOCUMENTATION", Field.Store.YES));
+            document.add(new TextField("content", token, Field.Store.NO));
+            writer.addDocument(document);
         }
     }
 }

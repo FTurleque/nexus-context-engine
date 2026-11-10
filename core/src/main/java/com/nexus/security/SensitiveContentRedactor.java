@@ -86,9 +86,9 @@ public final class SensitiveContentRedactor {
                     + "|[^\\s/:@]{" + (MAX_URI_USER_CHARS + 1) + ",}+:[^\\s/@]++@"
                     + "|[^\\s/:@]{1," + MAX_URI_USER_CHARS + "}+:[^\\s/@]{" + (MAX_SECRET_CHARS + 1) + ",}+@)");
     /**
-     * Jeton structuré plus long que sa borne : refusé, jamais tronqué ni publié en clair. Chaque
-     * borne de refus vaut la borne de masquage plus un, mesurée sur le même corps : pour
-     * {@code sk-}, le corps est compté après le préfixe {@code proj-} ou {@code ant-} optionnel.
+     * Jeton structuré plus long que sa borne : refusé, jamais tronqué ni publié en clair. Pour
+     * {@code sk-}, la borne de refus vaut la borne de masquage plus un, sur le même corps compté
+     * après le préfixe {@code proj-} ou {@code ant-} optionnel, consommé de façon possessive.
      */
     private static final Pattern OVERSIZED_TOKEN = Pattern.compile(
             "\\b(?:gh[pousr]_[A-Za-z0-9]|github_pat_\\w|(?:sk|rk)_(?:live|test)_[A-Za-z0-9])\\w{255}"
