@@ -32,6 +32,35 @@ grep -Eq '^ollama\.0\.33\.3\.linux-amd64\.sha256=[0-9a-f]{64}$' "$INTEGRITY"
 grep -Eq '^minos\.1\.2\.0\.windows-x64\.sha256=[0-9a-f]{64}$' "$INTEGRITY"
 grep -qF "MINOS_VERSION: '1.2.0'" "$ROOT/.github/workflows/measurement-tools.yml"
 grep -qF 'minos.$env:MINOS_VERSION.windows-x64.sha256' "$ROOT/.github/workflows/measurement-tools.yml"
+
+# Archgate: version fixed in the repository, release archive verified before
+# extraction, and the CI job installs through that verifier only.
+ARCHGATE_VERSION="$(awk -F= '$1 == "archgate.version" { sub(/\r$/, "", $2); print $2 }' "$INTEGRITY")"
+printf '%s\n' "$ARCHGATE_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'
+tr -d '\r' < "$INTEGRITY" | grep -Eq "^archgate\\.${ARCHGATE_VERSION}\\.linux-x64\\.sha256=[0-9a-f]{64}\$"
+grep -qF 'scripts/release/install-archgate.sh' "$ROOT/.github/workflows/ci.yml"
+grep -qF 'archgate check' "$ROOT/.github/workflows/ci.yml"
+INSTALL_ARCHGATE="${SCRIPT_DIR}/install-archgate.sh"
+mkdir -p "$TMP/archgate-src"
+printf '#!/bin/sh\necho fake-archgate\n' > "$TMP/archgate-src/archgate"
+tar -czf "$TMP/archgate.tar.gz" -C "$TMP/archgate-src" archgate
+ARCHGATE_SHA="$(sha256sum "$TMP/archgate.tar.gz" | awk '{print $1}')"
+printf 'archgate.version=9.9.9\narchgate.9.9.9.linux-x64.sha256=%s\n' "$ARCHGATE_SHA" > "$TMP/archgate-ok.properties"
+NEXUS_TOOL_INTEGRITY="$TMP/archgate-ok.properties" ARCHGATE_ARCHIVE="$TMP/archgate.tar.gz" \
+  sh "$INSTALL_ARCHGATE" "$TMP/archgate-ok" >/dev/null
+test -x "$TMP/archgate-ok/archgate"
+ALTERED_SHA="$(printf '%s' "$ARCHGATE_SHA" | tr '0-9a-f' '1-9a-f0')"
+printf 'archgate.version=9.9.9\narchgate.9.9.9.linux-x64.sha256=%s\n' "$ALTERED_SHA" > "$TMP/archgate-altered.properties"
+if NEXUS_TOOL_INTEGRITY="$TMP/archgate-altered.properties" ARCHGATE_ARCHIVE="$TMP/archgate.tar.gz" \
+  sh "$INSTALL_ARCHGATE" "$TMP/archgate-altered" >/dev/null 2>&1; then
+  echo 'Archgate archive with an altered pinned SHA-256 unexpectedly installed' >&2
+  exit 1
+fi
+if [ -e "$TMP/archgate-altered/archgate" ]; then
+  echo 'Archgate binary extracted despite a SHA-256 mismatch' >&2
+  exit 1
+fi
+
 grep -q 'MAVEN_VERSION="3.10.0"' "$ROOT/mvnw"
 grep -q 'MAVEN_VERSION=3.10.0' "$ROOT/mvnw.cmd"
 
