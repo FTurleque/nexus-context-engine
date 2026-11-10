@@ -137,9 +137,9 @@ Le dépôt public est surveillé en continu, indépendamment des PR : les gates 
 ### Comportement existant vérifié
 
 - **[Existant vérifié]** `gh api repos/FTurleque/nexus-context-engine --jq '.security_and_analysis'` renvoie `dependabot_security_updates`, `secret_scanning` et `secret_scanning_push_protection` à `enabled`, et `gh api repos/FTurleque/nexus-context-engine/vulnerability-alerts -i` répond `204` (lecture du 2026-11-05). Aucune alerte Dependabot ni secret scanning n'est ouverte à cette date.
-- **[Existant vérifié]** La procédure de traitement (délai de 7 jours, triage, fermeture `used_in_tests` d'une fixture de redaction avec son chemin) vit dans [`SECURITY.md`](../../SECURITY.md#traitement-des-alertes-de-sécurité) ; `scripts/release/test-operational-doc-contracts.sh:460-472` exige ses sections, le motif `used_in_tests` et l'existence de la fixture citée.
+- **[Existant vérifié]** La procédure de traitement (délai de 7 jours, triage, fermeture `used_in_tests` d'une fixture de redaction avec son chemin) vit dans [`SECURITY.md`](../../SECURITY.md#traitement-des-alertes-de-sécurité) ; `scripts/release/test-operational-doc-contracts.sh:522-533` exige ses sections, le motif `used_in_tests` et l'existence de la fixture citée.
 
-- **[Existant vérifié]** `gh api repos/FTurleque/nexus-context-engine/private-vulnerability-reporting` renvoie `{"enabled":true}` (lecture du 2026-11-09) ; `SECURITY.md` décrit ce canal, les versions prises en charge et le délai de réponse, exigés par `scripts/release/test-operational-doc-contracts.sh:543-550`.
+- **[Existant vérifié]** `gh api repos/FTurleque/nexus-context-engine/private-vulnerability-reporting` renvoie `{"enabled":true}` (lecture du 2026-11-09) ; `SECURITY.md` décrit ce canal, les versions prises en charge et le délai de réponse, exigés par `scripts/release/test-operational-doc-contracts.sh:549-556`.
 
 ### Écarts et limites
 
@@ -154,7 +154,7 @@ Cette section reprend les règles des sections « Méthode d'intégration : merg
 ### Comportement existant vérifié (repository-governance)
 
 - **[Existant vérifié]** Lecture du 2026-11-09 : `allowed_merge_methods` du ruleset 20503835 vaut `["merge"]` et `[allow_squash_merge, allow_rebase_merge]` vaut `[false,false]`.
-- **[Existant vérifié]** `scripts/release/test-operational-doc-contracts.sh:529-570` exige la politique merge commit dans cette page et dans le skill `nexus-pr-workflow`, et un propriétaire pour chaque chemin sensible de `.github/CODEOWNERS`.
+- **[Existant vérifié]** `scripts/release/test-operational-doc-contracts.sh:535-576` exige la politique merge commit dans cette page et dans le skill `nexus-pr-workflow`, et un propriétaire pour chaque chemin sensible de `.github/CODEOWNERS`.
 
 ### Écarts et limites (repository-governance)
 

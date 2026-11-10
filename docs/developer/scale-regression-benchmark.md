@@ -203,7 +203,7 @@ Spec : [`openspec/specs/scale-benchmark-gate/spec.md`](../../openspec/specs/scal
 ### Comportement existant vérifié
 
 - **[Existant vérifié]** Le déclencheur `pull_request` de `.github/workflows/scale-benchmark.yml:11-14` ne filtre aucun chemin. L'étape `Detect scale-sensitive changes` (`:48-105`) compare le diff de la PR à `WATCHED_PATHS` (`:58`) et écrit `measure=false` avec la notice « Aucun chemin surveillé n'est touché » (`:102-105`) ; les étapes de mesure sont conditionnées par `measure == 'true'` (`:109` à `:215`).
-- **[Existant vérifié]** `scripts/release/test-operational-doc-contracts.sh:401-420` fait échouer les contrats si le filtre push de `develop-push-scale-benchmark.yml` diverge de `WATCHED_PATHS` ou si le déclencheur `pull_request` retrouve un filtre `paths` ; l'auto-test `:437-458` vérifie que les trois dérives sont détectées, dont un chemin ajouté à `WATCHED_PATHS` seul.
+- **[Existant vérifié]** `scripts/release/test-operational-doc-contracts.sh:462-481` fait échouer les contrats si le filtre push de `develop-push-scale-benchmark.yml` diverge de `WATCHED_PATHS` ou si le déclencheur `pull_request` retrouve un filtre `paths` ; l'auto-test `:437-458` vérifie que les trois dérives sont détectées, dont un chemin ajouté à `WATCHED_PATHS` seul.
 - **[Existant vérifié]** Le ruleset `Protect main & develop` liste `Hermetic scale benchmark` dans sa règle `required_status_checks` (lecture `gh api repos/FTurleque/nexus-context-engine/rulesets/<id>` du 2026-11-05).
 
 ### Écarts et limites
