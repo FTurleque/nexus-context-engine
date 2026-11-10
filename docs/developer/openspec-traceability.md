@@ -28,6 +28,7 @@ Cette matrice cite les preuves lues ; elle n'établit pas qu'elles passent sur l
 | `ci-workflow-tooling` | [docs/developer/ci-and-supply-chain.md](ci-and-supply-chain.md#openspec-ci-workflow-tooling) |
 | `container-image-hardening` | [docs/developer/ci-and-supply-chain.md](ci-and-supply-chain.md#openspec-container-image-hardening) |
 | `core-package-boundaries` | [docs/developer/architecture-implementation.md](architecture-implementation.md#openspec-core-package-boundaries) |
+| `coverage-gates` | [docs/developer/adapter-coverage-gates.md](adapter-coverage-gates.md#openspec-coverage-gates) |
 | `federated-search-bounds` | [docs/developer/large-scale-search.md](large-scale-search.md#openspec-federated-search-bounds) |
 | `git-context-cache` | [docs/developer/git-context.md](git-context.md#openspec-git-context-cache) |
 | `git-context-discovery` | [docs/developer/git-context.md](git-context.md#openspec-git-context-discovery) |
@@ -132,6 +133,14 @@ Cette matrice cite les preuves lues ; elle n'établit pas qu'elles passent sur l
 | Le port d'embeddings ne construit pas son adaptateur | Imports du port sémantique | [architecture-implementation.md#openspec-core-package-boundaries](architecture-implementation.md#openspec-core-package-boundaries) | 2026-11-07-sprint-07-casser-le-bloc-cyclique-du-coeur › 5.1, 6.1 | core/src/test/java/com/nexus/architecture/CoreArchitectureTest.java#semanticPortDoesNotImportItsOllamaAdapter<br>core/src/test/java/com/nexus/architecture/CoreArchitectureTest.java#ollamaImportFromThePortFailsSearchSemanticWithoutOllama | couvert |
 | Le port d'embeddings ne construit pas son adaptateur | Configuration Ollama inchangée | [architecture-implementation.md#openspec-core-package-boundaries](architecture-implementation.md#openspec-core-package-boundaries) | 2026-11-07-sprint-07-casser-le-bloc-cyclique-du-coeur › 5.1 | core/src/test/java/com/nexus/search/semantic/SemanticSearchConfigurationBoundsTest.java#acceptsOllamaConfigurationAtHardBoundaries<br>core/src/test/java/com/nexus/search/semantic/SemanticSearchConfigurationBoundsTest.java#rejectsOllamaConfigurationAboveHardBoundaries | partiel : les bornes sont vérifiées, aucun test ne compare endpoint et modèle du fournisseur construit par `NexusApplicationFactory` avant et après le déplacement |
 | Le découpage ne change aucun comportement observable | Contrats publics | [architecture-implementation.md#openspec-core-package-boundaries](architecture-implementation.md#openspec-core-package-boundaries) | 2026-11-07-sprint-07-casser-le-bloc-cyclique-du-coeur › 3.1, 4.1, 7.1 | preuve CI seulement : NEXUS CI › Linux reactor Maven build (.github/workflows/ci.yml:105-108) exécute les tests de contrat REST et MCP sans modification de leurs valeurs attendues ; `scripts/self-smoke.ps1` | preuve CI seulement |
+
+## coverage-gates
+
+| Exigence | Scénario | Vue ou conception | Tâche | Test ou preuve | Statut |
+|---|---|---|---|---|---|
+| Les classes de bornes ont un plancher de couverture par classe | Régression d'une classe de bornes | [adapter-coverage-gates.md#openspec-coverage-gates](adapter-coverage-gates.md#openspec-coverage-gates) | sprint-01-suite-couverture-par-classe › 1.1, 1.3 | adapters/rest-quarkus/pom.xml (règle `CLASS` `NexusRestTransportPolicy` de `jacoco-check-rest`) ; preuve manuelle unique de la tâche 1.3 : trois tests `rejectsReverseProxyHttps*` désactivés, `clean verify` en échec nommant la classe | partiel : preuve manuelle, aucun test ni job ne rejoue la régression |
+| Les classes de bornes ont un plancher de couverture par classe | Règle mal nommée | [adapter-coverage-gates.md#openspec-coverage-gates](adapter-coverage-gates.md#openspec-coverage-gates) | sprint-01-suite-couverture-par-classe › 1.2 | test non écrit : contrôle « règle sans classe » de `coverage_floors.py` dépendant de sprint-12-durcir-les-gates-ajoutes › 1.2 | non couvert |
+| Les classes de bornes ont un plancher de couverture par classe | Mesure courante | [adapter-coverage-gates.md#openspec-coverage-gates](adapter-coverage-gates.md#openspec-coverage-gates) | sprint-01-suite-couverture-par-classe › 1.1 | core/pom.xml (exécution `jacoco-check-core`)<br>adapters/rest-quarkus/pom.xml (exécution `jacoco-check-rest`), exécutées par `./mvnw clean install` | couvert |
 
 ## federated-search-bounds
 
