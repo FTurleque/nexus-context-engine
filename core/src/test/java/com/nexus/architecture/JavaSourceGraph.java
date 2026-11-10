@@ -31,8 +31,9 @@ import java.util.stream.Stream;
  * caractère remplacés par des espaces), puis lu pour sa déclaration {@code package}, ses
  * déclarations {@code import} (y compris {@code import static} et les imports à joker) et les
  * références pleinement qualifiées à des préfixes surveillés, références de méthode
- * {@code Type::méthode} comprises (espaces autour de {@code ::} ignorés). Le graphe des packages ne retient
- * que les imports entre packages de la racine analysée.</p>
+ * {@code Type::méthode} comprises (espaces autour de {@code ::} ignorés). Le graphe des packages retient
+ * les imports et les références pleinement qualifiées entre packages de la racine analysée : une
+ * dépendance produit la même arête qu'elle soit importée ou écrite par nom qualifié.</p>
  */
 final class JavaSourceGraph {
 
@@ -98,7 +99,8 @@ final class JavaSourceGraph {
 
     /**
      * Graphe des packages : arête {@code a -> b} quand une classe de {@code a} importe un type de
-     * {@code b}, les deux packages appartenant à la racine analysée.
+     * {@code b} ou le désigne par son nom pleinement qualifié, les deux packages appartenant à la
+     * racine analysée.
      */
     SortedMap<String, SortedSet<String>> packageGraph() {
         Set<String> knownPackages = new TreeSet<>();
@@ -110,8 +112,8 @@ final class JavaSourceGraph {
             graph.put(packageName, new TreeSet<>());
         }
         for (SourceFile file : files) {
-            for (String imported : file.imports()) {
-                String target = owningPackage(imported, knownPackages);
+            for (String referenced : file.referencedNames()) {
+                String target = owningPackage(referenced, knownPackages);
                 if (target != null && !target.equals(file.packageName())) {
                     graph.get(file.packageName()).add(target);
                 }
@@ -142,7 +144,7 @@ final class JavaSourceGraph {
     }
 
     /**
-     * Package propriétaire d'un import : le plus long package connu qui préfixe le nom importé
+     * Package propriétaire d'un nom importé ou qualifié : le plus long package connu qui le préfixe
      * ({@code a.b.Type}, {@code a.b.Type.member}, {@code a.b.*}).
      */
     private static String owningPackage(String imported, Set<String> knownPackages) {

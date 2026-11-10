@@ -16,6 +16,7 @@ import com.nexus.index.IndexingReport;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.ranking.RankedCandidate;
 import com.nexus.search.FederatedSearchHit;
+import com.nexus.security.PublicDiagnosticPolicy;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -254,7 +255,7 @@ final class CliRenderer {
     }
 
     void renderError(String message, int exitCode) {
-        message = com.nexus.security.PublicDiagnosticPolicy.internal().text(message);
+        message = PublicDiagnosticPolicy.internal().text(message);
         if (json) {
             try {
                 writeJson(err, Map.of("error", true, "exitCode", exitCode, "message", message));
