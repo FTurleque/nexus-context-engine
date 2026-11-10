@@ -121,18 +121,28 @@ $smokeMode = if ($Smoke) { '1' } else { '0' }
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 $iss = [IO.File]::ReadAllText($template, $utf8)
 
-# Packaged commit, written to the Docker .env as the OCI revision label of an image built
-# on the user's machine. CI provides NEXUS_HEAD_SHA; otherwise Git, if it answers. Anything
-# but a full lowercase SHA-1 leaves the revision empty and the label absent.
-$revision = [string]$env:NEXUS_HEAD_SHA
-if ([string]::IsNullOrWhiteSpace($revision)) {
-    $git = Get-Command git -ErrorAction SilentlyContinue
-    if ($null -ne $git) {
-        try { $revision = [string](& $git.Source -C $repo rev-parse HEAD 2>$null | Select-Object -First 1) }
-        catch { $revision = '' }
-    }
+# The version reaches a .cmd line and the Docker .env unquoted: SemVer characters only.
+if ($Version -cnotmatch '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$') {
+    throw "Version $Version is not a SemVer version the installer can write to .env and cmd scripts."
 }
-$revision = $revision.Trim()
+
+# Packaged commit, written to the Docker .env as the OCI revision label of an image built
+# on the user's machine: NEXUS_HEAD_SHA in CI, otherwise Git HEAD. A modified working tree,
+# a NEXUS_HEAD_SHA that is not HEAD, or anything but a full lowercase SHA-1 leaves the
+# revision empty and the label "unknown": the label never names a commit that was not built.
+$revision = ([string]$env:NEXUS_HEAD_SHA).Trim()
+$git = Get-Command git -ErrorAction SilentlyContinue
+if ($null -ne $git) {
+    $head = ''
+    $changes = 'unknown'
+    try {
+        $head = ([string](& $git.Source -C $repo rev-parse HEAD 2>$null | Select-Object -First 1)).Trim()
+        $changes = [string](& $git.Source -C $repo status --porcelain 2>$null | Out-String)
+    }
+    catch { $head = '' }
+    if (-not [string]::IsNullOrWhiteSpace($changes) -or ($revision -and $revision -ne $head)) { $revision = '' }
+    elseif (-not $revision) { $revision = $head }
+}
 if ($revision -cnotmatch '^[0-9a-f]{40}$') { $revision = '' }
 $iss = $iss.Replace('@@REVISION@@', $revision)
 $iss = $iss.Replace('@@VERSION@@', (Escape-Inno $Version))

@@ -341,7 +341,7 @@ Les scripts sont générés dans `{installation}\integrations\` et peuvent être
 
 Les fichiers JSON des clients (Copilot JetBrains `mcp.json`, Claude Desktop `claude_desktop_config.json`) sont lus et réécrits en UTF-8 sans BOM : les autres entrées, chemins accentués compris, restent identiques. Avant de réécrire un fichier existant, le script en garde une copie exacte dans le même dossier, `<fichier>.nexus-backup-<aaaaMMjjHHmmss>`, puis remplace le fichier en une opération. Ces copies ne sont jamais supprimées par NEXUS ; effacez-les une fois la connexion vérifiée. Relancer un script sur un client déjà connecté ne réécrit rien et ne crée pas de copie.
 
-Un fichier qui ne se lit pas comme un objet JSON n'est jamais modifié : le script s'arrête avec le code 1 et la ligne du client passe en échec. Avec plusieurs `claude_desktop_config.json`, l'arrêt laisse aussi intacts les fichiers suivants. Corrigez le fichier signalé, puis relancez le script de connexion du client.
+Un fichier qui ne se lit pas comme un objet JSON, ou dont la section `servers` ou `mcpServers` n'est pas un objet, n'est jamais modifié : le script se termine avec le code 1 et la ligne du client passe en échec. Avec plusieurs `claude_desktop_config.json`, le script les lit tous avant d'en écrire un : un seul fichier illisible les laisse tous intacts. Pour connaître le fichier en cause, lancez `{installation}\integrations\connect-claude-desktop.cmd` (ou `connect-copilot-jetbrains.cmd`) : il affiche `NEXUS: Invalid JSON: <chemin>`. Corrigez ce fichier, puis relancez le script.
 
 Codex CLI et Codex Desktop lisent le même fichier `~/.codex/config.toml` : une seule entrée `nexus` sert aux deux. Cocher l'une des deux lignes décoche l'autre.
 
@@ -485,7 +485,7 @@ NEXUS_IMAGE_VERSION
 NEXUS_IMAGE_REVISION
 ```
 
-`NEXUS_IMAGE_VERSION` (version de l'installeur) et `NEXUS_IMAGE_REVISION` (commit empaqueté, absent s'il n'était pas connu) deviennent les labels OCI `version` et `revision` de l'image quand elle est construite sur le poste.
+`NEXUS_IMAGE_VERSION` (version de l'installeur) et `NEXUS_IMAGE_REVISION` (commit empaqueté, absent s'il n'était pas connu) deviennent les labels OCI `version` et `revision` de l'image quand elle est construite sur le poste ; sans révision, le label `revision` vaut `unknown`.
 
 `NEXUS_DOCKER_HOST_PORT` contient le port hôte final retenu après vérification ; il peut donc différer du port initialement demandé. `NEXUS_DOCKER_CONTAINER_PORT` reste la valeur interne explicitement choisie.
 
@@ -560,7 +560,7 @@ La désinstallation :
 
 - arrête le Compose NEXUS géré ;
 - retire l'entrée PATH gérée ;
-- retire les entrées `nexus` des clients IA que le setup a ajoutées ou s'est attribuées (celles qui lancent NEXUS), et aucune autre, avec la même lecture UTF-8 et la même copie `<fichier>.nexus-backup-<aaaaMMjjHHmmss>` avant réécriture ; un fichier JSON illisible est laissé tel quel, son entrée `nexus` comprise (journal de désinstallation, option `/LOG`) ;
+- retire les entrées `nexus` des clients IA que le setup a ajoutées ou s'est attribuées (celles qui lancent NEXUS), et aucune autre, avec la même lecture UTF-8 et la même copie `<fichier>.nexus-backup-<aaaaMMjjHHmmss>` avant réécriture ; un fichier JSON illisible est laissé tel quel, son entrée `nexus` comprise, les autres fichiers du client étant nettoyés ; le setup garde alors la trace du client, et une désinstallation ultérieure réessaie (journal de désinstallation, option `/LOG`) ;
 - supprime les fichiers applicatifs ;
 - conserve `NEXUS_HOME` ;
 - conserve les repositories utilisateur ;

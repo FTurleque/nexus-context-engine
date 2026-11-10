@@ -89,7 +89,7 @@ org.opencontainers.image.revision  SHA du commit construit
 org.opencontainers.image.version   version du pom.xml
 ```
 
-`revision` et `version` sont passés par `--build-arg NEXUS_IMAGE_REVISION=...` et `--build-arg NEXUS_IMAGE_VERSION=...`. La CI et `scripts/release/build-docker-image.ps1` les fournissent ; sur un poste installé par le setup Windows, le Compose les lit dans `docker\.env` (`NEXUS_IMAGE_VERSION`, version de l'installeur, et `NEXUS_IMAGE_REVISION`, commit empaqueté s'il est connu). Sans révision, le label `revision` est absent, jamais vide. Lecture :
+`revision` et `version` sont passés par `--build-arg NEXUS_IMAGE_REVISION=...` et `--build-arg NEXUS_IMAGE_VERSION=...`. La CI et `scripts/release/build-docker-image.ps1` les fournissent ; sur un poste installé par le setup Windows, le Compose les lit dans `docker\.env` (`NEXUS_IMAGE_VERSION`, version de l'installeur, et `NEXUS_IMAGE_REVISION`, commit empaqueté s'il est connu). Sans révision, le label `revision` vaut `unknown` : jamais vide, et jamais le label `revision` hérité de l'image de base UBI. Lecture :
 
 ```bash
 docker inspect --format '{{json .Config.Labels}}' nexus-context-engine:0.2.0

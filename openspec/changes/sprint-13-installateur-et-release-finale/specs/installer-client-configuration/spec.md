@@ -32,7 +32,8 @@ Quand le fichier de configuration d'un client ne se lit pas comme un objet JSON,
 #### Scenario: Plusieurs fichiers dont un invalide
 - **GIVEN** deux fichiers de configuration Claude Desktop détectés, le premier invalide et le second valide
 - **WHEN** l'installateur connecte NEXUS
-- **THEN** le premier fichier est inchangé et le second ne reçoit que sa propre entrée `nexus`, sans contenu repris du premier
+- **THEN** le script de connexion lit et contrôle les deux fichiers avant d'en écrire un, et se termine avec un code non nul
+- **AND** aucun des deux fichiers n'est modifié, et aucun contenu de l'un n'est écrit dans l'autre
 
 ### Requirement: Une sauvegarde précède toute réécriture d'une configuration existante
 Avant de réécrire un fichier de configuration de client existant, l'installateur SHALL en conserver une copie octet pour octet à côté du fichier, et SHALL remplacer le fichier par une écriture complète dans un fichier temporaire du même dossier suivie d'un remplacement.

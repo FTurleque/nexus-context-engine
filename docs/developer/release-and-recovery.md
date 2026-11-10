@@ -328,44 +328,49 @@ Spec : [`openspec/specs/installer-client-configuration/spec.md`](../../openspec/
 
 | Étiquette | Fait | Source |
 |---|---|---|
-| [Existant vérifié] | Les scripts de connexion et de déconnexion sont du texte PowerShell assemblé par l'installateur, écrit dans `{app}\integrations\` et exécuté par `{sys}\WindowsPowerShell\v1.0\powershell.exe` (Windows PowerShell 5.1). Leur texte reste ASCII : 5.1 lit un script sans BOM dans la page de code ANSI. | `packaging/windows/nexus-installer.iss.template:1448`, `:1682`, `:1756` |
-| [Existant vérifié] | `nexus-json.ps1` est le seul lecteur et écrivain des fichiers JSON des clients : `Read-ClientJson` lit en UTF-8 et lève une exception si le contenu n'est pas un objet JSON ; `Save-CleanJson` écrit un fichier temporaire du même dossier puis appelle `[System.IO.File]::Replace`, qui garde l'original sous `<fichier>.nexus-backup-<yyyyMMddHHmmss>` (suffixe `-N` si ce nom existe) ; `Add-NexusServerEntry` et `Remove-NexusServerEntry` repartent d'un état vide pour chaque fichier. | `packaging/windows/nexus-installer.iss.template:1479-1531` |
-| [Existant vérifié] | Les quatre scripts JSON (`connect-copilot-jetbrains.ps1`, `connect-claude-desktop.ps1`, `disconnect-copilot-jetbrains.ps1`, `disconnect-claude-desktop.ps1`) commencent par `$ErrorActionPreference = 'Stop'`. | `packaging/windows/nexus-installer.iss.template:1672-1682`, `:1744-1756`, `:1855-1868` |
+| [Existant vérifié] | Les scripts de connexion et de déconnexion sont du texte PowerShell assemblé par l'installateur, écrit dans `{app}\integrations\` par `SavePowerShellScript` en UTF-8 avec BOM, et exécuté par `{sys}\WindowsPowerShell\v1.0\powershell.exe` (Windows PowerShell 5.1). Sans BOM, 5.1 lirait le script dans la page ANSI, où `SaveStringToFile` convertit U+FF07 ou U+02BC en apostrophe ASCII. | `packaging/windows/nexus-installer.iss.template:1442-1450`, `:1560`, `:1711`, `:1786` |
+| [Existant vérifié] | `nexus-json.ps1` est le seul lecteur et écrivain des fichiers JSON des clients : `Read-ClientJson` lit en UTF-8 et lève une exception si le contenu n'est pas un objet JSON, `Get-ClientSection` si la section `servers` ou `mcpServers` n'en est pas un ; `Save-CleanJson` écrit un fichier temporaire du même dossier puis appelle `[System.IO.File]::Replace`, qui garde l'original sous `<fichier>.nexus-backup-<yyyyMMddHHmmss>` (suffixe `-N` si ce nom existe), et remet l'original en place si le remplacement échoue après l'avoir renommé. | `packaging/windows/nexus-installer.iss.template:1496-1559` |
+| [Existant vérifié] | `Add-NexusServerEntry` lit et contrôle tous les fichiers avant d'en écrire un. `Remove-NexusServerEntry` continue après un fichier illisible et lève une exception à la fin. | `packaging/windows/nexus-installer.iss.template:1532-1559` |
+| [Existant vérifié] | Les quatre scripts JSON (`connect-copilot-jetbrains.ps1`, `connect-claude-desktop.ps1`, `disconnect-copilot-jetbrains.ps1`, `disconnect-claude-desktop.ps1`) commencent par `$ErrorActionPreference = 'Stop'` et un `trap` qui affiche `NEXUS: <message>` puis sort en 1 ; le message nomme le fichier, jamais son contenu. | `packaging/windows/nexus-installer.iss.template:1700-1711`, `:1773-1786`, `:1883-1897` |
 | [Existant vérifié] | `PowerShellSingleQuote` double U+0027, U+2018, U+2019, U+201A et U+201B, que PowerShell traite tous comme délimiteurs de chaîne simple. | `packaging/windows/nexus-installer.iss.template:391` |
-| [Existant vérifié] | La désinstallation journalise le code non nul d'un script de déconnexion JSON. | `packaging/windows/nexus-installer.iss.template:2334`, `:2342` |
+| [Existant vérifié] | La désinstallation conserve le drapeau `CopilotJetBrainsManaged` ou `ClaudeDesktopManaged` et journalise le code quand le script de déconnexion échoue : une désinstallation ultérieure réessaie. | `packaging/windows/nexus-installer.iss.template:2358-2371` |
 
 ### Vue (installer-client-configuration)
 
-#### Vue UML de séquence — Comment un script de connexion modifie-t-il un fichier de configuration de client ? (existant)
+#### Vue UML de séquence — Comment un script de connexion modifie-t-il les fichiers de configuration d'un client ? (existant)
 
 ```mermaid
 sequenceDiagram
     participant S as connect-claude-desktop.ps1
     participant J as nexus-json.ps1
-    participant F as Fichier de configuration
+    participant F as Fichiers de configuration
     S->>J: Add-NexusServerEntry(fichiers, mcpServers, entrée)
     loop chaque fichier, état remis à vide
         J->>F: ReadAllText(fichier, UTF-8)
-        alt JSON invalide ou non objet
-            J-->>S: exception (ErrorActionPreference Stop)
-            S-->>S: code de sortie 1, fichier et suivants inchangés
+        alt JSON invalide, racine ou section non objet
+            J-->>S: exception
+            S-->>S: trap : NEXUS: message, code 1, aucun fichier écrit
         else entrée nexus déjà présente
-            J-->>J: fichier suivant, aucune écriture
+            J-->>J: fichier suivant
         else objet lu sans entrée nexus
-            J->>F: WriteAllText(fichier.nexus-guid.tmp, UTF-8 sans BOM)
-            J->>F: File.Replace(tmp, fichier, fichier.nexus-backup-horodatage)
+            J-->>J: fichier retenu pour écriture
         end
+    end
+    loop chaque fichier retenu
+        J->>F: WriteAllText(fichier.nexus-guid.tmp, UTF-8 sans BOM)
+        J->>F: File.Replace(tmp, fichier, fichier.nexus-backup-horodatage)
     end
     J-->>S: nombre d'entrées ajoutées
 ```
 
 Notation : UML de séquence. Exigences portées : « Les configurations des clients sont lues et écrites en UTF-8 », « Un fichier de configuration illisible n'est jamais réécrit », « Une sauvegarde précède toute réécriture d'une configuration existante ».
 
-Codes de sortie des scripts JSON : `0` entrée ajoutée (connexion) ou script terminé (déconnexion), `10` client absent, `20` entrée déjà présente partout, `30` Claude Desktop ouvert, `1` fichier illisible ou remplacement impossible. Un échec de remplacement supprime le fichier temporaire dans un `finally` ; l'original reste en place.
+Codes de sortie des scripts JSON : `0` entrée ajoutée (connexion) ou entrée retirée de chaque fichier lisible (déconnexion), `10` client absent, `20` entrée déjà présente partout, `30` Claude Desktop ouvert, `1` fichier ou section illisible, ou remplacement impossible.
 
 ### Écarts et limites (installer-client-configuration)
 
 - Un fichier déjà corrompu par une version antérieure de l'installateur n'est pas réparé.
-- Les sauvegardes ne sont jamais supprimées ni relues par NEXUS ; leur nettoyage revient à l'utilisateur.
-- Un client ouvert peut réécrire son fichier entre la lecture et le remplacement ; Claude Desktop est attendu fermé (code 30), pas Copilot JetBrains.
-- Le smoke `scripts/release/test-windows-installer.ps1` exécute `nexus-json.ps1` et les scripts de déconnexion installés ; les scripts de connexion ne sont générés que pour un client détecté, ce que l'installateur smoke ne fait pas : le smoke appelle `Add-NexusServerEntry` comme eux.
+- Les sauvegardes ne sont jamais supprimées ni relues par NEXUS ; elles contiennent ce que contenait le fichier, secrets d'autres serveurs MCP compris, et leur nettoyage revient à l'utilisateur.
+- `File.Replace` remplace un lien symbolique par un fichier ordinaire et rompt un lien dur : une configuration tenue dans un dépôt de dotfiles par lien n'est plus suivie après la connexion.
+- Un client ouvert peut réécrire son fichier entre la lecture et le remplacement ; Claude Desktop est attendu fermé (code 30), pas Copilot JetBrains. La version écrasée reste dans la sauvegarde.
+- Le smoke `scripts/release/test-windows-installer.ps1` exécute `nexus-json.ps1` et les scripts de déconnexion installés ; les scripts de connexion ne sont générés que pour un client détecté, ce que l'installateur smoke ne fait pas : le smoke appelle `Add-NexusServerEntry` comme eux, et des contrats textuels verrouillent leur forme. Le test d'échappement analyse la ligne générée en mémoire ; l'écriture UTF-8 avec BOM est vérifiée sur les scripts installés.

@@ -184,7 +184,7 @@ Notation : organigramme, pas UML. Exigences portées : « La publication s'exéc
 
 **[Existant vérifié]** Le relevé daté de la répétition `0.2.0-rc.2` consigne : run `release.yml` réussi après approbation de l'environnement `release`, release marquée pré-version, `gh attestation verify` réussi sur l'image, le ZIP et le `setup.exe` avec le workflow `release.yml` pour signataire, `latest` inchangé, et la lecture `gh api` de l'environnement et du ruleset de tags.
 
-**[Existant vérifié]** Seul `release.yml` pousse sur GHCR : `docker push` et `docker buildx imagetools create` des tags version, SHA et `latest` (`.github/workflows/release.yml:335-340`, `:473`). `docker-distribution.yml` et `develop-push-docker-distribution.yml` construisent et qualifient l'image sans publier ; le contrat `scripts/release/test-operational-doc-contracts.sh:831-865` refuse tout `docker push`, `ghcr.io`, `docker login`, `imagetools create` ou `--push` dans ces deux workflows, et toute attribution de la publication à `docker-distribution.yml` dans `docs/user/docker-installation.md`.
+**[Existant vérifié]** Seul `release.yml` pousse sur GHCR : `docker push` et `docker buildx imagetools create` des tags version, SHA et `latest` (`.github/workflows/release.yml:335-340`, `:473`). `docker-distribution.yml` et `develop-push-docker-distribution.yml` construisent et qualifient l'image sans publier ; le contrat `scripts/release/test-operational-doc-contracts.sh:831-875` refuse tout `docker push`, `ghcr.io`, `docker login`, `imagetools create` ou `--push` dans ces deux workflows, toute permission `packages: write` hors de `release.yml`, et toute attribution de la publication à `docker-distribution.yml` dans `docs/user/docker-installation.md`.
 
 ### Écarts et limites (release-pipeline)
 

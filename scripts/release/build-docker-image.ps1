@@ -30,13 +30,20 @@ if ($dockerfileSource.IndexOf($entrypointNormalization, [StringComparison]::Ordi
     throw 'Dockerfile must normalize CRLF on nexus-container-entrypoint.sh before producing a Windows-checkout-compatible image.'
 }
 
-# OCI labels: the pom version and, when Git answers, the commit built.
+# OCI labels: the pom version and, for an unmodified Git working tree, the commit built.
 $args = @('build', '--file', $dockerfile, '--tag', $Image, '--build-arg', "NEXUS_IMAGE_VERSION=$version")
 $git = Get-Command git -ErrorAction SilentlyContinue
 if ($null -ne $git) {
     $revision = ''
-    try { $revision = [string](& $git.Source -C $repo rev-parse HEAD 2>$null | Select-Object -First 1) } catch { $revision = '' }
-    if ($revision.Trim() -cmatch '^[0-9a-f]{40}$') { $args += @('--build-arg', "NEXUS_IMAGE_REVISION=$($revision.Trim())") }
+    $changes = 'unknown'
+    try {
+        $revision = ([string](& $git.Source -C $repo rev-parse HEAD 2>$null | Select-Object -First 1)).Trim()
+        $changes = [string](& $git.Source -C $repo status --porcelain 2>$null | Out-String)
+    }
+    catch { $revision = '' }
+    if ([string]::IsNullOrWhiteSpace($changes) -and $revision -cmatch '^[0-9a-f]{40}$') {
+        $args += @('--build-arg', "NEXUS_IMAGE_REVISION=$revision")
+    }
 }
 if (-not $NoPull) { $args += '--pull' }
 $args += $repo

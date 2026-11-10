@@ -758,7 +758,7 @@ for dockerfile in ("packaging/docker/Dockerfile", "packaging/docker/Dockerfile.r
         "/opt/nexus/THIRD_PARTY_NOTICES.txt",
         'org.opencontainers.image.source="https://github.com/FTurleque/nexus-context-engine"',
         'org.opencontainers.image.licenses="LicenseRef-NEXUS-Proprietary"',
-        'org.opencontainers.image.revision="${NEXUS_IMAGE_REVISION}"',
+        'org.opencontainers.image.revision="${NEXUS_IMAGE_REVISION',
         'org.opencontainers.image.version="${NEXUS_IMAGE_VERSION}"',
         "HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=6",
         'CMD ["/usr/local/bin/nexus-healthcheck"]',
@@ -843,6 +843,16 @@ for workflow in (".github/workflows/docker-distribution.yml", ".github/workflows
     for forbidden in ("docker push", "ghcr.io", "docker login", "imagetools create", "--push"):
         if forbidden in source:
             fail(f"{workflow} must not publish to GHCR ({forbidden!r})")
+
+# The real barrier: only release.yml may hold the packages: write permission.
+granting = sorted(
+    str(path).replace("\\", "/")
+    for pattern in (".github/workflows/*.yml", ".github/workflows/*.yaml", ".github/actions/**/*.yml", ".github/actions/**/*.yaml")
+    for path in Path(".").glob(pattern)
+    if re.search(r"^\s*packages:\s*write\b", path.read_text(encoding="utf-8"), re.MULTILINE)
+)
+if granting != [".github/workflows/release.yml"]:
+    fail(f"only .github/workflows/release.yml may declare packages: write, found {granting}")
 
 page = "docs/user/docker-installation.md"
 doc = Path(page).read_text(encoding="utf-8")
