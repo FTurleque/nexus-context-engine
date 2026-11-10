@@ -589,7 +589,16 @@ DIRECT_MAVEN_CALL = (
     re.compile(r"Get-Command\s+(?:-Name\s+)?['\"]?mvn", re.IGNORECASE),
     re.compile(r"Start-Process\b.*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE),
     re.compile(r"Join-Path\b.*['\"](?:\.\.[\\/])*mvnw?(?:\.cmd)?['\"]", re.IGNORECASE),
+    # Indirection (AUD-QUA-21): a variable holding exactly a Maven command name,
+    # cmd /c, and Invoke-Expression/iex of a string that names Maven. A message
+    # that quotes the wrapper inside a sentence is not a whole-string literal.
+    re.compile(r"\$[\w:]+\s*=\s*(['\"])" + MAVEN_TOKEN + r"\1", re.IGNORECASE),
+    re.compile(r"\bcmd(?:\.exe)?['\"]?\s+/c\b.*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE),
+    re.compile(r"(?:\bInvoke-Expression\b|(?<![\w-])iex\b).*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE),
 )
+# Explicit exceptions: (script path, exact trimmed line). Each entry must still
+# match a line of its script, so a stale exception fails the contract.
+MAVEN_CALL_EXCEPTIONS: set[tuple[str, str]] = set()
 
 
 def powershell_maven_violations(relative: str, source: str) -> list[str]:
@@ -600,6 +609,8 @@ def powershell_maven_violations(relative: str, source: str) -> list[str]:
             continue
         if SHARED_SCRIPT_FUNCTION.search(code):
             violations.append(f"{relative}:{number}: redefines a NexusScript.psm1 function")
+        if (relative, code.strip()) in MAVEN_CALL_EXCEPTIONS:
+            continue
         if any(pattern.search(code) for pattern in DIRECT_MAVEN_CALL):
             violations.append(f"{relative}:{number}: calls Maven directly instead of Invoke-Maven")
     return violations
@@ -623,6 +634,10 @@ for script in active_powershell_scripts():
     )
 if maven_violations:
     raise SystemExit("powershell maven contract drift:\n" + "\n".join(maven_violations))
+for excepted_script, excepted_line in sorted(MAVEN_CALL_EXCEPTIONS):
+    lines = [line.strip() for line in text(excepted_script).splitlines()]
+    if excepted_line not in lines:
+        raise SystemExit(f"powershell maven contract drift: stale exception {excepted_script}: {excepted_line}")
 for label, fixture in (
     ("installed mvn call", "Push-Location $root\n& mvn @arguments\n"),
     ("installed mvn.cmd call", "    & mvn.cmd -q package\n"),
@@ -633,6 +648,12 @@ for label, fixture in (
     ("installed lookup", "$m = Get-Command mvn -ErrorAction SilentlyContinue\n"),
     ("local Invoke-Maven", "function Invoke-Maven {\n}\n"),
     ("local Resolve-AbsolutePath", "function Resolve-AbsolutePath {\n}\n"),
+    ("command in a variable", '$m = "mvn"; & $m clean install\n'),
+    ("wrapper in a variable", "    $wrapper = '.\\mvnw.cmd'\n"),
+    ("cmd /c", "cmd /c mvn clean install\n"),
+    ("cmd.exe /c", "& cmd.exe /c \"mvnw.cmd -B verify\"\n"),
+    ("Invoke-Expression", 'Invoke-Expression "mvn clean install"\n'),
+    ("iex", "iex \"$PSScriptRoot\\..\\mvnw.cmd test\"\n"),
 ):
     if not powershell_maven_violations(f"fixture/{label}.ps1", fixture):
         raise SystemExit(f"powershell maven contract self-test: {label} was not detected")
@@ -640,6 +661,8 @@ for label, fixture in (
     ("module call", "Invoke-Maven -Arguments @('-q', 'package')\n"),
     ("comment", "# & mvn clean install\n"),
     ("message", 'Write-Error "Lancez d\'abord : .\\\\mvnw.cmd clean package"\n'),
+    ("message in a variable", '$hint = "Lancez d\'abord : .\\\\mvnw.cmd clean package"\n'),
+    ("test fixture name", "Write-FakeMaven -Directory $root -BaseName 'mvnw' -VersionExitCode 0\n"),
 ):
     if powershell_maven_violations(f"fixture/{label}.ps1", fixture):
         raise SystemExit(f"powershell maven contract self-test: {label} was rejected")
