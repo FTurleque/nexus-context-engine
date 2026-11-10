@@ -27,7 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * AUD-PRF-09 : la recherche de symboles est scopée au projet ciblé et interroge les termes en lot,
- * à résultats identiques aux requêtes par terme d'avant la migration V015.
+ * à résultats identiques aux requêtes par terme d'avant la migration V015. AUD-PRF-29 : un projet qui
+ * tient au moins la moitié des fichiers de la base parcourt l'index global du préfiltre approché.
  */
 class SqliteSymbolSearchScopingTest {
 
@@ -54,6 +55,77 @@ class SqliteSymbolSearchScopingTest {
                     () -> "parcours complet des symboles : " + plan25);
             // Le plan ne change pas quand la base passe de 25 à 100 projets.
             assertEquals(plan25, plan100);
+        }
+    }
+
+    @Test
+    void aProjectAloneInItsBaseUsesTheGlobalPrefilterRangeWithoutAnyFullSymbolScan() throws Exception {
+        SqliteDatabase database = new SqliteDatabase(new NexusPaths(temporaryDirectory.resolve("single-plan")));
+        List<UUID> projects = new ArrayList<>();
+        try (Connection connection = database.openConnection()) {
+            populate(connection, projects, 1);
+
+            assertTrue(SqliteSymbolSearch.usesGlobalFuzzyPrefilter(connection, projects.getFirst()));
+            for (String sql : List.of(SqliteSymbolSearch.FUZZY_GLOBAL_BATCH_SQL,
+                    SqliteSymbolSearch.FUZZY_GLOBAL_COUNT_ARM_SQL)) {
+                List<String> plan = fuzzyPlan(connection, sql, projects.getFirst());
+                assertTrue(plan.stream().anyMatch(detail -> detail.contains(
+                                "SEARCH s USING INDEX idx_symbols_fuzzy_prefilter (<expr>=? AND <expr>>? AND <expr><?)")),
+                        () -> "intervalle de l'index global attendu : " + plan);
+                assertTrue(plan.stream().anyMatch(detail -> detail.contains("SEARCH f USING INTEGER PRIMARY KEY")),
+                        () -> "le projet se vérifie par la clé du fichier : " + plan);
+                assertTrue(plan.stream().noneMatch(SqliteSymbolSearchScopingTest::scansSymbols),
+                        () -> "parcours complet des symboles : " + plan);
+            }
+        }
+    }
+
+    @Test
+    void theGlobalPrefilterIsChosenFromHalfOfTheIndexedFilesAndNotBelow() throws Exception {
+        SqliteDatabase database = new SqliteDatabase(new NexusPaths(temporaryDirectory.resolve("share")));
+        List<UUID> projects = new ArrayList<>();
+        try (Connection connection = database.openConnection()) {
+            populate(connection, projects, 2);
+            UUID target = projects.getFirst();
+            // 3 fichiers sur 6 : exactement la moitié de la base.
+            assertTrue(SqliteSymbolSearch.usesGlobalFuzzyPrefilter(connection, target));
+
+            insertFile(connection, projects.get(1), "src/Extra.java");
+            // 3 fichiers sur 7 : sous la moitié, l'index scopé par fichier reste choisi.
+            assertFalse(SqliteSymbolSearch.usesGlobalFuzzyPrefilter(connection, target));
+            assertTrue(SqliteSymbolSearch.usesGlobalFuzzyPrefilter(connection, projects.get(1)));
+            // Un projet sans fichier n'a aucun candidat : l'index scopé ne parcourt rien.
+            assertFalse(SqliteSymbolSearch.usesGlobalFuzzyPrefilter(connection, UUID.randomUUID()));
+        }
+    }
+
+    @Test
+    void aProjectAmongManyKeepsTheFileScopedPrefilter() throws Exception {
+        SqliteDatabase database = new SqliteDatabase(new NexusPaths(temporaryDirectory.resolve("federated-choice")));
+        List<UUID> projects = new ArrayList<>();
+        try (Connection connection = database.openConnection()) {
+            populate(connection, projects, 25);
+
+            assertFalse(SqliteSymbolSearch.usesGlobalFuzzyPrefilter(connection, projects.get(7)));
+        }
+    }
+
+    @Test
+    void globalPrefilterResultsAreIdenticalToThePerTermQueriesForAProjectAloneInItsBase() throws Exception {
+        SqliteDatabase database = new SqliteDatabase(new NexusPaths(temporaryDirectory.resolve("single-results")));
+        SqliteIndexRepository repository = new SqliteIndexRepository(database);
+        List<UUID> projects = new ArrayList<>();
+        try (Connection connection = database.openConnection()) {
+            populate(connection, projects, 1);
+            UUID target = projects.getFirst();
+            List<String> queries = List.of("orderservice", "order", "ordr", "id", "customerorder", "absent-token");
+
+            List<IndexedSymbol> expectedConcatenation = new ArrayList<>();
+            for (String query : queries) {
+                expectedConcatenation.addAll(referenceSearch(connection, target, query));
+            }
+            assertEquals(expectedConcatenation, repository.searchSymbols(target, queries, LIMIT));
+            assertFalse(expectedConcatenation.isEmpty());
         }
     }
 
@@ -212,9 +284,13 @@ class SqliteSymbolSearchScopingTest {
     // --- Plan et comptage ------------------------------------------------------------------------
 
     private static List<String> fuzzyPlan(Connection connection, UUID projectId) throws SQLException {
+        return fuzzyPlan(connection, SqliteSymbolSearch.FUZZY_BATCH_SQL, projectId);
+    }
+
+    /** Plan d'un bras du préfiltre approché ; les bras de récupération et de comptage ont les mêmes paramètres. */
+    private static List<String> fuzzyPlan(Connection connection, String sql, UUID projectId) throws SQLException {
         List<String> details = new ArrayList<>();
-        try (PreparedStatement statement = connection.prepareStatement(
-                "EXPLAIN QUERY PLAN " + SqliteSymbolSearch.FUZZY_BATCH_SQL)) {
+        try (PreparedStatement statement = connection.prepareStatement("EXPLAIN QUERY PLAN " + sql)) {
             statement.setInt(1, 0);
             statement.setString(2, projectId.toString());
             statement.setString(3, "o");

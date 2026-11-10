@@ -32,7 +32,11 @@ final class SchemaMigrator {
             new Migration(12, "db/migration/V012__index_symbol_relations_by_file.sql"),
             new Migration(13, "db/migration/V013__drop_redundant_prefix_indexes.sql"),
             new Migration(14, "db/migration/V014__index_staged_analyses.sql"),
-            new Migration(15, "db/migration/V015__index_symbols_by_file_for_fuzzy_search.sql"));
+            new Migration(15, "db/migration/V015__index_symbols_by_file_for_fuzzy_search.sql"),
+            new Migration(16, "db/migration/V016__index_staged_files_by_project.sql"),
+            new Migration(17, "db/migration/V017__index_symbols_for_dominant_project_fuzzy_search.sql"),
+            new Migration(18, "db/migration/V018__invalidate_sk_token_bound_indexes.sql"),
+            new Migration(19, "db/migration/V019__invalidate_token_context_bound_indexes.sql"));
 
     private SchemaMigrator() {
     }

@@ -7,7 +7,7 @@
     <parent>
         <groupId>io.github.fturleque</groupId>
         <artifactId>nexus-context-engine-parent</artifactId>
-        <version>0.2.0-rc.3</version>
+        <version>0.2.0</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
@@ -108,12 +108,12 @@
                                         <limit>
                                             <counter>LINE</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.65</minimum>
+                                            <minimum>0.87</minimum>
                                         </limit>
                                         <limit>
                                             <counter>BRANCH</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.60</minimum>
+                                            <minimum>0.75</minimum>
                                         </limit>
                                     </limits>
                                 </rule>
@@ -126,12 +126,12 @@
                                         <limit>
                                             <counter>LINE</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.78</minimum>
+                                            <minimum>0.87</minimum>
                                         </limit>
                                         <limit>
                                             <counter>BRANCH</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.67</minimum>
+                                            <minimum>0.75</minimum>
                                         </limit>
                                     </limits>
                                 </rule>
@@ -146,12 +146,32 @@
                                         <limit>
                                             <counter>LINE</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.60</minimum>
+                                            <minimum>0.82</minimum>
                                         </limit>
                                         <limit>
                                             <counter>BRANCH</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.38</minimum>
+                                            <minimum>0.58</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                                <!-- Validation du transport d'une exposition non loopback : la règle
+                                     PACKAGE com.nexus.api ne détecte pas la perte de ses tests. -->
+                                <rule>
+                                    <element>CLASS</element>
+                                    <includes>
+                                        <include>com.nexus.api.NexusRestTransportPolicy</include>
+                                    </includes>
+                                    <limits>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.77</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.49</minimum>
                                         </limit>
                                     </limits>
                                 </rule>

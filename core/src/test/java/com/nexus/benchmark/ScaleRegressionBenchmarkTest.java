@@ -7,6 +7,8 @@ import com.nexus.config.NexusPaths;
 import com.nexus.index.AnalysisResult;
 import com.nexus.index.CodeSymbol;
 import com.nexus.index.FileCategory;
+import com.nexus.index.IndexRepository;
+import com.nexus.index.IndexWriteSession;
 import com.nexus.index.IndexedFileUpdate;
 import com.nexus.index.RelationKind;
 import com.nexus.index.ScannedFile;
@@ -34,8 +36,10 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -47,6 +51,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -73,6 +78,44 @@ class ScaleRegressionBenchmarkTest {
     private static final int REINDEX_SYMBOLS = 100_000;
     private static final int REINDEX_INCREMENTAL_FILES = 50;
     private static final int REINDEX_SAMPLES = 3;
+    private static final List<String> SCENARIOS = List.of("sqliteTiers", "portfolio", "concurrentReadWrite",
+            "semanticRecovery", "reindexExistingFiles", "stagedPublication", "singleProjectFuzzy");
+    /**
+     * Fichiers par lot de mise en attente, comme l'indexation (128, ADR-0051). Le harnais est aussi compilé sur
+     * le code de base d'une PR : il ne dépend que des types publics déjà présents sur cette base.
+     */
+    private static final int STAGE_BATCH_FILES = 128;
+    private static final int FUZZY_SYMBOLS_PER_FILE = 5;
+    /** Requête entière puis 8 termes, comme une recherche de symboles de SymbolSearchStrategy. */
+    private static final List<String> FUZZY_TERMS = List.of("parseconfigfile", "parse", "config", "file",
+            "renderer", "loadindex", "graphnode", "tokenize", "mergerank");
+    /** Plafond du comptage de {@code SqliteSymbolSearch} : seuil du parcours ordonné plus un. */
+    private static final long FUZZY_CANDIDATE_CAP = 10_001L;
+    private static final String FILE_SCOPED_FUZZY_INDEX = "idx_symbols_file_fuzzy_prefilter";
+    private static final String GLOBAL_FUZZY_INDEX = "idx_symbols_fuzzy_prefilter";
+    /** Comptage plafonné du préfiltre ; mêmes clauses que {@code SqliteSymbolSearch.FUZZY_COUNT_ARM_SQL}. */
+    private static final String FUZZY_COUNT_ARM_SQL = """
+            SELECT ? AS term_index, COUNT(*) AS candidate_count FROM (
+                SELECT 1
+                FROM symbols s INDEXED BY %s
+                JOIN indexed_files f ON f.id = s.file_id
+                WHERE f.project_id = ?
+                  AND SUBSTR(LOWER(s.name), 1, 1) = ?
+                  AND LENGTH(s.name) BETWEEN ? AND ?
+                LIMIT ?)
+            """;
+    /** Récupération du préfiltre ; mêmes clauses que {@code SqliteSymbolSearch.FUZZY_BATCH_SQL}. */
+    private static final String FUZZY_BATCH_ARM_SQL = """
+            SELECT * FROM (
+                SELECT ? AS term_index, s.qualified_name AS qualified_name
+                FROM symbols s INDEXED BY %s
+                JOIN indexed_files f ON f.id = s.file_id
+                WHERE f.project_id = ?
+                  AND SUBSTR(LOWER(s.name), 1, 1) = ?
+                  AND LENGTH(s.name) BETWEEN ? AND ?
+                ORDER BY s.qualified_name, f.relative_path, s.start_line, s.source_provider
+                LIMIT ?)
+            """;
 
     @TempDir
     Path temporaryDirectory;
@@ -95,35 +138,49 @@ class ScaleRegressionBenchmarkTest {
         int concurrencySymbolsPerProject = full ? 100_000 : 25_000;
         int semanticDocuments = full ? 20_000 : 5_000;
 
+        int stagedPublicationFiles = full ? 100_000 : 50_000;
+        int singleProjectFuzzyFiles = full ? 100_000 : 20_000;
+        Set<String> scenarios = selectedScenarios(sqliteOnly);
+
         long benchmarkStarted = System.nanoTime();
         long usedHeapBefore = usedHeapBytes();
 
         // Les deux JVM (base et candidat) chauffent le même chemin sur des bases
         // distinctes. Le démarrage à froid reste visible dans le rapport.
         List<Long> populationWarmups = new ArrayList<>();
-        for (int iteration = 0; iteration < POPULATION_WARMUPS; iteration++) {
-            SqliteDatabase warmup = new SqliteDatabase(new NexusPaths(
-                    temporaryDirectory.resolve("population-warmup-" + iteration)));
-            setJournalMode(warmup, "DELETE");
-            long started = System.nanoTime();
-            populateProject(warmup, UUID.randomUUID(), "warmup", 10_000, 10_000);
-            populationWarmups.add(elapsedMillis(started));
-        }
         List<Map<String, Object>> sqlite = new ArrayList<>();
-        for (int symbolCount : sqliteTiers) {
-            sqlite.add(benchmarkSqliteTier(symbolCount, sqliteOnly));
+        if (scenarios.contains("sqliteTiers")) {
+            for (int iteration = 0; iteration < POPULATION_WARMUPS; iteration++) {
+                SqliteDatabase warmup = new SqliteDatabase(new NexusPaths(
+                        temporaryDirectory.resolve("population-warmup-" + iteration)));
+                setJournalMode(warmup, "DELETE");
+                long started = System.nanoTime();
+                populateProject(warmup, UUID.randomUUID(), "warmup", 10_000, 10_000);
+                populationWarmups.add(elapsedMillis(started));
+            }
+            for (int symbolCount : sqliteTiers) {
+                sqlite.add(benchmarkSqliteTier(symbolCount, sqliteOnly));
+            }
         }
 
-        Map<String, Object> portfolio = sqliteOnly ? Map.of() : benchmarkPortfolio(portfolioTiers);
-        Map<String, Object> concurrency = sqliteOnly ? Map.of() : benchmarkJournalModes(concurrencySymbolsPerProject);
-        Map<String, Object> semantic = sqliteOnly ? Map.of() : benchmarkSemanticRecovery(semanticDocuments);
-        Map<String, Object> reindex = sqliteOnly ? Map.of() : benchmarkReindexExistingFiles();
+        Map<String, Object> portfolio = scenarios.contains("portfolio") ? benchmarkPortfolio(portfolioTiers) : Map.of();
+        Map<String, Object> concurrency = scenarios.contains("concurrentReadWrite")
+                ? benchmarkJournalModes(concurrencySymbolsPerProject) : Map.of();
+        Map<String, Object> semantic = scenarios.contains("semanticRecovery")
+                ? benchmarkSemanticRecovery(semanticDocuments) : Map.of();
+        Map<String, Object> reindex = scenarios.contains("reindexExistingFiles")
+                ? benchmarkReindexExistingFiles() : Map.of();
+        Map<String, Object> stagedPublication = scenarios.contains("stagedPublication")
+                ? benchmarkStagedPublication(stagedPublicationFiles) : Map.of();
+        Map<String, Object> singleProjectFuzzy = scenarios.contains("singleProjectFuzzy")
+                ? benchmarkSingleProjectFuzzy(singleProjectFuzzyFiles) : Map.of();
 
         long usedHeapAfter = usedHeapBytes();
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("generatedAt", Instant.now().toString());
         report.put("profile", profile);
         report.put("sqliteOnly", sqliteOnly);
+        report.put("scenarios", List.copyOf(scenarios));
         report.put("populationWarmupSamplesMs", populationWarmups);
         report.put("environment", environment());
         report.put("protocol", Map.of(
@@ -144,6 +201,8 @@ class ScaleRegressionBenchmarkTest {
         report.put("concurrentReadWrite", concurrency);
         report.put("semanticRecovery", semantic);
         report.put("reindexExistingFiles", reindex);
+        report.put("stagedPublication", stagedPublication);
+        report.put("singleProjectFuzzy", singleProjectFuzzy);
         report.put("usedHeapBeforeBytes", usedHeapBefore);
         report.put("usedHeapAfterBytes", usedHeapAfter);
         report.put("usedHeapDeltaBytes", usedHeapAfter - usedHeapBefore);
@@ -221,10 +280,12 @@ class ScaleRegressionBenchmarkTest {
     }
 
     /**
-     * Réindexe des fichiers déjà présents par {@code applyChanges}, le chemin d'écriture de
-     * l'indexation, sur une base peuplée : une réindexation incrémentale (quelques fichiers) puis un
-     * rebuild (tous les fichiers). Chaque fichier supprime puis réécrit ses symboles et relations ;
-     * le coût doit rester proportionnel aux fichiers modifiés, non à la taille de la base.
+     * Réindexe des fichiers déjà présents par le chemin d'écriture de l'indexation (session ouverte,
+     * analyses mises en attente par lots, publication) sur une base peuplée : une réindexation
+     * incrémentale (quelques fichiers) puis un rebuild (tous les fichiers). Chaque fichier supprime puis
+     * réécrit ses symboles et relations ; le coût doit rester proportionnel aux fichiers modifiés, non à
+     * la taille de la base. {@code medianMs} couvre toute la session, {@code publishMedianMs} la seule
+     * transaction de publication.
      */
     private Map<String, Object> benchmarkReindexExistingFiles() throws Exception {
         SqliteDatabase database = new SqliteDatabase(new NexusPaths(temporaryDirectory.resolve("reindex-home")));
@@ -236,16 +297,18 @@ class ScaleRegressionBenchmarkTest {
         int incrementalFiles = Math.min(REINDEX_INCREMENTAL_FILES, fileCount);
 
         List<Long> incrementalSamples = new ArrayList<>();
+        List<Long> incrementalPublishSamples = new ArrayList<>();
         List<Long> rebuildSamples = new ArrayList<>();
+        List<Long> rebuildPublishSamples = new ArrayList<>();
         for (int sample = 0; sample < REINDEX_SAMPLES; sample++) {
             List<IndexedFileUpdate> incremental = reindexUpdates(fileCount, incrementalFiles, sample);
             long started = System.nanoTime();
-            repository.applyChanges(projectId, incremental, Set.of());
+            incrementalPublishSamples.add(writeBySession(repository, projectId, incremental) / 1_000L);
             incrementalSamples.add(elapsedMillis(started));
 
             List<IndexedFileUpdate> rebuild = reindexUpdates(fileCount, fileCount, sample);
             started = System.nanoTime();
-            repository.applyChanges(projectId, rebuild, Set.of());
+            rebuildPublishSamples.add(writeBySession(repository, projectId, rebuild) / 1_000L);
             rebuildSamples.add(elapsedMillis(started));
         }
 
@@ -258,12 +321,17 @@ class ScaleRegressionBenchmarkTest {
         incrementalResult.put("files", incrementalFiles);
         incrementalResult.put("samplesMs", incrementalSamples);
         incrementalResult.put("medianMs", percentile(incrementalSamples, 0.5d));
+        incrementalResult.put("publishSamplesMs", incrementalPublishSamples);
+        incrementalResult.put("publishMedianMs", percentile(incrementalPublishSamples, 0.5d));
         Map<String, Object> rebuildResult = new LinkedHashMap<>();
         rebuildResult.put("files", fileCount);
         rebuildResult.put("samplesMs", rebuildSamples);
         rebuildResult.put("medianMs", percentile(rebuildSamples, 0.5d));
+        rebuildResult.put("publishSamplesMs", rebuildPublishSamples);
+        rebuildResult.put("publishMedianMs", percentile(rebuildPublishSamples, 0.5d));
 
         Map<String, Object> result = new LinkedHashMap<>();
+        result.put("writePath", "openWriteSession/stage/publish");
         result.put("populatedSymbols", REINDEX_SYMBOLS);
         result.put("populatedRelations", REINDEX_SYMBOLS);
         result.put("populatedFiles", fileCount);
@@ -272,6 +340,329 @@ class ScaleRegressionBenchmarkTest {
         result.put("rebuild", rebuildResult);
         result.put("databaseBytes", sqliteFilesSize(database.databaseFile()));
         return result;
+    }
+
+    /**
+     * Écrit des analyses comme l'indexation : session ouverte, mise en attente par lots de
+     * {@link #STAGE_BATCH_FILES} fichiers, publication. Rend la durée de la publication en
+     * microsecondes.
+     */
+    private static long writeBySession(IndexRepository repository, UUID projectId, List<IndexedFileUpdate> updates) {
+        try (IndexWriteSession session = repository.openWriteSession(projectId)) {
+            for (int from = 0; from < updates.size(); from += STAGE_BATCH_FILES) {
+                session.stage(updates.subList(from, Math.min(updates.size(), from + STAGE_BATCH_FILES)));
+            }
+            long started = System.nanoTime();
+            session.publish(Set.of());
+            return elapsedMicros(started);
+        }
+    }
+
+    /**
+     * Publication de l'indexation complète d'un projet neuf de {@code fileCount} fichiers (AUD-PRF-27) :
+     * la transaction de publication relit la mise en attente par pages ; sa durée doit croître avec le
+     * nombre de fichiers, non avec son carré.
+     */
+    private Map<String, Object> benchmarkStagedPublication(int fileCount) throws Exception {
+        SqliteDatabase database = new SqliteDatabase(new NexusPaths(temporaryDirectory.resolve("staged-publication")));
+        setJournalMode(database, "DELETE");
+        UUID projectId = UUID.randomUUID();
+        try (Connection connection = database.openConnection();
+             PreparedStatement project = connection.prepareStatement("""
+                     INSERT INTO projects(id, name, root_path, source_type, last_indexed_at, index_status)
+                     VALUES (?, ?, ?, 'LOCAL', NULL, 'READY')
+                     """)) {
+            project.setString(1, projectId.toString());
+            project.setString(2, "staged-publication-" + projectId);
+            project.setString(3, temporaryDirectory.resolve("staged-project-" + projectId).toString());
+            project.executeUpdate();
+        }
+        SqliteIndexRepository repository = new SqliteIndexRepository(database);
+        Path root = temporaryDirectory.resolve("staged-sources");
+        long started = System.nanoTime();
+        long stagingMicros = 0L;
+        long publishMicros;
+        try (IndexWriteSession session = repository.openWriteSession(projectId)) {
+            for (int from = 0; from < fileCount; from += STAGE_BATCH_FILES) {
+                List<IndexedFileUpdate> batch = new ArrayList<>(STAGE_BATCH_FILES);
+                for (int file = from; file < Math.min(fileCount, from + STAGE_BATCH_FILES); file++) {
+                    String relativePath = filePath(file);
+                    String name = String.format(Locale.ROOT, "StagedSymbol%08d", file);
+                    Path absolute = root.resolve(relativePath);
+                    batch.add(new IndexedFileUpdate(
+                            new ScannedFile(absolute, relativePath, "java", 128, "staged-hash-" + file,
+                                    Instant.EPOCH.plusSeconds(file), 32, FileCategory.SOURCE),
+                            new AnalysisResult(absolute, "java",
+                                    List.of(new CodeSymbol(SymbolKind.CLASS, name, "bench.staged." + name,
+                                            "class " + name, 1, 2)),
+                                    List.of(new SymbolRelation(RelationKind.USES, "bench.staged." + name,
+                                            "bench.target.Target" + file)))));
+                }
+                long stageStarted = System.nanoTime();
+                session.stage(batch);
+                stagingMicros += elapsedMicros(stageStarted);
+            }
+            long publishStarted = System.nanoTime();
+            session.publish(Set.of());
+            publishMicros = elapsedMicros(publishStarted);
+        }
+        long totalMs = elapsedMillis(started);
+        var statistics = repository.statistics(projectId);
+        assertEquals(fileCount, statistics.files(), "La publication doit écrire chaque fichier mis en attente");
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("writePath", "openWriteSession/stage/publish");
+        result.put("files", fileCount);
+        result.put("symbolsPerFile", 1);
+        result.put("relationsPerFile", 1);
+        result.put("stageBatchFiles", STAGE_BATCH_FILES);
+        result.put("stagingMs", stagingMicros / 1_000L);
+        result.put("publishMs", publishMicros / 1_000L);
+        result.put("totalMs", totalMs);
+        result.put("databaseBytes", sqliteFilesSize(database.databaseFile()));
+        return result;
+    }
+
+    /**
+     * Recherche approchée d'un projet seul dans sa base (AUD-PRF-29). La recherche de production des 9 termes
+     * d'une recherche de symboles est mesurée sur le schéma courant ; le comptage plafonné et la récupération
+     * du préfiltre approché le sont avec l'index scopé par fichier ({@code idx_symbols_file_fuzzy_prefilter},
+     * V015) forcé, puis sur le schéma qui précède V015 : index scopé supprimé, index global
+     * {@code idx_symbols_fuzzy_prefilter} présent (recréé s'il manque, comme sur le code d'avant V017). Le
+     * harnais porte les requêtes de {@code SqliteSymbolSearch} avec l'index forcé en paramètre, ce qui le
+     * rend exécutable sur le code de base d'une PR.
+     */
+    private Map<String, Object> benchmarkSingleProjectFuzzy(int fileCount) throws Exception {
+        SqliteDatabase database = new SqliteDatabase(new NexusPaths(temporaryDirectory.resolve("single-project-fuzzy")));
+        setJournalMode(database, "DELETE");
+        UUID projectId = UUID.randomUUID();
+        long populateStarted = System.nanoTime();
+        populateFuzzyProject(database, projectId, fileCount);
+        long populationMs = elapsedMillis(populateStarted);
+
+        SqliteIndexRepository repository = new SqliteIndexRepository(database);
+        Measurement production = measure(() -> repository.searchSymbols(projectId, FUZZY_TERMS, SEARCH_LIMIT));
+        Map<String, Object> fileScoped = measureFuzzyArms(database, projectId, FILE_SCOPED_FUZZY_INDEX);
+        try (Connection connection = database.openConnection(); Statement statement = connection.createStatement()) {
+            statement.execute("DROP INDEX IF EXISTS " + FILE_SCOPED_FUZZY_INDEX);
+            statement.execute("CREATE INDEX IF NOT EXISTS " + GLOBAL_FUZZY_INDEX
+                    + " ON symbols(SUBSTR(LOWER(name), 1, 1), LENGTH(name))");
+        }
+        Map<String, Object> global = measureFuzzyArms(database, projectId, GLOBAL_FUZZY_INDEX);
+        assertTrue(fileScoped.get("candidateCounts").equals(global.get("candidateCounts"))
+                        && fileScoped.get("retrievedRows").equals(global.get("retrievedRows")),
+                "Les deux index doivent rendre les mêmes candidats");
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("projectsInDatabase", 1);
+        result.put("files", fileCount);
+        result.put("symbols", fileCount * FUZZY_SYMBOLS_PER_FILE);
+        result.put("symbolsPerFile", FUZZY_SYMBOLS_PER_FILE);
+        result.put("terms", FUZZY_TERMS);
+        result.put("populationMs", populationMs);
+        result.put("productionSearch", production.asMap());
+        result.put("fileScopedPrefilter", fileScoped);
+        result.put("globalPrefilterSchemaBeforeV015", global);
+        result.put("fileScopedCountSlowdownRatio", slowdown(global, fileScoped, "count"));
+        result.put("fileScopedRetrievalSlowdownRatio", slowdown(global, fileScoped, "retrieval"));
+        result.put("databaseBytes", sqliteFilesSize(database.databaseFile()));
+        return result;
+    }
+
+    /** Rapport des médianes : index scopé sur index global ; au-delà de 1, l'index scopé est plus lent. */
+    private static double slowdown(Map<String, Object> global, Map<String, Object> fileScoped, String measurement) {
+        long reference = ((Number) ((Map<?, ?>) global.get(measurement)).get("p50Micros")).longValue();
+        long measured = ((Number) ((Map<?, ?>) fileScoped.get(measurement)).get("p50Micros")).longValue();
+        return reference <= 0L ? 0.0d : (double) measured / reference;
+    }
+
+    private static Map<String, Object> measureFuzzyArms(SqliteDatabase database, UUID projectId, String index)
+            throws Exception {
+        String countSql = String.join(" UNION ALL ",
+                Collections.nCopies(FUZZY_TERMS.size(), FUZZY_COUNT_ARM_SQL.formatted(index)));
+        String retrievalSql = String.join(" UNION ALL ",
+                Collections.nCopies(FUZZY_TERMS.size(), FUZZY_BATCH_ARM_SQL.formatted(index)));
+        try (Connection connection = database.openConnection();
+             PreparedStatement count = connection.prepareStatement(countSql);
+             PreparedStatement retrieval = connection.prepareStatement(retrievalSql)) {
+            bindFuzzyArms(count, projectId, FUZZY_CANDIDATE_CAP);
+            bindFuzzyArms(retrieval, projectId, SEARCH_LIMIT);
+            Measurement countMeasurement = measure(() -> readCounts(count));
+            Measurement retrievalMeasurement = measure(() -> readRows(retrieval));
+
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("index", index);
+            result.put("count", countMeasurement.asMap());
+            result.put("retrieval", retrievalMeasurement.asMap());
+            result.put("candidateCounts", readCounts(count));
+            result.put("retrievedRows", readRows(retrieval));
+            result.put("countPlan", explain(connection, countSql, projectId, FUZZY_CANDIDATE_CAP));
+            return result;
+        }
+    }
+
+    private static void bindFuzzyArms(PreparedStatement statement, UUID projectId, long limit) throws SQLException {
+        int position = 1;
+        for (int term = 0; term < FUZZY_TERMS.size(); term++) {
+            String normalized = FUZZY_TERMS.get(term);
+            int length = normalized.codePointCount(0, normalized.length());
+            statement.setInt(position++, term);
+            statement.setString(position++, projectId.toString());
+            statement.setString(position++, normalized.substring(0, 1));
+            statement.setInt(position++, Math.max(0, length - 3));
+            statement.setInt(position++, length + 3);
+            statement.setLong(position++, limit);
+        }
+    }
+
+    private static List<Long> readCounts(PreparedStatement count) throws SQLException {
+        List<Long> counts = new ArrayList<>();
+        try (ResultSet resultSet = count.executeQuery()) {
+            while (resultSet.next()) {
+                counts.add(resultSet.getLong("candidate_count"));
+            }
+        }
+        return counts;
+    }
+
+    private static List<String> readRows(PreparedStatement retrieval) throws SQLException {
+        List<String> rows = new ArrayList<>();
+        try (ResultSet resultSet = retrieval.executeQuery()) {
+            while (resultSet.next()) {
+                rows.add(resultSet.getInt("term_index") + ":" + resultSet.getString("qualified_name"));
+            }
+        }
+        return rows;
+    }
+
+    private static List<String> explain(Connection connection, String sql, UUID projectId, long limit)
+            throws SQLException {
+        List<String> plan = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement("EXPLAIN QUERY PLAN " + sql)) {
+            bindFuzzyArms(statement, projectId, limit);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    plan.add(resultSet.getString("detail"));
+                }
+            }
+        }
+        return plan;
+    }
+
+    /**
+     * Un projet seul, {@link #FUZZY_SYMBOLS_PER_FILE} symboles par fichier. Les noms varient par premier
+     * caractère (26) et par longueur (6 à 25) : chaque terme de {@link #FUZZY_TERMS} a pour candidats
+     * environ 1,3 % des symboles, sous le seuil du parcours ordonné de {@code SqliteSymbolSearch}.
+     */
+    private void populateFuzzyProject(SqliteDatabase database, UUID projectId, int fileCount) throws SQLException {
+        try (Connection connection = database.openConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                try (PreparedStatement project = connection.prepareStatement("""
+                        INSERT INTO projects(id, name, root_path, source_type, last_indexed_at, index_status)
+                        VALUES (?, ?, ?, 'LOCAL', ?, 'READY')
+                        """)) {
+                    project.setString(1, projectId.toString());
+                    project.setString(2, "single-project-fuzzy-" + projectId);
+                    project.setString(3, temporaryDirectory.resolve("fuzzy-project-" + projectId).toString());
+                    project.setString(4, Instant.now().toString());
+                    project.executeUpdate();
+                }
+                try (PreparedStatement generation = connection.prepareStatement("""
+                        INSERT INTO project_index_generations(project_id, generation) VALUES (?, 1)
+                        """)) {
+                    generation.setString(1, projectId.toString());
+                    generation.executeUpdate();
+                }
+                try (PreparedStatement files = connection.prepareStatement("""
+                        INSERT INTO indexed_files(
+                            project_id, relative_path, language, size_bytes,
+                            content_hash, modified_at, estimated_tokens, category)
+                        VALUES (?, ?, 'java', 128, ?, ?, 32, 'SOURCE')
+                        """)) {
+                    for (int file = 0; file < fileCount; file++) {
+                        files.setString(1, projectId.toString());
+                        files.setString(2, filePath(file));
+                        files.setString(3, "fuzzy-hash-" + file);
+                        files.setString(4, Instant.EPOCH.plusSeconds(file).toString());
+                        files.addBatch();
+                        if ((file + 1) % BATCH_SIZE == 0) {
+                            files.executeBatch();
+                        }
+                    }
+                    files.executeBatch();
+                }
+                connection.commit();
+
+                List<Long> fileIds = new ArrayList<>(fileCount);
+                try (PreparedStatement select = connection.prepareStatement(
+                        "SELECT id FROM indexed_files WHERE project_id = ? ORDER BY id")) {
+                    select.setString(1, projectId.toString());
+                    try (ResultSet resultSet = select.executeQuery()) {
+                        while (resultSet.next()) {
+                            fileIds.add(resultSet.getLong(1));
+                        }
+                    }
+                }
+                int symbolCount = fileCount * FUZZY_SYMBOLS_PER_FILE;
+                try (var symbols = new SqliteBatchInsert(connection, SqliteBatchInsert.Table.SYMBOLS)) {
+                    for (int symbol = 0; symbol < symbolCount; symbol++) {
+                        String name = fuzzySymbolName(symbol);
+                        String qualified = "bench.fuzzy.p" + (symbol % 97) + "." + name;
+                        symbols.add(fileIds.get(symbol / FUZZY_SYMBOLS_PER_FILE), "METHOD", name, qualified,
+                                "void " + name + "()", 1, 2, "javaparser");
+                        if ((symbol + 1) % 50_000 == 0) {
+                            symbols.flush();
+                            connection.commit();
+                        }
+                    }
+                    symbols.flush();
+                    connection.commit();
+                }
+                try (PreparedStatement generation = connection.prepareStatement(
+                        "UPDATE project_index_generations SET generation = generation + 1 WHERE project_id = ?")) {
+                    generation.setString(1, projectId.toString());
+                    generation.executeUpdate();
+                }
+                connection.commit();
+            } catch (SQLException failure) {
+                connection.rollback();
+                throw failure;
+            }
+        }
+    }
+
+    /** Nom déterministe : premier caractère parmi 26, longueur de 6 à 25, suffixe distinct par symbole. */
+    private static String fuzzySymbolName(int symbol) {
+        char first = (char) ('a' + symbol % 26);
+        int length = 6 + (symbol / 26) % 20;
+        StringBuilder name = new StringBuilder(length).append(first);
+        String suffix = Integer.toString(symbol, 36);
+        while (name.length() + suffix.length() < length) {
+            name.append('x');
+        }
+        name.append(suffix);
+        return name.toString();
+    }
+
+    /**
+     * Scénarios exécutés : {@code nexus.scale.benchmark.scenarios} (liste séparée par des virgules) quand il
+     * est fourni ; sinon les paliers SQLite seuls en {@code sqliteOnly}, tous les scénarios autrement.
+     */
+    private static Set<String> selectedScenarios(boolean sqliteOnly) {
+        String requested = System.getProperty("nexus.scale.benchmark.scenarios", "").trim();
+        if (!requested.isEmpty()) {
+            Set<String> selected = new LinkedHashSet<>();
+            for (String scenario : requested.split(",")) {
+                String name = scenario.trim();
+                if (!SCENARIOS.contains(name)) {
+                    throw new IllegalArgumentException("Unknown nexus.scale.benchmark.scenarios entry: " + name);
+                }
+                selected.add(name);
+            }
+            return selected;
+        }
+        return sqliteOnly ? Set.of("sqliteTiers") : new LinkedHashSet<>(SCENARIOS);
     }
 
     /** Mises à jour de {@code count} fichiers existants, chacun avec ses symboles et relations. */

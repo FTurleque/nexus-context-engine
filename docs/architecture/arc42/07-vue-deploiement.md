@@ -100,7 +100,7 @@ Le SDK MCP Java (propriété `mcp.sdk.version` du `pom.xml`) reste supporté en 
 
 SQLite est l'autorité à sauvegarder. Lucene lexical/sémantique peut être reconstruit. Les migrations sont forward-only ; V005 impose les contraintes de plage des symboles.
 
-Le profil sémantique `content-v5` rend les anciens vecteurs incompatibles : une indexation reconstruit l'index sémantique concerné plutôt que de réutiliser silencieusement des embeddings pré-hardening.
+Le profil sémantique `content-v7` rend les anciens vecteurs incompatibles : une indexation reconstruit l'index sémantique concerné plutôt que de réutiliser silencieusement des embeddings pré-hardening.
 
 Sur les filesystems sans `SecureDirectoryStream`, `SafeFileIO` capture chemin réel et identité filesystem de chaque composant avant ouverture puis les revalide immédiatement après. Cette défense détecte les substitutions visibles sans prétendre sandboxer un filesystem local hostile.
 

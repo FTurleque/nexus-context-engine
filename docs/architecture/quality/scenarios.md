@@ -23,7 +23,7 @@ Ce fichier complète la Section 10 de l'arc42 avec les scénarios de qualité **
 | QS-15 — REST distant | Sécurité | auth + roots + transport effectif | Couvert |
 | QS-16 — Management REST isolé | Sécurité/Opérabilité | test 404 app listener + health/metrics management | Couvert |
 | QS-17 — Ollama distant | Sécurité | HTTPS par défaut, HTTP distant opt-in, credentials URI refusés | Couvert |
-| QS-18 — Secrets avant embeddings/contexte | Sécurité | `SensitiveContentRedactorTest`, `SecretRedactionProbeTest` + profil `content-v5` | Couvert |
+| QS-18 — Secrets avant embeddings/contexte | Sécurité | `SensitiveContentRedactorTest`, `SecretRedactionProbeTest` + profil `content-v7` | Couvert |
 | QS-19 — SQLite invariants | Correctness | V004/V005 + tests fresh/upgrade/invalid INSERT | Couvert |
 | QS-20 — Supply-chain reactor | Sécurité | JaCoCo + OSV + CodeQL + notices/SBOM + ancres | Couvert |
 | QS-21 — Supply-chain Docker | Sécurité | Trivy + SBOM + image exacte qualifiée | Couvert |
@@ -52,7 +52,7 @@ Une modification de ces valeurs doit mettre à jour code, tests, documentation e
 
 ## Critères supply-chain actifs
 
-- régression de couverture core sous 70 % lignes ou 50 % branches ⇒ build en échec ;
+- régression de couverture sous un plancher JaCoCo de module, de paquet ou de classe ⇒ build en échec (planchers et mesure de référence : [adapter-coverage-gates.md](../../developer/adapter-coverage-gates.md#seuils-bloquants)) ;
 - nouvelle vulnérabilité introduite en PR ⇒ gate OSV delta ;
 - vulnérabilité dans le SBOM CycloneDX agrégé ⇒ OSV gate bloquant ;
 - analyse statique Java/Kotlin ⇒ CodeQL `security-extended` ;

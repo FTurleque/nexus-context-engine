@@ -7,7 +7,7 @@
     <parent>
         <groupId>io.github.fturleque</groupId>
         <artifactId>nexus-context-engine-parent</artifactId>
-        <version>0.2.0-rc.3</version>
+        <version>0.2.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -82,12 +82,12 @@
                                         <limit>
                                             <counter>LINE</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.70</minimum>
+                                            <minimum>0.84</minimum>
                                         </limit>
                                         <limit>
                                             <counter>BRANCH</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.55</minimum>
+                                            <minimum>0.69</minimum>
                                         </limit>
                                     </limits>
                                 </rule>
@@ -108,7 +108,7 @@
                                         <limit>
                                             <counter>BRANCH</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.77</minimum>
+                                            <minimum>0.79</minimum>
                                         </limit>
                                     </limits>
                                 </rule>
@@ -121,12 +121,12 @@
                                         <limit>
                                             <counter>LINE</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.66</minimum>
+                                            <minimum>0.67</minimum>
                                         </limit>
                                         <limit>
                                             <counter>BRANCH</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.52</minimum>
+                                            <minimum>0.53</minimum>
                                         </limit>
                                     </limits>
                                 </rule>
@@ -139,12 +139,12 @@
                                         <limit>
                                             <counter>LINE</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.73</minimum>
+                                            <minimum>0.74</minimum>
                                         </limit>
                                         <limit>
                                             <counter>BRANCH</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.59</minimum>
+                                            <minimum>0.60</minimum>
                                         </limit>
                                     </limits>
                                 </rule>
@@ -157,12 +157,68 @@
                                         <limit>
                                             <counter>LINE</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.79</minimum>
+                                            <minimum>0.80</minimum>
                                         </limit>
                                         <limit>
                                             <counter>BRANCH</counter>
                                             <value>COVEREDRATIO</value>
                                             <minimum>0.60</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                                <!-- Planchers par classe pour les classes de bornes qu'une règle
+                                     PACKAGE laisse régresser sans échec. -->
+                                <rule>
+                                    <element>CLASS</element>
+                                    <includes>
+                                        <include>com.nexus.index.jdt.JdtStdioSession</include>
+                                    </includes>
+                                    <limits>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.40</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.16</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                                <rule>
+                                    <element>CLASS</element>
+                                    <includes>
+                                        <include>com.nexus.index.minos.MinosPayloadReader</include>
+                                    </includes>
+                                    <limits>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.60</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.36</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                                <rule>
+                                    <element>CLASS</element>
+                                    <includes>
+                                        <include>com.nexus.search.semantic.SemanticSearchConfiguration</include>
+                                    </includes>
+                                    <limits>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.74</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.68</minimum>
                                         </limit>
                                     </limits>
                                 </rule>

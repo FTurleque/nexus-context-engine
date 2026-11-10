@@ -1,0 +1,40 @@
+name: Action pin upstream tags
+
+# Compare chaque action externe épinglée par SHA au commit du tag amont nommé par
+# son commentaire `# vX.Y.Z` (git ls-remote, tag annoté déréférencé). Contrôle
+# réseau, hors des checks obligatoires : le contrôle local `pins` reste dans les
+# contrats hors réseau. Contrat : scripts/release/test-tool-integrity-anchors.sh.
+on:
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
+      - 'scripts/release/workflow_hygiene.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: action-pin-upstream-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  upstream:
+    name: Pinned SHAs match upstream tags
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Compare pins with upstream tags
+        shell: bash
+        run: python3 scripts/release/workflow_hygiene.py upstream .github/workflows .github/actions

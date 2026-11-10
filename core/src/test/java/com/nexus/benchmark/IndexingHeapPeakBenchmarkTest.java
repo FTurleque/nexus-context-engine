@@ -7,12 +7,14 @@ import com.nexus.config.NexusPaths;
 import com.nexus.index.AnalysisResult;
 import com.nexus.index.CodeSymbol;
 import com.nexus.index.FileHasher;
+import com.nexus.index.IndexWriteSession;
 import com.nexus.index.IndexedFileUpdate;
 import com.nexus.index.RelationKind;
 import com.nexus.index.ScannedFile;
 import com.nexus.index.SymbolKind;
 import com.nexus.index.SymbolRelation;
 import com.nexus.index.scan.ProjectScanner;
+import com.nexus.persistence.sqlite.SqliteBatchInsert;
 import com.nexus.persistence.sqlite.SqliteDatabase;
 import com.nexus.persistence.sqlite.SqliteIndexRepository;
 import com.nexus.project.ProjectDescriptor;
@@ -116,9 +118,9 @@ class IndexingHeapPeakBenchmarkTest {
             long symbols = operation.report().statistics().symbols();
             long relations = operation.report().statistics().relations();
 
-            // Durée de la transaction d'écriture unique d'aujourd'hui : mêmes volumes réappliqués par
-            // applyChanges. Elle borne la durée pendant laquelle le verrou d'écriture SQLite serait tenu
-            // si les analyses s'écrivaient dans la transaction pendant toute l'indexation (design D2).
+            // Durée de la transaction de publication d'une session d'écriture : mêmes volumes mis en
+            // attente par lots puis publiés. C'est la durée pendant laquelle l'indexation tient le verrou
+            // d'écriture SQLite d'un seul tenant (DATA-0074).
             long writeTransactionMs = measureSingleWriteTransaction(
                     new NexusPaths(temporaryDirectory.resolve("home")), project.id(), scanned, symbols, relations);
             long liveGrowth = Math.max(0L, sampler.peakLive() - baselineBytes);
@@ -216,9 +218,14 @@ class IndexingHeapPeakBenchmarkTest {
                     new AnalysisResult(file.absolutePath(), file.language(), fileSymbols, fileRelations)));
         }
         SqliteIndexRepository repository = new SqliteIndexRepository(new SqliteDatabase(paths));
-        long started = System.nanoTime();
-        repository.applyChanges(projectId, updates, java.util.Set.of());
-        return Math.max(0L, (System.nanoTime() - started) / 1_000_000L);
+        try (IndexWriteSession session = repository.openWriteSession(projectId)) {
+            for (int from = 0; from < updates.size(); from += SqliteBatchInsert.ROW_LIMIT) {
+                session.stage(updates.subList(from, Math.min(updates.size(), from + SqliteBatchInsert.ROW_LIMIT)));
+            }
+            long started = System.nanoTime();
+            session.publish(java.util.Set.of());
+            return Math.max(0L, (System.nanoTime() - started) / 1_000_000L);
+        }
     }
 
     private static long createCorpus(Path root, int fileCount) throws IOException {

@@ -1,9 +1,5 @@
 package com.nexus.persistence.sqlite;
 
-import com.nexus.index.CodeSymbol;
-import com.nexus.index.IndexedFileUpdate;
-import com.nexus.index.ScannedFile;
-import com.nexus.index.SymbolRelation;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -16,44 +12,16 @@ import java.util.UUID;
 import static com.nexus.persistence.sqlite.SqliteIndexSql.*;
 import static com.nexus.persistence.sqlite.SqliteIndexRows.*;
 
-/** Capacité interne de persistance ; partage les sessions et transactions de SqliteDatabase. */
+/**
+ * Capacité interne de persistance ; partage les sessions et transactions de SqliteDatabase. Les analyses de
+ * fichiers ne s'écrivent que par la publication d'une session d'écriture ({@link #writeStagedChanges}).
+ */
 final class SqliteFileWriter {
     private final SqliteDatabase database;
     SqliteFileWriter(SqliteDatabase database) { this.database = database; }
 
-    void applyChanges(UUID projectId, List<IndexedFileUpdate> updates, Set<String> removedPaths) {
-        try {
-            database.writeTransaction("apply index changes for project " + projectId,
-                    connection -> {
-                        writeChanges(connection, projectId, updates, removedPaths);
-                    });
-        } catch (SQLException exception) {
-            throw persistence("Impossible de mettre à jour l'index SQLite du projet " + projectId, exception);
-        }
-    }
-
-    /** Corps de la transaction d'indexation ; la transaction reste possédée par l'appelant (ADR-0051). */
-    static void writeChanges(
-            Connection connection,
-            UUID projectId,
-            List<IndexedFileUpdate> updates,
-            Set<String> removedPaths) throws SQLException {
-        deleteRemovedFiles(connection, projectId, removedPaths);
-        if (!updates.isEmpty()) {
-            // Instructions préparées une fois par transaction, réutilisées pour chaque fichier.
-            try (FileStatements statements = new FileStatements(connection, projectId)) {
-                for (IndexedFileUpdate update : updates) {
-                    long fileId = statements.upsertFile(update.file());
-                    statements.replaceAnalysis(fileId, update);
-                }
-            }
-        }
-        if (!updates.isEmpty() || !removedPaths.isEmpty()) {
-            bumpGeneration(connection, projectId);
-        }
-    }
-
-    private static final String STAGED_FILES_PAGE_SQL = """
+    /** Page des fichiers en attente d'un projet, servie par idx_index_staged_files_project_id (V016). */
+    static final String STAGED_FILES_PAGE_SQL = """
             SELECT id, relative_path, language, size_bytes, content_hash, modified_at,
                    estimated_tokens, category
             FROM index_staged_files
@@ -80,9 +48,8 @@ final class SqliteFileWriter {
     /**
      * Corps de la transaction de publication : applique les analyses mises en attente (V014) aux
      * tables canoniques par pages d'au plus {@link SqliteBatchInsert#ROW_LIMIT} fichiers, vide la mise
-     * en attente et incrémente la génération. Les faits écrits sont ceux que
-     * {@link #writeChanges} écrirait pour les mêmes analyses. La transaction reste possédée par l'appelant
-     * (ADR-0051).
+     * en attente et incrémente la génération. C'est l'unique chemin d'écriture des analyses de fichiers
+     * (DATA-0074). La transaction reste possédée par l'appelant (ADR-0051).
      */
     static void writeStagedChanges(Connection connection, UUID projectId, Set<String> removedPaths)
             throws SQLException {
@@ -223,11 +190,6 @@ final class SqliteFileWriter {
         }
 
         /** Upsert du fichier ; l'identifiant vient de {@code RETURNING id}, sans relecture. */
-        long upsertFile(ScannedFile file) throws SQLException {
-            return upsertFile(file.relativePath(), file.language(), file.sizeBytes(), file.contentHash(),
-                    file.modifiedAt().toString(), file.estimatedTokens(), file.category().name());
-        }
-
         long upsertFile(String relativePath, String language, long sizeBytes, String contentHash,
                 String modifiedAt, int estimatedTokens, String category) throws SQLException {
             upsert.setString(1, projectId);
@@ -244,20 +206,6 @@ final class SqliteFileWriter {
                 }
                 return resultSet.getLong(1);
             }
-        }
-
-        void replaceAnalysis(long fileId, IndexedFileUpdate update) throws SQLException {
-            deleteAnalysis(fileId);
-            for (CodeSymbol symbol : update.analysis().symbols()) {
-                addSymbol(fileId, symbol.kind().name(), symbol.name(), symbol.qualifiedName(),
-                        symbol.signature(), symbol.startLine(), symbol.endLine(), symbol.sourceProvider());
-            }
-            flushSymbols();
-            for (SymbolRelation relation : update.analysis().relations()) {
-                addRelation(fileId, relation.kind().name(), relation.source(),
-                        relation.target(), relation.confidence(), relation.sourceProvider());
-            }
-            flushRelations();
         }
 
         /** Supprime l'analyse embarquée précédente d'un fichier (relations, puis symboles). */

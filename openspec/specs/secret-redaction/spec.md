@@ -54,12 +54,12 @@ Quand la redaction refuse le contenu d'un fichier parce qu'une valeur sensible d
 Toute modification du comportement de redaction SHALL incrémenter `SensitiveContentRedactor.POLICY_VERSION` et le profil sémantique `content-vN`, et SHALL être accompagnée d'une migration qui repasse les projets indexés en `NOT_INDEXED`.
 
 #### Scenario: Mise à jour d'une base existante
-- **GIVEN** une base migrée avec la politique `secret-redaction-v5`
+- **GIVEN** une base migrée avec la politique `secret-redaction-v7`
 - **WHEN** la nouvelle version l'ouvre
 - **THEN** la migration d'invalidation incrémente la génération d'index des projets, les repasse en `NOT_INDEXED` et conserve le registre des projets
 
 #### Scenario: Index lexical d'une ancienne politique
-- **GIVEN** un index Lucene dont la version de politique diffère de `secret-redaction-v6`
+- **GIVEN** un index Lucene dont la version de politique diffère de `secret-redaction-v8`
 - **WHEN** l'indexation d'un projet vérifie la présence de l'index lexical
 - **THEN** il est traité comme invalide et reconstruit
 
@@ -87,5 +87,64 @@ La redaction SHALL refuser le contenu qui porte une partie utilisateur d'URL de 
 
 #### Scenario: Jeton à préfixe trop long
 - **GIVEN** un contenu contenant un jeton `ghp_` suivi de 256 caractères alphanumériques
+- **WHEN** le contenu est redigé
+- **THEN** la redaction est refusée et le message d'erreur ne contient aucune partie du jeton
+
+### Requirement: Un jeton sk- est masqué ou refusé à toute longueur de corps
+Pour un jeton `sk-`, `sk-proj-` ou `sk-ant-`, la redaction SHALL masquer un corps, compté après le préfixe, de 20 à 255 caractères et SHALL refuser le contenu dès 256 caractères de corps, sans jamais publier le jeton en clair.
+
+#### Scenario: Corps de 255 caractères
+- **GIVEN** un contenu contenant `sk-` suivi de 255 caractères alphanumériques
+- **WHEN** le contenu est redigé
+- **THEN** le jeton est remplacé par `[REDACTED]`
+
+#### Scenario: Corps de 256 caractères
+- **GIVEN** un contenu contenant `sk-` suivi de 256 caractères alphanumériques
+- **WHEN** le contenu est redigé
+- **THEN** la redaction est refusée et le message d'erreur ne contient aucune partie du jeton
+
+#### Scenario: Préfixe sk-ant- à la borne
+- **GIVEN** un contenu contenant `sk-ant-` suivi de 255 caractères, puis un autre contenu avec `sk-ant-` suivi de 256 caractères
+- **WHEN** chacun est redigé
+- **THEN** le premier jeton est masqué et le second contenu est refusé
+
+#### Scenario: Préfixe sk-proj- à la borne
+- **GIVEN** un contenu contenant `sk-proj-` suivi de 255 caractères, puis un autre contenu avec `sk-proj-` suivi de 256 caractères
+- **WHEN** chacun est redigé
+- **THEN** le premier jeton est masqué et le second contenu est refusé
+
+#### Scenario: Fenêtre sans fuite
+- **WHEN** des contenus portant `sk-` suivi de 256 à 260 caractères sont redigés
+- **THEN** chacun est refusé et aucun n'est publié en clair
+
+### Requirement: Un jeton collé à un bloc de clé privée est masqué ou refusé
+Pour un jeton à préfixe placé juste après la ligne de fin d'un bloc de clé privée, sans séparateur, la redaction SHALL masquer un corps de 255 caractères au plus et SHALL refuser le contenu dès 256 caractères de corps, comme pour le même jeton isolé.
+
+#### Scenario: Corps de 255 caractères après le bloc
+- **GIVEN** un bloc de clé privée complet suivi immédiatement de `sk-`, `glpat-` ou `xoxb-` et d'un corps de 255 caractères
+- **WHEN** le contenu est redigé
+- **THEN** le bloc et le jeton sont remplacés par `[REDACTED]`
+- **AND** aucun fragment du corps n'apparaît dans le contenu publié
+
+#### Scenario: Corps de 256 caractères après le bloc
+- **GIVEN** un bloc de clé privée complet suivi immédiatement de `sk-`, `sk-ant-`, `glpat-` ou `xoxb-` et d'un corps de 256 caractères
+- **WHEN** le contenu est redigé
+- **THEN** la redaction est refusée et le message d'erreur ne contient aucune partie du jeton
+
+### Requirement: Le masquage et le refus d'un jeton comptent la même classe de caractères
+Pour chaque famille de jetons à préfixe dont la longueur est bornée, la redaction SHALL compter le corps sur la même classe de caractères au masquage et au refus, de sorte qu'un corps de 255 caractères au plus est masqué et qu'un corps de 256 caractères ou plus est refusé, y compris quand il contient un `_`.
+
+#### Scenario: Jeton court contenant un tiret bas
+- **GIVEN** un contenu contenant `xoxb-`, `ghp_` ou `sk_live_` suivi de 25 caractères, d'un `_` et de 10 caractères
+- **WHEN** le contenu est redigé
+- **THEN** le jeton entier est remplacé par `[REDACTED]`
+
+#### Scenario: Corps de 255 caractères contenant un tiret bas
+- **GIVEN** un contenu contenant `xoxb-`, `ghp_` ou `sk_live_` suivi d'un corps de 255 caractères dont un `_`
+- **WHEN** le contenu est redigé
+- **THEN** le jeton entier est remplacé par `[REDACTED]`
+
+#### Scenario: Corps de 256 caractères contenant un tiret bas
+- **GIVEN** un contenu contenant `xoxb-`, `ghp_` ou `sk_live_` suivi d'un corps de 256 caractères dont un `_`
 - **WHEN** le contenu est redigé
 - **THEN** la redaction est refusée et le message d'erreur ne contient aucune partie du jeton

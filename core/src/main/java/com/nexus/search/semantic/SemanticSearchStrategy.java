@@ -139,8 +139,9 @@ public final class SemanticSearchStrategy implements SearchStrategy {
             }
         }
 
+        String embeddingQuery = SensitiveContentRedactor.redact(query);
         QueryVector shared = queryContext.shared(
-                queryVectorKey(), QueryVector.class, () -> embedQuery(query, queryContext));
+                queryVectorKey(embeddingQuery), QueryVector.class, () -> embedQuery(embeddingQuery, queryContext));
         if (shared.unavailable() != null) {
             return degradedProvider(project, shared.unavailable());
         }
@@ -185,12 +186,18 @@ public final class SemanticSearchStrategy implements SearchStrategy {
         return List.copyOf(candidates);
     }
 
-    private String queryVectorKey() {
-        return "semantic-query-vector|" + embeddingProvider.providerId() + "|" + embeddingProvider.modelId();
+    /**
+     * Clé du vecteur dans le contexte de la requête : fournisseur, modèle et texte redacté, dont dépend
+     * le vecteur (AUD-QUA-23). Le texte redacté est celui transmis au fournisseur ; la clé vit le temps de
+     * la requête.
+     */
+    String queryVectorKey(String embeddingQuery) {
+        return "semantic-query-vector|" + embeddingProvider.providerId() + "|" + embeddingProvider.modelId()
+                + "|" + embeddingQuery;
     }
 
-    private QueryVector embedQuery(String query, SearchQueryContext queryContext) throws IOException {
-        String embeddingQuery = SensitiveContentRedactor.redact(query);
+    /** Embedding du texte déjà redacté de la requête. */
+    private QueryVector embedQuery(String embeddingQuery, SearchQueryContext queryContext) throws IOException {
         try {
             // Le temps restant de l'échéance globale plafonne le délai de l'appel (BE-0081).
             Optional<Duration> remaining = queryContext.remainingTime();

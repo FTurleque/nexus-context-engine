@@ -26,9 +26,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Les migrations d'index (V012 : index par fichier de symbol_relations ; V013 : suppression des index
- * préfixes redondants ; V015 : préfiltre approché des symboles scopé par fichier) créent ou suppriment des
+ * préfixes redondants ; V015 : préfiltre approché des symboles scopé par fichier ; V016 : pagination des
+ * fichiers en attente ; V017 : préfiltre approché global d'un projet dominant) créent ou suppriment des
  * index sans toucher aux faits canoniques ni au statut d'indexation des projets (AUD-PRF-01, AUD-PRF-15,
- * AUD-PRF-09).
+ * AUD-PRF-09, AUD-PRF-27, AUD-PRF-29).
  */
 class SchemaMigratorFileIndexUpgradeTest {
 
@@ -101,13 +102,52 @@ class SchemaMigratorFileIndexUpgradeTest {
             // La première colonne identifie le fichier, donc le projet par indexed_files.
             assertEquals("file_id", indexColumns(connection, "idx_symbols_file_fuzzy_prefilter").getFirst());
             assertEquals(3, indexColumns(connection, "idx_symbols_file_fuzzy_prefilter").size());
-            // L'ancien index global n'est plus utilisé ; l'index par fichier et fournisseur reste.
-            assertFalse(indexNames(connection, "symbols").contains("idx_symbols_fuzzy_prefilter"));
+            // L'index par fichier et fournisseur reste ; l'index global est recréé par V017.
             assertTrue(indexNames(connection, "symbols").contains("idx_symbols_file_provider"));
             assertEquals(before, canonicalSnapshot(connection));
             assertEquals("READY", projectStatus(connection));
             assertEquals(7L, projectGeneration(connection));
             assertTrue(appliedVersions(connection).contains(15));
+        }
+    }
+
+    @Test
+    void v016IndexesStagedFilesByProjectWithoutTouchingStagedOrCanonicalFactsOrProjectStatus() throws Exception {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite::memory:")) {
+            buildPopulatedBase(connection, 15);
+            populateStaged(connection);
+            assertFalse(indexNames(connection, "index_staged_files").contains("idx_index_staged_files_project_id"));
+            List<String> before = canonicalSnapshot(connection);
+            List<String> stagedBefore = stagedSnapshot(connection);
+
+            SchemaMigrator.migrate(connection);
+
+            assertTrue(indexNames(connection, "index_staged_files").contains("idx_index_staged_files_project_id"));
+            assertEquals(List.of("project_id", "id"), indexColumns(connection, "idx_index_staged_files_project_id"));
+            assertEquals(before, canonicalSnapshot(connection));
+            assertEquals(stagedBefore, stagedSnapshot(connection));
+            assertEquals("READY", projectStatus(connection));
+            assertEquals(7L, projectGeneration(connection));
+            assertTrue(appliedVersions(connection).contains(16));
+        }
+    }
+
+    @Test
+    void v017RecreatesTheGlobalFuzzyPrefilterBesideTheFileScopedOneWithoutTouchingCanonicalFacts() throws Exception {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite::memory:")) {
+            buildPopulatedBase(connection, 16);
+            assertFalse(indexNames(connection, "symbols").contains("idx_symbols_fuzzy_prefilter"));
+            List<String> before = canonicalSnapshot(connection);
+
+            SchemaMigrator.migrate(connection);
+
+            assertTrue(indexNames(connection, "symbols").contains("idx_symbols_fuzzy_prefilter"));
+            assertEquals(2, indexColumns(connection, "idx_symbols_fuzzy_prefilter").size());
+            assertTrue(indexNames(connection, "symbols").contains("idx_symbols_file_fuzzy_prefilter"));
+            assertEquals(before, canonicalSnapshot(connection));
+            assertEquals("READY", projectStatus(connection));
+            assertEquals(7L, projectGeneration(connection));
+            assertTrue(appliedVersions(connection).contains(17));
         }
     }
 
@@ -151,9 +191,39 @@ class SchemaMigratorFileIndexUpgradeTest {
             }
         }
         populate(connection);
+        markLaterInvalidationsApplied(connection, lastVersion);
+    }
+
+    /**
+     * Enregistre comme déjà appliquées, sans les exécuter, les migrations d'invalidation postérieures
+     * à {@code lastVersion} (V018 et V019 : bornes des jetons à préfixe) : elles repassent les
+     * projets en {@code NOT_INDEXED} par construction, alors que ces tests isolent les migrations d'index.
+     * L'empreinte vide est complétée par le migrateur sans réappliquer le script. Une migration
+     * {@code __invalidate_} ne touche que les générations et le statut des projets, jamais le
+     * schéma : sinon ce raccourci masquerait son effet sur les index.
+     */
+    private static void markLaterInvalidationsApplied(Connection connection, int lastVersion)
+            throws SQLException, IOException {
+        try (PreparedStatement insert = connection.prepareStatement(
+                "INSERT INTO schema_migrations(version, script_name, applied_at) VALUES (?, ?, ?)")) {
+            for (Map.Entry<Integer, Path> migration : migrationsUpTo(Integer.MAX_VALUE, false).entrySet()) {
+                String name = migration.getValue().getFileName().toString();
+                if (migration.getKey() <= lastVersion || !name.contains("__invalidate_")) {
+                    continue;
+                }
+                insert.setInt(1, migration.getKey());
+                insert.setString(2, "db/migration/" + name);
+                insert.setString(3, "2026-01-01T00:00:00Z");
+                insert.executeUpdate();
+            }
+        }
     }
 
     private static Map<Integer, Path> migrationsUpTo(int lastVersion) throws IOException {
+        return migrationsUpTo(lastVersion, true);
+    }
+
+    private static Map<Integer, Path> migrationsUpTo(int lastVersion, boolean complete) throws IOException {
         Map<Integer, Path> migrations = new TreeMap<>();
         try {
             Path directory = Path.of(Objects.requireNonNull(
@@ -170,7 +240,9 @@ class SchemaMigratorFileIndexUpgradeTest {
         } catch (java.net.URISyntaxException exception) {
             throw new IOException(exception);
         }
-        assertEquals(lastVersion, migrations.size(), "migrations V001 à V" + lastVersion);
+        if (complete) {
+            assertEquals(lastVersion, migrations.size(), "migrations V001 à V" + lastVersion);
+        }
         return migrations;
     }
 
@@ -195,6 +267,45 @@ class SchemaMigratorFileIndexUpgradeTest {
                         + ", 'USES', 'demo.F" + file + "', 'demo.External" + file + "', 0.5, 'scip')");
             }
         }
+    }
+
+    /** Analyses en attente d'une indexation interrompue entre deux flushs. */
+    private static void populateStaged(Connection connection) throws SQLException {
+        try (Statement statement = connection.createStatement()) {
+            for (int file = 1; file <= 2; file++) {
+                statement.executeUpdate("INSERT INTO index_staged_files(id, project_id, relative_path, language, "
+                        + "size_bytes, content_hash, modified_at, estimated_tokens, category) VALUES ("
+                        + file + ", '" + PROJECT_ID + "', 'src/Staged" + file + ".java', 'java', 10, 'staged"
+                        + file + "', '2026-01-02T00:00:00Z', 5, 'SOURCE')");
+                statement.executeUpdate("INSERT INTO index_staged_symbols(staged_file_id, kind, name, "
+                        + "qualified_name, signature, start_line, end_line, source_provider) VALUES (" + file
+                        + ", 'CLASS', 'Staged" + file + "', 'demo.Staged" + file + "', 'class Staged" + file
+                        + "', 1, 2, 'javaparser')");
+                statement.executeUpdate("INSERT INTO index_staged_relations(staged_file_id, kind, source_ref, "
+                        + "target_ref, confidence, source_provider) VALUES (" + file + ", 'IMPORTS', 'src/Staged"
+                        + file + ".java', 'demo.Target" + file + "', 1.0, 'javaparser')");
+            }
+        }
+    }
+
+    private static List<String> stagedSnapshot(Connection connection) throws SQLException {
+        List<String> snapshot = new ArrayList<>();
+        for (String table : List.of("index_staged_files", "index_staged_symbols", "index_staged_relations")) {
+            StringBuilder rows = new StringBuilder();
+            try (Statement statement = connection.createStatement();
+                 ResultSet resultSet = statement.executeQuery("SELECT * FROM " + table + " ORDER BY id")) {
+                int columns = resultSet.getMetaData().getColumnCount();
+                while (resultSet.next()) {
+                    for (int column = 1; column <= columns; column++) {
+                        rows.append(resultSet.getObject(column)).append('|');
+                    }
+                    rows.append('\n');
+                }
+            }
+            assertFalse(rows.isEmpty(), table + " doit contenir des analyses en attente");
+            snapshot.add(rows.toString());
+        }
+        return snapshot;
     }
 
     // --- Lecture du schéma ------------------------------------------------------------------

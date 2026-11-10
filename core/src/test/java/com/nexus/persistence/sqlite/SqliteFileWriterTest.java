@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Chemin d'écriture par fichier : identifiant par RETURNING et instructions préparées par transaction. */
+/** Publication des analyses en attente : identifiant par RETURNING et instructions préparées par transaction. */
 class SqliteFileWriterTest {
 
     /** Plus d'un lot complet de 128 lignes, pour exercer l'instruction pleine et l'instruction de fin. */
@@ -68,12 +68,12 @@ class SqliteFileWriterTest {
         try (Connection connection = database.openConnection()) {
             connection.setAutoCommit(false);
             insertProject(connection, projectId);
-            SqliteFileWriter.writeChanges(connection, projectId, updates(3, "first"), Set.of());
+            stageAndPublish(connection, connection, projectId, updates(3, "first"));
             connection.commit();
             List<Long> identifiers = fileIds(connection, projectId);
             assertEquals(3, identifiers.size());
 
-            SqliteFileWriter.writeChanges(connection, projectId, updates(3, "second"), Set.of());
+            stageAndPublish(connection, connection, projectId, updates(3, "second"));
             connection.commit();
 
             assertEquals(identifiers, fileIds(connection, projectId));
@@ -96,12 +96,19 @@ class SqliteFileWriterTest {
             connection.setAutoCommit(false);
             insertProject(connection, projectId);
             Connection counting = recordingConnection(connection, prepared);
-            SqliteFileWriter.writeChanges(counting, projectId, updates(fileCount, "file"), Set.of());
+            stageAndPublish(connection, counting, projectId, updates(fileCount, "file"));
             connection.commit();
             assertEquals((long) fileCount * SYMBOLS_PER_FILE, count(connection, "symbols"));
             assertEquals((long) fileCount * RELATIONS_PER_FILE, count(connection, "symbol_relations"));
         }
         return prepared;
+    }
+
+    /** Met les analyses en attente puis les publie ; seule la publication passe par {@code publishing}. */
+    private static void stageAndPublish(Connection connection, Connection publishing, UUID projectId,
+            List<IndexedFileUpdate> updates) throws Exception {
+        SqliteIndexStaging.stage(connection, projectId, updates);
+        SqliteFileWriter.writeStagedChanges(publishing, projectId, Set.of());
     }
 
     /** Enveloppe une connexion pour enregistrer le SQL de chaque {@code prepareStatement}. */

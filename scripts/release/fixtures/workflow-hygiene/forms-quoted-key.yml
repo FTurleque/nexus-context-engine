@@ -1,0 +1,8 @@
+# Fixture négative : clé "runs-on" citée, sans timeout-minutes.
+name: fixture
+on: workflow_dispatch
+jobs:
+  quoted:
+    "runs-on": ubuntu-24.04
+    steps:
+      - run: echo quoted

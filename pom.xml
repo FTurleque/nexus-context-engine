@@ -6,7 +6,7 @@
 
     <groupId>io.github.fturleque</groupId>
     <artifactId>nexus-context-engine-parent</artifactId>
-    <version>0.2.0-rc.3</version>
+    <version>0.2.0</version>
     <packaging>pom</packaging>
     <name>NEXUS Context Engine Reactor</name>
     <description>Reactor et gouvernance de build communs au cœur NEXUS et à ses adaptateurs optionnels.</description>
@@ -33,7 +33,7 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <!-- Horodatage des entrées des JAR et du ZIP de distribution (build reproductible).
              Mis à jour avec la version à chaque release : docs/developer/release-and-recovery.md. -->
-        <project.build.outputTimestamp>2026-11-09T00:00:00Z</project.build.outputTimestamp>
+        <project.build.outputTimestamp>2026-11-10T00:00:00Z</project.build.outputTimestamp>
         <argLine></argLine>
         <nexus.runtime.nativeAccessArg>--enable-native-access=ALL-UNNAMED</nexus.runtime.nativeAccessArg>
         <nexus.coverage.line.minimum>0.65</nexus.coverage.line.minimum>
@@ -43,7 +43,7 @@
         <javaparser.version>3.28.2</javaparser.version>
         <sqlite-jdbc.version>3.54.1.0</sqlite-jdbc.version>
         <lucene.version>10.6.0</lucene.version>
-        <jgit.version>7.8.0.202609011348-r</jgit.version>
+        <jgit.version>7.8.1.202611041320-r</jgit.version>
         <jackson.version>2.22.4</jackson.version>
         <micrometer.version>1.17.2</micrometer.version>
         <snakeyaml-engine.version>3.2</snakeyaml-engine.version>
@@ -69,7 +69,7 @@
         <maven.antrun-plugin.version>3.2.0</maven.antrun-plugin.version>
         <cyclonedx-maven-plugin.version>2.9.3</cyclonedx-maven-plugin.version>
         <jacoco.version>0.8.16</jacoco.version>
-        <license-maven-plugin.version>2.7.1</license-maven-plugin.version>
+        <license-maven-plugin.version>2.8.0</license-maven-plugin.version>
     </properties>
 
     <dependencyManagement>

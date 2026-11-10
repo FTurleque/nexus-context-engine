@@ -74,6 +74,8 @@ for path in (
     "core/src/main/resources/db/migration/V009__invalidate_quoted_secret_indexes.sql",
     "core/src/main/resources/db/migration/V010__invalidate_scalar_secret_indexes.sql",
     "core/src/main/resources/db/migration/V011__invalidate_secret_format_indexes.sql",
+    "core/src/main/resources/db/migration/V018__invalidate_sk_token_bound_indexes.sql",
+    "core/src/main/resources/db/migration/V019__invalidate_token_context_bound_indexes.sql",
     "core/src/test/java/com/nexus/application/NexusApplicationSemanticConfigurationTest.java",
 ):
     if not (root / path).is_file():
@@ -84,7 +86,7 @@ for stale in ("<sourceDirectory>", "<testSourceDirectory>", "../src/main", "../s
         raise SystemExit(f"core layout drift: core/pom.xml still contains {stale!r}")
 
 migrations = sorted((root / "core/src/main/resources/db/migration").glob("V*.sql"))
-if not migrations or migrations[-1].name != "V015__index_symbols_by_file_for_fuzzy_search.sql":
+if not migrations or migrations[-1].name != "V019__invalidate_token_context_bound_indexes.sql":
     raise SystemExit(f"schema contract drift: latest migration is {migrations[-1].name if migrations else 'none'}")
 require("docs/developer/release-and-recovery.md", "V005__enforce_symbol_range_constraints.sql")
 require("docs/developer/release-and-recovery.md", "V006__invalidate_unredacted_lexical_indexes.sql")
@@ -235,7 +237,7 @@ for path in (
     require(path, "NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA")
 
 require("core/src/main/java/com/nexus/security/SensitiveContentRedactor.java", "[REDACTED]")
-require("core/src/main/java/com/nexus/search/semantic/SemanticIndexingService.java", "CONTENT_PROFILE_VERSION = 5")
+require("core/src/main/java/com/nexus/search/semantic/SemanticIndexingService.java", "CONTENT_PROFILE_VERSION = 7")
 for path in (
     "README.md",
     "docs/architecture/overview.md",
@@ -245,11 +247,11 @@ for path in (
     "docs/developer/release-and-recovery.md",
     "docs/developer/semantic-search.md",
 ):
-    require(path, "content-v5")
+    require(path, "content-v7")
 
-# AUD-SEC-01/AUD-SEC-02: redaction policy v6, V011 invalidation, per-file exclusion.
-require("core/src/main/java/com/nexus/security/SensitiveContentRedactor.java", '"secret-redaction-v6"')
-require("docs/developer/secret-redaction.md", "secret-redaction-v6")
+# AUD-SEC-01/AUD-SEC-02/AUD-SEC-20: redaction policy v8, V011, V018 and V019 invalidation, per-file exclusion.
+require("core/src/main/java/com/nexus/security/SensitiveContentRedactor.java", '"secret-redaction-v8"')
+require("docs/developer/secret-redaction.md", "secret-redaction-v8")
 require("docs/developer/secret-redaction.md", "INDEX_REDACTION_LIMIT")
 require("docs/developer/secret-redaction.md", "SecretRedactionProbeTest")
 require("docs/developer/release-and-recovery.md", "V011__invalidate_secret_format_indexes.sql")
@@ -257,6 +259,10 @@ require("docs/developer/release-and-recovery.md", "V012__index_symbol_relations_
 require("docs/developer/release-and-recovery.md", "V013__drop_redundant_prefix_indexes.sql")
 require("docs/developer/release-and-recovery.md", "V014__index_staged_analyses.sql")
 require("docs/developer/release-and-recovery.md", "V015__index_symbols_by_file_for_fuzzy_search.sql")
+require("docs/developer/release-and-recovery.md", "V016__index_staged_files_by_project.sql")
+require("docs/developer/release-and-recovery.md", "V017__index_symbols_for_dominant_project_fuzzy_search.sql")
+require("docs/developer/release-and-recovery.md", "V018__invalidate_sk_token_bound_indexes.sql")
+require("docs/developer/release-and-recovery.md", "V019__invalidate_token_context_bound_indexes.sql")
 require("docs/developer/current-limitations.md", "INDEX_REDACTION_LIMIT")
 
 # NXA4 + audit follow-up: lexical content is redacted before Lucene tokenization.
@@ -576,14 +582,27 @@ SHARED_SCRIPT_FUNCTION = re.compile(
     r"^\s*function\s+(Invoke-Maven|Resolve-AbsolutePath|Invoke-NexusJson|Select-MavenCommand)\b",
     re.IGNORECASE,
 )
-MAVEN_TOKEN = r"(?:\.\.?[\\/])?(?:[\w$:.\\/-]*[\\/])?mvnw?(?:\.cmd)?"
+MAVEN_TOKEN = r"(?:\.\.?[\\/])?(?:[\w${}:.\\/-]*[\\/])?mvnw?(?:\.cmd)?"
 DIRECT_MAVEN_CALL = (
     re.compile(r"&\s*['\"]?" + MAVEN_TOKEN + r"['\"]?(?:\s|$)", re.IGNORECASE),
     re.compile(r"^\s*" + MAVEN_TOKEN + r"\s", re.IGNORECASE),
     re.compile(r"Get-Command\s+(?:-Name\s+)?['\"]?mvn", re.IGNORECASE),
     re.compile(r"Start-Process\b.*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE),
-    re.compile(r"Join-Path\b.*['\"](?:\.\.[\\/])*mvnw?(?:\.cmd)?['\"]", re.IGNORECASE),
+    re.compile(r"Join-Path\b.*['\"\s\\/](?:\.\.[\\/])*mvnw?(?:\.cmd)?(?:['\")\s]|$)", re.IGNORECASE),
+    # Indirection (AUD-QUA-21): a variable holding exactly a Maven command name,
+    # cmd /c (options and $env:ComSpec included), and Invoke-Expression/iex of a
+    # string that names Maven. A message that quotes the wrapper inside a sentence
+    # is not a whole-string literal; a message naming both cmd /c and mvn is
+    # flagged and belongs in MAVEN_CALL_EXCEPTIONS.
+    re.compile(r"\$\{?[\w:]+\}?\s*=\s*(['\"])" + MAVEN_TOKEN + r"\1", re.IGNORECASE),
+    re.compile(
+        r"(?:\bcmd(?:\.exe)?['\"]?|\$env:ComSpec)(?:\s+/\w+)*\s+/c\b.*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE
+    ),
+    re.compile(r"(?:\bInvoke-Expression\b|(?<![\w-])iex\b).*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE),
 )
+# Explicit exceptions: (script path, exact trimmed line). Each entry must still
+# match a line of its script, so a stale exception fails the contract.
+MAVEN_CALL_EXCEPTIONS: set[tuple[str, str]] = set()
 
 
 def powershell_maven_violations(relative: str, source: str) -> list[str]:
@@ -594,6 +613,8 @@ def powershell_maven_violations(relative: str, source: str) -> list[str]:
             continue
         if SHARED_SCRIPT_FUNCTION.search(code):
             violations.append(f"{relative}:{number}: redefines a NexusScript.psm1 function")
+        if (relative, code.strip()) in MAVEN_CALL_EXCEPTIONS:
+            continue
         if any(pattern.search(code) for pattern in DIRECT_MAVEN_CALL):
             violations.append(f"{relative}:{number}: calls Maven directly instead of Invoke-Maven")
     return violations
@@ -617,6 +638,10 @@ for script in active_powershell_scripts():
     )
 if maven_violations:
     raise SystemExit("powershell maven contract drift:\n" + "\n".join(maven_violations))
+for excepted_script, excepted_line in sorted(MAVEN_CALL_EXCEPTIONS):
+    lines = [line.strip() for line in text(excepted_script).splitlines()]
+    if excepted_line not in lines:
+        raise SystemExit(f"powershell maven contract drift: stale exception {excepted_script}: {excepted_line}")
 for label, fixture in (
     ("installed mvn call", "Push-Location $root\n& mvn @arguments\n"),
     ("installed mvn.cmd call", "    & mvn.cmd -q package\n"),
@@ -627,6 +652,17 @@ for label, fixture in (
     ("installed lookup", "$m = Get-Command mvn -ErrorAction SilentlyContinue\n"),
     ("local Invoke-Maven", "function Invoke-Maven {\n}\n"),
     ("local Resolve-AbsolutePath", "function Resolve-AbsolutePath {\n}\n"),
+    ("command in a variable", '$m = "mvn"; & $m clean install\n'),
+    ("wrapper in a variable", "    $wrapper = '.\\mvnw.cmd'\n"),
+    ("cmd /c", "cmd /c mvn clean install\n"),
+    ("cmd /d /c", "cmd /d /c mvn verify\n"),
+    ("ComSpec", "& $env:ComSpec /c mvn verify\n"),
+    ("braced root in a variable", '$m = "${root}/mvnw"\n'),
+    ("braced variable name", "${m} = 'mvn'\n"),
+    ("unquoted Join-Path", "$m = Join-Path $root mvnw.cmd\n"),
+    ("cmd.exe /c", "& cmd.exe /c \"mvnw.cmd -B verify\"\n"),
+    ("Invoke-Expression", 'Invoke-Expression "mvn clean install"\n'),
+    ("iex", "iex \"$PSScriptRoot\\..\\mvnw.cmd test\"\n"),
 ):
     if not powershell_maven_violations(f"fixture/{label}.ps1", fixture):
         raise SystemExit(f"powershell maven contract self-test: {label} was not detected")
@@ -634,6 +670,8 @@ for label, fixture in (
     ("module call", "Invoke-Maven -Arguments @('-q', 'package')\n"),
     ("comment", "# & mvn clean install\n"),
     ("message", 'Write-Error "Lancez d\'abord : .\\\\mvnw.cmd clean package"\n'),
+    ("message in a variable", '$hint = "Lancez d\'abord : .\\\\mvnw.cmd clean package"\n'),
+    ("test fixture name", "Write-FakeMaven -Directory $root -BaseName 'mvnw' -VersionExitCode 0\n"),
 ):
     if powershell_maven_violations(f"fixture/{label}.ps1", fixture):
         raise SystemExit(f"powershell maven contract self-test: {label} was rejected")
@@ -659,14 +697,30 @@ PY
 # also reject its negative fixture.
 HYGIENE="scripts/release/workflow_hygiene.py"
 HYGIENE_FIXTURES="scripts/release/fixtures/workflow-hygiene"
-for check in inputs timeouts runners; do
-  python3 "$HYGIENE" "$check" .github/workflows
+for check in forms inputs timeouts runners; do
+  python3 "$HYGIENE" "$check" .github/workflows .github/actions
+done
+# Valid forms that must stay accepted: defaults.run as a mapping, env: beside a run: block.
+for check in pins forms inputs timeouts; do
+  python3 "$HYGIENE" "$check" "$HYGIENE_FIXTURES/valid-defaults-and-env.yml" >/dev/null
 done
 # A fixture counts as rejected only with exit code 1 and the message of its rule.
 for case in \
+  "forms|forms-flow-mapping-job.yml|forms-flow-mapping-job.yml:9: unsupported YAML form: job 'b' is not a block mapping" \
+  "forms|forms-quoted-key.yml|forms-quoted-key.yml:6: unsupported YAML form: quoted key 'runs-on'" \
+  "forms|forms-run-plain-next-line.yml|forms-run-plain-next-line.yml:14: unsupported YAML form: run: followed by a plain scalar" \
+  "forms|forms-flow-step.yml|forms-flow-step.yml:13: unsupported YAML form: flow collection" \
+  "forms|forms-anchor-alias.yml|forms-anchor-alias.yml:14: unsupported YAML form: anchor, alias or merge key" \
+  "forms|forms-run-plain-continuation.yml|forms-run-plain-continuation.yml:13: unsupported YAML form: run: plain scalar continued" \
+  "forms|forms-run-quoted-continuation.yml|forms-run-quoted-continuation.yml:13: unsupported YAML form: run: quoted scalar continued" \
+  "pins|forms-flow-step.yml|forms-flow-step.yml:13: unsupported YAML form: flow collection" \
+  "inputs|inputs-format-braces.yml|inputs-format-braces.yml:13: an input is interpolated" \
+  "inputs|inputs-nested-action|inputs-nested-action/group/tool/action.yml:12: an input is interpolated" \
   "inputs|inputs-in-run.yml|interpolated inside a run" \
   "inputs|inputs-inline-run.yml|interpolated inside a run" \
   "inputs|inputs-event-inputs.yml|interpolated inside a run" \
+  "inputs|inputs-github-script.yml|inputs-github-script.yml:17: an input is interpolated" \
+  "inputs|inputs-composite-action|inputs-composite-action/action.yml:14: an input is interpolated" \
   "timeouts|timeout-missing.yml|no timeout-minutes" \
   "runners|runners/scale-benchmark.yml|unpinned image"; do
   IFS='|' read -r check fixture message <<< "$case"
@@ -676,6 +730,29 @@ for case in \
   set -e
   if [[ "$status" -ne 1 ]] || ! grep -q "$message" <<< "$output"; then
     echo "workflow hygiene fixture $fixture was not rejected by the $check check for '$message' (exit $status)" >&2
+    exit 1
+  fi
+done
+
+# Coverage floors (coverage-gates): every JaCoCo floor has a published reference
+# measure and sits at most 3 points under it. The build reports are checked by
+# NEXUS CI after the Linux and Windows reactor builds; here only the pom.xml files and the
+# page are compared, and each negative fixture must be rejected by its own rule.
+COVERAGE_FLOORS="scripts/release/coverage_floors.py"
+COVERAGE_FIXTURES="scripts/release/fixtures/coverage-floors"
+python3 "$COVERAGE_FLOORS" --skip-reports
+for case in \
+  "floor-too-low|points under the reference measure" \
+  "floor-without-measure|has no row in the reference measure table" \
+  "rule-typo|com.nexus.api.NexusRestTransportPolicyTypo: the rule matches no class"; do
+  IFS='|' read -r fixture message <<< "$case"
+  set +e
+  output="$(python3 "$COVERAGE_FLOORS" --root "$COVERAGE_FIXTURES/$fixture" --modules adapters/rest-quarkus \
+    --doc coverage.md --platform linux --reports-dir "$COVERAGE_FIXTURES/reports" 2>&1)"
+  status=$?
+  set -e
+  if [[ "$status" -ne 1 ]] || ! grep -qF "$message" <<< "$output"; then
+    echo "coverage floors fixture $fixture was not rejected for '$message' (exit $status)" >&2
     exit 1
   fi
 done
@@ -729,7 +806,7 @@ for dockerfile in ("packaging/docker/Dockerfile", "packaging/docker/Dockerfile.r
         "/opt/nexus/THIRD_PARTY_NOTICES.txt",
         'org.opencontainers.image.source="https://github.com/FTurleque/nexus-context-engine"',
         'org.opencontainers.image.licenses="LicenseRef-NEXUS-Proprietary"',
-        'org.opencontainers.image.revision="${NEXUS_IMAGE_REVISION}"',
+        'org.opencontainers.image.revision="${NEXUS_IMAGE_REVISION',
         'org.opencontainers.image.version="${NEXUS_IMAGE_VERSION}"',
         "HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=6",
         'CMD ["/usr/local/bin/nexus-healthcheck"]',
@@ -798,6 +875,51 @@ for needle in ("Dockerfile.runtime.dockerignore", ".dockerignore", "read_only: t
         fail(f"docs/user/docker-installation.md must mention {needle!r}")
 
 print("docker-image-hardening-contracts=PASS")
+PY
+# --- Sprint 13 : seul le workflow de release publie dans GHCR (AUD-DEP-34) ---
+python3 - <<'PY'
+import re
+from pathlib import Path
+
+
+def fail(message: str) -> None:
+    raise SystemExit(f"ghcr publication contract drift: {message}")
+
+
+for workflow in (".github/workflows/docker-distribution.yml", ".github/workflows/develop-push-docker-distribution.yml"):
+    source = Path(workflow).read_text(encoding="utf-8")
+    for forbidden in ("docker push", "ghcr.io", "docker login", "imagetools create", "--push"):
+        if forbidden in source:
+            fail(f"{workflow} must not publish to GHCR ({forbidden!r})")
+
+# The real barrier: only release.yml may hold the packages: write permission.
+granting = sorted(
+    str(path).replace("\\", "/")
+    for pattern in (".github/workflows/*.yml", ".github/workflows/*.yaml", ".github/actions/**/*.yml", ".github/actions/**/*.yaml")
+    for path in Path(".").glob(pattern)
+    if re.search(r"^\s*packages:\s*write\b", path.read_text(encoding="utf-8"), re.MULTILINE)
+)
+if granting != [".github/workflows/release.yml"]:
+    fail(f"only .github/workflows/release.yml may declare packages: write, found {granting}")
+
+page = "docs/user/docker-installation.md"
+doc = Path(page).read_text(encoding="utf-8")
+match = re.search(r"^## Publication GHCR\s*$(.*?)(?=^## |\Z)", doc, re.MULTILINE | re.DOTALL)
+if not match:
+    fail(f"{page} must keep a '## Publication GHCR' section")
+section = match.group(1)
+latest = section.find("ghcr.io/fturleque/nexus-context-engine:latest")
+if latest < 0:
+    fail(f"{page} must list the GHCR latest tag in '## Publication GHCR'")
+workflows = re.findall(r"\.github/workflows/[\w.-]+\.yml", section[:latest])
+if not workflows or workflows[-1] != ".github/workflows/release.yml":
+    fail(f"{page} must attribute the GHCR <version> and latest tags to .github/workflows/release.yml")
+for sentence in re.split(r"(?<=[.:])\s", section):
+    if "docker-distribution.yml" in sentence and re.search(r"\bpublie\b", sentence) \
+            and "sans rien publier" not in sentence and "ne publie" not in sentence:
+        fail(f"{page} attributes GHCR publication to docker-distribution.yml")
+
+print("ghcr-publication-contracts=PASS")
 PY
 # --- Sprint 11 : documentation SQLite et instruction primaire (AUD-QUA-13, AUD-QUA-03, AUD-PRF-10) ---
 # The FTS5 trigram index shipped by V008 must not be described as a future engine.

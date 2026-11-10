@@ -432,6 +432,82 @@ class CoreArchitectureTest {
                         "[cycles-baseline] nouvelle arête de cycle entre packages : com.nexus.search -> com.nexus.ranking"),
                 CoreArchitectureRules.cycleBaseline(scanFixture().cycleEdges(), new TreeSet<>()));
     }
+
+    @Test
+    void qualifiedSearchNameWithoutImportInRankingFailsTheEmptyBaseline() throws IOException {
+        writeSource("com/nexus/ranking/Ranker.java", """
+                package com.nexus.ranking;
+
+                class Ranker {
+                    Class<?> service() {
+                        return com.nexus.search.SearchService.class;
+                    }
+                }
+                """);
+        writeSource("com/nexus/search/SearchService.java", """
+                package com.nexus.search;
+
+                import com.nexus.ranking.Ranker;
+
+                class SearchService {
+                }
+                """);
+
+        assertEquals(List.of(
+                        "[cycles-baseline] nouvelle arête de cycle entre packages : com.nexus.ranking -> com.nexus.search",
+                        "[cycles-baseline] nouvelle arête de cycle entre packages : com.nexus.search -> com.nexus.ranking"),
+                CoreArchitectureRules.cycleBaseline(scanFixture().cycleEdges(), new TreeSet<>()));
+    }
+
+    @Test
+    void qualifiedSearchNameWithoutImportInProjectFailsProjectLeaf() throws IOException {
+        writeSource("com/nexus/project/ProjectId.java", """
+                package com.nexus.project;
+
+                class ProjectId {
+                    void search(Object service) {
+                        com.nexus.search.SearchService typed = (com.nexus.search.SearchService) service;
+                    }
+                }
+                """);
+        writeSource("com/nexus/search/SearchService.java", """
+                package com.nexus.search;
+
+                interface SearchService {
+                }
+                """);
+
+        assertEquals(List.of("[project-feuille] com.nexus.project.ProjectId -> com.nexus.search.SearchService"),
+                CoreArchitectureRules.projectLeaf(scanFixture()));
+    }
+
+    @Test
+    void qualifiedCoreNameInCommentsOrStringsIsNotADependency() throws IOException {
+        writeSource("com/nexus/project/ProjectId.java", """
+                package com.nexus.project;
+
+                /**
+                 * Cité par {@link com.nexus.search.SearchService}, sans en dépendre.
+                 */
+                class ProjectId {
+                    // com.nexus.search.SearchService dans un commentaire ne compte pas.
+                    String text = "com.nexus.search.SearchService";
+                }
+                """);
+        writeSource("com/nexus/search/SearchService.java", """
+                package com.nexus.search;
+
+                import com.nexus.project.ProjectId;
+
+                interface SearchService {
+                }
+                """);
+
+        JavaSourceGraph graph = scanFixture();
+        assertEquals(List.of(), CoreArchitectureRules.projectLeaf(graph));
+        assertEquals(new TreeSet<>(), graph.cycleEdges());
+    }
+
     @Test
     void newCycleEdgeFailsTheBaselineAndNamesThePackages() throws IOException {
         writeCycleFixture();

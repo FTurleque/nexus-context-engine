@@ -177,7 +177,7 @@ Les limites REST fédérées réutilisent `ResultLimitPolicy` et `ContextBudgetP
 
 Les blocs privés multilignes conservent leurs séparateurs de lignes après redaction afin de ne pas déplacer les ranges source.
 
-Le profil sémantique est `content-v5`, ce qui rend un index historique incompatible et force sa reconstruction.
+Le profil sémantique est `content-v7`, ce qui rend un index historique incompatible et force sa reconstruction.
 
 ## Ollama
 
@@ -253,14 +253,14 @@ canonique et Lucene reconstructible. Ce découpage ne remplace aucun ADR accept�
 
 ## Frontières vérifiées du cœur
 
-`core/src/test/java/com/nexus/architecture/CoreArchitectureTest.java` ([ARCH-0076](../architecture/adr/ARCH-0076-garder-un-coeur-java-sans-framework-acyclique-et-verifie.md)) lit les sources de `core/src/main/java` sans dépendance de test supplémentaire : déclarations `package` et `import` (dont `import static` et les jokers), plus les noms pleinement qualifiés des préfixes surveillés ; commentaires, chaînes et blocs de texte sont ignorés. Il s'exécute dans la suite par défaut du module `core`.
+`core/src/test/java/com/nexus/architecture/CoreArchitectureTest.java` ([ARCH-0076](../architecture/adr/ARCH-0076-garder-un-coeur-java-sans-framework-acyclique-et-verifie.md)) lit les sources de `core/src/main/java` sans dépendance de test supplémentaire : déclarations `package` et `import` (dont `import static` et les jokers), plus les noms pleinement qualifiés des préfixes surveillés, dont la racine `com.nexus.` ; commentaires, chaînes et blocs de texte sont ignorés. Une dépendance entre packages du cœur compte de la même façon qu'elle soit importée ou écrite par nom pleinement qualifié, pour le graphe des cycles comme pour les règles de sens. Il s'exécute dans la suite par défaut du module `core`.
 
 | Règle | Contrainte |
 |---|---|
 | `core-sans-framework` | aucun type `io.quarkus`, `jakarta`, `javax.ws`, `org.springframework`, `io.modelcontextprotocol` |
 | `lucene-confine` | `org.apache.lucene` seulement dans `com.nexus.search.lucene` et `com.nexus.search.semantic.lucene` |
 | `sqlite-confine` | `org.sqlite` et `java.sql` seulement dans `com.nexus.persistence.sqlite`, plus la liste fermée `SQLITE_EXCEPTIONS` de `CoreArchitectureRules` (`java.sql.SQLException` dans `NexusApplicationFactory`, qui l'enveloppe en `PersistenceException`) |
-| `project-feuille` | `com.nexus.project` n'importe aucun autre package `com.nexus` |
+| `project-feuille` | `com.nexus.project` n'importe ni ne référence par nom qualifié aucun autre package `com.nexus` |
 | `cycles-baseline` | les arêtes de cycle du graphe des packages sont égales à `core/src/test/resources/architecture/package-cycles.txt`, vide ([ARCH-0076](../architecture/adr/ARCH-0076-garder-un-coeur-java-sans-framework-acyclique-et-verifie.md)) : tout cycle échoue |
 | `index-sans-search` | `com.nexus.index` et ses sous-packages, hors `com.nexus.index.service`, n'importent rien de `com.nexus.search` |
 | `context-source-sans-context` | `com.nexus.context.source` et ses sous-packages n'importent aucun type du package `com.nexus.context` (`context.model` reste permis) |
@@ -286,10 +286,11 @@ Spec : [`openspec/specs/core-package-boundaries/spec.md`](../../openspec/specs/c
 | Aucun tag, aucune condition d'activation sur le test ; la configuration Surefire du module ne fixe que le répertoire de travail (`..`), que le test suppose en lisant `core/src/main/java`. | [Existant vérifié] | `core/src/test/java/com/nexus/architecture/CoreArchitectureTest.java:30,41`, `core/pom.xml:62-66` |
 | Dix règles nommées : `core-sans-framework`, `lucene-confine`, `sqlite-confine`, `project-feuille`, `cycles-baseline`, `index-sans-search`, `context-source-sans-context`, `ranking-sans-search`, `search-semantic-sans-ollama`, `getenv-composition-root`. Une violation est rendue `[règle] classe -> nom importé`. | [Existant vérifié] | `core/src/test/java/com/nexus/architecture/CoreArchitectureRules.java:18-27`, `CoreArchitectureTest#getenvOutsideTheCompositionRootFailsGetenvRule` |
 | Le message d'échec est vérifié exactement pour chaque règle de confinement et de sens. | [Existant vérifié] | `CoreArchitectureTest#frameworkImportFailsCoreWithoutFramework`, `#luceneImportOutsideItsPackagesFailsLuceneConfined`, `#jdbcImportInContextFailsSqliteConfined`, `#upwardImportFromProjectFailsProjectLeaf`, `#searchImportFromIndexFailsIndexWithoutSearchButNotFromTheServicePackage`, `#contextImportFromASourceFailsContextSourceWithoutContext`, `#searchImportFromRankingFailsRankingWithoutSearchButNotTheCandidateModel`, `#ollamaImportFromThePortFailsSearchSemanticWithoutOllama` |
-| Une référence pleinement qualifiée sans import compte pour les préfixes surveillés (framework, Lucene, SQLite/JDBC) ; commentaires, chaînes et blocs de texte sont ignorés. | [Existant vérifié] | `CoreArchitectureRules.java:34`, `CoreArchitectureTest#qualifiedLuceneNameWithoutImportFailsLuceneConfined`, `#parserReadsStaticWildcardAndQualifiedNamesAndIgnoresCommentsAndStrings` |
+| Une référence pleinement qualifiée sans import compte pour les préfixes surveillés (framework, Lucene, SQLite/JDBC, `System.getenv` et la racine `com.nexus.`) ; commentaires, chaînes et blocs de texte sont ignorés. | [Existant vérifié] | `CoreArchitectureRules.WATCHED_QUALIFIED_PREFIXES`, `CoreArchitectureTest#qualifiedLuceneNameWithoutImportFailsLuceneConfined`, `#qualifiedSearchNameWithoutImportInProjectFailsProjectLeaf`, `#qualifiedCoreNameInCommentsOrStringsIsNotADependency`, `#parserReadsStaticWildcardAndQualifiedNamesAndIgnoresCommentsAndStrings` |
 | La liste fermée de `sqlite-confine` compte une seule entrée `java.sql.SQLException` : `NexusApplicationFactory`, qui enveloppe l'échec d'ouverture du stockage en `PersistenceException` (cause conservée). `NexusApplication`, `NexusCli` et toute autre classe qui importe `java.sql` échouent. | [Existant vérifié] | `CoreArchitectureRules.java:49-54`, `CoreArchitectureTest#closedSqlExceptionListPassesSqliteConfinedButNothingElse` |
 | La baseline de cycles ne contient plus aucune arête : son fichier ne porte que trois lignes de commentaire, et un test l'exige vide. Le graphe des packages est acyclique. | [Existant vérifié] | `core/src/test/resources/architecture/package-cycles.txt`, `CoreArchitectureTest#cycleBaselineIsEmpty` |
-| Le graphe des packages n'est construit que depuis les `import` (les références pleinement qualifiées vers `com.nexus` n'y entrent pas) ; une arête de cycle est une arête dont les deux extrémités sont dans une même composante de plus d'un package. | [Existant vérifié] | `core/src/test/java/com/nexus/architecture/JavaSourceGraph.java:100-141` |
+| Le graphe des packages est construit depuis les `import` et les références `com.nexus.*` pleinement qualifiées de chaque fichier ; une arête de cycle est une arête dont les deux extrémités sont dans une même composante de plus d'un package. Une classe de `ranking` qui désigne `com.nexus.search.SearchService` sans import ferme un cycle avec `search`. | [Existant vérifié] | `JavaSourceGraph#packageGraph`, `CoreArchitectureTest#qualifiedSearchNameWithoutImportInRankingFailsTheEmptyBaseline` |
+| Avec les références qualifiées, le graphe courant reste acyclique et aucune règle de sens n'échoue. Les références `com.nexus.*` qualifiées du code de production vont de `context`, `exposure` et `application` vers `security`, `project`, `index` et `context.model`, de `search` vers `project` et de `security` vers `paths` ; `cli` importe `PublicDiagnosticPolicy` de `security`, comme `context` et `exposure`. | [Existant vérifié] | `CoreArchitectureTest#packageCyclesMatchTheBaseline`, `#projectPackageIsALeaf`, `core/src/main/java/com/nexus/cli/CliRenderer.java` |
 | La baseline doit être triée et sans doublon (test dédié). Une arête nouvelle et une entrée devenue fausse sont deux échecs distincts ; un cycle `ranking` ↔ `search` contre la baseline vide échoue en nommant les deux arêtes. | [Existant vérifié] | `CoreArchitectureTest#cycleBaselineIsSorted`, `#newCycleEdgeFailsTheBaselineAndNamesThePackages`, `#staleBaselineEntryFailsAndAsksForItsRemoval`, `#rankingImportingSearchFailsTheEmptyBaselineAndNamesBothPackages`, `CoreArchitectureRules.java:82-98` |
 | `PublicContextPolicy` est dans `com.nexus.exposure` et aucun fichier de `com.nexus.security` n'importe `com.nexus.context` ; les imports `com.nexus` de `security` sont `config` et `paths`. | [Existant vérifié] | `core/src/main/java/com/nexus/exposure/PublicContextPolicy.java:1-14`, relevé des `import` de `core/src/main/java/com/nexus/security/` au HEAD |
 | Le package `com.nexus.project` n'importe aucun autre package `com.nexus` au HEAD (relevé des imports). | [Existant vérifié] | relevé des `import` de `core/src/main/java/com/nexus/project/`, règle `CoreArchitectureRules.java:73-76` |
@@ -388,8 +389,10 @@ Vue organigramme (non UML) — comment le test `cycles-baseline` décide-t-il de
 
 ```mermaid
 flowchart TD
-    S["sources de core/src/main/java"] --> P["JavaSourceGraph.scan : package et imports de chaque fichier"]
-    P --> G["graphe des packages com.nexus, sans arête vers soi-même"]
+    S["sources de core/src/main/java"] --> P["JavaSourceGraph.scan : package, imports et références com.nexus.* qualifiées, hors commentaires et chaînes"]
+    P --> U["union des noms référencés par fichier"]
+    U --> R["règles de sens : project-feuille, index-sans-search, ranking-sans-search, ..."]
+    U --> G["graphe des packages com.nexus, sans arête vers soi-même"]
     G --> C["composantes fortement connexes"]
     C --> E["arêtes de cycle : extrémités dans la même composante de plus d'un package"]
     E --> D{"comparaison avec package-cycles.txt (vide)"}
@@ -408,7 +411,7 @@ Les deux échecs peuvent survenir ensemble. Une baseline non triée ou avec doub
 - [Écart] Le design du sprint 7 range `ResultLimitPolicy` et `SearchDocument` dans un même package feuille. Impossible : `SearchDocument` dépend de `CodeSymbol` et `FileCategory` (`index`), que `index` ne peut pas importer en retour. `SearchDocument` est donc dans `index` et `ResultLimitPolicy` dans `config`.
 - [Écart] Le design du sprint 7 laissait le package du port sémantique « à fixer » ; le port `SemanticIndexing` est dans `index`, avec `SearchDocument` qu'il manipule.
 - [Écart] La baseline n'a pas été supprimée : le fichier reste, vide, et la règle `cycles-baseline` l'applique ; la spec du changement dit « sans baseline de cycles tolérés ». Ajouter une ligne contredit [ARCH-0076](../architecture/adr/ARCH-0076-garder-un-coeur-java-sans-framework-acyclique-et-verifie.md) et se voit dans le diff.
-- Limite : seuls les `import` alimentent le graphe des packages. Une dépendance `com.nexus.*` écrite en nom pleinement qualifié sans import échappe aux règles `project-feuille`, `cycles-baseline` et aux quatre règles de sens ; la détection des noms qualifiés ne vaut que pour les préfixes framework, Lucene et SQLite/JDBC (`JavaSourceGraph.java:100-114`, `CoreArchitectureRules.java:34`).
+- Limite : l'extraction des noms qualifiés est textuelle. Elle retient tout jeton qui commence par un préfixe surveillé et le rattache au plus long package connu ; elle ne résout pas les types ni les membres.
 - Limite : la baseline est une égalité d'ensembles, pas un plafond. Ajouter une arête dans une composante qui contient déjà ses deux extrémités échoue aussi.
 - Limite : les règles de sens couvrent quatre sens ; les autres dépendances hors cycles (par exemple `exposure` vers `context`) ne sont pas contrôlées.
 
@@ -416,7 +419,6 @@ Les deux échecs peuvent survenir ensemble. Une baseline non triée ou avec doub
 
 - [Question] Faut-il une règle automatisée pour la dernière exigence (`security` sans `context`, politique d'exposition hors de `security`) ?
 - [Question] Faut-il supprimer le fichier de baseline et la règle `cycles-baseline` au profit d'une règle d'acyclicité sans baseline, comme l'énonce la spec du sprint 7 ?
-- [Proposition] Faire détecter par l'analyseur les noms `com.nexus.*` pleinement qualifiés pour que `project-feuille`, `cycles-baseline` et les règles de sens ne dépendent plus de l'usage d'un import.
 
 ## OpenSpec user-facing-error-language
 

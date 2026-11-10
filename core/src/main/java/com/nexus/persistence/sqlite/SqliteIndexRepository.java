@@ -5,7 +5,6 @@ import com.nexus.index.IndexRepository;
 import com.nexus.index.IndexStatistics;
 import com.nexus.index.IndexWriteSession;
 import com.nexus.index.IndexedFile;
-import com.nexus.index.IndexedFileUpdate;
 import com.nexus.index.IndexedSymbol;
 import com.nexus.index.SymbolRelation;
 
@@ -93,11 +92,6 @@ public final class SqliteIndexRepository implements IndexRepository {
     @Override
     public List<SymbolRelation> searchRelations(UUID projectId, String symbol, int limit) {
         return relationQueries.searchRelations(projectId, symbol, limit);
-    }
-
-    @Override
-    public void applyChanges(UUID projectId, List<IndexedFileUpdate> updates, Set<String> removedPaths) {
-        fileWriter.applyChanges(projectId, updates, removedPaths);
     }
 
     @Override

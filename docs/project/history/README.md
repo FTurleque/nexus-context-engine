@@ -16,3 +16,5 @@ Résultats d'itération, de benchmark et de qualification, figés à leur date. 
 | heap, transaction d'écriture et hachage du pipeline d'indexation (2026-11-07) | [Mesures du pipeline d'indexation](indexing-heap-and-hashing-measures-2026-11-07.md) |
 | mise en attente des analyses et writers Lucene par indexation (2026-11-07) | [Mesures après mise en attente](indexing-staged-writes-measures-2026-11-07.md) |
 | répétition de release `0.2.0-rc.2` et attestations (2026-11-08) | [Répétition de release 0.2.0-rc.2](release-rehearsal-0.2.0-rc.2-2026-11-08.md) |
+| recherche approchée d'un projet seul et pagination de la mise en attente (2026-11-10) | [Recherche approchée d'un projet seul](recherche-approchee-projet-seul-2026-11-10.md) |
+| préflight GHCR de la release `0.2.0` : origine des tags et versions d'août supprimées (2026-11-10) | [Préflight GHCR 0.2.0](preflight-ghcr-0.2.0-2026-11-10.md) |

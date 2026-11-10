@@ -21,7 +21,8 @@ Les workflows versionnés conservent en plus une défense en profondeur sur les 
 - Windows : Java 21.0.12 épinglé (Temurin `21.0.12+101.0.LTS`, version livrée), tests des hooks Claude Code et du contrat token REST, puis qualification locale `scripts/validate-phase-6.ps1` ; en CI (`CI` ou `GITHUB_ACTIONS` définie), ce script échoue si le Maven Wrapper vérifié échoue, sans repli sur le Maven du runner ;
 - Linux : Java 21, **Maven 3.10.0**, reactor complet, tests, distribution, JaCoCo, SBOM et notices ;
 - vérification explicite des ancres d'intégrité Maven/JDT LS et des autres outils de qualification versionnés ;
-- vérification des contrats documentaires machine-vérifiables **avant** le reactor.
+- vérification des contrats documentaires machine-vérifiables **avant** le reactor ;
+- job `Archgate ADR rules` : règles `docs/architecture/adr/*.rules.ts` exécutées par `archgate check` avec la version épinglée et vérifiée d'Archgate (section [OpenSpec adr-rule-enforcement](#openspec-adr-rule-enforcement)).
 
 Le profil Maven `ci-strict-specified-tests` s'active automatiquement lorsque `CI=true`. Il force alors `surefire.failIfNoSpecifiedTests=true` : toute commande CI ciblée avec `-Dtest=...` échoue si le sélecteur ne correspond à aucun test. Hors CI, la valeur reste `false` afin de préserver les scripts développeur historiques qui sélectionnent un test `core` depuis le reactor multi-module.
 
@@ -31,7 +32,7 @@ Le gate documentaire contrôle notamment :
 
 - listener management `127.0.0.1:9000` séparé du listener API ;
 - politique Ollama distante et opt-in HTTP ;
-- redaction de secrets + profil `content-v5` ;
+- redaction de secrets + profil `content-v7` ;
 - JDT LS : confiance racine exacte + framing 16 MiB / 64 KiB / 8 KiB / 256 messages ;
 - maximum 8 tâches externes actives et circuit-breaker linéarisé ;
 - métadonnées Code Intelligence bornées avant canonicalisation ;
@@ -46,10 +47,12 @@ Le gate documentaire contrôle notamment :
 
 ## Hygiène des workflows
 
-`scripts/release/workflow_hygiene.py` vérifie les workflows de `.github/workflows/` ; chaque contrôle rejette aussi une fixture négative de `scripts/release/fixtures/workflow-hygiene/`.
+`scripts/release/workflow_hygiene.py` vérifie les workflows de `.github/workflows/` et les actions composites `.github/actions/*/action.yml` ; chaque contrôle rejette aussi une fixture négative de `scripts/release/fixtures/workflow-hygiene/`.
 
-- **Épinglage** (`test-tool-integrity-anchors.sh`) : chaque `uses:` externe est épinglé par SHA complet suivi de `# vX.Y.Z` ; un même SHA porte le même commentaire partout ; une action n'a qu'une version majeure dans l'ensemble des workflows. La concordance avec les tags amont n'est pas vérifiée en CI : elle se vérifie à la main lors d'une montée, par `git ls-remote --tags` (skill `nexus-dependency-bump`). Les workflows réutilisables OSV sont épinglés sur le SHA de **commit** d'un tag publié, jamais sur le SHA de l'objet tag.
-- **Inputs** (`test-operational-doc-contracts.sh`) : aucune expression `${{ inputs.` dans un bloc `run:` ; la valeur passe par une variable d'environnement de l'étape (`REQUESTED: ${{ inputs.profile }}`), puis la validation `ci|full` s'applique à la variable.
+- **Épinglage** (`test-tool-integrity-anchors.sh`) : chaque `uses:` externe est épinglé par SHA complet suivi de `# vX.Y.Z` ; un même SHA porte le même commentaire partout ; une action n'a qu'une version majeure dans l'ensemble des workflows. Les workflows réutilisables OSV sont épinglés sur le SHA de **commit** d'un tag publié, jamais sur le SHA de l'objet tag.
+- **Tags amont** (`.github/workflows/action-pin-upstream.yml`, chaque lundi, sur `workflow_dispatch` et sur toute PR qui touche `.github/workflows/`, `.github/actions/` ou `workflow_hygiene.py`, PR Dependabot comprises) : la commande `upstream` compare chaque SHA épinglé au commit du tag nommé par son commentaire (`git ls-remote --tags`, tag annoté déréférencé par `^{}`). Ce job a besoin du réseau et ne fait pas partie des checks obligatoires ; les contrats hors réseau rejouent la comparaison sur des sorties `ls-remote` enregistrées.
+- **Formes YAML** (les deux scripts de contrat) : l'analyseur lit ligne à ligne ; la commande `forms`, aussi lancée en tête de `inputs` et `timeouts`, refuse ce qu'il ne sait pas lire : un job écrit en flow mapping (`b: { runs-on: … }`), une collection en flow comme élément de séquence (`- {uses: …}`) ou comme valeur de `jobs`, `steps`, `with`, `env`, `run`, `uses`, `script`, `runs-on`, `timeout-minutes`, une ancre, un alias ou une clé de fusion (`&x`, `*x`, `<<:`), une clé citée parmi `jobs`, `steps`, `runs-on`, `timeout-minutes`, `run`, `uses`, `with`, `script`, et un `run:` ou `script:` qui n'est pas un bloc `|`/`>` mais se poursuit sur les lignes suivantes (valeur vide, scalaire simple continué, chaîne citée non refermée). Un `run:` multiligne s'écrit en bloc `|` ; un `run:` vide suivi d'une clé (`defaults: run: shell: bash`) est un mapping et reste accepté.
+- **Inputs** (`test-operational-doc-contracts.sh`) : aucune expression `${{ inputs.` dans un bloc `run:` ni dans le paramètre `script:` d'une étape (`actions/github-script`), workflows et actions composites compris ; la valeur passe par une variable d'environnement de l'étape (`REQUESTED: ${{ inputs.profile }}`), puis la validation `ci|full` s'applique à la variable.
 - **Durée** (`test-operational-doc-contracts.sh`) : tout job qui déclare `runs-on:` déclare `timeout-minutes`. Un job qui appelle un workflow réutilisable (`uses:`) n'accepte pas `timeout-minutes` : il est borné par les jobs du workflow appelé, eux-mêmes soumis à ce contrôle, ou, pour un workflow externe comme OSV, par ce workflow et la borne de 6 h de GitHub.
 - **Images de runner** (`test-operational-doc-contracts.sh`) : les jobs de benchmark et de qualification de performance (`scale-benchmark.yml`, `lucene-lifecycle-benchmark.yml`, `scanner-corpus-benchmark.yml`, `git-context-cache-qualification.yml`, job `scale-comparison` de `runtime-flags-qualification.yml`, jobs `minos-replay` et `index-baselines` de `measurement-tools.yml`, job `semantic-diagnostics` de `semantic-search-qualification.yml`) tournent sur `ubuntu-24.04` et `windows-2025`, pour que leurs budgets comparent des mesures prises sur la même image. Les autres jobs restent sur `ubuntu-latest` et `windows-latest`. Le retrait d'une image épinglée par GitHub fait échouer le benchmark ; la montée d'image est alors explicite.
 - **Cache Maven** : `setup-java` `cache: maven` n'est activé sur aucun job. Mesure du 2026-10-30 sur `linux-reactor` (`ubuntu-latest`) : sans cache, l'étape `Run Maven reactor` dure 80, 102 et 114 s sur trois runs de PR ; avec cache, 102 s au premier run (cache absent, puis 5 s de sauvegarde) et 90 s au second (≈ 270 Mo restaurés en 2 s). L'écart reste dans la variance d'un run à l'autre : le cache n'apporte pas de gain mesurable et ajouterait une surface d'empoisonnement. Les jobs de release et de qualification d'artefacts publiés restent de toute façon construits sans cache.
@@ -209,7 +212,8 @@ Les attestations de provenance et SBOM portent sur le digest publié. `latest` n
 - Maven 3.10.0 : SHA-512 ;
 - Eclipse JDT LS 1.60.0-202606262232 : SHA-256 ;
 - Ollama 0.33.3 Linux amd64, utilisé uniquement par la qualification sémantique réelle et ses diagnostics : SHA-256 ;
-- MINOS 1.2.0 Windows x64, utilisé uniquement par le replay `minos-replay` de `measurement-tools.yml` : SHA-256.
+- MINOS 1.2.0 Windows x64, utilisé uniquement par le replay `minos-replay` de `measurement-tools.yml` : SHA-256 ;
+- Archgate (`archgate.version`, 0.61.0) Linux x64, utilisé par le job `Archgate ADR rules` de NEXUS CI : SHA-256 de l'archive de release `archgate-linux-x64.tar.gz`, vérifié par `scripts/release/install-archgate.sh` avant extraction.
 
 Sur Unix et Windows, les wrappers Maven conservent l'archive dont le checksum correspond à l'ancre versionnée. `scripts/release/ToolArchiveVerifier.java`, lancé en mode source Java avant Maven, exige ensuite que l'installation extraite soit une projection exacte de cette archive : contenu identique, aucun symlink et aucun fichier supplémentaire. Un écart reconstruit le cache extrait depuis l'archive vérifiée.
 
@@ -283,34 +287,58 @@ Cette section porte la conception et l'existant vérifié des quatre exigences d
 - Aucun contrat ni job de CI ne lance deux builds pour comparer les empreintes : la comparaison reste une étape de la procédure de release.
 - Le build rouge sur un plugin sans version, sur une borne supérieure violée ou sur un Maven antérieur à 3.10.0 n'est pas exercé : les contrats vérifient la configuration de l'enforcer, pas l'échec qu'elle produit.
 
+## OpenSpec adr-rule-enforcement
+
+Spec : [`openspec/specs/adr-rule-enforcement/spec.md`](../../openspec/specs/adr-rule-enforcement/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+Cette section relie l'exécution des règles Archgate des ADR à la CI. Le contenu des règles relève de chaque ADR (`docs/architecture/adr/*.rules.ts`).
+
+### Comportement existant vérifié (adr-rule-enforcement)
+
+- **[Existant vérifié]** Installation. Archgate ne s'installe pas par un gestionnaire de paquets. L'installateur officiel (`cli.archgate.dev/install-unix`) accepte une version fixée (`ARCHGATE_VERSION`) mais ne vérifie aucune empreinte. `scripts/release/install-archgate.sh` télécharge donc l'asset de release `https://github.com/archgate/cli/releases/download/v<version>/archgate-linux-x64.tar.gz` de la version `archgate.version` de `config/tool-integrity.properties`, le vérifie contre l'ancre `archgate.<version>.linux-x64.sha256` par `scripts/release/verify-pinned-checksum.sh`, puis seulement extrait le binaire `archgate`. L'ancre a été relevée sur trois sources concordantes : l'empreinte publiée par l'API des releases GitHub, le fichier `archgate-linux-x64.tar.gz.sha256` de la release, et le calcul local sur l'archive téléchargée.
+- **[Existant vérifié]** Job `archgate` (`Archgate ADR rules`) de `.github/workflows/ci.yml` : `ubuntu-24.04`, `timeout-minutes: 10`, checkout épinglé par SHA sans jeton persistant, installation vérifiée, puis `archgate check --base HEAD --output github`. Par défaut, `archgate check` compare la branche à sa base et n'exécute que les règles des ADR dont les fichiers ont changé ; `--base HEAD` sur un checkout propre ne laisse aucun fichier modifié, et toutes les règles de tous les fichiers `docs/architecture/adr/*.rules.ts` s'exécutent. Une violation produit une annotation `::error` qui nomme l'ADR, la règle et le fichier, et le code de sortie 1 fait échouer le job.
+- **[Existant vérifié]** `scripts/release/test-tool-integrity-anchors.sh` vérifie la forme de l'ancre et de la version, la présence de `install-archgate.sh` et de `archgate check` dans `ci.yml`, puis exécute le script d'installation hors réseau (`ARCHGATE_ARCHIVE`, `NEXUS_TOOL_INTEGRITY`) sur une archive synthétique : installée avec l'empreinte juste, refusée sans binaire extrait avec une empreinte altérée.
+- **[Existant vérifié]** Une violation fait sortir `archgate check` en code 1, avec une annotation qui nomme l'ADR, la règle, le fichier et la ligne (par exemple `GEN-0002/core-compiles-with-release-21` sur `pom.xml` quand `maven.compiler.release` ne vaut pas 21). Preuve : matrice de traçabilité, capacité `adr-rule-enforcement`.
+
+### Écarts et limites (adr-rule-enforcement)
+
+- **[Limite]** Le job n'est pas dans la liste des checks obligatoires de `develop` (réglage GitHub, [branch-governance.md](branch-governance.md)) : une violation rend la PR rouge sans bloquer techniquement l'intégration tant que le check n'y est pas ajouté.
+- **[Limite]** Seul l'asset Linux x64 est ancré : `archgate check` en local reste à la charge du poste de développement, avec la version de son choix.
+- **[Limite]** `docs/architecture/adr/README.md` n'est pas un ADR : Archgate le signale (« unparsed-adr ») en avertissement, sans échec.
+
 ## OpenSpec ci-workflow-tooling
 
 Spec : [`openspec/specs/ci-workflow-tooling/spec.md`](../../openspec/specs/ci-workflow-tooling/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
 
-Cette section relie les quatre exigences d'hygiène des workflows aux contrôles qui les portent. Les contrôles de la section « Hygiène des workflows » ci-dessus restent la description courante ; ici sont ajoutés les emplacements exacts, ce qui est testé et ce qui ne l'est pas.
+Cette section relie les exigences d'hygiène des workflows aux contrôles qui les portent. Les contrôles de la section « Hygiène des workflows » ci-dessus restent la description courante ; ici sont ajoutés les emplacements exacts, ce qui est testé et ce qui ne l'est pas.
 
 ### Comportement existant vérifié (ci-workflow-tooling)
 
-**[Existant vérifié]** Les quatre contrôles sont des sous-commandes de `scripts/release/workflow_hygiene.py` (`pins`, `inputs`, `timeouts`, `runners`, table `CHECKS` à `scripts/release/workflow_hygiene.py:224`). Le script lit les workflows ligne à ligne, sans bibliothèque YAML (`scripts/release/workflow_hygiene.py:14-17`).
+**[Existant vérifié]** Les contrôles sont des sous-commandes de `scripts/release/workflow_hygiene.py` (`pins`, `forms`, `inputs`, `timeouts`, `runners`, table `CHECKS`, et `upstream`, traitée par `main`). Le script lit les workflows ligne à ligne, sans bibliothèque YAML (docstring du module). Un argument répertoire couvre ses `*.yml`/`*.yaml` et les actions composites `*/action.yml` en dessous (`workflow_files`).
 
-| Exigence | Contrôle | Source |
+| Exigence | Contrôle | Source (`scripts/release/workflow_hygiene.py`) |
 |---|---|---|
-| Les inputs ne sont jamais interpolés dans du shell | `inputs` : refuse toute expression `${{ … inputs … }}` (y compris `github.event.inputs`) sur une ligne d'un bloc `run:`, valeur en ligne ou bloc `\|` / `>` | `scripts/release/workflow_hygiene.py:29`, `:114-144` |
-| Le commentaire de version d'une action concorde avec son SHA | `pins` : SHA de 40 hexadécimaux, commentaire de forme version, un commentaire par SHA, une version majeure par action | `scripts/release/workflow_hygiene.py:26-27`, `:61-111` |
-| Chaque job non réutilisable est borné dans le temps | `timeouts` : tout job avec `runs-on:` et sans `uses:` doit déclarer `timeout-minutes` | `scripts/release/workflow_hygiene.py:147-184` |
-| Les benchmarks tournent sur des images de runner épinglées | `runners` : pour une liste fixe de jobs, chaque `runs-on:`, `os:` ou `- os:` littéral doit correspondre à `ubuntu-NN.NN`, `windows-NNNN` ou `macos-N` | `scripts/release/workflow_hygiene.py:34-43`, `:187-221` |
+| Les inputs ne sont jamais interpolés dans du shell | `inputs` : refuse toute expression `${{ … inputs … }}` (y compris `github.event.inputs`) sur une ligne d'un bloc `run:` ou d'un paramètre `script:`, valeur en ligne, bloc `\|` / `>` ou scalaire continué à la ligne suivante | `EXPRESSION`, `has_input_expression`, `RUN`, `run_blocks`, `check_inputs` |
+| Le commentaire de version d'une action concorde avec son SHA | `pins` : SHA de 40 hexadécimaux, commentaire de forme version, un commentaire par SHA, une version majeure par action | `PINNED`, `VERSION_COMMENT`, `external_pins`, `check_pins` |
+| Chaque job non réutilisable est borné dans le temps | `timeouts` : tout job avec `runs-on:` et sans `uses:` doit déclarer `timeout-minutes` | `jobs_of`, `check_timeouts` |
+| Les benchmarks tournent sur des images de runner épinglées | `runners` : pour une liste fixe de jobs, chaque `runs-on:`, `os:` ou `- os:` littéral doit correspondre à `ubuntu-NN.NN`, `windows-NNNN` ou `macos-N` | `PINNED_RUNNER_JOBS`, `VERSIONED_RUNNER`, `check_runners` |
+| Le contrôle d'hygiène refuse les formes YAML qu'il ne sait pas lire | `forms` (aussi en tête de `pins`, `inputs` et `timeouts`) : formes listées dans la section « Hygiène des workflows » ci-dessus | `QUOTED_KEY`, `ALIAS`, `FLOW`, `jobs_of` (marque `__inline__`), `scalar_form`, `unread_line_form`, `check_forms` |
+| Le contrôle d'hygiène couvre les scripts d'actions et les actions composites | `inputs` sur `script:` et sur `.github/actions/*/action.yml` | `RUN`, `workflow_files` |
+| Le SHA épinglé correspond au tag amont annoncé | `upstream` : `git ls-remote --tags https://github.com/<owner>/<repo>.git refs/tags/<tag> refs/tags/<tag>^{}` par couple (dépôt, tag) ; le commit du tag est l'entrée `^{}` d'un tag annoté, sinon le tag lui-même | `parse_ls_remote`, `tag_commit`, `compare_upstream`, `check_upstream` |
 
-**[Existant vérifié]** Où chaque contrôle est lancé, avec sa fixture négative (le contrat n'accepte la fixture que si le code de sortie est 1 et que le message de la règle apparaît) :
+**[Existant vérifié]** Où chaque contrôle est lancé, avec ses fixtures négatives (le contrat n'accepte la fixture que si le code de sortie est 1 et que le message de la règle apparaît) :
 
-- `pins` : `scripts/release/test-tool-integrity-anchors.sh:116`, fixtures aux lignes `:119-135` (`pins-comment-mismatch`, `pins-version-two-shas`, `pins-two-majors`, `pins-not-a-version`, `pins-tag-reference`) ;
-- `inputs`, `timeouts`, `runners` : `scripts/release/test-operational-doc-contracts.sh:564-566`, fixtures aux lignes `:568-583` (trois fixtures `inputs-*`, `timeout-missing`, `runners/scale-benchmark`) ;
-- en CI : étapes du job `Linux reactor Maven build`, `.github/workflows/ci.yml:81-85` (ancres et `pins`) et `:87-91` (`inputs`, `timeouts`, `runners`) ; en local : `bash .claude/scripts/contracts.sh` (`.claude/scripts/contracts.sh:30-34`) ou directement `python scripts/release/workflow_hygiene.py <contrôle> .github/workflows`. Au HEAD de cette rédaction, les quatre contrôles passent (exécutés en local).
+- `pins` et `forms` sur `.github/workflows` et `.github/actions` : `scripts/release/test-tool-integrity-anchors.sh`, fixtures `pins-comment-mismatch`, `pins-version-two-shas`, `pins-two-majors`, `pins-not-a-version`, `pins-tag-reference`, puis `forms-flow-mapping-job`, `forms-quoted-key`, `forms-run-plain-next-line`, `inputs-github-script`, `inputs-composite-action` ;
+- `upstream` hors réseau : même script, `upstream --recorded scripts/release/fixtures/workflow-hygiene/upstream/recorded` sur `match.yml` et `annotated.yml` (acceptés) et `sha-changed.yml`, `annotated-tag-object.yml`, `tag-missing.yml` (rejetés, message avec action, SHA, tag et commit du tag) ;
+- `forms`, `inputs`, `timeouts`, `runners` sur `.github/workflows` et `.github/actions` : `scripts/release/test-operational-doc-contracts.sh`, fixtures `forms-*`, `inputs-*` (dont `inputs-github-script.yml` et `inputs-composite-action`, avec fichier et ligne dans le message attendu), `timeout-missing`, `runners/scale-benchmark` ;
+- `upstream` avec réseau : `.github/workflows/action-pin-upstream.yml` ;
+- en CI : étapes du job `Linux reactor Maven build` de `ci.yml` qui lancent les deux scripts de contrat ; en local : `bash .claude/scripts/contracts.sh` ou directement `python scripts/release/workflow_hygiene.py <contrôle> .github/workflows .github/actions`.
 
 **[Existant vérifié]** État des workflows pour les scénarios :
 
 - profil de benchmark : `REQUESTED: ${{ inputs.profile }}` en `env:` dans `scale-benchmark.yml:120`, `lucene-lifecycle-benchmark.yml:88`, `scanner-corpus-benchmark.yml:63`, puis refus si la valeur n'est ni `ci` ni `full` (`scale-benchmark.yml:125-128`, `lucene-lifecycle-benchmark.yml:93-96`, `scanner-corpus-benchmark.yml:68-71`) avant l'écriture de `value=` dans `GITHUB_OUTPUT` (`scale-benchmark.yml:129`, `lucene-lifecycle-benchmark.yml:97`, `scanner-corpus-benchmark.yml:72`) ; tous sous `.github/workflows/` ;
-- épinglage : `actions/checkout` n'a qu'une version (`# v7.0.1`) dans `.github/workflows/` ; les deux workflows réutilisables OSV sont épinglés sur `b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0` (`osv-scanner.yml:30`, `osv-scanner.yml:82`). Relevé du 2026-11-04 par `git ls-remote https://github.com/google/osv-scanner-action 'refs/tags/v2.7.0*'` : le tag annoté `v2.7.0` pointe l'objet `6ad84ce1ef2d4124ba333b221894c133c4a970ea`, et `v2.7.0^{}` (le commit) est `b1d267aea5211fa648d9d442fa64b90dbdcbdd36` ; l'épinglage est donc sur le SHA de commit, pas sur l'objet tag. Cette concordance n'est vérifiée ni par le contrat ni par la CI (`scripts/release/test-tool-integrity-anchors.sh:111-113`, section « Hygiène des workflows » ci-dessus) ;
-- bornes de durée des quatre gates : `windows-gate` et `linux-reactor` à 45 minutes (`.github/workflows/ci.yml:26`, `:67`), `analyze` à 30 (`.github/workflows/codeql.yml:30`), `validate-release` à 10 (`.github/workflows/release.yml:19`) ; les jobs `uses:` de `release.yml` (par exemple `nexus-ci`, `.github/workflows/release.yml:49-52`) n'en déclarent pas et passent le contrôle (`scripts/release/workflow_hygiene.py:180-181`) ;
+- épinglage : `actions/checkout` n'a qu'une version (`# v7.0.1`) dans `.github/workflows/` ; les deux workflows réutilisables OSV sont épinglés sur `b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0` (`osv-scanner.yml:30`, `osv-scanner.yml:82`). Relevé du 2026-11-04 par `git ls-remote https://github.com/google/osv-scanner-action 'refs/tags/v2.7.0*'` : le tag annoté `v2.7.0` pointe l'objet `6ad84ce1ef2d4124ba333b221894c133c4a970ea`, et `v2.7.0^{}` (le commit) est `b1d267aea5211fa648d9d442fa64b90dbdcbdd36` ; l'épinglage est donc sur le SHA de commit, pas sur l'objet tag. La commande `upstream` refait cette comparaison pour chaque action externe ;
+- bornes de durée des quatre gates : `windows-gate` et `linux-reactor` à 45 minutes (`.github/workflows/ci.yml:26`, `:84`), `analyze` à 30 (`.github/workflows/codeql.yml:30`), `validate-release` à 10 (`.github/workflows/release.yml:19`) ; les jobs `uses:` de `release.yml` (par exemple `nexus-ci`, `.github/workflows/release.yml:49-52`) n'en déclarent pas et passent le contrôle (`check_timeouts`, test `"uses" in keys`) ;
 - images de runner : `scale-benchmark.yml:39` (`ubuntu-24.04`), `lucene-lifecycle-benchmark.yml:65` et `:67`, `git-context-cache-qualification.yml:59` et `:61` (`ubuntu-24.04`, `windows-2025`).
 
 ### Vues (ci-workflow-tooling)
@@ -319,18 +347,21 @@ Cette section relie les quatre exigences d'hygiène des workflows aux contrôles
 
 ```mermaid
 flowchart LR
-    WF[".github/workflows/*.yml"]
+    WF[".github/workflows/*.yml<br>.github/actions/*/action.yml"]
     FX["scripts/release/fixtures/workflow-hygiene/"]
 
     subgraph HY["scripts/release/workflow_hygiene.py"]
         P["pins"]
+        F["forms"]
         I["inputs"]
         T["timeouts"]
         R["runners"]
+        U["upstream"]
     end
 
     A["test-tool-integrity-anchors.sh"]
     O["test-operational-doc-contracts.sh"]
+    UP["action-pin-upstream.yml, réseau"]
     CIJ["ci.yml › linux-reactor, Linux reactor Maven build"]
     LOC["bash .claude/scripts/contracts.sh, local"]
 
@@ -340,9 +371,15 @@ flowchart LR
     LOC --> O
 
     A --> P
+    A --> F
+    A -->|"sorties ls-remote enregistrées"| U
+    O --> F
     O --> I
     O --> T
     O --> R
+    UP -->|"git ls-remote"| U
+    I -.->|"lance d'abord"| F
+    T -.->|"lance d'abord"| F
 
     WF -->|"lu par chaque contrôle"| HY
     FX -->|"chaque règle doit rejeter sa fixture, code de sortie 1 + message de la règle"| HY
@@ -350,25 +387,52 @@ flowchart LR
     HY -->|"idem"| O
 ```
 
-Le schéma répond à « où est vérifiée chaque règle », car `pins` vit dans le script des ancres d'intégrité et les trois autres dans le script des contrats opérationnels. La concordance d'un SHA avec le tag amont n'apparaît nulle part : elle est manuelle (`git ls-remote`).
+Le schéma répond à « où est vérifiée chaque règle » : `pins`, `forms` et `upstream` hors réseau vivent dans le script des ancres d'intégrité, `forms`, `inputs`, `timeouts` et `runners` dans celui des contrats opérationnels, `upstream` avec réseau dans un workflow à part.
 
-Exigences : `ci-workflow-tooling › Les inputs ne sont jamais interpolés dans du shell`, `ci-workflow-tooling › Le commentaire de version d'une action concorde avec son SHA`, `ci-workflow-tooling › Chaque job non réutilisable est borné dans le temps`, `ci-workflow-tooling › Les benchmarks tournent sur des images de runner épinglées`.
+Exigences : `ci-workflow-tooling › Les inputs ne sont jamais interpolés dans du shell`, `ci-workflow-tooling › Le commentaire de version d'une action concorde avec son SHA`, `ci-workflow-tooling › Chaque job non réutilisable est borné dans le temps`, `ci-workflow-tooling › Les benchmarks tournent sur des images de runner épinglées`, `ci-workflow-tooling › Le contrôle d'hygiène refuse les formes YAML qu'il ne sait pas lire`, `ci-workflow-tooling › Le contrôle d'hygiène couvre les scripts d'actions et les actions composites`.
+
+#### Vue séquence — Comment un SHA épinglé est-il comparé à son tag amont ?
+
+```mermaid
+sequenceDiagram
+    participant W as action-pin-upstream.yml
+    participant H as workflow_hygiene.py upstream
+    participant G as github.com (git ls-remote)
+    W->>H: .github/workflows et .github/actions
+    loop chaque uses: owner/repo@sha # vX.Y.Z
+        H->>G: ls-remote --tags owner/repo refs/tags/vX.Y.Z refs/tags/vX.Y.Z^{}
+        alt tag absent
+            G-->>H: aucune ligne
+            H-->>W: échec : tag introuvable
+        else commit du tag (entrée ^{} si annoté) différent du SHA
+            G-->>H: sha du tag
+            H-->>W: échec : action, SHA, tag, commit du tag
+        else concordance
+            G-->>H: sha identique
+        end
+    end
+    H-->>W: code 0 si aucune divergence
+```
+
+Un même couple (dépôt, tag) n'est interrogé qu'une fois. Un échec de `git ls-remote` (réseau, dépôt introuvable) est signalé une fois pour ce couple et fait échouer le job. Exigence : `ci-workflow-tooling › Le SHA épinglé correspond au tag amont annoncé`.
 
 ### Écarts et limites (ci-workflow-tooling)
 
 - **[Écart]** Périmètre « qualification de performance ». L'exigence cible les jobs de benchmark et de qualification de performance. Le job `real-ollama` de `semantic-search-qualification.yml` est une qualification dont les budgets (45 et 180 minutes) dépendent du débit CPU du runner (voir `semantic-search.md`, « Budget de temps de la qualification réelle »), mais il tourne sur `ubuntu-latest` (`.github/workflows/semantic-search-qualification.yml:61`) et n'est pas dans la liste du contrôle, qui ne contient que `semantic-diagnostics` pour ce workflow (`scripts/release/workflow_hygiene.py:41`). Le texte de la section « Hygiène des workflows » ci-dessus (images de runner) dit explicitement que les autres jobs restent sur `-latest`. Le périmètre de la spec n'est pas défini par une liste.
 - **[Écart]** Forme du commentaire de version. L'exigence écrit `# vX.Y.Z` ; le contrôle accepte `vN`, `vN.N` et `vN.N.N` (`scripts/release/workflow_hygiene.py:27`).
 - **Limite** Le contrôle `runners` est un dictionnaire fixe de workflows et de jobs (`scripts/release/workflow_hygiene.py:34-42`) : un nouveau job de benchmark sur `-latest` n'est pas vu tant qu'il n'y est pas ajouté. Il accepte aussi toute image `ubuntu-NN.NN`, `windows-NNNN` ou `macos-N` (`:43`), pas seulement `ubuntu-24.04` et `windows-2025`.
-- **Limite** Un job écrit en flow mapping n'est pas vu par `timeouts`, et une valeur de `runs-on` suivie d'un commentaire est rejetée par `runners` (`scripts/release/workflow_hygiene.py:14-17`).
-- **Limite** Les boucles de fixtures vérifient le code de sortie 1 et un fragment du message (`scripts/release/test-tool-integrity-anchors.sh:131`, `scripts/release/test-operational-doc-contracts.sh:579`) ; elles n'assertent ni le nom du fichier ou de la ligne, ni le nom du job. Le message produit les contient (`scripts/release/workflow_hygiene.py:75-77`, `:101`, `:140`, `:183`, `:217`).
-- **Limite** Le contrôle `inputs` ne regarde que `inputs` : `${{ steps.profile.outputs.value }}` dans un bloc `run:` (`scale-benchmark.yml:140`, `scanner-corpus-benchmark.yml:81`, `lucene-lifecycle-benchmark.yml:108`) n'est pas signalé ; la valeur a été validée à l'étape précédente. Dans `git-context-cache-qualification.yml`, `BENCHMARK_PROFILE` (`:66`) est transmis entre guillemets (`:95`) mais n'est pas validé par une étape shell ; seul le rapport l'est après coup (`:124`, `:169`). L'action locale `.github/actions/ollama-embedding-runtime/action.yml` passe ses inputs par `env:` (`:27-28`, `:52-54`) mais n'est pas dans le périmètre des contrôles, qui lisent `.github/workflows/`.
+- **Limite** Une valeur de `runs-on` suivie d'un commentaire est rejetée par `runners`. Le contrôle `forms` reste une liste de formes connues : une forme YAML absente de cette liste (clé complexe `? …`, tag `!!str`, document multiple) n'est pas refusée.
+- **Limite** Le paramètre `script:` est reconnu quel que soit son parent, pas seulement sous `with:`.
+- **Limite** Les boucles de fixtures de `pins`, `timeouts` et `runners` vérifient le code de sortie 1 et un fragment du message ; elles n'assertent ni le nom du fichier ou de la ligne, ni le nom du job. Le message produit les contient. Les fixtures `inputs-github-script` et `inputs-composite-action` assertent le fichier et la ligne.
+- **Limite** Le workflow `action-pin-upstream.yml` dépend du réseau et n'est pas un check obligatoire : un SHA divergent sur une PR qui ne touche pas `.github/` n'est vu qu'au run hebdomadaire.
+- **Limite** Le contrôle `inputs` ne regarde que `inputs` : `${{ steps.profile.outputs.value }}` dans un bloc `run:` (`scale-benchmark.yml:140`, `scanner-corpus-benchmark.yml:81`, `lucene-lifecycle-benchmark.yml:108`) n'est pas signalé ; la valeur a été validée à l'étape précédente. Dans `git-context-cache-qualification.yml`, `BENCHMARK_PROFILE` (`:66`) est transmis entre guillemets (`:95`) mais n'est pas validé par une étape shell ; seul le rapport l'est après coup (`:124`, `:169`).
 - **Limite** Aucun test n'envoie une valeur hostile à un workflow : le scénario « Valeur hostile » repose sur l'absence d'interpolation (contrôle `inputs`) et sur la lecture de l'étape de validation, pas sur un run.
 
 ### Propositions et questions ouvertes (ci-workflow-tooling)
 
 - **[Question]** Le job `real-ollama` (`semantic-search-qualification.yml`) est-il une « qualification de performance » au sens de l'exigence sur les images de runner ? Si oui, il faut l'ajouter à `PINNED_RUNNER_JOBS` ; si non, la spec devrait nommer le périmètre.
 - **[Proposition]** Resserrer `VERSION_COMMENT` à `vX.Y.Z` (trois composantes) ou reformuler l'exigence en `vN[.N[.N]]`.
-- **[Proposition]** Faire asserter par les boucles de fixtures le nom du fichier et, pour `timeouts` et `runners`, celui du job, afin de couvrir « en nommant le fichier et la ligne » et « en nommant le workflow et le job ».
+- **[Proposition]** Faire asserter par les boucles de fixtures de `pins`, `timeouts` et `runners` le nom du fichier et, pour `timeouts` et `runners`, celui du job, afin de couvrir « en nommant le fichier et la ligne » et « en nommant le workflow et le job ».
 - **[Proposition]** Remplacer le dictionnaire `PINNED_RUNNER_JOBS` par une détection (par exemple une marque dans le job) pour qu'un nouveau benchmark ne puisse pas y échapper.
 - **[Question]** Une valeur dérivée d'un input (`steps.<id>.outputs.value`) utilisée dans un bloc `run:` doit-elle aussi être refusée ?
 
@@ -403,13 +467,28 @@ Spec : [`openspec/specs/powershell-script-tooling/spec.md`](../../openspec/specs
 
 **[Existant vérifié]** Module partagé `scripts/lib/NexusScript.psm1` : `Invoke-Maven` (`scripts/lib/NexusScript.psm1:73`), `Resolve-AbsolutePath` (`:105`), `Invoke-NexusJson` (`:117`), seuls exports (`:161`). Les scripts actifs qui appellent Maven ou ces fonctions l'importent par `Import-Module (Join-Path $PSScriptRoot "lib/NexusScript.psm1") -Force` : `compare-jdt.ps1:10`, `compare-scip.ps1:10`, `measure-iteration-16-baseline.ps1:14`, `measure-iteration-16-portfolio.ps1:10`, `measure-iteration-16-small-delta.ps1:13`, `measure-iteration-17-real-semantic-diagnostic.ps1:15`, `measure-iteration-17-real-semantic.ps1:15`, `measure-iteration-17-semantic.ps1:13`, `measure-scale-regression.ps1:11`, `self-smoke.ps1:10`, `validate-minos-integration.ps1:17`, `validate-phase-6.ps1:6` (tous sous `scripts/`) et `scripts/release/build-windows-distribution.ps1:17`.
 
-**[Existant vérifié]** Contrat local, dans `scripts/release/test-operational-doc-contracts.sh` : motif des fonctions partagées (`:477-480`), motifs d'appel direct de Maven (`:481-488`), détection par ligne (`:491-501`), parcours de tous les `*.ps1` et `*.psm1` de `scripts/` hors `scripts/lib/` et `scripts/archive/` (`:504-521`), auto-test sur neuf fixtures qui doivent être détectées (`:522-534`) et trois qui ne doivent pas l'être (`:535-541`), présence de l'export et du message « exige le Maven Wrapper verifie » dans le module (`:542-546`), appel de `Test-NexusScript.ps1` par `ci.yml` (`:547`).
+**[Existant vérifié]** Contrat local, dans `scripts/release/test-operational-doc-contracts.sh` : motif des fonctions partagées (`SHARED_SCRIPT_FUNCTION`), motifs d'appel de Maven (`DIRECT_MAVEN_CALL`), liste d'exceptions explicite (`MAVEN_CALL_EXCEPTIONS`, couples script et ligne exacte, vide au HEAD ; une exception qui ne correspond plus à aucune ligne fait échouer le contrat), détection par ligne (`powershell_maven_violations`), parcours de tous les `*.ps1` et `*.psm1` de `scripts/` hors `scripts/lib/` et `scripts/archive/` (`active_powershell_scripts`), auto-test sur vingt fixtures qui doivent être détectées et cinq qui ne doivent pas l'être, présence de l'export et du message « exige le Maven Wrapper verifie » dans le module, appel de `Test-NexusScript.ps1` par `ci.yml`.
+
+**[Existant vérifié]** Motifs de `DIRECT_MAVEN_CALL`, appliqués à toute ligne qui n'est pas un commentaire :
+
+| Forme refusée | Exemple de fixture détectée |
+|---|---|
+| appel `&` d'un nom ou chemin Maven (`mvn`, `mvn.cmd`, `mvnw`, `mvnw.cmd`), cité ou non | `& mvn @arguments`, `& '.\mvnw.cmd' @mavenArgs` |
+| commande Maven en début de ligne | `mvn clean install` |
+| `Get-Command mvn`, `Start-Process … mvn`, `Join-Path … mvnw.cmd` (cité ou non) | `$m = Get-Command mvn -ErrorAction SilentlyContinue`, `$m = Join-Path $root mvnw.cmd` |
+| chaîne littérale réduite à un nom ou chemin Maven affectée à une variable | `$m = "mvn"; & $m clean install`, `$wrapper = '.\mvnw.cmd'`, `$m = "${root}/mvnw"`, `${m} = 'mvn'` |
+| `cmd /c`, `cmd.exe /c` ou `$env:ComSpec /c`, options intercalées comprises, suivi d'un nom Maven | `cmd /c mvn clean install`, `cmd /d /c mvn verify`, `& $env:ComSpec /c mvn verify` |
+| `Invoke-Expression` ou `iex` d'une chaîne qui nomme Maven | `Invoke-Expression "mvn clean install"`, `iex "$PSScriptRoot\..\mvnw.cmd test"` |
+
+Ne sont pas signalés : `Invoke-Maven`, une ligne de commentaire, un message qui cite le wrapper dans une phrase (`Write-Error "Lancez d'abord : .\mvnw.cmd clean package"`, y compris affecté à une variable), un nom passé en paramètre nommé (`-BaseName 'mvnw'` dans `scripts/tests/Test-NexusScript.ps1`). Une violation dans un script actif fait échouer le contrat avec `<script>:<ligne>: calls Maven directly instead of Invoke-Maven`.
+
+**[Limite]** Le contrat reste un filtre de motifs, pas une analyse de PowerShell : une affectation à une propriété (`$psi.FileName = 'mvn'`), une concaténation (`'mv' + 'n'`), `Set-Alias`, `Set-Variable -Value 'mvn'`, un tableau (`@('mvn')`), `[scriptblock]::Create(…)`, `[Diagnostics.Process]::Start(…)` ou `Start-Job { mvn … }` ne sont pas détectés. Un message qui cite à la fois `cmd /c` et `mvn` est signalé et passe par `MAVEN_CALL_EXCEPTIONS`.
 
 **[Existant vérifié]** Comportement de `Invoke-Maven` : le wrapper est `mvnw.cmd` sous Windows et `mvnw` ailleurs (`scripts/lib/NexusScript.psm1:13-20`) ; le wrapper est testé par `--version` (`:33`) ; en cas d'échec, `CI` ou `GITHUB_ACTIONS` non vide (`:9-11`) lève une exception sans repli (`:54-56`) ; hors CI un avertissement « Repli local » précède la recherche de `mvn.cmd` puis `mvn` (`:57-68`) ; la sélection est mémorisée par racine (`:90-92`) ; un code Maven non nul lève une exception dont `Data['ExitCode']` porte le code (`:95-102`).
 
 **[Existant vérifié]** Tests de `scripts/tests/Test-NexusScript.ps1`, sur des wrappers factices (aucun Maven réel) : wrapper présent (`:83-88`), wrapper en échec avec `CI` défini et un `mvn` factice dans le `PATH` (`:90-113`), code retour 3 propagé (`:115-135`), repli averti hors CI (`:137-154`), `Resolve-AbsolutePath` (`:156-163`). Ils tournent dans `Windows gate` sous PowerShell 7 puis Windows PowerShell 5.1 (`.github/workflows/ci.yml:48-54`) ; la version PowerShell 7 a été exécutée en local à cette rédaction (tous PASS).
 
-**[Existant vérifié]** Scripts d'itération : `validate-iteration-9`, `10`, `11`, `12`, `13`, `14`, `16` et `17` sont sous `scripts/archive/` ; aucun `validate-iteration-15.ps1` n'existe, et le contrat l'ignore (`scripts/release/test-operational-doc-contracts.sh:548-552`). `scripts/archive/README.md` les déclare non maintenus (contrat `:553`). La phrase « Les seuls points d'entrée de validation sont `scripts/validate-phase-6.ps1` … » est épinglée (`:554`) et présente à `docs/developer/ci-and-supply-chain.md:59`.
+**[Existant vérifié]** Scripts d'itération : `validate-iteration-9`, `10`, `11`, `12`, `13`, `14`, `16` et `17` sont sous `scripts/archive/` ; aucun `validate-iteration-15.ps1` n'existe, et le contrat l'ignore (`scripts/release/test-operational-doc-contracts.sh:684-688`). `scripts/archive/README.md` les déclare non maintenus (contrat `:553`). La phrase « Les seuls points d'entrée de validation sont `scripts/validate-phase-6.ps1` … » est épinglée (`:554`) et présente à `docs/developer/ci-and-supply-chain.md:59`.
 
 **[Existant vérifié]** `0.1.0-SNAPSHOT` n'apparaît pas dans les scripts actifs (recherche du 2026-11-04 sur `scripts/` hors `scripts/archive/`) ; il reste dans `scripts/archive/validate-iteration-12.ps1:10` et `scripts/archive/validate-iteration-13.ps1:10-11`. Aucun contrat ne cherche cette chaîne.
 
@@ -450,7 +529,7 @@ Exigences : `powershell-script-tooling › Maven est appelé par le wrapper vér
 - **[Écart]** Variable `GITHUB_ACTIONS`. Le scénario « Wrapper indisponible en CI » pose `GITHUB_ACTIONS` ; le test pose `CI` (`scripts/tests/Test-NexusScript.ps1:56-59`, appelé à `:96`). La branche `GITHUB_ACTIONS` seule (`scripts/lib/NexusScript.psm1:10`) n'est pas testée isolément ; sur un runner GitHub, les deux variables sont définies.
 - **[Écart]** `0.1.0-SNAPSHOT` : l'exigence « Aucune référence vers un artefact inexistant » n'a aucun contrat ; l'absence constatée est une recherche manuelle.
 - **Limite** Le contrat interdit de redéfinir et d'appeler Maven en direct, mais n'impose pas qu'un script importe le module (aucune vérification d'`Import-Module` dans `scripts/release/test-operational-doc-contracts.sh`) ; `Invoke-NexusJson` n'a aucun test dans `scripts/tests/Test-NexusScript.ps1`.
-- **Limite** L'auto-test du contrat vérifie que les fixtures sont détectées (`scripts/release/test-operational-doc-contracts.sh:533-534`), pas que le message nomme le script ; le message le fait (`:498`, `:500`, `:521`). Le scénario « Script d'itération obsolète » est vérifié par l'absence à la racine (`:548-552`) ; la présence sous `scripts/archive/` n'est pas assertée.
+- **Limite** L'auto-test du contrat vérifie que les fixtures sont détectées (`scripts/release/test-operational-doc-contracts.sh:667-668`), pas que le message nomme le script ; le message le fait (`:498`, `:500`, `:521`). Le scénario « Script d'itération obsolète » est vérifié par l'absence à la racine (`:548-552`) ; la présence sous `scripts/archive/` n'est pas assertée.
 - **Limite** Hors CI, le repli sur un Maven installé non ancré est permis et seulement averti (`scripts/lib/NexusScript.psm1:57-68`) ; l'exigence ne l'interdit que « en CI ».
 
 ### Propositions et questions ouvertes (powershell-script-tooling)
@@ -471,11 +550,12 @@ Cette section décrit ce que `scripts/release/test-operational-doc-contracts.sh`
 
 | Étiquette | Fait | Source |
 |---|---|---|
-| [Existant vérifié] | `docs/developer/search-ranking.md` décrit le voisinage graphe comme une projection bornée ; le contrat refuse « ProjectGraph cache », « ProjectGraphBuilder » et « Graphe dérivé par génération ». | `scripts/release/test-operational-doc-contracts.sh:366` |
-| [Existant vérifié] | `docs/developer/current-limitations.md` ne présente pas le moteur FTS5 trigram livré par V008 comme une évolution à venir. | `scripts/release/test-operational-doc-contracts.sh:804` |
-| [Existant vérifié] | `AGENTS.md` prescrit `./mvnw clean install` et ne contient aucune commande `mvn` hors wrapper. | `scripts/release/test-operational-doc-contracts.sh:813` |
+| [Existant vérifié] | `docs/developer/search-ranking.md` décrit le voisinage graphe comme une projection bornée ; le contrat refuse « ProjectGraph cache », « ProjectGraphBuilder » et « Graphe dérivé par génération ». | `scripts/release/test-operational-doc-contracts.sh:372-373` |
+| [Existant vérifié] | `docs/developer/current-limitations.md` ne présente pas le moteur FTS5 trigram livré par V008 comme une évolution à venir. | `scripts/release/test-operational-doc-contracts.sh:926` |
+| [Existant vérifié] | `AGENTS.md` prescrit `./mvnw clean install` et ne contient aucune commande `mvn` hors wrapper. | `scripts/release/test-operational-doc-contracts.sh:935` |
 | [Existant vérifié] | L'étape 9 du self-smoke vérifie que le contexte construit sur le dépôt retient le `AGENTS.md` natif. | `scripts/self-smoke.ps1:165` |
-| [Existant vérifié] | La documentation courante nomme `quarkus.platform.version` et `mcp.sdk.version` du `pom.xml` ; le contrat lit ces propriétés, refuse leur valeur et tout littéral `Quarkus x.y.z` ou `SDK MCP x.y.z` dans les documents contrôlés. | `scripts/release/test-operational-doc-contracts.sh:28-48`, `scripts/release/test-operational-doc-contracts.sh:133-170` |
+| [Existant vérifié] | La documentation courante nomme `quarkus.platform.version` et `mcp.sdk.version` du `pom.xml` ; le contrat lit ces propriétés, refuse leur valeur et tout littéral `Quarkus x.y.z` ou `SDK MCP x.y.z` dans les documents contrôlés. | `scripts/release/test-operational-doc-contracts.sh:29-49`, `scripts/release/test-operational-doc-contracts.sh:135-172` |
+| [Existant vérifié] | `docs/user/docker-installation.md` attribue les tags GHCR `<version>` et `latest` à `.github/workflows/release.yml` : le dernier workflow cité avant la liste des tags doit être celui-ci, et aucune phrase n'attribue une publication à `docker-distribution.yml`. Le même bloc refuse `docker push`, `ghcr.io`, `docker login`, `imagetools create` et `--push` dans `docker-distribution.yml` et `develop-push-docker-distribution.yml`, et réserve la permission `packages: write` à `release.yml` parmi `.github/workflows/` et `.github/actions/`. | `scripts/release/test-operational-doc-contracts.sh:879-923` |
 
 ### Écarts et limites (operational-documentation-contracts)
 
@@ -491,12 +571,15 @@ Cette section décrit les propriétés de l'image Docker et de son exécution pa
 
 | Étiquette | Fait | Source |
 |---|---|---|
-| [Existant vérifié] | Root possède `/opt/nexus` et les scripts de `/usr/local/bin` ; l'UID 10001 ne possède que `/data/nexus` et `/workspace`. Le contrat refuse un `COPY --chown` vers ces deux chemins et vérifie qu'il rejette sa fixture négative. | `scripts/release/test-operational-doc-contracts.sh:715-743` |
-| [Existant vérifié] | Le build depuis les sources lit le `.dockerignore` racine (liste d'exclusion) ; le build runtime lit `packaging/docker/Dockerfile.runtime.dockerignore` (liste d'autorisation), livré avec le payload Windows et le staging de repli. | `scripts/release/test-operational-doc-contracts.sh:745-770` |
-| [Existant vérifié] | L'image porte `LICENSE`, `THIRD_PARTY_NOTICES.txt`, les labels OCI `source`, `licenses`, `revision`, `version` et un `HEALTHCHECK` ; le compose déclare `read_only`, `tmpfs: /tmp:exec`, `cap_drop: [ALL]` et `no-new-privileges`. | `scripts/release/test-operational-doc-contracts.sh:772-790` |
-| [Existant vérifié] | Le workflow `Docker distribution` vérifie l'immuabilité, les notices et les labels, attend l'état `healthy` sans compose, teste le compose durci et sonde le contexte de repli. | `.github/workflows/docker-distribution.yml:127-160`, `.github/workflows/docker-distribution.yml:261-321`, `.github/workflows/docker-distribution.yml:323-388` |
+| [Existant vérifié] | Root possède `/opt/nexus` et les scripts de `/usr/local/bin` ; l'UID 10001 ne possède que `/data/nexus` et `/workspace`. Le contrat refuse un `COPY --chown` vers ces deux chemins et vérifie qu'il rejette sa fixture négative. | `scripts/release/test-operational-doc-contracts.sh:792-820` |
+| [Existant vérifié] | Le build depuis les sources lit le `.dockerignore` racine (liste d'exclusion) ; le build runtime lit `packaging/docker/Dockerfile.runtime.dockerignore` (liste d'autorisation), livré avec le payload Windows et le staging de repli. | `scripts/release/test-operational-doc-contracts.sh:822-847` |
+| [Existant vérifié] | L'image porte `LICENSE`, `THIRD_PARTY_NOTICES.txt`, les labels OCI `source`, `licenses`, `revision`, `version` et un `HEALTHCHECK` ; le compose déclare `read_only`, `tmpfs: /tmp:exec`, `cap_drop: [ALL]` et `no-new-privileges`. | `scripts/release/test-operational-doc-contracts.sh:849-875` |
+| [Existant vérifié] | Le workflow `Docker distribution` vérifie l'immuabilité, les notices et les labels, attend l'état `healthy` sans compose, teste le compose durci et sonde le contexte de repli. | `.github/workflows/docker-distribution.yml:127-160`, `.github/workflows/docker-distribution.yml:261-321`, `.github/workflows/docker-distribution.yml:323-398` |
+| [Existant vérifié] | L'image construite sur le poste porte sa version : le compose généré passe `NEXUS_IMAGE_VERSION` et `NEXUS_IMAGE_REVISION` en `build.args`, lus dans le `.env` que l'installateur écrit (version de l'installeur, commit empaqueté s'il est connu) ; le repli `docker build` de `nexus-docker-up.cmd` passe les mêmes arguments. Sans révision, `Dockerfile.runtime` pose `org.opencontainers.image.revision=unknown` : l'image de base UBI porte son propre label `revision`, qu'un label vide ou absent laisserait apparaître. `build-windows-installer.ps1` n'écrit la révision que pour un arbre de travail non modifié dont HEAD est le commit construit. | `packaging/docker/docker-compose.yml.template:6-13`, `packaging/windows/nexus-installer.iss.template:1299-1304`, `packaging/windows/nexus-installer.iss.template:1333-1335`, `scripts/release/build-windows-installer.ps1:124-147`, `packaging/docker/Dockerfile.runtime:6-15` |
+| [Existant vérifié] | Le workflow `Docker distribution` vérifie le label `version` de l'image de repli et la valeur `unknown` du label `revision` sans révision ; `scripts/release/test-docker-runtime.ps1` refuse une image dont le label `version` diffère du `pom.xml` ou dont le label `revision` est vide ; `scripts/release/test-windows-installer.ps1` vérifie les arguments du compose, du `.env` et du repli. | `.github/workflows/docker-distribution.yml:366-376`, `scripts/release/test-docker-runtime.ps1:44-55`, `scripts/release/test-windows-installer.ps1:178-184` |
 
 ### Écarts et limites (container-image-hardening)
 
 - Le tmpfs `/tmp` est monté `exec` : SQLite et JNA chargent depuis `/tmp` les bibliothèques natives qu'ils extraient.
 - L'absence de `/workspace/.git` dans l'étape `build` n'est vérifiée que par le contrat sur `.dockerignore` ; aucun job ne construit cette étape seule.
+- La construction par `docker compose build` d'une installation Docker réelle n'est exécutée par aucun workflow : la CI construit `Dockerfile.runtime` avec les mêmes arguments, et le smoke de l'installateur reste en mode natif.

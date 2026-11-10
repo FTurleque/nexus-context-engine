@@ -239,6 +239,10 @@ function PowerShellSingleQuote(Value: String): String;
 begin
   Result := Value;
   StringChangeEx(Result, '''', '''''', True);
+  StringChangeEx(Result, #$2018, #$2018#$2018, True);
+  StringChangeEx(Result, #$2019, #$2019#$2019, True);
+  StringChangeEx(Result, #$201A, #$201A#$201A, True);
+  StringChangeEx(Result, #$201B, #$201B#$201B, True);
 end;
 '@
     $hashHelperReplacement = $hashHelperAnchor + @'

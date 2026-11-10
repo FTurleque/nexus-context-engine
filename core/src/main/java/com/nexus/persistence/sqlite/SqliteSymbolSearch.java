@@ -25,9 +25,11 @@ import static com.nexus.persistence.sqlite.SqliteIndexRows.*;
 /**
  * Capacité interne de persistance ; partage les sessions et transactions de SqliteDatabase.
  *
- * <p>La recherche de symboles est scopée au projet ciblé (AUD-PRF-09) : le préfiltre approché part des
- * fichiers du projet puis sonde {@code idx_symbols_file_fuzzy_prefilter} (V015), donc son coût ne dépend
- * pas des autres projets de la base. Les termes d'une requête sont interrogés en lot : le nombre de requêtes
+ * <p>La recherche de symboles est scopée au projet ciblé (AUD-PRF-09) : pour un projet minoritaire dans la
+ * base, le préfiltre approché part des fichiers du projet puis sonde {@code idx_symbols_file_fuzzy_prefilter}
+ * (V015), donc son coût ne dépend pas des autres projets ; pour un projet qui tient au moins la moitié des
+ * fichiers, il parcourt l'intervalle de l'index global {@code idx_symbols_fuzzy_prefilter} (V017,
+ * AUD-PRF-29). Les termes d'une requête sont interrogés en lot : le nombre de requêtes
  * SQL ne dépend pas du nombre de termes, chaque terme étant borné par son propre {@code LIMIT} dans une
  * requête composée.</p>
  */
@@ -148,21 +150,45 @@ final class SqliteSymbolSearch {
                 LIMIT ?)
             """.formatted(SYMBOL_COLUMNS);
 
-    /**
-     * Préfiltre approché quand peu de candidats existent : parcours de l'index scopé au projet.
-     * Paramètres : terme, projet, premier caractère, longueur minimale, longueur maximale, limite.
-     */
-    static final String FUZZY_BATCH_SQL = """
+    /** Index du préfiltre approché scopé par fichier (V015), pour un projet minoritaire dans la base. */
+    static final String FILE_SCOPED_FUZZY_INDEX = "idx_symbols_file_fuzzy_prefilter";
+    /** Index global du préfiltre approché (V017), pour un projet qui tient au moins la moitié de la base. */
+    static final String GLOBAL_FUZZY_INDEX = "idx_symbols_fuzzy_prefilter";
+
+    private static final String FUZZY_BATCH_TEMPLATE = """
             SELECT * FROM (
                 SELECT ? AS term_index, %s
-                FROM symbols s INDEXED BY idx_symbols_file_fuzzy_prefilter
+                FROM symbols s INDEXED BY %s
                 JOIN indexed_files f ON f.id = s.file_id
                 WHERE f.project_id = ?
                   AND SUBSTR(LOWER(s.name), 1, 1) = ?
                   AND LENGTH(s.name) BETWEEN ? AND ?
                 ORDER BY s.qualified_name, f.relative_path, s.start_line, s.source_provider
                 LIMIT ?)
-            """.formatted(SYMBOL_COLUMNS);
+            """;
+
+    private static final String FUZZY_COUNT_TEMPLATE = """
+            SELECT ? AS term_index, COUNT(*) AS candidate_count FROM (
+                SELECT 1
+                FROM symbols s INDEXED BY %s
+                JOIN indexed_files f ON f.id = s.file_id
+                WHERE f.project_id = ?
+                  AND SUBSTR(LOWER(s.name), 1, 1) = ?
+                  AND LENGTH(s.name) BETWEEN ? AND ?
+                LIMIT ?)
+            """;
+
+    /**
+     * Préfiltre approché quand peu de candidats existent : parcours de l'index scopé par fichier.
+     * Paramètres : terme, projet, premier caractère, longueur minimale, longueur maximale, limite.
+     */
+    static final String FUZZY_BATCH_SQL = FUZZY_BATCH_TEMPLATE.formatted(SYMBOL_COLUMNS, FILE_SCOPED_FUZZY_INDEX);
+
+    /**
+     * Variante de {@link #FUZZY_BATCH_SQL} pour un projet qui tient au moins la moitié de la base :
+     * intervalle de l'index global (premier caractère, longueur), puis filtre par projet. Mêmes paramètres.
+     */
+    static final String FUZZY_GLOBAL_BATCH_SQL = FUZZY_BATCH_TEMPLATE.formatted(SYMBOL_COLUMNS, GLOBAL_FUZZY_INDEX);
 
     /**
      * Préfiltre approché quand de nombreux candidats existent : parcours dans l'ordre de
@@ -182,15 +208,15 @@ final class SqliteSymbolSearch {
             """.formatted(SYMBOL_COLUMNS);
 
     /** Nombre de candidats du préfiltre, plafonné ; mêmes paramètres que {@link #FUZZY_BATCH_SQL}. */
-    static final String FUZZY_COUNT_ARM_SQL = """
-            SELECT ? AS term_index, COUNT(*) AS candidate_count FROM (
-                SELECT 1
-                FROM symbols s INDEXED BY idx_symbols_file_fuzzy_prefilter
-                JOIN indexed_files f ON f.id = s.file_id
-                WHERE f.project_id = ?
-                  AND SUBSTR(LOWER(s.name), 1, 1) = ?
-                  AND LENGTH(s.name) BETWEEN ? AND ?
-                LIMIT ?)
+    static final String FUZZY_COUNT_ARM_SQL = FUZZY_COUNT_TEMPLATE.formatted(FILE_SCOPED_FUZZY_INDEX);
+
+    /** Comptage de {@link #FUZZY_GLOBAL_BATCH_SQL} ; mêmes paramètres que {@link #FUZZY_BATCH_SQL}. */
+    static final String FUZZY_GLOBAL_COUNT_ARM_SQL = FUZZY_COUNT_TEMPLATE.formatted(GLOBAL_FUZZY_INDEX);
+
+    /** Fichiers du projet ciblé et de toute la base ; paramètre : projet. */
+    static final String PROJECT_FILE_SHARE_SQL = """
+            SELECT (SELECT COUNT(*) FROM indexed_files WHERE project_id = ?) AS project_files,
+                   (SELECT COUNT(*) FROM indexed_files) AS total_files
             """;
 
     /**
@@ -236,12 +262,18 @@ final class SqliteSymbolSearch {
     }
 
     /**
-     * Préfiltre approché (premier caractère, longueur à plus ou moins trois), scopé aux fichiers du projet.
-     * Une première requête compte les candidats de chaque terme (plafonné au seuil) pour choisir, par terme,
-     * le parcours de l'index scopé ou le parcours ordonné qui s'arrête à la limite.
+     * Préfiltre approché (premier caractère, longueur à plus ou moins trois), filtré par projet. L'index
+     * parcouru dépend de la part du projet dans la base ({@link #usesGlobalFuzzyPrefilter}) : l'index scopé
+     * par fichier pour un projet minoritaire, dont le coût ne dépend pas des autres projets, l'index global
+     * sinon, dont l'intervalle coûte moins que le sondage de chacun des fichiers du projet (AUD-PRF-29).
+     * Une requête compte ensuite les candidats de chaque terme (plafonné au seuil) pour choisir, par terme,
+     * le parcours de cet index ou le parcours ordonné qui s'arrête à la limite.
      */
     static Map<String, List<IndexedSymbol>> searchFuzzySymbols(
             Connection connection, UUID projectId, List<String> queries, int limit) throws SQLException {
+        boolean global = usesGlobalFuzzyPrefilter(connection, projectId);
+        String countArm = global ? FUZZY_GLOBAL_COUNT_ARM_SQL : FUZZY_COUNT_ARM_SQL;
+        String batchArm = global ? FUZZY_GLOBAL_BATCH_SQL : FUZZY_BATCH_SQL;
         List<Object[]> fuzzyParameters = new ArrayList<>();
         for (int index = 0; index < queries.size(); index++) {
             String normalized = queries.get(index);
@@ -257,7 +289,7 @@ final class SqliteSymbolSearch {
         }
         Map<Integer, Long> counts = new HashMap<>();
         try (PreparedStatement statement = connection.prepareStatement(
-                String.join(" UNION ALL ", Collections.nCopies(countParameters.size(), FUZZY_COUNT_ARM_SQL)))) {
+                String.join(" UNION ALL ", Collections.nCopies(countParameters.size(), countArm)))) {
             bind(statement, countParameters);
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {
@@ -272,10 +304,29 @@ final class SqliteSymbolSearch {
             if (count == 0L) {
                 continue;
             }
-            arms.add(count <= FUZZY_SMALL_CANDIDATE_THRESHOLD ? FUZZY_BATCH_SQL : FUZZY_ORDERED_ARM_SQL);
+            arms.add(count <= FUZZY_SMALL_CANDIDATE_THRESHOLD ? batchArm : FUZZY_ORDERED_ARM_SQL);
             parameters.add(row);
         }
         return arms.isEmpty() ? Map.of() : runArms(connection, arms, parameters, queries);
+    }
+
+    /**
+     * Vrai quand le projet possède au moins la moitié des fichiers indexés de la base : ses symboles sont
+     * alors la majorité des candidats de l'index global, et sonder chacun de ses fichiers coûte plus que
+     * l'intervalle de cet index. Un projet seul dans sa base, l'usage principal, est dans ce cas.
+     */
+    static boolean usesGlobalFuzzyPrefilter(Connection connection, UUID projectId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(PROJECT_FILE_SHARE_SQL)) {
+            statement.setString(1, projectId.toString());
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) {
+                    return false;
+                }
+                long projectFiles = resultSet.getLong("project_files");
+                long totalFiles = resultSet.getLong("total_files");
+                return projectFiles > 0L && projectFiles * 2L >= totalFiles;
+            }
+        }
     }
 
     /** Requêtes de moins de trois points de code : repli LIKE historique. */

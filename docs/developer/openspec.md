@@ -110,3 +110,24 @@ Un changement garde le schéma de son `.openspec.yaml`. Les changements `sprint-
 - Les commandes `openspec schema` sont expérimentales.
 - La CI documentaire est statique : elle n'exécute pas `openspec validate` (la CLI n'est pas installée par les workflows) et ne parse pas les diagrammes.
 - La matrice cite les tests lus à la rédaction ; elle n'établit pas qu'ils passent sur le HEAD courant (voir « Preuve » dans les [règles de documentation](../../.claude/rules/documentation.md)).
+
+## OpenSpec openspec-documentation-contracts
+
+Spec : [`openspec/specs/openspec-documentation-contracts/spec.md`](../../openspec/specs/openspec-documentation-contracts/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+### Comportement existant vérifié (openspec-documentation-contracts)
+
+| Étiquette | Fait | Source |
+|---|---|---|
+| [Existant vérifié] | `check_links` vérifie qu'un lien relatif désigne un fichier existant et, pour une ancre vers un Markdown, un titre existant de ce fichier. | `scripts/release/openspec_doc_contracts.py:73-84` |
+| [Existant vérifié] | `check_change_links` l'applique à tous les `*.md` de `openspec/changes/`, archives comprises ; le contrôle Mermaid reste limité aux `design.md` actifs. | `scripts/release/openspec_doc_contracts.py:291-307` |
+| [Existant vérifié] | `scripts/release/test-openspec-doc-contracts.sh` exécute le contrat sur le dépôt, puis trois fixtures placées à la profondeur d'un changement archivé (`target/<fixture>/archive/<changement>/design.md`) : lien de fichier cassé et ancre absente, qui doivent échouer en nommant le fichier et le lien, et un lien valide. | `scripts/release/test-openspec-doc-contracts.sh:11-45` |
+
+### Règle de citation des chemins dans les designs
+
+L'archivage déplace un changement de `openspec/changes/<nom>/` vers `openspec/changes/archive/<date>-<nom>/`, un niveau plus bas : un lien relatif écrit pour le dossier actif casse. Un design cite donc les pages durables et le code par leur chemin depuis la racine du dépôt, en code (`docs/developer/git-context.md`), pas par un lien relatif. Le contrat refuse tout lien cassé, actif ou archivé.
+
+### Écarts et limites (openspec-documentation-contracts)
+
+- Seuls les liens Markdown sont contrôlés ; un chemin cité en code n'est vérifié que dans la matrice de traçabilité.
+- Corriger un lien d'archive modifie un document figé : c'est la seule modification admise, avec confirmation (`.claude/rules/documentation.md`).

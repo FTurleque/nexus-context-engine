@@ -139,6 +139,20 @@ Cycles bilatéraux (imports A→B / B→A) : context↔context.source 17/1, cont
 
 Un défaut interne à une boîte ne se voit pas sur un graphe de packages, et c'est là que se trouve l'essentiel des constats : la redaction par liste fermée (`AUD-SEC-01`), l'absence d'index SQLite sur `symbol_relations(file_id)` (`AUD-PRF-01`), la fédération qui recalcule tout par projet (`AUD-PRF-02`, `AUD-PRF-04`, `AUD-PRF-07`).
 
+## État au 9 novembre 2026
+
+- Le graphe des packages du cœur est **acyclique** (sprint 7, PR #300) : recalcul indépendant sur les imports et les références pleinement qualifiées, 32 packages, aucune composante cyclique ; `package-cycles.txt` est vide et `CoreArchitectureTest` exige qu'il le reste (ARCH-0076, Accepted).
+- Reste ouvert `AUD-ARC-20` : le test ne lit que les imports. L'arête `cli → security` (`CliRenderer.java:257`) n'existe que par une référence qualifiée, et ce style se propage dans le nouveau code.
+- Les packages de modèle sont devenus des feuilles (`context.model`, `search.candidate`), `ResultLimitPolicy` est passée dans `config`, `SearchDocument` dans `index`, et la configuration n'est plus lue que dans la composition root (`NexusConfiguration`, `AUD-ARC-12`).
+
+## État au 7 novembre 2026
+
+- Le bloc cyclique de 12 packages est scindé en deux : `index`, `index.scan`, `ranking`, `ranking.graph`, `search`, `search.semantic`, `search.semantic.ollama` d'un côté, `context` et ses trois sous-packages `context.source*` de l'autre. `security` n'est plus dans aucun cycle (`AUD-ARC-03` fermé, `PublicContextPolicy` déplacée dans `com.nexus.exposure`).
+- Les arêtes de cycle passent de 36 à 22 ; elles sont gelées dans `core/src/test/resources/architecture/package-cycles.txt` et contrôlées par `CoreArchitectureTest` (`AUD-ARC-07` fermé avec réserve). Ce test ne lit que les imports : 39 références pleinement qualifiées lui échappent (`AUD-ARC-20`).
+- La sortie publique a désormais un point unique, `com.nexus.exposure.PublicOutputProjection`, consommé par CLI, MCP et REST (`AUD-QUA-09` fermé) : l'arête pointillée du diagramme vers `security` n'existe plus.
+- Les cinq cycles bilatéraux `AUD-ARC-02` à `AUD-ARC-06` restent ouverts ; le sprint 5 en a légèrement renforcé un (`SearchIndexSession` consommé depuis `index`).
+- Le diagramme ci-dessus reste celui du 17/10 : il documente l'écart d'origine.
+
 ## Angles morts
 
 - Graphe construit uniquement sur les instructions `import com.nexus.*` (+ résolution des imports de types imbriqués) : les références qualifiées en ligne (ex. com.nexus.security.PublicDiagnosticPolicy dans CliRenderer, com.nexus.project.ProjectReadiness dans SearchService) ne sont pas comptées comme arêtes ; vérification manuelle : elles ne créent pas de nouveau cycle (security et project déjà concernés) mais les poids sont sous-estimés.

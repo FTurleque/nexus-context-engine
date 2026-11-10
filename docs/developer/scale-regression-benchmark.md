@@ -149,14 +149,38 @@ Le gate dédié PR exige exactement les quatre paliers SQLite dans `scale-benchm
 
 ## Réindexation sur base peuplée
 
-Le rapport général (hors `sqliteOnly=true`) porte la clé `reindexExistingFiles`. `ScaleRegressionBenchmarkTest` peuple d'abord un projet de 100 000 symboles et 100 000 relations (1 000 fichiers de 100 symboles), puis réécrit des fichiers **déjà indexés** par `SqliteIndexRepository.applyChanges`, le chemin d'écriture de l'indexation : upsert du fichier, suppression de ses symboles et relations, réinsertion.
+Le rapport général (hors `sqliteOnly=true`) porte la clé `reindexExistingFiles`. `ScaleRegressionBenchmarkTest` peuple d'abord un projet de 100 000 symboles et 100 000 relations (1 000 fichiers de 100 symboles), puis réécrit des fichiers **déjà indexés** par le chemin d'écriture de l'indexation (`writePath` : `openWriteSession/stage/publish`) : session ouverte, analyses mises en attente par lots de 128 fichiers, publication qui upserte chaque fichier, supprime ses symboles et relations et les réinsère.
 
 - `incremental` : 50 fichiers modifiés ;
 - `rebuild` : les 1 000 fichiers ;
-- chaque variante est répétée trois fois (`samplesMs`) et publie sa médiane (`medianMs`) ;
+- chaque variante est répétée trois fois et publie la durée de toute la session (`samplesMs`, `medianMs`) et celle de la seule publication (`publishSamplesMs`, `publishMedianMs`) ;
 - le scénario vérifie que les comptes de fichiers, symboles et relations restent inchangés (aucune duplication).
 
 La suppression des relations d'un fichier est servie par `idx_symbol_relations_file_provider` (migration `V012`) ; sans cet index elle parcourait toute la table à chaque fichier. Le scénario ne porte pas de plafond dans `scripts/verify-scale-budgets.py` : il rend la durée visible et reste hors du protocole de population, dont la version n'change pas. Un plafond ne se fixe qu'après des mesures répétées sur le runner CI.
+
+## Publication de la mise en attente
+
+La clé `stagedPublication` (hors `sqliteOnly=true`) mesure l'indexation complète d'un projet neuf par une session d'écriture : 50 000 fichiers en `ci`, 100 000 en `full`, un symbole et une relation par fichier, mis en attente par lots de 128. Le rapport donne `stagingMs` (somme des mises en attente), `publishMs` (transaction de publication, qui relit la mise en attente par pages servies par `idx_index_staged_files_project_id`, migration V016) et `totalMs`. La durée de publication est celle pendant laquelle le verrou d'écriture SQLite est tenu d'un seul tenant ; aucun plafond n'est posé.
+
+## Recherche approchée d'un projet seul
+
+La clé `singleProjectFuzzy` (hors `sqliteOnly=true`) mesure la recherche approchée d'un projet seul dans sa base : 20 000 fichiers en `ci`, 100 000 en `full`, 5 symboles par fichier dont les noms varient par premier caractère et par longueur, et les 9 termes d'une recherche de symboles (requête entière et 8 termes). Le rapport donne :
+
+- `productionSearch` : la recherche de production (`IndexRepository.searchSymbols` en lot) sur le schéma courant ;
+- `fileScopedPrefilter` : comptage plafonné (`count`) et récupération (`retrieval`) du préfiltre approché avec l'index scopé par fichier `idx_symbols_file_fuzzy_prefilter` (V015) forcé ;
+- `globalPrefilterSchemaBeforeV015` : les mêmes requêtes après suppression de l'index scopé, avec l'index global `idx_symbols_fuzzy_prefilter` (créé s'il manque), c'est-à-dire sur le schéma qui précède V015 ;
+- `fileScopedCountSlowdownRatio` et `fileScopedRetrievalSlowdownRatio` : rapports des médianes, index scopé sur index global ;
+- les comptes de candidats, les lignes rendues (identiques pour les deux index, vérifié par le scénario) et le plan du comptage.
+
+Le harnais porte ses propres requêtes de comptage et de récupération, copies de celles de `SqliteSymbolSearch` avec l'index forcé en paramètre : il s'exécute donc aussi sur le code de base d'une PR. La décision prise sur cette mesure (AUD-PRF-29) est consignée dans [le relevé du 2026-11-10](../project/history/recherche-approchee-projet-seul-2026-11-10.md) ; [large-scale-search.md](large-scale-search.md#sqlite-et-symboles) décrit le choix d'index qui en découle. Aucun plafond n'est posé.
+
+## Sélection des scénarios
+
+`-Dnexus.scale.benchmark.scenarios=<liste>` (séparée par des virgules) restreint l'exécution aux scénarios nommés parmi `sqliteTiers`, `portfolio`, `concurrentReadWrite`, `semanticRecovery`, `reindexExistingFiles`, `stagedPublication` et `singleProjectFuzzy` ; un nom inconnu est refusé. Sans cette propriété, `sqliteOnly=true` n'exécute que `sqliteTiers` et le rapport général exécute tous les scénarios. Le rapport liste les scénarios exécutés sous `scenarios`. Les workflows n'utilisent pas cette propriété ; elle sert aux mesures locales ciblées, par exemple :
+
+```bash
+./mvnw -B -ntp -pl core test -Dtest=ScaleRegressionBenchmarkTest -Dnexus.scale.benchmark.enabled=true -Dnexus.scale.benchmark.profile=full -Dnexus.scale.benchmark.scenarios=singleProjectFuzzy -Dnexus.scale.benchmark.output=target/scale-benchmark.json -Djacoco.skip=true
+```
 
 ## Autres scénarios scale
 
@@ -179,7 +203,7 @@ Spec : [`openspec/specs/scale-benchmark-gate/spec.md`](../../openspec/specs/scal
 ### Comportement existant vérifié
 
 - **[Existant vérifié]** Le déclencheur `pull_request` de `.github/workflows/scale-benchmark.yml:11-14` ne filtre aucun chemin. L'étape `Detect scale-sensitive changes` (`:48-105`) compare le diff de la PR à `WATCHED_PATHS` (`:58`) et écrit `measure=false` avec la notice « Aucun chemin surveillé n'est touché » (`:102-105`) ; les étapes de mesure sont conditionnées par `measure == 'true'` (`:109` à `:215`).
-- **[Existant vérifié]** `scripts/release/test-operational-doc-contracts.sh:401-420` fait échouer les contrats si le filtre push de `develop-push-scale-benchmark.yml` diverge de `WATCHED_PATHS` ou si le déclencheur `pull_request` retrouve un filtre `paths` ; l'auto-test `:437-458` vérifie que les trois dérives sont détectées, dont un chemin ajouté à `WATCHED_PATHS` seul.
+- **[Existant vérifié]** `scripts/release/test-operational-doc-contracts.sh:462-481` fait échouer les contrats si le filtre push de `develop-push-scale-benchmark.yml` diverge de `WATCHED_PATHS` ou si le déclencheur `pull_request` retrouve un filtre `paths` ; l'auto-test `:437-458` vérifie que les trois dérives sont détectées, dont un chemin ajouté à `WATCHED_PATHS` seul.
 - **[Existant vérifié]** Le ruleset `Protect main & develop` liste `Hermetic scale benchmark` dans sa règle `required_status_checks` (lecture `gh api repos/FTurleque/nexus-context-engine/rulesets/<id>` du 2026-11-05).
 
 ### Écarts et limites

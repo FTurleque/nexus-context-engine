@@ -55,6 +55,11 @@ Les wrappers `mvnw`/`mvnw.cmd` sont **durcis** (ancre SHA-512 versionnée, véri
 - Pin par SHA complet + commentaire de version : `uses: owner/action@<sha40> # vX.Y.Z`.
 - `github/codeql-action/init` et `github/codeql-action/analyze` : toujours ensemble à la même version (deux PR Dependabot séparées → combiner sur l'une, fermer l'autre).
 - Vérifier que le nom des jobs portant des checks obligatoires ne change pas.
+- Le workflow `Action pin upstream tags` (`.github/workflows/action-pin-upstream.yml`) compare chaque SHA au commit du tag amont de son commentaire ; en local : `python scripts/release/workflow_hygiene.py upstream .github/workflows .github/actions` (réseau).
+
+## Archgate
+
+Version `archgate.version` et ancre `archgate.<v>.linux-x64.sha256` dans `config/tool-integrity.properties`, à changer ensemble. Relever l'empreinte sur deux sources au moins : `gh release view v<v> -R archgate/cli --json assets` (champ `digest`) et le fichier `archgate-linux-x64.tar.gz.sha256` de la release, puis `sha256sum` sur l'archive téléchargée. Lancer `archgate check` avec la nouvelle version avant la PR.
 
 ## Vulnérabilités
 
