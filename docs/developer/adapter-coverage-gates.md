@@ -59,7 +59,7 @@ Chaque module exécute deux `jacoco:check` : `jacoco-check`, hérité du `pom.xm
 
 ### Niveau paquet et classe
 
-Le niveau `BUNDLE` laisse une marge de plusieurs centaines de lignes dans le core : une régression concentrée sur un paquet de confinement ou sur un importeur de code intelligence ne le fait pas échouer. Des règles `PACKAGE` et `CLASS` fixent donc un plancher proche de la mesure pour ces zones :
+Le niveau `BUNDLE` laisse une marge de plusieurs centaines de lignes dans le core : une régression concentrée sur un paquet de confinement ou sur un importeur de code intelligence ne le fait pas échouer. De même, une règle `PACKAGE` reste verte quand une seule classe de bornes perd ses tests. Des règles `PACKAGE` et `CLASS` fixent donc un plancher proche de la mesure pour ces zones :
 
 | Module | Élément | Cible | Minimum lignes | Minimum branches |
 |---|---|---|---:|---:|
@@ -68,9 +68,13 @@ Le niveau `BUNDLE` laisse une marge de plusieurs centaines de lignes dans le cor
 | core | `PACKAGE` | `com.nexus.index.minos` | 73 % | 59 % |
 | core | `PACKAGE` | `com.nexus.index.scip` | 79 % | 60 % |
 | REST | `PACKAGE` | `com.nexus.api` | 78 % | 67 % |
+| core | `CLASS` | `com.nexus.index.jdt.JdtStdioSession` | 40 % | 16 % |
+| core | `CLASS` | `com.nexus.index.minos.MinosPayloadReader` | 60 % | 36 % |
+| core | `CLASS` | `com.nexus.search.semantic.SemanticSearchConfiguration` | 74 % | 68 % |
 | REST | `CLASS` | `com.nexus.api.NexusApiApplicationService` | 60 % | 38 % |
+| REST | `CLASS` | `com.nexus.api.NexusRestTransportPolicy` | 77 % | 49 % |
 
-Ces planchers sont deux à trois points sous la mesure Windows du reactor complet :
+Ces planchers sont deux à trois points sous la mesure Windows du reactor complet, arrondis au centième inférieur :
 
 | Cible | Lignes couvertes | Lignes | Branches couvertes | Branches |
 |---|---:|---:|---:|---:|
@@ -83,6 +87,17 @@ Ces planchers sont deux à trois points sous la mesure Windows du reactor comple
 | `NexusApiApplicationService` | 60 / 95 | 63,16 % | 4 / 10 | 40,00 % |
 | MCP | 392 / 437 | 89,70 % | 89 / 113 | 78,76 % |
 | assistant-clients | 121 / 128 | 94,53 % | 79 / 89 | 88,76 % |
+
+Les quatre classes de bornes sont mesurées sur `./mvnw -B -ntp clean install` au commit `9adbab2c` (Windows) :
+
+| Classe | Lignes couvertes | Lignes | Branches couvertes | Branches |
+|---|---:|---:|---:|---:|
+| `JdtStdioSession` | 76 / 177 | 42,94 % | 13 / 70 | 18,57 % |
+| `MinosPayloadReader` | 17 / 27 | 62,96 % | 7 / 18 | 38,89 % |
+| `SemanticSearchConfiguration` | 23 / 30 | 76,67 % | 14 / 20 | 70,00 % |
+| `NexusRestTransportPolicy` | 49 / 62 | 79,03 % | 28 / 54 | 51,85 % |
+
+Le plancher de branches de `JdtStdioSession` (16 %) est une garde contre la régression, pas un objectif de couverture : la classe pilote le processus JDT LS, que la suite par défaut n'exécute pas de bout en bout.
 
 Un `./mvnw -B clean install` échoue si l'un des planchers n'est plus respecté. Une hausse durable de la mesure justifie de remonter le plancher correspondant ; une baisse ne justifie jamais de l'abaisser sans décision explicite.
 
@@ -146,6 +161,24 @@ NEXUS CI :
 - le gate Windows exige également la présence des quatre rapports après le reactor complet.
 
 La source d'autorité du PASS reste `jacoco:check` dans le lifecycle Maven ; l'impression CI sert au diagnostic et au suivi de tendance.
+
+## OpenSpec coverage-gates
+
+Spec : [`openspec/specs/coverage-gates/spec.md`](../../openspec/specs/coverage-gates/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
+
+Cette section décrit les planchers JaCoCo bloquants par classe. Elle ne contient pas de diagramme : le sujet est une liste de règles et de mesures, que les tableaux de la section « Seuils bloquants » portent.
+
+### Comportement existant vérifié
+
+- **[Existant vérifié]** L'exécution `jacoco-check-core` de `core/pom.xml` porte une règle `CLASS` lignes et branches pour `JdtStdioSession`, `MinosPayloadReader` et `SemanticSearchConfiguration` ; l'exécution `jacoco-check-rest` de `adapters/rest-quarkus/pom.xml` en porte une pour `NexusApiApplicationService` et une pour `NexusRestTransportPolicy`. Seuils et mesures : section « Niveau paquet et classe ».
+- **[Existant vérifié]** Une règle `CLASS` non respectée fait échouer `jacoco:check` avec un message qui nomme la classe. Preuve unique : avec les trois tests `rejectsReverseProxyHttps*` de `NexusRestExposureGuardTest` désactivés, `./mvnw -B -ntp -pl adapters/rest-quarkus -am clean verify` échoue sur `jacoco-check-rest` (« Rule violated for class com.nexus.api.NexusRestTransportPolicy: branches covered ratio is 0.48, but expected minimum is 0.49 », lignes 0,75 pour 0,77) alors que `com.nexus.api` reste à 239 / 311 branches (76,85 %), au-dessus de son plancher de paquet.
+- **[Existant vérifié]** Le module REST ajoute ses données d'exécution à `target/jacoco.exec` (`append`) : un `verify` sans `clean` relit les données d'une exécution précédente et peut masquer la perte d'un test. La mesure et la preuve d'une règle se font après `clean`.
+
+### Écarts et limites
+
+- **[Écart]** Le scénario « Règle mal nommée » n'a pas de contrôle : JaCoCo accepte une règle dont l'inclusion ne correspond à aucune classe compilée, et la règle reste vide. Le contrôle est prévu dans `coverage_floors.py` (changement `sprint-12-durcir-les-gates-ajoutes`).
+- **[Limite]** La preuve de régression est manuelle et n'est rejouée par aucun test ni job CI.
+- **[Limite]** Les mesures viennent du reactor Windows ; le reactor Linux de la CI n'a pas été relu pour ces quatre classes.
 
 ## OpenSpec adapter-contract-tests
 
