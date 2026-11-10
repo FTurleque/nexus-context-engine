@@ -177,7 +177,7 @@ Les limites REST fédérées réutilisent `ResultLimitPolicy` et `ContextBudgetP
 
 Les blocs privés multilignes conservent leurs séparateurs de lignes après redaction afin de ne pas déplacer les ranges source.
 
-Le profil sémantique est `content-v5`, ce qui rend un index historique incompatible et force sa reconstruction.
+Le profil sémantique est `content-v6`, ce qui rend un index historique incompatible et force sa reconstruction.
 
 ## Ollama
 
