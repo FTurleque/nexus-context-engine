@@ -191,9 +191,39 @@ class SchemaMigratorFileIndexUpgradeTest {
             }
         }
         populate(connection);
+        markLaterInvalidationsApplied(connection, lastVersion);
+    }
+
+    /**
+     * Enregistre comme déjà appliquées, sans les exécuter, les migrations d'invalidation postérieures
+     * à {@code lastVersion} (V018 : borne des jetons sk-) : elles repassent les projets en
+     * {@code NOT_INDEXED} par construction, alors que ces tests isolent les migrations d'index.
+     * L'empreinte vide est complétée par le migrateur sans réappliquer le script. Une migration
+     * {@code __invalidate_} ne touche que les générations et le statut des projets, jamais le
+     * schéma : sinon ce raccourci masquerait son effet sur les index.
+     */
+    private static void markLaterInvalidationsApplied(Connection connection, int lastVersion)
+            throws SQLException, IOException {
+        try (PreparedStatement insert = connection.prepareStatement(
+                "INSERT INTO schema_migrations(version, script_name, applied_at) VALUES (?, ?, ?)")) {
+            for (Map.Entry<Integer, Path> migration : migrationsUpTo(Integer.MAX_VALUE, false).entrySet()) {
+                String name = migration.getValue().getFileName().toString();
+                if (migration.getKey() <= lastVersion || !name.contains("__invalidate_")) {
+                    continue;
+                }
+                insert.setInt(1, migration.getKey());
+                insert.setString(2, "db/migration/" + name);
+                insert.setString(3, "2026-01-01T00:00:00Z");
+                insert.executeUpdate();
+            }
+        }
     }
 
     private static Map<Integer, Path> migrationsUpTo(int lastVersion) throws IOException {
+        return migrationsUpTo(lastVersion, true);
+    }
+
+    private static Map<Integer, Path> migrationsUpTo(int lastVersion, boolean complete) throws IOException {
         Map<Integer, Path> migrations = new TreeMap<>();
         try {
             Path directory = Path.of(Objects.requireNonNull(
@@ -210,7 +240,9 @@ class SchemaMigratorFileIndexUpgradeTest {
         } catch (java.net.URISyntaxException exception) {
             throw new IOException(exception);
         }
-        assertEquals(lastVersion, migrations.size(), "migrations V001 à V" + lastVersion);
+        if (complete) {
+            assertEquals(lastVersion, migrations.size(), "migrations V001 à V" + lastVersion);
+        }
         return migrations;
     }
 
