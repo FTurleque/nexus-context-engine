@@ -26,7 +26,7 @@
 ## 5. Documentation durable
 
 - [x] 5.1 `AUD-PRF-27`, `AUD-PRF-29`, `AUD-PRF-28`, `AUD-QUA-23` — Mettre à jour `docs/developer/sqlite-write-contention.md#openspec-sqlite-index-writes` (pagination indexée du staging, organigramme de publication de ce design), `docs/developer/large-scale-search.md#openspec-symbol-search-scoping` (scénario mono-projet et décision de 2.2) et `#openspec-federated-search-bounds` (clé du vecteur), `docs/developer/indexing-pipeline.md#openspec-project-indexing-pipeline` (port sans `applyChanges`) et `docs/developer/scale-regression-benchmark.md` (scénarios `stagedPublication` et `singleProjectFuzzy`) ; vérifier : `bash .claude/scripts/contracts.sh`
-- [ ] 5.2 `AUD-PRF-27`, `AUD-PRF-29`, `AUD-PRF-28`, `AUD-QUA-23` — Mettre à jour `docs/developer/openspec-traceability.md` : nouvelles lignes de `sqlite-index-writes`, `symbol-search-scoping`, `project-indexing-pipeline` (dont la ligne réécrite et le scénario ajouté de « La réindexation sur base peuplée est mesurée ») et `federated-search-bounds`, avec les tests de 1.2, 1.3, 2.1, 3.2, 3.3, 4.1 ou « test non écrit » ; vérifier : `bash scripts/release/test-openspec-doc-contracts.sh` après synchronisation des specs
+- [x] 5.2 `AUD-PRF-27`, `AUD-PRF-29`, `AUD-PRF-28`, `AUD-QUA-23` — Mettre à jour `docs/developer/openspec-traceability.md` : nouvelles lignes de `sqlite-index-writes`, `symbol-search-scoping`, `project-indexing-pipeline` (dont la ligne réécrite et le scénario ajouté de « La réindexation sur base peuplée est mesurée ») et `federated-search-bounds`, avec les tests de 1.2, 1.3, 2.1, 3.2, 3.3, 4.1 ou « test non écrit » ; vérifier : `bash scripts/release/test-openspec-doc-contracts.sh` après synchronisation des specs
 
 ## Workflow follow-up
 
