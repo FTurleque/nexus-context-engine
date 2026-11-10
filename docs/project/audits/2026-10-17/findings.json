@@ -3254,6 +3254,47 @@
    "absent_du_suivi": true
   },
   {
+   "id": "AUD-SEC-23",
+   "titre": "Un jeton à préfixe collé à un bloc de clé privée, ou un jeton xox?-, gh?_, sk_/rk_ contenant un « _ », n'est ni redigé ni refusé (refus et masquage désalignés)",
+   "severite": "Faible",
+   "axe": "Sécurité",
+   "axes": [
+    "Sécurité"
+   ],
+   "preuve": "core/src/main/java/com/nexus/security/SensitiveContentRedactor.java (d193fb05, secret-redaction-v7) : redact lance OVERSIZED_TOKEN sur le contenu brut (:105-108) puis masque sur replacePrivateKeyBlocks(content) (:109-110) ; un jeton collé à « -----END … PRIVATE KEY----- » est précédé d'un « - » au refus (lookbehind (?<![A-Za-z0-9_-]) en échec, :95) et d'un « ] » au masquage, où le quantificateur possessif {20,255}+ échoue sur sa garde de fin. Masquage xox[abposr]-[A-Za-z0-9-] (:48) contre garde et refus [A-Za-z0-9_-] (:49, :96) ; masquage gh[pousr]_[A-Za-z0-9] et (sk|rk)_(live|test)_[A-Za-z0-9] suivis de \\b (:45-46) contre refus \\w (:94). Sonde java 21 du 10/11 (classes de d193fb05) : clé privée + sk-, sk-ant-, glpat-, xoxb- et corps de 256 ou 300 → LEAK ; xoxb-, ghp_, sk_live_ + 25 caractères + « _ » + 10 → LEAK ; github_pat_ (déjà \\w) masqué.",
+   "impact": "Le jeton part en clair dans Lucene, les embeddings et les sorties CLI/REST/MCP. Les formats réels connus n'ont pas ces formes : exploitation peu probable, mais la garantie « borne de refus = borne de masquage + 1 » est fausse pour ces familles.",
+   "effort": "S",
+   "action": "Lancer les contrôles de refus sur replacePrivateKeyBlocks(content) ; aligner les classes de masquage sur le refus (xox?- [A-Za-z0-9_-], gh?_ et sk_/rk_ \\w) ; tests 255/256 dans les deux voisinages ; POLICY_VERSION, content-vN et migration d'invalidation.",
+   "sprint": 8,
+   "depends_on": [
+    "AUD-SEC-20"
+   ],
+   "bloque": [],
+   "statut": "Ouvert",
+   "changement": "Refus lancé sur le texte où les blocs de clé privée sont remplacés, classes de masquage alignées sur le refus pour xox?-, gh?_, sk_ et rk_, politique secret-redaction-v8, content-v7 et migration V019 (PR #349, sprint 8).",
+   "historique": [
+    {
+     "date": "2026-11-10",
+     "statut": "Ouvert"
+    }
+   ],
+   "verification": {
+    "date": "2026-11-10",
+    "commit": "d193fb05",
+    "verdict": "Ouvert — constat ajouté le 10/11 par la revue nexus-security-auditor de la PR #348",
+    "preuve": "Sonde java 21 sur une copie de SensitiveContentRedactor, SecretAssignmentScanner et OversizedSecretException de d193fb05 : après « -----END RSA PRIVATE KEY----- », sk-, sk-ant-, glpat- et xoxb- masqués à 30 et 255 caractères de corps, en clair à 256 et 300 ; xoxb-, ghp_ et sk_live_ + 25 caractères + « _ » + 10 en clair, refusés dès 255 + « _ » + 10 ; github_pat_ + 25 + « _ » + 10 masqué. | Test actif : Non : aucun test de jeton collé à un bloc de clé privée ni de jeton contenant un « _ ».",
+    "reserve": null
+   },
+   "verification_mainteneur": {
+    "date": "2026-11-10",
+    "commit": "65cd85db",
+    "verdict": "Fermé",
+    "preuve": "PR #349 (change sprint-08-suite-refus-contexte-redaction) : SensitiveContentRedactor.redact remplace les blocs de clé privée avant OVERSIZED_TOKEN, OVERSIZED_VALUE et OVERSIZED_URI ; masquage xox[abposr]-[A-Za-z0-9_-]{10,255}+, gh[pousr]_\\w{20,255}+, (sk|rk)_(live|test)_\\w{16,255}+, refus \\w{256} après gh?_, github_pat_, sk_/rk_ ; POLICY_VERSION secret-redaction-v8, content-v7, migration V019__invalidate_token_context_bound_indexes.sql ; SensitiveContentRedactorTest#masksTokenGluedToAPrivateKeyBlockWhoseBodyHas255Characters, #refusesTokenGluedToAPrivateKeyBlockWhoseBodyHas256Characters, #masksShortTokenContainingAnUnderscore, #masksTokenWhoseBodyHas255CharactersIncludingAnUnderscore, #refusesTokenWhoseBodyHas256CharactersIncludingAnUnderscore (10 cas en échec avec secret-redaction-v7), SchemaMigratorTokenContextBoundUpgradeTest ; ./mvnw clean install, self-smoke, contrats et archgate check verts.",
+    "reserve": null
+   },
+   "absent_du_suivi": true
+  },
+  {
    "id": "AUD-DEP-02",
    "titre": "Le workflow Release n'a jamais été exécuté : 0 run et 0 release/tag publiés",
    "severite": "Moyenne",
