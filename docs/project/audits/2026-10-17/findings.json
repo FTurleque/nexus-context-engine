@@ -178,7 +178,7 @@
    "sprint": 1,
    "depends_on": [],
    "bloque": [],
-   "statut": "Partiel",
+   "statut": "Fermé avec réserve",
    "historique": [
     {
      "date": "2026-10-17",
@@ -195,9 +195,13 @@
     {
      "date": "2026-11-09",
      "statut": "Partiel"
+    },
+    {
+     "date": "2026-11-10",
+     "statut": "Fermé avec réserve"
     }
    ],
-   "changement": "Corrigé par la PR #268 (dfb695ce)",
+   "changement": "Corrigé par la PR #343 (merge 159cef5a)",
    "verification": {
     "date": "2026-11-09",
     "commit": "7bbfe675",
@@ -206,11 +210,11 @@
     "reserve": "Le critère de sortie du sprint 1 (« une règle par classe pour les classes de bornes listées ») n'est toujours pas atteint ; la vérification du mainteneur (30/10, PR #268) porte sur les règles PACKAGE, pas sur les règles CLASS demandées."
    },
    "verification_mainteneur": {
-    "date": "2026-10-30",
-    "commit": "4024c874",
-    "verdict": "Fermé",
-    "preuve": "gates JaCoCo par paquet pour les classes de bornes (PR #268)",
-    "reserve": null
+    "date": "2026-11-10",
+    "commit": "159cef5a",
+    "verdict": "Fermé avec réserve",
+    "preuve": "Règles JaCoCo CLASS lignes/branches dans jacoco-check-core (JdtStdioSession 40/16 %, MinosPayloadReader 60/36 %, SemanticSearchConfiguration 74/68 %) et jacoco-check-rest (NexusRestTransportPolicy 77/49 %), au plus 3 points sous la mesure ; preuve qu'une régression de NexusRestTransportPolicy fait échouer le build ; docs/developer/adapter-coverage-gates.md complété.",
+    "reserve": "Tâche 1.2 du changement sprint-01-suite-couverture-par-classe non faite : le contrôle d'une inclusion CLASS/PACKAGE mal nommée attend scripts/release/coverage_floors.py (sprint 12). Plancher de branches de JdtStdioSession bas (16 %), accepté comme garde de régression."
    }
   },
   {
@@ -2176,8 +2180,8 @@
    "sprint": 6,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
-   "changement": "Nouveau",
+   "statut": "Fermé",
+   "changement": "Corrigé par la PR #344 (merge 59ea02fa)",
    "historique": [
     {
      "date": "2026-11-07",
@@ -2186,6 +2190,10 @@
     {
      "date": "2026-11-09",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-10",
+     "statut": "Fermé"
     }
    ],
    "verification": {
@@ -2195,7 +2203,14 @@
     "preuve": "SqliteFileWriter.java identique au 07/11 (diff vide) : STAGED_FILES_PAGE_SQL :56-63, boucle :96-109. V015 ne touche pas index_staged_files ; seul index = sqlite_autoindex_index_staged_files_1 (UNIQUE project_id, relative_path). V001→V015 rejouées (SQLite 3.45.1, sans ANALYZE) : `SEARCH index_staged_files USING INDEX sqlite_autoindex_index_staged_files_1 (project_id=?)` + `USE TEMP B-TREE FOR ORDER BY`. Pagination mesurée en mémoire : 10 000 fichiers 0,06 s, 40 000 fichiers 0,91 s (×4 fichiers → ×15 temps). Aucun ANALYZE ni PRAGMA optimize en production (grep persistence/sqlite). | Test actif : Aucun : pas de test de plan pour STAGED_FILES_PAGE_SQL, ni de benchmark staging/publish.",
     "reserve": "Plan non vérifié sur sqlite-jdbc 3.54.1.0. Constat absent du suivi du mainteneur, aucune correction incidente."
    },
-   "absent_du_suivi": true
+   "absent_du_suivi": false,
+   "verification_mainteneur": {
+    "date": "2026-11-10",
+    "commit": "59ea02fa",
+    "verdict": "Fermé",
+    "preuve": "Migration V016 idx_index_staged_files_project_id ON index_staged_files(project_id, id) ; test de plan de STAGED_FILES_PAGE_SQL dans SqliteGraphQueryPlanTest (sans USE TEMP B-TREE) ; test d'upgrade ; scénario stagedPublication dans ScaleRegressionBenchmarkTest.",
+    "reserve": null
+   }
   },
   {
    "id": "AUD-PRF-29",
@@ -2212,12 +2227,16 @@
    "sprint": 6,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
-   "changement": "Nouveau",
+   "statut": "Fermé avec réserve",
+   "changement": "Corrigé par la PR #344 (merge 59ea02fa)",
    "historique": [
     {
      "date": "2026-11-09",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-10",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
@@ -2226,6 +2245,13 @@
     "verdict": "Nouveau constat",
     "preuve": "Relevé à la vérification du 09/11.",
     "reserve": null
+   },
+   "verification_mainteneur": {
+    "date": "2026-11-10",
+    "commit": "59ea02fa",
+    "verdict": "Fermé avec réserve",
+    "preuve": "Scénario singleProjectFuzzy (projet seul, 100 000 fichiers, profil full, sqlite-jdbc 3.54.1.0) : avec V015, comptage ×2,27 et récupération ×5,58 par rapport à l'index global, au-delà du seuil ×2 fixé par le mainteneur. Correction : V017 recrée l'index global et SqliteSymbolSearch le choisit quand le projet possède au moins la moitié des fichiers indexés ; recherche de production 1 038,8 → 287,4 ms (p50). Relevé : docs/project/history/recherche-approchee-projet-seul-2026-11-10.md.",
+    "reserve": "Mesure sur le poste du mainteneur pendant d'autres travaux, une exécution par configuration : durées absolues indicatives. Un index d'expression de plus à maintenir à chaque écriture de symbole."
    }
   },
   {
@@ -2432,8 +2458,8 @@
    "sprint": 6,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
-   "changement": "Nouveau",
+   "statut": "Fermé",
+   "changement": "Corrigé par la PR #344 (merge 59ea02fa)",
    "historique": [
     {
      "date": "2026-11-07",
@@ -2442,6 +2468,10 @@
     {
      "date": "2026-11-09",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-10",
+     "statut": "Fermé"
     }
    ],
    "verification": {
@@ -2451,7 +2481,14 @@
     "preuve": "IndexRepository.java:62 applyChanges toujours au port ; SqliteIndexRepository.java:99-100 ; aucun appel en production (grep core/src/main : seule l'implémentation ; IndexPublication.java:44 appelle SearchIndexSession.applyChanges, lexical, autre méthode). Benchmarks inchangés : ScaleRegressionBenchmarkTest.java:243,248 et IndexingHeapPeakBenchmarkTest.java:220 (singleWriteTransactionMs :140) mesurent applyChanges ; 20 fichiers de test l'utilisent. | Test actif : Sans objet (les benchmarks concernés sont ignorés dans le build : ScaleRegressionBenchmarkTest et IndexingHeapPeakBenchmarkTest, Skipped 1).",
     "reserve": "Absent du suivi du mainteneur."
    },
-   "absent_du_suivi": true
+   "absent_du_suivi": false,
+   "verification_mainteneur": {
+    "date": "2026-11-10",
+    "commit": "59ea02fa",
+    "verdict": "Fermé",
+    "preuve": "applyChanges retiré d'IndexRepository, SqliteIndexRepository et SqliteFileWriter ; support de test IndexRepositoryWrites ; ScaleRegressionBenchmarkTest et IndexingHeapPeakBenchmarkTest mesurent openWriteSession → stage → publish.",
+    "reserve": null
+   }
   },
   {
    "id": "AUD-QUA-23",
@@ -2468,12 +2505,16 @@
    "sprint": 6,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
-   "changement": "Nouveau",
+   "statut": "Fermé",
+   "changement": "Corrigé par la PR #344 (merge 59ea02fa)",
    "historique": [
     {
      "date": "2026-11-09",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-10",
+     "statut": "Fermé"
     }
    ],
    "verification": {
@@ -2481,6 +2522,13 @@
     "commit": "7bbfe675",
     "verdict": "Nouveau constat",
     "preuve": "Relevé à la vérification du 09/11.",
+    "reserve": null
+   },
+   "verification_mainteneur": {
+    "date": "2026-11-10",
+    "commit": "59ea02fa",
+    "verdict": "Fermé",
+    "preuve": "SemanticSearchStrategy.queryVectorKey() inclut le texte redacté de la requête ; tests : deux requêtes par le même SearchQueryContext (deux embeddings), même requête sur 3 projets (un embedding).",
     "reserve": null
    }
   },
@@ -2757,8 +2805,8 @@
    "bloque": [
     "AUD-ARC-01"
    ],
-   "statut": "Ouvert",
-   "changement": "Nouveau",
+   "statut": "Fermé",
+   "changement": "Corrigé par la PR #342 (merge 0d64e56b)",
    "historique": [
     {
      "date": "2026-11-07",
@@ -2767,6 +2815,10 @@
     {
      "date": "2026-11-09",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-10",
+     "statut": "Fermé"
     }
    ],
    "verification": {
@@ -2776,7 +2828,14 @@
     "preuve": "JavaSourceGraph.java:101-120 packageGraph ne parcourt que file.imports() ; CoreArchitectureRules.java:40-42 WATCHED_QUALIFIED_PREFIXES = frameworks, Lucene, SQLite, getenv : pas de com.nexus., donc les règles de sens (indexWithoutSearch, contextSourceWithoutContext, rankingWithoutSearch, searchSemanticWithoutOllama, projectLeaf) ne voient pas non plus `com.nexus.x.Y` sans import. Aucun cas négatif « cycle par FQN » (CoreArchitectureTest :486-517 ne teste que java.sql.Types). Toujours 39 références FQN inter-packages dans le cœur, et du nouveau code en ajoute (FederatedSearchService.java:73 `com.nexus.project.ProjectReadiness::requireReady`, DefaultContextBuilder.java:188). L'arête cli→security (CliRenderer.java:257) n'existe que par FQN et échappe au graphe du test. | Test actif : Non : le test actif est aveugle aux FQN com.nexus.*.",
     "reserve": "Absent du suivi du mainteneur ; aucune correction incidente."
    },
-   "absent_du_suivi": true
+   "absent_du_suivi": false,
+   "verification_mainteneur": {
+    "date": "2026-11-10",
+    "commit": "0d64e56b",
+    "verdict": "Fermé",
+    "preuve": "JavaSourceGraph extrait les références com.nexus.<package>.<Type> pleinement qualifiées hors commentaires, chaînes et blocs de texte, et les injecte dans le graphe de packages et les règles de sens ; CliRenderer importe PublicDiagnosticPolicy ; cas négatifs (cycle et projectLeaf par nom qualifié) et cas positif (commentaire) dans CoreArchitectureTest ; baseline des cycles toujours vide.",
+    "reserve": null
+   }
   },
   {
    "id": "AUD-TST-16",
@@ -2793,8 +2852,8 @@
    "sprint": 7,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
-   "changement": "Nouveau",
+   "statut": "Fermé",
+   "changement": "Corrigé par la PR #342 (merge 0d64e56b)",
    "historique": [
     {
      "date": "2026-11-07",
@@ -2803,6 +2862,10 @@
     {
      "date": "2026-11-09",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-10",
+     "statut": "Fermé"
     }
    ],
    "verification": {
@@ -2812,7 +2875,14 @@
     "preuve": "index/service/ProjectIndexingService.java:296-297 `publication.commitDerivedIndexes(); publication.publishCanonical(...)` (ordre inchangé) ; ProjectIndexingPublicationTest (4 tests) : l'échec n'est injecté que pendant l'analyse (:131-135) ; le proxy recordingSession.publish (:292-295) délègue sans jamais lever. Aucun test ne fait lever publish ou publishCanonical après le commit Lucene, ni le commit sémantique après le lexical (grep core/src/test). Couverture JaCoCo d'IndexPublication : 27/38 lignes, 6/14 branches. Les chemins d'échec ne sont pas couverts. | Test actif : Non.",
     "reserve": "Absent du suivi du mainteneur ; aucune correction incidente."
    },
-   "absent_du_suivi": true
+   "absent_du_suivi": false,
+   "verification_mainteneur": {
+    "date": "2026-11-10",
+    "commit": "0d64e56b",
+    "verdict": "Fermé",
+    "preuve": "ProjectIndexingPublicationTest : échec de publish après commit Lucene et échec du commit sémantique après le lexical ; projet FAILED, génération inchangée, staging vide, recherche refusée, rebuild complet jusqu'à READY.",
+    "reserve": null
+   }
   },
   {
    "id": "AUD-SEC-04",
