@@ -423,6 +423,7 @@ Spec : [`openspec/specs/project-indexing-pipeline/spec.md`](../../openspec/specs
 | [Existant vérifié] | La borne de transport du payload est `MinosCodeIndexImporter.MAX_EXPORT_BYTES` (128 MiB, ARCH-0080), comptée en octets encodés. REST et MCP n'exposent aucun import MINOS en production : la borne commune est cette constante. | `MinosPayloadTransportBoundTest` |
 | [Existant vérifié] | `ProjectIndexingService` n'expose qu'un constructeur public, qui exige un `ProjectIndexLockManager` ; aucun code de production n'appelle `processLocalOnly()`, réservé aux tests (`ProjectIndexingServices`). | `ProjectIndexingServiceCompositionTest` |
 | [Existant vérifié] | Chaque index Lucene (lexical, sémantique) ouvre un `IndexWriter` à la première écriture d'une session (`openSession`), committe une fois à la barrière de publication et annule les écritures non committées à la fermeture sans commit ; une indexation sans changement n'ouvre ni ne committe rien. | `LuceneSearchIndexSessionTest` ; `LuceneSemanticSearchIndexSessionTest` |
+| [Existant vérifié] | Un échec de la publication canonique après le commit Lucene, ou du commit sémantique après le commit lexical, propage l'exception et laisse le projet `FAILED`, la génération canonique et les faits inchangés, sans analyse en attente ; la recherche est refusée par `ProjectReadiness` avant toute stratégie ; la même instance reprend au passage suivant par un rebuild complet qui finit `READY`. Le second cas ne publie rien. | `ProjectIndexingPublicationTest#aCanonicalPublishFailureAfterTheLuceneCommitLeavesTheProjectFailedUntilAFullRebuild`, `#aSemanticCommitFailureAfterTheLexicalCommitSkipsThePublicationUntilAFullRebuild` |
 | [Existant vérifié] | Le benchmark d'échelle rapporte `reindexExistingFiles` (réindexation incrémentale et rebuild sur base peuplée, hors `sqliteOnly`). Aucun plafond n'est posé sur ce scénario. | `ScaleRegressionBenchmarkTest#benchmarkReindexExistingFiles` |
 
 ### Vues
@@ -473,15 +474,54 @@ sequenceDiagram
 
 Exigences : `project-indexing-pipeline › Toute écriture d'index passe par ProjectIndexingService`, `project-indexing-pipeline › Le service d'indexation exige un gestionnaire de verrou explicite`, `project-indexing-pipeline › Un writer Lucene par indexation, committé à la publication`, `project-indexing-pipeline › La réindexation sur base peuplée est mesurée`.
 
+Vue Diagramme de séquence — Que se passe-t-il quand la barrière de publication échoue après un commit Lucene ? (existant)
+
+```mermaid
+sequenceDiagram
+    participant PIS as ProjectIndexingService
+    participant PUB as IndexPublication
+    participant LUC as Index Lucene (lexical, sémantique)
+    participant W as IndexWriteSession
+    participant PR as ProjectRepository
+    PIS->>PUB: commitDerivedIndexes
+    PUB->>LUC: commit lexical
+    alt commit sémantique en échec
+        PUB->>LUC: commit sémantique lève
+        PUB-->>PIS: exception, publish jamais appelé
+    else commits réussis
+        PIS->>PUB: publishCanonical
+        PUB->>W: publish lève, transaction annulée
+        PUB-->>PIS: exception
+    end
+    PIS->>W: close écarte les analyses en attente
+    PIS->>PR: FAILED, génération N conservée
+    PIS-->>PIS: relance l'exception, verrou libéré
+```
+
+Vue Diagramme d'états — Comment un projet revient-il à `READY` après un échec à la barrière ? (existant)
+
+```mermaid
+stateDiagram-v2
+    READY --> INDEXING: réindexation
+    INDEXING --> FAILED: échec à la barrière (publish ou commit sémantique)
+    FAILED --> INDEXING: indexation suivante, rebuild complet car non READY
+    INDEXING --> READY: publication et scan de cohérence réussis
+    note right of FAILED
+        recherche refusée par ProjectReadiness,
+        Lucene committé jamais servi
+    end note
+```
+
+Exigences : `project-indexing-pipeline › Un échec à la barrière de publication rend le projet à reconstruire`.
+
 ### Écarts et limites
 
-- [Écart] 1 — Un échec de la publication canonique après le commit Lucene laisse Lucene sur la nouvelle génération et SQLite sur la précédente ; le projet passe en `FAILED` (non servi) puis subit un rebuild complet. Aucun test n'injecte cet échec (DATA-0074).
+- Limite : la barrière de publication n'est pas atomique entre Lucene et SQLite. Un échec de la publication canonique après le commit Lucene laisse Lucene sur le nouveau contenu et SQLite sur la génération précédente ; seule la garde `READY` empêche de servir ce Lucene, puis le rebuild complet réaligne les deux (DATA-0062, DATA-0074).
 - [Écart] 2 — Les sessions de repli `DirectSearchIndexSession` et `DirectSemanticIndexSession` appliquent chaque lot immédiatement, sans rollback : les garanties « un commit » et « génération précédente servie » ne valent que pour les implémentations qui surchargent `openSession` (les implémentations Lucene de production).
 - Limite : la CLI reconnaît le dépassement de borne par la sous-chaîne « 128 MiB transport limit » du message ; une exception typée portée par le port rendrait ce contrat explicite.
 - Limite : le heap vivant d'un rebuild reste proportionnel au nombre de fichiers (listes du scan, table des fichiers existants, ensemble des chemins) ; mesure dans `docs/project/history/indexing-staged-writes-measures-2026-11-07.md`.
 
 ### Propositions et questions ouvertes
 
-- [Proposition] Ajouter un test d'échec injecté de `publishCanonical` après le commit Lucene (statut `FAILED`, rebuild complet au passage suivant).
 - [Proposition] Remplacer la détection par sous-chaîne de la CLI par une exception typée de dépassement de borne.
 - [Question] Faut-il poser un plafond de régression sur `reindexExistingFiles` une fois des mesures répétées disponibles sur le runner CI ?
