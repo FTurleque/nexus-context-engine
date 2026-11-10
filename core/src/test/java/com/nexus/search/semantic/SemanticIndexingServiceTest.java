@@ -33,7 +33,7 @@ class SemanticIndexingServiceTest {
             assertFalse(value.contains("synthetic-unquoted-secret-123456"));
             assertTrue(value.contains("[REDACTED]"));
         }
-        assertTrue(service.profileId().startsWith("content-v5;"));
+        assertTrue(service.profileId().startsWith("content-v6;"));
     }
 
     @Test

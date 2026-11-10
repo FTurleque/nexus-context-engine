@@ -16,7 +16,7 @@ import java.util.regex.Pattern;
 public final class SensitiveContentRedactor {
 
     /** Version persistée dans les index dérivés ; toute évolution impose leur reconstruction. */
-    public static final String POLICY_VERSION = "secret-redaction-v6";
+    public static final String POLICY_VERSION = "secret-redaction-v7";
 
     private static final String REDACTED = "[REDACTED]";
     private static final String PRIVATE_KEY_BEGIN = "-----BEGIN ";
@@ -85,10 +85,15 @@ public final class SensitiveContentRedactor {
             "(?i)\\b[a-z][a-z0-9+.-]{0,31}+://(?:[A-Za-z0-9_-]{" + (MAX_URI_USER_CHARS + 1) + ",}+@"
                     + "|[^\\s/:@]{" + (MAX_URI_USER_CHARS + 1) + ",}+:[^\\s/@]++@"
                     + "|[^\\s/:@]{1," + MAX_URI_USER_CHARS + "}+:[^\\s/@]{" + (MAX_SECRET_CHARS + 1) + ",}+@)");
-    /** Jeton structuré plus long que sa borne : refusé, jamais tronqué ni publié en clair. */
+    /**
+     * Jeton structuré plus long que sa borne : refusé, jamais tronqué ni publié en clair. Chaque
+     * borne de refus vaut la borne de masquage plus un, mesurée sur le même corps : pour
+     * {@code sk-}, le corps est compté après le préfixe {@code proj-} ou {@code ant-} optionnel.
+     */
     private static final Pattern OVERSIZED_TOKEN = Pattern.compile(
             "\\b(?:gh[pousr]_[A-Za-z0-9]|github_pat_\\w|(?:sk|rk)_(?:live|test)_[A-Za-z0-9])\\w{255}"
-                    + "|(?<![A-Za-z0-9_-])(?:sk-[A-Za-z0-9_-]{261}|(?:glpat-|xox[abposr]-)[A-Za-z0-9_-]{256})");
+                    + "|(?<![A-Za-z0-9_-])(?:sk-(?:proj-|ant-)?+[A-Za-z0-9_-]{256}"
+                    + "|(?:glpat-|xox[abposr]-)[A-Za-z0-9_-]{256})");
 
     private SensitiveContentRedactor() {
     }

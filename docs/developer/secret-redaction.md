@@ -1,6 +1,6 @@
 # Redaction des contenus sensibles
 
-`SensitiveContentRedactor` (politique `secret-redaction-v6`) masque les clés
+`SensitiveContentRedactor` (politique `secret-redaction-v7`) masque les clés
 privées (y compris `PGP PRIVATE KEY BLOCK`), les jetons structurés, les JWT, les
 credentials URI et les affectations sensibles :
 
@@ -39,7 +39,8 @@ Le scanner ne traverse jamais une ligne pour chercher sa fermeture. LF, CRLF
 et CR sont conservés à l’identique. La redaction est déterministe et idempotente.
 Les noms composites sont parcourus linéairement, sans répétition regex récursive.
 Une valeur dépassant 4 096 caractères (1 024 pour la partie utilisateur d’une
-URL, 255 pour le corps d’un jeton à préfixe) provoque un refus du contenu entier par `OversizedSecretException`, sans
+URL, 255 pour le corps d’un jeton à préfixe, compté après le préfixe `proj-` ou
+`ant-` d’un jeton `sk-`) provoque un refus du contenu entier par `OversizedSecretException`, sans
 suffixe secret ni valeur dans le message d’erreur. L’indexation exclut alors le
 seul fichier concerné des index lexical et sémantique (diagnostic
 `INDEX_REDACTION_LIMIT` dans le rapport) et le garde dans l’index structurel ; la
@@ -59,6 +60,7 @@ qui redige aussi `signature`, `qualifiedName`, `source` et `target` des symboles
 et relations issus de SCIP, MINOS ou JDT. Les requêtes fournies par le client restent des données client et
 ne sont pas assimilées aux diagnostics internes. Voir
 [recovery V011](release-and-recovery.md#mise-à-niveau-v011--formats-de-secrets)
+et [recovery V018](release-and-recovery.md#mise-à-niveau-v018--borne-des-jetons-sk-)
 pour l’invalidation des dérivés construits sous une politique antérieure.
 
 ## OpenSpec secret-redaction
@@ -71,18 +73,18 @@ Les sources sont relues au HEAD courant de la branche `docs/openspec-detailed-um
 
 | Étiquette | Fait | Source |
 |---|---|---|
-| [Existant vérifié] | `POLICY_VERSION` vaut `secret-redaction-v6`. | `core/src/main/java/com/nexus/security/SensitiveContentRedactor.java:19` |
-| [Existant vérifié] | Borne générale d'une valeur : `MAX_SECRET_CHARS = 4096` (redactor et scanner d'assignations). Bornes plus étroites : 1 024 pour la partie utilisateur d'une URL, et un corps de jeton à préfixe borné à 255 caractères (`OVERSIZED_TOKEN`). | `SensitiveContentRedactor.java:26-27`, `:44-49`, `:89-91` ; `SecretAssignmentScanner.java:8` |
-| [Existant vérifié] | `redact` commence par refuser le contenu entier (`OversizedSecretException`) si une valeur dépasse sa borne, puis masque dans l'ordre : blocs de clés privées, jetons à préfixe, JWT, `Bearer`, option `--password`, éléments XML, assignations, puis (si le texte contient `://`) jeton et mot de passe d'URL. | `SensitiveContentRedactor.java:96-116` |
+| [Existant vérifié] | `POLICY_VERSION` vaut `secret-redaction-v7`. | `core/src/main/java/com/nexus/security/SensitiveContentRedactor.java:19` |
+| [Existant vérifié] | Borne générale d'une valeur : `MAX_SECRET_CHARS = 4096` (redactor et scanner d'assignations). Bornes plus étroites : 1 024 pour la partie utilisateur d'une URL, et un corps de jeton à préfixe borné à 255 caractères (`OVERSIZED_TOKEN`). Pour `sk-`, `sk-proj-` et `sk-ant-`, masquage et refus comptent le même corps, après le préfixe optionnel : 255 caractères sont masqués, 256 refusés. | `SensitiveContentRedactor.java:26-27`, `:44-49`, `:88-96` ; `SensitiveContentRedactorTest#masksSkTokenWhoseBodyHas255CharactersAfterItsPrefix`, `#refusesSkTokenWhoseBodyHas256CharactersWithoutPublishingAnyPartOfIt`, `#refusesSkTokensWhoseBodyHas256To260Characters` ; `SecretAssignmentScanner.java:8` |
+| [Existant vérifié] | `redact` commence par refuser le contenu entier (`OversizedSecretException`) si une valeur dépasse sa borne, puis masque dans l'ordre : blocs de clés privées, jetons à préfixe, JWT, `Bearer`, option `--password`, éléments XML, assignations, puis (si le texte contient `://`) jeton et mot de passe d'URL. | `SensitiveContentRedactor.java:101-121` |
 | [Existant vérifié] | À 4 096 caractères la valeur est masquée ; à 4 097 le contenu est refusé et le message de l'exception ne contient pas la valeur. | `SecretAssignmentScanner.java:116-137` ; `SensitiveContentRedactorTest#rejectsOversizedValuesWithoutPublishingAnySuffix` |
-| [Existant vérifié] | `redactField` convertit un refus en `[REDACTED]` pour un champ court de sortie publique (signature, nom qualifié) au lieu de faire échouer la réponse. | `SensitiveContentRedactor.java:122-131` ; `PublicContextPolicy.java:55`, `:64` |
+| [Existant vérifié] | `redactField` convertit un refus en `[REDACTED]` pour un champ court de sortie publique (signature, nom qualifié) au lieu de faire échouer la réponse. | `SensitiveContentRedactor.java:127-136` ; `PublicContextPolicy.java:55`, `:64` |
 | [Existant vérifié] | À l'indexation, le fichier fautif est exclu des index lexical et sémantique, reçoit le diagnostic `INDEX_REDACTION_LIMIT` (chemin relatif et `valeur sensible dépassant la limite de redaction`, jamais la valeur) et reste analysé pour l'index structurel (la mise à jour SQLite est enregistrée avant la redaction). | `core/src/main/java/com/nexus/index/service/IndexDocumentPublisher.java:73-86`, `:111-117` |
 | [Existant vérifié] | Un fichier indexé puis devenu non redigeable est retiré des index lexical et sémantique (`removeStaleDocuments`) ; en reconstruction complète, il n'est simplement pas réécrit. | `IndexDocumentPublisher.java:105`, `:120-131` ; `ProjectIndexingServiceTest#anOversizedSecretExcludesOnlyItsFileFromDerivedIndexes` (partie lexicale) |
 | [Existant vérifié] | `LuceneSearchIndex` et `SemanticIndexingService` écartent aussi, document par document, un contenu refusé (`WARNING` sur `System.Logger`, chemin relatif). | `LuceneSearchIndex.java:264-272` ; `SemanticIndexingService.java:193-205` |
 | [Existant vérifié] | Construction de contexte : le fragment refusé est écarté seul, par `BudgetedContextSelector` (exclusion `<chemin> exclu : …`), `ContextBundle`, `ContextBudgetAllocator`, `SkillContextSelector` et, à la matérialisation, `ContextFragmentFactory` (diagnostic `CONTEXT_REDACTION_LIMIT`). | `BudgetedContextSelector.java:45-50` ; `ContextBundle.java:22-28` ; `ContextBudgetAllocator.java:96-102` ; `SkillContextSelector.java:38-44` ; `ContextFragmentFactory.java:143-151` |
 | [Existant vérifié] | Un index Lucene n'est « présent » que si la donnée de commit `nexus.redaction.policy` égale `POLICY_VERSION` ; sinon l'indexation force une reconstruction complète. | `LuceneSearchIndex.java:152-166`, `:170-174` ; `ProjectIndexingService.java:242-244` |
-| [Existant vérifié] | La migration `V011` incrémente `generation` de tous les projets et les repasse en `NOT_INDEXED` (`last_indexed_at = NULL`) ; le registre `projects` est conservé. | `core/src/main/resources/db/migration/V011__invalidate_secret_format_indexes.sql:6-21` |
-| [Existant vérifié] | Le profil sémantique est `content-v` + `CONTENT_PROFILE_VERSION` (5) + `;redactionPolicy=` + `POLICY_VERSION` + bornes d'embedding ; un changement de `POLICY_VERSION` modifie donc le profil même sans toucher `CONTENT_PROFILE_VERSION`. | `SemanticIndexingService.java:26`, `:127-132` |
+| [Existant vérifié] | Les migrations `V011` et `V018` incrémentent `generation` de tous les projets et les repassent en `NOT_INDEXED` (`last_indexed_at = NULL`) ; le registre `projects` est conservé. | `core/src/main/resources/db/migration/V011__invalidate_secret_format_indexes.sql:6-21` ; `V018__invalidate_sk_token_bound_indexes.sql:6-23` ; `SchemaMigratorSkTokenBoundUpgradeTest` |
+| [Existant vérifié] | Le profil sémantique est `content-v` + `CONTENT_PROFILE_VERSION` (6) + `;redactionPolicy=` + `POLICY_VERSION` + bornes d'embedding ; un changement de `POLICY_VERSION` modifie donc le profil même sans toucher `CONTENT_PROFILE_VERSION`. | `SemanticIndexingService.java:27`, `:170-175` |
 | [Existant vérifié] | `SemanticIndexingService.vectorize` redige chaque document une fois (`redactOnce`) puis part de ce texte pour l'embedding et l'extrait. | `SemanticIndexingService.java:140-141`, `:193-205` |
 
 ### Vues
@@ -144,13 +146,28 @@ Le refus du contenu entier évite de publier le suffixe d'un secret trop long ; 
 
 Exigences : `secret-redaction › Une valeur sensible trop longue n'exclut que son fichier`, `secret-redaction › Les formats de secrets courants sont redigés`, `secret-redaction › Les bornes étroites de redaction refusent le contenu`.
 
+Vue Organigramme — Un jeton de la famille `sk-` est-il masqué ou refusé ? (existant)
+
+```mermaid
+flowchart TD
+    A[contenu] --> B{"OVERSIZED_TOKEN : sk-, préfixe proj- ou ant- optionnel, 256 caractères de corps"}
+    B -- trouvé --> R["OversizedSecretException, aucun extrait du jeton"]
+    B -- absent --> C{"motif sk- : corps de 20 à 255"}
+    C -- trouvé --> M["remplacement par [REDACTED]"]
+    C -- absent --> N["aucun jeton sk- reconnu"]
+```
+
+Les deux motifs comptent le corps après le même préfixe optionnel, consommé de façon possessive : la borne de refus vaut la borne de masquage plus un, et aucune longueur de corps ne laisse un jeton reconnu en clair. `SensitiveContentRedactorTest` épingle 255 (masqué) et 256 (refusé) pour `sk-`, `sk-proj-` et `sk-ant-`, puis chaque longueur de 256 à 260 pour `sk-` ; `SecretRedactionProbeTest#skTokenFormatIsRedactedAtItsBoundAndRefusedAboveIt` garde le format de la sonde à sa borne.
+
+Exigences : `secret-redaction › Un jeton sk- est masqué ou refusé à toute longueur de corps`.
+
 Vue Organigramme — Comment un changement de politique invalide-t-il les index dérivés ? (existant)
 
 ```mermaid
 flowchart TD
-    P["POLICY_VERSION = secret-redaction-v6"] --> L["Lucene : commit nexus.redaction.policy"]
-    P --> S["profileId sémantique : content-v5;redactionPolicy=secret-redaction-v6;…"]
-    M["migration V011 : generation + 1, NOT_INDEXED, last_indexed_at NULL"] --> N["registre des projets conservé"]
+    P["POLICY_VERSION = secret-redaction-v7"] --> L["Lucene : commit nexus.redaction.policy"]
+    P --> S["profileId sémantique : content-v6;redactionPolicy=secret-redaction-v7;…"]
+    M["migrations V011 et V018 : generation + 1, NOT_INDEXED, last_indexed_at NULL"] --> N["registre des projets conservé"]
     L --> Q{"isPresent : version du commit égale POLICY_VERSION ?"}
     Q -- non --> F["fullRebuild lexical"]
     Q -- oui --> K["index lexical réutilisable"]
@@ -159,7 +176,7 @@ flowchart TD
     T -- oui --> W["vecteurs réutilisables"]
 ```
 
-Trois mécanismes se complètent : la migration `V011` invalide les projets déjà enregistrés, la donnée de commit Lucene invalide un index d'une autre politique, et le profil sémantique rend incompatible un index d'un autre profil. Aucun test n'exerce le second mécanisme (écart 1).
+Trois mécanismes se complètent : la dernière migration d'invalidation (`V018`) invalide les projets déjà enregistrés, la donnée de commit Lucene invalide un index d'une autre politique, et le profil sémantique rend incompatible un index d'un autre profil. Aucun test n'exerce le second mécanisme (écart 1).
 
 Exigences : `secret-redaction › Un changement de politique invalide les index dérivés`.
 
@@ -167,9 +184,9 @@ Exigences : `secret-redaction › Un changement de politique invalide les index 
 
 - [Écart] 1 — Index lexical d'une ancienne politique : le code invalide et reconstruit (`LuceneSearchIndex.java:163-165`, `ProjectIndexingService.java:242-244`) mais aucun test ne fait varier la donnée de commit `nexus.redaction.policy` (recherche dans `core/src/test` et `adapters` : aucune occurrence). Scénario sans preuve.
 - [Écart] 2 — « redigé une seule fois ». Vrai à l'intérieur de `SemanticIndexingService` (`:197`), mais sur le chemin d'indexation le texte a déjà été redigé par `IndexDocumentPublisher` (`:111-115`) et l'est encore par `LuceneSearchIndex` (`:275`). Aucun test ne compte les appels à `redact` ; la tâche archivée 8.1 prouvait ce point par une commande (`git grep -c`), pas par un test.
-- [Écart] 3 — Profil `content-vN`. L'exigence demande d'incrémenter le profil sémantique à chaque changement de politique ; le profil inclut déjà `redactionPolicy=<POLICY_VERSION>` (`SemanticIndexingService.java:127-132`), donc il change de toute façon. L'incrément manuel de `CONTENT_PROFILE_VERSION` (règle de `.claude/rules/search-and-redaction.md`) n'est vérifié par aucun test ; seuls les contrats de documentation épinglent `secret-redaction-v6` et `content-v5` (`scripts/release/test-operational-doc-contracts.sh:204-210`).
+- [Écart] 3 — Profil `content-vN`. L'exigence demande d'incrémenter le profil sémantique à chaque changement de politique ; le profil inclut déjà `redactionPolicy=<POLICY_VERSION>` (`SemanticIndexingService.java:170-175`), donc il change de toute façon. L'incrément manuel de `CONTENT_PROFILE_VERSION` (règle de `.claude/rules/search-and-redaction.md`) n'est vérifié par aucun test ; seuls les contrats de documentation épinglent `secret-redaction-v7` et `content-v6` (`scripts/release/test-operational-doc-contracts.sh:240-253`).
 - [Écart] 4 — Le motif « chaque modification de redaction s'accompagne d'une migration » est une règle de processus : aucun test ne détecte une évolution de `SensitiveContentRedactor` sans nouvelle migration (preuve manquante).
-- Limites vérifiées : les 19 formats de la spec sont les 19 cas `auditFormat` de la sonde de 35 cas ; `SecretRedactionProbeTest#probeHasThirtyFiveCasesIncludingTheNineteenAuditFormats` affirme 35, 19 et 2 limites connues. Les valeurs `secret-redaction-v5` (scénario de migration) et `secret-redaction-v6` (courante) correspondent à `SchemaMigratorSecretFormatUpgradeTest` (`:25`, `:74`) et à `POLICY_VERSION`. Aucun écart sur ces trois points.
+- Limites vérifiées : les 19 formats de la spec sont les 19 cas `auditFormat` de la sonde de 35 cas ; `SecretRedactionProbeTest#probeHasThirtyFiveCasesIncludingTheNineteenAuditFormats` affirme 35, 19 et 2 limites connues. Les valeurs `secret-redaction-v5` et `secret-redaction-v6` (scénarios de migration) et `secret-redaction-v7` (courante) correspondent à `SchemaMigratorSecretFormatUpgradeTest`, `SchemaMigratorSkTokenBoundUpgradeTest` et à `POLICY_VERSION`. Aucun écart sur ces trois points.
 - Limite : seul le chemin lexical est couvert de bout en bout pour l'indexation d'un fichier trop long ; `ProjectIndexingServiceTest#anOversizedSecretExcludesOnlyItsFileFromDerivedIndexes` n'active pas l'index sémantique, le test sémantique `SemanticIndexingServiceTest#excludesOnlyTheDocumentWhoseSecretExceedsTheRedactionBound` reste au niveau du service.
 
 ### Propositions et questions ouvertes
