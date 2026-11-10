@@ -1,0 +1,9 @@
+# Fixture négative : job écrit en flow mapping, illisible pour l'analyseur ligne à ligne.
+name: fixture
+on:
+  workflow_call:
+    inputs:
+      profile:
+        type: string
+jobs:
+  b: { runs-on: ubuntu-24.04, steps: [ { run: "echo ${{ inputs.profile }}" } ] }

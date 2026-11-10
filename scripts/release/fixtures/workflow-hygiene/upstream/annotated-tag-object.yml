@@ -1,0 +1,9 @@
+# Fixture négative : SHA de l objet tag annoté au lieu du commit.
+name: fixture
+on: workflow_dispatch
+jobs:
+  drift:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0

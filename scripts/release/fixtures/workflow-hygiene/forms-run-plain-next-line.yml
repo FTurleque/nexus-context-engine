@@ -1,0 +1,15 @@
+# Fixture négative : run: sans valeur suivi d'un scalaire simple sur la ligne suivante.
+name: fixture
+on:
+  workflow_call:
+    inputs:
+      profile:
+        type: string
+jobs:
+  plain:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Resolve
+        run:
+          echo ${{ inputs.profile }}

@@ -138,11 +138,53 @@ if grep -q '\$checksumUrl' "$ROOT/scripts/install-jdtls.ps1"; then
 fi
 
 # GitHub Actions pins: full SHA + '# vX.Y.Z', one comment per SHA and one
-# major version per action. Upstream tags are checked by hand on a bump
-# (git ls-remote), since CI has no guaranteed network access to them.
+# major version per action. The upstream tag of each pin is compared over the
+# network by .github/workflows/action-pin-upstream.yml (workflow_hygiene.py
+# upstream); here the comparison runs on recorded git ls-remote outputs.
 HYGIENE="${SCRIPT_DIR}/workflow_hygiene.py"
 HYGIENE_FIXTURES="${SCRIPT_DIR}/fixtures/workflow-hygiene"
-python3 "$HYGIENE" pins "$ROOT/.github/workflows"
+python3 "$HYGIENE" pins "$ROOT/.github/workflows" "$ROOT/.github/actions"
+python3 "$HYGIENE" forms "$ROOT/.github/workflows" "$ROOT/.github/actions"
+grep -qF 'workflow_hygiene.py upstream .github/workflows .github/actions' \
+  "$ROOT/.github/workflows/action-pin-upstream.yml"
+UPSTREAM="${HYGIENE_FIXTURES}/upstream"
+for fixture in match annotated; do
+  python3 "$HYGIENE" upstream --recorded "$UPSTREAM/recorded" "$UPSTREAM/${fixture}.yml" >/dev/null
+done
+for case in \
+  'sha-changed|is not the commit of upstream tag v7.0.1 (3d3c42e5aac5ba805825da76410c181273ba90b1)' \
+  'annotated-tag-object|is not the commit of upstream tag v9.0.0 (3a2844b7e9c422d3c10d287c895573f7108da1b3)' \
+  'tag-missing|tag v7.9.9 not found upstream'; do
+  fixture="${case%%|*}"
+  message="${case#*|}"
+  set +e
+  output="$(python3 "$HYGIENE" upstream --recorded "$UPSTREAM/recorded" "$UPSTREAM/${fixture}.yml" 2>&1)"
+  status=$?
+  set -e
+  if [ "$status" -ne 1 ] || ! printf '%s\n' "$output" | grep -qF "$message"; then
+    echo "upstream pin fixture ${fixture} was not rejected for '${message}' (exit ${status})" >&2
+    exit 1
+  fi
+done
+for case in \
+  'forms-flow-mapping-job.yml|forms|is not a block mapping' \
+  'forms-quoted-key.yml|forms|quoted key' \
+  'forms-run-plain-next-line.yml|forms|followed by a plain scalar' \
+  'inputs-github-script.yml|inputs|an input is interpolated' \
+  'inputs-composite-action|inputs|an input is interpolated'; do
+  fixture="${case%%|*}"
+  rest="${case#*|}"
+  check="${rest%%|*}"
+  message="${rest#*|}"
+  set +e
+  output="$(python3 "$HYGIENE" "$check" "$HYGIENE_FIXTURES/${fixture}" 2>&1)"
+  status=$?
+  set -e
+  if [ "$status" -ne 1 ] || ! printf '%s\n' "$output" | grep -qF "$message"; then
+    echo "workflow hygiene fixture ${fixture} was not rejected by ${check} for '${message}' (exit ${status})" >&2
+    exit 1
+  fi
+done
 # Each negative fixture must be rejected by its own rule: exit code 1 and the
 # rule's message, so a missing fixture or another rule cannot satisfy the case.
 for case in \

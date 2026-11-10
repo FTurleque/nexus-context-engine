@@ -688,14 +688,19 @@ PY
 # also reject its negative fixture.
 HYGIENE="scripts/release/workflow_hygiene.py"
 HYGIENE_FIXTURES="scripts/release/fixtures/workflow-hygiene"
-for check in inputs timeouts runners; do
-  python3 "$HYGIENE" "$check" .github/workflows
+for check in forms inputs timeouts runners; do
+  python3 "$HYGIENE" "$check" .github/workflows .github/actions
 done
 # A fixture counts as rejected only with exit code 1 and the message of its rule.
 for case in \
+  "forms|forms-flow-mapping-job.yml|job 'b' is not a block mapping" \
+  "forms|forms-quoted-key.yml|quoted key 'runs-on'" \
+  "forms|forms-run-plain-next-line.yml|run: followed by a plain scalar" \
   "inputs|inputs-in-run.yml|interpolated inside a run" \
   "inputs|inputs-inline-run.yml|interpolated inside a run" \
   "inputs|inputs-event-inputs.yml|interpolated inside a run" \
+  "inputs|inputs-github-script.yml|inputs-github-script.yml:17: an input is interpolated" \
+  "inputs|inputs-composite-action|inputs-composite-action/action.yml:14: an input is interpolated" \
   "timeouts|timeout-missing.yml|no timeout-minutes" \
   "runners|runners/scale-benchmark.yml|unpinned image"; do
   IFS='|' read -r check fixture message <<< "$case"
