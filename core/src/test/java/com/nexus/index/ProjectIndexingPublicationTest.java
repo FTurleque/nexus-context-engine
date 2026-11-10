@@ -11,6 +11,9 @@ import com.nexus.project.IndexStatus;
 import com.nexus.project.ProjectDescriptor;
 import com.nexus.project.ProjectRegistry;
 import com.nexus.project.ProjectRepository;
+import com.nexus.ranking.ContextRanker;
+import com.nexus.search.SearchService;
+import com.nexus.search.SearchStrategy;
 import com.nexus.search.lucene.LuceneSearchIndex;
 import com.nexus.search.semantic.EmbeddingProvider;
 import com.nexus.search.semantic.SemanticIndexingService;
@@ -42,6 +45,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -52,13 +58,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Rétention bornée des analyses et writers Lucene par indexation (AUD-PRF-12, AUD-PRF-11) : les
  * analyses sont mises en attente au rythme des lots, rien n'est visible avant la publication et un
- * échec laisse la génération précédente intacte.
+ * échec laisse la génération précédente intacte. Un échec à la barrière de publication, après le
+ * commit des index dérivés, laisse le projet {@code FAILED} et le passage suivant le reconstruit
+ * entièrement (AUD-TST-16).
  */
 class ProjectIndexingPublicationTest {
 
     private static final int BATCH_FILES = 5;
     private static final long BATCH_BYTES = 16L * 1024L * 1024L;
     private static final long AWAIT_SECONDS = 60;
+    private static final String PUBLISH_FAILURE = "échec de publication canonique injecté";
+    private static final String SEMANTIC_COMMIT_FAILURE = "échec du commit sémantique injecté";
 
     @TempDir
     Path temporaryDirectory;
@@ -153,6 +163,101 @@ class ProjectIndexingPublicationTest {
         assertTrue(retry.fullSearchRebuild());
         assertFalse(lucene.search(project.id(), "newmarker", 5).isEmpty());
         assertEquals(IndexStatus.READY, env.registry().get(project.id()).indexStatus());
+    }
+
+    @Test
+    void aCanonicalPublishFailureAfterTheLuceneCommitLeavesTheProjectFailedUntilAFullRebuild() throws Exception {
+        Path projectRoot = writeDocuments("project", 20, "oldmarker");
+        Env env = env();
+        ProjectDescriptor project = env.registry().register(projectRoot, "publish-failure");
+        AtomicBoolean failPublish = new AtomicBoolean(false);
+        List<String> events = Collections.synchronizedList(new ArrayList<>());
+        IndexRepository repository = recording(env.indexRepository(), new ArrayList<>(), events, failPublish::get);
+        ProjectIndexingService service = service(env, repository, new FlakyAnalyzer(file -> { }),
+                SemanticIndexing.disabled());
+
+        service.index(project.id());
+        assertEquals(IndexStatus.READY, env.registry().get(project.id()).indexStatus());
+        long generation = env.indexRepository().generation(project.id());
+        Map<String, IndexedFile> filesBefore = env.indexRepository().findFiles(project.id());
+
+        writeDocuments("project", 20, "newmarker");
+        failPublish.set(true);
+        events.clear();
+        IllegalStateException failure = assertThrows(IllegalStateException.class, () -> service.index(project.id()));
+
+        assertEquals(PUBLISH_FAILURE, failure.getMessage(), "l'exception de publication est propagée");
+        assertTrue(events.contains("publish"), "la publication canonique a été tentée : " + events);
+        LuceneSearchIndex lucene = new LuceneSearchIndex(env.paths());
+        assertFalse(lucene.search(project.id(), "newmarker", 5).isEmpty(),
+                "le commit Lucene a eu lieu avant l'échec de publication");
+        assertEquals(IndexStatus.FAILED, env.registry().get(project.id()).indexStatus());
+        assertEquals(generation, env.indexRepository().generation(project.id()));
+        assertEquals(filesBefore, env.indexRepository().findFiles(project.id()),
+                "aucun fait de la publication annulée n'est visible");
+        assertEquals(0L, count(env.database(), "index_staged_files"), "aucune analyse en attente ne subsiste");
+        assertSearchRefusedWithoutReadingDerivedIndexes(env.registry().get(project.id()));
+
+        // Le verrou est libéré : la même instance reprend, reconstruit tout et publie.
+        failPublish.set(false);
+        IndexingReport retry = service.index(project.id());
+        assertTrue(retry.fullSearchRebuild(), "un projet FAILED est reconstruit entièrement");
+        assertEquals(IndexStatus.READY, env.registry().get(project.id()).indexStatus());
+        assertEquals(generation + 1, env.indexRepository().generation(project.id()));
+        assertEquals(20, luceneDocumentCount(env.paths(), project.id()));
+        assertFalse(lucene.search(project.id(), "newmarker", 5).isEmpty());
+        assertTrue(lucene.search(project.id(), "oldmarker", 5).isEmpty());
+        assertEquals(0L, count(env.database(), "index_staged_files"));
+    }
+
+    @Test
+    void aSemanticCommitFailureAfterTheLexicalCommitSkipsThePublicationUntilAFullRebuild() throws Exception {
+        Path projectRoot = writeDocuments("project", 20, "oldmarker");
+        Env env = env();
+        ProjectDescriptor project = env.registry().register(projectRoot, "semantic-commit-failure");
+        AtomicBoolean failSemanticCommit = new AtomicBoolean(false);
+        SemanticIndexingService delegate = new SemanticIndexingService(
+                new ConstantEmbeddingProvider(), new LuceneSemanticSearchIndex(env.paths(), 3));
+        SemanticIndexing semantic = failingSemanticCommit(delegate, failSemanticCommit::get);
+        List<String> events = Collections.synchronizedList(new ArrayList<>());
+        IndexRepository repository = recording(env.indexRepository(), new ArrayList<>(), events, () -> false);
+        ProjectIndexingService service = service(env, repository, new FlakyAnalyzer(file -> { }), semantic);
+
+        service.index(project.id());
+        long generation = env.indexRepository().generation(project.id());
+        Map<String, IndexedFile> filesBefore = env.indexRepository().findFiles(project.id());
+        String oldFingerprint = CanonicalIndexFingerprint.fromScannedFiles(
+                new ProjectScanner().scanWithDiagnostics(projectRoot).files());
+        assertTrue(delegate.isCompatible(project.id(), oldFingerprint));
+
+        writeDocuments("project", 20, "newmarker");
+        failSemanticCommit.set(true);
+        events.clear();
+        IOException failure = assertThrows(IOException.class, () -> service.index(project.id()));
+
+        assertEquals(SEMANTIC_COMMIT_FAILURE, failure.getMessage(), "l'exception du commit sémantique est propagée");
+        assertFalse(events.contains("publish"), "la publication canonique n'a pas lieu : " + events);
+        LuceneSearchIndex lucene = new LuceneSearchIndex(env.paths());
+        assertFalse(lucene.search(project.id(), "newmarker", 5).isEmpty(),
+                "le commit lexical a eu lieu avant l'échec du commit sémantique");
+        assertEquals(IndexStatus.FAILED, env.registry().get(project.id()).indexStatus());
+        assertEquals(generation, env.indexRepository().generation(project.id()));
+        assertEquals(filesBefore, env.indexRepository().findFiles(project.id()));
+        assertEquals(0L, count(env.database(), "index_staged_files"), "aucune analyse en attente ne subsiste");
+        assertTrue(delegate.isCompatible(project.id(), oldFingerprint),
+                "l'index sémantique garde sa provenance précédente");
+        assertSearchRefusedWithoutReadingDerivedIndexes(env.registry().get(project.id()));
+
+        failSemanticCommit.set(false);
+        IndexingReport retry = service.index(project.id());
+        String newFingerprint = CanonicalIndexFingerprint.fromScannedFiles(
+                new ProjectScanner().scanWithDiagnostics(projectRoot).files());
+        assertTrue(retry.fullSearchRebuild(), "un projet FAILED est reconstruit entièrement");
+        assertEquals(IndexStatus.READY, env.registry().get(project.id()).indexStatus());
+        assertEquals(generation + 1, env.indexRepository().generation(project.id()));
+        assertTrue(delegate.isCompatible(project.id(), newFingerprint),
+                "l'index sémantique suit la génération publiée");
+        assertFalse(lucene.search(project.id(), "newmarker", 5).isEmpty());
     }
 
     @Test
@@ -262,6 +367,12 @@ class ProjectIndexingPublicationTest {
 
     private static IndexRepository recording(IndexRepository delegate, List<Integer> stagedSizes,
             List<String> events) {
+        return recording(delegate, stagedSizes, events, () -> false);
+    }
+
+    /** Enregistre les lots et la publication ; {@code failPublish} fait lever {@code publish}. */
+    private static IndexRepository recording(IndexRepository delegate, List<Integer> stagedSizes,
+            List<String> events, BooleanSupplier failPublish) {
         return (IndexRepository) Proxy.newProxyInstance(
                 ProjectIndexingPublicationTest.class.getClassLoader(),
                 new Class<?>[] {IndexRepository.class},
@@ -269,7 +380,7 @@ class ProjectIndexingPublicationTest {
                     try {
                         Object result = method.invoke(delegate, arguments);
                         if (method.getName().equals("openWriteSession")) {
-                            return recordingSession((IndexWriteSession) result, stagedSizes, events);
+                            return recordingSession((IndexWriteSession) result, stagedSizes, events, failPublish);
                         }
                         return result;
                     } catch (InvocationTargetException failure) {
@@ -279,7 +390,7 @@ class ProjectIndexingPublicationTest {
     }
 
     private static IndexWriteSession recordingSession(IndexWriteSession delegate, List<Integer> stagedSizes,
-            List<String> events) {
+            List<String> events, BooleanSupplier failPublish) {
         return new IndexWriteSession() {
             @Override
             public void stage(List<IndexedFileUpdate> updates) {
@@ -291,6 +402,9 @@ class ProjectIndexingPublicationTest {
             @Override
             public void publish(Set<String> removedPaths) {
                 events.add("publish");
+                if (failPublish.getAsBoolean()) {
+                    throw new IllegalStateException(PUBLISH_FAILURE);
+                }
                 delegate.publish(removedPaths);
             }
 
@@ -299,6 +413,70 @@ class ProjectIndexingPublicationTest {
                 delegate.close();
             }
         };
+    }
+
+    /** Délègue l'indexation sémantique ; {@code failCommit} fait lever {@code commit} de la session. */
+    private static SemanticIndexing failingSemanticCommit(SemanticIndexing delegate, BooleanSupplier failCommit) {
+        return new SemanticIndexing() {
+            @Override
+            public boolean enabled() {
+                return delegate.enabled();
+            }
+
+            @Override
+            public boolean isCompatible(UUID projectId, String canonicalFingerprint) throws IOException {
+                return delegate.isCompatible(projectId, canonicalFingerprint);
+            }
+
+            @Override
+            public Session openSession(UUID projectId, String canonicalFingerprint, boolean rebuild)
+                    throws IOException {
+                return new FailingCommitSession(
+                        delegate.openSession(projectId, canonicalFingerprint, rebuild), failCommit);
+            }
+        };
+    }
+
+    /** Session sémantique dont {@code commit} lève tant que {@code failCommit} est vrai. */
+    private record FailingCommitSession(SemanticIndexing.Session session, BooleanSupplier failCommit)
+            implements SemanticIndexing.Session {
+        @Override
+        public void applyChanges(List<SearchDocument> documents, Set<String> removedRelativePaths)
+                throws IOException {
+            session.applyChanges(documents, removedRelativePaths);
+        }
+
+        @Override
+        public void commit() throws IOException {
+            if (failCommit.getAsBoolean()) {
+                throw new IOException(SEMANTIC_COMMIT_FAILURE);
+            }
+            session.commit();
+        }
+
+        @Override
+        public void close() throws IOException {
+            session.close();
+        }
+    }
+
+    /**
+     * La garde de disponibilité refuse la recherche sur un projet non {@code READY} avant toute
+     * stratégie, donc sans lire les index dérivés.
+     */
+    private static void assertSearchRefusedWithoutReadingDerivedIndexes(ProjectDescriptor project) {
+        AtomicInteger strategyCalls = new AtomicInteger();
+        SearchStrategy strategy = (searched, query, limit) -> {
+            strategyCalls.incrementAndGet();
+            return List.of();
+        };
+        ContextRanker ranker = (request, candidates) -> List.of();
+        SearchService search = new SearchService(List.of(strategy), List.of(), ranker);
+
+        IllegalStateException refusal = assertThrows(IllegalStateException.class,
+                () -> search.search(project, "newmarker", 5, false));
+        assertTrue(refusal.getMessage().contains("n'est pas READY"), refusal.getMessage());
+        assertEquals(0, strategyCalls.get(), "aucune stratégie ne lit les index dérivés");
     }
 
     private static void await(CountDownLatch latch) {
