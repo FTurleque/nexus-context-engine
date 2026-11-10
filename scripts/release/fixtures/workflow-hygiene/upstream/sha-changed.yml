@@ -1,0 +1,9 @@
+# Fixture négative : SHA changé, commentaire resté sur v7.0.1.
+name: fixture
+on: workflow_dispatch
+jobs:
+  drift:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@0000000000000000000000000000000000000001 # v7.0.1

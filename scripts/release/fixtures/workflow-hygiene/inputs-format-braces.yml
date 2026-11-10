@@ -1,0 +1,13 @@
+# Fixture négative : input lu dans une expression qui contient des accolades.
+name: fixture
+on:
+  workflow_call:
+    inputs:
+      x:
+        type: string
+jobs:
+  j:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - run: echo ${{ format('{0}', inputs.x) }}

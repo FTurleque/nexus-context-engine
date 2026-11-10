@@ -4435,8 +4435,8 @@
    "sprint": 12,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
-   "changement": "Nouveau",
+   "statut": "Fermé",
+   "changement": "Corrigé par la PR #353",
    "historique": [
     {
      "date": "2026-11-07",
@@ -4445,6 +4445,10 @@
     {
      "date": "2026-11-09",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-10",
+     "statut": "Fermé"
     }
    ],
    "verification": {
@@ -4454,7 +4458,13 @@
     "preuve": "scripts/release/workflow_hygiene.py et fixtures identiques au 07/11 (diff vide). Fixtures rejouées sur la copie LF : run: + scalaire à la ligne suivante avec ${{ inputs.profile }}, job en flow mapping, clés \"c\"/\"runs-on\" citées sans timeout, with: script: github-script interpolant inputs → inputs PASS (rc=0) et timeouts PASS (rc=0) sur les 4 ; .github/actions/ollama-embedding-runtime/action.yml hors du périmètre appelé (test-operational-doc-contracts.sh:663, test-tool-integrity-anchors.sh:116 : .github/workflows seulement). | Test actif : Le gate tourne en CI mais ne détecte pas les variantes.",
     "reserve": "Constat absent du suivi du mainteneur ; aucun changement OpenSpec sprint 12."
    },
-   "absent_du_suivi": true
+   "absent_du_suivi": true,
+   "verification_mainteneur": {
+    "date": "2026-11-10",
+    "commit": "4e83b8e8",
+    "verdict": "Fermé",
+    "preuve": "workflow_hygiene.py forms (lancé aussi en tête de pins, inputs et timeouts) refuse job et étape en flow, collections en flow sur les clés contrôlées, ancres/alias/clés de fusion, clés citées (jobs, steps, runs-on, timeout-minutes, run, uses, with, script), scalaires run:/script: continués ou cités sur plusieurs lignes ; inputs couvre with: script: et les expressions à accolades internes ; .github/actions/**/action.yml contrôlés par les deux scripts de contrat ; une fixture négative par forme, plus une fixture positive (defaults: run: en mapping, env: frère d'un run: |)."
+   }
   },
   {
    "id": "AUD-DEP-33",
@@ -4471,8 +4481,8 @@
    "sprint": 12,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
-   "changement": "Nouveau",
+   "statut": "Fermé avec réserve",
+   "changement": "Corrigé par la PR #353",
    "historique": [
     {
      "date": "2026-11-07",
@@ -4481,6 +4491,10 @@
     {
      "date": "2026-11-09",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-10",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
@@ -4490,7 +4504,14 @@
     "preuve": "scripts/release/test-tool-integrity-anchors.sh:111-116 inchangé (« Upstream tags are checked by hand on a bump ») ; aucune occurrence de ls-remote dans .github/ ni de job comparant les SHA aux tags amont. | Test actif : Non.",
     "reserve": "Constat absent du suivi du mainteneur."
    },
-   "absent_du_suivi": true
+   "absent_du_suivi": true,
+   "verification_mainteneur": {
+    "date": "2026-11-10",
+    "commit": "4e83b8e8",
+    "verdict": "Fermé avec réserve",
+    "preuve": "Commande workflow_hygiene.py upstream : git ls-remote --tags refs/tags/<tag> et <tag>^{} par couple (dépôt, tag), configuration git locale ignorée, sans invite ; fixtures hors réseau (concordance, SHA changé, objet tag annoté, tag absent) dans scripts/release/test-tool-integrity-anchors.sh ; workflow .github/workflows/action-pin-upstream.yml (hebdomadaire, workflow_dispatch, PR touchant .github/) ; exécution réseau locale sur .github/workflows et .github/actions : PASS.",
+    "reserve": "Workflow non obligatoire ; schedule et workflow_dispatch ne tournent qu'une fois le fichier présent sur main (branche par défaut)."
+   }
   },
   {
    "id": "AUD-QUA-21",
@@ -4507,8 +4528,8 @@
    "sprint": 12,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
-   "changement": "Nouveau",
+   "statut": "Fermé avec réserve",
+   "changement": "Corrigé par la PR #353",
    "historique": [
     {
      "date": "2026-11-07",
@@ -4517,6 +4538,10 @@
     {
      "date": "2026-11-09",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-10",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
@@ -4526,7 +4551,14 @@
     "preuve": "test-operational-doc-contracts.sh:579-586 : motifs identiques au 07/11. Mutations sur scripts/compare-jdt.ps1 (copie) : `$m = \"mvn\"; & $m clean install` → rc=0 ; `cmd /c mvn clean install` → rc=0 ; `Invoke-Expression \"mvn clean install\"` → rc=0 ; témoin `& mvn clean install` → rc=1. | Test actif : Le contrat tourne en CI mais se contourne par indirection.",
     "reserve": "Constat absent du suivi du mainteneur."
    },
-   "absent_du_suivi": true
+   "absent_du_suivi": true,
+   "verification_mainteneur": {
+    "date": "2026-11-10",
+    "commit": "4e83b8e8",
+    "verdict": "Fermé avec réserve",
+    "preuve": "DIRECT_MAVEN_CALL de scripts/release/test-operational-doc-contracts.sh refuse un nom Maven affecté à une variable (y compris ${root}/mvnw et ${m}), cmd /c avec options et $env:ComSpec /c, Invoke-Expression/iex, Join-Path non cité ; liste d'exceptions MAVEN_CALL_EXCEPTIONS contrôlée contre les entrées périmées ; auto-test de vingt fixtures détectées et cinq acceptées ; les trois mutations du constat sur scripts/compare-jdt.ps1 font échouer le contrat en nommant le script et la ligne.",
+    "reserve": "Filtre de motifs, pas une analyse de PowerShell : affectation à une propriété, concaténation, Set-Alias, Set-Variable, tableau, [scriptblock]::Create, [Diagnostics.Process]::Start et Start-Job restent non détectés (consigné en [Limite] dans docs/developer/ci-and-supply-chain.md)."
+   }
   },
   {
    "id": "AUD-TST-15",
@@ -4543,8 +4575,8 @@
    "sprint": 12,
    "depends_on": [],
    "bloque": [],
-   "statut": "Fermé avec réserve",
-   "changement": "Corrigé par la PR #347",
+   "statut": "Fermé",
+   "changement": "Corrigé par les PR #347 et #353",
    "historique": [
     {
      "date": "2026-11-07",
@@ -4557,14 +4589,18 @@
     {
      "date": "2026-11-10",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-10",
+     "statut": "Fermé"
     }
    ],
    "verification_mainteneur": {
     "date": "2026-11-10",
-    "commit": "fd4020ce",
-    "verdict": "Fermé avec réserve",
-    "preuve": "Planchers JaCoCo de core, rest-quarkus, mcp-java et assistant-clients remontés à au plus 3 points sous la mesure de référence (la plus basse des mesures Linux et Windows au commit f8a27f89), publiée dans la table « Mesure de référence » de docs/developer/adapter-coverage-gates.md ; scripts/release/coverage_floors.py compare planchers, table et jacoco.csv du build, avec les fixtures négatives floor-too-low et floor-without-measure rejetées par test-operational-doc-contracts.sh ; exécuté par ci.yml après les builds Linux et Windows et par nexus-validate (tâches 1.1 à 1.3 de sprint-12-durcir-les-gates-ajoutes).",
-    "reserve": "Tâches 6.1 et 6.2 du changement sprint-12-durcir-les-gates-ajoutes (documentation durable et lignes de la matrice après synchronisation des specs) restantes ; changement non archivé. Sous Linux, com.nexus.index.minos reste plus de 3 points au-dessus de son plancher commun aux deux builds (test POSIX seul)."
+    "commit": "4e83b8e8",
+    "verdict": "Fermé",
+    "preuve": "Tâches 6.1 et 6.2 livrées : section « OpenSpec coverage-gates » de docs/developer/adapter-coverage-gates.md, lignes « Un plancher de couverture suit la mesure de référence » et « La page de couverture publie la mesure de référence des planchers » de docs/developer/openspec-traceability.md après synchronisation de openspec/specs/coverage-gates/spec.md (PR #353) ; planchers, coverage_floors.py et fixtures floor-too-low / floor-without-measure livrés par la PR #347.",
+    "reserve": "Sous Linux, com.nexus.index.minos reste plus de 3 points au-dessus de son plancher commun aux deux builds (test POSIX seul)."
    },
    "verification": {
     "date": "2026-11-09",
@@ -4591,8 +4627,8 @@
    "sprint": 12,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
-   "changement": "Nouveau",
+   "statut": "Fermé avec réserve",
+   "changement": "Corrigé par la PR #353",
    "historique": [
     {
      "date": "2026-11-07",
@@ -4601,6 +4637,10 @@
     {
      "date": "2026-11-09",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-10",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
@@ -4610,7 +4650,14 @@
     "preuve": "grep -rn archgate .github → 0 ; aucun package.json/lockfile ; 25 *.rules.ts dans docs/architecture/adr (40 au 07/11, après consolidation des ADR) ; 26 ADR citent encore une règle Archgate ou archgate check ; exécution seulement locale (.claude/rules/documentation.md:81). | Test actif : Non.",
     "reserve": "Constat absent du suivi du mainteneur."
    },
-   "absent_du_suivi": true
+   "absent_du_suivi": true,
+   "verification_mainteneur": {
+    "date": "2026-11-10",
+    "commit": "4e83b8e8",
+    "verdict": "Fermé avec réserve",
+    "preuve": "Archgate 0.61.0 épinglé : archgate.version et archgate.0.61.0.linux-x64.sha256 dans config/tool-integrity.properties (empreinte relevée sur le digest de l'API releases, le fichier .sha256 de la release et un calcul local) ; scripts/release/install-archgate.sh vérifie l'archive avant extraction, test hors réseau (empreinte altérée refusée sans binaire extrait) dans scripts/release/test-tool-integrity-anchors.sh ; job « Archgate ADR rules » de .github/workflows/ci.yml : archgate check --base HEAD --output github (toutes les règles, 63 sans violation). Preuve d'échec : commit de violation GEN-0002 97fec8d9, job rouge (run 42885910598, annotation pom.xml), reverté.",
+    "reserve": "Le job n'est pas dans la liste des checks obligatoires de develop (réglage GitHub du mainteneur)."
+   }
   },
   {
    "id": "AUD-QUA-22",
