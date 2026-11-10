@@ -51,6 +51,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -407,7 +408,7 @@ class ScaleRegressionBenchmarkTest {
         }
         long totalMs = elapsedMillis(started);
         var statistics = repository.statistics(projectId);
-        assertTrue(statistics.files() == fileCount, "La publication doit écrire chaque fichier mis en attente");
+        assertEquals(fileCount, statistics.files(), "La publication doit écrire chaque fichier mis en attente");
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("writePath", "openWriteSession/stage/publish");

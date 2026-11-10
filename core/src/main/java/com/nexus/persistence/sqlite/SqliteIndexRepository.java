@@ -5,7 +5,6 @@ import com.nexus.index.IndexRepository;
 import com.nexus.index.IndexStatistics;
 import com.nexus.index.IndexWriteSession;
 import com.nexus.index.IndexedFile;
-import com.nexus.index.IndexedFileUpdate;
 import com.nexus.index.IndexedSymbol;
 import com.nexus.index.SymbolRelation;
 
