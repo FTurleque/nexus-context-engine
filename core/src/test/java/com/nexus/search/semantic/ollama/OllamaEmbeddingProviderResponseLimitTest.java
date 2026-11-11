@@ -7,24 +7,36 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.Authenticator;
+import java.net.CookieHandler;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.ProxySelector;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OllamaEmbeddingProviderResponseLimitTest {
@@ -238,7 +250,7 @@ class OllamaEmbeddingProviderResponseLimitTest {
     @Test
     void reportsTimeoutWhenHeadersArriveButBodyStalls() throws Exception {
         byte[] body = json("{\"embeddings\":[[1.0]]}");
-        CountDownLatch bodyPaused = new CountDownLatch(1);
+        CountDownLatch releaseBody = new CountDownLatch(1);
         server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         server.createContext("/api/embed", exchange -> {
             try (exchange) {
@@ -248,8 +260,8 @@ class OllamaEmbeddingProviderResponseLimitTest {
                 try (OutputStream output = exchange.getResponseBody()) {
                     output.write(body[0]);
                     output.flush();
-                    bodyPaused.countDown();
-                    new CountDownLatch(1).await(1, TimeUnit.SECONDS);
+                    // Le corps reste suspendu jusqu'à la fin du test : seul le délai du provider peut conclure.
+                    releaseBody.await(10, TimeUnit.SECONDS);
                     output.write(body, 1, body.length - 1);
                 }
             } catch (InterruptedException exception) {
@@ -259,26 +271,128 @@ class OllamaEmbeddingProviderResponseLimitTest {
             }
         });
         server.start();
-        URI baseUri = serverUri(server);
-        OllamaEmbeddingProvider provider = provider(baseUri, 1, Duration.ofMillis(150), 1024);
-        AtomicReference<Throwable> failure = new AtomicReference<>();
+        HeaderGatedHttpClient client = new HeaderGatedHttpClient(
+                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(1)).build());
+        OllamaEmbeddingProvider provider = new OllamaEmbeddingProvider(
+                client, new ObjectMapper(), serverUri(server), "fixture-model", 1, Duration.ofMillis(150), 1024);
 
-        Thread caller = Thread.ofVirtual().start(() -> {
+        try {
+            EmbeddingProviderUnavailableException thrown = assertTimeoutPreemptively(
+                    HeaderGatedHttpClient.HEADER_WAIT,
+                    () -> assertThrows(EmbeddingProviderUnavailableException.class,
+                            () -> provider.embed("body-timeout")));
+
+            assertTrue(client.headersReceived(), "Le client doit avoir reçu les en-têtes avant le délai");
+            assertInstanceOf(TimeoutException.class, thrown.getCause(),
+                    "Le délai doit expirer pendant la lecture du corps, pas pendant l'attente des en-têtes");
+            assertEquals(
+                    "Ollama /api/embed indisponible : délai dépassé après 150 ms",
+                    thrown.getMessage());
+        } finally {
+            releaseBody.countDown();
+        }
+    }
+
+    /**
+     * Client qui ne rend la future à l'appelant qu'une fois les en-têtes de réponse reçus.
+     * Le délai que le provider mesure sur cette future ne couvre alors que la lecture du
+     * corps, quel que soit le temps d'établissement de la connexion. Le timeout de requête
+     * (phase des en-têtes) est porté à {@link #HEADER_WAIT} : cette phase est couverte par
+     * {@code reportsRequestTimeoutWithStableDiagnostic}.
+     */
+    private static final class HeaderGatedHttpClient extends HttpClient {
+
+        static final Duration HEADER_WAIT = Duration.ofSeconds(10);
+
+        private final HttpClient delegate;
+        private final CompletableFuture<Void> headers = new CompletableFuture<>();
+
+        HeaderGatedHttpClient(HttpClient delegate) {
+            this.delegate = delegate;
+        }
+
+        boolean headersReceived() {
+            return headers.isDone();
+        }
+
+        @Override
+        public <T> CompletableFuture<HttpResponse<T>> sendAsync(
+                HttpRequest request, HttpResponse.BodyHandler<T> handler) {
+            HttpRequest withHeaderWait = HttpRequest.newBuilder(request, (name, value) -> true)
+                    .timeout(HEADER_WAIT)
+                    .build();
+            CompletableFuture<HttpResponse<T>> response = delegate.sendAsync(withHeaderWait, info -> {
+                headers.complete(null);
+                return handler.apply(info);
+            });
             try {
-                provider.embed("body-timeout");
-            } catch (Throwable exception) {
-                failure.set(exception);
+                CompletableFuture.anyOf(headers, response).get(HEADER_WAIT.toMillis(), TimeUnit.MILLISECONDS);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            } catch (ExecutionException | TimeoutException exception) {
+                // La future rendue porte l'échec ; headersReceived() reste faux et le test le signale.
             }
-        });
+            return response;
+        }
 
-        assertTrue(bodyPaused.await(2, TimeUnit.SECONDS), "Le serveur doit avoir envoyé les en-têtes");
-        caller.join(2_000L);
-        assertFalse(caller.isAlive(), "L'appel doit respecter le délai pendant la lecture du corps");
-        EmbeddingProviderUnavailableException thrown =
-                assertInstanceOf(EmbeddingProviderUnavailableException.class, failure.get());
-        assertEquals(
-                "Ollama /api/embed indisponible : délai dépassé après 150 ms",
-                thrown.getMessage());
+        @Override
+        public <T> CompletableFuture<HttpResponse<T>> sendAsync(
+                HttpRequest request,
+                HttpResponse.BodyHandler<T> handler,
+                HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
+            return sendAsync(request, handler);
+        }
+
+        @Override
+        public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> handler)
+                throws IOException, InterruptedException {
+            return delegate.send(request, handler);
+        }
+
+        @Override
+        public Optional<CookieHandler> cookieHandler() {
+            return delegate.cookieHandler();
+        }
+
+        @Override
+        public Optional<Duration> connectTimeout() {
+            return delegate.connectTimeout();
+        }
+
+        @Override
+        public Redirect followRedirects() {
+            return delegate.followRedirects();
+        }
+
+        @Override
+        public Optional<ProxySelector> proxy() {
+            return delegate.proxy();
+        }
+
+        @Override
+        public SSLContext sslContext() {
+            return delegate.sslContext();
+        }
+
+        @Override
+        public SSLParameters sslParameters() {
+            return delegate.sslParameters();
+        }
+
+        @Override
+        public Optional<Authenticator> authenticator() {
+            return delegate.authenticator();
+        }
+
+        @Override
+        public Version version() {
+            return delegate.version();
+        }
+
+        @Override
+        public Optional<Executor> executor() {
+            return delegate.executor();
+        }
     }
 
     @Test
