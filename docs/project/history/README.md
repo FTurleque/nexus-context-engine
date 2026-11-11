@@ -22,4 +22,5 @@ Résultats d'itération, de benchmark et de qualification, figés à leur date. 
 | peuplement du palier 1M du gate scale selon le runner (2026-11-11) | [Peuplement 1M selon le runner](population-1m-runners-2026-11-11.md) |
 | releases immuables, rulesets de tags et release `v0.2.0` non immuable (2026-11-11) | [Releases immuables et rulesets de tags](releases-immuables-et-tags-2026-11-11.md) |
 | releases immuables activées et deux rulesets de tags après réglage (2026-11-11) | [Releases immuables après réglage](releases-immuables-et-tags-reglages-2026-11-11.md) |
+| pré-version `0.2.1-rc.1` publiée immuable, `latest` inchangé (2026-11-11) | [Pré-version 0.2.1-rc.1 immuable](release-0.2.1-rc.1-immuable-2026-11-11.md) |
 | passes de jetons à préfixe de la redaction et pré-filtre par préfixe littéral (2026-11-11) | [Passes de jetons de la redaction](redaction-token-passes-measures-2026-11-11.md) |
