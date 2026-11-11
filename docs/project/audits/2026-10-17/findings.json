@@ -5322,12 +5322,16 @@
    "sprint": 14,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
-   "changement": "Nouveau",
+   "statut": "Fermé avec réserve",
+   "changement": "publish-github-release-assets.sh sort en code 79 si la release publiée n'est pas immuable, avant latest ; procédure « Reprise d'une release échouée » dans release-and-recovery.md, sous contrat refusant les commandes de suppression ou de forçage de tag v* dans docs/developer/ ; SEC-0068 complété (création réservée au mainteneur, mise à jour et suppression interdites à tous, releases immuables) ; relevé daté du 2026-11-11 (PR #368, sprint 14). Réserve : tâches mainteneur 2.1 (releases immuables) et 2.2 (deux rulesets de tags) ouvertes ; v0.2.0 reste non immuable.",
    "historique": [
     {
      "date": "2026-11-11",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-11",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
@@ -5462,12 +5466,16 @@
    "sprint": 14,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
-   "changement": "Nouveau",
+   "statut": "Fermé avec réserve",
+   "changement": "Plafond absolu de 1M à 48 906 ms (40 755 × 1,20) dans verify-scale-budgets.py : min(48 906, max(40 s, 2,6 × 500k)), rapport général et courbe dédiée, avec ou sans base ; tests du ralentissement uniforme 20 000/52 000 refusé ; scale-regression-benchmark.md énonce la valeur, sous contrat qui la relit dans le script (PR #368, sprint 14). Réserve : valeur à confirmer par le mainteneur ; check Hermetic scale benchmark mesuré sur la PR.",
    "historique": [
     {
      "date": "2026-11-11",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-11",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
