@@ -4,39 +4,40 @@ Le [plan d'action](plan-action.md) classe par urgence ; ce document classe par *
 
 Principes : le dispositif avant ce qu'il mesure ; l'observabilité avant les corrections de fond ; les mêmes fichiers dans des sprints successifs, jamais parallèles (les sprints 1 et 2 partagent `validate-phase-6.ps1` et `ci.yml`, les sprints 5 et 6 `ProjectIndexingService` et `LuceneSearchIndex`). L'ordre a été vérifié par script (`consolidate.py`) : chaque constat actionnable est dans exactement un sprint, aucun Info n'y figure, aucun prérequis n'est placé après son dépendant.
 
-## Vue d'ensemble au 9 novembre 2026
+## Vue d'ensemble au 11 novembre 2026
 
 | Sprint | Titre | État | Fermés | Composition | Charge (j) | Reste (j) |
 |---|---|---|---:|---|---|---|
-| S1 | Remettre les mesures d'aplomb | Entamé | 7/8 | 4 moyenne · 4 faible | 2 à 8 | 0,25 à 1 |
+| S1 | Remettre les mesures d'aplomb | Clôturé | 8/8 | 4 moyenne · 4 faible | 2 à 8 | 0 à 0 |
 | S2 | Outillage des scripts et des workflows | Clôturé | 9/9 | 1 moyenne · 8 faible | 3,75 à 13 | 0 à 0 |
 | S3 | Filets de test et traces | Clôturé | 7/7 | 2 moyenne · 5 faible | 1,75 à 7 | 0 à 0 |
 | S4 | Une seule sortie publique, redaction complétée | Clôturé | 8/8 | 5 moyenne · 3 faible | 3,5 à 12 | 0 à 0 |
 | S5 | Indexation et écriture SQLite | Clôturé | 8/8 | 1 moyenne · 7 faible | 4,25 à 14 | 0 à 0 |
-| S6 | Fédération et runtimes longue durée | Entamé | 7/11 | 6 moyenne · 5 faible | 5 à 17 | 1 à 4 |
-| S7 | Casser le bloc cyclique du cœur | Entamé | 5/7 | 2 moyenne · 5 faible | 5,25 à 16 | 0,5 à 2 |
-| S8 | Façade, configuration et durcissements locaux | Entamé | 7/8 | 1 moyenne · 7 faible | 2,75 à 10 | 0,25 à 1 |
+| S6 | Fédération et runtimes longue durée | Clôturé | 11/11 | 6 moyenne · 5 faible | 5 à 17 | 0 à 0 |
+| S7 | Casser le bloc cyclique du cœur | Clôturé | 7/7 | 2 moyenne · 5 faible | 5,25 à 16 | 0 à 0 |
+| S8 | Façade, configuration et durcissements locaux | Clôturé | 9/9 | 1 moyenne · 8 faible | 3 à 11 | 0 à 0 |
 | S9 | Chaîne de release exécutable | Clôturé | 9/9 | 2 moyenne · 7 faible | 3 à 11 | 0 à 0 |
 | S10 | Conteneur et gouvernance du dépôt | Clôturé | 7/7 | 7 faible | 1,75 à 7 | 0 à 0 |
 | S11 | Finitions documentaires et micro-optimisations | Clôturé | 8/8 | 8 faible | 2,75 à 10 | 0 à 0 |
-| S12 | Durcir les gates ajoutés | À faire | 0/5 | 5 faible | 1,25 à 5 | 1,25 à 5 |
-| S13 | Installateur et release finale | À faire | 0/5 | 1 élevée · 4 faible | 1,25 à 5 | 1,25 à 5 |
+| S12 | Durcir les gates ajoutés | Clôturé | 5/5 | 5 faible | 1,25 à 5 | 0 à 0 |
+| S13 | Installateur et release finale | Clôturé | 5/5 | 1 élevée · 4 faible | 1,25 à 5 | 0 à 0 |
+| S14 | Suites de la vérification du 11 novembre | À faire | 0/8 | 1 élevée · 1 moyenne · 6 faible | 2,75 à 10 | 2,75 à 10 |
 
-Les sprints 12 et 13 n'existaient pas le 17/10. Le sprint 12 regroupe les contournements relevés le 07/11 dans les gates livrés aux sprints 1 et 2 ; le sprint 13 les défauts de l'installateur et de la publication relevés le 09/11, à corriger avant la release finale v0.2.0. Ni l'un ni l'autre n'a de dépendance avec les sprints 1 à 11.
+Les sprints 12 à 14 n'existaient pas le 17/10. Le sprint 12 regroupe les contournements relevés le 07/11 dans les gates livrés aux sprints 1 et 2 ; le sprint 13 les défauts de l'installateur et de la publication relevés le 09/11 ; le sprint 14 les constats relevés le 11/11. Aucun n'a de dépendance avec les sprints antérieurs.
 
-Charge restante : **4,5 à 18 jours**. C'est une enveloppe (S 0,25 à 1 j, M 1 à 3 j, L 3 à 8 j) : elle ne couvre ni la revue, ni les allers-retours de CI, ni les arbitrages écrits (ADR) qu'exigent les sprints 5, 6 et 11.
+Charge restante : **2,75 à 10 jours**. C'est une enveloppe (S 0,25 à 1 j, M 1 à 3 j, L 3 à 8 j) : elle ne couvre ni la revue, ni les allers-retours de CI, ni les arbitrages écrits (ADR) qu'exigent les sprints 5, 6 et 11.
 
 ## Chemin critique restant
 
-Tous les prérequis identifiés le 17/10 et le 07/11 sont livrés : le cœur est acyclique (`AUD-ARC-01`) et la première pré-release est publiée (`AUD-DEP-02`). Plus aucun constat ouvert n'en bloque un autre. L'ordre restant est une question d'urgence :
+Les sprints 1 à 13 sont clôturés et la release finale v0.2.0 est publiée. Aucun constat ouvert n'en bloque un autre. L'ordre restant, au sprint 14, est une question d'urgence :
 
-- **`AUD-QUA-22` (Élevée, S, sprint 13)** puis **`AUD-DEP-34` (S, sprint 13)**, avant la promotion vers `main` (PR #332) et la release finale v0.2.0.
-- **`AUD-ARC-20` (S, sprint 7)** : sans lui, le cœur peut redevenir cyclique sans que le test le voie.
-- **`AUD-PRF-27` et `AUD-PRF-29` (Moyenne, S, sprint 6)** : deux régressions de performance SQLite, mesurées.
+- **`AUD-QUA-28` (Élevée, M)** : avec un profil Windows accentué, l'installation native par défaut ne trouve pas `NEXUS_HOME` ; même population que `AUD-QUA-22`, à corriger avant la prochaine release.
+- **`AUD-SEC-24` (Moyenne, S)** : un fichier forgé de 8 Mo bloque l'indexation environ 1 min 30 par passe de redaction.
+- **`AUD-SEC-25`, `AUD-DEP-37`** : redaction XML et réglages GitHub de release ; puis les contournements des gates (`AUD-QUA-26`, `AUD-DEP-36`), le plafond de charge (`AUD-TST-18`) et la doc (`AUD-QUA-27`).
 
 ## S1 — Remettre les mesures d'aplomb
 
-**État au 09/11** : Entamé (7/8 fermés). Sortie partielle : toujours aucune règle JaCoCo par classe pour les classes de bornes listées (`AUD-TST-03`, désaccord avec la clôture déclarée ; JdtStdioSession à 18,6 % de branches couvertes).
+**État au 11/11** : Clôturé (8/8 fermés). Sortie atteinte (#343, #347) : règles CLASS pour les quatre classes de bornes, au plus 3 points sous la mesure ; une règle mal nommée fait échouer `coverage_floors.py`.
 
 **Pourquoi ici.** Plusieurs gates passent sans mesurer tout ce qu'ils annoncent ; tant qu'ils ne sont pas réparés, les corrections des sprints suivants ne sont pas vérifiables.
 
@@ -47,7 +48,7 @@ Tous les prérequis identifiés le 17/10 et le 07/11 sont livrés : le cœur est
 | Ordre | ID | Sévérité | Effort | Statut | Constat |
 |---:|---|---|---|---|---|
 | 1 | `AUD-TST-01` | Moyenne | S | Fermé avec réserve | NexusApiApplicationService, bean CDI exercé par les @QuarkusTest, n'est crédité qu'à 13 lignes sur 95 par l'agent JaCoCo seul |
-| 2 | `AUD-TST-03` | Moyenne | S | Partiel | Gates JaCoCo au seul niveau BUNDLE, seuils effectifs différents de la doc : 6 classes de sécurité ou de bornes sous 55 % de branches passent sans alerte |
+| 2 | `AUD-TST-03` | Moyenne | S | Fermé avec réserve | Gates JaCoCo au seul niveau BUNDLE, seuils effectifs différents de la doc : 6 classes de sécurité ou de bornes sous 55 % de branches passent sans alerte |
 | 3 | `AUD-QUA-06` | Moyenne | S | Fermé | Le gate CI Windows retombe silencieusement sur le Maven installé du runner si le wrapper échoue |
 | 4 | `AUD-TST-11` | Faible | S | Fermé | Tests symlink conditionnés par assume (15 sites) : un runner sans symlinks les ignore silencieusement |
 | 5 | `AUD-TST-08` | Faible | S | Fermé avec réserve | Scripts de test orphelins : test-rest-token-contract.ps1 et Test-Hooks.ps1 appelés par aucun workflow ni script |
@@ -57,7 +58,7 @@ Tous les prérequis identifiés le 17/10 et le 07/11 sont livrés : le cœur est
 
 ## S2 — Outillage des scripts et des workflows
 
-**État au 09/11** : Clôturé (9/9 fermés). Sortie atteinte ; contournements des gates regroupés au sprint 12.
+**État au 11/11** : Clôturé (9/9 fermés). Sortie atteinte.
 
 **Pourquoi ici.** Les scripts et workflows portent toutes les vérifications ; on les rend uniformes, et on stabilise la qualification sémantique qui mesurera le sprint 6. Touche validate-phase-6.ps1 et ci.yml après le sprint 1, jamais en parallèle.
 
@@ -81,7 +82,7 @@ Tous les prérequis identifiés le 17/10 et le 07/11 sont livrés : le cœur est
 
 ## S3 — Filets de test et traces
 
-**État au 09/11** : Clôturé (7/7 fermés). Sortie atteinte ; la baseline de cycles doit désormais rester vide.
+**État au 11/11** : Clôturé (7/7 fermés). Sortie atteinte ; la baseline de cycles est vide et le test lit désormais les références qualifiées.
 
 **Pourquoi ici.** Les sprints 4 à 8 modifient la sortie publique, l'indexation et les frontières de packages : il faut d'abord les tests de contrat, les traces et le garde-fou d'architecture qui signaleront une régression.
 
@@ -101,7 +102,7 @@ Tous les prérequis identifiés le 17/10 et le 07/11 sont livrés : le cœur est
 
 ## S4 — Une seule sortie publique, redaction complétée
 
-**État au 09/11** : Clôturé (8/8 fermés). Sortie atteinte ; la borne `sk-` reste désalignée (`AUD-SEC-20`).
+**État au 11/11** : Clôturé (8/8 fermés). Sortie atteinte ; la borne `sk-` est alignée (`AUD-SEC-20`, #348).
 
 **Pourquoi ici.** La projection publique est écrite trois fois ; on la rend unique avant d'y corriger l'ordre, les signatures et les formats de secrets, sinon chaque correctif est à faire trois fois.
 
@@ -126,7 +127,7 @@ Tous les prérequis identifiés le 17/10 et le 07/11 sont livrés : le cœur est
 
 ## S5 — Indexation et écriture SQLite
 
-**État au 09/11** : Clôturé (8/8 fermés). Sortie atteinte avec réserve : benchmark de réindexation via `applyChanges` (`AUD-PRF-28`), staging quadratique (`AUD-PRF-27`).
+**État au 11/11** : Clôturé (8/8 fermés). Sortie atteinte ; l'ancien chemin `applyChanges` est supprimé (`AUD-PRF-28`).
 
 **Pourquoi ici.** Les coûts d'indexation touchent les mêmes classes (ProjectIndexingService, SqliteFileWriter, LuceneSearchIndex) : un seul lot, avant la fédération qui réutilise ces classes.
 
@@ -147,7 +148,7 @@ Tous les prérequis identifiés le 17/10 et le 07/11 sont livrés : le cœur est
 
 ## S6 — Fédération et runtimes longue durée
 
-**État au 09/11** : Entamé (7/11 fermés). Sortie atteinte avec réserve (échéance vérifiée entre projets seulement) ; restent `AUD-PRF-27`, `AUD-PRF-28` et deux constats nouveaux, dont la régression V015 (`AUD-PRF-29`).
+**État au 11/11** : Clôturé (11/11 fermés). Sortie atteinte (#344) : pagination du staging indexée (V016), choix d'index selon la part du projet (V017).
 
 **Pourquoi ici.** Le chemin multi-projets répète des coûts par projet (embedding, readers, Git) ; on découpe d'abord la méthode de 168 lignes qui le porte. Mesuré par la qualification sémantique stabilisée au sprint 2.
 
@@ -168,14 +169,14 @@ Tous les prérequis identifiés le 17/10 et le 07/11 sont livrés : le cœur est
 | 5 | `AUD-PRF-06` | Faible | S | Fermé | Cache de contexte Git limité à 16 entrées alors que le scope fédéré monte à 100 projets : éviction LRU systématique sur une requête fédérée répétée |
 | 6 | `AUD-PRF-07` | Moyenne | S | Fermé avec réserve | GitRecencyCandidateEnricher relit 50 commits et 50 diffs d'arbres à chaque recherche et pour chaque projet, sans cache |
 | 7 | `AUD-PRF-09` | Faible | M | Fermé avec réserve | Recherche de symboles : index FTS trigram et préfiltre fuzzy globaux (non scopés projet), jusqu'à 9 recherches × 3 requêtes SQL par projet |
-| 8 | `AUD-PRF-27` | Moyenne | S | Ouvert | La publication du staging pagine index_staged_files sans index (project_id, id) : coût quadratique, 5,6 s à 100 000 fichiers sous verrou d'écriture |
-| 9 | `AUD-PRF-28` | Faible | S | Ouvert | IndexRepository.applyChanges est mort en production mais reste le chemin mesuré par les benchmarks de réindexation |
-| 10 | `AUD-PRF-29` | Moyenne | S | Ouvert | La migration V015 (préfiltre approché scopé par fichier) ralentit la recherche de symboles d'un gros projet seul dans sa base : 0,10 → 0,36 s à 100 000 fichiers |
-| 11 | `AUD-QUA-23` | Faible | S | Ouvert | La clé du vecteur de requête partagé ignore le texte de la requête : un SearchQueryContext réutilisé rendrait le vecteur de la requête précédente |
+| 8 | `AUD-PRF-27` | Moyenne | S | Fermé | La publication du staging pagine index_staged_files sans index (project_id, id) : coût quadratique, 5,6 s à 100 000 fichiers sous verrou d'écriture |
+| 9 | `AUD-PRF-28` | Faible | S | Fermé | IndexRepository.applyChanges est mort en production mais reste le chemin mesuré par les benchmarks de réindexation |
+| 10 | `AUD-PRF-29` | Moyenne | S | Fermé avec réserve | La migration V015 (préfiltre approché scopé par fichier) ralentit la recherche de symboles d'un gros projet seul dans sa base : 0,10 → 0,36 s à 100 000 fichiers |
+| 11 | `AUD-QUA-23` | Faible | S | Fermé | La clé du vecteur de requête partagé ignore le texte de la requête : un SearchQueryContext réutilisé rendrait le vecteur de la requête précédente |
 
 ## S7 — Casser le bloc cyclique du cœur
 
-**État au 09/11** : Entamé (5/7 fermés). Sortie atteinte : graphe du cœur acyclique, recalculé indépendamment. Restent `AUD-ARC-20` (le test ne voit pas les références qualifiées) et `AUD-TST-16`.
+**État au 11/11** : Clôturé (7/7 fermés). Sortie atteinte (#342) : `JavaSourceGraph` lit les références qualifiées, échecs de publication testés.
 
 **Pourquoi ici.** Les cycles se cassent un par un sous la protection du test d'architecture (sprint 3), après les sprints qui modifient context, security et search.
 
@@ -189,23 +190,25 @@ Tous les prérequis identifiés le 17/10 et le 07/11 sont livrés : le cœur est
 
 | Ordre | ID | Sévérité | Effort | Statut | Constat |
 |---:|---|---|---|---|---|
-| 1 | `AUD-ARC-20` | Faible | S | Ouvert | Le test d'architecture ne lit que les imports : 39 références pleinement qualifiées entre packages échappent au contrôle des cycles |
+| 1 | `AUD-ARC-20` | Faible | S | Fermé avec réserve | Le test d'architecture ne lit que les imports : 39 références pleinement qualifiées entre packages échappent au contrôle des cycles |
 | 2 | `AUD-ARC-02` | Moyenne | M | Fermé | Cycle index ↔ search : le package index mêle modèle de domaine, port de persistance et orchestration qui dépend des ports de recherche |
 | 3 | `AUD-ARC-04` | Faible | S | Fermé | Cycles context ↔ context.source / .git / .skill : les ports de sources dépendent du modèle de contexte qui dépend d'eux |
 | 4 | `AUD-ARC-05` | Faible | S | Fermé | Cycle search ↔ ranking : le ranker dépend des candidats de recherche, le service de recherche dépend du ranker |
 | 5 | `AUD-ARC-06` | Faible | S | Fermé | Le package de ports sémantiques instancie l'implémentation Ollama (cycle search.semantic ↔ search.semantic.ollama) |
 | 6 | `AUD-ARC-01` | Moyenne | L | Fermé avec réserve | Composante fortement connexe de 12 packages du cœur (context, context.source, .git, .skill, index, index.scan, ranking, ranking.graph, search, search.semantic, search.semantic.ollama, security) |
-| 7 | `AUD-TST-16` | Faible | S | Ouvert | Aucun test ne couvre un échec entre le commit Lucene et la publication SQLite, ni l'échec du commit sémantique après le lexical |
+| 7 | `AUD-TST-16` | Faible | S | Fermé avec réserve | Aucun test ne couvre un échec entre le commit Lucene et la publication SQLite, ni l'échec du commit sémantique après le lexical |
 
 ## S8 — Façade, configuration et durcissements locaux
 
-**État au 09/11** : Entamé (7/8 fermés). Sortie atteinte sauf `AUD-SEC-20`, écarté explicitement par la PR #331. Le critère Git est rempli par un contrôle de propriétaire (BE-0070) plutôt que par un plafond.
+**État au 11/11** : Clôturé (9/9 fermés). Sortie atteinte (#348, #349) : refus et masquage alignés, sur le même texte (`AUD-SEC-20`, `AUD-SEC-23`).
 
 **Pourquoi ici.** La façade et la configuration se nettoient une fois les packages stabilisés ; les deux durcissements locaux touchent des points d'entrée revus aux sprints 4 et 7.
 
 **Critère de sortie.** La façade n'expose plus SQLException ; System.getenv n'apparaît plus que dans la composition root ; le mode trust-local refuse un Host ou une Origin non loopback ; la découverte Git s'arrête à la racine du projet.
 
-**Charge** : 2,75 à 10 j.
+**Charge** : 3 à 11 j.
+
+**Ordre interne** : `AUD-SEC-20` avant `AUD-SEC-23`
 
 | Ordre | ID | Sévérité | Effort | Statut | Constat |
 |---:|---|---|---|---|---|
@@ -216,11 +219,12 @@ Tous les prérequis identifiés le 17/10 et le 07/11 sont livrés : le cœur est
 | 5 | `AUD-ARC-19` | Faible | S | Fermé | Le package index.jdt définit une classe nommée ProcessBuilder qui masque java.lang.ProcessBuilder |
 | 6 | `AUD-SEC-04` | Moyenne | S | Fermé avec réserve | En mode NEXUS_REST_TRUST_LOCAL=true, l'API REST loopback sans token n'a ni contrôle Host/Origin ni allowlist de racines : exposée au DNS rebinding depuis un navigateur |
 | 7 | `AUD-SEC-05` | Faible | S | Fermé avec réserve | La découverte JGit remonte les répertoires parents sans plafond ni contrôle de propriétaire du dépôt trouvé |
-| 8 | `AUD-SEC-20` | Faible | S | Ouvert | Un jeton sk- dont le corps fait 256 à 260 caractères n'est ni redigé ni refusé (bornes 255 et 261 désalignées) |
+| 8 | `AUD-SEC-20` | Faible | S | Fermé | Un jeton sk- dont le corps fait 256 à 260 caractères n'est ni redigé ni refusé (bornes 255 et 261 désalignées) |
+| 9 | `AUD-SEC-23` | Faible | S | Fermé avec réserve | Un jeton à préfixe collé à un bloc de clé privée, ou un jeton xox?-, gh?_, sk_/rk_ contenant un « _ », n'est ni redigé ni refusé (refus et masquage désalignés) |
 
 ## S9 — Chaîne de release exécutable
 
-**État au 09/11** : Clôturé (9/9 fermés). Sortie atteinte avec réserve : pré-release 0.2.0-rc.2 publiée depuis l'environnement protégé, assets attestés (SLSA vérifié). Ils ne sont pas signés Authenticode (risque accepté, `AUD-SEC-21`) et le chemin de release finale n'a pas encore été exercé.
+**État au 11/11** : Clôturé (9/9 fermés). Sortie atteinte ; la release finale v0.2.0 est publiée et attestée.
 
 **Pourquoi ici.** La release n'a jamais tourné : on corrige ce qu'elle manipule (secrets, environnement, attestations, version) avant de la lancer une première fois sur un tag de pré-version.
 
@@ -244,7 +248,7 @@ Tous les prérequis identifiés le 17/10 et le 07/11 sont livrés : le cœur est
 
 ## S10 — Conteneur et gouvernance du dépôt
 
-**État au 09/11** : Clôturé (7/7 fermés). Sortie atteinte (réserves mineures : CODEOWNERS sans `.github/actions/`, contexte Docker de build non sondé).
+**État au 11/11** : Clôturé (7/7 fermés). Sortie atteinte.
 
 **Pourquoi ici.** Durcissements indépendants du code, regroupés parce qu'ils touchent les mêmes fichiers (Dockerfile, compose) ou les réglages GitHub.
 
@@ -264,7 +268,7 @@ Tous les prérequis identifiés le 17/10 et le 07/11 sont livrés : le cœur est
 
 ## S11 — Finitions documentaires et micro-optimisations
 
-**État au 09/11** : Clôturé (8/8 fermés). Sortie atteinte (ADR DATA-0088 et BE-0087 au statut Proposed).
+**État au 11/11** : Clôturé (8/8 fermés). Sortie atteinte.
 
 **Pourquoi ici.** Corrections isolées, sans prérequis ni conséquence sur les autres lots.
 
@@ -285,7 +289,7 @@ Tous les prérequis identifiés le 17/10 et le 07/11 sont livrés : le cœur est
 
 ## S12 — Durcir les gates ajoutés
 
-**État au 09/11** : À faire (0/5 fermés). Non commencé : aucun changement OpenSpec, les 5 constats sont absents du suivi.
+**État au 11/11** : Clôturé (5/5 fermés). Sortie atteinte avec réserve (#353) : gates durcis et testés par mutation ; des formes simples les contournent encore (`AUD-QUA-26`, `AUD-DEP-36`).
 
 **Pourquoi ici.** Les gates livrés aux sprints 1 et 2 tiennent sur les cas d'origine mais se contournent sur des variantes. Sans dépendance avec les sprints 6 à 11 : à mener tôt, numéroté 12 pour ne pas renuméroter les changements OpenSpec existants.
 
@@ -295,15 +299,15 @@ Tous les prérequis identifiés le 17/10 et le 07/11 sont livrés : le cœur est
 
 | Ordre | ID | Sévérité | Effort | Statut | Constat |
 |---:|---|---|---|---|---|
-| 1 | `AUD-TST-15` | Faible | S | Ouvert | Planchers JaCoCo déjà loin de la mesure (api 78/67 contre 88,4/73,7 ; security 85/77 contre 91,7/82,9), contrairement à la doc « 2 à 3 points sous la mesure » |
-| 2 | `AUD-TST-17` | Faible | S | Ouvert | Les 40 règles Archgate (*.rules.ts) ne tournent dans aucun workflow et leur outillage n'est pas épinglé |
-| 3 | `AUD-QUA-21` | Faible | S | Ouvert | Le contrat « Maven uniquement via NexusScript.psm1 » se contourne par indirection ($m = "mvn" ; & $m, cmd /c mvn) |
-| 4 | `AUD-DEP-32` | Faible | S | Ouvert | workflow_hygiene.py ne lit pas toutes les formes YAML (run: multi-lignes simple, flow mapping, clés citées, with: script:) ni les actions composites |
-| 5 | `AUD-DEP-33` | Faible | S | Ouvert | Le contrôle des épinglages compare les commentaires entre eux, pas au tag amont : AUD-DEP-10 peut revenir sans alerte |
+| 1 | `AUD-TST-15` | Faible | S | Fermé avec réserve | Planchers JaCoCo déjà loin de la mesure (api 78/67 contre 88,4/73,7 ; security 85/77 contre 91,7/82,9), contrairement à la doc « 2 à 3 points sous la mesure » |
+| 2 | `AUD-TST-17` | Faible | S | Fermé avec réserve | Les 40 règles Archgate (*.rules.ts) ne tournent dans aucun workflow et leur outillage n'est pas épinglé |
+| 3 | `AUD-QUA-21` | Faible | S | Fermé avec réserve | Le contrat « Maven uniquement via NexusScript.psm1 » se contourne par indirection ($m = "mvn" ; & $m, cmd /c mvn) |
+| 4 | `AUD-DEP-32` | Faible | S | Fermé avec réserve | workflow_hygiene.py ne lit pas toutes les formes YAML (run: multi-lignes simple, flow mapping, clés citées, with: script:) ni les actions composites |
+| 5 | `AUD-DEP-33` | Faible | S | Fermé avec réserve | Le contrôle des épinglages compare les commentaires entre eux, pas au tag amont : AUD-DEP-10 peut revenir sans alerte |
 
 ## S13 — Installateur et release finale
 
-**État au 09/11** : À faire (0/5 fermés). Nouveau au 09/11.
+**État au 11/11** : Clôturé (5/5 fermés). Sortie atteinte (#354, release v0.2.0) : configurations JSON des clients préservées octet pour octet sous PS 5.1 (rejoué) ; reste l'écriture ANSI d'autres fichiers (`AUD-QUA-28`).
 
 **Pourquoi ici.** Défauts relevés le 09/11 sur l'installateur Windows et la publication, à corriger avant la promotion vers main (PR #332) et la release finale v0.2.0.
 
@@ -313,11 +317,32 @@ Tous les prérequis identifiés le 17/10 et le 07/11 sont livrés : le cœur est
 
 | Ordre | ID | Sévérité | Effort | Statut | Constat |
 |---:|---|---|---|---|---|
-| 1 | `AUD-QUA-22` | Élevée | S | Ouvert | L'installateur réécrit les configurations MCP des clients IA sans sauvegarde : chemins accentués corrompus, JSON invalide remplacé par un fichier vide |
-| 2 | `AUD-DEP-34` | Faible | S | Ouvert | Des tags GHCR :0.2.0 et :latest posés le 9 août par l'ancienne chaîne Docker existent hors de la release et bloqueront le préflight immuable de la release finale v0.2.0 |
-| 3 | `AUD-QUA-24` | Faible | S | Ouvert | L'échappement PowerShell de l'installateur ne double pas les apostrophes typographiques : un chemin contenant « ’ » casse les scripts générés |
-| 4 | `AUD-DEP-35` | Faible | S | Ouvert | Les labels OCI revision et version sont vides dans l'image construite par l'installateur Windows |
-| 5 | `AUD-QUA-25` | Faible | S | Ouvert | 9 liens relatifs cassés dans le changement OpenSpec archivé le 09/11, que le contrat OpenSpec ne contrôle pas |
+| 1 | `AUD-QUA-22` | Élevée | S | Fermé avec réserve | L'installateur réécrit les configurations MCP des clients IA sans sauvegarde : chemins accentués corrompus, JSON invalide remplacé par un fichier vide |
+| 2 | `AUD-DEP-34` | Faible | S | Fermé | Des tags GHCR :0.2.0 et :latest posés le 9 août par l'ancienne chaîne Docker existent hors de la release et bloqueront le préflight immuable de la release finale v0.2.0 |
+| 3 | `AUD-QUA-24` | Faible | S | Fermé | L'échappement PowerShell de l'installateur ne double pas les apostrophes typographiques : un chemin contenant « ’ » casse les scripts générés |
+| 4 | `AUD-DEP-35` | Faible | S | Fermé avec réserve | Les labels OCI revision et version sont vides dans l'image construite par l'installateur Windows |
+| 5 | `AUD-QUA-25` | Faible | S | Fermé | 9 liens relatifs cassés dans le changement OpenSpec archivé le 09/11, que le contrat OpenSpec ne contrôle pas |
+
+## S14 — Suites de la vérification du 11 novembre
+
+**État au 11/11** : À faire (0/8 fermés). Nouveau au 11/11.
+
+**Pourquoi ici.** Constats relevés le 11/11 : deux défauts de la redaction antérieurs aux sprints 8 (motif JWT coûteux, éléments XML composés), des contournements restants des gates textuels du sprint 12, le plafond de charge relâché pour la release 0.2.0 et deux réglages GitHub de la release.
+
+**Critère de sortie.** 1 Mo de « eyJ- » redigé en moins d'1 s (test) ; <db-password> et <db_password> masqués ; une fixture négative par forme de contournement relevée, rejetée par les contrats ; plafond 1M dur et page de benchmark exacte ; releases immuables activées.
+
+**Charge** : 2,75 à 10 j.
+
+| Ordre | ID | Sévérité | Effort | Statut | Constat |
+|---:|---|---|---|---|---|
+| 1 | `AUD-QUA-28` | Élevée | M | Ouvert | L'installateur écrit la configuration native, le .env Docker et le fragment TOML de Codex dans la page ANSI : avec un profil accentué, NEXUS_HOME par défaut est introuvable |
+| 2 | `AUD-SEC-24` | Moyenne | S | Ouvert | Le motif JWT de la redaction coûte environ 12 s par Mo sur une entrée forgée « eyJ- » répétée : un fichier de 8 Mo bloque l'indexation |
+| 3 | `AUD-DEP-36` | Faible | S | Ouvert | workflow_hygiene.py ignore les clés écrites avec un espace avant « : » et les corps de job indentés autrement que de 2 |
+| 4 | `AUD-DEP-37` | Faible | S | Ouvert | La release GitHub v0.2.0 n'est pas immuable et le tag v0.2.0 a été recréé par le contournement admin du ruleset des tags |
+| 5 | `AUD-QUA-26` | Faible | S | Ouvert | Le contrat « Maven via NexusScript.psm1 » ne voit pas un appel direct à mvn hors début de ligne |
+| 6 | `AUD-QUA-27` | Faible | S | Ouvert | Guide de reproduction encore sur des JAR 0.1.0-SNAPSHOT à la racine alors que la version publiée est 0.2.0 |
+| 7 | `AUD-SEC-25` | Faible | S | Ouvert | Un élément XML au nom composé par « - » ou « _ » (<db-password>, <db_password>) n'est pas redigé |
+| 8 | `AUD-TST-18` | Faible | S | Ouvert | Plafond de peuplement 1M relâché après l'échec de la release v0.2.0 : hors PR, un ralentissement uniforme jusqu'à 52 s passe, et la page affirme encore « plafonds inchangés » |
 
 ## Constats Info, hors sprint
 
@@ -341,6 +366,7 @@ Ils ne demandent aucune action. Ceux marqués ★ expliquent pourquoi un risque 
 - `AUD-PRF-23` — Embeddings d'indexation envoyés par lots (≤ 256 documents, budget de caractères) et fingerprint canonique mis en cache par génération
 - `AUD-PRF-24` — Une seule connexion SQLite réutilisée par requête applicative (session de lecture thread-local)
 - ★ `AUD-PRF-25` — Lot de documents d'indexation borné (128 fichiers / 16 MiB) et temporaires SQLite en mémoire (ADR 0050)
+- `AUD-PRF-30` — La redaction enchaîne désormais 9 passes (un motif par famille) : surcoût mesuré de 30 à 60 % sur contenu ordinaire, à confirmer
 - `AUD-QUA-15` — Duplication globale faible et sans TODO/FIXME ni printStackTrace
 - `AUD-QUA-16` — Logs : System.Logger dans le cœur, aucun System.out/err hors CLI
 - ★ `AUD-QUA-17` — Gestion d'erreurs larges globalement justifiée
