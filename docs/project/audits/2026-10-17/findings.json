@@ -5251,12 +5251,16 @@
    "sprint": 14,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
-   "changement": "Nouveau",
+   "statut": "Fermé",
+   "changement": "Corrigé par la PR #369",
    "historique": [
     {
      "date": "2026-11-11",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-11",
+     "statut": "Fermé"
     }
    ],
    "verification": {
@@ -5265,6 +5269,13 @@
     "verdict": "Nouveau constat",
     "preuve": "Rejoué indépendamment (java 21, classes de 510ff8ca) : 256 Ko de « eyJ- » → 3,1 s ; 1 Mo → 11,9 s (linéaire, ~4 096 caractères balayés par occurrence) ; 10,1 s sur les classes de 7bbfe675 : préexistant, non introduit par les sprints 8.",
     "reserve": null
+   },
+   "verification_mainteneur": {
+    "date": "2026-11-11",
+    "commit": "7d75186c",
+    "verdict": "Fermé",
+    "preuve": "redactJwts saute les débuts eyJ d'une suite base64url qui ne peuvent pas réussir (sans garde, un JWT précédé de - reste masqué) ; redactXmlSecretElements évalue l'alternative CDATA sans regex avec un pointeur de fin de corps qui ne recule pas. SensitiveContentRedactorTest#forgedRepetitionOfJwtStartsIsRedactedUnchangedInUnderOneSecond et #forgedRepetitionOfCdataOpeningsIsRedactedUnchangedInUnderOneSecond (1 Mo < 1 s, 0,4 à 0,5 s en local) ; rendu identique aux motifs v8 : #jwtAndCdataRenderingMatchesTheV8Patterns, #generatedJwtAndCdataContentsRenderAsWithTheV8Patterns.",
+    "reserve": "Tests de temps à seuil absolu (1 s) : stabilité sur les runners CI à confirmer."
    }
   },
   {
@@ -5434,12 +5445,16 @@
    "sprint": 14,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
-   "changement": "Nouveau",
+   "statut": "Fermé",
+   "changement": "Corrigé par la PR #369",
    "historique": [
     {
      "date": "2026-11-11",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-11",
+     "statut": "Fermé"
     }
    ],
    "verification": {
@@ -5448,6 +5463,13 @@
     "verdict": "Nouveau constat",
     "preuve": "Rejoué indépendamment (java 21, classes de 510ff8ca) : <password> et <db.password> masqués ; <db-password> et <db_password> en clair. --db-password et db_password= restent masqués.",
     "reserve": null
+   },
+   "verification_mainteneur": {
+    "date": "2026-11-11",
+    "commit": "7d75186c",
+    "verdict": "Fermé",
+    "preuve": "XML_OPEN et OPTION_NAME : nom possessif puis lookbehind borné sur SENSITIVE_NAME ; <db-password>, <db_password>, <my-token>, --api-key masqués, <api_key> conservé, refus au-delà de 4 096 caractères. Politique secret-redaction-v9, content-v8, migration V020 (SchemaMigratorCompositeNameUpgradeTest). Tests : SensitiveContentRedactorTest#xmlElementWhoseNameEndsWithASensitiveKeyIsRedacted, #compositeXmlNameValueIsRedactedAtTheBoundAndRefusedJustAbove, #optionWhoseNameEndsWithASensitiveKeyIsRedacted, #compositeNameOfHalfAMillionComponentsHasBoundedCost. Écart OPTION_NAME (--api-key, --private-key, --access-key, hors audit) corrigé dans la même PR.",
+    "reserve": "Limites v8 conservées et documentées : CDATA contenant un ] isolé, attributs de plus de 256 caractères, noms à espace de noms (<wsse:Password>), --db_password."
    }
   },
   {
@@ -6280,12 +6302,16 @@
    "sprint": null,
    "depends_on": [],
    "bloque": [],
-   "statut": "Info",
-   "changement": "Nouveau",
+   "statut": "Fermé",
+   "changement": "Corrigé par la PR #369",
    "historique": [
     {
      "date": "2026-11-11",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-11",
+     "statut": "Fermé"
     }
    ],
    "verification": {
@@ -6293,6 +6319,13 @@
     "commit": "510ff8ca",
     "verdict": "Nouveau constat",
     "preuve": "Relevé à la vérification du 11/11.",
+    "reserve": null
+   },
+   "verification_mainteneur": {
+    "date": "2026-11-11",
+    "commit": "7d75186c",
+    "verdict": "Fermé",
+    "preuve": "Banc opt-in RedactionThroughputBenchmarkTest : les 9 passes STRUCTURED_TOKENS pèsent 49 % (1 Mo de code ordinaire) et 43 % (corpus d'IndexingHeapPeakBenchmarkTest) de redact ; gain du pré-filtre 45 % et 42 % de redact, au-dessus du seuil de 25 %. Pré-filtre par préfixe littéral livré (STRUCTURED_TOKEN_PREFIXES), sortie identique (SensitiveContentRedactorTest#structuredTokenPrefixFilterKeepsEveryPassResult). redact : 392 → 215 ms et 1 268 → 769 ms. Relevé : docs/project/history/redaction-token-passes-measures-2026-11-11.md.",
     "reserve": null
    }
   },

@@ -339,7 +339,7 @@ Décision du design D3 : **aucun raccourci par taille et date de modification n'
 
 ### Reproduire les mesures
 
-Les deux classes sont désactivées par défaut (`nexus.scale.benchmark.enabled`) :
+Les trois classes sont désactivées par défaut (`nexus.scale.benchmark.enabled`) :
 
 ```powershell
 # Pic de heap d'un rebuild complet (corpus synthétique, 20 000 fichiers en profil full)
@@ -347,9 +347,14 @@ Les deux classes sont désactivées par défaut (`nexus.scale.benchmark.enabled`
 
 # Part du hachage dans le scan initial et final
 ./mvnw -B -ntp -pl core test -Dtest=ProjectScannerCorpusBudgetBenchmarkTest -Dnexus.scale.benchmark.enabled=true -Dnexus.scale.benchmark.profile=full -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true
+
+# Coût des passes de jetons à préfixe de la redaction
+./mvnw -B -ntp -pl core test -Dtest=RedactionThroughputBenchmarkTest -Dnexus.scale.benchmark.enabled=true -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true
 ```
 
 `IndexingHeapPeakBenchmarkTest` écrit `target/indexing-heap-benchmark.json` (`nexus.indexing.heap.benchmark.output`). Il relève le heap occupé maximal échantillonné et le heap **vivant** maximal après collection forcée ; le nombre de fichiers se règle par `nexus.scale.benchmark.indexing.files`, la période de la sonde par `nexus.indexing.heap.benchmark.liveProbeMillis` et le heap de la JVM de test par `-DargLine=-Xmx…`. Il n'a pas de workflow : c'est un relevé manuel, à relancer avant et après toute modification de la rétention des analyses. Préférer les rapports (heap vivant par fichier, parts du hachage et de l'écriture) aux durées absolues, très sensibles à la charge de la machine.
+
+`RedactionThroughputBenchmarkTest` écrit `target/redaction-throughput-benchmark.json` (`nexus.redaction.benchmark.output`), relatif au répertoire de lancement. Sur 1 Mo de code ordinaire et sur le corpus synthétique d'`IndexingHeapPeakBenchmarkTest` (2 000 fichiers), il relève la médiane de `SensitiveContentRedactor.redact`, des neuf passes de `STRUCTURED_TOKENS` sans filtre et des mêmes passes précédées du test de leurs préfixes littéraux (`STRUCTURED_TOKEN_PREFIXES`), tel que `redact` les applique ; il vérifie que les deux variantes rendent le même texte. `tokenPassesShareOfRedact` et `prefilterGainRatio` sont des rapports, à comparer d'une exécution à l'autre plutôt que les durées. Les relevés datés vont dans `docs/project/history/`.
 
 ## OpenSpec project-indexing-exclusions
 

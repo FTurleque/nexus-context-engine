@@ -240,7 +240,7 @@ class IndexingHeapPeakBenchmarkTest {
         return bytes;
     }
 
-    private static String javaSource(int index, int fileCount) {
+    static String javaSource(int index, int fileCount) {
         StringBuilder source = new StringBuilder(2_048);
         source.append("package bench.p").append(index % 200).append(";\n\n");
         for (int target = 1; target <= IMPORTS_PER_FILE; target++) {
