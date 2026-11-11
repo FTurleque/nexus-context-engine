@@ -5220,7 +5220,7 @@
    "depends_on": [],
    "bloque": [],
    "statut": "Ouvert",
-   "changement": "Nouveau",
+   "changement": "Écriture UTF-8 sans BOM (SaveUtf8TextFile) de nexus-native.env.cmd, docker\\.env, codex-desktop.mcp.toml, copilot-jetbrains.mcp.json et generic-mcp.json ; NEXUS_HOME accentué sous le profil écrit %USERPROFILE%\\… ou %LOCALAPPDATA%\\… (CmdEnvPathValue), autres lignes non ASCII lues sous chcp 65001 avec page de code restaurée (CmdUtf8Frame) ; dossier d'installation hors page ANSI refusé par l'assistant (le runtime Java embarqué ne démarre pas depuis un tel dossier) ; smoke avec profil « Hélène Łukasz » et dossier « Instàllé Hélène ».",
    "historique": [
     {
      "date": "2026-11-11",
@@ -5233,6 +5233,13 @@
     "verdict": "Nouveau constat",
     "preuve": "Rejoué le 11/11 sur la machine de l'utilisateur (ACP 1252, OEMCP 850, console cmd en page 850) : un env.cmd écrit en 1252 comme SaveStringToFile, contenant set \"NEXUS_HOME=…\\Hélène\\.nexus\", appelé par un .cmd comme nexus.cmd (build-windows-distribution.ps1:263-268) → « if exist \"%NEXUS_HOME%\" » répond MISSING alors que le dossier existe. Les autres fichiers (docker\\.env lu en UTF-8 par Compose, codex-desktop.mcp.toml relu en UTF-8 par connect-codex-desktop.ps1:1847) sont déduits de la lecture du gabarit, non rejoués.",
     "reserve": null
+   },
+   "verification_mainteneur": {
+    "date": "2026-11-11",
+    "commit": "f627ca43",
+    "verdict": "Fermé",
+    "preuve": "PR #370 (change sprint-14-installateur-encodage-utf8, tâches 1.1 à 3.4) : test-windows-config-escaping.ps1 rejoue CmdEnvPathValue et CmdUtf8Frame depuis la source durcie et les exécute par cmd.exe en page 850, console visible puis CreateNoWindow (dix cas, contrôles négatifs sans cadre et sans restauration) et contrôle le refus d'un dossier d'installation hors page ANSI ; test-windows-installer.ps1 sur l'installateur smoke compilé : nexus-native.env.cmd ASCII avec %USERPROFILE%\\.nexus, nexus.cmd project add puis project list en page 850 avec nexus.db sous « Hélène Łukasz », codex-desktop.mcp.toml et generic-mcp.json en UTF-8 strict sans BOM, connect-codex-desktop.ps1 sous Windows PowerShell 5.1, /DIR contenant « Łukasz » refusé (relevés locaux du 11/11, page ANSI 1252, OEM 850).",
+    "reserve": "docker\\.env et copilot-jetbrains.mcp.json non écrits par l'installateur smoke (contrat statique seul) ; valeur littérale non ASCII hors profil lue seulement par un lanceur doté d'une console (échec mesuré en DETACHED_PROCESS) ; dossier d'installation hors page ANSI refusé, limite du lanceur Java non levée."
    }
   },
   {
