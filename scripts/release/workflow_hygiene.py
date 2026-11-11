@@ -11,12 +11,16 @@ Checks:
             inline value (flow mapping), a flow collection as a sequence item
             or as the value of a key the checks read, an anchor, alias or merge
             key, a quoted `jobs`, `steps`, `runs-on`, `timeout-minutes`, `run`,
-            `uses`, `with` or `script` key, and a `run:`/`script:` scalar that
-            is not a `|`/`>` block yet continues on the next lines
+            `uses`, `with` or `script` key, a key followed by spaces before
+            `:` (`run :`), a job key indented differently from the first key
+            of its job, and a `run:`/`script:` scalar that is not a `|`/`>`
+            block yet continues on the next lines; the text lines of a
+            `run:`/`script:` block are script, not YAML, and are not read
   inputs    no expression reading `inputs` (or `github.event.inputs`) inside a
             `run:` block or a `script:` parameter; runs `forms` first
   timeouts  every job with `runs-on:` declares `timeout-minutes`; runs `forms`
-            first
+            first; the keys of a job are read at the indentation of its
+            first key
   runners   benchmark and performance qualification jobs use versioned images
   upstream  (network) every external pin is the commit of the upstream tag
             named by its version comment, annotated tags dereferenced
@@ -57,6 +61,8 @@ FLOW = re.compile(
 TOP_LEVEL_KEY = re.compile(r"^[A-Za-z_][\w-]*:")
 KEY = re.compile(r"^(?P<indent> *)(?P<key>[A-Za-z_][\w-]*):(?:\s|$)")
 MAPPING_KEY = re.compile(r"^\s*[A-Za-z_][\w-]*:(?:\s|$)")
+# A key followed by spaces before ':' (`run :`): valid YAML the other patterns do not read.
+SPACED_KEY = re.compile(r"^\s*(?:-\s+)?[A-Za-z_][\w-]*\s+:(?:\s|$)")
 
 # Benchmark and performance qualification jobs measured against budgets.
 PINNED_RUNNER_JOBS = {
@@ -218,11 +224,21 @@ def scalar_form(lines: list[str], number: int, run: re.Match) -> str | None:
     return f"{key}: plain scalar continued on the next line, use a | block"
 
 
-def unread_line_form(lines: list[str], number: int) -> str | None:
-    """Describe the unsupported form of line `number` (1-based), or None."""
+def block_text_lines(lines: list[str]) -> set[int]:
+    """Line numbers of the script text of each `run:`/`script:` value, key lines excluded."""
+    return {number for block in run_blocks(lines) for number, _ in block[1:]}
+
+
+def unread_line_form(lines: list[str], number: int, block_text: set[int]) -> str | None:
+    """Describe the unsupported form of line `number` (1-based), or None.
+
+    `block_text` holds the script lines of the `run:`/`script:` values: they are
+    not YAML and are not read."""
     line = lines[number - 1]
-    if line.lstrip().startswith("#"):
+    if line.lstrip().startswith("#") or number in block_text:
         return None
+    if SPACED_KEY.match(line):
+        return "key followed by a space before ':'"
     quoted = QUOTED_KEY.match(line)
     if quoted:
         return f"quoted key {quoted.group('key')!r}"
@@ -245,8 +261,15 @@ def check_forms(files: list[Path]) -> list[str]:
             for job, number, keys in jobs_of(lines)
             if keys.get("__inline__")
         )
+        errors.extend(
+            f"{where}:{keys['__misaligned__']}: unsupported YAML form: "
+            f"job key indented differently from the first key of job '{job}'"
+            for job, number, keys in jobs_of(lines)
+            if keys.get("__misaligned__")
+        )
+        block_text = block_text_lines(lines)
         for number in range(1, len(lines) + 1):
-            form = unread_line_form(lines, number)
+            form = unread_line_form(lines, number, block_text)
             if form:
                 errors.append(f"{where}:{number}: unsupported YAML form: {form}")
     return errors
@@ -265,10 +288,14 @@ def check_inputs(files: list[Path]) -> list[str]:
 
 
 def jobs_of(lines: list[str]) -> list[tuple[str, int, dict[str, int]]]:
-    """Return (job id, line number, job-level keys) for each job of a workflow."""
+    """Return (job id, line number, job-level keys) for each job of a workflow.
+
+    The keys of a job are read at the indentation of its first key; a key placed
+    between the job id and that indentation is recorded as `__misaligned__`."""
     jobs: list[tuple[str, int, dict[str, int]]] = []
     in_jobs = False
     job_indent = None
+    body_indent = None
     current = None
     for number, line in enumerate(lines, 1):
         if not line.strip() or line.lstrip().startswith("#"):
@@ -287,12 +314,18 @@ def jobs_of(lines: list[str]) -> list[tuple[str, int, dict[str, int]]]:
             job_indent = indent
         if indent == job_indent:
             current = (key.group("key"), number, {})
+            body_indent = None
             if not EMPTY_VALUE.match(line[key.end():]):
                 # A job is a block mapping; any inline value (flow mapping, alias...) is unread.
                 current[2]["__inline__"] = number
             jobs.append(current)
-        elif current is not None and indent == job_indent + 2:
-            current[2].setdefault(key.group("key"), number)
+        elif current is not None and indent > job_indent:
+            if body_indent is None:
+                body_indent = indent
+            if indent == body_indent:
+                current[2].setdefault(key.group("key"), number)
+            elif indent < body_indent:
+                current[2].setdefault("__misaligned__", number)
     return jobs
 
 

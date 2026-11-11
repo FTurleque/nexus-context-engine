@@ -1,0 +1,13 @@
+# Fixture négative : clé run espacée avant « : » qui interpole un input.
+name: fixture
+on:
+  workflow_call:
+    inputs:
+      profile:
+        type: string
+jobs:
+  spaced:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - run : echo ${{ inputs.profile }}
