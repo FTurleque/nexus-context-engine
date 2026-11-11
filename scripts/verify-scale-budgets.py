@@ -53,6 +53,13 @@ def verify_reports(directory: Path, require_base: bool = False):
         500_000: 20_000,
         1_000_000: 40_000,
     }
+    # À 1M, la durée de peuplement dépend surtout de la vitesse du runner, alors que
+    # le rapport 1M/500k d'un même rapport reste stable. Le plafond de 40 s s'étend
+    # jusqu'à ce rapport fois le palier 500k mesuré dans le même rapport, lui-même
+    # plafonné à 20 s : une croissance plus que proportionnelle reste refusée.
+    population_scaling_ratio = {
+        1_000_000: (500_000, 2.6),
+    }
     population_jitter_ms = {
         10_000: 200,
         100_000: 500,
@@ -88,6 +95,9 @@ def verify_reports(directory: Path, require_base: bool = False):
 
         population = tier['populationMs']
         ceiling = population_safety_ceiling[symbols]
+        if symbols in population_scaling_ratio:
+            lower_tier, ratio = population_scaling_ratio[symbols]
+            ceiling = max(ceiling, int(sqlite[lower_tier]['populationMs'] * ratio))
         assert population <= ceiling, (symbols, 'population-safety', population, ceiling)
         if population_comparable and symbols in baseline_sqlite:
             baseline_population = baseline_sqlite[symbols]['populationMs']

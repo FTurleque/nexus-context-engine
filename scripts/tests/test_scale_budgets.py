@@ -159,6 +159,42 @@ class ScaleBudgetsTest(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, 'population-safety.*45880.*40000'):
             self.verify()
 
+    def test_isolated_million_symbol_outlier_above_ceiling_is_tolerated_by_median(self):
+        self.repeated_curve()
+        self.report['sqliteTiers'][-1].update(populationMs=31_200, populationSamplesMs=[31_000, 45_880, 31_200])
+        self.verify()
+
+    def million_symbol_population(self, population_500k, population_1m):
+        self.report['sqliteTiers'][2].update(populationMs=population_500k, populationSamplesMs=[population_500k])
+        self.report['sqliteTiers'][3].update(populationMs=population_1m, populationSamplesMs=[population_1m])
+
+    def test_slow_runner_million_symbol_population_follows_same_report_scaling(self):
+        # Rapport général v0.2.0 du 2026-11-11 : runner lent à tous les paliers, rapport 1M/500k de 2,42.
+        self.million_symbol_population(16_810, 40_755)
+        self.verify()
+
+    def test_super_linear_million_symbol_slowdown_still_fails(self):
+        self.million_symbol_population(16_810, 43_707)
+        with self.assertRaisesRegex(AssertionError, 'population-safety.*43707.*43706'):
+            self.verify()
+
+    def test_fast_runner_keeps_absolute_million_symbol_ceiling(self):
+        self.million_symbol_population(12_652, 40_001)
+        with self.assertRaisesRegex(AssertionError, 'population-safety.*40001.*40000'):
+            self.verify()
+
+    def test_uniform_slowdown_still_fails_on_500k_ceiling(self):
+        self.million_symbol_population(20_001, 48_500)
+        with self.assertRaisesRegex(AssertionError, '500000.*population-safety.*20001.*20000'):
+            self.verify()
+
+    def test_repeated_million_symbol_slowdown_on_slow_runner_still_fails(self):
+        self.repeated_curve()
+        self.report['sqliteTiers'][2].update(populationMs=16_244, populationSamplesMs=[16_185, 16_244, 16_244])
+        self.report['sqliteTiers'][3].update(populationMs=45_000, populationSamplesMs=[44_900, 45_000, 45_200])
+        with self.assertRaisesRegex(AssertionError, 'population-safety.*45000.*42234'):
+            self.verify()
+
     def test_dedicated_curve_requires_three_samples_at_every_tier(self):
         self.repeated_curve()
         self.report['sqliteTiers'][-1]['populationSamplesMs'] = [289]
