@@ -339,11 +339,13 @@ try {
         'begin\s*Ansi := Value;\s*Result := String\(Ansi\) = Value;\s*end;'
     $roundTrip = [regex]::Match($hardened, $roundTripPattern)
     if (-not $roundTrip.Success) { throw 'IsAnsiRoundTrip must compare the name with its AnsiString conversion.' }
+    # SuppressibleMsgBox, not MsgBox: /SUPPRESSMSGBOXES does not suppress MsgBox, and a silent
+    # install would wait on the modal box.
     $folderGuard = '(?s)function NextButtonClick\(CurPageID: Integer\): Boolean;.*?begin\s*Result := True;\s*' +
-        'if \(CurPageID = wpSelectDir\) and \(not IsAnsiRoundTrip\(WizardDirValue\(\)\)\) then\s*begin\s*' +
-        'MsgBox\(InstallDirOutsideAnsiMessage\(\), mbError, MB_OK\);\s*Result := False;\s*exit;'
+        '(?:\{[^}]*\}\s*)?if \(CurPageID = wpSelectDir\) and \(not IsAnsiRoundTrip\(WizardDirValue\(\)\)\) then\s*begin\s*' +
+        'SuppressibleMsgBox\(InstallDirOutsideAnsiMessage\(\), mbError, MB_OK, IDOK\);\s*Result := False;\s*exit;'
     if (-not [regex]::IsMatch($hardened, $folderGuard)) {
-        throw 'NextButtonClick must refuse an install folder outside the ANSI code page before any other check.'
+        throw 'NextButtonClick must refuse an install folder outside the ANSI code page, by SuppressibleMsgBox, before any other check.'
     }
     $prepareGuard = '(?s)function PrepareToInstall\(var NeedsRestart: Boolean\): String;.*?' +
         'if not IsAnsiRoundTrip\(WizardDirValue\(\)\) then\s*begin\s*Result := InstallDirOutsideAnsiMessage\(\);\s*exit;'

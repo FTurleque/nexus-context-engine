@@ -1089,9 +1089,11 @@ var
 begin
   Result := True;
 
+  { SuppressibleMsgBox: a silent install with /SUPPRESSMSGBOXES logs the refusal and exits
+    instead of waiting on a modal box. }
   if (CurPageID = wpSelectDir) and (not IsAnsiRoundTrip(WizardDirValue())) then
   begin
-    MsgBox(InstallDirOutsideAnsiMessage(), mbError, MB_OK);
+    SuppressibleMsgBox(InstallDirOutsideAnsiMessage(), mbError, MB_OK, IDOK);
     Result := False;
     exit;
   end;

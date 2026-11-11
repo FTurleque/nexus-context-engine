@@ -333,7 +333,13 @@ try {
     $refusedLog = Join-Path $root 'refused-setup.log'
     $refusedArguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER',
         "/DIR=`"$refusedInstall`"", "/LOG=`"$refusedLog`"")
-    $refused = Start-Process -FilePath $Setup -ArgumentList $refusedArguments -Wait -PassThru
+    # Bounded wait: a refusal that waits on a modal box must fail the smoke, not hang the job.
+    $refused = Start-Process -FilePath $Setup -ArgumentList $refusedArguments -PassThru
+    $null = $refused.Handle  # keeps ExitCode readable under Windows PowerShell 5.1
+    if (-not $refused.WaitForExit(180000)) {
+        & taskkill.exe /PID $refused.Id /T /F | Out-Null
+        throw 'Setup did not exit within 180 s on an install folder outside the ANSI code page (modal box in a silent install?).'
+    }
     if ($refused.ExitCode -eq 0 -or (Test-Path -LiteralPath (Join-Path $refusedInstall 'app\nexus.exe'))) {
         throw "Setup accepted an install folder outside the ANSI code page: $refusedInstall"
     }
