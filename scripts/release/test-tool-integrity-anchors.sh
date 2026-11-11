@@ -171,6 +171,11 @@ for case in \
   'forms-flow-mapping-job.yml|forms|is not a block mapping' \
   'forms-quoted-key.yml|forms|quoted key' \
   'forms-run-plain-next-line.yml|forms|followed by a plain scalar' \
+  'forms-spaced-run.yml|forms|key followed by a space before' \
+  'forms-spaced-run.yml|inputs|key followed by a space before' \
+  'forms-spaced-runs-on.yml|timeouts|key followed by a space before' \
+  'forms-misaligned-job-key.yml|forms|job key indented differently from the first key' \
+  'timeout-missing-indent-4.yml|timeouts|has runs-on but no timeout-minutes' \
   'inputs-github-script.yml|inputs|an input is interpolated' \
   'inputs-composite-action|inputs|an input is interpolated'; do
   fixture="${case%%|*}"

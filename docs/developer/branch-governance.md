@@ -45,6 +45,15 @@ Il impose actuellement :
 
 NXA3-14 / #130 est satisfait pour `develop`. Le même ruleset couvre également `main`.
 
+### Rulesets de tags
+
+À côté du ruleset des branches, [SEC-0068](../architecture/adr/SEC-0068-publier-les-releases-depuis-un-environnement-protege-avec-des-assets-attestes.md) exige pour les tags de version `refs/tags/v*` deux rulesets de cible `tag` :
+
+- « Immutable version tags » : règles `update`, `deletion` et `non_fast_forward`, aucun acteur de contournement ;
+- « Protect tags » (id 26777159) : règle `creation`, contournement par le rôle `Repository admin`.
+
+**[Existant vérifié]** Lecture du 2026-11-11 : seul « Protect tags » existe ; il porte les quatre règles `creation`, `update`, `deletion` et `non_fast_forward`, avec le contournement admin en mode `always`. La séparation en deux rulesets est un geste du mainteneur, consigné avec ses lectures `gh api` dans [le relevé du 2026-11-11](../project/history/releases-immuables-et-tags-2026-11-11.md) et dans les relevés qui le suivent. La lecture et la procédure de reprise d'une release sans recréer son tag sont décrites dans [immutable-release-publishing.md](immutable-release-publishing.md#politique-de-publication-cible-sec-0068-proposée) et [release-and-recovery.md](release-and-recovery.md#reprise-dune-release-échouée).
+
 ## Méthode d'intégration : merge commit uniquement
 
 Une PR vers `develop` ou `main` s'intègre **uniquement par merge commit**, exact-head (`gh pr merge <n> --merge --match-head-commit <sha>`). Le squash et le rebase sont interdits : ils réécrivent les SHA qualifiés par la CI exact-head, et la promotion `develop` → `main` suppose que `main` ne contient que des commits déjà présents sur `develop`.

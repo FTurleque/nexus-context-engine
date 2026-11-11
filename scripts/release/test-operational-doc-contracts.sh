@@ -401,7 +401,11 @@ current_docs = (
     "docs/developer/code-intelligence.md",
     "docs/developer/jdt-language-server.md",
     "docs/developer/current-limitations.md",
+    "docs/developer/reproduce-and-debug.md",
 )
+# Development version of the first releases (AUD-QUA-27): no current document nor
+# active script names it. The durable pages refer to this constant by name.
+STALE_DEV_VERSION = "0.1.0-SNAPSHOT"
 for path in current_docs:
     for stale in (
         "PR #49",
@@ -410,6 +414,7 @@ for path in current_docs:
         "Quarkus 3.33",
         "MCP SDK     2.0.0",
         "après la campagne NXA3.",
+        STALE_DEV_VERSION,
     ):
         forbid(path, stale)
 
@@ -588,18 +593,24 @@ MAVEN_TOKEN = r"(?:\.\.?[\\/])?(?:[\w${}:.\\/-]*[\\/])?mvnw?(?:\.cmd)?"
 DIRECT_MAVEN_CALL = (
     re.compile(r"&\s*['\"]?" + MAVEN_TOKEN + r"['\"]?(?:\s|$)", re.IGNORECASE),
     re.compile(r"^\s*" + MAVEN_TOKEN + r"\s", re.IGNORECASE),
+    # Command position (AUD-QUA-26): after =, ;, {, (, | or a dot-sourcing '.'.
+    # The '.' counts only alone between blanks, so '.\mvnw.cmd' quoted in a
+    # sentence is not read as a dot followed by the wrapper.
+    re.compile(r"(?:[=;{(|]|(?<!\S)\.(?=\s))\s*['\"]?" + MAVEN_TOKEN + r"['\"]?(?:\s|$)", re.IGNORECASE),
     re.compile(r"Get-Command\s+(?:-Name\s+)?['\"]?mvn", re.IGNORECASE),
     re.compile(r"Start-Process\b.*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE),
     re.compile(r"Join-Path\b.*['\"\s\\/](?:\.\.[\\/])*mvnw?(?:\.cmd)?(?:['\")\s]|$)", re.IGNORECASE),
-    # Indirection (AUD-QUA-21): a variable holding exactly a Maven command name,
-    # cmd /c (options and $env:ComSpec included), and Invoke-Expression/iex of a
-    # string that names Maven. A message that quotes the wrapper inside a sentence
-    # is not a whole-string literal; a message naming both cmd /c and mvn is
-    # flagged and belongs in MAVEN_CALL_EXCEPTIONS.
+    # Indirection (AUD-QUA-21, AUD-QUA-26): a variable holding exactly a Maven
+    # command name, cmd /c or /k (options and $env:ComSpec included), pwsh or
+    # powershell -c/-Command, and Invoke-Expression/iex of a string that names
+    # Maven. A message that quotes the wrapper inside a sentence is not a
+    # whole-string literal; a message naming both cmd /c and mvn is flagged and
+    # belongs in MAVEN_CALL_EXCEPTIONS.
     re.compile(r"\$\{?[\w:]+\}?\s*=\s*(['\"])" + MAVEN_TOKEN + r"\1", re.IGNORECASE),
     re.compile(
-        r"(?:\bcmd(?:\.exe)?['\"]?|\$env:ComSpec)(?:\s+/\w+)*\s+/c\b.*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE
+        r"(?:\bcmd(?:\.exe)?['\"]?|\$env:ComSpec)(?:\s+/\w+)*\s+/[ck]\b.*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE
     ),
+    re.compile(r"\b(?:pwsh|powershell)(?:\.exe)?\b.*\s-c(?:ommand)?\b.*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE),
     re.compile(r"(?:\bInvoke-Expression\b|(?<![\w-])iex\b).*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE),
 )
 # Explicit exceptions: (script path, exact trimmed line). Each entry must still
@@ -640,6 +651,20 @@ for script in active_powershell_scripts():
     )
 if maven_violations:
     raise SystemExit("powershell maven contract drift:\n" + "\n".join(maven_violations))
+# No active script, shared module included, names an artefact of the development version.
+def names_stale_version(source: str) -> bool:
+    return STALE_DEV_VERSION in source
+
+
+if not names_stale_version("$jar = Join-Path $root 'target/nexus-context-engine-" + STALE_DEV_VERSION + "-cli.jar'\n"):
+    raise SystemExit("stale version contract self-test: an artefact of the development version was not detected")
+if names_stale_version("java -jar .\\target\\nexus-context-engine-<version>-cli.jar --version\n"):
+    raise SystemExit("stale version contract self-test: an artefact named by <version> was rejected")
+for script in [*active_powershell_scripts(), *sorted((root / "scripts" / "lib").glob("*.psm1"))]:
+    if names_stale_version(script.read_text(encoding="utf-8")):
+        raise SystemExit(
+            f"powershell script contract drift: {script.relative_to(root).as_posix()} still contains {STALE_DEV_VERSION!r}"
+        )
 for excepted_script, excepted_line in sorted(MAVEN_CALL_EXCEPTIONS):
     lines = [line.strip() for line in text(excepted_script).splitlines()]
     if excepted_line not in lines:
@@ -665,6 +690,15 @@ for label, fixture in (
     ("cmd.exe /c", "& cmd.exe /c \"mvnw.cmd -B verify\"\n"),
     ("Invoke-Expression", 'Invoke-Expression "mvn clean install"\n'),
     ("iex", "iex \"$PSScriptRoot\\..\\mvnw.cmd test\"\n"),
+    ("assignment", "$output = mvn clean install 2>&1\n"),
+    ("semicolon", "Push-Location $root; mvn clean install\n"),
+    ("block", "if ($full) { mvn clean install }\n"),
+    ("dot-source", ". mvn clean install\n"),
+    ("cmd /k", "cmd /k mvn clean install\n"),
+    ("pwsh -Command", 'pwsh -Command "mvn clean install"\n'),
+    ("powershell -c", "powershell.exe -NoProfile -c 'mvnw.cmd -B verify'\n"),
+    ("subexpression", "Write-Output $(mvn -v)\n"),
+    ("pipeline", "Get-Content x | mvn -f -\n"),
 ):
     if not powershell_maven_violations(f"fixture/{label}.ps1", fixture):
         raise SystemExit(f"powershell maven contract self-test: {label} was not detected")
@@ -702,7 +736,8 @@ HYGIENE_FIXTURES="scripts/release/fixtures/workflow-hygiene"
 for check in forms inputs timeouts runners; do
   python3 "$HYGIENE" "$check" .github/workflows .github/actions
 done
-# Valid forms that must stay accepted: defaults.run as a mapping, env: beside a run: block.
+# Valid forms that must stay accepted: defaults.run as a mapping, env: beside a run: block,
+# a 'label : value' script line inside a run: | block.
 for check in pins forms inputs timeouts; do
   python3 "$HYGIENE" "$check" "$HYGIENE_FIXTURES/valid-defaults-and-env.yml" >/dev/null
 done
@@ -715,6 +750,11 @@ for case in \
   "forms|forms-anchor-alias.yml|forms-anchor-alias.yml:14: unsupported YAML form: anchor, alias or merge key" \
   "forms|forms-run-plain-continuation.yml|forms-run-plain-continuation.yml:13: unsupported YAML form: run: plain scalar continued" \
   "forms|forms-run-quoted-continuation.yml|forms-run-quoted-continuation.yml:13: unsupported YAML form: run: quoted scalar continued" \
+  "forms|forms-spaced-run.yml|forms-spaced-run.yml:13: unsupported YAML form: key followed by a space before ':'" \
+  "inputs|forms-spaced-run.yml|forms-spaced-run.yml:13: unsupported YAML form: key followed by a space before ':'" \
+  "forms|forms-spaced-runs-on.yml|forms-spaced-runs-on.yml:6: unsupported YAML form: key followed by a space before ':'" \
+  "timeouts|forms-spaced-runs-on.yml|forms-spaced-runs-on.yml:6: unsupported YAML form: key followed by a space before ':'" \
+  "forms|forms-misaligned-job-key.yml|forms-misaligned-job-key.yml:7: unsupported YAML form: job key indented differently from the first key of job 'misaligned'" \
   "pins|forms-flow-step.yml|forms-flow-step.yml:13: unsupported YAML form: flow collection" \
   "inputs|inputs-format-braces.yml|inputs-format-braces.yml:13: an input is interpolated" \
   "inputs|inputs-nested-action|inputs-nested-action/group/tool/action.yml:12: an input is interpolated" \
@@ -724,6 +764,7 @@ for case in \
   "inputs|inputs-github-script.yml|inputs-github-script.yml:17: an input is interpolated" \
   "inputs|inputs-composite-action|inputs-composite-action/action.yml:14: an input is interpolated" \
   "timeouts|timeout-missing.yml|no timeout-minutes" \
+  "timeouts|timeout-missing-indent-4.yml|timeout-missing-indent-4.yml:5: job 'deep' has runs-on but no timeout-minutes" \
   "runners|runners/scale-benchmark.yml|unpinned image"; do
   IFS='|' read -r check fixture message <<< "$case"
   set +e
@@ -959,3 +1000,134 @@ if ! grep -Fq 'PRAGMA journal_mode' core/src/test/java/com/nexus/persistence/sql
   echo "documentation contract drift: SqliteDatabaseHardeningTest must assert PRAGMA journal_mode and cite DATA-0088" >&2
   exit 1
 fi
+# --- Sprint 14 : plafond de charge et release immuable (AUD-TST-18, AUD-DEP-37) ---
+python3 - <<'PY'
+from pathlib import Path
+import re
+
+root = Path.cwd()
+
+
+def text(path: str) -> str:
+    value = (root / path).read_text(encoding="utf-8")
+    if not value.strip():
+        raise SystemExit(f"empty contract file: {path}")
+    return value
+
+
+def require(path: str, needle: str) -> None:
+    if needle not in text(path):
+        raise SystemExit(f"documentation contract drift: {path} must contain {needle!r}")
+
+
+# AUD-TST-18: the benchmark page states the 1M population hard ceiling applied by the gate.
+def check_population_hard_ceiling(script: str, page: str, page_path: str) -> None:
+    match = re.search(r"population_hard_ceiling\s*=\s*\{\s*1_000_000:\s*([\d_]+)\s*,?\s*\}", script)
+    if not match:
+        raise SystemExit("scale benchmark contract drift: verify-scale-budgets.py must declare population_hard_ceiling for 1M")
+    # The page writes milliseconds with a space as thousands separator (48 906 ms).
+    expected = f"{int(match.group(1).replace('_', '')):,}".replace(",", " ") + " ms"
+    stated = [value + " ms" for value in re.findall(r"plafond absolu de 1M, \*\*([\d ]+) ms\*\*", page)]
+    if stated != [expected]:
+        raise SystemExit(
+            f"scale benchmark contract drift: {page_path} states the 1M population hard ceiling as "
+            f"{stated or 'missing'}, scripts/verify-scale-budgets.py applies {expected}"
+        )
+    if f"min({expected}, max(40 s" not in page:
+        raise SystemExit(f"scale benchmark contract drift: {page_path} must give the 1M ceiling formula with {expected}")
+    if "plafonds absolus de latence et de population restent inchangés" in page:
+        raise SystemExit(f"obsolete documentation contract: {page_path} claims the population ceilings are unchanged")
+
+
+scale_page_path = "docs/developer/scale-regression-benchmark.md"
+scale_gate_script = text("scripts/verify-scale-budgets.py")
+scale_page = text(scale_page_path)
+check_population_hard_ceiling(scale_gate_script, scale_page, scale_page_path)
+for label, script, page in (
+    ("page value", scale_gate_script,
+     scale_page.replace("plafond absolu de 1M, **48 906 ms**", "plafond absolu de 1M, **50 000 ms**", 1)),
+    ("script value", scale_gate_script.replace("1_000_000: 48_906", "1_000_000: 50_000", 1), scale_page),
+    ("stale claim", scale_gate_script,
+     scale_page + "\nLes plafonds absolus de latence et de population restent inchangés.\n"),
+):
+    if (script, page) == (scale_gate_script, scale_page):
+        raise SystemExit(f"population hard ceiling contract self-test: {label} fixture not found")
+    try:
+        check_population_hard_ceiling(script, page, scale_page_path)
+    except SystemExit:
+        pass
+    else:
+        raise SystemExit(f"population hard ceiling contract self-test: {label} drift was not detected")
+
+
+# AUD-DEP-37: a failed release resumes without recreating its tag; no current page deletes or moves a v* tag.
+recovery_doc = "docs/developer/release-and-recovery.md"
+for needle in (
+    "### Reprise d'une release échouée",
+    "relancer les jobs échoués du même run",
+    "Aucun tag `v*` n'est supprimé, déplacé ni recréé.",
+):
+    require(recovery_doc, needle)
+# A v* tag token: v followed by a digit or a glob, optionally under refs/tags/.
+version_tag = r"(?:refs/tags/)?v(?:\d|\*)"
+tag_deletion = re.compile(
+    # git tag with a delete or force flag (-d, --delete, -f, --force, combined short flags such as -fa).
+    r"git\s+tag\b[^\n`]*?\s(?:-[a-zA-Z]*[df][a-zA-Z]*|--delete|--force)\b"
+    # git push deleting or forcing a version tag.
+    rf"|git\s+push\b[^\n`]*?\s(?:--delete|-d|--force|-f)\b[^\n`]*?\s['\"]?{version_tag}"
+    rf"|git\s+push\b[^\n`]*?\s['\"]?[+:]{version_tag}"
+    r"|gh\s+release\s+delete\b[^\n`]*--cleanup-tag"
+    r"|DELETE\b[^\n`]*git/refs/tags/"
+)
+
+
+def tag_deletion_findings(pages):
+    return [
+        f"{path}:{number}"
+        for path, content in pages
+        for number, line in enumerate(content.splitlines(), 1)
+        if tag_deletion.search(line)
+    ]
+
+
+developer_pages = [
+    (path.relative_to(root).as_posix(), path.read_text(encoding="utf-8"))
+    for path in sorted((root / "docs/developer").rglob("*.md"))
+]
+findings = tag_deletion_findings(developer_pages)
+if findings:
+    raise SystemExit(f"release recovery contract drift: docs/developer/ prescribes deleting or moving a v* tag at {findings}")
+for sample in (
+    "git tag -d v1.0.0",
+    "git tag -d <tag>",
+    'git tag --delete "$TAG"',
+    "git tag -f v0.2.0 HEAD",
+    "git tag -fa v0.2.0 -m x",
+    "git tag -a -f v0.2.0",
+    "git tag v0.2.0 -f",
+    "git push --delete origin v0.2.0",
+    "git push origin --delete refs/tags/v0.2.0",
+    "git push origin -d v0.2.0",
+    "git push origin :refs/tags/v0.2.0",
+    "git push --force origin v0.2.0",
+    "git push -f origin refs/tags/v0.2.0",
+    "git push origin +refs/tags/v0.2.0",
+    "gh release delete v0.2.0 --cleanup-tag",
+    "gh api -X DELETE repos/o/r/git/refs/tags/v0.2.0",
+):
+    if not tag_deletion_findings([("sample.md", sample)]):
+        raise SystemExit(f"release recovery contract self-test: {sample!r} was not detected")
+for sample in (
+    "git push origin v0.3.0",
+    "git tag v0.3.0",
+    "git tag -a v0.3.0 -m release",
+    "git push --delete origin feature/x",
+    "git push --delete origin vibrant-branch",
+    "git push origin -d validate",
+    "git push --force-with-lease origin fix/x",
+    "gh release delete v0.2.0",
+):
+    if tag_deletion_findings([("sample.md", sample)]):
+        raise SystemExit(f"release recovery contract self-test: {sample!r} was wrongly detected")
+print("sprint-14-release-and-scale-contracts=PASS")
+PY
