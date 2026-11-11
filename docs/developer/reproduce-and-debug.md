@@ -43,17 +43,17 @@ Ce build doit :
 8. générer le JAR CLI autonome avec classifier `cli` ;
 9. installer les artefacts Maven locaux.
 
-Artefacts attendus :
+Artefacts attendus, où `<version>` est la valeur de `<version>` dans `pom.xml` :
 
 ```text
-target/nexus-context-engine-0.1.0-SNAPSHOT.jar
-target/nexus-context-engine-0.1.0-SNAPSHOT-cli.jar
+target/nexus-context-engine-<version>.jar
+target/nexus-context-engine-<version>-cli.jar
 ```
 
 Le second est directement exécutable :
 
 ```powershell
-java -jar .\target\nexus-context-engine-0.1.0-SNAPSHOT-cli.jar --version
+java -jar .\target\nexus-context-engine-<version>-cli.jar --version
 ```
 
 ## 4. Avertissements connus non bloquants

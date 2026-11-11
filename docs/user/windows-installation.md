@@ -77,6 +77,16 @@ Les deux runtimes NEXUS sont installés. L'utilisateur choisit ensuite lequel se
 
 Si REST natif et REST Docker sont tous les deux configurés, leurs ports externes ne peuvent pas être identiques : le wizard réserve le port natif et déplace automatiquement le port hôte Docker si nécessaire.
 
+## Dossier d'installation
+
+Défaut :
+
+```text
+%LOCALAPPDATA%\Programs\NEXUS
+```
+
+Le nom du dossier doit se limiter aux caractères de la page de code ANSI de Windows : les accents français en font partie (`C:\Outils\Instàllé Hélène` convient), pas un caractère comme `Ł` sur un poste configuré en français. Le runtime Java embarqué ne démarre pas depuis un tel dossier ; l'assistant le refuse avec le message « Le dossier d'installation contient un caractère absent de la page de code ANSI de Windows » et reste sur la page du dossier. Si le dossier par défaut est concerné (profil Windows dont le nom contient un tel caractère), choisir un autre dossier, par exemple `C:\NEXUS`. En installation silencieuse, l'installation s'arrête avec le même message.
+
 ## Écran 1 — Mode de déploiement
 
 Choix exclusifs :
@@ -125,6 +135,8 @@ Défaut :
 ```
 
 Il est conservé lors de la désinstallation.
+
+Les chemins accentués sont pris en charge, y compris sous un profil Windows accentué (`C:\Users\Hélène`). Un `NEXUS_HOME` accentué placé sous le profil ou sous `%LOCALAPPDATA%` est enregistré dans `config\nexus-native.env.cmd` sous la forme `%USERPROFILE%\…` ou `%LOCALAPPDATA%\…` : sous un profil accentué, la valeur par défaut s'écrit `%USERPROFILE%\.nexus`. Un chemin sans accent est enregistré tel quel. Un dossier accentué saisi ailleurs, par exemple `D:\Données\nexus`, est lu correctement par les lanceurs ouverts dans une console, visible ou non ; un programme qui lancerait `nexus.cmd` sans aucune console ne le lirait pas correctement.
 
 ### REST natif
 

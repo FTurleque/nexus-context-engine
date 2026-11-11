@@ -54,7 +54,16 @@ Assert-TextContains -Text $hardenedSource -Needle 'function CmdEnvEscape(Value: 
 Assert-TextContains -Text $hardenedSource -Needle 'function DotEnvQuoted(Value: String): String;' -Description 'Compose dotenv quoting helper'
 Assert-TextContains -Text $hardenedSource -Needle 'function IsLoopbackRestHost(Value: String): Boolean;' -Description 'wizard loopback-only REST policy'
 Assert-TextContains -Text $hardenedSource -Needle 'function VerifyFileSha256(FilePath: String; ExpectedSha256: String): Boolean;' -Description 'external prerequisite SHA-256 verifier'
-Assert-TextContains -Text $hardenedSource -Needle 'CmdEnvEscape(RuntimePage.Values[0])' -Description 'NEXUS_HOME batch escaping'
+# NEXUS_HOME is escaped and written as a LOCALAPPDATA/USERPROFILE reference; non-ASCII content is
+# read under code page 65001.
+foreach ($nativeFragment in @(
+    'CmdEnvPathValue(RuntimePage.Values[0])',
+    'function CmdEnvPathValue(Value: String): String;',
+    'function CmdUtf8Frame(Body: String): String;',
+    "Content := '@echo off' + #13#10 + CmdUtf8Frame("
+)) {
+    Assert-TextContains -Text $hardenedSource -Needle $nativeFragment -Description "native batch configuration: $nativeFragment"
+}
 Assert-TextContains -Text $hardenedSource -Needle "'NEXUS_HOME_BIND=nexus-data' + #13#10 +" -Description 'Docker home uses the named Compose volume'
 Assert-TextContains -Text $hardenedSource -Needle 'DotEnvQuoted(OllamaPage.Values[0])' -Description 'Docker Ollama URL dotenv quoting'
 Assert-TextContains -Text $hardenedSource -Needle 'NEXUS_REST_EXPOSURE_MODE=loopback-forward' -Description 'explicit Docker REST exposure mode'
@@ -141,6 +150,25 @@ foreach ($scriptGuard in @("'`$ErrorActionPreference = ''Stop''' + #13#10 +",
 # SaveStringToFile writes the ANSI code page with best-fit mapping (U+FF07 becomes an apostrophe).
 if ($installerSource -match "SaveStringToFile\(Dir \+ '\\[\w-]+\.ps1'") {
     throw 'Generated PowerShell scripts must be written by SavePowerShellScript (UTF-8 with BOM).'
+}
+# Configuration files carry the profile or install folder: UTF-8 without BOM, never the ANSI code page.
+foreach ($utf8Fragment in @(
+    'procedure SaveUtf8TextFile(Path: String; Text: String);',
+    'if not SaveStringsToUTF8FileWithoutBOM(Path, Lines, False) then',
+    "SaveUtf8TextFile(ExpandConstant('{app}\config\nexus-native.env.cmd'), Content);",
+    "SaveUtf8TextFile(ExpandConstant('{app}\docker\.env'), EnvContent);",
+    "SaveUtf8TextFile(Dir + '\copilot-jetbrains.mcp.json', NativeMcpCommandJson('servers'));",
+    "SaveUtf8TextFile(Dir + '\codex-desktop.mcp.toml', NativeCodexToml());",
+    "SaveUtf8TextFile(Dir + '\generic-mcp.json', NativeMcpCommandJson('mcpServers'));"
+)) {
+    Assert-TextContains -Text $installerSource -Needle $utf8Fragment -Description "UTF-8 configuration writer: $utf8Fragment"
+}
+foreach ($source in @($installerSource, $hardenedSource)) {
+    $ansiConfigWrites = @([regex]::Matches($source,
+        "SaveStringToFile\([^;\r\n]*?(\.env|\.toml|\.json|nexus-native\.env\.cmd)'\)?\s*,") | ForEach-Object { $_.Value })
+    if ($ansiConfigWrites.Count -gt 0) {
+        throw "Configuration files must be written in UTF-8 without BOM by SaveUtf8TextFile: $($ansiConfigWrites -join '; ')"
+    }
 }
 if ($installerSource -match 'Get-Content \$(mcp|cfg) -Raw \| ConvertFrom-Json') {
     throw 'Client configurations must be read by Read-ClientJson (UTF-8), not Get-Content.'
@@ -283,94 +311,233 @@ foreach ($launcherName in @('nexus.cmd','nexus-mcp.cmd','nexus-rest.cmd','nexus-
 }
 
 $root = Join-Path $repo 'target\installer-smoke'
-$install = Join-Path $root 'install'
+# Accented profile and install folder (AUD-QUA-28). The default NEXUS_HOME lives under the test
+# profile, whose U+0141 is outside code pages 1252 and 850. The install folder keeps to characters
+# of the ANSI code page: the embedded Java runtime does not start from a folder outside it, and
+# the ANSI bytes of a folder such as this one are already invalid in strict UTF-8.
+$install = Join-Path $root ('Inst' + [char]0x00E0 + 'll' + [char]0x00E9 + ' H' + [char]0x00E9 + 'l' + [char]0x00E8 + 'ne')
+$smokeProfile = Join-Path $root ('H' + [char]0x00E9 + 'l' + [char]0x00E8 + 'ne ' + [char]0x0141 + 'ukasz')
 $data = Join-Path $root 'nexus-home'
 Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force -Path $install, $data | Out-Null
+New-Item -ItemType Directory -Force -Path $install, $data, $smokeProfile | Out-Null
 $sentinel = Join-Path $data 'preserve-me.txt'
 'preserve' | Set-Content -LiteralPath $sentinel -Encoding ascii
 
-$arguments = @(
-    '/VERYSILENT',
-    '/SUPPRESSMSGBOXES',
-    '/NORESTART',
-    '/CURRENTUSER',
-    "/DIR=`"$install`""
-)
-$process = Start-Process -FilePath $Setup -ArgumentList $arguments -Wait -PassThru
-if ($process.ExitCode -ne 0) { throw "Setup smoke install failed with exit code $($process.ExitCode)" }
-
-foreach ($required in @(
-    'nexus.cmd',
-    'nexus-mcp.cmd',
-    'nexus-assistant-clients.cmd',
-    'app\nexus.exe',
-    'app\runtime\bin\java.exe',
-    'lib\nexus-cli.jar',
-    'lib\nexus-mcp.jar',
-    'lib\nexus-assistant-clients.jar',
-    'config\nexus-native.env.cmd',
-    'LICENSE',
-    'THIRD_PARTY_NOTICES.txt',
-    'SBOM.cdx.json'
-)) {
-    if (-not (Test-Path -LiteralPath (Join-Path $install $required) -PathType Leaf)) {
-        throw "Installed NEXUS is missing $required"
-    }
-}
-
-foreach ($launcherName in @('nexus.cmd','nexus-mcp.cmd','nexus-rest.cmd','nexus-assistant-clients.cmd','nexus-docker.cmd','nexus-docker-mcp.cmd')) {
-    $launcherPath = Join-Path $install $launcherName
-    if (Test-Path -LiteralPath $launcherPath) {
-        $launcherSource = Get-Content -Raw -LiteralPath $launcherPath
-        Assert-TextContains -Text $launcherSource -Needle 'setlocal DisableDelayedExpansion' -Description "$launcherName disables delayed expansion"
-    }
-}
-
-$previousHome = $env:NEXUS_HOME
+# USERPROFILE points to the test profile for the installer and every launcher it installs:
+# config\nexus-native.env.cmd sets NEXUS_HOME from it.
+$savedUserProfile = $env:USERPROFILE
 try {
-    $env:NEXUS_HOME = $data
-    $json = & (Join-Path $install 'nexus.cmd') '--version' '--json' | Out-String
-    if ($LASTEXITCODE -ne 0) { throw "Installed NEXUS CLI failed with exit code $LASTEXITCODE" }
-    $parsed = $json | ConvertFrom-Json
-    if ($parsed.version -ne $Version) { throw "Installed version mismatch: $($parsed.version) != $Version" }
+    $env:USERPROFILE = $smokeProfile
+    Write-Host '[smoke] an install folder outside the ANSI code page is refused before any file is copied'
+    $refusedInstall = Join-Path $root ('Inst' + [char]0x00E0 + 'll' + [char]0x00E9 + ' ' + [char]0x0141 + 'ukasz')
+    $refusedLog = Join-Path $root 'refused-setup.log'
+    $refusedArguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER',
+        "/DIR=`"$refusedInstall`"", "/LOG=`"$refusedLog`"")
+    # Bounded wait: a refusal that waits on a modal box must fail the smoke, not hang the job.
+    $refused = Start-Process -FilePath $Setup -ArgumentList $refusedArguments -PassThru
+    $null = $refused.Handle  # keeps ExitCode readable under Windows PowerShell 5.1
+    if (-not $refused.WaitForExit(180000)) {
+        & taskkill.exe /PID $refused.Id /T /F | Out-Null
+        throw 'Setup did not exit within 180 s on an install folder outside the ANSI code page (modal box in a silent install?).'
+    }
+    if ($refused.ExitCode -eq 0 -or (Test-Path -LiteralPath (Join-Path $refusedInstall 'app\nexus.exe'))) {
+        throw "Setup accepted an install folder outside the ANSI code page: $refusedInstall"
+    }
+    $refusedText = [IO.File]::ReadAllText($refusedLog)
+    Assert-TextContains -Text $refusedText -Needle 'absent de la page de code ANSI de Windows' `
+        -Description 'install-folder refusal names the ANSI code page limit'
 
-    $assistant = Join-Path $install 'nexus-assistant-clients.cmd'
-    $assistantUsage = & $assistant | Out-String
-    if ($LASTEXITCODE -ne 0 -or $assistantUsage -notmatch 'Usage:') {
-        throw 'Installed assistant integration runner smoke failed.'
+    $arguments = @(
+        '/VERYSILENT',
+        '/SUPPRESSMSGBOXES',
+        '/NORESTART',
+        '/CURRENTUSER',
+        "/DIR=`"$install`""
+    )
+    $process = Start-Process -FilePath $Setup -ArgumentList $arguments -Wait -PassThru
+    if ($process.ExitCode -ne 0) { throw "Setup smoke install failed with exit code $($process.ExitCode)" }
+
+    foreach ($required in @(
+        'nexus.cmd',
+        'nexus-mcp.cmd',
+        'nexus-assistant-clients.cmd',
+        'app\nexus.exe',
+        'app\runtime\bin\java.exe',
+        'lib\nexus-cli.jar',
+        'lib\nexus-mcp.jar',
+        'lib\nexus-assistant-clients.jar',
+        'config\nexus-native.env.cmd',
+        'LICENSE',
+        'THIRD_PARTY_NOTICES.txt',
+        'SBOM.cdx.json'
+    )) {
+        if (-not (Test-Path -LiteralPath (Join-Path $install $required) -PathType Leaf)) {
+            throw "Installed NEXUS is missing $required"
+        }
     }
-    if ($assistantUsage -notmatch 'claude-cli') {
-        throw 'Installed assistant integration runner does not advertise Claude CLI.'
+
+    foreach ($launcherName in @('nexus.cmd','nexus-mcp.cmd','nexus-rest.cmd','nexus-assistant-clients.cmd','nexus-docker.cmd','nexus-docker-mcp.cmd')) {
+        $launcherPath = Join-Path $install $launcherName
+        if (Test-Path -LiteralPath $launcherPath) {
+            $launcherSource = Get-Content -Raw -LiteralPath $launcherPath
+            Assert-TextContains -Text $launcherSource -Needle 'setlocal DisableDelayedExpansion' -Description "$launcherName disables delayed expansion"
+        }
     }
-    if ($assistantUsage -notmatch 'codex-desktop') {
-        throw 'Installed assistant integration runner does not advertise Codex Desktop.'
+
+    $previousHome = $env:NEXUS_HOME
+    # The NEXUS command-line tools write UTF-8: read their output as such, the accented install
+    # folder appears in the generated client commands.
+    $previousOutputEncoding = [Console]::OutputEncoding
+    try {
+        $env:NEXUS_HOME = $data
+        [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+        $json = & (Join-Path $install 'nexus.cmd') '--version' '--json' | Out-String
+        if ($LASTEXITCODE -ne 0) { throw "Installed NEXUS CLI failed with exit code $LASTEXITCODE" }
+        $parsed = $json | ConvertFrom-Json
+        if ($parsed.version -ne $Version) { throw "Installed version mismatch: $($parsed.version) != $Version" }
+
+        $assistant = Join-Path $install 'nexus-assistant-clients.cmd'
+        $assistantUsage = & $assistant | Out-String
+        if ($LASTEXITCODE -ne 0 -or $assistantUsage -notmatch 'Usage:') {
+            throw 'Installed assistant integration runner smoke failed.'
+        }
+        if ($assistantUsage -notmatch 'claude-cli') {
+            throw 'Installed assistant integration runner does not advertise Claude CLI.'
+        }
+        if ($assistantUsage -notmatch 'codex-desktop') {
+            throw 'Installed assistant integration runner does not advertise Codex Desktop.'
+        }
+
+        $javaExe = Join-Path $install 'app\runtime\bin\java.exe'
+        $mcpJar = Join-Path $install 'lib\nexus-mcp.jar'
+
+        $mcpProtocolSmoke = Join-Path $PSScriptRoot 'test-mcp-protocol.ps1'
+        & $mcpProtocolSmoke -Exe $javaExe -LaunchArgs @('-jar', $mcpJar) -NexusHome $env:NEXUS_HOME -Label 'Native'
+
+        $claudeCommand = & $assistant 'claude-cli' 'native' $javaExe $mcpJar 'command' | Out-String
+        if ($LASTEXITCODE -ne 0 -or $claudeCommand -notmatch 'claude mcp add --scope user nexus --') {
+            throw 'Installed Claude CLI integration generation smoke failed.'
+        }
+        if ($claudeCommand -notmatch [regex]::Escape($javaExe)) {
+            throw 'Claude CLI integration does not target the bundled Java runtime.'
+        }
+
+        $codexToml = & $assistant 'codex-desktop' 'native' $javaExe $mcpJar 'toml' | Out-String
+        if ($LASTEXITCODE -ne 0 -or $codexToml -notmatch '\[mcp_servers\.nexus\]') {
+            throw 'Installed Codex Desktop TOML generation smoke failed.'
+        }
+        if ($codexToml -notmatch 'nexus-mcp\.jar') {
+            throw 'Codex Desktop TOML does not target the NEXUS MCP runner.'
+        }
     }
+    finally {
+        $env:NEXUS_HOME = $previousHome
+        [Console]::OutputEncoding = $previousOutputEncoding
+    }
+
+    Write-Host '[smoke] accented profile and install folder: UTF-8 configuration files, NEXUS_HOME seen by nexus.cmd'
+    $strictUtf8 = New-Object System.Text.UTF8Encoding($false, $true)
+    $nativeEnvBytes = [IO.File]::ReadAllBytes((Join-Path $install 'config\nexus-native.env.cmd'))
+    if (@($nativeEnvBytes | Where-Object { $_ -gt 127 }).Count -gt 0) {
+        throw 'config\nexus-native.env.cmd must stay ASCII for the default NEXUS_HOME under an accented profile.'
+    }
+    $nativeEnvText = [Text.Encoding]::ASCII.GetString($nativeEnvBytes)
+    Assert-TextContains -Text $nativeEnvText -Needle 'set "NEXUS_HOME=%USERPROFILE%\.nexus"' `
+        -Description 'default NEXUS_HOME written as a USERPROFILE reference'
+    # nexus.cmd registers a project, then a second process lists it: Java opens NEXUS_HOME under
+    # the profile with U+0141 and keeps its state there. Each line runs in code page 850 and gives
+    # the console back its code page.
+    $expectedHome = Join-Path $smokeProfile '.nexus'
+    $probeProject = Join-Path $root 'probe-project'
+    New-Item -ItemType Directory -Force -Path $probeProject | Out-Null
+    'probe' | Set-Content -LiteralPath (Join-Path $probeProject 'README.md') -Encoding ascii
+    $callerPage = [Console]::OutputEncoding.CodePage
+    $nexusCmd = Join-Path $install 'nexus.cmd'
+    function Invoke-NexusCmdIn850([string]$Arguments) {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo($env:ComSpec,
+            "/d /c `"chcp 850 >nul & call `"$nexusCmd`" $Arguments`"")
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.StandardOutputEncoding = New-Object System.Text.UTF8Encoding($false)
+        $process = [Diagnostics.Process]::Start($psi)
+        $errorTask = $process.StandardError.ReadToEndAsync()
+        $output = $process.StandardOutput.ReadToEnd()
+        $process.WaitForExit()
+        $exitCode = $process.ExitCode
+        & $env:ComSpec /d /c "chcp $callerPage >nul"
+        if ($exitCode -ne 0) {
+            throw "nexus.cmd $Arguments failed in code page 850 under an accented profile (exit $exitCode): $output $($errorTask.Result)"
+        }
+        return $output
+    }
+    Invoke-NexusCmdIn850 "project add `"$probeProject`" s14-accented-probe --json" | Out-Null
+    $listed = Invoke-NexusCmdIn850 'project list --json'
+    if ($listed.IndexOf('s14-accented-probe', [StringComparison]::Ordinal) -lt 0) {
+        throw "nexus.cmd project list does not return the project registered by a previous process: $listed"
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $expectedHome 'nexus.db') -PathType Leaf)) {
+        throw "nexus.cmd did not keep its database under $expectedHome"
+    }
+    $strayHomes = @(Get-ChildItem -LiteralPath $root -Recurse -Directory -Force -Filter '.nexus' |
+        Where-Object { $_.FullName -ne $expectedHome })
+    if ($strayHomes.Count -gt 0) { throw "NEXUS storage created under an altered folder: $($strayHomes.FullName -join '; ')" }
+    # ANSI bytes read in an OEM code page: e9 e8 become U+00DA U+00DE, UTF-8 bytes in
+    # code page 1252 or 850 give U+00C3, U+00C2 or box-drawing characters.
+    $altered = @(Get-ChildItem -LiteralPath $root -Recurse -Directory -Force |
+        Where-Object { $_.Name -match '[\u00C2\u00C3\u00DA\u00DE\u251C\u2500-\u257F?]' })
+    if ($altered.Count -gt 0) { throw "Folder with an altered name under $root`: $($altered.FullName -join '; ')" }
 
     $javaExe = Join-Path $install 'app\runtime\bin\java.exe'
-    $mcpJar = Join-Path $install 'lib\nexus-mcp.jar'
-
-    $mcpProtocolSmoke = Join-Path $PSScriptRoot 'test-mcp-protocol.ps1'
-    & $mcpProtocolSmoke -Exe $javaExe -LaunchArgs @('-jar', $mcpJar) -NexusHome $env:NEXUS_HOME -Label 'Native'
-
-    $claudeCommand = & $assistant 'claude-cli' 'native' $javaExe $mcpJar 'command' | Out-String
-    if ($LASTEXITCODE -ne 0 -or $claudeCommand -notmatch 'claude mcp add --scope user nexus --') {
-        throw 'Installed Claude CLI integration generation smoke failed.'
+    $integrations = Join-Path $install 'integrations'
+    foreach ($fragment in @('codex-desktop.mcp.toml', 'generic-mcp.json', 'connect-codex-desktop.ps1')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $integrations $fragment) -PathType Leaf)) {
+            throw "Smoke installer did not write integrations\$fragment"
+        }
     }
-    if ($claudeCommand -notmatch [regex]::Escape($javaExe)) {
-        throw 'Claude CLI integration does not target the bundled Java runtime.'
+    function Read-StrictUtf8NoBom([string]$Path) {
+        $bytes = [IO.File]::ReadAllBytes($Path)
+        if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+            throw "$Path must be UTF-8 without BOM."
+        }
+        return $strictUtf8.GetString($bytes)
+    }
+    $tomlText = Read-StrictUtf8NoBom (Join-Path $integrations 'codex-desktop.mcp.toml')
+    $tomlCommand = [regex]::Match($tomlText, '(?m)^command = "(?<value>(?:[^"\\]|\\.)*)"')
+    if (-not $tomlCommand.Success -or $tomlCommand.Groups['value'].Value.Replace('\\', '\') -cne $javaExe) {
+        throw "codex-desktop.mcp.toml does not designate $javaExe`: $tomlText"
+    }
+    $genericJson = (Read-StrictUtf8NoBom (Join-Path $integrations 'generic-mcp.json')) | ConvertFrom-Json
+    if ($genericJson.mcpServers.nexus.command -cne $javaExe) {
+        throw "generic-mcp.json does not designate $javaExe`: $($genericJson.mcpServers.nexus.command)"
     }
 
-    $codexToml = & $assistant 'codex-desktop' 'native' $javaExe $mcpJar 'toml' | Out-String
-    if ($LASTEXITCODE -ne 0 -or $codexToml -notmatch '\[mcp_servers\.nexus\]') {
-        throw 'Installed Codex Desktop TOML generation smoke failed.'
+    # connect-codex-desktop.ps1 under Windows PowerShell 5.1 appends the fragment to an existing
+    # .codex\config.toml of a test profile.
+    $codexProfile = Join-Path $root 'codex-profile'
+    $codexConfig = Join-Path $codexProfile '.codex\config.toml'
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $codexConfig) | Out-Null
+    [IO.File]::WriteAllText($codexConfig, "model = `"probe`"`r`n", (New-Object System.Text.UTF8Encoding($false)))
+    $env:USERPROFILE = $codexProfile
+    try {
+        & (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -NonInteractive -ExecutionPolicy Bypass `
+            -File (Join-Path $integrations 'connect-codex-desktop.ps1') | Out-Null
+        $codexExit = $LASTEXITCODE
     }
-    if ($codexToml -notmatch 'nexus-mcp\.jar') {
-        throw 'Codex Desktop TOML does not target the NEXUS MCP runner.'
+    finally {
+        $env:USERPROFILE = $smokeProfile
+    }
+    if ($codexExit -ne 0) { throw "connect-codex-desktop.ps1 failed with exit code $codexExit" }
+    $codexText = Read-StrictUtf8NoBom $codexConfig
+    if ($codexText.IndexOf([char]0xFFFD) -ge 0 -or $codexText.IndexOf($javaExe.Replace('\', '\\'), [StringComparison]::Ordinal) -lt 0) {
+        throw "connect-codex-desktop.ps1 did not write the embedded Java path intact: $codexText"
+    }
+    if (-not $codexText.StartsWith('model = "probe"', [StringComparison]::Ordinal)) {
+        throw 'connect-codex-desktop.ps1 did not keep the existing configuration.'
     }
 }
 finally {
-    $env:NEXUS_HOME = $previousHome
+    $env:USERPROFILE = $savedUserProfile
 }
 
 Write-Host '[smoke] generated client scripts read and write UTF-8, never rewrite an unreadable file, back up before rewriting'

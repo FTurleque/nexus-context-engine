@@ -24,11 +24,11 @@
   },
   "ordre_interne": [],
   "prerequis_anterieurs": [],
-  "fermes": 7,
-  "etat": "Entamé",
+  "fermes": 8,
+  "etat": "Clôturé",
   "reste_jours": [
-   0.25,
-   1
+   0,
+   0
   ]
  },
  {
@@ -207,11 +207,11 @@
   "prerequis_anterieurs": [
    "AUD-DEP-19"
   ],
-  "fermes": 7,
-  "etat": "Entamé",
+  "fermes": 11,
+  "etat": "Clôturé",
   "reste_jours": [
-   1.0,
-   4
+   0,
+   0
   ]
  },
  {
@@ -262,11 +262,11 @@
    "AUD-ARC-03",
    "AUD-ARC-07"
   ],
-  "fermes": 5,
-  "etat": "Entamé",
+  "fermes": 7,
+  "etat": "Clôturé",
   "reste_jours": [
-   0.5,
-   2
+   0,
+   0
   ]
  },
  {
@@ -282,23 +282,29 @@
    "AUD-ARC-19",
    "AUD-SEC-04",
    "AUD-SEC-05",
-   "AUD-SEC-20"
+   "AUD-SEC-20",
+   "AUD-SEC-23"
   ],
   "charge_jours": [
-   2.75,
-   10
+   3.0,
+   11
   ],
   "composition": {
-   "Faible": 7,
+   "Faible": 8,
    "Moyenne": 1
   },
-  "ordre_interne": [],
+  "ordre_interne": [
+   [
+    "AUD-SEC-23",
+    "AUD-SEC-20"
+   ]
+  ],
   "prerequis_anterieurs": [],
-  "fermes": 7,
-  "etat": "Entamé",
+  "fermes": 9,
+  "etat": "Clôturé",
   "reste_jours": [
-   0.25,
-   1
+   0,
+   0
   ]
  },
  {
@@ -437,11 +443,11 @@
   },
   "ordre_interne": [],
   "prerequis_anterieurs": [],
-  "fermes": 0,
-  "etat": "À faire",
+  "fermes": 5,
+  "etat": "Clôturé",
   "reste_jours": [
-   1.25,
-   5
+   0,
+   0
   ]
  },
  {
@@ -466,11 +472,44 @@
   },
   "ordre_interne": [],
   "prerequis_anterieurs": [],
+  "fermes": 5,
+  "etat": "Clôturé",
+  "reste_jours": [
+   0,
+   0
+  ]
+ },
+ {
+  "numero": 14,
+  "titre": "Suites de la vérification du 11 novembre",
+  "pourquoi": "Constats relevés le 11/11 : deux défauts de la redaction antérieurs aux sprints 8 (motif JWT coûteux, éléments XML composés), des contournements restants des gates textuels du sprint 12, le plafond de charge relâché pour la release 0.2.0 et deux réglages GitHub de la release.",
+  "sortie": "1 Mo de « eyJ- » redigé en moins d'1 s (test) ; <db-password> et <db_password> masqués ; une fixture négative par forme de contournement relevée, rejetée par les contrats ; plafond 1M dur et page de benchmark exacte ; releases immuables activées.",
+  "constats": [
+   "AUD-QUA-28",
+   "AUD-SEC-24",
+   "AUD-DEP-36",
+   "AUD-DEP-37",
+   "AUD-QUA-26",
+   "AUD-QUA-27",
+   "AUD-SEC-25",
+   "AUD-TST-18"
+  ],
+  "charge_jours": [
+   2.75,
+   10
+  ],
+  "composition": {
+   "Élevée": 1,
+   "Moyenne": 1,
+   "Faible": 6
+  },
+  "ordre_interne": [],
+  "prerequis_anterieurs": [],
   "fermes": 0,
   "etat": "À faire",
   "reste_jours": [
-   1.25,
-   5
+   2.75,
+   10
   ]
  }
 ]

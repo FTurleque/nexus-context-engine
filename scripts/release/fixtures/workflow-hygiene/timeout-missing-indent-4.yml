@@ -1,0 +1,9 @@
+# Fixture négative : corps de job indenté de 4, sans timeout-minutes.
+name: fixture
+on: workflow_dispatch
+jobs:
+  deep:
+      name: Deep job
+      runs-on: ubuntu-24.04
+      steps:
+        - run: echo deep

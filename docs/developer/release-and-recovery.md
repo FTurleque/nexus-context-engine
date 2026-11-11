@@ -66,6 +66,20 @@ Le pom racine fixe `project.build.outputTimestamp` : les JAR (dont le JAR CLI om
 
 L'image Docker et l'installeur Windows ne sont pas couverts (horodatages des outils tiers).
 
+### Reprise d'une release échouée
+
+Un tag `v*` poussé désigne son commit pour toujours. La politique de publication de SEC-0068 exige, avant toute release, le ruleset « Immutable version tags », qui interdit à tous, mainteneur compris, de mettre à jour ou de supprimer un tag `v*`, et le réglage « releases immuables », qui verrouille toute release publiée. Ces réglages GitHub se relisent par `gh api` ; leur état relevé figure dans [le relevé du 2026-11-11](../project/history/releases-immuables-et-tags-2026-11-11.md). La reprise d'un run `release.yml` en échec dépend donc de ce qui a déjà été publié et de ce que demande le correctif :
+
+1. **Échec transitoire, commit inchangé, release GitHub non publiée** (runner, réseau, mesure de charge instable) : relancer les jobs échoués du même run, sur le même tag. Le préflight GHCR et la release en brouillon reprennent de façon idempotente ([Échec partiel](immutable-release-publishing.md#échec-partiel)). La relance d'un gate de charge ne vaut que pour le même commit ; le plafond absolu du gate borne ce qu'elle peut admettre.
+2. **Correctif qui change le commit** : le tag en échec est conservé sans release et consigné dans un relevé daté de `docs/project/history/` (tag, run, cause). La version des pom passe à une nouvelle version, que `scripts/release/validate-release-tag.sh` exige égale au tag :
+   - version finale `X.Y.Z` en échec : `X.Y.(Z+1)`, précédée de `X.Y.(Z+1)-rc.1` si le correctif touche la chaîne de release ;
+   - pré-version `X.Y.Z-rc.N` en échec : `X.Y.Z-rc.(N+1)`.
+
+   Le correctif suit le flux habituel (PR vers `develop`, promotion vers `main`) et le nouveau tag est posé sur la tête de `main`.
+3. **Release GitHub déjà publiée** : elle ne se corrige pas ; une nouvelle version suit le point 2. Si `scripts/release/publish-github-release-assets.sh` sort en code 79 (release publiée non immuable), `latest` n'a pas bougé : activer les releases immuables, puis publier une nouvelle version.
+
+Aucun tag `v*` n'est supprimé, déplacé ni recréé. Le détail des réglages GitHub et leurs commandes de lecture figurent dans [`immutable-release-publishing.md`](immutable-release-publishing.md#politique-de-publication-cible-sec-0068-proposée).
+
 ## SQLite : autorité, migrations et recovery
 
 SQLite reste l'autorité canonique. Les migrations sont forward-only, enregistrées dans `schema_migrations` et protégées par `script_sha256`.
@@ -115,9 +129,9 @@ Un backup/restauration doit conserver les protections adaptées au système cibl
 
 Avant une migration de production, sauvegarder SQLite service arrêté. Ne jamais restaurer uniquement un index Lucene en ignorant SQLite.
 
-## Recovery sémantique / `content-v7`
+## Recovery sémantique / `content-v8`
 
-Le profil de contenu sémantique courant est `content-v7`, lié à la politique de redaction `secret-redaction-v8`. Un index créé sous l'ancien profil est considéré incompatible et doit être reconstruit ; NEXUS ne réutilise pas silencieusement les vecteurs historiques.
+Le profil de contenu sémantique courant est `content-v8`, lié à la politique de redaction `secret-redaction-v9`. Un index créé sous l'ancien profil est considéré incompatible et doit être reconstruit ; NEXUS ne réutilise pas silencieusement les vecteurs historiques.
 
 La redaction de secrets réduit la fuite accidentelle de tokens/clés/mots de passe structurés, mais n'est pas une sauvegarde ni un scanner de secrets complet.
 
@@ -320,20 +334,48 @@ et reconstruit ses dérivés sous sa propre politique, qui laisse passer ces jet
 Pour revenir en arrière sans rouvrir ces cas, restaurer la sauvegarde de
 `NEXUS_HOME` prise avant la mise à niveau.
 
+## Mise à niveau V020 — noms composés
+
+`V020__invalidate_composite_name_indexes.sql` accompagne la politique
+`secret-redaction-v9` : la valeur d'un élément XML ou d'une option dont le nom
+composé se termine par une clé sensible (`<db-password>`, `<db_password>`,
+`<my-token>`, `--api-key`, `--private-key`) est masquée, et une telle valeur XML
+au-delà de 4 096 caractères fait refuser le fichier. Sous `secret-redaction-v8`,
+ces valeurs n'étaient ni masquées ni refusées : les dérivés existants peuvent les
+contenir en clair. Comme V019, la migration incrémente la génération de chaque
+projet, le passe à `NOT_INDEXED` et efface `last_indexed_at` ; le registre et les
+faits canoniques sont conservés. La prochaine indexation reconstruit les dérivés
+lexicaux, et le profil `content-v8` impose la reconstruction des vecteurs
+sémantiques. Un fichier qui porte une valeur refusée est exclu des index lexical
+et sémantique avec le diagnostic `INDEX_REDACTION_LIMIT`. V001 à V019 et leurs
+empreintes restent inchangées. `SchemaMigratorCompositeNameUpgradeTest` migre une
+base V019 dont l'index Lucene contient ces valeurs et vérifie la génération, le
+statut, le registre, le diagnostic et la reconstruction.
+
+Retour arrière : V020 ne change pas le schéma ; un binaire antérieur ouvre la base
+et reconstruit ses dérivés sous sa propre politique, qui laisse passer ces valeurs.
+Pour revenir en arrière sans rouvrir ces cas, restaurer la sauvegarde de
+`NEXUS_HOME` prise avant la mise à niveau.
+
 ## OpenSpec installer-client-configuration
 
-Spec : [`openspec/specs/installer-client-configuration/spec.md`](../../openspec/specs/installer-client-configuration/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md). Le comportement vu de l'utilisateur est décrit dans [Installation Windows](../user/windows-installation.md) (« Écran 9 — Clients IA » et « Désinstallation »).
+Spec : [`openspec/specs/installer-client-configuration/spec.md`](../../openspec/specs/installer-client-configuration/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md). Le comportement vu de l'utilisateur est décrit dans [Installation Windows](../user/windows-installation.md) (« Écran 4 — Configuration runtime », « Écran 9 — Clients IA » et « Désinstallation »).
 
 ### Comportement existant vérifié (installer-client-configuration)
 
 | Étiquette | Fait | Source |
 |---|---|---|
-| [Existant vérifié] | Les scripts de connexion et de déconnexion sont du texte PowerShell assemblé par l'installateur, écrit dans `{app}\integrations\` par `SavePowerShellScript` en UTF-8 avec BOM, et exécuté par `{sys}\WindowsPowerShell\v1.0\powershell.exe` (Windows PowerShell 5.1). Sans BOM, 5.1 lirait le script dans la page ANSI, où `SaveStringToFile` convertit U+FF07 ou U+02BC en apostrophe ASCII. | `packaging/windows/nexus-installer.iss.template:1442-1450`, `:1560`, `:1711`, `:1786` |
-| [Existant vérifié] | `nexus-json.ps1` est le seul lecteur et écrivain des fichiers JSON des clients : `Read-ClientJson` lit en UTF-8 et lève une exception si le contenu n'est pas un objet JSON, `Get-ClientSection` si la section `servers` ou `mcpServers` n'en est pas un ; `Save-CleanJson` écrit un fichier temporaire du même dossier puis appelle `[System.IO.File]::Replace`, qui garde l'original sous `<fichier>.nexus-backup-<yyyyMMddHHmmss>` (suffixe `-N` si ce nom existe), et remet l'original en place si le remplacement échoue après l'avoir renommé. | `packaging/windows/nexus-installer.iss.template:1496-1559` |
-| [Existant vérifié] | `Add-NexusServerEntry` lit et contrôle tous les fichiers avant d'en écrire un. `Remove-NexusServerEntry` continue après un fichier illisible et lève une exception à la fin. | `packaging/windows/nexus-installer.iss.template:1532-1559` |
-| [Existant vérifié] | Les quatre scripts JSON (`connect-copilot-jetbrains.ps1`, `connect-claude-desktop.ps1`, `disconnect-copilot-jetbrains.ps1`, `disconnect-claude-desktop.ps1`) commencent par `$ErrorActionPreference = 'Stop'` et un `trap` qui affiche `NEXUS: <message>` puis sort en 1 ; le message nomme le fichier, jamais son contenu. | `packaging/windows/nexus-installer.iss.template:1700-1711`, `:1773-1786`, `:1883-1897` |
+| [Existant vérifié] | Les scripts de connexion et de déconnexion sont du texte PowerShell assemblé par l'installateur, écrit dans `{app}\integrations\` par `SavePowerShellScript` en UTF-8 avec BOM, et exécuté par `{sys}\WindowsPowerShell\v1.0\powershell.exe` (Windows PowerShell 5.1). Sans BOM, 5.1 lirait le script dans la page ANSI, où `SaveStringToFile` convertit U+FF07 ou U+02BC en apostrophe ASCII. | `packaging/windows/nexus-installer.iss.template:1497-1505`, `:1615`, `:1766`, `:1841` |
+| [Existant vérifié] | `nexus-json.ps1` est le seul lecteur et écrivain des fichiers JSON des clients : `Read-ClientJson` lit en UTF-8 et lève une exception si le contenu n'est pas un objet JSON, `Get-ClientSection` si la section `servers` ou `mcpServers` n'en est pas un ; `Save-CleanJson` écrit un fichier temporaire du même dossier puis appelle `[System.IO.File]::Replace`, qui garde l'original sous `<fichier>.nexus-backup-<yyyyMMddHHmmss>` (suffixe `-N` si ce nom existe), et remet l'original en place si le remplacement échoue après l'avoir renommé. | `packaging/windows/nexus-installer.iss.template:1551-1614` |
+| [Existant vérifié] | `Add-NexusServerEntry` lit et contrôle tous les fichiers avant d'en écrire un. `Remove-NexusServerEntry` continue après un fichier illisible et lève une exception à la fin. | `packaging/windows/nexus-installer.iss.template:1587-1614` |
+| [Existant vérifié] | Les quatre scripts JSON (`connect-copilot-jetbrains.ps1`, `connect-claude-desktop.ps1`, `disconnect-copilot-jetbrains.ps1`, `disconnect-claude-desktop.ps1`) commencent par `$ErrorActionPreference = 'Stop'` et un `trap` qui affiche `NEXUS: <message>` puis sort en 1 ; le message nomme le fichier, jamais son contenu. | `packaging/windows/nexus-installer.iss.template:1755-1766`, `:1828-1841`, `:1938-1952` |
 | [Existant vérifié] | `PowerShellSingleQuote` double U+0027, U+2018, U+2019, U+201A et U+201B, que PowerShell traite tous comme délimiteurs de chaîne simple. | `packaging/windows/nexus-installer.iss.template:391` |
-| [Existant vérifié] | La désinstallation conserve le drapeau `CopilotJetBrainsManaged` ou `ClaudeDesktopManaged` et journalise le code quand le script de déconnexion échoue : une désinstallation ultérieure réessaie. | `packaging/windows/nexus-installer.iss.template:2358-2371` |
+| [Existant vérifié] | La désinstallation conserve le drapeau `CopilotJetBrainsManaged` ou `ClaudeDesktopManaged` et journalise le code quand le script de déconnexion échoue : une désinstallation ultérieure réessaie. | `packaging/windows/nexus-installer.iss.template:2413-2426` |
+| [Existant vérifié] | `config\nexus-native.env.cmd`, `docker\.env`, `integrations\codex-desktop.mcp.toml`, `integrations\copilot-jetbrains.mcp.json` et `integrations\generic-mcp.json` sont écrits par `SaveUtf8TextFile`, c'est-à-dire `SaveStringsToUTF8FileWithoutBOM` : UTF-8 sans BOM, suivi d'un saut de ligne final que `cmd.exe`, Compose, TOML et JSON ignorent. Un BOM ferait partie de la première clé du `.env` lue par Compose. | `packaging/windows/nexus-installer.iss.template:1319-1333`, `:1348`, `:1391`, `:1746-1748`, `:1780-1782`, `:1788-1790` |
+| [Existant vérifié] | Dans `config\nexus-native.env.cmd`, `NEXUS_HOME` est écrit par `CmdEnvPathValue` : une valeur qui contient un caractère non ASCII et commence, sans tenir compte de la casse ASCII et à une frontière de dossier, par `LOCALAPPDATA` ou `USERPROFILE` (préfixe le plus long) devient `%LOCALAPPDATA%\…` ou `%USERPROFILE%\…`, que `cmd.exe` développe depuis l'environnement Unicode ; une valeur ASCII reste littérale ; le reste du chemin et les autres valeurs sont échappés par `CmdEnvEscape` (`%` doublé). Sous un profil accentué, le `NEXUS_HOME` par défaut s'écrit donc `set "NEXUS_HOME=%USERPROFILE%\.nexus"`, en ASCII. | `scripts/release/harden-windows-installer-source.ps1:35-84`, `:243-251` |
+| [Existant vérifié] | Si les lignes `set` gardent un caractère non ASCII, `CmdUtf8Frame` les encadre : page de code courante relevée par `for /f "tokens=2 delims=:." %%P in ('chcp')`, `chcp 65001 >nul`, lignes `set`, puis `chcp <page d'origine> >nul`. Un contenu ASCII est écrit sans cadre. Les sorties de `chcp` vont vers `nul` : le canal JSON-RPC de `nexus-mcp.cmd` n'est pas pollué. | `scripts/release/harden-windows-installer-source.ps1:35-46`, `:86-102`, `scripts/release/harden-windows-rest-auth-source.ps1:15`, `:38` |
+| [Existant vérifié] | L'assistant refuse un dossier d'installation dont le nom ne fait pas l'aller-retour `String` → `AnsiString` → `String` (page ANSI active) : `NextButtonClick` reste sur la page du dossier, `PrepareToInstall` arrête une réinstallation où cette page est sautée, avec un message qui nomme la limite du runtime Java embarqué. Le message passe par `SuppressibleMsgBox` : en installation silencieuse avec `/SUPPRESSMSGBOXES`, il est journalisé sans fenêtre et l'installation s'interrompt. | `packaging/windows/nexus-installer.iss.template:1066-1083`, `:1094-1099`, `:1308-1313` |
+| [Existant vérifié] | L'installateur smoke coche Codex Desktop et le client générique : il écrit `codex-desktop.mcp.toml`, `connect-codex-desktop.ps1` et `generic-mcp.json`, sans connecter aucun client. | `packaging/windows/nexus-installer.iss.template:986-999`, `:2379` |
 
 ### Vue (installer-client-configuration)
 
@@ -367,10 +409,38 @@ Notation : UML de séquence. Exigences portées : « Les configurations des clie
 
 Codes de sortie des scripts JSON : `0` entrée ajoutée (connexion) ou entrée retirée de chaque fichier lisible (déconnexion), `10` client absent, `20` entrée déjà présente partout, `30` Claude Desktop ouvert, `1` fichier ou section illisible, ou remplacement impossible.
 
+#### Vue UML de séquence — Comment un lanceur natif charge-t-il la configuration native ? (existant)
+
+```mermaid
+sequenceDiagram
+    participant L as nexus.cmd
+    participant E as nexus-native.env.cmd
+    participant C as Console (page d'origine, ex. 850)
+    L->>E: call (setlocal DisableDelayedExpansion)
+    alt contenu ASCII (NEXUS_HOME écrit %USERPROFILE%\.nexus)
+        E->>E: set "NEXUS_HOME=%USERPROFILE%\.nexus"
+        Note over E: expansion par cmd.exe depuis la variable Unicode
+    else contenu avec caractère non ASCII
+        E->>C: chcp : page d'origine relevée
+        E->>C: chcp 65001
+        E->>E: set "NEXUS_HOME=D:\Données\Łódź\nexus" (lignes lues en UTF-8)
+        E->>C: chcp <page d'origine>
+    end
+    E-->>L: variables posées
+    L->>L: nexus.exe ou java.exe hérite de NEXUS_HOME
+```
+
+Notation : UML de séquence. Exigences portées : « Les lanceurs natifs reçoivent les valeurs de la configuration native telles qu'elles ont été saisies » et, pour l'écriture du fichier, « Les fichiers de configuration générés par l'installateur sont écrits en UTF-8 sans BOM ». La branche ASCII couvre les valeurs par défaut sous un profil accentué sans dépendre de `chcp` ; la branche `chcp` sert à une valeur saisie hors profil ou à un caractère non ASCII dans une autre variable (URL Ollama).
+
 ### Écarts et limites (installer-client-configuration)
 
 - Un fichier déjà corrompu par une version antérieure de l'installateur n'est pas réparé.
+- `chcp` exige une console. Un lanceur démarré avec une console cachée (`CREATE_NO_WINDOW`, mode mesuré) lit correctement une valeur littérale non ASCII ; un lanceur démarré sans aucune console (`DETACHED_PROCESS`) garde sa page de code et la lit mal (relevé local en page 850). Le mode de lancement de chaque client MCP n'est pas mesuré. Les valeurs littérales non ASCII de `config\nexus-native.env.cmd` sont donc réservées aux lanceurs qui disposent d'une console ; un `NEXUS_HOME` accentué sous le profil, écrit `%USERPROFILE%\…`, n'est pas concerné.
+- Un `NEXUS_HOME` accentué sous le profil, écrit `%USERPROFILE%\…` ou `%LOCALAPPDATA%\…`, suppose la variable définie au lancement : un client qui remplace l'environnement de ses serveurs MCP sans la transmettre donne `\.nexus`, à la racine du lecteur courant. Une valeur ASCII reste littérale et n'en dépend pas.
+- Le runtime Java embarqué ne démarre pas depuis un dossier d'installation qui contient un caractère absent de la page ANSI du poste (par exemple `Ł` en page 1252) : `nexus.exe` signale `could not find java.dll`, `java.exe -jar` `Unable to access jarfile` (relevé local, Temurin 21). L'assistant refuse donc un tel dossier ; un dossier limité aux caractères de la page ANSI (accents compris) fonctionne. Les données (`NEXUS_HOME`) ne sont pas concernées : NEXUS lit la variable en Unicode.
+- Le message `Docker Desktop n'est pas prêt` de `nexus-docker-up.cmd` est écrit par `SaveStringToFile` dans la page ANSI et s'affiche altéré dans une console OEM ; le comportement du lanceur n'en dépend pas (`packaging/windows/nexus-installer.iss.template:1411`, `:1437`).
+- Le `.env` Docker n'est pas écrit par l'installateur smoke (déploiement natif seul) : son encodage est vérifié par le contrat statique (aucun `SaveStringToFile` sur `.env`, `.toml`, `.json` ni `nexus-native.env.cmd`), pas par une lecture Compose.
 - Les sauvegardes ne sont jamais supprimées ni relues par NEXUS ; elles contiennent ce que contenait le fichier, secrets d'autres serveurs MCP compris, et leur nettoyage revient à l'utilisateur.
 - `File.Replace` remplace un lien symbolique par un fichier ordinaire et rompt un lien dur : une configuration tenue dans un dépôt de dotfiles par lien n'est plus suivie après la connexion.
 - Un client ouvert peut réécrire son fichier entre la lecture et le remplacement ; Claude Desktop est attendu fermé (code 30), pas Copilot JetBrains. La version écrasée reste dans la sauvegarde.
-- Le smoke `scripts/release/test-windows-installer.ps1` exécute `nexus-json.ps1` et les scripts de déconnexion installés ; les scripts de connexion ne sont générés que pour un client détecté, ce que l'installateur smoke ne fait pas : le smoke appelle `Add-NexusServerEntry` comme eux, et des contrats textuels verrouillent leur forme. Le test d'échappement analyse la ligne générée en mémoire ; l'écriture UTF-8 avec BOM est vérifiée sur les scripts installés.
+- Le smoke `scripts/release/test-windows-installer.ps1` exécute `nexus-json.ps1`, les scripts de déconnexion installés et `connect-codex-desktop.ps1` ; les scripts de connexion JSON ne sont générés que pour un client détecté, ce que l'installateur smoke ne fait pas : le smoke appelle `Add-NexusServerEntry` comme eux, et des contrats textuels verrouillent leur forme. Le test d'échappement analyse la ligne générée en mémoire ; l'écriture UTF-8 avec BOM est vérifiée sur les scripts installés.
