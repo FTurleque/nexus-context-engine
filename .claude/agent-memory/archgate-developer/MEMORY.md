@@ -1,0 +1,1 @@
+- [Clôture de sprint](feedback_cloture_sprint.md) — archiver les changes finis et nettoyer branches/worktrees après merge ; piège du hook push
