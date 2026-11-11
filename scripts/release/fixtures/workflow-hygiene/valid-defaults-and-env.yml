@@ -1,4 +1,5 @@
-# Fixture positive : defaults.run est un mapping, et env: frère d un run: | reçoit un input.
+# Fixture positive : defaults.run est un mapping, env: frère d un run: | reçoit un input,
+# et une ligne de script « label : valeur » dans un bloc run: | n'est pas lue comme YAML.
 name: fixture
 on:
   workflow_call:
@@ -19,6 +20,7 @@ jobs:
     steps:
       - run: |
           echo "$DIR"
+          label : valeur
         env:
           DIR: ${{ inputs.dir }}
       - run: echo done
