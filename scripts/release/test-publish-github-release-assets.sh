@@ -15,6 +15,24 @@ STATE="${FAKE_GH_STATE:?}"
 LOG="${FAKE_GH_LOG:?}"
 printf '%s\n' "$*" >> "$LOG"
 
+if [[ "${1:-}" == "api" ]]; then
+  # Only the read of a release by tag is served: repos/{owner}/{repo}/releases/tags/<tag> --jq .immutable
+  path="${2:-}"
+  prefix='repos/{owner}/{repo}/releases/tags/'
+  [[ "$path" == "$prefix"* && "${3:-}" == "--jq" && "${4:-}" == ".immutable" ]] || {
+    echo "unsupported fake gh api call: $*" >&2
+    exit 2
+  }
+  release_dir="$STATE/releases/${path#"$prefix"}"
+  [[ -f "$release_dir/draft" ]] || exit 1
+  if [[ -f "$release_dir/immutable" ]]; then
+    cat "$release_dir/immutable"
+  else
+    printf 'false\n'
+  fi
+  exit 0
+fi
+
 if [[ "${1:-}" != "release" ]]; then
   echo "unsupported fake gh command: $*" >&2
   exit 2
@@ -148,6 +166,8 @@ case "$subcommand" in
       exit 2
     }
     printf 'false\n' > "$release_dir/draft"
+    # GitHub marks a release immutable when it is published while the repository setting is on.
+    cat "$STATE/immutable-releases" > "$release_dir/immutable"
     ;;
   *)
     echo "unsupported fake gh release command: $subcommand" >&2
@@ -162,6 +182,7 @@ export GH_TOKEN="test-token"
 export FAKE_GH_STATE="$TEMP/state"
 export FAKE_GH_LOG="$TEMP/gh.log"
 : > "$FAKE_GH_LOG"
+printf 'true\n' > "$FAKE_GH_STATE/immutable-releases"
 
 asset_dir="$TEMP/local"
 mkdir -p "$asset_dir"
@@ -200,6 +221,8 @@ grep -Fq "release edit $TAG --draft=false" "$FAKE_GH_LOG" || fail "release was n
 if grep -E "^release create $TAG .*--prerelease" "$FAKE_GH_LOG" >/dev/null; then
   fail "final release must not be created with --prerelease"
 fi
+grep -Fq "api repos/{owner}/{repo}/releases/tags/$TAG --jq .immutable" "$FAKE_GH_LOG" \
+  || fail "published release immutability was not checked"
 
 # Re-running against an already published, byte-identical release must be read-only and idempotent.
 upload_count_before="$(grep -c '^release upload ' "$FAKE_GH_LOG" || true)"
@@ -250,5 +273,27 @@ expect_failure 78 bash "$SCRIPT" "$MISMATCH_TAG" "$asset_dir/nexus-windows.zip" 
 printf 'true\n' > "$release_dir/prerelease"
 expect_failure 78 bash "$SCRIPT" "$TAG" "$asset_dir/nexus-windows.zip" "$asset_dir/nexus-setup.exe"
 printf 'false\n' > "$release_dir/prerelease"
+
+# With immutable releases disabled, the published release is not immutable: exit 79 before latest.
+printf 'false\n' > "$FAKE_GH_STATE/immutable-releases"
+MUTABLE_TAG="v0.5.0"
+expect_failure 79 bash "$SCRIPT" "$MUTABLE_TAG" "$asset_dir/nexus-windows.zip" "$asset_dir/nexus-setup.exe"
+grep -Fq "GitHub Release $MUTABLE_TAG is published but not immutable" "$TEMP/expected-failure.err" \
+  || fail "non-immutable release failure does not name the tag"
+[[ "$(cat "$FAKE_GH_STATE/releases/$MUTABLE_TAG/draft")" == "false" ]] || fail "non-immutable release was not published"
+# Resuming a published release that is not immutable fails the same way, without mutating it.
+edit_count_before="$(grep -c '^release edit ' "$FAKE_GH_LOG" || true)"
+expect_failure 79 bash "$SCRIPT" "$MUTABLE_TAG" "$asset_dir/nexus-windows.zip" "$asset_dir/nexus-setup.exe"
+[[ "$(grep -c '^release edit ' "$FAKE_GH_LOG" || true)" == "$edit_count_before" ]] \
+  || fail "non-immutable published release was edited during resume"
+printf 'true\n' > "$FAKE_GH_STATE/immutable-releases"
+
+# An immutable published release passes the check with exit 0 and no mutation.
+upload_count_before="$(grep -c '^release upload ' "$FAKE_GH_LOG" || true)"
+edit_count_before="$(grep -c '^release edit ' "$FAKE_GH_LOG" || true)"
+bash "$SCRIPT" "$TAG" "$asset_dir/nexus-windows.zip" "$asset_dir/nexus-setup.exe" > "$TEMP/immutable.out"
+grep -Fq "GitHub Release $TAG is immutable." "$TEMP/immutable.out" || fail "immutable release check was not reported"
+[[ "$(grep -c '^release upload ' "$FAKE_GH_LOG" || true)" == "$upload_count_before" ]] || fail "immutable release received an upload"
+[[ "$(grep -c '^release edit ' "$FAKE_GH_LOG" || true)" == "$edit_count_before" ]] || fail "immutable release was edited"
 
 echo "GitHub Release asset publication qualification passed."

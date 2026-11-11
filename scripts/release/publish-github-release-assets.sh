@@ -155,3 +155,14 @@ if [[ "$release_is_draft" == "true" ]]; then
   fi
   echo "Published complete immutable GitHub Release: $TAG"
 fi
+
+# Published releases must be immutable (repository setting "immutable releases"): GitHub then
+# locks the tag and the assets. The field is readable with contents: read; the setting itself
+# requires administration access, which the release job does not hold. A published release
+# cannot be unpublished here: the failure stops the job before latest moves.
+release_is_immutable="$(gh api "repos/{owner}/{repo}/releases/tags/$TAG" --jq '.immutable')"
+if [[ "$release_is_immutable" != "true" ]]; then
+  echo "GitHub Release $TAG is published but not immutable; enable immutable releases before publishing." >&2
+  exit 79
+fi
+echo "GitHub Release $TAG is immutable."

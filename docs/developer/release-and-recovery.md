@@ -66,6 +66,20 @@ Le pom racine fixe `project.build.outputTimestamp` : les JAR (dont le JAR CLI om
 
 L'image Docker et l'installeur Windows ne sont pas couverts (horodatages des outils tiers).
 
+### Reprise d'une release échouée
+
+Un tag `v*` poussé désigne son commit pour toujours : la politique de publication de SEC-0068 interdit à tous, mainteneur compris, de le mettre à jour ou de le supprimer (ruleset « Immutable version tags ») et rend immuable toute release GitHub publiée (réglage « releases immuables »). La reprise d'un run `release.yml` en échec dépend donc de ce qui a déjà été publié et de ce que demande le correctif :
+
+1. **Échec transitoire, commit inchangé, release GitHub non publiée** (runner, réseau, mesure de charge instable) : relancer les jobs échoués du même run, sur le même tag. Le préflight GHCR et la release en brouillon reprennent de façon idempotente ([Échec partiel](immutable-release-publishing.md#échec-partiel)). La relance d'un gate de charge ne vaut que pour le même commit ; le plafond absolu du gate borne ce qu'elle peut admettre.
+2. **Correctif qui change le commit** : le tag en échec est conservé sans release et consigné dans un relevé daté de `docs/project/history/` (tag, run, cause). La version des pom passe à une nouvelle version, que `scripts/release/validate-release-tag.sh` exige égale au tag :
+   - version finale `X.Y.Z` en échec : `X.Y.(Z+1)`, précédée de `X.Y.(Z+1)-rc.1` si le correctif touche la chaîne de release ;
+   - pré-version `X.Y.Z-rc.N` en échec : `X.Y.Z-rc.(N+1)`.
+
+   Le correctif suit le flux habituel (PR vers `develop`, promotion vers `main`) et le nouveau tag est posé sur la tête de `main`.
+3. **Release GitHub déjà publiée** : elle ne se corrige pas ; une nouvelle version suit le point 2. Si `scripts/release/publish-github-release-assets.sh` sort en code 79 (release publiée non immuable), `latest` n'a pas bougé : activer les releases immuables, puis publier une nouvelle version.
+
+Aucun tag `v*` n'est supprimé, déplacé ni recréé. Le détail des réglages GitHub et leurs commandes de lecture figurent dans [`immutable-release-publishing.md`](immutable-release-publishing.md#politique-de-publication-cible-sec-0068-proposée).
+
 ## SQLite : autorité, migrations et recovery
 
 SQLite reste l'autorité canonique. Les migrations sont forward-only, enregistrées dans `schema_migrations` et protégées par `script_sha256`.

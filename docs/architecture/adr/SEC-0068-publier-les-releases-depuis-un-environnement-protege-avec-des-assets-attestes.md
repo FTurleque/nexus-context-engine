@@ -9,7 +9,7 @@ rules: false
 
 - **Statut** : Proposed
 - **Date** : 2026-11-07
-- **Origine** : sprint 9 de l'audit de code du 17/10/2026, constats `AUD-DEP-21`, `AUD-DEP-03`, `AUD-DEP-09` et `AUD-DEP-02`, changement OpenSpec `sprint-09-chaine-de-release-executable` (décisions D1, D3, D4 et D9 de son `design.md`)
+- **Origine** : sprint 9 de l'audit de code du 17/10/2026, constats `AUD-DEP-21`, `AUD-DEP-03`, `AUD-DEP-09` et `AUD-DEP-02`, changement OpenSpec `sprint-09-chaine-de-release-executable` (décisions D1, D3, D4 et D9 de son `design.md`) ; décision 2 précisée au sprint 14 (constat `AUD-DEP-37`, changement OpenSpec `sprint-14-plafond-charge-et-release-immuable`)
 - **Complète** : [GEN-0031](GEN-0031-packager-la-cli-dans-un-jar-autonome.md)
 
 ## Context
@@ -22,6 +22,12 @@ Faits relevés sur `origin/develop` le 2026-11-07 :
 - Le job `publish` (`.github/workflows/release.yml:150`) ne déclare aucune clé `environment:` ; `gh api repos/FTurleque/nexus-context-engine/environments` renvoie `total_count` = 0, et le seul ruleset actif, `Protect main & develop`, cible des branches : aucune règle ne porte sur `refs/tags/v*` (`AUD-DEP-03`).
 - Les deux `actions/attest` du job `publish` (`.github/workflows/release.yml:354` et `:361`) portent sur le digest de l'image ; le ZIP et le `setup.exe` Windows ne sont accompagnés que de fichiers `.sha256` publiés au même endroit qu'eux (`AUD-DEP-09`).
 - `scripts/release/validate-release-tag.sh:9` n'accepte que `vX.Y.Z` ; `gh run list --workflow release.yml` ne renvoie aucun run et `gh release list` aucune release (`AUD-DEP-02`). La chaîne n'a jamais été exécutée et ne peut pas être répétée sans publier une version finale.
+
+Faits relevés le 2026-11-11, après la release `v0.2.0` (`AUD-DEP-37`) :
+
+- Le ruleset « Protect tags » (id 26777159, `refs/tags/v*`) porte les règles `creation`, `update`, `deletion` et `non_fast_forward` sous un même contournement `RepositoryRole 5` (admin) en mode `always` : le tag `v0.2.0` a été supprimé puis reposé sur un autre commit entre les runs `release.yml` `42923369260` et `42945695122`.
+- `gh api repos/FTurleque/nexus-context-engine/immutable-releases` renvoie `enabled: false` et la release `v0.2.0` porte `immutable: false`. GitHub n'applique l'immuabilité qu'aux releases publiées après l'activation du réglage.
+- Retirer le contournement du ruleset unique interdirait aussi la règle `creation` à tous : plus aucun tag `v*`, donc plus aucune release, ne pourrait être créé.
 
 Ce qui doit être préservé : un seul workflow publie (`release.yml`), l'image qualifiée est publiée sans rebuild, les tags version et SHA ne sont jamais déplacés, la publication reste fail-closed.
 
@@ -40,7 +46,7 @@ La question est : **sous quelles conditions la chaîne de release est-elle autor
 **Option retenue : C.**
 
 1. **Aucun héritage de secrets (D1).** Aucun workflow ne transmet `secrets: inherit` ; un workflow réutilisable ne reçoit, par leur nom, que les secrets qu'il déclare. `release.yml` ne transmet aucun secret à `windows-installer.yml`, appelé avec `require_authenticode: false`.
-2. **Environnement protégé `release` (D3).** Le job `publish` déclare `environment: release` : reviewer requis (le mainteneur), déploiement limité aux tags `v*`. Le job Windows n'entre dans `release` que s'il est appelé avec `require_authenticode: true`, ce que `release.yml` ne fait pas ; l'environnement ne porte aucun secret. Un ruleset de tags `refs/tags/v*` réserve création, mise à jour et suppression au mainteneur. Rien n'est écrit dans GHCR ni dans les releases avant l'approbation.
+2. **Environnement protégé `release` (D3).** Le job `publish` déclare `environment: release` : reviewer requis (le mainteneur), déploiement limité aux tags `v*`. Le job Windows n'entre dans `release` que s'il est appelé avec `require_authenticode: true`, ce que `release.yml` ne fait pas ; l'environnement ne porte aucun secret. Sur `refs/tags/v*`, la création est réservée au mainteneur ; mise à jour et suppression sont interdites à tous (deux rulesets de tags). Les releases publiées sont immuables. Rien n'est écrit dans GHCR ni dans les releases avant l'approbation.
 3. **Attestation de tous les assets (D4).** Avant `publish-github-release-assets.sh`, `actions/attest` (même SHA que pour l'image) atteste en `subject-path` chaque ZIP et `setup.exe` ; `gh attestation verify` les vérifie ensuite, et un échec arrête le job avant tout upload et avant `latest`.
 4. **Assets Windows non signés.** Le ZIP et le `setup.exe` publiés ne portent pas de signature Authenticode ; leur provenance est l'attestation du point 3. La capacité de signature optionnelle de `windows-installer.yml` reste disponible pour une qualification manuelle, sans être utilisée par la release.
 5. **Tags de pré-version (D9).** Le tag est `vX.Y.Z` ou `vX.Y.Z-rc.N`, égal à la version Maven et sur la tête de `main`. Une pré-version publie une release marquée pré-version, sous des tags d'image immuables, sans déplacer `latest`. La première exécution est une répétition sur `X.Y.Z-rc.1`, prouvée par un relevé daté sous `docs/project/history/`.
@@ -54,7 +60,9 @@ Hors décision : build unique et préflight GHCR (inchangés), confinement des s
 - Transmettre à un workflow réutilisable, par leur nom, les seuls secrets qu'il déclare.
 - Déclarer `environment: release` sur le job `publish`, avec un reviewer requis et une politique de déploiement limitée aux tags `v*`.
 - Documenter pour l'utilisateur la vérification `gh attestation verify` des assets Windows, seule preuve de provenance en l'absence de signature Authenticode.
-- Protéger `refs/tags/v*` par un ruleset de tags actif.
+- Protéger `refs/tags/v*` par deux rulesets de tags actifs : création réservée au mainteneur, mise à jour et suppression interdites à tous, sans acteur de contournement.
+- Activer les releases immuables avant toute release, et vérifier le champ `immutable` de la release publiée avant de déplacer `latest`.
+- Reprendre une release échouée sur le même tag tant que le commit ne change pas, sinon par une nouvelle version.
 - Attester chaque ZIP et chaque `setup.exe` publiés par `actions/attest` en `subject-path`, et les vérifier par `gh attestation verify` avant tout upload.
 - Accepter `vX.Y.Z-rc.N` égal à la version Maven et à la tête de `main`, publier une release marquée pré-version et laisser `latest` inchangé.
 - Consigner la preuve de la répétition sur pré-version dans `docs/project/history/`.
@@ -67,6 +75,8 @@ Hors décision : build unique et préflight GHCR (inchangés), confinement des s
 - Ne pas téléverser un asset dont l'attestation n'a pas été vérifiée.
 - Ne pas déplacer `latest` pour un tag de pré-version.
 - Ne pas déplacer ni réutiliser un tag d'image version ou SHA, pré-version comprise.
+- Ne pas supprimer, déplacer ni recréer un tag `v*`, même après un run de release en échec.
+- Ne pas ajouter d'acteur de contournement aux règles `update` et `deletion` des tags `v*`.
 
 ## Consequences
 
@@ -76,6 +86,7 @@ Hors décision : build unique et préflight GHCR (inchangés), confinement des s
 - La clé de signature n'est lisible que dans un run approuvé de l'environnement `release`.
 - Le consommateur vérifie l'image, le ZIP et le `setup.exe` par la même commande, `gh attestation verify`, qui désigne le workflow `Release` du dépôt.
 - La chaîne peut être exécutée de bout en bout avant la première version finale.
+- Un tag de version désigne le même commit pour toujours, et les assets d'une release publiée ne se remplacent pas ; déplacer un tag demande de modifier un ruleset, geste visible dans le journal d'audit du dépôt.
 
 ### Négatives
 
@@ -84,6 +95,8 @@ Hors décision : build unique et préflight GHCR (inchangés), confinement des s
 - Les réglages (environnement, ruleset de tags) vivent hors du dépôt : ils ne sont vérifiables qu'en lecture par `gh api`.
 - Une version `-rc` peut figurer sur `main` entre deux releases finales.
 - Une pré-version publie dans le namespace GHCR réel.
+- Un run de release qui échoue après un correctif changeant le commit consomme son numéro de version : le tag reste sans release et une nouvelle version est publiée.
+- Le contrôle `immutable` arrive après la publication : il signale une release non immuable sans pouvoir la dépublier.
 
 ### Risques
 
@@ -94,12 +107,15 @@ Hors décision : build unique et préflight GHCR (inchangés), confinement des s
 | Réglage GitHub supprimé ou modifié hors revue | Élevé | Lecture `gh api …/environments` et `…/rulesets` à chaque répétition et dans le relevé de preuve |
 | Approbation par le seul mainteneur | Moyen | La protection vise l'exécution non sollicitée, pas la revue à deux ; modèle solo de `docs/developer/branch-governance.md` |
 | Pré-version prise pour une version finale | Faible | Release marquée pré-version, `latest` jamais déplacé, tags d'image distincts |
+| Réglage « releases immuables » désactivé avant une release | Moyen | Code 79 de `publish-github-release-assets.sh` avant le déplacement de `latest` ; lecture `gh api …/immutable-releases` avant chaque tag |
 
 ## Compliance and Enforcement
 
 - Contrat de `bash .claude/scripts/contracts.sh` (`scripts/release/test-final-audit-contracts.sh`, bloc « Sprint 9 : adr-publication ») : cet ADR existe, complète GEN-0031, et `docs/developer/immutable-release-publishing.md` le référence.
 - Contrats du changement `sprint-09-chaine-de-release-executable` dans le même script : refus de `secrets: inherit` (tâche 1.2), `environment: release` sur `publish` et appel du job Windows sans secret et avec `require_authenticode: false` (tâche 3.2), `subject-path` et vérification des assets avant upload (tâche 4.1) ; acceptation et refus des tags de pré-version par `scripts/release/test-release-tag-policy.sh` (tâche 9.1).
-- Réglages GitHub : lecture `gh api repos/FTurleque/nexus-context-engine/environments` (environnement `release`, reviewer requis) et `gh api repos/FTurleque/nexus-context-engine/rulesets` (ruleset de cible `tag` actif) ; aucun contrôle automatique.
+- Réglages GitHub : lecture `gh api repos/FTurleque/nexus-context-engine/environments` (environnement `release`, reviewer requis), `gh api repos/FTurleque/nexus-context-engine/immutable-releases` (`enabled: true`) et `gh api repos/FTurleque/nexus-context-engine/rulesets/<id>` pour chaque ruleset de cible `tag` (règles et `bypass_actors`) ; aucun contrôle automatique des rulesets.
+- Releases immuables : `scripts/release/publish-github-release-assets.sh` sort en code 79 si le champ `immutable` de la release publiée ne vaut pas `true` ; cas couverts par `scripts/release/test-publish-github-release-assets.sh`.
+- Reprise d'une release échouée : `scripts/release/test-operational-doc-contracts.sh` exige la sous-section « Reprise d'une release échouée » de `docs/developer/release-and-recovery.md` et refuse dans `docs/developer/` toute commande qui supprime ou déplace un tag `v*`.
 - Revue : toute modification de `.github/workflows/release.yml` ou `windows-installer.yml` vérifie qu'aucun secret n'est transmis hors déclaration, que `environment: release` reste sur `publish`, et que la vérification des attestations précède l'upload.
 - Aucune règle Archgate compagnon (`rules: false`).
 
@@ -112,6 +128,7 @@ La décision est réévaluée si : le projet dispose d'un moyen de signature Aut
 - Release : `release.yml` appelle `windows-installer.yml` avec `require_authenticode: false` et sans secret ; le job Windows s'exécute hors environnement et produit des assets non signés.
 - Signature optionnelle de `windows-installer.yml` (qualification manuelle) : secrets mappés sur les seules étapes « Build self-contained Windows distribution » et « Build production installer », hors `pull_request` ; `sign-windows-artifact.ps1` décode le PFX dans un répertoire propre à l'appel et l'efface dans un `finally` ; `environment.name` conditionnel à `require_authenticode`. L'installeur de smoke n'est jamais signé.
 - Attestations : `actions/attest` en `subject-path` sur le ZIP et le `setup.exe`, exactement un de chaque, puis `gh attestation verify` bloquant avant l'upload et avant `latest`.
+- Releases immuables : contrôle du champ `immutable` par `publish-github-release-assets.sh` après la sortie du brouillon et pour une release retrouvée publiée (code 79) ; procédure de reprise dans [`release-and-recovery.md`](../../developer/release-and-recovery.md#reprise-dune-release-échouée). L'activation du réglage et la séparation des deux rulesets de tags sont des gestes du mainteneur, relus par `gh api` et consignés sous `docs/project/history/` ; la release `v0.2.0`, publiée avant l'activation, reste non immuable.
 - Preuves de la répétition sur tag de pré-version : [relevé du 2026-11-08](../../project/history/release-rehearsal-0.2.0-rc.2-2026-11-08.md) (`v0.2.0-rc.2`, attestations vérifiées sur l'image, le ZIP et le `setup.exe`).
 
 ## References

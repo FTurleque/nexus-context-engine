@@ -55,10 +55,16 @@ def verify_reports(directory: Path, require_base: bool = False):
     }
     # À 1M, la durée de peuplement dépend surtout de la vitesse du runner, alors que
     # le rapport 1M/500k d'un même rapport reste stable. Le plafond de 40 s s'étend
-    # jusqu'à ce rapport fois le palier 500k mesuré dans le même rapport, lui-même
-    # plafonné à 20 s : une croissance plus que proportionnelle reste refusée.
+    # jusqu'à ce rapport fois le palier 500k mesuré dans le même rapport : une
+    # croissance plus que proportionnelle reste refusée. Le plafond absolu borne
+    # cette extension quel que soit le palier 500k, avec ou sans base comparable ;
+    # sa valeur vaut 1,20 fois la plus grande mesure admise (40 755 ms), relevée
+    # dans docs/project/history/population-1m-runners-2026-11-11.md.
     population_scaling_ratio = {
         1_000_000: (500_000, 2.6),
+    }
+    population_hard_ceiling = {
+        1_000_000: 48_906,
     }
     population_jitter_ms = {
         10_000: 200,
@@ -95,10 +101,14 @@ def verify_reports(directory: Path, require_base: bool = False):
 
         population = tier['populationMs']
         ceiling = population_safety_ceiling[symbols]
+        ceiling_details = ()
         if symbols in population_scaling_ratio:
             lower_tier, ratio = population_scaling_ratio[symbols]
-            ceiling = max(ceiling, int(sqlite[lower_tier]['populationMs'] * ratio))
-        assert population <= ceiling, (symbols, 'population-safety', population, ceiling)
+            proportional_ceiling = max(ceiling, int(sqlite[lower_tier]['populationMs'] * ratio))
+            hard_ceiling = population_hard_ceiling[symbols]
+            ceiling = min(hard_ceiling, proportional_ceiling)
+            ceiling_details = ('proportional=', proportional_ceiling, 'hard=', hard_ceiling)
+        assert population <= ceiling, (symbols, 'population-safety', population, ceiling, *ceiling_details)
         if population_comparable and symbols in baseline_sqlite:
             baseline_population = baseline_sqlite[symbols]['populationMs']
             relative_ceiling = max(

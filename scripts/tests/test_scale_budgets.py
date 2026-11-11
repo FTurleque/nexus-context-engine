@@ -188,6 +188,35 @@ class ScaleBudgetsTest(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, '500000.*population-safety.*20001.*20000'):
             self.verify()
 
+    def test_uniform_slowdown_fails_on_million_symbol_hard_ceiling(self):
+        # Palier 500k à son plafond : le plafond proportionnel atteindrait 52 000 ms.
+        self.million_symbol_population(20_000, 52_000)
+        with self.assertRaisesRegex(
+                AssertionError,
+                r"1000000, 'population-safety', 52000, 48906, 'proportional=', 52000, 'hard=', 48906"):
+            self.verify()
+
+    def test_uniform_slowdown_on_repeated_curve_fails_on_million_symbol_hard_ceiling(self):
+        self.repeated_curve()
+        self.report['sqliteTiers'][2].update(populationMs=20_000, populationSamplesMs=[20_000] * 3)
+        self.report['sqliteTiers'][3].update(populationMs=52_000, populationSamplesMs=[51_900, 52_000, 52_100])
+        with self.assertRaisesRegex(AssertionError, 'population-safety.*52000.*48906.*hard=.*48906'):
+            self.verify()
+
+    def test_million_symbol_hard_ceiling_is_inclusive(self):
+        self.million_symbol_population(20_000, 48_906)
+        self.verify()
+        self.million_symbol_population(20_000, 48_907)
+        with self.assertRaisesRegex(AssertionError, 'population-safety.*48907.*48906'):
+            self.verify()
+
+    def test_million_symbol_hard_ceiling_also_bounds_comparable_base_runs(self):
+        self.million_symbol_population(20_000, 48_000)
+        self.baseline()
+        self.million_symbol_population(20_000, 50_000)
+        with self.assertRaisesRegex(AssertionError, 'population-safety.*50000.*48906'):
+            self.verify(require_base=True)
+
     def test_repeated_million_symbol_slowdown_on_slow_runner_still_fails(self):
         self.repeated_curve()
         self.report['sqliteTiers'][2].update(populationMs=16_244, populationSamplesMs=[16_185, 16_244, 16_244])
