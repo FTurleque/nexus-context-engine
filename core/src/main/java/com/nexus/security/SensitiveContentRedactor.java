@@ -30,7 +30,10 @@ public final class SensitiveContentRedactor {
     /** Classe du corps et des gardes d'un jeton à tirets ({@code sk-}, {@code xox?-}, {@code glpat-}). */
     private static final String DASH_TOKEN_CHAR = "[A-Za-z0-9_-]";
 
-    /** Composants d'un nom d'option ou d'élément XML qui portent une valeur sensible. */
+    /**
+     * Composants d'un nom d'option ou d'élément XML qui portent une valeur sensible. Ce nom et ceux
+     * qui suivent ne servent que dans des motifs {@code (?i)} : leurs classes s'écrivent en minuscules.
+     */
     private static final String SENSITIVE_NAME = "(?:password|passwd|pwd|token|secret|api[_-]?key"
             + "|client[_-]?secret|access[_-]?key|access[_-]?token|private[_-]?key)";
     /**
@@ -38,7 +41,7 @@ public final class SensitiveContentRedactor {
      * nom est consommé en entier sans retour arrière, puis un lookbehind de longueur bornée vérifie
      * qu'il se termine par une clé sensible précédée d'un {@code -}.
      */
-    private static final String OPTION_NAME = "(?<![\\w-])--?+[A-Za-z0-9_-]++(?<=-" + SENSITIVE_NAME + ")";
+    private static final String OPTION_NAME = "(?<![\\w-])--?+[a-z0-9_-]++(?<=-" + SENSITIVE_NAME + ")";
     /** Début d'une valeur d'option non citée : ni tiret (option suivante), ni blanc, ni quote. */
     private static final String UNQUOTED_OPTION_VALUE_START = "(?![-\\s\"'`])";
     /**
@@ -46,7 +49,7 @@ public final class SensitiveContentRedactor {
      * {@code .}, {@code -} ou {@code _} ({@code db.password}, {@code db-password}, {@code api_key}),
      * puis ses attributs. Même construction que {@link #OPTION_NAME} : nom possessif, lookbehind borné.
      */
-    private static final String XML_OPEN = "<([A-Za-z0-9._-]++(?<=[<._-]" + SENSITIVE_NAME + "))"
+    private static final String XML_OPEN = "<([a-z0-9._-]++(?<=[<._-]" + SENSITIVE_NAME + "))"
             + "(?:[ \\t][^<>\\r\\n]{0,256}+)?+>";
 
     /**
