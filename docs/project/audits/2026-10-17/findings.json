@@ -5219,12 +5219,16 @@
    "sprint": 14,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "changement": "Écriture UTF-8 sans BOM (SaveUtf8TextFile) de nexus-native.env.cmd, docker\\.env, codex-desktop.mcp.toml, copilot-jetbrains.mcp.json et generic-mcp.json ; NEXUS_HOME accentué sous le profil écrit %USERPROFILE%\\… ou %LOCALAPPDATA%\\… (CmdEnvPathValue), autres lignes non ASCII lues sous chcp 65001 avec page de code restaurée (CmdUtf8Frame) ; dossier d'installation hors page ANSI refusé par l'assistant (le runtime Java embarqué ne démarre pas depuis un tel dossier) ; smoke avec profil « Hélène Łukasz » et dossier « Instàllé Hélène ».",
    "historique": [
     {
      "date": "2026-11-11",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-11",
+     "statut": "Fermé"
     }
    ],
    "verification": {
@@ -5301,12 +5305,16 @@
    "sprint": 14,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé avec réserve",
    "changement": "workflow_hygiene.py : forms refuse une clé suivie d'espaces avant « : » hors du texte des blocs run:/script: (SPACED_KEY) ; jobs_of lit les clés de job à l'indentation de la première clé du job et marque une clé désalignée, refusée par forms (PR #367, sprint 14).",
    "historique": [
     {
      "date": "2026-11-11",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-11",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
@@ -5376,12 +5384,16 @@
    "sprint": 14,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé avec réserve",
    "changement": "DIRECT_MAVEN_CALL refuse un nom Maven en position de commande après =, ;, {, (, | ou un . de dot-sourcing, cmd /k et pwsh/powershell -c/-Command ; une fixture d'auto-test par forme ; [Limite] de docs/developer/ci-and-supply-chain.md complétée (PR #367, sprint 14).",
    "historique": [
     {
      "date": "2026-11-11",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-11",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
@@ -5414,12 +5426,16 @@
    "sprint": 14,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
+   "statut": "Fermé",
    "changement": "docs/developer/reproduce-and-debug.md nomme les artefacts nexus-context-engine-<version> et entre dans current_docs ; la constante STALE_DEV_VERSION est refusée dans la documentation courante contrôlée et dans les scripts PowerShell actifs, module partagé compris (PR #367, sprint 14).",
    "historique": [
     {
      "date": "2026-11-11",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-11",
+     "statut": "Fermé"
     }
    ],
    "verification": {
