@@ -399,7 +399,11 @@ current_docs = (
     "docs/developer/code-intelligence.md",
     "docs/developer/jdt-language-server.md",
     "docs/developer/current-limitations.md",
+    "docs/developer/reproduce-and-debug.md",
 )
+# Development version of the first releases (AUD-QUA-27): no current document nor
+# active script names it. The durable pages refer to this constant by name.
+STALE_DEV_VERSION = "0.1.0-SNAPSHOT"
 for path in current_docs:
     for stale in (
         "PR #49",
@@ -408,6 +412,7 @@ for path in current_docs:
         "Quarkus 3.33",
         "MCP SDK     2.0.0",
         "après la campagne NXA3.",
+        STALE_DEV_VERSION,
     ):
         forbid(path, stale)
 
@@ -586,18 +591,24 @@ MAVEN_TOKEN = r"(?:\.\.?[\\/])?(?:[\w${}:.\\/-]*[\\/])?mvnw?(?:\.cmd)?"
 DIRECT_MAVEN_CALL = (
     re.compile(r"&\s*['\"]?" + MAVEN_TOKEN + r"['\"]?(?:\s|$)", re.IGNORECASE),
     re.compile(r"^\s*" + MAVEN_TOKEN + r"\s", re.IGNORECASE),
+    # Command position (AUD-QUA-26): after =, ;, {, (, | or a dot-sourcing '.'.
+    # The '.' counts only alone between blanks, so '.\mvnw.cmd' quoted in a
+    # sentence is not read as a dot followed by the wrapper.
+    re.compile(r"(?:[=;{(|]|(?<!\S)\.(?=\s))\s*['\"]?" + MAVEN_TOKEN + r"['\"]?(?:\s|$)", re.IGNORECASE),
     re.compile(r"Get-Command\s+(?:-Name\s+)?['\"]?mvn", re.IGNORECASE),
     re.compile(r"Start-Process\b.*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE),
     re.compile(r"Join-Path\b.*['\"\s\\/](?:\.\.[\\/])*mvnw?(?:\.cmd)?(?:['\")\s]|$)", re.IGNORECASE),
-    # Indirection (AUD-QUA-21): a variable holding exactly a Maven command name,
-    # cmd /c (options and $env:ComSpec included), and Invoke-Expression/iex of a
-    # string that names Maven. A message that quotes the wrapper inside a sentence
-    # is not a whole-string literal; a message naming both cmd /c and mvn is
-    # flagged and belongs in MAVEN_CALL_EXCEPTIONS.
+    # Indirection (AUD-QUA-21, AUD-QUA-26): a variable holding exactly a Maven
+    # command name, cmd /c or /k (options and $env:ComSpec included), pwsh or
+    # powershell -c/-Command, and Invoke-Expression/iex of a string that names
+    # Maven. A message that quotes the wrapper inside a sentence is not a
+    # whole-string literal; a message naming both cmd /c and mvn is flagged and
+    # belongs in MAVEN_CALL_EXCEPTIONS.
     re.compile(r"\$\{?[\w:]+\}?\s*=\s*(['\"])" + MAVEN_TOKEN + r"\1", re.IGNORECASE),
     re.compile(
-        r"(?:\bcmd(?:\.exe)?['\"]?|\$env:ComSpec)(?:\s+/\w+)*\s+/c\b.*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE
+        r"(?:\bcmd(?:\.exe)?['\"]?|\$env:ComSpec)(?:\s+/\w+)*\s+/[ck]\b.*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE
     ),
+    re.compile(r"\b(?:pwsh|powershell)(?:\.exe)?\b.*\s-c(?:ommand)?\b.*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE),
     re.compile(r"(?:\bInvoke-Expression\b|(?<![\w-])iex\b).*\bmvnw?(?:\.cmd)?\b", re.IGNORECASE),
 )
 # Explicit exceptions: (script path, exact trimmed line). Each entry must still
@@ -638,6 +649,20 @@ for script in active_powershell_scripts():
     )
 if maven_violations:
     raise SystemExit("powershell maven contract drift:\n" + "\n".join(maven_violations))
+# No active script, shared module included, names an artefact of the development version.
+def names_stale_version(source: str) -> bool:
+    return STALE_DEV_VERSION in source
+
+
+if not names_stale_version("$jar = Join-Path $root 'target/nexus-context-engine-" + STALE_DEV_VERSION + "-cli.jar'\n"):
+    raise SystemExit("stale version contract self-test: an artefact of the development version was not detected")
+if names_stale_version("java -jar .\\target\\nexus-context-engine-<version>-cli.jar --version\n"):
+    raise SystemExit("stale version contract self-test: an artefact named by <version> was rejected")
+for script in [*active_powershell_scripts(), *sorted((root / "scripts" / "lib").glob("*.psm1"))]:
+    if names_stale_version(script.read_text(encoding="utf-8")):
+        raise SystemExit(
+            f"powershell script contract drift: {script.relative_to(root).as_posix()} still contains {STALE_DEV_VERSION!r}"
+        )
 for excepted_script, excepted_line in sorted(MAVEN_CALL_EXCEPTIONS):
     lines = [line.strip() for line in text(excepted_script).splitlines()]
     if excepted_line not in lines:
@@ -663,6 +688,15 @@ for label, fixture in (
     ("cmd.exe /c", "& cmd.exe /c \"mvnw.cmd -B verify\"\n"),
     ("Invoke-Expression", 'Invoke-Expression "mvn clean install"\n'),
     ("iex", "iex \"$PSScriptRoot\\..\\mvnw.cmd test\"\n"),
+    ("assignment", "$output = mvn clean install 2>&1\n"),
+    ("semicolon", "Push-Location $root; mvn clean install\n"),
+    ("block", "if ($full) { mvn clean install }\n"),
+    ("dot-source", ". mvn clean install\n"),
+    ("cmd /k", "cmd /k mvn clean install\n"),
+    ("pwsh -Command", 'pwsh -Command "mvn clean install"\n'),
+    ("powershell -c", "powershell.exe -NoProfile -c 'mvnw.cmd -B verify'\n"),
+    ("subexpression", "Write-Output $(mvn -v)\n"),
+    ("pipeline", "Get-Content x | mvn -f -\n"),
 ):
     if not powershell_maven_violations(f"fixture/{label}.ps1", fixture):
         raise SystemExit(f"powershell maven contract self-test: {label} was not detected")
@@ -700,7 +734,8 @@ HYGIENE_FIXTURES="scripts/release/fixtures/workflow-hygiene"
 for check in forms inputs timeouts runners; do
   python3 "$HYGIENE" "$check" .github/workflows .github/actions
 done
-# Valid forms that must stay accepted: defaults.run as a mapping, env: beside a run: block.
+# Valid forms that must stay accepted: defaults.run as a mapping, env: beside a run: block,
+# a 'label : value' script line inside a run: | block.
 for check in pins forms inputs timeouts; do
   python3 "$HYGIENE" "$check" "$HYGIENE_FIXTURES/valid-defaults-and-env.yml" >/dev/null
 done
@@ -713,6 +748,11 @@ for case in \
   "forms|forms-anchor-alias.yml|forms-anchor-alias.yml:14: unsupported YAML form: anchor, alias or merge key" \
   "forms|forms-run-plain-continuation.yml|forms-run-plain-continuation.yml:13: unsupported YAML form: run: plain scalar continued" \
   "forms|forms-run-quoted-continuation.yml|forms-run-quoted-continuation.yml:13: unsupported YAML form: run: quoted scalar continued" \
+  "forms|forms-spaced-run.yml|forms-spaced-run.yml:13: unsupported YAML form: key followed by a space before ':'" \
+  "inputs|forms-spaced-run.yml|forms-spaced-run.yml:13: unsupported YAML form: key followed by a space before ':'" \
+  "forms|forms-spaced-runs-on.yml|forms-spaced-runs-on.yml:6: unsupported YAML form: key followed by a space before ':'" \
+  "timeouts|forms-spaced-runs-on.yml|forms-spaced-runs-on.yml:6: unsupported YAML form: key followed by a space before ':'" \
+  "forms|forms-misaligned-job-key.yml|forms-misaligned-job-key.yml:7: unsupported YAML form: job key indented differently from the first key of job 'misaligned'" \
   "pins|forms-flow-step.yml|forms-flow-step.yml:13: unsupported YAML form: flow collection" \
   "inputs|inputs-format-braces.yml|inputs-format-braces.yml:13: an input is interpolated" \
   "inputs|inputs-nested-action|inputs-nested-action/group/tool/action.yml:12: an input is interpolated" \
@@ -722,6 +762,7 @@ for case in \
   "inputs|inputs-github-script.yml|inputs-github-script.yml:17: an input is interpolated" \
   "inputs|inputs-composite-action|inputs-composite-action/action.yml:14: an input is interpolated" \
   "timeouts|timeout-missing.yml|no timeout-minutes" \
+  "timeouts|timeout-missing-indent-4.yml|timeout-missing-indent-4.yml:5: job 'deep' has runs-on but no timeout-minutes" \
   "runners|runners/scale-benchmark.yml|unpinned image"; do
   IFS='|' read -r check fixture message <<< "$case"
   set +e

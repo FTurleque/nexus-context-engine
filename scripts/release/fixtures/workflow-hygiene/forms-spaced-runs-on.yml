@@ -1,0 +1,8 @@
+# Fixture négative : clé runs-on espacée avant « : », sans timeout-minutes.
+name: fixture
+on: workflow_dispatch
+jobs:
+  spaced:
+    runs-on : ubuntu-latest
+    steps:
+      - run: echo spaced
