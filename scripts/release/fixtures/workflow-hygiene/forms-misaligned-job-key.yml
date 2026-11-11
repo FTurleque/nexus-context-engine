@@ -1,0 +1,9 @@
+# Fixture négative : première clé du job indentée de 4, clé suivante de 2.
+name: fixture
+on: workflow_dispatch
+jobs:
+  misaligned:
+      runs-on: ubuntu-24.04
+    timeout-minutes: 5
+      steps:
+        - run: echo misaligned
