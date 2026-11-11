@@ -32,6 +32,75 @@ begin
   StringChangeEx(Result, '%', '%%', True);
 end;
 
+function HasNonAsciiChar(Value: String): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 1 to Length(Value) do
+    if Ord(Value[I]) > 127 then
+    begin
+      Result := True;
+      exit;
+    end;
+end;
+
+{ A non-ASCII path under the current user's LOCALAPPDATA or USERPROFILE is written as
+  a reference to that variable: cmd.exe expands it from the Unicode environment, so
+  the default NEXUS_HOME under an accented profile stays exact whatever the console
+  code page. An ASCII path stays literal and does not depend on the variable being
+  defined when the launcher runs. The longest matching prefix wins; the match ignores
+  ASCII case (CompareText) and stops at a folder boundary. The rest of the path is
+  escaped by CmdEnvEscape. }
+function CmdEnvPathValue(Value: String): String;
+var
+  Names: TArrayOfString;
+  Prefix: String;
+  Best: String;
+  BestName: String;
+  I: Integer;
+begin
+  Result := CmdEnvEscape(Value);
+  if not HasNonAsciiChar(Value) then exit;
+  SetArrayLength(Names, 2);
+  Names[0] := 'LOCALAPPDATA';
+  Names[1] := 'USERPROFILE';
+  Best := '';
+  BestName := '';
+  for I := 0 to GetArrayLength(Names) - 1 do
+  begin
+    Prefix := RemoveBackslashUnlessRoot(GetEnv(Names[I]));
+    if (Length(Prefix) > Length(Best)) and (Length(Value) >= Length(Prefix)) and
+       (CompareText(Copy(Value, 1, Length(Prefix)), Prefix) = 0) and
+       ((Length(Value) = Length(Prefix)) or (Value[Length(Prefix) + 1] = '\') or
+        (Prefix[Length(Prefix)] = '\')) then
+    begin
+      Best := Prefix;
+      BestName := Names[I];
+    end;
+  end;
+  if BestName <> '' then
+    Result := '%' + BestName + '%' + CmdEnvEscape(Copy(Value, Length(Best) + 1, Length(Value)));
+end;
+
+{ cmd.exe decodes a batch file in the console code page. When the generated lines
+  keep a non-ASCII character, they are read under code page 65001 (UTF-8, the
+  encoding of the file) and the original code page is restored afterwards. chcp needs
+  a console: a launcher started without any console (DETACHED_PROCESS) keeps its code
+  page and reads such a literal value wrongly; a hidden console (CREATE_NO_WINDOW)
+  works. ASCII content is returned unchanged. }
+function CmdUtf8Frame(Body: String): String;
+begin
+  if HasNonAsciiChar(Body) then
+    Result := 'for /f "tokens=2 delims=:." %%P in (''chcp'') do set "NEXUS_ENV_PREVIOUS_CP=%%P"' + #13#10 +
+      'chcp 65001 >nul' + #13#10 +
+      Body +
+      'chcp %NEXUS_ENV_PREVIOUS_CP% >nul' + #13#10 +
+      'set "NEXUS_ENV_PREVIOUS_CP="' + #13#10
+  else
+    Result := Body;
+end;
+
 function DotEnvQuoted(Value: String): String;
 begin
   Result := Value;
@@ -172,13 +241,13 @@ end;
     'set "NEXUS_OLLAMA_BASE_URL=' + OllamaPage.Values[0] + '"' + #13#10;
 '@
     $nativeWriterReplacement = @'
-  Content := '@echo off' + #13#10 +
-    'set "NEXUS_HOME=' + CmdEnvEscape(RuntimePage.Values[0]) + '"' + #13#10 +
+  Content := '@echo off' + #13#10 + CmdUtf8Frame(
+    'set "NEXUS_HOME=' + CmdEnvPathValue(RuntimePage.Values[0]) + '"' + #13#10 +
     'set "NEXUS_REST_HOST=' + CmdEnvEscape(RuntimePage.Values[1]) + '"' + #13#10 +
     'set "NEXUS_REST_PORT=' + CmdEnvEscape(RuntimePage.Values[2]) + '"' + #13#10 +
     'set "NEXUS_REST_API_TOKEN=' + CmdEnvEscape(RuntimePage.Values[3]) + '"' + #13#10 +
     'set "NEXUS_SEMANTIC_PROVIDER=' + CmdEnvEscape(SemanticProviderValue()) + '"' + #13#10 +
-    'set "NEXUS_OLLAMA_BASE_URL=' + CmdEnvEscape(OllamaPage.Values[0]) + '"' + #13#10;
+    'set "NEXUS_OLLAMA_BASE_URL=' + CmdEnvEscape(OllamaPage.Values[0]) + '"' + #13#10);
 '@
     $Source = Replace-ExactlyOnce $Source $nativeWriter $nativeWriterReplacement 'native batch configuration escaping'
 
