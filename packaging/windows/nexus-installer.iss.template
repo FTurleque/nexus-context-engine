@@ -989,7 +989,13 @@ begin
     ProfilePage.SelectedValueIndex := 0;
     SemanticPage.Values[0] := False;
     DockerPrereqPage.Values[0] := False;
-    ClientBoxes[CLIENT_GENERIC].Checked := False;
+    { The smoke writes the Codex Desktop TOML fragment, its connect script and the
+      generic JSON fragment, so their encoding is checked on an accented install folder.
+      No client is connected: CurStepChanged skips ConnectClient in a smoke build. }
+    ClientBoxes[CLIENT_CODEX_DESKTOP].Enabled := True;
+    ClientBoxes[CLIENT_CODEX_DESKTOP].Checked := True;
+    ClientBoxes[CLIENT_GENERIC].Enabled := True;
+    ClientBoxes[CLIENT_GENERIC].Checked := True;
   end
   else
     LoadPreviousSettings;
@@ -1057,6 +1063,24 @@ begin
     end;
 end;
 
+{ The embedded Java runtime (nexus.exe, java.exe -jar) does not start from a folder whose
+  name has a character outside the active ANSI code page, such as U+0141 under code page
+  1252. The String -> AnsiString conversion replaces such a character, so the round trip
+  changes the name. }
+function IsAnsiRoundTrip(Value: String): Boolean;
+var
+  Ansi: AnsiString;
+begin
+  Ansi := Value;
+  Result := String(Ansi) = Value;
+end;
+
+function InstallDirOutsideAnsiMessage(): String;
+begin
+  Result := 'Le dossier d''installation contient un caractère absent de la page de code ANSI de Windows. ' +
+    'Le runtime Java embarqué ne démarre pas depuis un tel dossier : choisissez un dossier sans ce caractère.';
+end;
+
 function NextButtonClick(CurPageID: Integer): Boolean;
 var
   PortValue: Integer;
@@ -1064,6 +1088,13 @@ var
   ReservedPort: Integer;
 begin
   Result := True;
+
+  if (CurPageID = wpSelectDir) and (not IsAnsiRoundTrip(WizardDirValue())) then
+  begin
+    MsgBox(InstallDirOutsideAnsiMessage(), mbError, MB_OK);
+    Result := False;
+    exit;
+  end;
 
   if (CurPageID = NativeOptionsPage.ID) and InstallNative() then
   begin
@@ -1272,9 +1303,31 @@ end;
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   NeedsRestart := False;
+  { Backstop for a reinstall, where the install-folder page is skipped. }
+  if not IsAnsiRoundTrip(WizardDirValue()) then
+  begin
+    Result := InstallDirOutsideAnsiMessage();
+    exit;
+  end;
   Result := InstallOllamaIfNeeded();
   if Result <> '' then exit;
   Result := InstallDockerDesktopIfNeeded();
+end;
+
+{ Generated configuration files other than PowerShell scripts (nexus-native.env.cmd,
+  docker\.env, the TOML and JSON fragments) are written in UTF-8 without a BOM.
+  SaveStringToFile would convert them to the ANSI code page, where a profile or install
+  folder such as "Hélène" or "Łukasz" is altered; a BOM would become part of the first
+  .env key read by Compose. SaveStringsToUTF8FileWithoutBOM ends the text with one
+  extra line break, which cmd.exe, Compose, TOML and JSON readers ignore. }
+procedure SaveUtf8TextFile(Path: String; Text: String);
+var
+  Lines: TArrayOfString;
+begin
+  SetArrayLength(Lines, 1);
+  Lines[0] := Text;
+  if not SaveStringsToUTF8FileWithoutBOM(Path, Lines, False) then
+    Log('Unable to write ' + Path);
 end;
 
 procedure WriteNativeConfiguration;
@@ -1290,7 +1343,7 @@ begin
     'set "NEXUS_REST_API_TOKEN=' + RuntimePage.Values[3] + '"' + #13#10 +
     'set "NEXUS_SEMANTIC_PROVIDER=' + SemanticProviderValue() + '"' + #13#10 +
     'set "NEXUS_OLLAMA_BASE_URL=' + OllamaPage.Values[0] + '"' + #13#10;
-  SaveStringToFile(ExpandConstant('{app}\config\nexus-native.env.cmd'), Content, False);
+  SaveUtf8TextFile(ExpandConstant('{app}\config\nexus-native.env.cmd'), Content);
 end;
 
 { Build arguments of the local runtime-image fallback: the same OCI labels as the
@@ -1333,7 +1386,7 @@ begin
   EnvContent := EnvContent + 'NEXUS_IMAGE_VERSION={#NexusVersion}' + #13#10;
   if '{#NexusRevision}' <> '' then
     EnvContent := EnvContent + 'NEXUS_IMAGE_REVISION={#NexusRevision}' + #13#10;
-  SaveStringToFile(ExpandConstant('{app}\docker\.env'), EnvContent, False);
+  SaveUtf8TextFile(ExpandConstant('{app}\docker\.env'), EnvContent);
 
   if not LoadStringFromFile(ExpandConstant('{app}\docker\docker-compose.yml.template'), ComposeTemplate) then
     RaiseException('Impossible de lire la template Docker Compose installée.');
@@ -1688,9 +1741,9 @@ begin
   begin
     { Static JSON fallback — restored Docker handling, kept for manual import. }
     if UseDockerForIntegrations() then
-      SaveStringToFile(Dir + '\copilot-jetbrains.mcp.json', DockerMcpCommandJson('servers'), False)
+      SaveUtf8TextFile(Dir + '\copilot-jetbrains.mcp.json', DockerMcpCommandJson('servers'))
     else
-      SaveStringToFile(Dir + '\copilot-jetbrains.mcp.json', NativeMcpCommandJson('servers'), False);
+      SaveUtf8TextFile(Dir + '\copilot-jetbrains.mcp.json', NativeMcpCommandJson('servers'));
 
     { PS1: merge nexus entry into the live IntelliJ Copilot mcp.json using the
       same cmd.exe + nexus-mcp.cmd pattern as mcp-search-net.
@@ -1722,17 +1775,17 @@ begin
   if ClientSelected(CLIENT_CODEX_DESKTOP) then
   begin
     if UseDockerForIntegrations() then
-      SaveStringToFile(Dir + '\codex-desktop.mcp.toml', DockerCodexToml(), False)
+      SaveUtf8TextFile(Dir + '\codex-desktop.mcp.toml', DockerCodexToml())
     else
-      SaveStringToFile(Dir + '\codex-desktop.mcp.toml', NativeCodexToml(), False);
+      SaveUtf8TextFile(Dir + '\codex-desktop.mcp.toml', NativeCodexToml());
   end;
 
   if ClientSelected(CLIENT_GENERIC) then
   begin
     if UseDockerForIntegrations() then
-      SaveStringToFile(Dir + '\generic-mcp.json', DockerMcpCommandJson('mcpServers'), False)
+      SaveUtf8TextFile(Dir + '\generic-mcp.json', DockerMcpCommandJson('mcpServers'))
     else
-      SaveStringToFile(Dir + '\generic-mcp.json', NativeMcpCommandJson('mcpServers'), False);
+      SaveUtf8TextFile(Dir + '\generic-mcp.json', NativeMcpCommandJson('mcpServers'));
   end;
 
   if ClientSelected(CLIENT_COPILOT_CLI) then

@@ -17,7 +17,11 @@ Source : `docs/project/audits/2026-10-17/findings.json` (entrée `AUD-QUA-28`), 
   - [Exigence] `docker\.env`, le fragment TOML et les fragments JSON sont écrits en UTF-8 sans BOM et se relisent caractère pour caractère.
   - [Exigence] Les lanceurs natifs reçoivent `NEXUS_HOME` et les autres variables de `config\nexus-native.env.cmd` tels qu'ils ont été saisis, quelle que soit la page de code de la console, qu'ils rendent inchangée.
   - [Proposition] Pour le `.cmd` : `NEXUS_HOME` écrit en référence à `%LOCALAPPDATA%` ou `%USERPROFILE%` quand il commence par leur valeur, et `chcp 65001` encadré (page d'origine restaurée) quand une valeur garde un caractère non ASCII (voir `design.md`, « Décisions »).
-  - [Proposition] Le smoke installe avec un profil et un `{app}` accentués, contrôle `NEXUS_HOME` vu par `nexus.cmd` et le TOML de Codex.
+  - [Existant vérifié] Le runtime Java embarqué ne démarre pas depuis un dossier d'installation qui contient un caractère absent de la page ANSI du poste : en page 1252, `nexus.exe` installé sous `…\Instàllé Łukasz` signale `could not find java.dll` et `java.exe -jar` `Unable to access jarfile …?ukasz…`, alors que `…\Instàllé Hélène` fonctionne (relevé local du 11/11/2026, Temurin 21, installateur smoke).
+  - [Exigence] L'assistant refuse explicitement un dossier d'installation dont le nom ne fait pas l'aller-retour par la page ANSI active.
+  - [Décision] Le smoke installe dans un `{app}` accentué de la page ANSI (`Instàllé Hélène`) avec un profil qui contient `Łukasz` ; il contrôle que `nexus.cmd` enregistre puis relit un projet dans `NEXUS_HOME` sous ce profil, ainsi que les fragments TOML et JSON.
+  - [Décision] La lecture d'une valeur littérale non ASCII de `config\nexus-native.env.cmd` suppose une console, visible ou cachée (`CREATE_NO_WINDOW`) : un processus sans console (`DETACHED_PROCESS`) garde sa page de code (relevé local). Cette limite est documentée ; le `NEXUS_HOME` par défaut, écrit `%USERPROFILE%\.nexus`, n'en dépend pas.
+  - [Décision] `docker\.env`, absent de l'installateur smoke, est couvert par le contrat statique de la tâche 1.4 ; sa preuve reste partielle, sans lecture Compose.
 
 ## Type de changement
 
@@ -29,8 +33,10 @@ fonctionnel (fichiers générés par l'installateur Windows) : profil complet.
 - Les cinq fichiers écrits par `SaveStringToFile` qui portent une valeur saisie ou dérivée du poste : `config\nexus-native.env.cmd`, `docker\.env`, `integrations\codex-desktop.mcp.toml`, `integrations\copilot-jetbrains.mcp.json`, `integrations\generic-mcp.json`.
 - Les deux scripts de durcissement qui réécrivent l'écrivain de `config\nexus-native.env.cmd` (`scripts/release/harden-windows-installer-source.ps1:166-182`, `scripts/release/harden-windows-rest-auth-source.ps1:15-45`).
 - Les tests `scripts/release/test-windows-installer.ps1` et `scripts/release/test-windows-config-escaping.ps1`.
+- La validation du dossier d'installation par l'assistant (page `wpSelectDir`).
 
 **Hors périmètre :**
+- Le démarrage du runtime Java depuis un dossier hors page ANSI : limite du lanceur Java, que l'assistant refuse en amont.
 - Les lanceurs `.cmd` à texte constant écrits par `SaveStringToFile` (`nexus-docker-up.cmd`, `nexus-docker-down.cmd` `:1382-1383`, `connect-*.cmd` `:1719`, `:1761`, `:1794`, `:1812`, `:1832`, `:1859`) : ils ne contiennent que des références `%~dp0` et des valeurs ASCII validées ; seul le message `n'est pas prêt` (`:1356`) s'affiche altéré, défaut d'affichage sans effet sur le comportement.
 - `docker\docker-compose.yml` (`:1338-1340`) : lu et écrit en `AnsiString`, octets recopiés sans conversion.
 - Les scripts PowerShell générés et les configurations JSON des clients : déjà en UTF-8 (`installer-client-configuration`, sprint 13).
@@ -42,16 +48,16 @@ fonctionnel (fichiers générés par l'installateur Windows) : profil complet.
 ### New Capabilities
 
 ### Modified Capabilities
-- `installer-client-configuration`: ajout de deux exigences — encodage UTF-8 sans BOM des fichiers de configuration générés, et valeurs de `config\nexus-native.env.cmd` reçues intactes par les lanceurs natifs.
+- `installer-client-configuration`: ajout de trois exigences — encodage UTF-8 sans BOM des fichiers de configuration générés, valeurs de `config\nexus-native.env.cmd` reçues intactes par les lanceurs natifs, et refus d'un dossier d'installation hors de la page ANSI.
 
 ## Impact
 
-- Installateur : `packaging/windows/nexus-installer.iss.template` (`WriteNativeConfiguration`, `WriteDockerConfiguration`, `WriteAssistantAssets`, nouvel écrivain UTF-8 sans BOM, réglage du mode smoke `:986-993`), `scripts/release/harden-windows-installer-source.ps1`, `scripts/release/harden-windows-rest-auth-source.ps1`.
+- Installateur : `packaging/windows/nexus-installer.iss.template` (`WriteNativeConfiguration`, `WriteDockerConfiguration`, `WriteAssistantAssets`, nouvel écrivain UTF-8 sans BOM, réglage du mode smoke `:986-993`, contrôle du dossier d'installation dans `NextButtonClick`), `scripts/release/harden-windows-installer-source.ps1`, `scripts/release/harden-windows-rest-auth-source.ps1`.
 - Tests : `scripts/release/test-windows-installer.ps1`, `scripts/release/test-windows-config-escaping.ps1` ; workflow `Windows installer` (`.github/workflows/windows-installer.yml`).
-- Documentation : `docs/developer/release-and-recovery.md` (section `OpenSpec installer-client-configuration`), `docs/user/windows-installation.md` (« Écran 4 — Configuration runtime »), `docs/developer/openspec-traceability.md`.
+- Documentation : `docs/developer/release-and-recovery.md` (section `OpenSpec installer-client-configuration`), `docs/user/windows-installation.md` (« Dossier d'installation », « Écran 4 — Configuration runtime »), `docs/developer/openspec-traceability.md`.
 - Audit : statut de `AUD-QUA-28` dans `docs/project/audits/2026-10-17/findings.json`.
 - Aucun code Java, aucune migration SQLite, aucun ADR.
 
 ## Questions ouvertes
 
-- [Question] `docker\.env` n'est jamais écrit par l'installateur smoke (`InstallDocker()` rend faux en mode smoke, `packaging/windows/nexus-installer.iss.template:131-134`) : faut-il ajouter une lecture Compose réelle (`docker compose --env-file … config`) d'un `.env` accentué à `scripts/release/test-docker-runtime.ps1`, ou le contrat statique de la tâche 1.4 et le rejeu de la tâche 2.1 suffisent-ils ? La réponse change la preuve du scénario « Dossier de dépôt Docker accentué », pas l'implémentation.
+Aucune : les questions sur `docker\.env` et sur `chcp` sans console sont tranchées dans « What Changes ».
