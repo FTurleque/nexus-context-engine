@@ -1,6 +1,6 @@
 # Architecture de NEXUS
 
-Ce document décrit l'architecture **courante versionnée** de NEXUS 0.2.0. `develop` est la branche d'intégration et `main` la branche de release ; les anciens résultats d'itération restent dans les documents historiques.
+Ce document décrit l'architecture **courante versionnée** de NEXUS 0.2.1. `develop` est la branche d'intégration et `main` la branche de release ; les anciens résultats d'itération restent dans les documents historiques.
 
 ## Mission
 

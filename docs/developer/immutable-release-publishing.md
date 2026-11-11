@@ -39,10 +39,10 @@ Le job de publication télécharge cet artefact, vérifie le hash et l'ID après
 
 ## Tags GHCR
 
-Pour une version `0.2.0` sur le commit `<sha>` :
+Pour une version `0.2.1` sur le commit `<sha>` :
 
 ```text
-ghcr.io/fturleque/nexus-context-engine:0.2.0
+ghcr.io/fturleque/nexus-context-engine:0.2.1
 ghcr.io/fturleque/nexus-context-engine:sha-<sha>
 ghcr.io/fturleque/nexus-context-engine:latest
 ```

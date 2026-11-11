@@ -1,6 +1,6 @@
 # Section 6 — Vue d'exécution
 
-Les scénarios ci-dessous décrivent le comportement **courant** de NEXUS 0.2.0 et les ordres de validation qui ont une valeur de correctness/sécurité.
+Les scénarios ci-dessous décrivent le comportement **courant** de NEXUS 0.2.1 et les ordres de validation qui ont une valeur de correctness/sécurité.
 
 ## 6.1 Indexation nominale d'un projet
 

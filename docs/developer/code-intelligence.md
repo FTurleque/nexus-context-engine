@@ -1,6 +1,6 @@
 # Code Intelligence dans NEXUS
 
-Ce document décrit la Code Intelligence **courante** de NEXUS 0.2.0. NEXUS conserve son propre modèle (`CodeSymbol`, `SymbolRelation`) et traite JavaParser, SCIP, JDT Language Server et MINOS comme des sources de faits.
+Ce document décrit la Code Intelligence **courante** de NEXUS 0.2.1. NEXUS conserve son propre modèle (`CodeSymbol`, `SymbolRelation`) et traite JavaParser, SCIP, JDT Language Server et MINOS comme des sources de faits.
 
 ## Contrats
 

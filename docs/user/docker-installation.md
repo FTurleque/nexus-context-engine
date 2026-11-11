@@ -1,6 +1,6 @@
 # Distribution Docker NEXUS
 
-NEXUS 0.2.0 peut être exécuté nativement ou dans Docker. Docker reste **optionnel** et n'est jamais requis pour le mode Windows natif.
+NEXUS 0.2.1 peut être exécuté nativement ou dans Docker. Docker reste **optionnel** et n'est jamais requis pour le mode Windows natif.
 
 Lorsque `Docker` ou `Natif + Docker` est sélectionné dans l'assistant Windows, le setup peut désormais **installer Docker Desktop automatiquement s'il est absent**.
 
@@ -92,7 +92,7 @@ org.opencontainers.image.version   version du pom.xml
 `revision` et `version` sont passés par `--build-arg NEXUS_IMAGE_REVISION=...` et `--build-arg NEXUS_IMAGE_VERSION=...`. La CI et `scripts/release/build-docker-image.ps1` les fournissent ; sur un poste installé par le setup Windows, le Compose les lit dans `docker\.env` (`NEXUS_IMAGE_VERSION`, version de l'installeur, et `NEXUS_IMAGE_REVISION`, commit empaqueté s'il est connu). Sans révision, le label `revision` vaut `unknown` : jamais vide, et jamais le label `revision` hérité de l'image de base UBI. Lecture :
 
 ```bash
-docker inspect --format '{{json .Config.Labels}}' nexus-context-engine:0.2.0
+docker inspect --format '{{json .Config.Labels}}' nexus-context-engine:0.2.1
 ```
 
 ### Sonde de santé intégrée
@@ -123,9 +123,9 @@ shell      shell de diagnostic
 Exemples :
 
 ```powershell
-docker run --rm nexus-context-engine:0.2.0 cli --version --json
-docker run --rm -i nexus-context-engine:0.2.0 mcp
-docker run --rm nexus-context-engine:0.2.0 assistant generic docker nexus json
+docker run --rm nexus-context-engine:0.2.1 cli --version --json
+docker run --rm -i nexus-context-engine:0.2.1 mcp
+docker run --rm nexus-context-engine:0.2.1 assistant generic docker nexus json
 ```
 
 CLI et MCP ne dépendent pas du contrat de publication REST.
@@ -142,7 +142,7 @@ docker run --rm \
   -e NEXUS_REST_API_TOKEN="$TOKEN" \
   -e NEXUS_DOCKER_HOST_FORWARD_ADDRESS=127.0.0.1 \
   -p 127.0.0.1:8080:8080 \
-  nexus-context-engine:0.2.0 rest
+  nexus-context-engine:0.2.1 rest
 ```
 
 Les deux valeurs doivent décrire le même déploiement :
@@ -156,7 +156,7 @@ Ces lancements sont volontairement refusés :
 
 ```text
 # déclaration absente
-docker run ... -p 127.0.0.1:8080:8080 nexus-context-engine:0.2.0 rest
+docker run ... -p 127.0.0.1:8080:8080 nexus-context-engine:0.2.1 rest
 
 # déclaration distante déguisée en loopback-forward
 NEXUS_DOCKER_HOST_FORWARD_ADDRESS=0.0.0.0
@@ -189,14 +189,14 @@ $image = & .\scripts\release\build-docker-image.ps1
 Image par défaut :
 
 ```text
-nexus-context-engine:0.2.0
+nexus-context-engine:0.2.1
 ```
 
 Smoke :
 
 ```powershell
 & .\scripts\release\test-docker-runtime.ps1 `
-  -Image "nexus-context-engine:0.2.0" `
+  -Image "nexus-context-engine:0.2.1" `
   -HostPort 18080
 ```
 

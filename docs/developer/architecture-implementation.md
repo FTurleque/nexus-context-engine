@@ -1,4 +1,4 @@
-# Architecture d'implémentation — NEXUS 0.2.0
+# Architecture d'implémentation — NEXUS 0.2.1
 
 Ce chapitre décrit l'organisation concrète du code versionné après NXA3 + NXA4 et les remédiations d'audit du 7 septembre 2026. `develop` reçoit l'intégration qualifiée ; `main` reste la branche de release.
 

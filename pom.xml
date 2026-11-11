@@ -6,7 +6,7 @@
 
     <groupId>io.github.fturleque</groupId>
     <artifactId>nexus-context-engine-parent</artifactId>
-    <version>0.2.1-rc.1</version>
+    <version>0.2.1</version>
     <packaging>pom</packaging>
     <name>NEXUS Context Engine Reactor</name>
     <description>Reactor et gouvernance de build communs au cœur NEXUS et à ses adaptateurs optionnels.</description>

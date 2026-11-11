@@ -49,7 +49,7 @@ repository  FTurleque/nexus-context-engine
 visibility  public
 develop     intégration et qualification
 main        release
-version     0.2.0
+version     0.2.1
 Java        runtime >=21 / release 21
 Maven       3.10.0 via wrapper vérifié par SHA-512 versionné
 ```
@@ -179,7 +179,7 @@ Pour l'installateur Windows, tout `ISCC.exe` réutilisé doit correspondre à la
 Après build :
 
 ```powershell
-java -jar .\target\nexus-context-engine-0.2.0-cli.jar --help
+java -jar .\target\nexus-context-engine-0.2.1-cli.jar --help
 ```
 
 Commandes principales :
@@ -205,10 +205,10 @@ Pour `--deep-java`, configurez `NEXUS_JDTLS_HOME` **et** la racine canonique app
 `clean install` produit notamment :
 
 ```text
-target/nexus-context-engine-0.2.0-cli.jar
-target/nexus-context-engine-0.2.0-cli.jar.sha256
-target/distribution/nexus-context-engine-0.2.0.zip
-target/distribution/nexus-context-engine-0.2.0.zip.sha256
+target/nexus-context-engine-0.2.1-cli.jar
+target/nexus-context-engine-0.2.1-cli.jar.sha256
+target/distribution/nexus-context-engine-0.2.1.zip
+target/distribution/nexus-context-engine-0.2.1.zip.sha256
 target/licenses/THIRD_PARTY_NOTICES.txt
 target/sbom/bom.json
 ```

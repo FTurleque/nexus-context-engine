@@ -1,6 +1,6 @@
 # CI, couverture et supply-chain
 
-Ce document décrit le contrat courant de qualification et de publication de NEXUS 0.2.0 après les campagnes **NXA3 + NXA4 + NXA7**. Le code et les workflows versionnés restent l'autorité exécutable.
+Ce document décrit le contrat courant de qualification et de publication de NEXUS 0.2.1 après les campagnes **NXA3 + NXA4 + NXA7**. Le code et les workflows versionnés restent l'autorité exécutable.
 
 ## Branches et exact-head
 

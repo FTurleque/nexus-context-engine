@@ -5,7 +5,7 @@ Ce répertoire contient la documentation développeur **courante** : elle suit l
 ## État courant
 
 ```text
-version      0.2.0
+version      0.2.1
 Java         >=21, release 21
 Maven        3.10.0 via wrapper vérifié
 integration  develop
