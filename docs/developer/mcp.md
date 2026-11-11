@@ -9,7 +9,7 @@ module      adapters/mcp-java
 Java        21
 MCP SDK     pom.xml, propriété mcp.sdk.version
 transport   STDIO
-version     NEXUS 0.2.0
+version     NEXUS 0.2.1
 ```
 
 Le BOM MCP et Jackson sont gouvernés par le parent Maven, qui fixe la version du SDK dans la propriété `mcp.sdk.version`. Le SDK MCP apporte notamment en amont des lectures HTTP/STDIO bornées ; NEXUS supporte ici le transport local STDIO.
@@ -90,7 +90,7 @@ Les erreurs tools sont structurées avec `isError=true` et un payload JSON stabl
 Runner :
 
 ```text
-adapters/mcp-java/target/nexus-mcp-java-0.2.0-runner.jar
+adapters/mcp-java/target/nexus-mcp-java-0.2.1-runner.jar
 ```
 
 Le test d'intégration STDIO exerce le vrai processus enfant ; JaCoCo récupère explicitement sa couverture. NEXUS CI et Docker Distribution qualifient également le runner MCP sur l'exact head.

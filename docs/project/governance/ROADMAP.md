@@ -11,7 +11,7 @@ main    = release
 
 Toute promotion vers `main` doit partir d'un HEAD exact qualifié. Le contrat de protection de `develop` est décrit dans [`developer/branch-governance.md`](../../developer/branch-governance.md) et doit être appliqué dans les règles GitHub du repository.
 
-## Baseline fonctionnelle NEXUS 0.2.0
+## Baseline fonctionnelle NEXUS 0.2.1
 
 - Java 21 cible/runtime minimum ;
 - SQLite canonique, Lucene dérivé ;

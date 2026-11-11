@@ -2,7 +2,7 @@
 
 Ce module génère des commandes et configurations pour connecter le runner MCP NEXUS aux clients pris en charge. Il ne modifie aucun fichier de configuration automatiquement.
 
-Version : `0.2.0`.
+Version : `0.2.1`.
 
 ## Runtimes MCP
 
@@ -19,19 +19,19 @@ MCP reste en transport **STDIO** dans les modes natif et Docker. Aucun port MCP 
 Compatibilité historique :
 
 ```text
-java -jar nexus-assistant-clients-0.2.0-runner.jar <profil> <runner-mcp> [command|json|toml]
+java -jar nexus-assistant-clients-0.2.1-runner.jar <profil> <runner-mcp> [command|json|toml]
 ```
 
 Runtime natif autonome :
 
 ```text
-java -jar nexus-assistant-clients-0.2.0-runner.jar <profil> native <java-exe> <runner-mcp> [command|json|toml]
+java -jar nexus-assistant-clients-0.2.1-runner.jar <profil> native <java-exe> <runner-mcp> [command|json|toml]
 ```
 
 Runtime Docker :
 
 ```text
-java -jar nexus-assistant-clients-0.2.0-runner.jar <profil> docker <container-name> [command|json|toml]
+java -jar nexus-assistant-clients-0.2.1-runner.jar <profil> docker <container-name> [command|json|toml]
 ```
 
 Profils :
@@ -158,5 +158,5 @@ Le setup Windows possède une politique séparée et traçable pour les intégra
 Runner :
 
 ```text
-adapters/assistant-clients/target/nexus-assistant-clients-0.2.0-runner.jar
+adapters/assistant-clients/target/nexus-assistant-clients-0.2.1-runner.jar
 ```

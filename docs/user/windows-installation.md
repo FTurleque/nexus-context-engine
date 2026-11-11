@@ -1,6 +1,6 @@
 # Installation Windows et assistant de déploiement NEXUS
 
-Ce document décrit le setup Windows NEXUS 0.2.0 et constitue la documentation fonctionnelle de l'assistant de déploiement.
+Ce document décrit le setup Windows NEXUS 0.2.1 et constitue la documentation fonctionnelle de l'assistant de déploiement.
 
 La template exécutable est :
 
@@ -19,10 +19,10 @@ docs/user/deployment-wizard-template.md
 La release Windows x64 produit :
 
 ```text
-target\dist\nexus-context-engine-0.2.0-windows-x64.zip
-target\dist\nexus-context-engine-0.2.0-windows-x64.zip.sha256
-target\dist\NEXUS-0.2.0-windows-x64-setup.exe
-target\dist\NEXUS-0.2.0-windows-x64-setup.exe.sha256
+target\dist\nexus-context-engine-0.2.1-windows-x64.zip
+target\dist\nexus-context-engine-0.2.1-windows-x64.zip.sha256
+target\dist\NEXUS-0.2.1-windows-x64-setup.exe
+target\dist\NEXUS-0.2.1-windows-x64-setup.exe.sha256
 ```
 
 Le ZIP et le `setup.exe` ne portent pas de signature Authenticode : au premier lancement, Windows SmartScreen affiche « Windows a protégé votre ordinateur » avec un éditeur inconnu. Pour vérifier que le fichier vient bien de la chaîne de release du projet avant de l'exécuter, contrôler son empreinte avec le `.sha256` publié, ou son attestation de provenance :
@@ -430,7 +430,7 @@ NEXUS_HOME : C:\Users\<user>\.nexus
 Docker :
   - Docker Desktop : sera téléchargé depuis desktop.docker.com et installé en mode utilisateur (WSL 2)
   - La licence Docker devra être acceptée par l'utilisateur au premier démarrage.
-  - Image : ghcr.io/fturleque/nexus-context-engine:0.2.0
+  - Image : ghcr.io/fturleque/nexus-context-engine:0.2.1
   - REST : 127.0.0.1:8081 -> conteneur:8080
 
 Recherche sémantique : Ollama ACTIVÉ
@@ -604,13 +604,13 @@ EXE :
 Setup produit :
 
 ```text
-target\dist\NEXUS-0.2.0-windows-x64-setup.exe
+target\dist\NEXUS-0.2.1-windows-x64-setup.exe
 ```
 
 Smoke install/uninstall :
 
 ```powershell
-$setup = (Resolve-Path '.\target\dist\NEXUS-0.2.0-windows-x64-setup.exe').Path
+$setup = (Resolve-Path '.\target\dist\NEXUS-0.2.1-windows-x64-setup.exe').Path
 .\scripts\release\test-windows-installer.ps1 -Setup $setup
 ```
 

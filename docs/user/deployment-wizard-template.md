@@ -8,7 +8,7 @@ Ce document est le **contrat documentaire complet** du setup Windows. Toute évo
 
 ```yaml
 product: NEXUS Context Engine
-version: 0.2.0
+version: 0.2.1
 platform: windows-x64
 installer: Inno Setup
 privileges: current-user
@@ -281,7 +281,7 @@ Valeurs :
 ```yaml
 image:
   type: string
-  default: "ghcr.io/fturleque/nexus-context-engine:0.2.0"
+  default: "ghcr.io/fturleque/nexus-context-engine:0.2.1"
   required: true
 
 container_name:

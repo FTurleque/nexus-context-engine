@@ -14,7 +14,7 @@ génère pas de réponses, n'exécute pas d'agents et ne route pas de modèles.
 > Preuve : `core/src/main/java/com/nexus/application/NexusApplication.java` — façade applicative
 > partagée entre CLI, REST et MCP ; aucune dépendance vers un fournisseur LLM.
 
-**Version actuelle** : 0.2.0 — Phase 6 (Consolidation, hardening et industrialisation).
+**Version actuelle** : 0.2.1 — Phase 6 (Consolidation, hardening et industrialisation).
 
 ## 1.2 Objectifs métier
 

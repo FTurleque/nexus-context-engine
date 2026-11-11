@@ -1,7 +1,7 @@
 name: "nexus-context-engine"
 services:
   nexus:
-    image: "${NEXUS_DOCKER_IMAGE:-nexus-context-engine:0.2.0}"
+    image: "${NEXUS_DOCKER_IMAGE:-nexus-context-engine:0.2.1}"
     pull_policy: build
     build:
       context: ..

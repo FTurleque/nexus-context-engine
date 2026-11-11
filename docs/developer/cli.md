@@ -1,4 +1,4 @@
-# CLI NEXUS — surface 0.2.0
+# CLI NEXUS — surface 0.2.1
 
 Ce document décrit la CLI Phase 6. Le contrat historique MVP reste dans [`cli-mvp.md`](../project/history/cli-mvp.md).
 
@@ -59,13 +59,13 @@ REST et MCP utilisent la même façade. Les règles READY, providers, ranking et
 Fat JAR :
 
 ```powershell
-java -jar .\target\nexus-context-engine-0.2.0-cli.jar --help
+java -jar .\target\nexus-context-engine-0.2.1-cli.jar --help
 ```
 
 Archive installable :
 
 ```text
-target/distribution/nexus-context-engine-0.2.0.zip
+target/distribution/nexus-context-engine-0.2.1.zip
 ```
 
 Voir [`release-and-recovery.md`](release-and-recovery.md).
@@ -73,9 +73,9 @@ Voir [`release-and-recovery.md`](release-and-recovery.md).
 ## Projet et indexation
 
 ```powershell
-java -jar .\target\nexus-context-engine-0.2.0-cli.jar project add N:\workspace-dev\mon-app mon-app
-java -jar .\target\nexus-context-engine-0.2.0-cli.jar index mon-app
-java -jar .\target\nexus-context-engine-0.2.0-cli.jar index mon-app --rebuild
+java -jar .\target\nexus-context-engine-0.2.1-cli.jar project add N:\workspace-dev\mon-app mon-app
+java -jar .\target\nexus-context-engine-0.2.1-cli.jar index mon-app
+java -jar .\target\nexus-context-engine-0.2.1-cli.jar index mon-app --rebuild
 ```
 
 JDT LS reste explicite et exige désormais une racine projet approuvée avant tout démarrage du subprocess :
@@ -83,7 +83,7 @@ JDT LS reste explicite et exige désormais une racine projet approuvée avant to
 ```powershell
 $env:NEXUS_JDTLS_HOME = 'C:\tools\jdtls'
 $env:NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS = (Resolve-Path 'N:\workspace-dev\mon-app').Path
-java -jar .\target\nexus-context-engine-0.2.0-cli.jar index mon-app --deep-java
+java -jar .\target\nexus-context-engine-0.2.1-cli.jar index mon-app --deep-java
 ```
 
 `NEXUS_JDTLS_TRUSTED_PROJECT_ROOTS` compare les chemins réels exacts (`;` sous Windows, `:` sous Unix). Ne placez dans cette allowlist que des repositories dont vous acceptez l'import des métadonnées Maven/Gradle.
@@ -102,7 +102,7 @@ NEXUS ne lance jamais MINOS.
 
 ```powershell
 Get-Content -Raw .\minos-export.json |
-    java -jar .\target\nexus-context-engine-0.2.0-cli.jar minos-import mon-app --json
+    java -jar .\target\nexus-context-engine-0.2.1-cli.jar minos-import mon-app --json
 ```
 
 Le payload reste borné à 128 MiB. Les chemins sont validés contre les fichiers canoniques déjà indexés et les métadonnées décodées sont soumises aux plafonds communs de Code Intelligence avant canonicalisation.
@@ -110,7 +110,7 @@ Le payload reste borné à 128 MiB. Les chemins sont validés contre les fichier
 ## Recherche mono-projet
 
 ```powershell
-java -jar .\target\nexus-context-engine-0.2.0-cli.jar search mon-app "service de facturation" --limit 10 --explain
+java -jar .\target\nexus-context-engine-0.2.1-cli.jar search mon-app "service de facturation" --limit 10 --explain
 ```
 
 Le projet doit être `READY`.
@@ -118,7 +118,7 @@ Le projet doit être `READY`.
 ## Recherche fédérée
 
 ```powershell
-java -jar .\target\nexus-context-engine-0.2.0-cli.jar search-federated app-api,app-domain "facturation" --limit 20 --explain
+java -jar .\target\nexus-context-engine-0.2.1-cli.jar search-federated app-api,app-domain "facturation" --limit 20 --explain
 ```
 
 La portée accepte noms uniques ou UUID séparés par des virgules. Chaque projet doit être `READY`. NEXUS sur-récupère localement avant diversification globale par `(projectId,path)` pour éviter un top-K artificiellement sous-rempli. Une échéance globale (60 s par défaut, `NEXUS_FEDERATION_DEADLINE_SECONDS`) borne la requête : les projets non commencés sont listés par la clé JSON `unservedProjects` et par la ligne « Projets non servis » du rendu humain, pour la recherche comme pour le contexte fédéré ([détail](large-scale-search.md#vecteur-de-requête-unique-et-échéance-globale)).
@@ -126,13 +126,13 @@ La portée accepte noms uniques ou UUID séparés par des virgules. Chaque proje
 ## ContextBundle mono-projet
 
 ```powershell
-java -jar .\target\nexus-context-engine-0.2.0-cli.jar context mon-app "Corriger la facturation" --budget 2000 --explain
+java -jar .\target\nexus-context-engine-0.2.1-cli.jar context mon-app "Corriger la facturation" --budget 2000 --explain
 ```
 
 ## Contexte fédéré
 
 ```powershell
-java -jar .\target\nexus-context-engine-0.2.0-cli.jar context-federated app-api,app-domain "Corriger la facturation" --budget 4000 --explain
+java -jar .\target\nexus-context-engine-0.2.1-cli.jar context-federated app-api,app-domain "Corriger la facturation" --budget 4000 --explain
 ```
 
 Le budget est global. Les quotas projet sont déterministes, les items portent leur provenance, le merge est round-robin et les contenus identiques sont dédupliqués. Instructions, skills et Git restent évalués dans leur projet d'origine.
@@ -144,8 +144,8 @@ Désactivé par défaut. Activation explicite :
 ```powershell
 $env:NEXUS_SEMANTIC_PROVIDER = "ollama"
 $env:NEXUS_OLLAMA_EMBEDDING_MODEL = "qwen3-embedding:0.6b"
-java -jar .\target\nexus-context-engine-0.2.0-cli.jar index mon-app --rebuild
-java -jar .\target\nexus-context-engine-0.2.0-cli.jar search mon-app "adapter une requête au modèle métier"
+java -jar .\target\nexus-context-engine-0.2.1-cli.jar index mon-app --rebuild
+java -jar .\target\nexus-context-engine-0.2.1-cli.jar search mon-app "adapter une requête au modèle métier"
 ```
 
 La CLI n'a pas de flag sémantique dédié : l'opt-in commun par environnement évite un comportement différent entre CLI, REST et MCP.
