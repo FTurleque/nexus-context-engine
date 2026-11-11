@@ -94,12 +94,12 @@ NEXUS CI l'exécute après le build du reactor dans les jobs `Linux reactor Mave
 
 ### Mesure de référence
 
-Mesure du reactor complet au commit `f8a27f89` : Linux dans l'artefact `nexus-ci-evidence` de NEXUS CI, Windows sur `./mvnw -B -ntp clean install`.
+Mesure du reactor complet au commit `f8a27f89` : Linux dans l'artefact `nexus-ci-evidence` de NEXUS CI, Windows sur `./mvnw -B -ntp clean install` ; mesure Windows de `com.nexus.security` prise avec la politique `secret-redaction-v9`.
 
 | Module | Élément | Cible | Lignes Linux | Branches Linux | Lignes Windows | Branches Windows |
 |---|---|---|---:|---:|---:|---:|
 | `core` | `BUNDLE` | — | 9 635 / 11 099 (86,81 %) | 3 336 / 4 639 (71,91 %) | 9 643 / 11 099 (86,88 %) | 3 324 / 4 639 (71,65 %) |
-| `core` | `PACKAGE` | `com.nexus.security` | 503 / 580 (86,72 %) | 328 / 400 (82,00 %) | 516 / 580 (88,97 %) | 325 / 400 (81,25 %) |
+| `core` | `PACKAGE` | `com.nexus.security` | 503 / 580 (86,72 %) | 328 / 400 (82,00 %) | 636 / 700 (90,86 %) | 435 / 514 (84,63 %) |
 | `core` | `PACKAGE` | `com.nexus.index.jdt` | 568 / 812 (69,95 %) | 208 / 375 (55,47 %) | 568 / 812 (69,95 %) | 208 / 375 (55,47 %) |
 | `core` | `PACKAGE` | `com.nexus.index.minos` | 247 / 303 (81,52 %) | 131 / 195 (67,18 %) | 233 / 303 (76,90 %) | 121 / 195 (62,05 %) |
 | `core` | `PACKAGE` | `com.nexus.index.scip` | 387 / 468 (82,69 %) | 167 / 261 (63,98 %) | 386 / 468 (82,48 %) | 164 / 261 (62,84 %) |

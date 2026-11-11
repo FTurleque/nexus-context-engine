@@ -70,7 +70,8 @@ class SchemaMigratorTokenContextBoundUpgradeTest {
             assertEquals("token-context", app.getProject(id).name());
             assertThrows(IllegalStateException.class, () -> app.search(id, "TokenContextMarker", 10, false));
             var repository = new SqliteIndexRepository(new SqliteDatabase(paths));
-            assertEquals(LEGACY_GENERATION + 1, repository.generation(id));
+            // V019 puis V020 incrémentent chacune la génération une fois.
+            assertEquals(LEGACY_GENERATION + 2, repository.generation(id));
 
             var report = app.index(id, false, false).report();
 

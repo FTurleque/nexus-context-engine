@@ -76,6 +76,7 @@ for path in (
     "core/src/main/resources/db/migration/V011__invalidate_secret_format_indexes.sql",
     "core/src/main/resources/db/migration/V018__invalidate_sk_token_bound_indexes.sql",
     "core/src/main/resources/db/migration/V019__invalidate_token_context_bound_indexes.sql",
+    "core/src/main/resources/db/migration/V020__invalidate_composite_name_indexes.sql",
     "core/src/test/java/com/nexus/application/NexusApplicationSemanticConfigurationTest.java",
 ):
     if not (root / path).is_file():
@@ -86,7 +87,7 @@ for stale in ("<sourceDirectory>", "<testSourceDirectory>", "../src/main", "../s
         raise SystemExit(f"core layout drift: core/pom.xml still contains {stale!r}")
 
 migrations = sorted((root / "core/src/main/resources/db/migration").glob("V*.sql"))
-if not migrations or migrations[-1].name != "V019__invalidate_token_context_bound_indexes.sql":
+if not migrations or migrations[-1].name != "V020__invalidate_composite_name_indexes.sql":
     raise SystemExit(f"schema contract drift: latest migration is {migrations[-1].name if migrations else 'none'}")
 require("docs/developer/release-and-recovery.md", "V005__enforce_symbol_range_constraints.sql")
 require("docs/developer/release-and-recovery.md", "V006__invalidate_unredacted_lexical_indexes.sql")
@@ -237,7 +238,7 @@ for path in (
     require(path, "NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA")
 
 require("core/src/main/java/com/nexus/security/SensitiveContentRedactor.java", "[REDACTED]")
-require("core/src/main/java/com/nexus/search/semantic/SemanticIndexingService.java", "CONTENT_PROFILE_VERSION = 7")
+require("core/src/main/java/com/nexus/search/semantic/SemanticIndexingService.java", "CONTENT_PROFILE_VERSION = 8")
 for path in (
     "README.md",
     "docs/architecture/overview.md",
@@ -247,11 +248,11 @@ for path in (
     "docs/developer/release-and-recovery.md",
     "docs/developer/semantic-search.md",
 ):
-    require(path, "content-v7")
+    require(path, "content-v8")
 
-# AUD-SEC-01/AUD-SEC-02/AUD-SEC-20: redaction policy v8, V011, V018 and V019 invalidation, per-file exclusion.
-require("core/src/main/java/com/nexus/security/SensitiveContentRedactor.java", '"secret-redaction-v8"')
-require("docs/developer/secret-redaction.md", "secret-redaction-v8")
+# AUD-SEC-01/AUD-SEC-02/AUD-SEC-20/AUD-SEC-25: redaction policy v9, V011, V018, V019 and V020 invalidation, per-file exclusion.
+require("core/src/main/java/com/nexus/security/SensitiveContentRedactor.java", '"secret-redaction-v9"')
+require("docs/developer/secret-redaction.md", "secret-redaction-v9")
 require("docs/developer/secret-redaction.md", "INDEX_REDACTION_LIMIT")
 require("docs/developer/secret-redaction.md", "SecretRedactionProbeTest")
 require("docs/developer/release-and-recovery.md", "V011__invalidate_secret_format_indexes.sql")
@@ -263,6 +264,7 @@ require("docs/developer/release-and-recovery.md", "V016__index_staged_files_by_p
 require("docs/developer/release-and-recovery.md", "V017__index_symbols_for_dominant_project_fuzzy_search.sql")
 require("docs/developer/release-and-recovery.md", "V018__invalidate_sk_token_bound_indexes.sql")
 require("docs/developer/release-and-recovery.md", "V019__invalidate_token_context_bound_indexes.sql")
+require("docs/developer/release-and-recovery.md", "V020__invalidate_composite_name_indexes.sql")
 require("docs/developer/current-limitations.md", "INDEX_REDACTION_LIMIT")
 
 # NXA4 + audit follow-up: lexical content is redacted before Lucene tokenization.

@@ -115,9 +115,9 @@ Un backup/restauration doit conserver les protections adaptées au système cibl
 
 Avant une migration de production, sauvegarder SQLite service arrêté. Ne jamais restaurer uniquement un index Lucene en ignorant SQLite.
 
-## Recovery sémantique / `content-v7`
+## Recovery sémantique / `content-v8`
 
-Le profil de contenu sémantique courant est `content-v7`, lié à la politique de redaction `secret-redaction-v8`. Un index créé sous l'ancien profil est considéré incompatible et doit être reconstruit ; NEXUS ne réutilise pas silencieusement les vecteurs historiques.
+Le profil de contenu sémantique courant est `content-v8`, lié à la politique de redaction `secret-redaction-v9`. Un index créé sous l'ancien profil est considéré incompatible et doit être reconstruit ; NEXUS ne réutilise pas silencieusement les vecteurs historiques.
 
 La redaction de secrets réduit la fuite accidentelle de tokens/clés/mots de passe structurés, mais n'est pas une sauvegarde ni un scanner de secrets complet.
 
@@ -317,6 +317,29 @@ registre, le diagnostic et la reconstruction.
 
 Retour arrière : V019 ne change pas le schéma ; un binaire antérieur ouvre la base
 et reconstruit ses dérivés sous sa propre politique, qui laisse passer ces jetons.
+Pour revenir en arrière sans rouvrir ces cas, restaurer la sauvegarde de
+`NEXUS_HOME` prise avant la mise à niveau.
+
+## Mise à niveau V020 — noms composés
+
+`V020__invalidate_composite_name_indexes.sql` accompagne la politique
+`secret-redaction-v9` : la valeur d'un élément XML ou d'une option dont le nom
+composé se termine par une clé sensible (`<db-password>`, `<db_password>`,
+`<my-token>`, `--api-key`, `--private-key`) est masquée, et une telle valeur XML
+au-delà de 4 096 caractères fait refuser le fichier. Sous `secret-redaction-v8`,
+ces valeurs n'étaient ni masquées ni refusées : les dérivés existants peuvent les
+contenir en clair. Comme V019, la migration incrémente la génération de chaque
+projet, le passe à `NOT_INDEXED` et efface `last_indexed_at` ; le registre et les
+faits canoniques sont conservés. La prochaine indexation reconstruit les dérivés
+lexicaux, et le profil `content-v8` impose la reconstruction des vecteurs
+sémantiques. Un fichier qui porte une valeur refusée est exclu des index lexical
+et sémantique avec le diagnostic `INDEX_REDACTION_LIMIT`. V001 à V019 et leurs
+empreintes restent inchangées. `SchemaMigratorCompositeNameUpgradeTest` migre une
+base V019 dont l'index Lucene contient ces valeurs et vérifie la génération, le
+statut, le registre, le diagnostic et la reconstruction.
+
+Retour arrière : V020 ne change pas le schéma ; un binaire antérieur ouvre la base
+et reconstruit ses dérivés sous sa propre politique, qui laisse passer ces valeurs.
 Pour revenir en arrière sans rouvrir ces cas, restaurer la sauvegarde de
 `NEXUS_HOME` prise avant la mise à niveau.
 
