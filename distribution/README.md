@@ -1,4 +1,4 @@
-# NEXUS Context Engine — distribution 0.2.0
+# NEXUS Context Engine — distribution 0.2.1
 
 NEXUS peut être distribué sans cloner le dépôt et sans Maven sur la machine cible.
 

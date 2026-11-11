@@ -1,6 +1,6 @@
 # Section 5 — Vue des blocs (C4 Container et Component)
 
-Cette vue décrit les blocs **courants** de NEXUS 0.2.0.
+Cette vue décrit les blocs **courants** de NEXUS 0.2.1.
 
 ## 5.1 Containers
 

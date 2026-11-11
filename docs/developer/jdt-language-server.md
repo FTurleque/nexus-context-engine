@@ -1,6 +1,6 @@
 # Analyse Java profonde optionnelle avec Eclipse JDT Language Server
 
-Ce chapitre décrit le contrat **courant** de l'intégration JDT LS dans NEXUS 0.2.0. JDT LS reste un provider externe opt-in : il enrichit l'intelligence Java sans devenir une dépendance obligatoire du chemin d'indexation normal.
+Ce chapitre décrit le contrat **courant** de l'intégration JDT LS dans NEXUS 0.2.1. JDT LS reste un provider externe opt-in : il enrichit l'intelligence Java sans devenir une dépendance obligatoire du chemin d'indexation normal.
 
 ## Positionnement
 

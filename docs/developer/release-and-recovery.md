@@ -1,6 +1,6 @@
 # Release, installation et recovery
 
-Ce document décrit le contrat opérationnel courant de NEXUS Context Engine 0.2.0 après NXA3 + NXA4.
+Ce document décrit le contrat opérationnel courant de NEXUS Context Engine 0.2.1 après NXA3 + NXA4.
 
 ## Toolchain
 
@@ -16,10 +16,10 @@ Les scripts d'installation échouent si l'ancre attendue manque ou ne correspond
 Le reactor produit notamment :
 
 ```text
-target/nexus-context-engine-0.2.0-cli.jar
-target/nexus-context-engine-0.2.0-cli.jar.sha256
-target/distribution/nexus-context-engine-0.2.0.zip
-target/distribution/nexus-context-engine-0.2.0.zip.sha256
+target/nexus-context-engine-0.2.1-cli.jar
+target/nexus-context-engine-0.2.1-cli.jar.sha256
+target/distribution/nexus-context-engine-0.2.1.zip
+target/distribution/nexus-context-engine-0.2.1.zip.sha256
 target/licenses/THIRD_PARTY_NOTICES.txt
 target/sbom/bom.json
 ```
@@ -27,10 +27,10 @@ target/sbom/bom.json
 La distribution Windows x64 self-contained produit également :
 
 ```text
-target\dist\nexus-context-engine-0.2.0-windows-x64.zip
-target\dist\nexus-context-engine-0.2.0-windows-x64.zip.sha256
-target\dist\NEXUS-0.2.0-windows-x64-setup.exe
-target\dist\NEXUS-0.2.0-windows-x64-setup.exe.sha256
+target\dist\nexus-context-engine-0.2.1-windows-x64.zip
+target\dist\nexus-context-engine-0.2.1-windows-x64.zip.sha256
+target\dist\NEXUS-0.2.1-windows-x64-setup.exe
+target\dist\NEXUS-0.2.1-windows-x64-setup.exe.sha256
 ```
 
 ## Contrat de release
