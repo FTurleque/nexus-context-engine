@@ -125,7 +125,9 @@ Les plafonds absolus de latence et de population restent inchangés. Le stockage
 
 Le gate vérifie que les deux durées d'échauffement sont présentes, finies et positives ou nulles. Le plafond 10k de 1,4 s et la comparaison relative s'appliquent à la médiane des trois peuplements suivants. La durée globale du profil `full` (au plus 240 s, tous scénarios du rapport général compris : `stagedPublication` et `singleProjectFuzzy` y comptent pour une cinquantaine de secondes) et les timeouts du job bornent toujours l'exécution complète, échauffement compris.
 
-La médiane de trois peuplements à 1M reste soumise au plafond absolu de 40 s. Un unique échantillon perturbé est conservé dans le rapport ; un ralentissement présent dans au moins deux échantillons reste détecté. La courbe dédiée, plus longue, est exécutée séparément du rapport général et demeure soumise au timeout JUnit de 20 minutes et au timeout du job de 45 minutes.
+Les plafonds de population portent sur la courbe dédiée quand `scale-benchmark-sqlite-full.json` est présent (pull request), sinon sur le rapport général (`workflow_call` d'une release, `workflow_dispatch`). Dans la courbe dédiée, le palier 1M est la médiane de trois peuplements : un unique échantillon perturbé est conservé dans le rapport sans changer la médiane, et un ralentissement présent dans au moins deux échantillons reste détecté. Le rapport général n'a qu'un peuplement à 1M. La courbe dédiée, plus longue, est exécutée séparément du rapport général et demeure soumise au timeout JUnit de 20 minutes et au timeout du job de 45 minutes.
+
+À 1M, la durée de peuplement dépend surtout de la vitesse du runner, qui ralentit tous les paliers dans la même proportion, alors que les échantillons d'un même run sont proches et que le rapport 1M/500k d'un même rapport est stable, rapport général ou courbe dédiée ; l'ordre des scénarios, le heap et l'échauffement sont identiques dans les deux rapports ([relevé du 2026-11-11](../project/history/population-1m-runners-2026-11-11.md)). Le plafond de 1M vaut donc `max(40 s, 2,6 × population 500k du même rapport)`. Le palier 500k reste plafonné à 20 s, ce qui borne le plafond de 1M à 52 s. Une croissance plus que proportionnelle de 1M est refusée par le rapport 2,6. Un ralentissement uniforme de tous les paliers n'est refusé hors PR que lorsque 500k dépasse 20 s ; en PR, la comparaison relative à la base sur le même runner le refuse au-delà de 20 % (ou du jitter).
 
 Le gate est exécutable localement avec `python scripts/verify-scale-budgets.py target`. L'option `--require-base` impose la preuve PR et les quatre paliers. Un lancement manuel `full` peut être vérifié sans baseline de PR. Les tests `python -m unittest discover -s scripts/tests -p test_scale_budgets.py` vérifient notamment que les régressions 990/289 ms de population et 168,577/160 ms de recherche sont toujours refusées.
 
@@ -141,7 +143,7 @@ Le gate est exécutable localement avec `python scripts/verify-scale-budgets.py 
 Autres plafonds SQLite :
 
 - lookup de 100 fichiers : <= 30 ms p95 ;
-- population : <= 1,4 s / 5 s / 20 s / 40 s aux paliers 10k / 100k / 500k / 1M ;
+- population : <= 1,4 s / 5 s / 20 s aux paliers 10k / 100k / 500k, plafond de 1M décrit au [protocole 6](#protocole-6) ;
 - base à 1M : taille candidat <= taille de la base de la PR × 1,20, mesurées sur le même runner ;
 - lorsque base et candidat sont mesurés avec le même harness compatible, population candidat <= `max(base × 1,20, base + jitter)` avec jitters 0,2 / 0,5 / 1,5 / 3 s.
 
