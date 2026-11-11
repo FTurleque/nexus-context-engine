@@ -485,4 +485,205 @@ class SensitiveContentRedactorTest {
         assertFalse(redacted.contains("still-secret"));
         assertEquals(source.lines().count(), redacted.lines().count());
     }
+
+    /** Seuil du sprint 14 : 1 Mo de débuts forgés redigé en moins d'une seconde. */
+    private static final java.time.Duration FORGED_REPETITION_BUDGET = java.time.Duration.ofSeconds(1);
+    private static final int ONE_MEGABYTE = 1 << 20;
+    /** Motifs {@code JWT} et {@code XML_SECRET_ELEMENT} de {@code secret-redaction-v8}, référence de non-régression. */
+    private static final java.util.regex.Pattern V8_JWT = java.util.regex.Pattern.compile(
+            "\\beyJ[A-Za-z0-9_-]{10,4096}+\\.[A-Za-z0-9_-]{10,4096}+\\.[A-Za-z0-9_-]{10,4096}+\\b");
+    private static final java.util.regex.Pattern V8_XML_SECRET_ELEMENT = java.util.regex.Pattern.compile(
+            "(?i)(<((?:[A-Za-z0-9_-]++[._-])*+(?:password|passwd|pwd|token|secret|api[_-]?key"
+                    + "|client[_-]?secret|access[_-]?key|access[_-]?token|private[_-]?key))"
+                    + "(?:[ \\t][^<>\\r\\n]{0,256}+)?+>)(?:<!\\[CDATA\\[[^\\]\\r\\n]{1,4096}+]]>"
+                    + "|[^<\\r\\n]{1,4096}+)(</\\2>)");
+    /** JWT synthétique assemblé à l'exécution : trois segments base64url, sans signature réelle. */
+    private static final String JWT_SEGMENTS = String.join(".", "ey" + "J" + syntheticAlphanumeric(17),
+            "ey" + "J" + syntheticAlphanumeric(24), syntheticAlphanumeric(26));
+
+    @Test
+    void forgedRepetitionOfJwtStartsIsRedactedUnchangedInUnderOneSecond() {
+        String content = "eyJ-".repeat(ONE_MEGABYTE / 4);
+        assertEquals(262_144, content.length() / 4);
+        SensitiveContentRedactor.redact("eyJ-".repeat(1024));
+        String rendered = org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(FORGED_REPETITION_BUDGET,
+                () -> SensitiveContentRedactor.redact(content));
+        assertEquals(content, rendered);
+    }
+
+    @Test
+    void forgedRepetitionOfCdataOpeningsIsRedactedUnchangedInUnderOneSecond() {
+        String opening = "<password><![CDATA[";
+        String content = opening.repeat(ONE_MEGABYTE / opening.length() + 1);
+        assertTrue(content.length() >= ONE_MEGABYTE);
+        SensitiveContentRedactor.redact(opening.repeat(1024));
+        String rendered = org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(FORGED_REPETITION_BUDGET,
+                () -> SensitiveContentRedactor.redact(content));
+        assertEquals(content, rendered);
+    }
+
+    @Test
+    void jwtIsRedactedWhateverSeparatorPrecedesIt() {
+        assertEquals("jwt [REDACTED]", SensitiveContentRedactor.redact("jwt " + JWT_SEGMENTS));
+        String afterHyphen = SensitiveContentRedactor.redact("id-" + JWT_SEGMENTS);
+        assertEquals("id-[REDACTED]", afterHyphen);
+        for (String segment : JWT_SEGMENTS.split("\\.")) {
+            assertFalse(afterHyphen.contains(segment), afterHyphen);
+        }
+        assertEquals("<password>[REDACTED]</password>",
+                SensitiveContentRedactor.redact("<password><![CDATA[a<b-secret]]></password>"));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"", "-", "=", ":", "id-", "x ", "a", "_"})
+    void jwtAndCdataRenderingMatchesTheV8Patterns(String before) {
+        String sharedRun = "-eyJ" + "a".repeat(2000) + "-eyJ" + "b".repeat(3000) + ".cccccccccccc.dddddddddddd";
+        String wordThenHyphen = "aeyJ" + "q".repeat(20) + "-eyJ" + "r".repeat(20) + ".ssssssssssss.tttttttttttt";
+        String longSecond = "eyJ" + "u".repeat(12) + "." + "v".repeat(5000) + ".wwwwwwwwwwww";
+        for (String content : java.util.List.of(before + JWT_SEGMENTS, sharedRun, wordThenHyphen, longSecond,
+                before + JWT_SEGMENTS + "-" + JWT_SEGMENTS,
+                "<password><![CDATA[a<b-secret]]></password>",
+                "<password><![CDATA[x <password>v</password>",
+                "<PASSWORD><![cdata[mixed]]></Password> <token>t</TOKEN>")) {
+            assertEquals(renderedByV8Patterns(content), SensitiveContentRedactor.redact(content), content);
+        }
+        assertEquals("<password><![CDATA[x <password>[REDACTED]</password>",
+                SensitiveContentRedactor.redact("<password><![CDATA[x <password>v</password>"));
+    }
+
+    @Test
+    void generatedJwtAndCdataContentsRenderAsWithTheV8Patterns() {
+        String[] jwtParts = {"eyJ", "eyJ", "-", ".", "aaaaaaaaaa", "b", "_", " ", "0", "=", "\n"};
+        String[] xmlParts = {"<password>", "</password>", "<![CDATA[", "<![cdata[", "]]>", "]", "x", "<", "\n",
+                "<Token a=\"1\">", "</TOKEN>", "yyyyyy",
+                // Repli de casse Unicode exclu, comme (?i) sans UNICODE_CASE : s long, signe Kelvin, i sans point.
+                "</pa\u017f\u017fword>", "</to\u212aen>", "<![CDATA[\u0131"};
+        var random = new java.util.Random(14);
+        for (int sample = 0; sample < 4000; sample++) {
+            String[] parts = sample % 2 == 0 ? jwtParts : xmlParts;
+            var content = new StringBuilder();
+            int length = 1 + random.nextInt(60);
+            for (int index = 0; index < length; index++) {
+                content.append(parts[random.nextInt(parts.length)]);
+            }
+            String text = content.toString();
+            assertEquals(renderedByV8Patterns(text), SensitiveContentRedactor.redact(text), text);
+        }
+    }
+
+    private static String renderedByV8Patterns(String content) {
+        String jwt = V8_JWT.matcher(content).replaceAll("[REDACTED]");
+        return V8_XML_SECRET_ELEMENT.matcher(jwt).replaceAll("$1[REDACTED]$3");
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"db-password", "db_password", "my-token",
+            "app.db-password", "api_key", "api-key", "access_key", "private_key", "client_secret", "db.password"})
+    void xmlElementWhoseNameEndsWithASensitiveKeyIsRedacted(String name) {
+        String content = "<" + name + ">hunter2-value</" + name + ">";
+        assertEquals("<" + name + ">[REDACTED]</" + name + ">", SensitiveContentRedactor.redact(content));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"tokenizer", "mytoken", "password_hint"})
+    void xmlElementWhoseNameDoesNotEndWithASensitiveKeyIsKept(String name) {
+        String content = "<" + name + ">ordinary-value</" + name + ">";
+        assertEquals(content, SensitiveContentRedactor.redact(content));
+    }
+
+    @Test
+    void compositeXmlNameValueIsRedactedAtTheBoundAndRefusedJustAbove() {
+        String atBound = SensitiveContentRedactor.redact("<db-password>" + "v".repeat(4096) + "</db-password>");
+        assertEquals("<db-password>[REDACTED]</db-password>", atBound);
+        String aboveBound = "<db-password>" + "v".repeat(4097) + "</db-password>";
+        var failure = org.junit.jupiter.api.Assertions.assertThrows(OversizedSecretException.class,
+                () -> SensitiveContentRedactor.redact(aboveBound));
+        assertFalse(failure.getMessage().contains("vvvv"), failure.getMessage());
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"--api-key", "--private-key", "--access-key",
+            "--db-password", "--api_key", "-token"})
+    void optionWhoseNameEndsWithASensitiveKeyIsRedacted(String option) {
+        assertEquals("run " + option + " [REDACTED]", SensitiveContentRedactor.redact("run " + option + " hunter2-value"));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"--password-file conf.txt", "--tokenizer simple"})
+    void optionWhoseNameDoesNotEndWithASensitiveKeyIsKept(String content) {
+        assertEquals(content, SensitiveContentRedactor.redact(content));
+    }
+
+    @Test
+    void compositeNameOfHalfAMillionComponentsHasBoundedCost() {
+        String name = "a-".repeat(499_999) + "password";
+        String content = "<" + name + ">hunter2-value</" + name + ">\nrun --" + name + " hunter2-value";
+        // Garde-fou contre une récursion ou un retour arrière sur le nom, pas une mesure de performance.
+        String rendered = org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(java.time.Duration.ofSeconds(10),
+                () -> SensitiveContentRedactor.redact(content));
+        assertEquals("<" + name + ">[REDACTED]</" + name + ">\nrun --" + name + " [REDACTED]", rendered);
+    }
+
+    @Test
+    void structuredTokenPrefixFilterKeepsEveryPassResult() throws ReflectiveOperationException {
+        var tokens = redactorList("STRUCTURED_TOKENS").stream().map(java.util.regex.Pattern.class::cast).toList();
+        var prefixes = redactorList("STRUCTURED_TOKEN_PREFIXES").stream()
+                .map(family -> ((java.util.List<?>) family).stream().map(String.class::cast).toList())
+                .toList();
+        assertEquals(tokens.size(), prefixes.size());
+        var contents = new java.util.ArrayList<String>();
+        SecretRedactionProbeTest.probes().forEach(probe -> contents.add(probe.input()));
+        String body = syntheticAlphanumeric(255);
+        for (String prefix : java.util.List.of("sk-", "sk-proj-", "xoxb-", "glpat-", "ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_",
+                "sk_live_", "rk_test_")) {
+            contents.add("key = " + prefix + body);
+            contents.add("id-" + prefix + body + "-tail");
+            contents.add(PRIVATE_KEY_BLOCK + prefix + body);
+        }
+        contents.add("AKIA" + "ABCDEFGHIJKLMNOP" + " ASIA" + "QRSTUVWXYZ012345 npm_" + syntheticAlphanumeric(36)
+                + " AIza" + syntheticAlphanumeric(35));
+        for (String content : contents) {
+            String unfiltered = content;
+            String filtered = content;
+            for (int index = 0; index < tokens.size(); index++) {
+                unfiltered = tokens.get(index).matcher(unfiltered).replaceAll("[REDACTED]");
+                String current = filtered;
+                if (prefixes.get(index).stream().anyMatch(current::contains)) {
+                    filtered = tokens.get(index).matcher(filtered).replaceAll("[REDACTED]");
+                }
+            }
+            assertEquals(unfiltered, filtered, content);
+        }
+    }
+
+    private static java.util.List<?> redactorList(String name) throws ReflectiveOperationException {
+        var field = SensitiveContentRedactor.class.getDeclaredField(name);
+        field.setAccessible(true);
+        return (java.util.List<?>) field.get(null);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"<password>hunter'2isTheSecret</password>",
+            "token=abc\"defSECRET\"", "ab'cdSECRET'"})
+    void unquotedOptionValueContainingAQuoteIsRedactedUpToTheNextBlank(String value) {
+        for (String option : java.util.List.of("--api-key", "--db-password")) {
+            assertEquals("run " + option + " [REDACTED] next",
+                    SensitiveContentRedactor.redact("run " + option + " " + value + " next"));
+        }
+        String aboveBound = "run --api-key ab'" + "s".repeat(5_000);
+        var failure = org.junit.jupiter.api.Assertions.assertThrows(OversizedSecretException.class,
+                () -> SensitiveContentRedactor.redact(aboveBound));
+        assertFalse(failure.getMessage().contains("ssss"), failure.getMessage());
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"password", "db-password"})
+    void xmlValueAboveTheBoundIsRefusedEvenWhenItContainsABracket(String name) {
+        String aboveBound = "<" + name + ">aaa]" + "b".repeat(5_000) + "</" + name + ">";
+        var failure = org.junit.jupiter.api.Assertions.assertThrows(OversizedSecretException.class,
+                () -> SensitiveContentRedactor.redact(aboveBound));
+        assertFalse(failure.getMessage().contains("bbbb"), failure.getMessage());
+        String atBound = "<" + name + ">aaa]" + "b".repeat(4_092) + "</" + name + ">";
+        assertEquals("<" + name + ">[REDACTED]</" + name + ">", SensitiveContentRedactor.redact(atBound));
+    }
 }

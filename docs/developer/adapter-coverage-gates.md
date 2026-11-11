@@ -63,7 +63,7 @@ Le niveau `BUNDLE` laisse une marge de plusieurs centaines de lignes dans le cor
 
 | Module | Élément | Cible | Minimum lignes | Minimum branches |
 |---|---|---|---:|---:|
-| core | `PACKAGE` | `com.nexus.security` | 85 % | 79 % |
+| core | `PACKAGE` | `com.nexus.security` | 87 % | 82 % |
 | core | `PACKAGE` | `com.nexus.index.jdt` | 67 % | 53 % |
 | core | `PACKAGE` | `com.nexus.index.minos` | 74 % | 60 % |
 | core | `PACKAGE` | `com.nexus.index.scip` | 80 % | 60 % |
@@ -78,7 +78,7 @@ Le plancher de branches de `JdtStdioSession` (16 %) est une garde contre la rég
 
 ### Règle d'écart
 
-Un plancher est au plus 3 points sous la mesure de référence de sa cible, et jamais au-dessus. La mesure de référence est la plus basse des mesures du reactor complet dans les jobs `Linux reactor Maven build` et `Windows gate` de NEXUS CI, car le même plancher s'applique aux deux builds. Un plancher se fixe à la partie entière de la mesure de référence moins 2 points ; il n'est jamais abaissé sans décision explicite, et un plancher déjà au-dessus de cette valeur reste en place tant qu'il respecte l'écart (`com.nexus.security`, lignes 85 %).
+Un plancher est au plus 3 points sous la mesure de référence de sa cible, et jamais au-dessus. La mesure de référence est la plus basse des mesures du reactor complet dans les jobs `Linux reactor Maven build` et `Windows gate` de NEXUS CI, car le même plancher s'applique aux deux builds. Un plancher se fixe à la partie entière de la mesure de référence moins 2 points ; il n'est jamais abaissé sans décision explicite, et un plancher déjà au-dessus de cette valeur reste en place tant qu'il respecte l'écart.
 
 La PR qui améliore durablement la couverture d'une cible remonte son plancher et met à jour la table ci-dessous. Une PR qui fait varier la mesure d'une cible de plus de 3 points sur sa plateforme, ou d'une ligne ou d'une branche quand cette unité dépasse 3 points (`MinosPayloadReader`, `SemanticSearchConfiguration`, branches de `NexusApiApplicationService`), met elle aussi la table à jour. La table est remesurée en entier sur les deux plateformes au commit qu'elle cite.
 
@@ -94,12 +94,12 @@ NEXUS CI l'exécute après le build du reactor dans les jobs `Linux reactor Mave
 
 ### Mesure de référence
 
-Mesure du reactor complet au commit `f8a27f89` : Linux dans l'artefact `nexus-ci-evidence` de NEXUS CI, Windows sur `./mvnw -B -ntp clean install`.
+Mesure du reactor complet au commit `f8a27f89` : Linux dans l'artefact `nexus-ci-evidence` de NEXUS CI, Windows sur `./mvnw -B -ntp clean install` ; ligne `com.nexus.security` remesurée avec la politique `secret-redaction-v9`, Linux dans l'artefact `nexus-ci-evidence` du commit `c83c04ca`.
 
 | Module | Élément | Cible | Lignes Linux | Branches Linux | Lignes Windows | Branches Windows |
 |---|---|---|---:|---:|---:|---:|
 | `core` | `BUNDLE` | — | 9 635 / 11 099 (86,81 %) | 3 336 / 4 639 (71,91 %) | 9 643 / 11 099 (86,88 %) | 3 324 / 4 639 (71,65 %) |
-| `core` | `PACKAGE` | `com.nexus.security` | 503 / 580 (86,72 %) | 328 / 400 (82,00 %) | 516 / 580 (88,97 %) | 325 / 400 (81,25 %) |
+| `core` | `PACKAGE` | `com.nexus.security` | 625 / 700 (89,29 %) | 438 / 514 (85,21 %) | 636 / 700 (90,86 %) | 435 / 514 (84,63 %) |
 | `core` | `PACKAGE` | `com.nexus.index.jdt` | 568 / 812 (69,95 %) | 208 / 375 (55,47 %) | 568 / 812 (69,95 %) | 208 / 375 (55,47 %) |
 | `core` | `PACKAGE` | `com.nexus.index.minos` | 247 / 303 (81,52 %) | 131 / 195 (67,18 %) | 233 / 303 (76,90 %) | 121 / 195 (62,05 %) |
 | `core` | `PACKAGE` | `com.nexus.index.scip` | 387 / 468 (82,69 %) | 167 / 261 (63,98 %) | 386 / 468 (82,48 %) | 164 / 261 (62,84 %) |

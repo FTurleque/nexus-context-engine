@@ -66,6 +66,20 @@ Le pom racine fixe `project.build.outputTimestamp` : les JAR (dont le JAR CLI om
 
 L'image Docker et l'installeur Windows ne sont pas couverts (horodatages des outils tiers).
 
+### Reprise d'une release échouée
+
+Un tag `v*` poussé désigne son commit pour toujours. La politique de publication de SEC-0068 exige, avant toute release, le ruleset « Immutable version tags », qui interdit à tous, mainteneur compris, de mettre à jour ou de supprimer un tag `v*`, et le réglage « releases immuables », qui verrouille toute release publiée. Ces réglages GitHub se relisent par `gh api` ; leur état relevé figure dans [le relevé du 2026-11-11](../project/history/releases-immuables-et-tags-2026-11-11.md). La reprise d'un run `release.yml` en échec dépend donc de ce qui a déjà été publié et de ce que demande le correctif :
+
+1. **Échec transitoire, commit inchangé, release GitHub non publiée** (runner, réseau, mesure de charge instable) : relancer les jobs échoués du même run, sur le même tag. Le préflight GHCR et la release en brouillon reprennent de façon idempotente ([Échec partiel](immutable-release-publishing.md#échec-partiel)). La relance d'un gate de charge ne vaut que pour le même commit ; le plafond absolu du gate borne ce qu'elle peut admettre.
+2. **Correctif qui change le commit** : le tag en échec est conservé sans release et consigné dans un relevé daté de `docs/project/history/` (tag, run, cause). La version des pom passe à une nouvelle version, que `scripts/release/validate-release-tag.sh` exige égale au tag :
+   - version finale `X.Y.Z` en échec : `X.Y.(Z+1)`, précédée de `X.Y.(Z+1)-rc.1` si le correctif touche la chaîne de release ;
+   - pré-version `X.Y.Z-rc.N` en échec : `X.Y.Z-rc.(N+1)`.
+
+   Le correctif suit le flux habituel (PR vers `develop`, promotion vers `main`) et le nouveau tag est posé sur la tête de `main`.
+3. **Release GitHub déjà publiée** : elle ne se corrige pas ; une nouvelle version suit le point 2. Si `scripts/release/publish-github-release-assets.sh` sort en code 79 (release publiée non immuable), `latest` n'a pas bougé : activer les releases immuables, puis publier une nouvelle version.
+
+Aucun tag `v*` n'est supprimé, déplacé ni recréé. Le détail des réglages GitHub et leurs commandes de lecture figurent dans [`immutable-release-publishing.md`](immutable-release-publishing.md#politique-de-publication-cible-sec-0068-proposée).
+
 ## SQLite : autorité, migrations et recovery
 
 SQLite reste l'autorité canonique. Les migrations sont forward-only, enregistrées dans `schema_migrations` et protégées par `script_sha256`.
@@ -115,9 +129,9 @@ Un backup/restauration doit conserver les protections adaptées au système cibl
 
 Avant une migration de production, sauvegarder SQLite service arrêté. Ne jamais restaurer uniquement un index Lucene en ignorant SQLite.
 
-## Recovery sémantique / `content-v7`
+## Recovery sémantique / `content-v8`
 
-Le profil de contenu sémantique courant est `content-v7`, lié à la politique de redaction `secret-redaction-v8`. Un index créé sous l'ancien profil est considéré incompatible et doit être reconstruit ; NEXUS ne réutilise pas silencieusement les vecteurs historiques.
+Le profil de contenu sémantique courant est `content-v8`, lié à la politique de redaction `secret-redaction-v9`. Un index créé sous l'ancien profil est considéré incompatible et doit être reconstruit ; NEXUS ne réutilise pas silencieusement les vecteurs historiques.
 
 La redaction de secrets réduit la fuite accidentelle de tokens/clés/mots de passe structurés, mais n'est pas une sauvegarde ni un scanner de secrets complet.
 
@@ -317,6 +331,29 @@ registre, le diagnostic et la reconstruction.
 
 Retour arrière : V019 ne change pas le schéma ; un binaire antérieur ouvre la base
 et reconstruit ses dérivés sous sa propre politique, qui laisse passer ces jetons.
+Pour revenir en arrière sans rouvrir ces cas, restaurer la sauvegarde de
+`NEXUS_HOME` prise avant la mise à niveau.
+
+## Mise à niveau V020 — noms composés
+
+`V020__invalidate_composite_name_indexes.sql` accompagne la politique
+`secret-redaction-v9` : la valeur d'un élément XML ou d'une option dont le nom
+composé se termine par une clé sensible (`<db-password>`, `<db_password>`,
+`<my-token>`, `--api-key`, `--private-key`) est masquée, et une telle valeur XML
+au-delà de 4 096 caractères fait refuser le fichier. Sous `secret-redaction-v8`,
+ces valeurs n'étaient ni masquées ni refusées : les dérivés existants peuvent les
+contenir en clair. Comme V019, la migration incrémente la génération de chaque
+projet, le passe à `NOT_INDEXED` et efface `last_indexed_at` ; le registre et les
+faits canoniques sont conservés. La prochaine indexation reconstruit les dérivés
+lexicaux, et le profil `content-v8` impose la reconstruction des vecteurs
+sémantiques. Un fichier qui porte une valeur refusée est exclu des index lexical
+et sémantique avec le diagnostic `INDEX_REDACTION_LIMIT`. V001 à V019 et leurs
+empreintes restent inchangées. `SchemaMigratorCompositeNameUpgradeTest` migre une
+base V019 dont l'index Lucene contient ces valeurs et vérifie la génération, le
+statut, le registre, le diagnostic et la reconstruction.
+
+Retour arrière : V020 ne change pas le schéma ; un binaire antérieur ouvre la base
+et reconstruit ses dérivés sous sa propre politique, qui laisse passer ces valeurs.
 Pour revenir en arrière sans rouvrir ces cas, restaurer la sauvegarde de
 `NEXUS_HOME` prise avant la mise à niveau.
 

@@ -16,6 +16,7 @@ SQLite est canonique ; Lucene et le sémantique sont dérivés. Les migrations e
    - **Invalidation des dérivés** (redaction, identité de chemin, plages) : reprendre le motif de `V010__invalidate_scalar_secret_indexes.sql` — incrémenter `project_index_generations.generation` et repasser les projets en `NOT_INDEXED` ; conserver les faits canoniques, ne jamais supprimer le registre.
 3. Commentaire SQL en tête, en français : pourquoi la migration existe.
 4. Test d'upgrade dans `core/src/test/java/com/nexus/persistence/sqlite/SchemaMigrator<Sujet>UpgradeTest.java` sur le modèle de `SchemaMigratorScalarSecretUpgradeTest` : base à l'état précédent, migration, assertions sur génération/statut/données conservées.
+   Les tests qui comptent les migrations ou les générations changent d'une unité : `git grep -n "schema_migrations\|generation(id)" -- core/src/test` (tests d'upgrade existants, `SqliteWriteContentionIntegrationTest`).
 5. Si le code lit une nouvelle colonne, mettre à jour la capacité SQLite concernée (`persistence/sqlite`) et ses tests de plan de requête.
 6. Documentation : `docs/developer/release-and-recovery.md` (impact upgrade, rebuild imposé), contrats éventuels dans `scripts/release/test-operational-doc-contracts.sh`.
 7. ADR si le format persistant ou une politique durable change (skill `nexus-adr`).

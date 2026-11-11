@@ -76,6 +76,7 @@ for path in (
     "core/src/main/resources/db/migration/V011__invalidate_secret_format_indexes.sql",
     "core/src/main/resources/db/migration/V018__invalidate_sk_token_bound_indexes.sql",
     "core/src/main/resources/db/migration/V019__invalidate_token_context_bound_indexes.sql",
+    "core/src/main/resources/db/migration/V020__invalidate_composite_name_indexes.sql",
     "core/src/test/java/com/nexus/application/NexusApplicationSemanticConfigurationTest.java",
 ):
     if not (root / path).is_file():
@@ -86,7 +87,7 @@ for stale in ("<sourceDirectory>", "<testSourceDirectory>", "../src/main", "../s
         raise SystemExit(f"core layout drift: core/pom.xml still contains {stale!r}")
 
 migrations = sorted((root / "core/src/main/resources/db/migration").glob("V*.sql"))
-if not migrations or migrations[-1].name != "V019__invalidate_token_context_bound_indexes.sql":
+if not migrations or migrations[-1].name != "V020__invalidate_composite_name_indexes.sql":
     raise SystemExit(f"schema contract drift: latest migration is {migrations[-1].name if migrations else 'none'}")
 require("docs/developer/release-and-recovery.md", "V005__enforce_symbol_range_constraints.sql")
 require("docs/developer/release-and-recovery.md", "V006__invalidate_unredacted_lexical_indexes.sql")
@@ -237,7 +238,7 @@ for path in (
     require(path, "NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA")
 
 require("core/src/main/java/com/nexus/security/SensitiveContentRedactor.java", "[REDACTED]")
-require("core/src/main/java/com/nexus/search/semantic/SemanticIndexingService.java", "CONTENT_PROFILE_VERSION = 7")
+require("core/src/main/java/com/nexus/search/semantic/SemanticIndexingService.java", "CONTENT_PROFILE_VERSION = 8")
 for path in (
     "README.md",
     "docs/architecture/overview.md",
@@ -247,11 +248,11 @@ for path in (
     "docs/developer/release-and-recovery.md",
     "docs/developer/semantic-search.md",
 ):
-    require(path, "content-v7")
+    require(path, "content-v8")
 
-# AUD-SEC-01/AUD-SEC-02/AUD-SEC-20: redaction policy v8, V011, V018 and V019 invalidation, per-file exclusion.
-require("core/src/main/java/com/nexus/security/SensitiveContentRedactor.java", '"secret-redaction-v8"')
-require("docs/developer/secret-redaction.md", "secret-redaction-v8")
+# AUD-SEC-01/AUD-SEC-02/AUD-SEC-20/AUD-SEC-25: redaction policy v9, V011, V018, V019 and V020 invalidation, per-file exclusion.
+require("core/src/main/java/com/nexus/security/SensitiveContentRedactor.java", '"secret-redaction-v9"')
+require("docs/developer/secret-redaction.md", "secret-redaction-v9")
 require("docs/developer/secret-redaction.md", "INDEX_REDACTION_LIMIT")
 require("docs/developer/secret-redaction.md", "SecretRedactionProbeTest")
 require("docs/developer/release-and-recovery.md", "V011__invalidate_secret_format_indexes.sql")
@@ -263,6 +264,7 @@ require("docs/developer/release-and-recovery.md", "V016__index_staged_files_by_p
 require("docs/developer/release-and-recovery.md", "V017__index_symbols_for_dominant_project_fuzzy_search.sql")
 require("docs/developer/release-and-recovery.md", "V018__invalidate_sk_token_bound_indexes.sql")
 require("docs/developer/release-and-recovery.md", "V019__invalidate_token_context_bound_indexes.sql")
+require("docs/developer/release-and-recovery.md", "V020__invalidate_composite_name_indexes.sql")
 require("docs/developer/current-limitations.md", "INDEX_REDACTION_LIMIT")
 
 # NXA4 + audit follow-up: lexical content is redacted before Lucene tokenization.
@@ -998,3 +1000,134 @@ if ! grep -Fq 'PRAGMA journal_mode' core/src/test/java/com/nexus/persistence/sql
   echo "documentation contract drift: SqliteDatabaseHardeningTest must assert PRAGMA journal_mode and cite DATA-0088" >&2
   exit 1
 fi
+# --- Sprint 14 : plafond de charge et release immuable (AUD-TST-18, AUD-DEP-37) ---
+python3 - <<'PY'
+from pathlib import Path
+import re
+
+root = Path.cwd()
+
+
+def text(path: str) -> str:
+    value = (root / path).read_text(encoding="utf-8")
+    if not value.strip():
+        raise SystemExit(f"empty contract file: {path}")
+    return value
+
+
+def require(path: str, needle: str) -> None:
+    if needle not in text(path):
+        raise SystemExit(f"documentation contract drift: {path} must contain {needle!r}")
+
+
+# AUD-TST-18: the benchmark page states the 1M population hard ceiling applied by the gate.
+def check_population_hard_ceiling(script: str, page: str, page_path: str) -> None:
+    match = re.search(r"population_hard_ceiling\s*=\s*\{\s*1_000_000:\s*([\d_]+)\s*,?\s*\}", script)
+    if not match:
+        raise SystemExit("scale benchmark contract drift: verify-scale-budgets.py must declare population_hard_ceiling for 1M")
+    # The page writes milliseconds with a space as thousands separator (48 906 ms).
+    expected = f"{int(match.group(1).replace('_', '')):,}".replace(",", " ") + " ms"
+    stated = [value + " ms" for value in re.findall(r"plafond absolu de 1M, \*\*([\d ]+) ms\*\*", page)]
+    if stated != [expected]:
+        raise SystemExit(
+            f"scale benchmark contract drift: {page_path} states the 1M population hard ceiling as "
+            f"{stated or 'missing'}, scripts/verify-scale-budgets.py applies {expected}"
+        )
+    if f"min({expected}, max(40 s" not in page:
+        raise SystemExit(f"scale benchmark contract drift: {page_path} must give the 1M ceiling formula with {expected}")
+    if "plafonds absolus de latence et de population restent inchangés" in page:
+        raise SystemExit(f"obsolete documentation contract: {page_path} claims the population ceilings are unchanged")
+
+
+scale_page_path = "docs/developer/scale-regression-benchmark.md"
+scale_gate_script = text("scripts/verify-scale-budgets.py")
+scale_page = text(scale_page_path)
+check_population_hard_ceiling(scale_gate_script, scale_page, scale_page_path)
+for label, script, page in (
+    ("page value", scale_gate_script,
+     scale_page.replace("plafond absolu de 1M, **48 906 ms**", "plafond absolu de 1M, **50 000 ms**", 1)),
+    ("script value", scale_gate_script.replace("1_000_000: 48_906", "1_000_000: 50_000", 1), scale_page),
+    ("stale claim", scale_gate_script,
+     scale_page + "\nLes plafonds absolus de latence et de population restent inchangés.\n"),
+):
+    if (script, page) == (scale_gate_script, scale_page):
+        raise SystemExit(f"population hard ceiling contract self-test: {label} fixture not found")
+    try:
+        check_population_hard_ceiling(script, page, scale_page_path)
+    except SystemExit:
+        pass
+    else:
+        raise SystemExit(f"population hard ceiling contract self-test: {label} drift was not detected")
+
+
+# AUD-DEP-37: a failed release resumes without recreating its tag; no current page deletes or moves a v* tag.
+recovery_doc = "docs/developer/release-and-recovery.md"
+for needle in (
+    "### Reprise d'une release échouée",
+    "relancer les jobs échoués du même run",
+    "Aucun tag `v*` n'est supprimé, déplacé ni recréé.",
+):
+    require(recovery_doc, needle)
+# A v* tag token: v followed by a digit or a glob, optionally under refs/tags/.
+version_tag = r"(?:refs/tags/)?v(?:\d|\*)"
+tag_deletion = re.compile(
+    # git tag with a delete or force flag (-d, --delete, -f, --force, combined short flags such as -fa).
+    r"git\s+tag\b[^\n`]*?\s(?:-[a-zA-Z]*[df][a-zA-Z]*|--delete|--force)\b"
+    # git push deleting or forcing a version tag.
+    rf"|git\s+push\b[^\n`]*?\s(?:--delete|-d|--force|-f)\b[^\n`]*?\s['\"]?{version_tag}"
+    rf"|git\s+push\b[^\n`]*?\s['\"]?[+:]{version_tag}"
+    r"|gh\s+release\s+delete\b[^\n`]*--cleanup-tag"
+    r"|DELETE\b[^\n`]*git/refs/tags/"
+)
+
+
+def tag_deletion_findings(pages):
+    return [
+        f"{path}:{number}"
+        for path, content in pages
+        for number, line in enumerate(content.splitlines(), 1)
+        if tag_deletion.search(line)
+    ]
+
+
+developer_pages = [
+    (path.relative_to(root).as_posix(), path.read_text(encoding="utf-8"))
+    for path in sorted((root / "docs/developer").rglob("*.md"))
+]
+findings = tag_deletion_findings(developer_pages)
+if findings:
+    raise SystemExit(f"release recovery contract drift: docs/developer/ prescribes deleting or moving a v* tag at {findings}")
+for sample in (
+    "git tag -d v1.0.0",
+    "git tag -d <tag>",
+    'git tag --delete "$TAG"',
+    "git tag -f v0.2.0 HEAD",
+    "git tag -fa v0.2.0 -m x",
+    "git tag -a -f v0.2.0",
+    "git tag v0.2.0 -f",
+    "git push --delete origin v0.2.0",
+    "git push origin --delete refs/tags/v0.2.0",
+    "git push origin -d v0.2.0",
+    "git push origin :refs/tags/v0.2.0",
+    "git push --force origin v0.2.0",
+    "git push -f origin refs/tags/v0.2.0",
+    "git push origin +refs/tags/v0.2.0",
+    "gh release delete v0.2.0 --cleanup-tag",
+    "gh api -X DELETE repos/o/r/git/refs/tags/v0.2.0",
+):
+    if not tag_deletion_findings([("sample.md", sample)]):
+        raise SystemExit(f"release recovery contract self-test: {sample!r} was not detected")
+for sample in (
+    "git push origin v0.3.0",
+    "git tag v0.3.0",
+    "git tag -a v0.3.0 -m release",
+    "git push --delete origin feature/x",
+    "git push --delete origin vibrant-branch",
+    "git push origin -d validate",
+    "git push --force-with-lease origin fix/x",
+    "gh release delete v0.2.0",
+):
+    if tag_deletion_findings([("sample.md", sample)]):
+        raise SystemExit(f"release recovery contract self-test: {sample!r} was wrongly detected")
+print("sprint-14-release-and-scale-contracts=PASS")
+PY
