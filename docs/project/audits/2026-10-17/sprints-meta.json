@@ -505,11 +505,38 @@
   },
   "ordre_interne": [],
   "prerequis_anterieurs": [],
+  "fermes": 8,
+  "etat": "Clôturé",
+  "reste_jours": [
+   0,
+   0
+  ]
+ },
+ {
+  "numero": 15,
+  "titre": "Suites de la vérification du 12 novembre",
+  "pourquoi": "Constats relevés le 12/11 en revérifiant la redaction, l'installateur et la chaîne de release : un bloc de clé privée sauté derrière un marqueur incomplet (préexistant), « ^ » refusé à tort par l'assistant, des guides qui prescrivent encore Maven direct, et le badge Latest posé avant le contrôle d'immuabilité.",
+  "sortie": "Clé privée masquée derrière un « -----BEGIN » incomplet (test) ; profil « a^b » accepté en mode Docker ; guides sous contrat du wrapper ; aucune version finale non immuable ne reçoit le badge Latest.",
+  "constats": [
+   "AUD-DEP-38",
+   "AUD-QUA-29",
+   "AUD-QUA-30",
+   "AUD-SEC-26"
+  ],
+  "charge_jours": [
+   1.0,
+   4
+  ],
+  "composition": {
+   "Faible": 4
+  },
+  "ordre_interne": [],
+  "prerequis_anterieurs": [],
   "fermes": 0,
   "etat": "À faire",
   "reste_jours": [
-   2.75,
-   10
+   1.0,
+   4
   ]
  }
 ]

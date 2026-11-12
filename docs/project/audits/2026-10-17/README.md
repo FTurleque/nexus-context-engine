@@ -1,8 +1,10 @@
 # Audit NEXUS — 17 octobre 2026
 
-**Verdict : socle sain et vérifié, dette concentrée sur cinq causes ; aucun constat critique ni élevé.** Le build complet passe, la CI de `develop` est verte, les constats de sécurité du 14 septembre sont corrigés. Aucun code applicatif n'a été modifié pendant l'audit. **Au 11 novembre**, 101 des 109 constats actionnables sont fermés, les sprints 1 à 13 sont clôturés et la release v0.2.0 est publiée ; un nouveau constat Élevé touche l'installateur Windows (`AUD-QUA-28`).
+**Verdict : socle sain et vérifié, dette concentrée sur cinq causes ; aucun constat critique ni élevé.** Le build complet passe, la CI de `develop` était verte le 17/10, les constats de sécurité du 14 septembre sont corrigés. Aucun code applicatif n'a été modifié pendant l'audit. **Au 12 novembre**, 109 des 113 constats actionnables sont fermés, les sprints 1 à 14 sont clôturés et la version 0.2.1 est publiée en release immuable ; il reste 4 constats Faibles.
 
-> **Vérification du 11 novembre 2026** (`origin/develop` @ `510ff8ca`, vérification dans le code, build réel et relevé GitHub) : les 19 constats non fermés au 09/11 sont fermés, dont 12 avec réserve, et aucun désaccord ne subsiste avec le suivi du mainteneur. Sprints 1 à 13 clôturés (PR #342 à #354). La release finale **v0.2.0** est publiée et attestée par `release.yml` (`AUD-DEP-34` fermé). Aucune régression sur les 33 constats fermés dont un fichier cité a changé. 9 constats nouveaux, dont 8 regroupés au sprint 14 (`AUD-PRF-30`, Info, reste hors sprint) : `AUD-QUA-28` (Élevée, installateur : fichiers de configuration écrits en ANSI, `NEXUS_HOME` introuvable avec un profil accentué, rejoué), `AUD-SEC-24` (Moyenne, motif JWT de la redaction à ~12 s par Mo, antérieur aux sprints), et six Faibles. Build réel : 1 019 tests verts. Détail : [`etat-2026-11-11.md`](etat-2026-11-11.md).
+> **Vérification du 12 novembre 2026** (`origin/main` @ `244ab1d3`, vérification dans le code, build réel, relevé GitHub et rejeu Windows) : la branche `develop` est supprimée, le projet intègre et publie depuis `main` seule (ADR GEN-0089, BE-0090) ; aucun gate n'a été perdu au passage. Les 8 constats du sprint 14 sont fermés, dont 6 avec réserve, sans désaccord avec le suivi. Les releases v0.2.1-rc.1 et v0.2.1 sont publiées **immuables** et attestées, et un ruleset sans contournement interdit de déplacer ou supprimer un tag `v*`. Aucune régression sur les 38 constats fermés revérifiés. 7 constats nouveaux, dont 4 Faibles au sprint 15 : `AUD-SEC-26` (un « -----BEGIN » incomplet fait sauter le bloc de clé privée qui suit, préexistant, rejoué), `AUD-QUA-29`, `AUD-QUA-30`, `AUD-DEP-38`. Build réel : 1 063 tests verts. Détail : [`etat-2026-11-12.md`](etat-2026-11-12.md).
+>
+> **Vérification du 11 novembre 2026** (`origin/develop` @ `510ff8ca`, vérification dans le code, build réel et relevé GitHub) : les 19 constats non fermés au 09/11 sont fermés, dont 12 avec réserve, et aucun désaccord ne subsiste avec le suivi du mainteneur. Sprints 1 à 13 clôturés (PR #342 à #354). La release finale **v0.2.0** est publiée et attestée par `release.yml` (`AUD-DEP-34` fermé). Aucune régression sur les 33 constats fermés dont un fichier cité a changé. 9 constats nouveaux, regroupés au sprint 14 : `AUD-QUA-28` (Élevée, installateur : fichiers de configuration écrits en ANSI, `NEXUS_HOME` introuvable avec un profil accentué, rejoué), `AUD-SEC-24` (Moyenne, motif JWT de la redaction à ~12 s par Mo, antérieur aux sprints), et six Faibles. Build réel : 1 019 tests verts. Détail : [`etat-2026-11-11.md`](etat-2026-11-11.md).
 >
 > **Vérification du 9 novembre 2026** (`origin/develop` @ `7bbfe675`, vérification dans le code) : 82 constats fermés sur 100 actionnables, dont 28 avec réserve ; 1 partiel ; 17 ouverts. Les sprints 2 à 5 et 9 à 11 sont clôturés ; les sprints 6, 7 et 8 le sont sauf pour des constats du 07/11. La clôture déclarée le 9 novembre (« 83 constats fermés ») ne voit pas les 10 constats ajoutés le 07/11 : la mise à jour du 07/11 était restée sur une branche locale. Aucun de ces 10 constats n'est corrigé. `AUD-TST-03` reste partiel, en désaccord avec la clôture déclarée. 9 constats nouveaux, dont `AUD-QUA-22` (Élevée, installateur Windows, reproduit sous PowerShell 5.1). Build réel : 971 tests verts. Détail : [`etat-2026-11-09.md`](etat-2026-11-09.md). **Contrôle de 22 h** (`bc707ed5`) : seule la version passe en 0.2.0-rc.3 (5 `pom.xml`) ; rc.3 publiée et `main` promue deux fois (PR #332, #334) sans correction des constats ouverts ; `AUD-DEP-34` corrigé dans sa formulation (tags attestés par l'ancienne chaîne, pas « sans attestation ») et toujours bloquant pour la release finale.
 >
@@ -26,30 +28,29 @@
 
 Deux réserves avant de lire ces notes. Performance (71) repose sur des coûts lus dans le code, pas chronométrés ; les choix déjà assumés par un ADR (journal rollback, cache Git de 16 entrées, lecture intégrale des fichiers) ont été ramenés en Faible. Architecture (78) compte séparément les cinq cycles d'un même bloc ; le constat chapeau AUD-ARC-01 n'est pas compté une seconde fois. Aucune note ne descend sous 70 parce qu'aucun constat critique ni élevé n'a tenu après vérification.
 
-Au 11/11, les notes sont recalculées sur les seuls constats non fermés. Architecture et Performance à 100 signifient qu'aucun constat n'y est ouvert, pas que l'axe est sans défaut. Qualité (88) est la plus basse parce que `AUD-QUA-28` (Élevée) pèse 10 points ; Sécurité (95) porte `AUD-SEC-24` et `AUD-SEC-25`, tous deux antérieurs aux sprints mais relevés seulement le 11/11.
+Au 12/11, il ne reste aucun constat Critique, Élevé ni Moyen : chaque axe ne perd qu'un point par constat Faible ouvert. Ces notes mesurent ce qui reste à corriger dans la liste de l'audit, pas l'absence de défaut ; la Sécurité garde ainsi `AUD-SEC-26`, défaut antérieur aux sprints trouvé seulement le 12/11.
 
-| Axe | 17/10 | 29/10 | 07/11 | 09/11 | 11/11 | Calcul au 11/11 (constats non fermés) |
-|---|---:|---:|---:|---:|---:|---|
-| Architecture | 78 | 78 | 87 | 99 | **100** | 100 (aucun constat ouvert) |
-| Qualité | 72 | 72 | 90 | 86 | **88** | 100 − 10×1 Élevée − 1×2 Faible |
-| Sécurité | 80 | 80 | 89 | 99 | **95** | 100 − 4×1 Moyenne − 1×1 Faible |
-| Tests | 82 | 82 | 93 | 93 | **99** | 100 − 1×1 Faible |
-| Performance | 71 | 71 | 76 | 91 | **100** | 100 (aucun constat ouvert) |
-| Dépendances | 73 | 72 | 82 | 96 | **98** | 100 − 1×2 Faible |
+| Axe | 17/10 | 29/10 | 07/11 | 09/11 | 11/11 | 12/11 | Calcul au 12/11 (constats non fermés) |
+|---|---:|---:|---:|---:|---:|---:|---|
+| Architecture | 78 | 78 | 87 | 99 | 100 | **100** | 100 (aucun constat ouvert) |
+| Qualité | 72 | 72 | 90 | 86 | 88 | **98** | 100 − 1×2 Faible |
+| Sécurité | 80 | 80 | 89 | 99 | 95 | **99** | 100 − 1×1 Faible |
+| Tests | 82 | 82 | 93 | 93 | 99 | **100** | 100 (aucun constat ouvert) |
+| Performance | 71 | 71 | 76 | 91 | 100 | **100** | 100 (aucun constat ouvert) |
+| Dépendances | 73 | 72 | 82 | 96 | 98 | **99** | 100 − 1×1 Faible |
 
 Barème : 100 − 25 par Critique − 10 par Élevée − 4 par Moyenne − 1 par Faible, plancher 0, sur l'axe principal de chaque constat (un constat fusionné ne compte qu'une fois).
 
-Répartition : 150 constats — 2 élevée, 25 moyenne, 82 faible, 41 info ; 8 actionnables répartis en 14 sprints.
+Répartition : 157 constats — 2 élevée, 25 moyenne, 86 faible, 44 info ; 4 actionnables répartis en 15 sprints.
 
-## Cinq constats majeurs restants
+## Constats restants
 
-Les cinq majeurs du 17/10 (`AUD-QUA-09`, `AUD-SEC-01`, `AUD-TST-01`, `AUD-ARC-07`, `AUD-PRF-01`) sont fermés, trois d'entre eux avec réserve, ainsi que les cinq du 09/11. Restent, au 11/11 :
+Les cinq majeurs du 17/10 (`AUD-QUA-09`, `AUD-SEC-01`, `AUD-TST-01`, `AUD-ARC-07`, `AUD-PRF-01`) sont fermés, trois d'entre eux avec réserve, ainsi que ceux du 09/11 et du 11/11. Restent, au 12/11 :
 
-1. **`AUD-QUA-28` — L'installateur écrit la configuration native, le .env Docker et le fragment TOML de Codex dans la page ANSI : avec un profil accentué, NEXUS_HOME par défaut est introuvable** (Élevée, Ouvert, effort M, S14). Profil « Hélène » avec les valeurs par défaut : nexus-mcp.cmd/nexus.cmd (build-windows-distribution.ps1:263, :271) reçoivent un NEXUS_HOME inexistant (C:\Users\HÚlÞne\.nexus), Codex Desktop reçoit un chemin Java faux, le bind du dépôt Docker vise un autre dossier. Un caractère hors de la page ANSI devient « ? ». Même population que AUD-QUA-22 ; aucun test (smoke en ASCII).
-1. **`AUD-SEC-24` — Le motif JWT de la redaction coûte environ 12 s par Mo sur une entrée forgée « eyJ- » répétée : un fichier de 8 Mo bloque l'indexation** (Moyenne, Ouvert, effort S, S14). Un fichier forgé du dépôt indexé (≤ 8 Mo) immobilise l'indexation ~2 min par passe de redaction (indexation, Lucene, sémantique rejouent redact), et bloque les sorties contexte qui le redigent : déni de service local.
-1. **`AUD-SEC-25` — Un élément XML au nom composé par « - » ou « _ » (<db-password>, <db_password>) n'est pas redigé** (Faible, Ouvert, effort S, S14). Mot de passe d'un fichier XML de configuration (Spring, Maven settings) publié en clair dans Lucene, embeddings et sorties CLI/REST/MCP.
-1. **`AUD-DEP-37` — La release GitHub v0.2.0 n'est pas immuable et le tag v0.2.0 a été recréé par le contournement admin du ruleset des tags** (Faible, Ouvert, effort S, S14). Rien n'empêche techniquement de remplacer un asset de la release publiée ni de déplacer un tag de version après publication : la garantie « tag immuable » de AUD-DEP-27 repose sur la discipline de l'administrateur. Les attestations SLSA permettent de détecter une substitution, pas de l'empêcher.
-1. **`AUD-QUA-26` — Le contrat « Maven via NexusScript.psm1 » ne voit pas un appel direct à mvn hors début de ligne** (Faible, Ouvert, effort S, S14). Un script peut rappeler le Maven non ancré du runner sous une forme d'appel courante (affectation, ; ou bloc) sans alerte : régression AUD-QUA-05 possible.
+1. **`AUD-SEC-26` — Un marqueur « -----BEGIN » incomplet placé avant une clé privée fait sauter le vrai bloc : la clé reste en clair** (Faible, Ouvert, effort S, S15). Clé privée d'une fixture de test (parseur PEM, doc) publiée en clair dans Lucene, embeddings et sorties CLI/REST/MCP.
+1. **`AUD-DEP-38` — Code 79 posé après la publication : une version finale non immuable reçoit déjà le badge Latest GitHub, contrairement à release-and-recovery.md** (Faible, Ouvert, effort S, S15). Si le réglage « releases immuables » était désactivé, une version finale serait publique, mutable et désignée Latest sur GitHub avant l'échec 79 ; seul le tag d'image GHCR latest reste protégé. Risque résiduel tant que le réglage reste actif (relevé 2026-11-11 enabled:true).
+1. **`AUD-QUA-29` — L'assistant refuse « ^ » dans NEXUS_HOME, y compris sur la page Runtime sautée : un profil Windows contenant ^ bloque le mode Docker (installation silencieuse figée sur une MsgBox)** (Faible, Ouvert, effort S, S15). Utilisateur dont le nom de profil contient ^ (autorisé par Windows) : mode Docker bloqué avec un message sur des « chemins générés » qu'il ne peut corriger (NEXUS_HOME natif inutilisé en Docker seul, page Runtime masquée) ; installation silencieuse Docker en attente d'une boîte modale.
+1. **`AUD-QUA-30` — Le guide de reproduction et le pipeline d'indexation prescrivent encore `mvn` direct (Maven non ancré) alors que le dépôt impose le wrapper** (Faible, Ouvert, effort S, S15). Un contributeur suivant le guide (que QUA-27 vient de corriger) construit avec un Maven quelconque, contourne la vérification du wrapper et se heurte aux hooks qui refusent mvn ; la commande exec:java donnée ne vise pas le module core.
 
 ## Thèmes transverses
 
@@ -59,7 +60,7 @@ Les cinq majeurs du 17/10 (`AUD-QUA-09`, `AUD-SEC-01`, `AUD-TST-01`, `AUD-ARC-07
 - **Des frontières logiques que rien n'outille.** Les dépendances techniques sont bien confinées (Lucene, SQLite, JGit), mais 12 packages du cœur se dépendent mutuellement et aucun test d'architecture ne l'empêche de s'étendre. La configuration est lue dans 12 classes au lieu de la composition root. Au 07/11, le test d'architecture existe et le bloc est scindé en deux (22 arêtes de cycle au lieu de 36), mais il ne voit pas les références qualifiées (AUD-ARC-20). Au 09/11, le cœur est acyclique ; reste à faire voir au test les références qualifiées (AUD-ARC-20). (`AUD-ARC-20`, `AUD-ARC-07`, `AUD-ARC-01`, `AUD-ARC-02`, `AUD-ARC-04`…)
 - **Une chaîne de release jamais exécutée.** La release est conçue en échec fermé (tag égal à main, attestations, Trivy, Authenticode), mais elle n'a jamais tourné : aucun tag, aucun environnement protégé, une clé de signature visible de toutes les étapes du job Windows, une version codée en dur. Le premier run réel sera aussi le premier test. Au 07/11, rien n'a bougé : toujours aucun run de release, aucun environnement protégé. Au 09/11, la pré-release rc.2 est publiée depuis un environnement protégé, avec des assets attestés mais non signés ; la release finale reste à exercer (AUD-DEP-34). (`AUD-DEP-34`, `AUD-SEC-21`, `AUD-DEP-02`, `AUD-SEC-06`, `AUD-DEP-03`…)
 
-## Sprints au 11 novembre
+## Sprints au 12 novembre
 
 | Sprint | Titre | État | Fermés | Reste (j) | Critère de sortie |
 |---|---|---|---:|---|---|
@@ -76,14 +77,15 @@ Les cinq majeurs du 17/10 (`AUD-QUA-09`, `AUD-SEC-01`, `AUD-TST-01`, `AUD-ARC-07
 | S11 | Finitions documentaires et micro-optimisations | Clôturé | 8/8 | 0 à 0 | Les quatre dérives relevées (graphe dérivé, FTS trigram, AGENTS.md, décision WAL) sont corrigées ; aucune regex des deux chemins relevés n'est compilée par appel. |
 | S12 | Durcir les gates ajoutés | Clôturé | 5/5 | 0 à 0 | Chaque gate ajouté échoue sur les variantes relevées (fixtures workflow_hygiene, mutations du contrat Maven, tag amont faux) ; les règles Archgate tournent en CI ; les planchers JaCoCo sont à moins de 3 points de la mesure. |
 | S13 | Installateur et release finale | Clôturé | 5/5 | 0 à 0 | Connecter puis déconnecter NEXUS laisse intacts octet pour octet les autres serveurs d'une configuration UTF-8 contenant des chemins accentués, et refuse d'écrire sur un JSON invalide (tests de l'installateur) ; aucun tag GHCR hors chaîne de release ; labels OCI renseignés. |
-| S14 | Suites de la vérification du 11 novembre | À faire | 0/8 | 2,75 à 10 | 1 Mo de « eyJ- » redigé en moins d'1 s (test) ; <db-password> et <db_password> masqués ; une fixture négative par forme de contournement relevée, rejetée par les contrats ; plafond 1M dur et page de benchmark exacte ; releases immuables activées. |
+| S14 | Suites de la vérification du 11 novembre | Clôturé | 8/8 | 0 à 0 | 1 Mo de « eyJ- » redigé en moins d'1 s (test) ; <db-password> et <db_password> masqués ; une fixture négative par forme de contournement relevée, rejetée par les contrats ; plafond 1M dur et page de benchmark exacte ; releases immuables activées. |
+| S15 | Suites de la vérification du 12 novembre | À faire | 0/4 | 1 à 4 | Clé privée masquée derrière un « -----BEGIN » incomplet (test) ; profil « a^b » accepté en mode Docker ; guides sous contrat du wrapper ; aucune version finale non immuable ne reçoit le badge Latest. |
 
-Charge restante : 2,75 à 10 jours, enveloppe hors revue, CI et ADR. Détail et ordre interne : [`sprints.md`](sprints.md).
+Charge restante : 1 à 4 jours, enveloppe hors revue, CI et ADR. Détail et ordre interne : [`sprints.md`](sprints.md).
 
 ## Chemin critique
 
-- Livré : sprints 1 à 13 ; le cœur est acyclique et gardé (`AUD-ARC-01`, `AUD-ARC-20`), la release finale v0.2.0 est publiée et attestée par `release.yml` (`AUD-DEP-34`).
-- Avant la prochaine release : `AUD-QUA-28` (installateur, Élevée) et `AUD-DEP-37` (releases immuables) ; puis `AUD-SEC-24` et `AUD-SEC-25` (redaction).
+- Livré : sprints 1 à 14 ; le cœur est acyclique et gardé (`AUD-ARC-01`, `AUD-ARC-20`), la version 0.2.1 est publiée en release immuable et attestée par `release.yml` (`AUD-DEP-34`, `AUD-DEP-37`).
+- Reste, sans dépendance entre eux : `AUD-SEC-26` (redaction), `AUD-DEP-38` (badge Latest), `AUD-QUA-29` (installateur), `AUD-QUA-30` (guides).
 
 ## Suivi de l'audit du 14 septembre
 
@@ -119,6 +121,7 @@ Charge restante : 2,75 à 10 jours, enveloppe hors revue, CI et ADR. Détail et 
 - [`sprints.md`](sprints.md) / [`sprints-meta.json`](sprints-meta.json) — ordre de correction.
 - [`architecture.md`](architecture.md) — découpage observé et diagramme.
 - [`plan-action.md`](plan-action.md) — classement par urgence.
+- [`etat-2026-11-12.md`](etat-2026-11-12.md) — vérification du sprint 14, du passage à `main` seule et des releases 0.2.1.
 - [`etat-2026-11-11.md`](etat-2026-11-11.md) — vérification des sprints 1, 6, 7, 8, 12 et 13, de la release v0.2.0 et nouveaux constats.
 - [`etat-2026-11-09.md`](etat-2026-11-09.md) — vérification des sprints 6 à 11, des constats du 07/11 et nouveaux constats.
 - [`etat-2026-11-07.md`](etat-2026-11-07.md) — vérification des sprints 1 à 5 dans le code.

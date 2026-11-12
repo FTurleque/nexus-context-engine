@@ -139,6 +139,10 @@ Cycles bilatéraux (imports A→B / B→A) : context↔context.source 17/1, cont
 
 Un défaut interne à une boîte ne se voit pas sur un graphe de packages, et c'est là que se trouve l'essentiel des constats : la redaction par liste fermée (`AUD-SEC-01`), l'absence d'index SQLite sur `symbol_relations(file_id)` (`AUD-PRF-01`), la fédération qui recalcule tout par projet (`AUD-PRF-02`, `AUD-PRF-04`, `AUD-PRF-07`).
 
+## État au 12 novembre 2026
+
+- Rien de neuf sur le graphe des packages : le passage à `main` seule et le sprint 14 ne touchent ni les dépendances entre packages ni `CoreArchitectureTest` (31 tests verts au build `244ab1d3`).
+
 ## État au 11 novembre 2026
 
 - `AUD-ARC-20` est fermé (#342) : `JavaSourceGraph` extrait les références `com.nexus.*` pleinement qualifiées hors commentaires et chaînes, l'arête `cli → security` passe par un import, et des cas négatifs (cycle et feuille par nom qualifié) gardent la règle. Le graphe reste acyclique, `package-cycles.txt` vide. Réserve : un nom qualifié écrit avec des espaces, coupé sur deux lignes ou entrecoupé d'un commentaire échappe encore à l'analyseur (aucune occurrence dans le code).
