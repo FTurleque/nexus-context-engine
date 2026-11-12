@@ -40,7 +40,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: windows-installer-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  # github.workflow names the caller when this workflow is reused (main-push-windows-installer.yml,
+  # release.yml), so a reused run never shares the group of a direct run of this workflow.
+  group: windows-installer-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
