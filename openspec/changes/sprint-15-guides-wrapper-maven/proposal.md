@@ -15,7 +15,10 @@ Source : `docs/project/audits/2026-10-17/etat-2026-11-12.md` (section `AUD-QUA-3
   - [Existant vérifié] `pom.xml:10` déclare `<packaging>pom</packaging>` ; la `mainClass` `com.nexus.cli.NexusCli` n'est configurée que dans `core/pom.xml:232-235`. `exec:java` lancé à la racine ne vise donc pas `core` (échec probable, non rejoué par l'audit).
   - [Exigence] Les guides courants n'écrivent aucune commande Maven directe (`mvn`, `mvn.cmd`) en position de commande dans un bloc de code ou un code en ligne ; le contrat le vérifie et rejette une fixture de contournement.
   - [Exigence] Toute commande `exec:java` des guides courants vise le module `core` par `-pl core`.
-  - [Proposition] Le contrôle couvre toute la documentation courante (`docs/**/*.md` hors ADR, audits, relevés datés et rapports du superviseur, plus `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md`), et non la seule liste `current_docs` citée par l'action de l'audit : la liste ne contient pas trois des pages fautives.
+  - [Décision] Décision du mainteneur du 2026-11-12 : le contrôle couvre toute la documentation courante (`docs/**/*.md` hors ADR, audits, relevés datés et rapports du superviseur, plus `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md`), et non la seule liste `current_docs` : la liste ne contient pas trois des pages fautives.
+  - [Écart] L'action de l'audit demande d'« étendre le motif d'AGENTS.md (:977) à current_docs » (`docs/project/audits/2026-10-17/etat-2026-11-12.md:102`, `docs/project/audits/2026-10-17/findings.json:6013`) ; le changement couvre un périmètre plus large que cette liste.
+  - [Décision] Les exemples de fixtures de `DIRECT_MAVEN_CALL` cités par `docs/developer/ci-and-supply-chain.md:500-502` restent tels quels, en exceptions listées du contrat (document et texte exact de ligne) ; une exception obsolète fait échouer le contrat.
+  - [Décision] La contrainte O3 (`docs/architecture/arc42/02-contraintes.md:24`) cite les deux formes du wrapper, `./mvnw clean install` et `.\mvnw.cmd clean install`.
 
 ## Type de changement
 

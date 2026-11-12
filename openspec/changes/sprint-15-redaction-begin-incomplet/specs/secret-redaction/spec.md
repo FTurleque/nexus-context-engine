@@ -22,7 +22,7 @@ Un bloc de clé privée complet, PGP compris, SHALL être remplacé par `[REDACT
 - **THEN** le corps du bloc n'apparaît pas dans le texte rendu
 
 #### Scenario: Marqueur complet d'un autre type collé au vrai marqueur
-- **GIVEN** un contenu dont la première ligne est `-----BEGIN CERTIFICATE-----BEGIN RSA PRIVATE KEY-----`, suivie d'un corps et de la ligne `-----END RSA PRIVATE KEY-----`
+- **GIVEN** un contenu dont la première ligne est `-----BEGIN CERTIFICATE-----BEGIN RSA PRIVATE KEY-----`, les deux marqueurs se terminant sur cette ligne, suivie d'un corps et de la ligne `-----END RSA PRIVATE KEY-----`
 - **WHEN** le contenu est redigé
 - **THEN** le corps n'apparaît pas dans le texte rendu
 
@@ -35,6 +35,25 @@ Un bloc de clé privée complet, PGP compris, SHALL être remplacé par `[REDACT
 - **GIVEN** le contenu `x -----BEGIN foo` suivi d'une ligne `bar`
 - **WHEN** le contenu est redigé
 - **THEN** le texte rendu est identique au contenu, sans `OversizedSecretException`
+
+### Requirement: La fin d'un marqueur BEGIN est cherchée sur sa ligne
+Un marqueur `-----BEGIN ` SHALL n'ouvrir une clé privée que si ses tirets de fin `-----` se trouvent avant le premier CR ou LF qui le suit. Un marqueur dont la fin n'est pas sur sa ligne SHALL ne déclencher aucun masquage au-delà de sa ligne, quel que soit le séparateur (LF, CRLF ou CR).
+
+#### Scenario: Marqueur incomplet suivi plus loin d'un suffixe de clé
+- **GIVEN** un contenu formé d'une ligne `-----BEGIN `, puis d'une ligne `"PRIVATE KEY-----"`, puis d'une ligne `visible`, sans ligne `-----END `
+- **WHEN** le contenu est redigé
+- **THEN** le texte rendu est identique au contenu et ne contient pas `[REDACTED]`
+
+#### Scenario: Suffixe de clé plus loin puis vrai bloc
+- **GIVEN** le contenu du scénario précédent, suivi d'un bloc `RSA PRIVATE KEY` complet dont le corps vaut `MIIfakebodyNOTAKEY0123`
+- **WHEN** le contenu est redigé
+- **THEN** les trois premières lignes sont rendues inchangées, et le bloc seul est remplacé par `[REDACTED]`
+- **AND** le corps n'apparaît pas dans le texte rendu et le texte rendu compte autant de séparateurs de lignes que le contenu
+
+#### Scenario: Séparateurs CRLF et CR
+- **GIVEN** le contenu de « Suffixe de clé plus loin puis vrai bloc », dont chaque séparateur est CRLF, ou chaque séparateur est CR
+- **WHEN** le contenu est redigé
+- **THEN** les trois premières lignes sont rendues inchangées, le corps n'apparaît pas dans le texte rendu, et chaque CR et LF du contenu est conservé
 
 ## MODIFIED Requirements
 

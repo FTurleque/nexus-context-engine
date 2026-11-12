@@ -35,8 +35,14 @@
 #### Scenario: Badge non posé
 - **GIVEN** une version finale immuable dont la désignation Latest échoue ou ne désigne pas son tag à la relecture
 - **WHEN** le script termine la publication
-- **THEN** il sort avec un code non nul distinct des codes existants et un message qui nomme le tag
+- **THEN** il sort en 80 avec un message qui nomme le tag
 - **AND** l'étape qui déplace le tag d'image `latest` ne s'exécute pas
+
+#### Scenario: Relance d'une version finale plus ancienne
+- **GIVEN** une version finale `vX.Y.Z` publiée et immuable, et une version finale plus récente désignée Latest
+- **WHEN** le job `publish` de `vX.Y.Z` est relancé avec les mêmes assets
+- **THEN** le script désigne `vX.Y.Z` Latest sans comparer les versions ni téléverser d'asset, et sort en 0
+- **AND** l'étape suivante déplace le tag d'image `latest` sur `vX.Y.Z`
 
 ## MODIFIED Requirements
 

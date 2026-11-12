@@ -22,7 +22,7 @@ Les références `chemin:ligne` des puces [Existant vérifié] de ce design et d
 
 **Hors objectifs :**
 - Modifier l'étape GHCR de `release.yml` ou sa condition de canal.
-- Comparer les versions SemVer avant de poser un pointeur Latest (voir la [Question] de la proposition).
+- Comparer les versions SemVer avant de poser un pointeur Latest : la relance d'une version finale plus ancienne repose les deux pointeurs sur elle (voir « Décisions »).
 
 ## Composants et responsabilités
 
@@ -54,7 +54,7 @@ flowchart TD
     cur -- "oui" --> ok1["Sortie 0 sans modification"]
     cur -- "non" --> mark["gh release edit --latest"]
     mark --> check{"Relecture : Latest = tag ?"}
-    check -- "non" --> e80["Sortie non nulle (code proposé 80)"]
+    check -- "non" --> e80["Sortie 80 : badge non posé, tag d'image latest inchangé"]
     check -- "oui" --> ok2["Sortie 0, puis étape GHCR : tag d'image latest déplacé"]
 ```
 
@@ -66,7 +66,7 @@ Non applicable : les états de la release (brouillon, publiée) ne changent pas 
 
 ## Contrats d'interface
 
-- [Proposition] Nouveau code de sortie `80` : version finale immuable dont la relecture ne désigne pas le tag comme Latest, message `GitHub Release <tag> is immutable but could not be marked as the latest release.` (voir la [Question] de la proposition).
+- [Décision] Code de sortie dédié `80` : version finale immuable dont la relecture ne désigne pas le tag comme Latest, message `GitHub Release <tag> is immutable but could not be marked as the latest release.` (voir « Décisions »).
 - Messages imprimés : `GitHub Release <tag> is now the latest release.` ou `GitHub Release <tag> is already the latest release.` ; pour une pré-version, `GitHub pre-release <tag> is never marked as the latest release.`
 - Lecture de vérification du mainteneur après une release finale : `gh api repos/FTurleque/nexus-context-engine/releases/latest --jq '{tag_name, immutable}'` rend le nouveau tag et `true`.
 
@@ -77,6 +77,7 @@ Non applicable : aucune donnée NEXUS ni migration SQLite.
 ## Transactions, concurrence et idempotence
 
 - La pose du badge est idempotente : relue avant écriture, et sautée si le tag est déjà Latest ; une relance du job `publish` reprend aussi une release publiée et immuable restée hors Latest (échec entre la publication et la pose).
+- La relance du job `publish` d'une version finale plus ancienne que la dernière publiée repose le badge Latest sur cette version, puis l'étape GHCR y repose le tag d'image `latest` : comportement accepté et documenté (voir « Décisions »).
 - Le job `publish` n'a qu'une instance par tag (`concurrency` `release-${{ github.ref }}`, `.github/workflows/release.yml:11-12`) ; deux releases finales concurrentes ne sont pas un cas du flux (un tag par SHA de `main`, GEN-0089).
 
 ## Sécurité et isolation
@@ -87,7 +88,7 @@ Non applicable : aucune donnée NEXUS ni migration SQLite.
 ## Erreurs et reprise
 
 - Code 79 : release publiée, non immuable, hors Latest ; reprise inchangée (activer le réglage, nouvelle version, `docs/developer/release-and-recovery.md:69-81`).
-- Code proposé 80 : release publiée et immuable mais hors Latest ; reprise par relance des jobs échoués du même run, qui repose le badge puis déplace le tag d'image.
+- Code 80 : release publiée et immuable mais hors Latest ; reprise par relance des jobs échoués du même run, qui repose le badge puis déplace le tag d'image.
 - Lecture du Latest courant en échec autre que 404 : traitée comme « aucun » puis tranchée par la relecture finale, seule fail-closed.
 
 ## Observabilité
@@ -108,17 +109,19 @@ Non applicable : deux appels `gh` de plus au plus par release.
 - [Décision] Corriger le pipeline, pas la documentation. Le critère de sortie du sprint 15 exige un comportement (« aucune version finale non immuable ne reçoit le badge Latest ») ; réécrire la doc en « le tag d'image latest n'a pas bougé » rendrait la page exacte mais laisserait le défaut, et le badge oriente les consommateurs vers une release dont les assets resteraient remplaçables si le réglage était désactivé.
 - [Décision] Poser le badge dans le script de publication, juste après le contrôle d'immuabilité, plutôt que dans l'étape GHCR de `release.yml` : le comportement reste testable avec le faux `gh`, le code 79 l'empêche par construction, et l'ordre badge puis tag d'image respecte « avant ou avec le déplacement GHCR » (action du constat). Un échec de l'étape GHCR après le badge laisse les deux pointeurs divergents jusqu'à la relance du job, qui est idempotente.
 - [Décision] `--latest=false` sur la publication (`gh release edit --draft=false --latest=false`) et pas seulement à la création : `make_latest` agit à la publication, et sa valeur par défaut `true` s'applique à la requête qui fait sortir du brouillon.
+- [Décision] Code de sortie dédié `80`, et non le code générique 70, quand la relecture qui suit `gh release edit "$TAG" --latest` ne désigne pas le tag comme Latest (décision du mainteneur du 2026-11-12) : l'échec se distingue d'une lecture impossible et appelle sa propre reprise (relance des jobs échoués du même run).
+- [Décision] La relance du job `publish` d'une version finale plus ancienne que la dernière publiée repose le badge Latest sur cette version, comme l'étape GHCR le fait pour le tag d'image `latest` (décision du mainteneur du 2026-11-12). Le comportement est symétrique pour les deux pointeurs, limité à une relance manuelle et documenté dans `docs/developer/release-and-recovery.md` (tâche 2.1) ; aucune comparaison SemVer, qui changerait aussi l'étape GHCR et sortirait du constat.
 - [Décision] Pas d'ADR : application de la décision existante de `SEC-0068` (publication immuable, `latest` déplacé en dernier), sans nouvelle option structurante (skill `nexus-adr`, `.claude/rules/documentation.md`).
 
 ## Risques / Compromis
 
 - [Risque] `gh release edit --draft=false --latest=false` n'est pas rejoué contre l'API réelle avant la prochaine release → première pré-version ou version finale après fusion : relire `gh api …/releases/latest` (tâche 3.1) ; la création `--latest=false` d'un brouillon est, elle, déjà éprouvée par `v0.2.0-rc.2`.
 - [Risque] Entre la publication et la pose du badge, la release précédente reste Latest pendant quelques secondes → voulu : aucune version non qualifiée par le contrôle n'est désignée.
-- [Risque] Relance d'une version finale plus ancienne → badge et tag d'image reviennent à cette version (voir la [Question] de la proposition).
+- [Compromis] Relance d'une version finale plus ancienne → badge et tag d'image reviennent à cette version ; comportement accepté et documenté dans la procédure de reprise (voir « Décisions »).
 
 ## Stratégie de vérification
 
-- `bash scripts/release/test-publish-github-release-assets.sh` : cas « finale immuable » (Latest = tag, `edit --draft=false --latest=false` puis `edit --latest` après la lecture `immutable` dans le journal), « finale non immuable » (79, Latest inchangé), « pré-version » (Latest inchangé), « reprise hors Latest » (seul `edit --latest`), « reprise déjà Latest » (aucun `edit`), « badge non posé » (code 80) ; mutation locale : retirer `--latest=false` de la publication fait échouer le cas 79.
+- `bash scripts/release/test-publish-github-release-assets.sh` : cas « finale immuable » (Latest = tag, `edit --draft=false --latest=false` puis `edit --latest` après la lecture `immutable` dans le journal), « finale non immuable » (79, Latest inchangé), « pré-version » (Latest inchangé), « reprise hors Latest » (seul `edit --latest`), « reprise déjà Latest » (aucun `edit`), « badge non posé » (code 80), « relance d'une version plus ancienne » (Latest reposé sur ce tag) ; mutation locale : retirer `--latest=false` de la publication fait échouer le cas 79.
 - `bash .claude/scripts/contracts.sh` (dont `scripts/release/test-final-audit-contracts.sh`).
 - Lecture `gh api repos/FTurleque/nexus-context-engine/releases/latest` après la prochaine release finale.
 - `openspec validate sprint-15-release-latest-apres-immuable --strict`.
@@ -133,4 +136,5 @@ Non applicable : deux appels `gh` de plus au plus par release.
 | `release-pipeline › Le badge Latest n'est posé qu'après le contrôle d'immuabilité` | Reprise d'une version finale publiée hors Latest | Transactions, concurrence et idempotence | 1.1, 1.2 | test non écrit |
 | `release-pipeline › Le badge Latest n'est posé qu'après le contrôle d'immuabilité` | Reprise d'une version finale déjà Latest | Transactions, concurrence et idempotence | 1.1, 1.2 | test non écrit |
 | `release-pipeline › Le badge Latest n'est posé qu'après le contrôle d'immuabilité` | Badge non posé | Contrats d'interface | 1.1, 1.2 | test non écrit |
+| `release-pipeline › Le badge Latest n'est posé qu'après le contrôle d'immuabilité` | Relance d'une version finale plus ancienne | Transactions, concurrence et idempotence | 1.1, 1.2, 2.1 | test non écrit |
 | `release-pipeline › Les releases publiées sont immuables` | Release immuable | Composants et responsabilités | 1.2 | `scripts/release/test-publish-github-release-assets.sh:291-297` à adapter (aucun upload ; `edit --latest` seul admis) |

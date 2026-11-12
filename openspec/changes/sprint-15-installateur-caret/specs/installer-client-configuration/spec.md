@@ -12,9 +12,9 @@ L'assistant d'installation SHALL accepter le caractère `^` dans `NEXUS_HOME`, l
 - **AND** `docker\.env` contient la ligne `NEXUS_REPOSITORY_BIND='C:/Users/a^b'`
 
 #### Scenario: NEXUS_HOME contenant un accent circonflexe lu par un lanceur natif
-- **GIVEN** un dossier d'installation dont le nom ne contient pas `^` et un `NEXUS_HOME` existant `…\a^b\.nexus`
-- **WHEN** un lanceur natif appelle `config\nexus-native.env.cmd`
-- **THEN** `NEXUS_HOME` vu par le lanceur désigne ce dossier caractère pour caractère
+- **GIVEN** un `NEXUS_HOME` existant `…\a^b\.nexus` écrit par l'assistant dans `config\nexus-native.env.cmd`
+- **WHEN** un lanceur natif charge `config\nexus-native.env.cmd`
+- **THEN** `NEXUS_HOME` vu par le programme lancé désigne ce dossier caractère pour caractère
 
 #### Scenario: Guillemet double toujours refusé
 - **GIVEN** le profil d'installation personnalisé et un `NEXUS_HOME` saisi qui contient `"`
@@ -40,3 +40,29 @@ Quand l'installation est lancée en mode silencieux avec `/SUPPRESSMSGBOXES`, ch
 - **GIVEN** une installation interactive et une valeur que la validation d'une page refuse
 - **WHEN** l'utilisateur valide cette page
 - **THEN** l'assistant affiche le message de refus et reste sur cette page
+
+### Requirement: Un lanceur natif charge sa configuration quel que soit le dossier d'installation
+Les lanceurs `nexus.cmd`, `nexus-mcp.cmd`, `nexus-assistant-clients.cmd` et `nexus-rest.cmd` SHALL charger `config\nexus-native.env.cmd` quel que soit leur dossier d'installation, `^` compris, et SHALL lancer leur programme depuis le répertoire courant de l'appelant. Si ce fichier existe mais que son dossier ne s'ouvre pas, le lanceur SHALL s'arrêter avec un message d'erreur et un code non nul, sans lancer le programme. Sans ce fichier, il SHALL garder ses défauts.
+
+#### Scenario: Dossier d'installation contenant un accent circonflexe
+- **GIVEN** un dossier d'installation `…\in^st` dont `config\nexus-native.env.cmd` pose `NEXUS_HOME` sur un dossier existant et `NEXUS_REST_PORT=9123`
+- **WHEN** un lanceur natif de ce dossier est démarré comme processus, console visible ou cachée
+- **THEN** le programme lancé voit `NEXUS_HOME` caractère pour caractère et `NEXUS_REST_PORT=9123`
+- **AND** la sortie d'erreur du lanceur ne contient aucun message de chemin introuvable
+
+#### Scenario: Répertoire courant de l'appelant conservé
+- **GIVEN** un dossier d'installation `…\in^st` avec sa configuration et un appelant dont le répertoire courant est `…\caller`
+- **WHEN** l'appelant démarre `nexus.cmd` avec un argument relatif `.`
+- **THEN** le programme lancé a pour répertoire courant `…\caller` et résout `.` vers ce dossier
+- **AND** le répertoire courant de l'appelant est inchangé après la fin du lanceur
+
+#### Scenario: Dossier de configuration impossible à ouvrir
+- **GIVEN** un dossier d'installation dont `config\nexus-native.env.cmd` existe mais dont le dossier `config` ne peut pas être ouvert par `pushd`
+- **WHEN** un lanceur natif est démarré
+- **THEN** le lanceur se termine avec le code 1 et un message sur la sortie d'erreur qui nomme `config\nexus-native.env.cmd`
+- **AND** le programme n'est pas lancé, aucune donnée n'est écrite sous `NEXUS_HOME`
+
+#### Scenario: Distribution portable sans configuration
+- **GIVEN** un dossier d'installation sans `config\nexus-native.env.cmd`, `^` compris dans son nom
+- **WHEN** `nexus-rest.cmd` est démarré
+- **THEN** le lanceur ne signale aucune erreur et le programme reçoit l'hôte `127.0.0.1` et le port `8080` par défaut

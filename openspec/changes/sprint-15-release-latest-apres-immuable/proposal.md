@@ -38,7 +38,7 @@ outillage (script de publication et son test) avec une part documentaire : profi
 - L'étape GHCR « Move latest only after immutable publication attestations and release assets » de `.github/workflows/release.yml` : inchangée ; elle s'exécute déjà après le script.
 - Le réglage « releases immuables » et les rulesets de tags : traités par `AUD-DEP-37` (sprint 14).
 - Le badge Latest actuellement porté par `v0.2.0` (non immuable, publiée avant le réglage) : aucun rattrapage ; il passera à la prochaine version finale immuable.
-- La reprise d'une version finale plus ancienne que la dernière publiée (voir « Questions ouvertes »).
+- Toute comparaison SemVer avant de poser le badge Latest ou le tag d'image `latest` : la relance d'une version finale plus ancienne repose les deux pointeurs sur elle (voir « Questions ouvertes »).
 
 ## Capabilities
 
@@ -58,5 +58,7 @@ outillage (script de publication et son test) avec une part documentaire : profi
 
 ## Questions ouvertes
 
-- [Question] Relancer le job `publish` d'une version finale plus ancienne que la dernière publiée (par exemple `v0.2.1` après `v0.2.2`) reposerait le badge Latest sur l'ancienne version, comme l'étape GHCR déplace déjà sans condition le tag d'image `latest`. [Proposition] Accepter ce comportement, symétrique pour les deux pointeurs et limité à une relance manuelle, et le signaler dans la procédure de reprise ; l'alternative (comparer les versions SemVer avant de poser l'un ou l'autre) change aussi l'étape GHCR et sort du constat.
-- [Question] Code de sortie quand le badge Latest ne désigne pas le tag après `gh release edit --latest`. [Proposition] Nouveau code `80`, distinct des codes existants (64, 65, 66, 69, 70, 73 à 79), plutôt que le code générique 70.
+Aucune. Les deux questions de la première rédaction sont tranchées par décision du mainteneur du 2026-11-12 :
+
+- [Décision] Relancer le job `publish` d'une version finale plus ancienne que la dernière publiée (par exemple `v0.2.1` après `v0.2.2`) repose le badge Latest sur cette version, comme l'étape GHCR repose déjà sans condition le tag d'image `latest`. Ce comportement, symétrique pour les deux pointeurs et limité à une relance manuelle, est accepté et documenté dans `docs/developer/release-and-recovery.md` (tâche 2.1). Aucune comparaison SemVer n'est faite avant de poser l'un ou l'autre.
+- [Décision] Quand la relecture qui suit `gh release edit "$TAG" --latest` ne désigne pas le tag comme Latest, le script sort avec le code dédié `80`, distinct des codes existants (64, 65, 66, 69, 70, 73 à 79), et non avec le code générique 70, avec un message explicite qui nomme le tag.
