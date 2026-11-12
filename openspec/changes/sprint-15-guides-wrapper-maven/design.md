@@ -36,7 +36,7 @@
 ## Composants et responsabilités
 
 - [Proposition] Nouveau bloc Python en fin de `scripts/release/test-operational-doc-contracts.sh` (après `:1133`), titré `# --- Sprint 15 : guides sous le wrapper Maven (AUD-QUA-30) ---`, terminé par `print("maven-wrapper-doc-contracts=PASS")`.
-- [Proposition] Périmètre `maven_doc_paths()` : `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md` et `docs/**/*.md`, hors `docs/architecture/adr/`, `docs/project/audits/`, `docs/project/history/`, `docs/project/rapport-supervisor/`. Un parcours par motif plutôt qu'une copie de `current_docs` : une nouvelle page est couverte sans édition du contrat.
+- [Proposition] Périmètre `maven_doc_paths()`, conforme à la décision du mainteneur (Décisions) : `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md` et `docs/**/*.md`, hors `docs/architecture/adr/`, `docs/project/audits/`, `docs/project/history/`, `docs/project/rapport-supervisor/`. Un parcours par motif plutôt qu'une copie de `current_docs` : une nouvelle page est couverte sans édition du contrat.
 - [Proposition] Grammaire, appliquée ligne à ligne avec suivi des blocs de code délimités par trois accents graves ou par `~~~` :
   - jeton `(?<![\w./\\-])mvn(?:\.cmd)?` : exclut `mvnw`, `.mvn/`, `./mvnw`, `.\mvnw.cmd` ;
   - position de commande : début de ligne (après une invite facultative `PS…>`, `$ ` ou `> `) ou après `&&`, `||`, `;`, `|`, `&`, `(` ;
@@ -47,7 +47,7 @@
 - [Proposition] Contrôle `exec:java` : sur une ligne déjà en position de commande Maven (wrapper compris, jeton `(?:\.[\\/])?mvnw(?:\.cmd)?` ou `mvn`), la présence de `exec:java` exige `-pl core` (ou `--projects core`).
 - [Proposition] Auto-test en mémoire, sur le modèle de `scripts/release/test-operational-doc-contracts.sh:1105-1131` : formes détectées (bloc `mvn clean install`, bloc `mvn.cmd -q package`, `cd core && mvn test`, `PS> mvn -v`, bloc indenté dans une liste, code en ligne `mvn clean install`, `.\mvnw.cmd -q exec:java …` sans `-pl core`) ; formes non signalées (`.\mvnw.cmd clean install`, `./mvnw -version`, « `mvn` hors wrapper », `mvn installé` dans un bloc `mermaid`, `mvn clean install` en prose hors code, `.mvn/wrapper/maven-wrapper.properties`, `.\mvnw.cmd -q -pl core exec:java …`).
 - [Proposition] Le bloc `AGENTS.md` (`:977-984`) reste en place : le retirer décalerait les références `chemin:ligne` sans gain ; `AGENTS.md` est en outre couvert par le nouveau bloc.
-- [Proposition] Remplacements dans les guides : `.\mvnw.cmd -version`, `.\mvnw.cmd clean install` (avec la forme `./mvnw` hors Windows, comme `AGENTS.md:11`), `.\mvnw.cmd -q -pl core exec:java "-Dexec.args=--help"`, `.\mvnw.cmd -q -pl core exec:java "-Dexec.args=project add …"`.
+- [Proposition] Remplacements dans les guides : `.\mvnw.cmd -version`, `.\mvnw.cmd clean install` (avec la forme `./mvnw` hors Windows, comme `AGENTS.md:11`), `.\mvnw.cmd -q -pl core exec:java "-Dexec.args=--help"`, `.\mvnw.cmd -q -pl core exec:java "-Dexec.args=project add …"` ; la contrainte O3 de `docs/architecture/arc42/02-contraintes.md:24` cite `./mvnw clean install` et `.\mvnw.cmd clean install` (Décisions).
 
 ## Modèle de domaine et invariants
 
@@ -119,7 +119,10 @@ Après les corrections du groupe 1, la grammaire ne signale que les trois except
 
 - [Décision] Rester sur une grammaire de motifs limitée au code (blocs et code en ligne), sans analyse de la prose : une commande prescrite s'écrit en code dans ces guides.
 - [Décision] Ignorer les blocs `mermaid`, qui décrivent un comportement et ne prescrivent pas de commande.
-- [Décision] Ne pas étendre `current_docs` mais parcourir `docs/**/*.md` avec des exclusions explicites, parce que trois pages fautives n'y figurent pas et que la liste vit dans un autre heredoc.
+- [Décision] Décision du mainteneur du 2026-11-12 : ne pas étendre `current_docs` mais parcourir `docs/**/*.md` avec des exclusions explicites (`docs/architecture/adr/`, `docs/project/audits/`, `docs/project/history/`, `docs/project/rapport-supervisor/`), plus `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md`, parce que trois pages fautives n'y figurent pas et que la liste vit dans un autre heredoc.
+- [Écart] L'action de l'audit demande d'« étendre le motif d'AGENTS.md (:977) à current_docs » (`docs/project/audits/2026-10-17/etat-2026-11-12.md:102`, `docs/project/audits/2026-10-17/findings.json:6013`) ; le contrat couvre un périmètre plus large, qui contient les pages de `current_docs` et les trois pages fautives absentes de cette liste.
+- [Décision] Garder les exemples de fixtures de `docs/developer/ci-and-supply-chain.md:500-502` tels quels, en exceptions listées de `MAVEN_DOC_EXCEPTIONS` (document et texte exact de ligne) : la page reste fidèle à l'auto-test de `DIRECT_MAVEN_CALL`, et une exception obsolète fait échouer le contrat.
+- [Décision] La contrainte O3 de `docs/architecture/arc42/02-contraintes.md:24` cite les deux formes du wrapper, `./mvnw clean install` et `.\mvnw.cmd clean install`, comme `AGENTS.md:11`.
 - [Décision] Ajouter le contrôle en fin de script (`.claude/rules/ci-and-scripts.md`) pour ne décaler aucune référence `chemin:ligne`.
 - Aucun ADR : le changement complète un contrat existant.
 
@@ -139,7 +142,7 @@ Après les corrections du groupe 1, la grammaire ne signale que les trois except
 | Exigence (`capacité › titre`) | Scénario | Conception ou diagramme | Tâche | Test ou preuve |
 |---|---|---|---|---|
 | `operational-documentation-contracts › Les guides courants n'appellent Maven que par le wrapper` | Commande Maven directe dans le guide de reproduction | Organigramme (C1, E1) | 1.1, 2.1 | test non écrit |
-| `operational-documentation-contracts › Les guides courants n'appellent Maven que par le wrapper` | Commande Maven directe en code en ligne | Organigramme (C2, E1) | 1.3, 2.1 | test non écrit |
+| `operational-documentation-contracts › Les guides courants n'appellent Maven que par le wrapper` | Commande Maven directe en code en ligne | Organigramme (C2, E1) | 1.3, 1.4, 2.1 | test non écrit |
 | `operational-documentation-contracts › Les guides courants n'appellent Maven que par le wrapper` | Forme de contournement | Composants (auto-test) | 2.1 | test non écrit |
 | `operational-documentation-contracts › Les guides courants n'appellent Maven que par le wrapper` | Wrapper vérifié | Composants (jeton) | 2.1 | test non écrit |
 | `operational-documentation-contracts › Les guides courants n'appellent Maven que par le wrapper` | Mention qui désigne Maven sans le prescrire | Organigramme (bloc mermaid), Décisions | 2.1 | test non écrit |
@@ -150,6 +153,4 @@ Après les corrections du groupe 1, la grammaire ne signale que les trois except
 
 ## Questions ouvertes
 
-- [Question] L'action de l'audit dit « étendre le motif à `current_docs` » ; le design parcourt `docs/**/*.md` avec exclusions (Décisions). Faut-il plutôt ajouter les trois pages manquantes à `current_docs` et y restreindre le contrôle ? Sans effet sur les scénarios, sauf le périmètre nommé dans l'exigence.
-- [Question] Garder `docs/developer/ci-and-supply-chain.md:500-502` en exceptions listées (proposé) ou réécrire ces exemples de fixtures pour qu'ils ne commencent pas par `mvn` en code en ligne ? La première option garde la page fidèle à l'auto-test de `DIRECT_MAVEN_CALL`.
-- [Question] La contrainte O3 de `docs/architecture/arc42/02-contraintes.md:24` doit-elle citer `./mvnw clean install` (forme de `AGENTS.md:11`) ou les deux formes `./mvnw` et `.\mvnw.cmd` ?
+Aucune.
