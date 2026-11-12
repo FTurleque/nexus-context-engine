@@ -10,7 +10,6 @@ on:
         type: string
   pull_request:
     branches:
-      - develop
       - main
     paths:
       - 'core/src/main/java/com/nexus/context/source/git/**'
@@ -22,7 +21,7 @@ on:
       - '.github/workflows/git-context-cache-qualification.yml'
   push:
     branches:
-      - develop
+      - main
     paths:
       - 'core/src/main/java/com/nexus/context/source/git/**'
       - 'core/src/main/java/com/nexus/application/NexusApplication.java'

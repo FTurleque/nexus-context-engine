@@ -6,7 +6,6 @@ name: Measurement tools
 on:
   pull_request:
     branches:
-      - develop
       - main
     paths:
       - '.github/workflows/measurement-tools.yml'

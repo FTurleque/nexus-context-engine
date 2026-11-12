@@ -5,11 +5,10 @@ Cette feuille de route décrit l'état architectural **courant** et les travaux 
 ## Stratégie de branches
 
 ```text
-develop = intégration et qualification
-main    = release
+main = intégration, qualification et release (tags v*)
 ```
 
-Toute promotion vers `main` doit partir d'un HEAD exact qualifié. Le contrat de protection de `develop` est décrit dans [`developer/branch-governance.md`](../../developer/branch-governance.md) et doit être appliqué dans les règles GitHub du repository.
+Toute PR entre sur `main` qualifiée sur son HEAD exact, et une release est un tag posé sur un SHA de `main` (GEN-0089). Le contrat de protection de `main` est décrit dans [`developer/branch-governance.md`](../../developer/branch-governance.md) et doit être appliqué dans les règles GitHub du repository.
 
 ## Baseline fonctionnelle NEXUS 0.2.1
 
@@ -39,7 +38,7 @@ NXA3 a établi les contrats suivants :
 - publication Docker build-once / publish-qualified-image ;
 - préflight GHCR fail-closed et reprise idempotente ;
 - V005 SQLite pour les invariants de plage ;
-- Dependabot ciblé sur `develop` ;
+- Dependabot ciblé sur `main` ;
 - documentation opérationnelle contrôlée par CI.
 
 ## Hardening intégré — NXA4
@@ -71,7 +70,7 @@ La campagne de consolidation ajoute :
 - mode optionnel `NEXUS_REQUIRE_PRIVATE_STORAGE=true` pour échouer fermé lorsque la confidentialité du stockage ne peut pas être démontrée ;
 - revalidation de l'identité filesystem avant/après ouverture dans le fallback `SafeFileIO` lorsque `SecureDirectoryStream` n'est pas disponible ;
 - circuit-breaker provider linéarisé contre les races timeout/start ;
-- qualification sémantique réelle Ollama (corpus réduit sur PR, complet sur `develop` après fusion, mensuelle et manuelle) avec runtime épinglé par SHA-256 et seuils de non-régression ;
+- qualification sémantique réelle Ollama (corpus réduit sur PR, complet sur `main` après fusion, mensuelle et manuelle) avec runtime épinglé par SHA-256 et seuils de non-régression ;
 - contrat explicite de non-adoption de `jdk.incubator.vector` tant qu'une nouvelle mesure same-runner ne démontre pas un bénéfice robuste.
 
 ## Qualification de scale
@@ -87,7 +86,7 @@ La recherche lexicale contient en plus un test de non-régression sur les requê
 
 ## Gouvernance effective
 
-NXA3-14 / #130 est satisfait : le ruleset GitHub actif protège `develop`, exige le passage par pull request, interdit force-push/suppression et impose les checks permanents approuvés. Toute modification repository-admin doit être suivie d'une revalidation API.
+Le ruleset GitHub actif `Protect main` protège `main`, impose le passage par pull request et le merge commit, interdit suppression/non-fast-forward et exige les checks permanents approuvés. Toute modification repository-admin doit être suivie d'une revalidation API.
 
 Le modèle de maintenance courant est **solo**. L'absence de revue humaine distincte du mainteneur et l'absence d'obligation de resynchroniser une PR avec sa base juste avant merge sont des choix explicites de ce modèle, pas des hardenings à poursuivre. Les audits doivent se concentrer sur les protections réellement applicables : exact-head, checks automatisés, PR obligatoire, interdiction des force-pushes/suppressions et qualification des artefacts.
 

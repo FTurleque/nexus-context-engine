@@ -22,7 +22,7 @@
 | O1 | Documentation rédigée en français ; identifiants de code en anglais | Imposée | `AGENTS.md` |
 | O2 | Toute décision architecturale durable doit faire l'objet d'un ADR au format Archgate ; aucun ADR accepté ne peut être réécrit rétroactivement | Imposée | GEN-0057, `docs/architecture/adr/README.md` |
 | O3 | Avant toute itération validée : `mvn clean install` puis `scripts/self-smoke.ps1` | Imposée | `AGENTS.md` |
-| O4 | Aucune CI ni merge dans `develop` avant validation explicite du propriétaire | Imposée | `docs/project/governance/ROADMAP.md` § Gate #16 |
+| O4 | Aucun merge dans `main` avant validation explicite du propriétaire | Imposée | `docs/project/governance/ROADMAP.md` § Gate #16 |
 
 ## 2.3 Contraintes réglementaires
 

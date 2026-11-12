@@ -12,6 +12,7 @@ files: ["docs/architecture/adr/**", ".archgate/**"]
 - **Date** : 2026-10-29
 - **Origine** : décision du propriétaire du 2026-10-29 (gouvernance Archgate alignée sur celle de MINOS, GEN-0073)
 - **Remplace** : [ADR-0000](archive/0000-adopter-les-adr-madr.md) (format MADR et gouvernance des ADR) et [ADR-0056](archive/0056-regrouper-le-registre-des-adr-dans-la-documentation-d-architecture.md) (emplacement du registre)
+- **Complété par** : [GEN-0089](GEN-0089-integrer-et-publier-depuis-la-seule-branche-main.md) (base de comparaison d'Archgate)
 - **Remplacé par** : —
 
 ## Context
@@ -86,6 +87,10 @@ Options considérées pour l'identifiant :
 - Hooks Claude Code : `.claude/hooks/guard-edit.ps1` demande confirmation avant de modifier un ADR existant du registre ; `.claude/hooks/post-edit-reminders.ps1` rappelle la mise à jour de l'index ; tests dans `.claude/hooks/tests/Test-Hooks.ps1`.
 - `archgate adr list` liste chaque ADR actif ; un ADR absent de la liste a un en-tête invalide.
 - Revue : un nouvel ADR part du gabarit, figure dans `README.md` et dans `docs/architecture/arc42/09-decisions.md` (skill `nexus-adr`, commande `/nx-adr`).
+
+## Écarts constatés
+
+Constat du 2026-11-12 (la décision ci-dessus est inchangée) : `main` est la seule branche d'intégration ([GEN-0089](GEN-0089-integrer-et-publier-depuis-la-seule-branche-main.md)) ; `.archgate/config.json` déclare la base `origin/main` (`baseBranch`), et non `origin/develop` comme l'énonce le point 1 de la décision.
 
 ## Mise en œuvre
 

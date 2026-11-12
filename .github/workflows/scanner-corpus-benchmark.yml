@@ -10,7 +10,6 @@ on:
         type: string
   pull_request:
     branches:
-      - develop
       - main
     paths:
       - 'core/src/main/java/com/nexus/index/scan/**'

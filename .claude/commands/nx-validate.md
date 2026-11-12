@@ -4,9 +4,9 @@ argument-hint: "[quick|full]"
 allowed-tools: Bash(git status *) Bash(git diff *) Bash(bash .claude/scripts/contracts.sh) Bash(true)
 ---
 
-Fichiers modifiés par rapport à `origin/develop` :
+Fichiers modifiés par rapport à `origin/main` :
 
-!`git diff --stat origin/develop...HEAD || true`
+!`git diff --stat origin/main...HEAD || true`
 
 !`git status --short || true`
 

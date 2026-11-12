@@ -4,19 +4,19 @@ Ce document décrit le contrat courant de qualification et de publication de NEX
 
 ## Branches et exact-head
 
-`develop` est la branche d'intégration. `main` est la branche de release. Une promotion vers `main` n'est autorisée qu'après qualification du **HEAD exact** candidat.
+`main` est la seule branche d'intégration et la source des releases ([GEN-0089](../architecture/adr/GEN-0089-integrer-et-publier-depuis-la-seule-branche-main.md)). Une PR n'entre sur `main` qu'après qualification de son **HEAD exact**, et une release est un tag `vX.Y.Z` posé sur un SHA de `main`.
 
 NEXUS CI et CodeQL checkoutent explicitement `github.event.pull_request.head.sha` sur pull request. CodeQL vérifie ensuite que `git rev-parse HEAD` correspond au SHA attendu.
 
-Le ruleset GitHub actif `Protect main & develop` protège effectivement `develop` et `main`, exige le passage par pull request, interdit suppression/non-fast-forward et impose les checks permanents approuvés. NXA3-14 / #130 est satisfait.
+Le ruleset GitHub actif `Protect main` protège `main`, exige le passage par pull request et le merge commit, interdit suppression/non-fast-forward et impose les checks permanents approuvés.
 
 NEXUS est actuellement maintenu par **un seul mainteneur**. La politique de merge repose donc sur la PR, le SHA candidat et les gates automatisés ; elle n'exige ni seconde approbation humaine ni resynchronisation stricte de la branche avec sa base juste avant merge. Les audits ne doivent pas traiter ces absences comme des hardenings tant que le modèle de maintenance n'est pas explicitement modifié.
 
-Les workflows versionnés conservent en plus une défense en profondeur sur les pushes directs `develop` : NEXUS CI, CodeQL et OSV écoutent directement la branche ; les gates Docker, benchmarks et Windows sont réutilisés par des callers dédiés avec leurs filtres de chemins.
+Les workflows versionnés qualifient aussi chaque push sur `main` : NEXUS CI, CodeQL et OSV écoutent directement la branche, Docker Distribution écoute ses chemins, et les benchmarks et l'installateur Windows sont réutilisés par des callers `main-push-*.yml` avec leurs filtres de chemins.
 
 ## NEXUS CI
 
-`.github/workflows/ci.yml` qualifie `develop` et `main` :
+`.github/workflows/ci.yml` qualifie les PR vers `main` et les pushes sur `main` :
 
 - Windows : Java 21.0.12 épinglé (Temurin `21.0.12+101.0.LTS`, version livrée), tests des hooks Claude Code et du contrat token REST, puis qualification locale `scripts/validate-phase-6.ps1` ; en CI (`CI` ou `GITHUB_ACTIONS` définie), ce script échoue si le Maven Wrapper vérifié échoue, sans repli sur le Maven du runner ;
 - Linux : Java 21, **Maven 3.10.0**, reactor complet, tests, distribution, JaCoCo, SBOM et notices ;
@@ -72,7 +72,7 @@ Les scripts actifs de `scripts/` importent `scripts/lib/NexusScript.psm1`, seul 
 - POM, wrapper Maven et configuration `.mvn/**` ;
 - scripts/distribution/packaging Windows.
 
-Une modification Java ordinaire ne peut donc plus contourner le smoke du ZIP self-contained et de l'installateur Windows avant intégration dans `develop`.
+Une modification Java ordinaire ne peut donc plus contourner le smoke du ZIP self-contained et de l'installateur Windows avant intégration dans `main`.
 
 Signature Authenticode (`AUD-DEP-21`, `AUD-SEC-06`, `AUD-DEP-03`) :
 
@@ -122,10 +122,10 @@ La borne Lucene de 128 termes est couverte par un test de non-régression du rea
 
 ### Qualification sémantique réelle
 
-`.github/workflows/semantic-search-qualification.yml` n'est pas exécuté sur chaque PR. Ses déclencheurs et ses corpus suivent [BE-0084](../architecture/adr/BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) :
+`.github/workflows/semantic-search-qualification.yml` n'est pas exécuté sur chaque PR. Ses déclencheurs et ses corpus suivent [BE-0090](../architecture/adr/BE-0090-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) :
 
-- sur une PR vers `develop`/`main`, lorsque le workflow, l'ancre d'intégrité ou le code/test sémantique concerné change : corpus réduit `pr` ;
-- sur un `push` vers `develop` qui touche ces mêmes chemins, donc après fusion : corpus complet `full`, groupé par SHA : un push ultérieur ne l'annule pas et un run en cours n'est jamais annulé ;
+- sur une PR vers `main`, lorsque le workflow, l'ancre d'intégrité ou le code/test sémantique concerné change : corpus réduit `pr` ;
+- sur un `push` vers `main` qui touche ces mêmes chemins, donc après fusion : corpus complet `full`, groupé par SHA : un push ultérieur ne l'annule pas et un run en cours n'est jamais annulé ;
 - manuellement, corpus au choix (`full` par défaut) ;
 - selon une planification mensuelle, sur `main` : corpus `full`.
 
@@ -248,7 +248,7 @@ L'exécution `aggregate-third-party-notices` de `license-maven-plugin` produit `
 
 ## Dependabot
 
-`.github/dependabot.yml` cible explicitement `develop` pour Maven, GitHub Actions et Docker. Une exception urgente vers `main` doit être explicite et qualifiée ; elle n'est jamais le chemin par défaut.
+`.github/dependabot.yml` cible explicitement `main` pour Maven, GitHub Actions et Docker ; `main` est la seule branche d'intégration.
 
 ## Politique d'échec
 
@@ -302,7 +302,7 @@ Cette section relie l'exécution des règles Archgate des ADR à la CI. Le conte
 
 ### Écarts et limites (adr-rule-enforcement)
 
-- **[Limite]** Le job n'est pas dans la liste des checks obligatoires de `develop` (réglage GitHub, [branch-governance.md](branch-governance.md)) : une violation rend la PR rouge sans bloquer techniquement l'intégration tant que le check n'y est pas ajouté.
+- **[Limite]** Le job n'est pas dans la liste des checks obligatoires de `main` (réglage GitHub, [branch-governance.md](branch-governance.md)) : une violation rend la PR rouge sans bloquer techniquement l'intégration tant que le check n'y est pas ajouté.
 - **[Limite]** Seul l'asset Linux x64 est ancré : `archgate check` en local reste à la charge du poste de développement, avec la version de son choix.
 - **[Limite]** `docs/architecture/adr/README.md` n'est pas un ADR : Archgate le signale (« unparsed-adr ») en avertissement, sans échec.
 
@@ -338,10 +338,10 @@ Cette section relie les exigences d'hygiène des workflows aux contrôles qui le
 
 **[Existant vérifié]** État des workflows pour les scénarios :
 
-- profil de benchmark : `REQUESTED: ${{ inputs.profile }}` en `env:` dans `scale-benchmark.yml:120`, `lucene-lifecycle-benchmark.yml:88`, `scanner-corpus-benchmark.yml:63`, puis refus si la valeur n'est ni `ci` ni `full` (`scale-benchmark.yml:125-128`, `lucene-lifecycle-benchmark.yml:93-96`, `scanner-corpus-benchmark.yml:68-71`) avant l'écriture de `value=` dans `GITHUB_OUTPUT` (`scale-benchmark.yml:129`, `lucene-lifecycle-benchmark.yml:97`, `scanner-corpus-benchmark.yml:72`) ; tous sous `.github/workflows/` ;
-- épinglage : `actions/checkout` n'a qu'une version (`# v7.0.1`) dans `.github/workflows/` ; les deux workflows réutilisables OSV sont épinglés sur `b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0` (`osv-scanner.yml:30`, `osv-scanner.yml:82`). Relevé du 2026-11-04 par `git ls-remote https://github.com/google/osv-scanner-action 'refs/tags/v2.7.0*'` : le tag annoté `v2.7.0` pointe l'objet `6ad84ce1ef2d4124ba333b221894c133c4a970ea`, et `v2.7.0^{}` (le commit) est `b1d267aea5211fa648d9d442fa64b90dbdcbdd36` ; l'épinglage est donc sur le SHA de commit, pas sur l'objet tag. La commande `upstream` refait cette comparaison pour chaque action externe ;
-- bornes de durée des quatre gates : `windows-gate` et `linux-reactor` à 45 minutes (`.github/workflows/ci.yml:26`, `:84`), `analyze` à 30 (`.github/workflows/codeql.yml:30`), `validate-release` à 10 (`.github/workflows/release.yml:19`) ; les jobs `uses:` de `release.yml` (par exemple `nexus-ci`, `.github/workflows/release.yml:49-52`) n'en déclarent pas et passent le contrôle (`check_timeouts`, test `"uses" in keys`) ;
-- images de runner : `scale-benchmark.yml:39` (`ubuntu-24.04`), `lucene-lifecycle-benchmark.yml:65` et `:67`, `git-context-cache-qualification.yml:59` et `:61` (`ubuntu-24.04`, `windows-2025`).
+- profil de benchmark : `REQUESTED: ${{ inputs.profile }}` en `env:` dans `scale-benchmark.yml:119`, `lucene-lifecycle-benchmark.yml:87`, `scanner-corpus-benchmark.yml:62`, puis refus si la valeur n'est ni `ci` ni `full` (`scale-benchmark.yml:124-127`, `lucene-lifecycle-benchmark.yml:92-95`, `scanner-corpus-benchmark.yml:67-70`) avant l'écriture de `value=` dans `GITHUB_OUTPUT` (`scale-benchmark.yml:128`, `lucene-lifecycle-benchmark.yml:96`, `scanner-corpus-benchmark.yml:71`) ; tous sous `.github/workflows/` ;
+- épinglage : `actions/checkout` n'a qu'une version (`# v7.0.1`) dans `.github/workflows/` ; les deux workflows réutilisables OSV sont épinglés sur `b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0` (`osv-scanner.yml:28`, `osv-scanner.yml:80`). Relevé du 2026-11-04 par `git ls-remote https://github.com/google/osv-scanner-action 'refs/tags/v2.7.0*'` : le tag annoté `v2.7.0` pointe l'objet `6ad84ce1ef2d4124ba333b221894c133c4a970ea`, et `v2.7.0^{}` (le commit) est `b1d267aea5211fa648d9d442fa64b90dbdcbdd36` ; l'épinglage est donc sur le SHA de commit, pas sur l'objet tag. La commande `upstream` refait cette comparaison pour chaque action externe ;
+- bornes de durée des quatre gates : `windows-gate` et `linux-reactor` à 45 minutes (`.github/workflows/ci.yml:24`, `:84`), `analyze` à 30 (`.github/workflows/codeql.yml:28`), `validate-release` à 10 (`.github/workflows/release.yml:19`) ; les jobs `uses:` de `release.yml` (par exemple `nexus-ci`, `.github/workflows/release.yml:49-52`) n'en déclarent pas et passent le contrôle (`check_timeouts`, test `"uses" in keys`) ;
+- images de runner : `scale-benchmark.yml:38` (`ubuntu-24.04`), `lucene-lifecycle-benchmark.yml:64` et `:67`, `git-context-cache-qualification.yml:58` et `:61` (`ubuntu-24.04`, `windows-2025`).
 
 ### Vues (ci-workflow-tooling)
 
@@ -441,7 +441,7 @@ Un même couple (dépôt, tag) n'est interrogé qu'une fois. Un échec de `git l
 
 ### Écarts et limites (ci-workflow-tooling)
 
-- **[Écart]** Périmètre « qualification de performance ». L'exigence cible les jobs de benchmark et de qualification de performance. Le job `real-ollama` de `semantic-search-qualification.yml` est une qualification dont les budgets (45 et 180 minutes) dépendent du débit CPU du runner (voir `semantic-search.md`, « Budget de temps de la qualification réelle »), mais il tourne sur `ubuntu-latest` (`.github/workflows/semantic-search-qualification.yml:61`) et n'est pas dans la liste du contrôle, qui ne contient que `semantic-diagnostics` pour ce workflow (`scripts/release/workflow_hygiene.py:75`). Le texte de la section « Hygiène des workflows » ci-dessus (images de runner) dit explicitement que les autres jobs restent sur `-latest`. Le périmètre de la spec n'est pas défini par une liste.
+- **[Écart]** Périmètre « qualification de performance ». L'exigence cible les jobs de benchmark et de qualification de performance. Le job `real-ollama` de `semantic-search-qualification.yml` est une qualification dont les budgets (45 et 180 minutes) dépendent du débit CPU du runner (voir `semantic-search.md`, « Budget de temps de la qualification réelle »), mais il tourne sur `ubuntu-latest` (`.github/workflows/semantic-search-qualification.yml:60`) et n'est pas dans la liste du contrôle, qui ne contient que `semantic-diagnostics` pour ce workflow (`scripts/release/workflow_hygiene.py:75`). Le texte de la section « Hygiène des workflows » ci-dessus (images de runner) dit explicitement que les autres jobs restent sur `-latest`. Le périmètre de la spec n'est pas défini par une liste.
 - **[Écart]** Forme du commentaire de version. L'exigence écrit `# vX.Y.Z` ; le contrôle accepte `vN`, `vN.N` et `vN.N.N` (`scripts/release/workflow_hygiene.py:47`, `VERSION_COMMENT`).
 - **Limite** Le contrôle `runners` est un dictionnaire fixe de workflows et de jobs (`scripts/release/workflow_hygiene.py:68-76`, `PINNED_RUNNER_JOBS`) : un nouveau job de benchmark sur `-latest` n'est pas vu tant qu'il n'y est pas ajouté. Il accepte aussi toute image `ubuntu-NN.NN`, `windows-NNNN` ou `macos-N` (`:77`, `VERSIONED_RUNNER`), pas seulement `ubuntu-24.04` et `windows-2025`.
 - **Limite** Une valeur de `runs-on` suivie d'un commentaire est rejetée par `runners`. Le contrôle `forms` reste une liste de formes connues : une forme YAML absente de cette liste (clé complexe `? …`, identifiant de job cité `"b":`, tag `!!str`, document multiple) n'est pas refusée ; un identifiant de job cité n'est pas lu par `jobs_of`, et ses clés sont rattachées au job précédent.
@@ -449,7 +449,7 @@ Un même couple (dépôt, tag) n'est interrogé qu'une fois. Un échec de `git l
 - **Limite** Le paramètre `script:` est reconnu quel que soit son parent, pas seulement sous `with:`.
 - **Limite** Les boucles de fixtures de `pins` et `runners`, et la fixture `timeout-missing`, vérifient le code de sortie 1 et un fragment du message ; elles n'assertent ni le nom du fichier ou de la ligne, ni le nom du job. Le message produit les contient. La fixture `timeout-missing-indent-4` asserte le fichier, la ligne et le job dans `test-operational-doc-contracts.sh`.
 - **Limite** Le workflow `action-pin-upstream.yml` dépend du réseau et n'est pas un check obligatoire : un SHA divergent sur une PR qui ne touche pas `.github/` n'est vu qu'au run hebdomadaire.
-- **Limite** Le contrôle `inputs` ne regarde que `inputs` : `${{ steps.profile.outputs.value }}` dans un bloc `run:` (`scale-benchmark.yml:140`, `scanner-corpus-benchmark.yml:81`, `lucene-lifecycle-benchmark.yml:108`) n'est pas signalé ; la valeur a été validée à l'étape précédente. Dans `git-context-cache-qualification.yml`, `BENCHMARK_PROFILE` (`:66`) est transmis entre guillemets (`:95`) mais n'est pas validé par une étape shell ; seul le rapport l'est après coup (`:124`, `:169`).
+- **Limite** Le contrôle `inputs` ne regarde que `inputs` : `${{ steps.profile.outputs.value }}` dans un bloc `run:` (`scale-benchmark.yml:139`, `scanner-corpus-benchmark.yml:80`, `lucene-lifecycle-benchmark.yml:107`) n'est pas signalé ; la valeur a été validée à l'étape précédente. Dans `git-context-cache-qualification.yml`, `BENCHMARK_PROFILE` (`:66`) est transmis entre guillemets (`:95`) mais n'est pas validé par une étape shell ; seul le rapport l'est après coup (`:124`, `:169`).
 - **Limite** Aucun test n'envoie une valeur hostile à un workflow : le scénario « Valeur hostile » repose sur l'absence d'interpolation (contrôle `inputs`) et sur la lecture de l'étape de validation, pas sur un run.
 
 ### Propositions et questions ouvertes (ci-workflow-tooling)
@@ -512,7 +512,7 @@ Ne sont pas signalés : `Invoke-Maven`, une ligne de commentaire, un message qui
 
 **[Existant vérifié]** Comportement de `Invoke-Maven` : le wrapper est `mvnw.cmd` sous Windows et `mvnw` ailleurs (`scripts/lib/NexusScript.psm1:13-20`) ; le wrapper est testé par `--version` (`:33`) ; en cas d'échec, `CI` ou `GITHUB_ACTIONS` non vide (`:9-11`) lève une exception sans repli (`:54-56`) ; hors CI un avertissement « Repli local » précède la recherche de `mvn.cmd` puis `mvn` (`:57-68`) ; la sélection est mémorisée par racine (`:90-92`) ; un code Maven non nul lève une exception dont `Data['ExitCode']` porte le code (`:95-102`).
 
-**[Existant vérifié]** Tests de `scripts/tests/Test-NexusScript.ps1`, sur des wrappers factices (aucun Maven réel) : wrapper présent (`:83-88`), wrapper en échec avec `CI` défini et un `mvn` factice dans le `PATH` (`:90-113`), code retour 3 propagé (`:115-135`), repli averti hors CI (`:137-154`), `Resolve-AbsolutePath` (`:156-163`). Ils tournent dans `Windows gate` sous PowerShell 7 puis Windows PowerShell 5.1 (`.github/workflows/ci.yml:48-54`) ; la version PowerShell 7 a été exécutée en local à cette rédaction (tous PASS).
+**[Existant vérifié]** Tests de `scripts/tests/Test-NexusScript.ps1`, sur des wrappers factices (aucun Maven réel) : wrapper présent (`:83-88`), wrapper en échec avec `CI` défini et un `mvn` factice dans le `PATH` (`:90-113`), code retour 3 propagé (`:115-135`), repli averti hors CI (`:137-154`), `Resolve-AbsolutePath` (`:156-163`). Ils tournent dans `Windows gate` sous PowerShell 7 puis Windows PowerShell 5.1 (`.github/workflows/ci.yml:46-52`) ; la version PowerShell 7 a été exécutée en local à cette rédaction (tous PASS).
 
 **[Existant vérifié]** Scripts d'itération : `validate-iteration-9`, `10`, `11`, `12`, `13`, `14`, `16` et `17` sont sous `scripts/archive/` ; aucun `validate-iteration-15.ps1` n'existe, et le contrat l'ignore (`scripts/release/test-operational-doc-contracts.sh:718-722`). `scripts/archive/README.md` les déclare non maintenus (contrat `:723`). La phrase « Les seuls points d'entrée de validation sont `scripts/validate-phase-6.ps1` … » est épinglée (`:724`) et présente à `docs/developer/ci-and-supply-chain.md:62`.
 
@@ -581,7 +581,7 @@ Cette section décrit ce que `scripts/release/test-operational-doc-contracts.sh`
 | [Existant vérifié] | `AGENTS.md` prescrit `./mvnw clean install` et ne contient aucune commande `mvn` hors wrapper. | `scripts/release/test-operational-doc-contracts.sh:976` |
 | [Existant vérifié] | L'étape 9 du self-smoke vérifie que le contexte construit sur le dépôt retient le `AGENTS.md` natif. | `scripts/self-smoke.ps1:165` |
 | [Existant vérifié] | La documentation courante nomme `quarkus.platform.version` et `mcp.sdk.version` du `pom.xml` ; le contrat lit ces propriétés, refuse leur valeur et tout littéral `Quarkus x.y.z` ou `SDK MCP x.y.z` dans les documents contrôlés. | `scripts/release/test-operational-doc-contracts.sh:29-49`, `scripts/release/test-operational-doc-contracts.sh:135-172` |
-| [Existant vérifié] | `docs/user/docker-installation.md` attribue les tags GHCR `<version>` et `latest` à `.github/workflows/release.yml` : le dernier workflow cité avant la liste des tags doit être celui-ci, et aucune phrase n'attribue une publication à `docker-distribution.yml`. Le même bloc refuse `docker push`, `ghcr.io`, `docker login`, `imagetools create` et `--push` dans `docker-distribution.yml` et `develop-push-docker-distribution.yml`, et réserve la permission `packages: write` à `release.yml` parmi `.github/workflows/` et `.github/actions/`. | `scripts/release/test-operational-doc-contracts.sh:920-964` |
+| [Existant vérifié] | `docs/user/docker-installation.md` attribue les tags GHCR `<version>` et `latest` à `.github/workflows/release.yml` : le dernier workflow cité avant la liste des tags doit être celui-ci, et aucune phrase n'attribue une publication à `docker-distribution.yml`. Le même bloc refuse `docker push`, `ghcr.io`, `docker login`, `imagetools create` et `--push` dans `docker-distribution.yml`, et réserve la permission `packages: write` à `release.yml` parmi `.github/workflows/` et `.github/actions/`. | `scripts/release/test-operational-doc-contracts.sh:920-964` |
 
 ### Écarts et limites (operational-documentation-contracts)
 

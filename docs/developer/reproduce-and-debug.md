@@ -569,7 +569,7 @@ Cette section complète la procédure de test ci-dessus par les propriétés de 
 **Port `IndexRepository`** (exigence `Le port IndexRepository ne porte pas de comportement non exécuté`)
 
 - **[Existant vérifié]** `core/src/main/java/com/nexus/index/IndexRepository.java` (66 lignes) ne contient aucune méthode `default` : la recherche du mot-clé `default` y est vide. Le commit `239af54c` (« make every IndexRepository projection abstract ») a rendu abstraites les neuf méthodes `default` jadis en repli mémoire, `SqliteIndexRepository` les implémentant toutes, et a adapté le fake du test de projection du voisinage, `core/src/test/java/com/nexus/ranking/graph/GraphNeighborhoodProjectionTest.java` (`delegatesOnlyToBoundedNeighborhoodProjection`, `:23`).
-- **[Existant vérifié]** Le rapport JaCoCo de `core` est produit par le reactor (`core/target/site/jacoco/jacoco.xml`, `.github/workflows/ci.yml:168`) mais les règles de `jacoco:check` de `core` sont au niveau `BUNDLE` et `PACKAGE` (`core/pom.xml:68-152` ; aucune règle `CLASS` ni mention d'`IndexRepository`).
+- **[Existant vérifié]** Le rapport JaCoCo de `core` est produit par le reactor (`core/target/site/jacoco/jacoco.xml`, `.github/workflows/ci.yml:166`) mais les règles de `jacoco:check` de `core` sont au niveau `BUNDLE` et `PACKAGE` (`core/pom.xml:68-152` ; aucune règle `CLASS` ni mention d'`IndexRepository`).
 
 **Tests opt-in** (exigence `Chaque test opt-in a un lanceur automatisé`)
 
@@ -577,7 +577,7 @@ Cette section complète la procédure de test ci-dessus par les propriétés de 
 
 | Test | Désactivé tant que | Lanceur (workflow, job) |
 |---|---|---|
-| `MinosRealIntegrationTest` | `nexus.minos.integration.replay` n'est pas `true` (`core/src/test/java/com/nexus/index/minos/MinosRealIntegrationTest.java:45`) | `measurement-tools.yml`, job `minos-replay` → `scripts/validate-minos-integration.ps1` (`.github/workflows/measurement-tools.yml:98`), qui passe `-Dtest=MinosRealIntegrationTest` et `-Dnexus.minos.integration.replay=true` (`scripts/validate-minos-integration.ps1:141-143`) |
+| `MinosRealIntegrationTest` | `nexus.minos.integration.replay` n'est pas `true` (`core/src/test/java/com/nexus/index/minos/MinosRealIntegrationTest.java:45`) | `measurement-tools.yml`, job `minos-replay` → `scripts/validate-minos-integration.ps1` (`.github/workflows/measurement-tools.yml:97`), qui passe `-Dtest=MinosRealIntegrationTest` et `-Dnexus.minos.integration.replay=true` (`scripts/validate-minos-integration.ps1:141-143`) |
 | `LargeScaleSearchBaselineTest` | aucun dépôt fourni par `nexus.baseline.projects` ou `nexus.baseline.input` (`core/src/test/java/com/nexus/search/LargeScaleSearchBaselineTest.java:49`) | `measurement-tools.yml`, job `index-baselines` (`:136`) |
 | `SmallDeltaIndexingBaselineTest` | `nexus.delta.source` vide (`core/src/test/java/com/nexus/index/SmallDeltaIndexingBaselineTest.java:44`) | idem |
 | `SemanticSearchBenchmarkTest` | `nexus.semantic.benchmark.enabled` (`core/src/test/java/com/nexus/search/semantic/SemanticSearchBenchmarkTest.java:33`) | `semantic-search-qualification.yml`, job `semantic-diagnostics`, `if: github.event_name == 'workflow_dispatch' && inputs.diagnostics` (job `:247`, condition `:251`, commande `:283`) |

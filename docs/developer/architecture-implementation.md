@@ -1,6 +1,6 @@
 # Architecture d'implémentation — NEXUS 0.2.1
 
-Ce chapitre décrit l'organisation concrète du code versionné après NXA3 + NXA4 et les remédiations d'audit du 7 septembre 2026. `develop` reçoit l'intégration qualifiée ; `main` reste la branche de release.
+Ce chapitre décrit l'organisation concrète du code versionné après NXA3 + NXA4 et les remédiations d'audit du 7 septembre 2026. `main` reçoit l'intégration qualifiée et porte les tags de release (GEN-0089).
 
 ## Repository
 
@@ -192,7 +192,7 @@ Le profil sémantique est `content-v8`, ce qui rend un index historique incompat
 
 `OllamaEmbeddingProvider` borne la réponse `/api/embed` avant matérialisation JSON et valide dimension/valeurs finies.
 
-`.github/workflows/semantic-search-qualification.yml` apporte la preuve réelle (corpus réduit sur PR, corpus complet sur `develop` après fusion, manuelle et mensuelle ; BE-0084) : téléchargement Ollama 0.33.3 depuis la release officielle, vérification SHA-256 repository-pinned, endpoint loopback, modèle `qwen3-embedding:0.6b`, `RealSemanticSearchBenchmarkTest`, floors de qualité/non-régression et artefacts de preuve.
+`.github/workflows/semantic-search-qualification.yml` apporte la preuve réelle (corpus réduit sur PR, corpus complet sur `main` après fusion, manuelle et mensuelle ; BE-0090) : téléchargement Ollama 0.33.3 depuis la release officielle, vérification SHA-256 repository-pinned, endpoint loopback, modèle `qwen3-embedding:0.6b`, `RealSemanticSearchBenchmarkTest`, floors de qualité/non-régression et artefacts de preuve.
 
 ## Git local
 
@@ -225,7 +225,7 @@ Docker Distribution construit une image unique, exécute smokes/Trivy/SBOM puis 
 
 ## Gouvernance
 
-Le ruleset GitHub actif `Protect main & develop` satisfait NXA3-14 / #130 pour `develop` : pull request obligatoire, suppression/non-fast-forward interdits et checks permanents requis.
+Le ruleset GitHub actif `Protect main` protège `main` : pull request obligatoire, merge commit seul, suppression/non-fast-forward interdits et checks permanents requis.
 
 NEXUS est actuellement maintenu par **une seule personne**. Le modèle solo n'exige ni seconde approbation humaine ni resynchronisation stricte avec la base juste avant merge ; ces absences ne sont pas des hardenings ouverts. La qualification repose sur le SHA candidat et les gates automatisés applicables. Voir [`branch-governance.md`](branch-governance.md).
 
@@ -407,7 +407,7 @@ Les deux échecs peuvent survenir ensemble. Une baseline non triée ou avec doub
 
 - [Écart] Le scénario « Nouveau cycle » demande que le test « nomme les packages du cycle ». Le message nomme l'arête (`com.nexus.b -> com.nexus.a`), pas le cycle complet (`CoreArchitectureTest#newCycleEdgeFailsTheBaselineAndNamesThePackages`).
 - [Écart] Le scénario « Contrôle des imports » (aucun `import com.nexus.context` dans `security`) n'a aucune règle ni test : le relevé a été fait à la main au HEAD. La première moitié de l'exigence (politique d'exposition hors de `security`) n'a pas non plus de garde automatisée. `test non écrit`.
-- [Écart] Le scénario « Build standard » (le test s'exécute et passe par `./mvnw -B -ntp -pl core test`) n'est pas démontré par un test : c'est le comportement de la suite par défaut, prouvé par le run CI du reactor (`NEXUS CI`, job « Linux reactor Maven build », `./mvnw -B clean install`, `.github/workflows/ci.yml:105-108`). Rien n'a été exécuté pour cette documentation.
+- [Écart] Le scénario « Build standard » (le test s'exécute et passe par `./mvnw -B -ntp -pl core test`) n'est pas démontré par un test : c'est le comportement de la suite par défaut, prouvé par le run CI du reactor (`NEXUS CI`, job « Linux reactor Maven build », `./mvnw -B clean install`, `.github/workflows/ci.yml:103-106`). Rien n'a été exécuté pour cette documentation.
 - [Écart] Le design du sprint 7 range `ResultLimitPolicy` et `SearchDocument` dans un même package feuille. Impossible : `SearchDocument` dépend de `CodeSymbol` et `FileCategory` (`index`), que `index` ne peut pas importer en retour. `SearchDocument` est donc dans `index` et `ResultLimitPolicy` dans `config`.
 - [Écart] Le design du sprint 7 laissait le package du port sémantique « à fixer » ; le port `SemanticIndexing` est dans `index`, avec `SearchDocument` qu'il manipule.
 - [Écart] La baseline n'a pas été supprimée : le fichier reste, vide, et la règle `cycles-baseline` l'applique ; la spec du changement dit « sans baseline de cycles tolérés ». Ajouter une ligne contredit [ARCH-0076](../architecture/adr/ARCH-0076-garder-un-coeur-java-sans-framework-acyclique-et-verifie.md) et se voit dans le diff.

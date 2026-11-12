@@ -34,8 +34,8 @@ Prérequis : PowerShell 7 (`pwsh`) dans le `PATH`.
 
 | Hook | Effet |
 |---|---|
-| `SessionStart` | résume branche, copie de travail et divergence `main`/`develop` (sans réseau) |
-| `PreToolUse` Bash/PowerShell | refuse force-push, push direct `develop`/`main`, `--no-verify`, `git rebase -i`, `mvn` hors wrapper, `gh pr merge` sans `--match-head-commit` ou en squash/rebase, `sed -i` sur `.cmd`/`.ps1` ; demande confirmation avant `git reset --hard`/`git clean -f` |
+| `SessionStart` | résume branche, copie de travail et retard sur `origin/main` (sans réseau) |
+| `PreToolUse` Bash/PowerShell | refuse force-push, push direct `main`, `--no-verify`, `git rebase -i`, `mvn` hors wrapper, `gh pr merge` sans `--match-head-commit` ou en squash/rebase, `sed -i` sur `.cmd`/`.ps1` ; demande confirmation avant `git reset --hard`/`git clean -f` |
 | `PreToolUse` Edit/Write | refuse l'écriture de secrets et la modification d'une migration publiée ; demande confirmation pour un ADR accepté, un audit daté ou une ancre d'intégrité |
 | `PostToolUse` Edit/Write | rappelle les effets de bord (contrats doc, versions de politique, ancres, index ADR) et détecte les fins de ligne LF dans les `.cmd` |
 

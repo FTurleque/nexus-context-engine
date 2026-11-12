@@ -69,7 +69,7 @@ Chaque `RankedCandidate` expose son score final, ses composantes, des raisons te
 ### Hors décision
 
 - Les principes repris du RepoMap d'Aider (importance des symboles dans un graphe, proximité des symboles mentionnés, propagation de pertinence, sélection sous budget) sont adaptés au modèle multi-source de NEXUS et validés par mesure ; ni l'algorithme ni le code d'Aider ne sont copiés.
-- La sélection sous budget des fragments relève de [BE-0072](BE-0072-construire-le-contextbundle-sous-budget-de-tokens.md) ; les signaux sémantique et de récence Git relèvent de [BE-0084](BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) et [BE-0070](BE-0070-integrer-le-contexte-git-local-borne-mis-en-cache-et-confine.md) ; la fédération multi-projets relève de [BE-0081](BE-0081-federer-la-recherche-locale-par-projet-sous-echeance-globale.md).
+- La sélection sous budget des fragments relève de [BE-0072](BE-0072-construire-le-contextbundle-sous-budget-de-tokens.md) ; les signaux sémantique et de récence Git relèvent de [BE-0090](BE-0090-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) et [BE-0070](BE-0070-integrer-le-contexte-git-local-borne-mis-en-cache-et-confine.md) ; la fédération multi-projets relève de [BE-0081](BE-0081-federer-la-recherche-locale-par-projet-sous-echeance-globale.md).
 
 ## Do's and Don'ts
 
@@ -155,5 +155,5 @@ Le déterminisme et l'explicabilité du ranking par défaut restent à préserve
 - [BE-0072](BE-0072-construire-le-contextbundle-sous-budget-de-tokens.md) — construction du `ContextBundle` sous budget.
 - [DATA-0073](DATA-0073-tenir-sqlite-pour-source-de-verite-et-lucene-pour-index-derive.md) — SQLite source de vérité, Lucene index dérivé.
 - [ARCH-0080](ARCH-0080-enrichir-l-intelligence-de-code-par-des-providers-et-importers-optionnels.md) — providers et importers d'intelligence de code.
-- [BE-0084](BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md), [BE-0070](BE-0070-integrer-le-contexte-git-local-borne-mis-en-cache-et-confine.md), [BE-0081](BE-0081-federer-la-recherche-locale-par-projet-sous-echeance-globale.md).
+- [BE-0090](BE-0090-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md), [BE-0070](BE-0070-integrer-le-contexte-git-local-borne-mis-en-cache-et-confine.md), [BE-0081](BE-0081-federer-la-recherche-locale-par-projet-sous-echeance-globale.md).
 - Aider Repository Map : https://aider.chat/docs/repomap.html

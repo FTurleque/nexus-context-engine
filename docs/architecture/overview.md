@@ -1,6 +1,6 @@
 # Architecture de NEXUS
 
-Ce document décrit l'architecture **courante versionnée** de NEXUS 0.2.1. `develop` est la branche d'intégration et `main` la branche de release ; les anciens résultats d'itération restent dans les documents historiques.
+Ce document décrit l'architecture **courante versionnée** de NEXUS 0.2.1. `main` est la seule branche d'intégration et la source des releases (GEN-0089) ; les anciens résultats d'itération restent dans les documents historiques.
 
 ## Mission
 
@@ -98,7 +98,7 @@ Les contenus à forte probabilité de secret sont redigés avant les embeddings 
 
 Ollama HTTP est accepté sans opt-in uniquement sur loopback. Une URI distante doit utiliser HTTPS ; HTTP distant exige `NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA=true`. Les credentials intégrés à l'URI sont refusés.
 
-La qualité du chemin sémantique réel est qualifiée sur les PR qui touchent la recherche sémantique (corpus réduit), sur `develop` après fusion (corpus complet), manuellement et chaque mois (BE-0084), avec un runtime Ollama épinglé et vérifié par SHA-256, `qwen3-embedding:0.6b`, le vrai corpus NEXUS et des seuils explicites de qualité/non-régression. Ce workflow reste séparé des PR ordinaires en raison du coût du runtime et du modèle, et la release ne l'exige pas.
+La qualité du chemin sémantique réel est qualifiée sur les PR qui touchent la recherche sémantique (corpus réduit), sur `main` après fusion (corpus complet), manuellement et chaque mois (BE-0090), avec un runtime Ollama épinglé et vérifié par SHA-256, `qwen3-embedding:0.6b`, le vrai corpus NEXUS et des seuils explicites de qualité/non-régression. Ce workflow reste séparé des PR ordinaires en raison du coût du runtime et du modèle, et la release ne l'exige pas.
 
 ## Code Intelligence externe
 
@@ -151,7 +151,7 @@ Le listener de management ne doit pas être publié par le reverse proxy.
 
 ## Supply-chain et release
 
-Les gates exact-head comprennent NEXUS CI, CodeQL, OSV, Docker Distribution, Scale Benchmark, Scanner Corpus Benchmark et Windows Installer selon leur périmètre ; SonarCloud fournit en plus le Quality Gate de PR. La qualification sémantique réelle Ollama tourne sur les PR sémantiques et sur `develop` après fusion, hors du chemin de release (BE-0084), et conserve ses propres preuves.
+Les gates exact-head comprennent NEXUS CI, CodeQL, OSV, Docker Distribution, Scale Benchmark, Scanner Corpus Benchmark et Windows Installer selon leur périmètre ; SonarCloud fournit en plus le Quality Gate de PR. La qualification sémantique réelle Ollama tourne sur les PR sémantiques et sur `main` après fusion, hors du chemin de release (BE-0090), et conserve ses propres preuves.
 
 Docker Distribution construit et qualifie une image unique. La release charge l'artefact qualifié, vérifie hash/ID et publie ce contenu exact.
 
@@ -159,7 +159,7 @@ Les tags version/SHA sont immuables. Le préflight GHCR échoue fermé sur les e
 
 ## Gouvernance
 
-Le ruleset GitHub actif `Protect main & develop` protège `develop` et `main`, impose le passage par pull request, interdit suppression/non-fast-forward et exige les checks permanents approuvés. NXA3-14 / #130 est satisfait.
+Le ruleset GitHub actif `Protect main` protège `main`, impose le passage par pull request et le merge commit, interdit suppression/non-fast-forward et exige les checks permanents approuvés.
 
 NEXUS est actuellement maintenu par **une seule personne**. L'absence d'une approbation humaine distincte du mainteneur et l'absence de resynchronisation stricte de la PR avec sa base ne constituent pas des findings sous ce modèle. La barrière de merge repose sur le HEAD candidat, les checks automatisés applicables, la PR obligatoire et les protections de branche. Voir [`developer/branch-governance.md`](../developer/branch-governance.md).
 

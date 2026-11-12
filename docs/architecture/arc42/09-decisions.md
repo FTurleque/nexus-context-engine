@@ -37,11 +37,12 @@ Cette section présente un index synthétique avec statut, date et relations de 
 | [BE-0081](../adr/BE-0081-federer-la-recherche-locale-par-projet-sous-echeance-globale.md) | Fédérer la recherche locale par projet, avec provenance conservée et une échéance globale sans parallélisme | Accepted | 2026-11-08 |
 | [SEC-0082](../adr/SEC-0082-borner-le-support-filesystem-et-la-traversee-des-chemins.md) | Borner le support aux filesystems locaux qualifiés et distinguer traversée stricte et compatibilité | Accepted | 2026-11-08 |
 | [BE-0083](../adr/BE-0083-appliquer-des-regles-d-exclusion-du-scan-de-type-gitignore.md) | Appliquer des règles d'exclusion du scan de type gitignore, avec des exclusions intégrées | Accepted | 2026-11-08 |
-| [BE-0084](../adr/BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) | Garder la recherche sémantique optionnelle et la qualifier en deux corpus, hors du chemin de release | Accepted | 2026-11-08 |
 | [ARCH-0085](../adr/ARCH-0085-stabiliser-le-contrat-de-sortie-publique-cli-rest-mcp.md) | Stabiliser le contrat de sortie publique dans la projection du cœur : CLI humaine ou JSON, codes de sortie, parité REST et MCP | Accepted | 2026-11-08 |
 | [ARCH-0086](../adr/ARCH-0086-resoudre-la-configuration-et-nexus-home-dans-la-composition-root.md) | Résoudre la configuration NEXUS, dont NEXUS_HOME, dans la composition root et l'injecter | Accepted | 2026-11-08 |
 | [BE-0087](../adr/BE-0087-projeter-le-voisinage-du-graphe-d-imports-a-la-demande.md) | Projeter le voisinage du graphe d'imports à la demande depuis SQLite, borné, sans matérialisation ni cache | Proposed | 2026-11-09 |
 | [DATA-0088](../adr/DATA-0088-conserver-le-journal-rollback-sqlite.md) | Conserver le journal rollback SQLite et ne réévaluer WAL que sur mesure répétée | Proposed | 2026-11-09 |
+| [GEN-0089](../adr/GEN-0089-integrer-et-publier-depuis-la-seule-branche-main.md) | Intégrer et publier depuis la seule branche main | Proposed | 2026-11-12 |
+| [BE-0090](../adr/BE-0090-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) | Garder la recherche sémantique optionnelle et la qualifier en deux corpus, hors du chemin de release | Proposed | 2026-11-12 |
 | [ADR-0000](../adr/archive/0000-adopter-les-adr-madr.md) | Adopter MADR comme format et définir la gouvernance des ADR | Superseded (GEN-0057) | 2026-07-19 |
 | [ARCH-0001](../adr/archive/ARCH-0001-positionner-nexus-comme-moteur-intelligence-contexte.md) | Positionner NEXUS comme moteur d'intelligence de contexte indépendant des modèles | Superseded (ARCH-0077) | 2026-07-19 |
 | [ARCH-0003](../adr/archive/ARCH-0003-conserver-un-coeur-java-sans-framework-applicatif.md) | Conserver un cœur Java sans framework applicatif obligatoire | Superseded (ARCH-0076) | 2026-07-19 |
@@ -100,6 +101,7 @@ Cette section présente un index synthétique avec statut, date et relations de 
 | [ARCH-0066](../adr/archive/ARCH-0066-resoudre-la-configuration-dans-la-composition-root.md) | Résoudre la configuration NEXUS dans la composition root et l'injecter | Superseded (ARCH-0086) | 2026-11-07 |
 | [BE-0067](../adr/archive/BE-0067-plafonner-la-decouverte-du-depot-git-a-la-racine-du-projet.md) | Plafonner la découverte du dépôt Git à la racine du projet, sauf dépôt parent de l'utilisateur courant | Superseded (BE-0070) | 2026-11-07 |
 | [DATA-0069](../adr/archive/DATA-0069-dimensionner-le-cache-de-pages-sqlite-des-connexions.md) | Dimensionner le cache de pages SQLite des connexions | Reclassé | 2026-11-08 |
+| [BE-0084](../adr/archive/BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) | Garder la recherche sémantique optionnelle et la qualifier en deux corpus, hors du chemin de release | Superseded (BE-0090) | 2026-11-08 |
 
 ## Regroupements thématiques
 
@@ -116,7 +118,7 @@ migrations, SHA-256, identité repository, règles d'exclusion du scan.
 
 ### Recherche, ranking et contexte
 
-BE-0071, BE-0087, BE-0072, BE-0084 — recherche de candidats et score composé, voisinage du graphe
+BE-0071, BE-0087, BE-0072, BE-0090 — recherche de candidats et score composé, voisinage du graphe
 d'imports projeté à la demande, ContextBundle sous budget, recherche sémantique optionnelle et sa
 qualification.
 
@@ -143,3 +145,4 @@ l'environnement protégé `release`.
 ### Gouvernance
 
 GEN-0057 — registre des ADR au format Archgate (remplace ADR-0000 et ADR-0056, archivés).
+GEN-0089 — intégration et release depuis la seule branche `main`.

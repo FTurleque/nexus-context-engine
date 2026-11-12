@@ -163,10 +163,10 @@ Phase 6 implémente le batching. Les mesures historiques restent une référence
 
 `.github/workflows/semantic-search-qualification.yml` qualifie le chemin complet **runtime Ollama → modèle réel → embeddings → index Lucene sémantique → ranking**.
 
-Le workflow n'est pas exécuté sur les PR sans rapport avec le sémantique. Ses déclencheurs suivent [BE-0084](../architecture/adr/BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) :
+Le workflow n'est pas exécuté sur les PR sans rapport avec le sémantique. Ses déclencheurs suivent [BE-0090](../architecture/adr/BE-0090-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) :
 
-- une PR vers `develop`/`main` qui modifie le workflow, l'ancre Ollama ou le code/test sémantique ciblé exécute le corpus réduit `pr` ;
-- un `push` vers `develop` qui touche ces mêmes chemins, c'est-à-dire la fusion d'une telle PR, exécute le corpus complet `full` sur le SHA de `develop` ; le groupe de concurrence est ce SHA, donc un push ultérieur n'annule pas ce run, et un run en cours n'est jamais annulé (seul un run en attente sur le même SHA peut être remplacé) ;
+- une PR vers `main` qui modifie le workflow, l'ancre Ollama ou le code/test sémantique ciblé exécute le corpus réduit `pr` ;
+- un `push` vers `main` qui touche ces mêmes chemins, c'est-à-dire la fusion d'une telle PR, exécute le corpus complet `full` sur le SHA de `main` ; le groupe de concurrence est ce SHA, donc un push ultérieur n'annule pas ce run, et un run en cours n'est jamais annulé (seul un run en attente sur le même SHA peut être remplacé) ;
 - `workflow_dispatch` choisit le corpus (`full` par défaut) ; la planification mensuelle exécute `full` sur `main`.
 
 Le corpus `pr` est déclaré dans `RealSemanticBenchmarkCorpus` (test de `core`) : `docs/developer/`, ADR `BE-*` et `DATA-*`, classes de premier niveau des paquets `com.nexus.context` et `com.nexus.search` de `core`, paquet `com.nexus.context.source.git`, sources de `adapters/mcp-java`. Il est copié dans un répertoire temporaire avant indexation et contient chaque chemin jugé pertinent par les requêtes ; `RealSemanticBenchmarkCorpusTest` vérifie cette inclusion sur le dépôt à chaque build. Les seuils sont les mêmes pour les deux corpus.
@@ -213,7 +213,7 @@ durée du job      1 h 00 à 2 h 01 réussis ; 2 h 00 atteint après 318/324 req
 
 La variabilité provient du CPU alloué par GitHub et non du code NEXUS : le nombre de requêtes et de tokens est identique d'un run à l'autre pour un même corpus, et le temps Java entre deux requêtes est négligeable.
 
-Une calibration ABBA sur le même runner (EPYC 7763, 12 documents de 12 000 caractères) a comparé 2 threads llama.cpp (défaut Ollama : cœurs physiques) et 4 threads (`LLAMA_ARG_THREADS=4` ou option `num_thread`) : 383,1 s contre 370,9 s, soit **−3,2 %** seulement. L'hyper-threading n'apporte presque rien à ce calcul vectoriel saturé ; le workflow conserve donc la configuration par défaut d'Ollama. Mettre le modèle en cache est sans intérêt (pull ≈ 5 s). Réutiliser des vecteurs d'un run précédent affaiblirait la preuve (transport d'embeddings non exercé) et n'est pas retenu. Le corpus réduit `pr` a moins de distracteurs : il donne un verdict rapide sur PR, et le corpus complet reste la mesure de référence, sur `develop` après fusion.
+Une calibration ABBA sur le même runner (EPYC 7763, 12 documents de 12 000 caractères) a comparé 2 threads llama.cpp (défaut Ollama : cœurs physiques) et 4 threads (`LLAMA_ARG_THREADS=4` ou option `num_thread`) : 383,1 s contre 370,9 s, soit **−3,2 %** seulement. L'hyper-threading n'apporte presque rien à ce calcul vectoriel saturé ; le workflow conserve donc la configuration par défaut d'Ollama. Mettre le modèle en cache est sans intérêt (pull ≈ 5 s). Réutiliser des vecteurs d'un run précédent affaiblirait la preuve (transport d'embeddings non exercé) et n'est pas retenu. Le corpus réduit `pr` a moins de distracteurs : il donne un verdict rapide sur PR, et le corpus complet reste la mesure de référence, sur `main` après fusion.
 
 Le budget du corpus `full` est donc fixé à **180 minutes** : le runner le plus lent observé exige environ 2 h 05 de bout en bout, et 180 minutes laissent environ 45 % de marge pour la croissance du corpus.
 
@@ -223,10 +223,10 @@ Si `throughput.json` montre un corpus ou un débit qui rapproche la durée proje
 
 ### Qualification réelle et release
 
-La release n'exige pas la qualification sémantique réelle ([BE-0084](../architecture/adr/BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md), décision issue de BE-0084) : `release.yml` ne la place pas dans les `needs` du job `publish`. La recherche sémantique est désactivée par défaut (BE-0084). La preuve de qualité d'une promotion `develop` → `main` est le dernier run `full` réussi sur `develop`, à consulter avant la promotion :
+La release n'exige pas la qualification sémantique réelle ([BE-0090](../architecture/adr/BE-0090-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md)) : `release.yml` ne la place pas dans les `needs` du job `publish`. La recherche sémantique est désactivée par défaut (BE-0090). La preuve de qualité d'une release est le dernier run `full` réussi sur `main`, à consulter avant de poser le tag :
 
 ```bash
-gh run list -w semantic-search-qualification.yml --branch develop
+gh run list -w semantic-search-qualification.yml --branch main
 ```
 
 ## Correctness
@@ -237,7 +237,7 @@ Le mode sémantique respecte les mêmes gates `READY` que le lexical. Si une ind
 
 Spec : [`openspec/specs/semantic-search-qualification/spec.md`](../../openspec/specs/semantic-search-qualification/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md).
 
-Cette section relie les exigences de la spec au workflow, au test de corpus et aux contrats qui les portent. Elle ne modifie ni les seuils, ni les bornes, ni la décision [BE-0084](../architecture/adr/BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) ; les valeurs numériques citées sont celles relues dans le workflow, pas de nouvelles mesures.
+Cette section relie les exigences de la spec au workflow, au test de corpus et aux contrats qui les portent. Elle ne modifie ni les seuils, ni les bornes, ni la décision [BE-0090](../architecture/adr/BE-0090-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) ; les valeurs numériques citées sont celles relues dans le workflow, pas de nouvelles mesures.
 
 ### Comportement existant vérifié
 
@@ -245,19 +245,19 @@ Cette section relie les exigences de la spec au workflow, au test de corpus et a
 
 | Événement | Condition | Source |
 |---|---|---|
-| `pull_request` | branches `develop` et `main`, filtre `paths` de cinq motifs (le workflow, l'action `ollama-embedding-runtime`, `config/tool-integrity.properties`, `core/src/main/java/com/nexus/search/semantic/**`, `core/src/test/java/com/nexus/search/semantic/RealSemantic*.java`) | `.github/workflows/semantic-search-qualification.yml:7-16` |
-| `push` | branche `develop`, mêmes cinq motifs | `.github/workflows/semantic-search-qualification.yml:17-25` |
-| `workflow_dispatch` | input `corpus` (`full` par défaut, ou `pr`), input booléen `diagnostics` | `.github/workflows/semantic-search-qualification.yml:26-38` |
+| `pull_request` | branche `main`, filtre `paths` de cinq motifs (le workflow, l'action `ollama-embedding-runtime`, `config/tool-integrity.properties`, `core/src/main/java/com/nexus/search/semantic/**`, `core/src/test/java/com/nexus/search/semantic/RealSemantic*.java`) | `.github/workflows/semantic-search-qualification.yml:7-15` |
+| `push` | branche `main`, mêmes cinq motifs | `.github/workflows/semantic-search-qualification.yml:16-24` |
+| `workflow_dispatch` | input `corpus` (`full` par défaut, ou `pr`), input booléen `diagnostics` | `.github/workflows/semantic-search-qualification.yml:25-37` |
 | `schedule` | `17 3 3 * *` (mensuel) ; le commentaire d'en-tête le dit exécuté sur `main` | `.github/workflows/semantic-search-qualification.yml:3-5`, `:39-40` |
 
 **[Existant vérifié]** Ce que le job `real-ollama` fixe selon l'événement :
 
-- corpus : `pr` sur `pull_request`, sinon `inputs.corpus`, sinon `full` (`.github/workflows/semantic-search-qualification.yml:70`) ;
-- `timeout-minutes` : 45 sur `pull_request`, 180 sinon ; l'expression ne regarde que `github.event_name`, donc un `workflow_dispatch` avec `corpus=pr` a aussi 180 (`.github/workflows/semantic-search-qualification.yml:67`) ;
-- SHA qualifié : `github.event.pull_request.head.sha` sur PR, `github.sha` sinon (`.github/workflows/semantic-search-qualification.yml:69`), vérifié par `git rev-parse HEAD` après checkout (`.github/workflows/semantic-search-qualification.yml:79-87`) ;
-- concurrence : groupe `pr-<numéro>` avec annulation sur PR, groupe `github.sha` sans annulation sinon (`.github/workflows/semantic-search-qualification.yml:54-56`). Un run en attente du même SHA peut être remplacé (commentaire `:52-53`) ; un run en cours n'est jamais annulé hors PR.
+- corpus : `pr` sur `pull_request`, sinon `inputs.corpus`, sinon `full` (`.github/workflows/semantic-search-qualification.yml:69`) ;
+- `timeout-minutes` : 45 sur `pull_request`, 180 sinon ; l'expression ne regarde que `github.event_name`, donc un `workflow_dispatch` avec `corpus=pr` a aussi 180 (`.github/workflows/semantic-search-qualification.yml:66`) ;
+- SHA qualifié : `github.event.pull_request.head.sha` sur PR, `github.sha` sinon (`.github/workflows/semantic-search-qualification.yml:68`), vérifié par `git rev-parse HEAD` après checkout (`.github/workflows/semantic-search-qualification.yml:78-86`) ;
+- concurrence : groupe `pr-<numéro>` avec annulation sur PR, groupe `github.sha` sans annulation sinon (`.github/workflows/semantic-search-qualification.yml:53-55`). Un run en attente du même SHA peut être remplacé (commentaire `:52-53`) ; un run en cours n'est jamais annulé hors PR.
 
-**[Existant vérifié]** Contrôle du rapport (étape `Enforce semantic quality floor`, `.github/workflows/semantic-search-qualification.yml:121-177`), identique pour les deux corpus : `snapshotCommit` égal au SHA attendu (`:133-135`), `corpus` égal à `SEMANTIC_CORPUS` (`:136-137`), `modelId` attendu (`:138-139`), endpoint loopback (`:140-141`), au moins 6 requêtes (`:142-143`), index sémantique non vide (`:147-148`), seuils `recallAt3` 0,25, `hitAt3` 0,33, `mrrAt3` 0,20 (`:150-158`), et aucune baisse de plus de 0,10 face au baseline lexical (`:160-166`). Le rapport est écrit par `RealSemanticSearchBenchmarkTest` (`core/src/test/java/com/nexus/search/semantic/RealSemanticSearchBenchmarkTest.java:79`, propriété `nexus.semantic.realBenchmark.commit` passée à `.github/workflows/semantic-search-qualification.yml:112`). Le rapport, les `.txt` et les `.log` sont téléversés avec `if: always()` et `retention-days: 90` (`.github/workflows/semantic-search-qualification.yml:235-245`).
+**[Existant vérifié]** Contrôle du rapport (étape `Enforce semantic quality floor`, `.github/workflows/semantic-search-qualification.yml:120-176`), identique pour les deux corpus : `snapshotCommit` égal au SHA attendu (`:133-135`), `corpus` égal à `SEMANTIC_CORPUS` (`:136-137`), `modelId` attendu (`:138-139`), endpoint loopback (`:140-141`), au moins 6 requêtes (`:142-143`), index sémantique non vide (`:147-148`), seuils `recallAt3` 0,25, `hitAt3` 0,33, `mrrAt3` 0,20 (`:150-158`), et aucune baisse de plus de 0,10 face au baseline lexical (`:160-166`). Le rapport est écrit par `RealSemanticSearchBenchmarkTest` (`core/src/test/java/com/nexus/search/semantic/RealSemanticSearchBenchmarkTest.java:79`, propriété `nexus.semantic.realBenchmark.commit` passée à `.github/workflows/semantic-search-qualification.yml:111`). Le rapport, les `.txt` et les `.log` sont téléversés avec `if: always()` et `retention-days: 90` (`.github/workflows/semantic-search-qualification.yml:234-244`).
 
 **[Existant vérifié]** Le corpus `pr` est déclaré dans `RealSemanticBenchmarkCorpus` : sept tranches (`docs/developer/**`, ADR `BE-*.md` et `DATA-*.md`, classes de premier niveau de `com.nexus.context` et de `com.nexus.search`, `com.nexus.context.source.git`, `adapters/mcp-java/src/main`) (`core/src/test/java/com/nexus/search/semantic/RealSemanticBenchmarkCorpus.java:33-40`). La copie du corpus refuse un chemin pertinent absent (`:147-153`). Le paquet `com.nexus.search.semantic` lui-même n'est dans aucune tranche : seuls les `*.java` de premier niveau de `com.nexus.search` y sont.
 
@@ -267,9 +267,9 @@ Cette section relie les exigences de la spec au workflow, au test de corpus et a
 
 | Élément | Où | Source |
 |---|---|---|
-| Forme du workflow (déclencheurs, `NEXUS_HEAD_SHA`, borne 45/180, sélection du corpus, concurrence, absence dans les `needs` de `publish`) | local et CI, par `bash .claude/scripts/contracts.sh` et le job `Linux reactor Maven build` | `scripts/release/test-final-audit-contracts.sh:139-211`, `.github/workflows/ci.yml:93-97` |
+| Forme du workflow (déclencheurs, `NEXUS_HEAD_SHA`, borne 45/180, sélection du corpus, concurrence, absence dans les `needs` de `publish`) | local et CI, par `bash .claude/scripts/contracts.sh` et le job `Linux reactor Maven build` | `scripts/release/test-final-audit-contracts.sh:139-211`, `.github/workflows/ci.yml:91-95` |
 | Tranches du corpus `pr` et présence des chemins pertinents | local et CI, dans le build normal de `core` | `core/src/test/java/com/nexus/search/semantic/RealSemanticBenchmarkCorpusTest.java#repositoryPrCorpusContainsEveryRelevantPath`, `#materializationFailsWhenARelevantPathLeavesThePrCorpus`, `#corpusDefaultsToFullAndAcceptsOnlyFullOrPr` |
-| Run Ollama réel, seuils, `snapshotCommit` du rapport, durée réelle | **preuve CI seulement** (runtime Ollama et modèle téléchargés ; `RealSemanticSearchBenchmarkTest` est désactivé sans `nexus.semantic.realBenchmark.enabled=true`, `core/src/test/java/com/nexus/search/semantic/RealSemanticSearchBenchmarkTest.java:33`) | `.github/workflows/semantic-search-qualification.yml:103-177` |
+| Run Ollama réel, seuils, `snapshotCommit` du rapport, durée réelle | **preuve CI seulement** (runtime Ollama et modèle téléchargés ; `RealSemanticSearchBenchmarkTest` est désactivé sans `nexus.semantic.realBenchmark.enabled=true`, `core/src/test/java/com/nexus/search/semantic/RealSemanticSearchBenchmarkTest.java:33`) | `.github/workflows/semantic-search-qualification.yml:102-176` |
 
 ### Vues
 
@@ -278,8 +278,8 @@ Cette section relie les exigences de la spec au workflow, au test de corpus et a
 ```mermaid
 flowchart TD
     subgraph Declencheurs["Déclencheurs de semantic-search-qualification.yml"]
-        PR["pull_request vers develop ou main, filtre paths"]
-        PUSH["push sur develop, mêmes paths"]
+        PR["pull_request vers main, filtre paths"]
+        PUSH["push sur main, mêmes paths"]
         DISP["workflow_dispatch, input corpus, défaut full"]
         CRON["schedule 17 3 3 * *, mensuel"]
     end
@@ -299,12 +299,12 @@ flowchart TD
     SEUILS -- non --> ROUGE["job rouge, artefacts conservés 90 jours"]
 
     REL["tag vX.Y.Z"] --> PUB["release.yml: job publish, needs sans qualification sémantique"]
-    PUB -. "preuve de qualité consultée à la main:, dernier run full réussi sur develop" .-> VERT
+    PUB -. "preuve de qualité consultée à la main:, dernier run full réussi sur main" .-> VERT
 ```
 
-Le schéma répond à la question « où le corpus `pr` s'arrête-t-il et où commence le `full` ». Les alternatives d'erreur sont l'échec du seuil (branche rouge) et, non représenté, le dépassement du `timeout-minutes` : le job est alors annulé par GitHub. Le trait pointillé est la règle de release : le workflow de release ne dépend d'aucun run sémantique, c'est le mainteneur qui consulte `gh run list -w semantic-search-qualification.yml --branch develop` (cette page, « Qualification réelle et release »). `schedule` suit le commentaire d'en-tête du workflow (branche `main`) ; la branche par défaut du dépôt n'est pas relue ici.
+Le schéma répond à la question « où le corpus `pr` s'arrête-t-il et où commence le `full` ». Les alternatives d'erreur sont l'échec du seuil (branche rouge) et, non représenté, le dépassement du `timeout-minutes` : le job est alors annulé par GitHub. Le trait pointillé est la règle de release : le workflow de release ne dépend d'aucun run sémantique, c'est le mainteneur qui consulte `gh run list -w semantic-search-qualification.yml --branch main` (cette page, « Qualification réelle et release »). `schedule` suit le commentaire d'en-tête du workflow (branche `main`) ; la branche par défaut du dépôt n'est pas relue ici.
 
-Exigences : `semantic-search-qualification › Une PR exécute un corpus réduit borné`, `semantic-search-qualification › Le corpus complet s'exécute sur develop`, `semantic-search-qualification › Le rôle de la qualification dans la release est explicite`.
+Exigences : `semantic-search-qualification › Une PR exécute un corpus réduit borné`, `semantic-search-qualification › Le corpus complet s'exécute sur main`, `semantic-search-qualification › Le rôle de la qualification dans la release est explicite`.
 
 #### Vue organigramme — Dans quel ordre un rapport est-il refusé par l'étape de contrôle ? (existant)
 
@@ -329,21 +329,20 @@ flowchart TD
     C8 -- oui --> OK["JSON résumé imprimé, étape verte"]
 ```
 
-Le contrôle est le même quel que soit le corpus : aucune branche ne lit `SEMANTIC_CORPUS` pour choisir un seuil (`.github/workflows/semantic-search-qualification.yml:150-166`). La première garde (`snapshotCommit`) est celle du scénario « Rapport rattaché au SHA ».
+Le contrôle est le même quel que soit le corpus : aucune branche ne lit `SEMANTIC_CORPUS` pour choisir un seuil (`.github/workflows/semantic-search-qualification.yml:149-165`). La première garde (`snapshotCommit`) est celle du scénario « Rapport rattaché au SHA ».
 
-Exigences : `semantic-search-qualification › Une PR exécute un corpus réduit borné`, `semantic-search-qualification › Le corpus complet s'exécute sur develop`.
+Exigences : `semantic-search-qualification › Une PR exécute un corpus réduit borné`, `semantic-search-qualification › Le corpus complet s'exécute sur main`.
 
 ### Écarts et limites
 
-- **[Écart]** Renvoi de la spec. L'exigence « Le rôle de la qualification dans la release est explicite » renvoie à « l'ADR qui complète ADR-0014 ». La décision est portée par [BE-0084](../architecture/adr/BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) (`Accepted`), qui réunit la recherche sémantique optionnelle et la qualification en deux corpus ; la spec garde l'ancienne formulation.
+- **[Écart]** Renvoi de la spec. L'exigence « Le rôle de la qualification dans la release est explicite » renvoie à « l'ADR qui complète ADR-0014 ». La décision est portée par [BE-0090](../architecture/adr/BE-0090-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) (`Proposed`), qui réunit la recherche sémantique optionnelle et la qualification en deux corpus ; la spec garde l'ancienne formulation.
 - **[Écart]** Seuils non épinglés par un contrat. Le contrat final d'audit vérifie le nom de l'étape (`scripts/release/test-final-audit-contracts.sh:151`) mais aucune valeur de seuil ; les valeurs 0,25 / 0,33 / 0,20 et 0,10 ne figurent que dans le workflow (`:150-166`), l'ADR et cette page. L'exigence « mêmes seuils » n'a donc pas de test local ; elle découle du fait que le script de contrôle ne dépend pas du corpus.
-- **Limite** Le workflow s'exécute aussi sur les PR vers `main` (`.github/workflows/semantic-search-qualification.yml:8-10`) ; le scénario ne décrit que `develop`.
 - **Limite** « sous-ensemble représentatif » n'a pas de critère mesurable dans la spec : le seul invariant vérifié est que chaque chemin jugé pertinent par les six requêtes est dans le corpus `pr` (`RealSemanticBenchmarkCorpusTest#repositoryPrCorpusContainsEveryRelevantPath`).
 - **Limite** Ce qui s'exécute uniquement en CI n'a pas été rejoué pour cette section : durée réelle du job `pr`, échec effectif sous un seuil, `snapshotCommit` du rapport d'un run `full`. Les chiffres de débit et de durée de « Budget de temps » sont ceux de cette page et ne sont pas re-mesurés.
 
 ### Propositions et questions ouvertes
 
 - **[Proposition]** Épingler dans `scripts/release/test-final-audit-contracts.sh` les trois seuils et la tolérance 0,10 du workflow, pour que l'exigence « mêmes seuils » ait une preuve locale.
-- **[Proposition]** Remplacer dans la spec « l'ADR qui complète ADR-0014 » par un renvoi à BE-0084.
-- **[Question]** Un `workflow_dispatch` avec `corpus=pr` doit-il être borné à 45 minutes comme une PR ? Aujourd'hui l'expression de `timeout-minutes` ne dépend que de `github.event_name` (`.github/workflows/semantic-search-qualification.yml:67`).
+- **[Proposition]** Remplacer dans la spec « l'ADR qui complète ADR-0014 » par un renvoi à BE-0090.
+- **[Question]** Un `workflow_dispatch` avec `corpus=pr` doit-il être borné à 45 minutes comme une PR ? Aujourd'hui l'expression de `timeout-minutes` ne dépend que de `github.event_name` (`.github/workflows/semantic-search-qualification.yml:66`).
 - **[Question]** Faut-il un critère mesurable pour « sous-ensemble représentatif » (part de tokens, de fichiers ou de requêtes) plutôt que la seule inclusion des chemins pertinents ?

@@ -3,7 +3,6 @@ name: GitHub Release Asset Qualification
 on:
   pull_request:
     branches:
-      - develop
       - main
     paths:
       - 'scripts/release/publish-github-release-assets.sh'
@@ -11,7 +10,7 @@ on:
       - '.github/workflows/release-assets-qualification.yml'
   push:
     branches:
-      - develop
+      - main
     paths:
       - 'scripts/release/publish-github-release-assets.sh'
       - 'scripts/release/test-publish-github-release-assets.sh'

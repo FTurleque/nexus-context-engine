@@ -1,12 +1,11 @@
 name: Semantic Search Real Qualification
 
-# BE-0084 : corpus `pr` sur pull request (borne 45 min), corpus `full` sur develop
+# BE-0090 : corpus `pr` sur pull request (borne 45 min), corpus `full` sur main
 # après fusion (borne 180 min, jamais annulé), au choix sur workflow_dispatch, et
 # `full` sur main au planning mensuel. La release n'exige pas cette qualification.
 on:
   pull_request:
     branches:
-      - develop
       - main
     paths:
       - '.github/workflows/semantic-search-qualification.yml'
@@ -16,7 +15,7 @@ on:
       - 'core/src/test/java/com/nexus/search/semantic/RealSemantic*.java'
   push:
     branches:
-      - develop
+      - main
     paths:
       - '.github/workflows/semantic-search-qualification.yml'
       - '.github/actions/ollama-embedding-runtime/**'

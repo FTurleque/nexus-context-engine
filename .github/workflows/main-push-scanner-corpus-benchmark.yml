@@ -1,9 +1,9 @@
-name: Develop Push Scanner Corpus Benchmark
+name: Main Push Scanner Corpus Benchmark
 
 on:
   push:
     branches:
-      - develop
+      - main
     paths:
       - 'core/src/main/java/com/nexus/index/scan/**'
       - 'core/src/test/java/com/nexus/index/scan/**'
@@ -12,13 +12,12 @@ on:
       - 'core/pom.xml'
       - 'docs/developer/indexing-corpus-limits.md'
       - '.github/workflows/scanner-corpus-benchmark.yml'
-      - '.github/workflows/develop-push-scanner-corpus-benchmark.yml'
+      - '.github/workflows/main-push-scanner-corpus-benchmark.yml'
   pull_request:
     branches:
-      - develop
       - main
     paths:
-      - '.github/workflows/develop-push-scanner-corpus-benchmark.yml'
+      - '.github/workflows/main-push-scanner-corpus-benchmark.yml'
 
 permissions:
   contents: read

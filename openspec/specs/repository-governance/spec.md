@@ -1,16 +1,16 @@
 # repository-governance Specification
 
 ## Purpose
-Définit les règles du dépôt GitHub qui ne dépendent pas d'un outil local : méthodes d'intégration acceptées sur `develop` et `main`, propriétaires déclarés des fichiers sensibles.
+Définit les règles du dépôt GitHub qui ne dépendent pas d'un outil local : méthode d'intégration acceptée sur `main`, propriétaires déclarés des fichiers sensibles.
 Documentation durable : docs/developer/branch-governance.md#openspec-repository-governance
 
 ## Requirements
 
 ### Requirement: Seul le merge commit est accepté
-Le ruleset protégeant `main` et `develop` SHALL n'autoriser que la méthode `merge`, et les réglages du dépôt SHALL désactiver le squash et le rebase.
+Le ruleset protégeant `main` SHALL n'autoriser que la méthode `merge`, et les réglages du dépôt SHALL désactiver le squash et le rebase.
 
 #### Scenario: Lecture du ruleset
-- **WHEN** le mainteneur lit le ruleset « Protect main & develop » avec `gh api`
+- **WHEN** le mainteneur lit le ruleset « Protect main » avec `gh api`
 - **THEN** `allowed_merge_methods` vaut `["merge"]`
 
 #### Scenario: Lecture des réglages du dépôt

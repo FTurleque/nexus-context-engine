@@ -163,4 +163,4 @@ Le principe de construire le bundle dans NEXUS plutôt que dans chaque client re
 - [BE-0071](BE-0071-rechercher-et-classer-les-candidats-par-un-score-compose-explicable.md) — recherche et classement des candidats.
 - [ARCH-0077](ARCH-0077-positionner-nexus-comme-moteur-de-contexte-independant.md) — NEXUS moteur de contexte indépendant des modèles et des outils.
 - [ARCH-0078](ARCH-0078-normaliser-les-sources-de-contexte-natives-derriere-des-providers.md) — sources de contexte derrière des providers.
-- [BE-0084](BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) — recherche sémantique optionnelle.
+- [BE-0090](BE-0090-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) — recherche sémantique optionnelle.

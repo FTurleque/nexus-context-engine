@@ -8,8 +8,8 @@ Ce répertoire contient la documentation développeur **courante** : elle suit l
 version      0.2.1
 Java         >=21, release 21
 Maven        3.10.0 via wrapper vérifié
-integration  develop
-release      main
+integration  main
+release      tag v* sur main
 Quarkus      pom.xml, propriété quarkus.platform.version
 MCP SDK      pom.xml, propriété mcp.sdk.version
 ```
@@ -75,7 +75,7 @@ NexusApplication
 - outils fixes vérifiés contre des hashes versionnés.
 - image Docker construite une fois, qualifiée, publiée sans rebuild.
 - V005 impose les invariants de plage `CodeSymbol` dans SQLite.
-- Dependabot cible `develop`.
+- Dependabot cible `main`.
 
 ### Baseline NXA4 et post-audit
 
@@ -95,7 +95,7 @@ NexusApplication
 - `NEXUS_HOME` privé sur POSIX et chemins persistants symboliques concernés refusés.
 - sous Windows/filesystems ACL, `NEXUS_REQUIRE_PRIVATE_STORAGE=true` permet d'exiger une preuve de confidentialité et d'échouer fermé sans réécrire naïvement les ACL.
 - le fallback `SafeFileIO` sans `SecureDirectoryStream` capture et revalide l'identité filesystem autour de l'ouverture.
-- la qualification sémantique réelle Ollama tourne sur les PR sémantiques (corpus réduit), sur `develop` après fusion (corpus complet), manuellement et chaque mois avec runtime vérifié par SHA-256 et seuils de non-régression.
+- la qualification sémantique réelle Ollama tourne sur les PR sémantiques (corpus réduit), sur `main` après fusion (corpus complet), manuellement et chaque mois avec runtime vérifié par SHA-256 et seuils de non-régression.
 - `jdk.incubator.vector` reste volontairement non activé après qualification ABBA ; toute adoption exige une nouvelle mesure probante.
 
 ## Build
@@ -118,7 +118,7 @@ ou :
 4. Ne pas abaisser un budget/seuil pour masquer une régression.
 5. Toute décision structurante durable implique un ADR lorsque le changement dépasse un simple durcissement d'implémentation.
 
-La protection effective de `develop` reste une configuration GitHub externe au code et doit être vérifiée par API après modification. Le ruleset `Protect main & develop` est actif et #130 est satisfait. Le projet est maintenu par **un seul mainteneur** : les audits ne doivent pas transformer l'absence d'une seconde approbation humaine ou d'une resynchronisation stricte de branche en finding tant que ce modèle n'est pas explicitement modifié.
+La protection effective de `main` reste une configuration GitHub externe au code et doit être vérifiée par API après modification. Le ruleset `Protect main` est actif. Le projet est maintenu par **un seul mainteneur** : les audits ne doivent pas transformer l'absence d'une seconde approbation humaine ou d'une resynchronisation stricte de branche en finding tant que ce modèle n'est pas explicitement modifié.
 
 ## Contrat de hardening du 9 septembre 2026
 
