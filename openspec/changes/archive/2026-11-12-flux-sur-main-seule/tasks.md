@@ -20,8 +20,8 @@
 
 ## 4. Après le merge (mainteneur)
 
-- [ ] 4.1 Supprimer `develop` sur GitHub (`git push origin --delete develop`) et en local (`git branch -D develop`) ; vérifier : `git ls-remote --heads origin develop` vide
-- [ ] 4.2 Relire le ruleset 20503835 « Protect main » (`allowed_merge_methods`, `required_status_checks` dont « Hermetic scale benchmark ») et le consigner dans un relevé daté de `docs/project/history/` ; couvre `repository-governance › Seul le merge commit est accepté` (scénario « Lecture du ruleset »), `scale-benchmark-gate › Le check est requis sur main`
+- [x] 4.1 Supprimer `develop` sur GitHub (`git push origin --delete develop`) et en local (`git branch -D develop`) ; vérifier : `git ls-remote --heads origin develop` vide
+- [x] 4.2 Relire le ruleset 20503835 « Protect main » (`allowed_merge_methods`, `required_status_checks` dont « Hermetic scale benchmark ») et le consigner dans un relevé daté de `docs/project/history/` ; couvre `repository-governance › Seul le merge commit est accepté` (scénario « Lecture du ruleset »), `scale-benchmark-gate › Le check est requis sur main`
 
 ## Workflow follow-up
 
