@@ -75,8 +75,8 @@ Oui si la décision est **durable et structurante** et tranche entre des options
 | [ARCH-0086](ARCH-0086-resoudre-la-configuration-et-nexus-home-dans-la-composition-root.md) | Résoudre la configuration NEXUS, dont NEXUS_HOME, dans la composition root et l'injecter | 2026-11-08 | Accepted |
 | [BE-0087](BE-0087-projeter-le-voisinage-du-graphe-d-imports-a-la-demande.md) | Projeter le voisinage du graphe d'imports à la demande depuis SQLite, borné, sans matérialisation ni cache | 2026-11-09 | Proposed |
 | [DATA-0088](DATA-0088-conserver-le-journal-rollback-sqlite.md) | Conserver le journal rollback SQLite et ne réévaluer WAL que sur mesure répétée | 2026-11-09 | Proposed |
-| [GEN-0089](GEN-0089-integrer-et-publier-depuis-la-seule-branche-main.md) | Intégrer et publier depuis la seule branche main | 2026-11-12 | Proposed |
-| [BE-0090](BE-0090-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) | Garder la recherche sémantique optionnelle et la qualifier en deux corpus, hors du chemin de release | 2026-11-12 | Proposed |
+| [GEN-0089](GEN-0089-integrer-et-publier-depuis-la-seule-branche-main.md) | Intégrer et publier depuis la seule branche main | 2026-11-12 | Accepted |
+| [BE-0090](BE-0090-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) | Garder la recherche sémantique optionnelle et la qualifier en deux corpus, hors du chemin de release | 2026-11-12 | Accepted |
 
 ## Archive
 

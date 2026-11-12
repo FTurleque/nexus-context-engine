@@ -7,7 +7,7 @@ rules: false
 
 # Garder la recherche sémantique optionnelle et la qualifier en deux corpus, hors du chemin de release
 
-- **Statut** : Proposed
+- **Statut** : Accepted
 - **Date** : 2026-11-12
 - **Origine** : changement OpenSpec `flux-sur-main-seule` (intégration sur la seule branche `main`, GEN-0089)
 - **Remplace** : [BE-0084](archive/BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md)

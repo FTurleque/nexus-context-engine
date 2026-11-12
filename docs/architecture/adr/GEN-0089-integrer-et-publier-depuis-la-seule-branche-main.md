@@ -7,7 +7,7 @@ rules: false
 
 # Intégrer et publier depuis la seule branche main
 
-- **Statut** : Proposed
+- **Statut** : Accepted
 - **Date** : 2026-11-12
 - **Origine** : demande du mainteneur du 2026-11-12 ; changement OpenSpec `flux-sur-main-seule`
 - **Complète** : [GEN-0057](GEN-0057-tenir-le-registre-d-adr-au-format-archgate.md) (base de comparaison d'Archgate)
