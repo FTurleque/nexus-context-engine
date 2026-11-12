@@ -24,3 +24,4 @@ Résultats d'itération, de benchmark et de qualification, figés à leur date. 
 | releases immuables activées et deux rulesets de tags après réglage (2026-11-11) | [Releases immuables après réglage](releases-immuables-et-tags-reglages-2026-11-11.md) |
 | pré-version `0.2.1-rc.1` publiée immuable, `latest` inchangé (2026-11-11) | [Pré-version 0.2.1-rc.1 immuable](release-0.2.1-rc.1-immuable-2026-11-11.md) |
 | passes de jetons à préfixe de la redaction et pré-filtre par préfixe littéral (2026-11-11) | [Passes de jetons de la redaction](redaction-token-passes-measures-2026-11-11.md) |
+| branche unique `main` : suppression de `develop` et ruleset « Protect main » (2026-11-12) | [Branche unique main](flux-sur-main-seule-2026-11-12.md) |
