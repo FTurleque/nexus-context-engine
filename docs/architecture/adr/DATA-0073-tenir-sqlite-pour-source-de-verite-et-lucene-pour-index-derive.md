@@ -153,5 +153,5 @@ Lucene reste le moteur local par défaut tant qu'il satisfait les critères mesu
 - [ARCH-0005](ARCH-0005-adopter-un-fonctionnement-local-first-et-opt-in.md) : fonctionnement local-first et intégrations externes opt-in.
 - [DATA-0074](DATA-0074-garantir-le-cycle-de-vie-et-la-coherence-des-index-derives.md) : cycle de vie et cohérence des index dérivés.
 - [BE-0071](BE-0071-rechercher-et-classer-les-candidats-par-un-score-compose-explicable.md) : ranking des candidats.
-- [BE-0084](BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) : recherche sémantique optionnelle.
+- [BE-0090](BE-0090-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) : recherche sémantique optionnelle.
 - [docs/developer/index-provenance.md](../../developer/index-provenance.md) : provenance et fraîcheur des index.

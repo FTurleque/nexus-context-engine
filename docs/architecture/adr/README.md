@@ -71,11 +71,12 @@ Oui si la décision est **durable et structurante** et tranche entre des options
 | [BE-0081](BE-0081-federer-la-recherche-locale-par-projet-sous-echeance-globale.md) | Fédérer la recherche locale par projet, avec provenance conservée et une échéance globale sans parallélisme | 2026-11-08 | Accepted |
 | [SEC-0082](SEC-0082-borner-le-support-filesystem-et-la-traversee-des-chemins.md) | Borner le support aux filesystems locaux qualifiés et distinguer traversée stricte et compatibilité | 2026-11-08 | Accepted |
 | [BE-0083](BE-0083-appliquer-des-regles-d-exclusion-du-scan-de-type-gitignore.md) | Appliquer des règles d'exclusion du scan de type gitignore, avec des exclusions intégrées | 2026-11-08 | Accepted |
-| [BE-0084](BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) | Garder la recherche sémantique optionnelle et la qualifier en deux corpus, hors du chemin de release | 2026-11-08 | Accepted |
 | [ARCH-0085](ARCH-0085-stabiliser-le-contrat-de-sortie-publique-cli-rest-mcp.md) | Stabiliser le contrat de sortie publique dans la projection du cœur : CLI humaine ou JSON, codes de sortie, parité REST et MCP | 2026-11-08 | Accepted |
 | [ARCH-0086](ARCH-0086-resoudre-la-configuration-et-nexus-home-dans-la-composition-root.md) | Résoudre la configuration NEXUS, dont NEXUS_HOME, dans la composition root et l'injecter | 2026-11-08 | Accepted |
 | [BE-0087](BE-0087-projeter-le-voisinage-du-graphe-d-imports-a-la-demande.md) | Projeter le voisinage du graphe d'imports à la demande depuis SQLite, borné, sans matérialisation ni cache | 2026-11-09 | Proposed |
 | [DATA-0088](DATA-0088-conserver-le-journal-rollback-sqlite.md) | Conserver le journal rollback SQLite et ne réévaluer WAL que sur mesure répétée | 2026-11-09 | Proposed |
+| [GEN-0089](GEN-0089-integrer-et-publier-depuis-la-seule-branche-main.md) | Intégrer et publier depuis la seule branche main | 2026-11-12 | Accepted |
+| [BE-0090](BE-0090-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) | Garder la recherche sémantique optionnelle et la qualifier en deux corpus, hors du chemin de release | 2026-11-12 | Accepted |
 
 ## Archive
 
@@ -94,7 +95,7 @@ ADR remplacés ou reclassés, conservés pour l'historique et non lus par Archga
 | [ARCH-0011](archive/ARCH-0011-normaliser-les-sources-de-contexte.md) | Normaliser les sources de contexte derrière des providers | Superseded | [ARCH-0078](ARCH-0078-normaliser-les-sources-de-contexte-natives-derriere-des-providers.md) |
 | [ARCH-0012](archive/ARCH-0012-reutiliser-les-standards-instructions-et-agent-skills.md) | Réutiliser les standards existants pour les instructions et les skills | Superseded | [ARCH-0078](ARCH-0078-normaliser-les-sources-de-contexte-natives-derriere-des-providers.md) |
 | [BE-0013](archive/BE-0013-construire-un-contextbundle-sous-budget-de-tokens.md) | Construire un ContextBundle sous budget de tokens explicable | Superseded | [BE-0072](BE-0072-construire-le-contextbundle-sous-budget-de-tokens.md) |
-| [BE-0014](archive/BE-0014-rendre-la-recherche-semantique-optionnelle.md) | Rendre la recherche sémantique et les embeddings optionnels | Superseded | [BE-0084](BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) |
+| [BE-0014](archive/BE-0014-rendre-la-recherche-semantique-optionnelle.md) | Rendre la recherche sémantique et les embeddings optionnels | Superseded | [BE-0084](archive/BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) |
 | [GEN-0015](archive/GEN-0015-valider-le-mvp-par-la-cli-avant-les-integrations.md) | Valider le MVP par la CLI avant l'API, MCP et les intégrations IDE | Superseded | [ARCH-0085](ARCH-0085-stabiliser-le-contrat-de-sortie-publique-cli-rest-mcp.md) |
 | [BE-0016](archive/BE-0016-utiliser-le-sdk-java-officiel-pour-mcp.md) | Utiliser le SDK Java MCP officiel pour l'adaptateur MCP | Superseded | [ARCH-0075](ARCH-0075-exposer-le-coeur-par-des-adaptateurs-minces-isoles.md) |
 | [ARCH-0017](archive/ARCH-0017-decoupler-nexus-des-outils-et-orchestrateurs-externes.md) | Découpler NEXUS des outils et orchestrateurs externes | Superseded | [ARCH-0077](ARCH-0077-positionner-nexus-comme-moteur-de-contexte-independant.md) |
@@ -132,7 +133,7 @@ ADR remplacés ou reclassés, conservés pour l'historique et non lus par Archga
 | [ADR-0056](archive/0056-regrouper-le-registre-des-adr-dans-la-documentation-d-architecture.md) | Regrouper le registre des ADR dans la documentation d'architecture | Superseded | [GEN-0057](GEN-0057-tenir-le-registre-d-adr-au-format-archgate.md) |
 | [BE-0058](archive/BE-0058-exclure-les-worktrees-claude-code-du-scan-par-defaut.md) | Exclure les worktrees Claude Code du scan par défaut | Superseded | [BE-0083](BE-0083-appliquer-des-regles-d-exclusion-du-scan-de-type-gitignore.md) |
 | [ARCH-0059](archive/ARCH-0059-verifier-les-frontieres-du-coeur-par-un-test-d-architecture.md) | Vérifier les frontières du cœur par un test d'architecture | Superseded | [ARCH-0076](ARCH-0076-garder-un-coeur-java-sans-framework-acyclique-et-verifie.md) |
-| [GEN-0060](archive/GEN-0060-qualifier-la-recherche-semantique-reelle-en-deux-corpus.md) | Qualifier la recherche sémantique réelle en deux corpus, hors du chemin de release | Superseded | [BE-0084](BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) |
+| [GEN-0060](archive/GEN-0060-qualifier-la-recherche-semantique-reelle-en-deux-corpus.md) | Qualifier la recherche sémantique réelle en deux corpus, hors du chemin de release | Superseded | [BE-0084](archive/BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) |
 | [ARCH-0061](archive/ARCH-0061-decider-le-contrat-de-sortie-publique-dans-la-projection-du-coeur.md) | Décider le contrat de sortie publique dans la projection du cœur | Superseded | [ARCH-0085](ARCH-0085-stabiliser-le-contrat-de-sortie-publique-cli-rest-mcp.md) |
 | [DATA-0062](archive/DATA-0062-mettre-en-attente-les-analyses-d-indexation-dans-sqlite.md) | Mettre en attente les analyses d'indexation dans SQLite et committer Lucene une fois | Superseded | [DATA-0074](DATA-0074-garantir-le-cycle-de-vie-et-la-coherence-des-index-derives.md) |
 | [ARCH-0063](archive/ARCH-0063-casser-les-cycles-de-packages-du-coeur-par-des-packages-de-modele-feuilles.md) | Casser les cycles de packages du cœur par des packages de modèle feuilles | Superseded | [ARCH-0076](ARCH-0076-garder-un-coeur-java-sans-framework-acyclique-et-verifie.md) |
@@ -141,6 +142,7 @@ ADR remplacés ou reclassés, conservés pour l'historique et non lus par Archga
 | [ARCH-0066](archive/ARCH-0066-resoudre-la-configuration-dans-la-composition-root.md) | Résoudre la configuration NEXUS dans la composition root et l'injecter | Superseded | [ARCH-0086](ARCH-0086-resoudre-la-configuration-et-nexus-home-dans-la-composition-root.md) |
 | [BE-0067](archive/BE-0067-plafonner-la-decouverte-du-depot-git-a-la-racine-du-projet.md) | Plafonner la découverte du dépôt Git à la racine du projet, sauf dépôt parent de l'utilisateur courant | Superseded | [BE-0070](BE-0070-integrer-le-contexte-git-local-borne-mis-en-cache-et-confine.md) |
 | [DATA-0069](archive/DATA-0069-dimensionner-le-cache-de-pages-sqlite-des-connexions.md) | Dimensionner le cache de pages SQLite des connexions | Reclassé | — (reclassé, voir [sqlite-write-contention.md](../../developer/sqlite-write-contention.md)) |
+| [BE-0084](archive/BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) | Garder la recherche sémantique optionnelle et la qualifier en deux corpus, hors du chemin de release | Superseded | [BE-0090](BE-0090-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) |
 
 ## Références
 

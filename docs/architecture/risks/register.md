@@ -26,9 +26,9 @@ SQLite reste l'autorité et un index Lucene sémantique corrompu dispose d'une p
 
 ## Risques fortement mitigés par NXA3
 
-### Gouvernance `develop`
+### Gouvernance `main`
 
-NXA3-14 / #130 est satisfait : le ruleset actif cible `refs/heads/develop`, impose le passage par pull request, interdit suppression et non-fast-forward/force-push, limite le bypass administrateur au flux pull request et exige les checks permanents approuvés. L'état effectif doit être revalidé par API après toute modification repository-admin.
+Le ruleset actif `Protect main` cible `main` (branche par défaut), impose le passage par pull request et le merge commit, interdit suppression et non-fast-forward/force-push, limite le bypass administrateur au flux pull request et exige les checks permanents approuvés. `main` est la seule branche d'intégration (GEN-0089). L'état effectif doit être revalidé par API après toute modification repository-admin.
 
 NEXUS est actuellement maintenu par **une seule personne**. Une seconde approbation humaine et une resynchronisation stricte de branche avant merge ne font pas partie de la politique du projet et ne sont donc pas des risques ouverts. La protection applicable repose sur la PR obligatoire, le HEAD candidat, les checks automatisés et les protections contre suppression/force-push.
 

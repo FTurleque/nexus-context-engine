@@ -114,8 +114,8 @@ Le préflight GHCR est fail-closed. Tags version et SHA sont immuables ; un retr
 
 ## 7.9 CI et gouvernance
 
-`develop` est la branche d'intégration et `main` la branche de release. Les gates applicables qualifient le SHA exact.
+`main` est la seule branche d'intégration ; une release est un tag `vX.Y.Z` posé sur un SHA de `main` (GEN-0089). Les gates applicables qualifient le SHA exact.
 
-Le ruleset GitHub actif `Protect main & develop` protège les deux branches, impose les pull requests, interdit suppression/non-fast-forward et exige les checks permanents approuvés. NXA3-14 / #130 est satisfait.
+Le ruleset GitHub actif `Protect main` protège `main`, impose le passage par pull request et le merge commit, interdit suppression/non-fast-forward et exige les checks permanents approuvés.
 
 NEXUS est actuellement maintenu par **une seule personne**. La politique n'exige pas de seconde approbation humaine ni de resynchronisation stricte avec la base juste avant merge ; ces absences ne sont pas des findings dans le modèle solo courant. Toute évolution de ce modèle doit être décidée explicitement avant de modifier les règles GitHub.

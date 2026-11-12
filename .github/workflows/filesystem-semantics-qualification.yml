@@ -4,7 +4,6 @@ on:
   workflow_call:
   pull_request:
     branches:
-      - develop
       - main
     paths:
       - 'core/src/main/java/com/nexus/config/NexusPaths.java'
@@ -21,7 +20,7 @@ on:
       - '.github/workflows/filesystem-semantics-qualification.yml'
   push:
     branches:
-      - develop
+      - main
     paths:
       - 'core/src/main/java/com/nexus/config/NexusPaths.java'
       - 'core/src/main/java/com/nexus/index/ProjectIndexLockManager.java'

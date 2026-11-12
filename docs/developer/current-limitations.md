@@ -1,6 +1,6 @@
 # Limites actuelles et dette de consolidation
 
-Ce registre décrit l'état courant après les campagnes **NXA3 + NXA4** et les remédiations des audits `develop` des 2, 6 et 7 septembre 2026. Les anciens numéros de PR/runs ne constituent pas une preuve permanente ; la preuve de qualification est toujours le run attaché au HEAD exact concerné.
+Ce registre décrit l'état courant après les campagnes **NXA3 + NXA4** et les remédiations des audits des 2, 6 et 7 septembre 2026. Les anciens numéros de PR/runs ne constituent pas une preuve permanente ; la preuve de qualification est toujours le run attaché au HEAD exact concerné.
 
 ## Invariants techniques désormais couverts
 
@@ -110,7 +110,7 @@ Le listener de management est volontairement loopback-only et ne doit pas être 
 - le profil sémantique est `content-v8`, ce qui force le rebuild d'un ancien index incompatible ;
 - un fichier dont une valeur sensible dépasse 4 096 caractères est exclu des index lexical et sémantique et des contextes (diagnostics `INDEX_REDACTION_LIMIT` et `CONTEXT_REDACTION_LIMIT`) ; il reste dans l'index structurel ;
 - une indisponibilité provider dégrade la recherche de façon sûre ; un commit sémantique corrompu est reconstruit dans une génération publiée atomiquement, en conservant les anciens fichiers tant que des lecteurs externes peuvent les utiliser (voir DATA-0074 et la procédure de quarantaine) ;
-- `.github/workflows/semantic-search-qualification.yml` exécute le vrai benchmark (corpus réduit sur PR, corpus complet sur `develop` après fusion, manuel et mensuel) avec Ollama `0.33.3` vérifié par SHA-256 repository-pinned et `qwen3-embedding:0.6b`, puis applique des seuils de qualité/non-régression et conserve le rapport comme artefact.
+- `.github/workflows/semantic-search-qualification.yml` exécute le vrai benchmark (corpus réduit sur PR, corpus complet sur `main` après fusion, manuel et mensuel) avec Ollama `0.33.3` vérifié par SHA-256 repository-pinned et `qwen3-embedding:0.6b`, puis applique des seuils de qualité/non-régression et conserve le rapport comme artefact.
 
 La redaction conservatrice réduit les fuites accidentelles mais ne remplace pas un scanner de secrets spécialisé.
 
@@ -124,19 +124,19 @@ La redaction conservatrice réduit les fuites accidentelles mais ne remplace pas
 - les images Docker builder/runtime sont épinglées par digest et les Dockerfiles n'exécutent plus de `apt-get` dépendant de l'état courant d'un miroir ;
 - image Docker construite une fois, qualifiée puis publiée sans rebuild ;
 - GHCR preflight fail-closed avec reprise idempotente uniquement pour le même contenu ;
-- Dependabot cible `develop` ;
+- Dependabot cible `main` ;
 - les contrats documentaires courants sont vérifiés automatiquement par NEXUS CI ;
 - les changements de frontière filesystem déclenchent une qualification locale dédiée Linux/Windows ;
 - la preuve SMB sélectionnée dispose d'un gate Windows séparé qui crée un vrai partage SMB, impose l'usage UNC et conserve les informations protocole/configuration ;
-- NEXUS CI, CodeQL et OSV couvrent aussi les pushes directs sur `develop` en défense en profondeur ; Docker Distribution, Scale Benchmark, Scanner Corpus Benchmark et Windows Installer sont réutilisés par des callers `Develop Push ...` avec leurs filtres de chemins respectifs.
+- NEXUS CI, CodeQL et OSV couvrent aussi les pushes sur `main` en défense en profondeur ; Docker Distribution écoute directement les pushes `main`, et Scale Benchmark, Scanner Corpus Benchmark et Windows Installer sont réutilisés par des callers `Main Push ...` avec leurs filtres de chemins respectifs.
 
 Le Vector API reste volontairement **non activé par défaut** : la qualification ABBA same-runner a montré un léger gain global mais une légère régression du p95 graphe. Une adoption future exige une nouvelle mesure démontrant un bénéfice robuste sans régression des chemins critiques.
 
 ## Contrôle de gouvernance externe au code
 
-La protection GitHub de `develop` est un état repository-admin, pas un fichier versionné. Le contrat attendu est décrit dans [`branch-governance.md`](branch-governance.md).
+La protection GitHub de `main` est un état repository-admin, pas un fichier versionné. Le contrat attendu est décrit dans [`branch-governance.md`](branch-governance.md).
 
-NXA3-14 / #130 est satisfait : le ruleset actif `Protect main & develop` protège `develop`, exige les pull requests, interdit suppression/non-fast-forward et impose les checks permanents approuvés. Après toute modification repository-admin, cet état doit être revalidé par API.
+Le ruleset GitHub actif `Protect main` protège `main`, impose le passage par pull request et le merge commit, interdit suppression/non-fast-forward et exige les checks permanents approuvés. Après toute modification repository-admin, cet état doit être revalidé par API.
 
 NEXUS est actuellement un projet à **un seul mainteneur**. L'absence d'approbation humaine distincte et l'absence de resynchronisation obligatoire avec la base juste avant merge sont des choix explicites du modèle solo ; elles ne sont pas suivies comme findings. Toute évolution de cette politique doit être décidée explicitement avant de modifier les règles GitHub.
 

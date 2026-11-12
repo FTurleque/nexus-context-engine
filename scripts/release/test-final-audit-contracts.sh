@@ -170,8 +170,8 @@ grep -q 'Enforce semantic quality floor' "$SEMANTIC_WORKFLOW" \
   || fail 'real semantic qualification must enforce a regression floor'
 grep -q 'Summarize embedding throughput' "$SEMANTIC_WORKFLOW" \
   || fail 'real semantic qualification must retain measured embedding throughput'
-# BE-0084: reduced `pr` corpus bounded at 45 minutes on pull requests, `full` corpus
-# bounded at 180 minutes on develop after merge, never cancelled outside pull requests,
+# BE-0090: reduced `pr` corpus bounded at 45 minutes on pull requests, `full` corpus
+# bounded at 180 minutes on main after merge, never cancelled outside pull requests,
 # and not required by release.yml.
 grep -qF "timeout-minutes: \${{ github.event_name == 'pull_request' && 45 || 180 }}" "$SEMANTIC_WORKFLOW" \
   && grep -q 'budget de \*\*45 minutes\*\* pour le corpus `pr`' docs/developer/ci-and-supply-chain.md \
@@ -195,8 +195,8 @@ def block(text: str, key: str) -> str:
 workflow = Path(sys.argv[1]).read_text(encoding="utf-8")
 push = block(workflow, "push")
 pull = block(workflow, "pull_request")
-if "      - develop\n" not in push or "    paths:\n" not in push:
-    raise SystemExit("final-audit-contracts: the full corpus must run on push to develop, filtered by the watched paths")
+if "      - main\n" not in push or "    paths:\n" not in push:
+    raise SystemExit("final-audit-contracts: the full corpus must run on push to main, filtered by the watched paths")
 def watched(section: str) -> list[str]:
     paths = re.search(r"^    paths:\n((?:      - .*\n?)+)", section, re.MULTILINE)
     return paths.group(1).split() if paths else []
@@ -222,11 +222,11 @@ semantic_jobs = set(re.findall(
     release,
     re.MULTILINE))
 if needed & (semantic_jobs | {"semantic-search", "semantic-search-qualification", "real-ollama"}):
-    raise SystemExit("final-audit-contracts: BE-0084 keeps the real semantic qualification out of publish needs")
+    raise SystemExit("final-audit-contracts: BE-0090 keeps the real semantic qualification out of publish needs")
 PY
-grep -q 'BE-0084' docs/developer/semantic-search.md \
+grep -q 'BE-0090' docs/developer/semantic-search.md \
   && grep -q "La release n'exige pas la qualification sémantique réelle" docs/developer/semantic-search.md \
-  || fail 'docs/developer/semantic-search.md must state the release rule of BE-0084'
+  || fail 'docs/developer/semantic-search.md must state the release rule of BE-0090'
 grep -Eq '^ollama\.0\.33\.3\.linux-amd64\.sha256=[0-9a-f]{64}$' config/tool-integrity.properties \
   || fail 'Ollama qualification checksum anchor is missing'
 
@@ -285,8 +285,8 @@ grep -q 'un seul mainteneur' docs/developer/branch-governance.md \
   || fail 'branch governance must document the current solo-maintainer model'
 grep -q 'ne doivent donc pas remonter' docs/developer/branch-governance.md \
   || fail 'branch governance must prevent obsolete approval findings from resurfacing'
-grep -q 'NXA3-14 / #130 est satisfait' docs/architecture/risks/register.md \
-  || fail 'risk register must record the effective develop protection state'
+grep -q 'Le ruleset actif `Protect main` cible `main`' docs/architecture/risks/register.md \
+  || fail 'risk register must record the effective main protection state'
 
 # --- Sprint 9 : secrets-signature (AUD-DEP-21, AUD-SEC-06, AUD-DEP-03) ---
 # AUD-DEP-21: reusable workflows only receive the secrets they declare.
@@ -528,5 +528,11 @@ for index in docs/architecture/adr/README.md docs/architecture/arc42/09-decision
     || fail "SEC-0068 must be referenced from $index"
 done
 # --- Fin Sprint 9 : adr-publication ---
+
+# GEN-0089: main is the only integration branch; no workflow or Dependabot entry targets develop.
+develop_refs="$(grep -rnw 'develop' .github || true)"
+if [[ -n "$develop_refs" ]]; then
+  fail ".github/ must not target the develop branch (GEN-0089): $develop_refs"
+fi
 
 echo 'final-audit-contracts=PASS'

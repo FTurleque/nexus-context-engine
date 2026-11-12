@@ -18,12 +18,12 @@ $rules = @(
     @{
         Pattern  = $start + 'git\s+push\b[^\n]*(\s--force(-with-lease)?\b|\s-f\b|\s\+\S)'
         Decision = 'deny'
-        Reason   = 'Force-push interdit : develop et main refusent les non-fast-forward. Intégrer par merge (jamais rebase/force) puis pousser normalement.'
+        Reason   = 'Force-push interdit : main refuse les non-fast-forward. Intégrer par merge (jamais rebase/force) puis pousser normalement.'
     },
     @{
-        Pattern  = $start + 'git\s+push\b[^\n]*\s(\S+:)?(refs/heads/)?(develop|main)(\s|$)'
+        Pattern  = $start + 'git\s+push\b[^\n]*\s(\S+:)?(refs/heads/)?main(\s|$)'
         Decision = 'deny'
-        Reason   = 'Push direct vers develop/main interdit : le ruleset exige une pull request. Pousser une branche dédiée puis ouvrir une PR.'
+        Reason   = 'Push direct vers main interdit : le ruleset exige une pull request. Pousser une branche dédiée puis ouvrir une PR.'
     },
     @{
         Pattern  = $start + 'git\b[^\n]*(\s--no-verify\b|\s--no-gpg-sign\b|commit\.gpgsign=false)'

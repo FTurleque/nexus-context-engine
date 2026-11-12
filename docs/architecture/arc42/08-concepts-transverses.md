@@ -133,4 +133,4 @@ Les contrats documentaires doivent inclure les invariants NXA4 machine-vérifiab
 
 ## 8.13 Gouvernance
 
-`develop` est l'intégration, `main` la release. La protection effective de `develop` doit être appliquée côté GitHub ; les workflows seuls ne peuvent pas empêcher un push direct sur une branche non protégée.
+`main` est l'intégration et la source des releases (GEN-0089). La protection effective de `main` doit être appliquée côté GitHub ; les workflows seuls ne peuvent pas empêcher un push direct sur une branche non protégée.

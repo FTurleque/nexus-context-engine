@@ -11,7 +11,7 @@ Les règles du projet sont dans `AGENTS.md`, que Claude Code charge directement 
 
 ## Flux de travail
 
-- Branche depuis `origin/develop`, PR vers `develop`, merge exact-head en merge commit ; `main` ne reçoit que la promotion de `develop` (skill `nexus-pr-workflow`).
+- Branche depuis `origin/main`, PR vers `main`, merge exact-head en merge commit ; une release est un tag `vX.Y.Z` sur un SHA de `main` (skill `nexus-pr-workflow`, GEN-0089).
 - Valider avant toute PR : `/nx-validate` (contrats, `mvnw clean install`, `scripts/self-smoke.ps1`). Toujours le wrapper Maven, jamais `mvn`.
 - Contrats documentaires et d'intégrité locaux : `bash .claude/scripts/contracts.sh`.
 
@@ -30,7 +30,7 @@ Les règles du projet sont dans `AGENTS.md`, que Claude Code charge directement 
 | Décision d'architecture | `/nx-adr <sujet>`, skill `nexus-adr` |
 | Qualité du contexte produit par NEXUS | skill `nexus-context-validation` |
 | Doc courante et contrats | agent `nexus-doc-keeper` |
-| Release develop → main | `/nx-release`, skill `nexus-pr-workflow` |
+| Préparer une release | `/nx-release`, skill `nexus-pr-workflow` |
 | Bilan d'entretien | `/nx-health` |
 
-Les hooks du projet (`.claude/hooks/`) refusent le force-push, le push direct sur `develop`/`main`, `--no-verify`, `mvn` hors wrapper, `gh pr merge` sans `--match-head-commit`, `sed -i` sur les scripts Windows et la modification d'une migration publiée ; ils demandent confirmation avant de toucher un ADR accepté ou archivé, ou un audit daté. Leurs tests : `pwsh -NoProfile -File .claude/hooks/tests/Test-Hooks.ps1`.
+Les hooks du projet (`.claude/hooks/`) refusent le force-push, le push direct sur `main`, `--no-verify`, `mvn` hors wrapper, `gh pr merge` sans `--match-head-commit`, `sed -i` sur les scripts Windows et la modification d'une migration publiée ; ils demandent confirmation avant de toucher un ADR accepté ou archivé, ou un audit daté. Leurs tests : `pwsh -NoProfile -File .claude/hooks/tests/Test-Hooks.ps1`.

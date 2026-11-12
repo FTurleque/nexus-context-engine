@@ -10,7 +10,6 @@ on:
         type: string
   pull_request:
     branches:
-      - develop
       - main
   workflow_dispatch:
     inputs:
@@ -28,7 +27,7 @@ permissions:
 
 concurrency:
   # github.workflow désigne le workflow appelant en workflow_call : le wrapper
-  # develop-push-scale-benchmark.yml et ce workflow n'ont jamais le même groupe,
+  # main-push-scale-benchmark.yml et ce workflow n'ont jamais le même groupe,
   # et aucun des deux n'annule l'autre sur une PR qui touche les deux.
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -49,7 +48,7 @@ jobs:
         id: changes
         shell: bash
         # WATCHED_PATHS est la source unique des chemins surveillés : le filtre push
-        # de develop-push-scale-benchmark.yml en reprend exactement la liste.
+        # de main-push-scale-benchmark.yml en reprend exactement la liste.
         # Contrat : scripts/release/test-operational-doc-contracts.sh.
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -73,7 +72,7 @@ jobs:
             docs/developer/scale-regression-benchmark.md
             docs/project/history/scale-regression-results.md
             .github/workflows/scale-benchmark.yml
-            .github/workflows/develop-push-scale-benchmark.yml
+            .github/workflows/main-push-scale-benchmark.yml
         run: |
           set -euo pipefail
           if [[ "$EVENT_NAME" != "pull_request" ]]; then

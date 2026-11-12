@@ -1,9 +1,9 @@
-name: Develop Push Windows Installer
+name: Main Push Windows Installer
 
 on:
   push:
     branches:
-      - develop
+      - main
     paths:
       - 'packaging/windows/**'
       - 'scripts/release/**'
@@ -16,13 +16,12 @@ on:
       - 'mvnw'
       - 'mvnw.cmd'
       - '.github/workflows/windows-installer.yml'
-      - '.github/workflows/develop-push-windows-installer.yml'
+      - '.github/workflows/main-push-windows-installer.yml'
   pull_request:
     branches:
-      - develop
       - main
     paths:
-      - '.github/workflows/develop-push-windows-installer.yml'
+      - '.github/workflows/main-push-windows-installer.yml'
 
 permissions:
   contents: read

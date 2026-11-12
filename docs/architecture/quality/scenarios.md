@@ -28,7 +28,7 @@ Ce fichier complète la Section 10 de l'arc42 avec les scénarios de qualité **
 | QS-20 — Supply-chain reactor | Sécurité | JaCoCo + OSV + CodeQL + notices/SBOM + ancres | Couvert |
 | QS-21 — Supply-chain Docker | Sécurité | Trivy + SBOM + image exacte qualifiée | Couvert |
 | QS-22 — Dérive documentaire | Gouvernance/Correctness | `test-operational-doc-contracts.sh` dans NEXUS CI | Couvert |
-| QS-23 — `develop` protégé | Gouvernance | ruleset/branch protection GitHub | **Ouvert #130** |
+| QS-23 — `main` protégée | Gouvernance | ruleset `Protect main` | Satisfait |
 | QS-24 — Recovery sémantique physique | Défaillance | runbook/fixtures à renforcer | Watch item #54 |
 | QS-25 — Filesystem hostile/réseau | Défaillance | matrice dédiée requise | Watch item #52 |
 
@@ -74,7 +74,6 @@ Les minima JaCoCo bloquants restent 70 % lignes / 50 % branches. Une mesure hist
 - **#53** cache Git persistant : mesures cold/warm + modèle d'invalidation ;
 - **#54** recovery Ollama/Lucene physique ;
 - **#55** nouvelle dépendance à licence inhabituelle : revue explicite ;
-- **#130** protection effective de `develop` : configuration repository-admin obligatoire.
 
 ## Baselines historiques
 

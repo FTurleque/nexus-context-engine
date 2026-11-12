@@ -126,10 +126,10 @@ for needle in ("github.event.pull_request.head.sha", "Assert exact-head contract
         raise SystemExit(f"CodeQL exact-head contract drift: missing {needle!r}")
 
 dependabot = text(".github/dependabot.yml")
-if dependabot.count("target-branch: develop") < 3:
-    raise SystemExit("Dependabot contract drift: every managed ecosystem must target develop")
+if dependabot.count("target-branch: main") < 3:
+    raise SystemExit("Dependabot contract drift: every managed ecosystem must target main")
 
-require("docs/developer/ci-and-supply-chain.md", "`develop` est la branche d'intégration")
+require("docs/developer/ci-and-supply-chain.md", "`main` est la seule branche d'intégration")
 require("docs/developer/branch-governance.md", "force pushes")
 require("docs/developer/native-context-discovery-limits.md", "NativeContextDiscoveryBudgetBenchmarkTest")
 
@@ -421,7 +421,7 @@ for path in current_docs:
 
 # Scale benchmark: the pull_request trigger has no paths filter, so the required
 # "Hermetic scale benchmark" check exists on every PR. The detection step's
-# WATCHED_PATHS block is the single list of watched paths; the develop push
+# WATCHED_PATHS block is the single list of watched paths; the main push
 # caller must watch exactly that list.
 def trigger_paths(source: str, event: str) -> list[str] | None:
     paths: list[str] | None = None
@@ -483,17 +483,17 @@ def check_scale_benchmark_paths(reusable: str, caller: str) -> None:
     extra = sorted(set(push) - set(watched))
     if missing or extra:
         raise SystemExit(
-            "scale benchmark contract drift: develop push paths differ from WATCHED_PATHS"
+            "scale benchmark contract drift: main push paths differ from WATCHED_PATHS"
             f" (missing={missing}, extra={extra})"
         )
 
 
-scale_caller_path = ".github/workflows/develop-push-scale-benchmark.yml"
+scale_caller_path = ".github/workflows/main-push-scale-benchmark.yml"
 scale_reusable = text(".github/workflows/scale-benchmark.yml")
 scale_caller = text(scale_caller_path)
 check_scale_benchmark_paths(scale_reusable, scale_caller)
 if scale_caller_path not in watched_paths(scale_reusable):
-    raise SystemExit("scale benchmark contract drift: WATCHED_PATHS must include the develop push caller")
+    raise SystemExit("scale benchmark contract drift: WATCHED_PATHS must include the main push caller")
 if f"'{scale_caller_path}'" not in scale_caller.split("pull_request:", 1)[-1]:
     raise SystemExit("scale benchmark contract drift: caller must run on its own pull_request changes")
 if "    name: Hermetic scale benchmark\n" not in scale_reusable:
@@ -929,7 +929,7 @@ def fail(message: str) -> None:
     raise SystemExit(f"ghcr publication contract drift: {message}")
 
 
-for workflow in (".github/workflows/docker-distribution.yml", ".github/workflows/develop-push-docker-distribution.yml"):
+for workflow in (".github/workflows/docker-distribution.yml",):
     source = Path(workflow).read_text(encoding="utf-8")
     for forbidden in ("docker push", "ghcr.io", "docker login", "imagetools create", "--push"):
         if forbidden in source:

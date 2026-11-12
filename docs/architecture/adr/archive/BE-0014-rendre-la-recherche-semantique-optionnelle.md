@@ -7,11 +7,11 @@ rules: false
 
 # Rendre la recherche sémantique et les embeddings optionnels
 
-> **Archivé le 2026-11-08** : remplacé par [BE-0084](../BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) (recherche sémantique optionnelle et qualification en deux corpus). Ce document est conservé pour l'historique ; il n'est plus lu par Archgate.
+> **Archivé le 2026-11-08** : remplacé par [BE-0084](BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) (recherche sémantique optionnelle et qualification en deux corpus). Ce document est conservé pour l'historique ; il n'est plus lu par Archgate.
 
 - **Statut** : Superseded
 - **Date** : 2026-07-19
-- **Remplacé par** : [BE-0084](../BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md)
+- **Remplacé par** : [BE-0084](BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md)
 
 ## Context
 

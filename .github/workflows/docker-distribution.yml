@@ -16,7 +16,7 @@ on:
         description: Docker image config digest of the qualified image
         value: ${{ jobs.docker.outputs.qualified_image_id }}
   pull_request:
-    branches: [develop, main]
+    branches: [main]
     paths:
       - 'packaging/docker/**'
       - '.dockerignore'
@@ -59,8 +59,8 @@ permissions:
   contents: read
 
 concurrency:
-  # github.workflow names the caller when this workflow is reused, so a PR that triggers
-  # both this workflow and develop-push-docker-distribution.yml runs them in separate groups.
+  # github.workflow names the caller when this workflow is reused (release.yml), so a
+  # reused run never shares the group of a direct run of this workflow.
   group: docker-distribution-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 

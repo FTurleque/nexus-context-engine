@@ -7,7 +7,7 @@ Documentation durable : docs/developer/ci-and-supply-chain.md#openspec-adr-rule-
 ## Requirements
 
 ### Requirement: Les règles des ADR s'exécutent en CI
-Toute PR vers `develop` SHALL exécuter `archgate check` sur le dépôt et SHALL échouer si une règle signale une violation.
+Toute PR vers `main` SHALL exécuter `archgate check` sur le dépôt et SHALL échouer si une règle signale une violation.
 
 #### Scenario: Violation d'une règle
 - **GIVEN** une PR qui viole une règle d'un fichier `docs/architecture/adr/*.rules.ts`

@@ -7,13 +7,13 @@ rules: false
 
 # Qualifier la recherche sémantique réelle en deux corpus, hors du chemin de release
 
-> **Archivé le 2026-11-08** : remplacé par [BE-0084](../BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) (recherche sémantique optionnelle et qualification en deux corpus). Ce document est conservé pour l'historique ; il n'est plus lu par Archgate.
+> **Archivé le 2026-11-08** : remplacé par [BE-0084](BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) (recherche sémantique optionnelle et qualification en deux corpus). Ce document est conservé pour l'historique ; il n'est plus lu par Archgate.
 
 - **Statut** : Superseded
 - **Date** : 2026-10-30
 - **Origine** : audit du 2026-10-17, constat `AUD-DEP-19` ; changement OpenSpec `sprint-02-outillage-scripts-workflows`
 - **Complète** : [BE-0014](BE-0014-rendre-la-recherche-semantique-optionnelle.md)
-- **Remplacé par** : [BE-0084](../BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md)
+- **Remplacé par** : [BE-0084](BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md)
 
 ## Context
 

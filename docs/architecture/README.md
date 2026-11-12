@@ -5,11 +5,10 @@ Ce répertoire contient la documentation arc42, les risques et les décisions d'
 ## Branches
 
 ```text
-develop = intégration et qualification
-main    = release
+main = intégration, qualification et release (tags v*)
 ```
 
-La protection effective de `develop` est une règle GitHub de repository et non un comportement du runtime. Voir [`../developer/branch-governance.md`](../developer/branch-governance.md).
+La protection effective de `main` est une règle GitHub de repository et non un comportement du runtime. Voir [`../developer/branch-governance.md`](../developer/branch-governance.md).
 
 ## Sources primaires
 

@@ -141,6 +141,6 @@ La décision est réévaluée si : le rafraîchissement avant recherche annule l
 
 - [DATA-0073](DATA-0073-tenir-sqlite-pour-source-de-verite-et-lucene-pour-index-derive.md) : SQLite source de vérité, Lucene index dérivé.
 - [BE-0081](BE-0081-federer-la-recherche-locale-par-projet-sous-echeance-globale.md) : recherche fédérée par projet.
-- [BE-0084](BE-0084-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) : recherche sémantique optionnelle.
+- [BE-0090](BE-0090-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md) : recherche sémantique optionnelle.
 - Documentation développeur : [indexing-pipeline.md](../../developer/indexing-pipeline.md), [sqlite-write-contention.md](../../developer/sqlite-write-contention.md), [lucene-lifecycle-qualification.md](../../developer/lucene-lifecycle-qualification.md), [semantic-search.md](../../developer/semantic-search.md) (procédure de quarantaine).
 - Issue #50, PR #159, PR #161 ; changement OpenSpec `sprint-05-indexation-et-ecriture-sqlite` ; [relevé des mesures du 2026-11-07](../../project/history/indexing-heap-and-hashing-measures-2026-11-07.md).

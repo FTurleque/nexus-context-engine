@@ -35,7 +35,7 @@ target\dist\NEXUS-0.2.1-windows-x64-setup.exe.sha256
 
 ## Contrat de release
 
-`develop` est la branche d'intégration ; `main` est la branche de release. Une publication GHCR est déclenchée uniquement par un tag `vX.Y.Z` (ou `vX.Y.Z-rc.N` pour une pré-version) qui pointe sur le HEAD exact de `main` et dont la version correspond au `pom.xml`.
+`main` est la seule branche d'intégration et la source des releases (GEN-0089). Une publication GHCR est déclenchée uniquement par un tag `vX.Y.Z` (ou `vX.Y.Z-rc.N` pour une pré-version) qui pointe sur le HEAD exact de `main` et dont la version correspond au `pom.xml`.
 
 La release réutilise les gates exécutables : NEXUS CI, Windows Installer, Docker Distribution, Scale Benchmark, Scanner Corpus Benchmark, CodeQL et OSV-Scanner selon le contrat du workflow. SonarCloud reste un Quality Gate PR externe, pas un job de release.
 
@@ -75,7 +75,7 @@ Un tag `v*` poussé désigne son commit pour toujours. La politique de publicati
    - version finale `X.Y.Z` en échec : `X.Y.(Z+1)`, précédée de `X.Y.(Z+1)-rc.1` si le correctif touche la chaîne de release ;
    - pré-version `X.Y.Z-rc.N` en échec : `X.Y.Z-rc.(N+1)`.
 
-   Le correctif suit le flux habituel (PR vers `develop`, promotion vers `main`) et le nouveau tag est posé sur la tête de `main`.
+   Le correctif suit le flux habituel (PR vers `main`) et le nouveau tag est posé sur la tête de `main`.
 3. **Release GitHub déjà publiée** : elle ne se corrige pas ; une nouvelle version suit le point 2. Si `scripts/release/publish-github-release-assets.sh` sort en code 79 (release publiée non immuable), `latest` n'a pas bougé : activer les releases immuables, puis publier une nouvelle version.
 
 Aucun tag `v*` n'est supprimé, déplacé ni recréé. Le détail des réglages GitHub et leurs commandes de lecture figurent dans [`immutable-release-publishing.md`](immutable-release-publishing.md#politique-de-publication-cible-sec-0068-proposée).

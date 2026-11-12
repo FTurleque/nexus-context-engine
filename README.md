@@ -47,14 +47,13 @@ Références culturelles et citations :
 ```text
 repository  FTurleque/nexus-context-engine
 visibility  public
-develop     intégration et qualification
-main        release
+main        intégration, qualification et release (tags v*)
 version     0.2.1
 Java        runtime >=21 / release 21
 Maven       3.10.0 via wrapper vérifié par SHA-512 versionné
 ```
 
-La stratégie de branche est explicite : les changements sont intégrés et qualifiés sur `develop`, puis promus vers `main` pour les releases. La protection effective de `develop` est un contrôle GitHub de gouvernance distinct du code versionné. NEXUS est actuellement maintenu par un seul mainteneur ; la qualité de merge repose sur les PR et gates automatisés exact-head plutôt que sur une seconde approbation humaine artificielle.
+La stratégie de branche est explicite : `main` est la seule branche d'intégration ; chaque changement y entre par une PR qualifiée, et une release est un tag `vX.Y.Z` posé sur un SHA de `main` (GEN-0089). La protection effective de `main` est un contrôle GitHub de gouvernance distinct du code versionné. NEXUS est actuellement maintenu par un seul mainteneur ; la qualité de merge repose sur les PR et gates automatisés exact-head plutôt que sur une seconde approbation humaine artificielle.
 
 ## Capacités
 

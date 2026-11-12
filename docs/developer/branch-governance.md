@@ -1,11 +1,13 @@
 # Gouvernance des branches
 
-NEXUS sépare explicitement intégration et release :
+NEXUS intègre et publie depuis une seule branche ([GEN-0089](../architecture/adr/GEN-0089-integrer-et-publier-depuis-la-seule-branche-main.md)) :
 
 ```text
-develop  = branche d'intégration
-main     = branche de release
+main     = branche d'intégration et source des releases
+tag v*   = release, posée sur un SHA de main
 ```
+
+Toute branche de travail part de `origin/main` et revient par une PR vers `main`. Aucune autre branche longue durée n'existe.
 
 ## Modèle de maintenance
 
@@ -22,11 +24,12 @@ Les audits NEXUS ne doivent donc pas remonter l'absence d'approbation humaine ob
 
 ## État GitHub effectif
 
-Le ruleset repository actif `Protect main & develop` cible `~DEFAULT_BRANCH` et `refs/heads/develop`.
+Le ruleset repository actif `Protect main` (id 20503835) cible `~DEFAULT_BRANCH`, c'est-à-dire `main`.
 
 Il impose actuellement :
 
 - passage par pull request ;
+- intégration par merge commit uniquement ;
 - résolution des conversations de review ;
 - interdiction de suppression ;
 - interdiction des non-fast-forward / force pushes ;
@@ -43,8 +46,6 @@ Il impose actuellement :
 
 `Hermetic scale benchmark` (`.github/workflows/scale-benchmark.yml`) est produit sur toute PR et conclut en succès sans mesurer lorsque la PR ne touche aucun chemin surveillé (voir [scale-regression-benchmark.md](scale-regression-benchmark.md)) : il peut donc être requis sans laisser en attente les PR qui ne touchent pas ses chemins.
 
-NXA3-14 / #130 est satisfait pour `develop`. Le même ruleset couvre également `main`.
-
 ### Rulesets de tags
 
 À côté du ruleset des branches, [SEC-0068](../architecture/adr/SEC-0068-publier-les-releases-depuis-un-environnement-protege-avec-des-assets-attestes.md) exige pour les tags de version `refs/tags/v*` deux rulesets de cible `tag` :
@@ -56,11 +57,11 @@ NXA3-14 / #130 est satisfait pour `develop`. Le même ruleset couvre également 
 
 ## Méthode d'intégration : merge commit uniquement
 
-Une PR vers `develop` ou `main` s'intègre **uniquement par merge commit**, exact-head (`gh pr merge <n> --merge --match-head-commit <sha>`). Le squash et le rebase sont interdits : ils réécrivent les SHA qualifiés par la CI exact-head, et la promotion `develop` → `main` suppose que `main` ne contient que des commits déjà présents sur `develop`.
+Une PR vers `main` s'intègre **uniquement par merge commit**, exact-head (`gh pr merge <n> --merge --match-head-commit <sha>`). Le squash et le rebase sont interdits : ils réécrivent les SHA qualifiés par la CI exact-head, alors que les qualifications post-merge et le tag de release doivent porter sur le SHA que la PR a qualifié.
 
 La règle est portée par GitHub, pas seulement par le hook local de Claude Code :
 
-- le ruleset `Protect main & develop` (id 20503835) n'autorise que la méthode `merge` : `allowed_merge_methods = ["merge"]` ;
+- le ruleset `Protect main` (id 20503835) n'autorise que la méthode `merge` : `allowed_merge_methods = ["merge"]` ;
 - les réglages du dépôt désactivent les deux autres méthodes : `allow_squash_merge = false` et `allow_rebase_merge = false` (`allow_merge_commit` reste à `true`).
 
 Ces réglages sont modifiés à la main par le mainteneur dans GitHub. Ils se vérifient en lecture :
@@ -82,11 +83,11 @@ La revue code owner n'est **pas** obligatoire (`require_code_owner_review = fals
 
 Le signalement des vulnérabilités suit [`SECURITY.md`](../../SECURITY.md#signaler-une-vulnérabilité) : signalement privé GitHub, aucune issue publique.
 
-## Contrat attendu pour `develop`
+## Contrat attendu pour `main`
 
 La configuration GitHub doit conserver :
 
-- passage par pull request avant toute modification de `develop` ;
+- passage par pull request avant toute modification de `main` ;
 - intégration par merge commit uniquement (`allowed_merge_methods = ["merge"]`) ;
 - les checks exact-head permanents définis par la politique du dépôt ;
 - prise en compte des gates distribution/benchmark applicables au diff avant merge ;
@@ -94,31 +95,20 @@ La configuration GitHub doit conserver :
 - interdiction de suppression de la branche ;
 - bypass administrateur explicite, minimal et limité au flux pull request.
 
-Les gates qui utilisent des filtres de chemins ne doivent pas être configurés comme checks globaux requis si GitHub peut ne pas créer le check pour un diff hors périmètre. La politique de merge doit néanmoins exiger leur succès lorsqu'ils sont applicables.
-
-## Défense en profondeur sur `develop`
-
-Les workflows versionnés qualifient aussi un éventuel push direct sur `develop` afin qu'une erreur future de gouvernance GitHub ne réduise pas silencieusement la couverture après l'entrée du commit sur la branche :
-
-- `NEXUS CI`, `CodeQL` et `OSV-Scanner` écoutent directement les pushes `develop` ;
-- les qualifications à filtre de chemins (Docker Distribution, Scale Benchmark, Scanner Corpus Benchmark et Windows Installer) disposent de callers `Develop Push ...` qui réutilisent les workflows qualifiants via `workflow_call` avec les mêmes périmètres de fichiers.
-
-Cette défense en profondeur intervient **après** l'arrivée du commit sur la branche. Elle ne remplace pas le ruleset GitHub exigeant une pull request et les checks applicables avant merge.
-
-## Contrat attendu pour `main`
-
-`main` reçoit uniquement des promotions qualifiées depuis `develop`. La configuration GitHub doit donc conserver avant merge d'une promotion :
-
-- passage par pull request ;
-- intégration par merge commit uniquement ;
-- succès des checks exact-head permanents ;
-- succès des gates distribution/benchmark applicables au diff lorsqu'ils sont déclenchés ;
-- interdiction des force pushes et de la suppression ;
-- bypass administrateur explicite et minimal.
-
-Les workflows à filtres de chemins ne doivent pas être ajoutés comme checks globaux requis lorsqu'ils peuvent légitimement ne pas être créés. Une release conteneur exige ensuite un tag SemVer `vX.Y.Z` sur le HEAD exact de `main`.
+Les gates qui utilisent des filtres de chemins ne doivent pas être configurés comme checks globaux requis si GitHub peut ne pas créer le check pour un diff hors périmètre. La politique de merge doit néanmoins exiger leur succès lorsqu'ils sont applicables. Une release conteneur exige ensuite un tag SemVer `vX.Y.Z` sur le HEAD exact de `main`, posé après lecture des qualifications post-merge de ce SHA.
 
 Une correction urgente qui contourne le flux normal doit rester exceptionnelle et conserver une qualification exact-head équivalente ainsi qu'une justification GitHub.
+
+## Qualifications après merge
+
+Les workflows versionnés qualifient aussi chaque push sur `main`, ce qui couvre les combinaisons de merges et un éventuel push direct si la gouvernance GitHub venait à se relâcher :
+
+- `NEXUS CI`, `CodeQL` et `OSV-Scanner` écoutent directement les pushes `main` ;
+- `Docker Distribution` écoute les pushes `main` sur ses chemins ;
+- Scale Benchmark, Scanner Corpus Benchmark et Windows Installer disposent de callers `Main Push ...` (`main-push-*.yml`) qui réutilisent les workflows qualifiants via `workflow_call` avec les mêmes périmètres de fichiers ;
+- la qualification sémantique réelle exécute le corpus `full` sur les pushes `main` qui touchent ses chemins ([BE-0090](../architecture/adr/BE-0090-garder-la-recherche-semantique-optionnelle-et-qualifiee-hors-release.md)).
+
+Ces qualifications interviennent **après** l'arrivée du commit sur `main`. Elles ne remplacent pas le ruleset GitHub exigeant une pull request et les checks applicables avant merge.
 
 ## Vérification effective
 
@@ -163,6 +153,7 @@ Cette section reprend les règles des sections « Méthode d'intégration : merg
 ### Comportement existant vérifié (repository-governance)
 
 - **[Existant vérifié]** Lecture du 2026-11-09 : `allowed_merge_methods` du ruleset 20503835 vaut `["merge"]` et `[allow_squash_merge, allow_rebase_merge]` vaut `[false,false]`.
+- **[Existant vérifié]** Lecture du 2026-11-12 : le ruleset 20503835 s'appelle « Protect main » et ne cible que `~DEFAULT_BRANCH`.
 - **[Existant vérifié]** `scripts/release/test-operational-doc-contracts.sh:535-576` exige la politique merge commit dans cette page et dans le skill `nexus-pr-workflow`, et un propriétaire pour chaque chemin sensible de `.github/CODEOWNERS`.
 
 ### Écarts et limites (repository-governance)

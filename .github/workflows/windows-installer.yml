@@ -15,7 +15,6 @@ on:
         required: false
   pull_request:
     branches:
-      - develop
       - main
     paths:
       - 'packaging/windows/**'

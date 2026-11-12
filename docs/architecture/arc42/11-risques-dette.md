@@ -23,7 +23,7 @@ Probabilité : F faible, M moyenne, E élevée. Impact : F faible, M moyen, E é
 | R23 | découverte native pathologique | M | E | clôturé : `ContextDiscoveryLimits` + benchmark 1 000 skills |
 | R24 | diff Git massif | M | M | clôturé : sink fixe + caps + test massif |
 | R25 | dérive documentation opérationnelle | M | E | mitigé : contrats doc exécutés dans NEXUS CI |
-| R26 | `develop` non protégé côté GitHub | F | E | **clôturé** : ruleset actif `Protect main & develop`, NXA3-14 / #130 satisfait |
+| R26 | `main` non protégée côté GitHub | F | E | **clôturé** : ruleset actif `Protect main` |
 | R27 | JDT LS hostile/défectueux ou lancé sur dépôt non approuvé | F | E | framing 16 MiB/64 KiB/8 KiB + queue 256 + confiance racine exacte + fail-closed |
 | R28 | requête Lucene à forte cardinalité dépasse le budget de clauses | F | M | cap 128 termes analysés + test de non-régression |
 | R29 | fuite accidentelle de secrets vers embeddings/contexte | M | E | exclusions sensibles + redaction forte confiance + profil `content-v8` |
@@ -62,7 +62,7 @@ Le build vérifie les outils fixes par hashes versionnés. L'image Docker qualif
 
 ### Gouvernance
 
-Le ruleset actif protège `develop` et `main`, impose les pull requests, interdit suppression/non-fast-forward et exige les checks permanents approuvés. NXA3-14 / #130 est satisfait.
+Le ruleset GitHub actif `Protect main` protège `main`, impose le passage par pull request et le merge commit, interdit suppression/non-fast-forward et exige les checks permanents approuvés.
 
 NEXUS est actuellement maintenu par **une seule personne**. Le modèle solo n'exige pas de seconde approbation humaine ni de resynchronisation stricte avec la base juste avant merge. Ces absences ne sont pas des risques ouverts ; elles ne doivent être reconsidérées que si le modèle de maintenance change explicitement.
 

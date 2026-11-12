@@ -9,7 +9,7 @@ argument-hint: "<numéro de PR ou id de run>"
 1. Déléguer l'analyse à l'agent `nexus-ci-triage` avec le numéro de PR ou l'id de run (il garde les logs hors du contexte principal et connaît les causes récurrentes).
 2. Pour chaque cause racine retournée :
    - **liée au changement** : corriger sur la branche de la PR, valider localement (skill `nexus-validate`, mode quick puis full si nécessaire), pousser ;
-   - **préexistante sur develop** (CVE, test instable) : corriger dans la PR qui la débloque ou dans une PR dédiée, puis mettre à jour les autres PR (`@dependabot rebase` / `gh pr update-branch`).
+   - **préexistante sur main** (CVE, test instable) : corriger dans la PR qui la débloque ou dans une PR dédiée, puis mettre à jour les autres PR (`@dependabot rebase` / `gh pr update-branch`).
 3. Ne jamais : abaisser un seuil ou un budget pour faire passer un check, désactiver un test, contourner un hook (`--no-verify`), force-pusher.
 4. Rapporter : check, cause, correctif, SHA poussé, checks encore en cours.
 
