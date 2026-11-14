@@ -535,4 +535,18 @@ if [[ -n "$develop_refs" ]]; then
   fail ".github/ must not target the develop branch (GEN-0089): $develop_refs"
 fi
 
+# --- Sprint 15 : release-latest-apres-immuable (AUD-DEP-38) ---
+# Every release is published outside latest (make_latest defaults to true on publication), and
+# only an immutable final release is then marked latest, after the immutable read.
+publish_script=scripts/release/publish-github-release-assets.sh
+grep -Fq -- 'gh release edit "$TAG" --draft=false --latest=false' "$publish_script" \
+  || fail 'publish-github-release-assets.sh must publish releases outside latest (--draft=false --latest=false)'
+immutable_read_line="$(grep -nF -- "--jq '.immutable'" "$publish_script" | head -n 1 | cut -d: -f1)"
+latest_mark_line="$(grep -nF -- 'gh release edit "$TAG" --latest >' "$publish_script" | head -n 1 | cut -d: -f1)"
+[[ -n "$immutable_read_line" && -n "$latest_mark_line" ]] \
+  || fail 'publish-github-release-assets.sh must read immutable and then mark the release latest'
+(( immutable_read_line < latest_mark_line )) \
+  || fail 'publish-github-release-assets.sh must mark latest only after the immutable read'
+# --- Fin Sprint 15 : release-latest-apres-immuable ---
+
 echo 'final-audit-contracts=PASS'
