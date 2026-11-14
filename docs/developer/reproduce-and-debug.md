@@ -8,7 +8,7 @@ Le projet compile avec :
 
 ```text
 Java --release 21
-Maven
+Maven, fourni par le wrapper (mvnw)
 ```
 
 Un JDK plus récent peut être utilisé pour lancer Maven tant que le code compile avec la cible Java 21.
@@ -23,7 +23,7 @@ Maven n'est appelé que par le wrapper vérifié (`.\mvnw.cmd` sous Windows, `./
 ## 2. Récupérer la dernière version
 
 ```powershell
-cd N:\workspace-dev\nexus-context-engine
+cd nexus-context-engine
 git pull --ff-only
 ```
 
