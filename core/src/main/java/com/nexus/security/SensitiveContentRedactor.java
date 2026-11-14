@@ -21,10 +21,14 @@ public final class SensitiveContentRedactor {
     public static final String POLICY_VERSION = "secret-redaction-v10";
 
     private static final String REDACTED = "[REDACTED]";
-    private static final String PRIVATE_KEY_BEGIN = "-----BEGIN ";
-    private static final String PRIVATE_KEY_END = "-----END ";
-    private static final String PRIVATE_KEY_SUFFIX = "PRIVATE KEY-----";
-    private static final String PGP_PRIVATE_KEY_SUFFIX = "PRIVATE KEY BLOCK-----";
+    /** Tirets d'ouverture et de fin d'un marqueur de clé privée. */
+    private static final String MARKER_DASHES = "-----";
+    /** Longueur de {@code -----BEGIN } : tirets, mot {@code BEGIN} et un blanc. */
+    private static final int PRIVATE_KEY_BEGIN_LENGTH = 11;
+    private static final String PRIVATE_KEY_SUFFIX = "PRIVATE KEY";
+    private static final String PGP_PRIVATE_KEY_SUFFIX = "PRIVATE KEY BLOCK";
+    /** Espace insécable (U+00A0), blanc admis dans un marqueur de clé privée. */
+    private static final char NO_BREAK_SPACE = (char) 0x00A0;
     private static final int MAX_SECRET_CHARS = 4096;
     private static final int MAX_URI_USER_CHARS = 1024;
     /** Classe du corps et des gardes d'un jeton à tirets ({@code sk-}, {@code xox?-}, {@code glpat-}). */
@@ -406,48 +410,143 @@ public final class SensitiveContentRedactor {
      * ({@code -----BEGIN CERTIFICATE-----BEGIN RSA PRIVATE KEY-----}), et aucun {@code -----BEGIN }
      * situé après ce point n'est sauté. Entre ce point et les tirets trouvés il n'y a aucun
      * {@code -----} : chaque zone est balayée un nombre borné de fois et le coût reste linéaire.</p>
+     *
+     * <p>Les mots {@code BEGIN}, {@code END} et le type se comparent sans tenir compte de la casse ASCII,
+     * et une espace, une tabulation ou une espace insécable (U+00A0) valent un même blanc : après
+     * {@code BEGIN} ou {@code END}, et entre les mots du type. La ligne {@code -----END } doit porter le
+     * même type, à la casse et aux blancs près.</p>
      */
     private static String replacePrivateKeyBlocks(String content) {
         StringBuilder output = new StringBuilder(content.length());
         int cursor = 0;
         while (cursor < content.length()) {
-            int begin = content.indexOf(PRIVATE_KEY_BEGIN, cursor);
+            int begin = nextMarker(content, cursor, "BEGIN");
             if (begin < 0) {
                 output.append(content, cursor, content.length());
                 break;
             }
 
-            int afterBegin = begin + PRIVATE_KEY_BEGIN.length();
+            int afterBegin = begin + PRIVATE_KEY_BEGIN_LENGTH;
             int closingDashes = closingDashesOnMarkerLine(content, afterBegin);
-            if (closingDashes < 0) {
-                output.append(content, cursor, afterBegin);
-                cursor = afterBegin;
-                continue;
-            }
-            int markerEnd = closingDashes + 5;
-            String beginMarker = content.substring(begin, markerEnd);
-            if (!beginMarker.endsWith(PRIVATE_KEY_SUFFIX) && !beginMarker.endsWith(PGP_PRIVATE_KEY_SUFFIX)) {
+            if (closingDashes < 0 || !isPrivateKeyType(content, afterBegin, closingDashes)) {
                 output.append(content, cursor, afterBegin);
                 cursor = afterBegin;
                 continue;
             }
 
-            String keyType = beginMarker.substring(PRIVATE_KEY_BEGIN.length(), beginMarker.length() - 5);
-            String endMarker = PRIVATE_KEY_END + keyType + "-----";
-            int end = content.indexOf(endMarker, markerEnd);
+            int end = endOfMatchingEndMarker(content, closingDashes + MARKER_DASHES.length(), afterBegin, closingDashes);
             if (end < 0) {
                 output.append(content, cursor, begin).append(REDACTED);
                 appendLineSeparators(output, content, begin, content.length());
                 cursor = content.length();
                 continue;
             }
-            end += endMarker.length();
 
             output.append(content, cursor, begin).append(REDACTED);
             appendLineSeparators(output, content, begin, end);
             cursor = end;
         }
         return output.toString();
+    }
+
+    /**
+     * Position du prochain {@code -----<mot><blanc>} à partir de {@code from}, ou {@code -1}. Chaque
+     * occurrence de {@code -----} est examinée en temps constant, puis la recherche avance d'un caractère.
+     */
+    private static int nextMarker(String content, int from, String word) {
+        int position = from;
+        while (true) {
+            int dashes = content.indexOf(MARKER_DASHES, position);
+            if (dashes < 0) {
+                return -1;
+            }
+            int wordStart = dashes + MARKER_DASHES.length();
+            if (regionEqualsIgnoreAsciiCase(content, wordStart, word)
+                    && wordStart + word.length() < content.length()
+                    && isMarkerBlank(content.charAt(wordStart + word.length()))) {
+                return dashes;
+            }
+            position = dashes + 1;
+        }
+    }
+
+    /** Le type {@code content[from, to)} se termine par {@code PRIVATE KEY} ou {@code PRIVATE KEY BLOCK}. */
+    private static boolean isPrivateKeyType(String content, int from, int to) {
+        return endsWithNormalized(content, from, to, PRIVATE_KEY_SUFFIX)
+                || endsWithNormalized(content, from, to, PGP_PRIVATE_KEY_SUFFIX);
+    }
+
+    private static boolean endsWithNormalized(String content, int from, int to, String suffix) {
+        int start = to - suffix.length();
+        if (start < from) {
+            return false;
+        }
+        for (int index = 0; index < suffix.length(); index++) {
+            if (!sameMarkerChar(content.charAt(start + index), suffix.charAt(index))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Fin de la première ligne {@code -----END <type>-----} qui suit {@code from} et porte le type
+     * {@code content[typeFrom, typeTo)}, ou {@code -1}. Le type ne contient aucun {@code -----} : deux
+     * comparaisons ne partagent que les tirets d'ouverture, et le balayage reste linéaire.
+     */
+    private static int endOfMatchingEndMarker(String content, int from, int typeFrom, int typeTo) {
+        int position = from;
+        while (true) {
+            int candidate = nextMarker(content, position, "END");
+            if (candidate < 0) {
+                return -1;
+            }
+            int typeStart = candidate + MARKER_DASHES.length() + "END".length() + 1;
+            int typeLength = typeTo - typeFrom;
+            if (typeStart + typeLength + MARKER_DASHES.length() <= content.length()
+                    && sameType(content, typeStart, typeFrom, typeLength)
+                    && content.startsWith(MARKER_DASHES, typeStart + typeLength)) {
+                return typeStart + typeLength + MARKER_DASHES.length();
+            }
+            position = candidate + 1;
+        }
+    }
+
+    private static boolean sameType(String content, int candidate, int typeFrom, int length) {
+        for (int index = 0; index < length; index++) {
+            if (!sameMarkerChar(content.charAt(candidate + index), content.charAt(typeFrom + index))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean regionEqualsIgnoreAsciiCase(String content, int from, String word) {
+        if (from + word.length() > content.length()) {
+            return false;
+        }
+        for (int index = 0; index < word.length(); index++) {
+            if (asciiUpper(content.charAt(from + index)) != asciiUpper(word.charAt(index))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Égalité de deux caractères d'un marqueur : casse ASCII ignorée, blancs équivalents. */
+    private static boolean sameMarkerChar(char left, char right) {
+        if (isMarkerBlank(left) || isMarkerBlank(right)) {
+            return isMarkerBlank(left) && isMarkerBlank(right);
+        }
+        return asciiUpper(left) == asciiUpper(right);
+    }
+
+    private static boolean isMarkerBlank(char character) {
+        return character == ' ' || character == '\t' || character == NO_BREAK_SPACE;
+    }
+
+    private static char asciiUpper(char character) {
+        return character >= 'a' && character <= 'z' ? (char) (character - ('a' - 'A')) : character;
     }
 
     /**
@@ -460,7 +559,7 @@ public final class SensitiveContentRedactor {
             if (character == '\r' || character == '\n') {
                 return -1;
             }
-            if (character == '-' && content.startsWith("-----", index)) {
+            if (character == '-' && content.startsWith(MARKER_DASHES, index)) {
                 return index;
             }
         }

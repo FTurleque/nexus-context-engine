@@ -58,15 +58,28 @@ class SensitiveContentRedactorTest {
         // pas une mesure de performance : marge supérieure à x5 sur la durée nominale (~0,3 s à froid).
         org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(java.time.Duration.ofSeconds(10), () -> {
             assertEquals(malformed, SensitiveContentRedactor.redact(malformed));
-            String dashes = "-".repeat(5);
-            for (String repeated : java.util.List.of(dashes + "BEGIN \n", dashes + "BEGIN CERTIFICATE" + dashes + "\n",
-                    dashes + "BEGIN ")) {
-                String markers = repeated.repeat((1 << 20) / repeated.length() + 1);
-                assertEquals(markers, SensitiveContentRedactor.redact(markers));
-            }
             String oversized = "password=" + "x".repeat(1_000_000);
             org.junit.jupiter.api.Assertions.assertThrows(OversizedSecretException.class,
                     () -> SensitiveContentRedactor.redact(oversized));
+        });
+    }
+
+    @Test
+    void forgedPrivateKeyMarkerRepetitionsHaveBoundedCost() {
+        String dashes = "-".repeat(5);
+        // Garde-fou contre un balayage quadratique des marqueurs de clé privée, pas une mesure de
+        // performance : six contenus d'environ 1 Mo, seuil de 10 s comme le garde-fou précédent.
+        org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(java.time.Duration.ofSeconds(10), () -> {
+            for (String repeated : java.util.List.of(dashes + "BEGIN \n", dashes + "BEGIN CERTIFICATE" + dashes + "\n",
+                    dashes + "BEGIN ", dashes + "begin\t", dashes + "BEGIN" + (char) 0x00A0 + "X")) {
+                String markers = repeated.repeat((1 << 20) / repeated.length() + 1);
+                assertEquals(markers, SensitiveContentRedactor.redact(markers));
+            }
+            String partialEnd = dashes + "END RSA PRIVATE KE\n";
+            String unclosed = dashes + "BEGIN RSA PRIVATE KEY" + dashes + "\n"
+                    + partialEnd.repeat((1 << 20) / partialEnd.length() + 1);
+            String rendered = SensitiveContentRedactor.redact(unclosed);
+            assertTrue(rendered.startsWith("[REDACTED]\n"), rendered.substring(0, 40));
         });
     }
 
@@ -553,6 +566,78 @@ class SensitiveContentRedactorTest {
         assertEquals(lines + newline + "[REDACTED]" + newline + newline, redacted);
         assertFalse(redacted.contains(FAKE_KEY_BODY), redacted);
         assertEquals(lineSeparatorsOf(withBlock), lineSeparatorsOf(redacted));
+    }
+
+    static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments> privateKeyMarkersWithAnotherCaseOrBlank() {
+        String nbsp = "\u00A0";
+        var markers = java.util.List.of(
+                java.util.List.of("minuscules", "begin rsa private key", "end rsa private key"),
+                java.util.List.of("casse mêlée", "Begin Rsa Private Key", "End Rsa Private Key"),
+                java.util.List.of("tabulation après BEGIN et END", "BEGIN\tRSA PRIVATE KEY", "END\tRSA PRIVATE KEY"),
+                java.util.List.of("espace insécable entre les mots", "BEGIN" + nbsp + "RSA" + nbsp + "PRIVATE" + nbsp + "KEY",
+                        "END" + nbsp + "RSA" + nbsp + "PRIVATE" + nbsp + "KEY"),
+                java.util.List.of("espace insécable au début, espaces à la fin", "BEGIN RSA" + nbsp + "PRIVATE KEY",
+                        "END RSA PRIVATE KEY"),
+                java.util.List.of("bloc PGP en minuscules", "begin pgp private key block", "end pgp private key block"));
+        return markers.stream().flatMap(marker -> java.util.stream.Stream.of("\n", "\r\n").map(newline ->
+                org.junit.jupiter.params.provider.Arguments.of(marker.get(0) + (newline.length() == 1 ? " (LF)" : " (CRLF)"),
+                        marker.get(1), marker.get(2), newline)));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.MethodSource("privateKeyMarkersWithAnotherCaseOrBlank")
+    void privateKeyMarkerIsRecognizedWhateverItsCaseAndBlanks(String label, String begin, String end, String newline) {
+        String block = DASHES + begin + DASHES + newline + FAKE_KEY_BODY + newline + DASHES + end + DASHES;
+        String content = "before" + newline + block + newline + "after";
+        String redacted = SensitiveContentRedactor.redact(content);
+        assertEquals("before" + newline + "[REDACTED]" + newline + newline + newline + "after", redacted);
+
+        String truncated = "before" + newline + DASHES + begin + DASHES + newline + FAKE_KEY_BODY + newline + "tail";
+        assertEquals("before" + newline + "[REDACTED]" + newline + newline, SensitiveContentRedactor.redact(truncated));
+    }
+
+    @Test
+    void markerSplitAcrossTwoSourceLinesOpensNoKey() {
+        String source = "String pem = \"" + DASHES + "BEGIN RSA \" +\n"
+                + "        \"PRIVATE KEY" + DASHES + "\\n\" +\n"
+                + "        \"" + FAKE_KEY_BODY + "\\n\" +\n"
+                + "        \"" + DASHES + "END RSA PRIVATE KEY" + DASHES + "\";\n";
+        // Limite acceptée : la fin du marqueur n'est pas sur sa ligne, le corps reste en clair.
+        assertEquals(source, SensitiveContentRedactor.redact(source));
+    }
+
+    @Test
+    void codeLiteralEndingWithAKeySuffixMasksTheRestOfTheContent() {
+        String source = "if (l.startsWith(\"" + DASHES + "BEGIN \") && l.endsWith(\"PRIVATE KEY" + DASHES + "\")) {}\n"
+                + "visible\n";
+        // Limite acceptée : la ligne ouvre une clé sans ligne END, la suite est masquée (aucune fuite).
+        assertEquals("if (l.startsWith(\"[REDACTED]\n\n", SensitiveContentRedactor.redact(source));
+    }
+
+    static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments> unrecognizedPrivateKeyMarkers() {
+        String four = "-".repeat(4);
+        String enDashes = "\u2013".repeat(5);
+        return java.util.stream.Stream.of(
+                org.junit.jupiter.params.provider.Arguments.of("quatre tirets",
+                        four + "BEGIN RSA PRIVATE KEY" + four + "\n" + FAKE_KEY_BODY + "\n" + four + "END RSA PRIVATE KEY" + four),
+                org.junit.jupiter.params.provider.Arguments.of("espace avant les tirets de fin",
+                        DASHES + "BEGIN RSA PRIVATE KEY " + DASHES + "\n" + FAKE_KEY_BODY + "\n" + DASHES + "END RSA PRIVATE KEY " + DASHES),
+                org.junit.jupiter.params.provider.Arguments.of("BEGIN collé au type",
+                        DASHES + "BEGINRSA PRIVATE KEY" + DASHES + "\n" + FAKE_KEY_BODY + "\n" + DASHES + "ENDRSA PRIVATE KEY" + DASHES),
+                org.junit.jupiter.params.provider.Arguments.of("tirets demi-cadratin",
+                        enDashes + "BEGIN RSA PRIVATE KEY" + enDashes + "\n" + FAKE_KEY_BODY + "\n" + enDashes + "END RSA PRIVATE KEY" + enDashes),
+                org.junit.jupiter.params.provider.Arguments.of("E cyrillique dans BEGIN",
+                        DASHES + "B\u0415GIN RSA PRIVATE KEY" + DASHES + "\n" + FAKE_KEY_BODY + "\n" + DASHES + "\u0415ND RSA PRIVATE KEY" + DASHES),
+                org.junit.jupiter.params.provider.Arguments.of("format PuTTY",
+                        "PuTTY-User-Key-File-3: ssh-rsa\nEncryption: none\nComment: fixture\nPublic-Lines: 1\nAAAAB3NzaC1yc2E\n"
+                                + "Private-Lines: 1\n" + FAKE_KEY_BODY + "\nPrivate-MAC: 00"));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.MethodSource("unrecognizedPrivateKeyMarkers")
+    void unrecognizedPrivateKeyMarkerFormsStayInClear(String label, String content) {
+        // Limites connues : ces variantes ne sont pas reconnues comme blocs de clé privée.
+        assertEquals(content, SensitiveContentRedactor.redact(content));
     }
 
     @Test

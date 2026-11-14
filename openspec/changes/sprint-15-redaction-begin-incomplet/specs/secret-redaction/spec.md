@@ -55,6 +55,29 @@ Un marqueur `-----BEGIN ` SHALL n'ouvrir une clé privée que si ses tirets de f
 - **WHEN** le contenu est redigé
 - **THEN** les trois premières lignes sont rendues inchangées, le corps n'apparaît pas dans le texte rendu, et chaque CR et LF du contenu est conservé
 
+### Requirement: Un marqueur de clé privée est reconnu quelles que soient sa casse et ses blancs
+Les mots `BEGIN`, `END` et le type d'un marqueur de clé privée SHALL être comparés sans tenir compte de la casse ASCII, et une espace, une tabulation ou une espace insécable (U+00A0) SHALL valoir un même blanc après `BEGIN` ou `END` et entre les mots du type. La reconnaissance SHALL garder un coût linéaire et la règle de la fin du marqueur sur sa ligne.
+
+#### Scenario: Marqueurs en minuscules
+- **GIVEN** un bloc dont les marqueurs sont `-----begin rsa private key-----` et `-----end rsa private key-----`, avec le corps `MIIfakebodyNOTAKEY0123`
+- **WHEN** le contenu est redigé
+- **THEN** le bloc est remplacé par `[REDACTED]`, le corps n'apparaît pas dans le texte rendu et chaque CR et LF du contenu est conservé
+
+#### Scenario: Tabulation ou espace insécable comme blanc
+- **GIVEN** un bloc dont le marqueur d'ouverture porte une tabulation après `BEGIN`, ou une espace insécable entre les mots du type, et dont la ligne de fin porte le même type avec des espaces
+- **WHEN** le contenu est redigé
+- **THEN** le bloc est remplacé par `[REDACTED]` et le corps n'apparaît pas dans le texte rendu
+
+#### Scenario: Séparateur CRLF
+- **GIVEN** le contenu de « Marqueurs en minuscules », dont chaque séparateur est CRLF
+- **WHEN** le contenu est redigé
+- **THEN** le corps n'apparaît pas dans le texte rendu et chaque CR et LF du contenu est conservé
+
+#### Scenario: Variantes non reconnues
+- **GIVEN** un bloc dont les marqueurs ont moins de cinq tirets, une espace avant les tirets de fin, `BEGIN` collé au type, des tirets demi-cadratin ou une lettre cyrillique, ou un fichier au format PuTTY
+- **WHEN** le contenu est redigé
+- **THEN** le texte rendu est identique au contenu
+
 ## MODIFIED Requirements
 
 ### Requirement: Un changement de politique invalide les index dérivés
