@@ -5951,12 +5951,16 @@
    "sprint": 15,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
-   "changement": "Nouveau",
+   "statut": "Fermé avec réserve",
+   "changement": "Corrigé par la PR #388",
    "historique": [
     {
      "date": "2026-11-12",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-14",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
@@ -5965,6 +5969,13 @@
     "verdict": "Nouveau constat",
     "preuve": "Relevé à la vérification du 12/11.",
     "reserve": null
+   },
+   "verification_mainteneur": {
+    "date": "2026-11-14",
+    "commit": "460cb831",
+    "verdict": "Fermé avec réserve",
+    "preuve": "scripts/release/publish-github-release-assets.sh publie toute release par gh release edit --draft=false --latest=false, puis, pour une version finale dont immutable vaut true, la désigne Latest après la lecture d'immutable et relit le badge (sortie 80 nommant le tag sinon), sans comparaison de versions. scripts/release/test-publish-github-release-assets.sh (faux gh : finale immuable, finale non immuable, pré-version, reprise hors Latest, reprise déjà Latest, badge non posé, relance d'une version plus ancienne) ; scripts/release/test-final-audit-contracts.sh exige la publication hors Latest et la pose du badge après la lecture d'immutable.",
+    "reserve": "Pose du badge Latest contre l'API GitHub réelle à relever à la prochaine release finale (tâche 3.1 de sprint-15-release-latest-apres-immuable)."
    }
   },
   {
@@ -5983,12 +5994,16 @@
    "sprint": 15,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
-   "changement": "Nouveau",
+   "statut": "Fermé avec réserve",
+   "changement": "Corrigé par la PR #391",
    "historique": [
     {
      "date": "2026-11-12",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-14",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
@@ -5997,6 +6012,13 @@
     "verdict": "Nouveau constat",
     "preuve": "Rejoué le 12/11 sous Windows PowerShell 5.1 (repro-qua28.ps1, fonctions extraites de la source durcie) : profil « a^b » → ligne set \"NEXUS_HOME=…\\a^b\\.nexus\" correcte et exécutée sans erreur en page 850, mais ContainsUnsafeConfigChars(NEXUS_HOME) = vrai, donc refus par l'assistant. La MsgBox non supprimable est déduite de la lecture.",
     "reserve": null
+   },
+   "verification_mainteneur": {
+    "date": "2026-11-14",
+    "commit": "38795cee",
+    "verdict": "Fermé avec réserve",
+    "preuve": "ContainsUnsafeConfigChars n'interdit plus que CR, LF et le guillemet double : un accent circonflexe est accepté dans les valeurs de la configuration générée ; toute la validation des pages passe par SuppressibleMsgBox(…, MB_OK, IDOK). scripts/release/test-windows-config-escaping.ps1 (rejeu de ContainsUnsafeConfigChars, DockerPath et DotEnvQuoted sur C:\\Users\\a^b, sonde de lanceur avec un NEXUS_HOME a^b) et scripts/release/test-windows-installer.ps1 (contrat des boîtes, fixtures in^st, in st et no^conf, smoke installé) verts dans le job « Windows self-contained installer » sur e8b17fbd, head exact de la PR (run 43647095453). Écarts hors audit corrigés dans la même PR : lanceurs natifs qui ne chargeaient pas config\\nexus-native.env.cmd depuis un dossier d'installation contenant ^ ; connecteurs MCP natifs qui passaient par cmd /s /c (échec avec ^ ou une espace dans le dossier), remplacés par java.exe lancé directement avec la configuration native en env ; NEXUS_HOME personnalisé ignoré par les fragments JSON et TOML.",
+    "reserve": "Vérification manuelle sous Docker Desktop avec un profil a^b non faite (tâche 2.4 de sprint-15-installateur-caret)."
    }
   },
   {
@@ -6014,12 +6036,16 @@
    "sprint": 15,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
-   "changement": "Nouveau",
+   "statut": "Fermé",
+   "changement": "Corrigé par la PR #389",
    "historique": [
     {
      "date": "2026-11-12",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-14",
+     "statut": "Fermé"
     }
    ],
    "verification": {
@@ -6027,6 +6053,13 @@
     "commit": "244ab1d3",
     "verdict": "Nouveau constat",
     "preuve": "Relevé à la vérification du 12/11.",
+    "reserve": null
+   },
+   "verification_mainteneur": {
+    "date": "2026-11-14",
+    "commit": "d2f29f36",
+    "verdict": "Fermé",
+    "preuve": "Les guides courants (docs/developer/reproduce-and-debug.md, indexing-pipeline.md, agent-skills.md, docs/architecture/arc42/02-contraintes.md) appellent Maven par ./mvnw ou .\\mvnw.cmd, et exec:java avec -pl core. Contrat scripts/release/test-operational-doc-contracts.sh, bloc « Sprint 15 : guides sous le wrapper Maven (AUD-QUA-30) » : docs/**/*.md hors ADR, audits, historique et rapports, plus README.md, AGENTS.md, CONTRIBUTING.md et SECURITY.md, blocs de code et code en ligne, auto-test des formes détectées et non signalées, exceptions nommées ; bash .claude/scripts/contracts.sh vert. Écarts hors audit corrigés dans la même PR : chemin de poste et prérequis Maven du guide de reproduction ; contrat durci (parcours par motif plutôt que par liste, exec:java sans -pl core refusé, exception obsolète signalée).",
     "reserve": null
    }
   },
@@ -6045,12 +6078,16 @@
    "sprint": 15,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
-   "changement": "Nouveau",
+   "statut": "Fermé",
+   "changement": "Corrigé par la PR #390",
    "historique": [
     {
      "date": "2026-11-12",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-14",
+     "statut": "Fermé"
     }
    ],
    "verification": {
@@ -6059,6 +6096,13 @@
     "verdict": "Nouveau constat",
     "preuve": "Rejoué indépendamment (java 21, classes de 244ab1d3, corps de clé factice) : bloc seul masqué ; précédé de `if (line.startsWith(\"-----BEGIN \")) {}` ou d'une ligne « -----BEGIN  » → corps en clair. Identique sur 510ff8ca (préexistant).",
     "reserve": null
+   },
+   "verification_mainteneur": {
+    "date": "2026-11-14",
+    "commit": "b5adf249",
+    "verdict": "Fermé",
+    "preuve": "replacePrivateKeyBlocks reprend la recherche juste après « -----BEGIN » quand le marqueur n'ouvre pas de clé et cherche les tirets de fin du marqueur sur sa ligne ; politique secret-redaction-v10, profil content-v9, migration V021 (SchemaMigratorPrivateKeyMarkerUpgradeTest). Comportement : un bloc RSA ou PGP précédé d'une ligne « -----BEGIN », d'un littéral de code ou d'un marqueur d'un autre type est masqué, CR et LF conservés. Tests : SensitiveContentRedactorTest#privateKeyBlockAfterAMarkerThatOpensNoKeyIsRedacted, #markerWhoseClosingDashesAreNotOnItsLineOpensNoKey, #privateKeyMarkerIsRecognizedWhateverItsCaseAndBlanks, #endMarkerInTheMiddleOfALineClosesTheBlockAtTheEndOfItsLine, #generatedPrivateKeyMarkerContentsRenderAsV9WhenV9HasNoDefect (non-régression contre v9), #forgedPrivateKeyMarkerRepetitionsHaveBoundedCost (coût borné). Écarts hors audit corrigés dans la même PR : marqueur d'un autre type collé au vrai marqueur, y compris par plus de cinq tirets ; casse et blancs des marqueurs (minuscules, tabulation, espace insécable, suites de blancs) ; END au milieu d'une ligne qui laissait la suite du bloc en clair ; masquage jusqu'à la fin du contenu après un marqueur sans fin sur sa ligne.",
+    "reserve": "Limites figées par test : marqueur coupé sur deux lignes, quatre tirets, blancs Unicode autres que l'espace insécable ; un littéral qui ouvre une clé sans END masque la suite du contenu."
    }
   },
   {
