@@ -577,15 +577,47 @@ Cette section décrit ce que `scripts/release/test-operational-doc-contracts.sh`
 |---|---|---|
 | [Existant vérifié] | `docs/developer/search-ranking.md` décrit le voisinage graphe comme une projection bornée ; le contrat refuse « ProjectGraph cache », « ProjectGraphBuilder » et « Graphe dérivé par génération ». | `scripts/release/test-operational-doc-contracts.sh:372-373` |
 | [Existant vérifié] | Les documents de la liste `current_docs`, dont `docs/developer/reproduce-and-debug.md`, ne contiennent pas la version de développement tenue par la constante `STALE_DEV_VERSION` ; le guide de reproduction nomme les artefacts `target/nexus-context-engine-<version>.jar` et `-cli.jar`, la version étant celle de `pom.xml`. Les relevés datés (`docs/project/history/`) et les ADR hors de la liste la citent sans être contrôlés. | `scripts/release/test-operational-doc-contracts.sh`, liste `current_docs` et constante `STALE_DEV_VERSION` |
-| [Existant vérifié] | `docs/developer/current-limitations.md` ne présente pas le moteur FTS5 trigram livré par V008 comme une évolution à venir. | `scripts/release/test-operational-doc-contracts.sh:967` |
-| [Existant vérifié] | `AGENTS.md` prescrit `./mvnw clean install` et ne contient aucune commande `mvn` hors wrapper. | `scripts/release/test-operational-doc-contracts.sh:976` |
+| [Existant vérifié] | `docs/developer/current-limitations.md` ne présente pas le moteur FTS5 trigram livré par V008 comme une évolution à venir. | `scripts/release/test-operational-doc-contracts.sh:968-975` |
+| [Existant vérifié] | `AGENTS.md` prescrit `./mvnw clean install` et ne contient aucune commande `mvn` hors wrapper. | `scripts/release/test-operational-doc-contracts.sh:977-984` |
+| [Existant vérifié] | Les documents courants (`README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md` et `docs/**/*.md` hors `docs/architecture/adr/`, `docs/project/audits/`, `docs/project/history/`, `docs/project/rapport-supervisor/`) n'écrivent `mvn` ni `mvn.cmd` en position de commande dans un bloc de code non Mermaid ou un code en ligne. Le périmètre est parcouru par motif : une nouvelle page est couverte sans édition du contrat. Une violation échoue avec `<document>:<ligne>: calls Maven directly instead of ./mvnw or .\mvnw.cmd`. | `scripts/release/test-operational-doc-contracts.sh:1134-1257` (périmètre `:1142-1148`, grammaire `:1166-1172` et `:1184-1210`, parcours `:1241-1256`) |
+| [Existant vérifié] | Position de commande : début du texte, après une invite facultative `PS…>`, `$ ` ou `> `, ou après `&&`, `\|\|`, `;`, `\|`, `&`, `(`. Dans un bloc, le jeton est suivi d'un blanc ou de la fin de ligne ; dans un code en ligne, d'un blanc, si bien que `` `mvn` `` ou `` `mvn.cmd` `` seuls désignent l'outil sans être signalés. `mvnw`, `.mvn/`, `./mvnw` et `.\mvnw.cmd` ne correspondent pas au jeton. | `scripts/release/test-operational-doc-contracts.sh:1166-1168` |
+| [Existant vérifié] | Une commande Maven du wrapper (`./mvnw`, `.\mvnw.cmd`, `mvnw`, `mvnw.cmd`) qui lance `exec:java` sélectionne `core` par `-pl core` ou `--projects core` ; sinon le contrat échoue avec `<document>:<ligne>: exec:java must select the core module (-pl core)`. Le POM racine est un agrégateur (`pom.xml:10`) et seul `core/pom.xml:232-235` configure `exec-maven-plugin` avec `com.nexus.cli.NexusCli`. | `scripts/release/test-operational-doc-contracts.sh:1169-1170`, `:1207-1209` |
+| [Existant vérifié] | `MAVEN_DOC_EXCEPTIONS` liste, par document et texte exact de ligne, les trois lignes de `docs/developer/ci-and-supply-chain.md:500-502` qui citent les fixtures de `DIRECT_MAVEN_CALL`. Une exception dont la ligne a disparu ou changé échoue avec `obsolete Maven exception <document>: <ligne>`. | `scripts/release/test-operational-doc-contracts.sh:1150-1163`, `:1252-1253` |
+| [Existant vérifié] | L'auto-test en mémoire exige la détection de dix formes (dont `mvn.cmd` avec arguments, un appel Maven après `cd core &&`, une invite `PS>`, un bloc indenté dans une liste, un bloc `~~~`, un `exec:java` du wrapper sans `-pl core`) et l'absence de signalement de neuf autres (wrapper, `` `mvn` `` seul, bloc Mermaid, prose hors code, `.mvn/wrapper/…`, `-pl core` et `--projects core`, `cmd /c mvnw.cmd`). | `scripts/release/test-operational-doc-contracts.sh:1213-1239` |
 | [Existant vérifié] | L'étape 9 du self-smoke vérifie que le contexte construit sur le dépôt retient le `AGENTS.md` natif. | `scripts/self-smoke.ps1:165` |
 | [Existant vérifié] | La documentation courante nomme `quarkus.platform.version` et `mcp.sdk.version` du `pom.xml` ; le contrat lit ces propriétés, refuse leur valeur et tout littéral `Quarkus x.y.z` ou `SDK MCP x.y.z` dans les documents contrôlés. | `scripts/release/test-operational-doc-contracts.sh:29-49`, `scripts/release/test-operational-doc-contracts.sh:135-172` |
 | [Existant vérifié] | `docs/user/docker-installation.md` attribue les tags GHCR `<version>` et `latest` à `.github/workflows/release.yml` : le dernier workflow cité avant la liste des tags doit être celui-ci, et aucune phrase n'attribue une publication à `docker-distribution.yml`. Le même bloc refuse `docker push`, `ghcr.io`, `docker login`, `imagetools create` et `--push` dans `docker-distribution.yml`, et réserve la permission `packages: write` à `release.yml` parmi `.github/workflows/` et `.github/actions/`. | `scripts/release/test-operational-doc-contracts.sh:920-964` |
 
+Vue organigramme — quelle décision le contrat du wrapper prend-il pour une ligne d'un document courant ; exigences `operational-documentation-contracts › Les guides courants n'appellent Maven que par le wrapper` et `› Les commandes exec:java de la documentation visent le module core`.
+
+```mermaid
+flowchart TD
+    L["ligne d'un document courant"] --> F{"délimiteur de bloc ?"}
+    F -- oui --> T["ouvre ou ferme le bloc"]
+    F -- non --> M{"dans un bloc mermaid ?"}
+    M -- oui --> OK["acceptée"]
+    M -- non --> B{"dans un bloc de code ?"}
+    B -- oui --> C1["texte examiné : la ligne"]
+    B -- non --> C2["texte examiné : chaque code en ligne"]
+    C1 --> P{"mvn ou mvn.cmd en position de commande ?"}
+    C2 --> P
+    P -- oui --> X{"exception listée ?"}
+    X -- non --> E1["échec : document:ligne, Maven direct"]
+    X -- oui --> OK
+    P -- non --> J{"commande wrapper avec exec:java sans -pl core ?"}
+    J -- oui --> E2["échec : document:ligne, exec:java hors core"]
+    J -- non --> OK
+```
+
+Lecture : la prose hors code n'est jamais examinée ; une exception listée dont la ligne a disparu fait échouer le contrat en fin de parcours.
+
 ### Écarts et limites (operational-documentation-contracts)
 
 - Aucun contrôle permanent ne vérifie l'absence d'un type `ProjectGraph` dans le code : la recherche `git grep` a été exécutée à la livraison du sprint 11.
+- **Limite** Le contrat du wrapper ne lit que le code (blocs et code en ligne) : une commande Maven écrite en prose hors code passe.
+- **Limite** Une affectation (`$output = mvn …`) n'est pas en position de commande pour la grammaire documentaire ; cette forme propre aux scripts relève de `DIRECT_MAVEN_CALL`.
+- **Limite** Les exceptions de `docs/developer/ci-and-supply-chain.md:500-502` portent sur le texte exact de ligne : toute réécriture de ces lignes fait échouer le contrat en nommant l'exception, qu'il faut alors mettre à jour.
+- **Limite** Le contrôle `exec:java` ne voit que les commandes en position de commande : un appel par `cmd /c` ou une commande coupée sur plusieurs lignes n'est pas vérifié.
 
 ## OpenSpec container-image-hardening
 
