@@ -257,7 +257,14 @@ Copy-Item -LiteralPath (Join-Path $repo 'distribution\README.md') -Destination (
 $Version | Set-Content -LiteralPath (Join-Path $distribution 'VERSION') -Encoding ascii
 $moduleList | Set-Content -LiteralPath (Join-Path $distribution 'RUNTIME-MODULES.txt') -Encoding ascii
 
-@'
+# Launchers are written in CRLF whatever the line endings of the checkout: cmd.exe looks a
+# goto label up through the file, and an LF-only file depends on its size and layout.
+function Write-NexusLauncher([string]$Name, [string]$Text) {
+    $crlf = ($Text -replace "\r?\n", "`r`n") + "`r`n"
+    [IO.File]::WriteAllText((Join-Path $distribution $Name), $crlf, [Text.Encoding]::ASCII)
+}
+
+Write-NexusLauncher 'nexus.cmd' @'
 @echo off
 setlocal DisableDelayedExpansion
 if not exist "%~dp0config\nexus-native.env.cmd" goto run
@@ -270,9 +277,9 @@ exit /b %ERRORLEVEL%
 :configError
 echo NEXUS: cannot load "%~dp0config\nexus-native.env.cmd" 1>&2
 exit /b 1
-'@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus.cmd') -Encoding ascii
+'@
 
-@'
+Write-NexusLauncher 'nexus-mcp.cmd' @'
 @echo off
 setlocal DisableDelayedExpansion
 if not exist "%~dp0config\nexus-native.env.cmd" goto run
@@ -285,9 +292,9 @@ exit /b %ERRORLEVEL%
 :configError
 echo NEXUS: cannot load "%~dp0config\nexus-native.env.cmd" 1>&2
 exit /b 1
-'@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus-mcp.cmd') -Encoding ascii
+'@
 
-@'
+Write-NexusLauncher 'nexus-assistant-clients.cmd' @'
 @echo off
 setlocal DisableDelayedExpansion
 if not exist "%~dp0config\nexus-native.env.cmd" goto run
@@ -300,9 +307,9 @@ exit /b %ERRORLEVEL%
 :configError
 echo NEXUS: cannot load "%~dp0config\nexus-native.env.cmd" 1>&2
 exit /b 1
-'@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus-assistant-clients.cmd') -Encoding ascii
+'@
 
-@'
+Write-NexusLauncher 'nexus-rest.cmd' @'
 @echo off
 setlocal DisableDelayedExpansion
 if not exist "%~dp0config\nexus-native.env.cmd" goto run
@@ -317,25 +324,25 @@ exit /b %ERRORLEVEL%
 :configError
 echo NEXUS: cannot load "%~dp0config\nexus-native.env.cmd" 1>&2
 exit /b 1
-'@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus-rest.cmd') -Encoding ascii
+'@
 
-@'
+Write-NexusLauncher 'nexus-docker-mcp.cmd' @'
 @echo off
 setlocal DisableDelayedExpansion
 if exist "%~dp0docker\.env" for /f "usebackq tokens=1,* delims==" %%A in ("%~dp0docker\.env") do if /I "%%A"=="NEXUS_DOCKER_CONTAINER" set "NEXUS_DOCKER_CONTAINER=%%B"
 if "%NEXUS_DOCKER_CONTAINER%"=="" set "NEXUS_DOCKER_CONTAINER=nexus"
 docker exec -i "%NEXUS_DOCKER_CONTAINER%" java --enable-native-access=ALL-UNNAMED -jar /opt/nexus/lib/nexus-mcp.jar %*
 exit /b %ERRORLEVEL%
-'@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus-docker-mcp.cmd') -Encoding ascii
+'@
 
-@'
+Write-NexusLauncher 'nexus-docker.cmd' @'
 @echo off
 setlocal DisableDelayedExpansion
 if exist "%~dp0docker\.env" for /f "usebackq tokens=1,* delims==" %%A in ("%~dp0docker\.env") do if /I "%%A"=="NEXUS_DOCKER_CONTAINER" set "NEXUS_DOCKER_CONTAINER=%%B"
 if "%NEXUS_DOCKER_CONTAINER%"=="" set "NEXUS_DOCKER_CONTAINER=nexus"
 docker exec -i "%NEXUS_DOCKER_CONTAINER%" java --enable-native-access=ALL-UNNAMED -jar /opt/nexus/lib/nexus-cli.jar %*
 exit /b %ERRORLEVEL%
-'@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus-docker.cmd') -Encoding ascii
+'@
 
 $signer = Join-Path $PSScriptRoot 'sign-windows-artifact.ps1'
 if (-not (Test-Path -LiteralPath $signer -PathType Leaf)) {

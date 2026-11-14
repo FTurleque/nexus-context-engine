@@ -31,7 +31,9 @@ foreach ($required in @(
     'Le mode loopback-forward exige que',
     '"args": ["--enable-native-access=ALL-UNNAMED", "-jar"',
     'args = ["--enable-native-access=ALL-UNNAMED", "-jar"',
-    "PowerShellSingleQuote(ExpandConstant('{app}\nexus-mcp.cmd'))",
+    "PowerShellSingleQuote(ExpandConstant('{app}\lib\nexus-mcp.jar'))",
+    "PowerShellSingleQuote(ExpandConstant('{app}\app\runtime\bin\java.exe'))",
+    "'''); env = ' + NativeMcpEnvPs() + ' }'",
     'function Read-ClientJson([string]$Path) {',
     '[System.IO.File]::ReadAllText($Path, [System.Text.UTF8Encoding]::new($false))',
     '[System.IO.File]::Replace($tmp, $Path, $candidate)',
@@ -87,9 +89,10 @@ function Invoke-PowerShellSingleQuote([string]$Value, [object[]]$Rules) {
     foreach ($rule in $Rules) { $Value = $Value.Replace($rule.From, $rule.To) }
     return $Value
 }
+# Same shape as the native entry of McpEntryPsLiteral: java.exe, the runner jar and the env object.
 function Test-GeneratedMcpEntry([string]$Launcher, [object[]]$Rules) {
-    $line = "`$e = [PSCustomObject]@{ command = 'cmd.exe'; args = @('/d', '/s', '/c', '" +
-        (Invoke-PowerShellSingleQuote $Launcher $Rules) + "') }"
+    $line = "`$e = [PSCustomObject]@{ command = 'C:\NEXUS\app\runtime\bin\java.exe'; args = @('--enable-native-access=ALL-UNNAMED', '-jar', '" +
+        (Invoke-PowerShellSingleQuote $Launcher $Rules) + "'); env = [PSCustomObject]@{ NEXUS_HOME = 'C:\Users\a^b\.nexus' } }"
     $tokens = $null
     $errors = $null
     $ast = [System.Management.Automation.Language.Parser]::ParseInput($line, [ref]$tokens, [ref]$errors)
@@ -102,12 +105,12 @@ foreach ($quote in @(0x2018, 0x2019, 0x201A, 0x201B)) {
         throw ('PowerShellSingleQuote must double U+{0:X4}.' -f $quote)
     }
 }
-$typographic = 'C:\Outils\Jean' + [char]0x2019 + 's NEXUS\nexus-mcp.cmd'
+$typographic = 'C:\Outils\Jean' + [char]0x2019 + 's NEXUS\lib\nexus-mcp.jar'
 if (-not (Test-GeneratedMcpEntry $typographic $quoteRules)) {
     throw "Generated MCP entry for an install folder with U+2019 does not parse back to $typographic"
 }
 foreach ($quote in @(0x0027, 0x2018, 0x201A, 0x201B)) {
-    $launcher = 'C:\Outils\Q' + [char]$quote + 'Q\nexus-mcp.cmd'
+    $launcher = 'C:\Outils\Q' + [char]$quote + 'Q\lib\nexus-mcp.jar'
     if (-not (Test-GeneratedMcpEntry $launcher $quoteRules)) { throw ('Generated MCP entry does not round-trip U+{0:X4}.' -f $quote) }
 }
 # Negative control: doubling only the ASCII apostrophe breaks the same line.
