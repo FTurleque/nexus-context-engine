@@ -56,7 +56,7 @@ Un marqueur `-----BEGIN ` SHALL n'ouvrir une clé privée que si ses tirets de f
 - **THEN** les trois premières lignes sont rendues inchangées, le corps n'apparaît pas dans le texte rendu, et chaque CR et LF du contenu est conservé
 
 ### Requirement: Un marqueur de clé privée est reconnu quelles que soient sa casse et ses blancs
-Les mots `BEGIN`, `END` et le type d'un marqueur de clé privée SHALL être comparés sans tenir compte de la casse ASCII, et une espace, une tabulation ou une espace insécable (U+00A0) SHALL valoir un même blanc après `BEGIN` ou `END` et entre les mots du type. La reconnaissance SHALL garder un coût linéaire et la règle de la fin du marqueur sur sa ligne.
+Les mots `BEGIN`, `END` et le type d'un marqueur de clé privée SHALL être comparés sans tenir compte de la casse ASCII, et toute suite d'espaces, de tabulations ou d'espaces insécables (U+00A0) SHALL valoir un seul blanc après `BEGIN` ou `END` et entre les mots du type. La reconnaissance SHALL garder un coût linéaire et la règle de la fin du marqueur sur sa ligne.
 
 #### Scenario: Marqueurs en minuscules
 - **GIVEN** un bloc dont les marqueurs sont `-----begin rsa private key-----` et `-----end rsa private key-----`, avec le corps `MIIfakebodyNOTAKEY0123`
@@ -68,15 +68,38 @@ Les mots `BEGIN`, `END` et le type d'un marqueur de clé privée SHALL être com
 - **WHEN** le contenu est redigé
 - **THEN** le bloc est remplacé par `[REDACTED]` et le corps n'apparaît pas dans le texte rendu
 
+#### Scenario: Suites de blancs différentes
+- **GIVEN** un bloc dont le marqueur d'ouverture porte deux espaces entre `PRIVATE` et `KEY`, ou dont les marqueurs d'ouverture et de fin portent des suites de blancs différentes entre les mêmes mots
+- **WHEN** le contenu est redigé
+- **THEN** le bloc seul est remplacé par `[REDACTED]` et le corps n'apparaît pas dans le texte rendu
+
 #### Scenario: Séparateur CRLF
 - **GIVEN** le contenu de « Marqueurs en minuscules », dont chaque séparateur est CRLF
 - **WHEN** le contenu est redigé
 - **THEN** le corps n'apparaît pas dans le texte rendu et chaque CR et LF du contenu est conservé
 
 #### Scenario: Variantes non reconnues
-- **GIVEN** un bloc dont les marqueurs ont moins de cinq tirets, une espace avant les tirets de fin, `BEGIN` collé au type, des tirets demi-cadratin ou une lettre cyrillique, ou un fichier au format PuTTY
+- **GIVEN** un bloc dont les marqueurs ont moins de cinq tirets, une espace avant les tirets de fin, `BEGIN` collé au type, des tirets demi-cadratin, une lettre cyrillique ou un autre blanc Unicode (U+2003, U+3000, U+200B), ou un fichier au format PuTTY
 - **WHEN** le contenu est redigé
 - **THEN** le texte rendu est identique au contenu
+
+### Requirement: Une ligne END ne ferme un bloc qu'en début de ligne
+Un bloc de clé privée SHALL n'être fermé que par un marqueur `-----END <type>-----` qui commence sa ligne, précédé au plus d'espaces, de tabulations, d'espaces insécables ou de tirets. Un marqueur `-----END` placé au milieu d'une ligne SHALL être ignoré, et la recherche de la fin SHALL continuer, jusqu'à la fin du contenu au besoin.
+
+#### Scenario: Marqueur END au milieu d'une ligne
+- **GIVEN** un bloc `RSA PRIVATE KEY` dont une ligne vaut `AAA-----END RSA PRIVATE KEY-----SECRETBODY`, suivie d'une ligne `-----END RSA PRIVATE KEY-----`
+- **WHEN** le contenu est redigé
+- **THEN** tout le bloc jusqu'à la seconde ligne est remplacé par `[REDACTED]`, `SECRETBODY` n'apparaît pas dans le texte rendu et chaque CR et LF est conservé
+
+#### Scenario: Marqueur END au milieu d'une ligne sans vraie fin
+- **GIVEN** le même bloc sans seconde ligne `-----END`
+- **WHEN** le contenu est redigé
+- **THEN** le contenu est remplacé par `[REDACTED]` jusqu'à sa fin, séparateurs conservés
+
+#### Scenario: Blancs avant le marqueur END
+- **GIVEN** un bloc dont la ligne de fin commence par une espace, une tabulation et une espace insécable avant `-----END RSA PRIVATE KEY-----`
+- **WHEN** le contenu est redigé
+- **THEN** le bloc est fermé par cette ligne et le texte qui la suit reste visible
 
 ## MODIFIED Requirements
 

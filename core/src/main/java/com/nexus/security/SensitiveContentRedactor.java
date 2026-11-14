@@ -412,9 +412,10 @@ public final class SensitiveContentRedactor {
      * {@code -----} : chaque zone est balayée un nombre borné de fois et le coût reste linéaire.</p>
      *
      * <p>Les mots {@code BEGIN}, {@code END} et le type se comparent sans tenir compte de la casse ASCII,
-     * et une espace, une tabulation ou une espace insécable (U+00A0) valent un même blanc : après
-     * {@code BEGIN} ou {@code END}, et entre les mots du type. La ligne {@code -----END } doit porter le
-     * même type, à la casse et aux blancs près.</p>
+     * et toute suite d'espaces, de tabulations ou d'espaces insécables (U+00A0) vaut un seul blanc :
+     * après {@code BEGIN} ou {@code END}, et entre les mots du type. La ligne {@code -----END} doit
+     * commencer sa ligne, précédée au plus de blancs ou de tirets, et porter le même type, à la casse et
+     * aux blancs près ; sinon le bloc court jusqu'à la fin du contenu.</p>
      */
     private static String replacePrivateKeyBlocks(String content) {
         StringBuilder output = new StringBuilder(content.length());
@@ -428,13 +429,14 @@ public final class SensitiveContentRedactor {
 
             int afterBegin = begin + PRIVATE_KEY_BEGIN_LENGTH;
             int closingDashes = closingDashesOnMarkerLine(content, afterBegin);
-            if (closingDashes < 0 || !isPrivateKeyType(content, afterBegin, closingDashes)) {
+            String type = closingDashes < 0 ? "" : normalizedType(content, afterBegin, closingDashes);
+            if (!isPrivateKeyType(type)) {
                 output.append(content, cursor, afterBegin);
                 cursor = afterBegin;
                 continue;
             }
 
-            int end = endOfMatchingEndMarker(content, closingDashes + MARKER_DASHES.length(), afterBegin, closingDashes);
+            int end = endOfMatchingEndMarker(content, closingDashes + MARKER_DASHES.length(), type);
             if (end < 0) {
                 output.append(content, cursor, begin).append(REDACTED);
                 appendLineSeparators(output, content, begin, content.length());
@@ -470,19 +472,68 @@ public final class SensitiveContentRedactor {
         }
     }
 
-    /** Le type {@code content[from, to)} se termine par {@code PRIVATE KEY} ou {@code PRIVATE KEY BLOCK}. */
-    private static boolean isPrivateKeyType(String content, int from, int to) {
-        return endsWithNormalized(content, from, to, PRIVATE_KEY_SUFFIX)
-                || endsWithNormalized(content, from, to, PGP_PRIVATE_KEY_SUFFIX);
+    /**
+     * Type {@code content[from, to)} normalisé : blancs de tête retirés, chaque suite de blancs réduite
+     * à une espace, lettres ASCII en majuscules. Un blanc final est conservé.
+     */
+    private static String normalizedType(String content, int from, int to) {
+        StringBuilder type = new StringBuilder(to - from);
+        boolean pendingBlank = false;
+        for (int index = from; index < to; index++) {
+            char character = content.charAt(index);
+            if (isMarkerBlank(character)) {
+                pendingBlank = !type.isEmpty();
+                continue;
+            }
+            if (pendingBlank) {
+                type.append(' ');
+                pendingBlank = false;
+            }
+            type.append(asciiUpper(character));
+        }
+        if (pendingBlank) {
+            type.append(' ');
+        }
+        return type.toString();
     }
 
-    private static boolean endsWithNormalized(String content, int from, int to, String suffix) {
-        int start = to - suffix.length();
-        if (start < from) {
-            return false;
+    /** Le type normalisé se termine par {@code PRIVATE KEY} ou {@code PRIVATE KEY BLOCK}. */
+    private static boolean isPrivateKeyType(String normalizedType) {
+        return normalizedType.endsWith(PRIVATE_KEY_SUFFIX) || normalizedType.endsWith(PGP_PRIVATE_KEY_SUFFIX);
+    }
+
+    /**
+     * Fin de la première ligne {@code -----END <type>-----} qui suit {@code from}, commence sa ligne
+     * (seuls des blancs ou des tirets la précèdent) et porte le type normalisé {@code type}, ou
+     * {@code -1}. Un {@code -----END} au milieu d'une ligne est ignoré. La partie comparée d'une
+     * candidate ne contient aucun {@code -----} et chaque caractère du type normalisé consomme au moins
+     * un caractère de la candidate : le balayage reste linéaire.
+     */
+    private static int endOfMatchingEndMarker(String content, int from, String type) {
+        int position = from;
+        while (true) {
+            int candidate = nextMarker(content, position, "END");
+            if (candidate < 0) {
+                return -1;
+            }
+            if (startsItsLine(content, candidate)) {
+                int typeEnd = endOfNormalizedType(content, candidate + MARKER_DASHES.length() + "END".length(), type);
+                if (typeEnd >= 0 && content.startsWith(MARKER_DASHES, typeEnd)) {
+                    return typeEnd + MARKER_DASHES.length();
+                }
+            }
+            position = candidate + 1;
         }
-        for (int index = 0; index < suffix.length(); index++) {
-            if (!sameMarkerChar(content.charAt(start + index), suffix.charAt(index))) {
+    }
+
+    /** Seuls des blancs ou des tirets précèdent {@code position} sur sa ligne. */
+    private static boolean startsItsLine(String content, int position) {
+        for (int index = position - 1; index >= 0; index--) {
+            char character = content.charAt(index);
+            if (character == '\r' || character == '\n') {
+                return true;
+            }
+            if (character != '-' && !isMarkerBlank(character)) {
                 return false;
             }
         }
@@ -490,35 +541,34 @@ public final class SensitiveContentRedactor {
     }
 
     /**
-     * Fin de la première ligne {@code -----END <type>-----} qui suit {@code from} et porte le type
-     * {@code content[typeFrom, typeTo)}, ou {@code -1}. Le type ne contient aucun {@code -----} : deux
-     * comparaisons ne partagent que les tirets d'ouverture, et le balayage reste linéaire.
+     * Fin du type lu à partir de {@code from} s'il vaut le type normalisé {@code type} (blancs de tête
+     * ignorés, suite de blancs pour une espace, casse ASCII ignorée), ou {@code -1}.
      */
-    private static int endOfMatchingEndMarker(String content, int from, int typeFrom, int typeTo) {
-        int position = from;
-        while (true) {
-            int candidate = nextMarker(content, position, "END");
-            if (candidate < 0) {
-                return -1;
+    private static int endOfNormalizedType(String content, int from, String type) {
+        int index = skipMarkerBlanks(content, from);
+        for (int position = 0; position < type.length(); position++) {
+            char expected = type.charAt(position);
+            if (expected == ' ') {
+                if (index >= content.length() || !isMarkerBlank(content.charAt(index))) {
+                    return -1;
+                }
+                index = skipMarkerBlanks(content, index);
+            } else {
+                if (index >= content.length() || asciiUpper(content.charAt(index)) != expected) {
+                    return -1;
+                }
+                index++;
             }
-            int typeStart = candidate + MARKER_DASHES.length() + "END".length() + 1;
-            int typeLength = typeTo - typeFrom;
-            if (typeStart + typeLength + MARKER_DASHES.length() <= content.length()
-                    && sameType(content, typeStart, typeFrom, typeLength)
-                    && content.startsWith(MARKER_DASHES, typeStart + typeLength)) {
-                return typeStart + typeLength + MARKER_DASHES.length();
-            }
-            position = candidate + 1;
         }
+        return index;
     }
 
-    private static boolean sameType(String content, int candidate, int typeFrom, int length) {
-        for (int index = 0; index < length; index++) {
-            if (!sameMarkerChar(content.charAt(candidate + index), content.charAt(typeFrom + index))) {
-                return false;
-            }
+    private static int skipMarkerBlanks(String content, int from) {
+        int index = from;
+        while (index < content.length() && isMarkerBlank(content.charAt(index))) {
+            index++;
         }
-        return true;
+        return index;
     }
 
     private static boolean regionEqualsIgnoreAsciiCase(String content, int from, String word) {
@@ -531,14 +581,6 @@ public final class SensitiveContentRedactor {
             }
         }
         return true;
-    }
-
-    /** Égalité de deux caractères d'un marqueur : casse ASCII ignorée, blancs équivalents. */
-    private static boolean sameMarkerChar(char left, char right) {
-        if (isMarkerBlank(left) || isMarkerBlank(right)) {
-            return isMarkerBlank(left) && isMarkerBlank(right);
-        }
-        return asciiUpper(left) == asciiUpper(right);
     }
 
     private static boolean isMarkerBlank(char character) {
