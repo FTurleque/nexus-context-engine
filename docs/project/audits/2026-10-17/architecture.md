@@ -139,6 +139,10 @@ Cycles bilatéraux (imports A→B / B→A) : context↔context.source 17/1, cont
 
 Un défaut interne à une boîte ne se voit pas sur un graphe de packages, et c'est là que se trouve l'essentiel des constats : la redaction par liste fermée (`AUD-SEC-01`), l'absence d'index SQLite sur `symbol_relations(file_id)` (`AUD-PRF-01`), la fédération qui recalcule tout par projet (`AUD-PRF-02`, `AUD-PRF-04`, `AUD-PRF-07`).
 
+## État au 14 novembre 2026
+
+- Aucun fichier de code modifié depuis le 12/11 : graphe inchangé.
+
 ## État au 12 novembre 2026
 
 - Rien de neuf sur le graphe des packages : le passage à `main` seule et le sprint 14 ne touchent ni les dépendances entre packages ni `CoreArchitectureTest` (31 tests verts au build `244ab1d3`).
