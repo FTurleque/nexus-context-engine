@@ -18,13 +18,17 @@ import java.util.regex.Pattern;
 public final class SensitiveContentRedactor {
 
     /** Version persistée dans les index dérivés ; toute évolution impose leur reconstruction. */
-    public static final String POLICY_VERSION = "secret-redaction-v9";
+    public static final String POLICY_VERSION = "secret-redaction-v10";
 
     private static final String REDACTED = "[REDACTED]";
-    private static final String PRIVATE_KEY_BEGIN = "-----BEGIN ";
-    private static final String PRIVATE_KEY_END = "-----END ";
-    private static final String PRIVATE_KEY_SUFFIX = "PRIVATE KEY-----";
-    private static final String PGP_PRIVATE_KEY_SUFFIX = "PRIVATE KEY BLOCK-----";
+    /** Tirets d'ouverture et de fin d'un marqueur de clé privée. */
+    private static final String MARKER_DASHES = "-----";
+    /** Longueur de {@code -----BEGIN } : tirets, mot {@code BEGIN} et un blanc. */
+    private static final int PRIVATE_KEY_BEGIN_LENGTH = 11;
+    private static final String PRIVATE_KEY_SUFFIX = "PRIVATE KEY";
+    private static final String PGP_PRIVATE_KEY_SUFFIX = "PRIVATE KEY BLOCK";
+    /** Espace insécable (U+00A0), blanc admis dans un marqueur de clé privée. */
+    private static final char NO_BREAK_SPACE = (char) 0x00A0;
     private static final int MAX_SECRET_CHARS = 4096;
     private static final int MAX_URI_USER_CHARS = 1024;
     /** Classe du corps et des gardes d'un jeton à tirets ({@code sk-}, {@code xox?-}, {@code glpat-}). */
@@ -396,45 +400,223 @@ public final class SensitiveContentRedactor {
         return false;
     }
 
+    /**
+     * Remplace chaque bloc de clé privée par {@code [REDACTED]} en conservant ses CR et LF.
+     *
+     * <p>Les tirets de fin d'un marqueur {@code -----BEGIN } sont cherchés sur sa ligne seulement : un
+     * marqueur dont la fin n'est pas avant le premier CR ou LF n'ouvre pas de clé. Quand un marqueur
+     * n'ouvre pas de clé, la recherche reprend juste après son {@code -----BEGIN } : les tirets de fin
+     * d'un marqueur d'un autre type peuvent ouvrir le marqueur suivant
+     * ({@code -----BEGIN CERTIFICATE-----BEGIN RSA PRIVATE KEY-----}), et aucun {@code -----BEGIN }
+     * situé après ce point n'est sauté. Entre ce point et les tirets trouvés il n'y a aucun
+     * {@code -----} : chaque zone est balayée un nombre borné de fois et le coût reste linéaire.</p>
+     *
+     * <p>Les mots {@code BEGIN}, {@code END} et le type se comparent sans tenir compte de la casse ASCII,
+     * et toute suite d'espaces, de tabulations ou d'espaces insécables (U+00A0) vaut un seul blanc :
+     * après {@code BEGIN} ou {@code END}, et entre les mots du type. Le marqueur {@code -----END} porte
+     * le même type, à la casse et aux blancs près. S'il commence sa ligne, précédé au plus de blancs ou
+     * de tirets, le bloc s'arrête après ses tirets ; sinon il s'arrête à la fin de la ligne du marqueur.
+     * Sans marqueur {@code -----END}, le bloc court jusqu'à la fin du contenu.</p>
+     */
     private static String replacePrivateKeyBlocks(String content) {
         StringBuilder output = new StringBuilder(content.length());
         int cursor = 0;
         while (cursor < content.length()) {
-            int begin = content.indexOf(PRIVATE_KEY_BEGIN, cursor);
+            int begin = nextMarker(content, cursor, "BEGIN");
             if (begin < 0) {
                 output.append(content, cursor, content.length());
                 break;
             }
 
-            int markerEnd = content.indexOf("-----", begin + PRIVATE_KEY_BEGIN.length());
-            if (markerEnd < 0) {
-                output.append(content, cursor, content.length());
-                break;
-            }
-            markerEnd += 5;
-            String beginMarker = content.substring(begin, markerEnd);
-            if (!beginMarker.endsWith(PRIVATE_KEY_SUFFIX) && !beginMarker.endsWith(PGP_PRIVATE_KEY_SUFFIX)) {
-                output.append(content, cursor, markerEnd);
-                cursor = markerEnd;
+            int afterBegin = begin + PRIVATE_KEY_BEGIN_LENGTH;
+            int closingDashes = closingDashesOnMarkerLine(content, afterBegin);
+            String type = closingDashes < 0 ? "" : normalizedType(content, afterBegin, closingDashes);
+            if (!isPrivateKeyType(type)) {
+                output.append(content, cursor, afterBegin);
+                cursor = afterBegin;
                 continue;
             }
 
-            String keyType = beginMarker.substring(PRIVATE_KEY_BEGIN.length(), beginMarker.length() - 5);
-            String endMarker = PRIVATE_KEY_END + keyType + "-----";
-            int end = content.indexOf(endMarker, markerEnd);
+            int end = endOfMatchingEndMarker(content, closingDashes + MARKER_DASHES.length(), type);
             if (end < 0) {
                 output.append(content, cursor, begin).append(REDACTED);
                 appendLineSeparators(output, content, begin, content.length());
                 cursor = content.length();
                 continue;
             }
-            end += endMarker.length();
 
             output.append(content, cursor, begin).append(REDACTED);
             appendLineSeparators(output, content, begin, end);
             cursor = end;
         }
         return output.toString();
+    }
+
+    /**
+     * Position du prochain {@code -----<mot><blanc>} à partir de {@code from}, ou {@code -1}. Chaque
+     * occurrence de {@code -----} est examinée en temps constant, puis la recherche avance d'un caractère.
+     */
+    private static int nextMarker(String content, int from, String word) {
+        int position = from;
+        while (true) {
+            int dashes = content.indexOf(MARKER_DASHES, position);
+            if (dashes < 0) {
+                return -1;
+            }
+            int wordStart = dashes + MARKER_DASHES.length();
+            if (regionEqualsIgnoreAsciiCase(content, wordStart, word)
+                    && wordStart + word.length() < content.length()
+                    && isMarkerBlank(content.charAt(wordStart + word.length()))) {
+                return dashes;
+            }
+            position = dashes + 1;
+        }
+    }
+
+    /**
+     * Type {@code content[from, to)} normalisé : blancs de tête retirés, chaque suite de blancs réduite
+     * à une espace, lettres ASCII en majuscules. Un blanc final est conservé.
+     */
+    private static String normalizedType(String content, int from, int to) {
+        StringBuilder type = new StringBuilder(to - from);
+        boolean pendingBlank = false;
+        for (int index = from; index < to; index++) {
+            char character = content.charAt(index);
+            if (isMarkerBlank(character)) {
+                pendingBlank = !type.isEmpty();
+                continue;
+            }
+            if (pendingBlank) {
+                type.append(' ');
+                pendingBlank = false;
+            }
+            type.append(asciiUpper(character));
+        }
+        if (pendingBlank) {
+            type.append(' ');
+        }
+        return type.toString();
+    }
+
+    /** Le type normalisé se termine par {@code PRIVATE KEY} ou {@code PRIVATE KEY BLOCK}. */
+    private static boolean isPrivateKeyType(String normalizedType) {
+        return normalizedType.endsWith(PRIVATE_KEY_SUFFIX) || normalizedType.endsWith(PGP_PRIVATE_KEY_SUFFIX);
+    }
+
+    /**
+     * Fin du bloc fermé par le premier {@code -----END <type>-----} qui suit {@code from} et porte le
+     * type normalisé {@code type}, ou {@code -1}. Un marqueur qui commence sa ligne (seuls des blancs ou
+     * des tirets le précèdent) ferme le bloc après ses tirets ; un marqueur au milieu d'une ligne le
+     * ferme à la fin de cette ligne (premier CR ou LF, exclu), pour qu'aucun texte collé au marqueur ne
+     * sorte en clair. La partie comparée d'une candidate ne contient aucun {@code -----} et chaque
+     * caractère du type normalisé consomme au moins un caractère de la candidate : le balayage reste
+     * linéaire.
+     */
+    private static int endOfMatchingEndMarker(String content, int from, String type) {
+        int position = from;
+        while (true) {
+            int candidate = nextMarker(content, position, "END");
+            if (candidate < 0) {
+                return -1;
+            }
+            int typeEnd = endOfNormalizedType(content, candidate + MARKER_DASHES.length() + "END".length(), type);
+            if (typeEnd >= 0 && content.startsWith(MARKER_DASHES, typeEnd)) {
+                int markerEnd = typeEnd + MARKER_DASHES.length();
+                return startsItsLine(content, candidate) ? markerEnd : endOfLine(content, markerEnd);
+            }
+            position = candidate + 1;
+        }
+    }
+
+    /** Position du premier CR ou LF à partir de {@code from}, ou la longueur du contenu. */
+    private static int endOfLine(String content, int from) {
+        int index = from;
+        while (index < content.length() && content.charAt(index) != '\r' && content.charAt(index) != '\n') {
+            index++;
+        }
+        return index;
+    }
+
+    /** Seuls des blancs ou des tirets précèdent {@code position} sur sa ligne. */
+    private static boolean startsItsLine(String content, int position) {
+        for (int index = position - 1; index >= 0; index--) {
+            char character = content.charAt(index);
+            if (character == '\r' || character == '\n') {
+                return true;
+            }
+            if (character != '-' && !isMarkerBlank(character)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Fin du type lu à partir de {@code from} s'il vaut le type normalisé {@code type} (blancs de tête
+     * ignorés, suite de blancs pour une espace, casse ASCII ignorée), ou {@code -1}.
+     */
+    private static int endOfNormalizedType(String content, int from, String type) {
+        int index = skipMarkerBlanks(content, from);
+        for (int position = 0; position < type.length(); position++) {
+            char expected = type.charAt(position);
+            if (expected == ' ') {
+                if (index >= content.length() || !isMarkerBlank(content.charAt(index))) {
+                    return -1;
+                }
+                index = skipMarkerBlanks(content, index);
+            } else {
+                if (index >= content.length() || asciiUpper(content.charAt(index)) != expected) {
+                    return -1;
+                }
+                index++;
+            }
+        }
+        return index;
+    }
+
+    private static int skipMarkerBlanks(String content, int from) {
+        int index = from;
+        while (index < content.length() && isMarkerBlank(content.charAt(index))) {
+            index++;
+        }
+        return index;
+    }
+
+    private static boolean regionEqualsIgnoreAsciiCase(String content, int from, String word) {
+        if (from + word.length() > content.length()) {
+            return false;
+        }
+        for (int index = 0; index < word.length(); index++) {
+            if (asciiUpper(content.charAt(from + index)) != asciiUpper(word.charAt(index))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isMarkerBlank(char character) {
+        return character == ' ' || character == '\t' || character == NO_BREAK_SPACE;
+    }
+
+    private static char asciiUpper(char character) {
+        return character >= 'a' && character <= 'z' ? (char) (character - ('a' - 'A')) : character;
+    }
+
+    /**
+     * Position des premiers {@code -----} à partir de {@code from}, ou {@code -1} si un CR, un LF ou
+     * la fin du contenu vient avant. Un seul balayage, qui s'arrête au premier des deux.
+     */
+    private static int closingDashesOnMarkerLine(String content, int from) {
+        for (int index = from; index < content.length(); index++) {
+            char character = content.charAt(index);
+            if (character == '\r' || character == '\n') {
+                return -1;
+            }
+            if (character == '-' && content.startsWith(MARKER_DASHES, index)) {
+                return index;
+            }
+        }
+        return -1;
     }
 
     private static void appendLineSeparators(StringBuilder output, String content, int begin, int end) {

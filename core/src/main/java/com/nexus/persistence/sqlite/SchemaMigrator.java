@@ -37,7 +37,8 @@ final class SchemaMigrator {
             new Migration(17, "db/migration/V017__index_symbols_for_dominant_project_fuzzy_search.sql"),
             new Migration(18, "db/migration/V018__invalidate_sk_token_bound_indexes.sql"),
             new Migration(19, "db/migration/V019__invalidate_token_context_bound_indexes.sql"),
-            new Migration(20, "db/migration/V020__invalidate_composite_name_indexes.sql"));
+            new Migration(20, "db/migration/V020__invalidate_composite_name_indexes.sql"),
+            new Migration(21, "db/migration/V021__invalidate_private_key_marker_indexes.sql"));
 
     private SchemaMigrator() {
     }

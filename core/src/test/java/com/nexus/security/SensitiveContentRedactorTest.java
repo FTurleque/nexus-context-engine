@@ -65,6 +65,28 @@ class SensitiveContentRedactorTest {
     }
 
     @Test
+    void forgedPrivateKeyMarkerRepetitionsHaveBoundedCost() {
+        String dashes = "-".repeat(5);
+        // Garde-fou contre un balayage quadratique des marqueurs de clé privée, pas une mesure de
+        // performance : six contenus d'environ 1 Mo, seuil de 10 s comme le garde-fou précédent.
+        org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(java.time.Duration.ofSeconds(10), () -> {
+            for (String repeated : java.util.List.of(dashes + "BEGIN \n", dashes + "BEGIN CERTIFICATE" + dashes + "\n",
+                    dashes + "BEGIN ", dashes + "begin\t", dashes + "BEGIN" + (char) 0x00A0 + "X")) {
+                String markers = repeated.repeat((1 << 20) / repeated.length() + 1);
+                assertEquals(markers, SensitiveContentRedactor.redact(markers));
+            }
+            String partialEnd = dashes + "END RSA PRIVATE KE\n";
+            String unclosed = dashes + "BEGIN RSA PRIVATE KEY" + dashes + "\n"
+                    + partialEnd.repeat((1 << 20) / partialEnd.length() + 1);
+            String rendered = SensitiveContentRedactor.redact(unclosed);
+            assertTrue(rendered.startsWith("[REDACTED]\n"), rendered.substring(0, 40));
+            String spacedType = dashes + "BEGIN A" + " ".repeat(500_000) + "PRIVATE KEY" + dashes + "\n"
+                    + (dashes + "END A X\n").repeat(40_000) + "  AAA" + dashes + "END A PRIVATE KEY" + dashes + "x\n";
+            assertTrue(SensitiveContentRedactor.redact(spacedType).startsWith("[REDACTED]\n"));
+        });
+    }
+
+    @Test
     void rejectsOversizedValuesWithoutPublishingAnySuffix() {
         for (String quote : java.util.List.of("", "\"", "'")) {
             String prefix = "\"password\": " + quote;
@@ -484,6 +506,341 @@ class SensitiveContentRedactorTest {
         assertFalse(redacted.contains("abcdefghijklmnopqrstuvwxyz"));
         assertFalse(redacted.contains("still-secret"));
         assertEquals(source.lines().count(), redacted.lines().count());
+    }
+
+    /** Corps factice des blocs assemblés à l'exécution ; aucun matériau de clé réel. */
+    private static final String FAKE_KEY_BODY = "MIIfakebodyNOTAKEY0123";
+    private static final String DASHES = "-".repeat(5);
+
+    private static String privateKeyBlock(String type, String newline) {
+        return DASHES + "BEGIN " + type + DASHES + newline + FAKE_KEY_BODY + newline + DASHES + "END " + type + DASHES;
+    }
+
+    private static String lineSeparatorsOf(String content) {
+        var separators = new StringBuilder();
+        for (char character : content.toCharArray()) {
+            if (character == '\r' || character == '\n') {
+                separators.append(character);
+            }
+        }
+        return separators.toString();
+    }
+
+    static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments> privateKeyBlocksAfterAMarkerThatOpensNoKey() {
+        String rsa = privateKeyBlock("RSA PRIVATE KEY", "\n");
+        return java.util.stream.Stream.of(
+                org.junit.jupiter.params.provider.Arguments.of("ligne BEGIN incomplète",
+                        DASHES + "BEGIN \n" + rsa),
+                org.junit.jupiter.params.provider.Arguments.of("littéral de code",
+                        "if (line.startsWith(\"" + DASHES + "BEGIN \")) {}\n" + rsa),
+                org.junit.jupiter.params.provider.Arguments.of("marqueur d'un autre type sans tirets de fin",
+                        DASHES + "BEGIN CERT\n" + rsa),
+                org.junit.jupiter.params.provider.Arguments.of("marqueur complet d'un autre type collé",
+                        DASHES + "BEGIN CERTIFICATE" + DASHES + "BEGIN RSA PRIVATE KEY" + DASHES + "\n"
+                                + FAKE_KEY_BODY + "\n" + DASHES + "END RSA PRIVATE KEY" + DASHES),
+                org.junit.jupiter.params.provider.Arguments.of("marqueur d'un autre type collé par six tirets",
+                        DASHES + "BEGIN X-" + DASHES + "BEGIN RSA PRIVATE KEY" + DASHES + "\n"
+                                + FAKE_KEY_BODY + "\n" + DASHES + "END RSA PRIVATE KEY" + DASHES),
+                org.junit.jupiter.params.provider.Arguments.of("bloc PGP après une ligne BEGIN incomplète",
+                        DASHES + "BEGIN \n" + privateKeyBlock("PGP PRIVATE KEY BLOCK", "\n")));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.MethodSource("privateKeyBlocksAfterAMarkerThatOpensNoKey")
+    void privateKeyBlockAfterAMarkerThatOpensNoKeyIsRedacted(String label, String content) {
+        String redacted = SensitiveContentRedactor.redact(content);
+        assertFalse(redacted.contains(FAKE_KEY_BODY), redacted);
+        assertTrue(redacted.contains("[REDACTED]"), redacted);
+        assertEquals(lineSeparatorsOf(content), lineSeparatorsOf(redacted));
+        String firstLine = content.substring(0, content.indexOf('\n'));
+        if (!firstLine.contains("RSA PRIVATE KEY")) {
+            assertTrue(redacted.startsWith(firstLine + "\n"), redacted);
+        }
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"\n", "\r\n", "\r"})
+    void markerWhoseClosingDashesAreNotOnItsLineOpensNoKey(String newline) {
+        String lines = DASHES + "BEGIN " + newline + "\"PRIVATE KEY" + DASHES + "\"" + newline + "visible";
+        assertEquals(lines, SensitiveContentRedactor.redact(lines));
+
+        String withBlock = lines + newline + privateKeyBlock("RSA PRIVATE KEY", newline);
+        String redacted = SensitiveContentRedactor.redact(withBlock);
+        assertEquals(lines + newline + "[REDACTED]" + newline + newline, redacted);
+        assertFalse(redacted.contains(FAKE_KEY_BODY), redacted);
+        assertEquals(lineSeparatorsOf(withBlock), lineSeparatorsOf(redacted));
+    }
+
+    static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments> privateKeyMarkersWithAnotherCaseOrBlank() {
+        String nbsp = "\u00A0";
+        var markers = java.util.List.of(
+                java.util.List.of("minuscules", "begin rsa private key", "end rsa private key"),
+                java.util.List.of("casse mêlée", "Begin Rsa Private Key", "End Rsa Private Key"),
+                java.util.List.of("tabulation après BEGIN et END", "BEGIN\tRSA PRIVATE KEY", "END\tRSA PRIVATE KEY"),
+                java.util.List.of("espace insécable entre les mots", "BEGIN" + nbsp + "RSA" + nbsp + "PRIVATE" + nbsp + "KEY",
+                        "END" + nbsp + "RSA" + nbsp + "PRIVATE" + nbsp + "KEY"),
+                java.util.List.of("espace insécable au début, espaces à la fin", "BEGIN RSA" + nbsp + "PRIVATE KEY",
+                        "END RSA PRIVATE KEY"),
+                java.util.List.of("bloc PGP en minuscules", "begin pgp private key block", "end pgp private key block"),
+                java.util.List.of("deux espaces entre deux mots", "BEGIN RSA PRIVATE  KEY", "END RSA PRIVATE KEY"),
+                java.util.List.of("suites de blancs différentes au début et à la fin",
+                        "BEGIN  RSA\t" + nbsp + "PRIVATE KEY", "END \tRSA PRIVATE   KEY"));
+        return markers.stream().flatMap(marker -> java.util.stream.Stream.of("\n", "\r\n").map(newline ->
+                org.junit.jupiter.params.provider.Arguments.of(marker.get(0) + (newline.length() == 1 ? " (LF)" : " (CRLF)"),
+                        marker.get(1), marker.get(2), newline)));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.MethodSource("privateKeyMarkersWithAnotherCaseOrBlank")
+    void privateKeyMarkerIsRecognizedWhateverItsCaseAndBlanks(String label, String begin, String end, String newline) {
+        String block = DASHES + begin + DASHES + newline + FAKE_KEY_BODY + newline + DASHES + end + DASHES;
+        String content = "before" + newline + block + newline + "after";
+        String redacted = SensitiveContentRedactor.redact(content);
+        assertEquals("before" + newline + "[REDACTED]" + newline + newline + newline + "after", redacted);
+
+        String truncated = "before" + newline + DASHES + begin + DASHES + newline + FAKE_KEY_BODY + newline + "tail";
+        assertEquals("before" + newline + "[REDACTED]" + newline + newline, SensitiveContentRedactor.redact(truncated));
+    }
+
+    @Test
+    void markerSplitAcrossTwoSourceLinesOpensNoKey() {
+        String source = "String pem = \"" + DASHES + "BEGIN RSA \" +\n"
+                + "        \"PRIVATE KEY" + DASHES + "\\n\" +\n"
+                + "        \"" + FAKE_KEY_BODY + "\\n\" +\n"
+                + "        \"" + DASHES + "END RSA PRIVATE KEY" + DASHES + "\";\n";
+        // Limite acceptée : la fin du marqueur n'est pas sur sa ligne, le corps reste en clair.
+        assertEquals(source, SensitiveContentRedactor.redact(source));
+    }
+
+    @Test
+    void codeLiteralEndingWithAKeySuffixMasksTheRestOfTheContent() {
+        String source = "if (l.startsWith(\"" + DASHES + "BEGIN \") && l.endsWith(\"PRIVATE KEY" + DASHES + "\")) {}\n"
+                + "visible\n";
+        // Limite acceptée : la ligne ouvre une clé sans ligne END, la suite est masquée (aucune fuite).
+        assertEquals("if (l.startsWith(\"[REDACTED]\n\n", SensitiveContentRedactor.redact(source));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"\n", "\r\n"})
+    void endMarkerInTheMiddleOfALineClosesTheBlockAtTheEndOfItsLine(String newline) {
+        String type = "RSA PRIVATE KEY";
+        String endLine = DASHES + "END " + type + DASHES;
+        String content = DASHES + "BEGIN " + type + DASHES + newline
+                + "AAA" + endLine + "SECRETBODY" + newline
+                + endLine + newline + "after";
+        String redacted = SensitiveContentRedactor.redact(content);
+        assertEquals("[REDACTED]" + newline + newline + endLine + newline + "after", redacted);
+        assertFalse(redacted.contains("SECRETBODY"), redacted);
+
+        String withoutSecondEnd = DASHES + "BEGIN " + type + DASHES + newline
+                + "AAA" + endLine + "SECRETBODY" + newline + "tail";
+        assertEquals("[REDACTED]" + newline + newline + "tail", SensitiveContentRedactor.redact(withoutSecondEnd));
+    }
+
+    @Test
+    void serviceAccountKeyWithEscapedNewlinesHidesOnlyItsLine() {
+        String escapedNewline = (char) 92 + "n";
+        String key = DASHES + "BEGIN PRIVATE KEY" + DASHES + escapedNewline + FAKE_KEY_BODY + escapedNewline
+                + DASHES + "END PRIVATE KEY" + DASHES + escapedNewline;
+        String content = "{\n  \"type\": \"service_account\",\n  \"private_key\": \"" + key + "\",\n"
+                + "  \"client_email\": \"svc@example.iam.gserviceaccount.com\"\n}\n";
+        String redacted = SensitiveContentRedactor.redact(content);
+        assertFalse(redacted.contains(FAKE_KEY_BODY), redacted);
+        assertTrue(redacted.contains("  \"client_email\": \"svc@example.iam.gserviceaccount.com\"\n}\n"), redacted);
+        assertEquals(lineSeparatorsOf(content), lineSeparatorsOf(redacted));
+    }
+
+    @Test
+    void javaConcatenatedKeyHidesUpToTheEndOfItsEndLine() {
+        String escapedNewline = (char) 92 + "n";
+        String content = "String pem = \"" + DASHES + "BEGIN RSA PRIVATE KEY" + DASHES + escapedNewline + "\"\n"
+                + "        + \"" + FAKE_KEY_BODY + escapedNewline + "\"\n"
+                + "        + \"" + DASHES + "END RSA PRIVATE KEY" + DASHES + "\";\n"
+                + "int after = 1;\n";
+        assertEquals("String pem = \"[REDACTED]\n\n\nint after = 1;\n", SensitiveContentRedactor.redact(content));
+    }
+
+    @Test
+    void commentedKeyHidesUpToTheEndOfItsEndLine() {
+        String content = "// " + DASHES + "BEGIN RSA PRIVATE KEY" + DASHES + "\n// " + FAKE_KEY_BODY + "\n// "
+                + DASHES + "END RSA PRIVATE KEY" + DASHES + "\nvisible\n";
+        assertEquals("// [REDACTED]\n\n\nvisible\n", SensitiveContentRedactor.redact(content));
+    }
+
+    @Test
+    void endMarkerPrecededByBlanksOnItsLineClosesTheBlock() {
+        String type = "RSA PRIVATE KEY";
+        String content = DASHES + "BEGIN " + type + DASHES + "\n" + FAKE_KEY_BODY + "\n"
+                + " \t" + (char) 0x00A0 + DASHES + "END " + type + DASHES + "\nafter";
+        assertEquals("[REDACTED]\n\n\nafter", SensitiveContentRedactor.redact(content));
+    }
+
+    static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments> unrecognizedPrivateKeyMarkers() {
+        String four = "-".repeat(4);
+        String enDashes = "\u2013".repeat(5);
+        return java.util.stream.Stream.of(
+                org.junit.jupiter.params.provider.Arguments.of("quatre tirets",
+                        four + "BEGIN RSA PRIVATE KEY" + four + "\n" + FAKE_KEY_BODY + "\n" + four + "END RSA PRIVATE KEY" + four),
+                org.junit.jupiter.params.provider.Arguments.of("espace avant les tirets de fin",
+                        DASHES + "BEGIN RSA PRIVATE KEY " + DASHES + "\n" + FAKE_KEY_BODY + "\n" + DASHES + "END RSA PRIVATE KEY " + DASHES),
+                org.junit.jupiter.params.provider.Arguments.of("BEGIN collé au type",
+                        DASHES + "BEGINRSA PRIVATE KEY" + DASHES + "\n" + FAKE_KEY_BODY + "\n" + DASHES + "ENDRSA PRIVATE KEY" + DASHES),
+                org.junit.jupiter.params.provider.Arguments.of("tirets demi-cadratin",
+                        enDashes + "BEGIN RSA PRIVATE KEY" + enDashes + "\n" + FAKE_KEY_BODY + "\n" + enDashes + "END RSA PRIVATE KEY" + enDashes),
+                org.junit.jupiter.params.provider.Arguments.of("E cyrillique dans BEGIN",
+                        DASHES + "B\u0415GIN RSA PRIVATE KEY" + DASHES + "\n" + FAKE_KEY_BODY + "\n" + DASHES + "\u0415ND RSA PRIVATE KEY" + DASHES),
+                org.junit.jupiter.params.provider.Arguments.of("cadratin U+2003 entre PRIVATE et KEY",
+                        DASHES + "BEGIN RSA PRIVATE\u2003KEY" + DASHES + "\n" + FAKE_KEY_BODY + "\n" + DASHES + "END RSA PRIVATE\u2003KEY" + DASHES),
+                org.junit.jupiter.params.provider.Arguments.of("espace idéographique U+3000 entre PRIVATE et KEY",
+                        DASHES + "BEGIN RSA PRIVATE\u3000KEY" + DASHES + "\n" + FAKE_KEY_BODY + "\n" + DASHES + "END RSA PRIVATE\u3000KEY" + DASHES),
+                org.junit.jupiter.params.provider.Arguments.of("espace sans chasse U+200B après BEGIN",
+                        DASHES + "BEGIN\u200BRSA PRIVATE KEY" + DASHES + "\n" + FAKE_KEY_BODY + "\n" + DASHES + "END\u200BRSA PRIVATE KEY" + DASHES),
+                org.junit.jupiter.params.provider.Arguments.of("format PuTTY",
+                        "PuTTY-User-Key-File-3: ssh-rsa\nEncryption: none\nComment: fixture\nPublic-Lines: 1\nAAAAB3NzaC1yc2E\n"
+                                + "Private-Lines: 1\n" + FAKE_KEY_BODY + "\nPrivate-MAC: 00"));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.MethodSource("unrecognizedPrivateKeyMarkers")
+    void unrecognizedPrivateKeyMarkerFormsStayInClear(String label, String content) {
+        // Limites connues : ces variantes ne sont pas reconnues comme blocs de clé privée.
+        assertEquals(content, SensitiveContentRedactor.redact(content));
+    }
+
+    @Test
+    void privateKeyBlockRenderingWithoutTheV9DefectsIsUnchanged() throws ReflectiveOperationException {
+        String rsa = privateKeyBlock("RSA PRIVATE KEY", "\n");
+        java.util.List<String> contents = java.util.List.of(
+                rsa,
+                "before\n" + rsa + "\nafter",
+                privateKeyBlock("CERTIFICATE", "\n") + "\n" + rsa,
+                "x " + DASHES + "BEGIN foo\nbar",
+                "before\n" + DASHES + "BEGIN PRIVATE KEY" + DASHES + "\nabc\nstill-secret\n",
+                rsa + "sk-" + syntheticAlphanumeric(255) + " y");
+        for (String content : contents) {
+            V9Rendering reference = v9ReplacePrivateKeyBlocks(content);
+            assertFalse(reference.defective(), content);
+            assertEquals(reference.output(), replacePrivateKeyBlocks(content), content);
+        }
+        assertEquals("x " + DASHES + "BEGIN foo\nbar", SensitiveContentRedactor.redact("x " + DASHES + "BEGIN foo\nbar"));
+    }
+
+    @Test
+    void generatedPrivateKeyMarkerContentsRenderAsV9WhenV9HasNoDefect() throws ReflectiveOperationException {
+        String[] parts = {DASHES + "BEGIN ", DASHES + "END ", "RSA PRIVATE KEY" + DASHES, "PRIVATE KEY" + DASHES,
+                "PGP PRIVATE KEY BLOCK" + DASHES, "CERTIFICATE" + DASHES, DASHES, "-", "BEGIN ", "\n", "\r\n", "\r",
+                "MII", "x", "a b"};
+        var random = new java.util.Random(15);
+        int compared = 0;
+        for (int sample = 0; sample < 6000; sample++) {
+            var content = new StringBuilder();
+            int length = 1 + random.nextInt(30);
+            for (int index = 0; index < length; index++) {
+                content.append(parts[random.nextInt(parts.length)]);
+            }
+            String text = content.toString();
+            V9Rendering reference = v9ReplacePrivateKeyBlocks(text);
+            String rendered = replacePrivateKeyBlocks(text);
+            assertEquals(lineSeparatorsOf(text), lineSeparatorsOf(rendered), text);
+            if (!reference.defective()) {
+                assertEquals(reference.output(), rendered, text);
+                compared++;
+            }
+        }
+        assertTrue(compared > 1000, "cas comparés : " + compared);
+    }
+
+    private static String replacePrivateKeyBlocks(String content) throws ReflectiveOperationException {
+        var method = SensitiveContentRedactor.class.getDeclaredMethod("replacePrivateKeyBlocks", String.class);
+        method.setAccessible(true);
+        return (String) method.invoke(null, content);
+    }
+
+    /**
+     * Rendu de la boucle {@code replacePrivateKeyBlocks} de {@code secret-redaction-v9} ;
+     * {@code defective} signale l'un de ses deux défauts : fin de marqueur cherchée au-delà de sa ligne,
+     * marqueur sans clé dont la reprise en fin de marqueur saute un {@code -----BEGIN } commencé avant, ou
+     * {@code -----END} au milieu d'une ligne suivi d'un texte laissé visible sur cette ligne.
+     */
+    private record V9Rendering(String output, boolean defective) {
+    }
+
+    /** Copie de référence de la boucle v9, instrumentée pour signaler ses défauts. */
+    private static V9Rendering v9ReplacePrivateKeyBlocks(String content) {
+        String begin11 = DASHES + "BEGIN ";
+        String endPrefix = DASHES + "END ";
+        boolean defective = false;
+        StringBuilder output = new StringBuilder(content.length());
+        int cursor = 0;
+        while (cursor < content.length()) {
+            int begin = content.indexOf(begin11, cursor);
+            if (begin < 0) {
+                output.append(content, cursor, content.length());
+                break;
+            }
+            int markerEnd = content.indexOf(DASHES, begin + begin11.length());
+            if (markerEnd < 0) {
+                output.append(content, cursor, content.length());
+                break;
+            }
+            markerEnd += 5;
+            String beginMarker = content.substring(begin, markerEnd);
+            if (beginMarker.indexOf('\r') >= 0 || beginMarker.indexOf('\n') >= 0) {
+                defective = true;
+            }
+            if (!beginMarker.endsWith("PRIVATE KEY" + DASHES) && !beginMarker.endsWith("PRIVATE KEY BLOCK" + DASHES)) {
+                int nextBegin = content.indexOf(begin11, begin + begin11.length());
+                if (nextBegin >= 0 && nextBegin < markerEnd) {
+                    defective = true;
+                }
+                output.append(content, cursor, markerEnd);
+                cursor = markerEnd;
+                continue;
+            }
+            String keyType = beginMarker.substring(begin11.length(), beginMarker.length() - 5);
+            String endMarker = endPrefix + keyType + DASHES;
+            int end = content.indexOf(endMarker, markerEnd);
+            if (end >= 0 && !startsItsLine(content, end)) {
+                int afterEnd = end + endMarker.length();
+                if (afterEnd < content.length() && content.charAt(afterEnd) != '\r' && content.charAt(afterEnd) != '\n') {
+                    defective = true;
+                }
+            }
+            if (end < 0) {
+                output.append(content, cursor, begin).append("[REDACTED]");
+                appendV9LineSeparators(output, content, begin, content.length());
+                cursor = content.length();
+                continue;
+            }
+            end += endMarker.length();
+            output.append(content, cursor, begin).append("[REDACTED]");
+            appendV9LineSeparators(output, content, begin, end);
+            cursor = end;
+        }
+        return new V9Rendering(output.toString(), defective);
+    }
+
+    /** Seuls des tirets ou des blancs précèdent {@code position} sur sa ligne. */
+    private static boolean startsItsLine(String content, int position) {
+        for (int index = position - 1; index >= 0; index--) {
+            char character = content.charAt(index);
+            if (character == '\r' || character == '\n') {
+                return true;
+            }
+            if (character != '-' && character != ' ' && character != '\t' && character != (char) 0x00A0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static void appendV9LineSeparators(StringBuilder output, String content, int begin, int end) {
+        for (int index = begin; index < end; index++) {
+            char character = content.charAt(index);
+            if (character == '\r' || character == '\n') {
+                output.append(character);
+            }
+        }
     }
 
     /** Seuil du sprint 14 : 1 Mo de débuts forgés redigé en moins d'une seconde. */
