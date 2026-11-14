@@ -68,6 +68,7 @@ else
     CHANNEL_ARGS=(--prerelease --latest=false)
   else
     echo "Creating GitHub Release $TAG as a draft until every asset is verified."
+    CHANNEL_ARGS=(--latest=false)
   fi
   gh release create "$TAG" \
     --verify-tag \
@@ -142,7 +143,9 @@ done
 
 if [[ "$release_is_draft" == "true" ]]; then
   echo "All release assets are present with verified bytes; publishing GitHub Release $TAG."
-  gh release edit "$TAG" --draft=false >/dev/null
+  # make_latest defaults to true on the request that publishes a draft: send false so that no
+  # release becomes latest before its immutable state has been read.
+  gh release edit "$TAG" --draft=false --latest=false >/dev/null
   final_draft_state="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
   if [[ "$final_draft_state" != "false" ]]; then
     echo "GitHub Release $TAG did not transition from draft to published state." >&2
@@ -159,7 +162,8 @@ fi
 # Published releases must be immutable (repository setting "immutable releases"): GitHub then
 # locks the tag and the assets. The field is readable with contents: read; the setting itself
 # requires administration access, which the release job does not hold. A published release
-# cannot be unpublished here: the failure stops the job before latest moves.
+# cannot be unpublished here: the failure stops the job before the GitHub Latest badge and the
+# latest image tag move.
 if ! release_is_immutable="$(gh api "repos/{owner}/{repo}/releases/tags/$TAG" --jq '.immutable')"; then
   echo "Unable to read the immutable state of GitHub Release $TAG." >&2
   exit 70
@@ -169,3 +173,30 @@ if [[ "$release_is_immutable" != "true" ]]; then
   exit 79
 fi
 echo "GitHub Release $TAG is immutable."
+
+# Only an immutable final release is marked latest (GitHub Latest badge), after the immutable read
+# above and before the release workflow moves the latest image tag. The state of an immutable
+# release stays editable: only its tag and assets are locked. No version comparison: re-running
+# an older final release marks it latest again, as the image step moves the latest tag back to it.
+if [[ "$EXPECTED_PRERELEASE" == "true" ]]; then
+  echo "GitHub pre-release $TAG is never marked as the latest release."
+  exit 0
+fi
+
+read_latest_tag() {
+  # GitHub answers 404 when no release is marked latest: any failed read counts as "none".
+  gh api "repos/{owner}/{repo}/releases/latest" --jq '.tag_name' 2>/dev/null || true
+}
+
+if [[ "$(read_latest_tag)" == "$TAG" ]]; then
+  echo "GitHub Release $TAG is already the latest release."
+  exit 0
+fi
+if ! gh release edit "$TAG" --latest >/dev/null; then
+  echo "Marking GitHub Release $TAG as the latest release failed; re-reading the latest release." >&2
+fi
+if [[ "$(read_latest_tag)" != "$TAG" ]]; then
+  echo "GitHub Release $TAG is immutable but could not be marked as the latest release." >&2
+  exit 80
+fi
+echo "GitHub Release $TAG is now the latest release."

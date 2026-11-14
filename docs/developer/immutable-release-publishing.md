@@ -47,7 +47,7 @@ ghcr.io/fturleque/nexus-context-engine:sha-<sha>
 ghcr.io/fturleque/nexus-context-engine:latest
 ```
 
-Les tags version et SHA sont immuables. `latest` est volontairement mutable et ne désigne qu'une version finale : pour un tag `vX.Y.Z-rc.N`, la release GitHub est créée en pré-version (`--prerelease --latest=false`), les tags version et SHA sont publiés et `latest` reste inchangé.
+Les tags version et SHA sont immuables. Le tag d'image `latest` est volontairement mutable et ne désigne qu'une version finale : pour un tag `vX.Y.Z-rc.N`, la release GitHub est créée en pré-version (`--prerelease --latest=false`), les tags version et SHA sont publiés et `latest` reste inchangé. Le badge Latest de la release GitHub suit la même règle : toute release est publiée hors Latest (`gh release edit <tag> --draft=false --latest=false`), et seule une version finale dont la release est immuable reçoit ensuite le badge, avant le déplacement du tag d'image `latest`.
 
 ## Préflight fail-closed et reprise idempotente
 
@@ -116,7 +116,7 @@ Pour corriger une release dont le contenu doit changer, créer une nouvelle vers
 
 Un run de release en échec avant la publication de la release GitHub se relance sur le même tag tant que le commit ne change pas ; sinon le tag est conservé sans release et une nouvelle version est publiée. La procédure complète est dans [Reprise d'une release échouée](release-and-recovery.md#reprise-dune-release-échouée).
 
-Après la publication, `scripts/release/publish-github-release-assets.sh` lit le champ `immutable` de la release (`gh api repos/{owner}/{repo}/releases/tags/<tag> --jq .immutable`) et sort en code 79 s'il ne vaut pas `true`, avant le déplacement de `latest`. La release reste publiée : la reprise est une nouvelle version, après activation du réglage.
+Après la publication, faite hors Latest, `scripts/release/publish-github-release-assets.sh` lit le champ `immutable` de la release (`gh api repos/{owner}/{repo}/releases/tags/<tag> --jq .immutable`) et sort en code 79 s'il ne vaut pas `true` : ni le badge Latest ni le tag d'image `latest` ne bougent. La release reste publiée : la reprise est une nouvelle version, après activation du réglage. Pour une version finale immuable, le script lit ensuite le Latest courant (`gh api repos/{owner}/{repo}/releases/latest --jq .tag_name`, une absence de Latest valant « aucun »), pose le badge par `gh release edit <tag> --latest` s'il désigne une autre release, puis relit : une relecture qui ne rend pas le tag sort en code 80, et la relance des jobs échoués du même run reprend la pose.
 
 ## Rollback
 
@@ -163,9 +163,9 @@ Cette section porte la conception et l'existant vérifié des six exigences de l
 - **Environnement protégé.** Le job `publish` déclare `environment: release` (`.github/workflows/release.yml:169`). Le job Windows n'entre dans cet environnement que s'il est appelé avec `require_authenticode: true`, par `name: ${{ inputs.require_authenticode && 'release' || '' }}` (`.github/workflows/windows-installer.yml:55-56`) ; `release.yml` ne le fait pas. L'environnement exige un reviewer, limite le déploiement aux tags `v*` et ne porte aucun secret ; les rulesets de tags `refs/tags/v*` réservent la création au mainteneur et interdisent à tous la mise à jour et la suppression (point « Tags de version figés »). Ces réglages GitHub sont à appliquer par le mainteneur et se relisent par `gh api`.
 - **Attestation de tous les assets.** Avant l'upload, `actions/attest` (même SHA épinglé que pour l'image) atteste par `subject-path` le ZIP (`.github/workflows/release.yml:389-392`) et le `setup.exe` (`.github/workflows/release.yml:394-397`) ; l'étape « Verify Windows asset attestations before upload » (`.github/workflows/release.yml:399-424`) exécute `gh attestation verify` sur chacun, avec `--signer-workflow` et `--source-ref`, et échoue sinon.
 - **Version lue dans le pom.** `ci.yml` lit la version dans `pom.xml` et l'exporte en `NEXUS_VERSION` (`.github/workflows/ci.yml:77-89`) ; `scripts/validate-phase-6.ps1` la lit par `[xml]` (`scripts/validate-phase-6.ps1:95`, `:105`).
-- **Releases immuables.** Après la sortie du brouillon, ou pour une release retrouvée déjà publiée, `scripts/release/publish-github-release-assets.sh` lit le champ `immutable` de la release (`scripts/release/publish-github-release-assets.sh:163-166`, code 70 si la lecture échoue) et sort en code 79, message nommant le tag, s'il ne vaut pas `true` (`:167-170`). Le script s'exécute dans l'étape qui précède le déplacement de `latest` : un échec l'empêche. Le réglage lui-même n'est pas lu par le workflow, car `GET /repos/{owner}/{repo}/immutable-releases` exige la permission d'administration, que le `GITHUB_TOKEN` ne peut pas recevoir.
+- **Releases immuables.** `scripts/release/publish-github-release-assets.sh` crée et publie toute release hors Latest (`scripts/release/publish-github-release-assets.sh:71`, `:148`). Après la sortie du brouillon, ou pour une release retrouvée déjà publiée, il lit le champ `immutable` de la release (`:167-170`, code 70 si la lecture échoue) et sort en code 79, message nommant le tag, s'il ne vaut pas `true` (`:171-174`). Pour une version finale seulement, il pose ensuite le badge Latest et le relit, code 80 si la relecture ne désigne pas le tag (`:181-202`), sans comparaison de versions : la relance d'une version finale plus ancienne y repose le badge. Le script s'exécute dans l'étape qui précède le déplacement du tag d'image `latest` (`.github/workflows/release.yml:426-452`) : un échec l'empêche. Le réglage lui-même n'est pas lu par le workflow, car `GET /repos/{owner}/{repo}/immutable-releases` exige la permission d'administration, que le `GITHUB_TOKEN` ne peut pas recevoir.
 - **Tags de version figés.** Deux rulesets de cible `tag` sur `refs/tags/v*` : « Immutable version tags » (`update`, `deletion`, `non_fast_forward`, aucun contournement) et « Protect tags » (`creation`, contournement administrateur). Un tag de release en échec n'est donc jamais supprimé ni recréé : la reprise suit la vue organigramme de reprise ci-dessous.
-- **Pré-versions.** `scripts/release/validate-release-tag.sh` accepte `vX.Y.Z` et `vX.Y.Z-rc.N` (`N` entier non nul sans zéro de tête), toujours égal à la version Maven et à la tête de `main` (`scripts/release/validate-release-tag.sh:11`). Pour un tag `-rc`, `scripts/release/publish-github-release-assets.sh` crée la release en `--prerelease --latest=false` (`scripts/release/publish-github-release-assets.sh:68`) et refuse une release existante dont l'état pré-version contredit le tag (code 78) ; l'étape `latest` de `release.yml` laisse `latest` inchangé (`.github/workflows/release.yml:452-467`). Les tags d'image version et SHA restent immuables.
+- **Pré-versions.** `scripts/release/validate-release-tag.sh` accepte `vX.Y.Z` et `vX.Y.Z-rc.N` (`N` entier non nul sans zéro de tête), toujours égal à la version Maven et à la tête de `main` (`scripts/release/validate-release-tag.sh:11`). Pour un tag `-rc`, `scripts/release/publish-github-release-assets.sh` crée la release en `--prerelease --latest=false` (`scripts/release/publish-github-release-assets.sh:68`), la publie hors Latest, ne lui pose jamais le badge Latest (`:181-184`) et refuse une release existante dont l'état pré-version contredit le tag (code 78) ; l'étape `latest` de `release.yml` laisse `latest` inchangé (`.github/workflows/release.yml:452-467`). Les tags d'image version et SHA restent immuables.
 
 ### Vues (release-pipeline)
 
@@ -180,13 +180,24 @@ flowchart TD
     env --> image["Image GHCR sous tags immuables, attestation provenance et SBOM"]
     image --> attest["actions/attest sur les ZIP et setup.exe, puis gh attestation verify"]
     attest -- "vérification en échec" --> stop2["Échec avant tout upload et avant latest"]
-    attest -- "vérification réussie" --> assets["publish-github-release-assets.sh : release GitHub"]
-    assets --> rc{"Tag -rc ?"}
-    rc -- "oui" --> pre["Release marquée pré-version, latest inchangé"]
-    rc -- "non" --> latest["latest déplacé"]
+    attest -- "vérification réussie" --> draft["publish-github-release-assets.sh : brouillon vérifié, créé avec --latest=false"]
+    draft --> pub["gh release edit --draft=false --latest=false"]
+    resumed["Release retrouvée déjà publiée"] --> imm
+    pub --> imm{"immutable = true ?"}
+    imm -- "non" --> e79["Sortie 79 : badge Latest et tag d'image latest inchangés"]
+    imm -- "oui" --> rc{"Tag -rc ?"}
+    rc -- "oui" --> pre["Sortie 0 : pré-version jamais Latest, tag d'image latest inchangé"]
+    rc -- "non" --> cur{"Latest courant = tag ?"}
+    cur -- "oui" --> ok1["Sortie 0 sans modification"]
+    cur -- "non" --> mark["gh release edit --latest"]
+    mark --> check{"Relecture : Latest = tag ?"}
+    check -- "non" --> e80["Sortie 80 : badge non posé, tag d'image latest inchangé"]
+    check -- "oui" --> ok2["Sortie 0"]
+    ok1 --> ghcr["Étape suivante : tag d'image latest déplacé"]
+    ok2 --> ghcr
 ```
 
-Notation : organigramme, pas UML. Exigences portées : « La publication s'exécute dans l'environnement protégé », « Chaque asset publié porte une attestation de provenance », « Un tag de pré-version publie une pré-version ».
+Notation : organigramme, pas UML. Exigences portées : « La publication s'exécute dans l'environnement protégé », « Chaque asset publié porte une attestation de provenance », « Un tag de pré-version publie une pré-version », « Les releases publiées sont immuables », « Le badge Latest n'est posé qu'après le contrôle d'immuabilité ».
 
 #### Vue organigramme — Comment reprendre un run de release en échec sans recréer son tag ?
 
@@ -206,9 +217,9 @@ Notation : organigramme, pas UML. Exigences portées : « Une release échouée 
 
 ### Comportement existant vérifié (release-pipeline)
 
-**[Existant vérifié]** Les contrats `scripts/release/test-final-audit-contracts.sh:291-358` (bloc « Sprint 9 : secrets-signature »), `:360-399` (bloc « Sprint 9 : attest-prerelease »), `:482-511` (bloc « Sprint 9 : version-from-pom ») et `:513-530` (bloc « Sprint 9 : adr-publication ») verrouillent respectivement : `secrets: inherit` refusé et confinement des secrets de signature ; SHA unique de `actions/attest`, les deux `subject-path`, vérification bloquante et ordre attestation, vérification, upload, `latest` ; absence de version littérale dans `ci.yml` et `validate-phase-6.ps1` ; ADR de publication référencé.
+**[Existant vérifié]** Les contrats `scripts/release/test-final-audit-contracts.sh:291-358` (bloc « Sprint 9 : secrets-signature »), `:360-399` (bloc « Sprint 9 : attest-prerelease »), `:482-511` (bloc « Sprint 9 : version-from-pom »), `:513-530` (bloc « Sprint 9 : adr-publication ») et `:538-550` (bloc « Sprint 15 : release-latest-apres-immuable ») verrouillent respectivement : `secrets: inherit` refusé et confinement des secrets de signature ; SHA unique de `actions/attest`, les deux `subject-path`, vérification bloquante et ordre attestation, vérification, upload, `latest` ; absence de version littérale dans `ci.yml` et `validate-phase-6.ps1` ; ADR de publication référencé ; publication par `--draft=false --latest=false` et pose du badge Latest après la lecture `immutable`.
 
-**[Existant vérifié]** Les tests `scripts/release/test-release-tag-policy.sh` (cas valides `rc.1` et `rc.12`, cas invalides `rc.0`, `rc.01`, version Maven ou SHA divergents, `-SNAPSHOT`) et `scripts/release/test-publish-github-release-assets.sh` (création en pré-version, reprise idempotente, refus en code 78 d'un état pré-version contradictoire, refus en code 79 d'une release publiée non immuable, succès sans mutation d'une release immuable) couvrent la politique de tag et la publication des assets.
+**[Existant vérifié]** Les tests `scripts/release/test-release-tag-policy.sh` (cas valides `rc.1` et `rc.12`, cas invalides `rc.0`, `rc.01`, version Maven ou SHA divergents, `-SNAPSHOT`) et `scripts/release/test-publish-github-release-assets.sh` (création en pré-version, reprise idempotente, refus en code 78 d'un état pré-version contradictoire, refus en code 79 d'une release publiée non immuable sans badge Latest, badge Latest posé après la lecture `immutable` pour une version finale, jamais pour une pré-version, reprise d'une release hors Latest ou déjà Latest, relance d'une version plus ancienne, code 80 quand la pose échoue ; le faux `gh` applique la valeur par défaut `make_latest: true` de l'API à la publication) couvrent la politique de tag et la publication des assets.
 
 **[Existant vérifié]** `scripts/release/test-operational-doc-contracts.sh` exige la sous-section « Reprise d'une release échouée » de `docs/developer/release-and-recovery.md` et refuse, dans toute page de `docs/developer/`, une commande qui supprime ou force un tag : option de suppression ou de forçage de `git tag`, `git push` qui supprime ou force un tag `v*` (option ou préfixe `+` ou `:`), suppression d'une release avec son tag par `gh release delete`, appel `DELETE` sur `git/refs/tags/`. Le message nomme la page et la ligne.
 

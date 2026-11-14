@@ -41,7 +41,7 @@ La release réutilise les gates exécutables : NEXUS CI, Windows Installer, Dock
 
 L'image Docker est **construite une seule fois** dans Docker Distribution, qualifiée, exportée avec preuve d'intégrité puis chargée dans le job de publication. Le workflow de release ne reconstruit pas l'image.
 
-Les tags version et SHA sont immuables. Le préflight GHCR est fail-closed sur toute erreur ambiguë et accepte une reprise idempotente uniquement si le contenu déjà publié correspond à l'image qualifiée. `latest` est le seul pointeur mutable.
+Les tags version et SHA sont immuables. Le préflight GHCR est fail-closed sur toute erreur ambiguë et accepte une reprise idempotente uniquement si le contenu déjà publié correspond à l'image qualifiée. Les deux seuls pointeurs mutables sont le tag d'image `latest` et le badge Latest de la release GitHub ; tous deux ne désignent qu'une version finale dont la release est immuable. `scripts/release/publish-github-release-assets.sh` publie toute release hors Latest, lit son champ `immutable`, puis pose le badge Latest sur une version finale immuable ; l'étape suivante de `release.yml` déplace ensuite le tag d'image `latest`.
 
 Voir [`immutable-release-publishing.md`](immutable-release-publishing.md).
 
@@ -76,7 +76,9 @@ Un tag `v*` poussé désigne son commit pour toujours. La politique de publicati
    - pré-version `X.Y.Z-rc.N` en échec : `X.Y.Z-rc.(N+1)`.
 
    Le correctif suit le flux habituel (PR vers `main`) et le nouveau tag est posé sur la tête de `main`.
-3. **Release GitHub déjà publiée** : elle ne se corrige pas ; une nouvelle version suit le point 2. Si `scripts/release/publish-github-release-assets.sh` sort en code 79 (release publiée non immuable), `latest` n'a pas bougé : activer les releases immuables, puis publier une nouvelle version.
+3. **Release GitHub déjà publiée** : elle ne se corrige pas ; une nouvelle version suit le point 2. Si `scripts/release/publish-github-release-assets.sh` sort en code 79 (release publiée non immuable), ni le badge Latest de la release GitHub ni le tag d'image `latest` n'ont bougé : activer les releases immuables, puis publier une nouvelle version. S'il sort en code 80 (version finale publiée et immuable que la relecture ne désigne pas comme Latest), relancer les jobs échoués du même run : la reprise pose le badge Latest puis déplace le tag d'image `latest`.
+
+La relance du job `publish` d'une version finale plus ancienne que la dernière publiée repose le badge Latest puis le tag d'image `latest` sur cette version : aucune comparaison SemVer n'est faite. Ne relancer ce job que pour la dernière version finale, ou relancer ensuite celui de la version qui doit rester Latest. Après une release finale, `gh api repos/FTurleque/nexus-context-engine/releases/latest --jq '{tag_name, immutable}'` doit rendre le nouveau tag et `true`.
 
 Aucun tag `v*` n'est supprimé, déplacé ni recréé. Le détail des réglages GitHub et leurs commandes de lecture figurent dans [`immutable-release-publishing.md`](immutable-release-publishing.md#politique-de-publication-cible-sec-0068-proposée).
 
