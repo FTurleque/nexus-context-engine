@@ -184,8 +184,8 @@ if [[ "$EXPECTED_PRERELEASE" == "true" ]]; then
 fi
 
 read_latest_tag() {
-  # GitHub answers 404 when no release is marked latest: any failed read counts as "none".
-  gh api "repos/{owner}/{repo}/releases/latest" --jq '.tag_name' 2>/dev/null || true
+  # GitHub answers 404 when no release is marked latest: any failed read counts as "none" and its error stays in the log.
+  gh api "repos/{owner}/{repo}/releases/latest" --jq '.tag_name' || true
 }
 
 if [[ "$(read_latest_tag)" == "$TAG" ]]; then
