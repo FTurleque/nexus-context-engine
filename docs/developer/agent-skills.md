@@ -2,7 +2,7 @@
 
 Ce chapitre décrit l'implémentation de l'Itération 6 de NEXUS.
 
-> État : implémentation initiale à valider localement. L'itération ne sera déclarée terminée qu'après `mvn clean install` et le self-smoke étendu.
+> État : implémentation initiale à valider localement. L'itération ne sera déclarée terminée qu'après `./mvnw clean install` (`.\mvnw.cmd clean install` sous Windows) et le self-smoke étendu.
 
 ## 1. Objectif
 

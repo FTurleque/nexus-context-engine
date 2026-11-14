@@ -1131,3 +1131,127 @@ for sample in (
         raise SystemExit(f"release recovery contract self-test: {sample!r} was wrongly detected")
 print("sprint-14-release-and-scale-contracts=PASS")
 PY
+# --- Sprint 15 : guides sous le wrapper Maven (AUD-QUA-30) ---
+# Current documentation calls Maven only through ./mvnw or .\mvnw.cmd, and exec:java selects core.
+python3 - <<'PY'
+from pathlib import Path
+import re
+
+root = Path.cwd()
+
+MAVEN_DOC_ROOT_FILES = ("README.md", "AGENTS.md", "CONTRIBUTING.md", "SECURITY.md")
+MAVEN_DOC_EXCLUDED_DIRS = (
+    "docs/architecture/adr/",
+    "docs/project/audits/",
+    "docs/project/history/",
+    "docs/project/rapport-supervisor/",
+)
+# (document, exact line): the documented fixtures of the DIRECT_MAVEN_CALL script contract.
+MAVEN_DOC_EXCEPTIONS: set[tuple[str, str]] = {
+    (
+        "docs/developer/ci-and-supply-chain.md",
+        r"| appel `&` d'un nom ou chemin Maven (`mvn`, `mvn.cmd`, `mvnw`, `mvnw.cmd`), cité ou non | `& mvn @arguments`, `& '.\mvnw.cmd' @mavenArgs` |",
+    ),
+    (
+        "docs/developer/ci-and-supply-chain.md",
+        r"| commande Maven en début de ligne | `mvn clean install` |",
+    ),
+    (
+        "docs/developer/ci-and-supply-chain.md",
+        r"| nom ou chemin Maven en position de commande après `=`, `;`, `{`, `(` ou `\|`, ou après un `.` de dot-sourcing seul entre blancs | `$output = mvn clean install 2>&1`, `Push-Location $root; mvn clean install`, `if ($full) { mvn clean install }`, `Write-Output $(mvn -v)`, `Get-Content x \| mvn -f -`, `. mvn clean install` |",
+    ),
+}
+
+# Command position: start of the text (after an optional PS…>, $ or > prompt) or after a shell separator.
+COMMAND_POSITION = r"(?:^\s*(?:(?:PS[^>\n]*>|\$|>)\s*)?|(?:&&|\|\||[;|&(])\s*)"
+DIRECT_MAVEN = re.compile(COMMAND_POSITION + r"(?<![\w./\\-])mvn(?:\.cmd)?(?=\s|$)")
+DIRECT_MAVEN_INLINE = re.compile(COMMAND_POSITION + r"(?<![\w./\\-])mvn(?:\.cmd)?(?=\s)")
+WRAPPER_MAVEN = re.compile(COMMAND_POSITION + r"(?<![\w/\\-])(?:\.{1,2}[\\/])?mvnw(?:\.cmd)?(?=\s)")
+CORE_MODULE = re.compile(r"(?:^|\s)(?:-pl|--projects)(?:\s+|=)core(?=\s|$)")
+FENCE = re.compile(r"^\s*(`{3,}|~{3,})\s*([^\s`]*)")
+INLINE_CODE = re.compile(r"(`+)(.+?)\1")
+
+
+def maven_doc_paths() -> list[str]:
+    paths = [name for name in MAVEN_DOC_ROOT_FILES if (root / name).is_file()]
+    for path in sorted((root / "docs").rglob("*.md")):
+        relative = path.relative_to(root).as_posix()
+        if not relative.startswith(MAVEN_DOC_EXCLUDED_DIRS):
+            paths.append(relative)
+    return paths
+
+
+def maven_doc_findings(text: str) -> list[tuple[int, str, str]]:
+    """Return (line number, kind, line) for each direct Maven call or exec:java outside core."""
+    findings: list[tuple[int, str, str]] = []
+    fence: tuple[str, str] | None = None
+    for number, line in enumerate(text.splitlines(), start=1):
+        marker = FENCE.match(line)
+        if fence is None and marker:
+            fence = (marker.group(1), marker.group(2).lower())
+            continue
+        if fence is not None:
+            if marker and marker.group(1)[0] == fence[0][0] and len(marker.group(1)) >= len(fence[0]) \
+                    and not line.strip()[len(marker.group(1)):].strip():
+                fence = None
+                continue
+            if fence[1] == "mermaid":
+                continue
+            samples = [(line, DIRECT_MAVEN)]
+        else:
+            samples = [(match.group(2), DIRECT_MAVEN_INLINE) for match in INLINE_CODE.finditer(line)]
+        for sample, direct in samples:
+            if direct.search(sample):
+                findings.append((number, "direct", line))
+                break
+            if "exec:java" in sample and WRAPPER_MAVEN.search(sample) and not CORE_MODULE.search(sample):
+                findings.append((number, "exec-java", line))
+                break
+    return findings
+
+
+for sample, kind in (
+    ("```powershell\nmvn clean install\n```", "direct"),
+    ("```cmd\nmvn.cmd -q package\n```", "direct"),
+    ("```bash\ncd core && mvn test\n```", "direct"),
+    ("```powershell\nPS> mvn -v\n```", "direct"),
+    ("```\nmvn\n```", "direct"),
+    ("1. Construire :\n\n   ```powershell\n   mvn clean install\n   ```", "direct"),
+    ("Lancer `mvn clean install` avant le self-smoke.", "direct"),
+    ("~~~sh\n$ mvn -B verify\n~~~", "direct"),
+    ('```powershell\n.\\mvnw.cmd -q exec:java "-Dexec.args=--help"\n```', "exec-java"),
+    ("Lancer `./mvnw -q exec:java -Dexec.args=--help`.", "exec-java"),
+):
+    if [kind] != [found[1] for found in maven_doc_findings(sample)]:
+        raise SystemExit(f"maven wrapper doc contract self-test: {sample!r} was not detected")
+for sample in (
+    "```powershell\n.\\mvnw.cmd clean install\n```",
+    "```bash\n./mvnw -version\n```",
+    "Le hook refuse `mvn` hors wrapper et `mvn.cmd`.",
+    "```mermaid\nflowchart TD\n    A[mvn installé] --> B\n```",
+    "Lancer mvn clean install en prose hors code.",
+    "Voir `.mvn/wrapper/maven-wrapper.properties`.",
+    '```powershell\n.\\mvnw.cmd -q -pl core exec:java "-Dexec.args=--help"\n```',
+    "```bash\n./mvnw -q --projects core exec:java -Dexec.args=--help\n```",
+    "```powershell\ncmd /c mvnw.cmd -v\n```",
+):
+    if maven_doc_findings(sample):
+        raise SystemExit(f"maven wrapper doc contract self-test: {sample!r} was wrongly detected")
+
+used_exceptions: set[tuple[str, str]] = set()
+errors: list[str] = []
+for relative in maven_doc_paths():
+    content = (root / relative).read_text(encoding="utf-8")
+    for number, kind, line in maven_doc_findings(content):
+        if kind == "direct" and (relative, line) in MAVEN_DOC_EXCEPTIONS:
+            used_exceptions.add((relative, line))
+        elif kind == "direct":
+            errors.append(f"documentation contract drift: {relative}:{number}: calls Maven directly instead of ./mvnw or .\\mvnw.cmd")
+        else:
+            errors.append(f"documentation contract drift: {relative}:{number}: exec:java must select the core module (-pl core)")
+for excepted_document, excepted_line in sorted(MAVEN_DOC_EXCEPTIONS - used_exceptions):
+    errors.append(f"documentation contract drift: obsolete Maven exception {excepted_document}: {excepted_line}")
+if errors:
+    raise SystemExit("\n".join(errors))
+print("maven-wrapper-doc-contracts=PASS")
+PY
