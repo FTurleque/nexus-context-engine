@@ -8,28 +8,32 @@ Le projet compile avec :
 
 ```text
 Java --release 21
-Maven
+Maven, fourni par le wrapper (mvnw)
 ```
 
 Un JDK plus récent peut être utilisé pour lancer Maven tant que le code compile avec la cible Java 21.
 
 ```powershell
 java -version
-mvn -version
+.\mvnw.cmd -version
 ```
+
+Maven n'est appelé que par le wrapper vérifié (`.\mvnw.cmd` sous Windows, `./mvnw` ailleurs), qui contrôle l'archive Maven contre l'ancre SHA-512 versionnée.
 
 ## 2. Récupérer la dernière version
 
 ```powershell
-cd N:\workspace-dev\nexus-context-engine
+cd nexus-context-engine
 git pull --ff-only
 ```
 
 ## 3. Build complet
 
 ```powershell
-mvn clean install
+.\mvnw.cmd clean install
 ```
+
+Hors Windows : `./mvnw clean install`.
 
 Ce build doit :
 
@@ -160,7 +164,7 @@ Remove-Item -Recurse -Force $env:NEXUS_HOME -ErrorAction SilentlyContinue
 
 ## 7. Choisir le mode d'exécution CLI
 
-Après `mvn clean install`, le mode recommandé est :
+Après `.\mvnw.cmd clean install`, le mode recommandé est :
 
 ```powershell
 .\scripts\nexus.ps1 --help
@@ -177,10 +181,10 @@ scripts\nexus.cmd --help
 L'exécution Maven reste possible pendant le développement :
 
 ```powershell
-mvn -q exec:java "-Dexec.args=--help"
+.\mvnw.cmd -q -pl core exec:java "-Dexec.args=--help"
 ```
 
-mais elle n'est pas le chemin principal de validation.
+`-pl core` sélectionne le module qui configure `exec-maven-plugin` et la classe `com.nexus.cli.NexusCli` ; le POM racine est un agrégateur (`packaging pom`). `exec:java` ne compile pas : la commande exécute les classes de `core/target/classes` produites par le build précédent. Elle n'est pas le chemin principal de validation.
 
 ## 8. Enregistrer un projet
 
@@ -515,7 +519,7 @@ Ordre recommandé :
 1. reproduire le bug dans un test ;
 2. vérifier que le test échoue ;
 3. corriger la classe la plus locale possible ;
-4. exécuter `mvn clean install` ;
+4. exécuter `.\mvnw.cmd clean install` ;
 5. exécuter le self-smoke ;
 6. mettre à jour la documentation si le comportement observable change ;
 7. créer un ADR si la correction modifie une décision structurante.
