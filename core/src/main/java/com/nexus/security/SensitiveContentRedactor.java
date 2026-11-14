@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
 public final class SensitiveContentRedactor {
 
     /** Version persistée dans les index dérivés ; toute évolution impose leur reconstruction. */
-    public static final String POLICY_VERSION = "secret-redaction-v9";
+    public static final String POLICY_VERSION = "secret-redaction-v10";
 
     private static final String REDACTED = "[REDACTED]";
     private static final String PRIVATE_KEY_BEGIN = "-----BEGIN ";
@@ -396,6 +396,17 @@ public final class SensitiveContentRedactor {
         return false;
     }
 
+    /**
+     * Remplace chaque bloc de clé privée par {@code [REDACTED]} en conservant ses CR et LF.
+     *
+     * <p>Les tirets de fin d'un marqueur {@code -----BEGIN } sont cherchés sur sa ligne seulement : un
+     * marqueur dont la fin n'est pas avant le premier CR ou LF n'ouvre pas de clé. Quand un marqueur
+     * n'ouvre pas de clé, la recherche reprend juste après son {@code -----BEGIN } : les tirets de fin
+     * d'un marqueur d'un autre type peuvent ouvrir le marqueur suivant
+     * ({@code -----BEGIN CERTIFICATE-----BEGIN RSA PRIVATE KEY-----}), et aucun {@code -----BEGIN }
+     * situé après ce point n'est sauté. Entre ce point et les tirets trouvés il n'y a aucun
+     * {@code -----} : chaque zone est balayée un nombre borné de fois et le coût reste linéaire.</p>
+     */
     private static String replacePrivateKeyBlocks(String content) {
         StringBuilder output = new StringBuilder(content.length());
         int cursor = 0;
@@ -406,16 +417,18 @@ public final class SensitiveContentRedactor {
                 break;
             }
 
-            int markerEnd = content.indexOf("-----", begin + PRIVATE_KEY_BEGIN.length());
-            if (markerEnd < 0) {
-                output.append(content, cursor, content.length());
-                break;
+            int afterBegin = begin + PRIVATE_KEY_BEGIN.length();
+            int closingDashes = closingDashesOnMarkerLine(content, afterBegin);
+            if (closingDashes < 0) {
+                output.append(content, cursor, afterBegin);
+                cursor = afterBegin;
+                continue;
             }
-            markerEnd += 5;
+            int markerEnd = closingDashes + 5;
             String beginMarker = content.substring(begin, markerEnd);
             if (!beginMarker.endsWith(PRIVATE_KEY_SUFFIX) && !beginMarker.endsWith(PGP_PRIVATE_KEY_SUFFIX)) {
-                output.append(content, cursor, markerEnd);
-                cursor = markerEnd;
+                output.append(content, cursor, afterBegin);
+                cursor = afterBegin;
                 continue;
             }
 
@@ -435,6 +448,23 @@ public final class SensitiveContentRedactor {
             cursor = end;
         }
         return output.toString();
+    }
+
+    /**
+     * Position des premiers {@code -----} à partir de {@code from}, ou {@code -1} si un CR, un LF ou
+     * la fin du contenu vient avant. Un seul balayage, qui s'arrête au premier des deux.
+     */
+    private static int closingDashesOnMarkerLine(String content, int from) {
+        for (int index = from; index < content.length(); index++) {
+            char character = content.charAt(index);
+            if (character == '\r' || character == '\n') {
+                return -1;
+            }
+            if (character == '-' && content.startsWith("-----", index)) {
+                return index;
+            }
+        }
+        return -1;
     }
 
     private static void appendLineSeparators(StringBuilder output, String content, int begin, int end) {
