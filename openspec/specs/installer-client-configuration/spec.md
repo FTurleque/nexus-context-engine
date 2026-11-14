@@ -53,7 +53,7 @@ Une valeur placée entre apostrophes dans un script PowerShell généré par l'i
 #### Scenario: Dossier d'installation avec apostrophe typographique
 - **GIVEN** un dossier d'installation `C:\Outils\Jean’s NEXUS`
 - **WHEN** l'installateur génère le script de connexion des clients
-- **THEN** le script s'analyse sans erreur de syntaxe et la commande enregistrée pour `nexus` contient `C:\Outils\Jean’s NEXUS\nexus-mcp.cmd`
+- **THEN** le script s'analyse sans erreur de syntaxe et la commande enregistrée pour `nexus` contient `C:\Outils\Jean’s NEXUS\lib\nexus-mcp.jar`
 
 ### Requirement: Les fichiers de configuration générés par l'installateur sont écrits en UTF-8 sans BOM
 L'installateur SHALL écrire `docker\.env`, `integrations\codex-desktop.mcp.toml`, `integrations\copilot-jetbrains.mcp.json` et `integrations\generic-mcp.json` en UTF-8 sans BOM, de sorte que chaque valeur qu'il y place, dossier d'installation ou dossier de dépôt Docker, se relise en UTF-8 caractère pour caractère, accents compris.
@@ -117,3 +117,87 @@ L'assistant d'installation SHALL refuser, avec un message qui nomme la limite, u
 - **GIVEN** un poste en page ANSI 1252 et un dossier d'installation qui contient `Instàllé Hélène`
 - **WHEN** l'utilisateur valide la page du dossier d'installation
 - **THEN** l'assistant passe à la page suivante
+
+### Requirement: L'assistant accepte un accent circonflexe dans les valeurs de la configuration générée
+L'assistant d'installation SHALL accepter le caractère `^` dans `NEXUS_HOME`, le token REST, le dossier de dépôt Docker et l'URL Ollama, et SHALL l'écrire tel quel dans `config\nexus-native.env.cmd` et `docker\.env`. Il SHALL continuer de refuser, dans ces mêmes valeurs, retour chariot, saut de ligne et guillemet double.
+
+#### Scenario: Profil contenant un accent circonflexe en mode Docker
+- **GIVEN** un profil Windows `C:\Users\a^b` (variable `USERPROFILE`), un déploiement Docker, le profil d'installation standard (page Runtime sautée) et les valeurs par défaut
+- **WHEN** l'utilisateur valide la page de configuration Docker
+- **THEN** l'assistant passe à la page suivante sans message de refus
+- **AND** `docker\.env` contient la ligne `NEXUS_REPOSITORY_BIND='C:/Users/a^b'`
+
+#### Scenario: NEXUS_HOME contenant un accent circonflexe lu par un lanceur natif
+- **GIVEN** un `NEXUS_HOME` existant `…\a^b\.nexus` écrit par l'assistant dans `config\nexus-native.env.cmd`
+- **WHEN** un lanceur natif charge `config\nexus-native.env.cmd`
+- **THEN** `NEXUS_HOME` vu par le programme lancé désigne ce dossier caractère pour caractère
+
+#### Scenario: Guillemet double toujours refusé
+- **GIVEN** le profil d'installation personnalisé et un `NEXUS_HOME` saisi qui contient `"`
+- **WHEN** l'utilisateur valide la page Runtime
+- **THEN** l'assistant affiche un refus explicite et reste sur cette page
+- **AND** aucun fichier de configuration n'est écrit
+
+### Requirement: En installation silencieuse, les messages de l'assistant n'attendent aucune réponse
+Quand l'installation est lancée en mode silencieux avec `/SUPPRESSMSGBOXES`, chaque refus ou avis émis par l'assistant à la validation d'une page SHALL être journalisé sans boîte modale ; un refus SHALL arrêter l'installation avec un code de sortie non nul, sans écrire de configuration. Hors mode silencieux, le message SHALL rester affiché à l'utilisateur.
+
+#### Scenario: Valeur refusée en installation silencieuse
+- **GIVEN** une installation lancée avec `/VERYSILENT /SUPPRESSMSGBOXES /LOG` et une valeur que la validation d'une page refuse
+- **WHEN** l'assistant valide cette page
+- **THEN** l'installateur se termine sans attendre de réponse, avec un code de sortie non nul
+- **AND** le journal contient le message de refus et aucune configuration n'est écrite
+
+#### Scenario: Port remplacé en installation silencieuse
+- **GIVEN** une installation lancée avec `/VERYSILENT /SUPPRESSMSGBOXES /LOG` et un port REST demandé déjà occupé
+- **WHEN** l'assistant valide la page qui porte ce port
+- **THEN** l'avis du port retenu est journalisé sans boîte modale et l'installation continue avec ce port
+
+#### Scenario: Refus en installation interactive
+- **GIVEN** une installation interactive et une valeur que la validation d'une page refuse
+- **WHEN** l'utilisateur valide cette page
+- **THEN** l'assistant affiche le message de refus et reste sur cette page
+
+### Requirement: Un lanceur natif charge sa configuration quel que soit le dossier d'installation
+Les lanceurs `nexus.cmd`, `nexus-mcp.cmd`, `nexus-assistant-clients.cmd` et `nexus-rest.cmd` SHALL charger `config\nexus-native.env.cmd` quel que soit leur dossier d'installation, `^` compris, et SHALL lancer leur programme depuis le répertoire courant de l'appelant. Si ce fichier existe mais que son dossier ne s'ouvre pas, le lanceur SHALL s'arrêter avec un message d'erreur et un code non nul, sans lancer le programme. Sans ce fichier, il SHALL garder ses défauts.
+
+#### Scenario: Dossier d'installation contenant un accent circonflexe
+- **GIVEN** un dossier d'installation `…\in^st` dont `config\nexus-native.env.cmd` pose `NEXUS_HOME` sur un dossier existant et `NEXUS_REST_PORT=9123`
+- **WHEN** un lanceur natif de ce dossier est démarré comme processus, console visible ou cachée
+- **THEN** le programme lancé voit `NEXUS_HOME` caractère pour caractère et `NEXUS_REST_PORT=9123`
+- **AND** la sortie d'erreur du lanceur ne contient aucun message de chemin introuvable
+
+#### Scenario: Répertoire courant de l'appelant conservé
+- **GIVEN** un dossier d'installation `…\in^st` avec sa configuration et un appelant dont le répertoire courant est `…\caller`
+- **WHEN** l'appelant démarre `nexus.cmd` avec un argument relatif `.`
+- **THEN** le programme lancé a pour répertoire courant `…\caller` et résout `.` vers ce dossier
+- **AND** le répertoire courant de l'appelant est inchangé après la fin du lanceur
+
+#### Scenario: Dossier de configuration impossible à ouvrir
+- **GIVEN** un dossier d'installation dont `config\nexus-native.env.cmd` existe mais dont le dossier `config` ne peut pas être ouvert par `pushd`
+- **WHEN** un lanceur natif est démarré
+- **THEN** le lanceur se termine avec le code 1 et un message sur la sortie d'erreur qui nomme `config\nexus-native.env.cmd`
+- **AND** le programme n'est pas lancé, aucune donnée n'est écrite sous `NEXUS_HOME`
+
+#### Scenario: Distribution portable sans configuration
+- **GIVEN** un dossier d'installation sans `config\nexus-native.env.cmd`, `^` compris dans son nom
+- **WHEN** `nexus-rest.cmd` est démarré
+- **THEN** le lanceur ne signale aucune erreur et le programme reçoit l'hôte `127.0.0.1` et le port `8080` par défaut
+
+### Requirement: Un connecteur MCP natif démarre NEXUS quel que soit le dossier d'installation
+L'entrée `nexus` d'un connecteur natif de l'installateur, enregistrée dans un client MCP ou écrite dans un fragment d'import, SHALL lancer directement `{app}\app\runtime\bin\java.exe` sur `{app}\lib\nexus-mcp.jar`, sans `cmd.exe`, avec dans son environnement les valeurs non vides que `config\nexus-native.env.cmd` donne à `nexus-mcp.cmd`. Le serveur MCP SHALL démarrer même si le dossier d'installation contient une espace ou un `^`.
+
+#### Scenario: Dossier d'installation contenant un accent circonflexe
+- **GIVEN** un dossier d'installation `…\in^st` et l'entrée native `nexus` de ce dossier, avec `NEXUS_HOME` dans son environnement
+- **WHEN** un client lance l'entrée comme processus, ses arguments étant mis entre guillemets selon les règles de `CreateProcess`, et envoie `initialize`
+- **THEN** le serveur MCP répond et ouvre sa base sous le `NEXUS_HOME` de l'entrée
+
+#### Scenario: Dossier d'installation contenant une espace
+- **GIVEN** un profil `C:\Users\John Doe` et le dossier d'installation par défaut, ou tout dossier d'installation `…\in st`
+- **WHEN** un client lance l'entrée native `nexus` de ce dossier et envoie `initialize`
+- **THEN** le serveur MCP répond
+
+#### Scenario: Configuration native transmise au client
+- **GIVEN** un `NEXUS_HOME` saisi ou par défaut, et Ollama activé ou non
+- **WHEN** l'installateur génère les connecteurs natifs et les fragments d'import
+- **THEN** l'entrée `nexus` porte `NEXUS_HOME` dans son environnement, et `NEXUS_SEMANTIC_PROVIDER` et `NEXUS_OLLAMA_BASE_URL` quand ils ne sont pas vides
+- **AND** aucune entrée native ne lance `cmd.exe` ni `nexus-mcp.cmd`
