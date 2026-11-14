@@ -129,9 +129,9 @@ Un backup/restauration doit conserver les protections adaptées au système cibl
 
 Avant une migration de production, sauvegarder SQLite service arrêté. Ne jamais restaurer uniquement un index Lucene en ignorant SQLite.
 
-## Recovery sémantique / `content-v8`
+## Recovery sémantique / `content-v9`
 
-Le profil de contenu sémantique courant est `content-v8`, lié à la politique de redaction `secret-redaction-v9`. Un index créé sous l'ancien profil est considéré incompatible et doit être reconstruit ; NEXUS ne réutilise pas silencieusement les vecteurs historiques.
+Le profil de contenu sémantique courant est `content-v9`, lié à la politique de redaction `secret-redaction-v10`. Un index créé sous l'ancien profil est considéré incompatible et doit être reconstruit ; NEXUS ne réutilise pas silencieusement les vecteurs historiques.
 
 La redaction de secrets réduit la fuite accidentelle de tokens/clés/mots de passe structurés, mais n'est pas une sauvegarde ni un scanner de secrets complet.
 
@@ -354,6 +354,31 @@ statut, le registre, le diagnostic et la reconstruction.
 
 Retour arrière : V020 ne change pas le schéma ; un binaire antérieur ouvre la base
 et reconstruit ses dérivés sous sa propre politique, qui laisse passer ces valeurs.
+Pour revenir en arrière sans rouvrir ces cas, restaurer la sauvegarde de
+`NEXUS_HOME` prise avant la mise à niveau.
+
+## Mise à niveau V021 — marqueur BEGIN incomplet
+
+`V021__invalidate_private_key_marker_indexes.sql` accompagne la politique
+`secret-redaction-v10` : les tirets de fin d'un marqueur `-----BEGIN ` sont
+cherchés sur sa ligne, et la recherche reprend juste après le `-----BEGIN ` d'un
+marqueur qui n'ouvre pas de clé privée. Sous `secret-redaction-v9`, une ligne
+`-----BEGIN ` incomplète, un littéral de code qui la contient ou un marqueur d'un
+autre type collé au vrai marqueur faisait sauter le bloc de clé privée suivant,
+laissé en clair ; un marqueur sans fin sur sa ligne pouvait au contraire masquer
+tout le reste du contenu. Les dérivés existants peuvent donc contenir le corps
+d'une clé privée en clair, ou un contenu masqué à tort. Comme V020, la migration
+incrémente la génération de chaque projet, le passe à `NOT_INDEXED` et efface
+`last_indexed_at` ; le registre et les faits canoniques sont conservés. La
+prochaine indexation reconstruit les dérivés lexicaux, et le profil `content-v9`
+impose la reconstruction des vecteurs sémantiques. V001 à V020 et leurs empreintes
+restent inchangées. `SchemaMigratorPrivateKeyMarkerUpgradeTest` migre une base
+V020 dont l'index Lucene contient le corps d'un bloc placé derrière une ligne
+`-----BEGIN ` incomplète et vérifie la génération, le statut, le registre et la
+reconstruction.
+
+Retour arrière : V021 ne change pas le schéma ; un binaire antérieur ouvre la base
+et reconstruit ses dérivés sous sa propre politique, qui laisse ces blocs en clair.
 Pour revenir en arrière sans rouvrir ces cas, restaurer la sauvegarde de
 `NEXUS_HOME` prise avant la mise à niveau.
 

@@ -1,6 +1,6 @@
 # Redaction des contenus sensibles
 
-`SensitiveContentRedactor` (politique `secret-redaction-v9`) masque les clés
+`SensitiveContentRedactor` (politique `secret-redaction-v10`) masque les clés
 privées (y compris `PGP PRIVATE KEY BLOCK`), les jetons structurés, les JWT, les
 credentials URI et les affectations sensibles :
 
@@ -70,8 +70,9 @@ et relations issus de SCIP, MINOS ou JDT. Les requêtes fournies par le client r
 ne sont pas assimilées aux diagnostics internes. Voir
 [recovery V011](release-and-recovery.md#mise-à-niveau-v011--formats-de-secrets),
 [recovery V018](release-and-recovery.md#mise-à-niveau-v018--borne-des-jetons-sk-)
-[recovery V019](release-and-recovery.md#mise-à-niveau-v019--voisinage-et-classe-des-jetons-à-préfixe)
-et [recovery V020](release-and-recovery.md#mise-à-niveau-v020--noms-composés)
+[recovery V019](release-and-recovery.md#mise-à-niveau-v019--voisinage-et-classe-des-jetons-à-préfixe),
+[recovery V020](release-and-recovery.md#mise-à-niveau-v020--noms-composés)
+et [recovery V021](release-and-recovery.md#mise-à-niveau-v021--marqueur-begin-incomplet)
 pour l’invalidation des dérivés construits sous une politique antérieure.
 
 ## OpenSpec secret-redaction
@@ -84,9 +85,10 @@ Les références renvoient aux méthodes et aux tests ; les numéros de ligne ci
 
 | Étiquette | Fait | Source |
 |---|---|---|
-| [Existant vérifié] | `POLICY_VERSION` vaut `secret-redaction-v9`. | `core/src/main/java/com/nexus/security/SensitiveContentRedactor.java:21` |
+| [Existant vérifié] | `POLICY_VERSION` vaut `secret-redaction-v10`. | `core/src/main/java/com/nexus/security/SensitiveContentRedactor.java:21` |
 | [Existant vérifié] | Borne générale d'une valeur : `MAX_SECRET_CHARS = 4096` (redactor et scanner d'assignations). Bornes plus étroites : 1 024 pour la partie utilisateur d'une URL, et un corps de jeton à préfixe borné à 255 caractères (`OVERSIZED_TOKENS`). Pour `sk-`, `sk-proj-` et `sk-ant-`, masquage et refus comptent le même corps, après le préfixe optionnel : 255 caractères sont masqués, 256 refusés. Chaque famille bornée compte son corps sur la même classe au masquage et au refus : un jeton `xox?-`, `gh?_` ou `sk_live_` qui contient un `_` est masqué jusqu'à 255 caractères de corps et refusé à 256. | `SensitiveContentRedactor.java:28-29`, `:55-76` (`STRUCTURED_TOKENS`, un motif par famille), `:139-151` ; `SensitiveContentRedactorTest#masksSkTokenWhoseBodyHas255CharactersAfterItsPrefix`, `#refusesSkTokenWhoseBodyHas256CharactersWithoutPublishingAnyPartOfIt`, `#refusesSkTokensWhoseBodyHas256To260Characters`, `#masksShortTokenContainingAnUnderscore`, `#masksTokenWhoseBodyHas255CharactersIncludingAnUnderscore`, `#refusesTokenWhoseBodyHas256CharactersIncludingAnUnderscore` ; `SecretAssignmentScanner.java:8` |
 | [Existant vérifié] | `redact` remplace d'abord les blocs de clés privées par `[REDACTED]`, puis refuse le contenu entier (`OversizedSecretException`) si une valeur de ce texte dépasse sa borne, puis masque sur ce même texte dans l'ordre : jetons à préfixe (une passe par famille, sautée quand le contenu ne contient pas son préfixe littéral), JWT, `Bearer`, option `--password`, éléments XML, assignations, puis (si le texte contient `://`) jeton et mot de passe d'URL. Un jeton collé à la ligne de fin d'un bloc a donc le même voisinage au refus et au masquage. | `SensitiveContentRedactor.java:156-182` ; `SensitiveContentRedactorTest#masksTokenGluedToAPrivateKeyBlockWhoseBodyHas255Characters`, `#refusesTokenGluedToAPrivateKeyBlockWhoseBodyHas256Characters` |
+| [Existant vérifié] | `replacePrivateKeyBlocks` cherche les tirets de fin d'un marqueur `-----BEGIN ` sur sa ligne seulement, en un balayage qui s'arrête au premier CR, LF ou `-----`. Un marqueur dont la fin n'est pas sur sa ligne, ou qui ne se termine ni par `PRIVATE KEY-----` ni par `PRIVATE KEY BLOCK-----`, n'ouvre pas de clé : la recherche reprend juste après son `-----BEGIN `. Un bloc ouvert est remplacé jusqu'à sa ligne `-----END <type>-----`, ou à défaut jusqu'à la fin du contenu, en conservant ses CR et LF. | `SensitiveContentRedactor.java:410-450`, `closingDashesOnMarkerLine` `:457-468` ; `SensitiveContentRedactorTest#privateKeyBlockAfterAMarkerThatOpensNoKeyIsRedacted`, `#markerWhoseClosingDashesAreNotOnItsLineOpensNoKey`, `#privateKeyBlockRenderingWithoutTheV9DefectsIsUnchanged`, `#generatedPrivateKeyMarkerContentsRenderAsV9WhenV9HasNoDefect` |
 | [Existant vérifié] | À 4 096 caractères la valeur est masquée ; à 4 097 le contenu est refusé et le message de l'exception ne contient pas la valeur. | `SecretAssignmentScanner.java:116-137` ; `SensitiveContentRedactorTest#rejectsOversizedValuesWithoutPublishingAnySuffix` |
 | [Existant vérifié] | `redactField` convertit un refus en `[REDACTED]` pour un champ court de sortie publique (signature, nom qualifié) au lieu de faire échouer la réponse. | `SensitiveContentRedactor.java:184-197` ; `PublicContextPolicy.java:55`, `:64` |
 | [Existant vérifié] | À l'indexation, le fichier fautif est exclu des index lexical et sémantique, reçoit le diagnostic `INDEX_REDACTION_LIMIT` (chemin relatif et `valeur sensible dépassant la limite de redaction`, jamais la valeur) et reste analysé pour l'index structurel (la mise à jour SQLite est enregistrée avant la redaction). | `core/src/main/java/com/nexus/index/service/IndexDocumentPublisher.java` (`redactedOrNull` et son appelant, qui ajoute le chemin à `excludedPaths` et le diagnostic) |
@@ -94,8 +96,8 @@ Les références renvoient aux méthodes et aux tests ; les numéros de ligne ci
 | [Existant vérifié] | `LuceneSearchIndex` et `SemanticIndexingService` écartent aussi, document par document, un contenu refusé (`WARNING` sur `System.Logger`, chemin relatif). | `LuceneSearchIndex.toLuceneDocumentOrNull` ; `SemanticIndexingService.redactOnce` |
 | [Existant vérifié] | Construction de contexte : le fragment refusé est écarté seul, par `BudgetedContextSelector` (exclusion `<chemin> exclu : …`), `ContextBundle`, `ContextBudgetAllocator`, `SkillContextSelector` et, à la matérialisation, `ContextFragmentFactory` (diagnostic `CONTEXT_REDACTION_LIMIT`). | `BudgetedContextSelector.java:45-50` ; `ContextBundle.java:22-28` ; `ContextBudgetAllocator.java:96-102` ; `SkillContextSelector.java:38-44` ; `ContextFragmentFactory.java:143-151` |
 | [Existant vérifié] | Un index Lucene n'est « présent » que si la donnée de commit `nexus.redaction.policy` égale `POLICY_VERSION` ; sinon l'indexation force une reconstruction complète. | `LuceneSearchIndex.isPresent`, `hasCurrentRedactionPolicy` ; `ProjectIndexingService` (`!searchIndex.isPresent(projectId)` force `fullRebuild`) ; `LuceneSearchIndexTest#redactionPolicyCheckRejectsMissingOrObsoleteCommitPolicy` |
-| [Existant vérifié] | Les migrations `V011`, `V018`, `V019` et `V020` incrémentent `generation` de tous les projets et les repassent en `NOT_INDEXED` (`last_indexed_at = NULL`) ; le registre `projects` est conservé. | `core/src/main/resources/db/migration/V011__invalidate_secret_format_indexes.sql:6-21` ; `V018__invalidate_sk_token_bound_indexes.sql:6-15` ; `V019__invalidate_token_context_bound_indexes.sql:6-15` ; `V020__invalidate_composite_name_indexes.sql:6-15` ; `SchemaMigratorSkTokenBoundUpgradeTest`, `SchemaMigratorTokenContextBoundUpgradeTest`, `SchemaMigratorCompositeNameUpgradeTest` |
-| [Existant vérifié] | Le profil sémantique est `content-v` + `CONTENT_PROFILE_VERSION` (8) + `;redactionPolicy=` + `POLICY_VERSION` + bornes d'embedding ; un changement de `POLICY_VERSION` modifie donc le profil même sans toucher `CONTENT_PROFILE_VERSION`. | `SemanticIndexingService.java:27`, `:170-175` |
+| [Existant vérifié] | Les migrations `V011`, `V018`, `V019`, `V020` et `V021` incrémentent `generation` de tous les projets et les repassent en `NOT_INDEXED` (`last_indexed_at = NULL`) ; le registre `projects` est conservé. | `core/src/main/resources/db/migration/V011__invalidate_secret_format_indexes.sql:6-21` ; `V018__invalidate_sk_token_bound_indexes.sql:6-15` ; `V019__invalidate_token_context_bound_indexes.sql:6-15` ; `V020__invalidate_composite_name_indexes.sql:6-15` ; `V021__invalidate_private_key_marker_indexes.sql:7-16` ; `SchemaMigratorSkTokenBoundUpgradeTest`, `SchemaMigratorTokenContextBoundUpgradeTest`, `SchemaMigratorCompositeNameUpgradeTest`, `SchemaMigratorPrivateKeyMarkerUpgradeTest` |
+| [Existant vérifié] | Le profil sémantique est `content-v` + `CONTENT_PROFILE_VERSION` (9) + `;redactionPolicy=` + `POLICY_VERSION` + bornes d'embedding ; un changement de `POLICY_VERSION` modifie donc le profil même sans toucher `CONTENT_PROFILE_VERSION`. | `SemanticIndexingService.java:27`, `:170-175` |
 | [Existant vérifié] | `SemanticIndexingService.vectorize` redige chaque document une fois (`redactOnce`) puis part de ce texte pour l'embedding et l'extrait. | `SemanticIndexingService.vectorize`, `redactOnce` |
 
 ### Vues
@@ -196,13 +198,36 @@ Les noms d'élément XML et d'option sont consommés de façon possessive, puis 
 
 Exigences : `secret-redaction › Un élément XML au nom composé est redigé`, `secret-redaction › Une option de ligne de commande au nom composé est redigée`.
 
+Vue Organigramme — Où s'arrête un marqueur `-----BEGIN `, et où reprend la recherche quand il n'ouvre pas une clé ? (existant)
+
+```mermaid
+flowchart TD
+    A["begin : prochain -----BEGIN à partir de cursor"] --> B{"trouvé ?"}
+    B -- non --> Z["copier le reste, fin"]
+    B -- oui --> C["balayer depuis begin + 11 jusqu'au premier CR, LF ou -----"]
+    C --> L{"----- trouvé avant CR ou LF ?"}
+    L -- non --> E["copier jusqu'à begin + 11; cursor = begin + 11"]
+    L -- oui --> M["markerEnd : position des -----, plus 5"]
+    M --> D{"marqueur terminé par PRIVATE KEY----- ou PRIVATE KEY BLOCK----- ?"}
+    D -- non --> E
+    E --> A
+    D -- oui --> F{"-----END type----- trouvé après markerEnd ?"}
+    F -- oui --> G["bloc remplacé par [REDACTED], CR et LF conservés; cursor = fin du marqueur END"]
+    F -- non --> H["reste du contenu remplacé par [REDACTED], CR et LF conservés"]
+    G --> A
+```
+
+Un marqueur dont la fin n'est pas sur sa ligne n'ouvre pas de clé. Une ligne `-----BEGIN ` incomplète, un littéral de code comme `if (line.startsWith("-----BEGIN ")) {}` ou une ligne `-----BEGIN CERT` ne font donc ni sauter le bloc suivant ni masquer la suite du contenu, quel que soit le séparateur (LF, CRLF ou CR). La reprise juste après `-----BEGIN ` retrouve aussi un vrai marqueur collé à un marqueur d'un autre type, dont les tirets de fin ouvrent la clé (`-----BEGIN CERTIFICATE-----BEGIN RSA PRIVATE KEY-----`). Entre ce point et les tirets trouvés il n'y a aucun `-----` : la reprise ne retrouve jamais le même marqueur, et chaque zone n'est balayée qu'un nombre borné de fois. `SensitiveContentRedactorTest#privateKeyBlockAfterAMarkerThatOpensNoKeyIsRedacted` couvre les blocs RSA et PGP placés derrière un marqueur qui n'ouvre pas de clé, et `#markerWhoseClosingDashesAreNotOnItsLineOpensNoKey` la fin de marqueur cherchée sur sa ligne, en LF, CRLF et CR. `#privateKeyBlockRenderingWithoutTheV9DefectsIsUnchanged` et `#generatedPrivateKeyMarkerContentsRenderAsV9WhenV9HasNoDefect` comparent le rendu à la boucle de `secret-redaction-v9`, recopiée dans le test, sur les contenus où elle ne saute aucun marqueur et ne cherche pas la fin au-delà de la ligne. `#malformedKeysAndOversizedValuesHaveBoundedLookahead` redige sans changement 1 Mo de `-----BEGIN ` suivi de LF, de `-----BEGIN CERTIFICATE-----` suivi de LF, et de `-----BEGIN ` répété sans séparateur.
+
+Exigences : `secret-redaction › Un marqueur BEGIN qui n'ouvre pas une clé privée ne fait pas sauter le bloc suivant`, `secret-redaction › La fin d'un marqueur BEGIN est cherchée sur sa ligne`.
+
 Vue Organigramme — Comment un changement de politique invalide-t-il les index dérivés ? (existant)
 
 ```mermaid
 flowchart TD
-    P["POLICY_VERSION = secret-redaction-v9"] --> L["Lucene : commit nexus.redaction.policy"]
-    P --> S["profileId sémantique : content-v8;redactionPolicy=secret-redaction-v9;…"]
-    M["migrations V011, V018, V019 et V020 : generation + 1, NOT_INDEXED, last_indexed_at NULL"] --> N["registre des projets conservé"]
+    P["POLICY_VERSION = secret-redaction-v10"] --> L["Lucene : commit nexus.redaction.policy"]
+    P --> S["profileId sémantique : content-v9;redactionPolicy=secret-redaction-v10;…"]
+    M["migrations V011, V018, V019, V020 et V021 : generation + 1, NOT_INDEXED, last_indexed_at NULL"] --> N["registre des projets conservé"]
     L --> Q{"isPresent : version du commit égale POLICY_VERSION ?"}
     Q -- non --> F["fullRebuild lexical"]
     Q -- oui --> K["index lexical réutilisable"]
@@ -211,7 +236,7 @@ flowchart TD
     T -- oui --> W["vecteurs réutilisables"]
 ```
 
-Trois mécanismes se complètent : la dernière migration d'invalidation (`V020`) invalide les projets déjà enregistrés, la donnée de commit Lucene invalide un index d'une autre politique, et le profil sémantique rend incompatible un index d'un autre profil. Le second mécanisme est testé sur son prédicat, pas de bout en bout (écart 1).
+Trois mécanismes se complètent : la dernière migration d'invalidation (`V021`) invalide les projets déjà enregistrés, la donnée de commit Lucene invalide un index d'une autre politique, et le profil sémantique rend incompatible un index d'un autre profil. Le second mécanisme est testé sur son prédicat, pas de bout en bout (écart 1).
 
 Exigences : `secret-redaction › Un changement de politique invalide les index dérivés`.
 
@@ -219,9 +244,9 @@ Exigences : `secret-redaction › Un changement de politique invalide les index 
 
 - [Écart] 1 — Index lexical d'une ancienne politique : le code invalide et reconstruit (`LuceneSearchIndex.isPresent`, `ProjectIndexingService`). `LuceneSearchIndexTest#redactionPolicyCheckRejectsMissingOrObsoleteCommitPolicy` prouve qu'une donnée de commit `nexus.redaction.policy` absente ou différente de `POLICY_VERSION` est rejetée ; aucun test n'enchaîne ce rejet et la reconstruction complète dans `ProjectIndexingService`. Scénario partiellement prouvé.
 - [Écart] 2 — « redigé une seule fois ». Vrai à l'intérieur de `SemanticIndexingService` (`redactOnce`), mais sur le chemin d'indexation le texte a déjà été redigé par `IndexDocumentPublisher` (`redactedOrNull`) et l'est encore par `LuceneSearchIndex` (`toLuceneDocument`). Aucun test ne compte les appels à `redact` ; la tâche archivée 8.1 prouvait ce point par une commande (`git grep -c`), pas par un test.
-- [Écart] 3 — Profil `content-vN`. L'exigence demande d'incrémenter le profil sémantique à chaque changement de politique ; le profil inclut déjà `redactionPolicy=<POLICY_VERSION>` (`SemanticIndexingService.java:170-175`), donc il change de toute façon. L'incrément manuel de `CONTENT_PROFILE_VERSION` (règle de `.claude/rules/search-and-redaction.md`) n'est vérifié par aucun test ; seuls les contrats de documentation épinglent `secret-redaction-v9` et `content-v8` (`scripts/release/test-operational-doc-contracts.sh:240-253`).
+- [Écart] 3 — Profil `content-vN`. L'exigence demande d'incrémenter le profil sémantique à chaque changement de politique ; le profil inclut déjà `redactionPolicy=<POLICY_VERSION>` (`SemanticIndexingService.java:170-175`), donc il change de toute façon. L'incrément manuel de `CONTENT_PROFILE_VERSION` (règle de `.claude/rules/search-and-redaction.md`) n'est vérifié par aucun test ; seuls les contrats de documentation épinglent `secret-redaction-v10` et `content-v9` (`scripts/release/test-operational-doc-contracts.sh:242-256`).
 - [Écart] 4 — Le motif « chaque modification de redaction s'accompagne d'une migration » est une règle de processus : aucun test ne détecte une évolution de `SensitiveContentRedactor` sans nouvelle migration (preuve manquante).
-- Limites vérifiées : les 19 formats de la spec sont les 19 cas `auditFormat` de la sonde de 35 cas ; `SecretRedactionProbeTest#probeHasThirtyFiveCasesIncludingTheNineteenAuditFormats` affirme 35, 19 et 2 limites connues. Les valeurs `secret-redaction-v5`, `secret-redaction-v6`, `secret-redaction-v7` et `secret-redaction-v8` (scénarios de migration) et `secret-redaction-v9` (courante) correspondent à `SchemaMigratorSecretFormatUpgradeTest`, `SchemaMigratorSkTokenBoundUpgradeTest`, `SchemaMigratorTokenContextBoundUpgradeTest`, `SchemaMigratorCompositeNameUpgradeTest` et à `POLICY_VERSION`. Aucun écart sur ces trois points.
+- Limites vérifiées : les 19 formats de la spec sont les 19 cas `auditFormat` de la sonde de 35 cas ; `SecretRedactionProbeTest#probeHasThirtyFiveCasesIncludingTheNineteenAuditFormats` affirme 35, 19 et 2 limites connues. Les valeurs `secret-redaction-v5`, `secret-redaction-v6`, `secret-redaction-v7`, `secret-redaction-v8` et `secret-redaction-v9` (scénarios de migration) et `secret-redaction-v10` (courante) correspondent à `SchemaMigratorSecretFormatUpgradeTest`, `SchemaMigratorSkTokenBoundUpgradeTest`, `SchemaMigratorTokenContextBoundUpgradeTest`, `SchemaMigratorCompositeNameUpgradeTest`, `SchemaMigratorPrivateKeyMarkerUpgradeTest` et à `POLICY_VERSION`. Aucun écart sur ces trois points.
 - Limite : un jeton `sk-`, `glpat-` ou `xox?-` précédé d'un `-` qui n'appartient pas à un bloc de clé privée complet (après `-----END CERTIFICATE-----`, après une ligne `-----END … PRIVATE KEY-----` sans `BEGIN`, ou dans `a-sk-…`) n'est ni masqué ni refusé, à toute longueur : le masquage et le refus partagent l'ancrage `(?<![A-Za-z0-9_-])` (`SensitiveContentRedactor.notAfterDashToken`, appelé par `dashToken` et `OVERSIZED_TOKENS`). Aucun test n'épingle ce comportement.
 - Limite : une option n'est sensible que si sa clé suit un `-` : `--db_password valeur` reste en clair, alors que `<db_password>` est masqué (`secret-redaction › Une option de ligne de commande au nom composé est redigée`). À l'inverse, tout nom qui se termine par une clé sensible est masqué, y compris `--no-password valeur` ou `<csrf-token>` : c'est un masquage en trop, jamais une fuite.
 - Limite : un élément XML n'est reconnu que si son nom est formé de lettres, chiffres, `.`, `-` et `_` et si ses attributs tiennent en 256 caractères. `<wsse:Password>` (espace de noms), `<dbPassword>` (clé non séparée) ou un élément aux attributs plus longs restent en clair. Un corps CDATA est lu jusqu'au premier `]` : `<password><![CDATA[a]b]]></password>` reste en clair, et un corps CDATA de plus de 4 096 caractères qui contient `<` ou `]` n'est ni masqué ni refusé.
