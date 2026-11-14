@@ -2,7 +2,7 @@
 
 Classement par **urgence**. Pour l'**ordre d'exécution**, qui prime en cas de divergence, voir [`sprints.md`](sprints.md) : une action urgente dont le prérequis n'est pas livré ne peut pas être vérifiée.
 
-État au 12 novembre 2026 : 109 constats fermés sur 113 actionnables ; ce plan ne liste que les 4 non fermés.
+État au 14 novembre 2026 : 109 constats fermés sur 113 actionnables ; ce plan ne liste que les 4 non fermés.
 
 ## Immédiat — Élevée et Moyennes rapides (0)
 

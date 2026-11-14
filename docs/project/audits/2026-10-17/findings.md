@@ -16,7 +16,7 @@ Commit audité : `origin/develop` @ `98b1f3f0`. Constats triés par sévérité 
 
 - **Axe** : Qualité, Sécurité · **Effort** : S · **Sprint** : S13 · Installateur et release finale
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Lecture UTF-8 par Read-ClientJson, contrôle de tous les fichiers avant écriture, sauvegarde <fichier>.nexus-backup-<horodatage> puis File.Replace, arrêt sur erreur avec trap qui nomme le fichier, désinstallation qui continue après un fichier illisible et garde le drapeau *Managed (PR #354, sprint 13). · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — iss.template : Read-ClientJson/sauvegarde/File.Replace présents (7 occurrences) ; ajouts = garde ANSI du dossier, SaveUtf8TextFile. | Test actif : test-windows-installer.ps1 (Windows, non exécutable ici) Réserve : Réserve d'origine inchangée.
+- **Statut** : Fermé avec réserve · **Changement** : Lecture UTF-8 par Read-ClientJson, contrôle de tous les fichiers avant écriture, sauvegarde <fichier>.nexus-backup-<horodatage> puis File.Replace, arrêt sur erreur avec trap qui nomme le fichier, désinstallation qui continue après un fichier illisible et garde le drapeau *Managed (PR #354, sprint 13). · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Réserve d'origine inchangée.
 
 **Preuve**
 
@@ -36,7 +36,7 @@ idem :1604/:1609 (Copilot JetBrains mcp.json) et :1792-1809 (désinstallation) ;
 
 - **Axe** : Qualité, Dépendances · **Effort** : M · **Sprint** : S14 · Suites de la vérification du 11 novembre
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Écriture UTF-8 sans BOM (SaveUtf8TextFile) de nexus-native.env.cmd, docker\.env, codex-desktop.mcp.toml, copilot-jetbrains.mcp.json et generic-mcp.json ; NEXUS_HOME accentué sous le profil écrit %USERPROFILE%\… ou %LOCALAPPDATA%\… (CmdEnvPathValue), autres lignes non ASCII lues sous chcp 65001 avec page de code restaurée (CmdUtf8Frame) ; dossier d'installation hors page ANSI refusé par l'assistant (le runtime Java embarqué ne démarre pas depuis un tel dossier) ; smoke avec profil « Hélène Łukasz » et dossier « Instàllé Hélène ». · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — Source durcie : plus de SaveStringToFile sur une configuration ; env.cmd, docker\.env, TOML et JSON Codex/Copilot/générique via SaveUtf8TextFile (template:1325-1348, 1391, 1746-1790). Restent ANSI : docker-compose.yml (copie d'octets AnsiString :1393-1395), nexus-docker-up/down.cmd et connect-*.cmd (ASCII sauf un echo, chemins %~dp0). Portage des règles réelles : Hélène, Łukasz, 李 → set "NEXUS_HOME=%USERPROFILE%\.nexus" ASCII sans cadre ; O'Brien & Co, 50% (%%), a^b, (x86) → littéral ASCII entre guillemets, sûr ; hors profil non ASCII → cadre chcp 65001 + restauration. Dossier d'installation hors ACP refusé (IsAnsiRoundTrip :1070, :1094, :1309) ; Hélène en 1252 accepté. | Test actif : Oui : windows-installer.yml (pull_request vers main sur packaging/windows/**, scripts/release/**…, workflow_dispatch, workflow_call) exécute test-windows-config-escaping.ps1 (:77) puis test-windows-installer.ps1 sur l'installateur smoke (:109) ; appelé par main-push-windows-installer.yml (push main, filtre de chemins) et release.yml:59. Plus aucune référence à develop. | Rejoué le 12/11 sous Windows PowerShell 5.1 sur ta machine (ACP 1252, console 850), fonctions Pascal extraites de la source durcie comme en CI : profils « Hélène », « Łukasz », « 李 » → set "NEXUS_HOME=%USERPROFILE%\.nexus" ; « O'Brien & Co », « 50% », « (x86) » et un chemin non ASCII hors profil (cadre chcp 65001) → NEXUS_HOME résolu sur le dossier réel, console visible et cachée ; contrôle négatif ANSI sans cadre → MISSING. 8/8 PASS. Réserve : Non rejoué sous Windows ici (repro-qua28.ps1 à lancer) ; docker\.env et copilot-jetbrains.mcp.json sans smoke (contrat statique) ; littéral non ASCII hors profil illisible sans console (DETACHED_PROCESS) ; profil hors page ANSI (Łukasz en 1252, 李) : dossier par défaut {localappdata}\Programs\NEXUS refusé, l'utilisateur doit en choisir un autre ; NEXUS_HOME/dépôt Docker contenant ^ refusés (voir nouveau constat). Rejeu du 12/11 : avec un profil hors page 1252 (« Łukasz », « 李 »), le dossier d'installation par défaut {localappdata}\Programs\NEXUS est refusé et l'utilisateur doit en choisir un autre ; un profil contenant « ^ » est refusé par l'assistant (AUD-QUA-29).
+- **Statut** : Fermé avec réserve · **Changement** : Écriture UTF-8 sans BOM (SaveUtf8TextFile) de nexus-native.env.cmd, docker\.env, codex-desktop.mcp.toml, copilot-jetbrains.mcp.json et generic-mcp.json ; NEXUS_HOME accentué sous le profil écrit %USERPROFILE%\… ou %LOCALAPPDATA%\… (CmdEnvPathValue), autres lignes non ASCII lues sous chcp 65001 avec page de code restaurée (CmdUtf8Frame) ; dossier d'installation hors page ANSI refusé par l'assistant (le runtime Java embarqué ne démarre pas depuis un tel dossier) ; smoke avec profil « Hélène Łukasz » et dossier « Instàllé Hélène ». · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Non rejoué sous Windows ici (repro-qua28.ps1 à lancer) ; docker\.env et copilot-jetbrains.mcp.json sans smoke (contrat statique) ; littéral non ASCII hors profil illisible sans console (DETACHED_PROCESS) ; profil hors page ANSI (Łukasz en 1252, 李) : dossier par défaut {localappdata}\Programs\NEXUS refusé, l'utilisateur doit en choisir un autre ; NEXUS_HOME/dépôt Docker contenant ^ refusés (voir nouveau constat). Rejeu du 12/11 : avec un profil hors page 1252 (« Łukasz », « 李 »), le dossier d'installation par défaut {localappdata}\Programs\NEXUS est refusé et l'utilisateur doit en choisir un autre ; un profil contenant « ^ » est refusé par l'assistant (AUD-QUA-29).
 
 **Preuve**
 
@@ -54,7 +54,7 @@ SaveStringToFile (AnsiString, conversion ANSI : cf. packaging/windows/nexus-inst
 
 - **Axe** : Architecture · **Effort** : L · **Sprint** : S7 · Casser le bloc cyclique du cœur
 - **Dépend de** : `AUD-ARC-02`, `AUD-ARC-03`, `AUD-ARC-04`, `AUD-ARC-05`, `AUD-ARC-06`, `AUD-ARC-07`, `AUD-ARC-20` · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Les cinq cycles bilatéraux sont cassés par l'extraction des packages feuilles (index.service, context.model, search.candidate) et la remontée de la construction Ollama dans le composition root ; le graphe des packages du cœur est acyclique, décision ARCH-0076, verrouillée par CoreArchitectureTest avec une baseline de cycles vide (PR #300) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé avec réserve · **Changement** : Les cinq cycles bilatéraux sont cassés par l'extraction des packages feuilles (index.service, context.model, search.candidate) et la remontée de la construction Ollama dans le composition root ; le graphe des packages du cœur est acyclique, décision ARCH-0076, verrouillée par CoreArchitectureTest avec une baseline de cycles vide (PR #300) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -70,7 +70,7 @@ Commande : graphe des `import com.nexus.*` des 243 fichiers main + Tarjan (scrat
 
 - **Axe** : Architecture · **Effort** : M · **Sprint** : S7 · Casser le bloc cyclique du cœur
 - **Dépend de** : `AUD-ARC-07` · **Débloque** : `AUD-ARC-01`
-- **Statut** : Fermé · **Changement** : ProjectIndexingService, IndexDocumentPublisher et ExternalCodeIntelligenceRefresher passent dans le package d'orchestration index.service, ResultLimitPolicy dans config et SearchDocument dans index, et le port SemanticIndexing (implémenté par SemanticIndexingService, NoopSemanticIndexing à la place de null) remplace la classe concrète (PR #300) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : ProjectIndexingService, IndexDocumentPublisher et ExternalCodeIntelligenceRefresher passent dans le package d'orchestration index.service, ResultLimitPolicy dans config et SearchDocument dans index, et le port SemanticIndexing (implémenté par SemanticIndexingService, NoopSemanticIndexing à la place de null) remplace la classe concrète (PR #300) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -86,7 +86,7 @@ core/src/main/java/com/nexus/index/ProjectIndexingService.java:8-9 `import com.n
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : S4 · Une seule sortie publique, redaction complétée
 - **Dépend de** : `AUD-QUA-09` · **Débloque** : `AUD-ARC-01`
-- **Statut** : Fermé · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -102,7 +102,7 @@ core/src/main/java/com/nexus/security/PublicContextPolicy.java:5-8 `import com.n
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : S3 · Filets de test et traces
 - **Dépend de** : aucun · **Débloque** : `AUD-ARC-01`, `AUD-ARC-02`, `AUD-ARC-04`, `AUD-ARC-05`, `AUD-ARC-06`
-- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #282 (b6b56a07) · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — core/pom.xml : version + planchers relevés ; CoreArchitectureTest.java identique à 1111, aucun @Disabled. | Test actif : core/src/test/java/com/nexus/architecture/CoreArchitectureTest.java Réserve : Réserve d'origine inchangée.
+- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #282 (b6b56a07) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Réserve d'origine inchangée.
 
 **Preuve**
 
@@ -118,7 +118,7 @@ Commande : `grep -rli 'archunit|jdeps|ArchitectureTest' core/src/test adapters/*
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : S4 · Une seule sortie publique, redaction complétée
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -134,7 +134,7 @@ core/src/main/java/com/nexus/ranking/RankedCandidate.java:30 `components = Map.c
 
 - **Axe** : Qualité · **Effort** : M 1-3j · **Sprint** : S2 · Outillage des scripts et des workflows
 - **Dépend de** : `AUD-QUA-04` · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -150,7 +150,7 @@ core/src/main/java/com/nexus/ranking/RankedCandidate.java:30 `components = Map.c
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : S1 · Remettre les mesures d'aplomb
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Corrigé par la PR #266 (89a37f0b) · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé — ci.yml : seul le retrait de develop des triggers PR/push (main conservé) ; validate-phase-6.ps1 inchangé (aucun repli « Maven installé ») ; README dev : integration/release/Dependabot passés à main. | Test actif : test-tool-integrity-anchors.sh PASS (fixtures hygiene ajoutées)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #266 (89a37f0b) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -167,7 +167,7 @@ scripts/validate-phase-6.ps1:60-73 : `Write-Warning "Le Maven Wrapper est indisp
 - **Axe** : Qualité, Architecture · **Effort** : M 1-3j · **Sprint** : S4 · Une seule sortie publique, redaction complétée
 - **Dépend de** : `AUD-TST-07` · **Débloque** : `AUD-ARC-03`
 - **Fusionne** : `AUD-ARC-08`
-- **Statut** : Fermé · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -183,7 +183,7 @@ core/src/main/java/com/nexus/cli/CliResultMapper.java:49-62 contextItemMap : `"p
 
 - **Axe** : Qualité · **Effort** : M 1-3j · **Sprint** : S6 · Fédération et runtimes longue durée
 - **Dépend de** : aucun · **Débloque** : `AUD-PRF-03`
-- **Statut** : Fermé · **Changement** : FederatedContextService.build et ProjectIndexingService.indexLocked sont découpés en étapes privées nommées (validation, collecte par projet, sélection, métadonnées ; diff, publication, providers externes, vérification, statut) sans changement de comportement ; NexusApplicationFactory.create reste linéaire comme le demandait l'action (sprint 6, tâches 1.1 et 1.2, PR #299) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : FederatedContextService.build et ProjectIndexingService.indexLocked sont découpés en étapes privées nommées (validation, collecte par projet, sélection, métadonnées ; diff, publication, providers externes, vérification, statut) sans changement de comportement ; NexusApplicationFactory.create reste linéaire comme le demandait l'action (sprint 6, tâches 1.1 et 1.2, PR #299) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -199,7 +199,7 @@ Mesure heuristique (script d'accolades, 1 213 méthodes) : 18 méthodes > 60 lig
 
 - **Axe** : Sécurité · **Effort** : M 1-3j · **Sprint** : S4 · Une seule sortie publique, redaction complétée
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -215,7 +215,7 @@ core/src/main/java/com/nexus/security/SecretAssignmentScanner.java:10-12 — lis
 
 - **Axe** : Sécurité · **Effort** : S<1j · **Sprint** : S4 · Une seule sortie publique, redaction complétée
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé — SensitiveContentRedactorTest : 201 lignes ajoutées, aucune supprimée (v9 JWT/XML/options) ; aucun @Disabled. | Test actif : SensitiveContentRedactorTest, ProjectIndexingServiceTest (build Maven)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -231,7 +231,7 @@ core/src/main/java/com/nexus/security/SecretAssignmentScanner.java:126-129 — `
 
 - **Axe** : Sécurité · **Effort** : S<1j · **Sprint** : S8 · Façade, configuration et durcissements locaux
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Le filtre JAX-RS NexusRestLoopbackTransportFilter (PR #303) refuse en 403 sans détail, en trust-local comme en mode jeton loopback, toute requête dont le Host n'est pas littéralement 127.0.0.1, localhost ou [::1] ou dont l'Origin n'est pas loopback ; le risque navigateur résiduel du trust-local et la recommandation d'allowlist de racines sont documentés. · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé avec réserve · **Changement** : Le filtre JAX-RS NexusRestLoopbackTransportFilter (PR #303) refuse en 403 sans détail, en trust-local comme en mode jeton loopback, toute requête dont le Host n'est pas littéralement 127.0.0.1, localhost ou [::1] ou dont l'Origin n'est pas loopback ; le risque navigateur résiduel du trust-local et la recommandation d'allowlist de racines sont documentés. · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -248,7 +248,7 @@ adapters/rest-quarkus/src/main/java/com/nexus/api/NexusRestExposureGuard.java:79
 - **Axe** : Sécurité, Dépendances · **Effort** : S<1j · **Sprint** : S9 · Chaîne de release exécutable
 - **Dépend de** : aucun · **Débloque** : `AUD-DEP-02`
 - **Fusionne** : `AUD-DEP-01`
-- **Statut** : Fermé avec réserve · **Changement** : Fermé par #304 (tâches 2.1 et 2.2) : les secrets PFX ne figurent plus dans l'env du job windows-installer ; ils ne sont mappés que sur les deux étapes de signature, vides sur pull_request, et le PFX est décodé puis effacé dans la même étape sans que son chemin soit publié · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — windows-installer.yml : trigger PR develop retiré (main gardé), concurrence incluant github.workflow ; secrets PFX non réexposés. | Test actif : workflow_hygiene ; contrats release PASS Réserve : Réserve d'origine inchangée.
+- **Statut** : Fermé avec réserve · **Changement** : Fermé par #304 (tâches 2.1 et 2.2) : les secrets PFX ne figurent plus dans l'env du job windows-installer ; ils ne sont mappés que sur les deux étapes de signature, vides sur pull_request, et le PFX est décodé puis effacé dans la même étape sans que son chemin soit publié · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Réserve d'origine inchangée.
 
 **Preuve**
 
@@ -264,7 +264,7 @@ adapters/rest-quarkus/src/main/java/com/nexus/api/NexusRestExposureGuard.java:79
 
 - **Axe** : Sécurité, Performance · **Effort** : S · **Sprint** : S14 · Suites de la vérification du 11 novembre
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Corrigé par la PR #369 · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé — core/src/main/java/com/nexus/security/SensitiveContentRedactor.java:207-255 redactJwts saute à la fin de la suite base64url (runEnd) quand le 1er segment ne mène pas à un « . » ou après un échec ; :278-316 CDATA sans regex, pointeur cdataBodyEnd monotone. Sonde java 21 (copie 244ab1d3) 1 Mo / 8 Mo, rendu inchangé : eyJ- 195/1463 ms (510ff8ca : 15 608 ms à 1 Mo) ; eyJ 143/1174 ; eyJa.eyJa. 187/1417 ; eyJ+4000 b64url 164/1259 (sans séparateur 131/1094) ; <![CDATA[ 185/1354 ; <password><![CDATA[ 221/1551 (510ff8ca : 1 581). Différentiel réflexif redactJwts/redactXmlSecretElements vs replaceAll des motifs, 3×10 000 cas : 0 écart. Fuzz 644 unités × 24 opérations à 1 Mo : aucune > 1 s. | Test actif : Oui : SensitiveContentRedactorTest.java:505 (#forgedRepetitionOfJwtStarts…), :515 (#forgedRepetitionOfCdataOpenings…), :539 (#jwtAndCdataRenderingMatchesTheV8Patterns), :555 (#generatedJwtAndCdata…, 4 000 cas) ; aucun @Disabled/@Tag/assume dans la classe (non exécutés ici). | SensitiveContentRedactorTest 116/0 au build 244ab1d3 ; mesure indépendante : 1 Mo de « eyJ- » 195 ms (15,6 s avant), 8 Mo 1,5 s. Réserve : Tests à seuil absolu (assertTimeoutPreemptively 1 s, SensitiveContentRedactorTest.java:490) : marge mesurée ×4,5 à ×5 sur 2 vCPU ; stabilité CI non vérifiée ici (pas de Maven).
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #369 · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Tests à seuil absolu (assertTimeoutPreemptively 1 s, SensitiveContentRedactorTest.java:490) : marge mesurée ×4,5 à ×5 sur 2 vCPU ; stabilité CI non vérifiée ici (pas de Maven).
 
 **Preuve**
 
@@ -280,7 +280,7 @@ core/src/main/java/com/nexus/security/SensitiveContentRedactor.java:78-81 `\beyJ
 
 - **Axe** : Tests, Dépendances · **Effort** : S · **Sprint** : S1 · Remettre les mesures d'aplomb
 - **Dépend de** : aucun · **Débloque** : `AUD-QUA-08`
-- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #268 (dfb695ce) · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — rest-quarkus/pom.xml et pom racine : seul version 0.2.0→0.2.1 (et jackson 2.23.0) ; quarkus-jacoco toujours déclaré (:43). | Test actif : jacoco:check rest-quarkus (build Maven, non relancé ici) Réserve : Réserve d'origine inchangée.
+- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #268 (dfb695ce) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Réserve d'origine inchangée.
 
 **Preuve**
 
@@ -296,7 +296,7 @@ core/src/main/java/com/nexus/security/SensitiveContentRedactor.java:78-81 `\beyJ
 
 - **Axe** : Tests · **Effort** : S<1j · **Sprint** : S3 · Filets de test et traces
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Corrigé par la PR #282 (b6b56a07) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #282 (b6b56a07) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -313,7 +313,7 @@ core/src/test/java/com/nexus/security/FilesystemSemanticsQualificationTest.java:
 - **Axe** : Tests · **Effort** : S<1j · **Sprint** : S1 · Remettre les mesures d'aplomb
 - **Dépend de** : aucun · **Débloque** : aucun
 - **Fusionne** : `AUD-TST-04`
-- **Statut** : Fermé avec réserve · **Changement** : Corrigé par les PR #343 (merge 159cef5a) et #347 · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — core/pom.xml : planchers com.nexus.security relevés 0.85/0.79→0.87/0.82 (remesure secret-redaction-v9 89,29/84,63 % ; écart ≤3 pts respecté) ; règles CLASS intactes ; adapter-coverage-gates.md aligné. | Test actif : coverage-floors=PASS (contrat doc) Réserve : Réserve d'origine inchangée.
+- **Statut** : Fermé avec réserve · **Changement** : Corrigé par les PR #343 (merge 159cef5a) et #347 · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Réserve d'origine inchangée.
 
 **Preuve**
 
@@ -329,7 +329,7 @@ pom.xml:228 « <element>BUNDLE</element> » (idem core/pom.xml, adapters/*/pom.x
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S5 · Indexation et écriture SQLite
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : La migration V012 crée idx_symbol_relations_file_provider (file_id, source_provider), qui sert la suppression par fichier et la sonde de cascade, et le benchmark d'échelle réindexe des fichiers existants par applyChanges (PR #297, sprint 5, tâches 1.1 à 1.3 et 6.2) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé avec réserve · **Changement** : La migration V012 crée idx_symbol_relations_file_provider (file_id, source_provider), qui sert la suppression par fichier et la sonde de cascade, et le benchmark d'échelle réindexe des fichiers existants par applyChanges (PR #297, sprint 5, tâches 1.1 à 1.3 et 6.2) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -345,7 +345,7 @@ core/src/main/java/com/nexus/persistence/sqlite/SqliteFileWriter.java:100-101 : 
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S6 · Fédération et runtimes longue durée
 - **Dépend de** : `AUD-DEP-19` · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Un SearchQueryContext unique par requête fédérée (recherche et contexte) mémorise le vecteur de la requête redactée, clé (provider, modèle) : le fournisseur d'embeddings reçoit au plus un appel quel que soit le nombre de projets, et une indisponibilité est elle aussi mémorisée et partagée (sprint 6, tâches 2.1 et 2.2, PR #299) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Un SearchQueryContext unique par requête fédérée (recherche et contexte) mémorise le vecteur de la requête redactée, clé (provider, modèle) : le fournisseur d'embeddings reçoit au plus un appel quel que soit le nombre de projets, et une indisponibilité est elle aussi mémorisée et partagée (sprint 6, tâches 2.1 et 2.2, PR #299) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -362,7 +362,7 @@ core/src/main/java/com/nexus/search/semantic/SemanticSearchStrategy.java:125-127
 - **Axe** : Performance · **Effort** : S · **Sprint** : S6 · Fédération et runtimes longue durée
 - **Dépend de** : aucun · **Débloque** : aucun
 - **Fusionne** : `AUD-PRF-05`
-- **Statut** : Fermé · **Changement** : Les métadonnées de commit Lucene (compatibilité sémantique et sonde de readiness lexicale) sont lues sur le reader en cache, avec repli SegmentInfos.readLatestCommit sans DirectoryReader quand aucun reader n'est en cache (sprint 6, tâches 4.1 et 4.2, PR #299) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Les métadonnées de commit Lucene (compatibilité sémantique et sonde de readiness lexicale) sont lues sur le reader en cache, avec repli SegmentInfos.readLatestCommit sans DirectoryReader quand aucun reader n'est en cache (sprint 6, tâches 4.1 et 4.2, PR #299) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -378,7 +378,7 @@ core/src/main/java/com/nexus/search/semantic/lucene/PersistentLuceneSemanticSear
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S6 · Fédération et runtimes longue durée
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : GitRecencyCandidateEnricher mémorise par (répertoire Git, HEAD) les chemins modifiés des 50 derniers commits dans les bornes existantes, invalide l'entrée au changement de HEAD et borne le cache à MAX_PROJECTS entrées LRU, décision portée par BE-0070 (sprint 6, tâche 6.1, PR #299) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé avec réserve · **Changement** : GitRecencyCandidateEnricher mémorise par (répertoire Git, HEAD) les chemins modifiés des 50 derniers commits dans les bornes existantes, invalide l'entrée au changement de HEAD et borne le cache à MAX_PROJECTS entrées LRU, décision portée par BE-0070 (sprint 6, tâche 6.1, PR #299) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -394,7 +394,7 @@ core/src/main/java/com/nexus/context/source/git/GitRecencyCandidateEnricher.java
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S6 · Fédération et runtimes longue durée
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Corrigé par la PR #344 (merge 59ea02fa) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #344 (merge 59ea02fa) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -410,7 +410,7 @@ SqliteFileWriter.java:56-63 `SELECT … FROM index_staged_files WHERE project_id
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S6 · Fédération et runtimes longue durée
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #344 (merge 59ea02fa) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #344 (merge 59ea02fa) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -426,7 +426,7 @@ V015__index_symbols_by_file_for_fuzzy_search.sql:12-15 ; SqliteSymbolSearch.java
 
 - **Axe** : Dépendances · **Effort** : M · **Sprint** : S9 · Chaîne de release exécutable
 - **Dépend de** : `AUD-DEP-03`, `AUD-DEP-09`, `AUD-DEP-21`, `AUD-QUA-12`, `AUD-SEC-06` · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Fermé par #304 (tags de pré-version vX.Y.Z-rc.N, release marquée pré-version sans déplacer latest, ADR de politique de publication) puis par la répétition 0.2.0-rc.2 : version passée par #315 (0018cf3e), promotion vers main par #318 (38e1b95b), tag v0.2.0-rc.2 publié par un run Release réussi après approbation de l'environnement release, relevé consigné par #319 (de2a066a) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé avec réserve · **Changement** : Fermé par #304 (tags de pré-version vX.Y.Z-rc.N, release marquée pré-version sans déplacer latest, ADR de politique de publication) puis par la répétition 0.2.0-rc.2 : version passée par #315 (0018cf3e), promotion vers main par #318 (38e1b95b), tag v0.2.0-rc.2 publié par un run Release réussi après approbation de l'environnement release, relevé consigné par #319 (de2a066a) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -442,7 +442,7 @@ WebFetch https://github.com/FTurleque/nexus-context-engine/actions/workflows/rel
 
 - **Axe** : Dépendances, Sécurité · **Effort** : S · **Sprint** : S1 · Remettre les mesures d'aplomb
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Procédure de traitement des alertes dans SECURITY.md (PR #276) ; réglages de sécurité activés par le mainteneur · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Procédure de traitement des alertes dans SECURITY.md (PR #276) ; réglages de sécurité activés par le mainteneur · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -460,7 +460,7 @@ gh api repos/FTurleque/nexus-context-engine/dependabot/alerts → 403 « Dependa
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : S7 · Casser le bloc cyclique du cœur
 - **Dépend de** : `AUD-ARC-07` · **Débloque** : `AUD-ARC-01`
-- **Statut** : Fermé · **Changement** : ContextFragment, ContextItem et ContextSelectionResult passent dans le package context.model, dont dépendent à la fois context et context.source.* (PR #300) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : ContextFragment, ContextItem et ContextSelectionResult passent dans le package context.model, dont dépendent à la fois context et context.source.* (PR #300) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -476,7 +476,7 @@ core/src/main/java/com/nexus/context/source/ContextSourceFragmentFactory.java:3 
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : S7 · Casser le bloc cyclique du cœur
 - **Dépend de** : `AUD-ARC-07` · **Débloque** : `AUD-ARC-01`
-- **Statut** : Fermé · **Changement** : SearchCandidate, SearchSignals, CandidateType, CandidateEnricher et CandidateMerger passent dans le package search.candidate, et ranking comme ranking.graph ne dépendent plus de search (PR #300) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : SearchCandidate, SearchSignals, CandidateType, CandidateEnricher et CandidateMerger passent dans le package search.candidate, et ranking comme ranking.graph ne dépendent plus de search (PR #300) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -492,7 +492,7 @@ core/src/main/java/com/nexus/ranking/DeterministicContextRanker.java:3-5 `import
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : S7 · Casser le bloc cyclique du cœur
 - **Dépend de** : `AUD-ARC-07` · **Débloque** : `AUD-ARC-01`
-- **Statut** : Fermé · **Changement** : La lecture d'environnement et l'instanciation d'OllamaEmbeddingProvider quittent SemanticSearchConfiguration pour NexusApplicationFactory, composition root seule autorisée à lire l'environnement (PR #300) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : La lecture d'environnement et l'instanciation d'OllamaEmbeddingProvider quittent SemanticSearchConfiguration pour NexusApplicationFactory, composition root seule autorisée à lire l'environnement (PR #300) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -508,7 +508,7 @@ core/src/main/java/com/nexus/search/semantic/SemanticSearchConfiguration.java:3-
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : S8 · Façade, configuration et durcissements locaux
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Les gabarits readProject et readProjects de NexusApplication (PR #303) portent seuls la séquence READY → verrou partagé → session → revalidation READY, et les sept lectures indexées, inspect compris, passent par eux. · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Les gabarits readProject et readProjects de NexusApplication (PR #303) portent seuls la séquence READY → verrou partagé → session → revalidation READY, et les sept lectures indexées, inspect compris, passent par eux. · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -524,7 +524,7 @@ core/src/main/java/com/nexus/application/NexusApplication.java:209-214 (search),
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : S5 · Indexation et écriture SQLite
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : ProjectIndexingService.importExternalCodeIntelligence porte l'import MINOS sous le même verrou single-flight puis inter-processus que l'indexation, MinosCodeIndexImporter est composé par NexusApplicationFactory et la CLI lit le payload borné par la façade (PR #297, sprint 5, tâche 7.1) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : ProjectIndexingService.importExternalCodeIntelligence porte l'import MINOS sous le même verrou single-flight puis inter-processus que l'indexation, MinosCodeIndexImporter est composé par NexusApplicationFactory et la CLI lit le payload borné par la façade (PR #297, sprint 5, tâche 7.1) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -540,7 +540,7 @@ core/src/main/java/com/nexus/application/NexusApplication.java:185-190 `projectI
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : S8 · Façade, configuration et durcissements locaux
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : NexusApplicationFactory enveloppe l'échec d'ouverture SQLite dans PersistenceException, cause conservée (PR #303), si bien que la façade et les trois adaptateurs n'exposent ni n'importent plus java.sql. · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : NexusApplicationFactory enveloppe l'échec d'ouverture SQLite dans PersistenceException, cause conservée (PR #303), si bien que la façade et les trois adaptateurs n'exposent ni n'importent plus java.sql. · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -556,7 +556,7 @@ core/src/main/java/com/nexus/application/NexusApplication.java:95 `public static
 
 - **Axe** : Architecture · **Effort** : M · **Sprint** : S8 · Façade, configuration et durcissements locaux
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Le record NexusConfiguration, résolu une fois par NexusApplicationFactory depuis une Map et injecté dans les classes qui lisaient l'environnement (PR #303), remplace les 16 appels à System.getenv du cœur ; une règle du test d'architecture interdit tout nouvel appel hors composition root (ARCH-0086). · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé avec réserve · **Changement** : Le record NexusConfiguration, résolu une fois par NexusApplicationFactory depuis une Map et injecté dans les classes qui lisaient l'environnement (PR #303), remplace les 16 appels à System.getenv du cœur ; une règle du test d'architecture interdit tout nouvel appel hors composition root (ARCH-0086). · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -572,7 +572,7 @@ Commande : `grep -rn 'System.getenv' core/src/main` → 16 occurrences dans 12 f
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : S5 · Indexation et écriture SQLite
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : ProjectIndexingService n'a plus qu'un constructeur public complet, sans valeur par défaut du ProjectIndexLockManager ; les variantes de commodité vivent dans la fabrique de test ProjectIndexingServices (PR #297, sprint 5, tâche 8.1) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : ProjectIndexingService n'a plus qu'un constructeur public complet, sans valeur par défaut du ProjectIndexLockManager ; les variantes de commodité vivent dans la fabrique de test ProjectIndexingServices (PR #297, sprint 5, tâche 8.1) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -588,7 +588,7 @@ core/src/main/java/com/nexus/index/ProjectIndexingService.java:45,54,64,76,94 `p
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : S8 · Façade, configuration et durcissements locaux
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Le durcissement POSIX/ACL du stockage quitte NexusPaths pour security.PrivateStoragePolicy et SearchQualityMetrics passe sous core/src/test (PR #303). · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Le durcissement POSIX/ACL du stockage quitte NexusPaths pour security.PrivateStoragePolicy et SearchQualityMetrics passe sous core/src/test (PR #303). · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -605,7 +605,7 @@ core/src/main/java/com/nexus/config/NexusPaths.java:78-134 `ensurePrivateStorage
 - **Axe** : Architecture, Qualité · **Effort** : S · **Sprint** : S8 · Façade, configuration et durcissements locaux
 - **Dépend de** : aucun · **Débloque** : aucun
 - **Fusionne** : `AUD-QUA-14`
-- **Statut** : Fermé · **Changement** : La classe JDT ProcessBuilder est renommée BoundedJdtProcessBuilder et ses usages la nomment explicitement (PR #303). · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : La classe JDT ProcessBuilder est renommée BoundedJdtProcessBuilder et ses usages la nomment explicitement (PR #303). · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -621,7 +621,7 @@ core/src/main/java/com/nexus/index/jdt/ProcessBuilder.java:15-18 « Cette classe
 
 - **Axe** : Architecture, Tests · **Effort** : S · **Sprint** : S7 · Casser le bloc cyclique du cœur
 - **Dépend de** : aucun · **Débloque** : `AUD-ARC-01`
-- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #342 (merge 0d64e56b) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #342 (merge 0d64e56b) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -637,7 +637,7 @@ core/src/test/java/com/nexus/architecture/JavaSourceGraph.java:101-117 packageGr
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : S11 · Finitions documentaires et micro-optimisations
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Branche claude/s11-graphe-01c9d0 (90408ac9) : ProjectGraph supprimé, ProjectGraphBuilder renommé GraphNeighborhoodProjection, section graphe de docs/developer/search-ranking.md réécrite et tenue par le contrat documentaire, décision consignée dans BE-0087 (Proposed, complète BE-0071) · **Vérification du 2026-11-12** (`244ab1d3`) : Tient (fichier cité modifié, correction intacte) — Aucun fichier cité modifié ; ProjectGraph absent, contrat « ProjectGraph cache » PASS. | Test actif : test-operational-doc-contracts.sh
+- **Statut** : Fermé · **Changement** : Branche claude/s11-graphe-01c9d0 (90408ac9) : ProjectGraph supprimé, ProjectGraphBuilder renommé GraphNeighborhoodProjection, section graphe de docs/developer/search-ranking.md réécrite et tenue par le contrat documentaire, décision consignée dans BE-0087 (Proposed, complète BE-0071) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -653,7 +653,7 @@ docs/developer/search-ranking.md:79-86 « ProjectGraphBuilder construit le graph
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : S11 · Finitions documentaires et micro-optimisations
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : AGENTS.md prescrit ./mvnw clean install (.\mvnw.cmd sous Windows) ; le contrat refuse toute commande mvn hors wrapper dans AGENTS.md (sprint 11, tâche 3.1) · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé — guard-command.ps1:49 règle mvn(\.cmd)?\s hors wrapper intacte ; CLAUDE.md : seul le flux main ; push direct refusé sur main seule. | Test actif : Test-Hooks.ps1 (ci.yml:40)
+- **Statut** : Fermé · **Changement** : AGENTS.md prescrit ./mvnw clean install (.\mvnw.cmd sous Windows) ; le contrat refuse toute commande mvn hors wrapper dans AGENTS.md (sprint 11, tâche 3.1) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -669,7 +669,7 @@ AGENTS.md:11 « exécuter `mvn clean install` puis `scripts/self-smoke.ps1` » ;
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : S2 · Outillage des scripts et des workflows
 - **Dépend de** : aucun · **Débloque** : `AUD-QUA-05`
-- **Statut** : Fermé · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé — pom.xml : seulement version 0.2.1, outputTimestamp, jackson ; aucun validate-iteration-1x actif hors archive. | Test actif : n/a (structure)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -685,7 +685,7 @@ Comptage `grep -rl <nom>` hors du fichier lui-même : validate-iteration-11/12/1
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : S3 · Filets de test et traces
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Corrigé par la PR #282 (b6b56a07) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #282 (b6b56a07) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -701,7 +701,7 @@ core/src/main/java/com/nexus/context/source/git/GitRecencyCandidateEnricher.java
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : S4 · Une seule sortie publique, redaction complétée
 - **Dépend de** : `AUD-TST-01` · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -717,7 +717,7 @@ Détection par fenêtres de 8 lignes normalisées : 27 fenêtres communes entre 
 
 - **Axe** : Qualité · **Effort** : M 1-3j · **Sprint** : S11 · Finitions documentaires et micro-optimisations
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Frontière de langue écrite dans .claude/rules/java-core.md ; messages atteignables par CLI, REST, MCP ou configuration traduits (requêtes, budgets, scope fédéré, limites, provider Ollama, chemins, imports MINOS et SCIP) ; message des contraintes partagé par ContextRequest.UNSUPPORTED_CONSTRAINTS_MESSAGE et le mapper REST (sprint 11, tâches 5.1 à 5.3) ; derniers messages traduits : RepositoryPath (« Chemin repository invalide ») et BudgetedContextSelector (texte de ContextBudgetPolicy), PR de clôture des sprints 10 et 11 · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Frontière de langue écrite dans .claude/rules/java-core.md ; messages atteignables par CLI, REST, MCP ou configuration traduits (requêtes, budgets, scope fédéré, limites, provider Ollama, chemins, imports MINOS et SCIP) ; message des contraintes partagé par ContextRequest.UNSUPPORTED_CONSTRAINTS_MESSAGE et le mapper REST (sprint 11, tâches 5.1 à 5.3) ; derniers messages traduits : RepositoryPath (« Chemin repository invalide ») et BudgetedContextSelector (texte de ContextBudgetPolicy), PR de clôture des sprints 10 et 11 · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -733,7 +733,7 @@ Heuristique sur 316 messages littéraux `new (IllegalArgumentException|IllegalSt
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : S9 · Chaîne de release exécutable
 - **Dépend de** : aucun · **Débloque** : `AUD-DEP-02`
-- **Statut** : Fermé avec réserve · **Changement** : Fermé par #304 (tâches 8.1 et 8.2) : ci.yml et scripts/validate-phase-6.ps1 lisent la version produit dans pom.xml et la propagent en variable ; le contrat final refuse une version littérale dans ces deux fichiers · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — Aucun littéral 0.2.x dans ci.yml ni validate-phase-6.ps1 ; montée 0.2.1 sans toucher la CI. | Test actif : test-operational-doc-contracts.sh PASS Réserve : Réserve d'origine inchangée ; compose template et docs user portent 0.2.1 en dur (hors périmètre du contrat).
+- **Statut** : Fermé avec réserve · **Changement** : Fermé par #304 (tâches 8.1 et 8.2) : ci.yml et scripts/validate-phase-6.ps1 lisent la version produit dans pom.xml et la propagent en variable ; le contrat final refuse une version littérale dans ces deux fichiers · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Réserve d'origine inchangée ; compose template et docs user portent 0.2.1 en dur (hors périmètre du contrat).
 
 **Preuve**
 
@@ -749,7 +749,7 @@ Heuristique sur 316 messages littéraux `new (IllegalArgumentException|IllegalSt
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : S11 · Finitions documentaires et micro-optimisations
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Watch item de current-limitations.md borné à l'évolution au-delà du FTS5 trigram livré par V008 ; refus de l'ancienne formulation dans test-operational-doc-contracts.sh (sprint 11, tâche 2.1) · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé — current-limitations.md : retrait de « develop » et content-v8 ; watch item FTS5 V008 inchangé. | Test actif : test-operational-doc-contracts.sh
+- **Statut** : Fermé · **Changement** : Watch item de current-limitations.md borné à l'évolution au-delà du FTS5 trigram livré par V008 ; refus de l'ancienne formulation dans test-operational-doc-contracts.sh (sprint 11, tâche 2.1) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -765,7 +765,7 @@ docs/developer/current-limitations.md:148 « nouveau moteur FTS/trigram pour les
 
 - **Axe** : Qualité · **Effort** : S · **Sprint** : S12 · Durcir les gates ajoutés
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #353 · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — ci-and-supply-chain.md réécrit pour main ; DIRECT_MAVEN_CALL et auto-test du contrat intacts : PASS. | Test actif : test-operational-doc-contracts.sh PASS Réserve : Réserve d'origine inchangée.
+- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #353 · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Réserve d'origine inchangée.
 
 **Preuve**
 
@@ -781,7 +781,7 @@ scripts/release/test-operational-doc-contracts.sh:484-491 (motifs littéraux). M
 
 - **Axe** : Qualité · **Effort** : S · **Sprint** : S6 · Fédération et runtimes longue durée
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Corrigé par la PR #344 (merge 59ea02fa) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #344 (merge 59ea02fa) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -797,7 +797,7 @@ SemanticSearchStrategy.java:188-190 queryVectorKey() = providerId|modelId ; Sear
 
 - **Axe** : Qualité · **Effort** : S · **Sprint** : S13 · Installateur et release finale
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : PowerShellSingleQuote double U+0027 et U+2018 à U+201B ; scripts PowerShell générés écrits en UTF-8 avec BOM (SavePowerShellScript), la conversion ANSI best-fit de SaveStringToFile changeant U+FF07 et U+02BC en apostrophe (PR #354, sprint 13). · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé — PowerShellSingleQuote (iss :391-399) double U+0027 et U+2018-201B ; SavePowerShellScript (:1498) intact. | Test actif : test-windows-config-escaping.ps1 (non exécutable ici)
+- **Statut** : Fermé · **Changement** : PowerShellSingleQuote double U+0027 et U+2018 à U+201B ; scripts PowerShell générés écrits en UTF-8 avec BOM (SavePowerShellScript), la conversion ANSI best-fit de SaveStringToFile changeant U+FF07 et U+02BC en apostrophe (PR #354, sprint 13). · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -818,7 +818,7 @@ utilisée pour {app}\nexus-mcp.cmd et le nom de conteneur dans les scripts gén�
 
 - **Axe** : Qualité · **Effort** : S · **Sprint** : S13 · Installateur et release finale
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Liens de l'archive 2026-11-09-preciser-bornes-redaction-recence-git corrigés ; check_change_links contrôle tous les Markdown de openspec/changes/, archives comprises, avec fixtures négatives (PR #354, sprint 13). · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé — check_change_links (openspec_doc_contracts.py) couvre les archives, y compris 2026-11-12-flux-sur-main-seule : test-openspec-doc-contracts.sh PASS (fixtures d'archive OK). | Test actif : test-openspec-doc-contracts.sh (ci.yml:136)
+- **Statut** : Fermé · **Changement** : Liens de l'archive 2026-11-09-preciser-bornes-redaction-recence-git corrigés ; check_change_links contrôle tous les Markdown de openspec/changes/, archives comprises, avec fixtures négatives (PR #354, sprint 13). · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -837,7 +837,7 @@ openspec/changes/archive/2026-11-09-preciser-bornes-redaction-recence-git/design
 
 - **Axe** : Qualité, Dépendances · **Effort** : S · **Sprint** : S14 · Suites de la vérification du 11 novembre
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : DIRECT_MAVEN_CALL refuse un nom Maven en position de commande après =, ;, {, (, | ou un . de dot-sourcing, cmd /k et pwsh/powershell -c/-Command ; une fixture d'auto-test par forme ; [Limite] de docs/developer/ci-and-supply-chain.md complétée (PR #367, sprint 14). · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — Copie de compare-jdt.ps1 + 1 ligne, contrat complet. Formes du constat (`$o = mvn`, `; mvn`, `{ mvn }`, `. mvn`, `cmd /k`, `pwsh -Command`) → rc=1 « compare-jdt.ps1:194: calls Maven directly ». Nouvelles formes rc=1 : `& { mvn … }`, `Start-Process mvn`, `-FilePath 'mvn.cmd'`, `$(mvn -v)`, `(mvn)`, `mvn.cmd`, `mvnw`, `./mvnw`, `.\mvnw.cmd`, `&mvn`, `& (Get-Command mvn)`, `& "$env:MAVEN_HOME\bin\mvn"`, `cmd /s /c`, `cmd /c"mvn"`, `pwsh -c`, `Invoke-Command {mvn}`, `ForEach-Object { mvn }`. rc=0 : `& {mvn}`, `$(mvn)`, `return mvn`, concaténation, Set-Alias, Process.Start, -EncodedCommand (en [Limite] ci-and-supply-chain.md:511), plus `mvn` seul en fin de ligne, `mvn.bat`, `mvnd`. | Test actif : Oui : ci.yml:123-124 (pull_request/push main) exécute test-operational-doc-contracts.sh ; auto-test à 29 fixtures détectées et 5 acceptées. Réserve : Filtre de motifs documenté ; non documentés : `mvn` seul sans argument (rc=0), `mvn.bat`/`mvnd` (hors Maven 3 du dépôt, impact négligeable). `mvnw` et `./mvnw` sont refusés comme attendu (seul Invoke-Maven est permis).
+- **Statut** : Fermé avec réserve · **Changement** : DIRECT_MAVEN_CALL refuse un nom Maven en position de commande après =, ;, {, (, | ou un . de dot-sourcing, cmd /k et pwsh/powershell -c/-Command ; une fixture d'auto-test par forme ; [Limite] de docs/developer/ci-and-supply-chain.md complétée (PR #367, sprint 14). · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Filtre de motifs documenté ; non documentés : `mvn` seul sans argument (rc=0), `mvn.bat`/`mvnd` (hors Maven 3 du dépôt, impact négligeable). `mvnw` et `./mvnw` sont refusés comme attendu (seul Invoke-Maven est permis).
 
 **Preuve**
 
@@ -853,7 +853,7 @@ scripts/release/test-operational-doc-contracts.sh:588 motif `^\s*mvn…\s` ancr�
 
 - **Axe** : Qualité · **Effort** : S · **Sprint** : S14 · Suites de la vérification du 11 novembre
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : docs/developer/reproduce-and-debug.md nomme les artefacts nexus-context-engine-<version> et entre dans current_docs ; la constante STALE_DEV_VERSION est refusée dans la documentation courante contrôlée et dans les scripts PowerShell actifs, module partagé compris (PR #367, sprint 14). · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — docs/developer/reproduce-and-debug.md:46-56 nomme target/nexus-context-engine-<version>(-cli).jar (copie racine réelle via antrun, core/pom.xml:313-325) ; 0.1.0-SNAPSHOT absent des docs courantes et scripts actifs (reste dans scripts/archive, history, audits). Mutations : guide + `…-0.1.0-SNAPSHOT-cli.jar` → rc=1 nommant le guide ; copie compare-jdt.ps1 citant la version → rc=1. Mais guide + `…-0.2.0-cli.jar`, `…-0.1.0-cli.jar` ou `…-0.1.1-SNAPSHOT-cli.jar` → rc=0 : le contrat ne refuse que la constante STALE_DEV_VERSION (test-operational-doc-contracts.sh:408-418), pas une version ≠ pom.xml (0.2.1). | Test actif : Oui : ci.yml:123-124 (test-operational-doc-contracts.sh, auto-test names_stale_version). Réserve : Défaut cité corrigé, mais la classe « version périmée » n'est pas gardée : README.md:181, 207-208 et docs/developer/cli.md:62-86 figent 0.2.1 sans contrat lié à pom.xml ; au prochain bump la dérive repassera rc=0.
+- **Statut** : Fermé avec réserve · **Changement** : docs/developer/reproduce-and-debug.md nomme les artefacts nexus-context-engine-<version> et entre dans current_docs ; la constante STALE_DEV_VERSION est refusée dans la documentation courante contrôlée et dans les scripts PowerShell actifs, module partagé compris (PR #367, sprint 14). · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Défaut cité corrigé, mais la classe « version périmée » n'est pas gardée : README.md:181, 207-208 et docs/developer/cli.md:62-86 figent 0.2.1 sans contrat lié à pom.xml ; au prochain bump la dérive repassera rc=0.
 
 **Preuve**
 
@@ -869,7 +869,7 @@ docs/developer/reproduce-and-debug.md:49-50 `target/nexus-context-engine-0.1.0-S
 
 - **Axe** : Qualité, Dépendances · **Effort** : S · **Sprint** : S15 · Suites de la vérification du 12 novembre
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Nouveau · **Vérification du 2026-11-12** (`244ab1d3`) : Nouveau constat — Rejoué le 12/11 sous Windows PowerShell 5.1 (repro-qua28.ps1, fonctions extraites de la source durcie) : profil « a^b » → ligne set "NEXUS_HOME=…\a^b\.nexus" correcte et exécutée sans erreur en page 850, mais ContainsUnsafeConfigChars(NEXUS_HOME) = vrai, donc refus par l'assistant. La MsgBox non supprimable est déduite de la lecture.
+- **Statut** : Ouvert · **Changement** : Nouveau · **Vérification du 2026-11-14** (`8a50fc47`) : Ouvert — change proposé — openspec/changes/sprint-15-installateur-caret proposé (PR #386, décisions du mainteneur intégrées par #387) : « ^ » retiré de ContainsUnsafeConfigChars, SuppressibleMsgBox partout dans NextButtonClick et NotifyPortSelection ; le mainteneur y ajoute la correction des lanceurs natifs dans un dossier d'installation contenant « ^ », défaut préexistant de même population, sans constat séparé. 0 tâche cochée sur 11, aucun fichier de code modifié depuis 244ab1d3 (git diff --name-only sur core, adapters, scripts, packaging, .github, pom.xml, config : vide). Conception relue, sans désaccord.
 
 **Preuve**
 
@@ -885,7 +885,7 @@ harden-windows-installer-source.ps1:113-117 ContainsUnsafeConfigChars refuse ^ ;
 
 - **Axe** : Qualité · **Effort** : S · **Sprint** : S15 · Suites de la vérification du 12 novembre
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Nouveau · **Vérification du 2026-11-12** (`244ab1d3`) : Nouveau constat — Relevé à la vérification du 12/11.
+- **Statut** : Ouvert · **Changement** : Nouveau · **Vérification du 2026-11-14** (`8a50fc47`) : Ouvert — change proposé — openspec/changes/sprint-15-guides-wrapper-maven proposé (PR #386, décisions du mainteneur intégrées par #387) : contrat sur README, AGENTS, CONTRIBUTING, SECURITY et docs/**/*.md hors ADR et relevés datés ; exec:java exige -pl core. 0 tâche cochée sur 8, aucun fichier de code modifié depuis 244ab1d3 (git diff --name-only sur core, adapters, scripts, packaging, .github, pom.xml, config : vide). Conception relue, sans désaccord.
 
 **Preuve**
 
@@ -901,7 +901,7 @@ docs/developer/reproduce-and-debug.md:18 `mvn -version`, :31 `mvn clean install`
 
 - **Axe** : Sécurité · **Effort** : S<1j · **Sprint** : S4 · Une seule sortie publique, redaction complétée
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -917,7 +917,7 @@ adapters/mcp-java/src/main/java/com/nexus/mcp/McpResultMapper.java:89 `result.pu
 
 - **Axe** : Sécurité · **Effort** : S<1j · **Sprint** : S8 · Façade, configuration et durcissements locaux
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : La fabrique unique GitRepositoryLocator (PR #303) retient le dépôt de la racine du projet et n'accepte un dépôt parent que s'il appartient à l'utilisateur courant, à l'image de safe.directory, sinon le contexte Git est ignoré avec un diagnostic sans chemin ; ce contrôle de propriétaire remplace délibérément un plafond strict pour préserver le monorepo (décision BE-0070, option C). · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé avec réserve · **Changement** : La fabrique unique GitRepositoryLocator (PR #303) retient le dépôt de la racine du projet et n'accepte un dépôt parent que s'il appartient à l'utilisateur courant, à l'image de safe.directory, sinon le contexte Git est ignoré avec un diagnostic sans chemin ; ce contrôle de propriétaire remplace délibérément un plafond strict pour préserver le monorepo (décision BE-0070, option C). · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -934,7 +934,7 @@ core/src/main/java/com/nexus/context/source/git/LocalGitContextSourceProvider.ja
 - **Axe** : Sécurité, Dépendances · **Effort** : S<1j · **Sprint** : S2 · Outillage des scripts et des workflows
 - **Dépend de** : aucun · **Débloque** : aucun
 - **Fusionne** : `AUD-DEP-13`
-- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — scale-benchmark.yml:119 REQUESTED: ${{ inputs.profile }} en env (idem scanner :64, lucene :87) ; diff = commentaires develop→main et trigger. | Test actif : workflow_hygiene inputs PASS Réserve : Réserve d'origine inchangée.
+- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Réserve d'origine inchangée.
 
 **Preuve**
 
@@ -950,7 +950,7 @@ core/src/main/java/com/nexus/context/source/git/LocalGitContextSourceProvider.ja
 
 - **Axe** : Sécurité · **Effort** : S<1j · **Sprint** : S10 · Conteneur et gouvernance du dépôt
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : .dockerignore à la racine pour Dockerfile (liste d'exclusion) et packaging/docker/Dockerfile.runtime.dockerignore en liste d'autorisation, livré dans le payload Windows et dans le staging de repli de docker-distribution.yml (sprint 10) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé avec réserve · **Changement** : .dockerignore à la racine pour Dockerfile (liste d'exclusion) et packaging/docker/Dockerfile.runtime.dockerignore en liste d'autorisation, livré dans le payload Windows et dans le staging de repli de docker-distribution.yml (sprint 10) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -966,7 +966,7 @@ packaging/docker/Dockerfile:8 `COPY . .` ; `ls -a` à la racine : aucun .dockeri
 
 - **Axe** : Sécurité · **Effort** : S · **Sprint** : S8 · Façade, configuration et durcissements locaux
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Refus OVERSIZED_TOKEN aligné sur le masquage pour sk-, sk-proj- et sk-ant- (corps compté après le préfixe), politique secret-redaction-v7, content-v6 et migration V018 (PR #348, sprint 8). · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé — SensitiveContentRedactor v9 : motif sk-(?:proj-|ant-)?+…{20,255}+ inchangé ; passe sautée seulement si le préfixe littéral « sk- » est absent (sensible à la casse comme le motif) ; refus OVERSIZED inchangé. | Test actif : SensitiveContentRedactorTest (ajouts seuls)
+- **Statut** : Fermé · **Changement** : Refus OVERSIZED_TOKEN aligné sur le masquage pour sk-, sk-proj- et sk-ant- (corps compté après le préfixe), politique secret-redaction-v7, content-v6 et migration V018 (PR #348, sprint 8). · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -982,7 +982,7 @@ core/src/main/java/com/nexus/security/SensitiveContentRedactor.java:47 `sk-(?:pr
 
 - **Axe** : Sécurité · **Effort** : S · **Sprint** : S8 · Façade, configuration et durcissements locaux
 - **Dépend de** : `AUD-SEC-20` · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Refus lancé sur le texte où les blocs de clé privée sont remplacés, classes de masquage alignées sur le refus pour xox?-, gh?_, sk_ et rk_, politique secret-redaction-v8, content-v7 et migration V019 (PR #349, sprint 8). · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — Refus toujours sur replacePrivateKeyBlocks ; classes xox?-/gh?_/sk_/rk_ inchangées ; préfiltre STRUCTURED_TOKEN_PREFIXES dans le même ordre que STRUCTURED_TOKENS (9/9) ; doc secret-redaction v9. | Test actif : SensitiveContentRedactorTest Réserve : Réserve d'origine inchangée.
+- **Statut** : Fermé avec réserve · **Changement** : Refus lancé sur le texte où les blocs de clé privée sont remplacés, classes de masquage alignées sur le refus pour xox?-, gh?_, sk_ et rk_, politique secret-redaction-v8, content-v7 et migration V019 (PR #349, sprint 8). · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Réserve d'origine inchangée.
 
 **Preuve**
 
@@ -998,7 +998,7 @@ core/src/main/java/com/nexus/security/SensitiveContentRedactor.java (d193fb05, s
 
 - **Axe** : Sécurité · **Effort** : S · **Sprint** : S14 · Suites de la vérification du 11 novembre
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #369 · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — core/src/main/java/com/nexus/security/SensitiveContentRedactor.java:52-53 XML_OPEN `<([a-z0-9._-]++(?<=[<._-]SENSITIVE_NAME))` et :44 OPTION_NAME (lookbehind borné). Sonde : <db-password>, <db_password>, <db.password>, <my-token>, <api_key>, <DB-PASSWORD>, avec CDATA ou attributs, attribut password=, --db-password, --api-key → masqués (avant : <db-password>, <db_password>, <my-token>, --api-key en clair). Borne : corps 4 096 masqué, 4 097 refusé (4 noms, simple et CDATA, 2 options). Conformes à docs/developer/secret-redaction.md:12-13 : <password-hint>, <passwordless>, --passwordless, <keyboard>, <tokenizer>, <monkey>, <mytoken> non masqués ; pas de faux positif nouveau hors :226. | Test actif : Oui : SensitiveContentRedactorTest.java:582 (#xmlElementWhoseNameEndsWithASensitiveKeyIsRedacted, 10 noms), :589, :595 (#compositeXmlNameValueIsRedactedAtTheBoundAndRefusedJustAbove), :607 (#optionWhoseNameEndsWith…), :613, :618 (#compositeNameOfHalfAMillionComponentsHasBoundedCost), :681 ; SchemaMigratorCompositeNameUpgradeTest:45-46,91-92 ; aucun @Disabled. | SensitiveContentRedactorTest 116/0 et SchemaMigratorCompositeNameUpgradeTest 2/0 au build 244ab1d3. Réserve : Limites documentées (secret-redaction.md:226-227) mais fuites réelles : <x:password>, <wsse:Password> (espace de noms) et --db_password restent en clair (sonde) ; <dbPassword> non couvert.
+- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #369 · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Limites documentées (secret-redaction.md:226-227) mais fuites réelles : <x:password>, <wsse:Password> (espace de noms) et --db_password restent en clair (sonde) ; <dbPassword> non couvert.
 
 **Preuve**
 
@@ -1014,7 +1014,7 @@ core/src/main/java/com/nexus/security/SensitiveContentRedactor.java:38 XML_OPEN 
 
 - **Axe** : Sécurité · **Effort** : S · **Sprint** : S15 · Suites de la vérification du 12 novembre
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Nouveau · **Vérification du 2026-11-12** (`244ab1d3`) : Nouveau constat — Rejoué indépendamment (java 21, classes de 244ab1d3, corps de clé factice) : bloc seul masqué ; précédé de `if (line.startsWith("-----BEGIN ")) {}` ou d'une ligne « -----BEGIN  » → corps en clair. Identique sur 510ff8ca (préexistant).
+- **Statut** : Ouvert · **Changement** : Nouveau · **Vérification du 2026-11-14** (`8a50fc47`) : Ouvert — change proposé — openspec/changes/sprint-15-redaction-begin-incomplet proposé (PR #386, décisions du mainteneur intégrées par #387) : reprise à begin + longueur du marqueur et fin de marqueur cherchée sur sa ligne ; POLICY_VERSION v10, V021. 0 tâche cochée sur 11, aucun fichier de code modifié depuis 244ab1d3 (git diff --name-only sur core, adapters, scripts, packaging, .github, pom.xml, config : vide). Conception relue, sans désaccord.
 
 **Preuve**
 
@@ -1030,7 +1030,7 @@ core/src/main/java/com/nexus/security/SensitiveContentRedactor.java:403-419 repl
 
 - **Axe** : Tests · **Effort** : S<1j · **Sprint** : S3 · Filets de test et traces
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Corrigé par la PR #282 (b6b56a07) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #282 (b6b56a07) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1046,7 +1046,7 @@ core/src/test/java/com/nexus/index/ExternalTaskRunnerTest.java:34 « assertTrue(
 
 - **Axe** : Tests · **Effort** : S<1j · **Sprint** : S3 · Filets de test et traces
 - **Dépend de** : aucun · **Débloque** : `AUD-QUA-09`
-- **Statut** : Fermé · **Changement** : Corrigé par la PR #282 (b6b56a07) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #282 (b6b56a07) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1062,7 +1062,7 @@ adapters/rest-quarkus/src/test/java/com/nexus/api/NexusResourceTest.java:29-30 u
 
 - **Axe** : Tests · **Effort** : S<1j · **Sprint** : S1 · Remettre les mesures d'aplomb
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #266 (89a37f0b) · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — ci.yml:40 et :44 lancent toujours Test-Hooks.ps1 et test-rest-token-contract.ps1 ; claude-code.md : seule la description des hooks passée à main. | Test actif : ci.yml:40 Test-Hooks.ps1 Réserve : Test-Hooks.ps1 adapté (deny git push origin main / refs/heads/main) mais non exécutable ici (pas de pwsh).
+- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #266 (89a37f0b) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Test-Hooks.ps1 adapté (deny git push origin main / refs/heads/main) mais non exécutable ici (pas de pwsh).
 
 **Preuve**
 
@@ -1078,7 +1078,7 @@ grep -rn "test-rest-token-contract\|Test-Hooks" .github scripts → seulement l'
 
 - **Axe** : Tests · **Effort** : S<1j · **Sprint** : S3 · Filets de test et traces
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Corrigé par la PR #285 (6dc03c2d) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #285 (6dc03c2d) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1094,7 +1094,7 @@ core/src/test/java/com/nexus/index/minos/MinosRealIntegrationTest.java:45 assume
 
 - **Axe** : Tests · **Effort** : S<1j · **Sprint** : S3 · Filets de test et traces
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Corrigé par la PR #282 (b6b56a07) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #282 (b6b56a07) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1110,7 +1110,7 @@ core/src/main/java/com/nexus/index/IndexRepository.java:18,31,52 « default … 
 
 - **Axe** : Tests · **Effort** : S<1j · **Sprint** : S1 · Remettre les mesures d'aplomb
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Corrigé par les PR #267 (e3f67017) et #277 (a218a613) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Corrigé par les PR #267 (e3f67017) et #277 (a218a613) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1126,7 +1126,7 @@ core/src/test/java/com/nexus/security/SafeFileIOTest.java:54-55 « Assumptions.a
 
 - **Axe** : Tests · **Effort** : S · **Sprint** : S12 · Durcir les gates ajoutés
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Corrigé par les PR #347 et #353 · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — Planchers security 87/82 = int(min mesure)-2, ≤3 pts sous 89,29/84,63 ; table et règle mises à jour. | Test actif : coverage_floors (coverage-floors=PASS) Réserve : Réserve d'origine inchangée.
+- **Statut** : Fermé avec réserve · **Changement** : Corrigé par les PR #347 et #353 · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Réserve d'origine inchangée.
 
 **Preuve**
 
@@ -1142,7 +1142,7 @@ adapters/rest-quarkus/pom.xml:129,134 (com.nexus.api 0.78/0.67) et :149,154 (Nex
 
 - **Axe** : Tests · **Effort** : S · **Sprint** : S7 · Casser le bloc cyclique du cœur
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #342 (merge 0d64e56b) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #342 (merge 0d64e56b) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1158,7 +1158,7 @@ ProjectIndexingService.java:253-254 `publication.commitDerivedIndexes(); publica
 
 - **Axe** : Tests, Architecture · **Effort** : S · **Sprint** : S12 · Durcir les gates ajoutés
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #353 · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — ci.yml:270-295 job archgate intact (check --base HEAD) ; .archgate/config.json baseBranch origin/main (plus origin/develop). | Test actif : job Archgate ADR rules (ci.yml) Réserve : GEN-0057 point 1 cite encore origin/develop (annoté :93).
+- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #353 · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : GEN-0057 point 1 cite encore origin/develop (annoté :93).
 
 **Preuve**
 
@@ -1174,7 +1174,7 @@ grep -rn archgate .github → 0 résultat ; exécution prévue seulement en loca
 
 - **Axe** : Tests, Performance · **Effort** : S · **Sprint** : S14 · Suites de la vérification du 11 novembre
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Plafond absolu de 1M à 48 906 ms (40 755 × 1,20) dans verify-scale-budgets.py : min(48 906, max(40 s, 2,6 × 500k)), rapport général et courbe dédiée, avec ou sans base ; tests du ralentissement uniforme 20 000/52 000 refusé ; scale-regression-benchmark.md énonce la valeur, sous contrat qui la relit dans le script (PR #368, sprint 14). Réserve : valeur à confirmer par le mainteneur ; check Hermetic scale benchmark mesuré sur la PR. · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — verify-scale-budgets.py:66-68 population_hard_ceiling={1M:48_906}, :105-111 ceiling=min(48 906, max(40 000, int(500k×2,6))) appliqué avec ou sans base ; doc scale-regression-benchmark.md:124/:130/:146 cohérente (plus de « inchangés ») ; contrat check_population_hard_ceiling (test-operational-doc-contracts.sh:1024-1060) + auto-test 3 mutations : PASS. | Test actif : scripts/tests/test_scale_budgets.py : 26 tests OK (python3 -m unittest, relancé ici), dont 4 nouveaux sur le plafond dur ; exécuté par scale-benchmark.yml:225 avant verify ; contrat doc PASS. Réserve : Hors PR (release, dispatch) un ralentissement uniforme reste admis jusqu'à 500k=20 s (plafond inchangé, ~+50 % vs 13 s) et 1M=48 906 ms (~+57 % vs ~31 s) ; valeur dérivée d'une seule mesure max (40 755 ms ×1,20) ; sur push main (profil ci) aucun palier 1M. Check « Hermetic scale benchmark » mesuré sur la PR #368 : à confirmer par gh.
+- **Statut** : Fermé avec réserve · **Changement** : Plafond absolu de 1M à 48 906 ms (40 755 × 1,20) dans verify-scale-budgets.py : min(48 906, max(40 s, 2,6 × 500k)), rapport général et courbe dédiée, avec ou sans base ; tests du ralentissement uniforme 20 000/52 000 refusé ; scale-regression-benchmark.md énonce la valeur, sous contrat qui la relit dans le script (PR #368, sprint 14). Réserve : valeur à confirmer par le mainteneur ; check Hermetic scale benchmark mesuré sur la PR. · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Hors PR (release, dispatch) un ralentissement uniforme reste admis jusqu'à 500k=20 s (plafond inchangé, ~+50 % vs 13 s) et 1M=48 906 ms (~+57 % vs ~31 s) ; valeur dérivée d'une seule mesure max (40 755 ms ×1,20) ; sur push main (profil ci) aucun palier 1M. Check « Hermetic scale benchmark » mesuré sur la PR #368 : à confirmer par gh.
 
 **Preuve**
 
@@ -1190,7 +1190,7 @@ scripts/verify-scale-budgets.py:60-62 et :98-100 `ceiling = max(ceiling, int(sql
 
 - **Axe** : Performance · **Effort** : M · **Sprint** : S6 · Fédération et runtimes longue durée
 - **Dépend de** : `AUD-QUA-10` · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : La recherche et le contexte fédérés démarrent une échéance globale (FederationDeadlinePolicy, 60 s par défaut, NEXUS_FEDERATION_DEADLINE_SECONDS borné à 1-600 s) vérifiée avant chaque projet sans parallélisme, plafonnent le délai d'embedding par le temps restant et nomment les projets non commencés dans unservedProjects à parité CLI, REST et MCP ; décision BE-0064, consolidée depuis dans BE-0081 (sprint 6, tâches 3.1 à 3.3, PR #299) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé avec réserve · **Changement** : La recherche et le contexte fédérés démarrent une échéance globale (FederationDeadlinePolicy, 60 s par défaut, NEXUS_FEDERATION_DEADLINE_SECONDS borné à 1-600 s) vérifiée avant chaque projet sans parallélisme, plafonnent le délai d'embedding par le temps restant et nomment les projets non commencés dans unservedProjects à parité CLI, REST et MCP ; décision BE-0064, consolidée depuis dans BE-0081 (sprint 6, tâches 3.1 à 3.3, PR #299) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1206,7 +1206,7 @@ core/src/main/java/com/nexus/search/FederatedSearchService.java:56-66 boucle `fo
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S6 · Fédération et runtimes longue durée
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : La capacité du cache de contexte Git est alignée sur FederatedScopePolicy.MAX_PROJECTS (100) et ses compteurs CacheStats sont exposés sous gitContextCache dans les métadonnées explain, mono-projet et fédéré ; le workflow git-context-cache-qualification vérifie un scope de plus de 16 projets sans éviction ; décision BE-0065, consolidée depuis dans BE-0070 (sprint 6, tâches 5.1 à 5.3, PR #299) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : La capacité du cache de contexte Git est alignée sur FederatedScopePolicy.MAX_PROJECTS (100) et ses compteurs CacheStats sont exposés sous gitContextCache dans les métadonnées explain, mono-projet et fédéré ; le workflow git-context-cache-qualification vérifie un scope de plus de 16 projets sans éviction ; décision BE-0065, consolidée depuis dans BE-0070 (sprint 6, tâches 5.1 à 5.3, PR #299) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1222,7 +1222,7 @@ core/src/main/java/com/nexus/context/source/git/PersistentGitContextSourceProvid
 
 - **Axe** : Performance · **Effort** : M · **Sprint** : S5 · Indexation et écriture SQLite
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Le benchmark scanner rapporte la part du hachage au scan initial et au scan final ; la mesure montre que le coût vient de l'ouverture du fichier et non du SHA-256, et le design D3 décide de ne pas introduire de raccourci taille/date, DATA-0023 restant inchangé (PR #297, sprint 5, tâches 3.1 et 3.2) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé avec réserve · **Changement** : Le benchmark scanner rapporte la part du hachage au scan initial et au scan final ; la mesure montre que le coût vient de l'ouverture du fichier et non du SHA-256, et le design D3 décide de ne pas introduire de raccourci taille/date, DATA-0023 restant inchangé (PR #297, sprint 5, tâches 3.1 et 3.2) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1238,7 +1238,7 @@ core/src/main/java/com/nexus/index/scan/ProjectScanner.java:158 `FileHasher.sha2
 
 - **Axe** : Performance · **Effort** : M · **Sprint** : S6 · Fédération et runtimes longue durée
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : La migration V015 remplace le préfiltre fuzzy global par idx_symbols_file_fuzzy_prefilter (file_id en tête, sondé depuis les fichiers du projet) et SymbolSearchStrategy interroge tous les termes en lot (une requête SQL par famille) ; le MATCH FTS trigram reste global par décision mesurée et documentée, la restriction par rowid IN étant 10 à 300 fois plus lente (sprint 6, tâches 7.1 et 7.2, PR #299) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé avec réserve · **Changement** : La migration V015 remplace le préfiltre fuzzy global par idx_symbols_file_fuzzy_prefilter (file_id en tête, sondé depuis les fichiers du projet) et SymbolSearchStrategy interroge tous les termes en lot (une requête SQL par famille) ; le MATCH FTS trigram reste global par décision mesurée et documentée, la restriction par rowid IN étant 10 à 300 fois plus lente (sprint 6, tâches 7.1 et 7.2, PR #299) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1254,7 +1254,7 @@ V008__indexed_substring_search.sql:20-21 `idx_symbols_fuzzy_prefilter ON symbols
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S11 · Finitions documentaires et micro-optimisations
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : ADR DATA-0088 (Proposed) consigne le journal rollback, les mesures DELETE/WAL et la condition de réévaluation ; scale-regression-results.md et scale-regression-benchmark.md y renvoient ; SqliteDatabaseHardeningTest.keepsTheRollbackJournalOnEveryConnection fixe PRAGMA journal_mode = delete (sprint 11, tâches 4.1 et 4.2) · **Vérification du 2026-11-12** (`244ab1d3`) : Tient (fichier cité modifié, correction intacte) — Aucun fichier cité modifié ; DATA-0088 et SqliteDatabaseHardeningTest toujours cités (contrat doc PASS) ; mention develop sans effet. | Test actif : SqliteDatabaseHardeningTest Réserve : Réserve d'origine inchangée.
+- **Statut** : Fermé avec réserve · **Changement** : ADR DATA-0088 (Proposed) consigne le journal rollback, les mesures DELETE/WAL et la condition de réévaluation ; scale-regression-results.md et scale-regression-benchmark.md y renvoient ; SqliteDatabaseHardeningTest.keepsTheRollbackJournalOnEveryConnection fixe PRAGMA journal_mode = delete (sprint 11, tâches 4.1 et 4.2) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Réserve d'origine inchangée.
 
 **Preuve**
 
@@ -1270,7 +1270,7 @@ core/src/main/java/com/nexus/persistence/sqlite/SqliteDatabase.java:100-110 (auc
 
 - **Axe** : Performance · **Effort** : M · **Sprint** : S5 · Indexation et écriture SQLite
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Une session d'écriture par indexation garde un seul IndexWriter lexical et un seul sémantique, alimentés à chaque lot, committés une fois à la barrière de publication et annulés si l'indexation échoue (PR #297, sprint 5, tâche 4.1) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Une session d'écriture par indexation garde un seul IndexWriter lexical et un seul sémantique, alimentés à chaque lot, committés une fois à la barrière de publication et annulés si l'indexation échoue (PR #297, sprint 5, tâche 4.1) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1286,7 +1286,7 @@ core/src/main/java/com/nexus/search/lucene/LuceneSearchIndex.java:96-108 `applyC
 
 - **Axe** : Performance · **Effort** : M · **Sprint** : S5 · Indexation et écriture SQLite
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Les analyses des fichiers modifiés sont mises en attente dans les tables index_staged_* (V014) par courtes transactions au rythme des flushs, puis appliquées et publiées avec la génération en une transaction finale (PR #297, sprint 5, tâches 2.1 et 2.2, DATA-0074) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé avec réserve · **Changement** : Les analyses des fichiers modifiés sont mises en attente dans les tables index_staged_* (V014) par courtes transactions au rythme des flushs, puis appliquées et publiées avec la génération en une transaction finale (PR #297, sprint 5, tâches 2.1 et 2.2, DATA-0074) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1302,7 +1302,7 @@ core/src/main/java/com/nexus/index/IndexDocumentPublisher.java:24 `List<IndexedF
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S11 · Finitions documentaires et micro-optimisations
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Corrigé au sprint 11 (tâches 6.1, 6.2) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Corrigé au sprint 11 (tâches 6.1, 6.2) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1318,7 +1318,7 @@ core/src/main/java/com/nexus/context/BudgetedContextSelector.java:135-147 : `for
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S5 · Indexation et écriture SQLite
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : SqliteFileWriter prépare l'upsert et les deux DELETE une fois par transaction, obtient l'identifiant par RETURNING id sans relecture, et SqliteBatchInsert met en cache l'instruction de fin de lot par taille (PR #297, sprint 5, tâche 5.1) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : SqliteFileWriter prépare l'upsert et les deux DELETE une fois par transaction, obtient l'identifiant par RETURNING id sans relecture, et SqliteBatchInsert met en cache l'instruction de fin de lot par taille (PR #297, sprint 5, tâche 5.1) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1334,7 +1334,7 @@ core/src/main/java/com/nexus/persistence/sqlite/SqliteFileWriter.java:58-92 (INS
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S5 · Indexation et écriture SQLite
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : La migration V013 supprime idx_symbol_relations_project, idx_indexed_files_project et idx_symbols_file après vérification par EXPLAIN QUERY PLAN qu'un index plus large sert chaque requête (PR #297, sprint 5, tâches 6.1 et 6.2) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : La migration V013 supprime idx_symbol_relations_project, idx_indexed_files_project et idx_symbols_file après vérification par EXPLAIN QUERY PLAN qu'un index plus large sert chaque requête (PR #297, sprint 5, tâches 6.1 et 6.2) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1350,7 +1350,7 @@ V001__initial_schema.sql:79-80 `idx_symbol_relations_project ON symbol_relations
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S11 · Finitions documentaires et micro-optimisations
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Branche claude/s11-graphe-01c9d0 (90408ac9) : OUTGOING_GRAPH_SQL paginée par clé (source_ref, target_ref) > (?, ?), sans OFFSET ; reprise après le dernier couple lu · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé avec réserve · **Changement** : Branche claude/s11-graphe-01c9d0 (90408ac9) : OUTGOING_GRAPH_SQL paginée par clé (source_ref, target_ref) > (?, ?), sans OFFSET ; reprise après le dernier couple lu · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1366,7 +1366,7 @@ core/src/main/java/com/nexus/persistence/sqlite/SqliteGraphQueries.java:20 `LIMI
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S11 · Finitions documentaires et micro-optimisations
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Corrigé au sprint 11 (tâches 8.1, 8.2) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Corrigé au sprint 11 (tâches 8.1, 8.2) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1382,7 +1382,7 @@ core/src/main/java/com/nexus/paths/RepositoryPath.java:42 `slashPath.matches("^[
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : S4 · Une seule sortie publique, redaction complétée
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé — SemanticIndexingService : seul CONTENT_PROFILE_VERSION 7→8 ; redaction unique par document intacte. | Test actif : SemanticIndexingServiceTest (assert content-v8)
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #284 (050af1e4) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1398,7 +1398,7 @@ core/src/main/java/com/nexus/search/semantic/SemanticIndexingService.java:202 et
 
 - **Axe** : Performance, Tests · **Effort** : S · **Sprint** : S6 · Fédération et runtimes longue durée
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Corrigé par la PR #344 (merge 59ea02fa) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #344 (merge 59ea02fa) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1414,7 +1414,7 @@ IndexRepository.java:55 `void applyChanges(...)` et :63 openWriteSession ; Sqlit
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S9 · Chaîne de release exécutable
 - **Dépend de** : aucun · **Débloque** : `AUD-DEP-02`
-- **Statut** : Fermé avec réserve · **Changement** : Fermé par #304 (tâche 3.2) : le job publish déclare environment: release ; le mainteneur a créé l'environnement release (reviewer requis, déploiement limité aux tags v*, sans secret) et le ruleset de tags « Protect tags » sur refs/tags/v* (tâches manuelles 3.1 et 3.3) · **Vérification du 2026-11-12** (`244ab1d3`) : Tient (fichier cité modifié, correction intacte) — release.yml identique à 1111 : publish garde environment: release (:169) et needs des 13 gates ; préflight GHCR (:308) intact. Environnement/ruleset : à relire par gh. | Test actif : contrats release (final-audit PASS) Réserve : Réserve d'origine (réglages GitHub externes).
+- **Statut** : Fermé avec réserve · **Changement** : Fermé par #304 (tâche 3.2) : le job publish déclare environment: release ; le mainteneur a créé l'environnement release (reviewer requis, déploiement limité aux tags v*, sans secret) et le ruleset de tags « Protect tags » sur refs/tags/v* (tâches manuelles 3.1 et 3.3) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Réserve d'origine (réglages GitHub externes).
 
 **Preuve**
 
@@ -1430,7 +1430,7 @@ IndexRepository.java:55 `void applyChanges(...)` et :63 openWriteSession ; Sqlit
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S10 · Conteneur et gouvernance du dépôt
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : COPY sans --chown vers /opt/nexus et /usr/local/bin, chmod 0644/0755, chown limité à /data/nexus et /workspace dans les deux Dockerfiles ; refus d'un --chown au contrat test-operational-doc-contracts.sh (sprint 10) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : COPY sans --chown vers /opt/nexus et /usr/local/bin, chmod 0644/0755, chown limité à /data/nexus et /workspace dans les deux Dockerfiles ; refus d'un --chown au contrat test-operational-doc-contracts.sh (sprint 10) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1446,7 +1446,7 @@ packaging/docker/Dockerfile:19-20 `chown -R 10001:10001 /opt/nexus …` ; :26-27
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S9 · Chaîne de release exécutable
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Fermé par #304 (tâche 5.1) : le pom racine fixe project.build.outputTimestamp et la procédure de release prescrit sa mise à jour à chaque version · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — pom.xml:36 outputTimestamp 2026-11-11T00:00:00Z, mis à jour avec 0.2.1. | Test actif : procédure release-and-recovery.md Réserve : Réserve d'origine inchangée.
+- **Statut** : Fermé avec réserve · **Changement** : Fermé par #304 (tâche 5.1) : le pom racine fixe project.build.outputTimestamp et la procédure de release prescrit sa mise à jour à chaque version · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Réserve d'origine inchangée.
 
 **Preuve**
 
@@ -1462,7 +1462,7 @@ grep -rn outputTimestamp --include=pom.xml . → aucun résultat (pom.xml racine
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S9 · Chaîne de release exécutable
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Fermé par #304 (tâches 6.1 et 6.2) : les plugins clean, resources, jar, install et deploy sont épinglés en pluginManagement ; l'enforcer ajoute requirePluginVersions et requireUpperBoundDeps et exige Maven [3.10.0,) · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé — pom.xml : requirePluginVersions (:315-320), requireUpperBoundDeps (:321-333) intacts ; diff = version/jackson. | Test actif : maven-enforcer (build)
+- **Statut** : Fermé · **Changement** : Fermé par #304 (tâches 6.1 et 6.2) : les plugins clean, resources, jar, install et deploy sont épinglés en pluginManagement ; l'enforcer ajoute requirePluginVersions et requireUpperBoundDeps et exige Maven [3.10.0,) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1478,7 +1478,7 @@ pom.xml:257-265 règles = requireJavaVersion [21,), requireMavenVersion [3.9.0,)
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S9 · Chaîne de release exécutable
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Fermé par #304 (tâches 7.1 et 7.2) : l'exécution aggregate-third-party-notices applique une liste blanche includedLicenses avec failOnBlacklist=true et normalise les libellés par licenseMerges ; le contrat final exige ces réglages · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé — pom.xml : failOnBlacklist (:359) + includedLicenses (:360) intacts. | Test actif : aggregate-add-third-party (build)
+- **Statut** : Fermé · **Changement** : Fermé par #304 (tâches 7.1 et 7.2) : l'exécution aggregate-third-party-notices applique une liste blanche includedLicenses avec failOnBlacklist=true et normalise les libellés par licenseMerges ; le contrat final exige ces réglages · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1494,7 +1494,7 @@ pom.xml:282-292 : aggregate-add-third-party avec `failOnMissing=true`, sans incl
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S10 · Conteneur et gouvernance du dépôt
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : LICENSE et THIRD_PARTY_NOTICES.txt copiés dans /opt/nexus/ par les deux Dockerfiles ; labels org.opencontainers.image.{source,licenses,revision,version}, revision et version passés en --build-arg par docker-distribution.yml (sprint 10) · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé — pom.xml : seule la version ; Dockerfiles non modifiés. | Test actif : test-operational-doc-contracts.sh ; test-docker-runtime.ps1
+- **Statut** : Fermé · **Changement** : LICENSE et THIRD_PARTY_NOTICES.txt copiés dans /opt/nexus/ par les deux Dockerfiles ; labels org.opencontainers.image.{source,licenses,revision,version}, revision et version passés en --build-arg par docker-distribution.yml (sprint 10) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1510,7 +1510,7 @@ packaging/docker/Dockerfile:22-27 et Dockerfile.runtime:10-15 : seuls JAR, quark
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S9 · Chaîne de release exécutable
 - **Dépend de** : aucun · **Débloque** : `AUD-DEP-02`
-- **Statut** : Fermé · **Changement** : Fermé par #304 (tâches 4.1 et 4.2) : le job publish atteste par subject-path le ZIP et le setup.exe Windows, vérifie chaque attestation par gh attestation verify avant l'upload, et la documentation décrit la vérification consommateur · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Fermé par #304 (tâches 4.1 et 4.2) : le job publish atteste par subject-path le ZIP et le setup.exe Windows, vérifie chaque attestation par gh attestation verify avant l'upload, et la documentation décrit la vérification consommateur · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1526,7 +1526,7 @@ packaging/docker/Dockerfile:22-27 et Dockerfile.runtime:10-15 : seuls JAR, quark
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S2 · Outillage des scripts et des workflows
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — osv-scanner.yml:70 upload-artifact@cf430e03… # v7.0.2 inchangé ; diff = develop retiré des triggers PR/push (main gardé). | Test actif : workflow_hygiene pins + action-pin-upstream.yml (PR main + cron hebdo) Réserve : Réserve d'origine inchangée.
+- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Réserve d'origine inchangée.
 
 **Preuve**
 
@@ -1542,7 +1542,7 @@ packaging/docker/Dockerfile:22-27 et Dockerfile.runtime:10-15 : seuls JAR, quark
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S2 · Outillage des scripts et des workflows
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1558,7 +1558,7 @@ grep -ho 'uses: …# …' .github/workflows/*.yml | uniq -c → `11 actions/chec
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S2 · Outillage des scripts et des workflows
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé — osv-scanner.yml:28 et :80 @b1d267ae… # v2.7.0 inchangés ; triggers PR/push main + schedule. | Test actif : workflow_hygiene pins/upstream PASS
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1574,7 +1574,7 @@ grep -ho 'uses: …# …' .github/workflows/*.yml | uniq -c → `11 actions/chec
 
 - **Axe** : Dépendances, Tests · **Effort** : S · **Sprint** : S1 · Remettre les mesures d'aplomb
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : PR #265 (4aa90dfa) et #278 (4024c874) ; « Hermetic scale benchmark » ajouté au ruleset par le mainteneur · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé — main-push-scale-benchmark.yml paths = WATCHED_PATHS de scale-benchmark.yml (18 entrées identiques, vérifié) ; push main + PR main ; scale-benchmark.yml sur toute PR main (sans filtre) ; ruleset requis à revérifier. | Test actif : test-operational-doc-contracts.sh (égalité des listes) PASS ; test_scale_budgets.py 26 OK
+- **Statut** : Fermé · **Changement** : PR #265 (4aa90dfa) et #278 (4024c874) ; « Hermetic scale benchmark » ajouté au ruleset par le mainteneur · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1590,7 +1590,7 @@ scale-benchmark.yml:15-31 (PR) inclut application/**, index/**, project/**, conf
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S2 · Outillage des scripts et des workflows
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1606,7 +1606,7 @@ Analyse YAML : ci.yml windows-gate/linux-reactor, codeql.yml analyze, release.ym
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S10 · Conteneur et gouvernance du dépôt
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Documentation de la méthode merge commit seule (docs/developer/branch-governance.md, skill nexus-pr-workflow) et assertion du contrat documentaire (sprint 10, tâche 5.1) ; restriction du ruleset 20503835 et désactivation de squash/rebase à faire par le mainteneur (tâche 5.2) ; réglages GitHub appliqués par le mainteneur (sprint 10, tâches 5.2 et 5.4) · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé — Skill nexus-pr-workflow:13 merge commit seul, exact-head, ruleset allowed_merge_methods=["merge"] ; relevé 2026-11-12 : ruleset 20503835 « Protect main » merge=["merge"], squash/rebase false. | Test actif : test-operational-doc-contracts.sh PASS
+- **Statut** : Fermé · **Changement** : Documentation de la méthode merge commit seule (docs/developer/branch-governance.md, skill nexus-pr-workflow) et assertion du contrat documentaire (sprint 10, tâche 5.1) ; restriction du ruleset 20503835 et désactivation de squash/rebase à faire par le mainteneur (tâche 5.2) ; réglages GitHub appliqués par le mainteneur (sprint 10, tâches 5.2 et 5.4) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1622,7 +1622,7 @@ gh api repos/FTurleque/nexus-context-engine/rulesets/20503835 (17/10/2026) : pul
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S10 · Conteneur et gouvernance du dépôt
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : SECURITY.md complété (signalement privé GitHub, aucune issue publique, versions prises en charge, délai de réponse) et .github/CODEOWNERS créé, vérifiés par le contrat documentaire (sprint 10, tâche 5.3) ; activation du signalement privé à faire par le mainteneur (tâche 5.4) ; réglages GitHub appliqués par le mainteneur (sprint 10, tâches 5.2 et 5.4) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé avec réserve · **Changement** : SECURITY.md complété (signalement privé GitHub, aucune issue publique, versions prises en charge, délai de réponse) et .github/CODEOWNERS créé, vérifiés par le contrat documentaire (sprint 10, tâche 5.3) ; activation du signalement privé à faire par le mainteneur (tâche 5.4) ; réglages GitHub appliqués par le mainteneur (sprint 10, tâches 5.2 et 5.4) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1638,7 +1638,7 @@ ls .github → dependabot.yml, workflows ; `ls SECURITY.md .github/SECURITY.md` 
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S10 · Conteneur et gouvernance du dépôt
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : HEALTHCHECK sur /usr/local/bin/nexus-healthcheck dans les deux Dockerfiles ; compose : read_only: true, tmpfs /tmp:exec, cap_drop: [ALL], security_opt: [no-new-privileges:true] ; smoke Compose durci ajouté au workflow Docker distribution (sprint 10) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : HEALTHCHECK sur /usr/local/bin/nexus-healthcheck dans les deux Dockerfiles ; compose : read_only: true, tmpfs /tmp:exec, cap_drop: [ALL], security_opt: [no-new-privileges:true] ; smoke Compose durci ajouté au workflow Docker distribution (sprint 10) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1654,7 +1654,7 @@ packaging/docker/Dockerfile:1-55 sans HEALTHCHECK (sonde seulement dans docker-c
 
 - **Axe** : Dépendances · **Effort** : M · **Sprint** : S2 · Outillage des scripts et des workflows
 - **Dépend de** : aucun · **Débloque** : `AUD-PRF-02`
-- **Statut** : Fermé · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1670,7 +1670,7 @@ WebFetch …/actions/workflows/semantic-search-qualification.yml → runs #40-#6
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S1 · Remettre les mesures d'aplomb
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #266 (89a37f0b) · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — ci.yml:36 Windows gate Temurin '21.0.12+101.0.LTS', codeql.yml:52 idem ; diff = triggers develop retirés, main conservé. | Test actif : workflow_hygiene pins PASS Réserve : Réserve d'origine inchangée.
+- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #266 (89a37f0b) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Réserve d'origine inchangée.
 
 **Preuve**
 
@@ -1686,7 +1686,7 @@ WebFetch …/actions/workflows/semantic-search-qualification.yml → runs #40-#6
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S9 · Chaîne de release exécutable
 - **Dépend de** : aucun · **Débloque** : `AUD-DEP-02`
-- **Statut** : Fermé · **Changement** : Fermé par #304 (tâches 1.1 et 1.2) : release.yml n'utilise plus secrets: inherit et appelle le job Windows avec require_authenticode: false sans transmettre aucun secret ; le contrat final refuse secrets: inherit dans .github/workflows · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé · **Changement** : Fermé par #304 (tâches 1.1 et 1.2) : release.yml n'utilise plus secrets: inherit et appelle le job Windows avec require_authenticode: false sans transmettre aucun secret ; le contrat final refuse secrets: inherit dans .github/workflows · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1702,7 +1702,7 @@ WebFetch …/actions/workflows/semantic-search-qualification.yml → runs #40-#6
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S2 · Outillage des scripts et des workflows
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-11-12** (`244ab1d3`) : Inchangé — Aucun fichier cité modifié entre 510ff8ca et 244ab1d3 (git diff --name-only, 193 fichiers hors archives OpenSpec).
+- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #281 (85c08184) · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1718,7 +1718,7 @@ grep -ho 'runs-on: .*' → 13 ubuntu-latest, 4 windows-latest, 3 matrices sur *-
 
 - **Axe** : Dépendances, Qualité · **Effort** : S · **Sprint** : S10 · Conteneur et gouvernance du dépôt
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : Symptôme fermé par #269 (documentation alignée sur Quarkus 3.40.1.1 et le SDK MCP 2.1.0) ; cause fermée par la PR du lot 6 du sprint 10 : la documentation courante nomme les propriétés quarkus.platform.version et mcp.sdk.version, le contrat documentaire les lit dans pom.xml et refuse les littéraux de version · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé — README dev : version 0.2.1 (bloc), Quarkus/MCP toujours par propriétés ; contrat lit le pom et refuse les littéraux : PASS. | Test actif : test-operational-doc-contracts.sh
+- **Statut** : Fermé · **Changement** : Symptôme fermé par #269 (documentation alignée sur Quarkus 3.40.1.1 et le SDK MCP 2.1.0) ; cause fermée par la PR du lot 6 du sprint 10 : la documentation courante nomme les propriétés quarkus.platform.version et mcp.sdk.version, le contrat documentaire les lit dans pom.xml et refuse les littéraux de version · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1734,7 +1734,7 @@ gh pr checks 262 : « Linux reactor Maven build » FAILURE (run 40405755776, 26/
 
 - **Axe** : Dépendances, Sécurité · **Effort** : S · **Sprint** : S12 · Durcir les gates ajoutés
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #353 · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — workflow_hygiene.py : formes ajoutées (clé espacée, clé de job mal indentée), lignes de bloc run:/script: exclues de forms ; fixtures négatives ajoutées. | Test actif : test-tool-integrity-anchors.sh : workflow-hygiene-forms/pins PASS Réserve : Nouveau faux positif : SPACED_KEY lit aussi le texte des scalaires bloc hors run:/script: (voir nouveaux).
+- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #353 · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Nouveau faux positif : SPACED_KEY lit aussi le texte des scalaires bloc hors run:/script: (voir nouveaux).
 
 **Preuve**
 
@@ -1750,7 +1750,7 @@ scripts/release/workflow_hygiene.py:28 et :114-128 (run: inline ou bloc |/> seul
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S12 · Durcir les gates ajoutés
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #353 · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — action-pin-upstream.yml : PR main (paths) + cron hebdo + dispatch ; upstream inchangé. | Test actif : action-pin-upstream.yml (réseau, non relancé) Réserve : Réserve d'origine inchangée.
+- **Statut** : Fermé avec réserve · **Changement** : Corrigé par la PR #353 · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Réserve d'origine inchangée.
 
 **Preuve**
 
@@ -1766,7 +1766,7 @@ scripts/release/workflow_hygiene.py:88-111 ; scripts/release/test-tool-integrity
 
 - **Axe** : Dépendances, Sécurité · **Effort** : S · **Sprint** : S13 · Installateur et release finale
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé · **Changement** : docs/user/docker-installation.md attribue la publication GHCR à release.yml ; contrat test-operational-doc-contracts.sh : aucune publication dans les workflows de distribution, packages: write réservé à release.yml (PR #354, tâche 4.1). Tâches mainteneur 4.2 (état du registre avant la promotion de main) et 4.3 (provenance après la release finale) ouvertes. · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé — docker-distribution.yml : PR/push main (paths), dispatch, workflow_call ; contents: read, aucun login/push GHCR, seulement upload-artifact ; packages: write et docker push uniquement dans release.yml (:306, :335) ; contrat ghcr-publication PASS. | Test actif : test-operational-doc-contracts.sh (ghcr-publication-contracts=PASS)
+- **Statut** : Fermé · **Changement** : docs/user/docker-installation.md attribue la publication GHCR à release.yml ; contrat test-operational-doc-contracts.sh : aucune publication dans les workflows de distribution, packages: write réservé à release.yml (PR #354, tâche 4.1). Tâches mainteneur 4.2 (état du registre avant la promotion de main) et 4.3 (provenance après la release finale) ouvertes. · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1782,7 +1782,7 @@ docs/project/history/release-rehearsal-0.2.0-rc.2-2026-11-08.md:46 « ghcr.io/ft
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : S13 · Installateur et release finale
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : Compose généré et repli docker build passent NEXUS_IMAGE_VERSION et NEXUS_IMAGE_REVISION écrits dans .env par l'installateur ; label revision « unknown » sans révision, l'image de base UBI portant son propre label (PR #354, sprint 13). · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — compose template :12-13 build.args NEXUS_IMAGE_VERSION/REVISION intacts ; image par défaut 0.2.1. | Test actif : test-operational-doc-contracts.sh Réserve : Réserve d'origine inchangée.
+- **Statut** : Fermé avec réserve · **Changement** : Compose généré et repli docker build passent NEXUS_IMAGE_VERSION et NEXUS_IMAGE_REVISION écrits dans .env par l'installateur ; label revision « unknown » sans révision, l'image de base UBI portant son propre label (PR #354, sprint 13). · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Réserve d'origine inchangée.
 
 **Preuve**
 
@@ -1798,7 +1798,7 @@ packaging/docker/Dockerfile.runtime:7-8 (ARG NEXUS_IMAGE_REVISION="" / NEXUS_IMA
 
 - **Axe** : Dépendances, Sécurité · **Effort** : S · **Sprint** : S14 · Suites de la vérification du 11 novembre
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : workflow_hygiene.py : forms refuse une clé suivie d'espaces avant « : » hors du texte des blocs run:/script: (SPACED_KEY) ; jobs_of lit les clés de job à l'indentation de la première clé du job et marque une clé désalignée, refusée par forms (PR #367, sprint 14). · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — workflow_hygiene.py forms/inputs/timeouts sur fixtures : `- run : echo ${{ inputs.profile }}` → 1/1/1 ; `runs-on : …` → 1/1/1 ; job indenté de 4 sans timeout → timeouts=1 « job 'deep' has runs-on but no timeout-minutes » ; `"runs-on" :`, `"run" :` → quoted key ; `runs-on<TAB>:`, `jobs :`, ancres, flux rejetés ; `"b" :` rejeté (message trompeur). Injectés dans .github/workflows de la copie : test-operational-doc-contracts.sh rc=1, test-tool-integrity-anchors.sh rc=1 (forms seul, attendu). Restent rc=0 : job cité `"b":`/`'b':` sans timeout et `? runs-on` (documentés :447), expression ${{ … }} coupée sur deux lignes d'un bloc run: | (inputs rc=0). | Test actif : Oui : ci.yml:117-124 exécute test-tool-integrity-anchors.sh (pins+forms) et test-operational-doc-contracts.sh (forms, inputs, timeouts, runners + fixtures négatives). Réserve : Identifiant de job cité et clé complexe documentés ; nouveau : `echo ${{` / `inputs.profile }}` sur deux lignes d'un bloc run: n'est pas vu par inputs (EXPRESSION lue ligne par ligne, workflow_hygiene.py:52) — acceptation par GitHub non vérifiée par un run.
+- **Statut** : Fermé avec réserve · **Changement** : workflow_hygiene.py : forms refuse une clé suivie d'espaces avant « : » hors du texte des blocs run:/script: (SPACED_KEY) ; jobs_of lit les clés de job à l'indentation de la première clé du job et marque une clé désalignée, refusée par forms (PR #367, sprint 14). · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : Identifiant de job cité et clé complexe documentés ; nouveau : `echo ${{` / `inputs.profile }}` sur deux lignes d'un bloc run: n'est pas vu par inputs (EXPRESSION lue ligne par ligne, workflow_hygiene.py:52) — acceptation par GitHub non vérifiée par un run.
 
 **Preuve**
 
@@ -1814,7 +1814,7 @@ scripts/release/workflow_hygiene.py:44 RUN exige `run:` collé, :58 KEY idem, :2
 
 - **Axe** : Dépendances, Sécurité · **Effort** : S · **Sprint** : S14 · Suites de la vérification du 11 novembre
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Fermé avec réserve · **Changement** : publish-github-release-assets.sh sort en code 79 si la release publiée n'est pas immuable, avant latest ; procédure « Reprise d'une release échouée » dans release-and-recovery.md, sous contrat refusant les commandes de suppression ou de forçage de tag v* dans docs/developer/ ; SEC-0068 complété (création réservée au mainteneur, mise à jour et suppression interdites à tous, releases immuables) ; relevé daté du 2026-11-11 (PR #368, sprint 14). Réserve : tâches mainteneur 2.1 (releases immuables) et 2.2 (deux rulesets de tags) ouvertes ; v0.2.0 reste non immuable. · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé avec réserve — Relevé gh du 12/11 (lecture seule, ta machine) : immutable-releases enabled:true ; ruleset 27049344 « Immutable version tags » (refs/tags/v*) : deletion, non_fast_forward, update, aucun contournement ; ruleset 26777159 « Protect tags » réduit à creation, admin en contournement always ; releases v0.2.1-rc.1 et v0.2.1 immutable:true (runs release.yml 43080652705 et 43092786728, 1re tentative), tags GHCR 0.2.1 et latest sur sha-9b188ab9, attestation release.yml@refs/tags/v0.2.1. Code : publish-github-release-assets.sh sort en 79 si la release publiée n'est pas immuable, avant la pose de latest GHCR ; procédure de reprise sous contrat (release-and-recovery.md). Réserve : v0.2.0 reste non immuable (on ne peut pas le rattraper). Le réglage n'est pas imposé par le propriétaire (enforced_by_owner:false). La création de tag v* reste ouverte à l'admin en contournement. Le contrôle 79 arrive après la publication : une version finale recevrait déjà le badge Latest GitHub (AUD-DEP-38). La regex du contrat anti-tag ignore le drapeau placé après le tag et l'API PATCH (Info).
+- **Statut** : Fermé avec réserve · **Changement** : publish-github-release-assets.sh sort en code 79 si la release publiée n'est pas immuable, avant latest ; procédure « Reprise d'une release échouée » dans release-and-recovery.md, sous contrat refusant les commandes de suppression ou de forçage de tag v* dans docs/developer/ ; SEC-0068 complété (création réservée au mainteneur, mise à jour et suppression interdites à tous, releases immuables) ; relevé daté du 2026-11-11 (PR #368, sprint 14). Réserve : tâches mainteneur 2.1 (releases immuables) et 2.2 (deux rulesets de tags) ouvertes ; v0.2.0 reste non immuable. · **Vérification du 2026-11-14** (`8a50fc47`) : Inchangé — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit. Réserve : v0.2.0 reste non immuable (on ne peut pas le rattraper). Le réglage n'est pas imposé par le propriétaire (enforced_by_owner:false). La création de tag v* reste ouverte à l'admin en contournement. Le contrôle 79 arrive après la publication : une version finale recevrait déjà le badge Latest GitHub (AUD-DEP-38). La regex du contrat anti-tag ignore le drapeau placé après le tag et l'API PATCH (Info).
 
 **Preuve**
 
@@ -1830,7 +1830,7 @@ gh api …/releases/tags/v0.2.0 → immutable: false. Ruleset « Protect tags »
 
 - **Axe** : Dépendances, Sécurité · **Effort** : S · **Sprint** : S15 · Suites de la vérification du 12 novembre
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Ouvert · **Changement** : Nouveau · **Vérification du 2026-11-12** (`244ab1d3`) : Nouveau constat — Relevé à la vérification du 12/11.
+- **Statut** : Ouvert · **Changement** : Nouveau · **Vérification du 2026-11-14** (`8a50fc47`) : Ouvert — change proposé — openspec/changes/sprint-15-release-latest-apres-immuable proposé (PR #386, décisions du mainteneur intégrées par #387) : --latest=false à la publication, badge posé après le contrôle 79, relecture et code 80. 0 tâche cochée sur 7, aucun fichier de code modifié depuis 244ab1d3 (git diff --name-only sur core, adapters, scripts, packaging, .github, pom.xml, config : vide). Conception relue, sans désaccord.
 
 **Preuve**
 
@@ -1850,7 +1850,7 @@ Constats sans action : ils documentent ce qui tient. Ne pas les « corriger » ;
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1866,7 +1866,7 @@ Commande : `grep -rn 'jakarta|quarkus|springframework' core/src/main` → 0 ; im
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1882,7 +1882,7 @@ Commande : imports `com.nexus.*` des adapters/*/src/main → `com.nexus.applicat
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1898,7 +1898,7 @@ core/src/main/java/com/nexus/application/NexusApplicationFactory.java:73-163 (co
 
 - **Axe** : Architecture · **Effort** : S · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1914,7 +1914,7 @@ Commande : `find core/src/main adapters/*/src/main -name '*.java' | xargs wc -l 
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1930,7 +1930,7 @@ Script de fenêtres de 8 lignes normalisées sur 243 fichiers / 26 383 lignes ma
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1946,7 +1946,7 @@ Script de fenêtres de 8 lignes normalisées sur 243 fichiers / 26 383 lignes ma
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1962,7 +1962,7 @@ Script de fenêtres de 8 lignes normalisées sur 243 fichiers / 26 383 lignes ma
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1978,7 +1978,7 @@ Recherche de raw types `(List|Map|Set|Optional|Class) x =` → 0 ; Optional en c
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -1994,7 +1994,7 @@ Recherche de raw types `(List|Map|Set|Optional|Class) x =` → 0 ; Optional en c
 
 - **Axe** : Qualité · **Effort** : S<1j · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2010,7 +2010,7 @@ Recherche de raw types `(List|Map|Set|Optional|Class) x =` → 0 ; Optional en c
 
 - **Axe** : Qualité · **Effort** : S · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Nouveau · **Vérification du 2026-11-12** (`244ab1d3`) : Nouveau constat — Relevé à la vérification du 12/11.
+- **Statut** : Info · **Changement** : Nouveau · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2026,7 +2026,7 @@ packaging/windows/nexus-installer.iss.template:1411 'echo Docker Desktop n''est 
 
 - **Axe** : Qualité, Dépendances · **Effort** : S · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Nouveau · **Vérification du 2026-11-12** (`244ab1d3`) : Nouveau constat — Relevé à la vérification du 12/11.
+- **Statut** : Info · **Changement** : Nouveau · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2042,7 +2042,7 @@ scripts/release/workflow_hygiene.py:65 SPACED_KEY, :238-241 (seules les lignes d
 
 - **Axe** : Sécurité · **Effort** : S<1j · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 - **Suivi de l'audit du 14/09** : NXA-20260914-01 : corrigé
 
 **Preuve**
@@ -2059,7 +2059,7 @@ core/src/main/java/com/nexus/security/SecretAssignmentScanner.java:43-73 (clé c
 
 - **Axe** : Sécurité · **Effort** : S<1j · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 - **Suivi de l'audit du 14/09** : NXA-20260914-02 : corrigé
 
 **Preuve**
@@ -2076,7 +2076,7 @@ core/src/main/java/com/nexus/search/semantic/ollama/OllamaEmbeddingProvider.java
 
 - **Axe** : Sécurité · **Effort** : S<1j · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 - **Suivi de l'audit du 14/09** : NXA-20260914-03 : corrigé
 
 **Preuve**
@@ -2093,7 +2093,7 @@ core/src/main/java/com/nexus/config/WindowsStoragePrincipals.java:24-25 `Advapi3
 
 - **Axe** : Sécurité · **Effort** : S<1j · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2109,7 +2109,7 @@ adapters/rest-quarkus/src/main/java/com/nexus/api/NexusRestExposureGuard.java:83
 
 - **Axe** : Sécurité · **Effort** : S<1j · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2125,7 +2125,7 @@ IllegalArgumentExceptionMapper.java:28-37 (message générique « Requête inval
 
 - **Axe** : Sécurité · **Effort** : S<1j · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2141,7 +2141,7 @@ core/src/main/java/com/nexus/persistence/sqlite/SqliteIndexSql.java:56-69 (ftsTr
 
 - **Axe** : Sécurité · **Effort** : S<1j · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2157,7 +2157,7 @@ grep `Files.read*|newInputStream|FileInputStream|Files.walk|Files.lines` hors Sa
 
 - **Axe** : Sécurité · **Effort** : S<1j · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2173,7 +2173,7 @@ core/src/main/java/com/nexus/index/jdt/ProcessBuilder.java:33-61 (allowlist), :7
 
 - **Axe** : Sécurité · **Effort** : S<1j · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2189,7 +2189,7 @@ grep `DefaultTyping|JsonTypeInfo|ObjectInputStream|XMLDecoder|new Yaml` : 0 ; co
 
 - **Axe** : Sécurité · **Effort** : S<1j · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2205,7 +2205,7 @@ core/src/main/java/com/nexus/search/semantic/SemanticSearchConfiguration.java:22
 
 - **Axe** : Sécurité · **Effort** : S<1j · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2221,7 +2221,7 @@ packaging/docker/Dockerfile:3-4 (digests), :52 `USER 10001:10001` ; docker-compo
 
 - **Axe** : Sécurité, Dépendances · **Effort** : M · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Nouveau · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Nouveau · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2237,7 +2237,7 @@ packaging/docker/Dockerfile:3-4 (digests), :52 `USER 10001:10001` ; docker-compo
 
 - **Axe** : Sécurité · **Effort** : S · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Nouveau · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Nouveau · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2253,7 +2253,7 @@ packaging/docker/Dockerfile.runtime:45 et Dockerfile:57 `NEXUS_REST_HOST=0.0.0.0
 
 - **Axe** : Tests · **Effort** : S<1j · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2269,7 +2269,7 @@ packaging/docker/Dockerfile.runtime:45 et Dockerfile:57 `NEXUS_REST_HOST=0.0.0.0
 
 - **Axe** : Tests · **Effort** : S<1j · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2285,7 +2285,7 @@ core/src/test/java/com/nexus/security/SensitiveContentRedactorTest.java:28-33 (J
 
 - **Axe** : Tests · **Effort** : S<1j · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2301,7 +2301,7 @@ pom.xml:153-160 (pas d'excludedGroups/groups) ; pom.xml:319-330 profil ci-strict
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2317,7 +2317,7 @@ core/src/main/java/com/nexus/persistence/sqlite/SqliteBatchInsert.java:26 `priva
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2333,7 +2333,7 @@ core/src/main/java/com/nexus/persistence/sqlite/SqliteProjectRepository.java:65-
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2349,7 +2349,7 @@ core/src/main/java/com/nexus/persistence/sqlite/SqliteGraphQueries.java:12-20 et
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2365,7 +2365,7 @@ core/src/main/java/com/nexus/search/lucene/PersistentLuceneSearchIndex.java:24 `
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2381,7 +2381,7 @@ core/src/main/java/com/nexus/search/semantic/SemanticIndexingService.java:62 (ba
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2397,7 +2397,7 @@ core/src/main/java/com/nexus/persistence/sqlite/SqliteDatabase.java:48-62 (conne
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2413,7 +2413,7 @@ core/src/main/java/com/nexus/index/ProjectIndexingService.java:31-32 ; IndexDocu
 
 - **Axe** : Performance · **Effort** : S · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Corrigé par la PR #369 · **Vérification du 2026-11-12** (`244ab1d3`) : Fermé — core/src/main/java/com/nexus/security/SensitiveContentRedactor.java:82-85 STRUCTURED_TOKEN_PREFIXES, :167-171 passe sautée sans préfixe. Les 9 motifs (:67-76) sont sensibles à la casse (aucun (?i)) et commencent par ces littéraux exacts (gh[pousr]_ → 5 préfixes, (?:sk|rk)_ → sk_/rk_) ; contains() porte sur tout le texte courant, donc aucun préfixe coupé ; [REDACTED] n'en crée aucun. Différentiel avec/sans pré-filtre, 3×10 000 cas aléatoires (préfixes en casse mixte inclus, ~1 380 modifiés par lot) : 0 écart. Mesure 1 Mo, meilleur de 5 : code ordinaire 172 ms (510ff8ca : 285), Z continu 116 ms (222) ; 8 Mo de code : 1 318 ms. | Test actif : Oui : SensitiveContentRedactorTest.java:628 (#structuredTokenPrefixFilterKeepsEveryPassResult) ; RedactionThroughputBenchmarkTest opt-in (banc, non bloquant). | RedactionThroughputBenchmarkTest opt-in (ignoré au build par défaut) ; différentiel avec et sans pré-filtre sur 30 000 cas : 0 écart.
+- **Statut** : Info · **Changement** : Corrigé par la PR #369 · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2429,7 +2429,7 @@ core/src/main/java/com/nexus/security/SensitiveContentRedactor.java:53-62, :129-
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2445,7 +2445,7 @@ Script YAML sur .github/workflows/*.yml : `unpinned=[]` pour les 19 fichiers, `p
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2461,7 +2461,7 @@ mvnw:4-18,46,98 ; config/tool-integrity.properties:4 `maven.3.10.0.sha512=22d3�
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2477,7 +2477,7 @@ packaging/docker/Dockerfile:3-4 (`maven:3.9.11-…@sha256:6fdc…`, `eclipse-tem
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2493,7 +2493,7 @@ pom.xml:40-52 vs git ls-remote --tags : Quarkus 3.40.1, Lucene 10.5.2, sqlite-jd
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2510,7 +2510,7 @@ release.yml:28-46 (validate-release-tag.sh), :151-164 (13 needs), :299-350 (immu
 - **Axe** : Dépendances, Performance, Tests · **Effort** : S · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
 - **Fusionne** : `AUD-PRF-26`
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2526,7 +2526,7 @@ WebFetch …/actions/workflows/scale-benchmark.yml : #390 (PR #250, 16/10) et #3
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-12** (`244ab1d3`) : Tient — Relevé inchangé.
+- **Statut** : Info · **Changement** : Aucun · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
@@ -2542,7 +2542,7 @@ adapters/rest-quarkus/src/main/resources/application.properties:8-13 (management
 
 - **Axe** : Dépendances · **Effort** : S · **Sprint** : hors sprint
 - **Dépend de** : aucun · **Débloque** : aucun
-- **Statut** : Info · **Changement** : Nouveau · **Vérification du 2026-11-12** (`244ab1d3`) : Nouveau constat — Relevé à la vérification du 12/11.
+- **Statut** : Info · **Changement** : Nouveau · **Vérification du 2026-11-14** (`8a50fc47`) : Tient — Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.
 
 **Preuve**
 
