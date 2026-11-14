@@ -71,6 +71,32 @@ if ($hardenedSource.IndexOf("'set `"NEXUS_HOME=' + RuntimePage.Values[0]", [Stri
     throw 'Generated installer source still writes raw NEXUS_HOME into batch configuration.'
 }
 
+Write-Host '[contract] page validation boxes never wait in a silent install; a caret is accepted'
+# /SUPPRESSMSGBOXES suppresses SuppressibleMsgBox only: a MsgBox would hold a silent install.
+foreach ($routineHeader in @('function NextButtonClick\(CurPageID: Integer\): Boolean;',
+        'procedure NotifyPortSelection\(Description: String; RequestedPort: Integer; SelectedPort: Integer\);')) {
+    $routine = [regex]::Match($hardenedSource, "(?s)$routineHeader.*?\r?\nend;")
+    if (-not $routine.Success) { throw "Hardened installer source is missing $routineHeader" }
+    if ([regex]::IsMatch($routine.Value, '(?<!Suppressible)MsgBox\(')) {
+        throw "Page validation must use SuppressibleMsgBox, never MsgBox: $routineHeader"
+    }
+    $boxes = @([regex]::Matches($routine.Value, 'SuppressibleMsgBox\('))
+    if ($boxes.Count -eq 0) { throw "No SuppressibleMsgBox found in $routineHeader" }
+    for ($i = 0; $i -lt $boxes.Count; $i++) {
+        $end = if ($i + 1 -lt $boxes.Count) { $boxes[$i + 1].Index } else { $routine.Value.Length }
+        $segment = $routine.Value.Substring($boxes[$i].Index, $end - $boxes[$i].Index)
+        $close = [regex]::Match($segment, ',\s*(?<icon>mb\w+),\s*MB_OK,\s*IDOK\)')
+        if (-not $close.Success) { throw "SuppressibleMsgBox without MB_OK, IDOK in $routineHeader`: $segment" }
+        $after = $segment.Substring($close.Index + $close.Length)
+        if ($close.Groups['icon'].Value -eq 'mbError' -and $after -notmatch '^;\s*Result := False;\s*exit;') {
+            throw "A page validation refusal must be followed by Result := False; exit;: $segment"
+        }
+    }
+}
+if ([regex]::IsMatch($hardenedSource, "function ContainsUnsafeConfigChars\(Value: String\): Boolean;\s*begin[^;]*Pos\('\^'")) {
+    throw 'ContainsUnsafeConfigChars must accept a caret: it is literal in nexus-native.env.cmd and docker\.env (AUD-QUA-29).'
+}
+
 Write-Host '[contract] external prerequisite provenance is immutable and fail-closed'
 $dockerPinnedUrl = 'https://desktop.docker.com/win/main/amd64/236216/Docker%20Desktop%20Installer.exe'
 $dockerSha256 = '820438e75c16e44b393079154bea7d27958a15845c23a635b1a1f6f586b2ed44'
@@ -235,9 +261,30 @@ foreach ($progressFragment in @(
 )) {
     Assert-TextContains -Text $installerSource -Needle $progressFragment -Description "post-install progress row: $progressFragment"
 }
-# Native CLI connectors launch nexus-mcp.cmd, which loads config\nexus-native.env.cmd
-# and passes --enable-native-access=ALL-UNNAMED to the embedded Java runtime.
-Assert-TextContains -Text $installerSource -Needle "PowerShellSingleQuote(ExpandConstant('{app}\nexus-mcp.cmd'))" -Description 'native CLI connectors use the hardened nexus-mcp.cmd launcher'
+# Native connectors start the embedded java.exe directly, with the native configuration in the env
+# of their entry: cmd.exe /s /c parses the launcher path unquoted, a space or a caret of the install
+# folder breaks it.
+foreach ($routineHeader in @('function McpEntryPsLiteral\(IncludeType: Boolean\): String;', 'function McpCommandArrayPs\(\): String;',
+        'function NativeMcpCommandArrayPs\(\): String;')) {
+    $routine = [regex]::Match($installerSource, "(?s)$routineHeader.*?\r?\nend;")
+    if (-not $routine.Success) { throw "Installer source is missing $routineHeader" }
+    if ($routine.Value -match "cmd\.exe|nexus-mcp\.cmd|''/s''") { throw "Native MCP entries must not go through cmd.exe: $routineHeader" }
+}
+foreach ($mcpFragment in @(
+    "PowerShellSingleQuote(ExpandConstant('{app}\app\runtime\bin\java.exe'))",
+    "''--enable-native-access=ALL-UNNAMED'', ''-jar'', '''",
+    "PowerShellSingleQuote(ExpandConstant('{app}\lib\nexus-mcp.jar'))",
+    "'''); env = ' + NativeMcpEnvPs() + ' }';",
+    "Result := NativeMcpCommandArrayPs();",
+    "Values[Count] := TrimTrailingBackslash(RuntimePage.Values[0]);",
+    "'      `"env`": ' + NativeMcpEnvJson() + ',' + #13#10 +",
+    "'env = ' + NativeMcpEnvToml() + #13#10 +",
+    "'`$addArgs = @(''mcp'', ''add'', ''nexus'', ''--tools'', ''*'') + ' + McpEnvArgsPs('--env') + ' + @(''--'') + `$cmd'",
+    "'`$addArgs = @(''mcp'', ''add'', ''--scope'', ''user'', ''nexus'') + ' + McpEnvArgsPs('-e') + ' + @(''--'') + `$cmd'",
+    "'`$addArgs = @(''mcp'', ''add'', ''nexus'') + ' + McpEnvArgsPs('--env') + ' + @(''--'') + `$cmd'"
+)) {
+    Assert-TextContains -Text $installerSource -Needle $mcpFragment -Description "native MCP entry: $mcpFragment"
+}
 $detector = Join-Path $repo 'packaging\windows\detect-assistant-clients.ps1'
 $detectorBytes = [IO.File]::ReadAllBytes($detector)
 if (@($detectorBytes | Where-Object { $_ -gt 127 }).Count -gt 0) {
@@ -308,6 +355,286 @@ foreach ($launcherName in @('nexus.cmd','nexus-mcp.cmd','nexus-rest.cmd','nexus-
     }
     $launcherSource = Get-Content -Raw -LiteralPath $launcherPath
     Assert-TextContains -Text $launcherSource -Needle 'setlocal DisableDelayedExpansion' -Description "$launcherName disables delayed expansion"
+    # CRLF whatever the line endings of the checkout: cmd.exe looks labels up through the file.
+    $launcherText = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($launcherPath))
+    if ([regex]::IsMatch($launcherText, '(?<!\r)\n') -or [regex]::IsMatch($launcherText, '\r(?!\n)')) {
+        throw "$launcherName must be written with CRLF line endings only."
+    }
+}
+
+Write-Host '[smoke] native launchers load config\nexus-native.env.cmd from an install folder with a caret'
+# CALL doubles a caret of its argument, even inside quotes: a launcher enters config by pushd and
+# calls the file by a relative path, then gives the caller back its directory by popd.
+$nativeLaunchers = @('nexus.cmd', 'nexus-mcp.cmd', 'nexus-assistant-clients.cmd', 'nexus-rest.cmd')
+foreach ($launcherName in $nativeLaunchers) {
+    $launcherSource = Get-Content -Raw -LiteralPath (Join-Path $distribution $launcherName)
+    if ($launcherSource.IndexOf('call "%~dp0', [StringComparison]::Ordinal) -ge 0) {
+        throw "$launcherName must not CALL a path under %~dp0: CALL doubles a caret of the install folder."
+    }
+    foreach ($fragment in @(
+        'if not exist "%~dp0config\nexus-native.env.cmd" goto run',
+        'pushd "%~dp0config" || goto configError',
+        'call .\nexus-native.env.cmd',
+        'popd',
+        ':run',
+        ':configError',
+        'echo NEXUS: cannot load "%~dp0config\nexus-native.env.cmd" 1>&2'
+    )) {
+        Assert-TextContains -Text $launcherSource -Needle $fragment -Description "$launcherName native configuration loading: $fragment"
+    }
+    $programExit = $launcherSource.IndexOf('exit /b %ERRORLEVEL%', [StringComparison]::Ordinal)
+    $errorLabel = $launcherSource.IndexOf(':configError', [StringComparison]::Ordinal)
+    if ($programExit -lt 0 -or $errorLabel -lt $programExit -or
+        $launcherSource.IndexOf('exit /b 1', $errorLabel, [StringComparison]::Ordinal) -lt 0) {
+        throw "$launcherName must end with the :configError label, after the program exit, and leave with exit /b 1."
+    }
+}
+$restLauncher = Get-Content -Raw -LiteralPath (Join-Path $distribution 'nexus-rest.cmd')
+if ($restLauncher.IndexOf(':run', [StringComparison]::Ordinal) -gt $restLauncher.IndexOf('if "%NEXUS_REST_HOST%"=="" set "NEXUS_REST_HOST=127.0.0.1"', [StringComparison]::Ordinal) -or
+    $restLauncher.IndexOf(':run', [StringComparison]::Ordinal) -gt $restLauncher.IndexOf('if "%NEXUS_REST_PORT%"=="" set "NEXUS_REST_PORT=8080"', [StringComparison]::Ordinal)) {
+    throw 'nexus-rest.cmd must set its default host and port after :run, also without a configuration file.'
+}
+
+# Fixtures: the built launchers in <root>\in^st, <root>\in st and <root>\no^conf, with junctions to
+# app, lib and rest of the distribution. Each launcher is started as a process from <root>\caller,
+# without CALL, in code page 850, console visible then hidden.
+$caretRoot = Join-Path $repo 'target\launcher-caret-smoke'
+if (@($caretRoot.ToCharArray() | Where-Object { [int]$_ -gt 127 }).Count -gt 0) {
+    throw "The launcher fixture writes an ASCII configuration file: move the repository to an ASCII path ($caretRoot)."
+}
+$caretInstall = Join-Path $caretRoot 'in^st'
+$spaceInstall = Join-Path $caretRoot 'in st'
+$portableInstall = Join-Path $caretRoot 'no^conf'
+$caretHome = Join-Path $caretRoot 'h^ome\.nexus'
+$decoyHome = Join-Path $caretRoot 'decoy-home'
+$caller = Join-Path $caretRoot 'caller'
+$fixtureTimeoutMs = 180000
+# A junction is removed alone: a recursive removal would follow it into the distribution.
+function Remove-LauncherFixtures {
+    foreach ($folder in @($caretInstall, $spaceInstall, $portableInstall)) {
+        foreach ($link in @('app', 'lib', 'rest')) {
+            $linkPath = Join-Path $folder $link
+            if ((Test-Path -LiteralPath $linkPath) -and
+                ((Get-Item -LiteralPath $linkPath -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                [IO.Directory]::Delete($linkPath, $false)
+            }
+        }
+    }
+    Remove-Item -LiteralPath $caretRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
+function New-LauncherFixture([string]$Folder) {
+    New-Item -ItemType Directory -Force -Path $Folder | Out-Null
+    foreach ($name in $nativeLaunchers) {
+        Copy-Item -LiteralPath (Join-Path $distribution $name) -Destination (Join-Path $Folder $name)
+    }
+    foreach ($link in @('app', 'lib', 'rest')) {
+        New-Item -ItemType Junction -Path (Join-Path $Folder $link) -Target (Join-Path $distribution $link) | Out-Null
+    }
+}
+$fixturePage = [Console]::OutputEncoding.CodePage
+# Standard error of a run, without what the program itself logs: the SLF4J notice printed when no
+# logging provider is bound, and java.util.logging records of com.nexus classes: a header line that
+# names the class and the method (lambda$x$0 and <init> included), a LEVEL: message line, then the
+# indented lines, Caused by: lines and exception lines of a stack trace. Such records come, for
+# instance, from the ACL warning on a fixture folder that inherits the ACL of the checkout. What
+# remains must be empty: a cmd.exe path error is localized, its text is not matched.
+function Get-LauncherErrors([string]$Text) {
+    $remaining = New-Object System.Collections.Generic.List[string]
+    $inRecord = $false
+    foreach ($line in @($Text -split "\r?\n")) {
+        if ($line.Trim() -eq '' -or $line -match '^SLF4J\(\w\): ') { continue }
+        if ($line -match '^\S.* com\.nexus\.[\w.$]+ [\w$<>]+$') { $inRecord = $true; continue }
+        if ($inRecord -and ($line -match '^[A-Z]+: ' -or $line -match '^\s' -or $line -match '^Caused by: ' -or
+                $line -match '^[a-z][\w$]*(\.[\w$]+)+(Exception|Error)\b')) { continue }
+        $inRecord = $false
+        $remaining.Add($line)
+    }
+    return ($remaining -join "`n")
+}
+$programLog = "SLF4J(W): No SLF4J providers were found.`r`nNov 14, 2026 8:13:11 PM com.nexus.security.PrivateStoragePolicy lambda`$enforce`$0`r`n" +
+    "WARNING: storage may be readable`r`njava.io.IOException: denied`r`n`tat com.nexus.X.y(X.java:1)`r`nCaused by: java.lang.Error: z`r`n`t... 3 more`r`n"
+if ((Get-LauncherErrors $programLog) -ne '' -or
+    (Get-LauncherErrors ($programLog + "Le chemin d'acces specifie est introuvable.`r`n")) -ne "Le chemin d'acces specifie est introuvable.") {
+    throw 'Get-LauncherErrors must drop the program log records and keep any other line.'
+}
+# Reads both output streams to the end and waits at most $fixtureTimeoutMs, then kills the process
+# tree: a launcher that waits on its console must fail the smoke, not hang the job.
+function Wait-FixtureProcess([Diagnostics.Process]$Process, [string]$Label) {
+    $errorTask = $Process.StandardError.ReadToEndAsync()
+    $outputTask = $Process.StandardOutput.ReadToEndAsync()
+    if (-not $Process.WaitForExit($fixtureTimeoutMs)) {
+        & taskkill.exe /PID $Process.Id /T /F | Out-Null
+        throw "$Label did not exit within $($fixtureTimeoutMs / 1000) s."
+    }
+    $Process.WaitForExit()
+    return [PSCustomObject]@{ ExitCode = $Process.ExitCode; Output = $outputTask.Result; Error = $errorTask.Result }
+}
+function Invoke-FixtureLauncher([string]$Launcher, [string]$Arguments, [bool]$Hidden) {
+    $psi = New-Object System.Diagnostics.ProcessStartInfo($env:ComSpec,
+        "/d /s /c `"chcp 850 >nul & `"$Launcher`" $Arguments`"")
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $Hidden
+    $psi.WorkingDirectory = $caller
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.StandardOutputEncoding = New-Object System.Text.UTF8Encoding($false)
+    $psi.EnvironmentVariables['NEXUS_HOME'] = $decoyHome
+    try { $result = Wait-FixtureProcess ([Diagnostics.Process]::Start($psi)) "$Launcher $Arguments" }
+    finally { & $env:ComSpec /d /c "chcp $fixturePage >nul" }
+    return $result
+}
+# Command line built from an argument array as Node (libuv), Rust, .NET and Java build it for
+# CreateProcess: an argument with a space, a tab or a double quote is quoted, its double quotes and
+# the backslashes before them are escaped. MCP clients start their servers this way.
+function ConvertTo-WindowsArgument([string]$Argument) {
+    if ($Argument.Length -gt 0 -and $Argument -notmatch '[\s"]') { return $Argument }
+    $builder = New-Object System.Text.StringBuilder
+    [void]$builder.Append('"')
+    $backslashes = 0
+    foreach ($ch in $Argument.ToCharArray()) {
+        if ($ch -eq '\') { $backslashes++; continue }
+        if ($ch -eq '"') { [void]$builder.Append([char]'\', 2 * $backslashes + 1); [void]$builder.Append('"'); $backslashes = 0; continue }
+        if ($backslashes -gt 0) { [void]$builder.Append([char]'\', $backslashes); $backslashes = 0 }
+        [void]$builder.Append($ch)
+    }
+    if ($backslashes -gt 0) { [void]$builder.Append([char]'\', 2 * $backslashes) }
+    [void]$builder.Append('"')
+    return $builder.ToString()
+}
+# Starts an MCP entry with that command line and the env of the entry, sends initialize and waits
+# at most 60 s for the answer, then stops the server, which keeps running after its input ends.
+# Standard streams are files, as in test-mcp-protocol.ps1: under Windows PowerShell 5.1 a
+# StandardInput pipe does not deliver the input to the server.
+function Invoke-McpEntry([string]$Command, [string[]]$Arguments, [hashtable]$Environment, [string]$Label,
+        [string]$WorkingDirectory = $caller) {
+    $work = Join-Path $repo 'target\mcp-entry-probe'
+    Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Force -Path $work | Out-Null
+    $inFile = Join-Path $work 'in.jsonl'; $outFile = Join-Path $work 'out.jsonl'; $errFile = Join-Path $work 'err.log'
+    [IO.File]::WriteAllText($inFile,
+        '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"nexus-smoke","version":"1.0"}}}' + "`n",
+        [Text.Encoding]::ASCII)
+    $names = @(@('NEXUS_HOME') + @($Environment.Keys) | Select-Object -Unique)
+    $saved = @{}
+    foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
+    function Read-SharedText([string]$Path) {
+        try {
+            $stream = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+            try { return (New-Object IO.StreamReader($stream, (New-Object Text.UTF8Encoding($false)))).ReadToEnd() } finally { $stream.Dispose() }
+        } catch { return '' }
+    }
+    try {
+        [Environment]::SetEnvironmentVariable('NEXUS_HOME', $decoyHome, 'Process')
+        foreach ($name in $Environment.Keys) { [Environment]::SetEnvironmentVariable($name, $Environment[$name], 'Process') }
+        $process = Start-Process -FilePath $Command -WorkingDirectory $WorkingDirectory -PassThru -NoNewWindow `
+            -ArgumentList (@($Arguments | ForEach-Object { ConvertTo-WindowsArgument $_ }) -join ' ') `
+            -RedirectStandardInput $inFile -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+        $null = $process.Handle  # keeps ExitCode readable under Windows PowerShell 5.1
+        $deadline = (Get-Date).AddSeconds(60)
+        while ((Get-Date) -lt $deadline -and -not $process.HasExited -and -not (Test-McpInitialized (Read-SharedText $outFile))) {
+            Start-Sleep -Milliseconds 300
+        }
+        if (-not $process.HasExited) { & taskkill.exe /PID $process.Id /T /F | Out-Null; $process.WaitForExit(10000) | Out-Null }
+        return [PSCustomObject]@{ Output = (Read-SharedText $outFile); Error = (Read-SharedText $errFile) }
+    }
+    finally {
+        foreach ($name in $names) { [Environment]::SetEnvironmentVariable($name, $saved[$name], 'Process') }
+        Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+function Test-McpInitialized([string]$Output) {
+    return [regex]::IsMatch($Output, '"id"\s*:\s*1\b') -and $Output.IndexOf('"serverInfo"', [StringComparison]::Ordinal) -ge 0
+}
+Remove-LauncherFixtures
+try {
+    New-LauncherFixture $caretInstall
+    New-LauncherFixture $portableInstall
+    New-Item -ItemType Directory -Force -Path (Join-Path $caretInstall 'config'), $caller, $decoyHome | Out-Null
+    [IO.File]::WriteAllText((Join-Path $caretInstall 'config\nexus-native.env.cmd'),
+        "@echo off`r`nset `"NEXUS_HOME=$caretHome`"`r`nset `"NEXUS_REST_PORT=9123`"`r`n", [Text.Encoding]::ASCII)
+    $caretLauncher = Join-Path $caretInstall 'nexus.cmd'
+
+    # A configuration folder that pushd cannot enter: exit 1, message naming the file, program not
+    # started. Only the pushd target of a copy of the built nexus.cmd differs.
+    $builtNexus = Get-Content -Raw -LiteralPath $caretLauncher
+    $mutatedSource = $builtNexus.Replace('pushd "%~dp0config"', 'pushd "%~dp0config-missing"')
+    if ($mutatedSource -ceq $builtNexus) { throw 'nexus.cmd has no pushd "%~dp0config" line to mutate.' }
+    $mutatedLauncher = Join-Path $caretInstall 'nexus-config-missing.cmd'
+    [IO.File]::WriteAllText($mutatedLauncher, $mutatedSource, [Text.Encoding]::ASCII)
+    foreach ($hidden in @($false, $true)) {
+        New-Item -ItemType Directory -Force -Path $caretHome | Out-Null
+        $failed = Invoke-FixtureLauncher $mutatedLauncher 'project add . s15-caret-probe --json' $hidden
+        if ($failed.ExitCode -ne 1 -or $failed.Error.IndexOf('NEXUS: cannot load', [StringComparison]::Ordinal) -lt 0 -or
+            $failed.Error.IndexOf('config\nexus-native.env.cmd', [StringComparison]::Ordinal) -lt 0) {
+            throw "A launcher whose config folder cannot be entered must exit 1 and name the file (hidden console=$hidden): exit $($failed.ExitCode), $($failed.Error)"
+        }
+        if ((Test-Path -LiteralPath (Join-Path $caretHome 'nexus.db')) -or (Test-Path -LiteralPath (Join-Path $decoyHome 'nexus.db'))) {
+            throw "A launcher whose config folder cannot be entered started the program (hidden console=$hidden)."
+        }
+    }
+
+    # The project path is relative to the caller: the JSON projection does not print project roots,
+    # and project add fails on a folder that does not exist where the program runs.
+    $callerProject = Join-Path $caller 'caret-caller-project'
+    New-Item -ItemType Directory -Force -Path $callerProject | Out-Null
+    'probe' | Set-Content -LiteralPath (Join-Path $callerProject 'README.md') -Encoding ascii
+    foreach ($hidden in @($false, $true)) {
+        Remove-Item -LiteralPath $caretHome -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force -Path $caretHome | Out-Null
+        $label = "nexus.cmd in $caretInstall (hidden console=$hidden)"
+        foreach ($arguments in @('project add .\caret-caller-project s15-caret-probe --json', 'project list --json')) {
+            $run = Invoke-FixtureLauncher $caretLauncher $arguments $hidden
+            $runErrors = Get-LauncherErrors $run.Error
+            if ($run.ExitCode -ne 0 -or $runErrors -ne '') {
+                throw "$label $arguments failed (exit $($run.ExitCode)): $($run.Output) $runErrors"
+            }
+        }
+        if (-not (Test-Path -LiteralPath (Join-Path $caretHome 'nexus.db') -PathType Leaf)) {
+            throw "$label did not keep its database under the configured NEXUS_HOME $caretHome"
+        }
+        if (Test-Path -LiteralPath (Join-Path $decoyHome 'nexus.db')) {
+            throw "$label used the inherited NEXUS_HOME instead of config\nexus-native.env.cmd."
+        }
+        if (@(($run.Output | ConvertFrom-Json).projects | Where-Object { $_.name -ceq 's15-caret-probe' }).Count -ne 1) {
+            throw "$label project list does not return the project registered by a previous process: $($run.Output)"
+        }
+    }
+
+    # Native MCP entries in an install folder with a caret, then with a space. The entry the installer
+    # writes (embedded java.exe, runner jar, NEXUS_HOME in env) starts NEXUS as a client starts it;
+    # the cmd.exe /d /s /c <folder>\nexus-mcp.cmd entry does not: cmd.exe parses the path unquoted.
+    New-LauncherFixture $spaceInstall
+    foreach ($mcpInstall in @($caretInstall, $spaceInstall)) {
+        Remove-Item -LiteralPath $caretHome -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force -Path $caretHome | Out-Null
+        $label = "native MCP entry in $mcpInstall"
+        $mcp = Invoke-McpEntry (Join-Path $mcpInstall 'app\runtime\bin\java.exe') `
+            @('--enable-native-access=ALL-UNNAMED', '-jar', (Join-Path $mcpInstall 'lib\nexus-mcp.jar')) `
+            @{ NEXUS_HOME = $caretHome } $label
+        if (-not (Test-McpInitialized $mcp.Output) -or (Get-LauncherErrors $mcp.Error) -ne '') {
+            throw "$label did not answer initialize: $($mcp.Output) $(Get-LauncherErrors $mcp.Error)"
+        }
+        if (-not (Test-Path -LiteralPath (Join-Path $caretHome 'nexus.db') -PathType Leaf) -or
+            (Test-Path -LiteralPath (Join-Path $decoyHome 'nexus.db'))) {
+            throw "$label did not open the NEXUS_HOME of its env, $caretHome"
+        }
+        # Negative control: the cmd.exe entry of the same folder fails, so the probe is not vacuous.
+        $viaCmd = Invoke-McpEntry 'cmd.exe' @('/d', '/s', '/c', (Join-Path $mcpInstall 'nexus-mcp.cmd')) @{} "cmd.exe MCP entry in $mcpInstall"
+        if (Test-McpInitialized $viaCmd.Output) {
+            throw "MCP entry probe is vacuous: cmd.exe /d /s /c must fail on $mcpInstall."
+        }
+    }
+
+    # No configuration file (portable distribution): defaults, no message.
+    foreach ($hidden in @($false, $true)) {
+        $portable = Invoke-FixtureLauncher (Join-Path $portableInstall 'nexus.cmd') '--version --json' $hidden
+        if ($portable.ExitCode -ne 0 -or (Get-LauncherErrors $portable.Error) -ne '' -or ($portable.Output | ConvertFrom-Json).version -ne $Version) {
+            throw "nexus.cmd without configuration failed in $portableInstall (hidden console=$hidden, exit $($portable.ExitCode)): $($portable.Output) $($portable.Error)"
+        }
+    }
+}
+finally {
+    Remove-LauncherFixtures
 }
 
 $root = Join-Path $repo 'target\installer-smoke'
@@ -510,6 +837,22 @@ try {
     $genericJson = (Read-StrictUtf8NoBom (Join-Path $integrations 'generic-mcp.json')) | ConvertFrom-Json
     if ($genericJson.mcpServers.nexus.command -cne $javaExe) {
         throw "generic-mcp.json does not designate $javaExe`: $($genericJson.mcpServers.nexus.command)"
+    }
+    # The native entry carries NEXUS_HOME in env (here the default under the accented profile) and
+    # starts NEXUS as a client does, from the install folder with a space and accents.
+    $tomlEnv = [regex]::Match($tomlText, '(?m)^env = \{ NEXUS_HOME = "(?<value>(?:[^"\\]|\\.)*)"(?:, \w+ = "(?:[^"\\]|\\.)*")* \}\r?$')
+    if (-not $tomlEnv.Success -or $tomlEnv.Groups['value'].Value.Replace('\\', '\') -cne $expectedHome) {
+        throw "codex-desktop.mcp.toml does not pass NEXUS_HOME=$expectedHome in env: $tomlText"
+    }
+    $genericEntry = $genericJson.mcpServers.nexus
+    if ($genericEntry.env.NEXUS_HOME -cne $expectedHome) {
+        throw "generic-mcp.json does not pass NEXUS_HOME=$expectedHome in env: $($genericEntry.env | ConvertTo-Json -Compress)"
+    }
+    $genericEnvironment = @{}
+    foreach ($property in $genericEntry.env.PSObject.Properties) { $genericEnvironment[$property.Name] = [string]$property.Value }
+    $installedMcp = Invoke-McpEntry $genericEntry.command @($genericEntry.args) $genericEnvironment 'generic-mcp.json native entry' $root
+    if (-not (Test-McpInitialized $installedMcp.Output)) {
+        throw "The native entry of generic-mcp.json did not answer initialize: $($installedMcp.Output) $(Get-LauncherErrors $installedMcp.Error)"
     }
 
     # connect-codex-desktop.ps1 under Windows PowerShell 5.1 appends the fragment to an existing

@@ -611,10 +611,10 @@ end;
 procedure NotifyPortSelection(Description: String; RequestedPort: Integer; SelectedPort: Integer);
 begin
   if RequestedPort <> SelectedPort then
-    MsgBox(
+    SuppressibleMsgBox(
       Description + ' ' + IntToStr(RequestedPort) + ' est déjà utilisé.' + #13#10 +
       'NEXUS a sélectionné automatiquement le premier port TCP disponible : ' + IntToStr(SelectedPort) + '.',
-      mbInformation, MB_OK);
+      mbInformation, MB_OK, IDOK);
 end;
 
 function GenerateLocalToken(): String;
@@ -1089,8 +1089,9 @@ var
 begin
   Result := True;
 
-  { SuppressibleMsgBox: a silent install with /SUPPRESSMSGBOXES logs the refusal and exits
-    instead of waiting on a modal box. }
+  { Every box of the page validation is a SuppressibleMsgBox: a silent install with
+    /SUPPRESSMSGBOXES logs the message, and a refusal ends it, instead of waiting on a
+    modal box. }
   if (CurPageID = wpSelectDir) and (not IsAnsiRoundTrip(WizardDirValue())) then
   begin
     SuppressibleMsgBox(InstallDirOutsideAnsiMessage(), mbError, MB_OK, IDOK);
@@ -1102,7 +1103,7 @@ begin
   begin
     if not (NativeOptionsPage.Values[0] or NativeOptionsPage.Values[1] or NativeOptionsPage.Values[2]) then
     begin
-      MsgBox('Sélectionnez au moins une surface native.', mbError, MB_OK);
+      SuppressibleMsgBox('Sélectionnez au moins une surface native.', mbError, MB_OK, IDOK);
       Result := False;
       exit;
     end;
@@ -1112,14 +1113,14 @@ begin
   begin
     if Trim(RuntimePage.Values[0]) = '' then
     begin
-      MsgBox('NEXUS_HOME ne peut pas être vide.', mbError, MB_OK);
+      SuppressibleMsgBox('NEXUS_HOME ne peut pas être vide.', mbError, MB_OK, IDOK);
       Result := False;
       exit;
     end;
     PortValue := StrToIntDef(RuntimePage.Values[2], -1);
     if (PortValue < 1) or (PortValue > 65535) then
     begin
-      MsgBox('Le port REST natif doit être compris entre 1 et 65535.', mbError, MB_OK);
+      SuppressibleMsgBox('Le port REST natif doit être compris entre 1 et 65535.', mbError, MB_OK, IDOK);
       Result := False;
       exit;
     end;
@@ -1127,14 +1128,14 @@ begin
     begin
       if not IsSafeBindAddress(RuntimePage.Values[1]) then
       begin
-        MsgBox('L''adresse d''écoute REST native est vide ou invalide.', mbError, MB_OK);
+        SuppressibleMsgBox('L''adresse d''écoute REST native est vide ou invalide.', mbError, MB_OK, IDOK);
         Result := False;
         exit;
       end;
       ResolvedPort := FindAvailableTcpPort(RuntimePage.Values[1], PortValue, -1);
       if ResolvedPort < 1 then
       begin
-        MsgBox('Aucun port TCP disponible n''a été trouvé pour le REST natif.', mbError, MB_OK);
+        SuppressibleMsgBox('Aucun port TCP disponible n''a été trouvé pour le REST natif.', mbError, MB_OK, IDOK);
         Result := False;
         exit;
       end;
@@ -1143,7 +1144,7 @@ begin
     end;
     if InstallNativeRest() and (Lowercase(Trim(RuntimePage.Values[1])) <> '127.0.0.1') and (Lowercase(Trim(RuntimePage.Values[1])) <> 'localhost') and (Trim(RuntimePage.Values[3]) = '') then
     begin
-      MsgBox('Un token API REST est obligatoire pour une écoute native non-loopback.', mbError, MB_OK);
+      SuppressibleMsgBox('Un token API REST est obligatoire pour une écoute native non-loopback.', mbError, MB_OK, IDOK);
       Result := False;
       exit;
     end;
@@ -1151,14 +1152,14 @@ begin
 
   if (CurPageID = OllamaPage.ID) and OllamaEnabled() and (Trim(OllamaPage.Values[0]) = '') then
   begin
-    MsgBox('L''URL Ollama ne peut pas être vide lorsque Ollama est activé.', mbError, MB_OK);
+    SuppressibleMsgBox('L''URL Ollama ne peut pas être vide lorsque Ollama est activé.', mbError, MB_OK, IDOK);
     Result := False;
     exit;
   end;
 
   if (CurPageID = DockerPrereqPage.ID) and InstallDocker() and not DockerRuntimePresent() and not DockerPrereqPage.Values[0] then
   begin
-    MsgBox('Docker Desktop/CLI n''est pas installé. Cochez l''installation automatique ou installez Docker avant de continuer.', mbError, MB_OK);
+    SuppressibleMsgBox('Docker Desktop/CLI n''est pas installé. Cochez l''installation automatique ou installez Docker avant de continuer.', mbError, MB_OK, IDOK);
     Result := False;
     exit;
   end;
@@ -1167,50 +1168,50 @@ begin
   begin
     if (not DockerRuntimePresent()) and (not DockerDesktopAutoInstallSelected()) then
     begin
-      MsgBox('Docker Desktop/CLI n''est pas disponible et son installation automatique n''est pas sélectionnée.', mbError, MB_OK);
+      SuppressibleMsgBox('Docker Desktop/CLI n''est pas disponible et son installation automatique n''est pas sélectionnée.', mbError, MB_OK, IDOK);
       Result := False;
       exit;
     end;
     if (Trim(DockerPage.Values[0]) = '') or (Trim(DockerPage.Values[1]) = '') or (Trim(DockerPage.Values[5]) = '') then
     begin
-      MsgBox('Image, nom du conteneur et repository Docker sont obligatoires.', mbError, MB_OK);
+      SuppressibleMsgBox('Image, nom du conteneur et repository Docker sont obligatoires.', mbError, MB_OK, IDOK);
       Result := False;
       exit;
     end;
     if HasWhitespace(Trim(DockerPage.Values[0])) then
     begin
-      MsgBox('L''image Docker ne doit pas contenir d''espace (ex. ghcr.io/org/nexus:tag).', mbError, MB_OK);
+      SuppressibleMsgBox('L''image Docker ne doit pas contenir d''espace (ex. ghcr.io/org/nexus:tag).', mbError, MB_OK, IDOK);
       Result := False;
       exit;
     end;
     if not IsValidDockerName(DockerPage.Values[1]) then
     begin
-      MsgBox('Le nom du conteneur est invalide. Attendu : lettres/chiffres puis [a-zA-Z0-9_.-].', mbError, MB_OK);
+      SuppressibleMsgBox('Le nom du conteneur est invalide. Attendu : lettres/chiffres puis [a-zA-Z0-9_.-].', mbError, MB_OK, IDOK);
       Result := False;
       exit;
     end;
     if not IsValidRestartPolicy(DockerPage.Values[6]) then
     begin
-      MsgBox('Restart policy invalide. Valeurs acceptées : no, always, unless-stopped, on-failure, on-failure:N.', mbError, MB_OK);
+      SuppressibleMsgBox('Restart policy invalide. Valeurs acceptées : no, always, unless-stopped, on-failure, on-failure:N.', mbError, MB_OK, IDOK);
       Result := False;
       exit;
     end;
     if not DirExists(Trim(DockerPage.Values[5])) then
     begin
-      MsgBox('Le repository / racine de projets à monter est introuvable : ' + Trim(DockerPage.Values[5]), mbError, MB_OK);
+      SuppressibleMsgBox('Le repository / racine de projets à monter est introuvable : ' + Trim(DockerPage.Values[5]), mbError, MB_OK, IDOK);
       Result := False;
       exit;
     end;
     if not IsSafeBindAddress(DockerPage.Values[2]) then
     begin
-      MsgBox('L''adresse d''écoute hôte Docker est vide ou invalide.', mbError, MB_OK);
+      SuppressibleMsgBox('L''adresse d''écoute hôte Docker est vide ou invalide.', mbError, MB_OK, IDOK);
       Result := False;
       exit;
     end;
     PortValue := StrToIntDef(DockerPage.Values[3], -1);
     if (PortValue < 1) or (PortValue > 65535) then
     begin
-      MsgBox('Le port REST hôte Docker doit être compris entre 1 et 65535.', mbError, MB_OK);
+      SuppressibleMsgBox('Le port REST hôte Docker doit être compris entre 1 et 65535.', mbError, MB_OK, IDOK);
       Result := False;
       exit;
     end;
@@ -1223,23 +1224,23 @@ begin
       ResolvedPort := FindAvailableTcpPort(DockerPage.Values[2], PortValue, ReservedPort);
     if ResolvedPort < 1 then
     begin
-      MsgBox('Aucun port TCP disponible n''a été trouvé pour le REST Docker.', mbError, MB_OK);
+      SuppressibleMsgBox('Aucun port TCP disponible n''a été trouvé pour le REST Docker.', mbError, MB_OK, IDOK);
       Result := False;
       exit;
     end;
     DockerPage.Values[3] := IntToStr(ResolvedPort);
     if (ReservedPort = PortValue) and (ResolvedPort <> PortValue) then
-      MsgBox(
+      SuppressibleMsgBox(
         'Le port REST hôte Docker ' + IntToStr(PortValue) + ' est déjà réservé au REST natif NEXUS.' + #13#10 +
         'NEXUS utilisera le port TCP disponible ' + IntToStr(ResolvedPort) + ' pour Docker.',
-        mbInformation, MB_OK)
+        mbInformation, MB_OK, IDOK)
     else
       NotifyPortSelection('Le port REST hôte Docker', PortValue, ResolvedPort);
 
     PortValue := StrToIntDef(DockerPage.Values[4], -1);
     if (PortValue < 1) or (PortValue > 65535) then
     begin
-      MsgBox('Le port REST interne Docker doit être compris entre 1 et 65535.', mbError, MB_OK);
+      SuppressibleMsgBox('Le port REST interne Docker doit être compris entre 1 et 65535.', mbError, MB_OK, IDOK);
       Result := False;
       exit;
     end;
@@ -1440,6 +1441,98 @@ begin
   RegWriteStringValue(HKCU, InstallerRegistryPath(), 'DockerManaged', '1');
 end;
 
+{ A native MCP entry starts the embedded java.exe directly, never cmd.exe: cmd.exe /s /c
+  parses the launcher path unquoted, so a space or a caret of the install folder breaks
+  it. The entry carries, in its env, the values config\nexus-native.env.cmd gives
+  nexus-mcp.cmd. An empty value is left out, as SET "NAME=" removes the variable. }
+procedure NativeMcpEnvironment(var Names: TArrayOfString; var Values: TArrayOfString);
+var
+  Count: Integer;
+begin
+  Count := 0;
+  SetArrayLength(Names, 3);
+  SetArrayLength(Values, 3);
+  Names[Count] := 'NEXUS_HOME';
+  Values[Count] := TrimTrailingBackslash(RuntimePage.Values[0]);
+  Count := Count + 1;
+  if SemanticProviderValue() <> '' then
+  begin
+    Names[Count] := 'NEXUS_SEMANTIC_PROVIDER';
+    Values[Count] := SemanticProviderValue();
+    Count := Count + 1;
+  end;
+  if OllamaPage.Values[0] <> '' then
+  begin
+    Names[Count] := 'NEXUS_OLLAMA_BASE_URL';
+    Values[Count] := OllamaPage.Values[0];
+    Count := Count + 1;
+  end;
+  SetArrayLength(Names, Count);
+  SetArrayLength(Values, Count);
+end;
+
+function NativeMcpEnvJson(): String;
+var
+  Names, Values: TArrayOfString;
+  I: Integer;
+begin
+  NativeMcpEnvironment(Names, Values);
+  Result := '{';
+  for I := 0 to GetArrayLength(Names) - 1 do
+  begin
+    if I > 0 then Result := Result + ', ';
+    Result := Result + '"' + Names[I] + '": "' + JsonEscape(Values[I]) + '"';
+  end;
+  Result := Result + '}';
+end;
+
+function NativeMcpEnvToml(): String;
+var
+  Names, Values: TArrayOfString;
+  I: Integer;
+begin
+  NativeMcpEnvironment(Names, Values);
+  Result := '{ ';
+  for I := 0 to GetArrayLength(Names) - 1 do
+  begin
+    if I > 0 then Result := Result + ', ';
+    Result := Result + Names[I] + ' = "' + TomlEscape(Values[I]) + '"';
+  end;
+  Result := Result + ' }';
+end;
+
+{ PowerShell literal of the env object of a JSON client entry. }
+function NativeMcpEnvPs(): String;
+var
+  Names, Values: TArrayOfString;
+  I: Integer;
+begin
+  NativeMcpEnvironment(Names, Values);
+  Result := '[PSCustomObject]@{ ';
+  for I := 0 to GetArrayLength(Names) - 1 do
+  begin
+    if I > 0 then Result := Result + '; ';
+    Result := Result + Names[I] + ' = ''' + PowerShellSingleQuote(Values[I]) + '''';
+  end;
+  Result := Result + ' }';
+end;
+
+{ PowerShell array of the env options of a client CLI `mcp add` (Flag: --env or -e). }
+function NativeMcpEnvArgsPs(Flag: String): String;
+var
+  Names, Values: TArrayOfString;
+  I: Integer;
+begin
+  NativeMcpEnvironment(Names, Values);
+  Result := '@(';
+  for I := 0 to GetArrayLength(Names) - 1 do
+  begin
+    if I > 0 then Result := Result + ', ';
+    Result := Result + '''' + Flag + ''', ''' + Names[I] + '=' + PowerShellSingleQuote(Values[I]) + '''';
+  end;
+  Result := Result + ')';
+end;
+
 function NativeMcpCommandJson(ServersKey: String): String;
 var
   JavaPath: String;
@@ -1451,6 +1544,7 @@ begin
     '  "' + ServersKey + '": {' + #13#10 +
     '    "nexus": {' + #13#10 +
     '      "type": "stdio",' + #13#10 +
+    '      "env": ' + NativeMcpEnvJson() + ',' + #13#10 +
     '      "command": "' + JavaPath + '",' + #13#10 +
     '      "args": ["-jar", "' + RunnerPath + '"]' + #13#10 +
     '    }' + #13#10 +
@@ -1480,6 +1574,7 @@ begin
   RunnerPath := TomlEscape(ExpandConstant('{app}\lib\nexus-mcp.jar'));
   Result := '[mcp_servers.nexus]' + #13#10 +
     'command = "' + JavaPath + '"' + #13#10 +
+    'env = ' + NativeMcpEnvToml() + #13#10 +
     'args = ["-jar", "' + RunnerPath + '"]' + #13#10;
 end;
 
@@ -1616,9 +1711,18 @@ begin
   SavePowerShellScript(Dir + '\nexus-json.ps1', S);
 end;
 
+{ PowerShell array literal of the native MCP command: the embedded java.exe, then its
+  arguments, as each client passes them to CreateProcess (see NativeMcpEnvironment). }
+function NativeMcpCommandArrayPs(): String;
+begin
+  Result := '@(''' + PowerShellSingleQuote(ExpandConstant('{app}\app\runtime\bin\java.exe')) +
+    ''', ''--enable-native-access=ALL-UNNAMED'', ''-jar'', ''' +
+    PowerShellSingleQuote(ExpandConstant('{app}\lib\nexus-mcp.jar')) + ''')';
+end;
+
 { Return a PowerShell literal for the nexus MCP entry, honouring the runtime choice
-  (docker exec vs native cmd.exe launcher). IncludeType adds the "type":"stdio"
-  field required by GitHub Copilot's JetBrains config. }
+  (docker exec vs native java.exe with the native configuration in env). IncludeType
+  adds the "type":"stdio" field required by GitHub Copilot's JetBrains config. }
 function McpEntryPsLiteral(IncludeType: Boolean): String;
 var
   TypePart: String;
@@ -1628,8 +1732,10 @@ begin
     Result := '[PSCustomObject]@{ ' + TypePart + 'command = ''docker''; args = @(''exec'', ''-i'', ''' +
       PowerShellSingleQuote(DockerPage.Values[1]) + ''', ''java'', ''-jar'', ''/opt/nexus/lib/nexus-mcp.jar'') }'
   else
-    Result := '[PSCustomObject]@{ ' + TypePart + 'command = ''cmd.exe''; args = @(''/d'', ''/s'', ''/c'', ''' +
-      PowerShellSingleQuote(ExpandConstant('{app}\nexus-mcp.cmd')) + ''') }';
+    Result := '[PSCustomObject]@{ ' + TypePart + 'command = ''' +
+      PowerShellSingleQuote(ExpandConstant('{app}\app\runtime\bin\java.exe')) +
+      '''; args = @(''--enable-native-access=ALL-UNNAMED'', ''-jar'', ''' +
+      PowerShellSingleQuote(ExpandConstant('{app}\lib\nexus-mcp.jar')) + '''); env = ' + NativeMcpEnvPs() + ' }';
 end;
 
 { Return a PowerShell array literal for the MCP command+args (for CLI `mcp add -- ...`). }
@@ -1639,8 +1745,17 @@ begin
     Result := '@(''docker'', ''exec'', ''-i'', ''' + PowerShellSingleQuote(DockerPage.Values[1]) +
       ''', ''java'', ''-jar'', ''/opt/nexus/lib/nexus-mcp.jar'')'
   else
-    Result := '@(''cmd.exe'', ''/d'', ''/s'', ''/c'', ''' +
-      PowerShellSingleQuote(ExpandConstant('{app}\nexus-mcp.cmd')) + ''')';
+    Result := NativeMcpCommandArrayPs();
+end;
+
+{ Return a PowerShell array literal of the env options placed before `--` in a CLI
+  `mcp add` (empty for Docker, whose container holds its own configuration). }
+function McpEnvArgsPs(Flag: String): String;
+begin
+  if UseDockerForIntegrations() then
+    Result := '@()'
+  else
+    Result := NativeMcpEnvArgsPs(Flag);
 end;
 
 { PowerShell prologue that sets $exe to the Claude Code CLI: on PATH first, then
@@ -1748,8 +1863,8 @@ begin
       SaveUtf8TextFile(Dir + '\copilot-jetbrains.mcp.json', NativeMcpCommandJson('servers'));
 
     { PS1: merge nexus entry into the live IntelliJ Copilot mcp.json using the
-      same cmd.exe + nexus-mcp.cmd pattern as mcp-search-net.
-      - exit 10 : mcp.json absent OR nexus-mcp.cmd not installed
+      entry of McpEntryPsLiteral (java.exe and env in native mode).
+      - exit 10 : Copilot JetBrains configuration folder absent
       - exit 20 : nexus key already present (idempotent)
       - exit 0  : nexus added successfully
       - exit 1  : mcp.json unreadable as a JSON object, left unchanged }
@@ -1805,7 +1920,7 @@ begin
       '$list = (& $exe mcp list 2>&1 | Out-String)' + #13#10 +
       'if ($list -match ''(?m)^\s*nexus\b'') { exit 20 }' + #13#10 +
       '$cmd = ' + McpCommandArrayPs() + #13#10 +
-      '$addArgs = @(''mcp'', ''add'', ''nexus'', ''--tools'', ''*'', ''--'') + $cmd' + #13#10 +
+      '$addArgs = @(''mcp'', ''add'', ''nexus'', ''--tools'', ''*'') + ' + McpEnvArgsPs('--env') + ' + @(''--'') + $cmd' + #13#10 +
       '& $exe @addArgs' + #13#10 +
       'exit $LASTEXITCODE' + #13#10;
     SavePowerShellScript(Dir + '\connect-copilot-cli.ps1', CopilotScript);
@@ -1819,7 +1934,7 @@ begin
   if ClientSelected(CLIENT_CLAUDE_DESKTOP) then
   begin
     { PS1: merge nexus into the mcpServers of every Claude Desktop configuration
-      present (cmd.exe + nexus-mcp.cmd, same pattern as mcp-search-net).
+      present (entry of McpEntryPsLiteral).
       - exit 10 : no Claude Desktop configuration folder
       - exit 20 : nexus already present in each of them (idempotent)
       - exit 30 : Claude Desktop is running (its rewrite would drop the entry)
@@ -1861,7 +1976,7 @@ begin
       '& $exe mcp get nexus *> $null' + #13#10 +
       'if ($LASTEXITCODE -eq 0) { exit 20 }' + #13#10 +
       '$cmd = ' + McpCommandArrayPs() + #13#10 +
-      '$addArgs = @(''mcp'', ''add'', ''--scope'', ''user'', ''nexus'', ''--'') + $cmd' + #13#10 +
+      '$addArgs = @(''mcp'', ''add'', ''--scope'', ''user'', ''nexus'') + ' + McpEnvArgsPs('-e') + ' + @(''--'') + $cmd' + #13#10 +
       '& $exe @addArgs' + #13#10 +
       'exit $LASTEXITCODE' + #13#10);
     SaveStringToFile(Dir + '\connect-claude-cli.cmd', PowerShellLauncherCmd('connect-claude-cli.ps1'), False);
@@ -1881,7 +1996,7 @@ begin
       '& $exe mcp get nexus *> $null' + #13#10 +
       'if ($LASTEXITCODE -eq 0) { exit 20 }' + #13#10 +
       '$cmd = ' + McpCommandArrayPs() + #13#10 +
-      '$addArgs = @(''mcp'', ''add'', ''nexus'', ''--'') + $cmd' + #13#10 +
+      '$addArgs = @(''mcp'', ''add'', ''nexus'') + ' + McpEnvArgsPs('--env') + ' + @(''--'') + $cmd' + #13#10 +
       '& $exe @addArgs' + #13#10 +
       'exit $LASTEXITCODE' + #13#10);
     SaveStringToFile(Dir + '\connect-codex-cli.cmd', PowerShellLauncherCmd('connect-codex-cli.ps1'), False);

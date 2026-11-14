@@ -66,3 +66,32 @@ Les lanceurs `nexus.cmd`, `nexus-mcp.cmd`, `nexus-assistant-clients.cmd` et `nex
 - **GIVEN** un dossier d'installation sans `config\nexus-native.env.cmd`, `^` compris dans son nom
 - **WHEN** `nexus-rest.cmd` est démarré
 - **THEN** le lanceur ne signale aucune erreur et le programme reçoit l'hôte `127.0.0.1` et le port `8080` par défaut
+
+### Requirement: Un connecteur MCP natif démarre NEXUS quel que soit le dossier d'installation
+L'entrée `nexus` d'un connecteur natif de l'installateur, enregistrée dans un client MCP ou écrite dans un fragment d'import, SHALL lancer directement `{app}\app\runtime\bin\java.exe` sur `{app}\lib\nexus-mcp.jar`, sans `cmd.exe`, avec dans son environnement les valeurs non vides que `config\nexus-native.env.cmd` donne à `nexus-mcp.cmd`. Le serveur MCP SHALL démarrer même si le dossier d'installation contient une espace ou un `^`.
+
+#### Scenario: Dossier d'installation contenant un accent circonflexe
+- **GIVEN** un dossier d'installation `…\in^st` et l'entrée native `nexus` de ce dossier, avec `NEXUS_HOME` dans son environnement
+- **WHEN** un client lance l'entrée comme processus, ses arguments étant mis entre guillemets selon les règles de `CreateProcess`, et envoie `initialize`
+- **THEN** le serveur MCP répond et ouvre sa base sous le `NEXUS_HOME` de l'entrée
+
+#### Scenario: Dossier d'installation contenant une espace
+- **GIVEN** un profil `C:\Users\John Doe` et le dossier d'installation par défaut, ou tout dossier d'installation `…\in st`
+- **WHEN** un client lance l'entrée native `nexus` de ce dossier et envoie `initialize`
+- **THEN** le serveur MCP répond
+
+#### Scenario: Configuration native transmise au client
+- **GIVEN** un `NEXUS_HOME` saisi ou par défaut, et Ollama activé ou non
+- **WHEN** l'installateur génère les connecteurs natifs et les fragments d'import
+- **THEN** l'entrée `nexus` porte `NEXUS_HOME` dans son environnement, et `NEXUS_SEMANTIC_PROVIDER` et `NEXUS_OLLAMA_BASE_URL` quand ils ne sont pas vides
+- **AND** aucune entrée native ne lance `cmd.exe` ni `nexus-mcp.cmd`
+
+## MODIFIED Requirements
+
+### Requirement: Les valeurs injectées dans les scripts PowerShell générés sont échappées
+Une valeur placée entre apostrophes dans un script PowerShell généré par l'installateur SHALL voir doublés l'apostrophe ASCII et chacun des caractères U+2018, U+2019, U+201A et U+201B, de sorte que le script se lit sans erreur et rend la valeur d'origine.
+
+#### Scenario: Dossier d'installation avec apostrophe typographique
+- **GIVEN** un dossier d'installation `C:\Outils\Jean’s NEXUS`
+- **WHEN** l'installateur génère le script de connexion des clients
+- **THEN** le script s'analyse sans erreur de syntaxe et la commande enregistrée pour `nexus` contient `C:\Outils\Jean’s NEXUS\lib\nexus-mcp.jar`

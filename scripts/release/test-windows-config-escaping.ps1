@@ -31,7 +31,9 @@ foreach ($required in @(
     'Le mode loopback-forward exige que',
     '"args": ["--enable-native-access=ALL-UNNAMED", "-jar"',
     'args = ["--enable-native-access=ALL-UNNAMED", "-jar"',
-    "PowerShellSingleQuote(ExpandConstant('{app}\nexus-mcp.cmd'))",
+    "PowerShellSingleQuote(ExpandConstant('{app}\lib\nexus-mcp.jar'))",
+    "PowerShellSingleQuote(ExpandConstant('{app}\app\runtime\bin\java.exe'))",
+    "'''); env = ' + NativeMcpEnvPs() + ' }'",
     'function Read-ClientJson([string]$Path) {',
     '[System.IO.File]::ReadAllText($Path, [System.Text.UTF8Encoding]::new($false))',
     '[System.IO.File]::Replace($tmp, $Path, $candidate)',
@@ -87,9 +89,10 @@ function Invoke-PowerShellSingleQuote([string]$Value, [object[]]$Rules) {
     foreach ($rule in $Rules) { $Value = $Value.Replace($rule.From, $rule.To) }
     return $Value
 }
+# Same shape as the native entry of McpEntryPsLiteral: java.exe, the runner jar and the env object.
 function Test-GeneratedMcpEntry([string]$Launcher, [object[]]$Rules) {
-    $line = "`$e = [PSCustomObject]@{ command = 'cmd.exe'; args = @('/d', '/s', '/c', '" +
-        (Invoke-PowerShellSingleQuote $Launcher $Rules) + "') }"
+    $line = "`$e = [PSCustomObject]@{ command = 'C:\NEXUS\app\runtime\bin\java.exe'; args = @('--enable-native-access=ALL-UNNAMED', '-jar', '" +
+        (Invoke-PowerShellSingleQuote $Launcher $Rules) + "'); env = [PSCustomObject]@{ NEXUS_HOME = 'C:\Users\a^b\.nexus' } }"
     $tokens = $null
     $errors = $null
     $ast = [System.Management.Automation.Language.Parser]::ParseInput($line, [ref]$tokens, [ref]$errors)
@@ -102,12 +105,12 @@ foreach ($quote in @(0x2018, 0x2019, 0x201A, 0x201B)) {
         throw ('PowerShellSingleQuote must double U+{0:X4}.' -f $quote)
     }
 }
-$typographic = 'C:\Outils\Jean' + [char]0x2019 + 's NEXUS\nexus-mcp.cmd'
+$typographic = 'C:\Outils\Jean' + [char]0x2019 + 's NEXUS\lib\nexus-mcp.jar'
 if (-not (Test-GeneratedMcpEntry $typographic $quoteRules)) {
     throw "Generated MCP entry for an install folder with U+2019 does not parse back to $typographic"
 }
 foreach ($quote in @(0x0027, 0x2018, 0x201A, 0x201B)) {
-    $launcher = 'C:\Outils\Q' + [char]$quote + 'Q\nexus-mcp.cmd'
+    $launcher = 'C:\Outils\Q' + [char]$quote + 'Q\lib\nexus-mcp.jar'
     if (-not (Test-GeneratedMcpEntry $launcher $quoteRules)) { throw ('Generated MCP entry does not round-trip U+{0:X4}.' -f $quote) }
 }
 # Negative control: doubling only the ASCII apostrophe breaks the same line.
@@ -269,7 +272,8 @@ try {
             (New-EnvCase ($profileDir + '2\nexus')),
             (New-EnvCase $upperProfileHome),
             (New-EnvCase (Join-Path $localDir 'NEXUS\data') 'set "NEXUS_HOME=%USERPROFILE%\AppData\Local\NEXUS\data"' $profileDir ''),
-            (New-EnvCase (Join-Path $asciiProfile '.nexus') '' $asciiProfile (Join-Path $asciiProfile 'AppData\Local'))
+            (New-EnvCase (Join-Path $asciiProfile '.nexus') '' $asciiProfile (Join-Path $asciiProfile 'AppData\Local')),
+            (New-EnvCase (Join-Path $root 'a^b\.nexus') ('set "NEXUS_HOME=' + (Join-Path $root 'a^b\.nexus') + '"'))
         )
         $index = 0
         foreach ($case in $cases) {
@@ -361,6 +365,94 @@ try {
     $refusedFolder = 'C:\Outils\Inst' + [char]0xE0 + 'll' + [char]0xE9 + ' ' + [char]0x141 + 'ukasz'
     if (-not (Test-AnsiRoundTrip $acceptedFolder)) { throw "An install folder of the ANSI code page must be accepted: $acceptedFolder" }
     if (Test-AnsiRoundTrip $refusedFolder) { throw "An install folder with U+0141 must be refused under code page 1252: $refusedFolder" }
+
+    # ContainsUnsafeConfigChars refuses only what breaks a generated format: CR and LF end the
+    # line, a double quote closes set "...". A caret is literal in both config\nexus-native.env.cmd
+    # (quoted SET, delayed expansion off) and docker\.env (single-quoted value), and a Windows
+    # profile may contain one (AUD-QUA-29). Replay of the Pos terms from the hardened source.
+    $unsafeMatch = [regex]::Match($hardened,
+        '(?s)function ContainsUnsafeConfigChars\(Value: String\): Boolean;\s*begin\s*Result := (?<expr>.*?);\s*end;')
+    if (-not $unsafeMatch.Success) { throw 'ContainsUnsafeConfigChars not found in the hardened installer source.' }
+    $unsafeTerms = @($unsafeMatch.Groups['expr'].Value -split '\s+or\s+')
+    $unsafeChars = @(foreach ($term in $unsafeTerms) {
+        $termMatch = [regex]::Match($term.Trim(), "^\(Pos\((?<lit>$pascalLiteral), Value\) > 0\)$")
+        if (-not $termMatch.Success) { throw "ContainsUnsafeConfigChars term is not a Pos(<literal>, Value) > 0 test: $term" }
+        ConvertFrom-PascalLiteral $termMatch.Groups['lit'].Value
+    })
+    function Test-UnsafeConfigValue([string]$Value) {
+        return @($unsafeChars | Where-Object { $Value.Contains($_) }).Count -gt 0
+    }
+    foreach ($accepted in @('C:\Users\a^b', 'C:\Users\a^b\.nexus', 'http://127.0.0.1:11434/a^b', 'tok^en')) {
+        if (Test-UnsafeConfigValue $accepted) { throw "ContainsUnsafeConfigChars must accept a caret: $accepted" }
+    }
+    foreach ($refused in @('C:\Users\a"b', "C:\Users\a`rb", "C:\Users\a`nb")) {
+        if (-not (Test-UnsafeConfigValue $refused)) {
+            throw "ContainsUnsafeConfigChars must refuse CR, LF and double quote: $($refused.Replace("`r", '#13').Replace("`n", '#10'))"
+        }
+    }
+    if ($hardened.IndexOf('accent circonflexe', [StringComparison]::Ordinal) -ge 0) {
+        throw 'The wizard refusal messages must not list the caret among the refused characters.'
+    }
+
+    # docker\.env line for a profile C:\Users\a^b: replay of DockerPath then DotEnvQuoted.
+    $dockerPathMatch = [regex]::Match($hardened,
+        "(?s)function DockerPath\(Value: String\): String;\s*begin\s*Result := TrimTrailingBackslash\(Value\);\s*" +
+        "StringChangeEx\(Result, '\\', '/', True\);\s*end;")
+    if (-not $dockerPathMatch.Success) { throw 'DockerPath must trim the trailing backslash, then turn backslashes into slashes.' }
+    $dotEnvMatch = [regex]::Match($hardened,
+        "(?s)function DotEnvQuoted\(Value: String\): String;\s*begin\s*Result := Value;\s*(?:\{[^}]*\}\s*)?" +
+        "StringChangeEx\(Result, (?<from>$pascalLiteral), (?<to>$pascalLiteral), True\);\s*" +
+        "Result := '''' \+ Result \+ '''';\s*end;")
+    if (-not $dotEnvMatch.Success) { throw 'DotEnvQuoted must escape one character, then wrap the value in single quotes.' }
+    $dotEnvFrom = ConvertFrom-PascalLiteral $dotEnvMatch.Groups['from'].Value
+    $dotEnvTo = ConvertFrom-PascalLiteral $dotEnvMatch.Groups['to'].Value
+    function Invoke-DockerRepositoryBind([string]$Value) {
+        $path = $Value
+        if ($path.Length -gt 0 -and $path.EndsWith('\')) { $path = $path.Substring(0, $path.Length - 1) }
+        return "'" + $path.Replace('\', '/').Replace($dotEnvFrom, $dotEnvTo) + "'"
+    }
+    if ($hardened.IndexOf("'NEXUS_REPOSITORY_BIND=' + DotEnvQuoted(DockerPath(DockerPage.Values[5])) + #13#10 +", [StringComparison]::Ordinal) -lt 0) {
+        throw 'docker\.env must write the repository folder through DockerPath then DotEnvQuoted.'
+    }
+    $caretBind = Invoke-DockerRepositoryBind 'C:\Users\a^b'
+    if ($caretBind -cne "'C:/Users/a^b'") { throw "docker\.env repository line for C:\Users\a^b is $caretBind, expected 'C:/Users/a^b'." }
+
+    # Every box of the page validation is a SuppressibleMsgBox: /SUPPRESSMSGBOXES does not suppress
+    # MsgBox, and a silent install would wait on it. A refusal is followed by Result := False.
+    function Get-WizardBoxViolations([string]$Source) {
+        $violations = New-Object System.Collections.Generic.List[string]
+        foreach ($header in @('function NextButtonClick\(CurPageID: Integer\): Boolean;',
+                'procedure NotifyPortSelection\(Description: String; RequestedPort: Integer; SelectedPort: Integer\);')) {
+            $routine = [regex]::Match($Source, "(?s)$header.*?\r?\nend;")
+            if (-not $routine.Success) { $violations.Add("routine not found: $header"); continue }
+            $body = $routine.Value
+            foreach ($bare in [regex]::Matches($body, '(?<!Suppressible)MsgBox\(')) {
+                $violations.Add("MsgBox in $header`: " + $body.Substring($bare.Index, [Math]::Min(80, $body.Length - $bare.Index)))
+            }
+            $boxes = @([regex]::Matches($body, 'SuppressibleMsgBox\('))
+            if ($boxes.Count -eq 0) { $violations.Add("no SuppressibleMsgBox in $header") }
+            for ($i = 0; $i -lt $boxes.Count; $i++) {
+                $end = if ($i + 1 -lt $boxes.Count) { $boxes[$i + 1].Index } else { $body.Length }
+                $segment = $body.Substring($boxes[$i].Index, $end - $boxes[$i].Index)
+                $close = [regex]::Match($segment, ',\s*(?<icon>mb\w+),\s*MB_OK,\s*IDOK\)')
+                if (-not $close.Success) { $violations.Add("SuppressibleMsgBox without MB_OK, IDOK: $($segment.Substring(0, [Math]::Min(80, $segment.Length)))"); continue }
+                $icon = $close.Groups['icon'].Value
+                $after = $segment.Substring($close.Index + $close.Length)
+                if ($icon -eq 'mbError') {
+                    if ($after -notmatch '^;\s*Result := False;\s*exit;') { $violations.Add("refusal not followed by Result := False; exit;: $($segment.Substring(0, [Math]::Min(80, $segment.Length)))") }
+                }
+                elseif ($icon -ne 'mbInformation') { $violations.Add("unexpected box icon $icon") }
+            }
+        }
+        return $violations
+    }
+    $boxViolations = @(Get-WizardBoxViolations $hardened)
+    if ($boxViolations.Count -gt 0) { throw "Wizard page validation boxes must be SuppressibleMsgBox:`n$($boxViolations -join "`n")" }
+    # Negative control: a MsgBox put back on the Docker page is reported.
+    $mutatedBox = $hardened.Replace("SuppressibleMsgBox('L''adresse d''", "MsgBox('L''adresse d''")
+    if ($mutatedBox -ceq $hardened -or @(Get-WizardBoxViolations $mutatedBox).Count -eq 0) {
+        throw 'Wizard box contract is vacuous: a MsgBox on the Docker page must be reported.'
+    }
 
     Write-Host 'NEXUS Windows cmd and PowerShell escaping, client JSON helper, REST auth, Docker forward and native-access contract PASS' -ForegroundColor Green
 }
