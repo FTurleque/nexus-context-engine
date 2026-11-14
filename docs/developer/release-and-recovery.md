@@ -359,23 +359,26 @@ Pour revenir en arrière sans rouvrir ces cas, restaurer la sauvegarde de
 
 ## OpenSpec installer-client-configuration
 
-Spec : [`openspec/specs/installer-client-configuration/spec.md`](../../openspec/specs/installer-client-configuration/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md). Le comportement vu de l'utilisateur est décrit dans [Installation Windows](../user/windows-installation.md) (« Écran 4 — Configuration runtime », « Écran 9 — Clients IA » et « Désinstallation »).
+Spec : [`openspec/specs/installer-client-configuration/spec.md`](../../openspec/specs/installer-client-configuration/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md). Le comportement vu de l'utilisateur est décrit dans [Installation Windows](../user/windows-installation.md) (« Écran 4 — Configuration runtime », « Écran 8 — Configuration Docker », « Écran 9 — Clients IA », « Fichiers générés » et « Désinstallation »).
 
 ### Comportement existant vérifié (installer-client-configuration)
 
 | Étiquette | Fait | Source |
 |---|---|---|
-| [Existant vérifié] | Les scripts de connexion et de déconnexion sont du texte PowerShell assemblé par l'installateur, écrit dans `{app}\integrations\` par `SavePowerShellScript` en UTF-8 avec BOM, et exécuté par `{sys}\WindowsPowerShell\v1.0\powershell.exe` (Windows PowerShell 5.1). Sans BOM, 5.1 lirait le script dans la page ANSI, où `SaveStringToFile` convertit U+FF07 ou U+02BC en apostrophe ASCII. | `packaging/windows/nexus-installer.iss.template:1497-1505`, `:1615`, `:1766`, `:1841` |
-| [Existant vérifié] | `nexus-json.ps1` est le seul lecteur et écrivain des fichiers JSON des clients : `Read-ClientJson` lit en UTF-8 et lève une exception si le contenu n'est pas un objet JSON, `Get-ClientSection` si la section `servers` ou `mcpServers` n'en est pas un ; `Save-CleanJson` écrit un fichier temporaire du même dossier puis appelle `[System.IO.File]::Replace`, qui garde l'original sous `<fichier>.nexus-backup-<yyyyMMddHHmmss>` (suffixe `-N` si ce nom existe), et remet l'original en place si le remplacement échoue après l'avoir renommé. | `packaging/windows/nexus-installer.iss.template:1551-1614` |
-| [Existant vérifié] | `Add-NexusServerEntry` lit et contrôle tous les fichiers avant d'en écrire un. `Remove-NexusServerEntry` continue après un fichier illisible et lève une exception à la fin. | `packaging/windows/nexus-installer.iss.template:1587-1614` |
-| [Existant vérifié] | Les quatre scripts JSON (`connect-copilot-jetbrains.ps1`, `connect-claude-desktop.ps1`, `disconnect-copilot-jetbrains.ps1`, `disconnect-claude-desktop.ps1`) commencent par `$ErrorActionPreference = 'Stop'` et un `trap` qui affiche `NEXUS: <message>` puis sort en 1 ; le message nomme le fichier, jamais son contenu. | `packaging/windows/nexus-installer.iss.template:1755-1766`, `:1828-1841`, `:1938-1952` |
+| [Existant vérifié] | Les scripts de connexion et de déconnexion sont du texte PowerShell assemblé par l'installateur, écrit dans `{app}\integrations\` par `SavePowerShellScript` en UTF-8 avec BOM, et exécuté par `{sys}\WindowsPowerShell\v1.0\powershell.exe` (Windows PowerShell 5.1). Sans BOM, 5.1 lirait le script dans la page ANSI, où `SaveStringToFile` convertit U+FF07 ou U+02BC en apostrophe ASCII. | `packaging/windows/nexus-installer.iss.template:1499-1507`, `:1617`, `:1768`, `:1843` |
+| [Existant vérifié] | `nexus-json.ps1` est le seul lecteur et écrivain des fichiers JSON des clients : `Read-ClientJson` lit en UTF-8 et lève une exception si le contenu n'est pas un objet JSON, `Get-ClientSection` si la section `servers` ou `mcpServers` n'en est pas un ; `Save-CleanJson` écrit un fichier temporaire du même dossier puis appelle `[System.IO.File]::Replace`, qui garde l'original sous `<fichier>.nexus-backup-<yyyyMMddHHmmss>` (suffixe `-N` si ce nom existe), et remet l'original en place si le remplacement échoue après l'avoir renommé. | `packaging/windows/nexus-installer.iss.template:1553-1616` |
+| [Existant vérifié] | `Add-NexusServerEntry` lit et contrôle tous les fichiers avant d'en écrire un. `Remove-NexusServerEntry` continue après un fichier illisible et lève une exception à la fin. | `packaging/windows/nexus-installer.iss.template:1589-1616` |
+| [Existant vérifié] | Les quatre scripts JSON (`connect-copilot-jetbrains.ps1`, `connect-claude-desktop.ps1`, `disconnect-copilot-jetbrains.ps1`, `disconnect-claude-desktop.ps1`) commencent par `$ErrorActionPreference = 'Stop'` et un `trap` qui affiche `NEXUS: <message>` puis sort en 1 ; le message nomme le fichier, jamais son contenu. | `packaging/windows/nexus-installer.iss.template:1757-1768`, `:1830-1843`, `:1940-1954` |
 | [Existant vérifié] | `PowerShellSingleQuote` double U+0027, U+2018, U+2019, U+201A et U+201B, que PowerShell traite tous comme délimiteurs de chaîne simple. | `packaging/windows/nexus-installer.iss.template:391` |
-| [Existant vérifié] | La désinstallation conserve le drapeau `CopilotJetBrainsManaged` ou `ClaudeDesktopManaged` et journalise le code quand le script de déconnexion échoue : une désinstallation ultérieure réessaie. | `packaging/windows/nexus-installer.iss.template:2413-2426` |
-| [Existant vérifié] | `config\nexus-native.env.cmd`, `docker\.env`, `integrations\codex-desktop.mcp.toml`, `integrations\copilot-jetbrains.mcp.json` et `integrations\generic-mcp.json` sont écrits par `SaveUtf8TextFile`, c'est-à-dire `SaveStringsToUTF8FileWithoutBOM` : UTF-8 sans BOM, suivi d'un saut de ligne final que `cmd.exe`, Compose, TOML et JSON ignorent. Un BOM ferait partie de la première clé du `.env` lue par Compose. | `packaging/windows/nexus-installer.iss.template:1319-1333`, `:1348`, `:1391`, `:1746-1748`, `:1780-1782`, `:1788-1790` |
-| [Existant vérifié] | Dans `config\nexus-native.env.cmd`, `NEXUS_HOME` est écrit par `CmdEnvPathValue` : une valeur qui contient un caractère non ASCII et commence, sans tenir compte de la casse ASCII et à une frontière de dossier, par `LOCALAPPDATA` ou `USERPROFILE` (préfixe le plus long) devient `%LOCALAPPDATA%\…` ou `%USERPROFILE%\…`, que `cmd.exe` développe depuis l'environnement Unicode ; une valeur ASCII reste littérale ; le reste du chemin et les autres valeurs sont échappés par `CmdEnvEscape` (`%` doublé). Sous un profil accentué, le `NEXUS_HOME` par défaut s'écrit donc `set "NEXUS_HOME=%USERPROFILE%\.nexus"`, en ASCII. | `scripts/release/harden-windows-installer-source.ps1:35-84`, `:243-251` |
+| [Existant vérifié] | La désinstallation conserve le drapeau `CopilotJetBrainsManaged` ou `ClaudeDesktopManaged` et journalise le code quand le script de déconnexion échoue : une désinstallation ultérieure réessaie. | `packaging/windows/nexus-installer.iss.template:2414-2427` |
+| [Existant vérifié] | `config\nexus-native.env.cmd`, `docker\.env`, `integrations\codex-desktop.mcp.toml`, `integrations\copilot-jetbrains.mcp.json` et `integrations\generic-mcp.json` sont écrits par `SaveUtf8TextFile`, c'est-à-dire `SaveStringsToUTF8FileWithoutBOM` : UTF-8 sans BOM, suivi d'un saut de ligne final que `cmd.exe`, Compose, TOML et JSON ignorent. Un BOM ferait partie de la première clé du `.env` lue par Compose. | `packaging/windows/nexus-installer.iss.template:1320-1334`, `:1349`, `:1392`, `:1747-1749`, `:1781-1783`, `:1789-1791` |
+| [Existant vérifié] | Dans `config\nexus-native.env.cmd`, `NEXUS_HOME` est écrit par `CmdEnvPathValue` : une valeur qui contient un caractère non ASCII et commence, sans tenir compte de la casse ASCII et à une frontière de dossier, par `LOCALAPPDATA` ou `USERPROFILE` (préfixe le plus long) devient `%LOCALAPPDATA%\…` ou `%USERPROFILE%\…`, que `cmd.exe` développe depuis l'environnement Unicode ; une valeur ASCII reste littérale ; le reste du chemin et les autres valeurs sont échappés par `CmdEnvEscape` (`%` doublé). Sous un profil accentué, le `NEXUS_HOME` par défaut s'écrit donc `set "NEXUS_HOME=%USERPROFILE%\.nexus"`, en ASCII. | `scripts/release/harden-windows-installer-source.ps1:35-84`, `:247-255` |
 | [Existant vérifié] | Si les lignes `set` gardent un caractère non ASCII, `CmdUtf8Frame` les encadre : page de code courante relevée par `for /f "tokens=2 delims=:." %%P in ('chcp')`, `chcp 65001 >nul`, lignes `set`, puis `chcp <page d'origine> >nul`. Un contenu ASCII est écrit sans cadre. Les sorties de `chcp` vont vers `nul` : le canal JSON-RPC de `nexus-mcp.cmd` n'est pas pollué. | `scripts/release/harden-windows-installer-source.ps1:35-46`, `:86-102`, `scripts/release/harden-windows-rest-auth-source.ps1:15`, `:38` |
-| [Existant vérifié] | L'assistant refuse un dossier d'installation dont le nom ne fait pas l'aller-retour `String` → `AnsiString` → `String` (page ANSI active) : `NextButtonClick` reste sur la page du dossier, `PrepareToInstall` arrête une réinstallation où cette page est sautée, avec un message qui nomme la limite du runtime Java embarqué. Le message passe par `SuppressibleMsgBox` : en installation silencieuse avec `/SUPPRESSMSGBOXES`, il est journalisé sans fenêtre et l'installation s'interrompt. | `packaging/windows/nexus-installer.iss.template:1066-1083`, `:1094-1099`, `:1308-1313` |
-| [Existant vérifié] | L'installateur smoke coche Codex Desktop et le client générique : il écrit `codex-desktop.mcp.toml`, `connect-codex-desktop.ps1` et `generic-mcp.json`, sans connecter aucun client. | `packaging/windows/nexus-installer.iss.template:986-999`, `:2379` |
+| [Existant vérifié] | L'assistant refuse un dossier d'installation dont le nom ne fait pas l'aller-retour `String` → `AnsiString` → `String` (page ANSI active) : `NextButtonClick` reste sur la page du dossier, `PrepareToInstall` arrête une réinstallation où cette page est sautée, avec un message qui nomme la limite du runtime Java embarqué. Le message passe par `SuppressibleMsgBox` : en installation silencieuse avec `/SUPPRESSMSGBOXES`, il est journalisé sans fenêtre et l'installation s'interrompt. | `packaging/windows/nexus-installer.iss.template:1066-1083`, `:1095-1100`, `:1309-1314` |
+| [Existant vérifié] | L'installateur smoke coche Codex Desktop et le client générique : il écrit `codex-desktop.mcp.toml`, `connect-codex-desktop.ps1` et `generic-mcp.json`, sans connecter aucun client. | `packaging/windows/nexus-installer.iss.template:986-999`, `:2380` |
+| [Existant vérifié] | `ContainsUnsafeConfigChars` refuse dans `NEXUS_HOME`, le token REST, le dossier de dépôt Docker et l'URL Ollama le retour chariot (`#13`), le saut de ligne (`#10`) et le guillemet double, seuls caractères qui cassent un format écrit : une fin de ligne ajoute une ligne au fichier, le guillemet ferme `set "…"`. Invariant : une valeur acceptée est littérale pour son lecteur. Dans `config\nexus-native.env.cmd`, chaque valeur est entre guillemets (`set "NOM=valeur"`, `%` doublé par `CmdEnvEscape`) et les lanceurs désactivent l'expansion retardée, si bien que `^` y reste littéral ; dans `docker\.env`, `DotEnvQuoted` met la valeur entre apostrophes. Un profil `C:\Users\a^b` donne `set "NEXUS_HOME=C:\Users\a^b\.nexus"` et `NEXUS_REPOSITORY_BIND='C:/Users/a^b'`. La page Docker contrôle aussi `NEXUS_HOME`, même quand la page Runtime est sautée. | `scripts/release/harden-windows-installer-source.ps1:104-121`, `:166-172`, `:227-234`, `:249`, `:284`, `scripts/release/build-windows-distribution.ps1:262` |
+| [Existant vérifié] | Toutes les boîtes de la validation des pages passent par `SuppressibleMsgBox(…, MB_OK, IDOK)` : refus de `NextButtonClick`, chacun suivi de `Result := False; exit;`, avis de port réservé au REST natif et avis de port remplacé de `NotifyPortSelection`. En installation silencieuse avec `/SUPPRESSMSGBOXES`, le message est journalisé sans fenêtre et un refus arrête l'installation ; sans ce paramètre, la boîte reste affichée. Les blocs ajoutés par le durcissement suivent la même forme. | `packaging/windows/nexus-installer.iss.template:611-618`, `:1084-1248`, `scripts/release/harden-windows-installer-source.ps1:157-235` |
+| [Existant vérifié] | `nexus.cmd`, `nexus-mcp.cmd`, `nexus-assistant-clients.cmd` et `nexus-rest.cmd` chargent `config\nexus-native.env.cmd` par `if not exist "%~dp0config\nexus-native.env.cmd" goto run`, `pushd "%~dp0config" || goto configError`, `call .\nexus-native.env.cmd`, `popd`, puis lancent leur programme après `:run`, depuis le dossier courant de l'appelant. `CALL` double un `^` de son argument même entre guillemets : il ne reçoit qu'un chemin relatif fixe, et `%~dp0` reste entre guillemets dans `if exist` et `pushd`. Si `pushd` échoue alors que le fichier existe, `:configError` écrit `NEXUS: cannot load "<dossier>\config\nexus-native.env.cmd"` sur la sortie d'erreur et rend `exit /b 1` sans lancer le programme. Sans le fichier, le lanceur garde ses défauts ; `nexus-rest.cmd` pose `127.0.0.1` et `8080` après `:run`. | `scripts/release/build-windows-distribution.ps1:260-320` |
 
 ### Vue (installer-client-configuration)
 
@@ -413,24 +416,63 @@ Codes de sortie des scripts JSON : `0` entrée ajoutée (connexion) ou entrée r
 
 ```mermaid
 sequenceDiagram
-    participant L as nexus.cmd
+    participant A as Appelant (dossier courant caller)
+    participant L as nexus.cmd (dossier in^st)
     participant E as nexus-native.env.cmd
     participant C as Console (page d'origine, ex. 850)
-    L->>E: call (setlocal DisableDelayedExpansion)
-    alt contenu ASCII (NEXUS_HOME écrit %USERPROFILE%\.nexus)
-        E->>E: set "NEXUS_HOME=%USERPROFILE%\.nexus"
-        Note over E: expansion par cmd.exe depuis la variable Unicode
-    else contenu avec caractère non ASCII
-        E->>C: chcp : page d'origine relevée
-        E->>C: chcp 65001
-        E->>E: set "NEXUS_HOME=D:\Données\Łódź\nexus" (lignes lues en UTF-8)
-        E->>C: chcp <page d'origine>
+    participant P as nexus.exe ou java.exe
+    A->>L: démarrage (setlocal DisableDelayedExpansion)
+    alt fichier absent (distribution portable)
+        L->>L: goto run, valeurs par défaut
+    else fichier présent
+        L->>L: pushd "%~dp0config"
+        alt pushd échoue
+            L-->>A: NEXUS: cannot load "…\config\nexus-native.env.cmd" (sortie d'erreur), code 1, programme non lancé
+        else pushd réussit
+            L->>E: call .\nexus-native.env.cmd (chemin relatif, sans ^)
+            alt contenu ASCII (NEXUS_HOME écrit %USERPROFILE%\.nexus)
+                E->>E: set "NEXUS_HOME=%USERPROFILE%\.nexus"
+                Note over E: expansion par cmd.exe depuis la variable Unicode
+            else contenu avec caractère non ASCII
+                E->>C: chcp : page d'origine relevée
+                E->>C: chcp 65001
+                E->>E: set "NEXUS_HOME=D:\Données\Łódź\nexus" (lignes lues en UTF-8)
+                E->>C: chcp <page d'origine>
+            end
+            E-->>L: variables posées
+            L->>L: popd (dossier courant = caller)
+        end
     end
-    E-->>L: variables posées
-    L->>L: nexus.exe ou java.exe hérite de NEXUS_HOME
+    L->>P: :run, "%~dp0…" %* depuis caller, hérite de NEXUS_HOME
+    P-->>L: code de sortie
+    L-->>A: exit /b %ERRORLEVEL%
 ```
 
-Notation : UML de séquence. Exigences portées : « Les lanceurs natifs reçoivent les valeurs de la configuration native telles qu'elles ont été saisies » et, pour l'écriture du fichier, « Les fichiers de configuration générés par l'installateur sont écrits en UTF-8 sans BOM ». La branche ASCII couvre les valeurs par défaut sous un profil accentué sans dépendre de `chcp` ; la branche `chcp` sert à une valeur saisie hors profil ou à un caractère non ASCII dans une autre variable (URL Ollama).
+Notation : UML de séquence. Exigences portées : « Les lanceurs natifs reçoivent les valeurs de la configuration native telles qu'elles ont été saisies », « Un lanceur natif charge sa configuration quel que soit le dossier d'installation » et, pour l'écriture du fichier, « Les fichiers de configuration générés par l'installateur sont écrits en UTF-8 sans BOM ». La branche ASCII couvre les valeurs par défaut sous un profil accentué sans dépendre de `chcp` ; la branche `chcp` sert à une valeur saisie hors profil ou à un caractère non ASCII dans une autre variable (URL Ollama).
+
+#### Vue UML de séquence — Comment la page Docker valide-t-elle ses valeurs en installation silencieuse ? (existant)
+
+```mermaid
+sequenceDiagram
+    participant S as Setup (/VERYSILENT /SUPPRESSMSGBOXES)
+    participant N as NextButtonClick(DockerPage)
+    participant V as ContainsUnsafeConfigChars
+    participant L as Journal (/LOG)
+    S->>N: clic Suivant simulé
+    N->>V: NEXUS_HOME, dossier de dépôt, URL Ollama
+    alt valeur avec CR, LF ou guillemet double
+        V-->>N: vrai
+        N->>L: SuppressibleMsgBox (supprimée, IDOK) : message journalisé
+        N-->>S: False
+        S->>S: arrêt, code de sortie non nul, aucune configuration écrite
+    else valeur sans ces caractères (C:\Users\a^b compris)
+        V-->>N: faux
+        N-->>S: True
+        S->>S: page suivante, puis écriture de docker\.env (NEXUS_REPOSITORY_BIND='C:/Users/a^b')
+    end
+```
+
+Notation : UML de séquence. Exigences portées : « L'assistant accepte un accent circonflexe dans les valeurs de la configuration générée » et « En installation silencieuse, les messages de l'assistant n'attendent aucune réponse ». Les autres refus de `NextButtonClick` suivent la même branche « vrai » ; un avis de port est journalisé de la même façon sans rendre `False`.
 
 ### Écarts et limites (installer-client-configuration)
 
@@ -438,7 +480,9 @@ Notation : UML de séquence. Exigences portées : « Les lanceurs natifs reçoiv
 - `chcp` exige une console. Un lanceur démarré avec une console cachée (`CREATE_NO_WINDOW`, mode mesuré) lit correctement une valeur littérale non ASCII ; un lanceur démarré sans aucune console (`DETACHED_PROCESS`) garde sa page de code et la lit mal (relevé local en page 850). Le mode de lancement de chaque client MCP n'est pas mesuré. Les valeurs littérales non ASCII de `config\nexus-native.env.cmd` sont donc réservées aux lanceurs qui disposent d'une console ; un `NEXUS_HOME` accentué sous le profil, écrit `%USERPROFILE%\…`, n'est pas concerné.
 - Un `NEXUS_HOME` accentué sous le profil, écrit `%USERPROFILE%\…` ou `%LOCALAPPDATA%\…`, suppose la variable définie au lancement : un client qui remplace l'environnement de ses serveurs MCP sans la transmettre donne `\.nexus`, à la racine du lecteur courant. Une valeur ASCII reste littérale et n'en dépend pas.
 - Le runtime Java embarqué ne démarre pas depuis un dossier d'installation qui contient un caractère absent de la page ANSI du poste (par exemple `Ł` en page 1252) : `nexus.exe` signale `could not find java.dll`, `java.exe -jar` `Unable to access jarfile` (relevé local, Temurin 21). L'assistant refuse donc un tel dossier ; un dossier limité aux caractères de la page ANSI (accents compris) fonctionne. Les données (`NEXUS_HOME`) ne sont pas concernées : NEXUS lit la variable en Unicode.
-- Le message `Docker Desktop n'est pas prêt` de `nexus-docker-up.cmd` est écrit par `SaveStringToFile` dans la page ANSI et s'affiche altéré dans une console OEM ; le comportement du lanceur n'en dépend pas (`packaging/windows/nexus-installer.iss.template:1411`, `:1437`).
+- Le message `Docker Desktop n'est pas prêt` de `nexus-docker-up.cmd` est écrit par `SaveStringToFile` dans la page ANSI et s'affiche altéré dans une console OEM ; le comportement du lanceur n'en dépend pas (`packaging/windows/nexus-installer.iss.template:1412`, `:1438`).
+- La page Docker n'est exercée par aucun smoke (Docker exclu du mode smoke) : l'acceptation d'un profil `C:\Users\a^b` en mode Docker est prouvée par le rejeu des règles Pascal (`ContainsUnsafeConfigChars`, `DockerPath`, `DotEnvQuoted`) dans `scripts/release/test-windows-config-escaping.ps1`, et l'absence de boîte modale par le contrat textuel de `NextButtonClick` ; ni l'installateur non smoke sous un tel profil avec Docker Desktop, ni une réinstallation silencieuse refusée sur la page Docker n'ont été rejoués.
+- Un script tiers qui appelle un lanceur par `call "<dossier contenant ^>\nexus.cmd"` échoue avant que le lanceur soit lu : `CALL` double le `^` de son argument. Un lanceur démarré comme processus (raccourci, `cmd /c`, client MCP) ou appelé sans `CALL` n'est pas concerné.
 - Le `.env` Docker n'est pas écrit par l'installateur smoke (déploiement natif seul) : son encodage est vérifié par le contrat statique (aucun `SaveStringToFile` sur `.env`, `.toml`, `.json` ni `nexus-native.env.cmd`), pas par une lecture Compose.
 - Les sauvegardes ne sont jamais supprimées ni relues par NEXUS ; elles contiennent ce que contenait le fichier, secrets d'autres serveurs MCP compris, et leur nettoyage revient à l'utilisateur.
 - `File.Replace` remplace un lien symbolique par un fichier ordinaire et rompt un lien dur : une configuration tenue dans un dépôt de dotfiles par lien n'est plus suivie après la connexion.

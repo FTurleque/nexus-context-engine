@@ -260,35 +260,63 @@ $moduleList | Set-Content -LiteralPath (Join-Path $distribution 'RUNTIME-MODULES
 @'
 @echo off
 setlocal DisableDelayedExpansion
-if exist "%~dp0config\nexus-native.env.cmd" call "%~dp0config\nexus-native.env.cmd"
+if not exist "%~dp0config\nexus-native.env.cmd" goto run
+pushd "%~dp0config" || goto configError
+call .\nexus-native.env.cmd
+popd
+:run
 "%~dp0app\nexus.exe" %*
 exit /b %ERRORLEVEL%
+:configError
+echo NEXUS: cannot load "%~dp0config\nexus-native.env.cmd" 1>&2
+exit /b 1
 '@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus.cmd') -Encoding ascii
 
 @'
 @echo off
 setlocal DisableDelayedExpansion
-if exist "%~dp0config\nexus-native.env.cmd" call "%~dp0config\nexus-native.env.cmd"
+if not exist "%~dp0config\nexus-native.env.cmd" goto run
+pushd "%~dp0config" || goto configError
+call .\nexus-native.env.cmd
+popd
+:run
 "%~dp0app\runtime\bin\java.exe" --enable-native-access=ALL-UNNAMED -jar "%~dp0lib\nexus-mcp.jar" %*
 exit /b %ERRORLEVEL%
+:configError
+echo NEXUS: cannot load "%~dp0config\nexus-native.env.cmd" 1>&2
+exit /b 1
 '@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus-mcp.cmd') -Encoding ascii
 
 @'
 @echo off
 setlocal DisableDelayedExpansion
-if exist "%~dp0config\nexus-native.env.cmd" call "%~dp0config\nexus-native.env.cmd"
+if not exist "%~dp0config\nexus-native.env.cmd" goto run
+pushd "%~dp0config" || goto configError
+call .\nexus-native.env.cmd
+popd
+:run
 "%~dp0app\runtime\bin\java.exe" --enable-native-access=ALL-UNNAMED -jar "%~dp0lib\nexus-assistant-clients.jar" %*
 exit /b %ERRORLEVEL%
+:configError
+echo NEXUS: cannot load "%~dp0config\nexus-native.env.cmd" 1>&2
+exit /b 1
 '@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus-assistant-clients.cmd') -Encoding ascii
 
 @'
 @echo off
 setlocal DisableDelayedExpansion
-if exist "%~dp0config\nexus-native.env.cmd" call "%~dp0config\nexus-native.env.cmd"
+if not exist "%~dp0config\nexus-native.env.cmd" goto run
+pushd "%~dp0config" || goto configError
+call .\nexus-native.env.cmd
+popd
+:run
 if "%NEXUS_REST_HOST%"=="" set "NEXUS_REST_HOST=127.0.0.1"
 if "%NEXUS_REST_PORT%"=="" set "NEXUS_REST_PORT=8080"
 "%~dp0app\runtime\bin\java.exe" --enable-native-access=ALL-UNNAMED "-Dquarkus.http.host=%NEXUS_REST_HOST%" "-Dquarkus.http.port=%NEXUS_REST_PORT%" -jar "%~dp0rest\quarkus-run.jar" %*
 exit /b %ERRORLEVEL%
+:configError
+echo NEXUS: cannot load "%~dp0config\nexus-native.env.cmd" 1>&2
+exit /b 1
 '@ | Set-Content -LiteralPath (Join-Path $distribution 'nexus-rest.cmd') -Encoding ascii
 
 @'

@@ -71,6 +71,32 @@ if ($hardenedSource.IndexOf("'set `"NEXUS_HOME=' + RuntimePage.Values[0]", [Stri
     throw 'Generated installer source still writes raw NEXUS_HOME into batch configuration.'
 }
 
+Write-Host '[contract] page validation boxes never wait in a silent install; a caret is accepted'
+# /SUPPRESSMSGBOXES suppresses SuppressibleMsgBox only: a MsgBox would hold a silent install.
+foreach ($routineHeader in @('function NextButtonClick\(CurPageID: Integer\): Boolean;',
+        'procedure NotifyPortSelection\(Description: String; RequestedPort: Integer; SelectedPort: Integer\);')) {
+    $routine = [regex]::Match($hardenedSource, "(?s)$routineHeader.*?\r?\nend;")
+    if (-not $routine.Success) { throw "Hardened installer source is missing $routineHeader" }
+    if ([regex]::IsMatch($routine.Value, '(?<!Suppressible)MsgBox\(')) {
+        throw "Page validation must use SuppressibleMsgBox, never MsgBox: $routineHeader"
+    }
+    $boxes = @([regex]::Matches($routine.Value, 'SuppressibleMsgBox\('))
+    if ($boxes.Count -eq 0) { throw "No SuppressibleMsgBox found in $routineHeader" }
+    for ($i = 0; $i -lt $boxes.Count; $i++) {
+        $end = if ($i + 1 -lt $boxes.Count) { $boxes[$i + 1].Index } else { $routine.Value.Length }
+        $segment = $routine.Value.Substring($boxes[$i].Index, $end - $boxes[$i].Index)
+        $close = [regex]::Match($segment, ',\s*(?<icon>mb\w+),\s*MB_OK,\s*IDOK\)')
+        if (-not $close.Success) { throw "SuppressibleMsgBox without MB_OK, IDOK in $routineHeader`: $segment" }
+        $after = $segment.Substring($close.Index + $close.Length)
+        if ($close.Groups['icon'].Value -eq 'mbError' -and $after -notmatch '^;\s*Result := False;\s*exit;') {
+            throw "A page validation refusal must be followed by Result := False; exit;: $segment"
+        }
+    }
+}
+if ([regex]::IsMatch($hardenedSource, "function ContainsUnsafeConfigChars\(Value: String\): Boolean;\s*begin[^;]*Pos\('\^'")) {
+    throw 'ContainsUnsafeConfigChars must accept a caret: it is literal in nexus-native.env.cmd and docker\.env (AUD-QUA-29).'
+}
+
 Write-Host '[contract] external prerequisite provenance is immutable and fail-closed'
 $dockerPinnedUrl = 'https://desktop.docker.com/win/main/amd64/236216/Docker%20Desktop%20Installer.exe'
 $dockerSha256 = '820438e75c16e44b393079154bea7d27958a15845c23a635b1a1f6f586b2ed44'
@@ -308,6 +334,179 @@ foreach ($launcherName in @('nexus.cmd','nexus-mcp.cmd','nexus-rest.cmd','nexus-
     }
     $launcherSource = Get-Content -Raw -LiteralPath $launcherPath
     Assert-TextContains -Text $launcherSource -Needle 'setlocal DisableDelayedExpansion' -Description "$launcherName disables delayed expansion"
+}
+
+Write-Host '[smoke] native launchers load config\nexus-native.env.cmd from an install folder with a caret'
+# CALL doubles a caret of its argument, even inside quotes: a launcher enters config by pushd and
+# calls the file by a relative path, then gives the caller back its directory by popd.
+$nativeLaunchers = @('nexus.cmd', 'nexus-mcp.cmd', 'nexus-assistant-clients.cmd', 'nexus-rest.cmd')
+foreach ($launcherName in $nativeLaunchers) {
+    $launcherSource = Get-Content -Raw -LiteralPath (Join-Path $distribution $launcherName)
+    if ($launcherSource.IndexOf('call "%~dp0', [StringComparison]::Ordinal) -ge 0) {
+        throw "$launcherName must not CALL a path under %~dp0: CALL doubles a caret of the install folder."
+    }
+    foreach ($fragment in @(
+        'if not exist "%~dp0config\nexus-native.env.cmd" goto run',
+        'pushd "%~dp0config" || goto configError',
+        'call .\nexus-native.env.cmd',
+        'popd',
+        ':run',
+        ':configError',
+        'echo NEXUS: cannot load "%~dp0config\nexus-native.env.cmd" 1>&2'
+    )) {
+        Assert-TextContains -Text $launcherSource -Needle $fragment -Description "$launcherName native configuration loading: $fragment"
+    }
+    $programExit = $launcherSource.IndexOf('exit /b %ERRORLEVEL%', [StringComparison]::Ordinal)
+    $errorLabel = $launcherSource.IndexOf(':configError', [StringComparison]::Ordinal)
+    if ($programExit -lt 0 -or $errorLabel -lt $programExit -or
+        $launcherSource.IndexOf('exit /b 1', $errorLabel, [StringComparison]::Ordinal) -lt 0) {
+        throw "$launcherName must end with the :configError label, after the program exit, and leave with exit /b 1."
+    }
+}
+$restLauncher = Get-Content -Raw -LiteralPath (Join-Path $distribution 'nexus-rest.cmd')
+if ($restLauncher.IndexOf(':run', [StringComparison]::Ordinal) -gt $restLauncher.IndexOf('if "%NEXUS_REST_HOST%"=="" set "NEXUS_REST_HOST=127.0.0.1"', [StringComparison]::Ordinal) -or
+    $restLauncher.IndexOf(':run', [StringComparison]::Ordinal) -gt $restLauncher.IndexOf('if "%NEXUS_REST_PORT%"=="" set "NEXUS_REST_PORT=8080"', [StringComparison]::Ordinal)) {
+    throw 'nexus-rest.cmd must set its default host and port after :run, also without a configuration file.'
+}
+
+# Fixtures: the built launchers in <root>\in^st and <root>\no^conf, with junctions to app, lib and
+# rest of the distribution. Each launcher is started as a process from <root>\caller, without CALL,
+# in code page 850, console visible then hidden.
+$caretRoot = Join-Path $repo 'target\launcher-caret-smoke'
+if (@($caretRoot.ToCharArray() | Where-Object { [int]$_ -gt 127 }).Count -gt 0) {
+    throw "The launcher fixture writes an ASCII configuration file: move the repository to an ASCII path ($caretRoot)."
+}
+$caretInstall = Join-Path $caretRoot 'in^st'
+$portableInstall = Join-Path $caretRoot 'no^conf'
+$caretHome = Join-Path $caretRoot 'h^ome\.nexus'
+$decoyHome = Join-Path $caretRoot 'decoy-home'
+$caller = Join-Path $caretRoot 'caller'
+# A junction is removed alone: a recursive removal would follow it into the distribution.
+function Remove-LauncherFixtures {
+    foreach ($folder in @($caretInstall, $portableInstall)) {
+        foreach ($link in @('app', 'lib', 'rest')) {
+            $linkPath = Join-Path $folder $link
+            if ((Test-Path -LiteralPath $linkPath) -and
+                ((Get-Item -LiteralPath $linkPath -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                [IO.Directory]::Delete($linkPath, $false)
+            }
+        }
+    }
+    Remove-Item -LiteralPath $caretRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
+function New-LauncherFixture([string]$Folder) {
+    New-Item -ItemType Directory -Force -Path $Folder | Out-Null
+    foreach ($name in $nativeLaunchers) {
+        Copy-Item -LiteralPath (Join-Path $distribution $name) -Destination (Join-Path $Folder $name)
+    }
+    foreach ($link in @('app', 'lib', 'rest')) {
+        New-Item -ItemType Junction -Path (Join-Path $Folder $link) -Target (Join-Path $distribution $link) | Out-Null
+    }
+}
+$fixturePage = [Console]::OutputEncoding.CodePage
+# Standard error of a run, without what the program itself logs: the SLF4J notice printed when no
+# logging provider is bound, and java.util.logging records of com.nexus classes (a header line
+# naming the class, then a LEVEL: message line), such as the ACL warning on a fixture folder that
+# inherits the ACL of the checkout. What remains must be empty: a cmd.exe path error is localized,
+# its text is not matched.
+function Get-LauncherErrors([string]$Text) {
+    $remaining = New-Object System.Collections.Generic.List[string]
+    $skipNext = $false
+    foreach ($line in @($Text -split "\r?\n")) {
+        if ($skipNext) { $skipNext = $false; if ($line -match '^[A-Z]+: ') { continue } }
+        if ($line.Trim() -eq '' -or $line -match '^SLF4J\(\w\): ') { continue }
+        if ($line -match '^\S.* com\.nexus\.[\w.$]+ \w+$') { $skipNext = $true; continue }
+        $remaining.Add($line)
+    }
+    return ($remaining -join "`n")
+}
+function Invoke-FixtureLauncher([string]$Launcher, [string]$Arguments, [bool]$Hidden, [string]$Then = '') {
+    $psi = New-Object System.Diagnostics.ProcessStartInfo($env:ComSpec,
+        "/d /s /c `"chcp 850 >nul & `"$Launcher`" $Arguments$Then`"")
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $Hidden
+    $psi.WorkingDirectory = $caller
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.StandardOutputEncoding = New-Object System.Text.UTF8Encoding($false)
+    $psi.EnvironmentVariables['NEXUS_HOME'] = $decoyHome
+    $process = [Diagnostics.Process]::Start($psi)
+    $errorTask = $process.StandardError.ReadToEndAsync()
+    $output = $process.StandardOutput.ReadToEnd()
+    $process.WaitForExit()
+    $exitCode = $process.ExitCode
+    & $env:ComSpec /d /c "chcp $fixturePage >nul"
+    return [PSCustomObject]@{ ExitCode = $exitCode; Output = $output; Error = $errorTask.Result }
+}
+Remove-LauncherFixtures
+try {
+    New-LauncherFixture $caretInstall
+    New-LauncherFixture $portableInstall
+    New-Item -ItemType Directory -Force -Path (Join-Path $caretInstall 'config'), $caller, $decoyHome | Out-Null
+    [IO.File]::WriteAllText((Join-Path $caretInstall 'config\nexus-native.env.cmd'),
+        "@echo off`r`nset `"NEXUS_HOME=$caretHome`"`r`nset `"NEXUS_REST_PORT=9123`"`r`n", [Text.Encoding]::ASCII)
+    $caretLauncher = Join-Path $caretInstall 'nexus.cmd'
+
+    # A configuration folder that pushd cannot enter: exit 1, message naming the file, program not
+    # started. Only the pushd target of a copy of the built nexus.cmd differs.
+    $builtNexus = Get-Content -Raw -LiteralPath $caretLauncher
+    $mutatedSource = $builtNexus.Replace('pushd "%~dp0config"', 'pushd "%~dp0config-missing"')
+    if ($mutatedSource -ceq $builtNexus) { throw 'nexus.cmd has no pushd "%~dp0config" line to mutate.' }
+    $mutatedLauncher = Join-Path $caretInstall 'nexus-config-missing.cmd'
+    [IO.File]::WriteAllText($mutatedLauncher, $mutatedSource, [Text.Encoding]::ASCII)
+    foreach ($hidden in @($false, $true)) {
+        New-Item -ItemType Directory -Force -Path $caretHome | Out-Null
+        $failed = Invoke-FixtureLauncher $mutatedLauncher 'project add . s15-caret-probe --json' $hidden
+        if ($failed.ExitCode -ne 1 -or $failed.Error.IndexOf('NEXUS: cannot load', [StringComparison]::Ordinal) -lt 0 -or
+            $failed.Error.IndexOf('config\nexus-native.env.cmd', [StringComparison]::Ordinal) -lt 0) {
+            throw "A launcher whose config folder cannot be entered must exit 1 and name the file (hidden console=$hidden): exit $($failed.ExitCode), $($failed.Error)"
+        }
+        if ((Test-Path -LiteralPath (Join-Path $caretHome 'nexus.db')) -or (Test-Path -LiteralPath (Join-Path $decoyHome 'nexus.db'))) {
+            throw "A launcher whose config folder cannot be entered started the program (hidden console=$hidden)."
+        }
+    }
+
+    # The project path is relative to the caller: the JSON projection does not print project roots,
+    # and project add fails on a folder that does not exist where the program runs.
+    $callerProject = Join-Path $caller 'caret-caller-project'
+    New-Item -ItemType Directory -Force -Path $callerProject | Out-Null
+    'probe' | Set-Content -LiteralPath (Join-Path $callerProject 'README.md') -Encoding ascii
+    foreach ($hidden in @($false, $true)) {
+        Remove-Item -LiteralPath $caretHome -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force -Path $caretHome | Out-Null
+        $label = "nexus.cmd in $caretInstall (hidden console=$hidden)"
+        foreach ($arguments in @('project add .\caret-caller-project s15-caret-probe --json', 'project list --json')) {
+            $run = Invoke-FixtureLauncher $caretLauncher $arguments $hidden
+            $runErrors = Get-LauncherErrors $run.Error
+            if ($run.ExitCode -ne 0 -or $runErrors -ne '') {
+                throw "$label $arguments failed (exit $($run.ExitCode)): $($run.Output) $runErrors"
+            }
+        }
+        if (-not (Test-Path -LiteralPath (Join-Path $caretHome 'nexus.db') -PathType Leaf)) {
+            throw "$label did not keep its database under the configured NEXUS_HOME $caretHome"
+        }
+        if (Test-Path -LiteralPath (Join-Path $decoyHome 'nexus.db')) {
+            throw "$label used the inherited NEXUS_HOME instead of config\nexus-native.env.cmd."
+        }
+        if (@(($run.Output | ConvertFrom-Json).projects | Where-Object { $_.name -ceq 's15-caret-probe' }).Count -ne 1) {
+            throw "$label project list does not return the project registered by a previous process: $($run.Output)"
+        }
+        # The cmd.exe line goes on after the launcher: its directory is still the caller's.
+        $after = Invoke-FixtureLauncher $caretLauncher '--version --json' $hidden ' & cd'
+        $lastLine = @($after.Output -split "\r?\n" | Where-Object { $_.Trim() -ne '' })[-1].Trim()
+        if ($lastLine -cne $caller) { throw "$label changed the directory of its caller to $lastLine" }
+    }
+
+    # No configuration file (portable distribution): defaults, no message.
+    foreach ($hidden in @($false, $true)) {
+        $portable = Invoke-FixtureLauncher (Join-Path $portableInstall 'nexus.cmd') '--version --json' $hidden
+        if ($portable.ExitCode -ne 0 -or (Get-LauncherErrors $portable.Error) -ne '' -or ($portable.Output | ConvertFrom-Json).version -ne $Version) {
+            throw "nexus.cmd without configuration failed in $portableInstall (hidden console=$hidden, exit $($portable.ExitCode)): $($portable.Output) $($portable.Error)"
+        }
+    }
+}
+finally {
+    Remove-LauncherFixtures
 }
 
 $root = Join-Path $repo 'target\installer-smoke'

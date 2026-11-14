@@ -138,6 +138,8 @@ Il est conservé lors de la désinstallation.
 
 Les chemins accentués sont pris en charge, y compris sous un profil Windows accentué (`C:\Users\Hélène`). Un `NEXUS_HOME` accentué placé sous le profil ou sous `%LOCALAPPDATA%` est enregistré dans `config\nexus-native.env.cmd` sous la forme `%USERPROFILE%\…` ou `%LOCALAPPDATA%\…` : sous un profil accentué, la valeur par défaut s'écrit `%USERPROFILE%\.nexus`. Un chemin sans accent est enregistré tel quel. Un dossier accentué saisi ailleurs, par exemple `D:\Données\nexus`, est lu correctement par les lanceurs ouverts dans une console, visible ou non ; un programme qui lancerait `nexus.cmd` sans aucune console ne le lirait pas correctement.
 
+`NEXUS_HOME` et le token REST acceptent tout caractère sauf le retour à la ligne et le guillemet double, que l'assistant refuse avec le message « NEXUS_HOME et le token REST ne peuvent pas contenir de retour à la ligne ni de guillemet double ». L'accent circonflexe `^`, permis dans un nom de profil Windows, est accepté et écrit tel quel.
+
 ### REST natif
 
 Défauts :
@@ -312,6 +314,10 @@ Les données du conteneur (`/data/nexus`) vivent dans le volume Docker nommé `n
 
 Une URL Ollama de bouclage (`http://127.0.0.1:11434`) est écrite telle quelle dans le `.env` : NEXUS la valide puis la redirige lui-même vers `host.docker.internal`.
 
+Le repository, l'URL Ollama et `NEXUS_HOME` (écran 4, dont la valeur par défaut dérive du profil même quand cet écran est sauté) sont refusés s'ils contiennent un retour à la ligne ou un guillemet double, avec le message « Les chemins et URL générés ne peuvent pas contenir de retour à la ligne ni de guillemet double ». Un profil dont le nom contient `^`, par exemple `C:\Users\a^b`, est accepté : le `.env` reçoit `NEXUS_REPOSITORY_BIND='C:/Users/a^b'`.
+
+En installation silencieuse (`/VERYSILENT`), ajouter `/SUPPRESSMSGBOXES` : les refus et les avis de port des écrans de l'assistant sont alors écrits dans le journal (`/LOG`) sans fenêtre, et un refus arrête l'installation avec un code de sortie non nul. Sans `/SUPPRESSMSGBOXES`, la fenêtre du message reste affichée et attend une réponse.
+
 ### Démarrage Docker généré
 
 `nexus-docker-up.cmd` ne dépend pas uniquement du `PATH` courant. Il recherche aussi la CLI Docker Desktop dans les emplacements per-user et all-users.
@@ -469,6 +475,8 @@ NEXUS_OLLAMA_BASE_URL
 ```
 
 `NEXUS_REST_PORT` contient le port externe final retenu après vérification de disponibilité.
+
+`nexus.cmd`, `nexus-mcp.cmd`, `nexus-assistant-clients.cmd` et `nexus-rest.cmd` chargent ce fichier quel que soit le dossier d'installation, y compris un dossier qui contient `^` (dossier par défaut sous un profil `C:\Users\a^b`), et lancent leur programme depuis le dossier courant de l'appelant. Si le fichier existe mais que son dossier `config` ne peut pas être ouvert, le lanceur s'arrête avec le code 1 et le message `NEXUS: cannot load "<installation>\config\nexus-native.env.cmd"` sur la sortie d'erreur, sans lancer le programme : corriger les droits du dossier ou réinstaller. Sans ce fichier (distribution portable), les lanceurs gardent leurs valeurs par défaut, `127.0.0.1` et `8080` pour `nexus-rest.cmd`.
 
 ### Docker
 

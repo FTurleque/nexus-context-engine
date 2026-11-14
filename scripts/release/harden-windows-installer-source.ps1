@@ -110,10 +110,14 @@ begin
   Result := '''' + Result + '''';
 end;
 
+{ Refuses only what breaks a generated format: CR and LF end the line, a double quote
+  closes set "..." in nexus-native.env.cmd. A caret stays literal there, inside the
+  quotes with delayed expansion disabled by every launcher, and in docker\.env, where
+  DotEnvQuoted single-quotes the value; a Windows profile name may contain one. }
 function ContainsUnsafeConfigChars(Value: String): Boolean;
 begin
   Result := (Pos(#13, Value) > 0) or (Pos(#10, Value) > 0) or
-            (Pos('"', Value) > 0) or (Pos('^', Value) > 0);
+            (Pos('"', Value) > 0);
 end;
 
 function IsValidDockerImageReference(Value: String): Boolean;
@@ -153,7 +157,7 @@ end;
     $runtimeValidation = @'
     if Trim(RuntimePage.Values[0]) = '' then
     begin
-      MsgBox('NEXUS_HOME ne peut pas être vide.', mbError, MB_OK);
+      SuppressibleMsgBox('NEXUS_HOME ne peut pas être vide.', mbError, MB_OK, IDOK);
       Result := False;
       exit;
     end;
@@ -162,7 +166,7 @@ end;
     if ContainsUnsafeConfigChars(RuntimePage.Values[0]) or
        ContainsUnsafeConfigChars(RuntimePage.Values[3]) then
     begin
-      MsgBox('NEXUS_HOME et le token REST ne peuvent pas contenir de retour à la ligne, guillemet double ou accent circonflexe.', mbError, MB_OK);
+      SuppressibleMsgBox('NEXUS_HOME et le token REST ne peuvent pas contenir de retour à la ligne ni de guillemet double.', mbError, MB_OK, IDOK);
       Result := False;
       exit;
     end;
@@ -172,7 +176,7 @@ end;
     $remoteNative = @'
     if InstallNativeRest() and (Lowercase(Trim(RuntimePage.Values[1])) <> '127.0.0.1') and (Lowercase(Trim(RuntimePage.Values[1])) <> 'localhost') and (Trim(RuntimePage.Values[3]) = '') then
     begin
-      MsgBox('Un token API REST est obligatoire pour une écoute native non-loopback.', mbError, MB_OK);
+      SuppressibleMsgBox('Un token API REST est obligatoire pour une écoute native non-loopback.', mbError, MB_OK, IDOK);
       Result := False;
       exit;
     end;
@@ -180,7 +184,7 @@ end;
     $remoteNativeReplacement = @'
     if InstallNativeRest() and not IsLoopbackRestHost(RuntimePage.Values[1]) then
     begin
-      MsgBox('Le wizard Windows limite le REST natif au loopback. Une exposition distante est une configuration administrative avancée : configurez manuellement NEXUS_REST_ALLOWED_PROJECT_ROOTS, un token fort, NEXUS_REST_EXPOSURE_MODE et HTTPS/tunnel.', mbError, MB_OK);
+      SuppressibleMsgBox('Le wizard Windows limite le REST natif au loopback. Une exposition distante est une configuration administrative avancée : configurez manuellement NEXUS_REST_ALLOWED_PROJECT_ROOTS, un token fort, NEXUS_REST_EXPOSURE_MODE et HTTPS/tunnel.', mbError, MB_OK, IDOK);
       Result := False;
       exit;
     end;
@@ -190,7 +194,7 @@ end;
     $dockerImageValidation = @'
     if HasWhitespace(Trim(DockerPage.Values[0])) then
     begin
-      MsgBox('L''image Docker ne doit pas contenir d''espace (ex. ghcr.io/org/nexus:tag).', mbError, MB_OK);
+      SuppressibleMsgBox('L''image Docker ne doit pas contenir d''espace (ex. ghcr.io/org/nexus:tag).', mbError, MB_OK, IDOK);
       Result := False;
       exit;
     end;
@@ -198,7 +202,7 @@ end;
     $dockerImageValidationReplacement = @'
     if not IsValidDockerImageReference(DockerPage.Values[0]) then
     begin
-      MsgBox('L''image Docker contient un caractère non autorisé. Utilisez une référence registry/repository:tag ou @digest sans espace, retour à la ligne, $, #, guillemet ou antislash.', mbError, MB_OK);
+      SuppressibleMsgBox('L''image Docker contient un caractère non autorisé. Utilisez une référence registry/repository:tag ou @digest sans espace, retour à la ligne, $, #, guillemet ou antislash.', mbError, MB_OK, IDOK);
       Result := False;
       exit;
     end;
@@ -208,7 +212,7 @@ end;
     $dockerBindValidation = @'
     if not IsSafeBindAddress(DockerPage.Values[2]) then
     begin
-      MsgBox('L''adresse d''écoute hôte Docker est vide ou invalide.', mbError, MB_OK);
+      SuppressibleMsgBox('L''adresse d''écoute hôte Docker est vide ou invalide.', mbError, MB_OK, IDOK);
       Result := False;
       exit;
     end;
@@ -216,7 +220,7 @@ end;
     $dockerBindReplacement = $dockerBindValidation + @'
     if not IsLoopbackRestHost(DockerPage.Values[2]) then
     begin
-      MsgBox('Le wizard Windows limite la publication REST Docker au loopback. Le mode loopback-forward exige que l''adresse hôte réellement déclarée soit loopback ; utilisez un reverse proxy HTTPS ou un tunnel pour une exposition distante.', mbError, MB_OK);
+      SuppressibleMsgBox('Le wizard Windows limite la publication REST Docker au loopback. Le mode loopback-forward exige que l''adresse hôte réellement déclarée soit loopback ; utilisez un reverse proxy HTTPS ou un tunnel pour une exposition distante.', mbError, MB_OK, IDOK);
       Result := False;
       exit;
     end;
@@ -224,7 +228,7 @@ end;
        ContainsUnsafeConfigChars(DockerPage.Values[5]) or
        ContainsUnsafeConfigChars(OllamaPage.Values[0]) then
     begin
-      MsgBox('Les chemins et URL générés ne peuvent pas contenir de retour à la ligne, guillemet double ou accent circonflexe.', mbError, MB_OK);
+      SuppressibleMsgBox('Les chemins et URL générés ne peuvent pas contenir de retour à la ligne ni de guillemet double.', mbError, MB_OK, IDOK);
       Result := False;
       exit;
     end;
