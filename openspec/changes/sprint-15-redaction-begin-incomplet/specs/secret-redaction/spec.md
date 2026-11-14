@@ -55,6 +55,57 @@ Un marqueur `-----BEGIN ` SHALL n'ouvrir une clé privée que si ses tirets de f
 - **WHEN** le contenu est redigé
 - **THEN** les trois premières lignes sont rendues inchangées, le corps n'apparaît pas dans le texte rendu, et chaque CR et LF du contenu est conservé
 
+### Requirement: Un marqueur de clé privée est reconnu quelles que soient sa casse et ses blancs
+Les mots `BEGIN`, `END` et le type d'un marqueur de clé privée SHALL être comparés sans tenir compte de la casse ASCII, et toute suite d'espaces, de tabulations ou d'espaces insécables (U+00A0) SHALL valoir un seul blanc après `BEGIN` ou `END` et entre les mots du type. La reconnaissance SHALL garder un coût linéaire et la règle de la fin du marqueur sur sa ligne.
+
+#### Scenario: Marqueurs en minuscules
+- **GIVEN** un bloc dont les marqueurs sont `-----begin rsa private key-----` et `-----end rsa private key-----`, avec le corps `MIIfakebodyNOTAKEY0123`
+- **WHEN** le contenu est redigé
+- **THEN** le bloc est remplacé par `[REDACTED]`, le corps n'apparaît pas dans le texte rendu et chaque CR et LF du contenu est conservé
+
+#### Scenario: Tabulation ou espace insécable comme blanc
+- **GIVEN** un bloc dont le marqueur d'ouverture porte une tabulation après `BEGIN`, ou une espace insécable entre les mots du type, et dont la ligne de fin porte le même type avec des espaces
+- **WHEN** le contenu est redigé
+- **THEN** le bloc est remplacé par `[REDACTED]` et le corps n'apparaît pas dans le texte rendu
+
+#### Scenario: Suites de blancs différentes
+- **GIVEN** un bloc dont le marqueur d'ouverture porte deux espaces entre `PRIVATE` et `KEY`, ou dont les marqueurs d'ouverture et de fin portent des suites de blancs différentes entre les mêmes mots
+- **WHEN** le contenu est redigé
+- **THEN** le bloc seul est remplacé par `[REDACTED]` et le corps n'apparaît pas dans le texte rendu
+
+#### Scenario: Séparateur CRLF
+- **GIVEN** le contenu de « Marqueurs en minuscules », dont chaque séparateur est CRLF
+- **WHEN** le contenu est redigé
+- **THEN** le corps n'apparaît pas dans le texte rendu et chaque CR et LF du contenu est conservé
+
+#### Scenario: Variantes non reconnues
+- **GIVEN** un bloc dont les marqueurs ont moins de cinq tirets, une espace avant les tirets de fin, `BEGIN` collé au type, des tirets demi-cadratin, une lettre cyrillique ou un autre blanc Unicode (U+2003, U+3000, U+200B), ou un fichier au format PuTTY
+- **WHEN** le contenu est redigé
+- **THEN** le texte rendu est identique au contenu
+
+### Requirement: Un marqueur END hors début de ligne ferme le bloc à la fin de sa ligne
+Un marqueur `-----END <type>-----` du type du bloc SHALL fermer ce bloc où qu'il se trouve sur sa ligne. S'il commence sa ligne, précédé au plus d'espaces, de tabulations, d'espaces insécables ou de tirets, le bloc SHALL s'arrêter après ses tirets de fin. Sinon, le bloc SHALL s'arrêter à la fin de la ligne du marqueur, avant son CR ou son LF, et le texte des lignes suivantes SHALL rester visible.
+
+#### Scenario: Marqueur END au milieu d'une ligne
+- **GIVEN** un bloc `RSA PRIVATE KEY` dont une ligne vaut `AAA-----END RSA PRIVATE KEY-----SECRETBODY`, suivie d'une ligne `-----END RSA PRIVATE KEY-----` puis d'une ligne `after`
+- **WHEN** le contenu est redigé
+- **THEN** le bloc est remplacé par `[REDACTED]` jusqu'à la fin de la ligne qui porte `SECRETBODY`, `SECRETBODY` n'apparaît pas dans le texte rendu, les deux lignes suivantes restent visibles et chaque CR et LF est conservé
+
+#### Scenario: Clé de compte de service sur une ligne
+- **GIVEN** un fichier JSON dont la ligne `"private_key"` porte tout le bloc, ses retours à la ligne échappés en `\n`, suivie d'une ligne `"client_email"`
+- **WHEN** le contenu est redigé
+- **THEN** le corps n'apparaît pas dans le texte rendu et la ligne `"client_email"` reste visible
+
+#### Scenario: Concaténation de code et commentaire
+- **GIVEN** un bloc écrit en concaténation de chaînes Java, ou en commentaire `//`, dont la ligne de fin porte `-----END RSA PRIVATE KEY-----` après d'autres caractères
+- **WHEN** le contenu est redigé
+- **THEN** le bloc est remplacé par `[REDACTED]` jusqu'à la fin de la ligne de fin, et la ligne suivante reste visible
+
+#### Scenario: Blancs avant le marqueur END
+- **GIVEN** un bloc dont la ligne de fin commence par une espace, une tabulation et une espace insécable avant `-----END RSA PRIVATE KEY-----`
+- **WHEN** le contenu est redigé
+- **THEN** le bloc est fermé par cette ligne et le texte qui la suit reste visible
+
 ## MODIFIED Requirements
 
 ### Requirement: Un changement de politique invalide les index dérivés

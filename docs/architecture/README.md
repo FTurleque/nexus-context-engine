@@ -43,7 +43,7 @@ La protection effective de `main` est une règle GitHub de repository et non un 
 - requêtes Lucene à forte cardinalité bornées à 128 termes analysés uniques.
 - limites REST fédérées centralisées et `constraints` non supportées rejetées explicitement.
 - Ollama distant HTTPS par défaut ; HTTP distant uniquement via opt-in administratif explicite.
-- secrets à forte confiance redigés avant embeddings/fragments ; profil sémantique `content-v8`.
+- secrets à forte confiance redigés avant embeddings/fragments ; profil sémantique `content-v9`.
 - `NEXUS_HOME`/SQLite privés sur POSIX ; chemins persistants symboliques durcis refusés.
 
 ## Preuve de qualification
