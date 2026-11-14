@@ -184,7 +184,7 @@ L'exécution Maven reste possible pendant le développement :
 .\mvnw.cmd -q -pl core exec:java "-Dexec.args=--help"
 ```
 
-`-pl core` sélectionne le module qui configure `exec-maven-plugin` et la classe `com.nexus.cli.NexusCli` ; le POM racine est un agrégateur (`packaging pom`). `exec:java` ne compile pas : la commande exécute les classes de `core/target/classes` produites par le build précédent. Elle n'est pas le chemin principal de validation. n'est pas le chemin principal de validation.
+`-pl core` sélectionne le module qui configure `exec-maven-plugin` et la classe `com.nexus.cli.NexusCli` ; le POM racine est un agrégateur (`packaging pom`). `exec:java` ne compile pas : la commande exécute les classes de `core/target/classes` produites par le build précédent. Elle n'est pas le chemin principal de validation.
 
 ## 8. Enregistrer un projet
 

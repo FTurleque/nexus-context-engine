@@ -1162,13 +1162,14 @@ MAVEN_DOC_EXCEPTIONS: set[tuple[str, str]] = {
     ),
 }
 
-# Command position: start of the text (after an optional PS…>, $ or > prompt) or after a shell separator.
-COMMAND_POSITION = r"(?:^\s*(?:(?:PS[^>\n]*>|\$|>)\s*)?|(?:&&|\|\||[;|&(])\s*)"
+# Command position: start of the text (after an optional PS…>, $ or > prompt followed by a blank)
+# or after a shell separator.
+COMMAND_POSITION = r"(?:^\s*(?:(?:PS[^>\n]*>|\$|>)\s+)?|(?:&&|\|\||[;|&({])\s*)"
 DIRECT_MAVEN = re.compile(COMMAND_POSITION + r"(?<![\w./\\-])mvn(?:\.cmd)?(?=\s|$)")
 DIRECT_MAVEN_INLINE = re.compile(COMMAND_POSITION + r"(?<![\w./\\-])mvn(?:\.cmd)?(?=\s)")
 WRAPPER_MAVEN = re.compile(COMMAND_POSITION + r"(?<![\w/\\-])(?:\.{1,2}[\\/])?mvnw(?:\.cmd)?(?=\s)")
 CORE_MODULE = re.compile(r"(?:^|\s)(?:-pl|--projects)(?:\s+|=)core(?=\s|$)")
-FENCE = re.compile(r"^\s*(`{3,}|~{3,})\s*([^\s`]*)")
+FENCE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
 INLINE_CODE = re.compile(r"(`+)(.+?)\1")
 
 
@@ -1187,12 +1188,14 @@ def maven_doc_findings(text: str) -> list[tuple[int, str, str]]:
     fence: tuple[str, str] | None = None
     for number, line in enumerate(text.splitlines(), start=1):
         marker = FENCE.match(line)
-        if fence is None and marker:
-            fence = (marker.group(1), marker.group(2).lower())
+        if fence is None and marker and not (marker.group(1)[0] == "`" and "`" in marker.group(2)):
+            # CommonMark: a backtick fence has no backtick in its info string.
+            info = marker.group(2).split()
+            fence = (marker.group(1), info[0].lower() if info else "")
             continue
         if fence is not None:
             if marker and marker.group(1)[0] == fence[0][0] and len(marker.group(1)) >= len(fence[0]) \
-                    and not line.strip()[len(marker.group(1)):].strip():
+                    and not marker.group(2).strip():
                 fence = None
                 continue
             if fence[1] == "mermaid":
@@ -1215,15 +1218,18 @@ for sample, kind in (
     ("```cmd\nmvn.cmd -q package\n```", "direct"),
     ("```bash\ncd core && mvn test\n```", "direct"),
     ("```powershell\nPS> mvn -v\n```", "direct"),
+    ("```powershell\nif ($full) { mvn clean install }\n```", "direct"),
     ("```\nmvn\n```", "direct"),
     ("1. Construire :\n\n   ```powershell\n   mvn clean install\n   ```", "direct"),
     ("Lancer `mvn clean install` avant le self-smoke.", "direct"),
+    ("```mvn clean install``` lance le build.\n\n```powershell\n.\\mvnw.cmd clean install\n```\n\nmvn hors code", "direct"),
     ("~~~sh\n$ mvn -B verify\n~~~", "direct"),
     ('```powershell\n.\\mvnw.cmd -q exec:java "-Dexec.args=--help"\n```', "exec-java"),
     ("Lancer `./mvnw -q exec:java -Dexec.args=--help`.", "exec-java"),
 ):
-    if [kind] != [found[1] for found in maven_doc_findings(sample)]:
-        raise SystemExit(f"maven wrapper doc contract self-test: {sample!r} was not detected")
+    kinds = [found[1] for found in maven_doc_findings(sample)]
+    if kinds != [kind]:
+        raise SystemExit(f"maven wrapper doc contract self-test: {sample!r} was not detected once as {kind} (found {kinds})")
 for sample in (
     "```powershell\n.\\mvnw.cmd clean install\n```",
     "```bash\n./mvnw -version\n```",
@@ -1231,17 +1237,19 @@ for sample in (
     "```mermaid\nflowchart TD\n    A[mvn installé] --> B\n```",
     "Lancer mvn clean install en prose hors code.",
     "Voir `.mvn/wrapper/maven-wrapper.properties`.",
+    "```powershell\n$mvn = Get-Command mvnw.cmd\nif ($mvn -eq $null) { exit 1 }\n```",
     '```powershell\n.\\mvnw.cmd -q -pl core exec:java "-Dexec.args=--help"\n```',
     "```bash\n./mvnw -q --projects core exec:java -Dexec.args=--help\n```",
     "```powershell\ncmd /c mvnw.cmd -v\n```",
 ):
-    if maven_doc_findings(sample):
-        raise SystemExit(f"maven wrapper doc contract self-test: {sample!r} was wrongly detected")
+    found = maven_doc_findings(sample)
+    if found:
+        raise SystemExit(f"maven wrapper doc contract self-test: {sample!r} was wrongly detected ({[f[1] for f in found]})")
 
 used_exceptions: set[tuple[str, str]] = set()
 errors: list[str] = []
 for relative in maven_doc_paths():
-    content = (root / relative).read_text(encoding="utf-8")
+    content = (root / relative).read_text(encoding="utf-8").lstrip("﻿")
     for number, kind, line in maven_doc_findings(content):
         if kind == "direct" and (relative, line) in MAVEN_DOC_EXCEPTIONS:
             used_exceptions.add((relative, line))

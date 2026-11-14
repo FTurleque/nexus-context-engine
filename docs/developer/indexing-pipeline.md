@@ -68,7 +68,7 @@ La barrière de publication enchaîne dans cet ordre : commit des index Lucene, 
 La commande :
 
 ```powershell
-.\mvnw.cmd -q -pl core exec:java "-Dexec.args=project add N:\workspace-dev\my-project my-project"
+.\mvnw.cmd -q -pl core exec:java "-Dexec.args=project add C:\src\my-project my-project"
 ```
 
 passe par `ProjectRegistry`.
