@@ -413,9 +413,10 @@ public final class SensitiveContentRedactor {
      *
      * <p>Les mots {@code BEGIN}, {@code END} et le type se comparent sans tenir compte de la casse ASCII,
      * et toute suite d'espaces, de tabulations ou d'espaces insécables (U+00A0) vaut un seul blanc :
-     * après {@code BEGIN} ou {@code END}, et entre les mots du type. La ligne {@code -----END} doit
-     * commencer sa ligne, précédée au plus de blancs ou de tirets, et porter le même type, à la casse et
-     * aux blancs près ; sinon le bloc court jusqu'à la fin du contenu.</p>
+     * après {@code BEGIN} ou {@code END}, et entre les mots du type. Le marqueur {@code -----END} porte
+     * le même type, à la casse et aux blancs près. S'il commence sa ligne, précédé au plus de blancs ou
+     * de tirets, le bloc s'arrête après ses tirets ; sinon il s'arrête à la fin de la ligne du marqueur.
+     * Sans marqueur {@code -----END}, le bloc court jusqu'à la fin du contenu.</p>
      */
     private static String replacePrivateKeyBlocks(String content) {
         StringBuilder output = new StringBuilder(content.length());
@@ -503,11 +504,13 @@ public final class SensitiveContentRedactor {
     }
 
     /**
-     * Fin de la première ligne {@code -----END <type>-----} qui suit {@code from}, commence sa ligne
-     * (seuls des blancs ou des tirets la précèdent) et porte le type normalisé {@code type}, ou
-     * {@code -1}. Un {@code -----END} au milieu d'une ligne est ignoré. La partie comparée d'une
-     * candidate ne contient aucun {@code -----} et chaque caractère du type normalisé consomme au moins
-     * un caractère de la candidate : le balayage reste linéaire.
+     * Fin du bloc fermé par le premier {@code -----END <type>-----} qui suit {@code from} et porte le
+     * type normalisé {@code type}, ou {@code -1}. Un marqueur qui commence sa ligne (seuls des blancs ou
+     * des tirets le précèdent) ferme le bloc après ses tirets ; un marqueur au milieu d'une ligne le
+     * ferme à la fin de cette ligne (premier CR ou LF, exclu), pour qu'aucun texte collé au marqueur ne
+     * sorte en clair. La partie comparée d'une candidate ne contient aucun {@code -----} et chaque
+     * caractère du type normalisé consomme au moins un caractère de la candidate : le balayage reste
+     * linéaire.
      */
     private static int endOfMatchingEndMarker(String content, int from, String type) {
         int position = from;
@@ -516,14 +519,22 @@ public final class SensitiveContentRedactor {
             if (candidate < 0) {
                 return -1;
             }
-            if (startsItsLine(content, candidate)) {
-                int typeEnd = endOfNormalizedType(content, candidate + MARKER_DASHES.length() + "END".length(), type);
-                if (typeEnd >= 0 && content.startsWith(MARKER_DASHES, typeEnd)) {
-                    return typeEnd + MARKER_DASHES.length();
-                }
+            int typeEnd = endOfNormalizedType(content, candidate + MARKER_DASHES.length() + "END".length(), type);
+            if (typeEnd >= 0 && content.startsWith(MARKER_DASHES, typeEnd)) {
+                int markerEnd = typeEnd + MARKER_DASHES.length();
+                return startsItsLine(content, candidate) ? markerEnd : endOfLine(content, markerEnd);
             }
             position = candidate + 1;
         }
+    }
+
+    /** Position du premier CR ou LF à partir de {@code from}, ou la longueur du contenu. */
+    private static int endOfLine(String content, int from) {
+        int index = from;
+        while (index < content.length() && content.charAt(index) != '\r' && content.charAt(index) != '\n') {
+            index++;
+        }
+        return index;
     }
 
     /** Seuls des blancs ou des tirets précèdent {@code position} sur sa ligne. */

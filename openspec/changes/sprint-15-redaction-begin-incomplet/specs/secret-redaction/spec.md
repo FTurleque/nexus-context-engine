@@ -83,18 +83,23 @@ Les mots `BEGIN`, `END` et le type d'un marqueur de clé privée SHALL être com
 - **WHEN** le contenu est redigé
 - **THEN** le texte rendu est identique au contenu
 
-### Requirement: Une ligne END ne ferme un bloc qu'en début de ligne
-Un bloc de clé privée SHALL n'être fermé que par un marqueur `-----END <type>-----` qui commence sa ligne, précédé au plus d'espaces, de tabulations, d'espaces insécables ou de tirets. Un marqueur `-----END` placé au milieu d'une ligne SHALL être ignoré, et la recherche de la fin SHALL continuer, jusqu'à la fin du contenu au besoin.
+### Requirement: Un marqueur END hors début de ligne ferme le bloc à la fin de sa ligne
+Un marqueur `-----END <type>-----` du type du bloc SHALL fermer ce bloc où qu'il se trouve sur sa ligne. S'il commence sa ligne, précédé au plus d'espaces, de tabulations, d'espaces insécables ou de tirets, le bloc SHALL s'arrêter après ses tirets de fin. Sinon, le bloc SHALL s'arrêter à la fin de la ligne du marqueur, avant son CR ou son LF, et le texte des lignes suivantes SHALL rester visible.
 
 #### Scenario: Marqueur END au milieu d'une ligne
-- **GIVEN** un bloc `RSA PRIVATE KEY` dont une ligne vaut `AAA-----END RSA PRIVATE KEY-----SECRETBODY`, suivie d'une ligne `-----END RSA PRIVATE KEY-----`
+- **GIVEN** un bloc `RSA PRIVATE KEY` dont une ligne vaut `AAA-----END RSA PRIVATE KEY-----SECRETBODY`, suivie d'une ligne `-----END RSA PRIVATE KEY-----` puis d'une ligne `after`
 - **WHEN** le contenu est redigé
-- **THEN** tout le bloc jusqu'à la seconde ligne est remplacé par `[REDACTED]`, `SECRETBODY` n'apparaît pas dans le texte rendu et chaque CR et LF est conservé
+- **THEN** le bloc est remplacé par `[REDACTED]` jusqu'à la fin de la ligne qui porte `SECRETBODY`, `SECRETBODY` n'apparaît pas dans le texte rendu, les deux lignes suivantes restent visibles et chaque CR et LF est conservé
 
-#### Scenario: Marqueur END au milieu d'une ligne sans vraie fin
-- **GIVEN** le même bloc sans seconde ligne `-----END`
+#### Scenario: Clé de compte de service sur une ligne
+- **GIVEN** un fichier JSON dont la ligne `"private_key"` porte tout le bloc, ses retours à la ligne échappés en `\n`, suivie d'une ligne `"client_email"`
 - **WHEN** le contenu est redigé
-- **THEN** le contenu est remplacé par `[REDACTED]` jusqu'à sa fin, séparateurs conservés
+- **THEN** le corps n'apparaît pas dans le texte rendu et la ligne `"client_email"` reste visible
+
+#### Scenario: Concaténation de code et commentaire
+- **GIVEN** un bloc écrit en concaténation de chaînes Java, ou en commentaire `//`, dont la ligne de fin porte `-----END RSA PRIVATE KEY-----` après d'autres caractères
+- **WHEN** le contenu est redigé
+- **THEN** le bloc est remplacé par `[REDACTED]` jusqu'à la fin de la ligne de fin, et la ligne suivante reste visible
 
 #### Scenario: Blancs avant le marqueur END
 - **GIVEN** un bloc dont la ligne de fin commence par une espace, une tabulation et une espace insécable avant `-----END RSA PRIVATE KEY-----`

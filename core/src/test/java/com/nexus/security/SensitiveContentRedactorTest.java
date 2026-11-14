@@ -622,18 +622,49 @@ class SensitiveContentRedactorTest {
 
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(strings = {"\n", "\r\n"})
-    void endMarkerInTheMiddleOfALineDoesNotCloseTheBlock(String newline) {
+    void endMarkerInTheMiddleOfALineClosesTheBlockAtTheEndOfItsLine(String newline) {
         String type = "RSA PRIVATE KEY";
+        String endLine = DASHES + "END " + type + DASHES;
         String content = DASHES + "BEGIN " + type + DASHES + newline
-                + "AAA" + DASHES + "END " + type + DASHES + "SECRETBODY" + newline
-                + DASHES + "END " + type + DASHES + newline + "after";
+                + "AAA" + endLine + "SECRETBODY" + newline
+                + endLine + newline + "after";
         String redacted = SensitiveContentRedactor.redact(content);
-        assertEquals("[REDACTED]" + newline + newline + newline + "after", redacted);
+        assertEquals("[REDACTED]" + newline + newline + endLine + newline + "after", redacted);
         assertFalse(redacted.contains("SECRETBODY"), redacted);
 
-        String withoutRealEnd = DASHES + "BEGIN " + type + DASHES + newline
-                + "AAA" + DASHES + "END " + type + DASHES + "SECRETBODY" + newline + "tail";
-        assertEquals("[REDACTED]" + newline + newline, SensitiveContentRedactor.redact(withoutRealEnd));
+        String withoutSecondEnd = DASHES + "BEGIN " + type + DASHES + newline
+                + "AAA" + endLine + "SECRETBODY" + newline + "tail";
+        assertEquals("[REDACTED]" + newline + newline + "tail", SensitiveContentRedactor.redact(withoutSecondEnd));
+    }
+
+    @Test
+    void serviceAccountKeyWithEscapedNewlinesHidesOnlyItsLine() {
+        String escapedNewline = (char) 92 + "n";
+        String key = DASHES + "BEGIN PRIVATE KEY" + DASHES + escapedNewline + FAKE_KEY_BODY + escapedNewline
+                + DASHES + "END PRIVATE KEY" + DASHES + escapedNewline;
+        String content = "{\n  \"type\": \"service_account\",\n  \"private_key\": \"" + key + "\",\n"
+                + "  \"client_email\": \"svc@example.iam.gserviceaccount.com\"\n}\n";
+        String redacted = SensitiveContentRedactor.redact(content);
+        assertFalse(redacted.contains(FAKE_KEY_BODY), redacted);
+        assertTrue(redacted.contains("  \"client_email\": \"svc@example.iam.gserviceaccount.com\"\n}\n"), redacted);
+        assertEquals(lineSeparatorsOf(content), lineSeparatorsOf(redacted));
+    }
+
+    @Test
+    void javaConcatenatedKeyHidesUpToTheEndOfItsEndLine() {
+        String escapedNewline = (char) 92 + "n";
+        String content = "String pem = \"" + DASHES + "BEGIN RSA PRIVATE KEY" + DASHES + escapedNewline + "\"\n"
+                + "        + \"" + FAKE_KEY_BODY + escapedNewline + "\"\n"
+                + "        + \"" + DASHES + "END RSA PRIVATE KEY" + DASHES + "\";\n"
+                + "int after = 1;\n";
+        assertEquals("String pem = \"[REDACTED]\n\n\nint after = 1;\n", SensitiveContentRedactor.redact(content));
+    }
+
+    @Test
+    void commentedKeyHidesUpToTheEndOfItsEndLine() {
+        String content = "// " + DASHES + "BEGIN RSA PRIVATE KEY" + DASHES + "\n// " + FAKE_KEY_BODY + "\n// "
+                + DASHES + "END RSA PRIVATE KEY" + DASHES + "\nvisible\n";
+        assertEquals("// [REDACTED]\n\n\nvisible\n", SensitiveContentRedactor.redact(content));
     }
 
     @Test
@@ -728,8 +759,8 @@ class SensitiveContentRedactorTest {
     /**
      * Rendu de la boucle {@code replacePrivateKeyBlocks} de {@code secret-redaction-v9} ;
      * {@code defective} signale l'un de ses deux défauts : fin de marqueur cherchée au-delà de sa ligne,
-     * marqueur sans clé dont la reprise en fin de marqueur saute un {@code -----BEGIN } commencé avant, ou ligne
-     * {@code -----END} acceptée au milieu d'une ligne.
+     * marqueur sans clé dont la reprise en fin de marqueur saute un {@code -----BEGIN } commencé avant, ou
+     * {@code -----END} au milieu d'une ligne suivi d'un texte laissé visible sur cette ligne.
      */
     private record V9Rendering(String output, boolean defective) {
     }
@@ -770,7 +801,10 @@ class SensitiveContentRedactorTest {
             String endMarker = endPrefix + keyType + DASHES;
             int end = content.indexOf(endMarker, markerEnd);
             if (end >= 0 && !startsItsLine(content, end)) {
-                defective = true;
+                int afterEnd = end + endMarker.length();
+                if (afterEnd < content.length() && content.charAt(afterEnd) != '\r' && content.charAt(afterEnd) != '\n') {
+                    defective = true;
+                }
             }
             if (end < 0) {
                 output.append(content, cursor, begin).append("[REDACTED]");
