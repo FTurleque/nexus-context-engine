@@ -63,8 +63,8 @@ class SchemaMigratorSkTokenBoundUpgradeTest {
             assertEquals("sk-bound", app.getProject(id).name());
             assertThrows(IllegalStateException.class, () -> app.search(id, "SkBoundMarker", 10, false));
             var repository = new SqliteIndexRepository(new SqliteDatabase(paths));
-            // V018, V019, V020 et V021 incrémentent chacune la génération une fois.
-            assertEquals(LEGACY_GENERATION + 4, repository.generation(id));
+            // V018, V019, V020, V021 et V022 incrémentent chacune la génération une fois.
+            assertEquals(LEGACY_GENERATION + 5, repository.generation(id));
 
             var report = app.index(id, false, false).report();
 

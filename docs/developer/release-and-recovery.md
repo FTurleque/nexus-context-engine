@@ -131,9 +131,9 @@ Un backup/restauration doit conserver les protections adaptées au système cibl
 
 Avant une migration de production, sauvegarder SQLite service arrêté. Ne jamais restaurer uniquement un index Lucene en ignorant SQLite.
 
-## Recovery sémantique / `content-v9`
+## Recovery sémantique / `content-v10`
 
-Le profil de contenu sémantique courant est `content-v9`, lié à la politique de redaction `secret-redaction-v10`. Un index créé sous l'ancien profil est considéré incompatible et doit être reconstruit ; NEXUS ne réutilise pas silencieusement les vecteurs historiques.
+Le profil de contenu sémantique courant est `content-v10`, lié à la politique de redaction `secret-redaction-v11`. Un index créé sous l'ancien profil est considéré incompatible et doit être reconstruit ; NEXUS ne réutilise pas silencieusement les vecteurs historiques.
 
 La redaction de secrets réduit la fuite accidentelle de tokens/clés/mots de passe structurés, mais n'est pas une sauvegarde ni un scanner de secrets complet.
 
@@ -380,6 +380,28 @@ V020 dont l'index Lucene contient le corps d'un bloc placé derrière une ligne
 reconstruction.
 
 Retour arrière : V021 ne change pas le schéma ; un binaire antérieur ouvre la base
+et reconstruit ses dérivés sous sa propre politique, qui laisse ces blocs en clair.
+Pour revenir en arrière sans rouvrir ces cas, restaurer la sauvegarde de
+`NEXUS_HOME` prise avant la mise à niveau.
+
+## Mise à niveau V022 — END puis BEGIN sur une ligne
+
+`V022__invalidate_end_begin_same_line_indexes.sql` accompagne la politique
+`secret-redaction-v11` : un bloc de clé privée s'arrête avant le `-----BEGIN ` d'une
+clé privée qui suit son `-----END` sur la même ligne, tirets partagés compris. Sous
+`secret-redaction-v10`, le curseur passait au-delà de ce marqueur et le corps de la
+seconde clé restait en clair (fichier commenté, concaténation de code, JSON à
+plusieurs clés sur une ligne, fixture à plusieurs clés). Les dérivés existants peuvent
+donc contenir le corps d'une clé privée en clair. Comme V021, la migration incrémente
+la génération de chaque projet, le passe à `NOT_INDEXED` et efface `last_indexed_at` ;
+le registre et les faits canoniques sont conservés. La prochaine indexation reconstruit
+les dérivés lexicaux, et le profil `content-v10` impose la reconstruction des vecteurs
+sémantiques. V001 à V021 et leurs empreintes restent inchangées.
+`SchemaMigratorEndBeginSameLineUpgradeTest` migre une base V021 dont l'index Lucene
+contient le corps d'un second bloc placé après un `-----END` sur sa ligne et vérifie la
+génération, le statut, le registre et la reconstruction.
+
+Retour arrière : V022 ne change pas le schéma ; un binaire antérieur ouvre la base
 et reconstruit ses dérivés sous sa propre politique, qui laisse ces blocs en clair.
 Pour revenir en arrière sans rouvrir ces cas, restaurer la sauvegarde de
 `NEXUS_HOME` prise avant la mise à niveau.

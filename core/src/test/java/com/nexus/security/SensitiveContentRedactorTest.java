@@ -87,6 +87,32 @@ class SensitiveContentRedactorTest {
     }
 
     @Test
+    void endThenBeginRepetitionsHaveBoundedCost() {
+        String dashes = "-".repeat(5);
+        String block = dashes + "BEGIN PRIVATE KEY" + dashes;
+        String end = dashes + "END PRIVATE KEY" + dashes;
+        // Garde-fou contre un balayage quadratique de la ligne d'un END, pas une mesure de performance :
+        // contenus d'environ 1 Mo, seuil de 10 s comme les garde-fous voisins.
+        org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(java.time.Duration.ofSeconds(10), () -> {
+            String oneLineCycles = (block + "x" + end).repeat((1 << 20) / (block.length() + 1 + end.length()) + 1);
+            assertFalse(SensitiveContentRedactor.redact(oneLineCycles).contains("PRIVATE KEY"));
+
+            String cyclesPerLine = (block + "\nx" + end + "\n").repeat((1 << 20) / (block.length() + end.length() + 3) + 1);
+            assertFalse(SensitiveContentRedactor.redact(cyclesPerLine).contains("PRIVATE KEY"));
+
+            String otherBegins = block + "\nx" + end + (dashes + "BEGIN CERTIFICATE ").repeat((1 << 20) / 23 + 1) + "\nafter";
+            String rendered = SensitiveContentRedactor.redact(otherBegins);
+            assertEquals("[REDACTED]\n\nafter", rendered);
+
+            String dashRun = block + "\nx" + end + "-".repeat(1 << 20) + "\nafter";
+            assertTrue(SensitiveContentRedactor.redact(dashRun).endsWith("\nafter"));
+
+            String dashedAfterLineStartEnd = block + "\n" + end + (dashes + "x ").repeat((1 << 20) / 7 + 1);
+            assertTrue(SensitiveContentRedactor.redact(dashedAfterLineStartEnd).startsWith("[REDACTED]\n"));
+        });
+    }
+
+    @Test
     void rejectsOversizedValuesWithoutPublishingAnySuffix() {
         for (String quote : java.util.List.of("", "\"", "'")) {
             String prefix = "\"password\": " + quote;
@@ -600,6 +626,168 @@ class SensitiveContentRedactorTest {
 
         String truncated = "before" + newline + DASHES + begin + DASHES + newline + FAKE_KEY_BODY + newline + "tail";
         assertEquals("before" + newline + "[REDACTED]" + newline + newline, SensitiveContentRedactor.redact(truncated));
+    }
+
+    private static final String SECOND_BODY = "MIIsecondbodyNOTAKEY4567";
+
+    private static String endThenBegin(String prefix, String endPrefix, boolean sharedDashes, String newline) {
+        String firstEnd = endPrefix + DASHES + "END RSA PRIVATE KEY" + DASHES;
+        String secondBegin = (sharedDashes ? "" : DASHES) + "BEGIN EC PRIVATE KEY" + DASHES;
+        return prefix + DASHES + "BEGIN RSA PRIVATE KEY" + DASHES + newline
+                + prefix + "FIRSTBODY" + newline
+                + firstEnd + secondBegin + newline
+                + prefix + SECOND_BODY + newline
+                + DASHES + "END EC PRIVATE KEY" + DASHES;
+    }
+
+    static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments> privateKeyBlocksAfterAnEndOnTheSameLine() {
+        var cases = new java.util.ArrayList<org.junit.jupiter.params.provider.Arguments>();
+        for (String newline : java.util.List.of("\n", "\r\n", "\r")) {
+            String label = newline.equals("\n") ? "LF" : newline.equals("\r\n") ? "CRLF" : "CR";
+            cases.add(org.junit.jupiter.params.provider.Arguments.of(
+                    "END commenté au milieu de la ligne, dix tirets (" + label + ")",
+                    endThenBegin("# ", "# ", false, newline)));
+            cases.add(org.junit.jupiter.params.provider.Arguments.of(
+                    "END précédé d'un x (" + label + ")", endThenBegin("x", "x", false, newline)));
+            cases.add(org.junit.jupiter.params.provider.Arguments.of(
+                    "END en début de ligne, dix tirets (" + label + ")", endThenBegin("", "", false, newline)));
+            cases.add(org.junit.jupiter.params.provider.Arguments.of(
+                    "END au milieu de la ligne, tirets partagés (" + label + ")",
+                    endThenBegin("# ", "# ", true, newline)));
+            cases.add(org.junit.jupiter.params.provider.Arguments.of(
+                    "END en début de ligne, tirets partagés (" + label + ")", endThenBegin("", "", true, newline)));
+            for (int dashes = 6; dashes <= 9; dashes++) {
+                cases.add(org.junit.jupiter.params.provider.Arguments.of(
+                        "END en début de ligne, " + dashes + " tirets (" + label + ")",
+                        endThenDashesThenBegin("", dashes, newline)));
+                cases.add(org.junit.jupiter.params.provider.Arguments.of(
+                        "END au milieu de la ligne, " + dashes + " tirets (" + label + ")",
+                        endThenDashesThenBegin("x", dashes, newline)));
+            }
+        }
+        return cases.stream();
+    }
+
+    /** Bloc RSA dont le END est suivi, sur sa ligne, de {@code dashes} tirets puis de {@code BEGIN EC PRIVATE KEY-----}. */
+    private static String endThenDashesThenBegin(String prefix, int dashes, String newline) {
+        return prefix + DASHES + "BEGIN RSA PRIVATE KEY" + DASHES + newline
+                + prefix + "FIRSTBODY" + newline
+                + prefix + DASHES + "END RSA PRIVATE KEY" + "-".repeat(dashes) + "BEGIN EC PRIVATE KEY" + DASHES + newline
+                + prefix + SECOND_BODY + newline
+                + DASHES + "END EC PRIVATE KEY" + DASHES;
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.MethodSource("privateKeyBlocksAfterAnEndOnTheSameLine")
+    void privateKeyBlockAfterAnEndMarkerOnTheSameLineIsRedacted(String label, String content) {
+        String redacted = SensitiveContentRedactor.redact(content);
+        assertFalse(redacted.contains(SECOND_BODY), redacted);
+        assertFalse(redacted.contains("FIRSTBODY"), redacted);
+        assertFalse(redacted.contains("EC PRIVATE KEY"), redacted);
+        assertEquals(lineSeparatorsOf(content), lineSeparatorsOf(redacted));
+    }
+
+    @Test
+    void twoKeysOnOneJsonLineAreBothRedacted() {
+        String escapedNewline = (char) 92 + "n";
+        String first = DASHES + "BEGIN PRIVATE KEY" + DASHES + escapedNewline + "FIRSTBODY" + escapedNewline
+                + DASHES + "END PRIVATE KEY" + DASHES + escapedNewline;
+        String second = DASHES + "BEGIN PRIVATE KEY" + DASHES + escapedNewline + SECOND_BODY + escapedNewline
+                + DASHES + "END PRIVATE KEY" + DASHES + escapedNewline;
+        String content = "{\n  \"k1\": \"" + first + "\", \"k2\": \"" + second + "\",\n"
+                + "  \"client_email\": \"svc@example.iam.gserviceaccount.com\"\n}\n";
+        String redacted = SensitiveContentRedactor.redact(content);
+        assertFalse(redacted.contains("FIRSTBODY"), redacted);
+        assertFalse(redacted.contains(SECOND_BODY), redacted);
+        assertTrue(redacted.contains("  \"client_email\": \"svc@example.iam.gserviceaccount.com\"\n}\n"), redacted);
+        assertEquals(lineSeparatorsOf(content), lineSeparatorsOf(redacted));
+    }
+
+    @Test
+    void beginOfAnotherTypeOnTheEndLineStillHidesTheRestOfTheLine() {
+        String content = DASHES + "BEGIN RSA PRIVATE KEY" + DASHES + "\nAAA\nx" + DASHES + "END RSA PRIVATE KEY" + DASHES
+                + DASHES + "BEGIN CERTIFICATE" + DASHES + "TAILOFTHELINE\nafter";
+        assertEquals("[REDACTED]\n\n\nafter", SensitiveContentRedactor.redact(content));
+    }
+
+    @Test
+    void endMarkerFollowedByAnIncompleteBeginKeepsClosingAtTheEndOfItsLine() {
+        String content = DASHES + "BEGIN RSA PRIVATE KEY" + DASHES + "\nAAA" + DASHES + "END RSA PRIVATE KEY" + DASHES
+                + "x " + DASHES + "BEGIN CERT\nvisible";
+        assertEquals("[REDACTED]\n\nvisible", SensitiveContentRedactor.redact(content));
+    }
+
+    static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments> markersSplitAcrossTwoLines() {
+        String body = FAKE_KEY_BODY;
+        String escapedNewline = (char) 92 + "n";
+        return java.util.stream.Stream.of(
+                org.junit.jupiter.params.provider.Arguments.of("concaténation Java",
+                        "String pem = \"" + DASHES + "BEGIN RSA \" +\n\"PRIVATE KEY" + DASHES + escapedNewline + "\" +\n\""
+                                + body + escapedNewline + "\" +\n\"" + DASHES + "END RSA PRIVATE KEY" + DASHES + "\";\n"),
+                org.junit.jupiter.params.provider.Arguments.of("chaîne Python implicite",
+                        "PEM = (\"" + DASHES + "BEGIN RSA \"\n       \"PRIVATE KEY" + DASHES + escapedNewline + "\"\n       \""
+                                + body + escapedNewline + "\"\n       \"" + DASHES + "END RSA PRIVATE KEY" + DASHES + "\")\n"),
+                org.junit.jupiter.params.provider.Arguments.of("coupure par CRLF",
+                        DASHES + "BEGIN RSA\r\nPRIVATE KEY" + DASHES + "\r\n" + body + "\r\n" + DASHES
+                                + "END RSA PRIVATE KEY" + DASHES + "\r\n"));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.MethodSource("markersSplitAcrossTwoLines")
+    void splitMarkerVariantsOpenNoKey(String label, String source) {
+        // Limite acceptée et documentée : le marqueur coupé n'ouvre pas de clé, le corps reste en clair.
+        assertEquals(source, SensitiveContentRedactor.redact(source));
+    }
+
+    @Test
+    void generatedBlocksFollowedByAnotherBlockOnTheSameLineNeverLeakABody() {
+        String[] types = {"RSA PRIVATE KEY", "EC PRIVATE KEY", "PRIVATE KEY", "PGP PRIVATE KEY BLOCK"};
+        String[] prefixes = {"", "# ", "// ", "x", " ", "\"", "x-"};
+        String[] newlines = {"\n", "\r\n", "\r"};
+        // "shared" suivi de un à quatre tirets : six à neuf tirets entre le type du END et le BEGIN suivant.
+        String[] joins = {"\n", "", " ", "SECRET", "\r\n", "shared", "z", DASHES + "BEGIN CERTIFICATE" + DASHES,
+                "shared-", "shared--", "shared---", "shared----", "-"};
+        var random = new java.util.Random(16);
+        int refused = 0;
+        for (int sample = 0; sample < 20_000; sample++) {
+            int blocks = 1 + random.nextInt(3);
+            String newline = newlines[random.nextInt(newlines.length)];
+            var content = new StringBuilder();
+            boolean shared = false;
+            for (int index = 0; index < blocks; index++) {
+                String type = types[random.nextInt(types.length)];
+                String prefix = prefixes[random.nextInt(prefixes.length)];
+                String endPrefix = random.nextBoolean() ? prefix : prefixes[random.nextInt(prefixes.length)];
+                content.append(index == 0 ? prefix : "").append(shared ? "" : DASHES).append("BEGIN ").append(type)
+                        .append(DASHES).append(newline).append(prefix).append("GENBODY").append(index).append(newline)
+                        .append(endPrefix).append(DASHES).append("END ").append(type).append(DASHES);
+                shared = false;
+                if (index < blocks - 1) {
+                    String join = joins[random.nextInt(joins.length)];
+                    if (join.startsWith("shared")) {
+                        shared = true;
+                        content.append(join.substring("shared".length()));
+                    } else {
+                        content.append(join);
+                    }
+                }
+            }
+            String text = content.toString();
+            String redacted;
+            try {
+                redacted = SensitiveContentRedactor.redact(text);
+            } catch (OversizedSecretException expected) {
+                // Un refus ne publie rien : aucun corps ne fuit. Les refus sont comptés pour que le
+                // test ne devienne pas vacant.
+                refused++;
+                continue;
+            }
+            for (int index = 0; index < blocks; index++) {
+                assertFalse(redacted.contains("GENBODY" + index), text.replace("\r", "\\r").replace("\n", "\\n"));
+            }
+            assertEquals(lineSeparatorsOf(text), lineSeparatorsOf(redacted));
+        }
+        assertEquals(0, refused, "contenus générés refusés au lieu d'être masqués");
     }
 
     @Test

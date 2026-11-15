@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
 public final class SensitiveContentRedactor {
 
     /** Version persistée dans les index dérivés ; toute évolution impose leur reconstruction. */
-    public static final String POLICY_VERSION = "secret-redaction-v10";
+    public static final String POLICY_VERSION = "secret-redaction-v11";
 
     private static final String REDACTED = "[REDACTED]";
     /** Tirets d'ouverture et de fin d'un marqueur de clé privée. */
@@ -416,7 +416,9 @@ public final class SensitiveContentRedactor {
      * après {@code BEGIN} ou {@code END}, et entre les mots du type. Le marqueur {@code -----END} porte
      * le même type, à la casse et aux blancs près. S'il commence sa ligne, précédé au plus de blancs ou
      * de tirets, le bloc s'arrête après ses tirets ; sinon il s'arrête à la fin de la ligne du marqueur.
-     * Sans marqueur {@code -----END}, le bloc court jusqu'à la fin du contenu.</p>
+     * Dans les deux cas, un {@code -----BEGIN } de clé privée placé après le {@code -----END} sur sa
+     * ligne arrête le bloc avant lui et ouvre le bloc suivant. Sans marqueur {@code -----END}, le bloc
+     * court jusqu'à la fin du contenu.</p>
      */
     private static String replacePrivateKeyBlocks(String content) {
         StringBuilder output = new StringBuilder(content.length());
@@ -508,9 +510,18 @@ public final class SensitiveContentRedactor {
      * type normalisé {@code type}, ou {@code -1}. Un marqueur qui commence sa ligne (seuls des blancs ou
      * des tirets le précèdent) ferme le bloc après ses tirets ; un marqueur au milieu d'une ligne le
      * ferme à la fin de cette ligne (premier CR ou LF, exclu), pour qu'aucun texte collé au marqueur ne
-     * sorte en clair. La partie comparée d'une candidate ne contient aucun {@code -----} et chaque
-     * caractère du type normalisé consomme au moins un caractère de la candidate : le balayage reste
-     * linéaire.
+     * sorte en clair.
+     *
+     * <p>Quand un marqueur {@code -----BEGIN } qui ouvre une clé privée suit le {@code -----END} sur sa
+     * ligne, le bloc s'arrête avant ce marqueur : l'ouverture du second bloc n'est pas avalée. Les tirets
+     * qui suivent le type du {@code END} forment une seule suite : quand les cinq derniers ouvrent ce
+     * marqueur ({@code -----END X-----BEGIN Y-----}, ou six à neuf tirets entre {@code X} et
+     * {@code BEGIN}), le bloc s'arrête avant ces cinq tirets.</p>
+     *
+     * <p>La partie comparée d'une candidate ne contient aucun {@code -----} et chaque caractère du type
+     * normalisé consomme au moins un caractère de la candidate : le balayage reste linéaire. La recherche
+     * du {@code BEGIN} s'arrête à celui-ci ou à la fin de la ligne, sans chercher la fin de ligne
+     * d'abord : une longue ligne de blocs successifs resterait sinon quadratique.</p>
      */
     private static int endOfMatchingEndMarker(String content, int from, String type) {
         int position = from;
@@ -521,20 +532,55 @@ public final class SensitiveContentRedactor {
             }
             int typeEnd = endOfNormalizedType(content, candidate + MARKER_DASHES.length() + "END".length(), type);
             if (typeEnd >= 0 && content.startsWith(MARKER_DASHES, typeEnd)) {
+                int dashRunEnd = typeEnd;
+                while (dashRunEnd < content.length() && content.charAt(dashRunEnd) == '-') {
+                    dashRunEnd++;
+                }
+                int sharedBegin = dashRunEnd - MARKER_DASHES.length();
+                if (opensPrivateKeyAt(content, sharedBegin)) {
+                    return sharedBegin;
+                }
                 int markerEnd = typeEnd + MARKER_DASHES.length();
-                return startsItsLine(content, candidate) ? markerEnd : endOfLine(content, markerEnd);
+                return startsItsLine(content, candidate) ? markerEnd : endOfLineOrPrivateKeyBegin(content, markerEnd);
             }
             position = candidate + 1;
         }
     }
 
-    /** Position du premier CR ou LF à partir de {@code from}, ou la longueur du contenu. */
-    private static int endOfLine(String content, int from) {
+    /**
+     * Position du premier CR ou LF à partir de {@code from}, ou la longueur du contenu, ou celle d'un
+     * {@code -----BEGIN } qui ouvre une clé privée s'il vient avant. Un seul balayage ; chaque candidat
+     * est examiné jusqu'aux premiers tirets qui le suivent, sur sa ligne.
+     */
+    private static int endOfLineOrPrivateKeyBegin(String content, int from) {
         int index = from;
-        while (index < content.length() && content.charAt(index) != '\r' && content.charAt(index) != '\n') {
+        while (index < content.length()) {
+            char character = content.charAt(index);
+            if (character == '\r' || character == '\n') {
+                return index;
+            }
+            if (character == '-' && opensPrivateKeyAt(content, index)) {
+                return index;
+            }
             index++;
         }
         return index;
+    }
+
+    /**
+     * {@code position} porte un {@code -----BEGIN } dont les tirets de fin sont sur sa ligne et dont le
+     * type est celui d'une clé privée.
+     */
+    private static boolean opensPrivateKeyAt(String content, int position) {
+        int wordStart = position + MARKER_DASHES.length();
+        if (!content.startsWith(MARKER_DASHES, position) || !regionEqualsIgnoreAsciiCase(content, wordStart, "BEGIN")
+                || wordStart + "BEGIN".length() >= content.length()
+                || !isMarkerBlank(content.charAt(wordStart + "BEGIN".length()))) {
+            return false;
+        }
+        int afterBegin = position + PRIVATE_KEY_BEGIN_LENGTH;
+        int closingDashes = closingDashesOnMarkerLine(content, afterBegin);
+        return closingDashes >= 0 && isPrivateKeyType(normalizedType(content, afterBegin, closingDashes));
     }
 
     /** Seuls des blancs ou des tirets précèdent {@code position} sur sa ligne. */
