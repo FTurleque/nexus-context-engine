@@ -642,8 +642,9 @@ class SensitiveContentRedactorTest {
 
     static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments> privateKeyBlocksAfterAnEndOnTheSameLine() {
         var cases = new java.util.ArrayList<org.junit.jupiter.params.provider.Arguments>();
+        var labels = java.util.Map.of("\n", "LF", "\r\n", "CRLF", "\r", "CR");
         for (String newline : java.util.List.of("\n", "\r\n", "\r")) {
-            String label = newline.equals("\n") ? "LF" : newline.equals("\r\n") ? "CRLF" : "CR";
+            String label = labels.get(newline);
             cases.add(org.junit.jupiter.params.provider.Arguments.of(
                     "END commenté au milieu de la ligne, dix tirets (" + label + ")",
                     endThenBegin("# ", "# ", false, newline)));
@@ -656,16 +657,22 @@ class SensitiveContentRedactorTest {
                     endThenBegin("# ", "# ", true, newline)));
             cases.add(org.junit.jupiter.params.provider.Arguments.of(
                     "END en début de ligne, tirets partagés (" + label + ")", endThenBegin("", "", true, newline)));
-            for (int dashes = 6; dashes <= 9; dashes++) {
-                cases.add(org.junit.jupiter.params.provider.Arguments.of(
-                        "END en début de ligne, " + dashes + " tirets (" + label + ")",
-                        endThenDashesThenBegin("", dashes, newline)));
-                cases.add(org.junit.jupiter.params.provider.Arguments.of(
-                        "END au milieu de la ligne, " + dashes + " tirets (" + label + ")",
-                        endThenDashesThenBegin("x", dashes, newline)));
-            }
+            addSixToNineDashCases(cases, newline, label);
         }
         return cases.stream();
+    }
+
+    /** Six à neuf tirets entre le type du END et le BEGIN, END en début puis au milieu de la ligne. */
+    private static void addSixToNineDashCases(
+            java.util.List<org.junit.jupiter.params.provider.Arguments> cases, String newline, String label) {
+        for (int dashes = 6; dashes <= 9; dashes++) {
+            cases.add(org.junit.jupiter.params.provider.Arguments.of(
+                    "END en début de ligne, " + dashes + " tirets (" + label + ")",
+                    endThenDashesThenBegin("", dashes, newline)));
+            cases.add(org.junit.jupiter.params.provider.Arguments.of(
+                    "END au milieu de la ligne, " + dashes + " tirets (" + label + ")",
+                    endThenDashesThenBegin("x", dashes, newline)));
+        }
     }
 
     /** Bloc RSA dont le END est suivi, sur sa ligne, de {@code dashes} tirets puis de {@code BEGIN EC PRIVATE KEY-----}. */
