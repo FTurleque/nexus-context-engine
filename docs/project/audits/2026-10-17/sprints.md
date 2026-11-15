@@ -4,7 +4,7 @@ Le [plan d'action](plan-action.md) classe par urgence ; ce document classe par *
 
 Principes : le dispositif avant ce qu'il mesure ; l'observabilité avant les corrections de fond ; les mêmes fichiers dans des sprints successifs, jamais parallèles (les sprints 1 et 2 partagent `validate-phase-6.ps1` et `ci.yml`, les sprints 5 et 6 `ProjectIndexingService` et `LuceneSearchIndex`). L'ordre a été vérifié par script (`consolidate.py`) : chaque constat actionnable est dans exactement un sprint, aucun Info n'y figure, aucun prérequis n'est placé après son dépendant.
 
-## Vue d'ensemble au 14 novembre 2026
+## Vue d'ensemble au 15 novembre 2026
 
 | Sprint | Titre | État | Fermés | Composition | Charge (j) | Reste (j) |
 |---|---|---|---:|---|---|---|
@@ -22,23 +22,24 @@ Principes : le dispositif avant ce qu'il mesure ; l'observabilité avant les cor
 | S12 | Durcir les gates ajoutés | Clôturé | 5/5 | 5 faible | 1,25 à 5 | 0 à 0 |
 | S13 | Installateur et release finale | Clôturé | 5/5 | 1 élevée · 4 faible | 1,25 à 5 | 0 à 0 |
 | S14 | Suites de la vérification du 11 novembre | Clôturé | 8/8 | 1 élevée · 1 moyenne · 6 faible | 2,75 à 10 | 0 à 0 |
-| S15 | Suites de la vérification du 12 novembre | À faire | 0/4 | 4 faible | 1 à 4 | 1 à 4 |
+| S15 | Suites de la vérification du 12 novembre | Clôturé | 4/4 | 4 faible | 1 à 4 | 0 à 0 |
+| S16 | Suites de la vérification du 15 novembre | À faire | 0/2 | 2 faible | 0,5 à 2 | 0,5 à 2 |
 
-Les sprints 12 à 15 n'existaient pas le 17/10. Le sprint 12 regroupe les contournements relevés le 07/11 dans les gates livrés aux sprints 1 et 2 ; le sprint 13 les défauts de l'installateur et de la publication relevés le 09/11 ; les sprints 14 et 15 les constats relevés le 11/11 et le 12/11. Aucun n'a de dépendance avec les sprints antérieurs.
+Les sprints 12 à 16 n'existaient pas le 17/10. Le sprint 12 regroupe les contournements relevés le 07/11 dans les gates livrés aux sprints 1 et 2 ; le sprint 13 les défauts de l'installateur et de la publication relevés le 09/11 ; les sprints 14 à 16 les constats relevés le 11/11, le 12/11 et le 15/11. Aucun n'a de dépendance avec les sprints antérieurs.
 
-Charge restante : **1 à 4 jours**. C'est une enveloppe (S 0,25 à 1 j, M 1 à 3 j, L 3 à 8 j) : elle ne couvre ni la revue, ni les allers-retours de CI, ni les arbitrages écrits (ADR) qu'exigent les sprints 5, 6 et 11.
+Charge restante : **0,5 à 2 jours**. C'est une enveloppe (S 0,25 à 1 j, M 1 à 3 j, L 3 à 8 j) : elle ne couvre ni la revue, ni les allers-retours de CI, ni les arbitrages écrits (ADR) qu'exigent les sprints 5, 6 et 11.
 
 ## Chemin critique restant
 
-Les sprints 1 à 14 sont clôturés et la version 0.2.1 est publiée en release immuable. Aucun constat ouvert n'en bloque un autre. L'ordre restant, au sprint 15, est une question d'urgence :
+Les sprints 1 à 15 sont clôturés. Aucun constat ouvert n'en bloque un autre. Au sprint 16 :
 
-- **`AUD-SEC-26` (Faible, S)** : une clé privée de fixture peut sortir en clair derrière un marqueur « -----BEGIN » incomplet.
-- **`AUD-DEP-38` (Faible, S)** : le badge Latest GitHub précède le contrôle d'immuabilité.
+- **`AUD-SEC-27` (Faible, S)** : deux formes de bloc de clé que v9 masquait sortent en clair sous v10.
+- **`AUD-QUA-33` (Faible, S)** : une boîte non supprimable bloque l'installation silencieuse après Docker Desktop.
 - **`AUD-SEC-25`, `AUD-DEP-37`** : redaction XML et réglages GitHub de release ; puis les contournements des gates (`AUD-QUA-26`, `AUD-DEP-36`), le plafond de charge (`AUD-TST-18`) et la doc (`AUD-QUA-27`).
 
 ## S1 — Remettre les mesures d'aplomb
 
-**État au 14/11** : Clôturé (8/8 fermés). Sortie atteinte (#343, #347) : règles CLASS pour les quatre classes de bornes, au plus 3 points sous la mesure ; une règle mal nommée fait échouer `coverage_floors.py`.
+**État au 15/11** : Clôturé (8/8 fermés). Sortie atteinte (#343, #347) : règles CLASS pour les quatre classes de bornes, au plus 3 points sous la mesure ; une règle mal nommée fait échouer `coverage_floors.py`.
 
 **Pourquoi ici.** Plusieurs gates passent sans mesurer tout ce qu'ils annoncent ; tant qu'ils ne sont pas réparés, les corrections des sprints suivants ne sont pas vérifiables.
 
@@ -59,7 +60,7 @@ Les sprints 1 à 14 sont clôturés et la version 0.2.1 est publiée en release 
 
 ## S2 — Outillage des scripts et des workflows
 
-**État au 14/11** : Clôturé (9/9 fermés). Sortie atteinte.
+**État au 15/11** : Clôturé (9/9 fermés). Sortie atteinte.
 
 **Pourquoi ici.** Les scripts et workflows portent toutes les vérifications ; on les rend uniformes, et on stabilise la qualification sémantique qui mesurera le sprint 6. Touche validate-phase-6.ps1 et ci.yml après le sprint 1, jamais en parallèle.
 
@@ -83,7 +84,7 @@ Les sprints 1 à 14 sont clôturés et la version 0.2.1 est publiée en release 
 
 ## S3 — Filets de test et traces
 
-**État au 14/11** : Clôturé (7/7 fermés). Sortie atteinte ; la baseline de cycles est vide et le test lit désormais les références qualifiées.
+**État au 15/11** : Clôturé (7/7 fermés). Sortie atteinte ; la baseline de cycles est vide et le test lit désormais les références qualifiées.
 
 **Pourquoi ici.** Les sprints 4 à 8 modifient la sortie publique, l'indexation et les frontières de packages : il faut d'abord les tests de contrat, les traces et le garde-fou d'architecture qui signaleront une régression.
 
@@ -103,7 +104,7 @@ Les sprints 1 à 14 sont clôturés et la version 0.2.1 est publiée en release 
 
 ## S4 — Une seule sortie publique, redaction complétée
 
-**État au 14/11** : Clôturé (8/8 fermés). Sortie atteinte ; la borne `sk-` est alignée (`AUD-SEC-20`, #348).
+**État au 15/11** : Clôturé (8/8 fermés). Sortie atteinte ; la borne `sk-` est alignée (`AUD-SEC-20`, #348).
 
 **Pourquoi ici.** La projection publique est écrite trois fois ; on la rend unique avant d'y corriger l'ordre, les signatures et les formats de secrets, sinon chaque correctif est à faire trois fois.
 
@@ -128,7 +129,7 @@ Les sprints 1 à 14 sont clôturés et la version 0.2.1 est publiée en release 
 
 ## S5 — Indexation et écriture SQLite
 
-**État au 14/11** : Clôturé (8/8 fermés). Sortie atteinte ; l'ancien chemin `applyChanges` est supprimé (`AUD-PRF-28`).
+**État au 15/11** : Clôturé (8/8 fermés). Sortie atteinte ; l'ancien chemin `applyChanges` est supprimé (`AUD-PRF-28`).
 
 **Pourquoi ici.** Les coûts d'indexation touchent les mêmes classes (ProjectIndexingService, SqliteFileWriter, LuceneSearchIndex) : un seul lot, avant la fédération qui réutilise ces classes.
 
@@ -149,7 +150,7 @@ Les sprints 1 à 14 sont clôturés et la version 0.2.1 est publiée en release 
 
 ## S6 — Fédération et runtimes longue durée
 
-**État au 14/11** : Clôturé (11/11 fermés). Sortie atteinte (#344) : pagination du staging indexée (V016), choix d'index selon la part du projet (V017).
+**État au 15/11** : Clôturé (11/11 fermés). Sortie atteinte (#344) : pagination du staging indexée (V016), choix d'index selon la part du projet (V017).
 
 **Pourquoi ici.** Le chemin multi-projets répète des coûts par projet (embedding, readers, Git) ; on découpe d'abord la méthode de 168 lignes qui le porte. Mesuré par la qualification sémantique stabilisée au sprint 2.
 
@@ -177,7 +178,7 @@ Les sprints 1 à 14 sont clôturés et la version 0.2.1 est publiée en release 
 
 ## S7 — Casser le bloc cyclique du cœur
 
-**État au 14/11** : Clôturé (7/7 fermés). Sortie atteinte (#342) : `JavaSourceGraph` lit les références qualifiées, échecs de publication testés.
+**État au 15/11** : Clôturé (7/7 fermés). Sortie atteinte (#342) : `JavaSourceGraph` lit les références qualifiées, échecs de publication testés.
 
 **Pourquoi ici.** Les cycles se cassent un par un sous la protection du test d'architecture (sprint 3), après les sprints qui modifient context, security et search.
 
@@ -201,7 +202,7 @@ Les sprints 1 à 14 sont clôturés et la version 0.2.1 est publiée en release 
 
 ## S8 — Façade, configuration et durcissements locaux
 
-**État au 14/11** : Clôturé (9/9 fermés). Sortie atteinte (#348, #349) : refus et masquage alignés, sur le même texte (`AUD-SEC-20`, `AUD-SEC-23`).
+**État au 15/11** : Clôturé (9/9 fermés). Sortie atteinte (#348, #349) : refus et masquage alignés, sur le même texte (`AUD-SEC-20`, `AUD-SEC-23`).
 
 **Pourquoi ici.** La façade et la configuration se nettoient une fois les packages stabilisés ; les deux durcissements locaux touchent des points d'entrée revus aux sprints 4 et 7.
 
@@ -225,7 +226,7 @@ Les sprints 1 à 14 sont clôturés et la version 0.2.1 est publiée en release 
 
 ## S9 — Chaîne de release exécutable
 
-**État au 14/11** : Clôturé (9/9 fermés). Sortie atteinte ; la release finale v0.2.0 est publiée et attestée.
+**État au 15/11** : Clôturé (9/9 fermés). Sortie atteinte ; la release finale v0.2.0 est publiée et attestée.
 
 **Pourquoi ici.** La release n'a jamais tourné : on corrige ce qu'elle manipule (secrets, environnement, attestations, version) avant de la lancer une première fois sur un tag de pré-version.
 
@@ -249,7 +250,7 @@ Les sprints 1 à 14 sont clôturés et la version 0.2.1 est publiée en release 
 
 ## S10 — Conteneur et gouvernance du dépôt
 
-**État au 14/11** : Clôturé (7/7 fermés). Sortie atteinte.
+**État au 15/11** : Clôturé (7/7 fermés). Sortie atteinte.
 
 **Pourquoi ici.** Durcissements indépendants du code, regroupés parce qu'ils touchent les mêmes fichiers (Dockerfile, compose) ou les réglages GitHub.
 
@@ -269,7 +270,7 @@ Les sprints 1 à 14 sont clôturés et la version 0.2.1 est publiée en release 
 
 ## S11 — Finitions documentaires et micro-optimisations
 
-**État au 14/11** : Clôturé (8/8 fermés). Sortie atteinte.
+**État au 15/11** : Clôturé (8/8 fermés). Sortie atteinte.
 
 **Pourquoi ici.** Corrections isolées, sans prérequis ni conséquence sur les autres lots.
 
@@ -290,7 +291,7 @@ Les sprints 1 à 14 sont clôturés et la version 0.2.1 est publiée en release 
 
 ## S12 — Durcir les gates ajoutés
 
-**État au 14/11** : Clôturé (5/5 fermés). Sortie atteinte avec réserve (#353) : gates durcis et testés par mutation ; des formes simples les contournent encore (`AUD-QUA-26`, `AUD-DEP-36`).
+**État au 15/11** : Clôturé (5/5 fermés). Sortie atteinte avec réserve (#353) : gates durcis et testés par mutation ; des formes simples les contournent encore (`AUD-QUA-26`, `AUD-DEP-36`).
 
 **Pourquoi ici.** Les gates livrés aux sprints 1 et 2 tiennent sur les cas d'origine mais se contournent sur des variantes. Sans dépendance avec les sprints 6 à 11 : à mener tôt, numéroté 12 pour ne pas renuméroter les changements OpenSpec existants.
 
@@ -308,7 +309,7 @@ Les sprints 1 à 14 sont clôturés et la version 0.2.1 est publiée en release 
 
 ## S13 — Installateur et release finale
 
-**État au 14/11** : Clôturé (5/5 fermés). Sortie atteinte (#354, release v0.2.0) : configurations JSON des clients préservées octet pour octet sous PS 5.1 (rejoué).
+**État au 15/11** : Clôturé (5/5 fermés). Sortie atteinte (#354, release v0.2.0) : configurations JSON des clients préservées octet pour octet sous PS 5.1 (rejoué).
 
 **Pourquoi ici.** Défauts relevés le 09/11 sur l'installateur Windows et la publication, à corriger avant la promotion vers main (PR #332) et la release finale v0.2.0.
 
@@ -326,7 +327,7 @@ Les sprints 1 à 14 sont clôturés et la version 0.2.1 est publiée en release 
 
 ## S14 — Suites de la vérification du 11 novembre
 
-**État au 14/11** : Clôturé (8/8 fermés). Sortie atteinte (#367 à #370, release v0.2.1) : redaction linéaire sur les entrées forgées, noms XML composés masqués, fichiers de l'installateur en UTF-8 (rejoué sous Windows), plafond 1M dur, releases immuables.
+**État au 15/11** : Clôturé (8/8 fermés). Sortie atteinte (#367 à #370, release v0.2.1) : redaction linéaire sur les entrées forgées, noms XML composés masqués, fichiers de l'installateur en UTF-8 (rejoué sous Windows), plafond 1M dur, releases immuables.
 
 **Pourquoi ici.** Constats relevés le 11/11 : deux défauts de la redaction antérieurs aux sprints 8 (motif JWT coûteux, éléments XML composés), des contournements restants des gates textuels du sprint 12, le plafond de charge relâché pour la release 0.2.0 et deux réglages GitHub de la release.
 
@@ -347,7 +348,7 @@ Les sprints 1 à 14 sont clôturés et la version 0.2.1 est publiée en release 
 
 ## S15 — Suites de la vérification du 12 novembre
 
-**État au 14/11** : À faire (0/4 fermés). Changes proposés (#386, #387), aucune tâche réalisée au 14/11.
+**État au 15/11** : Clôturé (4/4 fermés). Sortie atteinte (#388 à #392) : clé privée masquée derrière un marqueur incomplet, « ^ » accepté (rejoué sous Windows), guides sous contrat du wrapper, badge Latest posé après le contrôle d'immuabilité.
 
 **Pourquoi ici.** Constats relevés le 12/11 en revérifiant la redaction, l'installateur et la chaîne de release : un bloc de clé privée sauté derrière un marqueur incomplet (préexistant), « ^ » refusé à tort par l'assistant, des guides qui prescrivent encore Maven direct, et le badge Latest posé avant le contrôle d'immuabilité.
 
@@ -357,10 +358,25 @@ Les sprints 1 à 14 sont clôturés et la version 0.2.1 est publiée en release 
 
 | Ordre | ID | Sévérité | Effort | Statut | Constat |
 |---:|---|---|---|---|---|
-| 1 | `AUD-DEP-38` | Faible | S | Ouvert | Code 79 posé après la publication : une version finale non immuable reçoit déjà le badge Latest GitHub, contrairement à release-and-recovery.md |
-| 2 | `AUD-QUA-29` | Faible | S | Ouvert | L'assistant refuse « ^ » dans NEXUS_HOME, y compris sur la page Runtime sautée : un profil Windows contenant ^ bloque le mode Docker (installation silencieuse figée sur une MsgBox) |
-| 3 | `AUD-QUA-30` | Faible | S | Ouvert | Le guide de reproduction et le pipeline d'indexation prescrivent encore `mvn` direct (Maven non ancré) alors que le dépôt impose le wrapper |
-| 4 | `AUD-SEC-26` | Faible | S | Ouvert | Un marqueur « -----BEGIN » incomplet placé avant une clé privée fait sauter le vrai bloc : la clé reste en clair |
+| 1 | `AUD-DEP-38` | Faible | S | Fermé avec réserve | Code 79 posé après la publication : une version finale non immuable reçoit déjà le badge Latest GitHub, contrairement à release-and-recovery.md |
+| 2 | `AUD-QUA-29` | Faible | S | Fermé avec réserve | L'assistant refuse « ^ » dans NEXUS_HOME, y compris sur la page Runtime sautée : un profil Windows contenant ^ bloque le mode Docker (installation silencieuse figée sur une MsgBox) |
+| 3 | `AUD-QUA-30` | Faible | S | Fermé | Le guide de reproduction et le pipeline d'indexation prescrivent encore `mvn` direct (Maven non ancré) alors que le dépôt impose le wrapper |
+| 4 | `AUD-SEC-26` | Faible | S | Fermé avec réserve | Un marqueur « -----BEGIN » incomplet placé avant une clé privée fait sauter le vrai bloc : la clé reste en clair |
+
+## S16 — Suites de la vérification du 15 novembre
+
+**État au 15/11** : À faire (0/2 fermés). Nouveau au 15/11.
+
+**Pourquoi ici.** Constats relevés le 15/11 en revérifiant le sprint 15 : deux formes de bloc de clé que la nouvelle reconnaissance v10 laisse en clair alors que v9 les masquait, et une boîte non supprimable après l'installation automatique de Docker Desktop (préexistante).
+
+**Critère de sortie.** « END … BEGIN » sur une ligne et marqueur BEGIN coupé : masqués ou explicitement refusés, avec un test ; aucune MsgBox non gardée dans la source durcie (contrat).
+
+**Charge** : 0,5 à 2 j.
+
+| Ordre | ID | Sévérité | Effort | Statut | Constat |
+|---:|---|---|---|---|---|
+| 1 | `AUD-QUA-33` | Faible | S | Ouvert | Installation silencieuse en mode Docker bloquée par une MsgBox non supprimable après l'installation automatique de Docker Desktop |
+| 2 | `AUD-SEC-27` | Faible | S | Ouvert | La reconnaissance des blocs de clé v10 laisse en clair deux formes que v9 masquait : un -----END suivi d'un -----BEGIN sur la même ligne, et un marqueur BEGIN coupé sur deux lignes |
 
 ## Constats Info, hors sprint
 
