@@ -532,11 +532,36 @@
   },
   "ordre_interne": [],
   "prerequis_anterieurs": [],
+  "fermes": 4,
+  "etat": "Clôturé",
+  "reste_jours": [
+   0,
+   0
+  ]
+ },
+ {
+  "numero": 16,
+  "titre": "Suites de la vérification du 15 novembre",
+  "pourquoi": "Constats relevés le 15/11 en revérifiant le sprint 15 : deux formes de bloc de clé que la nouvelle reconnaissance v10 laisse en clair alors que v9 les masquait, et une boîte non supprimable après l'installation automatique de Docker Desktop (préexistante).",
+  "sortie": "« END … BEGIN » sur une ligne et marqueur BEGIN coupé : masqués ou explicitement refusés, avec un test ; aucune MsgBox non gardée dans la source durcie (contrat).",
+  "constats": [
+   "AUD-QUA-33",
+   "AUD-SEC-27"
+  ],
+  "charge_jours": [
+   0.5,
+   2
+  ],
+  "composition": {
+   "Faible": 2
+  },
+  "ordre_interne": [],
+  "prerequis_anterieurs": [],
   "fermes": 0,
   "etat": "À faire",
   "reste_jours": [
-   1.0,
-   4
+   0.5,
+   2
   ]
  }
 ]

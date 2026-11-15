@@ -51,15 +51,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Procédure de traitement des alertes dans SECURITY.md (PR #276) ; réglages de sécurité activés par le mainteneur",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-05",
@@ -113,15 +117,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Corrigé par la PR #266 (89a37f0b)",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "Fichier cité modifié en documentation seulement ; contrats opérationnel et OpenSpec PASS.",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-30",
@@ -178,15 +186,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "Corrigé par la PR #268 (dfb695ce)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Réserve d'origine inchangée.",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-30",
@@ -243,15 +255,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "Corrigé par les PR #343 (merge 159cef5a) et #347",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Réserve d'origine inchangée.",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "test-operational-doc-contracts.sh : 6 lignes retirées = montées de version (V021, content-v9, policy v10) ; contrat PASS ; docs modifiées couvertes. | Test actif : scripts/release/test-operational-doc-contracts.sh",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-10",
@@ -310,15 +326,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "PR #265 (4aa90dfa) et #278 (4024c874) ; « Hermetic scale benchmark » ajouté au ruleset par le mainteneur",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-05",
@@ -372,15 +392,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "Corrigé par la PR #266 (89a37f0b)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Réserve d'origine inchangée.",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-30",
@@ -434,15 +458,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "Corrigé par la PR #266 (89a37f0b)",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Test-Hooks.ps1 adapté (deny git push origin main / refs/heads/main) mais non exécutable ici (pas de pwsh).",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "test-windows-installer.ps1 : +346/-3, lignes retirées limitées à l'assertion nexus-mcp.cmd remplacée par l'entrée java.exe.",
+    "reserve": "Réserve d'origine ; pwsh absent ici."
    },
    "verification_mainteneur": {
     "date": "2026-10-30",
@@ -496,15 +524,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Corrigé par les PR #267 (e3f67017) et #277 (a218a613)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-30",
@@ -560,15 +592,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "Corrigé par la PR #281 (85c08184)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-30",
@@ -622,15 +658,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "Corrigé par la PR #281 (85c08184)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Réserve d'origine inchangée.",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-30",
@@ -684,15 +724,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Corrigé par la PR #281 (85c08184)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-30",
@@ -746,15 +790,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Corrigé par la PR #281 (85c08184)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-30",
@@ -808,15 +856,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Corrigé par la PR #281 (85c08184)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-30",
@@ -872,15 +924,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Corrigé par la PR #281 (85c08184)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-30",
@@ -934,15 +990,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "Corrigé par la PR #281 (85c08184)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-30",
@@ -998,15 +1058,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Corrigé par la PR #281 (85c08184)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-30",
@@ -1064,15 +1128,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "Corrigé par la PR #281 (85c08184)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Réserve d'origine inchangée.",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-30",
@@ -1132,15 +1200,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "Corrigé par la PR #282 (b6b56a07)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Réserve d'origine inchangée.",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-30",
@@ -1194,15 +1266,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Corrigé par la PR #282 (b6b56a07)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-30",
@@ -1256,15 +1332,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Corrigé par la PR #282 (b6b56a07)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-30",
@@ -1318,15 +1398,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Corrigé par la PR #282 (b6b56a07)",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "SqliteWriteContentionIntegrationTest : seule l'assertion de version de schéma 20→21 ; aucun test retiré du redacteur (35→44 @Test).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-30",
@@ -1382,15 +1466,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Corrigé par la PR #282 (b6b56a07)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-30",
@@ -1444,15 +1532,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Corrigé par la PR #285 (6dc03c2d)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-30",
@@ -1506,15 +1598,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Corrigé par la PR #282 (b6b56a07)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-30",
@@ -1572,15 +1668,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Corrigé par la PR #284 (050af1e4)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-31",
@@ -1634,15 +1734,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Corrigé par la PR #284 (050af1e4)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-31",
@@ -1704,15 +1808,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Corrigé par la PR #284 (050af1e4)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-31",
@@ -1766,15 +1874,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "Corrigé par la PR #284 (050af1e4)",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "Politique v10 + V021 (même schéma que V020) ; contrat exige secret-redaction-v10 et V021 ; SchemaMigrator enregistre 21. | Test actif : test-operational-doc-contracts.sh ; SchemaMigratorPrivateKeyMarkerUpgradeTest (non exécuté : pas de Maven)",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-31",
@@ -1828,15 +1940,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Corrigé par la PR #284 (050af1e4)",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "CONTENT_PROFILE_VERSION 8→9 seule modification de SemanticIndexingService ; contrat content-v9 PASS. | Test actif : test-operational-doc-contracts.sh",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-31",
@@ -1890,15 +2006,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Corrigé par la PR #284 (050af1e4)",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "SemanticIndexingService : seul CONTENT_PROFILE_VERSION 8→9 change.",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-31",
@@ -1954,15 +2074,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Corrigé par la PR #284 (050af1e4)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-31",
@@ -2016,15 +2140,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Corrigé par la PR #284 (050af1e4)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-10-31",
@@ -2074,15 +2202,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "La migration V012 crée idx_symbol_relations_file_provider (file_id, source_provider), qui sert la suppression par fichier et la sonde de cascade, et le benchmark d'échelle réindexe des fichiers existants par applyChanges (PR #297, sprint 5, tâches 1.1 à 1.3 et 6.2)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -2132,15 +2264,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "ProjectIndexingService.importExternalCodeIntelligence porte l'import MINOS sous le même verrou single-flight puis inter-processus que l'indexation, MinosCodeIndexImporter est composé par NexusApplicationFactory et la CLI lit le payload borné par la façade (PR #297, sprint 5, tâche 7.1)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -2190,15 +2326,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "ProjectIndexingService n'a plus qu'un constructeur public complet, sans valeur par défaut du ProjectIndexLockManager ; les variantes de commodité vivent dans la fabrique de test ProjectIndexingServices (PR #297, sprint 5, tâche 8.1)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -2248,15 +2388,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "Le benchmark scanner rapporte la part du hachage au scan initial et au scan final ; la mesure montre que le coût vient de l'ouverture du fichier et non du SHA-256, et le design D3 décide de ne pas introduire de raccourci taille/date, DATA-0023 restant inchangé (PR #297, sprint 5, tâches 3.1 et 3.2)",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "Fichier cité modifié en documentation seulement ; contrats opérationnel et OpenSpec PASS.",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -2306,15 +2450,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Une session d'écriture par indexation garde un seul IndexWriter lexical et un seul sémantique, alimentés à chaque lot, committés une fois à la barrière de publication et annulés si l'indexation échoue (PR #297, sprint 5, tâche 4.1)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -2364,15 +2512,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "Les analyses des fichiers modifiés sont mises en attente dans les tables index_staged_* (V014) par courtes transactions au rythme des flushs, puis appliquées et publiées avec la génération en une transaction finale (PR #297, sprint 5, tâches 2.1 et 2.2, DATA-0074)",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "Fichier cité modifié en documentation seulement ; contrats opérationnel et OpenSpec PASS.",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -2422,15 +2574,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "SqliteFileWriter prépare l'upsert et les deux DELETE une fois par transaction, obtient l'identifiant par RETURNING id sans relecture, et SqliteBatchInsert met en cache l'instruction de fin de lot par taille (PR #297, sprint 5, tâche 5.1)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -2480,15 +2636,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "La migration V013 supprime idx_symbol_relations_project, idx_indexed_files_project et idx_symbols_file après vérification par EXPLAIN QUERY PLAN qu'un index plus large sert chaque requête (PR #297, sprint 5, tâches 6.1 et 6.2)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -2540,15 +2700,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Un SearchQueryContext unique par requête fédérée (recherche et contexte) mémorise le vecteur de la requête redactée, clé (provider, modèle) : le fournisseur d'embeddings reçoit au plus un appel quel que soit le nombre de projets, et une indisponibilité est elle aussi mémorisée et partagée (sprint 6, tâches 2.1 et 2.2, PR #299)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -2601,15 +2765,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Les métadonnées de commit Lucene (compatibilité sémantique et sonde de readiness lexicale) sont lues sur le reader en cache, avec repli SegmentInfos.readLatestCommit sans DirectoryReader quand aucun reader n'est en cache (sprint 6, tâches 4.1 et 4.2, PR #299)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -2659,15 +2827,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "GitRecencyCandidateEnricher mémorise par (répertoire Git, HEAD) les chemins modifiés des 50 derniers commits dans les bornes existantes, invalide l'entrée au changement de HEAD et borne le cache à MAX_PROJECTS entrées LRU, décision portée par BE-0070 (sprint 6, tâche 6.1, PR #299)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -2714,14 +2886,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "absent_du_suivi": false,
    "verification_mainteneur": {
@@ -2765,14 +2941,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-10",
@@ -2824,15 +3004,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "FederatedContextService.build et ProjectIndexingService.indexLocked sont découpés en étapes privées nommées (validation, collecte par projet, sélection, métadonnées ; diff, publication, providers externes, vérification, statut) sans changement de comportement ; NexusApplicationFactory.create reste linéaire comme le demandait l'action (sprint 6, tâches 1.1 et 1.2, PR #299)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -2884,15 +3068,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "La recherche et le contexte fédérés démarrent une échéance globale (FederationDeadlinePolicy, 60 s par défaut, NEXUS_FEDERATION_DEADLINE_SECONDS borné à 1-600 s) vérifiée avant chaque projet sans parallélisme, plafonnent le délai d'embedding par le temps restant et nomment les projets non commencés dans unservedProjects à parité CLI, REST et MCP ; décision BE-0064, consolidée depuis dans BE-0081 (sprint 6, tâches 3.1 à 3.3, PR #299)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -2942,15 +3130,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "La capacité du cache de contexte Git est alignée sur FederatedScopePolicy.MAX_PROJECTS (100) et ses compteurs CacheStats sont exposés sous gitContextCache dans les métadonnées explain, mono-projet et fédéré ; le workflow git-context-cache-qualification vérifie un scope de plus de 16 projets sans éviction ; décision BE-0065, consolidée depuis dans BE-0070 (sprint 6, tâches 5.1 à 5.3, PR #299)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -3000,15 +3192,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "La migration V015 remplace le préfiltre fuzzy global par idx_symbols_file_fuzzy_prefilter (file_id en tête, sondé depuis les fichiers du projet) et SymbolSearchStrategy interroge tous les termes en lot (une requête SQL par famille) ; le MATCH FTS trigram reste global par décision mesurée et documentée, la restriction par rowid IN étant 10 à 300 fois plus lente (sprint 6, tâches 7.1 et 7.2, PR #299)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -3056,14 +3252,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "absent_du_suivi": false,
    "verification_mainteneur": {
@@ -3107,14 +3307,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-10",
@@ -3173,15 +3377,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "Les cinq cycles bilatéraux sont cassés par l'extraction des packages feuilles (index.service, context.model, search.candidate) et la remontée de la construction Ollama dans le composition root ; le graphe des packages du cœur est acyclique, décision ARCH-0076, verrouillée par CoreArchitectureTest avec une baseline de cycles vide (PR #300)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -3235,15 +3443,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "ProjectIndexingService, IndexDocumentPublisher et ExternalCodeIntelligenceRefresher passent dans le package d'orchestration index.service, ResultLimitPolicy dans config et SearchDocument dans index, et le port SemanticIndexing (implémenté par SemanticIndexingService, NoopSemanticIndexing à la place de null) remplace la classe concrète (PR #300)",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "SemanticIndexingService : seul CONTENT_PROFILE_VERSION 8→9 change.",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -3297,15 +3509,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "ContextFragment, ContextItem et ContextSelectionResult passent dans le package context.model, dont dépendent à la fois context et context.source.* (PR #300)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -3359,15 +3575,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "SearchCandidate, SearchSignals, CandidateType, CandidateEnricher et CandidateMerger passent dans le package search.candidate, et ranking comme ranking.graph ne dépendent plus de search (PR #300)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -3421,15 +3641,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "La lecture d'environnement et l'instanciation d'OllamaEmbeddingProvider quittent SemanticSearchConfiguration pour NexusApplicationFactory, composition root seule autorisée à lire l'environnement (PR #300)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -3479,14 +3703,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "absent_du_suivi": false,
    "verification_mainteneur": {
@@ -3534,14 +3762,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "absent_du_suivi": false,
    "verification_mainteneur": {
@@ -3592,15 +3824,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "Le filtre JAX-RS NexusRestLoopbackTransportFilter (PR #303) refuse en 403 sans détail, en trust-local comme en mode jeton loopback, toute requête dont le Host n'est pas littéralement 127.0.0.1, localhost ou [::1] ou dont l'Origin n'est pas loopback ; le risque navigateur résiduel du trust-local et la recommandation d'allowlist de racines sont documentés.",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "test-final-audit-contracts.sh : +14/-0 (bloc DEP-38 seul) ; PASS sur l'arbre normalisé. | Test actif : scripts/release/test-final-audit-contracts.sh",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -3650,15 +3886,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Les gabarits readProject et readProjects de NexusApplication (PR #303) portent seuls la séquence READY → verrou partagé → session → revalidation READY, et les sept lectures indexées, inspect compris, passent par eux.",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -3708,15 +3948,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "NexusApplicationFactory enveloppe l'échec d'ouverture SQLite dans PersistenceException, cause conservée (PR #303), si bien que la façade et les trois adaptateurs n'exposent ni n'importent plus java.sql.",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -3766,15 +4010,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "Le record NexusConfiguration, résolu une fois par NexusApplicationFactory depuis une Map et injecté dans les classes qui lisaient l'environnement (PR #303), remplace les 16 appels à System.getenv du cœur ; une règle du test d'architecture interdit tout nouvel appel hors composition root (ARCH-0086).",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -3824,15 +4072,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Le durcissement POSIX/ACL du stockage quitte NexusPaths pour security.PrivateStoragePolicy et SearchQualityMetrics passe sous core/src/test (PR #303).",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -3886,15 +4138,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "La classe JDT ProcessBuilder est renommée BoundedJdtProcessBuilder et ses usages la nomment explicitement (PR #303).",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -3944,15 +4200,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "La fabrique unique GitRepositoryLocator (PR #303) retient le dépôt de la racine du projet et n'accepte un dépôt parent que s'il appartient à l'utilisateur courant, à l'image de safe.directory, sinon le contexte Git est ignoré avec un diagnostic sans chemin ; ce contrôle de propriétaire remplace délibérément un plafond strict pour préserver le monorepo (décision BE-0070, option C).",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -3999,14 +4259,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "Seul replacePrivateKeyBlocks change ; sk- corps 255 masqué, 258 et sk-ant- 256 refusés (sonde javac sur v10). | Test actif : SensitiveContentRedactorTest (161 cas verts via shim JUnit, javac 21)",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-10",
@@ -4052,14 +4316,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Réserve d'origine inchangée.",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "redact() remplace les blocs de clé avant le refus (hors diff) ; ghp_ collé à -----END RSA PRIVATE KEY----- → [REDACTED] ; xoxb- avec _ masqué ; ghp_ 256 refusé (sonde v10). | Test actif : SensitiveContentRedactorTest (161/161 sur v10 ; 29 cas en échec sur v9 : tests discriminants)",
+    "reserve": "Réserve d'origine inchangée."
    },
    "verification_mainteneur": {
     "date": "2026-11-10",
@@ -4116,15 +4384,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "Fermé par #304 (tags de pré-version vX.Y.Z-rc.N, release marquée pré-version sans déplacer latest, ADR de politique de publication) puis par la répétition 0.2.0-rc.2 : version passée par #315 (0018cf3e), promotion vers main par #318 (38e1b95b), tag v0.2.0-rc.2 publié par un run Release réussi après approbation de l'environnement release, relevé consigné par #319 (de2a066a)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -4180,15 +4452,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "Fermé par #304 (tâches 2.1 et 2.2) : les secrets PFX ne figurent plus dans l'env du job windows-installer ; ils ne sont mappés que sur les deux étapes de signature, vides sur pull_request, et le PFX est décodé puis effacé dans la même étape sans que son chemin soit publié",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Réserve d'origine inchangée.",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "test-final-audit-contracts.sh : +14/-0 (bloc DEP-38 seul) ; PASS sur l'arbre normalisé. | Test actif : scripts/release/test-final-audit-contracts.sh",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -4240,15 +4516,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "Fermé par #304 (tâche 3.2) : le job publish déclare environment: release ; le mainteneur a créé l'environnement release (reviewer requis, déploiement limité aux tags v*, sans secret) et le ruleset de tags « Protect tags » sur refs/tags/v* (tâches manuelles 3.1 et 3.3)",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Réserve d'origine (réglages GitHub externes).",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "test-final-audit-contracts.sh : +14/-0 (bloc DEP-38 seul) ; PASS sur l'arbre normalisé. | Test actif : scripts/release/test-final-audit-contracts.sh",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -4298,15 +4578,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "Fermé par #304 (tâche 5.1) : le pom racine fixe project.build.outputTimestamp et la procédure de release prescrit sa mise à jour à chaque version",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Réserve d'origine inchangée.",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "test-final-audit-contracts.sh : +14/-0 (bloc DEP-38 seul) ; PASS sur l'arbre normalisé. | Test actif : scripts/release/test-final-audit-contracts.sh",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -4356,15 +4640,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Fermé par #304 (tâches 6.1 et 6.2) : les plugins clean, resources, jar, install et deploy sont épinglés en pluginManagement ; l'enforcer ajoute requirePluginVersions et requireUpperBoundDeps et exige Maven [3.10.0,)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -4414,15 +4702,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Fermé par #304 (tâches 7.1 et 7.2) : l'exécution aggregate-third-party-notices applique une liste blanche includedLicenses avec failOnBlacklist=true et normalise les libellés par licenseMerges ; le contrat final exige ces réglages",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "test-final-audit-contracts.sh : +14/-0 (bloc DEP-38 seul) ; PASS sur l'arbre normalisé. | Test actif : scripts/release/test-final-audit-contracts.sh",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -4474,15 +4766,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Fermé par #304 (tâches 4.1 et 4.2) : le job publish atteste par subject-path le ZIP et le setup.exe Windows, vérifie chaque attestation par gh attestation verify avant l'upload, et la documentation décrit la vérification consommateur",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "test-final-audit-contracts.sh : +14/-0 (bloc DEP-38 seul) ; PASS sur l'arbre normalisé. | Test actif : scripts/release/test-final-audit-contracts.sh",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -4534,15 +4830,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Fermé par #304 (tâches 1.1 et 1.2) : release.yml n'utilise plus secrets: inherit et appelle le job Windows avec require_authenticode: false sans transmettre aucun secret ; le contrat final refuse secrets: inherit dans .github/workflows",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "test-final-audit-contracts.sh : +14/-0 (bloc DEP-38 seul) ; PASS sur l'arbre normalisé. | Test actif : scripts/release/test-final-audit-contracts.sh",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -4594,15 +4894,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "Fermé par #304 (tâches 8.1 et 8.2) : ci.yml et scripts/validate-phase-6.ps1 lisent la version produit dans pom.xml et la propagent en variable ; le contrat final refuse une version littérale dans ces deux fichiers",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Réserve d'origine inchangée ; compose template et docs user portent 0.2.1 en dur (hors périmètre du contrat).",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -4652,15 +4956,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "COPY sans --chown vers /opt/nexus et /usr/local/bin, chmod 0644/0755, chown limité à /data/nexus et /workspace dans les deux Dockerfiles ; refus d'un --chown au contrat test-operational-doc-contracts.sh (sprint 10)",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "test-operational-doc-contracts.sh : 6 lignes retirées = montées de version (V021, content-v9, policy v10) ; contrat PASS ; docs modifiées couvertes. | Test actif : scripts/release/test-operational-doc-contracts.sh",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -4710,15 +5018,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "LICENSE et THIRD_PARTY_NOTICES.txt copiés dans /opt/nexus/ par les deux Dockerfiles ; labels org.opencontainers.image.{source,licenses,revision,version}, revision et version passés en --build-arg par docker-distribution.yml (sprint 10)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -4768,15 +5080,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Documentation de la méthode merge commit seule (docs/developer/branch-governance.md, skill nexus-pr-workflow) et assertion du contrat documentaire (sprint 10, tâche 5.1) ; restriction du ruleset 20503835 et désactivation de squash/rebase à faire par le mainteneur (tâche 5.2) ; réglages GitHub appliqués par le mainteneur (sprint 10, tâches 5.2 et 5.4)",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "test-operational-doc-contracts.sh : 6 lignes retirées = montées de version (V021, content-v9, policy v10) ; contrat PASS ; docs modifiées couvertes. | Test actif : scripts/release/test-operational-doc-contracts.sh",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -4826,15 +5142,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "SECURITY.md complété (signalement privé GitHub, aucune issue publique, versions prises en charge, délai de réponse) et .github/CODEOWNERS créé, vérifiés par le contrat documentaire (sprint 10, tâche 5.3) ; activation du signalement privé à faire par le mainteneur (tâche 5.4) ; réglages GitHub appliqués par le mainteneur (sprint 10, tâches 5.2 et 5.4)",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "test-operational-doc-contracts.sh : 6 lignes retirées = montées de version (V021, content-v9, policy v10) ; contrat PASS ; docs modifiées couvertes. | Test actif : scripts/release/test-operational-doc-contracts.sh",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -4884,15 +5204,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "HEALTHCHECK sur /usr/local/bin/nexus-healthcheck dans les deux Dockerfiles ; compose : read_only: true, tmpfs /tmp:exec, cap_drop: [ALL], security_opt: [no-new-privileges:true] ; smoke Compose durci ajouté au workflow Docker distribution (sprint 10)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -4940,14 +5264,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "test-operational-doc-contracts.sh : 6 lignes retirées = montées de version (V021, content-v9, policy v10) ; contrat PASS ; docs modifiées couvertes. | Test actif : scripts/release/test-operational-doc-contracts.sh",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -4997,15 +5325,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": ".dockerignore à la racine pour Dockerfile (liste d'exclusion) et packaging/docker/Dockerfile.runtime.dockerignore en liste d'autorisation, livré dans le payload Windows et dans le staging de repli de docker-distribution.yml (sprint 10)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -5055,15 +5387,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "ADR DATA-0088 (Proposed) consigne le journal rollback, les mesures DELETE/WAL et la condition de réévaluation ; scale-regression-results.md et scale-regression-benchmark.md y renvoient ; SqliteDatabaseHardeningTest.keepsTheRollbackJournalOnEveryConnection fixe PRAGMA journal_mode = delete (sprint 11, tâches 4.1 et 4.2)",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Réserve d'origine inchangée.",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "Fichier cité modifié en documentation seulement ; contrats opérationnel et OpenSpec PASS.",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -5113,15 +5449,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Corrigé au sprint 11 (tâches 6.1, 6.2)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -5171,15 +5511,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "changement": "Branche claude/s11-graphe-01c9d0 (90408ac9) : OUTGOING_GRAPH_SQL paginée par clé (source_ref, target_ref) > (?, ?), sans OFFSET ; reprise après le dernier couple lu",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -5229,15 +5573,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Corrigé au sprint 11 (tâches 8.1, 8.2)",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -5287,15 +5635,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Branche claude/s11-graphe-01c9d0 (90408ac9) : ProjectGraph supprimé, ProjectGraphBuilder renommé GraphNeighborhoodProjection, section graphe de docs/developer/search-ranking.md réécrite et tenue par le contrat documentaire, décision consignée dans BE-0087 (Proposed, complète BE-0071)",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "test-operational-doc-contracts.sh : 6 lignes retirées = montées de version (V021, content-v9, policy v10) ; contrat PASS ; docs modifiées couvertes. | Test actif : scripts/release/test-operational-doc-contracts.sh",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -5345,15 +5697,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "AGENTS.md prescrit ./mvnw clean install (.\\mvnw.cmd sous Windows) ; le contrat refuse toute commande mvn hors wrapper dans AGENTS.md (sprint 11, tâche 3.1)",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "test-operational-doc-contracts.sh : 6 lignes retirées = montées de version (V021, content-v9, policy v10) ; contrat PASS ; docs modifiées couvertes. | Test actif : scripts/release/test-operational-doc-contracts.sh",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -5403,15 +5759,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Frontière de langue écrite dans .claude/rules/java-core.md ; messages atteignables par CLI, REST, MCP ou configuration traduits (requêtes, budgets, scope fédéré, limites, provider Ollama, chemins, imports MINOS et SCIP) ; message des contraintes partagé par ContextRequest.UNSUPPORTED_CONSTRAINTS_MESSAGE et le mapper REST (sprint 11, tâches 5.1 à 5.3) ; derniers messages traduits : RepositoryPath (« Chemin repository invalide ») et BudgetedContextSelector (texte de ContextBudgetPolicy), PR de clôture des sprints 10 et 11",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -5461,15 +5821,19 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "changement": "Watch item de current-limitations.md borné à l'évolution au-delà du FTS5 trigram livré par V008 ; refus de l'ancienne formulation dans test-operational-doc-contracts.sh (sprint 11, tâche 2.1)",
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "test-operational-doc-contracts.sh : 6 lignes retirées = montées de version (V021, content-v9, policy v10) ; contrat PASS ; docs modifiées couvertes. | Test actif : scripts/release/test-operational-doc-contracts.sh",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-09",
@@ -5517,14 +5881,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Nouveau faux positif : SPACED_KEY lit aussi le texte des scalaires bloc hors run:/script: (voir nouveaux).",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "test-operational-doc-contracts.sh : 6 lignes retirées = montées de version (V021, content-v9, policy v10) ; contrat PASS ; docs modifiées couvertes. | Test actif : scripts/release/test-operational-doc-contracts.sh",
+    "reserve": null
    },
    "absent_du_suivi": true,
    "verification_mainteneur": {
@@ -5571,14 +5939,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Réserve d'origine inchangée.",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "absent_du_suivi": true,
    "verification_mainteneur": {
@@ -5626,14 +5998,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Réserve d'origine inchangée.",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "DIRECT_MAVEN_CALL inchangé ; mutations sur compare-jdt.ps1 (`$m = \"mvn\"; & $m`, `cmd /c mvn`) → contrat rc=1 nommant la ligne. | Test actif : scripts/release/test-operational-doc-contracts.sh",
+    "reserve": "Filtre de motifs (réserve d'origine)."
    },
    "absent_du_suivi": true,
    "verification_mainteneur": {
@@ -5681,6 +6057,10 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification_mainteneur": {
@@ -5691,11 +6071,11 @@
     "reserve": "Sous Linux, com.nexus.index.minos reste plus de 3 points au-dessus de son plancher commun aux deux builds (test POSIX seul)."
    },
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Réserve d'origine inchangée.",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "Fichier cité modifié en documentation seulement ; contrats opérationnel et OpenSpec PASS.",
+    "reserve": null
    },
    "absent_du_suivi": true
   },
@@ -5737,14 +6117,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "GEN-0057 point 1 cite encore origin/develop (annoté :93).",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Aucun fichier cité modifié entre 8a50fc47 et 58399279 (git diff --name-only, 24 fichiers de code).",
+    "reserve": null
    },
    "absent_du_suivi": true,
    "verification_mainteneur": {
@@ -5789,14 +6173,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Réserve d'origine inchangée.",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "nexus-json.ps1 (Read-ClientJson, Save-CleanJson, Add/Remove-NexusServerEntry) hors diff ; seules les entrées natives changent (java.exe + env). Lignes retirées de test-windows-installer.ps1 : 3, toutes nexus-mcp.cmd. | Test actif : scripts/release/test-windows-installer.ps1",
+    "reserve": "Réserve d'origine inchangée ; pwsh absent ici."
    },
    "verification_mainteneur": {
     "date": "2026-11-10",
@@ -5844,14 +6232,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "release.yml et ghcr-immutable-preflight.sh hors diff ; test-ghcr-immutable-preflight PASS ; contrat opérationnel PASS. | Test actif : scripts/release/test-ghcr-immutable-preflight.sh, test-operational-doc-contracts.sh",
+    "reserve": "Tâches 4.2/4.3 (réserve mainteneur)."
    },
    "verification_mainteneur": {
     "date": "2026-11-10",
@@ -5894,14 +6286,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Réserve d'origine inchangée.",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "test-windows-installer.ps1 : +346/-3, lignes retirées limitées à l'assertion nexus-mcp.cmd remplacée par l'entrée java.exe.",
+    "reserve": "Réserve d'origine ; pwsh absent ici."
    },
    "verification_mainteneur": {
     "date": "2026-11-10",
@@ -5944,14 +6340,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "PowerShellSingleQuote garde les doublements U+2018-201B (ancre de durcissement identique) ; valeurs env et chemins java.exe/jar passent par elle ; rejeu typographique adapté à lib\\nexus-mcp.jar. | Test actif : scripts/release/test-windows-config-escaping.ps1 (Jean’s NEXUS, contrôle négatif)",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-10",
@@ -5994,14 +6394,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "Fichier cité modifié en documentation seulement ; contrats opérationnel et OpenSpec PASS.",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-10",
@@ -6041,14 +6445,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Non rejoué sous Windows ici (repro-qua28.ps1 à lancer) ; docker\\.env et copilot-jetbrains.mcp.json sans smoke (contrat statique) ; littéral non ASCII hors profil illisible sans console (DETACHED_PROCESS) ; profil hors page ANSI (Łukasz en 1252, 李) : dossier par défaut {localappdata}\\Programs\\NEXUS refusé, l'utilisateur doit en choisir un autre ; NEXUS_HOME/dépôt Docker contenant ^ refusés (voir nouveau constat). Rejeu du 12/11 : avec un profil hors page 1252 (« Łukasz », « 李 »), le dossier d'installation par défaut {localappdata}\\Programs\\NEXUS est refusé et l'utilisateur doit en choisir un autre ; un profil contenant « ^ » est refusé par l'assistant (AUD-QUA-29).",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "JSON/TOML natifs toujours écrits par SaveUtf8TextFile ; SaveStringToFile limité aux .cmd et compose (inchangé) ; env MCP en Unicode ; cas a^b ajouté au rejeu CmdEnvPathValue ; lanceurs en ASCII CRLF. | Test actif : scripts/release/test-windows-config-escaping.ps1, test-windows-installer.ps1",
+    "reserve": "Réserve d'origine (docker\\.env, copilot-jetbrains sans smoke) ; pwsh absent ici."
    },
    "verification_mainteneur": {
     "date": "2026-11-11",
@@ -6088,14 +6496,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé"
     }
    ],
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Tests à seuil absolu (assertTimeoutPreemptively 1 s, SensitiveContentRedactorTest.java:490) : marge mesurée ×4,5 à ×5 sur 2 vCPU ; stabilité CI non vérifiée ici (pas de Maven).",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "Motifs JWT/CDATA inchangés ; 1 Mo eyJ- 339 ms, CDATA 262 ms (sonde) ; tests forgedRepetition* verts. | Test actif : SensitiveContentRedactorTest (161 cas verts via shim JUnit)",
+    "reserve": "Seuil absolu 1 s (réserve mainteneur)."
    },
    "verification_mainteneur": {
     "date": "2026-11-11",
@@ -6135,14 +6547,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Identifiant de job cité et clé complexe documentés ; nouveau : `echo ${{` / `inputs.profile }}` sur deux lignes d'un bloc run: n'est pas vu par inputs (EXPRESSION lue ligne par ligne, workflow_hygiene.py:52) — acceptation par GitHub non vérifiée par un run.",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "test-operational-doc-contracts.sh : 6 lignes retirées = montées de version (V021, content-v9, policy v10) ; contrat PASS ; docs modifiées couvertes. | Test actif : scripts/release/test-operational-doc-contracts.sh",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-11",
@@ -6182,14 +6598,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "v0.2.0 reste non immuable (on ne peut pas le rattraper). Le réglage n'est pas imposé par le propriétaire (enforced_by_owner:false). La création de tag v* reste ouverte à l'admin en contournement. Le contrôle 79 arrive après la publication : une version finale recevrait déjà le badge Latest GitHub (AUD-DEP-38). La regex du contrat anti-tag ignore le drapeau placé après le tag et l'API PATCH (Info).",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "exit 79 conservé (:173) après lecture immutable ; mutation exit 79 → test-publish en échec « expected exit 79 ». | Test actif : scripts/release/test-publish-github-release-assets.sh",
+    "reserve": "v0.2.0 reste non immuable (réserve d'origine)."
    }
   },
   {
@@ -6222,14 +6642,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Filtre de motifs documenté ; non documentés : `mvn` seul sans argument (rc=0), `mvn.bat`/`mvnd` (hors Maven 3 du dépôt, impact négligeable). `mvnw` et `./mvnw` sont refusés comme attendu (seul Invoke-Maven est permis).",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "Mutations `$output = mvn … 2>&1`, `Push-Location $root; mvn …`, `. mvn …` → rc=1 ; contrat PASS (maven-wrapper-doc-contracts=PASS). | Test actif : scripts/release/test-operational-doc-contracts.sh",
+    "reserve": "Formes hors motifs documentées (réserve d'origine)."
    },
    "verification_mainteneur": {
     "date": "2026-11-11",
@@ -6268,14 +6692,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Défaut cité corrigé, mais la classe « version périmée » n'est pas gardée : README.md:181, 207-208 et docs/developer/cli.md:62-86 figent 0.2.1 sans contrat lié à pom.xml ; au prochain bump la dérive repassera rc=0.",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "test-operational-doc-contracts.sh : 6 lignes retirées = montées de version (V021, content-v9, policy v10) ; contrat PASS ; docs modifiées couvertes. | Test actif : scripts/release/test-operational-doc-contracts.sh",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-11",
@@ -6314,14 +6742,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Limites documentées (secret-redaction.md:226-227) mais fuites réelles : <x:password>, <wsse:Password> (espace de noms) et --db_password restent en clair (sonde) ; <dbPassword> non couvert.",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "XML_OPEN/OPTION_NAME hors diff ; <db-password>, <db_password>, <my-token> masqués (sonde v10). | Test actif : SensitiveContentRedactorTest#xmlElementWhoseNameEndsWithASensitiveKeyIsRedacted",
+    "reserve": "Limites v8 documentées (espaces de noms)."
    },
    "verification_mainteneur": {
     "date": "2026-11-11",
@@ -6361,14 +6793,18 @@
     {
      "date": "2026-11-14",
      "statut": "Fermé avec réserve"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
-    "verdict": "Inchangé",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": "Hors PR (release, dispatch) un ralentissement uniforme reste admis jusqu'à 500k=20 s (plafond inchangé, ~+50 % vs 13 s) et 1M=48 906 ms (~+57 % vs ~31 s) ; valeur dérivée d'une seule mesure max (40 755 ms ×1,20) ; sur push main (profil ci) aucun palier 1M. Check « Hermetic scale benchmark » mesuré sur la PR #368 : à confirmer par gh.",
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Tient (fichier cité modifié, correction intacte)",
+    "preuve": "Fichier cité modifié en documentation seulement ; contrats opérationnel et OpenSpec PASS.",
+    "reserve": null
    }
   },
   {
@@ -6399,16 +6835,16 @@
      "statut": "Ouvert"
     },
     {
-     "date": "2026-11-14",
+     "date": "2026-11-15",
      "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
-    "verdict": "Ouvert — change proposé",
-    "preuve": "openspec/changes/sprint-15-release-latest-apres-immuable proposé (PR #386, décisions du mainteneur intégrées par #387) : --latest=false à la publication, badge posé après le contrôle 79, relecture et code 80. 0 tâche cochée sur 7, aucun fichier de code modifié depuis 244ab1d3 (git diff --name-only sur core, adapters, scripts, packaging, .github, pom.xml, config : vide). Conception relue, sans désaccord.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Fermé avec réserve",
+    "preuve": "publish-github-release-assets.sh : create --draft --latest=false (:71), edit --draft=false --latest=false (:148), lecture .immutable (:167), exit 79 (:173), pré-version exit 0 sans badge (:181-184), lecture releases/latest puis edit --latest (:194), relecture, exit 80 (:198). Relance d'une version plus ancienne : badge reposé sans comparaison (choix documenté, cohérent avec le tag image). release.yml inchangé : l'étape « Move latest » suit dans le même job, sans always()/continue-on-error, donc sautée après 79/80. Tests rejoués (CRLF normalisés) : test-publish PASS, final-audit-contracts PASS. Mutations : sans --latest=false → échec « not published outside latest » (test-publish) et échec du contrat final ; badge posé avant la lecture immutable → échec « latest was marked before the immutable read » ; exit 79 neutralisé → échec. | Test actif : scripts/release/test-publish-github-release-assets.sh (finale immuable/non immuable, pré-version, reprise, 404, version plus ancienne, sorties 80 fail/ignore) ; scripts/release/test-final-audit-contracts.sh (bloc Sprint 15) | test-publish-github-release-assets.sh et test-final-audit-contracts.sh rejoués, mutations (retrait de --latest=false, badge avant lecture d'immutable, sortie 79 neutralisée) détectées.",
+    "reserve": "Faux gh seulement : pose de --latest sur une release immuable et 404 de releases/latest contre l'API réelle à relever à la prochaine release finale (tâche 3.1). Le gh réel écrit le corps JSON d'erreur 404 sur stdout (sans effet : comparaison de chaîne)."
    },
    "verification_mainteneur": {
     "date": "2026-11-14",
@@ -6446,16 +6882,16 @@
      "statut": "Ouvert"
     },
     {
-     "date": "2026-11-14",
+     "date": "2026-11-15",
      "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
-    "verdict": "Ouvert — change proposé",
-    "preuve": "openspec/changes/sprint-15-installateur-caret proposé (PR #386, décisions du mainteneur intégrées par #387) : « ^ » retiré de ContainsUnsafeConfigChars, SuppressibleMsgBox partout dans NextButtonClick et NotifyPortSelection ; le mainteneur y ajoute la correction des lanceurs natifs dans un dossier d'installation contenant « ^ », défaut préexistant de même population, sans constat séparé. 0 tâche cochée sur 11, aucun fichier de code modifié depuis 244ab1d3 (git diff --name-only sur core, adapters, scripts, packaging, .github, pom.xml, config : vide). Conception relue, sans désaccord.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Fermé avec réserve",
+    "preuve": "harden-windows-installer-source.ps1:117-121 ContainsUnsafeConfigChars = CR, LF, \" seulement ; NextButtonClick/NotifyPortSelection 100 % SuppressibleMsgBox(…, MB_OK, IDOK). Écrivains : .cmd par CmdEnvEscape (% doublé ; ^ & ! ( littéraux dans set \"…\" sous DisableDelayedExpansion) ; docker\\.env NEXUS_REPOSITORY_BIND = DotEnvQuoted(DockerPath) : compose-go (dotenv/parser.go) lit '…' littéralement, sans interpolation de $, seul \\' désechappé ; JSON/TOML/PS via NativeMcpEnvironment (valeur brute + JsonEscape/TomlEscape/PowerShellSingleQuote). Lanceurs build-windows-distribution.ps1:267-280 : pushd, call .\\, popd, goto configError, CRLF ASCII ; %~dp0 toujours entre guillemets, jamais passé à CALL. | Rejoué le 15/11 sous Windows PowerShell 5.1 sur ta machine (repro-qua29.ps1, fonctions extraites de la source durcie) : profils « a^b », « 50%x », « a!b », « O'Brien & Co », « Hélène », « (x86) » acceptés par ContainsUnsafeConfigChars (refus : CR, LF, guillemet) ; nexus-native.env.cmd, .env Docker (portage compose-go et docker compose config réel), JSON, TOML et PowerShell rendent le chemin exact ; lanceurs nexus, nexus-mcp, nexus-assistant-clients et nexus-rest dans les dossiers « in^st & 50% (x) », « a!b ^c », « Hélène (x86) ^ » : configuration chargée, console visible et cachée ; « no^conf » : valeurs par défaut ; contrôle négatif (ancien call \"%~dp0config\\…\") : configuration non chargée. Un seul écart, dû au rejeu : la sortie de docker compose config pour « Hélène » est relue par PowerShell 5.1 dans la page de la console (mojibake HÃ©lÃ¨ne), alors que le portage compose-go du même fichier rend le chemin exact.",
+    "reserve": "PowerShell indisponible ici : repro-qua29.ps1 écrit, non exécuté. Couverture CI partielle : fixtures in^st, « in st », no^conf (test-windows-installer.ps1:405-407) et DotEnvQuoted rejoué sur a^b seul (test-windows-config-escaping.ps1:417-418) ; aucun dossier d'installation avec %, !, &, ( ni profil O'Brien/50% côté .env/JSON. Docker Desktop manuel avec profil a^b non fait (tâche 2.4). Non rejoué : un CLI client résolu en .cmd seul recevrait -e NEXUS_HOME=…a^b non cité via cmd.exe (template:1923/1979/1999) ; les shims npm .ps1 sont préférés par Get-Command. La boîte affichée après l'installation automatique de Docker Desktop n'est pas supprimable (AUD-QUA-33)."
    },
    "verification_mainteneur": {
     "date": "2026-11-14",
@@ -6492,16 +6928,16 @@
      "statut": "Ouvert"
     },
     {
-     "date": "2026-11-14",
+     "date": "2026-11-15",
      "statut": "Fermé"
     }
    ],
    "verification": {
-    "verdict": "Ouvert — change proposé",
-    "preuve": "openspec/changes/sprint-15-guides-wrapper-maven proposé (PR #386, décisions du mainteneur intégrées par #387) : contrat sur README, AGENTS, CONTRIBUTING, SECURITY et docs/**/*.md hors ADR et relevés datés ; exec:java exige -pl core. 0 tâche cochée sur 8, aucun fichier de code modifié depuis 244ab1d3 (git diff --name-only sur core, adapters, scripts, packaging, .github, pom.xml, config : vide). Conception relue, sans désaccord.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Fermé",
+    "preuve": "Copie CRLF→LF : bash scripts/release/test-operational-doc-contracts.sh rc=0 (maven-wrapper-doc-contracts=PASS). Mutations dans docs/developer/reproduce-and-debug.md, toutes rc=1 avec fichier:ligne : bloc ```bash mvn clean install```, code en ligne `mvn clean install`, ```cd core && mvn test```, ```PS> mvn -v```, .\\mvnw.cmd -q exec:java sans -pl core (exec-java) ; en plus CONTRIBUTING.md ~~~ $ mvn -B verify, docs/user/windows-installation.md ```mvn package```, `mvn.cmd -q package` → rc=1. Grep indépendant (README, AGENTS, CONTRIBUTING, SECURITY, docs/** hors ADR/audits/historique/rapports) : seules les mentions descriptives et les 3 exceptions nommées de ci-and-supply-chain.md:500-502.",
+    "reserve": "Limites connues et documentées (ci-and-supply-chain.md:621), confirmées par mutation rc=0 : bloc de code indenté sans clôture (« mvn clean install » indenté 4 espaces) et préfixe `MAVEN_OPTS=… mvn verify`. Hors périmètre du contrat : .claude/skills/nexus-validate/SKILL.md:10 `mvn clean install` (via le wrapper), formulation ambiguë mais pas une prescription de mvn direct."
    },
    "verification_mainteneur": {
     "date": "2026-11-14",
@@ -6526,7 +6962,7 @@
    "sprint": 15,
    "depends_on": [],
    "bloque": [],
-   "statut": "Fermé",
+   "statut": "Fermé avec réserve",
    "changement": "Corrigé par la PR #390",
    "historique": [
     {
@@ -6538,16 +6974,16 @@
      "statut": "Ouvert"
     },
     {
-     "date": "2026-11-14",
-     "statut": "Fermé"
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
-    "verdict": "Ouvert — change proposé",
-    "preuve": "openspec/changes/sprint-15-redaction-begin-incomplet proposé (PR #386, décisions du mainteneur intégrées par #387) : reprise à begin + longueur du marqueur et fin de marqueur cherchée sur sa ligne ; POLICY_VERSION v10, V021. 0 tâche cochée sur 11, aucun fichier de code modifié depuis 244ab1d3 (git diff --name-only sur core, adapters, scripts, packaging, .github, pom.xml, config : vide). Conception relue, sans désaccord.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Fermé avec réserve",
+    "preuve": "SensitiveContentRedactor.java:421-453 (fin de marqueur sur sa ligne :432, reprise begin+11 :436). Sonde /tmp/claude-0/verifA15/probe/Var.java, 41 cas, corps factice : v9 LEAK sur 25, v10 sur 4 (22 marqueur coupé, 32 blanc avant tirets, 33 quatre tirets : limites figées SensitiveContentRedactorTest:606,705 ; 41 témoin CERTIFICATE). T5 (littéral startsWith, ligne « -----BEGIN  »), CERT incomplet, CERTIFICATE collé (5 et 6 tirets), PGP/EC/OPENSSH/ENCRYPTED/PKCS8, 5 incomplets d'affilée, LF/CRLF/CR, tirets ligne suivante, tronqué sans END, BEGIN en fin de fichier : masqués, séparateurs conservés 41/41. Différentiel 20 000 cas : 5 843 écarts dont 5 316 purement correctifs. | SensitiveContentRedactorTest 161/0 et SchemaMigratorPrivateKeyMarkerUpgradeTest 2/0 au build 58399279.",
+    "reserve": "Deux régressions face à v9 (v9 masquait, v10 laisse en clair) : 1) marqueur coupé sur deux lignes (concaténation Java/Python, CRLF) : 304 cas à jeton sur 20 000. Documenté (secret-redaction.md:255) et figé (:606), mais c'est une nouvelle fuite. 2) BEGIN avalé par la fin de ligne d'un END placé au milieu d'une ligne (:525) : 6 cas, non documenté, voir nouveaux[0]. Le test de non-régression contre v9 (:729) classe ces deux familles comme « defective » (:789-806) : il ne peut pas les détecter. Les deux formes que la v10 laisse désormais en clair alors que v9 les masquait font l'objet de AUD-SEC-27."
    },
    "verification_mainteneur": {
     "date": "2026-11-14",
@@ -6555,6 +6991,68 @@
     "verdict": "Fermé",
     "preuve": "replacePrivateKeyBlocks reprend la recherche juste après « -----BEGIN » quand le marqueur n'ouvre pas de clé et cherche les tirets de fin du marqueur sur sa ligne ; politique secret-redaction-v10, profil content-v9, migration V021 (SchemaMigratorPrivateKeyMarkerUpgradeTest). Comportement : un bloc RSA ou PGP précédé d'une ligne « -----BEGIN », d'un littéral de code ou d'un marqueur d'un autre type est masqué, CR et LF conservés. Tests : SensitiveContentRedactorTest#privateKeyBlockAfterAMarkerThatOpensNoKeyIsRedacted, #markerWhoseClosingDashesAreNotOnItsLineOpensNoKey, #privateKeyMarkerIsRecognizedWhateverItsCaseAndBlanks, #endMarkerInTheMiddleOfALineClosesTheBlockAtTheEndOfItsLine, #generatedPrivateKeyMarkerContentsRenderAsV9WhenV9HasNoDefect (non-régression contre v9), #forgedPrivateKeyMarkerRepetitionsHaveBoundedCost (coût borné). Écarts hors audit corrigés dans la même PR : marqueur d'un autre type collé au vrai marqueur, y compris par plus de cinq tirets ; casse et blancs des marqueurs (minuscules, tabulation, espace insécable, suites de blancs) ; END au milieu d'une ligne qui laissait la suite du bloc en clair ; masquage jusqu'à la fin du contenu après un marqueur sans fin sur sa ligne.",
     "reserve": "Limites figées par test : marqueur coupé sur deux lignes, quatre tirets, blancs Unicode autres que l'espace insécable ; un littéral qui ouvre une clé sans END masque la suite du contenu."
+   }
+  },
+  {
+   "id": "AUD-QUA-33",
+   "titre": "Installation silencieuse en mode Docker bloquée par une MsgBox non supprimable après l'installation automatique de Docker Desktop",
+   "severite": "Faible",
+   "axe": "Qualité",
+   "axes": [
+    "Qualité"
+   ],
+   "preuve": "packaging/windows/nexus-installer.iss.template:2276-2290 StartDockerDesktopAfterInstall appelle MsgBox(…, mbInformation, MB_OK) sans garde WizardSilent ; appelée en ssPostInstall (:2488-2491) dès que InstallDockerDesktopIfNeeded a installé Docker Desktop (:489), case cochée par défaut (:954). /SUPPRESSMSGBOXES ne supprime pas MsgBox (même raison que QUA-29). Les autres MsgBox post-installation sont gardées (:1820-1823 WizardSilent, :2503 not WizardSilent). Préexistant (1112:2161), hors du contrat MsgBox qui ne lit que NextButtonClick/NotifyPortSelection.",
+   "impact": "Déploiement /VERYSILENT en mode Docker sur un poste sans Docker : l'installation reste en attente d'une boîte modale (invisible en session non interactive) après le lancement de Docker Desktop.",
+   "effort": "S",
+   "action": "Garder par if not WizardSilent() (ou SuppressibleMsgBox(…, MB_OK, IDOK)) et étendre le contrat de test-windows-config-escaping.ps1/test-windows-installer.ps1 à toute MsgBox( non gardée de la source durcie.",
+   "sprint": 16,
+   "depends_on": [],
+   "bloque": [],
+   "statut": "Ouvert",
+   "changement": "Nouveau",
+   "historique": [
+    {
+     "date": "2026-11-15",
+     "statut": "Ouvert"
+    }
+   ],
+   "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Nouveau constat",
+    "preuve": "Lecture du gabarit (MsgBox sans garde WizardSilent dans StartDockerDesktopAfterInstall) ; non rejoué en installation silencieuse réelle. Préexistant (arbre 244ab1d3).",
+    "reserve": null
+   }
+  },
+  {
+   "id": "AUD-SEC-27",
+   "titre": "La reconnaissance des blocs de clé v10 laisse en clair deux formes que v9 masquait : un -----END suivi d'un -----BEGIN sur la même ligne, et un marqueur BEGIN coupé sur deux lignes",
+   "severite": "Faible",
+   "axe": "Sécurité",
+   "axes": [
+    "Sécurité"
+   ],
+   "preuve": "SensitiveContentRedactor.java:525 : endOfLine(content, markerEnd) quand le END ne commence pas sa ligne ; le curseur passe au-delà d'un « -----BEGIN EC PRIVATE KEY----- » placé sur la même ligne, et la recherche reprend après. Sonde /tmp/claude-0/verifA15/probe/Swallow.java (corps factices) : « # -----END RSA PRIVATE KEY----------BEGIN EC PRIVATE KEY-----\\n# <corps> » → corps EC en clair sous v10, masqué sous v9. Même résultat avec « // … END… BEGIN », « x-----END…-----BEGIN » et deux blocs RSA. Différentiel : 7 cas sur 20 000 (6 avec jeton). Aucun test ; secret-redaction.md:224 n'en parle pas. Seconde forme : un marqueur BEGIN coupé sur deux lignes (concaténation Java « \"-----BEGIN RSA \" +\\n\"PRIVATE KEY-----\" », Python implicite, CRLF) était masqué par v9 et sort en clair sous v10 (304 cas avec jeton sur 20 000) ; la limite est documentée, et le test différentiel du mainteneur exclut ces cas comme « defective » (SensitiveContentRedactorTest:789-806).",
+   "impact": "Deuxième clé privée d'un fichier commenté ou concaténé sans saut de ligne (README, fixture, .env multi-clés) publiée en clair dans Lucene, les embeddings et les sorties CLI/REST/MCP.",
+   "effort": "S",
+   "action": "Dans endOfMatchingEndMarker, fermer à min(fin de ligne, prochain nextMarker(content, markerEnd, \"BEGIN\")) ; ajouter un test « END milieu de ligne puis BEGIN sur la même ligne » en LF/CRLF ; politique v11, content-v10, migration V022.",
+   "sprint": 16,
+   "depends_on": [],
+   "bloque": [],
+   "statut": "Ouvert",
+   "changement": "Nouveau",
+   "historique": [
+    {
+     "date": "2026-11-15",
+     "statut": "Ouvert"
+    }
+   ],
+   "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
+    "verdict": "Nouveau constat",
+    "preuve": "Rejoué indépendamment (java 21, classes de 58399279 et de 244ab1d3, corps factices) : 4 des 6 variantes « END puis BEGIN sur la même ligne » laissent le second corps en clair sous v10, toutes masquées sous v9 ; 4 des 5 concaténations d'un marqueur coupé masquées sous v9, toutes en clair sous v10.",
+    "reserve": null
    }
   },
   {
@@ -6597,15 +7095,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -6648,15 +7150,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -6699,15 +7205,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -6750,15 +7260,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -6801,15 +7315,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -6852,15 +7370,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -6903,15 +7425,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -6954,15 +7480,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -7005,15 +7535,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -7061,15 +7595,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -7112,15 +7650,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -7148,14 +7690,18 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé. | Test actif : scripts/release/test-operational-doc-contracts.sh (auto-test AUD-DEP-37, échantillons manquants)",
+    "reserve": null
    }
   },
   {
@@ -7198,15 +7744,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -7249,15 +7799,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -7300,15 +7854,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -7351,15 +7909,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -7402,15 +7964,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -7453,15 +8019,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -7504,15 +8074,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -7544,14 +8118,18 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    },
    "verification_mainteneur": {
     "date": "2026-11-11",
@@ -7601,15 +8179,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -7652,15 +8234,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -7703,15 +8289,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -7754,15 +8344,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -7805,15 +8399,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -7856,15 +8454,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -7892,14 +8494,18 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -7928,14 +8534,18 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -7979,15 +8589,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -8031,15 +8645,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -8083,15 +8701,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -8134,15 +8756,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -8185,15 +8811,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -8236,15 +8866,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -8287,15 +8921,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -8338,15 +8976,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -8389,15 +9031,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -8440,15 +9086,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -8491,15 +9141,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -8536,14 +9190,18 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -8579,14 +9237,18 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -8629,15 +9291,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -8680,15 +9346,19 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   },
   {
@@ -8731,18 +9401,22 @@
     {
      "date": "2026-11-14",
      "statut": "Info"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Info"
     }
    ],
    "changement": "Aucun",
    "verification": {
+    "date": "2026-11-15",
+    "commit": "58399279",
     "verdict": "Tient",
-    "preuve": "Aucun fichier de code modifié entre 244ab1d3 et 8a50fc47 ; verdict du 12/11 reconduit.",
-    "reserve": null,
-    "date": "2026-11-14",
-    "commit": "8a50fc47"
+    "preuve": "Relevé inchangé.",
+    "reserve": null
    }
   }
  ],
- "date_maj": "2026-11-14",
- "commit_maj": "8a50fc47"
+ "date_maj": "2026-11-15",
+ "commit_maj": "58399279"
 }
