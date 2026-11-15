@@ -2282,11 +2282,16 @@ begin
   DockerDesktopPath := DockerDesktopExecutable();
   if DockerDesktopPath = '' then exit;
   if Exec(DockerDesktopPath, '', '', SW_SHOWNORMAL, ewNoWait, ResultCode) then
-    MsgBox(
-      'Docker Desktop a été installé et vient d''être lancé.' + #13#10 +
-      'Au premier démarrage, acceptez les conditions Docker et terminez si nécessaire la préparation WSL 2. ' +
-      'Le script NEXUS Docker attendra ensuite que le moteur soit prêt.',
-      mbInformation, MB_OK);
+  begin
+    Log('Docker Desktop installed by the setup and launched; the Docker terms are accepted at its first start.');
+    { MsgBox is not suppressed by /SUPPRESSMSGBOXES: a silent install never shows it. }
+    if not WizardSilent() then
+      MsgBox(
+        'Docker Desktop a été installé et vient d''être lancé.' + #13#10 +
+        'Au premier démarrage, acceptez les conditions Docker et terminez si nécessaire la préparation WSL 2. ' +
+        'Le script NEXUS Docker attendra ensuite que le moteur soit prêt.',
+        mbInformation, MB_OK);
+  end;
 end;
 
 { Post-install progress: one row per configuration step the wizard choices trigger,

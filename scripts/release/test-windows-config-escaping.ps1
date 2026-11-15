@@ -454,6 +454,110 @@ try {
         throw 'Wizard box contract is vacuous: a MsgBox on the Docker page must be reported.'
     }
 
+    # Every modal box of the installer code is guarded against a silent install (AUD-QUA-33):
+    # /SUPPRESSMSGBOXES suppresses SuppressibleMsgBox only, and nobody answers a MsgBox in a
+    # /VERYSILENT deployment. The page validation (NextButtonClick, NotifyPortSelection) is checked
+    # above; this contract reads the whole [Code] section, strings and comments removed, routine by
+    # routine, so a box added anywhere is seen without editing a list of routines.
+    $modalCallPattern = '(?<![\w.])(?<name>MsgBox|TaskDialogMsgBox|InputBox|InputQuery)\('
+    $suppressibleCallPattern = '(?<![\w.])Suppressible(?:TaskDialog)?MsgBox\('
+    $silentGuardPattern = '\bnot WizardSilent\(\)|\bWizardSilent\(\)\s+then\s+break\b|\bUninstSilent\b'
+    $pageValidationRoutines = @('NextButtonClick', 'NotifyPortSelection')
+
+    function Get-InstallerCodeRoutines([string]$Source) {
+        $code = [regex]::Match($Source, '(?ms)^\[Code\][ \t]*\r?\n(?<body>.*?)(?=^\[[A-Za-z]+\][ \t]*\r?$|\z)')
+        if (-not $code.Success) { throw 'The hardened installer source has no [Code] section.' }
+        $evaluator = [System.Text.RegularExpressions.MatchEvaluator] {
+            param($m)
+            if ($m.Value.StartsWith("'")) { return "''" }
+            return ' '
+        }
+        $stripped = [regex]::Replace($code.Groups['body'].Value,
+            "'(?:[^']|'')*'|\{[^}]*\}|//[^\r\n]*|\(\*[\s\S]*?\*\)", $evaluator)
+        $headers = @([regex]::Matches($stripped, '(?m)^(?:procedure|function)\s+(?<name>\w+)'))
+        $routines = New-Object System.Collections.Generic.List[object]
+        for ($i = 0; $i -lt $headers.Count; $i++) {
+            $end = if ($i + 1 -lt $headers.Count) { $headers[$i + 1].Index } else { $stripped.Length }
+            $routines.Add([pscustomobject]@{
+                Name = $headers[$i].Groups['name'].Value
+                Text = $stripped.Substring($headers[$i].Index, $end - $headers[$i].Index)
+            })
+        }
+        return $routines
+    }
+
+    function Get-UnguardedBoxViolations([string]$Source) {
+        $violations = New-Object System.Collections.Generic.List[string]
+        $routines = @(Get-InstallerCodeRoutines $Source)
+        if ($routines.Count -lt 50) { $violations.Add("only $($routines.Count) routines found in the [Code] section"); return $violations }
+        foreach ($routine in $routines) {
+            foreach ($call in [regex]::Matches($routine.Text, $modalCallPattern)) {
+                $before = $routine.Text.Substring(0, $call.Index)
+                if ($before -notmatch $silentGuardPattern) {
+                    $violations.Add("$($routine.Name): $($call.Groups['name'].Value) without WizardSilent() or UninstSilent guard")
+                }
+            }
+            if ($pageValidationRoutines -notcontains $routine.Name -and [regex]::IsMatch($routine.Text, $suppressibleCallPattern)) {
+                $violations.Add("$($routine.Name): SuppressibleMsgBox outside the page validation")
+            }
+        }
+        return $violations
+    }
+
+    # The Docker Desktop notice after its automatic installation: nothing when Docker Desktop was
+    # not installed by the setup, the launch logged, the box shown to an interactive user only.
+    function Get-DockerDesktopNoticeViolations([string]$Source) {
+        $violations = New-Object System.Collections.Generic.List[string]
+        $routine = [regex]::Match($Source, '(?s)procedure StartDockerDesktopAfterInstall;.*?\r?\nend;')
+        if (-not $routine.Success) { $violations.Add('StartDockerDesktopAfterInstall not found'); return $violations }
+        if ($routine.Value -notmatch 'if not DockerDesktopInstalledDuringSetup then exit;') {
+            $violations.Add('StartDockerDesktopAfterInstall must exit when Docker Desktop was not installed by the setup')
+        }
+        $guardedNotice = "(?s)Exec\(DockerDesktopPath,[^;]*\)\s*then\s*begin\s*Log\('[^']*'\);" +
+            "\s*(?:\{[^}]*\}\s*)?if not WizardSilent\(\) then\s*MsgBox\("
+        if ($routine.Value -notmatch $guardedNotice) {
+            $violations.Add('StartDockerDesktopAfterInstall must log the launch, then show its box only under not WizardSilent()')
+        }
+        return $violations
+    }
+
+    $unguardedBoxes = @(Get-UnguardedBoxViolations $hardened)
+    if ($unguardedBoxes.Count -gt 0) {
+        throw "Every modal box of the installer must be guarded against a silent install:`n$($unguardedBoxes -join "`n")"
+    }
+    $dockerNoticeViolations = @(Get-DockerDesktopNoticeViolations $hardened)
+    if ($dockerNoticeViolations.Count -gt 0) {
+        throw "Docker Desktop notice contract:`n$($dockerNoticeViolations -join "`n")"
+    }
+    # Negative controls: the guard removed from the Docker Desktop notice, a box added to a routine
+    # without guard, and the early exit removed are each reported.
+    $unguardedNotice = [regex]::Replace($hardened,
+        '(?s)(procedure StartDockerDesktopAfterInstall;.*?)if not WizardSilent\(\) then\s*', '$1')
+    if ($unguardedNotice -ceq $hardened) { throw 'Box contract mutation did not apply: guard of StartDockerDesktopAfterInstall.' }
+    $noticeReport = @(Get-UnguardedBoxViolations $unguardedNotice)
+    if (@($noticeReport | Where-Object { $_ -like 'StartDockerDesktopAfterInstall: MsgBox*' }).Count -eq 0) {
+        throw 'Box contract is vacuous: a MsgBox without guard in StartDockerDesktopAfterInstall must be reported.'
+    }
+    if (@(Get-DockerDesktopNoticeViolations $unguardedNotice).Count -eq 0) {
+        throw 'Docker Desktop notice contract is vacuous: a box without guard must be reported.'
+    }
+    $injectedBox = [regex]::Replace($hardened,
+        '(?m)^(function IsSmokeBuild\(\): Boolean;\r?\nbegin)', "`$1`r`n  MsgBox('x', mbInformation, MB_OK);")
+    if ($injectedBox -ceq $hardened) { throw 'Box contract mutation did not apply: injected MsgBox.' }
+    if (@(Get-UnguardedBoxViolations $injectedBox | Where-Object { $_ -like 'IsSmokeBuild: MsgBox*' }).Count -eq 0) {
+        throw 'Box contract is vacuous: a MsgBox added to an unguarded routine must be reported.'
+    }
+    $injectedSuppressible = [regex]::Replace($hardened,
+        '(?m)^(function IsSmokeBuild\(\): Boolean;\r?\nbegin)', "`$1`r`n  SuppressibleMsgBox('x', mbInformation, MB_OK, IDOK);")
+    if (@(Get-UnguardedBoxViolations $injectedSuppressible | Where-Object { $_ -like 'IsSmokeBuild: SuppressibleMsgBox*' }).Count -eq 0) {
+        throw 'Box contract is vacuous: a SuppressibleMsgBox outside the page validation must be reported.'
+    }
+    $noEarlyExit = $hardened.Replace('if not DockerDesktopInstalledDuringSetup then exit;', 'Log(''Docker Desktop notice.'');')
+    if ($noEarlyExit -ceq $hardened) { throw 'Box contract mutation did not apply: early exit of StartDockerDesktopAfterInstall.' }
+    if (@(Get-DockerDesktopNoticeViolations $noEarlyExit).Count -eq 0) {
+        throw 'Docker Desktop notice contract is vacuous: the early exit removed must be reported.'
+    }
+
     Write-Host 'NEXUS Windows cmd and PowerShell escaping, client JSON helper, REST auth, Docker forward and native-access contract PASS' -ForegroundColor Green
 }
 finally {

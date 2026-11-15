@@ -386,7 +386,7 @@ Pour revenir en arrière sans rouvrir ces cas, restaurer la sauvegarde de
 
 ## OpenSpec installer-client-configuration
 
-Spec : [`openspec/specs/installer-client-configuration/spec.md`](../../openspec/specs/installer-client-configuration/spec.md) ; les exigences sur l'accent circonflexe, les messages en installation silencieuse, le chargement de la configuration par les lanceurs natifs et les connecteurs MCP natifs sont dans le changement [`sprint-15-installateur-caret`](../../openspec/changes/sprint-15-installateur-caret/specs/installer-client-configuration/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md). Le comportement vu de l'utilisateur est décrit dans [Installation Windows](../user/windows-installation.md) (« Écran 4 — Configuration runtime », « Écran 8 — Configuration Docker », « Écran 9 — Clients IA », « Fichiers générés » et « Désinstallation »).
+Spec : [`openspec/specs/installer-client-configuration/spec.md`](../../openspec/specs/installer-client-configuration/spec.md) ; les exigences sur l'accent circonflexe, les messages en installation silencieuse, le chargement de la configuration par les lanceurs natifs et les connecteurs MCP natifs sont dans le changement [`sprint-15-installateur-caret`](../../openspec/changes/sprint-15-installateur-caret/specs/installer-client-configuration/spec.md), celles sur l'avis de Docker Desktop en installation silencieuse et sur le contrôle de toutes les boîtes du gabarit dans le changement [`sprint-16-installateur-msgbox-docker`](../../openspec/changes/sprint-16-installateur-msgbox-docker/specs/installer-client-configuration/spec.md) ; matrice de traçabilité : [openspec-traceability.md](openspec-traceability.md). Le comportement vu de l'utilisateur est décrit dans [Installation Windows](../user/windows-installation.md) (« Écran 4 — Configuration runtime », « Écran 8 — Configuration Docker », « Écran 9 — Clients IA », « Fichiers générés » et « Désinstallation »).
 
 ### Comportement existant vérifié (installer-client-configuration)
 
@@ -405,6 +405,9 @@ Spec : [`openspec/specs/installer-client-configuration/spec.md`](../../openspec/
 | [Existant vérifié] | L'installateur smoke coche Codex Desktop et le client générique : il écrit `codex-desktop.mcp.toml`, `connect-codex-desktop.ps1` et `generic-mcp.json`, sans connecter aucun client. | `packaging/windows/nexus-installer.iss.template:986-999`, `:2494` |
 | [Existant vérifié] | `ContainsUnsafeConfigChars` refuse dans `NEXUS_HOME`, le token REST, le dossier de dépôt Docker et l'URL Ollama le retour chariot (`#13`), le saut de ligne (`#10`) et le guillemet double, seuls caractères qui cassent un format écrit : une fin de ligne ajoute une ligne au fichier, le guillemet ferme `set "…"`. Invariant : une valeur acceptée est littérale pour son lecteur. Dans `config\nexus-native.env.cmd`, chaque valeur est entre guillemets (`set "NOM=valeur"`, `%` doublé par `CmdEnvEscape`) et les lanceurs désactivent l'expansion retardée, si bien que `^` y reste littéral ; dans `docker\.env`, `DotEnvQuoted` met la valeur entre apostrophes. Un profil `C:\Users\a^b` donne `set "NEXUS_HOME=C:\Users\a^b\.nexus"` et `NEXUS_REPOSITORY_BIND='C:/Users/a^b'`. La page Docker contrôle aussi `NEXUS_HOME`, même quand la page Runtime est sautée. | `scripts/release/harden-windows-installer-source.ps1:104-121`, `:166-172`, `:227-234`, `:249`, `:284`, `scripts/release/build-windows-distribution.ps1:269` |
 | [Existant vérifié] | Toutes les boîtes de la validation des pages passent par `SuppressibleMsgBox(…, MB_OK, IDOK)` : refus de `NextButtonClick`, chacun suivi de `Result := False; exit;`, avis de port réservé au REST natif et avis de port remplacé de `NotifyPortSelection`. En installation silencieuse avec `/SUPPRESSMSGBOXES`, le message est journalisé sans fenêtre et un refus arrête l'installation ; sans ce paramètre, la boîte reste affichée. Les blocs ajoutés par le durcissement suivent la même forme. | `packaging/windows/nexus-installer.iss.template:611-618`, `:1084-1248`, `scripts/release/harden-windows-installer-source.ps1:157-235` |
+| [Existant vérifié] | `StartDockerDesktopAfterInstall` quitte si Docker Desktop n'a pas été installé par l'installateur, lance Docker Desktop (`ewNoWait`), journalise le lancement, puis n'affiche sa boîte d'information (conditions Docker à accepter au premier démarrage) que sous `not WizardSilent()`. `MsgBox` n'est supprimée par aucun paramètre : sans cette garde, un déploiement `/VERYSILENT`, avec ou sans `/SUPPRESSMSGBOXES`, attendrait une fenêtre invisible. | `packaging/windows/nexus-installer.iss.template:2276-2295`, appel `:2496` |
+| [Existant vérifié] | Chaque `MsgBox(` du code de l'installateur est précédé, dans sa routine, d'une garde de mode silencieux : `RunWhileClaudeDesktopClosed` (`WizardSilent()` ou `UninstSilent` quittent la boucle avant la boîte), l'avis d'échec des clients IA (`not WizardSilent()`), la question de suppression des données à la désinstallation (`not UninstSilent`) et l'avis de Docker Desktop. `[Run]` démarre Docker avec `skipifsilent`. | `packaging/windows/nexus-installer.iss.template:1819-1824`, `:2288-2289`, `:2508-2509`, `:2618-2622`, `:70` |
+| [Existant vérifié] | Le contrôle de la source durcie lit la section `[Code]` sans ses chaînes ni ses commentaires, routine par routine : tout `MsgBox(`, `TaskDialogMsgBox(`, `InputBox(` ou `InputQuery(` doit suivre `WizardSilent()` ou `UninstSilent` dans sa routine, et `SuppressibleMsgBox(` n'est admis que dans `NextButtonClick` et `NotifyPortSelection`. Une garde retirée de l'avis Docker Desktop, un `MsgBox` ou un `SuppressibleMsgBox` ajouté à une routine sans garde, et la sortie anticipée retirée de `StartDockerDesktopAfterInstall` sont chacun rejetés (contrôles négatifs). | `scripts/release/test-windows-config-escaping.ps1:457-559`, exécuté par `.github/workflows/windows-installer.yml:77` |
 | [Existant vérifié] | `nexus.cmd`, `nexus-mcp.cmd`, `nexus-assistant-clients.cmd` et `nexus-rest.cmd` chargent `config\nexus-native.env.cmd` par `if not exist "%~dp0config\nexus-native.env.cmd" goto run`, `pushd "%~dp0config" || goto configError`, `call .\nexus-native.env.cmd`, `popd`, puis lancent leur programme après `:run`, depuis le dossier courant de l'appelant. `CALL` double un `^` de son argument même entre guillemets : il ne reçoit qu'un chemin relatif fixe, et `%~dp0` reste entre guillemets dans `if exist` et `pushd`. Si `pushd` échoue alors que le fichier existe, `:configError` écrit `NEXUS: cannot load "<dossier>\config\nexus-native.env.cmd"` sur la sortie d'erreur et rend `exit /b 1` sans lancer le programme. Sans le fichier, le lanceur garde ses défauts ; `nexus-rest.cmd` pose `127.0.0.1` et `8080` après `:run`. | `scripts/release/build-windows-distribution.ps1:267-327` |
 | [Existant vérifié] | Les lanceurs sont écrits par `Write-NexusLauncher`, qui ramène chaque fin de ligne à CRLF avant l'écriture ASCII : la recherche d'une étiquette `goto` par `cmd.exe` ne dépend pas des fins de ligne du checkout. | `scripts/release/build-windows-distribution.ps1:260-265` |
 | [Existant vérifié] | Une entrée MCP native, écrite par un connecteur (`McpEntryPsLiteral` pour Copilot JetBrains et Claude Desktop, `McpCommandArrayPs` pour les `mcp add` de Copilot CLI, Claude Code et Codex CLI) ou dans un fragment d'import (`NativeMcpCommandJson`, `NativeCodexToml`), lance directement `{app}\app\runtime\bin\java.exe --enable-native-access=ALL-UNNAMED -jar {app}\lib\nexus-mcp.jar`, sans `cmd.exe` : `cmd.exe /d /s /c <chemin>` retire les guillemets et analyse le chemin sans protection, si bien qu'une espace coupe la commande et qu'un `^` disparaît. `NativeMcpEnvironment` donne à l'entrée `NEXUS_HOME` (sans barre oblique finale) et, s'ils ne sont pas vides, `NEXUS_SEMANTIC_PROVIDER` et `NEXUS_OLLAMA_BASE_URL`, valeurs que `config\nexus-native.env.cmd` donne à `nexus-mcp.cmd` ; elles sont écrites dans l'objet `env` des entrées JSON, la table `env` du TOML Codex, ou passées par `--env` (Copilot CLI, Codex CLI) et `-e` (Claude Code) avant `--`. | `packaging/windows/nexus-installer.iss.template:1444-1534`, `:1536-1579`, `:1714-1759`, `:1923`, `:1979`, `:1999` |
@@ -503,6 +506,48 @@ sequenceDiagram
 
 Notation : UML de séquence. Exigences portées : « L'assistant accepte un accent circonflexe dans les valeurs de la configuration générée » et « En installation silencieuse, les messages de l'assistant n'attendent aucune réponse ». Les autres refus de `NextButtonClick` suivent la même branche « vrai » ; un avis de port est journalisé de la même façon sans rendre `False`.
 
+#### Vue UML de séquence — Que fait l'étape post-installation après l'installation de Docker Desktop ? (cible, réalisée par `sprint-16-installateur-msgbox-docker`)
+
+```mermaid
+sequenceDiagram
+    participant S as Setup (/VERYSILENT)
+    participant P as CurStepChanged(ssPostInstall)
+    participant D as StartDockerDesktopAfterInstall
+    participant X as Docker Desktop
+    participant L as Journal (/LOG)
+    S->>P: ssPostInstall
+    P->>D: si Docker Desktop installé par l'installateur
+    D->>X: Exec (ewNoWait)
+    X-->>D: lancé
+    D->>L: lancement journalisé
+    alt installation interactive
+        D->>S: MsgBox (conditions Docker à accepter)
+        S-->>D: OK
+    else installation silencieuse
+        D-->>P: retour sans boîte
+    end
+    P-->>S: fin de l'étape
+```
+
+Notation : UML de séquence. Exigence portée : « Une installation silencieuse n'attend aucune réponse après l'installation de Docker Desktop ». Si `Exec` échoue, ni journal de lancement ni boîte : comportement inchangé.
+
+#### Organigramme — Comment le contrôle de la source durcie juge-t-il les boîtes modales ? (cible)
+
+```mermaid
+flowchart TD
+    A["Section [Code] de la source durcie"] --> B["Retirer chaînes et commentaires"]
+    B --> C["Découper en routines"]
+    C --> D{"MsgBox, TaskDialogMsgBox, InputBox ou InputQuery ?"}
+    D -- non --> G
+    D -- oui --> E{"WizardSilent() ou UninstSilent avant l'appel, dans la routine ?"}
+    E -- non --> F["Violation : routine et appel"]
+    E -- oui --> G{"SuppressibleMsgBox hors NextButtonClick et NotifyPortSelection ?"}
+    G -- oui --> F
+    G -- non --> H["Contrôle réussi"]
+```
+
+Notation : organigramme (pas UML). Exigence portée : « Le contrôle de la source durcie refuse toute boîte modale sans garde de mode silencieux ».
+
 ### Écarts et limites (installer-client-configuration)
 
 - Un fichier déjà corrompu par une version antérieure de l'installateur n'est pas réparé.
@@ -520,3 +565,7 @@ Notation : UML de séquence. Exigences portées : « L'assistant accepte un acce
 - `File.Replace` remplace un lien symbolique par un fichier ordinaire et rompt un lien dur : une configuration tenue dans un dépôt de dotfiles par lien n'est plus suivie après la connexion.
 - Un client ouvert peut réécrire son fichier entre la lecture et le remplacement ; Claude Desktop est attendu fermé (code 30), pas Copilot JetBrains. La version écrasée reste dans la sauvegarde.
 - Le smoke `scripts/release/test-windows-installer.ps1` exécute `nexus-json.ps1`, les scripts de déconnexion installés et `connect-codex-desktop.ps1` ; les scripts de connexion JSON ne sont générés que pour un client détecté, ce que l'installateur smoke ne fait pas : le smoke appelle `Add-NexusServerEntry` comme eux, et des contrats textuels verrouillent leur forme. Le test d'échappement analyse la ligne générée en mémoire ; l'écriture UTF-8 avec BOM est vérifiée sur les scripts installés.
+- [Écart] hors audit : avant `sprint-16-installateur-msgbox-docker`, la recherche de `MsgBox(` ne lisait que `NextButtonClick` et `NotifyPortSelection` : la boîte de `AUD-QUA-33` n'était vue par aucun test. Le contrôle lit désormais tout le code ; sa garde est cherchée dans la routine avant l'appel, pas dans le bloc qui l'enveloppe (une garde sur une autre branche d'un `if` le satisferait à tort : revue), et chaînes et commentaires sont retirés par expression régulière, pas par un analyseur Pascal.
+- Balayage du 15/11 (gabarit, deux scripts de durcissement, `scripts/release/build-windows-distribution.ps1`, lanceurs générés, `packaging/windows/detect-assistant-clients.ps1`) : aucune autre primitive modale (`TaskDialogMsgBox`, `InputBox`, `InputQuery`, `ExitSetupMsgBox`), aucun `pause`, `set /p` ni `Read-Host`. Les `Exec(…, ewWaitUntilTerminated)` (installeurs Docker Desktop et Ollama, scripts d'intégration, `docker compose down`) n'ont pas de délai borné : Inno Setup n'en offre pas ; un enfant bloqué suspend l'installation, ce qui n'est ni mesuré ni corrigé ici.
+- En installation silencieuse, Docker Desktop est lancé sans attente : son propre écran de licence n'est pas supprimé et reste à accepter dans la session de l'utilisateur. L'étape `docker-desktop` de la liste de progression passe à `done` même si `Exec` n'a pas pu lancer Docker Desktop, sans message : écart connu de présentation, sans effet sur la fin de l'installation.
+- Une installation silencieuse réelle avec installation automatique de Docker Desktop (poste sans Docker, WSL 2) n'a pas été rejouée : la garde est prouvée par le contrôle textuel de la source durcie et par la compilation de cette source avec Inno Setup 6, pas par une exécution.

@@ -251,6 +251,8 @@ Si elle reste cochée, après validation de la page **Ready to Install** et clic
 
 Le setup ne passe volontairement **pas** `--accept-license`. NEXUS ne doit pas accepter la Docker Subscription Service Agreement à la place de l'utilisateur. Au premier lancement Docker Desktop, l'utilisateur doit accepter les conditions Docker pour démarrer le moteur.
 
+Une fenêtre le rappelle à la fin de l'installation. En installation silencieuse (`/SILENT` ou `/VERYSILENT`), elle n'est jamais affichée, avec ou sans `/SUPPRESSMSGBOXES` : le lancement de Docker Desktop est écrit dans le journal (`/LOG`) et l'installation se termine sans attendre. Les conditions Docker restent à accepter au premier démarrage de Docker Desktop, dans la session de l'utilisateur.
+
 Le mode Docker Desktop per-user cible normalement :
 
 ```text
@@ -316,7 +318,7 @@ Une URL Ollama de bouclage (`http://127.0.0.1:11434`) est écrite telle quelle d
 
 Le repository, l'URL Ollama et `NEXUS_HOME` (écran 4, dont la valeur par défaut dérive du profil même quand cet écran est sauté) sont refusés s'ils contiennent un retour à la ligne ou un guillemet double, avec le message « Les chemins et URL générés ne peuvent pas contenir de retour à la ligne ni de guillemet double ». Un profil dont le nom contient `^`, par exemple `C:\Users\a^b`, est accepté : le `.env` reçoit `NEXUS_REPOSITORY_BIND='C:/Users/a^b'`.
 
-En installation silencieuse (`/VERYSILENT`), ajouter `/SUPPRESSMSGBOXES` : les refus et les avis de port des écrans de l'assistant sont alors écrits dans le journal (`/LOG`) sans fenêtre, et un refus arrête l'installation avec un code de sortie non nul. Sans `/SUPPRESSMSGBOXES`, la fenêtre du message reste affichée et attend une réponse.
+En installation silencieuse (`/VERYSILENT`), ajouter `/SUPPRESSMSGBOXES` : les refus et les avis de port des écrans de l'assistant sont alors écrits dans le journal (`/LOG`) sans fenêtre, et un refus arrête l'installation avec un code de sortie non nul. Sans `/SUPPRESSMSGBOXES`, la fenêtre du message reste affichée et attend une réponse. L'avis de fin d'installation de Docker Desktop (écran 7) n'est, lui, jamais affiché en installation silencieuse.
 
 ### Démarrage Docker généré
 
