@@ -9,7 +9,7 @@ argument-hint: "[open|merge <pr>|release]"
 ## Modèle
 
 - `main` est la seule branche d'intégration et la source des releases (GEN-0089). Elle est protégée par le ruleset « Protect main » : PR obligatoire, pas de force-push ni de suppression, checks obligatoires.
-- Mainteneur unique : pas de seconde approbation humaine requise, pas d'obligation d'être à jour avec la base avant merge.
+- Mainteneur unique : pas de seconde approbation humaine requise. Les checks requis sont stricts : une PR doit être à jour avec `main` avant merge (`docs/developer/branch-governance.md`).
 - Intégration par **merge commit** (`--merge`), jamais squash/rebase, toujours **exact-head** (`--match-head-commit`). GitHub porte la règle : le ruleset n'autorise que `allowed_merge_methods = ["merge"]` et le dépôt désactive squash et rebase (`allow_squash_merge`, `allow_rebase_merge` à `false`) ; ces réglages appartiennent au mainteneur et se vérifient en lecture (`docs/developer/branch-governance.md`, section « Méthode d'intégration »). Ne jamais proposer `--squash` ni `--rebase`, même si l'interface GitHub les offre.
 - Fichiers sensibles (`.github/workflows/`, `scripts/release/`, `config/tool-integrity.properties`, wrappers Maven, `packaging/`) : propriétaire déclaré dans `.github/CODEOWNERS`, revue code owner non obligatoire.
 - Vulnérabilité découverte : signalement privé GitHub selon `SECURITY.md`, jamais d'issue ni de PR publique qui la décrit avant la release corrigée.
@@ -24,10 +24,11 @@ Checks obligatoires sur `main` : `Windows gate`, `Linux reactor Maven build`, `C
 
 ## Merger
 
-1. `gh pr checks <n>` : tous les checks obligatoires `pass` sur le HEAD courant.
-2. `sha=$(gh pr view <n> --json headRefOid --jq .headRefOid)`
-3. `gh pr merge <n> --merge --match-head-commit "$sha"` (le hook refuse un merge sans `--match-head-commit`).
-4. Après le merge, les qualifications post-merge (`main-push-*.yml`, corpus sémantique `full`, Docker) tournent sur le push de `main` ; les lire avant une release.
+1. `gh pr view <n> --json mergeStateStatus` : si la PR est `BEHIND` (une autre PR a fait avancer `main`), `gh pr update-branch <n>` y fusionne `main` sans force-push ; attendre la CI de ce nouveau HEAD. Les checks requis sont stricts : GitHub refuse sinon le merge.
+2. `gh pr checks <n>` : tous les checks obligatoires `pass` sur le HEAD courant.
+3. `sha=$(gh pr view <n> --json headRefOid --jq .headRefOid)`
+4. `gh pr merge <n> --merge --match-head-commit "$sha"` (le hook refuse un merge sans `--match-head-commit`).
+5. Après le merge, les qualifications post-merge (`main-push-*.yml`, corpus sémantique `full`, Docker) tournent sur le push de `main` ; les lire avant une release.
 
 ## PR Dependabot
 

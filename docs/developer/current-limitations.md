@@ -138,7 +138,7 @@ La protection GitHub de `main` est un état repository-admin, pas un fichier ver
 
 Le ruleset GitHub actif `Protect main` protège `main`, impose le passage par pull request et le merge commit, interdit suppression/non-fast-forward et exige les checks permanents approuvés. Après toute modification repository-admin, cet état doit être revalidé par API.
 
-NEXUS est actuellement un projet à **un seul mainteneur**. L'absence d'approbation humaine distincte et l'absence de resynchronisation obligatoire avec la base juste avant merge sont des choix explicites du modèle solo ; elles ne sont pas suivies comme findings. Toute évolution de cette politique doit être décidée explicitement avant de modifier les règles GitHub.
+NEXUS est actuellement un projet à **un seul mainteneur**. L'absence d'approbation humaine distincte est un choix explicite du modèle solo ; elle n'est pas suivie comme finding. Toute évolution de cette politique doit être décidée explicitement avant de modifier les règles GitHub.
 
 ## Watch items
 

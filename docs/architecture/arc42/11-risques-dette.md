@@ -64,7 +64,7 @@ Le build vérifie les outils fixes par hashes versionnés. L'image Docker qualif
 
 Le ruleset GitHub actif `Protect main` protège `main`, impose le passage par pull request et le merge commit, interdit suppression/non-fast-forward et exige les checks permanents approuvés.
 
-NEXUS est actuellement maintenu par **une seule personne**. Le modèle solo n'exige pas de seconde approbation humaine ni de resynchronisation stricte avec la base juste avant merge. Ces absences ne sont pas des risques ouverts ; elles ne doivent être reconsidérées que si le modèle de maintenance change explicitement.
+NEXUS est actuellement maintenu par **une seule personne**. Le modèle solo n'exige pas de seconde approbation humaine. Cette absence n'est pas un risque ouvert ; elle ne doit être reconsidérées que si le modèle de maintenance change explicitement.
 
 ## Dette / choix conditionnés
 

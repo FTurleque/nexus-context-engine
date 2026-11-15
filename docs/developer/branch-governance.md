@@ -18,9 +18,9 @@ Tant que ce modèle n'est pas explicitement changé :
 - aucune approbation humaine distincte du mainteneur n'est requise avant merge ;
 - aucune règle ne doit être ajoutée uniquement pour simuler une revue à plusieurs personnes qui n'existe pas ;
 - la barrière de confiance avant merge repose sur la pull request, les checks automatisés exact-head, l'interdiction des force-pushes/suppressions et la résolution des conversations lorsqu'il y en a ;
-- le fait qu'une PR ne soit pas forcée à se resynchroniser avec sa base immédiatement avant merge n'est pas suivi comme finding tant que les checks applicables qualifient bien le HEAD candidat.
+- les checks requis sont stricts : une PR doit être à jour avec `main` avant merge, et ses checks qualifient le HEAD qui combine la PR et `main` (voir [Méthode d'intégration](#méthode-dintégration--merge-commit-uniquement)).
 
-Les audits NEXUS ne doivent donc pas remonter l'absence d'approbation humaine obligatoire ou l'absence de mode « branch up to date before merge » comme vulnérabilités/hardenings résiduels sans changement explicite de cette politique.
+Les audits NEXUS ne doivent donc pas remonter l'absence d'approbation humaine obligatoire comme vulnérabilité ou hardening résiduels sans changement explicite de cette politique.
 
 ## État GitHub effectif
 
@@ -34,6 +34,7 @@ Il impose actuellement :
 - interdiction de suppression ;
 - interdiction des non-fast-forward / force pushes ;
 - bypass `Repository admin` limité au mode `pull_request` ;
+- checks requis en mode strict (`strict_required_status_checks_policy` à `true`) : la branche d'une PR doit être à jour avec `main` avant merge ;
 - huit checks permanents requis :
   - `Windows gate` ;
   - `Linux reactor Maven build` ;
@@ -58,6 +59,8 @@ Il impose actuellement :
 ## Méthode d'intégration : merge commit uniquement
 
 Une PR vers `main` s'intègre **uniquement par merge commit**, exact-head (`gh pr merge <n> --merge --match-head-commit <sha>`). Le squash et le rebase sont interdits : ils réécrivent les SHA qualifiés par la CI exact-head, alors que les qualifications post-merge et le tag de release doivent porter sur le SHA que la PR a qualifié.
+
+Les checks requis sont stricts : une PR en retard sur `main` (`mergeStateStatus` à `BEHIND`) n'est pas fusionnable. Quand une PR fusionnée fait avancer `main`, `gh pr update-branch <n>` fusionne `main` dans chaque autre PR ouverte, sans force-push ; la CI qualifie ce nouveau HEAD, qui combine la PR et `main`, avant le merge exact-head.
 
 La règle est portée par GitHub, pas seulement par le hook local de Claude Code :
 
@@ -120,12 +123,13 @@ required pull request = true
 force push = disabled
 deletion = disabled
 required checks = politique approuvée
+strict required status checks = true
 allowed merge methods = ["merge"]
 allow_squash_merge = false
 allow_rebase_merge = false
 ```
 
-Aucune approbation humaine additionnelle ni resynchronisation stricte de branche n'est requise par le modèle solo courant. Si le projet passe un jour à plusieurs mainteneurs, cette section devra être revue explicitement avant de changer les règles GitHub.
+Aucune approbation humaine additionnelle n'est requise par le modèle solo courant. Si le projet passe un jour à plusieurs mainteneurs, cette section devra être revue explicitement avant de changer les règles GitHub.
 
 ## OpenSpec repository-security-settings
 

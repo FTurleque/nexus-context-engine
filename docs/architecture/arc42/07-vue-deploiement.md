@@ -118,4 +118,4 @@ Le préflight GHCR est fail-closed. Tags version et SHA sont immuables ; un retr
 
 Le ruleset GitHub actif `Protect main` protège `main`, impose le passage par pull request et le merge commit, interdit suppression/non-fast-forward et exige les checks permanents approuvés.
 
-NEXUS est actuellement maintenu par **une seule personne**. La politique n'exige pas de seconde approbation humaine ni de resynchronisation stricte avec la base juste avant merge ; ces absences ne sont pas des findings dans le modèle solo courant. Toute évolution de ce modèle doit être décidée explicitement avant de modifier les règles GitHub.
+NEXUS est actuellement maintenu par **une seule personne**. La politique n'exige pas de seconde approbation humaine ; cette absence n'est pas un finding dans le modèle solo courant. Toute évolution de ce modèle doit être décidée explicitement avant de modifier les règles GitHub.
