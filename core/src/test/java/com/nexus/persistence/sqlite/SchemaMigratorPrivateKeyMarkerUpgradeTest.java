@@ -68,7 +68,8 @@ class SchemaMigratorPrivateKeyMarkerUpgradeTest {
             assertEquals("private-key-marker", app.getProject(id).name());
             assertThrows(IllegalStateException.class, () -> app.search(id, "PrivateKeyMarker", 10, false));
             var repository = new SqliteIndexRepository(new SqliteDatabase(paths));
-            assertEquals(LEGACY_GENERATION + 1, repository.generation(id));
+            // V021 puis V022 incrémentent chacune la génération une fois.
+            assertEquals(LEGACY_GENERATION + 2, repository.generation(id));
 
             var report = app.index(id, false, false).report();
 

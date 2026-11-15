@@ -69,8 +69,8 @@ class SchemaMigratorCompositeNameUpgradeTest {
             assertEquals("composite-name", app.getProject(id).name());
             assertThrows(IllegalStateException.class, () -> app.search(id, "CompositeNameMarker", 10, false));
             var repository = new SqliteIndexRepository(new SqliteDatabase(paths));
-            // V020 puis V021 incrémentent chacune la génération une fois.
-            assertEquals(LEGACY_GENERATION + 2, repository.generation(id));
+            // V020, V021 puis V022 incrémentent chacune la génération une fois.
+            assertEquals(LEGACY_GENERATION + 3, repository.generation(id));
 
             var report = app.index(id, false, false).report();
 
