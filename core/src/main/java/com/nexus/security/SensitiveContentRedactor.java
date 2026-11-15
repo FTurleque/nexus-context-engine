@@ -532,19 +532,30 @@ public final class SensitiveContentRedactor {
             }
             int typeEnd = endOfNormalizedType(content, candidate + MARKER_DASHES.length() + "END".length(), type);
             if (typeEnd >= 0 && content.startsWith(MARKER_DASHES, typeEnd)) {
-                int dashRunEnd = typeEnd;
-                while (dashRunEnd < content.length() && content.charAt(dashRunEnd) == '-') {
-                    dashRunEnd++;
-                }
-                int sharedBegin = dashRunEnd - MARKER_DASHES.length();
-                if (opensPrivateKeyAt(content, sharedBegin)) {
-                    return sharedBegin;
-                }
-                int markerEnd = typeEnd + MARKER_DASHES.length();
-                return startsItsLine(content, candidate) ? markerEnd : endOfLineOrPrivateKeyBegin(content, markerEnd);
+                return endOfBlockClosedBy(content, candidate, typeEnd);
             }
             position = candidate + 1;
         }
+    }
+
+    /**
+     * Fin du bloc fermé par le marqueur {@code -----END} placé en {@code candidate}, dont le type se
+     * termine en {@code typeEnd}, sur des tirets. Les tirets qui suivent le type forment une seule
+     * suite : si ses cinq derniers ouvrent un {@code -----BEGIN } de clé privée, le bloc s'arrête avant
+     * eux. Sinon il s'arrête après les tirets du marqueur s'il commence sa ligne, et à la fin de sa ligne
+     * ou avant un {@code -----BEGIN } de clé privée placé plus loin sur cette ligne dans le cas contraire.
+     */
+    private static int endOfBlockClosedBy(String content, int candidate, int typeEnd) {
+        int dashRunEnd = typeEnd;
+        while (dashRunEnd < content.length() && content.charAt(dashRunEnd) == '-') {
+            dashRunEnd++;
+        }
+        int sharedBegin = dashRunEnd - MARKER_DASHES.length();
+        if (opensPrivateKeyAt(content, sharedBegin)) {
+            return sharedBegin;
+        }
+        int markerEnd = typeEnd + MARKER_DASHES.length();
+        return startsItsLine(content, candidate) ? markerEnd : endOfLineOrPrivateKeyBegin(content, markerEnd);
     }
 
     /**
@@ -573,9 +584,10 @@ public final class SensitiveContentRedactor {
      */
     private static boolean opensPrivateKeyAt(String content, int position) {
         int wordStart = position + MARKER_DASHES.length();
+        // Le blanc qui suit BEGIN est le dernier caractère de -----BEGIN .
+        int wordEnd = position + PRIVATE_KEY_BEGIN_LENGTH - 1;
         if (!content.startsWith(MARKER_DASHES, position) || !regionEqualsIgnoreAsciiCase(content, wordStart, "BEGIN")
-                || wordStart + "BEGIN".length() >= content.length()
-                || !isMarkerBlank(content.charAt(wordStart + "BEGIN".length()))) {
+                || wordEnd >= content.length() || !isMarkerBlank(content.charAt(wordEnd))) {
             return false;
         }
         int afterBegin = position + PRIVATE_KEY_BEGIN_LENGTH;
