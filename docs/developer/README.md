@@ -118,7 +118,7 @@ ou :
 4. Ne pas abaisser un budget/seuil pour masquer une régression.
 5. Toute décision structurante durable implique un ADR lorsque le changement dépasse un simple durcissement d'implémentation.
 
-La protection effective de `main` reste une configuration GitHub externe au code et doit être vérifiée par API après modification. Le ruleset `Protect main` est actif. Le projet est maintenu par **un seul mainteneur** : les audits ne doivent pas transformer l'absence d'une seconde approbation humaine ou d'une resynchronisation stricte de branche en finding tant que ce modèle n'est pas explicitement modifié.
+La protection effective de `main` reste une configuration GitHub externe au code et doit être vérifiée par API après modification. Le ruleset `Protect main` est actif. Le projet est maintenu par **un seul mainteneur** : les audits ne doivent pas transformer l'absence d'une seconde approbation humaine en finding tant que ce modèle n'est pas explicitement modifié.
 
 ## Contrat de hardening du 9 septembre 2026
 

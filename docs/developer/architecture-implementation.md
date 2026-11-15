@@ -227,7 +227,7 @@ Docker Distribution construit une image unique, exécute smokes/Trivy/SBOM puis 
 
 Le ruleset GitHub actif `Protect main` protège `main` : pull request obligatoire, merge commit seul, suppression/non-fast-forward interdits et checks permanents requis.
 
-NEXUS est actuellement maintenu par **une seule personne**. Le modèle solo n'exige ni seconde approbation humaine ni resynchronisation stricte avec la base juste avant merge ; ces absences ne sont pas des hardenings ouverts. La qualification repose sur le SHA candidat et les gates automatisés applicables. Voir [`branch-governance.md`](branch-governance.md).
+NEXUS est actuellement maintenu par **une seule personne**. Le modèle solo n'exige pas de seconde approbation humaine ; cette absence n'est pas un hardening ouvert. La qualification repose sur le SHA candidat et les gates automatisés applicables. Voir [`branch-governance.md`](branch-governance.md).
 
 ## Séparation des capacités internes (septembre 2026)
 

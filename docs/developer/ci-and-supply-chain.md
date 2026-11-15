@@ -10,7 +10,7 @@ NEXUS CI et CodeQL checkoutent explicitement `github.event.pull_request.head.sha
 
 Le ruleset GitHub actif `Protect main` protège `main`, exige le passage par pull request et le merge commit, interdit suppression/non-fast-forward et impose les checks permanents approuvés.
 
-NEXUS est actuellement maintenu par **un seul mainteneur**. La politique de merge repose donc sur la PR, le SHA candidat et les gates automatisés ; elle n'exige ni seconde approbation humaine ni resynchronisation stricte de la branche avec sa base juste avant merge. Les audits ne doivent pas traiter ces absences comme des hardenings tant que le modèle de maintenance n'est pas explicitement modifié.
+NEXUS est actuellement maintenu par **un seul mainteneur**. La politique de merge repose donc sur la PR, le SHA candidat et les gates automatisés ; elle n'exige pas de seconde approbation humaine. Les audits ne doivent pas traiter cette absence comme un hardening tant que le modèle de maintenance n'est pas explicitement modifié.
 
 Les workflows versionnés qualifient aussi chaque push sur `main` : NEXUS CI, CodeQL et OSV écoutent directement la branche, Docker Distribution écoute ses chemins, et les benchmarks et l'installateur Windows sont réutilisés par des callers `main-push-*.yml` avec leurs filtres de chemins.
 

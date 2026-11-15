@@ -161,7 +161,7 @@ Les tags version/SHA sont immuables. Le préflight GHCR échoue fermé sur les e
 
 Le ruleset GitHub actif `Protect main` protège `main`, impose le passage par pull request et le merge commit, interdit suppression/non-fast-forward et exige les checks permanents approuvés.
 
-NEXUS est actuellement maintenu par **une seule personne**. L'absence d'une approbation humaine distincte du mainteneur et l'absence de resynchronisation stricte de la PR avec sa base ne constituent pas des findings sous ce modèle. La barrière de merge repose sur le HEAD candidat, les checks automatisés applicables, la PR obligatoire et les protections de branche. Voir [`developer/branch-governance.md`](../developer/branch-governance.md).
+NEXUS est actuellement maintenu par **une seule personne**. L'absence d'une approbation humaine distincte du mainteneur ne constitue pas un finding sous ce modèle. La barrière de merge repose sur le HEAD candidat, les checks automatisés applicables, la PR obligatoire et les protections de branche. Voir [`developer/branch-governance.md`](../developer/branch-governance.md).
 
 Voir aussi [`developer/architecture-implementation.md`](../developer/architecture-implementation.md), [`developer/ci-and-supply-chain.md`](../developer/ci-and-supply-chain.md), [`developer/current-limitations.md`](../developer/current-limitations.md) et [`roadmap.md`](../project/governance/ROADMAP.md).
 

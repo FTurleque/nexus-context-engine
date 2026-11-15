@@ -120,7 +120,7 @@ Une qualification périodique/manuelle doit exécuter `RealSemanticSearchBenchma
 
 Le ruleset GitHub actif `Protect main` protège `main` : pull request obligatoire, merge commit seul, suppression/non-fast-forward interdits et checks permanents requis. Le code et les workflows restent une défense en profondeur mais ne remplacent pas ce contrôle repository-admin.
 
-NEXUS est actuellement un projet à **un seul mainteneur**. La qualité de merge est donc portée par la PR, le SHA candidat et les gates automatisés ; aucune seconde approbation humaine ni resynchronisation stricte avec la base n'est exigée par la politique courante. Ces absences ne doivent pas être remontées comme findings tant que le modèle de maintenance n'est pas explicitement modifié.
+NEXUS est actuellement un projet à **un seul mainteneur**. La qualité de merge est donc portée par la PR, le SHA candidat et les gates automatisés ; aucune seconde approbation humaine n'est exigée par la politique courante. Cette absence ne doit pas être remontée comme finding tant que le modèle de maintenance n'est pas explicitement modifié.
 
 ### QS-20 — Métadonnées Code Intelligence bornées
 
