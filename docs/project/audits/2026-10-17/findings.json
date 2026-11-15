@@ -7008,12 +7008,16 @@
    "sprint": 16,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
-   "changement": "Nouveau",
+   "statut": "Fermé avec réserve",
+   "changement": "Corrigé par la PR #395",
    "historique": [
     {
      "date": "2026-11-15",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
@@ -7022,6 +7026,13 @@
     "verdict": "Nouveau constat",
     "preuve": "Lecture du gabarit (MsgBox sans garde WizardSilent dans StartDockerDesktopAfterInstall) ; non rejoué en installation silencieuse réelle. Préexistant (arbre 244ab1d3).",
     "reserve": null
+   },
+   "verification_mainteneur": {
+    "date": "2026-11-15",
+    "commit": "aff2a7b7",
+    "verdict": "Fermé avec réserve",
+    "preuve": "packaging/windows/nexus-installer.iss.template, StartDockerDesktopAfterInstall : lancement de Docker Desktop journalisé dans les deux modes, boîte d'information sous not WizardSilent(). scripts/release/test-windows-config-escaping.ps1 lit toute la section [Code] de la source durcie, routine par routine, sans chaînes ni commentaires : tout MsgBox(, TaskDialogMsgBox(, InputBox( ou InputQuery( doit suivre WizardSilent() ou UninstSilent, SuppressibleMsgBox( n'est admis que dans NextButtonClick et NotifyPortSelection ; quatre contrôles négatifs (garde retirée, MsgBox injecté, SuppressibleMsgBox injecté, sortie anticipée retirée). Contrat en échec sur le gabarit d'origine, vert sous PowerShell 7 et Windows PowerShell 5.1 ; source durcie compilée par Inno Setup 6 ; workflow Windows installer vert en exact-head sur aff2a7b7, change sprint-16-installateur-msgbox-docker.",
+    "reserve": "Installation silencieuse réelle avec installation automatique de Docker Desktop non rejouée : la garde est prouvée par lecture, contrat et compilation. Limites documentées non corrigées : Exec(…, ewWaitUntilTerminated) sans délai borné ; l'étape « Lancement de Docker Desktop » passe à done même si le lancement échoue."
    }
   },
   {
@@ -7039,12 +7050,16 @@
    "sprint": 16,
    "depends_on": [],
    "bloque": [],
-   "statut": "Ouvert",
-   "changement": "Nouveau",
+   "statut": "Fermé avec réserve",
+   "changement": "Corrigé par la PR #394",
    "historique": [
     {
      "date": "2026-11-15",
      "statut": "Ouvert"
+    },
+    {
+     "date": "2026-11-15",
+     "statut": "Fermé avec réserve"
     }
    ],
    "verification": {
@@ -7053,6 +7068,13 @@
     "verdict": "Nouveau constat",
     "preuve": "Rejoué indépendamment (java 21, classes de 58399279 et de 244ab1d3, corps factices) : 4 des 6 variantes « END puis BEGIN sur la même ligne » laissent le second corps en clair sous v10, toutes masquées sous v9 ; 4 des 5 concaténations d'un marqueur coupé masquées sous v9, toutes en clair sous v10.",
     "reserve": null
+   },
+   "verification_mainteneur": {
+    "date": "2026-11-15",
+    "commit": "40aba476",
+    "verdict": "Fermé avec réserve",
+    "preuve": "SensitiveContentRedactor.endOfMatchingEndMarker et endOfBlockClosedBy (secret-redaction-v11) : un -----BEGIN de clé privée placé après un -----END sur sa ligne arrête le bloc avant lui, que le END commence sa ligne ou non ; les tirets qui suivent le type du END forment une seule suite dont les cinq derniers peuvent ouvrir le BEGIN (tirets partagés, six à neuf tirets) ; un BEGIN d'un autre type n'arrête pas le bloc ; balayage unique linéaire (endOfLineOrPrivateKeyBegin). Profil content-v10, migration V022 (SchemaMigratorEndBeginSameLineUpgradeTest). SensitiveContentRedactorTest#privateKeyBlockAfterAnEndMarkerOnTheSameLineIsRedacted (LF, CRLF, CR), #generatedBlocksFollowedByAnotherBlockOnTheSameLineNeverLeakABody (20 000 contenus, refus exigés nuls), #endThenBeginRepetitionsHaveBoundedCost. Écarts hors audit corrigés dans le même change : tirets partagés (-----END X-----BEGIN Y-----, en clair sous v9 et v10) et six à neuf tirets entre END et BEGIN (relevé par l'audit de sécurité du diff). Fuzz différentiel v10/v11 (200 000 contenus) : 0 corps en clair sous v11, 0 corps masqué sous v10 et visible sous v11. CI exact-head verte sur 40aba476, change sprint-16-redaction-end-puis-begin.",
+    "reserve": "Marqueur BEGIN coupé sur deux lignes (concaténation Java, chaîne Python implicite, coupure CRLF) : refus explicite, corps toujours en clair. Masquer cette forme contredirait la règle « la fin d'un marqueur BEGIN est cherchée sur sa ligne » (décision du mainteneur du 12/11) ; limite documentée (docs/developer/secret-redaction.md) et figée par SensitiveContentRedactorTest#splitMarkerVariantsOpenNoKey."
    }
   },
   {
