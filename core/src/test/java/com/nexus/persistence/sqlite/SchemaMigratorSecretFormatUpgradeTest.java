@@ -95,8 +95,8 @@ class SchemaMigratorSecretFormatUpgradeTest {
             assertEquals("formats", app.getProject(id).name());
             assertThrows(IllegalStateException.class, () -> app.search(id, "FormatMarker", 10, false));
             var repository = new SqliteIndexRepository(new SqliteDatabase(paths));
-            // V011, V018, V019, V020 et V021 incrémentent chacune la génération une fois.
-            assertEquals(46, repository.generation(id));
+            // V011, V018, V019, V020, V021 et V022 incrémentent chacune la génération une fois.
+            assertEquals(47, repository.generation(id));
 
             app.index(id, false, false);
 
