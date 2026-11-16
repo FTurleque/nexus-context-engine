@@ -86,9 +86,9 @@ La recherche lexicale contient en plus un test de non-régression sur les requê
 
 ## Gouvernance effective
 
-Le ruleset GitHub actif `Protect main` protège `main`, impose le passage par pull request et le merge commit, interdit suppression/non-fast-forward et exige les checks permanents approuvés. Toute modification repository-admin doit être suivie d'une revalidation API.
+Le ruleset GitHub actif `Protect main` protège `main`, impose le passage par pull request et le merge commit, interdit suppression/non-fast-forward et exige les checks permanents approuvés en mode strict : une PR doit être à jour avec `main` avant merge, et ses checks qualifient le HEAD qui combine la PR et `main` ([gouvernance des branches](../../developer/branch-governance.md)). Toute modification repository-admin doit être suivie d'une revalidation API.
 
-Le modèle de maintenance courant est **solo**. L'absence de revue humaine distincte du mainteneur et l'absence d'obligation de resynchroniser une PR avec sa base juste avant merge sont des choix explicites de ce modèle, pas des hardenings à poursuivre. Les audits doivent se concentrer sur les protections réellement applicables : exact-head, checks automatisés, PR obligatoire, interdiction des force-pushes/suppressions et qualification des artefacts.
+Le modèle de maintenance courant est **solo**. L'absence de revue humaine distincte du mainteneur est un choix explicite de ce modèle, pas un hardening à poursuivre. Les audits doivent se concentrer sur les protections réellement applicables : exact-head, checks automatisés stricts, PR obligatoire, interdiction des force-pushes/suppressions et qualification des artefacts.
 
 ## Travail restant
 
