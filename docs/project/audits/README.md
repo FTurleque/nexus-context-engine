@@ -5,6 +5,7 @@ Seul l'audit en cours reste à la racine de ce dossier. À sa clôture, il est d
 ## En cours
 
 - [Audit du 17 octobre 2026](2026-10-17/README.md) — constats, sprints et plan d'action ; changements OpenSpec `openspec/changes/sprint-01-*` à `sprint-11-*`.
+- [Audit du 16 novembre 2026](2026-11-16/README.md) — constats, sprints et plan d'action ; changements OpenSpec `openspec/changes/audit-1116-s1-*` à `audit-1116-s7-*`.
 
 ## Archive
 
