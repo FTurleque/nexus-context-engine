@@ -1,0 +1,653 @@
+# Constats — audit du 16 novembre 2026
+
+73 constats : 1 Élevée, 7 Moyenne, 30 Faible, 35 Info. 38 sont actionnables et répartis en 7 sprints ([sprints.md](sprints.md)) ; les constats Info ne sont dans aucun sprint.
+
+Tri : sévérité, puis axe. Source structurée : [findings.json](findings.json).
+
+## Élevée (1)
+
+### AUD-SEC-01 — Une clé sensible placée juste après la quote ouvrante d'une chaîne ("password=…", "POSTGRES_PASSWORD=…", "Authorization: …") n'est jamais masquée
+
+- **Sévérité** : Élevée · **Axes** : Sécurité · **Effort** : S
+- **Sprint** : S3 · **Débloque** : AUD-SEC-02, AUD-PRF-01
+- **Preuve** : core/src/main/java/com/nexus/security/SecretAssignmentScanner.java:63-67 : `if (quoted) { if (end >= text.length() || text.charAt(end) != first) { cursor = Math.max(cursor + 1, end); continue; } ...` — quand la quote n'est pas refermée juste après la clé, le curseur saute à la fin de la clé ; la clé n'est jamais réexaminée comme clé non citée alors que la garde :55 (`identifierCharacter(prev)`) l'admettrait (un `"` n'est pas un caractère d'identifiant). Harnais java 21 contre les classes copiées (/tmp/hs/Probe2, Probe3) : `String cs = "password=FAKEpass123;user=sa";` → inchangé ; `docker run -e "POSTGRES_PASSWORD=FAKEpass" postgres` → inchangé (alors que la forme non citée `-e POSTGRES_PASSWORD=FAKEpass` est masquée) ; `- "POSTGRES_PASSWORD=FAKEpass"` (compose dans un .md) → inchangé ; `curl -H "Authorization: token FAKEtok1234"` → inchangé ; `String s = "secret: FAKEsec";` → inchangé ; `env: ["TOKEN=FAKEtok123"]` → inchangé. Aucun test de cette forme (rg sur core/src/test/java/com/nexus/security : seules les formes `password="…"` existent, SensitiveContentRedactorTest.java:398).
+- **Impact** : Une affectation sensible écrite dans une chaîne (chaîne de connexion, variable d'environnement passée à docker/compose dans un README, en-tête HTTP dans un exemple curl) part en clair dans Lucene, les embeddings (Ollama éventuellement distant) et les sorties CLI/REST/MCP servies aux agents. C'est un défaut d'implémentation d'une forme que la documentation couvre (docs/developer/secret-redaction.md : « clé ASCII simple ou composite … éventuellement citée, puis : ou = »), pas une limite de périmètre.
+- **Action** : Dans la branche citée, quand la quote fermante ne suit pas la clé, reprendre à `cursor + 1` (réexamen de la clé comme non citée) au lieu de sauter à `end` ; tests des six formes ci-dessus et non-régression des clés citées JSON ; procédure nexus-redaction-change (POLICY_VERSION v12, profil content-vN, migration d'invalidation des dérivés).
+- **Audit du 17/10** : Non traité par l'audit du 17/10 : forme distincte des clés JSON/JS citées corrigées par NXA-20260914-01 (AUD-SEC-09).
+
+## Moyenne (7)
+
+### AUD-QUA-01 — Les erreurs internes REST et MCP sont converties en réponse générique sans aucune trace côté serveur
+
+- **Sévérité** : Moyenne · **Axes** : Qualité · **Effort** : S
+- **Sprint** : S2 · **Débloque** : AUD-QUA-06
+- **Preuve** : adapters/rest-quarkus/src/main/java/com/nexus/api/IOExceptionMapper.java:15-19 `return Response.status(INTERNAL_SERVER_ERROR)…entity(new ErrorResponse("io_error", …))` sans log ; IllegalStateExceptionMapper.java:38-43 idem (`internal_state_error`) ; `rg -n 'LOG|Logger' adapters/rest-quarkus/src/main` → 0 résultat. adapters/mcp-java/src/main/java/com/nexus/mcp/NexusMcpTools.java:235-238 `catch (Exception exception) { return textResult(Map.of("error", "nexus_tool_error", "message", safeMessage(exception)), true); }` et safeMessage (:260-271) renvoie « Erreur interne NEXUS » pour tout ce qui n'est pas IAE/ISE, sans log. core/src/main/java/com/nexus/application/NexusApplication.java:299-303 `catch (IOException | RuntimeException failure) { return false; }` dans readiness() : l'index dérivé est déclaré absent sans journaliser la cause.
+- **Impact** : La politique de sortie publique (pas de chemin ni de stack, AUD-SEC-13) est respectée, mais l'opérateur n'a aucun moyen de diagnostiquer un 500 REST, une erreur d'outil MCP ou une readiness dégradée : l'exception et sa cause sont perdues. Le mapper JAX-RS fourni empêche aussi Quarkus de journaliser l'exception non gérée. Sur 30 k lignes de cœur, 22 appels LOGGER.log au total.
+- **Action** : Journaliser côté serveur (System.Logger WARNING/ERROR, message passé par PublicDiagnosticPolicy.internal() si besoin, stack complète) dans IOExceptionMapper, la branche 500 d'IllegalStateExceptionMapper, le catch générique de NexusMcpTools et la sonde readiness ; ajouter un identifiant de corrélation renvoyé dans ErrorResponse pour relier réponse et log.
+- **Audit du 17/10** : AUD-SEC-13 (Info) a validé l'absence de chemins et de stacks dans les réponses ; il ne traitait pas l'absence de journalisation serveur. AUD-DEP-29 (Info) mentionnait « journalisation System.Logger » sans en mesurer la couverture.
+
+### AUD-QUA-02 — Deux chemins d'écriture d'index coexistent : l'API par lot (rebuild/applyChanges) n'a plus d'appelant en production mais reste déclarée dans 2 interfaces et 5 classes
+
+- **Sévérité** : Moyenne · **Axes** : Qualité, Architecture · **Effort** : M
+- **Sprint** : S5 · **Débloque** : AUD-PRF-03, AUD-QUA-07
+- **Preuve** : Toutes les écritures de production passent par openSession : core/src/main/java/com/nexus/index/service/IndexPublication.java:44,49 et IndexDocumentPublisher.java:69. `rg '\.rebuild\(|\.applyChanges\(' core/src/main adapters/*/src/main` hors sessions → seulement les délégations internes (PersistentLuceneSearchIndex.java:45,55 ; PersistentLuceneSemanticSearchIndex.java:81-117 ; SemanticIndexingService.java:95-124 ; DirectSearchIndexSession.java:23,29 ; DirectSemanticIndexSession.java:27,34). Les deux Persistent* surchargent openSession (PersistentLuceneSearchIndex.java:59, PersistentLuceneSemanticSearchIndex.java:123), donc Direct*Session (87 lignes) ne sert qu'aux doubles de test. SemanticIndexingService.rebuild/applyChanges (4 méthodes publiques, :94-125) ne sont pas dans l'interface SemanticIndexing (core/src/main/java/com/nexus/index/SemanticIndexing.java:15-43) et ne sont appelées que par 17 fichiers de test. Duplication : LuceneSearchIndex.java:102-117 ≈ :389-410 ; LuceneSemanticSearchIndex.java:127-142 (récupération sur index corrompu) ≈ :265-279, :194-207 ≈ :307-327. Script de fenêtres de 8 lignes : 17 des 30 fenêtres dupliquées inter-fichiers du code main sont dans la paire LuceneSemanticSearchIndex/PersistentLuceneSemanticSearchIndex.
+- **Impact** : Chaque évolution de l'écriture Lucene (redaction, provenance, récupération sur corruption) doit être faite deux fois et les tests du chemin mort peuvent rester verts quand le chemin réel régresse. Piège : le défaut SemanticSearchIndex.rebuild(projectId, provenance, docs) (SemanticSearchIndex.java:35-40) ignore silencieusement la provenance si une implémentation ne le surcharge pas. Même schéma que AUD-PRF-28 corrigé côté SQLite, laissé côté Lucene.
+- **Action** : Retirer rebuild/applyChanges de SearchIndex et SemanticSearchIndex (et leurs surcharges sans provenance), supprimer Direct*Session et les 4 méthodes publiques de SemanticIndexingService ; réécrire les tests sur openSession (une fabrique de test peut offrir l'ancienne commodité) ; supprimer le défaut qui avale la provenance.
+- **Audit du 17/10** : AUD-PRF-28 (Fermé) a retiré IndexRepository.applyChanges, chemin SQLite mort ; l'équivalent Lucene lexical et sémantique n'était pas couvert. AUD-QUA-15 (Info) avait déjà relevé 5 fenêtres dupliquées pour la paire LuceneSemanticSearchIndex/PersistentLuceneSemanticSearchIndex ; il y en a 17 aujourd'hui.
+
+### AUD-SEC-02 — Les formes d'affectation courantes des langages indexés (camelCase composé, indice de dictionnaire, appel put/setProperty, SQL) laissent la valeur en clair
+
+- **Sévérité** : Moyenne · **Axes** : Sécurité · **Effort** : M
+- **Sprint** : S3 · **Dépend de** : AUD-SEC-01, AUD-PRF-04 · **Débloque** : AUD-SEC-05
+- **Preuve** : core/src/main/java/com/nexus/security/SecretAssignmentScanner.java:15-18 : composant sensible exigé en segment entier `(?:^|[_.-])(…)(?=$|[_.-])`, sans découpage camelCase ; :72 seuls `:` ou `=` suivent la clé. core/src/main/java/com/nexus/index/SourceLanguage.java:18-24 : seuls .java, .kt, .ts, .js, .py, .sql et .md sont indexés en contenu, donc le code est la surface principale. Harnais (Probe, Probe3) : LEAK pour `String dbPassword = "FAKE…";`, `private String jwtSecret = "FAKE…";`, `String keystorePassword = "FAKE…";`, `String myApiKey = …`, `awsSecretAccessKey = …`, `os.environ["DB_PASSWORD"] = "FAKE…"`, `config["password"] = "FAKE…"`, `props.put("password", "FAKE…")`, `System.setProperty("javax.net.ssl.keyStorePassword", "FAKE…")`, `new PasswordAuthentication("user", "FAKE…".toCharArray())`, `CREATE USER app IDENTIFIED BY 'FAKE…'`, `ALTER ROLE app WITH PASSWORD 'FAKE…'`, `PGPASSWORD=FAKE…`, `DB_PASS=FAKE…`, `password: |` (bloc YAML), `password hunter2` ; masqués : `apiKey`, `clientSecret`, `secretKey`, `self.password`.
+- **Impact** : Les noms composés en camelCase sont la convention Java/Kotlin/TypeScript (langages cibles de NEXUS) : un secret littéral dans un champ `dbPassword` ou `jwtSecret` est publié en clair aux agents et dans les embeddings. La politique est documentée comme liste fermée non exhaustive, mais la doc (secret-redaction.md) ne cite comme camelCase que `secretKey`/`accessKey`, ce qui laisse croire que `dbPassword` est couvert.
+- **Action** : Découper la clé aux transitions minuscule→Majuscule avant la comparaison par segment (dbPassword → db, Password) ; reconnaître `["clé"] =`/`['clé'] =` et le premier argument littéral sensible de `put`/`setProperty`/`setenv` ; SQL `IDENTIFIED BY '…'` et `PASSWORD '…'` ; faux positifs à mesurer (tokenizer, passwordHint) ; versionner les cas dans SecretRedactionProbeTest ; POLICY_VERSION, content-vN, migration.
+- **Audit du 17/10** : AUD-SEC-01 (17/10) fermé avec réserve : couverture en liste fermée documentée comme non exhaustive ; ces formes n'y figuraient pas. Sévérité maintenue à Moyenne car elles dominent dans les seuls langages indexés.
+
+### AUD-TST-13 — Le découpage d'un gros fichier en fenêtres de contexte (queryRanges, queryTerms, mergeRanges) n'est exécuté par aucun test : 54 lignes de ContextFragmentFactory à 0 %
+
+- **Sévérité** : Moyenne · **Axes** : Tests · **Effort** : S
+- **Sprint** : S2 · **Débloque** : AUD-TST-14, AUD-TST-04
+- **Preuve** : JaCoCo (rapports Windows du coordinateur (/home/claude/audit/build, mvnw.cmd -B -ntp verify sur 7ec5c5dc)), jacoco.xml : ContextFragmentFactory 98/151 lignes (64,9 %), 22/46 branches (47,8 %) ; méthodes queryRanges (l. 272) 0/13 lignes 0/8 branches, queryTerms (l. 292) 0/5, 0/4, mergeRanges (l. 302) 0/15, 0/6 ; fileFragments (l. 235) 10/24. Lignes non couvertes : core/src/main/java/com/nexus/context/ContextFragmentFactory.java:254-268 et :272-319. Extrait :254 `List<LineRange> ranges = queryRanges(lines, query);` ; :45-47 QUERY_WINDOW_LINES = 5, MAX_QUERY_WINDOWS = 4, FALLBACK_HEAD_LINES = 40.
+- **Impact** : C'est le chemin qui choisit les lignes envoyées à l'assistant dès qu'un fichier dépasse le seuil plein (120 à 800 tokens, :240) : fenêtres de ±5 lignes autour des termes, fusion des fenêtres adjacentes, repli sur les 40 premières lignes. Une régression (fenêtres qui se chevauchent, fusion off-by-one, repli vide) dégraderait silencieusement la qualité du contexte sans faire échouer la suite ; les tests existants (ContextFragmentFactoryPathBoundaryTest, ContextFragmentFactoryRangeValidationTest, DefaultContextBuilderIntegrationTest) n'utilisent que des fichiers sous le seuil.
+- **Action** : Ajouter un test unitaire de ContextFragmentFactory avec un fichier au-dessus du seuil : termes présents (fenêtres et bornes 1/lines.size()), deux occurrences proches (fusion), cinq occurrences (plafond MAX_QUERY_WINDOWS), aucun terme (repli sur 40 lignes), termes d'un caractère ignorés ; puis envisager une règle CLASS sur ContextFragmentFactory.
+
+### AUD-PRF-01 — Un terme de recherche de moins de 3 caractères parcourt tous les symboles du projet puis les trie : environ 0,7 s par terme à 1 M de symboles (mesure SQLite hors JDBC), 2,3 s pour 3 termes
+
+- **Sévérité** : Moyenne · **Axes** : Performance · **Effort** : S
+- **Sprint** : S4 · **Dépend de** : AUD-SEC-01
+- **Preuve** : core/src/main/java/com/nexus/persistence/sqlite/SqliteIndexSql.java:24 `TRIGRAM_MIN_CODE_POINTS = 3` ; SqliteSymbolSearch.java:99 et :104-105 (termes courts routés vers LIKE_ARM_SQL) ; SqliteSymbolSearch.java:226-247 `LOWER(s.name) LIKE '%x%' OR LOWER(s.qualified_name) LIKE '%x%' OR (SUBSTR(LOWER(s.name),1,1) = ? AND ABS(LENGTH(s.name) - ?) <= 3)` + `ORDER BY CASE ...` ; SearchText.java:67-71 (aucune longueur minimale de terme) et SymbolSearchStrategy.java:42 et :49-50 (jusqu'à 8 termes envoyés en lot). Même structure pour les relations : SqliteRelationQueries.java:61-62 et :88-96. Reproduction (python3 sqlite3 3.53.1, schéma des 22 migrations, 1 M de symboles sur 20 000 fichiers, /tmp/prf/sql/like_bench.py) : plan `SEARCH s USING INDEX idx_symbols_file_fuzzy_prefilter (file_id=?)` + `USE TEMP B-TREE FOR ORDER BY` ; « id » 704 ms, « db » 699 ms, « x » 1 067 ms, UNION ALL id+db+io 2 311 ms, contre 116 ms pour le bras trigramme « handler ». Le banc d'échelle ne mesure que des requêtes de 11 caractères et plus (ScaleRegressionBenchmarkTest.java:252-255). Note : chiffres mesurés avec le SQLite 3.53.1 de Python sur le schéma des migrations ; le plan (LIKE '%x%' non indexable + tri complet avant LIMIT) est le même avec sqlite-jdbc, seuls les chiffres absolus restent à remesurer.
+- **Impact** : Une requête en langage naturel (« how is the db id mapped », tâche de build_context) produit des termes courts (is, db, id) : chaque terme coûte un parcours complet des symboles du projet et un tri en arbre temporaire. La latence croît linéairement avec la taille du projet (jusqu'à 8 termes, environ 6 s extrapolées à 1 M de symboles), hors de toute gate puisque le banc ne couvre pas ce cas. find_usages avec un symbole de 1 ou 2 caractères a la même forme sur symbol_relations (non mesuré).
+- **Action** : Dans SymbolSearchStrategy, ne pas envoyer en recherche « contient » les termes de moins de 3 points de code issus du découpage (garder la requête entière) ; pour une requête entière courte, se limiter à l'égalité et au préfixe sur le nom (servis par un index sur LOWER(name)) au lieu de '%x%'. Ajouter au banc d'échelle un cas de requête courte avec budget p95.
+- **Audit du 17/10** : AUD-PRF-09 (fermé avec réserve) portait sur le trigramme et le préfiltre approché, pas sur le repli LIKE des termes courts : constat nouveau.
+
+### AUD-PRF-02 — Une panne transitoire d'Ollama (429, 5xx, délai) fait échouer toute l'indexation et perd tous les embeddings déjà calculés, sans aucune nouvelle tentative
+
+- **Sévérité** : Moyenne · **Axes** : Performance · **Effort** : M
+- **Sprint** : S4 · **Dépend de** : AUD-PRF-05
+- **Preuve** : core/src/main/java/com/nexus/search/semantic/ollama/OllamaEmbeddingProvider.java:284-285 (429/5xx -> EmbeddingProviderUnavailableException) et :310 (délai, DEFAULT_TIMEOUT 60 s :33) ; SemanticIndexingService.java:208-210 `embeddingProvider.embedAll(...)` sans reprise ; IndexDocumentPublisher.java:110-137 et :255-261 (embeddings calculés en ligne pendant la boucle des fichiers, sous le verrou de projet) ; ProjectIndexingService.java:238-239 `markFailed(project, exception)` puis :208 `fullRebuild = explicitRebuild || project.indexStatus() != IndexStatus.READY` ; IndexPublication.java (un seul commit Lucene en fin d'indexation, close() annule le reste). Débit documenté : docs/developer/semantic-search.md:216 (12 documents de 12 000 caractères en 383 s sur le runner, environ 32 s par document). Politique fail-closed documentée : semantic-search.md:107. grep « retry|Retry » dans index/ et search/semantic : aucune reprise côté indexation. Délai par défaut : docs/developer/semantic-search.md:30 (NEXUS_OLLAMA_TIMEOUT_SECONDS = 60) contre .github/workflows/semantic-search-qualification.yml:65,:117 (-Dnexus.semantic.ollama.timeoutSeconds=120) ; lot ≤ 12 000 caractères (SemanticIndexingService.java:24) ≈ 35 s au débit le plus lent documenté.
+- **Impact** : Sur un dépôt réel, un rebuild sémantique sur CPU dure des heures ; un seul 503 ou dépassement de 60 s (proche du coût d'un document de 12 000 caractères sur une machine chargée) annule tout le travail : projet FAILED, lexical et structurel non publiés, et le passage suivant repart d'un rebuild complet, embeddings compris. Le coût d'une panne passagère est donc l'indexation entière.
+- **Action** : Ajouter une reprise bornée (par exemple 3 tentatives avec attente croissante, plafonnée) de l'appel embedAll d'un lot sur EmbeddingProviderUnavailableException uniquement, sans toucher la politique fail-closed (une erreur de contrat reste bloquante). À terme, envisager de réutiliser les vecteurs des fichiers inchangés après un échec. Réaligner aussi le délai par défaut (60 s) sur celui que la qualification du projet retient sur CPU (120 s), sinon la reprise refait le même appel trop long.
+- **Fusion** : relecture : délai Ollama par défaut
+
+### AUD-DEP-01 — Quarkus épinglé en 3.40.1.1 alors que la release d'urgence sécurité 3.40.1.2 du 09/11/2026 corrige trois CVE
+
+- **Sévérité** : Moyenne · **Axes** : Dépendances, Sécurité · **Effort** : S
+- **Sprint** : S1
+- **Preuve** : pom.xml:55 `<quarkus.platform.version>3.40.1.1</quarkus.platform.version>` (dernière montée : commit cbbda64a du 29/10/2026). https://quarkus.io/releases : 3.40.1.2 publiée le 09/11/2026. https://quarkus.io/blog/quarkus-3-40-1-2-released/ : corrige CVE-2026-107912 (vertx-http, contournement d'autorisation de l'interface de management), CVE-2026-110879 (Jackson PTV, déjà neutralisé ici par jackson-bom 2.23.0, pom.xml:47 et :91-97) et CVE-2026-111497 (écriture hors limites dans le décodeur Brotli de Brotli4J, RCE possible, CVSS NVD 9,8). HEAD 7ec5c5dc du 15/11/2026.
+- **Impact** : brotli4j 1.23.0 (RCE, CVE-2026-111497) est bien livré dans le classpath REST via quarkus-vertx-http. Aucune des trois CVE n'est atteignable dans la configuration livrée (pas de règle quarkus.http.auth.permission, décompression des requêtes non activée, client Ollama hors Vert.x) ; le risque naît dès qu'un réglage change. Correctif LTS présenté comme sûr, effort S.
+- **Action** : Monter quarkus.platform.version en 3.40.1.2 (PR Dependabot ou skill nexus-dependency-bump), relire les exclusions requireUpperBoundDeps (pom.xml:321-333) et vérifier que le gate OSV sur le SBOM agrégé passe. Vérifier dans target/sbom/bom.json si com.aayushatharva.brotli4j figure dans le classpath REST.
+- **Audit du 17/10** : AUD-DEP-26 (Info, « dépendances majeures à jour au 17/10 ») : situation nouvelle, la release corrective date du 09/11 ; AUD-DEP-31 montrait déjà qu'une montée Quarkus peut buter sur un contrat documentaire qui recopie le numéro de version.
+
+## Faible (30)
+
+### AUD-ARC-01 — Le tableau des sens autorisés d'ARCH-0076 n'est automatisé que sur 4 règles, omet 12 packages et ne correspond plus au code sur 3 arêtes
+
+- **Sévérité** : Faible · **Axes** : Architecture, Tests · **Effort** : M
+- **Sprint** : S5 · **Dépend de** : AUD-ARC-12, AUD-ARC-02, AUD-ARC-04
+- **Preuve** : docs/architecture/adr/ARCH-0076-garder-un-coeur-java-sans-framework-acyclique-et-verifie.md:70-82 (tableau : « context ─► context.model, context.source.*, search, ranking » l.79, « context.source.* ─► context.model, search.candidate » l.80, « search.semantic ─► search, search.candidate, index » l.77) ; core/src/test/java/com/nexus/architecture/CoreArchitectureRules.java:18-27 (règles de sens : index-sans-search, context-source-sans-context, ranking-sans-search, search-semantic-sans-ollama seulement). Écarts relevés par script (graph_pkg.py) : core/src/main/java/com/nexus/context/ContextFragmentFactory.java:4 `import com.nexus.index.CodeSymbol;` ; core/src/main/java/com/nexus/search/semantic/lucene/PersistentLuceneSemanticSearchIndex.java:4 `import com.nexus.search.lucene.PersistentLuceneReaderSupport;` ; context.source.instruction/skill → index.scan (3 imports, voir AUD-ARC-02). Packages absents du tableau : cli, exposure, persistence(.sqlite), search.lucene, index.jdt/scip/minos/java/markdown, security, config, paths, token. docs/developer/architecture-implementation.md:416 reconnaît la limite (« les règles de sens couvrent quatre sens »).
+- **Impact** : Le graphe est aujourd'hui acyclique et sain, mais seule l'acyclicité est garantie mécaniquement : une dépendance descendante non désirée (ex. context → persistence.sqlite, exposure → search.lucene, index.* → application) passerait le build tant qu'elle ne ferme pas de cycle. Le tableau, présenté comme contrat de revue, est déjà inexact, ce qui affaiblit la revue manuelle qu'il est censé guider.
+- **Action** : Remplacer les 4 règles de sens par une matrice d'autorisations complète (package → ensemble de dépendances permises, fondations config/paths/project/token/security incluses) dans CoreArchitectureRules, avec au minimum : persistence.sqlite, search.lucene, search.semantic.lucene/ollama et index.jdt/scip/minos importés seulement par application (et entre eux là où c'est voulu) ; application et cli importés par personne dans le cœur. Mettre le tableau de l'ADR à jour depuis la matrice (ou le générer) et y ajouter cli et exposure. ARCH-0076 est accepté : ne pas le réécrire, le compléter par l'ADR d'AUD-ARC-12.
+- **Audit du 17/10** : AUD-ARC-07 (fermé) a introduit CoreArchitectureTest ; la couverture limitée aux 4 sens est consignée comme « Limite » dans architecture-implementation.md:416, pas arbitrée comme dette dans un ADR.
+
+### AUD-ARC-02 — Les sources de contexte (instruction, skill) dépendent du package de scan d'indexation pour ProjectIgnoreMatcher
+
+- **Sévérité** : Faible · **Axes** : Architecture · **Effort** : S
+- **Sprint** : S5 · **Dépend de** : AUD-ARC-12 · **Débloque** : AUD-ARC-01, AUD-SEC-06
+- **Preuve** : core/src/main/java/com/nexus/context/source/instruction/InstructionDiscoverySupport.java:7 `import com.nexus.index.scan.ProjectIgnoreMatcher;` (instancié l.38 et l.107) ; core/src/main/java/com/nexus/context/source/instruction/InstructionReferenceResolver.java (même import) ; core/src/main/java/com/nexus/context/source/skill/LocalAgentSkillsProvider.java:5. ProjectIgnoreMatcher (298 l.) n'importe que paths et security (core/src/main/java/com/nexus/index/scan/ProjectIgnoreMatcher.java:3-6). ARCH-0076:80 limite context.source.* à context.model et search.candidate.
+- **Impact** : La politique d'exclusion de type gitignore (BE-0083), transverse au scan et à la découverte native, est rangée dans index.scan : la découverte de contexte est couplée au package de scan de l'indexation, ce qui contredit le tableau de sens et gênerait une extraction séparée de l'indexation et du contexte.
+- **Action** : Déplacer ProjectIgnoreMatcher (et ses types associés) dans un package feuille partagé, par exemple com.nexus.paths ou un nouveau com.nexus.scan.rules qui n'importe que paths/security, puis l'ajouter au tableau de sens ; à défaut, consigner l'autorisation dans le nouvel ADR (AUD-ARC-12):80 pour autoriser context.source.* ─► index.scan. ARCH-0076 est accepté : ne pas le réécrire, le compléter par l'ADR d'AUD-ARC-12.
+
+### AUD-ARC-03 — Normalisation des entrées recodée par chaque surface : requestedSources traité différemment en REST et en MCP, et limite littérale de 20 dans find_usages contre la politique commune de 10
+
+- **Sévérité** : Faible · **Axes** : Architecture, Qualité · **Effort** : S
+- **Sprint** : S6
+- **Preuve** : Défauts redéclarés : adapters/rest-quarkus/src/main/java/com/nexus/api/NexusResource.java:33-34, FederatedResource.java:28-29, adapters/mcp-java/src/main/java/com/nexus/mcp/NexusMcpTools.java:27-28, core/src/main/java/com/nexus/cli/NexusCli.java:234,255. Divergences : (1) NexusMcpTools.java:145 `positiveInteger(arguments, "limit", 20, ...)` littéral propre à find_usages ; (2) sources demandées : REST NexusApiApplicationService.java:181-193 (une entrée vide échoue en « Source de contexte inconnue ») contre MCP McpToolArguments.java:89-99 (entrées vides filtrées, cardinalité bornée) ; (3) CLI : NexusCli.java:203 et :219 passent `Set.of()`, aucune option de sources, absent de docs/developer/cli.md (grep requestedSources/--sources : 0).
+- **Impact** : La sortie est unifiée par PublicOutputProjection, mais l'entrée ne l'est pas : chaque surface réimplémente défauts et parsing, et les comportements divergent déjà sur des cas limites. Toute nouvelle option de requête doit être ajoutée trois fois, avec un risque de dérive de parité.
+- **Action** : Porter dans le cœur une normalisation unique des paramètres de requête (défauts appliqués par NexusApplication quand la valeur est absente, `CandidateType.parseAll(Collection<String>)` ou équivalent avec bornes et traitement des blancs identiques), faire appeler cette API par les trois surfaces, puis documenter l'absence de sources demandées en CLI comme divergence déclarée (PublicOutputSchema / rest-api.md:201) ou ajouter l'option.
+- **Audit du 17/10** : AUD-QUA-09 (fermé) a unifié la sortie publique des trois canaux ; la normalisation des entrées n'était pas couverte.
+
+### AUD-ARC-04 — Le package com.nexus.index, déclaré « modèle et ports », contient aussi de l'infrastructure concurrente et fichier (verrous, exécution de tâches)
+
+- **Sévérité** : Faible · **Axes** : Architecture · **Effort** : S
+- **Sprint** : S5 · **Dépend de** : AUD-ARC-12 · **Débloque** : AUD-ARC-01, AUD-QUA-05
+- **Preuve** : ARCH-0076:65 « `com.nexus.index` garde le modèle et les ports ». Or core/src/main/java/com/nexus/index/ProjectIndexLockManager.java (363 l., FileChannel/FileLock/Semaphore, imports PrivateStoragePolicy et NexusPaths l.3-5), core/src/main/java/com/nexus/index/ExternalTaskRunner.java:34 (`public final class`, threads plateforme l.75, quarantaine des tâches) utilisé uniquement par core/src/main/java/com/nexus/index/service/ExternalCodeIntelligenceRefresher.java:6,21, core/src/main/java/com/nexus/index/IndexingCapacityGate.java, FileHasher.java. Le package racine compte 34 types (1 742 l.).
+- **Impact** : Le package le plus importé du cœur (modèle d'index) mélange contrats et implémentations à effets de bord ; tout consommateur du modèle voit ces classes publiques, et la frontière port/implémentation annoncée n'est pas lisible dans le découpage.
+- **Action** : Déplacer ExternalTaskRunner dans index.service en visibilité package ; regrouper ProjectIndexLockManager et IndexingCapacityGate dans un sous-package (ex. index.lock) importé par application et index.service ; consigner le placement dans le nouvel ADR (AUD-ARC-12) et le tableau de sens. ARCH-0076 est accepté : ne pas le réécrire, le compléter par l'ADR d'AUD-ARC-12.
+- **Audit du 17/10** : AUD-ARC-02 (fermé) a sorti l'orchestration vers index.service ; ces classes d'infrastructure sont restées dans le package racine.
+
+### AUD-ARC-05 — La recherche sémantique désactivée est représentée par null et un booléen dans la façade, contre la règle d'ARCH-0076
+
+- **Sévérité** : Faible · **Axes** : Architecture, Qualité · **Effort** : S
+- **Sprint** : S5
+- **Preuve** : core/src/main/java/com/nexus/application/NexusApplicationFactory.java:160 `SemanticSearchIndex semanticSearchIndex = null;` ; core/src/main/java/com/nexus/application/NexusApplication.java:64-65 (champ nullable + `boolean semanticSearchEnabled`), :321 `if (semanticSearchIndex != null)`. ARCH-0076:97 « Représenter une capacité désactivée par une implémentation sans effet du port, pas par `null` », appliqué côté indexation par SemanticIndexing.disabled() (NexusApplicationFactory.java:159).
+- **Impact** : Incohérence de pattern entre les deux ports sémantiques ; l'état « désactivé » est porté par deux champs à garder synchrones et toute nouvelle utilisation de semanticSearchIndex devra penser au null.
+- **Action** : Introduire une implémentation sans effet de SemanticSearchIndex (ou un Optional fermé à la composition) et dériver semanticSearchEnabled de la configuration, comme pour SemanticIndexing.disabled().
+
+### AUD-ARC-12 — La matrice complète des sens et le placement de ProjectIgnoreMatcher et des verrous ne sont décidés dans aucun ADR : ARCH-0076, accepté, ne peut pas être réécrit
+
+- **Sévérité** : Faible · **Axes** : Architecture · **Effort** : S
+- **Sprint** : S5 · **Débloque** : AUD-ARC-02, AUD-ARC-04, AUD-ARC-01
+- **Preuve** : AGENTS.md:8 « créer ou compléter la chaîne d'ADR sans réécrire rétroactivement une décision acceptée » ; docs/architecture/adr/ARCH-0076-garder-un-coeur-java-sans-framework-acyclique-et-verifie.md:10 « Statut : Accepted » et tableau incomplet :70-82 (voir AUD-ARC-01) ; .claude/CLAUDE.md (hooks : confirmation exigée avant de toucher un ADR accepté).
+- **Impact** : Les corrections d'AUD-ARC-01, 02 et 04 demandent de nouvelles autorisations et de nouveaux placements ; sans ADR qui les décide, elles seraient refusées en revue ou par les hooks, ou réécriraient une décision acceptée.
+- **Action** : Écrire, avec le skill nexus-adr, un ADR ARCH-NNNN qui complète ARCH-0076 : matrice complète des sens (fondations comprises), place de ProjectIgnoreMatcher, sous-package des verrous et d'ExternalTaskRunner ; le lier à ARCH-0076 et mettre à jour l'index.
+- **Audit du 17/10** : Constat ajouté à la relecture indépendante.
+
+### AUD-QUA-03 — 9 méthodes de plus de 80 lignes subsistent (mesure par accolades), dont LocalGitContextSourceProvider.discover (108) et SemanticHybridContextRanker.rank (95), déjà signalées
+
+- **Sévérité** : Faible · **Axes** : Qualité · **Effort** : M
+- **Sprint** : S7 · **Dépend de** : AUD-QUA-04
+- **Preuve** : Script d'accolades (/home/claude/audit/tools/methlen.py, records exclus) : core/src/main/java/com/nexus/application/NexusApplicationFactory.java:125 create = 116 ; core/src/main/java/com/nexus/context/source/git/LocalGitContextSourceProvider.java:64 discover = 108 (profondeur 4, ~15 décisions, 4 catch dont catch (Exception) :167) ; core/src/main/java/com/nexus/ranking/SemanticHybridContextRanker.java:68 rank = 95 (profondeur 4) ; index/scan/ProjectScanner.java:79 scanWithDiagnostics = 92 ; context/source/skill/AiSkillsRegistryProvider.java:36 discover = 85 ; index/scip/ScipSnapshotMapper.java:55 importDocument = 84 (~19 décisions) ; context/BudgetedContextSelector.java:34 select = 83 ; context/ContextBuildMetadata.java:35 metadata = 83 ; index/jdt/JdtLanguageServerCodeIntelligenceProvider.java:138 analyze = 82.
+- **Impact** : Ces méthodes concentrent boucle, budget, gestion d'erreurs et construction du résultat : coût de lecture et risque de régression lors des évolutions Git/ranking/scan. NexusApplicationFactory.create est une composition linéaire, acceptée par l'audit précédent.
+- **Action** : Découper discover (parcours des commits / agrégation / fragments), rank (normalisation / fusion / tri) et importDocument en étapes nommées, comme cela a été fait pour FederatedContextService.build et indexLocked ; laisser create.
+- **Audit du 17/10** : AUD-QUA-10 (Fermé) listait déjà discover (106 l.) et rank (95 l.) dans sa preuve, mais son action ne visait que FederatedContextService.build et indexLocked : ces deux méthodes n'ont pas été touchées (discover a gagné 2 lignes). Dette résiduelle connue, pas une régression.
+
+### AUD-QUA-04 — Les métadonnées de contexte (68 clés) sont construites en Map<String, Object> à clés littérales, hors du contrat typé PublicOutputSchema
+
+- **Sévérité** : Faible · **Axes** : Qualité · **Effort** : M
+- **Sprint** : S6 · **Débloque** : AUD-SEC-06, AUD-QUA-03
+- **Preuve** : core/src/main/java/com/nexus/context/ContextBuildMetadata.java:54-… `Map<String, Object> metadata = new LinkedHashMap<>(); metadata.put("query", …); metadata.put("rankedCandidates", …)` : 45 put ; core/src/main/java/com/nexus/context/FederatedContextService.java:352-376 : 23 put. core/src/main/java/com/nexus/exposure/PublicOutput.java:126,147 `SortedMap<String, Object> metadata`. PublicOutputSchema (core/src/main/java/com/nexus/exposure/PublicOutputSchema.java:33-42) ne compare que les composantes de records. Consommateurs par nom : scripts/self-smoke.ps1 (19 accès `.metadata.<clé>`), scripts/validate-phase-6.ps1 (3), docs/developer/reproduce-and-debug.md:349-351.
+- **Impact** : Un renommage ou une suppression de clé n'est détecté ni à la compilation ni par les tests de parité ; seul le self-smoke Windows le révèle, après coup. Les clés équivalentes entre contexte simple et fédéré ne sont pas garanties alignées.
+- **Action** : Introduire des records de métadonnées (au minimum pour les clés consommées par self-smoke et la documentation) ou des constantes partagées, et étendre PublicOutputSchema à ces records.
+
+### AUD-QUA-05 — Trois états globaux de processus installés par la composition root, aux sémantiques différentes (dernier écrivain ou premier écrivain, sans détection de conflit)
+
+- **Sévérité** : Faible · **Axes** : Qualité, Architecture · **Effort** : S
+- **Sprint** : S6 · **Dépend de** : AUD-ARC-04
+- **Preuve** : core/src/main/java/com/nexus/security/ProjectFileLimits.java:21 `private static volatile long configuredMaxFileSizeBytes` (écrasé par configure :37-44) ; core/src/main/java/com/nexus/config/SecurityPolicy.java:26 `private static volatile Posture posture` (écrasé par configure) ; core/src/main/java/com/nexus/index/IndexingCapacityGate.java:14,44-54 `shared` fixé au premier appel, une limite différente passée ensuite est ignorée sans erreur. Installés par core/src/main/java/com/nexus/application/NexusConfiguration.java:70-73 et adapters/rest-quarkus/src/main/java/com/nexus/api/NexusRestExposureGuard.java:29 (SecurityPolicy.configure(System.getenv())). ; voir aussi le relevé Architecture : core/src/main/java/com/nexus/config/SecurityPolicy.java:26 `private static volatile Posture posture` et configure(Map) ; core/src/main/java/com/nexus/application/NexusConfiguration.java:70-72 installProcessPolicies() ; appelé par NexusApplicationFactory.java:133. Décision : ARCH-0086 (« Deux parts valent pour tout le processus… »).
+- **Impact** : Deux NexusApplication composées dans le même processus (tests, futur embarquement) se partagent silencieusement ces valeurs ; l'isolation des tests dépend de l'ordre d'exécution. Comportement documenté dans les javadocs, d'où une sévérité faible.
+- **Action** : Faire échouer configure/acquireShared quand une valeur différente de celle déjà installée est demandée (ou exposer un reset réservé aux tests), et documenter la règle « une configuration par processus » dans l'ADR ARCH-0086.
+- **Audit du 17/10** : AUD-ARC-12 (Fermé avec réserve) a centralisé la lecture de l'environnement dans NexusConfiguration ; ces trois statiques en sont le relais process-wide, non traité par ce constat.
+- **Fusion** : AUD-ARC-11
+
+### AUD-QUA-06 — Le mapper REST classe les IllegalStateException en 409 en analysant le texte français du message produit par le cœur
+
+- **Sévérité** : Faible · **Axes** : Qualité, Architecture · **Effort** : S
+- **Sprint** : S6 · **Dépend de** : AUD-QUA-01
+- **Preuve** : adapters/rest-quarkus/src/main/java/com/nexus/api/IllegalStateExceptionMapper.java:20-23 `NOT_READY_PREFIX = "Le projet "`, `NOT_READY_MARKER = " n'est pas READY (état "`, `INDEX_BUSY_PREFIX = "Une mutation d'index est déjà en cours pour le projet "` ; :45-85 analyse par préfixe, suffixe et forme d'UUID. Messages émis par core/src/main/java/com/nexus/project/ProjectReadiness.java:13 et core/src/main/java/com/nexus/index/ProjectIndexLockManager.java:231. Côté MCP, NexusMcpTools.java:268-269 réduit toute IllegalStateException à un seul message.
+- **Impact** : Une reformulation du message dans le cœur transforme un 409 relançable en 500 ; le couplage est protégé par NexusProjectStateConflictIntegrationTest (message réel), d'où la sévérité faible. MCP ne peut pas distinguer « pas prêt » et « occupé ».
+- **Action** : Introduire des exceptions typées (ProjectNotReadyException, ProjectIndexBusyException, sous-classes d'IllegalStateException pour la compatibilité) et les mapper par type en REST et MCP.
+
+### AUD-QUA-07 — Petits utilitaires recopiés avec des sémantiques divergentes : 3 safeMessage, 4 closeQuietly, 6 catch OversizedSecretException identiques, 42 noms pleinement qualifiés dans le code
+
+- **Sévérité** : Faible · **Axes** : Qualité · **Effort** : S
+- **Sprint** : S7 · **Dépend de** : AUD-QUA-02
+- **Preuve** : safeMessage : core/src/main/java/com/nexus/cli/NexusCli.java:325-328 (message brut), core/src/main/java/com/nexus/context/source/git/LocalGitContextSourceProvider.java:245-251 (type + message brut dans un diagnostic), adapters/mcp-java/src/main/java/com/nexus/mcp/NexusMcpTools.java:260-271 (PublicDiagnosticPolicy). closeQuietly : ProjectIndexLockManager.java:234, IndexDocumentPublisher.java:81, LuceneSearchIndex.java:155, SqliteFileWriter.java:272. Exclusion OversizedSecretException : IndexDocumentPublisher.java:212-217, LuceneSearchIndex.java:306-313, SemanticIndexingService.java:236-245, BudgetedContextSelector.java:48-53, ContextBudgetAllocator.java:99-105, SkillContextSelector.java:39. Noms pleinement qualifiés hors import/javadoc : 42 (ex. ContextFragmentFactory.java ×7, SqliteDatabase.java:54-89 ×3 avec un Proxy dynamique écrit en lignes denses).
+- **Impact** : Hygiène : comportements proches mais non identiques (le message brut de LocalGitContextSourceProvider dépend d'un filtrage aval des diagnostics), lisibilité réduite, risque d'oubli lors d'une évolution de la politique de diagnostic.
+- **Action** : Centraliser un safeMessage interne unique (PublicDiagnosticPolicy) et un utilitaire Closeables.closeSuppressing ; remplacer les FQN par des imports (le test d'architecture les voit déjà) ; réécrire le proxy de SqliteDatabase en classe nommée.
+- **Audit du 17/10** : AUD-ARC-20 (Fermé avec réserve) a rendu les FQN visibles au test d'architecture ; leur présence reste un sujet de lisibilité, pas de frontière.
+
+### AUD-QUA-08 — Méthodes publiques de production appelées par les seuls tests (code de test dans le jar)
+
+- **Sévérité** : Faible · **Axes** : Qualité · **Effort** : S
+- **Sprint** : S5
+- **Preuve** : core/src/main/java/com/nexus/index/ProjectIndexLockManager.java:79-86 `processLocalOnly()` (javadoc : « Aucun code de production ne l'appelle ») ; core/src/main/java/com/nexus/paths/RepositoryPath.java:25 `fromPath` (1 fichier de test, 0 appel main) ; core/src/main/java/com/nexus/security/ProjectPathGuard.java:91 `containsSymbolicLink` (ProjectPathGuardTest seul). Vérifié par rg -w sur core/src/main et adapters/*/src/main (aucun appelant hors du fichier), pas de réflexion ni CDI sur ces types.
+- **Impact** : Surface publique superflue dans des types de sécurité et de chemins à fort fan-in ; processLocalOnly renvoie un verrou no-op qui pourrait être câblé par erreur.
+- **Action** : Déplacer processLocalOnly dans la fabrique de test (comme les constructeurs de commodité d'AUD-ARC-13) et supprimer ou rendre package-private fromPath et containsSymbolicLink. Les 4 méthodes publiques rebuild/applyChanges de SemanticIndexingService sont traitées par AUD-QUA-02.
+- **Audit du 17/10** : AUD-ARC-13 (Fermé) a déplacé les constructeurs de commodité de ProjectIndexingService vers une fabrique de test, mais processLocalOnly est resté dans le code de production.
+
+### AUD-QUA-09 — Scripts : duplication résiduelle (Measure-Quality, scripts de mesure quasi identiques) et 1 150 lignes de Python dans des heredocs Bash
+
+- **Sévérité** : Faible · **Axes** : Qualité · **Effort** : M
+- **Sprint** : S7
+- **Preuve** : scripts/compare-jdt.ps1:19 et scripts/compare-scip.ps1:21 : fonction Measure-Quality de 40 lignes identique (`diff` = 0 ligne) ; scripts/measure-iteration-17-real-semantic.ps1 et -diagnostic.ps1 : 155 lignes chacun, 20 lignes de diff ; Get-JavaMajorVersion/Get-JavaVersionText dans validate-minos-integration.ps1 et validate-phase-6.ps1. scripts/release/test-operational-doc-contracts.sh (1 269 l.) : 5 blocs `python3 - <<'PY'` (l. 4-733, 821-925, 927-970, 1008-1137, 1140-1269), `def text`/`def require` redéfinis (:12,:19,:828,:1015,:1022), 88 appels require/forbid ; test-final-audit-contracts.sh : 3 blocs. 15 des 31 .ps1 hors archive sans Set-StrictMode (dont self-smoke.ps1, nexus.ps1) ; tous ont $ErrorActionPreference = "Stop".
+- **Impact** : Le Python embarqué échappe au lint et aux tests unitaires Python du dépôt (scripts/tests) ; une correction de Measure-Quality doit être faite deux fois. Sans StrictMode, une propriété mal orthographiée vaut $null au lieu d'échouer.
+- **Action** : Extraire les heredocs Python dans des modules scripts/release/*.py (comme workflow_hygiene.py) avec une bibliothèque require/forbid commune ; déplacer Measure-Quality et Get-JavaMajorVersion dans NexusScript.psm1 ; ajouter Set-StrictMode -Version Latest aux scripts actifs.
+- **Audit du 17/10** : AUD-QUA-05 (Fermé avec réserve) a regroupé Invoke-Maven, Resolve-AbsolutePath et Invoke-NexusJson dans NexusScript.psm1 (vérifié : seul définisseur aujourd'hui) ; les autres fonctions dupliquées et le Python embarqué n'étaient pas dans son périmètre.
+
+### AUD-QUA-10 — build-windows-distribution.ps1 ignore l'échec du nettoyage de la distribution précédente avant de la reconstruire
+
+- **Sévérité** : Faible · **Axes** : Qualité · **Effort** : S
+- **Sprint** : S7
+- **Preuve** : scripts/release/build-windows-distribution.ps1:214-216 `Remove-Item -LiteralPath $stage, $appImages, $distribution -Recurse -Force -ErrorAction SilentlyContinue` puis `New-Item -ItemType Directory -Force` et copies dans $distribution ; même schéma dans scripts/release/build-windows-installer.ps1:112.
+- **Impact** : Si un fichier de l'ancienne distribution est verrouillé (exécutable lancé par un smoke précédent sur un poste local), il reste dans le dossier recopié et peut finir dans le ZIP. Sans effet sur les runners CI éphémères, d'où la sévérité faible.
+- **Action** : Après le Remove-Item, vérifier `-not (Test-Path $distribution)` (idem pour le ZIP) et échouer explicitement sinon.
+
+### AUD-SEC-03 — Une chaîne Python triple-quotée ou une concaténation ne masque que le premier littéral : la suite de la valeur reste en clair
+
+- **Sévérité** : Faible · **Axes** : Sécurité · **Effort** : S
+- **Sprint** : S3 · **Dépend de** : AUD-PRF-04
+- **Preuve** : core/src/main/java/com/nexus/security/SecretAssignmentScanner.java:29-36 et :96-104 : la valeur citée s'arrête à la première quote fermante. Harnais : `password = """FAKEpass123"""` → `password = "[REDACTED]""FAKEpass123"""` ; `password = "abc" + "FAKEtail123";` → `password = "[REDACTED]" + "FAKEtail123";` ; `requests.get(url, auth=('user', 'FAKEpass'))` → `auth=[REDACTED], 'FAKEpass'))`.
+- **Impact** : Valeur publiée intégralement (triple quote) ou en partie (concaténation, tuple) ; Python est un langage indexé (SourceLanguage.java:23).
+- **Action** : Traiter `"""`/`'''` comme délimiteur sur la ligne ; pour `+` ou `,` suivis d'un littéral sur la même ligne, étendre le masquage jusqu'à la fin de l'expression ; tests ; même bump de politique que AUD-SEC-01.
+
+### AUD-SEC-04 — Un mot de passe d'URL contenant « @ » ou de moins de 3 caractères n'est pas masqué
+
+- **Sévérité** : Faible · **Axes** : Sécurité · **Effort** : S
+- **Sprint** : S3 · **Dépend de** : AUD-PRF-04
+- **Preuve** : core/src/main/java/com/nexus/security/SensitiveContentRedactor.java:123-125 : `([^\s/@]{3,…}+)(@)` — mot de passe sans `@` et d'au moins 3 caractères, quantificateur possessif. Harnais : `https://admin:p@ssFAKE@db.example.com/` → inchangé ; `https://u:ab@host/` → inchangé.
+- **Impact** : Un mot de passe d'URL non encodé contenant `@` (fréquent dans les exemples et scripts) ou très court sort en clair. Exploitation limitée : la forme RFC encode `@` en `%40`, qui est masqué.
+- **Action** : Ancrer sur le dernier `@` avant le premier `/`, `?`, `#` ou blanc de l'autorité, et abaisser le minimum à 1 caractère ; tests ; bump de politique groupé.
+
+### AUD-SEC-05 — Plusieurs familles de secrets structurés courantes ne sont ni masquées ni exclues (AccountKey Azure, SharedAccessKey, hf_, SG., webhook Slack, ya29., clé PuTTY)
+
+- **Sévérité** : Faible · **Axes** : Sécurité · **Effort** : S
+- **Sprint** : S3 · **Dépend de** : AUD-SEC-02, AUD-PRF-04
+- **Preuve** : core/src/main/java/com/nexus/security/SensitiveContentRedactor.java:71-80 (liste STRUCTURED_TOKENS) ; SecretAssignmentScanner.java:15-18 (AccountKey, SharedAccessKey ne sont pas des segments sensibles). Harnais : LEAK pour `DefaultEndpointsProtocol=https;AccountName=acct;AccountKey=FAKE…==;…`, `Endpoint=sb://…;SharedAccessKey=FAKE…=`, `hf_FAKE…`, `SG.FAKE….FAKE…`, `https://hooks.slack.com/services/T…/B…/FAKE…`, `ya29.FAKE…`, bloc `PuTTY-User-Key-File-3: … Private-Lines: …`. core/src/main/java/com/nexus/index/scan/ProjectIgnoreMatcher.java:80-87 : `.ppk` absent des suffixes exclus.
+- **Impact** : Ces identifiants, présents dans du code JS/Python/Java ou des README, partent en clair vers les agents et les embeddings.
+- **Action** : Ajouter `AccountKey`, `SharedAccessKey` aux composants sensibles, les préfixes `hf_`, `SG.<22>.<43>`, `ya29.`, l'URL de webhook Slack, le bloc PuTTY (de `Private-Lines:` à `Private-MAC:`) ; `.ppk` aux suffixes exclus ; tests et bump groupé.
+- **Audit du 17/10** : AUD-SEC-01 (17/10) fermé avec réserve : liste fermée assumée ; ces familles restent hors liste.
+
+### AUD-SEC-06 — Les instructions et skills des dépôts indexés sont servis aux agents comme items INSTRUCTION/SKILL sans marquage de confiance ni modèle de menace d'injection écrit
+
+- **Sévérité** : Faible · **Axes** : Sécurité · **Effort** : M
+- **Sprint** : S6 · **Dépend de** : AUD-QUA-04, AUD-ARC-02
+- **Preuve** : core/src/main/java/com/nexus/index/scan/ProjectScanner.java:272-279 : `agents.md`, `agent.md`, `claude.md`, `gemini.md` reconnus à toute profondeur ; core/src/main/java/com/nexus/context/source/instruction/AgentsMdInstructionProvider.java:29 priorité jusqu'à 94, augmentée par la proximité ; core/src/main/java/com/nexus/context/ContextBudgetAllocator.java:19,143 budget réservé aux instructions avant le code ; core/src/main/java/com/nexus/context/source/skill/SkillContextSelector.java:18 « sans jamais tronquer leurs instructions », :80-81 `CandidateType.SKILL` ; InstructionReferenceResolver.java:27-28 suit les références `@chemin` sur 5 niveaux. adapters/mcp-java/src/main/java/com/nexus/mcp/NexusMcpTools.java:155-156 : description de build_context sans mention que le contenu est une donnée du dépôt. ProjectIgnoreMatcher.java:40-54 n'exclut ni `vendor/` ni `third_party/`. `rg -i 'prompt injection|injection d.instructions'` sur docs/ hors audits et SECURITY.md → 0 résultat. Point qui tient : FederatedContextService.java:370 garde les sources natives en `project-local`.
+- **Impact** : Un dépôt indexé non maîtrisé (dépendance vendorisée, clone tiers, sous-module, contribution externe) peut placer un AGENTS.md/CLAUDE.md/SKILL.md dans un sous-répertoire : NEXUS le classe en tête, l'étiquette « instruction » ou « skill » et le sert intégralement à l'agent, qui tend à le suivre (exfiltration via outils, modification de code). NEXUS amplifie ce que l'agent lirait seul, en lui donnant une autorité d'instruction.
+- **Action** : Documenter le modèle de menace (SECURITY.md, current-limitations.md) ; ajouter aux items un champ de provenance (`origin: repository`, `trust: untrusted`) et une phrase dans les descriptions d'outils MCP indiquant que le contenu servi est une donnée ; permettre de désactiver ou de limiter les sources INSTRUCTION/SKILL par projet (racine seule, allowlist de chemins) ; exclure `vendor/`, `third_party/` et les sous-modules de la découverte d'instructions par défaut ; ADR si le contrat public change. Note de relecture : la portée est déjà bornée (AGENTS.md imbriqué servi seulement pour des cibles sous son répertoire, skills limitées à trois racines, node_modules/dist/build exclus) ; reste la défense en profondeur et le modèle de menace écrit.
+- **Audit du 17/10** : Non traité par l'audit du 17/10 (aucun constat sur l'injection d'instructions).
+
+### AUD-SEC-07 — Sous Windows, le repli non atomique de SafeFileIO ne détecte pas une substitution concurrente par jonction : fileKey nul et toRealPath(NOFOLLOW_LINKS) ne suivent pas la jonction
+
+- **Sévérité** : Faible · **Axes** : Sécurité · **Effort** : M
+- **Sprint** : S4
+- **Preuve** : core/src/main/java/com/nexus/security/SafeFileIO.java:121-140 : SecureDirectoryStream absent (cas de Windows) → repli, sauf mode strict ; :187 et :217 contrôlent `Files.isSymbolicLink` (faux pour une jonction, reparse point de type mount point) ; :205 et :230 comparent `toRealPath(LinkOption.NOFOLLOW_LINKS)`, qui ne résout pas la jonction ; :235-236 ignorent l'identité quand `fileKey()` est nul (cas des attributs Windows). Les jonctions déjà présentes sont arrêtées par `toRealPath()` qui suit les liens (ProjectPathGuard.java:63,80) : le résidu est la fenêtre entre ce contrôle et l'ouverture. docs/developer/filesystem-support.md:204-210 reconnaît qu'aucun test ne couvre les jonctions.
+- **Impact** : Un processus local capable d'écrire dans l'arbre du projet pendant l'indexation peut, par course, rediriger une lecture vers un fichier hors racine lisible par le compte NEXUS, dont le contenu serait indexé puis servi. Il faut un attaquant local concurrent : risque faible.
+- **Action** : Dans le repli Windows, comparer aussi `toRealPath()` (qui suit les liens) de chaque composant avant et après ouverture, et refuser les attributs `isOther()` d'un répertoire (reparse point) ; ajouter un test Windows avec `mklink /J` (le workflow Windows existe) ; documenter le résidu.
+- **Audit du 17/10** : AUD-SEC-15 (17/10, Info) avait noté des lectures bornées par ProjectPathGuard et SafeFileIO ; la Javadoc de SafeFileIO.java:36-42 reconnaît un repli best-effort (ABA), mais pas le cas des jonctions.
+
+### AUD-TST-04 — Paquets critiques cli, application, persistence.sqlite, search.lucene et context gardés par le seul BUNDLE du core (marge mesurée : 356 lignes et 186 branches)
+
+- **Sévérité** : Faible · **Axes** : Tests · **Effort** : S
+- **Sprint** : S2 · **Dépend de** : AUD-TST-14, AUD-TST-13
+- **Preuve** : core/pom.xml:80-90 BUNDLE 0.84 / 0.69 ; règles PACKAGE seulement pour com.nexus.security (:98), index.jdt (:116), index.minos (:134), index.scip (:152). Mesure JaCoCo (rapports Windows du coordinateur (/home/claude/audit/build, mvnw.cmd -B -ntp verify sur 7ec5c5dc)) : core 9 857 / 11 311 lignes (87,15 %), 3 540 / 4 861 branches (72,82 %) -> marge 11 311 × 3,15 % ≈ 356 lignes et 4 861 × 3,82 % ≈ 186 branches. Paquets non gardés les plus faibles : com.nexus.cli 76,9 % / 57,9 %, com.nexus.application 86,0 % / 57,0 %, com.nexus.search.semantic.lucene 81,8 % / 66,1 %, com.nexus.search.lucene 84,1 % / 69,8 %.
+- **Impact** : La perte complète des tests d'une classe critique de taille moyenne (par ex. NexusCli 183 lignes exécutables, BoundedLuceneSearcherCache 89, SqliteGraphQueries 107) reste sous la marge du BUNDLE sans faire échouer jacoco:check.
+- **Action** : Ajouter des règles PACKAGE pour com.nexus.persistence.sqlite, com.nexus.search.lucene et com.nexus.context (au minimum), à la partie entière de la mesure moins 2 points, en suivant la règle d'écart et la table vérifiées par scripts/release/coverage_floors.py.
+- **Audit du 17/10** : AUD-TST-03 (Fermé avec réserve) : les planchers PACKAGE/CLASS ont été introduits pour les zones de confinement et de code intelligence ; l'extension aux paquets de persistance et de recherche n'a pas été faite.
+
+### AUD-TST-05 — Deux propriétés de la suite reposent sur la seule lecture : la preuve qu'une règle CLASS échoue est manuelle, et aucun job n'exécute les tests REST/MCP dans un ordre inversé ou aléatoire
+
+- **Sévérité** : Faible · **Axes** : Tests · **Effort** : S
+- **Sprint** : S2
+- **Preuve** : docs/developer/adapter-coverage-gates.md, section coverage-gates « [Limite] La preuve de régression est manuelle et n'est rejouée par aucun test ni job CI » ; section adapter-contract-tests « [Limite] Aucun test ni job CI n'exécute les classes dans un ordre inversé ou aléatoire ». `find . -name junit-platform.properties` -> aucun fichier ; aucune option runOrder dans les pom.xml.
+- **Impact** : Une dérive de configuration JaCoCo (instrumentation Quarkus ou MCP enfant) qui rendrait une règle vide serait en partie captée par coverage_floors.py (inclusion sans classe), mais pas une règle qui ne mord plus ; une dépendance d'ordre introduite dans les @BeforeAll partagés de NexusMcpServerIntegrationTest passerait inaperçue.
+- **Action** : Ajouter un job hebdomadaire qui lance `-pl adapters/rest-quarkus,adapters/mcp-java -Djunit.jupiter.testmethod.order.default=org.junit.jupiter.api.MethodOrderer$Random` et `-Dsurefire.runOrder=random` ; outiller la preuve de règle CLASS (désactivation scriptée des trois tests rejectsReverseProxyHttps* dans une copie de travail, échec attendu).
+
+### AUD-TST-14 — Table de référence de couverture périmée : com.nexus.security est passé de 700 à 792 lignes, et la mesure Windows (92,30 %) est 5,3 points au-dessus du plancher de 87 % sans que la table l'enregistre
+
+- **Sévérité** : Faible · **Axes** : Tests · **Effort** : S
+- **Sprint** : S2 · **Dépend de** : AUD-TST-13 · **Débloque** : AUD-TST-04
+- **Preuve** : docs/developer/adapter-coverage-gates.md (Mesure de référence) : com.nexus.security 625 / 700 lignes Linux (89,29 %), 636 / 700 Windows (90,86 %) ; core BUNDLE 11 099 lignes. JaCoCo (rapports Windows du coordinateur (/home/claude/audit/build, mvnw.cmd -B -ntp verify sur 7ec5c5dc)) : security 731 / 792 lignes (92,30 %), 540 / 622 branches (86,82 %) ; core 11 311 lignes. core/pom.xml:98-111 plancher security 0.87 / 0.82. `coverage_floors.py --platform windows --reports-dir <rapports>` -> PASS ; la même mesure confrontée à la colonne Linux -> « com.nexus.security LINE: build measure 92.30 % is more than 3.00 points above the published linux measure 89.29 %; update the reference measure table and raise the floor ».
+- **Impact** : La table ne reflète plus le code : la règle d'écart prend le minimum Linux/Windows publié (89,29 %) comme référence, donc le plancher de 87 % la respecte encore, mais la dérive des dénominateurs (700 → 792 lignes) masque l'écart réel et fausse les prochains planchers.
+- **Action** : Remesurer le reactor complet sur Linux et Windows au même commit, mettre à jour la table (dénominateurs compris) et remonter le plancher security à la partie entière de la mesure moins 2 points (90 % / 84 % d'après la mesure Windows), comme l'exige la règle d'écart.
+- **Audit du 17/10** : AUD-TST-15 (Fermé avec réserve) : même symptôme (planchers loin de la mesure) ; l'outil corrige l'écart plancher/table, pas l'écart table/code.
+
+### AUD-PRF-03 — À l'indexation, chaque fichier passe trois fois en entier par le redacteur (éditeur de documents, Lucene, sémantique), alors que les deux dernières passes portent sur un texte déjà masqué
+
+- **Sévérité** : Faible · **Axes** : Performance · **Effort** : S
+- **Sprint** : S5 · **Dépend de** : AUD-QUA-02
+- **Preuve** : core/src/main/java/com/nexus/index/service/IndexDocumentPublisher.java:188 et :212-214 `SensitiveContentRedactor.redact(content)`, document construit avec `redactedContent` (:199) ; puis LuceneSearchIndex.java:317 `SensitiveContentRedactor.redact(source.content())` ; puis SemanticIndexingService.java:184 et :240 `redactOnce` -> `SensitiveContentRedactor.redact(document.content())`. Mesure (classes du redacteur compilées hors dépôt dans /tmp/prf, RealBench) : 8 Mo de sources Java du dépôt découpées en blocs de 20 Ko masqués à 4,1-4,6 Mo/s en régime établi, soit environ 0,23 s par Mo et par passe. Choix documenté : docs/developer/secret-redaction.md:134 (« seconde barrière volontaire »).
+- **Impact** : Deux passes sur trois sont redondantes : environ 0,45 s de CPU par Mo indexé, soit de l'ordre de 1,5 min pour 200 Mo de sources et jusqu'à environ 15 min au budget par défaut de 2 Gio, à chaque rebuild complet (imposé par chaque montée de politique de redaction, V018 à V022).
+- **Action** : Conserver la barrière mais la rendre gratuite sur le chemin de production : marquer par le type le contenu déjà masqué (SearchDocument portant un RedactedText, par exemple) et ne masquer dans les sessions Lucene et sémantique que le contenu non marqué ; mesurer le gain dans portfolio.totalFullIndexMs.
+- **Audit du 17/10** : AUD-PRF-18 (fermé) : le doublon interne à SemanticIndexingService a été retiré, mais la redaction ajoutée depuis dans IndexDocumentPublisher rend les passes Lucene et sémantique redondantes ; choix documenté comme barrière volontaire, d'où la sévérité Faible.
+
+### AUD-PRF-04 — Bancs de performance sans seuil (cycle de vie Lucene, cache Git) ou sans lanceur (débit de redaction, pic de tas à l'indexation)
+
+- **Sévérité** : Faible · **Axes** : Performance, Tests · **Effort** : S
+- **Sprint** : S1 · **Débloque** : AUD-SEC-02, AUD-SEC-03, AUD-SEC-04, AUD-SEC-05
+- **Preuve** : .github/workflows/lucene-lifecycle-benchmark.yml:136-148 (assertions de forme : samples >= 20, p95 >= p50) et :169-170 `print(... p95ImprovementRatio)` sans seuil ; .github/workflows/git-context-cache-qualification.yml:123-147 et :159 `print('warm-p95-improvement=', ...)` sans seuil ; core/src/test/java/com/nexus/benchmark/RedactionThroughputBenchmarkTest.java (opt-in) : `grep -rn RedactionThroughput .github scripts` -> 0 résultat ; .github/workflows/scanner-corpus-benchmark.yml:100 `scanMs <= 30_000` pour 2 000 ou 10 000 fichiers. À l'inverse, scale-benchmark.yml:225-229 + scripts/verify-scale-budgets.py:95-194 imposent de vrais budgets p95, de durée et de heap. ; fusionné avec le constat Tests : core/src/test/java/com/nexus/benchmark/RedactionThroughputBenchmarkTest.java:35 et IndexingHeapPeakBenchmarkTest.java:60 `@EnabledIfSystemProperty(named = "nexus.scale.benchmark.enabled", ...)`. `rg -l IndexingHeapPeak|RedactionThroughput .github/workflows scripts` -> 0 fichier ; les 10 autres classes opt-in sont nommées dans un `-Dtest=` de workflow (scale-benchmark.yml:136, lucene-lifecycle-benchmark.yml:104, semantic-search-qualification.yml:108/282, measurement-tools.yml:135, smb-filesystem-qualification.yml:90, git-context-cache-qualification.yml:91, scanner-corpus-benchmark.yml:80).
+- **Impact** : Une régression du cache de readers Lucene, du cache Git ou du redacteur (le composant le plus modifié, dont le coût domine l'indexation) passe sans échec de CI tant que le banc d'échelle global reste sous ses plafonds ; le seuil du scanner est assez large pour masquer un facteur 10.
+- **Action** : Ajouter un seuil relatif à la base de la PR (comme scale-benchmark) ou un plancher de gain sur les bancs Lucene et Git ; brancher RedactionThroughputBenchmarkTest dans un workflow déclenché par les changements de core/src/main/java/com/nexus/security avec un débit minimal ; resserrer le budget scanner à partir des relevés retenus. ; brancher aussi IndexingHeapPeakBenchmarkTest dans un job planifié ou documenter son statut d'outil manuel.
+- **Audit du 17/10** : AUD-PRF-30 (Info) : le banc de redaction a servi à décider du pré-filtre mais n'est pas devenu une gate.
+- **Fusion** : AUD-TST-02
+
+### AUD-PRF-05 — L'extrait sémantique normalise les blancs de tout le fichier (jusqu'à 8 Mio) pour n'en garder que 320 caractères
+
+- **Sévérité** : Faible · **Axes** : Performance · **Effort** : S
+- **Sprint** : S4 · **Débloque** : AUD-PRF-02
+- **Preuve** : core/src/main/java/com/nexus/search/semantic/SemanticIndexingService.java:278-285 `WHITESPACE.matcher(redactedContent).replaceAll(" ").trim()` puis `substring(0, safePrefixEnd(normalized, DEFAULT_EXCERPT_CHARS))` (320). Mesure (IdBench, même motif \s+) : 74 à 89 ms et une copie complète par fichier de 8 Mo.
+- **Impact** : Allocation d'une chaîne de la taille du fichier et environ 10 ms par Mo de CPU inutiles par document vectorisé ; faible devant le coût des embeddings, mais gratuit à supprimer.
+- **Action** : Ne normaliser qu'un préfixe borné (par exemple les 4 × DEFAULT_EXCERPT_CHARS premiers caractères) avant de tronquer.
+
+### AUD-DEP-02 — Le gate Docker ne se déclenche pas sur une modification de mvnw, .mvn, config/tool-integrity.properties ou des vérificateurs que le Dockerfile exécute
+
+- **Sévérité** : Faible · **Axes** : Dépendances, Tests · **Effort** : S
+- **Sprint** : S1
+- **Preuve** : .github/workflows/docker-distribution.yml:20-37 et :39-55 (filtres `paths:` PR et push) : ni `mvnw`, ni `.mvn/**`, ni `config/tool-integrity.properties`, ni `scripts/release/verify-pinned-checksum.sh`, ni `scripts/release/ToolArchiveVerifier.java`. Or packaging/docker/Dockerfile:12-13 exécute `./mvnw -B -DskipTests package`, et mvnw:7-9 lit config/tool-integrity.properties et appelle ces deux vérificateurs ; l'extraction par `jar xf` (mvnw:70-77) sert aux images sans unzip. De même .github/workflows/windows-installer.yml:17-29 couvre mvnw et .mvn mais pas config/**.
+- **Impact** : Une régression du wrapper propre à l'image builder (outil d'extraction, chemin, ancre) passe la PR puis le push sur main sans exécuter le gate Docker ; elle n'apparaît qu'au gate Docker de release.yml:68-75, au moment du tag. Ce gate n'est pas un check requis (docs/developer/branch-governance.md:38-47 et :101) : on compte sur ses filtres pour le déclencher quand il s'applique.
+- **Action** : Ajouter mvnw, mvnw.cmd, .mvn/**, config/tool-integrity.properties, scripts/release/verify-pinned-checksum.sh et scripts/release/ToolArchiveVerifier.java aux deux filtres de docker-distribution.yml, et config/tool-integrity.properties à windows-installer.yml et main-push-windows-installer.yml. Supprimer le motif mort 'src/**' (aucun répertoire src à la racine).
+- **Audit du 17/10** : AUD-DEP-14 (Fermé) traitait la même classe de défaut pour le benchmark d'échelle ; ces deux filtres-là n'avaient pas été relevés.
+
+### AUD-DEP-03 — 19 checkouts sur 25 conservent le jeton GITHUB_TOKEN dans .git/config, dont celui du job publish (contents et packages en écriture)
+
+- **Sévérité** : Faible · **Axes** : Sécurité, Dépendances · **Effort** : S
+- **Sprint** : S1
+- **Preuve** : grep : 25 `uses: actions/checkout@`, 6 `persist-credentials: false` (ci.yml:279, action-pin-upstream, measurement-tools ×3, semantic-search-qualification ×1). .github/workflows/release.yml:183-187 (checkout du job publish sans persist-credentials) sous permissions :171-175 `contents: write`, `packages: write`, `id-token: write`, `attestations: write`. scripts/release/workflow_hygiene.py ne contrôle pas cette clé (grep 'persist' vide). Également interpolés dans des blocs run: : `${{ github.actor }}` (release.yml:306), `${{ steps.preflight.outputs.* }}` (release.yml:330-331, 461, 477-481), `${{ github.event.pull_request.base.sha }}` (scale-benchmark.yml:164).
+- **Impact** : Le code exécuté après le checkout (scripts du dépôt, actions tierces) peut lire un jeton en écriture sur disque plutôt que de devoir le recevoir explicitement. Dans publish, le code est celui du tag déjà qualifié et les actions sont épinglées par SHA : le risque est faible, mais cela reste une défense en profondeur absente. Les expressions interpolées ne sont pas contrôlables par un attaquant (login GitHub, sorties d'un script du dépôt, SHA) : c'est de l'hygiène.
+- **Action** : Ajouter `persist-credentials: false` à tous les checkouts (le job publish s'authentifie déjà explicitement via GH_TOKEN et docker login) et en faire une règle de workflow_hygiene.py. Passer github.actor et les sorties d'étape par env: comme le reste des workflows.
+- **Audit du 17/10** : AUD-SEC-07 (Fermé avec réserve) a sorti inputs.profile des blocs run: ; AUD-DEP-32/36 (Fermés avec réserve) décrivent les limites connues de workflow_hygiene.py. persist-credentials n'avait pas été relevé.
+
+### AUD-DEP-04 — Les gates requis Linux reactor et SBOM OSV tournent sur un JDK '21' flottant et ubuntu-latest, quand Windows, CodeQL et les images épinglent 21.0.12
+
+- **Sévérité** : Faible · **Axes** : Dépendances · **Effort** : S
+- **Sprint** : S1
+- **Preuve** : .github/workflows/ci.yml:81 `runs-on: ubuntu-latest` et :108-112 `java-version: '21'` (job qui produit et teste le ZIP de distribution) ; osv-scanner.yml:49 `java-version: '21'`. À comparer avec ci.yml:36, codeql.yml:52 et windows-installer.yml:71 `'21.0.12+101.0.LTS'`, et packaging/docker/Dockerfile:3-4 (temurin 21.0.12 épinglé par digest). Décompte : 14 `java-version: '21'`, 3 versions exactes et 2 `'24'` ; runners : 10 ubuntu-latest, 4 windows-latest, 7 ubuntu-24.04, 1 windows-2025.
+- **Impact** : Le JAR vérifié par le gate Linux et le SBOM scanné par OSV sont produits par un JDK qui change sans PR, alors que project.build.outputTimestamp (pom.xml:36) vise des artefacts reproductibles. Un changement de patch JDK ou d'image runner peut faire rougir ou modifier un check requis sans changement de code.
+- **Action** : Épingler `java-version: '21.0.12+101.0.LTS'` dans ci.yml (linux-reactor) et osv-scanner.yml (build-sbom), et ubuntu-24.04 pour ces deux jobs, comme pour les benchmarks ; laisser Dependabot ou le skill nexus-dependency-bump faire monter la version.
+- **Audit du 17/10** : AUD-DEP-20 et AUD-DEP-22 (Fermés avec réserve) : le JDK du Windows gate a été épinglé et les benchmarks sont passés sur des runners fixes, mais les deux gates Linux requis gardent un JDK et un runner flottants (résidu connu, impact faible).
+
+### AUD-DEP-05 — CLI et MCP sans backend ni configuration de logs : SLF4J tombe en NOP, aucun log structuré, aucun réglage de niveau documenté
+
+- **Sévérité** : Faible · **Axes** : Qualité, Dépendances · **Effort** : M
+- **Sprint** : S2
+- **Preuve** : docs/developer/reproduce-and-debug.md:87 « NEXUS n'a pas encore choisi de backend de logging. SLF4J utilise donc une implémentation NOP ». System.getLogger n'est utilisé que dans 13 classes (grep) ; aucune dépendance slf4j ou logging dans les pom ; adapters/rest-quarkus/src/main/resources/application.properties:1-13 sans clé quarkus.log.* ni extension quarkus-logging-json ; distribution/bin/nexus:8 lance `java ... -jar` sans point d'injection de configuration documenté. Les métriques Micrometer n'existent que côté REST (NexusApiApplicationService.java:196-209).
+- **Impact** : Dans les modes CLI et MCP stdio, les messages des dépendances qui journalisent via SLF4J (SDK MCP, JGit) sont perdus sans bruit, et l'opérateur n'a pas de moyen documenté de passer en DEBUG (seul JDK_JAVA_OPTIONS avec -Djava.util.logging.config.file marcherait). Côté REST, les journaux restent en texte libre, difficiles à exploiter par un collecteur. L'impact reste modéré pour un outil local mono-utilisateur.
+- **Action** : Choisir un pont SLF4J vers System.Logger/JUL (par exemple slf4j-jdk-platform-logging) pour les JAR CLI et MCP, en gardant stdout réservé au transport MCP. Documenter un réglage du niveau (NEXUS_LOG_LEVEL ou un logging.properties chargé par le lanceur). Côté REST, documenter quarkus.log.level et l'option quarkus-logging-json pour Docker.
+- **Audit du 17/10** : AUD-DEP-29 et AUD-QUA-16 (Info) jugeaient l'observabilité en place (health, Prometheus, System.Logger). Ce constat les complète : la perte des logs SLF4J et l'absence de réglage n'y étaient pas traitées.
+
+### AUD-DEP-07 — L'épinglage URL et SHA-256 de Docker Desktop et d'Ollama dans l'installateur passe par une réécriture textuelle du template, avec empreintes recopiées dans 3 fichiers
+
+- **Sévérité** : Faible · **Axes** : Qualité, Sécurité · **Effort** : M
+- **Sprint** : S7
+- **Preuve** : Template versionné avec des URL flottantes : packaging/windows/nexus-installer.iss.template:456-457 (`https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe`) et :1267-1268 (`https://ollama.com/download/OllamaSetup.exe`), contrôle Authenticode seulement (:400-438). La version figée (Docker 4.86.0 build 236216, Ollama v0.33.3) et VerifyFileSha256 sont injectées au build par scripts/release/harden-windows-installer-source.ps1 (399 lignes de Replace-ExactlyOnce, :349, :362, :390). Empreintes recopiées dans build-windows-installer.ps1:181-184 et test-windows-installer.ps1:101-104, mais absentes de config/tool-integrity.properties, qui porte déjà ollama.0.33.3.linux-amd64.sha256.
+- **Impact** : La chaîne échoue de façon sûre : Replace-ExactlyOnce lève une erreur et build-windows-installer.ps1:172-187 exige les fragments. En revanche, lire le template induit en erreur sur ce qui est réellement livré, et chaque montée de Docker Desktop ou d'Ollama touche 3 à 4 fichiers et des ancres textuelles fragiles. C'est un coût de maintenance et un risque de dérive entre les copies.
+- **Action** : Écrire directement dans le template les URL épinglées et VerifyFileSha256, avec des empreintes injectées depuis config/tool-integrity.properties (clés docker-desktop.<build>.windows.sha256 et ollama.<v>.windows-setup.sha256) par le préprocesseur Inno (#define). Réduire harden-windows-installer-source.ps1 aux transformations qui ne peuvent pas vivre dans le template.
+
+## Info (35)
+
+### AUD-ARC-06 — Graphe des packages du cœur acyclique, vérifié indépendamment : 32 packages, 165 arêtes, aucune composante fortement connexe
+
+- **Sévérité** : Info · **Axes** : Architecture, Tests · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : Script /home/claude/audit/arc/graph_pkg.py (imports, import static, jokers et noms com.nexus.* pleinement qualifiés hors commentaires et chaînes) + Tarjan (cycles.py) : 0 SCC au niveau package exact et au niveau sous-package (index/search/context/persistence). core/src/test/resources/architecture/package-cycles.txt : commentaires seuls ; core/src/test/java/com/nexus/architecture/CoreArchitectureTest.java:157-170 (cycleBaselineIsEmpty, packageCyclesMatchTheBaseline), JavaSourceGraph.java:129-166 (SCC). Test sans tag ni exclusion Surefire (core/pom.xml:60-66). Règles Archgate exécutées en CI : .github/workflows/ci.yml:270-295 (`archgate check --base HEAD`).
+- **Impact** : La dette de cycles relevée en octobre (SCC de 12 packages) est résorbée et verrouillée par un test de la suite par défaut.
+- **Action** : Aucune ; conserver. Voir AUD-ARC-01 pour étendre les règles de sens.
+- **Audit du 17/10** : AUD-ARC-01, AUD-ARC-07, AUD-ARC-20 (fermés avec réserve) : correction confirmée sur le code actuel.
+
+### AUD-ARC-07 — Adaptateurs REST et MCP minces : ils n'importent que la façade, la projection publique et des types valeur ou de politique
+
+- **Sévérité** : Info · **Axes** : Architecture · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : Relevé des imports com.nexus des adaptateurs (fine.json) : rest-quarkus → application (NexusApplication, NexusConfiguration), exposure (PublicOutput, PublicOutputProjection), project (ProjectDescriptor, IndexStatus, FederatedScopePolicy), config (ResultLimitPolicy, SecurityPolicy), search (QueryPolicy), context (ContextBudgetPolicy, ContextRequest), index (IndexStatistics, IndexingReport, IndexingCapacityExceededException), search.candidate (CandidateType) ; mcp-java : même profil. Aucun package technique (persistence, lucene, semantic, jdt, scip). NexusApiApplicationService.java:41-140 : contrôle des racines autorisées, métriques puis délégation. Divergence fonctionnelle déclarée : find_symbol/find_usages MCP seulement (docs/developer/rest-api.md:201). assistant-clients n'importe que com.nexus.integrations.
+- **Impact** : ARCH-0075 est respecté dans le code ; la parité des sorties repose sur PublicOutputProjection commune.
+- **Action** : Aucune (voir AUD-ARC-03 pour les entrées).
+- **Audit du 17/10** : AUD-ARC-16 (Info) : toujours vrai.
+
+### AUD-ARC-08 — Pas de god object : façade à 12 dépendances et 15 opérations publiques, composition root de 347 lignes
+
+- **Sévérité** : Info · **Axes** : Architecture · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : core/src/main/java/com/nexus/application/NexusApplication.java:54-92 (12 collaborateurs injectés), :123-319 (opérations : projets, index, MINOS, inspect, search, fédérée, context, fédéré, symboles, usages, readiness, close) ; NexusApplicationFactory.java:122-246 (composition explicite, seule lecture de System.getenv l.317, 64 imports com.nexus attendus pour une composition root). Plus gros fichier main : security/SensitiveContentRedactor.java (689 l.), puis LuceneSemanticSearchIndex (580) et NexusApplication (539).
+- **Impact** : La façade reste un point de délégation fin (séquence de lecture cohérente factorisée dans readProject/readProjects) ; la factory concentre le câblage par construction.
+- **Action** : Aucune. Réexaminer si la factory dépasse ~500 lignes ou si un second mode de composition s'ajoute (aujourd'hui trois `persistentReaders ? A : B`).
+- **Audit du 17/10** : AUD-ARC-17, AUD-ARC-18 (Info) : toujours vrai.
+
+### AUD-ARC-09 — Acyclicité garantie au niveau sous-package seulement : regroupés par espace de premier niveau, index, search et ranking forment un cycle
+
+- **Sévérité** : Info · **Axes** : Architecture · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : cycles.py avec fusion par premier niveau : SCC {index, search, ranking} via index.service → search (IndexDocumentPublisher, IndexPublication, ProjectIndexingService → SearchIndex/SearchIndexSession, 4 imports), search → ranking (6), ranking → search.candidate (12). Arête autorisée par ARCH-0076:74 (« index.service ─► index, search, … »).
+- **Impact** : Aucun aujourd'hui. À garder en tête si l'extraction de modules Maven envisagée par ARCH-0076 se fait par espace de premier niveau : index.service et search.candidate devront suivre la couche qui les consomme, pas leur préfixe de nom.
+- **Action** : Aucune immédiate ; si une extraction est décidée, raisonner sur le graphe des sous-packages (fourni dans `graphe`).
+
+### AUD-ARC-10 — Persistance correctement inversée : ports dans index et project, persistence.sqlite importé par la seule composition root
+
+- **Sévérité** : Info · **Axes** : Architecture · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : Arêtes entrantes vers core.persistence : uniquement core.application (4 imports : SqliteDatabase, SqliteProjectRepository, SqliteIndexRepository, PersistenceException). persistence.sqlite → index (36 imports, implémentation d'IndexRepository, core/src/main/java/com/nexus/index/IndexRepository.java:16-77, 16 méthodes) et → project (ProjectRepository). Règle sqlite-confine : CoreArchitectureRules.java:67-68, une seule exception (SQLException dans NexusApplicationFactory).
+- **Impact** : DATA-0073 (SQLite canonique derrière des ports) se lit dans le graphe ; aucune fuite JDBC vers les services ou les adaptateurs.
+- **Action** : Aucune ; la matrice proposée en AUD-ARC-01 figerait « persistence importé par application seulement ».
+- **Audit du 17/10** : AUD-ARC-11 (fermé) : SQLException retirée du contrat de la façade, confirmé.
+
+### AUD-QUA-11 — Gestion d'erreurs larges toujours justifiée : 13 catch Exception/RuntimeException en main, tous à une frontière, agrégés ou commentés
+
+- **Sévérité** : Info · **Axes** : Qualité · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : `rg 'catch \((Exception|RuntimeException|Throwable)' core/src/main adapters/*/src/main` → 13 sites (5 Exception, 8 RuntimeException), 0 Throwable : frontières (NexusCli.java:60, NexusMcpTools.java:235, NexusReadinessCheck.java:37), addSuppressed (NexusApplication.java:446, IndexDocumentPublisher.java:84, ProjectIndexingService.java:397), rethrow enrichi (SkillFrontmatterParser.java:52), fail-open journalisé (GitRecencyCandidateEnricher.java:157-161, SqliteIndexWriteSession.java:73-75, WindowsStoragePrincipals.java:33-35). Les 13 `catch (… ignored)` sont commentés (ex. ProjectIndexLockManager.java:237-238). 0 TODO/FIXME/XXX, 0 printStackTrace, 0 System.out/err dans le cœur hors NexusCli.java:41 et le transport stdio MCP (NexusMcpServer.java:45). Les conversions en null/Optional.empty (InstructionReferenceResolver.java:111,131 ; MinosPathPolicy.java:40 ; IndexDocumentPublisher.java:215) sont des refus de chemin ou de contenu tracés par l'appelant (ex. IndexDocumentPublisher.java:189-192 diagnostic INDEX_REDACTION_LIMIT).
+- **Impact** : Pas d'exception avalée silencieusement dans le cœur, hormis la journalisation manquante d'AUD-QUA-01.
+- **Action** : Aucune.
+- **Audit du 17/10** : AUD-QUA-17 (Info) et AUD-QUA-07 (Fermé) : relevé confirmé sur le code actuel.
+
+### AUD-QUA-12 — Typage, ressources et concurrence maîtrisés
+
+- **Sévérité** : Info · **Axes** : Qualité · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : 2 @SuppressWarnings justifiés (SafeFileIO.java:122 cast SecureDirectoryStream ; SqliteBatchInsert.java:78 Sonar S2077 commenté) ; pas de raw type relevé ; Object[] limité à SqliteSymbolSearch.java (14) et SqliteBatchInsert.java (2) pour des paramètres SQL. Ressources : toutes les ouvertures hors try-with-resources (ProjectIndexLockManager.java:164,194 ; LuceneSearchIndex.java:290 ; BoundedLuceneSearcherCache.java:237 ; SqliteDatabase.java:102 ; SqliteFileWriter.java:178-180) ferment explicitement sur échec avec addSuppressed. Concurrence : aucun Executors en main ; threads explicites bornés (ExternalTaskRunner.java:39 sémaphore de 8, circuit-breaker par tâche ; JdtStdioSession.java:61-62 threads virtuels) ; attente injectable (SqliteWriteRetryPolicy.java:41 Sleeper), aucun Thread.sleep direct.
+- **Impact** : —
+- **Action** : Aucune.
+- **Audit du 17/10** : AUD-QUA-18 (Info) confirmé.
+
+### AUD-QUA-13 — Taille des fichiers et duplication globale faibles ; adaptateurs REST/MCP/CLI sans duplication grâce aux politiques partagées du cœur
+
+- **Sévérité** : Info · **Axes** : Qualité · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : Plus gros fichier main : core/src/main/java/com/nexus/security/SensitiveContentRedactor.java = 689 l. (51 méthodes, la plus longue 39 l. : redactXmlSecretElements :282) ; 10 fichiers > 400 l. sur 263. Fenêtres de 8 lignes normalisées : 30 dupliquées inter-fichiers dont 17 dans la paire d'AUD-QUA-02. Adaptateurs + CLI (27 fichiers) : 0 fenêtre dupliquée de 6 lignes ; validation commune via ResultLimitPolicy, ContextBudgetPolicy, QueryPolicy et projection unique PublicOutputProjection (NexusResource.java:103-127, NexusMcpTools.java:77-208, NexusCli.java:234-244). Seul écart : défaut 20 codé en dur pour find_usages (NexusMcpTools.java:138,145), outil MCP seul.
+- **Impact** : —
+- **Action** : Aucune (éventuellement une constante pour le défaut 20).
+- **Audit du 17/10** : AUD-QUA-15, AUD-QUA-19 (Info) et AUD-QUA-09 (Fermé) confirmés ; le plus gros fichier est passé de 532 à 689 lignes (redaction), sans méthode longue.
+
+### AUD-QUA-14 — Scripts shell et PowerShell fail-fast
+
+- **Sévérité** : Info · **Axes** : Qualité · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : 31/31 .ps1 actifs avec $ErrorActionPreference = "Stop" ; 17 scripts shell actifs avec `set -eu` minimum, `set -euo pipefail` pour tous les scripts bash ; les 5 scripts en `set -eu` sont en /bin/sh POSIX (distribution/bin/nexus, packaging/docker/nexus-container-entrypoint.sh, scripts/release/install-archgate.sh, test-tool-integrity-anchors.sh, verify-pinned-checksum.sh), où pipefail n'est pas portable ; leurs pipes `sha256sum | awk` aboutissent à une comparaison d'empreinte qui échoue si la valeur est vide (fail-closed).
+- **Impact** : —
+- **Action** : Aucune.
+
+### AUD-SEC-08 — SQL entièrement paramétré et requêtes Lucene échappées : aucune injection depuis les entrées client
+
+- **Sévérité** : Info · **Axes** : Sécurité · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : rg `createStatement|executeQuery\(|prepareStatement\([^"]` : seuls SchemaMigrator/SqliteDatabase exécutent du SQL constant (PRAGMA, migrations embarquées) ; SqliteBatchInsert.java:78-81 (préfixe d'enum + `?`), SqliteSymbolSearch.java:338-354 (bras constants, LIKE échappé, valeurs liées). LuceneSearchIndex.java:250,256 : `parser.parse(QueryParserBase.escape(term))`.
+- **Impact** : Pas d'injection SQL, FTS ni de syntaxe Lucene (jokers, regex, fuzzy) depuis une requête client.
+- **Action** : Aucune.
+- **Audit du 17/10** : Confirme AUD-SEC-14 (17/10).
+
+### AUD-SEC-09 — REST : jeton exigé par défaut même en loopback, comparaison en temps constant, contrôle Host/Origin littéral et erreurs sans détail
+
+- **Sévérité** : Info · **Axes** : Sécurité · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : NexusRestExposureGuard.java:83-106 (jeton robuste exigé sauf NEXUS_REST_TRUST_LOCAL=true explicite ; management loopback-only :62-69) ; NexusRestSecurity.java:199-210 (`MessageDigest.isEqual`) ; NexusRestLoopbackTransportFilter.java:44-46,74-80 (@PreMatching, Host 127.0.0.1/localhost/[::1] littéral, Origin non loopback refusé, 403 sans détail) ; IllegalArgumentExceptionMapper.java:28-36 et IOExceptionMapper.java:12-17 (messages génériques, le chemin de NexusRestProjectRootPolicy.java:91-93 n'est pas renvoyé) ; application.properties : bind 127.0.0.1, max-body-size=1M, fail-on-unknown-properties.
+- **Impact** : Surface REST bornée ; aucune CORS ouverte (aucun en-tête CORS configuré, les Origin étrangères sont refusées).
+- **Action** : Aucune.
+- **Audit du 17/10** : Confirme AUD-SEC-04 (fermé avec réserve : risque résiduel du trust-local documenté) et AUD-SEC-12.
+
+### AUD-SEC-10 — La redaction s'applique à l'indexation et à la frontière publique, et son coût reste linéaire sur des entrées forgées
+
+- **Sévérité** : Info · **Axes** : Sécurité · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : PublicContextPolicy.java:56 (`redactField(item.content())`), PublicOutputProjection.java:69-83,194-195 (signatures, extraits, relations) ; IndexDocumentPublisher, SemanticIndexingService, LuceneSearchIndex appellent aussi `redact`. Harnais Probe2 (java 21) : 600 000 car. `--a` répétés 245 ms ; `<a.password ` × 50 000 195 ms ; `password=` × 100 000 156 ms ; `eyJ` × 300 000 236 ms ; `-----BEGIN ` × 100 000 488 ms ; `a://` × 200 000 460 ms ; `"password` × 100 000 327 ms. Voir AUD-PRF-03 : trois passes à l'indexation plus la frontière publique.
+- **Impact** : Pas de ReDoS mesurable ; une forme manquée à l'indexation reste rattrapable à la sortie quand la politique évolue.
+- **Action** : Aucune.
+- **Audit du 17/10** : Confirme AUD-SEC-24 (fermé).
+
+### AUD-SEC-11 — Packaging : image non-root, Compose durci et lié à 127.0.0.1, jeton d'installeur issu du CSPRNG et stocké sous le profil utilisateur
+
+- **Sévérité** : Info · **Axes** : Sécurité · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : packaging/docker/Dockerfile:70 et Dockerfile.runtime:60 `USER 10001:10001` ; docker-compose.yml.template:20-26 (`read_only: true`, `cap_drop`, `no-new-privileges:true`), :58 port publié sur `${NEXUS_DOCKER_BIND_ADDRESS:-127.0.0.1}`, :64 dépôt monté `:ro`, :52 jeton obligatoire ; packaging/windows/nexus-installer.iss.template:17,20 (`{localappdata}\Programs\NEXUS`, `PrivilegesRequired=lowest`), :620-639 (`BCryptGenRandom` 32 octets, hexadécimal, aucun repli).
+- **Impact** : Le jeton écrit dans config\nexus-native.env.cmd et docker\.env hérite des ACL du profil utilisateur.
+- **Action** : Aucune.
+- **Audit du 17/10** : Confirme AUD-SEC-19 et AUD-SEC-22 (écoute 0.0.0.0 dans le conteneur compensée par le jeton).
+
+### AUD-SEC-12 — Aucun secret réel commité : seules des valeurs factices de tests et un jeton de smoke CI éphémère
+
+- **Sévérité** : Info · **Axes** : Sécurité · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : rg sur AKIA, gh?_, xox?-, sk-, glpat-, AIza, -----BEGIN … PRIVATE KEY (hors .git) : correspondances uniquement dans le code et les tests de redaction, la doc et openspec ; hors tests de redaction : SemanticSearchStrategyTest.java:82 et FederatedQueryVectorTest.java:38 (valeur `ghp_` alphabétique manifestement factice). Jeton REST de 64 caractères hexadécimaux en clair dans .github/workflows/docker-distribution.yml:189,224,264 et scripts/release/test-docker-runtime.ps1:23, utilisé pour un conteneur de smoke publié sur 127.0.0.1 du runner.
+- **Impact** : Aucun risque direct ; le jeton de smoke pourrait être copié tel quel dans un déploiement par mimétisme.
+- **Action** : Optionnel : générer le jeton de smoke à l'exécution (`openssl rand -hex 32`) pour supprimer la valeur fixe.
+
+### AUD-SEC-13 — Entrées externes bornées : endpoint Ollama validé, YAML sans alias, trame MCP limitée à 1 Mio
+
+- **Sévérité** : Info · **Axes** : Sécurité · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : OllamaEndpointResolver.java:63-84 (http/https seulement, credentials d'URI refusés, HTTP distant soumis à NEXUS_ALLOW_INSECURE_REMOTE_OLLAMA) ; URL issue de la seule configuration (NexusApplicationFactory.java:277), pas de SSRF pilotable par un client ; SkillFrontmatterParser.java:34-37 (`setAllowDuplicateKeys(false)`, `setMaxAliasesForCollections(0)`, `setCodePointLimit`) ; aucun `@JsonTypeInfo`, `activateDefaultTyping` ni `ObjectInputStream` dans le code principal ; McpStdioInputStream.java:13 (1 Mio par trame) ; NexusMcpTools.java:69-77 (limites bornées par ResultLimitPolicy).
+- **Impact** : Pas de désérialisation polymorphe ni de SSRF client.
+- **Action** : Aucune.
+- **Audit du 17/10** : Confirme AUD-SEC-17 et AUD-SEC-18.
+
+### AUD-SEC-14 — Le contenu indexé est limité à sept extensions de code et documentation, et les fichiers de secrets usuels sont exclus
+
+- **Sévérité** : Info · **Axes** : Sécurité · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : core/src/main/java/com/nexus/index/SourceLanguage.java:18-24 (.java, .md, .kt/.kts, .ts/.tsx, .js/.jsx/.mjs/.cjs, .py, .sql) ; ProjectIgnoreMatcher.java:40-54 (.aws, .ssh, .gnupg, .kube, .secrets…), :65-87 et :258-262 (`.env`, `.env.*`, `.npmrc`, `.netrc`, `.git-credentials`, `credentials*.json`, `secrets.y*ml`, suffixes .pem/.key/.p12/.pfx/.jks/.keystore/.kdbx).
+- **Impact** : Les fichiers de configuration (YAML, properties, XML, .envrc, .tfstate) ne sont pas indexés en contenu : la redaction porte surtout sur le code et le Markdown, ce qui rend AUD-SEC-01/02 prioritaires.
+- **Action** : Aucune.
+
+### AUD-TST-01 — Le wrapper Maven code en dur repo.maven.apache.org sans variable de miroir : la suite n'a pas pu être lancée sous Linux derrière un proxy qui refuse Maven Central
+
+- **Sévérité** : Info · **Axes** : Dépendances, Tests · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : mvnw:5 `MAVEN_DIST_URL="https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/${MAVEN_VERSION}/..."` ; mvnw:32-36 téléchargement curl sans autre source. Exécution `./mvnw -B -ntp verify` -> « curl: (22) The requested URL returned error: 403 », code 22, durée 0 s ; statut du proxy : CONNECT repo.maven.apache.org:443 refusé (politique). Aucun ~/.m2/settings.xml ni miroir dans le dépôt.
+- **Impact** : Pour un contributeur derrière un miroir Maven obligatoire, le wrapper échoue ; la CI et le poste local standard ne sont pas touchés, et le wrapper accepte une archive déposée à l'avance puis vérifiée par SHA-512 (mvnw:50-53).
+- **Action** : Documenter le contournement (archive déposée) dans docs/developer ; une variable MVNW_REPOURL est un confort, pas une correction requise.
+
+### AUD-TST-03 — JDT Language Server réel jamais exécuté en CI : JdtStdioSession gardé par un plancher de 40 % des lignes et 16 % des branches
+
+- **Sévérité** : Info · **Axes** : Tests · **Effort** : M
+- **Sprint** : hors sprint (Info)
+- **Preuve** : core/pom.xml:172-185 règle CLASS JdtStdioSession 0.40 / 0.16 ; docs/developer/adapter-coverage-gates.md (Mesure de référence) : 76 / 177 lignes (42,94 %), 13 / 70 branches (18,57 %) Linux et Windows. `rg -i 'jdtls|jdt' .github/workflows` -> aucun résultat ; les tests de core/src/test/java/com/nexus/index/jdt utilisent un faux Process (JdtLanguageServerCodeIntelligenceProviderTest.java:240-256). scripts/compare-jdt.ps1 et install-jdtls.ps1 sont des outils manuels. JaCoCo (rapports Windows du coordinateur (/home/claude/audit/build, mvnw.cmd -B -ntp verify sur 7ec5c5dc)) : JdtStdioSession 76/177 lignes, 13/70 branches ; JdtProcessLauncher 0/26 lignes ; JdtWorkspaceMessages 0/30 lignes ; JdtLanguageServerCodeIntelligenceProvider.Configuration 19/47 lignes, 9/30 branches ; paquet index.jdt 70,0 % / 55,5 %.
+- **Impact** : Le pilotage du sous-processus (framing JSON-RPC, timeouts, arrêt) n'est jamais confronté à un vrai JDT LS ; une montée de version de JDT LS ou un changement de protocole ne serait détecté qu'à l'usage. Risque borné : le provider est opt-in et soumis à une allowlist de racines (docs/developer/cli.md:81-89).
+- **Action** : Dette arbitrée par écrit (adapter-coverage-gates.md:77) : garder le plancher comme garde de non-régression. Un job planifié avec un vrai JDT LS reste souhaitable si JdtLanguageServerCodeIntelligenceProvider doit être refactoré.
+- **Audit du 17/10** : AUD-TST-03 (Fermé avec réserve) : le plancher de 16 % est documenté comme garde de non-régression, pas comme objectif ; dette connue et arbitrée.
+
+### AUD-TST-06 — Gates de couverture complets et vérifiés : BUNDLE + PACKAGE + CLASS sur 4 modules, table de référence contrôlée par script, fixtures négatives rejetées
+
+- **Sévérité** : Info · **Axes** : Tests · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : pom.xml:39-40 et :259-292 (65 % / 55 % hérités) ; core/pom.xml:80-221 ; adapters/rest-quarkus/pom.xml:106-174 ; adapters/mcp-java/pom.xml:93-136 (fusion jacoco.exec + jacoco-mcp-child.exec) ; adapters/assistant-clients/pom.xml:43-53 (92 % / 84 %). `python3 -I scripts/release/coverage_floors.py --skip-reports` -> « coverage-floors=PASS (reports skipped) » ; les 3 fixtures (floor-too-low, floor-without-measure, rule-typo) sont rejetées avec le message attendu. .github/workflows/ci.yml:64 et :234 exécutent le contrôle contre la mesure du build sur Windows et Linux.
+- **Impact** : Les planchers sont atteignables (2,6 à 3 points sous la mesure publiée) et toute dérive de plus de 3 points ou d'une unité est bloquante en CI. Aucune classe de production n'est exclue du calcul.
+- **Action** : Aucune.
+- **Audit du 17/10** : AUD-TST-03 et AUD-TST-15 (Fermés avec réserve) : réserves levées sur ce point, la règle d'écart est désormais outillée.
+
+### AUD-TST-07 — Tests ignorés : 26 sous Windows (17 opt-in + 9 POSIX/système de fichiers), environ 19 attendus sous Linux (17 opt-in + 2 Windows-only), tous lancés ailleurs sauf les 2 bancs d'AUD-PRF-04
+
+- **Sévérité** : Info · **Axes** : Tests · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : Surefire (rapports Windows du coordinateur (/home/claude/audit/build, mvnw.cmd -B -ntp verify sur 7ec5c5dc)) : core 997 tests, 0 échec, 0 erreur, 26 ignorés ; REST 95/0/0 ; MCP 43/0/0 ; assistant-clients 24/0/0. Les 26 ignorés : 17 opt-in (« System property [...] does not exist » ou assume opt-in) + 8 tests POSIX (assumeTrue separator '/', par ex. PosixPathIdentityIntegrationTest.java:29/44, ScipProjectPathGuardTest.java:26) + SafeFileIOTest.java:226-236 (fileKey absent sous Windows). Sous Linux (déduction statique, non exécuté) : les assumptions POSIX et SafeFileIOTest passent ; restent 17 opt-in + 2 @EnabledOnOs(OS.WINDOWS) (AssistantIntegrationEscapingTest.java:108, WindowsStoragePrincipalsTest.java:33, exécutés par le Windows gate). testsupport/SymbolicLinks.java:52-56 échoue au lieu d'ignorer quand le support est exigé.
+- **Impact** : Aucun test de la suite par défaut ne reste silencieusement ignoré sous Linux ; les tests ignorés le sont par choix explicite et disposent d'un lanceur dédié (sauf AUD-TST-02).
+- **Action** : Aucune.
+- **Audit du 17/10** : AUD-TST-11 (Fermé) et AUD-TST-09 (Fermé) : corrections toujours en place.
+
+### AUD-TST-08 — Fragilité maîtrisée : pas de port fixe, pas de dépendance réseau, Thread.sleep limité à des attentes bornées par une échéance
+
+- **Sévérité** : Info · **Axes** : Tests · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : adapters/rest-quarkus/src/test/resources/application.properties:4-6 (test-port, test-ssl-port et management.test-port à 0) + NexusTestPortHermeticityTest ; hors bancs, Thread.sleep seulement dans ExternalTaskRunnerTest.java:80-85 (boucle avec échéance System.nanoTime), JdtLanguageServerCodeIntelligenceProviderTest.java:247-249 (faux Process), SqliteWriteContentionIntegrationTest.java:308 (politique de retry injectée de 2 ms). OllamaEndpointResolverTest.java:14-35 ne fait que du parsing d'URI. 0 import Mockito, 162 classes avec @TempDir, aucun @Order/@TestMethodOrder dans adapters/*/src/test. Tests les plus lents (rapports Windows du coordinateur (/home/claude/audit/build, mvnw.cmd -B -ntp verify sur 7ec5c5dc)) : GitRecencyCandidateEnricherTest 12,3 s et 10,2 s, NexusMcpServerIntegrationTest 6,5 s ; durée Surefire cumulée core 110,9 s.
+- **Impact** : Faible risque de tests intermittents liés à l'horloge, aux ports ou au réseau.
+- **Action** : Aucune.
+- **Audit du 17/10** : AUD-TST-06 (Fermé) : les assertions de durée murale serrées ont disparu de la suite par défaut.
+
+### AUD-TST-09 — Qualité des assertions : sur 962 méthodes de test, aucune sans assertion dans la suite par défaut et aucune réduite à assertNotNull
+
+- **Sévérité** : Info · **Axes** : Tests · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : Scan /tmp/tstscan/scan.py (corps des méthodes @Test/@ParameterizedTest) : 962 méthodes ; 5 signalées sans assertion, dont 4 faux positifs vérifiés à la main (CliRendererSymbolRedactionTest.java:37, OllamaEmbeddingProviderUserMessageTest.java:21, BudgetedContextSelectorBudgetMessageTest.java:19, SecretRedactionProbeTest.java:86 contiennent assertThrows/assertEquals) et 1 banc opt-in (LuceneLifecycleQualificationBenchmarkTest.java:83) ; 0 méthode avec assertNotNull seul ; 39 assertions passent par toString() mais portent sur des Path ou des sorties rendues (par ex. NexusPathsTest.java:63), pas sur le toString d'objets métier.
+- **Impact** : Les tests vérifient des comportements, pas seulement l'absence d'exception.
+- **Action** : Aucune.
+
+### AUD-TST-10 — 188 classes main sur 263 sans test homologue, mais les classes critiques concernées sont bien couvertes indirectement (SecretAssignmentScanner 98,7 %, IndexDocumentPublisher 87,0 % des lignes)
+
+- **Sévérité** : Info · **Axes** : Tests · **Effort** : M
+- **Sprint** : hors sprint (Info)
+- **Preuve** : Script /tmp/homolog.sh : 263 classes main, 188 sans fichier <Classe>Test* ; aucun test ne nomme SecretAssignmentScanner, IndexDocumentPublisher ni BoundedLuceneSearcherCache. JaCoCo (rapports Windows du coordinateur (/home/claude/audit/build, mvnw.cmd -B -ntp verify sur 7ec5c5dc)) : SecretAssignmentScanner 78/79 lignes, 123/132 branches ; IndexDocumentPublisher 94/108, 65/80 ; BoundedLuceneSearcherCache 72/89, 26/40 (createIfCapacityAllows 3 branches manquées, close 4). La branche « capacité pleine » (BoundedLuceneSearcherCache.java:188) n'est atteignable qu'au-delà de MAX_CACHED_PROJECTS = 100 (PersistentLuceneSearchIndex.java:25), égal au plafond de projets (AUD-PRF-22).
+- **Impact** : La couverture indirecte est réelle et élevée pour les classes de sécurité et de publication ; seul BoundedLuceneSearcherCache (65 % des branches, fermeture concurrente) gagnerait à un test dédié.
+- **Action** : Lors de la prochaine modification de ces classes, ajouter un test unitaire dédié (bornes de SecretAssignmentScanner, invalidation concurrente et fermeture de BoundedLuceneSearcherCache).
+- **Audit du 17/10** : AUD-PRF-22 (Info) : borne de 100 projets du cache déjà documentée.
+
+### AUD-TST-11 — Tests des adaptateurs : 9 classes @QuarkusTest REST et un vrai serveur MCP STDIO instrumenté, un test par outil MCP, un endpoint REST testé hors de la classe de contrat
+
+- **Sévérité** : Info · **Axes** : Tests · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : `rg -l @QuarkusTest adapters` -> 9 classes ; adapters/rest-quarkus : 19 fichiers de test pour 17 classes, ≈95 méthodes ; adapters/mcp-java : 11 fichiers pour 6 classes, ≈43 méthodes. docs/developer/adapter-coverage-gates.md (adapter-contract-tests) : les 9 outils MCP ont chacun un test dans NexusMcpServerIntegrationTest ; GET /api/v1/projects/{projectId} (NexusResource.java:54-55) n'est testé que dans NexusRestOutputParityTest.java:101-108 (écart documenté).
+- **Impact** : Contrats REST/MCP couverts de bout en bout avec contrôle de non-fuite (assertNoLeak) ; l'écart restant est déjà inventorié.
+- **Action** : Aucune (ou appliquer la proposition déjà documentée : test dédié dans NexusResourceTest).
+- **Audit du 17/10** : AUD-TST-07 (Fermé) : les tests E2E monolithiques ont été éclatés (14 méthodes dans chaque classe).
+
+### AUD-TST-12 — Scripts et hooks testés en CI sans Pester : Test-Hooks.ps1 (41 cas), Test-NexusScript.ps1 sous pwsh et PowerShell 5.1, test_scale_budgets.py (26 tests verts)
+
+- **Sévérité** : Info · **Axes** : Tests · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : .github/workflows/ci.yml:38-52 (Windows gate : Test-Hooks.ps1, test-rest-token-contract.ps1, Test-NexusScript.ps1 en pwsh et powershell) ; .claude/hooks/tests/Test-Hooks.ps1 : 27 Assert-Command + 14 Assert-Edit, sections guard-command (:40), guard-edit (:68), post-edit-reminders (:83). `python3 -m unittest discover -s scripts/tests -p test_scale_budgets.py` -> « Ran 26 tests ... OK » ; lancé en CI par scale-benchmark.yml:225. Scripts de packaging : test-windows-installer.ps1, test-windows-config-escaping.ps1, test-windows-sbom-augmentation.ps1 dans windows-installer.yml ; test-docker-runtime.ps1 dans docker-distribution.yml. 37 .ps1 hors archive, 0 fichier *.Tests.ps1.
+- **Impact** : Les garde-fous de l'outillage et des scripts de distribution sont exercés ; l'absence de Pester est un choix assumé (harnais maison).
+- **Action** : Aucune.
+- **Audit du 17/10** : AUD-TST-08 (Fermé avec réserve) : Test-Hooks.ps1 et test-rest-token-contract.ps1 sont désormais appelés par ci.yml.
+
+### AUD-PRF-06 — Schéma SQLite : chaque filtre, jointure et tri fréquent est servi par un index ; LIKE '%x%' n'existe que dans le repli des termes courts
+
+- **Sévérité** : Info · **Axes** : Performance · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : Croisement migrations/requêtes : indexed_files UNIQUE(project_id, relative_path) (V001) sert SqliteFileQueries.java (project_id, json_each sur relative_path) ; symbols idx_symbols_file_provider, idx_symbols_file_fuzzy_prefilter, idx_symbols_fuzzy_prefilter, idx_symbols_qualified_name (V005, V015, V017) servent SqliteSymbolSearch.java:158-214 (INDEXED BY explicite) ; symbol_relations (project_id, kind, source_ref|target_ref) (V003) sert SqliteGraphQueries.java:31-94 (keyset, INDEXED BY) ; (file_id, source_provider) (V012) sert les suppressions par fichier ; index_staged_files (project_id, id) (V016) sert la pagination ; FTS5 trigramme sans contenu (V008) pour les termes de 3 caractères et plus. Écritures : transactions explicites (SqliteDatabase.java:159-176), temp_store MEMORY et cache de 64 Mio (:105-113), journal rollback fixé par l'ADR DATA-0088 (SqliteDatabaseHardeningTest.java:84-87). Pas de N+1 relevé : lectures du registre par json_each en tranches de 500 (SqliteProjectRepository.java:65-82).
+- **Impact** : Couche d'accès aux données saine ; le seul angle non couvert est le repli LIKE (AUD-PRF-01).
+- **Action** : Aucune.
+- **Audit du 17/10** : AUD-PRF-01, -15, -19, -21, -27 (fermés ou Info) : corrections revérifiées dans le code actuel.
+
+### AUD-PRF-07 — Redaction de complexité linéaire sur 16 entrées forgées de 8 Mo (3,6 s au pire), motifs précompilés
+
+- **Sévérité** : Info · **Axes** : Performance, Sécurité · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : core/src/main/java/com/nexus/security/SensitiveContentRedactor.java:91-155 motifs `static final` à quantificateurs possessifs et bornés (MAX_SECRET_CHARS 4096) ; :211-240 balayage JWT à nombre de passes borné ; pré-filtre par préfixe :171-175. Mesure (RedactBench, classes compilées hors dépôt, JDK 21) : 1 Mo -> 8 Mo, temps multiplié par 4 à 10 (linéaire, effets JIT inclus) ; pires cas à 8 Mo : « -----BEGIN » répété 3 574 ms, « - » 3 316 ms, « a:// » 3 234 ms, code Java 2 541 ms ; « eyJ » répété 1 384 ms (12 s/Mo signalés par AUD-SEC-24, corrigé).
+- **Impact** : Aucun motif super-linéaire trouvé ; un fichier de 8 Mo coûte au pire environ 3,6 s de CPU. Sur le chemin de contexte, ce temps est compté par l'échéance de matérialisation (ContextMaterializationBudget.java:105 et :114-121, contrôle à l'ouverture du fichier suivant), le dépassement est donc borné à un fichier.
+- **Action** : Aucune ; voir AUD-PRF-04 pour faire de ce débit une gate.
+- **Audit du 17/10** : AUD-SEC-24 (fermé) : la régression JWT ne se reproduit pas (1,4 s pour 8 Mo de « eyJ »).
+
+### AUD-PRF-08 — Chemins de requête bornés : résultats Lucene, voisinage graphe, matérialisation du contexte, fédération et appel d'embedding de requête
+
+- **Sévérité** : Info · **Axes** : Performance · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : ResultLimitPolicy.java:14-15 (500, 2 000 en interne) et LuceneFileSearchStrategy.java:35 ; SqliteGraphQueries.java:108 et :135-165 (maxEdges validé, pagination keyset) ; ContextMaterializationLimits.java:19-23 (64 Mio, 10 000 fichiers, 30 s) ; SqliteSymbolSearch.java:38 (16 requêtes par lot) ; échéance fédérée et délai d'embedding plafonné par le temps restant (SemanticSearchStrategy.java:200-206) ; cache de searchers borné à 100 projets, rafraîchi par maybeRefreshBlocking avant chaque lecture (BoundedLuceneSearcherCache.java:181-199 et :254-268) ; empreinte canonique mise en cache par génération (SemanticSearchStrategy.java:233-243) ; readers persistants activés pour MCP et REST seulement (NexusMcpServer.java:32, NexusApiApplicationService.java:173).
+- **Impact** : Aucune requête non bornée trouvée sur le chemin servi. Au-delà de 100 projets, le cache de readers ne fait pas d'éviction et retombe sur une ouverture de DirectoryReader par requête (choix documenté).
+- **Action** : Aucune.
+- **Audit du 17/10** : AUD-PRF-02, -03, -04, -22 : corrections et bornes revérifiées dans le code actuel.
+
+### AUD-PRF-09 — JDT LS : un processus par passage, borné par le délai global des providers (180 s) et 120 s par requête, mais tous les fichiers Java restent ouverts jusqu'à la fin
+
+- **Sévérité** : Info · **Axes** : Performance · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : core/src/main/java/com/nexus/index/jdt/JdtLanguageServerCodeIntelligenceProvider.java:163-186 (didOpen de chaque fichier Java, puis documentSymbol) et :210-212 (didClose seulement après toutes les requêtes de relations) ; :52 DEFAULT_TIMEOUT_SECONDS 120 par requête (JdtStdioSession.java:147-148) ; ProjectIndexingService.java:43 DEFAULT_PROVIDER_TIMEOUT 180 s appliqué par ExternalTaskRunner (index/ExternalTaskRunner.java:44-50, MAX_TIMEOUT 1 h) ; JdtStdioSession.java:110-135 destroy puis destroyForcibly à la fermeture.
+- **Impact** : Durée bornée et processus toujours détruit ; la mémoire de JDT LS croît avec le nombre de fichiers ouverts (non mesuré), et le démarrage à froid est payé à chaque --deep-java (fonction opt-in).
+- **Action** : Aucune immédiate ; si un gros projet est visé, fermer chaque document après documentSymbol et le rouvrir à la demande pour les requêtes de relations.
+
+### AUD-DEP-06 — Tags de version : un seul ruleset « Protect tags » dont le contournement admin `always` couvre aussi update et deletion
+
+- **Sévérité** : Info · **Axes** : Sécurité, Dépendances · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : docs/developer/branch-governance.md:57 « [Existant vérifié] Lecture du 2026-11-11 : seul « Protect tags » existe ; il porte les quatre règles creation, update, deletion et non_fast_forward, avec le contournement admin en mode always ». La cible de SEC-0068 (branch-governance.md:52-55) prévoit un ruleset « Immutable version tags » sans aucun acteur de contournement.
+- **Impact** : Un compte administrateur compromis, ou une fausse manœuvre, peut déplacer ou supprimer un tag v* déjà publié. Le préflight GHCR immuable (release.yml:308-319) et l'exit 79 de publish-github-release-assets.sh limitent les dégâts côté artefacts, mais l'identité tag ↔ SHA n'est pas garantie côté dépôt.
+- **Action** : Aucune action dans le dépôt : réglage GitHub suivi par la tâche mainteneur d'AUD-DEP-37 (audit du 17/10). À revérifier par gh api lors de la prochaine mise à jour.
+- **Audit du 17/10** : AUD-DEP-37 (Fermé avec réserve) : réserve connue, tâche mainteneur 2.2 ouverte. Non revérifié ici, l'API GitHub n'est pas accessible depuis cette session.
+
+### AUD-DEP-08 — Jackson 2.23.0 importé avant le BOM Quarkus remplace la ligne LTS 2.21.x de la plate-forme ; elle est postérieure aux correctifs de CVE-2026-110879
+
+- **Sévérité** : Info · **Axes** : Dépendances · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : pom.xml:89-97 (jackson-bom ${jackson.version} importé avant quarkus-bom, commentaire « cannot silently downgrade the security baselines ») et pom.xml:47 `2.23.0` (commit Dependabot 36858afb du 12/11/2026, 2.22.4 → 2.23.0). Quarkus 3.40.1.2 aligne Jackson 2.21.8 (blog Quarkus). CVE-2026-110879 est corrigée en 2.21.8, 2.22.4, 3.1.8 et 3.2.4 (herodevs.com/vulnerability-directory/cve-2026-110879). Aucun activateDefaultTyping ni @JsonTypeInfo dans core ni dans les adaptateurs (grep vide).
+- **Impact** : Choix délibéré et cohérent pour la sécurité. Il fait tourner quarkus-rest-jackson sur une version de Jackson que la plate-forme n'a pas qualifiée, et sur une branche non LTS dont la maintenance s'arrête à la sortie de la 2.24.
+- **Action** : Aucune action immédiate. À chaque montée Quarkus, vérifier que la surcharge reste nécessaire ; sinon revenir à la version de la plate-forme, de préférence une LTS (2.21.x).
+- **Audit du 17/10** : AUD-SEC-17 (Info) : pas de typage polymorphe, toujours vrai.
+
+### AUD-DEP-09 — Quarkus 4.0 est annoncé pour le 25/11/2026 ; NEXUS est sur la LTS 3.40
+
+- **Sévérité** : Info · **Axes** : Dépendances · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : https://quarkus.io/releases : « Quarkus 4.0 … planned 25 Nov 2026 » ; 3.40 est une LTS (30/09/2026). pom.xml:55.
+- **Impact** : Pas d'urgence : la LTS 3.40 reçoit des correctifs. L'adaptateur REST (17 classes) est mince, la migration future devrait rester contenue.
+- **Action** : Inscrire la migration vers Quarkus 4 dans la feuille de route une fois la première 4.x LTS connue ; ne pas laisser Dependabot proposer une montée majeure sans revue.
+
+### AUD-DEP-10 — Chaîne d'approvisionnement CI solide : actions épinglées par SHA vérifié, permissions minimales, secrets bornés, release fail-closed et attestée
+
+- **Sévérité** : Info · **Axes** : Sécurité, Dépendances · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : grep des `uses:` hors SHA de 40 caractères : vide (20 workflows + action composite). Aucun pull_request_target ni workflow_run (grep). `permissions: contents: read` au niveau du workflow partout ; écritures limitées à publish (release.yml:171-175) et aux uploads SARIF. Secrets de signature vidés sur pull_request (windows-installer.yml:91-92, 115-116) et aucun secrets: inherit (release.yml:56-66). trivy-action@ed142fd0… = v0.36.0 du 22/04, publiée après la compromission de mars 2026 (github.com/aquasecurity/trivy-action/releases). Wrapper Maven vérifié par SHA-512 versionné (mvnw:15-19, 45-47 ; config/tool-integrity.properties:4), Inno Setup par SHA-256 (ensure-inno-setup.ps1:15, 178-180), Archgate épinglé (ci.yml:281-286). Dependabot actif sur maven, github-actions et docker (.github/dependabot.yml ; 33 commits, le dernier le 12/11/2026). OSV en delta PR et sur le SBOM agrégé avec fail-on-vuln (osv-scanner.yml:84-89). CodeQL security-extended avec un vrai build (codeql.yml:54-65). Release : tag = HEAD de main, 13 gates en needs, empreinte de l'image vérifiée, tags immuables, attestations de provenance et de SBOM vérifiées avant l'upload (release.yml:152-424).
+- **Impact** : Les risques classiques (actions mutables, injection pull_request_target, secrets exposés aux PR de forks, cache empoisonné : aucun cache Maven) sont fermés.
+- **Action** : Aucune.
+- **Audit du 17/10** : AUD-DEP-23, AUD-DEP-24, AUD-DEP-27, AUD-SEC-19 (Info) : toujours vrais ; AUD-DEP-20 réglé pour CodeQL (build-mode manual).
+
+### AUD-DEP-11 — Conteneur durci : bases épinglées par digest, UID 10001, HEALTHCHECK, racine en lecture seule, aucune capacité, bind loopback et jeton obligatoire
+
+- **Sévérité** : Info · **Axes** : Sécurité · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : packaging/docker/Dockerfile:3-4 (maven et temurin JRE UBI10 minimal @sha256), :28-29 (seuls /data/nexus et /workspace appartiennent à 10001), :65-66 HEALTHCHECK, :70 `USER 10001:10001`. docker-compose.yml.template:20-26 (read_only, cap_drop ALL, no-new-privileges), :52 (NEXUS_REST_API_TOKEN obligatoire), :58 (publication sur 127.0.0.1 par défaut), :64 (workspace monté en :ro). nexus-container-healthcheck.sh:4-12 sonde /q/health/live sur le listener de management loopback, sans curl. .dockerignore exclut .git, .env et les données.
+- **Impact** : Surface du conteneur minimale ; la sonde ne vérifie que la liveness (la readiness reste disponible sur /q/health/ready).
+- **Action** : Aucune.
+- **Audit du 17/10** : AUD-DEP-04, AUD-DEP-08, AUD-DEP-18, AUD-DEP-25, AUD-SEC-08 : corrections toujours en place.
+
+### AUD-DEP-12 — Build gouverné : outputTimestamp, enforcer strict, licences en liste blanche bloquante, SBOM CycloneDX, notices préservées dans les JAR ombrés
+
+- **Sévérité** : Info · **Axes** : Dépendances · **Effort** : S
+- **Sprint** : hors sprint (Info)
+- **Preuve** : pom.xml:36 (outputTimestamp 2026-11-11T00:00:00Z), :298-337 (requireJavaVersion 21, requireMavenVersion 3.10.0, requirePluginVersions sans LATEST/RELEASE/SNAPSHOT, requireUpperBoundDeps avec 2 exclusions justifiées), :339-392 (license-maven-plugin failOnMissing et failOnBlacklist, 9 licences permises), :394-412 (CycloneDX agrégé). core/pom.xml:262-280 (AppendingTransformer pour META-INF/LICENSE* et NOTICE*). Le ZIP Linux embarque LICENSE, THIRD_PARTY_NOTICES.txt et SBOM.cdx.json (ci.yml:173-180).
+- **Impact** : Le build est reproductible par configuration, mais aucun job ne rejoue un double build pour le prouver. La reproductibilité est attestée une seule fois, à la main (docs/developer/release-and-recovery.md, réf. AUD-DEP-05).
+- **Action** : Facultatif : ajouter au workflow de release un double `clean verify` qui compare les SHA-256 du JAR CLI et du ZIP (ou artifact:compare), pour transformer l'attestation manuelle en garantie.
+- **Audit du 17/10** : AUD-DEP-05 (Fermé avec réserve : double build non rejoué), AUD-DEP-06, AUD-DEP-07 (Fermés) : corrections intactes.

@@ -1,0 +1,124 @@
+[
+ {
+  "numero": 1,
+  "titre": "Remettre la CI et les mesures d'aplomb",
+  "pourquoi": "Les corrections suivantes s'appuient sur des gates fiables et des bancs qui mesurent quelque chose. Ce sprint touche le pom, les workflows et le wrapper, presque pas le code applicatif. La montée Quarkus y entre parce que c'est un correctif de sécurité d'effort S.",
+  "sortie": "Quarkus est en 3.40.1.2 dans pom.xml et le gate OSV du SBOM agrégé passe. ci.yml (linux-reactor) et osv-scanner.yml (build-sbom) épinglent java-version '21.0.12+101.0.LTS' et ubuntu-24.04. docker-distribution.yml (PR et push) et windows-installer.yml filtrent mvnw, mvnw.cmd, .mvn/**, config/tool-integrity.properties et les deux vérificateurs. workflow_hygiene.py échoue sur un checkout sans persist-credentials: false, et sa fixture négative est rejetée. RedactionThroughputBenchmarkTest et IndexingHeapPeakBenchmarkTest sont nommés dans un -Dtest= de workflow, avec un seuil qui fait échouer le job.",
+  "constats": [
+   "AUD-DEP-01",
+   "AUD-PRF-04",
+   "AUD-DEP-02",
+   "AUD-DEP-03",
+   "AUD-DEP-04"
+  ],
+  "charge_jours": [
+   1.25,
+   5
+  ]
+ },
+ {
+  "numero": 2,
+  "titre": "Couverture à jour et erreurs serveur tracées",
+  "pourquoi": "Les sprints 3 à 6 modifient la redaction, la recherche et les adaptateurs. Avant ça, il faut une table de couverture juste, des planchers sur les paquets critiques, et des erreurs 500 qui laissent une trace côté serveur pour voir les régressions.",
+  "sortie": "La table de adapter-coverage-gates.md porte une mesure Linux et Windows au même commit, dénominateurs à jour. core/pom.xml porte des règles PACKAGE pour com.nexus.persistence.sqlite, com.nexus.search.lucene, com.nexus.context, com.nexus.cli et com.nexus.application, et coverage_floors.py passe sur les deux plateformes. queryRanges, queryTerms et mergeRanges ont une couverture de lignes non nulle dans jacoco.xml. Un job planifié exécute les tests REST et MCP en ordre aléatoire. IOExceptionMapper, la branche 500 d'IllegalStateExceptionMapper et le catch générique de NexusMcpTools journalisent l'exception avec un identifiant renvoyé au client. readiness() journalise la cause, et un test par surface le vérifie. Le niveau de log de la CLI et du serveur MCP se règle par une variable documentée.",
+  "constats": [
+   "AUD-QUA-01",
+   "AUD-TST-13",
+   "AUD-TST-14",
+   "AUD-TST-04",
+   "AUD-TST-05",
+   "AUD-DEP-05"
+  ],
+  "charge_jours": [
+   2.25,
+   8
+  ]
+ },
+ {
+  "numero": 3,
+  "titre": "Redaction v12 : formes d'affectation du code",
+  "pourquoi": "Toutes ces corrections partagent un seul passage de politique (POLICY_VERSION, profil content-vN, invalidation des dérivés) : les grouper évite plusieurs reconstructions d'index. Le banc de débit branché au sprint 1 mesure l'effet des nouvelles expressions.",
+  "sortie": "POLICY_VERSION vaut secret-redaction-v12 et le profil sémantique passe à content-v11. SecretRedactionProbeTest contient un cas par forme listée dans SEC-01 à SEC-05 (le test affirme leur nombre), et docs/developer/secret-redaction.md cite ces formes. Une seule migration Vnnn invalide les dérivés, avec son test d'upgrade. Le banc de débit de redaction passe son seuil dans le workflow branché au sprint 1.",
+  "constats": [
+   "AUD-SEC-01",
+   "AUD-SEC-02",
+   "AUD-SEC-03",
+   "AUD-SEC-04",
+   "AUD-SEC-05"
+  ],
+  "charge_jours": [
+   2.0,
+   7
+  ]
+ },
+ {
+  "numero": 4,
+  "titre": "Robustesse des chemins de requête et d'indexation",
+  "pourquoi": "Des corrections locales, indépendantes des frontières du cœur, dont l'effet se mesure avec les bancs du sprint 1.",
+  "sortie": "Le banc d'échelle a un cas de requête de moins de 3 caractères avec un budget p95 dans verify-scale-budgets.py. Un test avec un faux provider qui renvoie 503 puis 200 montre que l'indexation aboutit en READY, et un test avec une erreur de contrat montre qu'elle reste FAILED. Le délai Ollama par défaut est réaligné sur la mesure documentée. Dans le repli Windows de SafeFileIO, un test injecte une jonction entre le contrôle et l'ouverture (point d'injection de test) et vérifie le refus. L'extrait sémantique ne normalise plus qu'un préfixe borné.",
+  "constats": [
+   "AUD-PRF-01",
+   "AUD-PRF-05",
+   "AUD-PRF-02",
+   "AUD-SEC-07"
+  ],
+  "charge_jours": [
+   2.5,
+   8
+  ]
+ },
+ {
+  "numero": 5,
+  "titre": "Frontières du cœur et API d'index unique",
+  "pourquoi": "On décide d'abord de la place de ProjectIgnoreMatcher et des verrous, puis on fige la matrice complète des sens. L'API d'index par lot disparaît avant qu'on optimise la redaction dans les sessions, pour ne pas corriger deux chemins.",
+  "sortie": "Un nouvel ADR, qui complète ARCH-0076, porte la matrice complète des sens. CoreArchitectureTest la vérifie, et une fixture négative échoue par règle. SearchIndex et SemanticSearchIndex n'exposent plus que openSession, et Direct*Session est supprimée. processLocalOnly, RepositoryPath.fromPath et ProjectPathGuard.containsSymbolicLink ne sont plus publics dans le main. Les sessions Lucene et sémantique ne repassent plus un contenu déjà masqué dans le redacteur, et le gain apparaît dans portfolio.totalFullIndexMs. NexusApplication n'a plus de champ SemanticSearchIndex nullable.",
+  "constats": [
+   "AUD-QUA-02",
+   "AUD-ARC-12",
+   "AUD-ARC-02",
+   "AUD-ARC-04",
+   "AUD-ARC-01",
+   "AUD-ARC-05",
+   "AUD-QUA-08",
+   "AUD-PRF-03"
+  ],
+  "charge_jours": [
+   3.5,
+   12
+  ]
+ },
+ {
+  "numero": 6,
+  "titre": "Contrats des adaptateurs et du contexte servi",
+  "pourquoi": "Ce sprint touche les mêmes mappers et le même schéma public que le sprint 2. Il passe après lui, et la provenance des instructions s'appuie sur le schéma typé.",
+  "sortie": "REST et MCP mappent ProjectNotReadyException et ProjectIndexBusyException par type, et IllegalStateExceptionMapper ne contient plus de préfixe de message. REST et MCP appellent la même fonction du cœur pour requestedSources, qui traite une entrée vide de façon identique. Les métadonnées consommées par self-smoke.ps1 sont des records couverts par PublicOutputSchema, avec un champ de confiance pour les items INSTRUCTION et SKILL. SECURITY.md ou current-limitations.md décrit le modèle de menace d'injection. configure() et acquireShared échouent sur une valeur différente de celle déjà installée.",
+  "constats": [
+   "AUD-ARC-03",
+   "AUD-QUA-04",
+   "AUD-QUA-05",
+   "AUD-QUA-06",
+   "AUD-SEC-06"
+  ],
+  "charge_jours": [
+   2.75,
+   9
+  ]
+ },
+ {
+  "numero": 7,
+  "titre": "Hygiène du code, des scripts et de l'installateur",
+  "pourquoi": "De la dette sans urgence ni prérequis, qu'on traite une fois les chantiers de fond livrés pour ne pas réécrire deux fois les mêmes fichiers.",
+  "sortie": "LocalGitContextSourceProvider.discover, SemanticHybridContextRanker.rank et ScipSnapshotMapper.importDocument font moins de 80 lignes, et une règle outillée (test d'architecture ou script de contrats) en garde la mesure. Un seul safeMessage interne et un seul utilitaire de fermeture restent dans le main. build-windows-distribution.ps1 et build-windows-installer.ps1 échouent si la distribution précédente subsiste. Les heredocs Python de test-operational-doc-contracts.sh sont des modules scripts/release/*.py testés. Les empreintes de l'installateur viennent de config/tool-integrity.properties seul.",
+  "constats": [
+   "AUD-QUA-03",
+   "AUD-QUA-07",
+   "AUD-QUA-09",
+   "AUD-QUA-10",
+   "AUD-DEP-07"
+  ],
+  "charge_jours": [
+   3.5,
+   11
+  ]
+ }
+]
