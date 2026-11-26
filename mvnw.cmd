@@ -69,7 +69,7 @@ IF ERRORLEVEL 1 EXIT /B %ERRORLEVEL%
 
 :INSTALL_MAVEN
 ECHO [NEXUS] Extraction de Maven %MAVEN_VERSION% depuis l'archive verifiee...
-"%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $archive=[Environment]::ExpandEnvironmentVariables('%ARCHIVE%'); $homeDir=[Environment]::ExpandEnvironmentVariables('%WRAPPER_HOME%'); Expand-Archive -Force -Path $archive -DestinationPath $homeDir"
+"%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $archive=[Environment]::ExpandEnvironmentVariables('%ARCHIVE%'); $homeDir=[Environment]::ExpandEnvironmentVariables('%WRAPPER_HOME%'); $mavenHome=[Environment]::ExpandEnvironmentVariables('%MAVEN_HOME%'); if (Test-Path -LiteralPath $mavenHome) { Remove-Item -Recurse -Force -LiteralPath $mavenHome }; Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory($archive, $homeDir)"
 IF ERRORLEVEL 1 EXIT /B %ERRORLEVEL%
 IF NOT EXIST "%MAVEN_HOME%\bin\mvn.cmd" (
   ECHO [NEXUS] L'archive Maven verifiee n'a pas produit le launcher attendu : %MAVEN_HOME%\bin\mvn.cmd

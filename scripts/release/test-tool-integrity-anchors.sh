@@ -211,4 +211,12 @@ for case in \
   fi
 done
 
+# mvnw.cmd extracts Maven through .NET ZipFile: Expand-Archive fails under Windows PowerShell 5.1
+# on recent windows-2025 runner images ("Cannot find an overload for ExtractToDirectory").
+grep -q 'System.IO.Compression.ZipFile' "$ROOT/mvnw.cmd"
+if grep -q 'Expand-Archive' "$ROOT/mvnw.cmd"; then
+  echo "mvnw.cmd must not extract Maven with Expand-Archive" >&2
+  exit 1
+fi
+
 printf 'Pinned tool integrity anchor tests passed\n'

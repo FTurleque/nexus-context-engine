@@ -90,7 +90,7 @@ NXA7 a également durci le bootstrap `mvnw.cmd` après qu'un runner Windows a re
 2. préfère `curl.exe` avec suivi des redirections et retries ;
 3. bascule vers Windows PowerShell avec un User-Agent explicite si `curl.exe` est absent ou échoue ;
 4. refuse toujours l'archive si son SHA-512 ne correspond pas à l'ancre versionnée dans `config/tool-integrity.properties` ;
-5. conserve cette archive vérifiée comme ancre locale ;
+5. conserve cette archive vérifiée comme ancre locale et l'extrait par la classe .NET `System.IO.Compression.ZipFile`, après avoir retiré un arbre partiel (`Expand-Archive` échoue sous Windows PowerShell 5.1 sur les images `windows-2025` récentes ; contrat de fin de `scripts/release/test-tool-integrity-anchors.sh`) ;
 6. compare l'arbre Maven extrait, fichier par fichier, à l'archive vérifiée **avant chaque réutilisation** ;
 7. reconstruit automatiquement l'arbre extrait si une mutation ou un fichier inattendu est détecté.
 
