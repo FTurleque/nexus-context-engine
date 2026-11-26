@@ -87,7 +87,7 @@ Le contrat `scripts/release/test-final-audit-contracts.sh` (bloc « Sprint 9 : s
 NXA7 a également durci le bootstrap `mvnw.cmd` après qu'un runner Windows a reçu un HTTP 403 via `Invoke-WebRequest` sur Maven Central. Le wrapper :
 
 1. conserve Maven **3.10.1** comme version de bootstrap ;
-2. préfère `curl.exe` avec suivi des redirections et retries ;
+2. préfère `curl.exe` avec suivi des redirections et retries (le wrapper Unix `mvnw` retente aussi, par `curl --retry` ou `wget --retry-on-http-error`, un téléchargement refusé en HTTP 429 par Maven Central) ;
 3. bascule vers Windows PowerShell avec un User-Agent explicite si `curl.exe` est absent ou échoue ;
 4. refuse toujours l'archive si son SHA-512 ne correspond pas à l'ancre versionnée dans `config/tool-integrity.properties` ;
 5. conserve cette archive vérifiée comme ancre locale et l'extrait par la classe .NET `System.IO.Compression.ZipFile`, après avoir retiré un arbre partiel (`Expand-Archive` échoue sous Windows PowerShell 5.1 sur les images `windows-2025` récentes ; contrat de fin de `scripts/release/test-tool-integrity-anchors.sh`) ;

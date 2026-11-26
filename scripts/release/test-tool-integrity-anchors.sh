@@ -219,4 +219,9 @@ if grep -q 'Expand-Archive' "$ROOT/mvnw.cmd"; then
   exit 1
 fi
 
+# mvnw retries a Maven Central download refused with HTTP 429 or a transient error,
+# like mvnw.cmd does with curl.exe --retry.
+grep -q 'curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors' "$ROOT/mvnw"
+grep -q 'wget -q --tries=5 --waitretry=5 --retry-on-http-error=429' "$ROOT/mvnw"
+
 printf 'Pinned tool integrity anchor tests passed\n'
