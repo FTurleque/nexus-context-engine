@@ -50,7 +50,7 @@ visibility  public
 main        intégration, qualification et release (tags v*)
 version     0.2.1
 Java        runtime >=21 / release 21
-Maven       3.10.1 via wrapper vérifié par SHA-512 versionné
+Maven       3.10.2 via wrapper vérifié par SHA-512 versionné
 ```
 
 La stratégie de branche est explicite : `main` est la seule branche d'intégration ; chaque changement y entre par une PR qualifiée, et une release est un tag `vX.Y.Z` posé sur un SHA de `main` (GEN-0089). La protection effective de `main` est un contrôle GitHub de gouvernance distinct du code versionné. NEXUS est actuellement maintenu par un seul mainteneur ; la qualité de merge repose sur les PR et gates automatisés exact-head plutôt que sur une seconde approbation humaine artificielle.
@@ -169,7 +169,7 @@ Sous Linux/macOS :
 sh ./mvnw clean install
 ```
 
-Le wrapper utilise **Maven 3.10.1**. Son archive est vérifiée contre une ancre SHA-512 stockée dans `config/tool-integrity.properties`. JDT LS utilise de la même façon une ancre SHA-256 versionnée. Le runtime Ollama utilisé par la qualification réelle possède également une ancre SHA-256 repository-pinned.
+Le wrapper utilise **Maven 3.10.2**. Son archive est vérifiée contre une ancre SHA-512 stockée dans `config/tool-integrity.properties`. JDT LS utilise de la même façon une ancre SHA-256 versionnée. Le runtime Ollama utilisé par la qualification réelle possède également une ancre SHA-256 repository-pinned.
 
 Pour l'installateur Windows, tout `ISCC.exe` réutilisé doit correspondre à la version Inno Setup épinglée et présenter une signature Authenticode valide de l'éditeur attendu ; sinon le bootstrap versionné est utilisé puis requalifié.
 

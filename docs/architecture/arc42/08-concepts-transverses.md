@@ -116,7 +116,7 @@ La redaction conserve les séparateurs de lignes des blocs multilignes afin de n
 
 ## 8.11 Supply-chain
 
-- Maven 3.10.1 via wrapper + SHA-512 versionné ;
+- Maven 3.10.2 via wrapper + SHA-512 versionné ;
 - JDT LS fixe + SHA-256 versionné ;
 - CodeQL exact-head ;
 - OSV delta + SBOM agrégé ;

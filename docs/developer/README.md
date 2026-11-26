@@ -7,14 +7,14 @@ Ce répertoire contient la documentation développeur **courante** : elle suit l
 ```text
 version      0.2.1
 Java         >=21, release 21
-Maven        3.10.1 via wrapper vérifié
+Maven        3.10.2 via wrapper vérifié
 integration  main
 release      tag v* sur main
 Quarkus      pom.xml, propriété quarkus.platform.version
 MCP SDK      pom.xml, propriété mcp.sdk.version
 ```
 
-Le build courant utilise **Maven 3.10.1** via le wrapper et son ancre d'intégrité versionnée.
+Le build courant utilise **Maven 3.10.2** via le wrapper et son ancre d'intégrité versionnée.
 
 Les campagnes NXA3 et NXA4 constituent la baseline de hardening courante. Une ancienne PR ou un ancien run vert n'est jamais une preuve pour un nouveau HEAD : la preuve applicable reste le run exact-head du commit concerné.
 

@@ -19,7 +19,7 @@ Les workflows versionnés qualifient aussi chaque push sur `main` : NEXUS CI, Co
 `.github/workflows/ci.yml` qualifie les PR vers `main` et les pushes sur `main` :
 
 - Windows : Java 21.0.12 épinglé (Temurin `21.0.12+101.0.LTS`, version livrée), tests des hooks Claude Code et du contrat token REST, puis qualification locale `scripts/validate-phase-6.ps1` ; en CI (`CI` ou `GITHUB_ACTIONS` définie), ce script échoue si le Maven Wrapper vérifié échoue, sans repli sur le Maven du runner ;
-- Linux : Java 21, **Maven 3.10.1**, reactor complet, tests, distribution, JaCoCo, SBOM et notices ;
+- Linux : Java 21, **Maven 3.10.2**, reactor complet, tests, distribution, JaCoCo, SBOM et notices ;
 - vérification explicite des ancres d'intégrité Maven/JDT LS et des autres outils de qualification versionnés ;
 - vérification des contrats documentaires machine-vérifiables **avant** le reactor ;
 - job `Archgate ADR rules` : règles `docs/architecture/adr/*.rules.ts` exécutées par `archgate check` avec la version épinglée et vérifiée d'Archgate (section [OpenSpec adr-rule-enforcement](#openspec-adr-rule-enforcement)).
@@ -86,7 +86,7 @@ Le contrat `scripts/release/test-final-audit-contracts.sh` (bloc « Sprint 9 : s
 
 NXA7 a également durci le bootstrap `mvnw.cmd` après qu'un runner Windows a reçu un HTTP 403 via `Invoke-WebRequest` sur Maven Central. Le wrapper :
 
-1. conserve Maven **3.10.1** comme version de bootstrap ;
+1. conserve Maven **3.10.2** comme version de bootstrap ;
 2. préfère `curl.exe` avec suivi des redirections et retries (le wrapper Unix `mvnw` retente aussi, par `curl --retry` ou `wget --retry-on-http-error`, un téléchargement refusé en HTTP 429 par Maven Central) ;
 3. bascule vers Windows PowerShell avec un User-Agent explicite si `curl.exe` est absent ou échoue ;
 4. refuse toujours l'archive si son SHA-512 ne correspond pas à l'ancre versionnée dans `config/tool-integrity.properties` ;
@@ -173,7 +173,7 @@ En CI, les baselines mesurent le snapshot NEXUS lui-même : elles vérifient que
 
 Les images de base builder/runtime sont épinglées par digest. Les Dockerfiles n'exécutent **aucun `apt-get`** après ces bases :
 
-- le builder utilise le wrapper repository-pinned `./mvnw`, donc Maven **3.10.1** après vérification de l'ancre SHA-512 versionnée et de l'arbre extrait ;
+- le builder utilise le wrapper repository-pinned `./mvnw`, donc Maven **3.10.2** après vérification de l'ancre SHA-512 versionnée et de l'arbre extrait ;
 - le runtime n'installe pas `curl`/`wget` uniquement pour le healthcheck ;
 - `/usr/local/bin/nexus-healthcheck` utilise le support TCP de Bash contre le listener management local.
 
@@ -209,7 +209,7 @@ Les attestations de provenance et SBOM portent sur le digest publié. `latest` n
 
 `config/tool-integrity.properties` contient les ancres indépendantes :
 
-- Maven 3.10.1 : SHA-512 ;
+- Maven 3.10.2 : SHA-512 ;
 - Eclipse JDT LS 1.60.0-202606262232 : SHA-256 ;
 - Ollama 0.33.3 Linux amd64, utilisé uniquement par la qualification sémantique réelle et ses diagnostics : SHA-256 ;
 - MINOS 1.2.0 Windows x64, utilisé uniquement par le replay `minos-replay` de `measurement-tools.yml` : SHA-256 ;

@@ -1,7 +1,7 @@
 @ECHO OFF
 SETLOCAL EnableExtensions
 
-SET "MAVEN_VERSION=3.10.1"
+SET "MAVEN_VERSION=3.10.2"
 SET "MAVEN_DIST_URL=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/%MAVEN_VERSION%/apache-maven-%MAVEN_VERSION%-bin.zip"
 SET "WRAPPER_HOME=%USERPROFILE%\.m2\wrapper\dists\nexus\apache-maven-%MAVEN_VERSION%"
 SET "MAVEN_HOME=%WRAPPER_HOME%\apache-maven-%MAVEN_VERSION%"
