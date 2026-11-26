@@ -109,7 +109,7 @@ try {
     Write-Host "Version produit (pom.xml) : $productVersion"
 
     Write-Host "[2/9] Maven reproductible via le wrapper (repli local hors CI)"
-    $wrapperMavenBin = Join-Path $env:USERPROFILE ".m2\wrapper\dists\nexus\apache-maven-3.10.0\apache-maven-3.10.0\bin"
+    $wrapperMavenBin = Join-Path $env:USERPROFILE ".m2\wrapper\dists\nexus\apache-maven-3.10.2\apache-maven-3.10.2\bin"
     if (Test-Path -LiteralPath $wrapperMavenBin -PathType Container) {
         $env:PATH = "$wrapperMavenBin;$env:PATH"
     }

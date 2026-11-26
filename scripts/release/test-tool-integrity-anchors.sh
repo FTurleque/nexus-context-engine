@@ -26,7 +26,7 @@ if "$VERIFY" sha512 "00000000000000000000000000000000000000000000000000000000000
   exit 1
 fi
 
-grep -Eq '^maven\.3\.10\.0\.sha512=[0-9a-f]{128}$' "$INTEGRITY"
+grep -Eq '^maven\.3\.10\.2\.sha512=[0-9a-f]{128}$' "$INTEGRITY"
 grep -Eq '^jdtls\.1\.60\.0-202606262232\.sha256=[0-9a-f]{64}$' "$INTEGRITY"
 grep -Eq '^ollama\.0\.33\.3\.linux-amd64\.sha256=[0-9a-f]{64}$' "$INTEGRITY"
 grep -Eq '^minos\.1\.2\.0\.windows-x64\.sha256=[0-9a-f]{64}$' "$INTEGRITY"
@@ -62,8 +62,8 @@ if [ -e "$TMP/archgate-altered/archgate" ]; then
   exit 1
 fi
 
-grep -q 'MAVEN_VERSION="3.10.0"' "$ROOT/mvnw"
-grep -q 'MAVEN_VERSION=3.10.0' "$ROOT/mvnw.cmd"
+grep -q 'MAVEN_VERSION="3.10.2"' "$ROOT/mvnw"
+grep -q 'MAVEN_VERSION=3.10.2' "$ROOT/mvnw.cmd"
 
 # Both wrappers must keep the repository-pinned digest as the trust anchor and
 # verify the extracted cache itself before executing Maven.
@@ -218,5 +218,10 @@ if grep -q 'Expand-Archive' "$ROOT/mvnw.cmd"; then
   echo "mvnw.cmd must not extract Maven with Expand-Archive" >&2
   exit 1
 fi
+
+# mvnw retries a Maven Central download refused with HTTP 429 or a transient error,
+# like mvnw.cmd does with curl.exe --retry.
+grep -q 'curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors' "$ROOT/mvnw"
+grep -q 'wget -q --tries=5 --waitretry=5 --retry-on-http-error=429' "$ROOT/mvnw"
 
 printf 'Pinned tool integrity anchor tests passed\n'

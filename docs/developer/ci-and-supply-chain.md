@@ -19,7 +19,7 @@ Les workflows versionnés qualifient aussi chaque push sur `main` : NEXUS CI, Co
 `.github/workflows/ci.yml` qualifie les PR vers `main` et les pushes sur `main` :
 
 - Windows : Java 21.0.12 épinglé (Temurin `21.0.12+101.0.LTS`, version livrée), tests des hooks Claude Code et du contrat token REST, puis qualification locale `scripts/validate-phase-6.ps1` ; en CI (`CI` ou `GITHUB_ACTIONS` définie), ce script échoue si le Maven Wrapper vérifié échoue, sans repli sur le Maven du runner ;
-- Linux : Java 21, **Maven 3.10.0**, reactor complet, tests, distribution, JaCoCo, SBOM et notices ;
+- Linux : Java 21, **Maven 3.10.2**, reactor complet, tests, distribution, JaCoCo, SBOM et notices ;
 - vérification explicite des ancres d'intégrité Maven/JDT LS et des autres outils de qualification versionnés ;
 - vérification des contrats documentaires machine-vérifiables **avant** le reactor ;
 - job `Archgate ADR rules` : règles `docs/architecture/adr/*.rules.ts` exécutées par `archgate check` avec la version épinglée et vérifiée d'Archgate (section [OpenSpec adr-rule-enforcement](#openspec-adr-rule-enforcement)).
@@ -86,8 +86,8 @@ Le contrat `scripts/release/test-final-audit-contracts.sh` (bloc « Sprint 9 : s
 
 NXA7 a également durci le bootstrap `mvnw.cmd` après qu'un runner Windows a reçu un HTTP 403 via `Invoke-WebRequest` sur Maven Central. Le wrapper :
 
-1. conserve Maven **3.10.0** comme version de bootstrap ;
-2. préfère `curl.exe` avec suivi des redirections et retries ;
+1. conserve Maven **3.10.2** comme version de bootstrap ;
+2. préfère `curl.exe` avec suivi des redirections et retries (le wrapper Unix `mvnw` retente aussi, par `curl --retry` ou `wget --retry-on-http-error`, un téléchargement refusé en HTTP 429 par Maven Central) ;
 3. bascule vers Windows PowerShell avec un User-Agent explicite si `curl.exe` est absent ou échoue ;
 4. refuse toujours l'archive si son SHA-512 ne correspond pas à l'ancre versionnée dans `config/tool-integrity.properties` ;
 5. conserve cette archive vérifiée comme ancre locale et l'extrait par la classe .NET `System.IO.Compression.ZipFile`, après avoir retiré un arbre partiel (`Expand-Archive` échoue sous Windows PowerShell 5.1 sur les images `windows-2025` récentes ; contrat de fin de `scripts/release/test-tool-integrity-anchors.sh`) ;
@@ -173,7 +173,7 @@ En CI, les baselines mesurent le snapshot NEXUS lui-même : elles vérifient que
 
 Les images de base builder/runtime sont épinglées par digest. Les Dockerfiles n'exécutent **aucun `apt-get`** après ces bases :
 
-- le builder utilise le wrapper repository-pinned `./mvnw`, donc Maven **3.10.0** après vérification de l'ancre SHA-512 versionnée et de l'arbre extrait ;
+- le builder utilise le wrapper repository-pinned `./mvnw`, donc Maven **3.10.2** après vérification de l'ancre SHA-512 versionnée et de l'arbre extrait ;
 - le runtime n'installe pas `curl`/`wget` uniquement pour le healthcheck ;
 - `/usr/local/bin/nexus-healthcheck` utilise le support TCP de Bash contre le listener management local.
 
@@ -209,7 +209,7 @@ Les attestations de provenance et SBOM portent sur le digest publié. `latest` n
 
 `config/tool-integrity.properties` contient les ancres indépendantes :
 
-- Maven 3.10.0 : SHA-512 ;
+- Maven 3.10.2 : SHA-512 ;
 - Eclipse JDT LS 1.60.0-202606262232 : SHA-256 ;
 - Ollama 0.33.3 Linux amd64, utilisé uniquement par la qualification sémantique réelle et ses diagnostics : SHA-256 ;
 - MINOS 1.2.0 Windows x64, utilisé uniquement par le replay `minos-replay` de `measurement-tools.yml` : SHA-256 ;
@@ -238,7 +238,7 @@ Le `pluginManagement` du pom racine épingle par propriété chaque plugin du bu
 
 L'exécution `enforce-nexus-toolchain` de `maven-enforcer-plugin` applique :
 
-- `requireJavaVersion` `[21,)` et `requireMavenVersion` `[3.10.0,)`, aligné sur le wrapper Maven 3.10.0 ;
+- `requireJavaVersion` `[21,)` et `requireMavenVersion` `[3.10.0,)`, plancher de la ligne Maven 3.10 du wrapper ;
 - `requirePluginVersions` : un plugin sans version explicite, ou en `LATEST`/`RELEASE`/`SNAPSHOT`, fait échouer le build ;
 - `requireUpperBoundDeps` : un transitif résolu sous la version qu'exige un autre chemin du graphe fait échouer le build en nommant la dépendance et ses chemins. Les exclusions (`org.jctools:jctools-core`, `org.jspecify:jspecify`, fixés par le BOM Quarkus) sont listées et justifiées dans le pom, à revoir à chaque montée de `quarkus.platform.version`. `jna` est géré avec `jna-platform` pour que le BOM Quarkus ne le ramène pas sous la version qu'exige `jna-platform`.
 
@@ -272,7 +272,7 @@ Cette section porte la conception et l'existant vérifié des quatre exigences d
 ### Conception (build-reproducibility)
 
 - **Build reproductible.** Le pom racine fixe `project.build.outputTimestamp` (`pom.xml:36`) ; sa valeur est mise à jour avec la version à chaque release. La vérification compare les SHA-256 du JAR CLI et du ZIP de distribution entre deux `./mvnw -B -ntp clean verify -DskipTests` successifs : le ZIP est assemblé en phase `verify`, un `clean package` ne le produit pas. Hors périmètre : l'image Docker et l'installeur Inno Setup, dont les outils tiers écrivent des horodatages.
-- **Outillage épinglé.** `pluginManagement` épingle `maven-clean-plugin`, `maven-resources-plugin`, `maven-jar-plugin`, `maven-install-plugin`, `maven-deploy-plugin` et `maven-site-plugin` par propriétés, suivies par Dependabot. L'exécution `enforce-nexus-toolchain` de `maven-enforcer-plugin` ajoute `requirePluginVersions` (`pom.xml:315`) et `requireUpperBoundDeps` (`pom.xml:321`) et fixe `requireMavenVersion` à `[3.10.0,)` (`pom.xml:310-313`), aligné sur le wrapper.
+- **Outillage épinglé.** `pluginManagement` épingle `maven-clean-plugin`, `maven-resources-plugin`, `maven-jar-plugin`, `maven-install-plugin`, `maven-deploy-plugin` et `maven-site-plugin` par propriétés, suivies par Dependabot. L'exécution `enforce-nexus-toolchain` de `maven-enforcer-plugin` ajoute `requirePluginVersions` (`pom.xml:315`) et `requireUpperBoundDeps` (`pom.xml:321`) et fixe `requireMavenVersion` à `[3.10.0,)` (`pom.xml:310-313`), plancher de la ligne Maven 3.10 du wrapper.
 - **Bornes supérieures.** `requireUpperBoundDeps` est préféré à `dependencyConvergence`, trop bruyant avec les BOM Quarkus. Les deux exclusions (`org.jctools:jctools-core`, `org.jspecify:jspecify`) sont listées et justifiées dans le pom, à revoir à chaque montée de `quarkus.platform.version`. `jna` est géré à `5.19.1` (`pom.xml:50`) pour que le BOM Quarkus ne le ramène pas sous la version qu'exige `jna-platform`.
 
 ### Comportement existant vérifié (build-reproducibility)

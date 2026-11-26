@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-MAVEN_VERSION="3.10.0"
+MAVEN_VERSION="3.10.2"
 MAVEN_DIST_URL="https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/${MAVEN_VERSION}/apache-maven-${MAVEN_VERSION}-bin.zip"
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 INTEGRITY_FILE="${SCRIPT_DIR}/config/tool-integrity.properties"
@@ -33,9 +33,9 @@ download_archive() {
   echo "[NEXUS] Téléchargement de Maven ${MAVEN_VERSION} via Maven Central..."
   rm -f "${ARCHIVE}"
   if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "${MAVEN_DIST_URL}" -o "${ARCHIVE}"
+    curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors "${MAVEN_DIST_URL}" -o "${ARCHIVE}"
   elif command -v wget >/dev/null 2>&1; then
-    wget -q "${MAVEN_DIST_URL}" -O "${ARCHIVE}"
+    wget -q --tries=5 --waitretry=5 --retry-on-http-error=429,500,502,503,504 "${MAVEN_DIST_URL}" -O "${ARCHIVE}"
   else
     echo "curl ou wget est requis pour initialiser Maven Wrapper." >&2
     exit 1

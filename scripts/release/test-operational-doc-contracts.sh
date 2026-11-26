@@ -51,8 +51,8 @@ managed_versions = {
 
 # Toolchain / NXA3 baseline
 wrapper = text(".mvn/wrapper/maven-wrapper.properties")
-if "apache-maven-3.10.0-bin.zip" not in wrapper:
-    raise SystemExit("wrapper contract drift: expected Maven 3.10.0")
+if "apache-maven-3.10.2-bin.zip" not in wrapper:
+    raise SystemExit("wrapper contract drift: expected Maven 3.10.2")
 
 for path in (
     "README.md",
@@ -60,7 +60,7 @@ for path in (
     "docs/developer/release-and-recovery.md",
     "docs/developer/ci-and-supply-chain.md",
 ):
-    require(path, "Maven 3.10.0")
+    require(path, "Maven 3.10.2")
 
 # Core must own a standard Maven layout; the historical root src tree must not return.
 if (root / "src").exists():
